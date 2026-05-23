@@ -130,9 +130,15 @@ End Function
 ' ---- SOHRANIT KASSU (10-col: D=ВыручкаZ, E=ЭквZ, F=ПеревZ, G=ФактНал, H=ФактЭкв, I=ФактПер, J=Расхожд) ----
 Sub SohranitKassu()
     Dim wsVvod As Worksheet
+    Dim wsCfg As Worksheet
     Set wsVvod = ThisWorkbook.Sheets("ВВОД_КАССА")
+    Set wsCfg = ThisWorkbook.Sheets("НАСТРОЙКИ")
     Application.Calculation = xlCalculationManual
     Application.ScreenUpdating = False
+
+    ' Read payment method toggles from НАСТРОЙКИ (Section 3, column E)
+    Dim vklEkv As Boolean: vklEkv = VklVykl(wsCfg.Cells(20, 5).Value)  ' E20: Эквайринг Z
+    Dim vklPer As Boolean: vklPer = VklVykl(wsCfg.Cells(21, 5).Value)  ' E21: Перевод Z
 
     Dim tbl As ListObject
     Set tbl = wsVvod.ListObjects("tblВводКасса")
@@ -151,7 +157,7 @@ Sub SohranitKassu()
         smenaK = CStr(wsVvod.Cells(r, 2).Value)
         kassirK = CStr(wsVvod.Cells(r, 3).Value)
 
-        ' D=Выручка Z-отчёт (наличка)
+        ' D=Выручка Z-отчёт (наличка) — always active
         Dim vyruchkaK As Double
         vyruchkaK = BezopasnoeCislo(wsVvod.Cells(r, 4).Value)
 
@@ -160,14 +166,18 @@ Sub SohranitKassu()
                 MsgBox "ВНИМАНИЕ: Смена '" & smenaK & "' за " & Format(dataValK, "DD.MM.YYYY") & _
                        " уже записана в базе! Сохранение пропущено.", vbExclamation
             Else
-                ' D: Z-отчёт наличка → Доход/Наличка
+                ' D: Z-отчёт наличка → Доход/Наличка (always)
                 ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Наличка", vyruchkaK, "Z-отчёт"
-                ' E: Z-отчёт эквайринг → Доход/Эквайринг
-                Dim ekvZ As Double: ekvZ = BezopasnoeCislo(wsVvod.Cells(r, 5).Value)
-                If ekvZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Эквайринг", ekvZ, "Z-Эквайринг"
-                ' F: Z-отчёт перевод → Доход/Перевод
-                Dim perZ As Double: perZ = BezopasnoeCislo(wsVvod.Cells(r, 6).Value)
-                If perZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Перевод", perZ, "Z-Перевод"
+                ' E: Z-отчёт эквайринг — только если включено в НАСТРОЙКАХ
+                If vklEkv Then
+                    Dim ekvZ As Double: ekvZ = BezopasnoeCislo(wsVvod.Cells(r, 5).Value)
+                    If ekvZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Эквайринг", ekvZ, "Z-Эквайринг"
+                End If
+                ' F: Z-отчёт перевод — только если включено в НАСТРОЙКАХ
+                If vklPer Then
+                    Dim perZ As Double: perZ = BezopasnoeCislo(wsVvod.Cells(r, 6).Value)
+                    If perZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Перевод", perZ, "Z-Перевод"
+                End If
                 ' J: Расхождение (col 10) → тип Расхождение если ненулевое
                 Dim rashK As Double: rashK = BezopasnoeCislo(wsVvod.Cells(r, 10).Value)
                 If Abs(rashK) > 0.01 Then
@@ -363,6 +373,42 @@ Sub НавигацияНаВыплаты()
 End Sub
 
 ' ---- Setup all buttons (right-side sidebar panel) ----
+' ---- ZACHISLIT POSTOYANNYE RASHODY: write current-month fixed expenses to BAZA_DDS ----
+Sub ZachislitPostoyannyeRashody()
+    Dim wsCfg As Worksheet
+    Set wsCfg = ThisWorkbook.Sheets("НАСТРОЙКИ")
+    Application.Calculation = xlCalculationManual
+    Application.ScreenUpdating = False
+
+    Dim mNum As Integer: mNum = Month(Now)
+    Dim monthRow As Long: monthRow = 81 + mNum  ' rows 82–93 = months 1–12
+
+    Dim cats(1 To 6) As String
+    cats(1) = "ЗП": cats(2) = "Аренда": cats(3) = "Налоги"
+    cats(4) = "Интернет": cats(5) = "Охрана": cats(6) = "Другое"
+
+    Dim todayD As Date: todayD = Now()
+    Dim zapisano As Integer: zapisano = 0
+    Dim i As Integer
+    For i = 1 To 6
+        Dim summa As Double
+        summa = BezopasnoeCislo(wsCfg.Cells(monthRow, i + 1).Value)
+        If summa > 0 Then
+            ZapisatTransakciyu todayD, "-", "", "Расход", cats(i), "Перевод", summa, "Постоянный расход " & cats(i)
+            zapisano = zapisano + 1
+        End If
+    Next i
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+
+    If zapisano > 0 Then
+        MsgBox "Постоянные расходы зачислены! Записано строк: " & zapisano & " (БАЗА_ДДС).", vbInformation
+    Else
+        MsgBox "Нет данных для текущего месяца в Разделе 8 НАСТРОЙКИ (строка " & monthRow & ").", vbExclamation
+    End If
+End Sub
+
 Sub UstanovitVseKnopki()
     Dim ws As Worksheet
     Dim btn As Shape
@@ -426,6 +472,16 @@ Sub UstanovitVseKnopki()
     Call AddSideBtn(ws, "navKas_O",   "▶ Касса",    "НавигацияНаКасса",    545, 38, 150, 24, 59, 130, 246)
     Call AddSideBtn(ws, "navRash_O",  "▶ Расходы",  "НавигацияНаРасходы",  545, 68, 150, 24, 239, 68, 68)
     Call AddSideBtn(ws, "navBaza_O",  "▶ База ДДС", "НавигацияНаБазу",     545, 98, 150, 24, 107, 114, 128)
+
+    ' === НАСТРОЙКИ ===
+    Set ws = ThisWorkbook.Sheets("НАСТРОЙКИ")
+    On Error Resume Next
+    For Each btn In ws.Shapes: btn.Delete: Next btn
+    On Error GoTo 0
+    Call AddSideBtn(ws, "btnZachislit", "ЗАЧИСЛИТЬ РАСХОДЫ", "ZachislitPostoyannyeRashody", 830, 4,  190, 32, 20, 184, 166)
+    Call AddSideBtn(ws, "navDash_N",  "▶ Дашборд",  "НавигацияНаДашборд",  830, 42,  190, 24, 79, 70, 229)
+    Call AddSideBtn(ws, "navKas_N",   "▶ Касса",    "НавигацияНаКасса",    830, 72,  190, 24, 59, 130, 246)
+    Call AddSideBtn(ws, "navBaza_N",  "▶ База ДДС", "НавигацияНаБазу",     830, 102, 190, 24, 107, 114, 128)
 
     MsgBox "Все кнопки установлены! Шаблон готов к работе.", vbInformation
 End Sub

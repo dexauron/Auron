@@ -291,11 +291,13 @@ ws.merge_cells("A97:H97")
 ws.cell(97,1).value="  Добавляйте ТП — они появятся в выпадающем списке на листе ЗАПИСЬ_НА_ВЫПЛАТУ"
 ws.cell(97,1).font=fnt(9,it=True,col=PURPLE); ws.cell(97,1).fill=F(PURP_L); ws.row_dimensions[97].height=20
 hrow(ws,98,["№","Название ТП / Поставщика","Телефон / Контакт","","","","",""],PURPLE,26)
+_sup_ex={99:"ТД Метро / Metro Cash&Carry", 100:"ООО Лента Оптторг", 101:"Вкусвилл"}
 for ri_ in range(99,1099):
     alt_=ri_%2==0; bg_=PURP_L if alt_ else WHITE
     ws.cell(ri_,1).value=f'=IF(B{ri_}="","",ROW()-98)'
     ws.cell(ri_,1).font=fnt(9,col=GRAY); ws.cell(ri_,1).fill=F(bg_)
     ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=CA()
+    ws.cell(ri_,2).value=_sup_ex.get(ri_,"")
     ws.cell(ri_,2).font=fnt(10); ws.cell(ri_,2).fill=F(INP if ri_<=101 else bg_)
     ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=LA(); ws.cell(ri_,2).protection=prot(False)
     ws.cell(ri_,3).font=fnt(10); ws.cell(ri_,3).fill=F(bg_)
@@ -397,6 +399,12 @@ tbl_vk=Table(displayName="tblВводКасса",ref="A3:J503")
 tbl_vk.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showRowStripes=True,showFirstColumn=False)
 ws.add_table(tbl_vk)
 cw(ws,{"A":12,"B":10,"C":16,"D":17,"E":14,"F":13,"G":14,"H":15,"I":14,"J":14})
+# CF: dim columns whose payment method is disabled in НАСТРОЙКИ
+_DIM_=PatternFill("solid",fgColor="FFD1D5DB",start_color="FFD1D5DB")
+_DIMF_=fnt(10,col="FF9CA3AF")
+for _rng_,_tgl_ in [("E4:E503","НАСТРОЙКИ!$E$20"),("F4:F503","НАСТРОЙКИ!$E$21"),
+                    ("H4:H503","НАСТРОЙКИ!$E$28"),("I4:I503","НАСТРОЙКИ!$E$29")]:
+    ws.conditional_formatting.add(_rng_,FormulaRule(formula=[f'{_tgl_}="Выкл"'],fill=_DIM_,font=_DIMF_))
 ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF3B82F6"
 print("✓ ВВОД_КАССА")
 
@@ -1224,11 +1232,34 @@ ws.conditional_formatting.add("B21",FormulaRule(formula=["B21>0"],fill=F(GREEN_L
 ws.conditional_formatting.add("B21",FormulaRule(formula=["B21<=0"],fill=F(RED_L),font=fnt(12,True,RED)))
 ws.row_dimensions[22].height=6  # spacer
 
-# ── Footer ──────────────────────────────────────────────────────
-ws.cell(23,1).value="Для экспорта в PDF нажмите  [ЭКСПОРТ PDF]  — кнопка установлена через VBA (Модуль_WM9)"
-ws.cell(23,1).font=fnt(10,it=True,col=INDIGO); ws.cell(23,1).fill=F(BLUE_L); ws.cell(23,1).border=brd(); ws.cell(23,1).alignment=LA()
-for ci_ in range(2,7): ws.cell(23,ci_).fill=F(BLUE_L); ws.cell(23,ci_).border=brd()
-ws.row_dimensions[23].height=30
+# Enhanced alert CF on B20: deep red when debt exceeds threshold from НАСТРОЙКИ!$E$38
+ws.conditional_formatting.add("B20",FormulaRule(formula=["AND(B20>0,B20>НАСТРОЙКИ!$E$38)"],fill=F("FFEF4444"),font=fnt(12,True,"FFDC2626")))
+
+# ── БЛОК 4: ВЫПЛАТЫ ПОСТАВЩИКАМ (мини-отчёт по ТОП-5) ─────────
+sec_hdr(ws,23,"  БЛОК 4: ВЫПЛАТЫ ПОСТАВЩИКАМ — ТОП-5 ПО НАСТРОЙКАМ",6,PURPLE)
+for ci_,h_ in enumerate(["Поставщик / ТП","Запланировано (₽)","Выплачено (₽)","Остаток (₽)","","Источник"],1):
+    c=ws.cell(24,ci_); c.value=h_; c.font=fnt(9,True,"FFFFFFFF"); c.fill=F(PURPLE); c.border=brd(); c.alignment=CA()
+ws.row_dimensions[24].height=24
+
+_ZP_="ЗАПИСЬ_НА_ВЫПЛАТУ!$C$4:$C$503"
+_ZS_="ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503"
+_ZT_="ЗАПИСЬ_НА_ВЫПЛАТУ!$E$4:$E$503"
+for i_,ri_ in enumerate(range(25,30)):
+    sr_=f"НАСТРОЙКИ!$B${99+i_}"
+    lbl_=f'=IF({sr_}="","(Поставщик {i_+1})",{sr_})'
+    f_plan=f'=IFERROR(SUMPRODUCT(({_ZP_}={sr_})*({_ZT_}="Запланировано")*{_ZS_}),0)'
+    f_vip =f'=IFERROR(SUMPRODUCT(({_ZP_}={sr_})*({_ZT_}="Выплачено")*{_ZS_}),0)'
+    f_ost =f'=IFERROR(C{ri_}-D{ri_},0)'
+    ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY); ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=f_plan; ws.cell(ri_,2).font=fnt(11,True,PURPLE); ws.cell(ri_,2).fill=F(PURP_L); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
+    ws.cell(ri_,3).value=f_vip;  ws.cell(ri_,3).font=fnt(11,True,GREEN);  ws.cell(ri_,3).fill=F(GREEN_L); ws.cell(ri_,3).border=brd(); ws.cell(ri_,3).alignment=RA(); ws.cell(ri_,3).number_format=MONEY
+    ws.cell(ri_,4).value=f_ost;  ws.cell(ri_,4).font=fnt(11,True,AMBER);  ws.cell(ri_,4).fill=F(AMBER_L); ws.cell(ri_,4).border=brd(); ws.cell(ri_,4).alignment=RA(); ws.cell(ri_,4).number_format=MONEY
+    ws.cell(ri_,5).fill=F(LGRAY); ws.cell(ri_,5).border=brd()
+    ws.cell(ri_,6).value=f"НАСТРОЙКИ!B{99+i_}"; ws.cell(ri_,6).font=fnt(9,it=True,col=GRAY); ws.cell(ri_,6).fill=F(LGRAY); ws.cell(ri_,6).border=brd(); ws.cell(ri_,6).alignment=LA()
+    ws.row_dimensions[ri_].height=26
+    ws.conditional_formatting.add(f"D{ri_}",FormulaRule(formula=[f"D{ri_}>0"],fill=F(RED_L),font=fnt(11,True,RED)))
+    ws.conditional_formatting.add(f"D{ri_}",FormulaRule(formula=[f"D{ri_}<=0"],fill=F(GREEN_L),font=fnt(11,True,GREEN)))
+ws.row_dimensions[30].height=6  # spacer
 
 ws.freeze_panes="A4"
 ws.sheet_properties.tabColor="FF111827"
@@ -1241,32 +1272,36 @@ ws = wb.create_sheet("ИНСТРУКЦИЯ"); ws.sheet_view.showGridLines = Fals
 banner(ws, "WAY MARKET v9 — ИНСТРУКЦИЯ ПО ИСПОЛЬЗОВАНИЮ", "A1:J1", INDIGO, 14)
 
 steps=[
-    ("1. НАСТРОЙКИ", INDIGO,
-     ["Откройте лист НАСТРОЙКИ",
-      "Введите название магазина, дату начала учёта, начальный долг",
-      "Настройте смены (ДЕНЬ/ВЕЧЕР/НОЧЬ)",
-      "Заполните справочник кассиров в столбце A (строки 44-79)",
-      "Добавьте категории расходов в столбец C при необходимости"]),
+    ("1. НАСТРОЙКИ — ЦЕНТР УПРАВЛЕНИЯ", INDIGO,
+     ["Раздел 1 (строки 5–11): Название магазина, дата, маржа, долг, лимит, период",
+      "Раздел 2 (строки 15–17): Вкл/Выкл смен ДЕНЬ / ВЕЧЕР / НОЧЬ",
+      "Раздел 3 (строки 20–24): Вкл/Выкл способов оплаты (Эквайринг, Перевод и др.)",
+      "Раздел 6 (строки 37–39): Пороги уведомлений — расхождение, долг, просрочка",
+      "Раздел 7 (строки 44–79): Справочники кассиров, категорий, способов, типов операций",
+      "Раздел 8 (строки 82–93): Постоянные расходы — нажмите ЗАЧИСЛИТЬ РАСХОДЫ",
+      "Раздел 9 (строки 99–1098): Справочник поставщиков для выплат и мини-отчёта"]),
     ("2. ЕЖЕДНЕВНЫЙ ВВОД ДАННЫХ", BLUE,
-     ["Лист ВВОД_КАССА: выберите дату, кассира, введите Z-отчёты смен",
-      "Нажмите кнопку СОХРАНИТЬ КАССУ (или Alt+F8 → СохранитьКассу)",
-      "Лист ВВОД_РАСХОДЫ: укажите дату и кассира, введите расходы по категориям",
-      "Нажмите СОХРАНИТЬ РАСХОДЫ для записи в базу",
-      "Данные сохраняются в БАЗА_ДДС автоматически"]),
+     ["ВВОД_КАССА: дата, смена, кассир, Z-отчёты по активным способам оплаты",
+      "Колонки затемнены, если способ оплаты выключен в НАСТРОЙКАХ",
+      "Нажмите СОХРАНИТЬ КАССУ — данные запишутся в БАЗА_ДДС",
+      "ВВОД_РАСХОДЫ: дата, категория (из справочника), способ, сумма",
+      "Нажмите СОХРАНИТЬ РАСХОДЫ — данные запишутся в БАЗА_ДДС"]),
     ("3. ВЫПЛАТЫ ПОСТАВЩИКАМ", AMBER,
-     ["Лист ЗАПИСЬ_НА_ВЫПЛАТУ: заполните получателя, сумму, способ оплаты",
+     ["ЗАПИСЬ_НА_ВЫПЛАТУ: выберите поставщика из списка (Раздел 9 НАСТРОЙКИ)",
+      "Укажите дату, сумму, способ оплаты, накладную и статус",
       "Нажмите СОХРАНИТЬ ВЫПЛАТУ",
-      "Контролируйте статусы в листе КАЛЕНДАРЬ_ВЫПЛАТ",
-      "Просроченные выплаты подсвечиваются красным автоматически"]),
+      "Просроченные выплаты подсвечиваются красным в КАЛЕНДАРЬ_ВЫПЛАТ"]),
     ("4. ДАШБОРД", GREEN,
-     ["Лист ДАШБОРД: выберите месяц и год в фильтре (строка 4)",
-      "Все 26 показателей пересчитаются автоматически",
-      "Стрелки ▲▼ показывают динамику vs предыдущий месяц",
-      "Нажмите ОБНОВИТЬ для принудительного пересчёта"]),
+     ["ДАШБОРД: выберите месяц и год в фильтре (строка 4) → нажмите ОБНОВИТЬ",
+      "Все показатели пересчитываются автоматически по БАЗА_ДДС",
+      "Стрелки ▲▼ — динамика vs предыдущий период",
+      "Цветовая индикация: зелёный = норма, красный = превышение"]),
     ("5. ОТЧЁТ РУКОВОДИТЕЛЮ", PURPLE,
-     ["Лист ОТЧЁТ_РУКОВОДИТЕЛЮ: сводные данные за текущий период",
-      "Нажмите ЭКСПОРТ PDF для сохранения отчёта",
-      "Отчёт синхронизирован с фильтром дашборда"]),
+     ["ОТЧЁТ_РУКОВОДИТЕЛЮ: 4 блока финансовых показателей",
+      "Блок 1: Выручка, Расходы, Прибыль, Остаток в системе",
+      "Блок 2: Финансовая модель 25/75 — маржа и лимит закупа",
+      "Блок 3: Долговая нагрузка и кассовый разрыв",
+      "Блок 4: Мини-отчёт по ТОП-5 поставщикам из НАСТРОЙКИ"]),
 ]
 
 r=3
