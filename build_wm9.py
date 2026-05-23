@@ -165,8 +165,8 @@ ws.cell(12,1).value="Статья расходов"; ws.cell(12,1).font=fnt(9,Tr
 ws.cell(12,2).value="Сумма"; ws.cell(12,2).font=fnt(9,True,"FFFFFFFF"); ws.cell(12,2).fill=F(TEAL); ws.cell(12,2).border=brd(); ws.cell(12,2).alignment=CA()
 ws.row_dimensions[12].height=24
 for ri_,(nm_,amt_) in enumerate([("Аренда",366000),("Налоги",90000),("Интернет",5000),("Охрана",25000)],13):
-    ws.cell(ri_,1).value=nm_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY if ri_%2==0 else WHITE)
-    ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,1).value=nm_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(INP)
+    ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA(); ws.cell(ri_,1).protection=prot(False)
     ws.cell(ri_,2).value=amt_; ws.cell(ri_,2).font=fnt(10,True,TEAL); ws.cell(ri_,2).fill=F(INP)
     ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
     ws.cell(ri_,2).protection=prot(False); ws.row_dimensions[ri_].height=22
