@@ -120,12 +120,31 @@ else:
     if "Кассир" in headers_r:
         errors.append(f"Кассир still present in ВВОД_РАСХОДЫ headers: {headers_r}")
 
-# НАСТРОЙКИ: smart tables exist
+# НАСТРОЙКИ: 9-section smart tables exist (Stage 5 layout)
 ws_n = wb3["НАСТРОЙКИ"]
 tbl_names_n = list(ws_n._tables)
-for req in ["tblФиксРасходы", "tblСмены", "tblКассиры", "tblКатегорииРасходов", "tblСпособыОплаты"]:
-    if req not in tbl_names_n:
-        errors.append(f"{req} not found in НАСТРОЙКИ")
+required_n = {
+    "tblКассиры":       "A43:A79",
+    "tblКатегории":     "C43:C79",
+    "tblСпособыОплаты": "E43:E79",
+    "tblТипыОпераций":  "G43:G79",
+    "tblПостоянные":    "A81:H94",
+    "tblПоставщики":    "A98:C1098",
+}
+for tname, exp_ref in required_n.items():
+    if tname not in tbl_names_n:
+        errors.append(f"{tname} not found in НАСТРОЙКИ")
+    else:
+        ref = ws_n._tables[tname].ref
+        if ref != exp_ref:
+            errors.append(f"{tname} ref={ref!r}, expected {exp_ref!r}")
+# E5/E7/E8/E9 are direct value cells (not formulas)
+if str(ws_n.cell(5,5).value or "").startswith("="):
+    errors.append("НАСТРОЙКИ E5 should be direct value, not formula")
+if ws_n.cell(7,5).value != 0.25:
+    errors.append(f"НАСТРОЙКИ E7={ws_n.cell(7,5).value!r}, expected 0.25")
+if ws_n.cell(9,5).value != 500000:
+    errors.append(f"НАСТРОЙКИ E9={ws_n.cell(9,5).value!r}, expected 500000")
 
 # ОТЧЁТ_РУКОВОДИТЕЛЮ: 3 blocks exist
 ws_o = wb3["ОТЧЁТ_РУКОВОДИТЕЛЮ"]
