@@ -1007,60 +1007,142 @@ print("✓ ДАШБОРД")
 # 9. ОТЧЁТ_РУКОВОДИТЕЛЮ
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ОТЧЁТ_РУКОВОДИТЕЛЮ"); ws.sheet_view.showGridLines = False
-banner(ws, "ОТЧЁТ РУКОВОДИТЕЛЮ — сводные данные за месяц", "A1:J1", NAVY)
-ws.merge_cells("A2:J2")
-ws.cell(2,1).value=f'=НАСТРОЙКИ!E5&" | "&TEXT(TODAY(),"MMMM YYYY")'
-ws.cell(2,1).font=fnt(12,True,NAVY); ws.cell(2,1).fill=F(LGRAY); ws.cell(2,1).alignment=LA(); ws.row_dimensions[2].height=26
 
-sec_hdr(ws, 4, "  ВЫРУЧКА И ПРИБЫЛЬ", 10, BLUE)
-def kpi_ref(label):
-    """Look up KPI by exact label in dashboard registry, return formula"""
-    if label in KPI_REGISTRY:
-        return f"={KPI_REGISTRY[label][0]}"
-    return "=0"
+# ── Period date references (from ДАШБОРД hidden row 5) ────────
+_rP="БАЗА_ДДС!$A$4:$A$3003"; _rD="БАЗА_ДДС!$D$4:$D$3003"
+_rE="БАЗА_ДДС!$E$4:$E$3003"; _rG="БАЗА_ДДС!$G$4:$G$3003"
+DS="ДАШБОРД!$A$5"; DE="ДАШБОРД!$B$5"; PS="ДАШБОРД!$C$5"; PE="ДАШБОРД!$D$5"
 
-rpt_rows=[
-    ("Общая выручка за месяц", kpi_ref("Общая выручка")),
-    ("Расходы за месяц", kpi_ref("Все расходы")),
-    ("Чистая прибыль", kpi_ref("Чистая прибыль")),
-    ("Рентабельность %", kpi_ref("Рентабельность %")),
-    ("Маржа %", kpi_ref("Маржа %")),
+def rsp(typ=None,cat=None,s=None,e=None):
+    """SUMPRODUCT filtered by current period."""
+    s_=s or DS; e_=e or DE
+    c=[f"({_rP}>={s_})",f"({_rP}<={e_})"]
+    if typ: c.append(f'({_rD}="{typ}")')
+    if cat: c.append(f'({_rE}="{cat}")')
+    return f'=IFERROR(SUMPRODUCT({"*".join(c)}*{_rG}),0)'
+
+def rsa(typ=None):
+    """SUMPRODUCT all-time (no period filter)."""
+    filt=f'({_rD}="{typ}")*' if typ else ""
+    return f'=IFERROR(SUMPRODUCT({filt}{_rG}),0)'
+
+# ── Banner ────────────────────────────────────────────────────
+banner(ws,"ОТЧЁТ РУКОВОДИТЕЛЮ — финансовая модель 25/75","A1:F1",NAVY,15)
+ws.row_dimensions[1].height=40
+
+# Row 2: info bar — individual cells, no merge (formula constraint)
+ws.cell(2,1).value='=НАСТРОЙКИ!B5&"  |  Период: "&TEXT(ДАШБОРД!$A$5,"DD.MM.YYYY")&" — "&TEXT(ДАШБОРД!$B$5,"DD.MM.YYYY")'
+ws.cell(2,1).font=fnt(11,False,NAVY); ws.cell(2,1).fill=F(LGRAY); ws.cell(2,1).border=brd(); ws.cell(2,1).alignment=LA()
+ws.cell(2,6).value='="Сформирован: "&TEXT(NOW(),"DD.MM.YYYY HH:MM")'
+ws.cell(2,6).font=fnt(9,it=True,col=GRAY); ws.cell(2,6).fill=F(LGRAY); ws.cell(2,6).border=brd(); ws.cell(2,6).alignment=RA()
+for ci_ in range(2,6): ws.cell(2,ci_).fill=F(LGRAY); ws.cell(2,ci_).border=brd()
+ws.row_dimensions[2].height=28
+
+# Row 3: column headers
+for ci_,(h_,w_) in enumerate([("Показатель",32),("Сумма (₽)",18),("% от выручки",13),
+                                ("Пред. период (₽)",15),("▲▼",5),("Лимит / Справка",16)],1):
+    c=ws.cell(3,ci_); c.value=h_; c.font=fnt(9,True,"FFFFFFFF"); c.fill=F(NAVY); c.border=brd(); c.alignment=CA()
+    ws.column_dimensions[get_column_letter(ci_)].width=w_
+ws.row_dimensions[3].height=24
+
+# ── БЛОК 1: СВОДНЫЕ ПОКАЗАТЕЛИ ────────────────────────────────
+sec_hdr(ws,4,"  БЛОК 1: СВОДНЫЕ ПОКАЗАТЕЛИ ЗА ПЕРИОД",6,NAVY)
+
+_f_vyr=rsp("Доход"); _f_rsh=rsp("Расход")
+_p_vyr=rsp("Доход",s=PS,e=PE); _p_rsh=rsp("Расход",s=PS,e=PE)
+_f_ost=f'=IFERROR({rsa("Доход")[1:]}-{rsa("Расход")[1:]},0)'
+
+b1_rows=[
+    (5,"Общая выручка (Доход)",_f_vyr,_p_vyr,"=1","100% базы",True),
+    (6,"Общие расходы (Расход)",_f_rsh,_p_rsh,"=IFERROR(B6/MAX(1,B5),0)","% выручки",False),
+    (7,"Чистая прибыль (Выручка − Расходы)","=IFERROR(B5-B6,0)","=IFERROR(D5-D6,0)","=IFERROR(B7/MAX(1,B5),0)","% рентабельн.",True),
+    (8,"Фактический остаток в системе",_f_ost,None,"всё время","все периоды",None),
 ]
-for i,(lbl_,f_) in enumerate(rpt_rows,5):
-    lbl_cell(ws,i,1,5,lbl_)
-    calc_cell(ws,i,6,10,f_,col=GREEN if i!=6 else RED,bg=GREEN_L if i!=6 else RED_L)
-    ws.row_dimensions[i].height=26
+for (ri_,lbl_,cur_,prv_,pct_,note_,up_) in b1_rows:
+    ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY); ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=cur_; ws.cell(ri_,2).font=fnt(12,True,NAVY); ws.cell(ri_,2).fill=F(BLUE_L); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
+    if isinstance(pct_,str) and pct_.startswith('='):
+        ws.cell(ri_,3).value=pct_; ws.cell(ri_,3).number_format="0.0%"
+    else:
+        ws.cell(ri_,3).value=pct_
+    ws.cell(ri_,3).font=fnt(9,col=GRAY); ws.cell(ri_,3).fill=F(LGRAY); ws.cell(ri_,3).border=brd(); ws.cell(ri_,3).alignment=CA()
+    if prv_ is not None:
+        ws.cell(ri_,4).value=prv_; ws.cell(ri_,4).font=fnt(10,col=GRAY); ws.cell(ri_,4).fill=F(LGRAY); ws.cell(ri_,4).border=brd(); ws.cell(ri_,4).alignment=RA(); ws.cell(ri_,4).number_format=MONEY
+        tr_=f'=IF(B{ri_}>D{ri_},"▲","▼")' if up_ else f'=IF(B{ri_}<D{ri_},"▲","▼")'
+        ws.cell(ri_,5).value=tr_; ws.cell(ri_,5).fill=F(LGRAY); ws.cell(ri_,5).border=brd(); ws.cell(ri_,5).alignment=CA(); ws.cell(ri_,5).font=fnt(12,True,GREEN)
+        ws.conditional_formatting.add(f"E{ri_}",FormulaRule(formula=[f'E{ri_}="▲"'],font=fnt(12,True,GREEN)))
+        ws.conditional_formatting.add(f"E{ri_}",FormulaRule(formula=[f'E{ri_}="▼"'],font=fnt(12,True,RED)))
+    else:
+        ws.cell(ri_,4).fill=F(LGRAY); ws.cell(ri_,4).border=brd()
+        ws.cell(ri_,5).fill=F(LGRAY); ws.cell(ri_,5).border=brd()
+    ws.cell(ri_,6).value=note_; ws.cell(ri_,6).font=fnt(9,it=True,col=GRAY); ws.cell(ri_,6).fill=F(LGRAY); ws.cell(ri_,6).border=brd(); ws.cell(ri_,6).alignment=LA()
+    ws.row_dimensions[ri_].height=28
 
-sec_hdr(ws, 11, "  ДОЛГИ И ВЫПЛАТЫ", 10, AMBER)
-debt_rows=[
-    ("Текущий долг", kpi_ref("Текущий долг")),
-    ("Взято в долг за месяц", kpi_ref("Взято в долг")),
-    ("Выплачено за месяц", kpi_ref("Выплачено долгов")),
-    ("Просроченные выплаты", kpi_ref("Просроч. выплаты")),
+# Traffic light: прибыль (B7) и остаток (B8)
+for ri_ in [7,8]:
+    ws.conditional_formatting.add(f"B{ri_}",FormulaRule(formula=[f"B{ri_}>0"],fill=F(GREEN_L),font=fnt(12,True,GREEN)))
+    ws.conditional_formatting.add(f"B{ri_}",FormulaRule(formula=[f"B{ri_}<=0"],fill=F(RED_L),font=fnt(12,True,RED)))
+ws.row_dimensions[9].height=6  # spacer
+
+# ── БЛОК 2: ФИНАНСОВАЯ МОДЕЛЬ 25/75 ────────────────────────────
+sec_hdr(ws,10,"  БЛОК 2: ФИНАНСОВАЯ МОДЕЛЬ — РАСПРЕДЕЛЕНИЕ 25/75",6,INDIGO)
+
+b2_rows=[
+    (11,"Маржинальная прибыль (25%)","=IFERROR(B5*НАСТРОЙКИ!$B$7,0)","=НАСТРОЙКИ!$B$7",'=TEXT(НАСТРОЙКИ!$B$7,"0%")&" × выручка"'),
+    (12,"Лимит на закуп товаров (75%)","=IFERROR(B5*НАСТРОЙКИ!$B$8,0)","=НАСТРОЙКИ!$B$8",'=TEXT(НАСТРОЙКИ!$B$8,"0%")&" × выручка"'),
+    (13,"Фактический закуп за период",rsp("Расход","Закуп"),"=IFERROR(B13/MAX(1,B5),0)","Категория: Закуп"),
+    (14,"Остаток лимита на закуп","=IFERROR(B12-B13,0)","=IFERROR(B14/MAX(1,B5),0)","= Лимит − Факт.закуп"),
 ]
-for i,(lbl_,f_) in enumerate(debt_rows,12):
-    lbl_cell(ws,i,1,5,lbl_)
-    calc_cell(ws,i,6,10,f_,col=RED,bg=RED_L)
-    ws.row_dimensions[i].height=26
+for (ri_,lbl_,cur_,pct_,note_) in b2_rows:
+    ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY); ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=cur_; ws.cell(ri_,2).font=fnt(12,True,INDIGO); ws.cell(ri_,2).fill=F(PURP_L); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
+    ws.cell(ri_,3).value=pct_
+    if isinstance(pct_,str) and pct_.startswith('='):
+        ws.cell(ri_,3).number_format="0.0%" if "НАСТРОЙКИ" not in pct_ else "0%"
+    ws.cell(ri_,3).font=fnt(9,col=INDIGO); ws.cell(ri_,3).fill=F(LGRAY); ws.cell(ri_,3).border=brd(); ws.cell(ri_,3).alignment=CA()
+    ws.cell(ri_,4).fill=F(LGRAY); ws.cell(ri_,4).border=brd()
+    ws.cell(ri_,5).fill=F(LGRAY); ws.cell(ri_,5).border=brd()
+    ws.cell(ri_,6).value=note_; ws.cell(ri_,6).font=fnt(9,it=True,col=GRAY); ws.cell(ri_,6).fill=F(LGRAY); ws.cell(ri_,6).border=brd(); ws.cell(ri_,6).alignment=LA()
+    ws.row_dimensions[ri_].height=28
 
-sec_hdr(ws, 17, "  ТОП РАСХОДОВ", 10, RED)
-for i,cat in enumerate(exp_cats_list[:5],18):
-    lbl_cell(ws,i,1,5,cat)
-    f_=f'=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=$B$5)*(БАЗА_ДДС!$E$4:$E$3003="{cat}")*БАЗА_ДДС!$G$4:$G$3003),0)'
-    # Note: references $A$5 and $B$5 which are on ДАШБОРД sheet - use ДАШБОРД!$A$5
-    f_rpt=f'=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$E$4:$E$3003="{cat}")*БАЗА_ДДС!$G$4:$G$3003),0)'
-    calc_cell(ws,i,6,10,f_rpt,col=RED,bg=RED_L)
-    ws.row_dimensions[i].height=26
+# Traffic light: остаток лимита (B14) — green=в норме, red=перерасход
+ws.conditional_formatting.add("B14",FormulaRule(formula=["B14>=0"],fill=F(GREEN_L),font=fnt(12,True,GREEN)))
+ws.conditional_formatting.add("B14",FormulaRule(formula=["B14<0"],fill=F(RED_L),font=fnt(12,True,RED)))
+ws.row_dimensions[15].height=6  # spacer
 
-ws.merge_cells("A24:J24")
-ws.cell(24,1).value="Для экспорта в PDF нажмите  [ЭКСПОРТ PDF]  (макрос VBA)"
-ws.cell(24,1).font=fnt(11,True,INDIGO); ws.cell(24,1).fill=F(BLUE_L); ws.cell(24,1).alignment=CA(); ws.row_dimensions[24].height=32
+# ── БЛОК 3: ДОЛГОВАЯ НАГРУЗКА ──────────────────────────────────
+sec_hdr(ws,16,"  БЛОК 3: ДОЛГОВАЯ НАГРУЗКА И ОБЯЗАТЕЛЬСТВА",6,RED)
 
-# Sync filter cells from ДАШБОРД
-ws.cell(3,1).value="=ДАШБОРД!$B$4"; ws.cell(3,2).value="=ДАШБОРД!$E$4"
-ws.row_dimensions[3].height=0  # hide
+_f_dolg_tek="=IFERROR(B17+B18-B19,0)"
+b3_rows=[
+    (17,"Начальный долг поставщикам (баланс)","=НАСТРОЙКИ!$B$9","НАСТРОЙКИ!B9"),
+    (18,"Взято в долг — всё время",rsa("Долг"),"тип транзакции: Долг"),
+    (19,"Выплачено по долгам — всё время",rsa("Оплата долга"),"тип: Оплата долга"),
+    (20,"Текущий долг поставщикам (итого)",_f_dolg_tek,"= Нач. + Взято − Выплачено"),
+    (21,"Кассовый разрыв (прогноз)","=IFERROR(B8-B20,0)","= Фактич.остаток − Долг"),
+]
+for (ri_,lbl_,cur_,note_) in b3_rows:
+    ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY); ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=cur_; ws.cell(ri_,2).font=fnt(12,True,RED); ws.cell(ri_,2).fill=F(RED_L); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
+    for ci_ in [3,4,5]: ws.cell(ri_,ci_).fill=F(LGRAY); ws.cell(ri_,ci_).border=brd()
+    ws.cell(ri_,6).value=note_; ws.cell(ri_,6).font=fnt(9,it=True,col=GRAY); ws.cell(ri_,6).fill=F(LGRAY); ws.cell(ri_,6).border=brd(); ws.cell(ri_,6).alignment=LA()
+    ws.row_dimensions[ri_].height=28
 
-cw(ws,{"A":22,"B":14,"C":14,"D":14,"E":14,"F":16,"G":16,"H":14,"I":14,"J":14})
+# Traffic light: текущий долг (B20) — red=долг есть
+ws.conditional_formatting.add("B20",FormulaRule(formula=["B20>0"],fill=F(RED_L),font=fnt(12,True,RED)))
+ws.conditional_formatting.add("B20",FormulaRule(formula=["B20<=0"],fill=F(GREEN_L),font=fnt(12,True,GREEN)))
+# Кассовый разрыв (B21) — green=положительный, red=отрицательный (разрыв)
+ws.conditional_formatting.add("B21",FormulaRule(formula=["B21>0"],fill=F(GREEN_L),font=fnt(12,True,GREEN)))
+ws.conditional_formatting.add("B21",FormulaRule(formula=["B21<=0"],fill=F(RED_L),font=fnt(12,True,RED)))
+ws.row_dimensions[22].height=6  # spacer
+
+# ── Footer ──────────────────────────────────────────────────────
+ws.cell(23,1).value="Для экспорта в PDF нажмите  [ЭКСПОРТ PDF]  — кнопка установлена через VBA (Модуль_WM9)"
+ws.cell(23,1).font=fnt(10,it=True,col=INDIGO); ws.cell(23,1).fill=F(BLUE_L); ws.cell(23,1).border=brd(); ws.cell(23,1).alignment=LA()
+for ci_ in range(2,7): ws.cell(23,ci_).fill=F(BLUE_L); ws.cell(23,ci_).border=brd()
+ws.row_dimensions[23].height=30
+
+ws.freeze_panes="A4"
 ws.sheet_properties.tabColor="FF111827"
 print("✓ ОТЧЁТ_РУКОВОДИТЕЛЮ")
 
