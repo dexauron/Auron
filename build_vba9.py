@@ -7,7 +7,27 @@ Option Explicit
 
 ' =========================================================
 ' WAY MARKET v9 -- VBA Module
-' Paste into Excel via Alt+F11 -> Import File
+' Alt+F11 -> File -> Import File -> select this .bas file
+' No sheet protection used — user configures manually.
+'
+' ВАЖНО для КАЛЕНДАРЬ_ВЫПЛАТ (SelectionChange):
+' В редакторе VBA раскройте лист "КАЛЕНДАРЬ_ВЫПЛАТ"
+' и вставьте в его модуль следующий код:
+'
+'   Private Sub Worksheet_SelectionChange(ByVal Target As Range)
+'       If Target.Column >= 1 And Target.Column <= 14 Then
+'           Dim rowNum As Long: rowNum = Target.Row
+'           If rowNum >= 11 And (rowNum - 11) Mod 4 = 0 Then
+'               Dim colIdx As Long: colIdx = Target.Column
+'               If colIdx Mod 2 = 1 Then
+'                   If Target.Value <> "" Then
+'                       Call WAY_MARKET_v9.ObnovitBokovuyuPanelKalendarya(CDate(DateSerial(Me.Range("G4"), Me.Range("P4"), Me.Range(Target.Address).Value)))
+'                   End If
+'               End If
+'           End If
+'       End If
+'   End Sub
+'
 ' =========================================================
 
 ' ---- Safe number conversion ----
@@ -476,6 +496,58 @@ Sub UstanovitVseKnopki()
     ws.Shapes("btnPDF").OnAction = "EksportOtchetaPDF"
 
     MsgBox "Все кнопки установлены! Шаблон готов к работе.", vbInformation
+End Sub
+
+' ---- Calendar sidebar: show payments for selected day ----
+Sub ObnovitBokovuyuPanelKalendarya(selectedDate As Date)
+    Dim wsKal As Worksheet
+    Dim wsZap As Worksheet
+    Set wsKal = ThisWorkbook.Sheets("КАЛЕНДАРЬ_ВЫПЛАТ")
+    Set wsZap = ThisWorkbook.Sheets("ЗАПИСЬ_НА_ВЫПЛАТУ")
+
+    Const SB_COL As Integer = 15  ' Column O — sidebar start
+    Const SB_START As Integer = 4  ' First data row in sidebar
+    Const SB_END As Integer = 29   ' Last row in sidebar
+
+    ' Clear sidebar
+    wsKal.Range(wsKal.Cells(3, SB_COL), wsKal.Cells(3, SB_COL + 3)).Merge True
+    wsKal.Cells(3, SB_COL).Value = Format(selectedDate, "DD.MM.YYYY")
+    wsKal.Cells(3, SB_COL).Font.Bold = True
+    wsKal.Cells(3, SB_COL).Font.Color = RGB(79, 70, 229)
+
+    Dim i As Long, outRow As Long
+    outRow = SB_START
+
+    ' Clear previous data
+    wsKal.Range(wsKal.Cells(SB_START, SB_COL), wsKal.Cells(SB_END, SB_COL + 3)).ClearContents
+
+    ' Fill from tblВыплаты
+    Dim lastR As Long
+    lastR = 503
+    For i = 4 To lastR
+        If wsZap.Cells(i, 2).Value = selectedDate Then
+            If outRow > SB_END Then Exit For
+            wsKal.Cells(outRow, SB_COL).Value = CStr(wsZap.Cells(i, 3).Value)   ' Поставщик
+            wsKal.Cells(outRow, SB_COL + 1).Value = BezopasnoeCislo(wsZap.Cells(i, 4).Value)  ' Сумма
+            wsKal.Cells(outRow, SB_COL + 2).Value = CStr(wsZap.Cells(i, 5).Value)   ' Статус
+            wsKal.Cells(outRow, SB_COL + 3).Value = CStr(wsZap.Cells(i, 6).Value)   ' Накладная
+            wsKal.Cells(outRow, SB_COL + 1).NumberFormat = "#,##0;[Red]-#,##0"
+            ' Color by status
+            Select Case wsZap.Cells(i, 5).Value
+                Case "Выплачено":   wsKal.Cells(outRow, SB_COL).Interior.Color = RGB(209, 250, 229)
+                Case "Просрочено":  wsKal.Cells(outRow, SB_COL).Interior.Color = RGB(254, 226, 226)
+                Case "Запланировано": wsKal.Cells(outRow, SB_COL).Interior.Color = RGB(239, 246, 255)
+                Case Else: wsKal.Cells(outRow, SB_COL).Interior.Color = RGB(247, 248, 250)
+            End Select
+            outRow = outRow + 1
+        End If
+    Next i
+
+    If outRow = SB_START Then
+        wsKal.Cells(SB_START, SB_COL).Value = "(Выплат нет)"
+        wsKal.Cells(SB_START, SB_COL).Font.Italic = True
+        wsKal.Cells(SB_START, SB_COL).Font.Color = RGB(107, 114, 128)
+    End If
 End Sub
 
 ' ---- Keyboard shortcuts ----

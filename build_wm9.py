@@ -271,7 +271,7 @@ tbl_c.tableStyleInfo=TableStyleInfo(name="TableStyleLight2",showRowStripes=True)
 cw(ws,{"A":22,"B":14,"C":14,"D":16,"E":14,"F":14,"G":14,"H":14})
 ws.freeze_panes="A3"
 ws.sheet_properties.tabColor="FF374151"
-ws.protection.sheet = True; ws.protection.password = ""
+
 print("✓ НАСТРОЙКИ")
 
 # ════════════════════════════════════════════════════════════
@@ -310,7 +310,7 @@ tbl_b.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showRowStripes=True
 ws.add_table(tbl_b)
 cw(ws,{"A":12,"B":10,"C":18,"D":16,"E":18,"F":14,"G":14,"H":30})
 ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF6B7280"
-ws.protection.sheet = True; ws.protection.password = ""
+
 print("✓ БАЗА_ДДС")
 
 # ════════════════════════════════════════════════════════════
@@ -381,7 +381,7 @@ ws.cell(24,1).font=fnt(10,it=True,col=BLUE); ws.cell(24,1).fill=F(BLUE_L); ws.ce
 
 cw(ws,{"A":14,"B":14,"C":13,"D":14,"E":14,"F":12,"G":10,"H":12,"I":14,"J":12,"K":6,"L":6,"M":6})
 ws.freeze_panes="A3"; ws.sheet_properties.tabColor="FF3B82F6"
-ws.protection.sheet = True; ws.protection.password = ""
+
 print("✓ ВВОД_КАССА")
 
 # ════════════════════════════════════════════════════════════
@@ -427,73 +427,170 @@ ws.cell(27,5).font=fnt(10,it=True,col=BLUE); ws.cell(27,5).fill=F(BLUE_L); ws.ce
 
 cw(ws,{"A":22,"B":14,"C":16,"D":16,"E":20,"F":10,"G":10,"H":10,"I":10,"J":10})
 ws.freeze_panes="A3"; ws.sheet_properties.tabColor="FFEF4444"
-ws.protection.sheet = True; ws.protection.password = ""
+
 print("✓ ВВОД_РАСХОДЫ")
 
 # ════════════════════════════════════════════════════════════
-# 5. ЗАПИСЬ_НА_ВЫПЛАТУ
+# 5. ЗАПИСЬ_НА_ВЫПЛАТУ (умная таблица tblВыплаты)
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ЗАПИСЬ_НА_ВЫПЛАТУ"); ws.sheet_view.showGridLines = False
-banner(ws, "ЗАПИСЬ НА ВЫПЛАТУ — контроль задолженностей", "A1:J1", AMBER)
-ws.merge_cells("A2:J2")
-ws.cell(2,1).value="Внесите информацию о выплате поставщику или сотруднику. Нажмите СОХРАНИТЬ ВЫПЛАТУ."
-ws.cell(2,1).font=fnt(10,it=True,col=AMBER); ws.cell(2,1).fill=F(AMBER_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
+banner(ws, "ЗАПИСЬ НА ВЫПЛАТУ ПОСТАВЩИКАМ (умная таблица tblВыплаты)", "A1:K1", PURPLE)
+ws.merge_cells("A2:K2")
+ws.cell(2,1).value="Вносите выплаты вручную. Календарь выплат обновится автоматически."
+ws.cell(2,1).font=fnt(10,it=True,col=PURPLE); ws.cell(2,1).fill=F(PURP_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
 
-fields=[("Дата выплаты",4,"date"),("Получатель / Поставщик",4,"text"),("Тип выплаты",4,"paytype"),
-        ("Сумма (₽)",4,"money"),("Способ оплаты",4,"payway"),("Комментарий",4,"text")]
-for i,(lbl_,colspan,t) in enumerate(fields,4):
-    lbl_cell(ws,i,1,3,lbl_)
-    c=inp_cell(ws,i,4,3+colspan,money=(t=="money"))
-    if t=="date": c.number_format=DATE_F; c.value=today
-    if t=="paytype":
-        dv=DataValidation(type="list",formula1='"Поставщик,Зарплата,Аренда,Налог,Прочее"')
-        ws.add_data_validation(dv); dv.add(c)
-    if t=="payway":
-        dv=DataValidation(type="list",formula1="=НАСТРОЙКИ!$E$44:$E$49")
-        ws.add_data_validation(dv); dv.add(c)
-    ws.row_dimensions[i].height=28
+hdrs_z=["№","Дата выплаты","Поставщик (ТП)","Сумма (₽)","Статус","Накладная №","Способ оплаты","Комментарий","","","Idx"]
+hrow(ws,3,hdrs_z,PURPLE,30)
+ws.column_dimensions["K"].hidden=True
 
-ws.merge_cells("A11:J11"); ws.cell(11,1).value="Нажмите  [СОХРАНИТЬ ВЫПЛАТУ]  для записи в базу"
-ws.cell(11,1).font=fnt(11,True,AMBER); ws.cell(11,1).fill=F(AMBER_L); ws.cell(11,1).alignment=CA(); ws.row_dimensions[11].height=32
+dv_st_z=DataValidation(type="list",formula1='"Запланировано,Выплачено,Просрочено,Отменено"')
+ws.add_data_validation(dv_st_z); dv_st_z.add("E4:E503")
+dv_sp_z=DataValidation(type="list",formula1='"Наличка,Эквайринг,Перевод"',allow_blank=True)
+ws.add_data_validation(dv_sp_z); dv_sp_z.add("G4:G503")
 
-cw(ws,{"A":20,"B":12,"C":12,"D":14,"E":14,"F":12,"G":12,"H":12,"I":12,"J":12})
-ws.sheet_properties.tabColor="FFF59E0B"
-ws.protection.sheet = True; ws.protection.password = ""
-print("✓ ЗАПИСЬ_НА_ВЫПЛАТУ")
+for r in range(4,504):
+    alt=r%2==0
+    bg=PURP_L if alt else WHITE
+    ws.cell(r,1).value=f'=IF(C{r}="","",ROW()-3)'
+    for ci in range(1,9):
+        c=ws.cell(r,ci); c.border=brd(); c.fill=F(bg); c.font=fnt(10,bold=(ci==3))
+        c.alignment=CA() if ci in [1,2,5,7] else LA() if ci in [3,6,8] else RA() if ci==4 else CA()
+    ws.cell(r,2).number_format=DATE_F; ws.cell(r,4).number_format=MONEY
+    ws.cell(r,11).value=f'=IF($B{r}="",99999,COUNTIFS($B$4:$B{r},$B{r}))'
+    ws.cell(r,11).font=fnt(8,col=GRAY); ws.row_dimensions[r].height=22
+
+for tipo_z,fill_z,fn_z in [("Запланировано",BLUE_L,BLUE),("Выплачено",GREEN_L,GREEN),
+                             ("Просрочено",RED_L,RED),("Отменено",LGRAY,GRAY)]:
+    ws.conditional_formatting.add("E4:E503",FormulaRule(formula=[f'$E4="{tipo_z}"'],fill=F(fill_z),font=fnt(10,True,fn_z)))
+ws.conditional_formatting.add("B4:B503",FormulaRule(
+    formula=['AND($E4="Запланировано",$B4<TODAY())'],fill=F(RED_L),font=fnt(10,True,RED)))
+
+tbl_z=Table(displayName="tblВыплаты",ref="A3:K503")
+tbl_z.tableStyleInfo=TableStyleInfo(name="TableStyleMedium5",showRowStripes=True)
+ws.add_table(tbl_z)
+cw(ws,{"A":5,"B":13,"C":24,"D":14,"E":15,"F":14,"G":13,"H":24,"I":4,"J":4,"K":4})
+ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF"+PURPLE[2:]
+print("✓ ЗАПИСЬ_НА_ВЫПЛАТУ (tblВыплаты)")
 
 # ════════════════════════════════════════════════════════════
-# 6. КАЛЕНДАРЬ_ВЫПЛАТ (умная таблица tblВыплаты)
+# 6. КАЛЕНДАРЬ_ВЫПЛАТ — интерактивный календарь + боковая панель
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("КАЛЕНДАРЬ_ВЫПЛАТ"); ws.sheet_view.showGridLines = False
-banner(ws, "КАЛЕНДАРЬ ВЫПЛАТ — план vs факт", "A1:H1", AMBER)
-ws.merge_cells("A2:H2")
-ws.cell(2,1).value="Умная таблица tblВыплаты. Фильтруйте по получателю, типу, статусу оплаты."
-ws.cell(2,1).font=fnt(10,it=True,col=AMBER); ws.cell(2,1).fill=F(AMBER_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
+banner(ws, "КАЛЕНДАРЬ ВЫПЛАТ ПОСТАВЩИКАМ", "A1:N1", PURPLE)
+ws.merge_cells("A2:N2")
+ws.cell(2,1).value="Выберите месяц и год. Кликните на день — справа появится список выплат за этот день."
+ws.cell(2,1).font=fnt(10,it=True,col=PURPLE); ws.cell(2,1).fill=F(PURP_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
 
-hdrs_v=["Дата план","Получатель","Тип","Сумма план","Дата факт","Сумма факт","Статус","Комментарий"]
-hrow(ws,3,hdrs_v,AMBER,28)
-dv_st=DataValidation(type="list",formula1='"Ожидается,Оплачено,Просрочено,Частично"')
-ws.add_data_validation(dv_st)
-for r in range(4,1004):
-    alt=r%2==0
-    for ci in range(1,9):
-        c=ws.cell(r,ci); c.border=brd(); c.fill=F(AMBER_L if alt else WHITE); c.font=fnt(10)
-        c.alignment=CA() if ci in [3,7] else LA() if ci in [2,8] else RA() if ci in [4,6] else CA()
-        c.protection=prot(False)
-    ws.cell(r,1).number_format=DATE_F; ws.cell(r,4).number_format=MONEY
-    ws.cell(r,5).number_format=DATE_F; ws.cell(r,6).number_format=MONEY
-    dv_st.add(ws.cell(r,7)); ws.row_dimensions[r].height=20
+# Filter bar row 4
+ws.cell(4,1).value="Месяц:"; ws.cell(4,1).font=fnt(11,True); ws.cell(4,1).alignment=RA(); ws.cell(4,1).fill=F(LGRAY)
+ws.merge_cells("B4:D4")
+ws.cell(4,2).value=MONTHS_RU[today.month-1]
+ws.cell(4,2).font=fnt(14,True,INDIGO); ws.cell(4,2).fill=F(INP); ws.cell(4,2).border=brd_med(); ws.cell(4,2).alignment=CA()
+dv_mon_k=DataValidation(type="list",formula1='"Январь,Февраль,Март,Апрель,Май,Июнь,Июль,Август,Сентябрь,Октябрь,Ноябрь,Декабрь"')
+ws.add_data_validation(dv_mon_k); dv_mon_k.add("B4")
+ws.cell(4,6).value="Год:"; ws.cell(4,6).font=fnt(11,True); ws.cell(4,6).alignment=RA(); ws.cell(4,6).fill=F(LGRAY)
+ws.merge_cells("G4:H4")
+ws.cell(4,7).value=today.year
+ws.cell(4,7).font=fnt(14,True,INDIGO); ws.cell(4,7).fill=F(INP); ws.cell(4,7).border=brd_med(); ws.cell(4,7).alignment=CA()
+dv_yr_k=DataValidation(type="list",formula1='"2024,2025,2026,2027,2028"')
+ws.add_data_validation(dv_yr_k); dv_yr_k.add("G4")
+ws.row_dimensions[4].height=36
 
-for st,fill_,font_ in [("Оплачено",GREEN_L,GREEN),("Просрочено",RED_L,RED),("Частично",AMBER_L,AMBER)]:
-    ws.conditional_formatting.add("G4:G1003",FormulaRule(formula=[f'$G4="{st}"'],fill=F(fill_),font=fnt(10,True,font_)))
-ws.conditional_formatting.add("A4:A1003",FormulaRule(formula=['AND($G4="Ожидается",$A4<TODAY())'],fill=F(RED_L),font=fnt(10,True,RED)))
+# Hidden helper cells (column P)
+ws.cell(4,16).value='=MATCH(B4,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0)'
+ws.cell(5,16).value='=DATE(G4,P4,1)'; ws.cell(5,16).number_format=DATE_F
+ws.cell(6,16).value='=EOMONTH(P5,0)'; ws.cell(6,16).number_format=DATE_F
+ws.cell(7,16).value='=WEEKDAY(P5,2)'
+ws.column_dimensions['P'].hidden=True
 
-tbl_v=Table(displayName="tblВыплаты",ref="A3:H1003")
-tbl_v.tableStyleInfo=TableStyleInfo(name="TableStyleMedium7",showRowStripes=True)
-ws.add_table(tbl_v)
-cw(ws,{"A":12,"B":22,"C":16,"D":14,"E":12,"F":14,"G":12,"H":28})
-ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FFF59E0B"
-print("✓ КАЛЕНДАРЬ_ВЫПЛАТ")
+# KPI summary row 6-8
+sec_hdr(ws, 6, "  СВОДКА ПО ВЫБРАННОМУ МЕСЯЦУ", 14, INDIGO)
+def kpi_cal(ws, row, c1, c2, lbl_, f_, bg):
+    ws.merge_cells(start_row=row, start_column=c1, end_row=row, end_column=c2)
+    c=ws.cell(row,c1); c.value=lbl_; c.font=fnt(10,True,"FFBBBBBB"); c.fill=F("FF1F2937"); c.alignment=CA()
+    ws.merge_cells(start_row=row+1, start_column=c1, end_row=row+1, end_column=c2)
+    c=ws.cell(row+1,c1); c.value=f_; c.font=fnt(18,True,"FFFFFFFF"); c.fill=F(bg); c.alignment=CA(); c.number_format=MONEY
+    ws.row_dimensions[row].height=20; ws.row_dimensions[row+1].height=40
+
+kpi_cal(ws,7,1,3,"К ВЫПЛАТЕ ВСЕГО",
+    '=IFERROR(SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503>=$P$5)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503<=$P$6)*ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503),0)',PURPLE)
+kpi_cal(ws,7,5,7,"ВЫПЛАЧЕНО",
+    '=IFERROR(SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503>=$P$5)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503<=$P$6)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$E$4:$E$503="Выплачено")*ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503),0)',GREEN)
+kpi_cal(ws,7,9,11,"ЗАПЛАНИРОВАНО",
+    '=IFERROR(SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503>=$P$5)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503<=$P$6)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$E$4:$E$503="Запланировано")*ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503),0)',AMBER)
+kpi_cal(ws,7,12,14,"ПРОСРОЧЕНО",
+    '=IFERROR(SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503>=$P$5)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503<=$P$6)*(ЗАПИСЬ_НА_ВЫПЛАТУ!$E$4:$E$503="Просрочено")*ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503),0)',RED)
+
+# Day-of-week header row 10
+ws.row_dimensions[10].height=28
+for i,d in enumerate(['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС']):
+    cs=1+i*2
+    ws.merge_cells(start_row=10,start_column=cs,end_row=10,end_column=cs+1)
+    c=ws.cell(10,cs); c.value=d; c.font=fnt(10,True,"FFFFFFFF")
+    c.fill=F(RED if i>=5 else NAVY); c.alignment=CA(); c.border=brd()
+
+# 6-week calendar grid (rows 11-34, 4 rows per week)
+CELL_ROWS=4; SR=11
+for week in range(6):
+    br=SR+week*CELL_ROWS
+    for dp in range(7):
+        cs=1+dp*2; ce=cs+1; di=week*7+dp
+        dr=f'DATE($G$4,$P$4,1)+{di}-($P$7-1)'
+        check=f"${get_column_letter(cs)}${br}"
+        # Day number + total amount
+        ws.cell(br,cs).value=f'=IFERROR(IF(AND({dr}>=$P$5,{dr}<=$P$6),DAY({dr}),""),"")'
+        ws.cell(br,cs).font=fnt(13,True,NAVY); ws.cell(br,cs).alignment=LA()
+        ws.cell(br,ce).value=f'=IFERROR(IF({check}="","",SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503={dr})*ЗАПИСЬ_НА_ВЫПЛАТУ!$D$4:$D$503)),"")'
+        ws.cell(br,ce).font=fnt(11,True,RED); ws.cell(br,ce).alignment=RA(); ws.cell(br,ce).number_format='#,##0;;;'
+        # Up to 2 suppliers
+        for tp_i in range(2):
+            rt=br+1+tp_i; n=tp_i+1
+            ws.cell(rt,cs).value=f'=IFERROR(IF({check}="","",INDEX(ЗАПИСЬ_НА_ВЫПЛАТУ!$C:$C,SUMPRODUCT((ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503={dr})*(ЗАПИСЬ_НА_ВЫПЛАТУ!$K$4:$K$503={n})*ROW(ЗАПИСЬ_НА_ВЫПЛАТУ!$B$4:$B$503)))),"")'
+            ws.cell(rt,cs).font=fnt(8,col=BLUE); ws.cell(rt,cs).alignment=LA()
+            ws.merge_cells(start_row=rt,start_column=cs,end_row=rt,end_column=ce)
+        # "+ N more" hint
+        ws.cell(br+3,cs).value=f'=IFERROR(IF(OR({check}="",COUNTIFS(ЗАПИСЬ_НА_ВЫПЛАТУ!$B:$B,{dr})<=2),"","+ ещё "&(COUNTIFS(ЗАПИСЬ_НА_ВЫПЛАТУ!$B:$B,{dr})-2)),"")'
+        ws.cell(br+3,cs).font=fnt(8,it=True,col=GRAY); ws.cell(br+3,cs).alignment=CA()
+        ws.merge_cells(start_row=br+3,start_column=cs,end_row=br+3,end_column=ce)
+        # Cell background
+        bg_c="FFFFF5F5" if dp>=5 else "FFFAFAFA"
+        for ri in range(br,br+4):
+            for ci_ in [cs,ce]:
+                ws.cell(ri,ci_).fill=F(bg_c); ws.cell(ri,ci_).border=brd("FF999999" if ri==br else BORDER)
+        for ri in [br,br+1,br+2,br+3]:
+            ws.row_dimensions[ri].height=22 if ri==br else 16
+
+# ── Sidebar (columns O-R): populated by VBA SelectionChange ──────────────────
+SB=15  # column O
+ws.merge_cells(start_row=1,start_column=SB,end_row=1,end_column=SB+3)
+ws.cell(1,SB).value="ДЕТАЛИ ДНЯ"; ws.cell(1,SB).font=fnt(12,True,"FFFFFFFF")
+ws.cell(1,SB).fill=F(INDIGO); ws.cell(1,SB).alignment=CA()
+
+sidebar_hdrs=["Поставщик","Сумма","Статус","Накладная"]
+for si,h in enumerate(sidebar_hdrs):
+    ws.cell(2,SB+si).value=h; ws.cell(2,SB+si).font=fnt(9,True,"FFFFFFFF")
+    ws.cell(2,SB+si).fill=F(NAVY); ws.cell(2,SB+si).alignment=CA(); ws.cell(2,SB+si).border=brd()
+
+ws.merge_cells(start_row=3,start_column=SB,end_row=3,end_column=SB+3)
+ws.cell(3,SB).value="← Кликните на день в календаре"
+ws.cell(3,SB).font=fnt(10,it=True,col=GRAY); ws.cell(3,SB).fill=F(LGRAY); ws.cell(3,SB).alignment=CA()
+
+for r in range(4,30):
+    for si in range(4):
+        c=ws.cell(r,SB+si); c.fill=F(LGRAY if r%2==0 else WHITE); c.border=brd(); c.font=fnt(10)
+        c.alignment=LA() if si in [0,3] else RA() if si==1 else CA()
+    ws.cell(r,SB+1).number_format=MONEY; ws.row_dimensions[r].height=20
+
+for col_i in range(1,19):
+    ws.column_dimensions[get_column_letter(col_i)].width=13
+# Wider sidebar columns
+ws.column_dimensions[get_column_letter(SB)].width=22
+ws.column_dimensions[get_column_letter(SB+1)].width=14
+ws.column_dimensions[get_column_letter(SB+2)].width=14
+ws.column_dimensions[get_column_letter(SB+3)].width=16
+
+ws.freeze_panes="A11"; ws.sheet_properties.tabColor="FF"+PURPLE[2:]
+print("✓ КАЛЕНДАРЬ_ВЫПЛАТ (интерактивный)")
 
 # ════════════════════════════════════════════════════════════
 # 7. ДАННЫЕ (hidden sheet for chart data)
@@ -710,31 +807,26 @@ def kpi_block(ws, label_row, val_row, cards, bg_hdr=LGRAY, bg_val=WHITE, val_col
 
         ws.row_dimensions[val_row].height=38
 
-# Helper SUMIFS fragments using hidden row 5 dates
+# Helper SUMIFS — clean construction, no trailing-paren bug
 def sumifs_periodo(tipo=None, cat=None, pay=None, fld="$G$4:$G$3003"):
-    """Returns formula fragment for current period"""
-    base=f"БАЗА_ДДС!$A$4:$A$3003>=$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=$B$5)"
-    conds=[base]
+    conds = ["(БАЗА_ДДС!$A$4:$A$3003>=$A$5)", "(БАЗА_ДДС!$A$4:$A$3003<=$B$5)"]
     if tipo: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{tipo}")')
-    if cat: conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
-    if pay: conds.append(f'(БАЗА_ДДС!$F$4:$F$3003="{pay}")')
-    return "=IFERROR(SUMPRODUCT(("+")*(".join(conds)+f")*БАЗА_ДДС!{fld}),0)"
+    if cat:  conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
+    if pay:  conds.append(f'(БАЗА_ДДС!$F$4:$F$3003="{pay}")')
+    return f'=IFERROR(SUMPRODUCT({"*".join(conds)}*БАЗА_ДДС!{fld}),0)'
 
 def sumifs_prev(tipo=None, cat=None, pay=None, fld="$G$4:$G$3003"):
-    """Returns formula fragment for previous period"""
-    base=f"БАЗА_ДДС!$A$4:$A$3003>=$C$5)*(БАЗА_ДДС!$A$4:$A$3003<=$D$5)"
-    conds=[base]
+    conds = ["(БАЗА_ДДС!$A$4:$A$3003>=$C$5)", "(БАЗА_ДДС!$A$4:$A$3003<=$D$5)"]
     if tipo: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{tipo}")')
-    if cat: conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
-    if pay: conds.append(f'(БАЗА_ДДС!$F$4:$F$3003="{pay}")')
-    return "=IFERROR(SUMPRODUCT(("+")*(".join(conds)+f")*БАЗА_ДДС!{fld}),0)"
+    if cat:  conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
+    if pay:  conds.append(f'(БАЗА_ДДС!$F$4:$F$3003="{pay}")')
+    return f'=IFERROR(SUMPRODUCT({"*".join(conds)}*БАЗА_ДДС!{fld}),0)'
 
 def countifs_periodo(tipo=None):
-    base=f"БАЗА_ДДС!$A$4:$A$3003>=$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=$B$5)"
-    conds=[base]
+    conds = ["(БАЗА_ДДС!$A$4:$A$3003>=$A$5)", "(БАЗА_ДДС!$A$4:$A$3003<=$B$5)"]
     if tipo: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{tipo}")')
-    conds.append(f'(БАЗА_ДДС!$G$4:$G$3003<>"")')
-    return "=IFERROR(SUMPRODUCT(("+")*(".join(conds)+")*(1)),0)"
+    conds.append('(БАЗА_ДДС!$G$4:$G$3003<>"")')
+    return f'=IFERROR(SUMPRODUCT({"*".join(conds)}),0)'
 
 # Revenues
 v_выручка = sumifs_periodo("Доход")
@@ -986,7 +1078,7 @@ ws.add_chart(chart6, f"G{row}")
 cw(ws,{"A":10,"B":10,"C":10,"D":10,"E":10,"F":10,"G":10,"H":10,"I":10,"J":10,"K":10,"L":10})
 ws.freeze_panes="A7"
 ws.sheet_properties.tabColor="FF4F46E5"
-ws.protection.sheet = True; ws.protection.password = ""
+
 print("✓ ДАШБОРД")
 
 # ════════════════════════════════════════════════════════════
