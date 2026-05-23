@@ -638,6 +638,28 @@ ws.row_dimensions[6].height=22
 
 # ── KPI Layout: 12 columns (A-L), 3 cols per card = 4 cards per row ──────────
 # Each block: row N=section header, rows N+1,N+2 = KPI cards (label+value)
+# Strategy: store curr/prev formulas in hidden ДАННЫЕ sheet to avoid deep nesting.
+
+KPI_DATA_ROW = [99]  # next free row in ДАННЫЕ for KPI values
+KPI_REGISTRY = {}    # label -> (curr_ref, prev_ref)
+
+def store_kpi(label, curr_formula, prev_formula, mfmt=True):
+    """Allocate row in ДАННЫЕ, write formulas, return (curr_ref, prev_ref)"""
+    KPI_DATA_ROW[0] += 1
+    r = KPI_DATA_ROW[0]
+    ws_d.cell(r, 1).value = label
+    ws_d.cell(r, 1).font = fnt(9, False, GRAY)
+    if curr_formula:
+        ws_d.cell(r, 2).value = curr_formula
+        if mfmt: ws_d.cell(r, 2).number_format = MONEY
+    if prev_formula:
+        ws_d.cell(r, 3).value = prev_formula
+        if mfmt: ws_d.cell(r, 3).number_format = MONEY
+    curr_ref = f"ДАННЫЕ!$B${r}" if curr_formula else None
+    prev_ref = f"ДАННЫЕ!$C${r}" if prev_formula else None
+    if label:
+        KPI_REGISTRY[label] = (curr_ref, prev_ref)
+    return curr_ref, prev_ref
 
 def dash_section(ws, row, title, bg):
     ws.merge_cells(start_row=row,start_column=1,end_row=row,end_column=12)
@@ -651,7 +673,6 @@ def kpi_block(ws, label_row, val_row, cards, bg_hdr=LGRAY, bg_val=WHITE, val_col
     for i,(label,val_f,prev_f,mfmt) in enumerate(cards):
         c1=i*cols_per+1; c2=c1+cols_per-1
         if i==ncards-1: c2=12  # last card takes remaining space
-        trend_col=c2  # trend in last cell of merge
         val_c2=c2-1 if ncards>1 else c2
 
         # Label row
@@ -660,19 +681,23 @@ def kpi_block(ws, label_row, val_row, cards, bg_hdr=LGRAY, bg_val=WHITE, val_col
         lc.font=fnt(9,False,GRAY); lc.fill=F(bg_hdr); lc.border=brd(); lc.alignment=CA()
         ws.row_dimensions[label_row].height=20
 
-        # Value row
+        # Store formulas in ДАННЫЕ, get short cell references
+        curr_ref, prev_ref = store_kpi(label, val_f if val_f else None, prev_f if prev_f else None, mfmt)
+
+        # Value row — reference ДАННЫЕ cell
         ws.merge_cells(start_row=val_row,start_column=c1,end_row=val_row,end_column=val_c2)
-        vc=ws.cell(val_row,c1); vc.value=val_f
+        vc=ws.cell(val_row,c1)
+        if curr_ref:
+            vc.value = f"={curr_ref}"
+        else:
+            vc.value = ""
         vc.font=fnt(16,True,val_col); vc.fill=F(bg_val); vc.border=brd(); vc.alignment=CA(wrap=False)
         if mfmt: vc.number_format=MONEY
 
-        # Trend cell
+        # Trend cell — short comparison via cell refs
         tc=ws.cell(val_row,c2)
-        if prev_f and val_f:
-            # Formula: ▲ if current > prev
-            vref=val_f.lstrip("=") if val_f.startswith("=") else val_f
-            pref=prev_f.lstrip("=") if prev_f.startswith("=") else prev_f
-            tc.value=f'=IF(({vref})>({pref}),"▲","▼")'
+        if curr_ref and prev_ref:
+            tc.value = f'=IF({curr_ref}>{prev_ref},"▲","▼")'
             tc.font=fnt(12,True,GREEN)
         else:
             tc.value=""
@@ -974,12 +999,18 @@ ws.cell(2,1).value=f'=НАСТРОЙКИ!E5&" | "&TEXT(TODAY(),"MMMM YYYY")'
 ws.cell(2,1).font=fnt(12,True,NAVY); ws.cell(2,1).fill=F(LGRAY); ws.cell(2,1).alignment=LA(); ws.row_dimensions[2].height=26
 
 sec_hdr(ws, 4, "  ВЫРУЧКА И ПРИБЫЛЬ", 10, BLUE)
+def kpi_ref(label):
+    """Look up KPI by exact label in dashboard registry, return formula"""
+    if label in KPI_REGISTRY:
+        return f"={KPI_REGISTRY[label][0]}"
+    return "=0"
+
 rpt_rows=[
-    ("Общая выручка за месяц", v_выручка),
-    ("Расходы за месяц", v_расходы),
-    ("Чистая прибыль", v_прибыль),
-    ("Рентабельность %", v_рент),
-    ("Маржа %", v_маржа),
+    ("Общая выручка за месяц", kpi_ref("Общая выручка")),
+    ("Расходы за месяц", kpi_ref("Все расходы")),
+    ("Чистая прибыль", kpi_ref("Чистая прибыль")),
+    ("Рентабельность %", kpi_ref("Рентабельность %")),
+    ("Маржа %", kpi_ref("Маржа %")),
 ]
 for i,(lbl_,f_) in enumerate(rpt_rows,5):
     lbl_cell(ws,i,1,5,lbl_)
@@ -988,10 +1019,10 @@ for i,(lbl_,f_) in enumerate(rpt_rows,5):
 
 sec_hdr(ws, 11, "  ДОЛГИ И ВЫПЛАТЫ", 10, AMBER)
 debt_rows=[
-    ("Текущий долг", v_долг_тек),
-    ("Взято в долг за месяц", v_долг_взят),
-    ("Выплачено за месяц", v_долг_выпл),
-    ("Просроченные выплаты", v_просроч),
+    ("Текущий долг", kpi_ref("Текущий долг")),
+    ("Взято в долг за месяц", kpi_ref("Взято в долг")),
+    ("Выплачено за месяц", kpi_ref("Выплачено долгов")),
+    ("Просроченные выплаты", kpi_ref("Просроч. выплаты")),
 ]
 for i,(lbl_,f_) in enumerate(debt_rows,12):
     lbl_cell(ws,i,1,5,lbl_)
