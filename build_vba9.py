@@ -130,94 +130,64 @@ End Function
 ' ---- SOHRANIT KASSU ----
 Sub SohranitKassu()
     Dim wsVvod As Worksheet
-    Dim kassir As String
-    Dim dataVal As Date
-    Dim smeny As Variant, r As Integer
-
     Set wsVvod = ThisWorkbook.Sheets("ВВОД_КАССА")
     Application.Calculation = xlCalculationManual
     Application.ScreenUpdating = False
 
-    ' Get date
-    dataVal = PoluiChitDatu(wsVvod)
-    If dataVal = 0 Then
-        Application.Calculation = xlCalculationAutomatic
-        Application.ScreenUpdating = True
-        Exit Sub
-    End If
-
-    kassir = CStr(wsVvod.Range("E8").Value)
-    smeny = Array("День", "Вечер", "Ночь")
+    Dim tbl As ListObject
+    Set tbl = wsVvod.ListObjects("tblВводКасса")
 
     Dim zapisano As Integer
     zapisano = 0
+    Dim r As Long
 
-    For r = 0 To 2
-        Dim smena As String
-        Dim rowNum As Integer
-        smena = smeny(r)
-        rowNum = 12 + r
+    For r = 4 To 503
+        If wsVvod.Cells(r, 1).Value = "" Then GoTo NextRowK
 
-        Dim vyruchka As Double
-        Dim razhozhdenie As Double
-        Dim zakup As Double
-        Dim iман As Double
-        Dim viplata As Double
+        Dim dataValK As Date
+        Dim smenaK As String
+        Dim kassirK As String
+        dataValK = CDate(wsVvod.Cells(r, 1).Value)
+        smenaK = CStr(wsVvod.Cells(r, 2).Value)
+        kassirK = CStr(wsVvod.Cells(r, 3).Value)
 
-        vyruchka = BezopasnoeCislo(wsVvod.Cells(rowNum, 2).Value)
-        razhozhdenie = BezopasnoeCislo(wsVvod.Cells(rowNum, 9).Value)
-        zakup = 0
-        iман = 0
-        viplata = 0
+        Dim vyruchkaK As Double
+        vyruchkaK = BezopasnoeCislo(wsVvod.Cells(r, 4).Value)
 
-        If vyruchka > 0 Then
-            ' Check duplication
-            If DataSmenaEstVBaze(dataVal, smena) Then
-                MsgBox "ВНИМАНИЕ: Смена '" & smena & "' за " & Format(dataVal, "DD.MM.YYYY") & _
+        If vyruchkaK > 0 Then
+            If DataSmenaEstVBaze(dataValK, smenaK) Then
+                MsgBox "ВНИМАНИЕ: Смена '" & smenaK & "' за " & Format(dataValK, "DD.MM.YYYY") & _
                        " уже записана в базе! Сохранение пропущено.", vbExclamation
             Else
-                ZapisatTransakciyu dataVal, smena, kassir, "Доход", "", "Наличка", vyruchka, "Z-отчёт"
-                If Abs(razhozhdenie) > 0 Then
-                    ZapisatTransakciyu dataVal, smena, kassir, "Расхождение", "", "Наличка", Abs(razhozhdenie), "Расхождение кассы"
-                End If
+                ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Наличка", vyruchkaK, "Z-отчёт"
+                Dim ekv As Double: ekv = BezopasnoeCislo(wsVvod.Cells(r, 6).Value)
+                If ekv > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Эквайринг", ekv, "Эквайринг"
+                Dim perK As Double: perK = BezopasnoeCislo(wsVvod.Cells(r, 7).Value)
+                If perK > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Перевод", perK, "Перевод"
+                Dim imanK As Double: imanK = BezopasnoeCislo(wsVvod.Cells(r, 8).Value)
+                If imanK > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Иман", "", "Иман", imanK, "Иман"
+                Dim viplK As Double: viplK = BezopasnoeCislo(wsVvod.Cells(r, 9).Value)
+                If viplK > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Расход", "", "Наличка", viplK, "Выплата с кассы"
+                Dim zakupK As Double: zakupK = BezopasnoeCislo(wsVvod.Cells(r, 10).Value)
+                If zakupK > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Расход", "Закуп товара", "Наличка", zakupK, "Закуп"
+                Dim dolgK As Double: dolgK = BezopasnoeCislo(wsVvod.Cells(r, 11).Value)
+                If dolgK > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Долг", "Закуп товара", "Долг", dolgK, "Долг поставщику"
                 zapisano = zapisano + 1
             End If
         End If
+NextRowK:
     Next r
-
-    ' Additional: закуп
-    Dim zakupS As Double
-    zakupS = BezopasnoeCislo(wsVvod.Range("E17").Value)
-    If zakupS > 0 Then
-        ZapisatTransakciyu dataVal, "-", kassir, "Расход", "Закуп товара", "Наличка", zakupS, "Закуп"
-    End If
-
-    ' Additional: долг
-    Dim dolgS As Double
-    dolgS = BezopasnoeCislo(wsVvod.Range("E18").Value)
-    If dolgS > 0 Then
-        ZapisatTransakciyu dataVal, "-", kassir, "Долг", "Закуп товара", "Долг", dolgS, "Долг поставщику"
-    End If
-
-    ' Additional: иман
-    Dim imanS As Double
-    imanS = BezopasnoeCislo(wsVvod.Range("E19").Value)
-    If imanS > 0 Then
-        ZapisatTransakciyu dataVal, "-", kassir, "Иман", "", "Наличка", imanS, "Иман"
-    End If
 
     Application.Calculation = xlCalculationAutomatic
     Application.ScreenUpdating = True
 
     If zapisano > 0 Then
-        ' Clear input fields
-        Dim ci As Integer
-        For r = 12 To 14
-            For ci = 2 To 10
-                wsVvod.Cells(r, ci).ClearContents
-            Next ci
-        Next r
-        wsVvod.Range("E17:E19").ClearContents
+        tbl.DataBodyRange.ClearContents
+        Dim todayK As Date: todayK = Now()
+        wsVvod.Cells(4, 1).Value = todayK: wsVvod.Cells(4, 2).Value = "День"
+        wsVvod.Cells(5, 1).Value = todayK: wsVvod.Cells(5, 2).Value = "Вечер"
+        wsVvod.Cells(6, 1).Value = todayK: wsVvod.Cells(6, 2).Value = "Ночь"
+        wsVvod.Range("A4:A6").NumberFormat = "DD.MM.YYYY"
         MsgBox "Касса сохранена! Записано смен: " & zapisano, vbInformation
     Else
         MsgBox "Нет данных для сохранения (введите выручку Z-отчётов).", vbExclamation
@@ -227,51 +197,39 @@ End Sub
 ' ---- SOHRANIT RASHODY ----
 Sub SohranitRashody()
     Dim wsVvod As Worksheet
-    Dim kassir As String
-    Dim dataVal As Date
     Set wsVvod = ThisWorkbook.Sheets("ВВОД_РАСХОДЫ")
-
     Application.Calculation = xlCalculationManual
     Application.ScreenUpdating = False
 
-    dataVal = wsVvod.Range("D5").Value
-    If dataVal = 0 Then
-        MsgBox "Не заполнена дата!", vbExclamation
-        Application.Calculation = xlCalculationAutomatic
-        Application.ScreenUpdating = True
-        Exit Sub
-    End If
+    Dim tbl As ListObject
+    Set tbl = wsVvod.ListObjects("tblВводРасходы")
 
-    kassir = CStr(wsVvod.Range("I5").Value)
-    Dim r As Integer
     Dim zapisano As Integer
     zapisano = 0
+    Dim r As Long
 
-    For r = 9 To 24
-        Dim kat As String
-        Dim sposob As String
-        Dim summa As Double
-        Dim komment As String
-        kat = CStr(wsVvod.Cells(r, 1).Value)
-        sposob = CStr(wsVvod.Cells(r, 2).Value)
-        summa = BezopasnoeCislo(wsVvod.Cells(r, 3).Value)
-        komment = CStr(wsVvod.Cells(r, 5).Value)
-        If summa > 0 And kat <> "" Then
-            ZapisatTransakciyu dataVal, "-", kassir, "Расход", kat, sposob, summa, komment
+    For r = 4 To 503
+        If wsVvod.Cells(r, 1).Value = "" Then GoTo NextRowR
+        Dim dataValR As Date: dataValR = CDate(wsVvod.Cells(r, 1).Value)
+        Dim kassirR As String: kassirR = CStr(wsVvod.Cells(r, 2).Value)
+        Dim katR As String: katR = CStr(wsVvod.Cells(r, 3).Value)
+        Dim sposobR As String: sposobR = CStr(wsVvod.Cells(r, 4).Value)
+        Dim summaR As Double: summaR = BezopasnoeCislo(wsVvod.Cells(r, 5).Value)
+        Dim kommentR As String: kommentR = CStr(wsVvod.Cells(r, 6).Value)
+        If summaR > 0 And katR <> "" Then
+            ZapisatTransakciyu dataValR, "-", kassirR, "Расход", katR, sposobR, summaR, kommentR
             zapisano = zapisano + 1
         End If
+NextRowR:
     Next r
 
     Application.Calculation = xlCalculationAutomatic
     Application.ScreenUpdating = True
 
     If zapisano > 0 Then
-        For r = 9 To 24
-            wsVvod.Cells(r, 1).ClearContents
-            wsVvod.Cells(r, 2).ClearContents
-            wsVvod.Cells(r, 3).ClearContents
-            wsVvod.Cells(r, 5).ClearContents
-        Next r
+        tbl.DataBodyRange.ClearContents
+        wsVvod.Cells(4, 1).Value = Now()
+        wsVvod.Cells(4, 1).NumberFormat = "DD.MM.YYYY"
         MsgBox "Расходы сохранены! Записей: " & zapisano, vbInformation
     Else
         MsgBox "Нет данных для сохранения.", vbExclamation
@@ -362,25 +320,20 @@ End Sub
 Sub ПоставитьСегодня()
     Dim ws As Worksheet
     Set ws = ThisWorkbook.ActiveSheet
-    Dim months As Variant
-    months = Array("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", _
-                   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
-    ws.Range("B5").Value = Day(Now)
-    ws.Range("E5").Value = months(Month(Now) - 1)
-    ws.Range("H5").Value = Year(Now)
+    ws.Cells(4, 1).Value = Now()
+    ws.Cells(5, 1).Value = Now()
+    ws.Cells(6, 1).Value = Now()
+    ws.Range("A4:A6").NumberFormat = "DD.MM.YYYY"
 End Sub
 
 Sub ПоставитьВчера()
     Dim ws As Worksheet
     Set ws = ThisWorkbook.ActiveSheet
-    Dim months As Variant
-    months = Array("Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", _
-                   "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь")
-    Dim vchera As Date
-    vchera = Now - 1
-    ws.Range("B5").Value = Day(vchera)
-    ws.Range("E5").Value = months(Month(vchera) - 1)
-    ws.Range("H5").Value = Year(vchera)
+    Dim vchera As Date: vchera = Now() - 1
+    ws.Cells(4, 1).Value = vchera
+    ws.Cells(5, 1).Value = vchera
+    ws.Cells(6, 1).Value = vchera
+    ws.Range("A4:A6").NumberFormat = "DD.MM.YYYY"
 End Sub
 
 ' ---- Setup all buttons ----
@@ -397,7 +350,7 @@ Sub UstanovitVseKnopki()
     On Error GoTo 0
 
     Dim b As Shape
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 400, 160, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 2, 160, 36)
     b.TextFrame.Characters.Text = "СОХРАНИТЬ КАССУ"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11
@@ -407,7 +360,7 @@ Sub UstanovitVseKnopki()
     b.Name = "btnSaveKassu"
     ws.Shapes("btnSaveKassu").OnAction = "SohranitKassu"
 
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 180, 400, 120, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 180, 2, 120, 36)
     b.TextFrame.Characters.Text = "СЕГОДНЯ"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11
@@ -417,7 +370,7 @@ Sub UstanovitVseKnopki()
     b.Name = "btnSogodnya"
     ws.Shapes("btnSogodnya").OnAction = "ПоставитьСегодня"
 
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 310, 400, 120, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 310, 2, 120, 36)
     b.TextFrame.Characters.Text = "ВЧЕРА"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11
@@ -434,7 +387,7 @@ Sub UstanovitVseKnopki()
         btn.Delete
     Next btn
     On Error GoTo 0
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 440, 160, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 2, 160, 36)
     b.TextFrame.Characters.Text = "СОХРАНИТЬ РАСХОДЫ"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11
@@ -451,7 +404,7 @@ Sub UstanovitVseKnopki()
         btn.Delete
     Next btn
     On Error GoTo 0
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 220, 160, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 2, 160, 36)
     b.TextFrame.Characters.Text = "СОХРАНИТЬ ВЫПЛАТУ"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11
@@ -485,7 +438,7 @@ Sub UstanovitVseKnopki()
         btn.Delete
     Next btn
     On Error GoTo 0
-    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 400, 160, 36)
+    Set b = ws.Shapes.AddShape(msoShapeRoundedRectangle, 10, 2, 160, 36)
     b.TextFrame.Characters.Text = "ЭКСПОРТ PDF"
     b.TextFrame.Characters.Font.Bold = True
     b.TextFrame.Characters.Font.Size = 11

@@ -131,144 +131,98 @@ wb = Workbook()
 # 1. НАСТРОЙКИ
 # ════════════════════════════════════════════════════════════
 ws = wb.active; ws.title = "НАСТРОЙКИ"; ws.sheet_view.showGridLines = False
-banner(ws, "⚙  НАСТРОЙКИ МАГАЗИНА — все параметры в одном месте", "A1:H1", INDIGO)
+banner(ws, "⚙  НАСТРОЙКИ МАГАЗИНА — заполните один раз", "A1:H1", INDIGO)
 ws.merge_cells("A2:H2")
 ws.cell(2,1).value = "Заполните разделы ниже один раз. Все листы подстроятся автоматически."
 ws.cell(2,1).font = fnt(10,it=True,col=GRAY); ws.cell(2,1).fill = F(LGRAY)
 ws.cell(2,1).alignment = CA(); ws.row_dimensions[2].height = 22
 
-sec_hdr(ws, 4, "  ПАРАМЕТРЫ МАГАЗИНА", 8, INDIGO)
-params = [("Название магазина","WAY MARKET №2","text"),
-          ("Дата начала учёта","01.01.2026","date"),
-          ("Доля в фонд рентабельности (%)","25","num"),
-          ("Лимит на закуп (%)","75","num"),
-          ("Начальный долг поставщикам (₽)", 500000, "money"),
-          ("Округление сумм","До рубля","round"),
-          ("Период сравнения","Прошлый месяц","period")]
-for i,(label,val,t) in enumerate(params,5):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=label; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=val; c.font=fnt(11,True,INDIGO); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); c.protection=prot(False)
-    if t=="money": c.number_format=MONEY
-    if t=="date": c.number_format=DATE_F
-    if t=="round":
-        dv=DataValidation(type="list",formula1='"До рубля,До копейки,До 100 руб,До 1000 руб"')
-        ws.add_data_validation(dv); dv.add(c)
-    if t=="period":
-        dv=DataValidation(type="list",formula1='"Прошлый месяц,Прошлый квартал,Прошлый год"')
-        ws.add_data_validation(dv); dv.add(c)
-    ws.row_dimensions[i].height=24
+# ── БЛОК 1: Параметры и константы (rows 4–9) ─────────────────────
+sec_hdr(ws, 4, "  ПАРАМЕТРЫ И КОНСТАНТЫ", 8, INDIGO)
+for ri_,(lbl_,val_,t_) in enumerate([
+    ("Название магазина","WAY MARKET №2","text"),
+    ("Дата начала учёта",today,"date"),
+    ("Доля маржинальной прибыли",0.25,"pct"),
+    ("Лимит на закупку товаров",0.75,"pct"),
+    ("Начальный долг поставщикам (₽)",500000,"money"),
+],5):
+    ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY)
+    ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=val_; ws.cell(ri_,2).font=fnt(11,True,INDIGO); ws.cell(ri_,2).fill=F(INP)
+    ws.cell(ri_,2).border=brd_med(); ws.cell(ri_,2).alignment=CA(); ws.cell(ri_,2).protection=prot(False)
+    if t_=="date": ws.cell(ri_,2).number_format=DATE_F
+    elif t_=="pct": ws.cell(ri_,2).number_format="0%"
+    elif t_=="money": ws.cell(ri_,2).number_format=MONEY
+    ws.row_dimensions[ri_].height=24
+# Компатибильные ячейки: ДАШБОРД ссылается на НАСТРОЙКИ!E5, E6, E9
+ws.cell(5,5).value="=B5"; ws.cell(5,5).font=fnt(8,col=GRAY); ws.cell(5,5).fill=F(LGRAY); ws.cell(5,5).alignment=LA()
+ws.cell(6,5).value="=B6"; ws.cell(6,5).number_format=DATE_F; ws.cell(6,5).font=fnt(8,col=GRAY); ws.cell(6,5).fill=F(LGRAY); ws.cell(6,5).alignment=LA()
+ws.cell(9,5).value="=B9"; ws.cell(9,5).number_format=MONEY; ws.cell(9,5).font=fnt(8,col=GRAY); ws.cell(9,5).fill=F(LGRAY); ws.cell(9,5).alignment=LA()
 
-sec_hdr(ws, 13, "  РЕЖИМ РАБОТЫ — активные смены", 8, AMBER)
-ws.merge_cells("A14:D14"); ws.cell(14,1).value="Количество смен"
-ws.cell(14,1).font=fnt(10); ws.cell(14,1).fill=F(LGRAY); ws.cell(14,1).border=brd(); ws.cell(14,1).alignment=LA()
-ws.merge_cells("E14:H14"); ws.cell(14,5).value=2
-ws.cell(14,5).font=fnt(11,True,AMBER); ws.cell(14,5).fill=F(INP)
-ws.cell(14,5).border=brd_med(); ws.cell(14,5).alignment=CA(); ws.cell(14,5).protection=prot(False)
-dv_cnt=DataValidation(type="list",formula1='"1,2,3"'); ws.add_data_validation(dv_cnt); dv_cnt.add(ws.cell(14,5))
-dv_oo=DataValidation(type="list",formula1='"Вкл,Выкл"'); ws.add_data_validation(dv_oo)
-for i,(sn,sv) in enumerate([("Смена ДЕНЬ","Вкл"),("Смена ВЕЧЕР","Вкл"),("Смена НОЧЬ","Выкл")],15):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=sn; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=sv; c.font=fnt(11,True); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); dv_oo.add(c); c.protection=prot(False)
-    ws.row_dimensions[i].height=22
+# ── БЛОК 2: tblФиксРасходы (rows 11–20) ───────────────────────
+sec_hdr(ws, 11, "  ПОСТОЯННЫЕ РАСХОДЫ (tblФиксРасходы)", 8, TEAL)
+ws.cell(12,1).value="Статья расходов"; ws.cell(12,1).font=fnt(9,True,"FFFFFFFF"); ws.cell(12,1).fill=F(TEAL); ws.cell(12,1).border=brd(); ws.cell(12,1).alignment=CA()
+ws.cell(12,2).value="Сумма"; ws.cell(12,2).font=fnt(9,True,"FFFFFFFF"); ws.cell(12,2).fill=F(TEAL); ws.cell(12,2).border=brd(); ws.cell(12,2).alignment=CA()
+ws.row_dimensions[12].height=24
+for ri_,(nm_,amt_) in enumerate([("Аренда",366000),("Налоги",90000),("Интернет",5000),("Охрана",25000)],13):
+    ws.cell(ri_,1).value=nm_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY if ri_%2==0 else WHITE)
+    ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
+    ws.cell(ri_,2).value=amt_; ws.cell(ri_,2).font=fnt(10,True,TEAL); ws.cell(ri_,2).fill=F(INP)
+    ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
+    ws.cell(ri_,2).protection=prot(False); ws.row_dimensions[ri_].height=22
+for ri_ in range(17,21):
+    ws.cell(ri_,1).fill=F(LGRAY if ri_%2==0 else WHITE); ws.cell(ri_,1).border=brd()
+    ws.cell(ri_,1).alignment=LA(); ws.cell(ri_,1).protection=prot(False)
+    ws.cell(ri_,2).fill=F(INP); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA()
+    ws.cell(ri_,2).number_format=MONEY; ws.cell(ri_,2).protection=prot(False)
+    ws.row_dimensions[ri_].height=22
+tbl_fix=Table(displayName="tblФиксРасходы",ref="A12:B20")
+tbl_fix.tableStyleInfo=TableStyleInfo(name="TableStyleLight6",showRowStripes=True); ws.add_table(tbl_fix)
 
-sec_hdr(ws, 19, "  Z-ОТЧЁТ (источники выручки)", 8, BLUE)
-for i,(p,v) in enumerate([("Эквайринг","Вкл"),("Перевод","Вкл"),("Онлайн торговля","Выкл"),
-                           ("Иман (хозяин)","Вкл"),("Выплата с кассы","Вкл")],20):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=p; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=v; c.font=fnt(11,True); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); dv_oo.add(c); c.protection=prot(False)
-    ws.row_dimensions[i].height=22
+# ── БЛОК 3: Справочники (rows 22–33) ─────────────────────────
+sec_hdr(ws, 22, "  СПРАВОЧНИКИ (выпадающие списки)", 8, INDIGO)
+# tblСмены col A
+ws.cell(23,1).value="Смена"; ws.cell(23,1).font=fnt(9,True,"FFFFFFFF"); ws.cell(23,1).fill=F(INDIGO); ws.cell(23,1).border=brd(); ws.cell(23,1).alignment=CA()
+for ri_,nm_ in enumerate(["День","Вечер","Ночь"],24):
+    ws.cell(ri_,1).value=nm_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY if ri_%2==0 else WHITE)
+    ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA(); ws.cell(ri_,1).protection=prot(False)
+for ri_ in range(27,34):
+    ws.cell(ri_,1).fill=F(LGRAY if ri_%2==0 else WHITE); ws.cell(ri_,1).border=brd()
+    ws.cell(ri_,1).alignment=LA(); ws.cell(ri_,1).protection=prot(False)
+tbl_sm=Table(displayName="tblСмены",ref="A23:A33")
+tbl_sm.tableStyleInfo=TableStyleInfo(name="TableStyleLight1",showRowStripes=True); ws.add_table(tbl_sm)
+# tblКассиры col C
+ws.cell(23,3).value="Кассир"; ws.cell(23,3).font=fnt(9,True,"FFFFFFFF"); ws.cell(23,3).fill=F(PURPLE); ws.cell(23,3).border=brd(); ws.cell(23,3).alignment=CA()
+for ri_,nm_ in enumerate(["Сотрудник 1","Сотрудник 2"],24):
+    ws.cell(ri_,3).value=nm_; ws.cell(ri_,3).font=fnt(10); ws.cell(ri_,3).fill=F(PURP_L if ri_%2==0 else WHITE)
+    ws.cell(ri_,3).border=brd(); ws.cell(ri_,3).alignment=LA(); ws.cell(ri_,3).protection=prot(False)
+for ri_ in range(26,34):
+    ws.cell(ri_,3).fill=F(PURP_L if ri_%2==0 else WHITE); ws.cell(ri_,3).border=brd()
+    ws.cell(ri_,3).alignment=LA(); ws.cell(ri_,3).protection=prot(False)
+tbl_kas=Table(displayName="tblКассиры",ref="C23:C33")
+tbl_kas.tableStyleInfo=TableStyleInfo(name="TableStyleLight4",showRowStripes=True); ws.add_table(tbl_kas)
+# tblКатегорииРасходов col E
+ws.cell(23,5).value="Категория расхода"; ws.cell(23,5).font=fnt(9,True,"FFFFFFFF"); ws.cell(23,5).fill=F(AMBER); ws.cell(23,5).border=brd(); ws.cell(23,5).alignment=CA()
+for ri_,nm_ in enumerate(["Закуп","ЗП","Маркетинг","Логистика","Хоз.нужды"],24):
+    ws.cell(ri_,5).value=nm_; ws.cell(ri_,5).font=fnt(10); ws.cell(ri_,5).fill=F(AMBER_L if ri_%2==0 else WHITE)
+    ws.cell(ri_,5).border=brd(); ws.cell(ri_,5).alignment=LA(); ws.cell(ri_,5).protection=prot(False)
+for ri_ in range(29,34):
+    ws.cell(ri_,5).fill=F(AMBER_L if ri_%2==0 else WHITE); ws.cell(ri_,5).border=brd()
+    ws.cell(ri_,5).alignment=LA(); ws.cell(ri_,5).protection=prot(False)
+tbl_cat=Table(displayName="tblКатегорииРасходов",ref="E23:E33")
+tbl_cat.tableStyleInfo=TableStyleInfo(name="TableStyleLight3",showRowStripes=True); ws.add_table(tbl_cat)
+# tblСпособыОплаты col H
+ws.cell(23,8).value="Способ оплаты"; ws.cell(23,8).font=fnt(9,True,"FFFFFFFF"); ws.cell(23,8).fill=F(BLUE); ws.cell(23,8).border=brd(); ws.cell(23,8).alignment=CA()
+for ri_,nm_ in enumerate(["Наличка","Эквайринг","Перевод","Иман","Долг"],24):
+    ws.cell(ri_,8).value=nm_; ws.cell(ri_,8).font=fnt(10); ws.cell(ri_,8).fill=F(BLUE_L if ri_%2==0 else WHITE)
+    ws.cell(ri_,8).border=brd(); ws.cell(ri_,8).alignment=LA(); ws.cell(ri_,8).protection=prot(False)
+for ri_ in range(29,34):
+    ws.cell(ri_,8).fill=F(BLUE_L if ri_%2==0 else WHITE); ws.cell(ri_,8).border=brd()
+    ws.cell(ri_,8).alignment=LA(); ws.cell(ri_,8).protection=prot(False)
+tbl_pay=Table(displayName="tblСпособыОплаты",ref="H23:H33")
+tbl_pay.tableStyleInfo=TableStyleInfo(name="TableStyleLight9",showRowStripes=True); ws.add_table(tbl_pay)
 
-sec_hdr(ws, 26, "  КОНТРОЛЬ КАССЫ", 8, GREEN)
-for i,(p,v) in enumerate([("Сверка по наличке","Вкл"),("Сверка по эквайрингу","Выкл"),("Сверка по переводу","Выкл")],27):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=p; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=v; c.font=fnt(11,True); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); dv_oo.add(c); c.protection=prot(False)
-    ws.row_dimensions[i].height=22
-
-sec_hdr(ws, 31, "  ИНВЕНТАРЬ И ДОПОЛНИТЕЛЬНЫЙ УЧЁТ", 8, PURPLE)
-for i,(p,v) in enumerate([("Списание товара","Вкл"),("Возврат поставщику","Вкл"),("Касса утром/вечером (остатки)","Вкл")],32):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=p; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=v; c.font=fnt(11,True); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); dv_oo.add(c); c.protection=prot(False)
-    ws.row_dimensions[i].height=22
-
-sec_hdr(ws, 36, "  ПОРОГИ УВЕДОМЛЕНИЙ", 8, RED)
-for i,(p,v,t) in enumerate([("Расхождение кассы больше (₽)",5000,"money"),
-                              ("Общий долг больше (₽)",1000000,"money"),
-                              ("Просрочка больше (дней)",7,"num")],37):
-    ws.merge_cells(start_row=i,start_column=1,end_row=i,end_column=4)
-    c=ws.cell(i,1); c.value=p; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-    ws.merge_cells(start_row=i,start_column=5,end_row=i,end_column=8)
-    c=ws.cell(i,5); c.value=v; c.font=fnt(11,True,RED); c.fill=F(INP)
-    c.border=brd_med(); c.alignment=CA(); c.protection=prot(False)
-    if t=="money": c.number_format=MONEY
-    ws.row_dimensions[i].height=22
-
-# Conditional formatting for Вкл/Выкл
-for addr in ["E15","E16","E17","E20","E21","E22","E23","E24","E27","E28","E29","E32","E33","E34"]:
-    ws.conditional_formatting.add(addr,FormulaRule(formula=[f'{addr}="Вкл"'],fill=F(GREEN_L),font=fnt(11,True,GREEN)))
-    ws.conditional_formatting.add(addr,FormulaRule(formula=[f'{addr}="Выкл"'],fill=F(RED_L),font=fnt(11,True,RED)))
-
-sec_hdr(ws, 41, "  СПРАВОЧНИКИ (выпадающие списки для ввода данных)", 8, INDIGO)
-# Кассиры col A
-ws.cell(43,1).value="КАССИРЫ"; ws.cell(43,1).font=fnt(10,True,"FFFFFFFF")
-ws.cell(43,1).fill=F(PURPLE); ws.cell(43,1).alignment=CA(); ws.cell(43,1).border=brd()
-for i,n in enumerate(["Иванов А.","Петров П.","Сидоров С.","Козлов К."],44):
-    c=ws.cell(i,1); c.value=n; c.font=fnt(10); c.fill=F(PURP_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-for i in range(48,80):
-    c=ws.cell(i,1); c.fill=F(PURP_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-# Категории col C
-ws.cell(43,3).value="КАТЕГОРИИ"; ws.cell(43,3).font=fnt(10,True,"FFFFFFFF")
-ws.cell(43,3).fill=F(AMBER); ws.cell(43,3).alignment=CA(); ws.cell(43,3).border=brd()
-cats=["Закуп товара","ГСМ","Расходный материал","Зарплата","Аренда","Коммунальные",
-      "Налог","Прочие расходы","Списание","Возврат","Маркетинг","Охрана"]
-for i,n in enumerate(cats,44):
-    c=ws.cell(i,3); c.value=n; c.font=fnt(10); c.fill=F(AMBER_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-for i in range(56,80):
-    c=ws.cell(i,3); c.fill=F(AMBER_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-# Способы оплаты col E
-ws.cell(43,5).value="СПОСОБЫ ОПЛАТЫ"; ws.cell(43,5).font=fnt(10,True,"FFFFFFFF")
-ws.cell(43,5).fill=F(TEAL); ws.cell(43,5).alignment=CA(); ws.cell(43,5).border=brd()
-for i,n in enumerate(["Наличка","Эквайринг","Перевод","Онлайн","Иман","Долг"],44):
-    c=ws.cell(i,5); c.value=n; c.font=fnt(10); c.fill=F(TEAL_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-for i in range(50,80):
-    c=ws.cell(i,5); c.fill=F(TEAL_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA(); c.protection=prot(False)
-# Типы операций col G
-ws.cell(43,7).value="ТИПЫ ОПЕРАЦИЙ"; ws.cell(43,7).font=fnt(10,True,"FFFFFFFF")
-ws.cell(43,7).fill=F(BLUE); ws.cell(43,7).alignment=CA(); ws.cell(43,7).border=brd()
-for i,n in enumerate(["Доход","Расход","Долг","Оплата долга","Расхождение","Иман","Списание","Возврат","Касса"],44):
-    c=ws.cell(i,7); c.value=n; c.font=fnt(10); c.fill=F(BLUE_L if i%2==0 else WHITE); c.border=brd(); c.alignment=LA()
-
-# Постоянные расходы
-sec_hdr(ws, 82, "  ПОСТОЯННЫЕ РАСХОДЫ (умная таблица tblПостоянные)", 8, TEAL)
-hrow(ws, 83, ["Месяц","Зарплата","Аренда","Коммунальные","Налог","Маркетинг","Охрана","ИТОГО"], TEAL, 24)
-for mi,mon in enumerate(MONTHS_RU):
-    r=84+mi
-    for ci,v in enumerate([mon,540000,366000,90000,90000,30000,25000],1):
-        c=ws.cell(r,ci); c.value=v; c.font=fnt(10,bold=(ci==1))
-        c.fill=F(INP if ci>=2 else (LGRAY if mi%2==0 else WHITE))
-        c.border=brd(); c.alignment=LA() if ci==1 else RA()
-        if ci>=2: c.number_format=MONEY; c.protection=prot(False)
-    ws.cell(r,8).value=f"=SUM(B{r}:G{r})"; ws.cell(r,8).font=fnt(10,True,TEAL)
-    ws.cell(r,8).fill=F(TEAL_L); ws.cell(r,8).border=brd(); ws.cell(r,8).alignment=RA()
-    ws.cell(r,8).number_format=MONEY; ws.row_dimensions[r].height=22
-tbl_c=Table(displayName="tblПостоянные",ref="A83:H95")
-tbl_c.tableStyleInfo=TableStyleInfo(name="TableStyleLight2",showRowStripes=True); ws.add_table(tbl_c)
-
-cw(ws,{"A":22,"B":14,"C":14,"D":16,"E":14,"F":14,"G":14,"H":14})
+cw(ws,{"A":22,"B":16,"C":18,"D":4,"E":20,"F":4,"G":4,"H":16})
 ws.freeze_panes="A3"
 ws.sheet_properties.tabColor="FF374151"
 
@@ -299,10 +253,10 @@ for tipo,fill_,font_ in [("Доход",BLUE_L,BLUE),("Расход",RED_L,RED),(
                           ("Иман",PURP_L,PURPLE),("Списание",RED_L,RED),("Возврат",GREEN_L,GREEN),("Касса",TEAL_L,TEAL)]:
     ws.conditional_formatting.add("D4:D3003",FormulaRule(formula=[f'$D4="{tipo}"'],fill=F(fill_),font=fnt(10,True,font_)))
 
-dv_tp=DataValidation(type="list",formula1="=НАСТРОЙКИ!$G$44:$G$52"); ws.add_data_validation(dv_tp); dv_tp.add("D4:D3003")
-dv_pay=DataValidation(type="list",formula1="=НАСТРОЙКИ!$E$44:$E$49"); ws.add_data_validation(dv_pay); dv_pay.add("F4:F3003")
-dv_cat=DataValidation(type="list",formula1="=НАСТРОЙКИ!$C$44:$C$55"); ws.add_data_validation(dv_cat); dv_cat.add("E4:E3003")
-dv_ksr=DataValidation(type="list",formula1="=НАСТРОЙКИ!$A$44:$A$79"); ws.add_data_validation(dv_ksr); dv_ksr.add("C4:C3003")
+dv_tp=DataValidation(type="list",formula1='"Доход,Расход,Долг,Оплата долга,Расхождение,Иман,Списание,Возврат,Касса"'); ws.add_data_validation(dv_tp); dv_tp.add("D4:D3003")
+dv_pay=DataValidation(type="list",formula1="=НАСТРОЙКИ!$H$24:$H$33"); ws.add_data_validation(dv_pay); dv_pay.add("F4:F3003")
+dv_cat=DataValidation(type="list",formula1="=НАСТРОЙКИ!$E$24:$E$33"); ws.add_data_validation(dv_cat); dv_cat.add("E4:E3003")
+dv_ksr=DataValidation(type="list",formula1="=НАСТРОЙКИ!$C$24:$C$33"); ws.add_data_validation(dv_ksr); dv_ksr.add("C4:C3003")
 dv_sm=DataValidation(type="list",formula1='"День,Вечер,Ночь,-"'); ws.add_data_validation(dv_sm); dv_sm.add("B4:B3003")
 
 tbl_b=Table(displayName="tblБаза",ref="A3:H3003")
@@ -317,117 +271,85 @@ print("✓ БАЗА_ДДС")
 # 3. ВВОД_КАССА
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ВВОД_КАССА"); ws.sheet_view.showGridLines = False
-banner(ws, "ВВОД ДАННЫХ КАССЫ — Z-отчёты и факт", "A1:M1", BLUE)
+banner(ws, "ВВОД ДАННЫХ КАССЫ  |  ► кнопки: СОХРАНИТЬ / СЕГОДНЯ / ВЧЕРА — см. строку 1", "A1:M1", BLUE)
 ws.merge_cells("A2:M2")
-ws.cell(2,1).value="1. Выберите дату  2. Укажите кассира  3. Введите Z-отчёты смен  4. Нажмите СОХРАНИТЬ КАССУ"
+ws.cell(2,1).value="Заполните таблицу. Расхождение = Факт.Касса − Выручка.Z (авто). Нажмите СОХРАНИТЬ КАССУ."
 ws.cell(2,1).font=fnt(10,it=True,col=BLUE); ws.cell(2,1).fill=F(BLUE_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
-
-# Дата
-sec_hdr(ws, 4, "  ДАТА СМЕНЫ", 13, INDIGO)
-for col_,lbl_ in [(1,"День"),(4,"Месяц"),(7,"Год"),(10,"Итоговая дата:")]:
-    c=ws.cell(5,col_); c.value=lbl_; c.font=fnt(10); c.fill=F(LGRAY); c.border=brd(); c.alignment=LA()
-c=inp_cell(ws,5,2,3,money=False); c.value=today.day
-dv_dd=DataValidation(type="whole",operator="between",formula1=1,formula2=31,allow_blank=True)
-ws.add_data_validation(dv_dd); dv_dd.add(ws.cell(5,2))
-c=inp_cell(ws,5,5,6,money=False); c.value=MONTHS_RU[today.month-1]
-dv_mm=DataValidation(type="list",formula1='"Январь,Февраль,Март,Апрель,Май,Июнь,Июль,Август,Сентябрь,Октябрь,Ноябрь,Декабрь"')
-ws.add_data_validation(dv_mm); dv_mm.add(ws.cell(5,5))
-c=inp_cell(ws,5,8,9,money=False); c.value=today.year
-dv_yy=DataValidation(type="whole",operator="between",formula1=2020,formula2=2099,allow_blank=True)
-ws.add_data_validation(dv_yy); dv_yy.add(ws.cell(5,8))
-ws.merge_cells("J5:M5")
-c=ws.cell(5,10)
-c.value='=IFERROR(DATE(H5,MATCH(E5,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0),B5),"")'
-c.font=fnt(12,True,GREEN); c.fill=F(GREEN_L); c.border=brd(); c.alignment=CA(); c.number_format='[$-419]dddd, d mmmm yyyy'
-ws.row_dimensions[5].height=28
-
-# Кассир
-sec_hdr(ws, 7, "  КАССИР СМЕНЫ", 13, INDIGO)
-lbl_cell(ws,8,1,4,"Кассир")
-c=inp_cell(ws,8,5,9,money=False)
-dv_k=DataValidation(type="list",formula1="=НАСТРОЙКИ!$A$44:$A$79"); ws.add_data_validation(dv_k); dv_k.add(c)
-
-# Z-отчёты смен
-sec_hdr(ws, 10, "  Z-ОТЧЁТЫ СМЕН (выручка)", 13, GREEN)
-hrow(ws,11,["Смена","Выручка Zотч","Нал.факт","Эквайринг","Перевод","Онлайн","Иман","Выплата","Расхождение","Остаток","—","—","—"],GREEN,24)
-for r,sn in enumerate([("День","Вечер","Ночь")],12):
-    for ri,sname in enumerate(sn):
-        row=12+ri
-        ws.cell(row,1).value=sname; ws.cell(row,1).font=fnt(10,True); ws.cell(row,1).fill=F(LGRAY); ws.cell(row,1).border=brd(); ws.cell(row,1).alignment=CA()
-        for ci in range(2,10):
-            c=inp_cell(ws,row,ci,ci,money=True)
-            ws.cell(row,ci).font=fnt(10,True,INDIGO)
-        # Расхождение auto
-        ws.cell(row,9).value=f"=IFERROR(C{row}-B{row},0)"
-        ws.cell(row,9).font=fnt(10,True,RED); ws.cell(row,9).fill=F(RED_L)
-        ws.cell(row,9).border=brd(); ws.cell(row,9).alignment=RA(); ws.cell(row,9).number_format=MONEY
-        ws.row_dimensions[row].height=26
-
-# Дополнительно
-sec_hdr(ws, 16, "  ДОПОЛНИТЕЛЬНО", 13, AMBER)
-for r,(lbl_,ci_start) in enumerate([("Закуп товара (сумма)",1),("Долг поставщику (новый)",1),("Иман (снято хозяином)",1)],17):
-    lbl_cell(ws,r,1,4,lbl_)
-    inp_cell(ws,r,5,9,money=True)
-    ws.row_dimensions[r].height=26
-
-# Итог
-sec_hdr(ws, 21, "  ИТОГО ЗА ДЕНЬ", 13, NAVY)
-ws.merge_cells("A22:D22"); ws.cell(22,1).value="Общая выручка по Z-отчётам:"; ws.cell(22,1).font=fnt(10); ws.cell(22,1).fill=F(LGRAY); ws.cell(22,1).border=brd(); ws.cell(22,1).alignment=LA()
-calc_cell(ws,22,5,9,"=IFERROR(SUM(B12:B14),0)",col=GREEN,bg=GREEN_L)
-ws.merge_cells("A23:D23"); ws.cell(23,1).value="Итого расхождений:"; ws.cell(23,1).font=fnt(10); ws.cell(23,1).fill=F(LGRAY); ws.cell(23,1).border=brd(); ws.cell(23,1).alignment=LA()
-calc_cell(ws,23,5,9,"=IFERROR(SUM(I12:I14),0)",col=RED,bg=RED_L)
-ws.merge_cells("A24:M24"); ws.cell(24,1).value="После заполнения нажмите кнопку  [СОХРАНИТЬ КАССУ]  (макрос VBA)"
-ws.cell(24,1).font=fnt(10,it=True,col=BLUE); ws.cell(24,1).fill=F(BLUE_L); ws.cell(24,1).alignment=CA(); ws.row_dimensions[24].height=24
-
-cw(ws,{"A":14,"B":14,"C":13,"D":14,"E":14,"F":12,"G":10,"H":12,"I":14,"J":12,"K":6,"L":6,"M":6})
-ws.freeze_panes="A3"; ws.sheet_properties.tabColor="FF3B82F6"
-
+# Smart table tblВводКасса
+hdrs_k=["Дата","Смена","Кассир","Выручка.Z","Факт.Касса","Эквайринг","Перевод","Иман","Выплаты","Закуп","Долг.ТП","Расхождение","Остаток"]
+hrow(ws,3,hdrs_k,BLUE,30)
+ws.row_dimensions[3].height=30
+dv_sm_k=DataValidation(type="list",formula1="=НАСТРОЙКИ!$A$24:$A$33"); ws.add_data_validation(dv_sm_k)
+dv_ks_k=DataValidation(type="list",formula1="=НАСТРОЙКИ!$C$24:$C$33"); ws.add_data_validation(dv_ks_k)
+for r in range(4,504):
+    alt=r%2==0; bg=LGRAY if alt else WHITE; seed=r<=6
+    ws.cell(r,1).font=fnt(10); ws.cell(r,1).fill=F(INP if seed else bg); ws.cell(r,1).border=brd()
+    ws.cell(r,1).alignment=CA(); ws.cell(r,1).number_format=DATE_F; ws.cell(r,1).protection=prot(False)
+    if seed: ws.cell(r,1).value=today
+    if r==4: ws.cell(r,2).value="День"
+    elif r==5: ws.cell(r,2).value="Вечер"
+    elif r==6: ws.cell(r,2).value="Ночь"
+    ws.cell(r,2).font=fnt(10); ws.cell(r,2).fill=F(INP if seed else bg); ws.cell(r,2).border=brd()
+    ws.cell(r,2).alignment=CA(); ws.cell(r,2).protection=prot(False)
+    ws.cell(r,3).font=fnt(10); ws.cell(r,3).fill=F(INP if seed else bg); ws.cell(r,3).border=brd()
+    ws.cell(r,3).alignment=LA(); ws.cell(r,3).protection=prot(False)
+    for ci in range(4,12):
+        c=ws.cell(r,ci); c.font=fnt(10,True,INDIGO); c.fill=F(INP if seed else bg)
+        c.border=brd(); c.alignment=RA(); c.number_format=MONEY; c.protection=prot(False)
+    ws.cell(r,12).value=f"=IFERROR(E{r}-D{r},0)"
+    ws.cell(r,12).font=fnt(10,True,RED); ws.cell(r,12).fill=F(RED_L if seed else bg)
+    ws.cell(r,12).border=brd(); ws.cell(r,12).alignment=RA(); ws.cell(r,12).number_format=MONEY
+    ws.cell(r,13).font=fnt(10); ws.cell(r,13).fill=F(INP if seed else bg)
+    ws.cell(r,13).border=brd(); ws.cell(r,13).alignment=RA()
+    ws.cell(r,13).number_format=MONEY; ws.cell(r,13).protection=prot(False)
+    ws.row_dimensions[r].height=22
+dv_sm_k.add("B4:B503"); dv_ks_k.add("C4:C503")
+tbl_vk=Table(displayName="tblВводКасса",ref="A3:M503")
+tbl_vk.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showRowStripes=True,showFirstColumn=False)
+ws.add_table(tbl_vk)
+cw(ws,{"A":12,"B":10,"C":16,"D":14,"E":13,"F":12,"G":10,"H":10,"I":12,"J":12,"K":12,"L":14,"M":12})
+ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF3B82F6"
 print("✓ ВВОД_КАССА")
 
 # ════════════════════════════════════════════════════════════
 # 4. ВВОД_РАСХОДЫ
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ВВОД_РАСХОДЫ"); ws.sheet_view.showGridLines = False
-banner(ws, "ВВОД РАСХОДОВ — закуп, зарплата, прочие", "A1:J1", RED)
-ws.merge_cells("A2:J2")
-ws.cell(2,1).value="1. Выберите дату и кассира  2. Введите расходы по категориям  3. Нажмите СОХРАНИТЬ РАСХОДЫ"
+banner(ws, "ВВОД РАСХОДОВ  |  ► кнопка СОХРАНИТЬ РАСХОДЫ — см. строку 1", "A1:F1", RED)
+ws.merge_cells("A2:F2")
+ws.cell(2,1).value="Заполните таблицу расходов. Нажмите СОХРАНИТЬ РАСХОДЫ."
 ws.cell(2,1).font=fnt(10,it=True,col=RED); ws.cell(2,1).fill=F(RED_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
-
-# Дата
-sec_hdr(ws, 4, "  ДАТА И КАССИР", 10, INDIGO)
-lbl_cell(ws,5,1,3,"Дата (ДД.ММ.ГГГГ)"); c=inp_cell(ws,5,4,6,money=False,fmt=DATE_F); c.value=today
-lbl_cell(ws,5,7,8,"Кассир")
-c=inp_cell(ws,5,9,10,money=False)
-dv_k2=DataValidation(type="list",formula1="=НАСТРОЙКИ!$A$44:$A$79"); ws.add_data_validation(dv_k2); dv_k2.add(c)
-
-# Расходы по категориям
-sec_hdr(ws, 7, "  РАСХОДЫ ПО КАТЕГОРИЯМ", 10, RED)
-hrow(ws,8,["Категория","Способ оплаты","Сумма","Комментарий","—","—","—","—","—","—"],RED,24)
-dv_cat2=DataValidation(type="list",formula1="=НАСТРОЙКИ!$C$44:$C$55"); ws.add_data_validation(dv_cat2)
-dv_pay2=DataValidation(type="list",formula1="=НАСТРОЙКИ!$E$44:$E$49"); ws.add_data_validation(dv_pay2)
-for r in range(9,25):
-    alt=r%2==0
-    ws.cell(r,1).fill=F(INP if not alt else LGRAY); ws.cell(r,1).border=brd(); ws.cell(r,1).font=fnt(10,True,INDIGO)
-    ws.cell(r,1).alignment=LA(); ws.cell(r,1).protection=prot(False); dv_cat2.add(ws.cell(r,1))
-    ws.cell(r,2).fill=F(INP if not alt else LGRAY); ws.cell(r,2).border=brd(); ws.cell(r,2).font=fnt(10,True,INDIGO)
-    ws.cell(r,2).alignment=CA(); ws.cell(r,2).protection=prot(False); dv_pay2.add(ws.cell(r,2))
-    ws.merge_cells(start_row=r,start_column=3,end_row=r,end_column=4)
-    c=ws.cell(r,3); c.fill=F(INP); c.border=brd(); c.font=fnt(11,True,INDIGO)
-    c.alignment=RA(); c.number_format=MONEY; c.protection=prot(False)
-    ws.merge_cells(start_row=r,start_column=5,end_row=r,end_column=10)
-    c=ws.cell(r,5); c.fill=F(LGRAY if alt else WHITE); c.border=brd(); c.font=fnt(10)
-    c.alignment=LA(); c.protection=prot(False)
-    ws.row_dimensions[r].height=24
-
-# Итого
-sec_hdr(ws, 26, "  ИТОГО РАСХОДОВ ЗА ДЕНЬ", 10, NAVY)
-calc_cell(ws,27,1,4,"=IFERROR(SUM(C9:C24),0)",col=RED,bg=RED_L)
-ws.merge_cells("E27:J27"); ws.cell(27,5).value="После заполнения нажмите  [СОХРАНИТЬ РАСХОДЫ]"
-ws.cell(27,5).font=fnt(10,it=True,col=BLUE); ws.cell(27,5).fill=F(BLUE_L); ws.cell(27,5).alignment=CA()
-
-cw(ws,{"A":22,"B":14,"C":16,"D":16,"E":20,"F":10,"G":10,"H":10,"I":10,"J":10})
-ws.freeze_panes="A3"; ws.sheet_properties.tabColor="FFEF4444"
-
+# Smart table tblВводРасходы
+hdrs_r=["Дата","Кассир","Категория","Способ","Сумма","Комментарий"]
+hrow(ws,3,hdrs_r,RED,30)
+ws.row_dimensions[3].height=30
+dv_ks_r=DataValidation(type="list",formula1="=НАСТРОЙКИ!$C$24:$C$33"); ws.add_data_validation(dv_ks_r)
+dv_cat_r=DataValidation(type="list",formula1="=НАСТРОЙКИ!$E$24:$E$33"); ws.add_data_validation(dv_cat_r)
+dv_pay_r=DataValidation(type="list",formula1="=НАСТРОЙКИ!$H$24:$H$33"); ws.add_data_validation(dv_pay_r)
+for r in range(4,504):
+    alt=r%2==0; bg=LGRAY if alt else WHITE; seed=r==4
+    if seed: ws.cell(r,1).value=today
+    ws.cell(r,1).font=fnt(10); ws.cell(r,1).fill=F(INP if seed else bg)
+    ws.cell(r,1).border=brd(); ws.cell(r,1).alignment=CA()
+    ws.cell(r,1).number_format=DATE_F; ws.cell(r,1).protection=prot(False)
+    ws.cell(r,2).font=fnt(10); ws.cell(r,2).fill=F(INP if seed else bg)
+    ws.cell(r,2).border=brd(); ws.cell(r,2).alignment=LA(); ws.cell(r,2).protection=prot(False)
+    ws.cell(r,3).font=fnt(10); ws.cell(r,3).fill=F(INP if seed else bg)
+    ws.cell(r,3).border=brd(); ws.cell(r,3).alignment=LA(); ws.cell(r,3).protection=prot(False)
+    ws.cell(r,4).font=fnt(10); ws.cell(r,4).fill=F(INP if seed else bg)
+    ws.cell(r,4).border=brd(); ws.cell(r,4).alignment=CA(); ws.cell(r,4).protection=prot(False)
+    ws.cell(r,5).font=fnt(11,True,INDIGO); ws.cell(r,5).fill=F(INP if seed else bg)
+    ws.cell(r,5).border=brd(); ws.cell(r,5).alignment=RA()
+    ws.cell(r,5).number_format=MONEY; ws.cell(r,5).protection=prot(False)
+    ws.cell(r,6).font=fnt(10); ws.cell(r,6).fill=F(bg)
+    ws.cell(r,6).border=brd(); ws.cell(r,6).alignment=LA(); ws.cell(r,6).protection=prot(False)
+    ws.row_dimensions[r].height=22
+dv_ks_r.add("B4:B503"); dv_cat_r.add("C4:C503"); dv_pay_r.add("D4:D503")
+tbl_vr=Table(displayName="tblВводРасходы",ref="A3:F503")
+tbl_vr.tableStyleInfo=TableStyleInfo(name="TableStyleMedium3",showRowStripes=True,showFirstColumn=False)
+ws.add_table(tbl_vr)
+cw(ws,{"A":12,"B":16,"C":20,"D":14,"E":16,"F":30})
+ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FFEF4444"
 print("✓ ВВОД_РАСХОДЫ")
 
 # ════════════════════════════════════════════════════════════
