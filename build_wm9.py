@@ -1249,7 +1249,7 @@ for i_,ri_ in enumerate(range(25,30)):
     lbl_=f'=IF({sr_}="","(Поставщик {i_+1})",{sr_})'
     f_plan=f'=IFERROR(SUMPRODUCT(({_ZP_}={sr_})*({_ZT_}="Запланировано")*{_ZS_}),0)'
     f_vip =f'=IFERROR(SUMPRODUCT(({_ZP_}={sr_})*({_ZT_}="Выплачено")*{_ZS_}),0)'
-    f_ost =f'=IFERROR(C{ri_}-D{ri_},0)'
+    f_ost =f'=IFERROR(B{ri_}-C{ri_},0)'
     ws.cell(ri_,1).value=lbl_; ws.cell(ri_,1).font=fnt(10); ws.cell(ri_,1).fill=F(LGRAY); ws.cell(ri_,1).border=brd(); ws.cell(ri_,1).alignment=LA()
     ws.cell(ri_,2).value=f_plan; ws.cell(ri_,2).font=fnt(11,True,PURPLE); ws.cell(ri_,2).fill=F(PURP_L); ws.cell(ri_,2).border=brd(); ws.cell(ri_,2).alignment=RA(); ws.cell(ri_,2).number_format=MONEY
     ws.cell(ri_,3).value=f_vip;  ws.cell(ri_,3).font=fnt(11,True,GREEN);  ws.cell(ri_,3).fill=F(GREEN_L); ws.cell(ri_,3).border=brd(); ws.cell(ri_,3).alignment=RA(); ws.cell(ri_,3).number_format=MONEY
@@ -1332,12 +1332,12 @@ steps2=[
     "1. Откройте Excel и нажмите Alt+F11 (Редактор VBA)",
     "2. В меню: Файл → Импорт файла → выберите Модуль_WM9.bas",
     "3. Закройте редактор VBA (Alt+Q)",
-    "4. Перейдите на лист ВВОД_КАССА → Alt+F8 → УстановитьВсеКнопки → Run",
+    "4. Перейдите на лист ВВОД_КАССА → Alt+F8 → UstanovitVseKnopki → Run",
     "5. На листах появятся кнопки для сохранения данных",
     "6. Если появится 'Предупреждение безопасности' — нажмите 'Включить содержимое'",
     "",
     "ВАЖНО: Файл нужно сохранить в формате .xlsm (Книга Excel с поддержкой макросов)",
-    "ВАЖНО: Защита листов установлена. Редактировать можно только синие ячейки.",
+    "ВАЖНО: Вводите данные только в синие ячейки — они разблокированы и предназначены для ввода.",
     "",
     "Для LibreOffice Calc: импорт Basic-модуля через Сервис → Макросы → Редактор Basic",
 ]
