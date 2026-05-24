@@ -433,11 +433,11 @@ Sub UstanovitVseKnopki()
     On Error Resume Next
     For Each btn In ws.Shapes: btn.Delete: Next btn
     On Error GoTo 0
-    Call AddSideBtn(ws, "btnSaveRashody", "СОХРАНИТЬ РАСХОДЫ", "SohranitRashody", 510, 4, 160, 32, 239, 68, 68)
-    Call AddSideBtn(ws, "navDash_R",  "▶ Дашборд",  "НавигацияНаДашборд",  510, 42,  160, 24, 79, 70, 229)
-    Call AddSideBtn(ws, "navKas_R",   "▶ Касса",    "НавигацияНаКасса",    510, 72,  160, 24, 59, 130, 246)
-    Call AddSideBtn(ws, "navVipl_R",  "▶ Выплаты",  "НавигацияНаВыплаты",  510, 102, 160, 24, 245, 158, 11)
-    Call AddSideBtn(ws, "navBaza_R",  "▶ База ДДС", "НавигацияНаБазу",     510, 132, 160, 24, 107, 114, 128)
+    Call AddSideBtn(ws, "btnSaveRashody", "СОХРАНИТЬ РАСХОДЫ", "SohranitRashody", 550, 4, 160, 32, 239, 68, 68)
+    Call AddSideBtn(ws, "navDash_R",  "▶ Дашборд",  "НавигацияНаДашборд",  550, 42,  160, 24, 79, 70, 229)
+    Call AddSideBtn(ws, "navKas_R",   "▶ Касса",    "НавигацияНаКасса",    550, 72,  160, 24, 59, 130, 246)
+    Call AddSideBtn(ws, "navVipl_R",  "▶ Выплаты",  "НавигацияНаВыплаты",  550, 102, 160, 24, 245, 158, 11)
+    Call AddSideBtn(ws, "navBaza_R",  "▶ База ДДС", "НавигацияНаБазу",     550, 132, 160, 24, 107, 114, 128)
 
     ' === ЗАПИСЬ_НА_ВЫПЛАТУ ===
     Set ws = ThisWorkbook.Sheets("ЗАПИСЬ_НА_ВЫПЛАТУ")
@@ -449,6 +449,26 @@ Sub UstanovitVseKnopki()
     Call AddSideBtn(ws, "navKas_V",   "▶ Касса",    "НавигацияНаКасса",    720, 72,  160, 24, 59, 130, 246)
     Call AddSideBtn(ws, "navRash_V",  "▶ Расходы",  "НавигацияНаРасходы",  720, 102, 160, 24, 239, 68, 68)
     Call AddSideBtn(ws, "navBaza_V",  "▶ База ДДС", "НавигацияНаБазу",     720, 132, 160, 24, 107, 114, 128)
+
+    ' === КАЛЕНДАРЬ_ВЫПЛАТ ===
+    Set ws = ThisWorkbook.Sheets("КАЛЕНДАРЬ_ВЫПЛАТ")
+    On Error Resume Next
+    For Each btn In ws.Shapes: btn.Delete: Next btn
+    On Error GoTo 0
+    Call AddSideBtn(ws, "navDash_Kal",  "▶ Дашборд",  "НавигацияНаДашборд",  970, 4,  150, 28, 79, 70, 229)
+    Call AddSideBtn(ws, "navVipl_Kal",  "▶ Выплаты",  "НавигацияНаВыплаты",  970, 38, 150, 24, 245, 158, 11)
+    Call AddSideBtn(ws, "navKas_Kal",   "▶ Касса",    "НавигацияНаКасса",    970, 68, 150, 24, 59, 130, 246)
+    Call AddSideBtn(ws, "navBaza_Kal",  "▶ База ДДС", "НавигацияНаБазу",     970, 98, 150, 24, 107, 114, 128)
+
+    ' === БАЗА_ДДС ===
+    Set ws = ThisWorkbook.Sheets("БАЗА_ДДС")
+    On Error Resume Next
+    For Each btn In ws.Shapes: btn.Delete: Next btn
+    On Error GoTo 0
+    Call AddSideBtn(ws, "navDash_B",  "▶ Дашборд",  "НавигацияНаДашборд",  710, 4,  150, 28, 79, 70, 229)
+    Call AddSideBtn(ws, "navKas_B",   "▶ Касса",    "НавигацияНаКасса",    710, 38, 150, 24, 59, 130, 246)
+    Call AddSideBtn(ws, "navRash_B",  "▶ Расходы",  "НавигацияНаРасходы",  710, 68, 150, 24, 239, 68, 68)
+    Call AddSideBtn(ws, "navVipl_B",  "▶ Выплаты",  "НавигацияНаВыплаты",  710, 98, 150, 24, 245, 158, 11)
 
     ' === ДАШБОРД ===
     Set ws = ThisWorkbook.Sheets("ДАШБОРД")

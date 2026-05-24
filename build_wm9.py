@@ -399,12 +399,6 @@ tbl_vk=Table(displayName="tblВводКасса",ref="A3:J503")
 tbl_vk.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showRowStripes=True,showFirstColumn=False)
 ws.add_table(tbl_vk)
 cw(ws,{"A":12,"B":10,"C":16,"D":17,"E":14,"F":13,"G":14,"H":15,"I":14,"J":14})
-# CF: dim columns whose payment method is disabled in НАСТРОЙКИ
-_DIM_=PatternFill("solid",fgColor="FFD1D5DB",start_color="FFD1D5DB")
-_DIMF_=fnt(10,col="FF9CA3AF")
-for _rng_,_tgl_ in [("E4:E503","НАСТРОЙКИ!$E$20"),("F4:F503","НАСТРОЙКИ!$E$21"),
-                    ("H4:H503","НАСТРОЙКИ!$E$28"),("I4:I503","НАСТРОЙКИ!$E$29")]:
-    ws.conditional_formatting.add(_rng_,FormulaRule(formula=[f'{_tgl_}="Выкл"'],fill=_DIM_,font=_DIMF_))
 ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF3B82F6"
 print("✓ ВВОД_КАССА")
 
@@ -1231,9 +1225,6 @@ ws.conditional_formatting.add("B20",FormulaRule(formula=["B20<=0"],fill=F(GREEN_
 ws.conditional_formatting.add("B21",FormulaRule(formula=["B21>0"],fill=F(GREEN_L),font=fnt(12,True,GREEN)))
 ws.conditional_formatting.add("B21",FormulaRule(formula=["B21<=0"],fill=F(RED_L),font=fnt(12,True,RED)))
 ws.row_dimensions[22].height=6  # spacer
-
-# Enhanced alert CF on B20: deep red when debt exceeds threshold from НАСТРОЙКИ!$E$38
-ws.conditional_formatting.add("B20",FormulaRule(formula=["AND(B20>0,B20>НАСТРОЙКИ!$E$38)"],fill=F("FFEF4444"),font=fnt(12,True,"FFDC2626")))
 
 # ── БЛОК 4: ВЫПЛАТЫ ПОСТАВЩИКАМ (мини-отчёт по ТОП-5) ─────────
 sec_hdr(ws,23,"  БЛОК 4: ВЫПЛАТЫ ПОСТАВЩИКАМ — ТОП-5 ПО НАСТРОЙКАМ",6,PURPLE)
