@@ -127,7 +127,7 @@ Function PoluiChitDatu(wsVvod As Worksheet) As Date
     On Error GoTo 0
 End Function
 
-' ---- SOHRANIT KASSU (10-col: D=ВыручкаZ, E=ЭквZ, F=ПеревZ, G=ФактНал, H=ФактЭкв, I=ФактПер, J=Расхожд) ----
+' ---- SOHRANIT KASSU (12-col: D=ВыручкаZ, E=ЭквZ, F=ПеревZ, G=ИманZ, H=ВыплатаZ, I=ФактНал, J=ФактЭкв, K=ФактПер, L=Расхожд) ----
 Sub SohranitKassu()
     Dim wsVvod As Worksheet
     Dim wsCfg As Worksheet
@@ -136,9 +136,16 @@ Sub SohranitKassu()
     Application.Calculation = xlCalculationManual
     Application.ScreenUpdating = False
 
-    ' Read payment method toggles from НАСТРОЙКИ (Section 3, column E)
-    Dim vklEkv As Boolean: vklEkv = VklVykl(wsCfg.Cells(20, 5).Value)  ' E20: Эквайринг Z
-    Dim vklPer As Boolean: vklPer = VklVykl(wsCfg.Cells(21, 5).Value)  ' E21: Перевод Z
+    ' Payment method toggles (Section 3, E20-E24)
+    Dim vklEkv As Boolean: vklEkv = VklVykl(wsCfg.Cells(20, 5).Value)    ' E20: Эквайринг
+    Dim vklPer As Boolean: vklPer = VklVykl(wsCfg.Cells(21, 5).Value)    ' E21: Перевод
+    Dim vklIman As Boolean: vklIman = VklVykl(wsCfg.Cells(23, 5).Value)  ' E23: Иман (хозяин)
+    Dim vklVipl As Boolean: vklVipl = VklVykl(wsCfg.Cells(24, 5).Value)  ' E24: Выплата с кассы
+
+    ' Shift toggles (Section 2, E15-E17)
+    Dim vklDen As Boolean: vklDen = VklVykl(wsCfg.Cells(15, 5).Value)        ' E15: День
+    Dim vklVecher As Boolean: vklVecher = VklVykl(wsCfg.Cells(16, 5).Value)  ' E16: Вечер
+    Dim vklNoch As Boolean: vklNoch = VklVykl(wsCfg.Cells(17, 5).Value)      ' E17: Ночь
 
     Dim tbl As ListObject
     Set tbl = wsVvod.ListObjects("tblВводКасса")
@@ -168,18 +175,28 @@ Sub SohranitKassu()
             Else
                 ' D: Z-отчёт наличка → Доход/Наличка (always)
                 ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Наличка", vyruchkaK, "Z-отчёт"
-                ' E: Z-отчёт эквайринг — только если включено в НАСТРОЙКАХ
+                ' E: Z-отчёт эквайринг
                 If vklEkv Then
                     Dim ekvZ As Double: ekvZ = BezopasnoeCislo(wsVvod.Cells(r, 5).Value)
                     If ekvZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Эквайринг", ekvZ, "Z-Эквайринг"
                 End If
-                ' F: Z-отчёт перевод — только если включено в НАСТРОЙКАХ
+                ' F: Z-отчёт перевод
                 If vklPer Then
                     Dim perZ As Double: perZ = BezopasnoeCislo(wsVvod.Cells(r, 6).Value)
                     If perZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Перевод", perZ, "Z-Перевод"
                 End If
-                ' J: Расхождение (col 10) → тип Расхождение если ненулевое
-                Dim rashK As Double: rashK = BezopasnoeCislo(wsVvod.Cells(r, 10).Value)
+                ' G: Z-отчёт иман (личные средства хозяина)
+                If vklIman Then
+                    Dim imanZ As Double: imanZ = BezopasnoeCislo(wsVvod.Cells(r, 7).Value)
+                    If imanZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Доход", "", "Иман", imanZ, "Z-Иман"
+                End If
+                ' H: выплата с кассы (расход, выданный прямо из кассы)
+                If vklVipl Then
+                    Dim viplZ As Double: viplZ = BezopasnoeCislo(wsVvod.Cells(r, 8).Value)
+                    If viplZ > 0 Then ZapisatTransakciyu dataValK, smenaK, kassirK, "Расход", "Выплата с кассы", "Наличка", viplZ, "Выплата с кассы"
+                End If
+                ' L: Расхождение (col 12) → записывается если ненулевое
+                Dim rashK As Double: rashK = BezopasnoeCislo(wsVvod.Cells(r, 12).Value)
                 If Abs(rashK) > 0.01 Then
                     ZapisatTransakciyu dataValK, smenaK, kassirK, "Расхождение", "", "Наличка", rashK, "Расхождение по смене"
                 End If
@@ -195,14 +212,76 @@ NextRowK:
     If zapisano > 0 Then
         tbl.DataBodyRange.ClearContents
         Dim todayK As Date: todayK = Now()
-        wsVvod.Cells(4, 1).Value = todayK: wsVvod.Cells(4, 2).Value = "День"
-        wsVvod.Cells(5, 1).Value = todayK: wsVvod.Cells(5, 2).Value = "Вечер"
-        wsVvod.Cells(6, 1).Value = todayK: wsVvod.Cells(6, 2).Value = "Ночь"
-        wsVvod.Range("A4:A6").NumberFormat = "DD.MM.YYYY"
+        ' Seed only enabled shifts
+        Dim seedRow As Integer: seedRow = 4
+        If vklDen Then
+            wsVvod.Cells(seedRow, 1).Value = todayK
+            wsVvod.Cells(seedRow, 2).Value = "День"
+            wsVvod.Range("A" & seedRow).NumberFormat = "DD.MM.YYYY"
+            seedRow = seedRow + 1
+        End If
+        If vklVecher Then
+            wsVvod.Cells(seedRow, 1).Value = todayK
+            wsVvod.Cells(seedRow, 2).Value = "Вечер"
+            wsVvod.Range("A" & seedRow).NumberFormat = "DD.MM.YYYY"
+            seedRow = seedRow + 1
+        End If
+        If vklNoch Then
+            wsVvod.Cells(seedRow, 1).Value = todayK
+            wsVvod.Cells(seedRow, 2).Value = "Ночь"
+            wsVvod.Range("A" & seedRow).NumberFormat = "DD.MM.YYYY"
+        End If
         MsgBox "Касса сохранена! Записано смен: " & zapisano, vbInformation
     Else
         MsgBox "Нет данных для сохранения (введите выручку Z-отчётов).", vbExclamation
     End If
+End Sub
+
+' ---- OBNOVIT KOLONKI KASSY — hide/show columns based on НАСТРОЙКИ toggles ----
+Sub ObnovitKolonkiKassy()
+    Dim wsVvod As Worksheet
+    Dim wsCfg As Worksheet
+    Set wsVvod = ThisWorkbook.Sheets("ВВОД_КАССА")
+    Set wsCfg = ThisWorkbook.Sheets("НАСТРОЙКИ")
+
+    Dim vklEkv As Boolean: vklEkv = VklVykl(wsCfg.Cells(20, 5).Value)    ' E20: Эквайринг
+    Dim vklPer As Boolean: vklPer = VklVykl(wsCfg.Cells(21, 5).Value)    ' E21: Перевод
+    Dim vklIman As Boolean: vklIman = VklVykl(wsCfg.Cells(23, 5).Value)  ' E23: Иман
+    Dim vklVipl As Boolean: vklVipl = VklVykl(wsCfg.Cells(24, 5).Value)  ' E24: Выплата
+
+    ' E=col5 ЭквZ  /  J=col10 ФактЭкв
+    wsVvod.Columns(5).Hidden = Not vklEkv
+    wsVvod.Columns(10).Hidden = Not vklEkv
+    ' F=col6 ПеревZ  /  K=col11 ФактПер
+    wsVvod.Columns(6).Hidden = Not vklPer
+    wsVvod.Columns(11).Hidden = Not vklPer
+    ' G=col7 ИманZ
+    wsVvod.Columns(7).Hidden = Not vklIman
+    ' H=col8 ВыплатаZ
+    wsVvod.Columns(8).Hidden = Not vklVipl
+End Sub
+
+' ---- OBNOVIT SMENY KASSY — hide/show shift seed rows based on НАСТРОЙКИ toggles ----
+Sub ObnovitSmenyKassy()
+    Dim wsVvod As Worksheet
+    Dim wsCfg As Worksheet
+    Set wsVvod = ThisWorkbook.Sheets("ВВОД_КАССА")
+    Set wsCfg = ThisWorkbook.Sheets("НАСТРОЙКИ")
+
+    Dim vklDen As Boolean: vklDen = VklVykl(wsCfg.Cells(15, 5).Value)        ' E15: День
+    Dim vklVecher As Boolean: vklVecher = VklVykl(wsCfg.Cells(16, 5).Value)  ' E16: Вечер
+    Dim vklNoch As Boolean: vklNoch = VklVykl(wsCfg.Cells(17, 5).Value)      ' E17: Ночь
+
+    wsVvod.Rows(4).Hidden = Not vklDen
+    wsVvod.Rows(5).Hidden = Not vklVecher
+    wsVvod.Rows(6).Hidden = Not vklNoch
+End Sub
+
+' ---- PRIMJENIT NASTROJKI — apply НАСТРОЙКИ toggles to ВВОД_КАССА ----
+Sub PrimjenitNastrojki()
+    ObnovitKolonkiKassy
+    ObnovitSmenyKassy
+    MsgBox "Настройки применены к листу ВВОД_КАССА!", vbInformation
 End Sub
 
 ' ---- SOHRANIT RASHODY (5-col: B=Категория, C=Способ, D=Сумма, E=Комментарий) ----
@@ -418,15 +497,15 @@ Sub UstanovitVseKnopki()
     On Error Resume Next
     For Each btn In ws.Shapes: btn.Delete: Next btn
     On Error GoTo 0
-    ' Action buttons (top area, stacked right)
-    Call AddSideBtn(ws, "btnSaveKassu",  "СОХРАНИТЬ КАССУ", "SohranitKassu",  750, 4,  160, 32, 59, 130, 246)
-    Call AddSideBtn(ws, "btnSogodnya",   "СЕГОДНЯ",          "ПоставитьСегодня", 750, 42, 160, 28, 16, 185, 129)
-    Call AddSideBtn(ws, "btnVchera",     "ВЧЕРА",            "ПоставитьВчера",   750, 76, 160, 28, 107, 114, 128)
+    ' Action buttons (top area, stacked right — x=865 for 12-col table)
+    Call AddSideBtn(ws, "btnSaveKassu",  "СОХРАНИТЬ КАССУ", "SohranitKassu",    865, 4,  160, 32, 59, 130, 246)
+    Call AddSideBtn(ws, "btnSogodnya",   "СЕГОДНЯ",          "ПоставитьСегодня", 865, 42, 160, 28, 16, 185, 129)
+    Call AddSideBtn(ws, "btnVchera",     "ВЧЕРА",            "ПоставитьВчера",   865, 76, 160, 28, 107, 114, 128)
     ' Navigation buttons (bottom of sidebar)
-    Call AddSideBtn(ws, "navDash_K",  "▶ Дашборд",    "НавигацияНаДашборд",   750, 120, 160, 24, 79, 70, 229)
-    Call AddSideBtn(ws, "navRash_K",  "▶ Расходы",    "НавигацияНаРасходы",   750, 150, 160, 24, 239, 68, 68)
-    Call AddSideBtn(ws, "navVipl_K",  "▶ Выплаты",    "НавигацияНаВыплаты",   750, 180, 160, 24, 245, 158, 11)
-    Call AddSideBtn(ws, "navBaza_K",  "▶ База ДДС",   "НавигацияНаБазу",      750, 210, 160, 24, 107, 114, 128)
+    Call AddSideBtn(ws, "navDash_K",  "▶ Дашборд",    "НавигацияНаДашборд",   865, 120, 160, 24, 79, 70, 229)
+    Call AddSideBtn(ws, "navRash_K",  "▶ Расходы",    "НавигацияНаРасходы",   865, 150, 160, 24, 239, 68, 68)
+    Call AddSideBtn(ws, "navVipl_K",  "▶ Выплаты",    "НавигацияНаВыплаты",   865, 180, 160, 24, 245, 158, 11)
+    Call AddSideBtn(ws, "navBaza_K",  "▶ База ДДС",   "НавигацияНаБазу",      865, 210, 160, 24, 107, 114, 128)
 
     ' === ВВОД_РАСХОДЫ ===
     Set ws = ThisWorkbook.Sheets("ВВОД_РАСХОДЫ")
@@ -498,10 +577,11 @@ Sub UstanovitVseKnopki()
     On Error Resume Next
     For Each btn In ws.Shapes: btn.Delete: Next btn
     On Error GoTo 0
-    Call AddSideBtn(ws, "btnZachislit", "ЗАЧИСЛИТЬ РАСХОДЫ", "ZachislitPostoyannyeRashody", 830, 4,  190, 32, 20, 184, 166)
-    Call AddSideBtn(ws, "navDash_N",  "▶ Дашборд",  "НавигацияНаДашборд",  830, 42,  190, 24, 79, 70, 229)
-    Call AddSideBtn(ws, "navKas_N",   "▶ Касса",    "НавигацияНаКасса",    830, 72,  190, 24, 59, 130, 246)
-    Call AddSideBtn(ws, "navBaza_N",  "▶ База ДДС", "НавигацияНаБазу",     830, 102, 190, 24, 107, 114, 128)
+    Call AddSideBtn(ws, "btnPrimenot",  "ПРИМЕНИТЬ НАСТРОЙКИ", "PrimjenitNastrojki",         830, 4,   190, 32, 79, 70, 229)
+    Call AddSideBtn(ws, "btnZachislit", "ЗАЧИСЛИТЬ РАСХОДЫ",   "ZachislitPostoyannyeRashody", 830, 42,  190, 32, 20, 184, 166)
+    Call AddSideBtn(ws, "navDash_N",  "▶ Дашборд",  "НавигацияНаДашборд",  830, 84,  190, 24, 79, 70, 229)
+    Call AddSideBtn(ws, "navKas_N",   "▶ Касса",    "НавигацияНаКасса",    830, 114, 190, 24, 59, 130, 246)
+    Call AddSideBtn(ws, "navBaza_N",  "▶ База ДДС", "НавигацияНаБазу",     830, 144, 190, 24, 107, 114, 128)
 
     MsgBox "Все кнопки установлены! Шаблон готов к работе.", vbInformation
 End Sub
@@ -558,11 +638,13 @@ Sub ObnovitBokovuyuPanelKalendarya(selectedDate As Date)
     End If
 End Sub
 
-' ---- Keyboard shortcuts ----
+' ---- Keyboard shortcuts + startup init ----
 Sub Auto_Open()
     Application.OnKey "^+s", "SohranitKassu"
     Application.OnKey "^+r", "SohranitRashody"
     Application.OnKey "^+d", "ObnovitDashboard"
+    ObnovitKolonkiKassy
+    ObnovitSmenyKassy
 End Sub
 
 Sub Auto_Close()

@@ -92,20 +92,20 @@ for label, got, exp in checks:
 wb3 = load_workbook(XLSX)
 errors = []
 
-# ВВОД_КАССА: must have 10 columns (A:J) in tblВводКасса
+# ВВОД_КАССА: must have 12 columns (A:L) in tblВводКасса
 ws_k = wb3["ВВОД_КАССА"]
 tbl_names_k = list(ws_k._tables)   # iterates over name strings
 if "tblВводКасса" not in tbl_names_k:
     errors.append("tblВводКасса not found in ВВОД_КАССА")
 else:
     tbl_k = ws_k._tables["tblВводКасса"]
-    if tbl_k.ref != "A3:J503":
-        errors.append(f"tblВводКасса ref={tbl_k.ref}, expected A3:J503")
-    j4 = ws_k.cell(4, 10).value
-    if j4 and "G4" in str(j4) and "D4" in str(j4):
+    if tbl_k.ref != "A3:L503":
+        errors.append(f"tblВводКасса ref={tbl_k.ref}, expected A3:L503")
+    l4 = ws_k.cell(4, 12).value
+    if l4 and "I4" in str(l4) and "D4" in str(l4) and "G4" in str(l4):
         pass
     else:
-        errors.append(f"J4 расхождение formula wrong: {j4!r}")
+        errors.append(f"L4 расхождение formula wrong: {l4!r}")
 
 # ВВОД_РАСХОДЫ: must have 5 columns (A:E)
 ws_r = wb3["ВВОД_РАСХОДЫ"]
@@ -176,9 +176,14 @@ bas_checks = [
     ("SohranitViplatu writes Оплата долга", '"Оплата долга"' in bas_content),
     ("EksportOtchetaPDF removed",   "ExportAsFixedFormat" not in bas_content),
     ("Navigation subs exist",        "НавигацияНаДашборд" in bas_content),
-    ("Right-side X>=510 in buttons", "510, 4" in bas_content or "750, 4" in bas_content),
+    ("Right-side X>=865 in buttons", "865, 4" in bas_content),
     ("No .Protect calls",            ".Protect" not in bas_content),
-    ("10-col расхождение col 10",    "Cells(r, 10)" in bas_content),
+    ("12-col расхождение col 12",    "Cells(r, 12)" in bas_content),
+    ("ObnovitKolonkiKassy exists",   "Sub ObnovitKolonkiKassy()" in bas_content),
+    ("ObnovitSmenyKassy exists",     "Sub ObnovitSmenyKassy()" in bas_content),
+    ("PrimjenitNastrojki exists",    "Sub PrimjenitNastrojki()" in bas_content),
+    ("Иман toggle E23",              "wsCfg.Cells(23, 5)" in bas_content),
+    ("Выплата toggle E24",           "wsCfg.Cells(24, 5)" in bas_content),
     ("5-col rashody col 2=kat",      'Dim katR As String: katR = CStr(wsVvod.Cells(r, 2)' in bas_content),
 ]
 
@@ -190,7 +195,7 @@ for label, ok in bas_checks:
 # ── Final result ──────────────────────────────────────────────────────────────
 print("\n" + "═"*55)
 if PASS:
-    print("  ✅  ALL TESTS PASSED — WAY MARKET v9 Stage 4 OK")
+    print("  ✅  ALL TESTS PASSED — WAY MARKET v9 Stage 7 OK")
 else:
     print("  ❌  SOME TESTS FAILED — see details above")
 print("═"*55)

@@ -360,15 +360,16 @@ ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF6B7280"
 print("✓ БАЗА_ДДС")
 
 # ════════════════════════════════════════════════════════════
-# 3. ВВОД_КАССА  (10 колонок, Stage 4)
+# 3. ВВОД_КАССА  (12 колонок, Stage 7)
 # ════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ВВОД_КАССА"); ws.sheet_view.showGridLines = False
-banner(ws, "ВВОД ДАННЫХ КАССЫ  |  ► кнопки: СОХРАНИТЬ / СЕГОДНЯ / ВЧЕРА", "A1:J1", BLUE)
-ws.merge_cells("A2:J2")
-ws.cell(2,1).value="Введите Z-отчёты и фактику по трём каналам. Расхождение рассчитывается автоматически."
+banner(ws, "ВВОД ДАННЫХ КАССЫ  |  ► кнопки: СОХРАНИТЬ / СЕГОДНЯ / ВЧЕРА", "A1:L1", BLUE)
+ws.merge_cells("A2:L2")
+ws.cell(2,1).value="Введите Z-отчёты и фактику. Колонки Эквайринг/Перевод/Иман/Выплата управляются из НАСТРОЙКИ. Расхождение рассчитывается автоматически."
 ws.cell(2,1).font=fnt(10,it=True,col=BLUE); ws.cell(2,1).fill=F(BLUE_L); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=22
-# Smart table tblВводКасса — 10 колонок
-hdrs_k=["Дата","Смена","Кассир","Выручка (Z-отчёт)","Эквайринг (Z)","Перевод (Z)","Факт.наличка","Факт.эквайринг","Факт.перевод","Расхождение"]
+# Smart table tblВводКасса — 12 колонок
+# D=ВыручкаZ  E=ЭквZ  F=ПеревZ  G=ИманZ(хозяин)  H=ВыплатаZ  I=ФактНал  J=ФактЭкв  K=ФактПер  L=Расхождение
+hdrs_k=["Дата","Смена","Кассир","Выручка (Z-отчёт)","Эквайринг (Z)","Перевод (Z)","Иман Z (хозяин)","Выплата с кассы Z","Факт.наличка","Факт.эквайринг","Факт.перевод","Расхождение"]
 hrow(ws,3,hdrs_k,BLUE,30)
 ws.row_dimensions[3].height=30
 dv_sm_k=DataValidation(type="list",formula1='"День,Вечер,Ночь,-"'             ); ws.add_data_validation(dv_sm_k)
@@ -385,20 +386,20 @@ for r in range(4,504):
     ws.cell(r,2).alignment=CA(); ws.cell(r,2).protection=prot(False)
     ws.cell(r,3).font=fnt(10); ws.cell(r,3).fill=F(INP if seed else bg); ws.cell(r,3).border=brd()
     ws.cell(r,3).alignment=LA(); ws.cell(r,3).protection=prot(False)
-    # cols 4-9: Z-отчёты (D-F) + фактика (G-I)
-    for ci in range(4,10):
+    # cols 4-11: D=ВыручкаZ, E=ЭквZ, F=ПеревZ, G=ИманZ, H=ВыплатаZ, I=ФактНал, J=ФактЭкв, K=ФактПер
+    for ci in range(4,12):
         c=ws.cell(r,ci); c.font=fnt(10,True,INDIGO); c.fill=F(INP if seed else bg)
         c.border=brd(); c.alignment=RA(); c.number_format=MONEY; c.protection=prot(False)
-    # col 10: Расхождение = (G+H+I) - (D+E+F)
-    ws.cell(r,10).value=f"=IFERROR((G{r}+H{r}+I{r})-(D{r}+E{r}+F{r}),0)"
-    ws.cell(r,10).font=fnt(10,True,RED); ws.cell(r,10).fill=F(RED_L if seed else bg)
-    ws.cell(r,10).border=brd(); ws.cell(r,10).alignment=RA(); ws.cell(r,10).number_format=MONEY
+    # col 12 (L): Расхождение = (ФактНал+ФактЭкв+ФактПер) - (ВыручкаZ+ЭквZ+ПеревZ+ИманZ-ВыплатаZ)
+    ws.cell(r,12).value=f"=IFERROR((I{r}+J{r}+K{r})-(D{r}+E{r}+F{r}+G{r}-H{r}),0)"
+    ws.cell(r,12).font=fnt(10,True,RED); ws.cell(r,12).fill=F(RED_L if seed else bg)
+    ws.cell(r,12).border=brd(); ws.cell(r,12).alignment=RA(); ws.cell(r,12).number_format=MONEY
     ws.row_dimensions[r].height=22
 dv_sm_k.add("B4:B503"); dv_ks_k.add("C4:C503")
-tbl_vk=Table(displayName="tblВводКасса",ref="A3:J503")
+tbl_vk=Table(displayName="tblВводКасса",ref="A3:L503")
 tbl_vk.tableStyleInfo=TableStyleInfo(name="TableStyleMedium2",showRowStripes=True,showFirstColumn=False)
 ws.add_table(tbl_vk)
-cw(ws,{"A":12,"B":10,"C":16,"D":17,"E":14,"F":13,"G":14,"H":15,"I":14,"J":14})
+cw(ws,{"A":12,"B":10,"C":16,"D":17,"E":14,"F":13,"G":14,"H":16,"I":14,"J":14,"K":14,"L":14})
 ws.freeze_panes="A4"; ws.sheet_properties.tabColor="FF3B82F6"
 print("✓ ВВОД_КАССА")
 
