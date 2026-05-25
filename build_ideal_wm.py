@@ -92,7 +92,7 @@ ws.merge_cells("B2:C2")
 ws.cell(2,2).value='=НАСТРОЙКИ!E5&" — "&TEXT(TODAY(),"DD MMMM YYYY")'
 ws.cell(2,2).font=fnt(12,True,TEAL); ws.cell(2,2).fill=F(LGRAY); ws.cell(2,2).alignment=LA(False)
 ws.merge_cells("E2:I2")
-ws.cell(2,5).value='="Данные обновляются при каждом открытии файла"'
+ws.cell(2,5).value='Данные обновляются при каждом открытии файла'
 ws.cell(2,5).font=fnt(9,it=True,col=GRAY); ws.cell(2,5).fill=F(LGRAY); ws.cell(2,5).alignment=RA()
 ws.row_dimensions[2].height=28
 
@@ -320,6 +320,18 @@ for i in range(5):
         c_.protection=prot(False); c_.alignment=LA(False); c_.font=fnt(10)
     ws.row_dimensions[53+i].height=24
 
+# РАЗДЕЛ 6: Пороги уведомлений
+n_sec(60,"  РАЗДЕЛ 6 — ПОРОГИ УВЕДОМЛЕНИЙ",RED)
+ws.merge_cells("A61:H61")
+ws.cell(61,1).value="Превышение этих порогов подсвечивается красным на ПУЛЬТ и ДАШБОРД"
+ws.cell(61,1).font=fnt(9,it=True,col=GRAY); ws.cell(61,1).fill=F(RED_L); ws.cell(61,1).alignment=LA(False); ws.row_dimensions[61].height=20
+for r_,lbl_,def_,hint_ in [
+    (62,"Расхождение кассы > (₽)",5000,"Подсветка расхождения красным на ПУЛЬТ"),
+    (63,"Общий долг поставщикам > (₽)",1000000,"Подсветка долга на ДАШБОРД"),
+    (64,"Просрочка выплат > (дней)",7,"Просрочена выплата если дата + X дней < сегодня"),
+]:
+    n_param(r_,lbl_,def_,"money" if r_<64 else "int",hint_)
+
 ws.protection.sheet=True; ws.protection.password="wm2025"
 ws.freeze_panes="A3"
 print("✓ НАСТРОЙКИ")
@@ -523,7 +535,7 @@ ws.merge_cells("A2:H2")
 ws.cell(2,1).value="Только для чтения. Данные вносятся через ВВОД_КАССА и ВВОД_РАСХОДЫ."
 ws.cell(2,1).font=fnt(9,it=True,col=GRAY); ws.cell(2,1).fill=F(LGRAY); ws.cell(2,1).alignment=CA(); ws.row_dimensions[2].height=20
 
-hdr_row(ws,3,[("Дата",13),("Смена",12),("Кассир",14),("Тип",14),
+hdr_row(ws,3,[("Дата",13),("Смена",12),("Кассир",14),("Тип операций",14),
               ("Категория",16),("Способ оплаты",14),("Сумма (₽)",16),("Прим.",14)],NAVY,24)
 for r in range(4,3004):
     for ci in range(1,9):
@@ -548,7 +560,7 @@ print("✓ БАЗА_ДДС")
 # ════════════════════════════════════════════════════════════════════
 ws = wb.create_sheet("ЗАПИСЬ_ВЫПЛАТ"); ws.sheet_view.showGridLines = False
 ws.sheet_properties.tabColor = AMBER
-cw(ws,{"A":5,"B":13,"C":20,"D":16,"E":13,"F":14,"G":14,"H":18})
+cw(ws,{"A":5,"B":13,"C":20,"D":16,"E":13,"F":14,"G":14,"H":15,"I":18})
 banner(ws,"💳  ЗАПИСЬ ВЫПЛАТ ПОСТАВЩИКАМ","A1:H1",GOLD,14,WHITE)
 
 ws.merge_cells("A2:H2")
@@ -578,14 +590,15 @@ for ci,(lbl,formula,clr,bg) in enumerate([
 ws.row_dimensions[5].height=8
 
 hdr_row(ws,6,[("№",4),("Дата выплаты",13),("Поставщик (ТП)",20),("Сумма (₽)",16),
-              ("Статус",13),("Накладная",14),("Способ",14),("Примечание",18)],GOLD,24)
+              ("Статус",13),("Накладная",14),("Способ",14),("Факт. оплата",15),("Примечание",18)],GOLD,24)
 for r in range(7,507):
     ws.cell(r,1).value=f'=IF(B{r}<>"",ROW()-6,"")'
     ws.cell(r,1).font=fnt(9,col=GRAY); ws.cell(r,1).alignment=CA(); ws.cell(r,1).border=brd()
     ws.cell(r,1).fill=F(WHITE if r%2==0 else LGRAY)
-    for ci in range(2,9):
+    for ci in range(2,10):
         c_=ws.cell(r,ci); c_.fill=F(WHITE if r%2==0 else LGRAY); c_.border=brd(); c_.protection=prot(False)
     ws.cell(r,2).number_format=DATE_F; ws.cell(r,4).number_format=MONEY
+    ws.cell(r,8).number_format=DATE_F   # Дата факт. оплаты
     ws.row_dimensions[r].height=20
 
 dv_st=DataValidation(type="list",formula1='"Запланировано,Выплачено,Отменено"',allow_blank=False)
@@ -593,18 +606,18 @@ ws.add_data_validation(dv_st); dv_st.sqref="E7:E506"
 dv_sup=DataValidation(type="list",formula1="НАСТРОЙКИ!$A$53:$A$57",allow_blank=True)
 ws.add_data_validation(dv_sup); dv_sup.sqref="C7:C506"
 
-ws.conditional_formatting.add("A7:I506",FormulaRule(formula=['$E7="Выплачено"'],fill=F(GREEN_L),font=fnt(10,col=GREEN)))
-ws.conditional_formatting.add("A7:I506",FormulaRule(formula=['AND($E7="Запланировано",$B7<TODAY())'],fill=F(RED_L),font=fnt(10,True,RED)))
+ws.conditional_formatting.add("A7:J506",FormulaRule(formula=['$E7="Выплачено"'],fill=F(GREEN_L),font=fnt(10,col=GREEN)))
+ws.conditional_formatting.add("A7:J506",FormulaRule(formula=['AND($E7="Запланировано",$B7<TODAY())'],fill=F(RED_L),font=fnt(10,True,RED)))
 
-# Col I: Idx — порядковый номер выплаты на эту дату (для календаря)
-ws.cell(6,9).value="Idx"
+# Col J: Idx — порядковый номер выплаты на эту дату (для календаря)
+ws.cell(6,10).value="Idx"
 for r in range(7,507):
-    ws.cell(r,9).value=f'=IF(B{r}<>"",COUNTIFS($B$7:$B{r},$B{r}),"")'
-    ws.cell(r,9).font=fnt(9,col=GRAY); ws.cell(r,9).fill=F(LGRAY); ws.cell(r,9).border=brd()
-    ws.cell(r,9).alignment=CA(); ws.cell(r,9).protection=prot(True)
-ws.column_dimensions["I"].width=5
+    ws.cell(r,10).value=f'=IF(B{r}<>"",COUNTIFS($B$7:$B{r},$B{r}),"")'
+    ws.cell(r,10).font=fnt(9,col=GRAY); ws.cell(r,10).fill=F(LGRAY); ws.cell(r,10).border=brd()
+    ws.cell(r,10).alignment=CA(); ws.cell(r,10).protection=prot(True)
+ws.column_dimensions["J"].width=5
 
-tbl_vip=Table(displayName="tblВыплаты",ref="A6:I506")
+tbl_vip=Table(displayName="tblВыплаты",ref="A6:J506")
 tbl_vip.tableStyleInfo=TableStyleInfo(name="TableStyleMedium3",showRowStripes=False)
 ws.add_table(tbl_vip)
 ws.freeze_panes="B7"
@@ -669,7 +682,7 @@ for i_,d_ in enumerate(['ПН','ВТ','СР','ЧТ','ПТ','СБ','ВС']):
 
 # 6-week grid
 CELL_ROWS_=4; SR_=11
-_ZC="ЗАПИСЬ_ВЫПЛАТ!$C$7:$C$506"; _ZI="ЗАПИСЬ_ВЫПЛАТ!$I$7:$I$506"
+_ZC="ЗАПИСЬ_ВЫПЛАТ!$C$7:$C$506"; _ZI="ЗАПИСЬ_ВЫПЛАТ!$J$7:$J$506"
 for week_ in range(6):
     br_=SR_+week_*CELL_ROWS_
     for dp_ in range(7):
@@ -714,7 +727,7 @@ _rA="БАЗА_ДДС!$A$4:$A$3003"; _rD="БАЗА_ДДС!$D$4:$D$3003"
 _rE="БАЗА_ДДС!$E$4:$E$3003"; _rG="БАЗА_ДДС!$G$4:$G$3003"
 
 for mi in range(1,13):
-    r=mi+1; yr_ref="ДАШБОРД!$E$4"
+    r=mi+1; yr_ref="ДАШБОРД!$E$3"
     s=f"DATE({yr_ref},{mi},1)"; e=f"EOMONTH(DATE({yr_ref},{mi},1),0)"
     ws_d.cell(r,1).value=MONTHS_RU[mi-1]
     ws_d.cell(r,2).value=f'=IFERROR(SUMPRODUCT(({_rA}>={s})*({_rA}<={e})*({_rD}="Доход")*{_rG}),0)'
@@ -759,50 +772,48 @@ print("✓ ДАННЫЕ (hidden)")
 ws = wb.create_sheet("ДАШБОРД"); ws.sheet_view.showGridLines = False
 ws.sheet_properties.tabColor = TEAL_M
 
-cw(ws,{"A":3,"B":14,"C":14,"D":3,"E":14,"F":14,"G":3,"H":14,"I":14,"J":3,"K":3})
-banner(ws,"📊  ДАШБОРД — АНАЛИТИКА","A1:K1",TEAL,15)
+# 12 columns: 4 KPIs × 3 cols each
+cw(ws,{"A":17,"B":13,"C":4,"D":17,"E":13,"F":4,"G":17,"H":13,"I":4,"J":17,"K":13,"L":4})
+banner(ws,"📊  WAY MARKET — ДАШБОРД УПРАВЛЕНЧЕСКОГО УЧЁТА","A1:L1",TEAL,15)
 
-# Row 2: период фильтр
-ws.merge_cells("B2:C2")
-ws.cell(2,2).value="Месяц:"
-ws.cell(2,2).font=fnt(10,col=GRAY); ws.cell(2,2).fill=F(LGRAY); ws.cell(2,2).alignment=RA()
-ws.merge_cells("E2:F2")
-c_month=inp(ws,2,5,MONTHS_RU[today.month-1],"@",False)
+# Row 2: shop name + record count
+ws.merge_cells("A2:F2")
+ws.cell(2,1).value='=НАСТРОЙКИ!E4&"  |  Данные с: "&TEXT(НАСТРОЙКИ!E5,"DD.MM.YYYY")'
+ws.cell(2,1).font=fnt(10,True,TEAL_M); ws.cell(2,1).fill=F(LGRAY); ws.cell(2,1).alignment=LA(False)
+ws.merge_cells("G2:L2")
+ws.cell(2,7).value='=IFERROR("Всего записей: "&TEXT(COUNTA(БАЗА_ДДС!$A$4:$A$3003),"#,##0")&"  |  Последнее: "&TEXT(MAX(БАЗА_ДДС!$A$4:$A$3003),"DD.MM.YYYY"),"—")'
+ws.cell(2,7).font=fnt(9,it=True,col=GRAY); ws.cell(2,7).fill=F(LGRAY); ws.cell(2,7).alignment=RA()
+ws.row_dimensions[2].height=24
+
+# Row 3: period filter
+ws.cell(3,1).value="ПЕРИОД:"
+ws.cell(3,1).font=fnt(9,True,DGRAY); ws.cell(3,1).fill=F(LGRAY); ws.cell(3,1).border=brd(); ws.cell(3,1).alignment=RA()
+ws.merge_cells("B3:C3")
+c_month=inp(ws,3,2,MONTHS_RU[today.month-1],"@",False)
 dv_m=DataValidation(type="list",formula1='"'+",".join(MONTHS_RU)+'"',allow_blank=False)
 ws.add_data_validation(dv_m); dv_m.add(c_month)
+ws.cell(3,4).value="Год:"
+ws.cell(3,4).font=fnt(9,True,DGRAY); ws.cell(3,4).fill=F(LGRAY); ws.cell(3,4).border=brd(); ws.cell(3,4).alignment=RA()
+ws.merge_cells("E3:F3")
+c_year=inp(ws,3,5,today.year,'"####"',False)
+ws.merge_cells("G3:L3")
+ws.cell(3,7).value="[ОБНОВИТЬ] — нажмите F9 для пересчёта формул  |  Ctrl+Shift+D"
+ws.cell(3,7).font=fnt(9,it=True,col=GRAY); ws.cell(3,7).fill=F(LGRAY); ws.cell(3,7).alignment=CA()
+ws.row_dimensions[3].height=30
 
-ws.cell(2,8).value="Год:"
-ws.cell(2,8).font=fnt(10,col=GRAY); ws.cell(2,8).fill=F(LGRAY); ws.cell(2,8).alignment=RA()
-ws.merge_cells("I2:J2")
-c_year=inp(ws,2,9,today.year,'"####"',False)
-ws.row_dimensions[2].height=28
+# Row 4: spacer
+ws.row_dimensions[4].height=6
 
-# Hidden period calculation (row 5)
+# Row 5: hidden period calculations (A5=start, B5=end, C5=prev_start, D5=prev_end, E5=year)
 ws.row_dimensions[5].height=0
-ws.cell(5,1).value='=DATE($I$2,MATCH($E$2,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0),1)'
+ws.cell(5,1).value='=DATE($E$3,MATCH($B$3,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0),1)'
 ws.cell(5,1).number_format=DATE_F
 ws.cell(5,2).value='=EOMONTH($A$5,0)'; ws.cell(5,2).number_format=DATE_F
-ws.cell(5,3).value='=DATE($I$2,MATCH($E$2,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0)-1,1)'; ws.cell(5,3).number_format=DATE_F
+ws.cell(5,3).value='=DATE($E$3,MATCH($B$3,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0)-1,1)'; ws.cell(5,3).number_format=DATE_F
 ws.cell(5,4).value='=EOMONTH($C$5,0)'; ws.cell(5,4).number_format=DATE_F
-ws.cell(5,5).value=f'={today.year}'  # year reference for ДАННЫЕ
+ws.cell(5,5).value='=$E$3'
 
-# Helper: KPI block row builder
-def dash_kpi(row, label, cur_f, prev_f, pct_f=None, note="",
-             val_clr=TEAL_M, val_bg=TEAL_L, up_good=True):
-    ws.cell(row,1).value=label; ws.cell(row,1).font=fnt(9,col=GRAY)
-    ws.cell(row,1).fill=F(LGRAY); ws.cell(row,1).border=brd(); ws.cell(row,1).alignment=LA(False)
-    ws.merge_cells(start_row=row,start_column=2,end_row=row,end_column=3)
-    cv=ws.cell(row,2); cv.value=cur_f; cv.font=fnt(12,True,val_clr)
-    cv.fill=F(val_bg); cv.border=brd(); cv.alignment=RA(); cv.number_format=MONEY
-    ws.merge_cells(start_row=row,start_column=5,end_row=row,end_column=6)
-    pv=ws.cell(row,5); pv.value=prev_f; pv.font=fnt(10,col=GRAY)
-    pv.fill=F(LGRAY); pv.border=brd(); pv.alignment=RA(); pv.number_format=MONEY
-    if pct_f:
-        ws.merge_cells(start_row=row,start_column=8,end_row=row,end_column=9)
-        pc=ws.cell(row,8); pc.value=pct_f; pc.font=fnt(9,col=GRAY)
-        pc.fill=F(LGRAY); pc.border=brd(); pc.alignment=CA(); pc.number_format="0.0%"
-    ws.row_dimensions[row].height=26
-
+# ── Formula helpers ───────────────────────────────────────────────
 def SP(typ=None,cat=None,pay=None):
     conds=["(БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)","(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)"]
     if typ: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{typ}")')
@@ -810,96 +821,214 @@ def SP(typ=None,cat=None,pay=None):
     if pay: conds.append(f'(БАЗА_ДДС!$F$4:$F$3003="{pay}")')
     return f'=IFERROR(SUMPRODUCT({"*".join(conds)}*БАЗА_ДДС!$G$4:$G$3003),0)'
 
+def SP_cnt(typ=None,cat=None):
+    conds=["(БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)","(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)"]
+    if typ: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{typ}")')
+    if cat: conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
+    return f'=IFERROR(SUMPRODUCT({"*".join(conds)}*(1)),0)'
+
 def SP_prev(typ=None,cat=None):
     conds=["(БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$C$5)","(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$D$5)"]
     if typ: conds.append(f'(БАЗА_ДДС!$D$4:$D$3003="{typ}")')
     if cat: conds.append(f'(БАЗА_ДДС!$E$4:$E$3003="{cat}")')
     return f'=IFERROR(SUMPRODUCT({"*".join(conds)}*БАЗА_ДДС!$G$4:$G$3003),0)'
 
-# Row 3: column headers (manual — no merge on col A to allow sub-merges)
-for ci,lbl,span in [(1,"Показатель",1),(2,"Текущий период",2),(5,"Пред. период",2),(8,"% / Доп. инфо",2)]:
-    if span>1: ws.merge_cells(start_row=3,start_column=ci,end_row=3,end_column=ci+span-1)
-    ws.cell(3,ci).value=lbl; ws.cell(3,ci).font=fnt(9,True,WHITE)
-    ws.cell(3,ci).fill=F(TEAL); ws.cell(3,ci).alignment=CA(); ws.cell(3,ci).border=brd()
-    for sc in range(ci,ci+span):
-        ws.cell(3,sc).fill=F(TEAL); ws.cell(3,sc).border=brd()
-ws.row_dimensions[3].height=22
+# ── 4-tile block builder ─────────────────────────────────────────
+def tile_block(ws, start_row, title, tiles, bg, lbl_bg=None, val_bg=None):
+    if lbl_bg is None: lbl_bg = bg
+    if val_bg is None: val_bg = bg
+    sec_hdr(ws, start_row, f"  {title}", 12, bg, 22)
+    ws.row_dimensions[start_row+1].height=22
+    ws.row_dimensions[start_row+2].height=38
+    for i,(lbl,val_f,fmt,ind_f) in enumerate(tiles):
+        c1=i*3+1; c3=c1+2
+        ws.merge_cells(start_row=start_row+1,start_column=c1,end_row=start_row+1,end_column=c3)
+        cl=ws.cell(start_row+1,c1); cl.value=lbl
+        cl.font=fnt(9,col=WHITE); cl.fill=F(lbl_bg); cl.alignment=CA(True); cl.border=brd()
+        ws.merge_cells(start_row=start_row+2,start_column=c1,end_row=start_row+2,end_column=c3-1)
+        cv=ws.cell(start_row+2,c1); cv.value=val_f
+        cv.font=fnt(15,True,WHITE); cv.fill=F(val_bg); cv.alignment=CA(False); cv.border=brd()
+        cv.number_format=fmt if fmt else MONEY
+        ci=ws.cell(start_row+2,c3)
+        ci.value=ind_f if ind_f else "—"
+        ci.font=fnt(11,True,WHITE); ci.fill=F(val_bg); ci.alignment=CA(); ci.border=brd()
 
-ws.row_dimensions[4].height=6  # spacer
+# ── БЛОК 1: ВЫРУЧКА (rows 6-8) ───────────────────────────────────
+_vyr=SP("Доход")
+tile_block(ws,6,"  ВЫРУЧКА",[
+    ("Общая выручка",    _vyr, MONEY,
+     f'=IFERROR(IF({_vyr[1:]}>{SP_prev("Доход")[1:]},"▲","▼"),"▶")'),
+    ("Среднее в день",
+     f'=IFERROR({_vyr[1:]}/MAX(1,DAY(ДАШБОРД!$B$5)),0)', MONEY, None),
+    ("Среднее за смену",
+     f'=IFERROR({_vyr[1:]}/MAX(1,{SP_cnt("Доход")[1:]}),0)', MONEY, None),
+    ("Выполнение плана",
+     '=IFERROR('+_vyr[1:]+'/IFERROR(INDEX(НАСТРОЙКИ!$B$25:$L$26,IF(MATCH(ДАШБОРД!$B$3,{"Январь","Февраль","Март","Апрель","Май","Июнь"},0)>0,1,2),MOD(MATCH(ДАШБОРД!$B$3,{"Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"},0)-1,6)*2+1,1),1),0)',
+     "0%", None),
+],GREEN)
 
-# БЛОК 1: ВЫРУЧКА
-sec_hdr(ws,6,"  💰  ВЫРУЧКА",10,TEAL_M,22)
-dash_kpi(7,"Общая выручка (Доход)",SP("Доход"),SP_prev("Доход"),
-         "=IFERROR(B7/MAX(1,E7)-1,0)",val_clr=GREEN,val_bg=GREEN_L)
-dash_kpi(8,"  ▸ Наличные",SP("Доход",pay="Наличные"),SP_prev("Доход"),None)
-dash_kpi(9,"  ▸ Эквайринг",SP("Доход",pay="Эквайринг"),SP_prev("Доход"),None)
-dash_kpi(10,"  ▸ Перевод (СБП)",SP("Доход",pay="Перевод (СБП)"),SP_prev("Доход"),None)
-dash_kpi(11,"  ▸ Иман (доверие)",SP("Иман"),SP_prev("Иман"),None,val_clr=PURPLE,val_bg=PURP_L)
-ws.merge_cells(start_row=12,start_column=2,end_row=12,end_column=3)
-ws.cell(12,2).value='=IFERROR("ПЛАН: "&TEXT(НАСТРОЙКИ!B25 if... ,"#,##0 ₽"),"Нет плана")'
-# Simpler plan reference
-ws.cell(12,2).value='=IFERROR("Выполнение плана: "&TEXT(IFERROR(B7/INDEX(НАСТРОЙКИ!$B$25:$L$26,IF(MATCH(ДАШБОРД!$E$2,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь"},0)>0,1,2),MOD(MATCH(ДАШБОРД!$E$2,{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"},0)-1,6)*2+1,0),0),"0%")&" от плана","—")'
-ws.cell(12,2).font=fnt(9,it=True,col=GOLD); ws.cell(12,2).fill=F(GOLD_L); ws.cell(12,2).alignment=CA(); ws.cell(12,2).border=brd()
-ws.row_dimensions[12].height=20
+# ── БЛОК 2: КОНТРОЛЬ КАССЫ (rows 9-11) ──────────────────────────
+_rash_sum='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Расхождение")*БАЗА_ДДС!$G$4:$G$3003),0)'
+_rash_cnt='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Расхождение")*(1)),0)'
+_kassa_f='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Касса")*БАЗА_ДДС!$G$4:$G$3003),0)'
+_ost_f=f'=IFERROR({_vyr[1:]}-{SP("Расход")[1:]},0)'
+tile_block(ws,9,"  КОНТРОЛЬ КАССЫ",[
+    ("Выплаты с кассы",    _kassa_f,  MONEY, None),
+    ("Расхождений сумма",  _rash_sum, MONEY,
+     f'=IFERROR(IF({_rash_sum[1:]}>НАСТРОЙКИ!$E$62,"⚠","✓"),"—")'),
+    ("Кол-во расхождений", _rash_cnt, "#,##0", None),
+    ("Остаток кассы",      _ost_f,    MONEY,
+     f'=IFERROR(IF({_ost_f[1:]}>=0,"▲","▼"),"—")'),
+],TEAL_M)
 
-ws.row_dimensions[13].height=6
+# ── БЛОК 3: ДОЛГИ (rows 12-14) ───────────────────────────────────
+_dolg_tek='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Долг")*БАЗА_ДДС!$G$4:$G$3003)-SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Оплата долга")*БАЗА_ДДС!$G$4:$G$3003)+НАСТРОЙКИ!$E$8,0)'
+_dolg_per=SP("Долг"); _opl_per=SP("Оплата долга")
+tile_block(ws,12,"  ДОЛГИ И ОБЯЗАТЕЛЬСТВА",[
+    ("Текущий долг", _dolg_tek, MONEY,
+     f'=IFERROR(IF({_dolg_tek[1:]}>НАСТРОЙКИ!$E$63,"⚠","✓"),"—")'),
+    ("Взято в долг",     _dolg_per, MONEY, None),
+    ("Выплачено долгов", _opl_per,  MONEY, None),
+    ("К оплате (=долг)", _dolg_tek, MONEY, None),
+],RED)
 
-# БЛОК 2: РАСХОДЫ
-sec_hdr(ws,14,"  📦  РАСХОДЫ",10,AMBER,22)
-dash_kpi(15,"Общие расходы",SP("Расход"),SP_prev("Расход"),"=IFERROR(B15/MAX(1,B7),0)",val_clr=AMBER,val_bg=AMBER_L)
-dash_kpi(16,"  ▸ Закуп товара",SP("Расход","Закуп товара"),SP_prev("Расход","Закуп товара"))
-dash_kpi(17,"  ▸ Аренда",SP("Расход","Аренда"),SP_prev("Расход","Аренда"))
-dash_kpi(18,"  ▸ Зарплата (ЗП)",SP("Расход","ЗП"),SP_prev("Расход","ЗП"))
-dash_kpi(19,"  ▸ Прочие расходы",
-         '=IFERROR('+SP("Расход")[1:]+'-'+SP("Расход","Закуп товара")[1:]+'-'+SP("Расход","Аренда")[1:]+'-'+SP("Расход","ЗП")[1:]+',0)',
-         SP_prev("Расход"))
-ws.row_dimensions[20].height=6
+# ── БЛОК 4: ПРИБЫЛЬ (rows 15-17) ────────────────────────────────
+_zakup=SP("Расход","Закуп товара"); _rash_all=SP("Расход")
+_pribyl=f'=IFERROR({_vyr[1:]}-{_rash_all[1:]},0)'
+_rent=f'=IFERROR({_pribyl[1:]}/MAX(1,{_vyr[1:]}),0)'
+tile_block(ws,15,"  ПРИБЫЛЬ",[
+    ("Закуп товара",   _zakup,    MONEY, None),
+    ("Все расходы",    _rash_all, MONEY,
+     f'=IFERROR(IF({_rash_all[1:]}<{_vyr[1:]},"▲","▼"),"—")'),
+    ("Чистая прибыль", _pribyl,   MONEY,
+     f'=IFERROR(IF({_pribyl[1:]}>=0,"▲","▼"),"—")'),
+    ("Рентабельность", _rent, "0.0%", None),
+],GREEN)
 
-# БЛОК 3: ПРИБЫЛЬ
-sec_hdr(ws,21,"  📈  ПРИБЫЛЬ",10,GREEN,22)
-dash_kpi(22,"Валовая прибыль (Доход−Расход)",
-         f'=IFERROR({SP("Доход")[1:]}-{SP("Расход")[1:]},0)',
-         f'=IFERROR({SP_prev("Доход")[1:]}-{SP_prev("Расход")[1:]},0)',
-         "=IFERROR(B22/MAX(1,B7),0)",val_clr=GREEN,val_bg=GREEN_L)
-dash_kpi(23,"Модель 25%: норма прибыли",
-         "=IFERROR(B7*НАСТРОЙКИ!$E$6,0)",
-         "=IFERROR(E7*НАСТРОЙКИ!$E$6,0)",
-         "=IFERROR(B22/MAX(1,IFERROR(B7*НАСТРОЙКИ!$E$6,1)),0)",
-         val_clr=TEAL_M,val_bg=TEAL_L)
-dash_kpi(24,"Фактический остаток (всё время)",
-         '=IFERROR(SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Доход")*БАЗА_ДДС!$G$4:$G$3003)-SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Расход")*БАЗА_ДДС!$G$4:$G$3003),0)',
-         None,"всё время",val_clr=TEAL,val_bg=TEAL_L)
-ws.row_dimensions[25].height=6
+# ── БЛОК 5: ЭФФЕКТИВНОСТЬ (rows 18-20) ──────────────────────────
+_eff_zakup=f'=IFERROR({_vyr[1:]}/MAX(1,{_zakup[1:]}),0)'
+_nagruzka=f'=IFERROR({_dolg_tek[1:]}/MAX(1,{_vyr[1:]}),0)'
+_avg_rash=f'=IFERROR({_rash_all[1:]}/MAX(1,DAY(ДАШБОРД!$B$5)),0)'
+tile_block(ws,18,"  ЭФФЕКТИВНОСТЬ",[
+    ("Маржа %",            _rent,       "0.0%",  None),
+    ("Эффект. закупа (x)", _eff_zakup,  "0.0x",  None),
+    ("Нагрузка долга %",   _nagruzka,   "0.0%",
+     f'=IFERROR(IF({_nagruzka[1:]}>1,"⚠","✓"),"—")'),
+    ("Ср. расход / день",  _avg_rash,   MONEY,   None),
+],TEAL_M)
 
-# БЛОК 4: ИМАН + ДОЛГИ
-sec_hdr(ws,26,"  🤝  ИМАН И ДОЛГИ",10,PURPLE,22)
-dash_kpi(27,"Иман выдан (за период)",SP("Иман"),SP_prev("Иман"),None,val_clr=PURPLE,val_bg=PURP_L)
-dash_kpi(28,"Долг поставщикам (сейчас)",
-         '=IFERROR(SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Долг")*БАЗА_ДДС!$G$4:$G$3003)-SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Оплата долга")*БАЗА_ДДС!$G$4:$G$3003)+НАСТРОЙКИ!$E$8,0)',
-         None,None,val_clr=RED,val_bg=RED_L)
+# ── БЛОК 6: ОПЕРАЦИИ И ВЫПЛАТЫ (rows 21-23) ─────────────────────
+_prosr_sum='=IFERROR(SUMPRODUCT((ЗАПИСЬ_ВЫПЛАТ!$B$7:$B$506<TODAY())*(ЗАПИСЬ_ВЫПЛАТ!$E$7:$E$506="Запланировано")*ЗАПИСЬ_ВЫПЛАТ!$D$7:$D$506),0)'
+_prosr_cnt='=IFERROR(SUMPRODUCT((ЗАПИСЬ_ВЫПЛАТ!$B$7:$B$506<TODAY())*(ЗАПИСЬ_ВЫПЛАТ!$E$7:$E$506="Запланировано")*(ЗАПИСЬ_ВЫПЛАТ!$D$7:$D$506<>"")),0)'
+_vipl_sum='=IFERROR(SUMPRODUCT((ЗАПИСЬ_ВЫПЛАТ!$E$7:$E$506="Выплачено")*ЗАПИСЬ_ВЫПЛАТ!$D$7:$D$506),0)'
+_plan_sum='=IFERROR(SUMPRODUCT(ЗАПИСЬ_ВЫПЛАТ!$D$7:$D$506*(ЗАПИСЬ_ВЫПЛАТ!$D$7:$D$506<>"")),0)'
+_vipl_pct=f'=IFERROR({_vipl_sum[1:]}/MAX(1,{_plan_sum[1:]}),0)'
+_zakup_dolg_pct=f'=IFERROR({_dolg_per[1:]}/MAX(1,{_rash_all[1:]}),0)'
+tile_block(ws,21,"  ОПЕРАЦИИ И ВЫПЛАТЫ",[
+    ("Просроч. выплаты ₽", _prosr_sum, MONEY, f'=IFERROR(IF({_prosr_sum[1:]}>0,"⚠","✓"),"—")'),
+    ("Просроч. кол-во",    _prosr_cnt, "#,##0", None),
+    ("Выплачено %",        _vipl_pct,  "0%",   None),
+    ("Закуп в долг %",     _zakup_dolg_pct, "0%", None),
+],AMBER)
 
-ws.row_dimensions[29].height=8
+# ── БЛОК 7: СТАТИСТИКА ПЕРИОДА (rows 24-26) ─────────────────────
+_total_ops=SP_cnt()
+_max_day='=IFERROR(MAXIFS(БАЗА_ДДС!$G$4:$G$3003,БАЗА_ДДС!$D$4:$D$3003,"Доход",БАЗА_ДДС!$A$4:$A$3003,">="&ДАШБОРД!$A$5,БАЗА_ДДС!$A$4:$A$3003,"<="&ДАШБОРД!$B$5),0)'
+_min_day='=IFERROR(MINIFS(БАЗА_ДДС!$G$4:$G$3003,БАЗА_ДДС!$D$4:$D$3003,"Доход",БАЗА_ДДС!$A$4:$A$3003,">="&ДАШБОРД!$A$5,БАЗА_ДДС!$A$4:$A$3003,"<="&ДАШБОРД!$B$5),0)'
+_days_with='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Доход")/COUNTIFS(БАЗА_ДДС!$A$4:$A$3003,БАЗА_ДДС!$A$4:$A$3003,БАЗА_ДДС!$D$4:$D$3003,"Доход")),0)'
+tile_block(ws,24,"  СТАТИСТИКА ПЕРИОДА",[
+    ("Дней с данными",     _days_with, "#,##0", None),
+    ("Всего операций",     _total_ops, "#,##0", None),
+    ("Макс. выручка/день", _max_day,   MONEY,   None),
+    ("Мин. выручка/день",  _min_day,   MONEY,   None),
+],NAVY)
 
-# ГОДОВОЙ ТРЕНД — chart area title
-sec_hdr(ws,30,"  📉  ГОДОВОЙ ТРЕНД ВЫРУЧКИ И РАСХОДОВ",10,NAVY,22)
-# Data table for chart (cols K-M, rows 31-43)
-ws.cell(31,11).value="Месяц"; ws.cell(31,12).value="Доход"; ws.cell(31,13).value="Расход"
-ws.cell(31,14).value="План"
+# ── БЛОК 8: ИМАН И ПРОЧЕЕ (rows 27-29) ──────────────────────────
+_iman_per=SP("Иман")
+_iman_all='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$D$4:$D$3003="Иман")*БАЗА_ДДС!$G$4:$G$3003),0)'
+_spis='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*((БАЗА_ДДС!$D$4:$D$3003="Списание")+(БАЗА_ДДС!$D$4:$D$3003="Возврат"))*БАЗА_ДДС!$G$4:$G$3003),0)'
+_vozvr='=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Возврат")*БАЗА_ДДС!$G$4:$G$3003),0)'
+tile_block(ws,27,"  ИМАН И ПРОЧЕЕ",[
+    ("Иман хозяина (период)", _iman_per,  MONEY, f'=IFERROR(IF({_iman_per[1:]}>0,"▶","—"),"—")'),
+    ("Иман (всё время)",       _iman_all,  MONEY, None),
+    ("Списания+Возвраты",      _spis,      MONEY, None),
+    ("Возвраты (период)",      _vozvr,     MONEY, None),
+],PURPLE)
+
+ws.row_dimensions[30].height=8
+
+# ── ДЕТАЛИЗАЦИЯ РАСХОДОВ (rows 31-42) ────────────────────────────
+sec_hdr(ws,31,"  ДЕТАЛИЗАЦИЯ РАСХОДОВ ЗА ПЕРИОД",12,NAVY,22)
+ws.merge_cells("A32:D32"); ws.cell(32,1).value="Категория"
+ws.cell(32,1).font=fnt(9,True,WHITE); ws.cell(32,1).fill=F(NAVY); ws.cell(32,1).alignment=LA(False); ws.cell(32,1).border=brd()
+ws.cell(32,5).value="Сумма (₽)"; ws.cell(32,5).font=fnt(9,True,WHITE); ws.cell(32,5).fill=F(NAVY); ws.cell(32,5).alignment=CA(); ws.cell(32,5).border=brd()
+ws.cell(32,6).value="Доля %"; ws.cell(32,6).font=fnt(9,True,WHITE); ws.cell(32,6).fill=F(NAVY); ws.cell(32,6).alignment=CA(); ws.cell(32,6).border=brd()
+ws.merge_cells("G32:L32"); ws.cell(32,7).value="Гистограмма (длина = доля от общих расходов)"
+ws.cell(32,7).font=fnt(9,True,WHITE); ws.cell(32,7).fill=F(NAVY); ws.cell(32,7).alignment=LA(False); ws.cell(32,7).border=brd()
+ws.row_dimensions[32].height=22
+_tot_rash_d=f'MAX(1,{_rash_all[1:]})'
+for ci,cat in enumerate(["Закуп товара офисом","Закуп товара","Зарплата","Аренда","Коммунальные","Налоги","ГСМ","Расходный материал","Маркетинг","Прочие расходы"]):
+    r=33+ci
+    cat_f=f'=IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Расход")*(БАЗА_ДДС!$E$4:$E$3003="{cat}")*БАЗА_ДДС!$G$4:$G$3003),0)'
+    pct_f=f'=IFERROR({cat_f[1:]}/{_tot_rash_d},0)'
+    bar_f=f'=IFERROR(REPT("█",ROUND({pct_f[1:]}*40,0)),"")' 
+    bg_r=WHITE if ci%2==0 else LGRAY
+    ws.merge_cells(start_row=r,start_column=1,end_row=r,end_column=4)
+    ws.cell(r,1).value=cat; ws.cell(r,1).font=fnt(10); ws.cell(r,1).fill=F(bg_r); ws.cell(r,1).border=brd(); ws.cell(r,1).alignment=LA(False)
+    ws.cell(r,5).value=cat_f; ws.cell(r,5).font=fnt(10,True,AMBER); ws.cell(r,5).fill=F(AMBER_L); ws.cell(r,5).border=brd(); ws.cell(r,5).alignment=RA(); ws.cell(r,5).number_format=MONEY
+    ws.cell(r,6).value=pct_f; ws.cell(r,6).font=fnt(9); ws.cell(r,6).fill=F(bg_r); ws.cell(r,6).border=brd(); ws.cell(r,6).alignment=CA(); ws.cell(r,6).number_format="0.0%"
+    ws.merge_cells(start_row=r,start_column=7,end_row=r,end_column=12)
+    ws.cell(r,7).value=bar_f; ws.cell(r,7).font=fnt(9,col=AMBER); ws.cell(r,7).fill=F(bg_r); ws.cell(r,7).border=brd(); ws.cell(r,7).alignment=LA(False)
+    ws.row_dimensions[r].height=20
+
+ws.row_dimensions[43].height=8
+
+# ── ВЫРУЧКА ПО ДНЯМ НЕДЕЛИ (rows 44-52) ─────────────────────────
+sec_hdr(ws,44,"  📅  ВЫРУЧКА ПО ДНЯМ НЕДЕЛИ (текущий период)",12,TEAL_M,22)
+for ci_,h_ in enumerate(["День недели","Выручка (₽)","Кол-во дней","Ср. в день","% от периода","Лучший?"],1):
+    ws.cell(45,ci_).value=h_; ws.cell(45,ci_).font=fnt(9,True,WHITE); ws.cell(45,ci_).fill=F(TEAL_M); ws.cell(45,ci_).border=brd(); ws.cell(45,ci_).alignment=CA()
+ws.row_dimensions[45].height=22
+_tot_vyr_dow='IFERROR(SUMPRODUCT((БАЗА_ДДС!$A$4:$A$3003>=ДАШБОРД!$A$5)*(БАЗА_ДДС!$A$4:$A$3003<=ДАШБОРД!$B$5)*(БАЗА_ДДС!$D$4:$D$3003="Доход")*БАЗА_ДДС!$G$4:$G$3003),1)'
+for di,dn in enumerate(["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"],1):
+    r=45+di
+    vyr_f=f'=ДАННЫЕ!B{19+di}'
+    days_f=f'=ДАННЫЕ!C{19+di}'
+    bg_r=RED_L if di>=6 else (WHITE if di%2==0 else LGRAY)
+    for ci_ in range(1,7):
+        ws.cell(r,ci_).fill=F(bg_r); ws.cell(r,ci_).border=brd()
+    ws.cell(r,1).value=dn; ws.cell(r,1).font=fnt(10); ws.cell(r,1).alignment=LA(False)
+    ws.cell(r,2).value=vyr_f; ws.cell(r,2).font=fnt(10,True,TEAL_M); ws.cell(r,2).fill=F(TEAL_L); ws.cell(r,2).border=brd(); ws.cell(r,2).alignment=RA(); ws.cell(r,2).number_format=MONEY
+    ws.cell(r,3).value=days_f; ws.cell(r,3).font=fnt(10); ws.cell(r,3).alignment=CA()
+    ws.cell(r,4).value=f'=IFERROR({vyr_f[1:]}/MAX(1,{days_f[1:]}),0)'; ws.cell(r,4).font=fnt(10); ws.cell(r,4).alignment=RA(); ws.cell(r,4).number_format=MONEY
+    ws.cell(r,5).value=f'=IFERROR({vyr_f[1:]}/{_tot_vyr_dow},0)'; ws.cell(r,5).font=fnt(10); ws.cell(r,5).alignment=CA(); ws.cell(r,5).number_format="0.0%"
+    ws.cell(r,6).value=f'=IF({vyr_f[1:]}=MAX(ДАННЫЕ!$B$20:$B$26),"⭐ ЛУЧ","")'; ws.cell(r,6).font=fnt(10,True,GOLD); ws.cell(r,6).alignment=CA()
+    ws.row_dimensions[r].height=22
+
+ws.row_dimensions[53].height=8
+
+# ── ГОДОВОЙ ТРЕНД — chart (rows 54+) ─────────────────────────────
+sec_hdr(ws,54,"  📉  ГОДОВОЙ ТРЕНД ВЫРУЧКИ И РАСХОДОВ",12,NAVY,22)
+# Hidden data cols O-R (15-18)
+ws.cell(55,15).value="Месяц"; ws.cell(55,16).value="Доход"; ws.cell(55,17).value="Расход"; ws.cell(55,18).value="План"
 for mi in range(1,13):
-    r=31+mi
-    ws.cell(r,11).value=MONTHS_RU[mi-1]
-    ws.cell(r,12).value=f'=ДАННЫЕ!B{mi+1}'
-    ws.cell(r,13).value=f'=ДАННЫЕ!C{mi+1}'
-    ws.cell(r,14).value=f'=ДАННЫЕ!G{mi+1}'
-    ws.row_dimensions[r].height=0  # hidden rows
+    r=55+mi
+    ws.cell(r,15).value=MONTHS_RU[mi-1]
+    ws.cell(r,16).value=f'=ДАННЫЕ!B{mi+1}'
+    ws.cell(r,17).value=f'=ДАННЫЕ!C{mi+1}'
+    ws.cell(r,18).value=f'=ДАННЫЕ!G{mi+1}'
+    ws.row_dimensions[r].height=0
+# Hidden DOW data cols S-T (19-20)
+ws.cell(55,19).value="День"; ws.cell(55,20).value="Выручка"
+for di in range(7):
+    ws.cell(56+di,19).value=["Понедельник","Вторник","Среда","Четверг","Пятница","Суббота","Воскресенье"][di]
+    ws.cell(56+di,20).value=f'=ДАННЫЕ!B{20+di}'
+    ws.row_dimensions[56+di].height=0
 
-# Build line chart
 chart=LineChart(); chart.title="Тренд выручки и расходов"
 chart.style=10; chart.height=10; chart.width=22
 chart.y_axis.title="Сумма (₽)"; chart.x_axis.title="Месяц"
-
-data_ref=Reference(ws,min_col=12,max_col=14,min_row=31,max_row=43)
-cats_ref=Reference(ws,min_col=11,min_row=32,max_row=43)
+data_ref=Reference(ws,min_col=16,max_col=18,min_row=55,max_row=67)
+cats_ref=Reference(ws,min_col=15,min_row=56,max_row=67)
 chart.add_data(data_ref,titles_from_data=True)
 chart.set_categories(cats_ref)
 chart.series[0].graphicalProperties.line.solidFill=TEAL_M
@@ -910,26 +1039,20 @@ if len(chart.series)>2:
     chart.series[2].graphicalProperties.line.solidFill=GOLD_M
     chart.series[2].graphicalProperties.line.dashDot="dash"
     chart.series[2].graphicalProperties.line.width=15000
-ws.add_chart(chart,"A31")
+ws.add_chart(chart,"A55")
 
-# DOW bar chart
 chart2=BarChart(); chart2.title="Выручка по дням недели"
 chart2.style=10; chart2.height=8; chart2.width=14
-dow_data=Reference(ws,min_col=16,max_col=16,min_row=31,max_row=38)
-dow_cats=Reference(ws,min_col=15,min_row=32,max_row=38)
-# populate DOW hidden data
-for di in range(7):
-    ws.cell(32+di,15).value=dow_names[di]
-    ws.cell(32+di,16).value=f'=ДАННЫЕ!B{20+di}'
-    ws.row_dimensions[32+di].height=0
-ws.cell(31,15).value="День"; ws.cell(31,16).value="Выручка"
+dow_data=Reference(ws,min_col=20,max_col=20,min_row=55,max_row=62)
+dow_cats=Reference(ws,min_col=19,min_row=56,max_row=62)
 chart2.add_data(dow_data,titles_from_data=True)
 chart2.set_categories(dow_cats)
 chart2.series[0].graphicalProperties.solidFill=TEAL_M
-ws.add_chart(chart2,"E31")
+ws.add_chart(chart2,"G55")
 
-ws.freeze_panes="B3"
+ws.freeze_panes="A4"
 print("✓ ДАШБОРД")
+
 
 # ════════════════════════════════════════════════════════════════════
 # 10. АНАЛИТИКА — углублённый анализ
