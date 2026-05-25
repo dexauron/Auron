@@ -7,7 +7,7 @@ Attribute VB_Name = "WayMarketMacros"
 
 Option Explicit
 
-' ── Константы ──
+' ── Константы — имена листов ──
 Private Const SH_BAZA  As String = "БАЗА_ДДС"
 Private Const SH_KASSA As String = "Ввод_Касса"
 Private Const SH_RASH  As String = "Ввод_Расходы"
@@ -15,6 +15,14 @@ Private Const SH_VYPL  As String = "Запись_Выплат"
 Private Const SH_CAL   As String = "Календарь_Выплат"
 Private Const SH_DASH  As String = "Дашборд"
 Private Const SH_PULT  As String = "Пульт"
+Private Const SH_SETS  As String = "Настройки"
+
+' ── Автокомплит: вспомогательные колонки в Настройки ──
+' Col I (9) = фильтр Кассиры, Col J (10) = Категории, Col K (11) = Поставщики
+Private Const AC_COL_KASSA As Integer = 9
+Private Const AC_COL_CAT   As Integer = 10
+Private Const AC_COL_SUP   As Integer = 11
+Private Const AC_MAX_ROWS  As Integer = 15
 
 ' ═══════════════════════════════════════════════════════════════
 '  SAVE KASSA — Сохранить кассу в БАЗА_ДДС
@@ -231,6 +239,121 @@ End Sub
 
 
 ' ═══════════════════════════════════════════════════════════════
+'  АВТОКОМПЛИТ — умный поиск по подстроке
+'  Как работает:
+'    1) Пользователь начинает печатать в поле (F3 / B6 / B12)
+'    2) Worksheet_Change вызывает AC_Kassa / AC_Category / AC_Supplier
+'    3) VBA фильтрует список по введённому тексту (case-insensitive)
+'    4) Записывает совпадения во вспомогательные колонки I/J/K листа Настройки
+'    5) Обновляет выпадающий список поля — теперь видны только совпадения
+'    6) Если совпадение ровно одно — вставляет полное значение автоматически
+'
+'  УСТАНОВКА (сделать 1 раз после импорта этого .bas файла):
+'    Открыть Alt+F11, затем для каждого листа:
+'
+'  ─── Вставить в модуль листа "Ввод_Касса" ──────────────────
+'  (правый клик на вкладку → "Просмотр кода", вставить ниже)
+'
+'  Private Sub Worksheet_Change(ByVal Target As Range)
+'      If Target.Cells.Count > 1 Then Exit Sub
+'      If Target.Address = "$F$3" Then
+'          Call WayMarketMacros.AC_Kassa(Target)
+'      End If
+'  End Sub
+'
+'  ─── Вставить в модуль листа "Ввод_Расходы" ────────────────
+'
+'  Private Sub Worksheet_Change(ByVal Target As Range)
+'      If Target.Cells.Count > 1 Then Exit Sub
+'      If Target.Address = "$B$6" Then
+'          Call WayMarketMacros.AC_Category(Target)
+'      ElseIf Target.Address = "$B$12" Then
+'          Call WayMarketMacros.AC_Supplier(Target)
+'      End If
+'  End Sub
+'
+' ═══════════════════════════════════════════════════════════════
+
+Private Sub AC_DoFilter(inputCell As Range, masterList As Variant, helperCol As Integer)
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+
+    Dim typed As String
+    typed = LCase(Trim(CStr(inputCell.Value)))
+
+    On Error GoTo errHandler
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+
+    ' Очистить вспомогательный столбец
+    wsS.Range(wsS.Cells(1, helperCol), wsS.Cells(AC_MAX_ROWS, helperCol)).ClearContents
+
+    Dim i As Long, j As Long
+    j = 0
+
+    ' Фильтр по подстроке (регистр игнорируется)
+    For i = 0 To UBound(masterList)
+        If Len(typed) = 0 Or InStr(1, LCase(CStr(masterList(i))), typed, vbTextCompare) > 0 Then
+            wsS.Cells(j + 1, helperCol).Value = masterList(i)
+            j = j + 1
+        End If
+    Next i
+
+    ' Нет совпадений — показать весь список
+    If j = 0 Then
+        For i = 0 To UBound(masterList)
+            wsS.Cells(i + 1, helperCol).Value = masterList(i)
+        Next i
+        j = UBound(masterList) + 1
+    End If
+
+    ' Адрес диапазона для DataValidation
+    Dim colLetter As String
+    colLetter = Chr(64 + helperCol)   ' 9→I, 10→J, 11→K
+    Dim dvAddr As String
+    dvAddr = "=" & wsS.Name & "!$" & colLetter & "$1:$" & colLetter & "$" & j
+
+    ' Обновить DataValidation (без блокировки — пользователь может печатать свободно)
+    With inputCell.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertInformation, _
+             Operator:=xlBetween, Formula1:=dvAddr
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .ShowInput = False
+        .ShowError = False
+    End With
+
+    ' Автозаполнение при единственном совпадении
+    If j = 1 And Len(typed) > 0 Then
+        inputCell.Value = wsS.Cells(1, helperCol).Value
+    End If
+
+errHandler:
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+End Sub
+
+' ── Публичные методы — вызываются из Worksheet_Change листов ──
+
+Public Sub AC_Kassa(inputCell As Range)
+    Call AC_DoFilter(inputCell, Array("Айгуль", "Зарина", "Данияр"), AC_COL_KASSA)
+End Sub
+
+Public Sub AC_Category(inputCell As Range)
+    Call AC_DoFilter(inputCell, _
+        Array("ЗП", "Аренда", "Налоги", "Интернет", "Закуп товара", _
+              "Оплата ТП", "Коммуналка", "Реклама", "Другое"), AC_COL_CAT)
+End Sub
+
+Public Sub AC_Supplier(inputCell As Range)
+    Call AC_DoFilter(inputCell, _
+        Array("ТД Метро", "Лента", "Вкусвилл", "Магнит", "Х5 Ритейл", "Юнилевер"), _
+        AC_COL_SUP)
+End Sub
+
+
+' ═══════════════════════════════════════════════════════════════
 '  УТИЛИТЫ
 ' ═══════════════════════════════════════════════════════════════
 Private Function Nz(v As Variant) As Variant
@@ -273,11 +396,30 @@ End Function
 '  1) Открыть файл в Excel
 '  2) Alt+F11 → File → Import File → выбрать этот .bas файл
 '  3) Назначить макросы кнопкам:
-'     - Ввод_Касса!A16 → SaveKassa
-'     - Ввод_Касса!E4  → InsertToday_Kassa
+'     - Ввод_Касса!A16  → SaveKassa
+'     - Ввод_Касса!E4   → InsertToday_Kassa
 '     - Ввод_Расходы!A16 → SaveRashod
 '     - Ввод_Расходы!C3  → InsertToday_Rashod
-'     - Календарь!I3 → InsertToday_Calendar
-'     - Дашборд!K3  → RefreshDashboard
-'  4) Файл → Сохранить как → Тип файла: Книга Excel с поддержкой макросов (.xlsm)
+'     - Календарь!I3    → InsertToday_Calendar
+'     - Дашборд!K3      → RefreshDashboard
+'  4) АВТОКОМПЛИТ — вставить Worksheet_Change в модули листов:
+'     a) Правый клик на вкладку "Ввод_Касса" → "Просмотр кода"
+'        Вставить:
+'        Private Sub Worksheet_Change(ByVal Target As Range)
+'            If Target.Cells.Count > 1 Then Exit Sub
+'            If Target.Address = "$F$3" Then
+'                Call WayMarketMacros.AC_Kassa(Target)
+'            End If
+'        End Sub
+'     b) Правый клик на вкладку "Ввод_Расходы" → "Просмотр кода"
+'        Вставить:
+'        Private Sub Worksheet_Change(ByVal Target As Range)
+'            If Target.Cells.Count > 1 Then Exit Sub
+'            If Target.Address = "$B$6" Then
+'                Call WayMarketMacros.AC_Category(Target)
+'            ElseIf Target.Address = "$B$12" Then
+'                Call WayMarketMacros.AC_Supplier(Target)
+'            End If
+'        End Sub
+'  5) Файл → Сохранить как → Тип файла: Книга Excel с поддержкой макросов (.xlsm)
 ' ═══════════════════════════════════════════════════════════════
