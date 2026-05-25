@@ -1733,8 +1733,8 @@ Public Sub SaveKassa()
 
         ' Форматирование
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
-        wsB.Cells(r, 7).NumberFormat = "#,##0"" ₽"""
-        wsB.Cells(r, 8).NumberFormat = "#,##0"" ₽"""
+        wsB.Cells(r, 7).NumberFormat = "#,##0"
+        wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
 
     ' Очистить форму
@@ -1819,7 +1819,7 @@ Public Sub SaveRashod()
         wsB.Cells(r, 8).Value = ""
         wsB.Cells(r, 9).Value = CStr(wsR.Range("B9").Value)
 
-        MsgBox "Расход сохранён: " & Format(rashSum, "#,##0") & " ₽ (" & catVal & ")", _
+        MsgBox "Расход сохранён: " & Format(rashSum, "#,##0") & " " & ChrW(8381) & " (" & catVal & ")", _
                vbInformation, "Расход"
     Else
         ' Закуп в долг
@@ -1840,15 +1840,15 @@ Public Sub SaveRashod()
         wsB.Cells(r, 8).Value = ""
         wsB.Cells(r, 9).Value = "Закуп в долг"
 
-        MsgBox "Закуп в долг сохранён: " & Format(dolgSum, "#,##0") & _
-               " ₽ (" & supVal & ")" & vbCrLf & vbCrLf & _
+        MsgBox "Закуп в долг сохранён: " & Format(dolgSum, "#,##0") & " " & ChrW(8381) & _
+               " (" & supVal & ")" & vbCrLf & vbCrLf & _
                "Не забудьте добавить запись в ЗАПИСЬ_ВЫПЛАТ для планирования оплаты!", _
                vbInformation, "Долг"
     End If
 
     ' Форматирование новой строки
     wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
-    wsB.Cells(r, 7).NumberFormat = "#,##0"" ₽"""
+    wsB.Cells(r, 7).NumberFormat = "#,##0"
 
     ' Очистить форму
     wsR.Range("B3").ClearContents
@@ -2157,8 +2157,18 @@ End Sub
 
 
 def write_vba_file(path="WAY_MARKET_VBA.bas"):
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(VBA_CODE)
+    code = VBA_CODE
+    # Replace characters not in cp1251 (box-drawing, etc.)
+    # VBA IDE imports .bas files using system ANSI (cp1251 on Russian Windows)
+    code = code.replace("\u2550", "=")   # ═
+    code = code.replace("\u2551", "|")   # ║
+    code = code.replace("\u2500", "-")   # ─
+    code = code.replace("\u2502", "|")   # │
+    code = code.replace("\u2192", "->")  # →
+    code = code.replace("\u00B7", ".")   # ·
+    # ₽ is handled via ChrW(8381) in the VBA source itself
+    with open(path, "w", encoding="cp1251", errors="replace") as f:
+        f.write(code)
     return path
 
 
