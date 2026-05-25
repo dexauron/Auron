@@ -56,13 +56,19 @@ Public Sub SaveKassa()
     Dim lastRow As Long
     lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
     If lastRow < 6 Then lastRow = 5
+    If lastRow + 3 > 3005 Then
+        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
+               "Удалите старые записи или расширьте таблицу.", _
+               vbCritical, "Нет места"
+        Exit Sub
+    End If
 
     ' 3 Приход-строки (Наличные, Карта, Перевод) — всегда пишем все 3
     Dim methods As Variant, i As Long, r As Long
+    Dim factVal As Double, zVal As Double, discVal As Double
     methods = Array("Наличные", "Карта", "Перевод")
     For i = 0 To 2
         r = lastRow + 1 + i
-        Dim factVal As Double, zVal As Double, discVal As Double
         zVal    = CDbl(Nz(wsK.Cells(8 + i, 2).Value))
         factVal = CDbl(Nz(wsK.Cells(8 + i, 3).Value))
         discVal = factVal - zVal
@@ -135,6 +141,12 @@ Public Sub SaveRashod()
     Dim lastRow As Long
     lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
     If lastRow < 6 Then lastRow = 5
+    If lastRow + 1 > 3005 Then
+        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
+               "Удалите старые записи или расширьте таблицу.", _
+               vbCritical, "Нет места"
+        Exit Sub
+    End If
     Dim r As Long: r = lastRow + 1
 
     If rashSum > 0 Then
@@ -371,6 +383,7 @@ End Function
 '  Добавляет кнопки-фигуры с макросами + автокомплит.
 ' ═══════════════════════════════════════════════════════════════
 Public Sub SetupAll()
+    On Error GoTo setupErr
     Application.ScreenUpdating = False
 
     Dim wsK As Worksheet, wsR As Worksheet
@@ -407,6 +420,10 @@ Public Sub SetupAll()
     MsgBox "Кнопки установлены!" & vbCrLf & _
            "Сохраните файл как .xlsm чтобы сохранить макросы.", _
            vbInformation, "WAY MARKET — Установка завершена"
+    Exit Sub
+setupErr:
+    Application.ScreenUpdating = True
+    MsgBox "Ошибка установки: " & Err.Description, vbCritical, "SetupAll"
 End Sub
 
 
@@ -436,7 +453,7 @@ Private Sub AddBtn(ws As Worksheet, rngAddr As String, caption As String, _
     shp.TextFrame2.TextRange.Font.Size = 12
     shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
     shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
-    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = ppAlignCenter
+    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = 2  ' ppAlignCenter=2 (mso center); ppAlignCenter not in Excel VBA
     On Error GoTo 0
 End Sub
 
