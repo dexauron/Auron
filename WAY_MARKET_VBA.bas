@@ -366,60 +366,82 @@ End Function
 
 
 ' ═══════════════════════════════════════════════════════════════
-'  ВСТАВКА В МОДУЛЬ ЛИСТА Календарь_Выплат:
-'  Скопировать в модуль листа (правый клик по вкладке → View Code)
-' ═══════════════════════════════════════════════════════════════
+'  КАК АКТИВИРОВАТЬ КНОПКИ И АВТОКОМПЛИТ:
+'
+'  Шаг 1: Импортировать этот .bas файл
+'    Alt+F11 → File → Import File → выбрать WAY_MARKET_VBA.bas
+'
+'  Шаг 2: Вставить код в модули ЧЕТЫРЁХ листов.
+'    Для каждого листа: правый клик на вкладку → "Просмотр кода"
+'    Вставить соответствующий блок целиком (без кавычек).
+'
+'  ─── Модуль листа "Ввод_Касса" ─────────────────────────────
+'  (двойной клик по зелёной/синей кнопке запускает макрос;
+'   ввод текста в F3 фильтрует список кассиров)
+'
+'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+'      If Not Intersect(Target, Me.Range("A16:G16")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.SaveKassa
+'      End If
+'      If Not Intersect(Target, Me.Range("E4:F4")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.InsertToday_Kassa
+'      End If
+'  End Sub
+'
+'  Private Sub Worksheet_Change(ByVal Target As Range)
+'      If Target.Cells.Count > 1 Then Exit Sub
+'      If Target.Address = "$F$3" Then Call WayMarketMacros.AC_Kassa(Target)
+'  End Sub
+'
+'  ─── Модуль листа "Ввод_Расходы" ────────────────────────────
+'
+'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+'      If Not Intersect(Target, Me.Range("A16:D16")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.SaveRashod
+'      End If
+'      If Not Intersect(Target, Me.Range("C3:D3")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.InsertToday_Rashod
+'      End If
+'  End Sub
+'
+'  Private Sub Worksheet_Change(ByVal Target As Range)
+'      If Target.Cells.Count > 1 Then Exit Sub
+'      If Target.Address = "$B$6" Then
+'          Call WayMarketMacros.AC_Category(Target)
+'      ElseIf Target.Address = "$B$12" Then
+'          Call WayMarketMacros.AC_Supplier(Target)
+'      End If
+'  End Sub
+'
+'  ─── Модуль листа "Календарь_Выплат" ────────────────────────
+'
+'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+'      If Not Intersect(Target, Me.Range("I3:J3")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.InsertToday_Calendar
+'      End If
+'  End Sub
+'
 '  Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-'      ' Реакция на клик по дате в календаре (строки 7..36, колонки A..G)
 '      If Target.Cells.Count > 1 Then Exit Sub
 '      Dim r As Long: r = Target.Row
 '      Dim c As Long: c = Target.Column
 '      If c < 1 Or c > 7 Then Exit Sub
-'      If (r - 7) Mod 5 <> 0 Then Exit Sub  ' только строки с числом дня
-'      If Not IsNumeric(Target.Value) Then Exit Sub
-'      If Target.Value = "" Then Exit Sub
-'
-'      ' Подсветить выбранную ячейку
+'      If (r - 7) Mod 5 <> 0 Then Exit Sub
+'      If Not IsNumeric(Target.Value) Or Target.Value = "" Then Exit Sub
 '      Application.ScreenUpdating = False
 '      Me.Range("A7:G36").Interior.Pattern = xlNone
 '      Target.Interior.Color = RGB(254, 240, 138)
 '      Application.ScreenUpdating = True
 '  End Sub
 '
-'  Private Sub Worksheet_Activate()
-'      ' Установить текущий месяц/год при открытии листа
-'      Module1.InsertToday_Calendar
+'  ─── Модуль листа "Дашборд" ─────────────────────────────────
+'
+'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
+'      If Not Intersect(Target, Me.Range("K3:L3")) Is Nothing Then
+'          Cancel = True: Call WayMarketMacros.RefreshDashboard
+'      End If
 '  End Sub
 '
-' ═══════════════════════════════════════════════════════════════
-'  КАК ИСПОЛЬЗОВАТЬ:
-'  1) Открыть файл в Excel
-'  2) Alt+F11 → File → Import File → выбрать этот .bas файл
-'  3) Назначить макросы кнопкам:
-'     - Ввод_Касса!A16  → SaveKassa
-'     - Ввод_Касса!E4   → InsertToday_Kassa
-'     - Ввод_Расходы!A16 → SaveRashod
-'     - Ввод_Расходы!C3  → InsertToday_Rashod
-'     - Календарь!I3    → InsertToday_Calendar
-'     - Дашборд!K3      → RefreshDashboard
-'  4) АВТОКОМПЛИТ — вставить Worksheet_Change в модули листов:
-'     a) Правый клик на вкладку "Ввод_Касса" → "Просмотр кода"
-'        Вставить:
-'        Private Sub Worksheet_Change(ByVal Target As Range)
-'            If Target.Cells.Count > 1 Then Exit Sub
-'            If Target.Address = "$F$3" Then
-'                Call WayMarketMacros.AC_Kassa(Target)
-'            End If
-'        End Sub
-'     b) Правый клик на вкладку "Ввод_Расходы" → "Просмотр кода"
-'        Вставить:
-'        Private Sub Worksheet_Change(ByVal Target As Range)
-'            If Target.Cells.Count > 1 Then Exit Sub
-'            If Target.Address = "$B$6" Then
-'                Call WayMarketMacros.AC_Category(Target)
-'            ElseIf Target.Address = "$B$12" Then
-'                Call WayMarketMacros.AC_Supplier(Target)
-'            End If
-'        End Sub
-'  5) Файл → Сохранить как → Тип файла: Книга Excel с поддержкой макросов (.xlsm)
+'  Шаг 3: Файл → Сохранить как → Книга Excel с поддержкой макросов (.xlsm)
+'
 ' ═══════════════════════════════════════════════════════════════
