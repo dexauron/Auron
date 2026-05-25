@@ -1024,22 +1024,7 @@ def build_pult(ws):
     ]
     ws.row_dimensions[7].height = 18
     ws.row_dimensions[8].height = 32
-    for i, (lbl, f, color) in enumerate(today_tiles):
-        col = i + 1
-        # Move every other since we have 6 cols / 4 tiles - leave gap
-        _kpi_tile(ws, 7, col + (1 if i >= 2 else 0), 1, lbl, f, color,
-                  val_size=11)
-
-    # Actually use simpler 4 tiles spanning 6 cols (each 1.5 wide isn't possible)
-    # Let me redo: 4 tiles in cols A-D, E-F as legend/spacer
-    # Clean up — re-render
-    for r in (7, 8):
-        for col in range(1, 7):
-            ws.cell(r, col).value = None
-            ws.cell(r, col).fill = mkfill(WHITE)
-    # Use 4 tiles across all 6 cols isn't great. Use 4 tiles, each spanning 1.5 cols
-    # Workaround: split cols differently. Use cols 1-2, 2-3 isn't allowed.
-    # Best: 6 cols / 4 tiles → just do them as A,B,C,D and leave E,F
+    # 4 tiles in cols A-D, E-F left blank
     for i, (lbl, f, color) in enumerate(today_tiles):
         _kpi_tile(ws, 7, i + 1, 1, lbl, f, color, val_size=10)
 
@@ -1049,6 +1034,7 @@ def build_pult(ws):
     sec_hdr(ws, 10, "  ЗА ПЕРИОД", bg=TEAL, ncols=6, height=22)
     P = '$A$4'  # period start
     Q = '$B$4'  # period end
+    # Tiles are at row 11 (label) / row 12 (value), cols 1..6
     period_tiles = [
         ("Выручка",
          f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
@@ -1058,12 +1044,12 @@ def build_pult(ws):
          f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
          f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
          RED),
-        ("Прибыль", f'=B11-C11', BLUE),
+        ("Прибыль", '=A12-B12', BLUE),
         ("Смен закрыто",
          f'=ROUND(COUNTIFS(tblБаза[Тип],"Приход",tblБаза[Дата],">="&{P},'
          f'tblБаза[Дата],"<="&{Q})/3,0)', PURPLE),
         ("Сред. выручка",
-         f'=IFERROR(B11/E11,0)', TEAL_M),
+         '=IFERROR(A12/D12,0)', TEAL_M),
         ("Долг новый",
          f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
          f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
@@ -1180,11 +1166,11 @@ def build_calendar(ws):
             # day position 0-based in 6×7 grid
             day_pos = week * 7 + (day_col - 1)
             # Day number formula
-            # day_n = day_pos - (WEEKDAY-1) + 1
+            # day_n = day_pos - (WEEKDAY-1) + 1 = day_pos - C4 + 2
             day_formula = (
-                f'=IF(AND({day_pos}-($C$4-1)>=1,'
-                f'{day_pos}-($C$4-1)<=DAY($B$4)),'
-                f'{day_pos}-($C$4-1),"")'
+                f'=IF(AND({day_pos}-$C$4+2>=1,'
+                f'{day_pos}-$C$4+2<=DAY($B$4)),'
+                f'{day_pos}-$C$4+2,"")'
             )
             c = ws.cell(week_top, day_col, day_formula)
             c.fill = mkfill(GRAY_L)
@@ -2002,6 +1988,11 @@ def main():
         c.font = mkfont(GRAY_D, 12, True)
         c.alignment = mkalign("center", "center")
         ws.row_dimensions[1].height = 36
+
+    # Force full recalculation on file open — avoids Excel's
+    # "removed and restored" dialog caused by missing calcChain
+    wb.calculation.fullCalcOnLoad = True
+    wb.calculation.calcMode = "auto"
 
     out = "WAY_MARKET.xlsx"
     wb.save(out)
