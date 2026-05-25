@@ -366,82 +366,127 @@ End Function
 
 
 ' ═══════════════════════════════════════════════════════════════
-'  КАК АКТИВИРОВАТЬ КНОПКИ И АВТОКОМПЛИТ:
-'
-'  Шаг 1: Импортировать этот .bas файл
-'    Alt+F11 → File → Import File → выбрать WAY_MARKET_VBA.bas
-'
-'  Шаг 2: Вставить код в модули ЧЕТЫРЁХ листов.
-'    Для каждого листа: правый клик на вкладку → "Просмотр кода"
-'    Вставить соответствующий блок целиком (без кавычек).
-'
-'  ─── Модуль листа "Ввод_Касса" ─────────────────────────────
-'  (двойной клик по зелёной/синей кнопке запускает макрос;
-'   ввод текста в F3 фильтрует список кассиров)
-'
-'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-'      If Not Intersect(Target, Me.Range("A16:G16")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.SaveKassa
-'      End If
-'      If Not Intersect(Target, Me.Range("E4:F4")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.InsertToday_Kassa
-'      End If
-'  End Sub
-'
-'  Private Sub Worksheet_Change(ByVal Target As Range)
-'      If Target.Cells.Count > 1 Then Exit Sub
-'      If Target.Address = "$F$3" Then Call WayMarketMacros.AC_Kassa(Target)
-'  End Sub
-'
-'  ─── Модуль листа "Ввод_Расходы" ────────────────────────────
-'
-'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-'      If Not Intersect(Target, Me.Range("A16:D16")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.SaveRashod
-'      End If
-'      If Not Intersect(Target, Me.Range("C3:D3")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.InsertToday_Rashod
-'      End If
-'  End Sub
-'
-'  Private Sub Worksheet_Change(ByVal Target As Range)
-'      If Target.Cells.Count > 1 Then Exit Sub
-'      If Target.Address = "$B$6" Then
-'          Call WayMarketMacros.AC_Category(Target)
-'      ElseIf Target.Address = "$B$12" Then
-'          Call WayMarketMacros.AC_Supplier(Target)
-'      End If
-'  End Sub
-'
-'  ─── Модуль листа "Календарь_Выплат" ────────────────────────
-'
-'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-'      If Not Intersect(Target, Me.Range("I3:J3")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.InsertToday_Calendar
-'      End If
-'  End Sub
-'
-'  Private Sub Worksheet_SelectionChange(ByVal Target As Range)
-'      If Target.Cells.Count > 1 Then Exit Sub
-'      Dim r As Long: r = Target.Row
-'      Dim c As Long: c = Target.Column
-'      If c < 1 Or c > 7 Then Exit Sub
-'      If (r - 7) Mod 5 <> 0 Then Exit Sub
-'      If Not IsNumeric(Target.Value) Or Target.Value = "" Then Exit Sub
-'      Application.ScreenUpdating = False
-'      Me.Range("A7:G36").Interior.Pattern = xlNone
-'      Target.Interior.Color = RGB(254, 240, 138)
-'      Application.ScreenUpdating = True
-'  End Sub
-'
-'  ─── Модуль листа "Дашборд" ─────────────────────────────────
-'
-'  Private Sub Worksheet_BeforeDoubleClick(ByVal Target As Range, Cancel As Boolean)
-'      If Not Intersect(Target, Me.Range("K3:L3")) Is Nothing Then
-'          Cancel = True: Call WayMarketMacros.RefreshDashboard
-'      End If
-'  End Sub
-'
-'  Шаг 3: Файл → Сохранить как → Книга Excel с поддержкой макросов (.xlsm)
-'
+'  УСТАНОВКА КНОПОК — ЗАПУСТИТЬ ОДИН РАЗ
+'  После импорта .bas:  Alt+F8 → SetupAll → Выполнить
+'  Добавляет кнопки-фигуры с макросами + автокомплит.
+' ═══════════════════════════════════════════════════════════════
+Public Sub SetupAll()
+    Application.ScreenUpdating = False
+
+    Dim wsK As Worksheet, wsR As Worksheet
+    Dim wsC As Worksheet, wsD As Worksheet
+    Set wsK = ThisWorkbook.Worksheets(SH_KASSA)
+    Set wsR = ThisWorkbook.Worksheets(SH_RASH)
+    Set wsC = ThisWorkbook.Worksheets(SH_CAL)
+    Set wsD = ThisWorkbook.Worksheets(SH_DASH)
+
+    ' ── Ввод_Касса ──────────────────────────────────────────────
+    Call AddBtn(wsK, "A16:G16", "  СОХРАНИТЬ КАССУ", _
+                "WayMarketMacros.SaveKassa", RGB(5, 150, 105))
+    Call AddBtn(wsK, "E4:F4", "  СЕГОДНЯ", _
+                "WayMarketMacros.InsertToday_Kassa", RGB(29, 78, 216))
+
+    ' ── Ввод_Расходы ────────────────────────────────────────────
+    Call AddBtn(wsR, "A16:D16", "  СОХРАНИТЬ", _
+                "WayMarketMacros.SaveRashod", RGB(5, 150, 105))
+    Call AddBtn(wsR, "C3:D3", "  СЕГОДНЯ", _
+                "WayMarketMacros.InsertToday_Rashod", RGB(29, 78, 216))
+
+    ' ── Календарь_Выплат ────────────────────────────────────────
+    Call AddBtn(wsC, "I3:J3", "  СЕГОДНЯ", _
+                "WayMarketMacros.InsertToday_Calendar", RGB(29, 78, 216))
+
+    ' ── Дашборд ─────────────────────────────────────────────────
+    Call AddBtn(wsD, "K3:L3", "  ОБНОВИТЬ", _
+                "WayMarketMacros.RefreshDashboard", RGB(217, 119, 6))
+
+    ' ── Автокомплит (Worksheet_Change) ──────────────────────────
+    Call TryInjectAutocomplete
+
+    Application.ScreenUpdating = True
+    MsgBox "Кнопки установлены!" & vbCrLf & _
+           "Сохраните файл как .xlsm чтобы сохранить макросы.", _
+           vbInformation, "WAY MARKET — Установка завершена"
+End Sub
+
+
+Private Sub AddBtn(ws As Worksheet, rngAddr As String, caption As String, _
+                   macro As String, clr As Long)
+    Dim rng As Range
+    Set rng = ws.Range(rngAddr)
+
+    ' Удалить предыдущую кнопку с тем же макросом
+    Dim shp As Shape
+    For Each shp In ws.Shapes
+        If shp.OnAction = macro Then shp.Delete: Exit For
+    Next shp
+
+    ' Добавить прямоугольную фигуру с назначенным макросом
+    Set shp = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
+        rng.Left + 1, rng.Top + 1, rng.Width - 2, rng.Height - 2)
+
+    shp.OnAction = macro
+    shp.Fill.ForeColor.RGB = clr
+    shp.Fill.Solid
+    shp.Line.Visible = msoFalse
+
+    On Error Resume Next
+    shp.TextFrame2.TextRange.Text = caption
+    shp.TextFrame2.TextRange.Font.Bold = True
+    shp.TextFrame2.TextRange.Font.Size = 12
+    shp.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+    shp.TextFrame2.VerticalAnchor = msoAnchorMiddle
+    shp.TextFrame2.TextRange.ParagraphFormat.Alignment = ppAlignCenter
+    On Error GoTo 0
+End Sub
+
+
+Private Sub TryInjectAutocomplete()
+    ' Требует: Файл → Параметры → Центр управления безопасностью →
+    '   Параметры макросов → "Доверять доступу к объектной модели VBA"
+    On Error GoTo noAccess
+
+    Dim proj As Object
+    Set proj = ThisWorkbook.VBProject
+
+    Call InjectWSChange(ThisWorkbook.Worksheets(SH_KASSA), _
+        "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
+        "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
+        "    If Target.Address = ""$F$3"" Then" & vbCrLf & _
+        "        Call WayMarketMacros.AC_Kassa(Target)" & vbCrLf & _
+        "    End If" & vbCrLf & _
+        "End Sub")
+
+    Call InjectWSChange(ThisWorkbook.Worksheets(SH_RASH), _
+        "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
+        "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
+        "    If Target.Address = ""$B$6"" Then" & vbCrLf & _
+        "        Call WayMarketMacros.AC_Category(Target)" & vbCrLf & _
+        "    ElseIf Target.Address = ""$B$12"" Then" & vbCrLf & _
+        "        Call WayMarketMacros.AC_Supplier(Target)" & vbCrLf & _
+        "    End If" & vbCrLf & _
+        "End Sub")
+    Exit Sub
+
+noAccess:
+    ' Кнопки работают и без этой настройки. Только автокомплит при наборе недоступен.
+End Sub
+
+
+Private Sub InjectWSChange(ws As Worksheet, code As String)
+    Dim cm As Object
+    Set cm = ThisWorkbook.VBProject.VBComponents(ws.CodeName).CodeModule
+    If InStr(1, cm.Lines(1, cm.CountOfLines), "Worksheet_Change") = 0 Then
+        cm.InsertLines cm.CountOfLines + 1, vbCrLf & code
+    End If
+End Sub
+
+
+' ═══════════════════════════════════════════════════════════════
+'  КАК ИСПОЛЬЗОВАТЬ:
+'  1) Открыть WAY_MARKET.xlsx в Excel
+'  2) Alt+F11 → File → Import File → выбрать WAY_MARKET_VBA.bas
+'  3) Alt+F8 → выбрать "SetupAll" → нажать "Выполнить"
+'     Кнопки появятся на листах, макросы назначатся автоматически.
+'  4) Файл → Сохранить как → Книга Excel с поддержкой макросов (.xlsm)
 ' ═══════════════════════════════════════════════════════════════
