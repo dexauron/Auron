@@ -2357,6 +2357,10 @@ def inject_button_shapes(xlsx_path):
         files[rels_path] = rels_xml.encode('utf-8')
 
         ws_xml = files[sheet_file].decode('utf-8')
+        # Ensure xmlns:r is declared on the root <worksheet> element
+        R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
+        if R_NS not in ws_xml:
+            ws_xml = ws_xml.replace('<worksheet ', '<worksheet ' + R_NS + ' ', 1)
         drw_elem = f'<drawing r:id="{drw_rel_id}"/>'
         if '<drawing' not in ws_xml:
             # Insert before <tableParts> (correct schema order) or before </worksheet>
