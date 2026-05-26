@@ -1639,6 +1639,294 @@ def build_dashboard(ws):
     c.font = mkfont(GRAY_D, 9)
     c.alignment = mkalign("left", "center")
 
+    # ── РАСШИРЕННАЯ АНАЛИТИКА (добавлено) ──────────────────────
+    pp_r = footer_row + 2
+    ws.row_dimensions[footer_row + 1].height = 16
+    ws.row_dimensions[pp_r].height = 0          # hidden helper row
+    _pc1 = ws.cell(pp_r, 1, '=DATE(YEAR($A$4),MONTH($A$4)-1,1)')
+    _pc1.number_format = FMT_DATE
+    _pc2 = ws.cell(pp_r, 2, '=$A$4-1')
+    _pc2.number_format = FMT_DATE
+    for _ci in range(1, 13):
+        ws.cell(pp_r, _ci).font = mkfont(WHITE, 1)
+
+    P  = '$A$4'
+    Q  = '$B$4'
+    PP = f'$A${pp_r}'
+    QP = f'$B${pp_r}'
+
+    def _rev(p, q):
+        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+                f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+
+    def _exp(p, q, cat=''):
+        if cat:
+            return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                    f'tblБаза[Категория],"{cat}",'
+                    f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+
+    def _cnt(p, q, typ=''):
+        if typ:
+            return (f'=COUNTIFS(tblБаза[Тип],"{typ}",'
+                    f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+        return (f'=COUNTIFS(tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+
+    r = pp_r + 1
+    sec_hdr(ws, r,
+            "  РАСШИРЕННАЯ АНАЛИТИКА  —  сравнение с предыдущим месяцем",
+            bg=NAVY, ncols=12, height=26)
+    r += 1
+    ws.row_dimensions[r].height = 4
+    r += 1
+
+    def _xt(lr, vr, col, lbl, cf, pf, fmt, bg, inv=False, has_trend=True):
+        """Write one 3-col KPI tile: label + value + optional trend delta."""
+        n = 3
+        ws.merge_cells(start_row=lr, start_column=col,
+                       end_row=lr, end_column=col + n - 1)
+        c = ws.cell(lr, col, lbl)
+        c.fill = mkfill(bg)
+        c.font = mkfont(WHITE, 9)
+        c.alignment = mkalign("center", "center")
+        for ci in range(col + 1, col + n):
+            ws.cell(lr, ci).fill = mkfill(bg)
+
+        v_end = col + 1 if has_trend else col + 2
+        ws.merge_cells(start_row=vr, start_column=col,
+                       end_row=vr, end_column=v_end)
+        c = ws.cell(vr, col, cf)
+        c.fill = mkfill(WHITE)
+        c.font = mkfont(NAVY, 13, True)
+        c.alignment = mkalign("center", "center")
+        c.number_format = fmt
+        c.border = mkborder()
+        for ci in range(col + 1, v_end + 1):
+            ws.cell(vr, ci).fill = mkfill(WHITE)
+            ws.cell(vr, ci).border = mkborder()
+
+        if has_trend and pf is not None:
+            tc = col + 2
+            tf = f'={cf.lstrip("=")}-({pf.lstrip("=")})'
+            c  = ws.cell(vr, tc, tf)
+            c.fill  = mkfill("FFF0F4FF")
+            c.font  = mkfont(NAVY, 9, True)
+            c.alignment = mkalign("center", "center")
+            c.border = mkborder()
+            if "%" in str(fmt):
+                tf_fmt = ('[Green]"▲ "0.0%;[Red]"▼ "0.0%;"-"' if not inv
+                          else '[Red]"▲ "0.0%;[Green]"▼ "0.0%;"-"')
+            elif '"x"' in str(fmt):
+                tf_fmt = ('[Green]"▲ "0.00"x";[Red]"▼ "0.00"x";"-"' if not inv
+                          else '[Red]"▲ "0.00"x";[Green]"▼ "0.00"x";"-"')
+            elif str(fmt) == "0":
+                tf_fmt = ('[Green]"▲ "0;[Red]"▼ "0;"-"' if not inv
+                          else '[Red]"▲ "0;[Green]"▼ "0;"-"')
+            else:
+                tf_fmt = ('[Green]"▲ "#,##0;[Red]"▼ "#,##0;"-"' if not inv
+                          else '[Red]"▲ "#,##0;[Green]"▼ "#,##0;"-"')
+            c.number_format = tf_fmt
+        elif has_trend:
+            tc = col + 2
+            c  = ws.cell(vr, tc, '"-"')
+            c.fill  = mkfill("FFF0F4FF")
+            c.font  = mkfont(GRAY_D, 9)
+            c.alignment = mkalign("center", "center")
+            c.border = mkborder()
+
+    def _sec(title, bg, tiles):
+        nonlocal r
+        sec_hdr(ws, r, title, bg=bg, ncols=12, height=22)
+        ws.row_dimensions[r + 1].height = 18
+        ws.row_dimensions[r + 2].height = 36
+        for i, tile in enumerate(tiles):
+            col = i * 3 + 1
+            lbl, cf, pf, fmt, inv = tile[:5]
+            ht  = tile[5] if len(tile) > 5 else True
+            _xt(r + 1, r + 2, col, lbl, cf, pf, fmt, bg, inv, ht)
+        r += 3
+        ws.row_dimensions[r].height = 5
+        r += 1
+
+    _sec("  ВЫРУЧКА", GREEN, [
+        ("Общая выручка",
+         _rev(P, Q), _rev(PP, QP), FMT_RUB, False),
+        ("Среднее в день",
+         f'=IFERROR(({_rev(P, Q)[1:]})/({Q}-{P}+1),0)',
+         f'=IFERROR(({_rev(PP, QP)[1:]})/({QP}-{PP}+1),0)',
+         FMT_RUB, False),
+        ("Среднее за смену",
+         f'=IFERROR(({_rev(P, Q)[1:]})/MAX(1,({_cnt(P, Q, "Приход")[1:]})/3),0)',
+         f'=IFERROR(({_rev(PP, QP)[1:]})/MAX(1,({_cnt(PP, QP, "Приход")[1:]})/3),0)',
+         FMT_RUB, False),
+        ("Лучший день",
+         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, False),
+    ])
+
+    _sec("  КОНТРОЛЬ КАССЫ", BLUE, [
+        ("Выплаты из кассы",
+         _exp(P, Q), _exp(PP, QP), FMT_RUB, True),
+        ("Расхождений сумма",
+         f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, True),
+        ("Кол-во расхождений",
+         f'=COUNTIFS(tblБаза[Расхождение],"<>0",tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=COUNTIFS(tblБаза[Расхождение],"<>0",tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         "0", True),
+        ("Остаток кассы",
+         '=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход")'
+         '-SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход")'
+         '-SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+         '+SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП")',
+         f'={_rev(P, Q)[1:]}-({_exp(P, Q)[1:]})',
+         FMT_RUB, False),
+    ])
+
+    _sec("  ДОЛГИ И ОБЯЗАТЕЛЬСТВА", AMBER, [
+        ("Текущий долг",
+         '=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+         '-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП")',
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
+         f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         FMT_RUB, True),
+        ("Взято в долг",
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, True),
+        ("Выплачено долгов",
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, False),
+        ("К оплате (=долг)",
+         '=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+         '-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП")',
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
+         f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         FMT_RUB, True),
+    ])
+
+    _sec("  ПРИБЫЛЬ", GREEN, [
+        ("Закуп товара",
+         _exp(P, Q, 'Закуп товара'), _exp(PP, QP, 'Закуп товара'),
+         FMT_RUB, True),
+        ("Все расходы",
+         _exp(P, Q), _exp(PP, QP), FMT_RUB, True),
+        ("Чистая прибыль",
+         f'={_rev(P, Q)[1:]}-({_exp(P, Q)[1:]})',
+         f'={_rev(PP, QP)[1:]}-({_exp(PP, QP)[1:]})',
+         FMT_RUB, False),
+        ("Рентабельность %",
+         f'=IFERROR(({_rev(P, Q)[1:]}-{_exp(P, Q)[1:]})'
+         f'/MAX(1,{_rev(P, Q)[1:]}),0)',
+         f'=IFERROR(({_rev(PP, QP)[1:]}-{_exp(PP, QP)[1:]})'
+         f'/MAX(1,{_rev(PP, QP)[1:]}),0)',
+         "0.0%", False),
+    ])
+
+    _sec("  ЭФФЕКТИВНОСТЬ", PURPLE, [
+        ("Маржа %",
+         f'=IFERROR(({_rev(P, Q)[1:]}-{_exp(P, Q, "Закуп товара")[1:]})'
+         f'/MAX(1,{_rev(P, Q)[1:]}),0)',
+         f'=IFERROR(({_rev(PP, QP)[1:]}-{_exp(PP, QP, "Закуп товара")[1:]})'
+         f'/MAX(1,{_rev(PP, QP)[1:]}),0)',
+         "0.0%", False),
+        ("Эффект. закупа (x)",
+         f'=IFERROR({_rev(P, Q)[1:]}/MAX(1,{_exp(P, Q, "Закуп товара")[1:]}),0)',
+         f'=IFERROR({_rev(PP, QP)[1:]}/MAX(1,{_exp(PP, QP, "Закуп товара")[1:]}),0)',
+         '0.00"x"', False),
+        ("Нагрузка долга %",
+         f'=IFERROR((SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+         f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП"))'
+         f'/MAX(1,{_rev(P, Q)[1:]}),0)',
+         f'=IFERROR((SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+         f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП"))'
+         f'/MAX(1,{_rev(PP, QP)[1:]}),0)',
+         "0.0%", True),
+        ("Ср. расход/день",
+         f'=IFERROR({_exp(P, Q)[1:]}/({Q}-{P}+1),0)',
+         f'=IFERROR({_exp(PP, QP)[1:]}/({QP}-{PP}+1),0)',
+         FMT_RUB, True),
+    ])
+
+    _sec("  ОПЕРАЦИИ И ВЫПЛАТЫ", RED, [
+        ("Просроч. выплаты",
+         '=SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Запланировано",'
+         'tblВыплаты[Дата плановой оплаты],"<"&TODAY())',
+         None, FMT_RUB, True, True),
+        ("Просроч. кол-во",
+         '=COUNTIFS(tblВыплаты[Статус],"Запланировано",'
+         'tblВыплаты[Дата плановой оплаты],"<"&TODAY())',
+         None, "0", True, True),
+        ("Выплачено %",
+         '=IFERROR(SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Оплачено")'
+         '/MAX(1,SUMIFS(tblВыплаты[Сумма],tblВыплаты[Сумма],">0")),0)',
+         None, "0.0%", False, True),
+        ("Закуп в долг %",
+         f'=IFERROR(SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
+         f'/MAX(1,{_exp(P, Q, "Закуп товара")[1:]}),0)',
+         f'=IFERROR(SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})'
+         f'/MAX(1,{_exp(PP, QP, "Закуп товара")[1:]}),0)',
+         "0.0%", True),
+    ])
+
+    _sec("  СТАТИСТИКА ПЕРИОДА", TEAL, [
+        ("Дней с данными",
+         f'=IFERROR(SUMPRODUCT((tblБаза[Дата]>={P})'
+         f'*(tblБаза[Дата]<={Q})*(tblБаза[Тип]="Приход"))/3,0)',
+         None, "0", False, False),
+        ("Всего операций",
+         _cnt(P, Q), None, "0", False, False),
+        ("Макс. выручка/день",
+         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, False),
+        ("Мин. выручка/день",
+         f'=IFERROR(MINIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q}),0)',
+         None, FMT_RUB, False, False),
+    ])
+
+    _sec("  ДОПОЛНИТЕЛЬНО", NAVY, [
+        ("Иман (хозяин)",
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+         f'tblБаза[Поставщик],"Иман",'
+         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+         f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+         f'tblБаза[Поставщик],"Иман",'
+         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         FMT_RUB, True),
+        ("Списания+Возвраты",
+         _exp(P, Q, 'Другое'), _exp(PP, QP, 'Другое'),
+         FMT_RUB, True),
+        ("Налоги",
+         _exp(P, Q, 'Налоги'), None, FMT_RUB, True, False),
+        ("Коммуналка+Интернет",
+         f'={_exp(P, Q, "Коммуналка")[1:]}+{_exp(P, Q, "Интернет")[1:]}',
+         None, FMT_RUB, True, False),
+    ])
+
 
 # ═══════════════════════════════════════════════════════════════
 #  BLOCK 5: VBA EXPORT (.bas file)
