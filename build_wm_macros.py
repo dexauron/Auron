@@ -2192,6 +2192,191 @@ TAB_COLORS = {
 }
 
 
+def inject_button_shapes(xlsx_path):
+    """
+    Post-process the saved XLSX: embed DrawingML shapes as real clickable buttons.
+
+    Shapes carry macro= attribute. After the user imports WAY_MARKET_VBA.bas
+    and saves as .xlsm, clicking a shape triggers the assigned macro directly —
+    no SetupAll needed.
+
+    Positions (0-indexed col/row, exclusive to-boundary):
+      Ввод_Касса  : СОХРАНИТЬ A16:G16 → (0,15)→(7,16)
+                    СЕГОДНЯ   E4:F4   → (4,3)→(6,4)
+      Ввод_Расходы: СОХРАНИТЬ A16:D16 → (0,15)→(4,16)
+                    СЕГОДНЯ   C3:D3   → (2,2)→(4,3)
+      Календарь   : СЕГОДНЯ   I3:J3   → (8,2)→(10,3)
+      Дашборд     : ОБНОВИТЬ  K3:L3   → (10,2)→(12,3)
+    """
+    import zipfile, re, os
+
+    BUTTONS = {
+        "Ввод_Касса": [
+            {"id": 1, "name": "Btn_SaveKassa",
+             "caption": "СОХРАНИТЬ КАССУ",
+             "macro": "WayMarketMacros.SaveKassa",
+             "fc": 0, "fr": 15, "tc": 7, "tr": 16, "color": "059669", "sz": 1400},
+            {"id": 2, "name": "Btn_TodayKassa",
+             "caption": "СЕГОДНЯ",
+             "macro": "WayMarketMacros.InsertToday_Kassa",
+             "fc": 4, "fr": 3, "tc": 6, "tr": 4, "color": "1D4ED8", "sz": 1100},
+        ],
+        "Ввод_Расходы": [
+            {"id": 1, "name": "Btn_SaveRashod",
+             "caption": "СОХРАНИТЬ",
+             "macro": "WayMarketMacros.SaveRashod",
+             "fc": 0, "fr": 15, "tc": 4, "tr": 16, "color": "059669", "sz": 1400},
+            {"id": 2, "name": "Btn_TodayRashod",
+             "caption": "СЕГОДНЯ",
+             "macro": "WayMarketMacros.InsertToday_Rashod",
+             "fc": 2, "fr": 2, "tc": 4, "tr": 3, "color": "1D4ED8", "sz": 1100},
+        ],
+        "Календарь_Выплат": [
+            {"id": 1, "name": "Btn_TodayCal",
+             "caption": "СЕГОДНЯ",
+             "macro": "WayMarketMacros.InsertToday_Calendar",
+             "fc": 8, "fr": 2, "tc": 10, "tr": 3, "color": "1D4ED8", "sz": 1100},
+        ],
+        "Дашборд": [
+            {"id": 1, "name": "Btn_Refresh",
+             "caption": "ОБНОВИТЬ",
+             "macro": "WayMarketMacros.RefreshDashboard",
+             "fc": 10, "fr": 2, "tc": 12, "tr": 3, "color": "D97706", "sz": 1100},
+        ],
+    }
+
+    def make_anchor(b):
+        return (
+            f'<xdr:twoCellAnchor editAs="oneCell">'
+            f'<xdr:from><xdr:col>{b["fc"]}</xdr:col><xdr:colOff>0</xdr:colOff>'
+            f'<xdr:row>{b["fr"]}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>'
+            f'<xdr:to><xdr:col>{b["tc"]}</xdr:col><xdr:colOff>0</xdr:colOff>'
+            f'<xdr:row>{b["tr"]}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>'
+            f'<xdr:sp macro="{b["macro"]}" textlink="">'
+            f'<xdr:nvSpPr>'
+            f'<xdr:cNvPr id="{b["id"]}" name="{b["name"]}"/>'
+            f'<xdr:cNvSpPr><a:spLocks noTextEdit="0"/></xdr:cNvSpPr>'
+            f'</xdr:nvSpPr>'
+            f'<xdr:spPr>'
+            f'<a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm>'
+            f'<a:prstGeom prst="roundRect">'
+            f'<a:avLst><a:gd name="adj" fmla="val 10000"/></a:avLst>'
+            f'</a:prstGeom>'
+            f'<a:solidFill><a:srgbClr val="{b["color"]}"/></a:solidFill>'
+            f'<a:ln><a:noFill/></a:ln>'
+            f'</xdr:spPr>'
+            f'<xdr:txBody>'
+            f'<a:bodyPr anchor="ctr"/><a:lstStyle/>'
+            f'<a:p><a:pPr algn="ctr"/>'
+            f'<a:r>'
+            f'<a:rPr lang="ru-RU" sz="{b["sz"]}" b="1" dirty="0">'
+            f'<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>'
+            f'<a:latin typeface="Calibri"/>'
+            f'</a:rPr>'
+            f'<a:t>{b["caption"]}</a:t>'
+            f'</a:r></a:p>'
+            f'</xdr:txBody>'
+            f'</xdr:sp>'
+            f'<xdr:clientData/>'
+            f'</xdr:twoCellAnchor>'
+        )
+
+    def make_drawing_xml(btn_list):
+        return (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<xdr:wsDr '
+            'xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" '
+            'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            + ''.join(make_anchor(b) for b in btn_list)
+            + '</xdr:wsDr>'
+        )
+
+    DRAWING_NS  = ("http://schemas.openxmlformats.org/officeDocument/"
+                   "2006/relationships/drawing")
+    DRAWING_CT  = ("application/vnd.openxmlformats-officedocument.drawing+xml")
+
+    with zipfile.ZipFile(xlsx_path, 'r') as zin:
+        files = {n: zin.read(n) for n in zin.namelist()}
+
+    wb_xml  = files['xl/workbook.xml'].decode('utf-8')
+    wb_rels = files['xl/_rels/workbook.xml.rels'].decode('utf-8')
+
+    # Parse each <Relationship> element individually (attribute order varies)
+    rid2tgt = {}
+    for m in re.finditer(r'<Relationship\b([^>]+)>', wb_rels):
+        attrs = m.group(1)
+        id_m  = re.search(r'Id="([^"]+)"', attrs)
+        tgt_m = re.search(r'Target="([^"]+)"', attrs)
+        if id_m and tgt_m:
+            tgt = tgt_m.group(1).lstrip('/')   # strip leading / on absolute paths
+            rid2tgt[id_m.group(1)] = tgt
+
+    sheet2file = {}
+    for m in re.finditer(r'<sheet\b[^>]+name="([^"]+)"[^>]+r:id="([^"]+)"', wb_xml):
+        tgt = rid2tgt.get(m.group(2), '')
+        if tgt:
+            sheet2file[m.group(1)] = tgt
+
+    existing_drw = [n for n in files
+                    if re.match(r'xl/drawings/drawing\d+\.xml$', n)]
+    drw_idx = max((int(re.search(r'\d+', os.path.basename(n)).group())
+                   for n in existing_drw), default=0) + 1
+
+    ct_xml = files['[Content_Types].xml'].decode('utf-8')
+
+    for sheet_name, btn_list in BUTTONS.items():
+        if sheet_name not in sheet2file:
+            continue
+        sheet_file = sheet2file[sheet_name]
+        drw_file   = f'xl/drawings/drawing{drw_idx}.xml'
+        drw_rel_id = f'rId_drw{drw_idx}'
+        drw_target = f'../drawings/drawing{drw_idx}.xml'
+
+        files[drw_file] = make_drawing_xml(btn_list).encode('utf-8')
+
+        part = '/' + drw_file
+        if part not in ct_xml:
+            ct_xml = ct_xml.replace(
+                '</Types>',
+                f'<Override PartName="{part}" ContentType="{DRAWING_CT}"/></Types>')
+
+        sheet_base = os.path.basename(sheet_file).replace('.xml', '')
+        rels_path  = f'xl/worksheets/_rels/{sheet_base}.xml.rels'
+        rel_entry  = (f'<Relationship Id="{drw_rel_id}" '
+                      f'Type="{DRAWING_NS}" Target="{drw_target}"/>')
+        if rels_path in files:
+            rels_xml = files[rels_path].decode('utf-8')
+            rels_xml = rels_xml.replace('</Relationships>',
+                                        rel_entry + '</Relationships>')
+        else:
+            rels_xml = (
+                '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<Relationships xmlns="http://schemas.openxmlformats.org/'
+                'package/2006/relationships">' + rel_entry + '</Relationships>')
+        files[rels_path] = rels_xml.encode('utf-8')
+
+        ws_xml = files[sheet_file].decode('utf-8')
+        drw_elem = f'<drawing r:id="{drw_rel_id}"/>'
+        if '<drawing' not in ws_xml:
+            # Insert before <tableParts> (correct schema order) or before </worksheet>
+            if '<tableParts' in ws_xml:
+                ws_xml = ws_xml.replace('<tableParts', drw_elem + '<tableParts', 1)
+            else:
+                ws_xml = ws_xml.replace('</worksheet>', drw_elem + '</worksheet>', 1)
+        files[sheet_file] = ws_xml.encode('utf-8')
+
+        drw_idx += 1
+
+    files['[Content_Types].xml'] = ct_xml.encode('utf-8')
+
+    tmp = xlsx_path + '.tmp'
+    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:
+        for name, data in files.items():
+            zout.writestr(name, data)
+    os.replace(tmp, xlsx_path)
+
+
 def main():
     print("Генерируем демо-данные...")
     baza = gen_baza()
@@ -2253,6 +2438,7 @@ def main():
 
     out = "WAY_MARKET.xlsx"
     wb.save(out)
+    inject_button_shapes(out)
     sz = os.path.getsize(out) // 1024
     print(f"\n✓ Сохранено: {out}  ({sz} KB)")
     print(f"  Строк данных в БАЗА_ДДС: {len(baza)}")
@@ -2262,14 +2448,15 @@ def main():
     print(f"✓ Сохранено: {vba_path}  ({vsz} KB)")
 
     print("""
-═══════════════════════════════════════════════════════════════
+==============================================================
   ИНСТРУКЦИЯ
-═══════════════════════════════════════════════════════════════
+==============================================================
   1. Откройте WAY_MARKET.xlsx в Excel
-  2. Alt+F11 → File → Import File → WAY_MARKET_VBA.bas
-  3. Назначьте макросы кнопкам (см. .bas внизу)
-  4. Файл → Сохранить как → .xlsm
-═══════════════════════════════════════════════════════════════""")
+     (кнопки уже видны как зелёные/синие/жёлтые фигуры)
+  2. Alt+F11 -> File -> Import File -> WAY_MARKET_VBA.bas
+  3. Файл -> Сохранить как -> .xlsm
+     (кнопки станут кликабельными)
+==============================================================""")
 
 
 if __name__ == "__main__":
