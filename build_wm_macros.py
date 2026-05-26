@@ -2467,6 +2467,7 @@ def write_vba_file(path="WAY_MARKET_VBA.bas"):
 SHEET_NAMES = [
     "Пульт", "Ввод_Касса", "Ввод_Расходы", "БАЗА_ДДС",
     "Запись_Выплат", "Календарь_Выплат", "Дашборд", "Настройки",
+    "Отчёт_Рук",
 ]
 TAB_COLORS = {
     "Пульт":            "0B4F54",
@@ -2477,7 +2478,507 @@ TAB_COLORS = {
     "Календарь_Выплат": "D97706",
     "Дашборд":          "B45309",
     "Настройки":        "6B7280",
+    "Отчёт_Рук":        "065F46",
 }
+
+
+def build_otchet_rukovoditelya(ws):
+    """ОТЧЁТ РУКОВОДИТЕЛЯ — ежемесячный управленческий отчёт."""
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation  = "landscape"
+    ws.page_setup.paperSize    = 9      # A4
+    ws.page_setup.fitToWidth   = 1
+    ws.page_setup.fitToHeight  = 0
+    ws.page_setup.fitToPage    = True
+    ws.print_options.gridLines = False
+
+    NC = 7   # number of columns used
+    set_widths(ws, [
+        ("A", 4), ("B", 30), ("C", 18), ("D", 12),
+        ("E", 18), ("F", 14), ("G", 12),
+    ])
+
+    months_arr = ('{"Январь";"Февраль";"Март";"Апрель";"Май";"Июнь";'
+                  '"Июль";"Август";"Сентябрь";"Октябрь";"Ноябрь";"Декабрь"}')
+
+    # ── Internal helpers ──────────────────────────────────────
+    def _mb(color="111827"):
+        return Border(
+            left=Side(style="medium", color=color),
+            right=Side(style="medium", color=color),
+            top=Side(style="medium", color=color),
+            bottom=Side(style="medium", color=color),
+        )
+
+    def _row_hdr(row, labels, bg, height=22):
+        ws.row_dimensions[row].height = height
+        for col, lbl in enumerate(labels, 1):
+            c = ws.cell(row, col, lbl)
+            c.fill = mkfill(bg)
+            c.font = mkfont(WHITE, 9, True)
+            c.alignment = mkalign("center" if col != 2 else "left", "center")
+            c.border = mkborder()
+
+    def _fill_row(row, alt=False, total=False, height=20):
+        ws.row_dimensions[row].height = height
+        bg = ("FFD1FAE5" if total else (GRAY_L if alt else WHITE))
+        for col in range(1, NC + 1):
+            ws.cell(row, col).fill = mkfill(bg)
+
+    def _cell(row, col, val, fmt=None, aln="center", bold=False, bg=None, color=NAVY):
+        c = ws.cell(row, col, val)
+        if bg:
+            c.fill = mkfill(bg)
+        c.font = mkfont(color, 10, bold)
+        c.alignment = mkalign(aln, "center")
+        if fmt:
+            c.number_format = fmt
+        c.border = mkborder()
+        return c
+
+    # ── ROW 1: Title ──────────────────────────────────────────
+    ws.row_dimensions[1].height = 44
+    ws.merge_cells("A1:G1")
+    c = ws.cell(1, 1, "  ЕЖЕМЕСЯЧНЫЙ ОТЧЁТ  —  WAY MARKET")
+    c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 17, True)
+    c.alignment = mkalign("center", "center")
+    for ci in range(2, NC + 1):
+        ws.cell(1, ci).fill = mkfill(NAVY)
+
+    # ── ROW 2: Subtitle ───────────────────────────────────────
+    ws.row_dimensions[2].height = 22
+    ws.merge_cells("A2:G2")
+    c = ws.cell(2, 1, "  Управленческий отчёт по движению денежных средств магазина")
+    c.fill = mkfill(TEAL); c.font = mkfont(WHITE, 11)
+    c.alignment = mkalign("left", "center")
+
+    # ── ROW 3: Period controls ────────────────────────────────
+    ws.row_dimensions[3].height = 36
+    ctrl_bg = "FFFFFFFF"
+    for col, (lbl, val, merge_end) in enumerate([
+        ("Месяц:", MONTHS_RU[0], None),
+        (None,     None,          None),     # B3 = month value
+        ("Год:",   YEAR,         None),
+        (None,     None,          None),     # D3 = year value
+        ("Дата отчёта:", "=TEXT(TODAY(),\"DD MMMM YYYY\"&\" г.\")", "G3"),
+    ], 1):
+        pass  # done manually below
+
+    # A3: label "Месяц:"
+    c = ws.cell(3, 1, "Месяц:")
+    c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 10, True)
+    c.alignment = mkalign("right", "center")
+    # B3: month dropdown
+    c = ws.cell(3, 2, MONTHS_RU[0])
+    c.fill = mkfill(ctrl_bg); c.font = mkfont(NAVY, 12, True)
+    c.alignment = mkalign("center", "center"); c.border = _mb()
+    _add_dv(ws, '"' + ",".join(MONTHS_RU) + '"', "B3")
+    # C3: label "Год:"
+    c = ws.cell(3, 3, "Год:")
+    c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 10, True)
+    c.alignment = mkalign("right", "center")
+    # D3: year input
+    c = ws.cell(3, 4, YEAR)
+    c.fill = mkfill(ctrl_bg); c.font = mkfont(NAVY, 12, True)
+    c.alignment = mkalign("center", "center"); c.border = _mb()
+    # E3: label "Сформирован:"
+    c = ws.cell(3, 5, "Сформирован:")
+    c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 10, True)
+    c.alignment = mkalign("right", "center")
+    # F3-G3: today's date
+    ws.merge_cells("F3:G3")
+    c = ws.cell(3, 6, '=TEXT(TODAY(),"DD MMMM YYYY")&" г."')
+    c.fill = mkfill(ctrl_bg); c.font = mkfont(NAVY, 11, True)
+    c.alignment = mkalign("center", "center"); c.border = _mb()
+    ws.cell(3, 7).fill = mkfill(ctrl_bg)
+
+    # ── ROW 4: Hidden date helpers ────────────────────────────
+    ws.row_dimensions[4].height = 0
+    ws.cell(4, 1, f'=DATE(D3,MATCH(B3,{months_arr},0),1)').number_format = FMT_DATE
+    ws.cell(4, 2, '=EOMONTH($A$4,0)').number_format = FMT_DATE
+    ws.cell(4, 3, '=DATE(YEAR($A$4),MONTH($A$4)-1,1)').number_format = FMT_DATE
+    ws.cell(4, 4, '=$A$4-1').number_format = FMT_DATE
+    for ci in range(1, NC + 1):
+        ws.cell(4, ci).font = mkfont(WHITE, 1)
+
+    P  = '$A$4'   # period start (current month)
+    Q  = '$B$4'   # period end
+    PP = '$C$4'   # previous month start
+    QP = '$D$4'   # previous month end
+
+    # Formula shorthands (return strings WITHOUT leading =)
+    def rev(p, q):
+        return (f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+                f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+
+    def exp_(p, q, cat=''):
+        base = (f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+        if cat:
+            base = (f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                    f'tblБаза[Категория],"{cat}",'
+                    f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+        return base
+
+    def rev_pay(p, q, method):
+        return (f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+                f'tblБаза[Способ оплаты],"{method}",'
+                f'tblБаза[Дата],">="&{p},tblБаза[Дата],"<="&{q})')
+
+    r = 5
+    ws.row_dimensions[r].height = 10
+    r += 1
+
+    # ── Generic row writer ────────────────────────────────────
+    def data_row(num, label, cf, pf, pct_ref=None,
+                 fmt=FMT_RUB, alt=False, bold=False, total=False, inv=False):
+        """Write one data row. cf/pf = formula WITHOUT leading '='. """
+        nonlocal r
+        bg = "FFD1FAE5" if total else (GRAY_L if alt else WHITE)
+        h  = 22 if total else 20
+        ws.row_dimensions[r].height = h
+        fnt_sz = 11 if total else 10
+
+        def wr(col, val, n_fmt=None, aln="center"):
+            c = ws.cell(r, col, val)
+            c.fill = mkfill(bg)
+            c.font = mkfont(NAVY, fnt_sz, bold or total)
+            c.alignment = mkalign(aln, "center")
+            if n_fmt:
+                c.number_format = n_fmt
+            c.border = mkborder()
+
+        wr(1, str(num) if num else "")
+        wr(2, label, aln="left")
+        if cf:
+            wr(3, f'={cf}', fmt)
+        else:
+            wr(3, "")
+
+        if pct_ref and cf:
+            wr(4, f'=IFERROR(C{r}/{pct_ref},0)', "0.0%")
+        elif cf and total:
+            wr(4, '=IFERROR(C{0}/C{0},0)'.format(r), "0.0%")
+        else:
+            wr(4, "")
+
+        if pf:
+            wr(5, f'={pf}', fmt)
+        else:
+            wr(5, "")
+
+        if cf and pf:
+            if inv:
+                wr(6, f'=C{r}-E{r}',
+                   '[Red]"▲ "#,##0;[Green]"▼ "#,##0;"-"')
+                wr(7, f'=IFERROR((C{r}-E{r})/ABS(E{r}),0)',
+                   '[Red]"+0.0%";[Green]"-0.0%";"—"')
+            else:
+                wr(6, f'=C{r}-E{r}',
+                   '[Green]"▲ "#,##0;[Red]"▼ "#,##0;"-"')
+                wr(7, f'=IFERROR((C{r}-E{r})/ABS(E{r}),0)',
+                   '[Green]"+0.0%";[Red]"-0.0%";"—"')
+        else:
+            wr(6, ""); wr(7, "")
+
+        row_ref = r
+        r += 1
+        return row_ref
+
+    def spacer(h=8):
+        nonlocal r
+        ws.row_dimensions[r].height = h
+        for ci in range(1, NC + 1):
+            ws.cell(r, ci).fill = mkfill(WHITE)
+        r += 1
+
+    def sec_title(text, bg=NAVY):
+        nonlocal r
+        sec_hdr(ws, r, text, bg=bg, ncols=NC, height=24)
+        r += 1
+
+    def tbl_hdr(labels, bg=TEAL_M):
+        nonlocal r
+        _row_hdr(r, labels, bg)
+        r += 1
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 1 — ФИНАНСОВАЯ СВОДКА
+    # ════════════════════════════════════════════════════════
+    sec_title("  1. ФИНАНСОВАЯ СВОДКА", GREEN)
+    tbl_hdr(["№", "Показатель", "Текущий месяц", "% выручки",
+             "Прошлый месяц", "Δ (Откл.)", "Δ %"])
+
+    r_rev = data_row(1, "Выручка (все поступления)",
+                     rev(P, Q), rev(PP, QP), pct_ref=None)
+    rev_ref = f'$C${r_rev}'
+
+    data_row(2, "Расходы всего",
+             exp_(P, Q), exp_(PP, QP), pct_ref=rev_ref, inv=True)
+    data_row(3, "в т.ч. Закуп товара",
+             exp_(P, Q, 'Закуп товара'), exp_(PP, QP, 'Закуп товара'),
+             pct_ref=rev_ref, inv=True)
+    data_row(4, "в т.ч. ЗП сотрудников",
+             exp_(P, Q, 'ЗП'), exp_(PP, QP, 'ЗП'),
+             pct_ref=rev_ref, inv=True)
+    data_row(5, "в т.ч. Аренда",
+             exp_(P, Q, 'Аренда'), exp_(PP, QP, 'Аренда'),
+             pct_ref=rev_ref, inv=True)
+    data_row(6, "Прочие расходы",
+             f'{exp_(P,Q)}-{exp_(P,Q,"Закуп товара")}-{exp_(P,Q,"ЗП")}-{exp_(P,Q,"Аренда")}',
+             f'{exp_(PP,QP)}-{exp_(PP,QP,"Закуп товара")}-{exp_(PP,QP,"ЗП")}-{exp_(PP,QP,"Аренда")}',
+             pct_ref=rev_ref, inv=True)
+
+    r_profit = data_row(7, "Чистая прибыль",
+                        f'{rev(P,Q)}-{exp_(P,Q)}',
+                        f'{rev(PP,QP)}-{exp_(PP,QP)}',
+                        pct_ref=rev_ref)
+    data_row(8, "Рентабельность %",
+             f'IFERROR(({rev(P,Q)}-{exp_(P,Q)})/MAX(1,{rev(P,Q)}),0)',
+             f'IFERROR(({rev(PP,QP)}-{exp_(PP,QP)})/MAX(1,{rev(PP,QP)}),0)',
+             pct_ref=None, fmt="0.0%")
+    data_row(9, "Маржа (валовая) %",
+             f'IFERROR(({rev(P,Q)}-{exp_(P,Q,"Закуп товара")})/MAX(1,{rev(P,Q)}),0)',
+             f'IFERROR(({rev(PP,QP)}-{exp_(PP,QP,"Закуп товара")})/MAX(1,{rev(PP,QP)}),0)',
+             pct_ref=None, fmt="0.0%")
+
+    spacer()
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 2 — ВЫРУЧКА ПО СПОСОБАМ ОПЛАТЫ
+    # ════════════════════════════════════════════════════════
+    sec_title("  2. ВЫРУЧКА ПО СПОСОБАМ ОПЛАТЫ", BLUE)
+    tbl_hdr(["№", "Способ оплаты", "Текущий месяц", "% выручки",
+             "Прошлый месяц", "Δ (Откл.)", "Δ %"])
+
+    for i, method in enumerate(["Наличные", "Карта", "Перевод"], 1):
+        data_row(i, method, rev_pay(P, Q, method), rev_pay(PP, QP, method),
+                 pct_ref=rev_ref, alt=(i % 2 == 0))
+
+    # Total row
+    tot_r = r
+    data_row("", "ИТОГО", rev(P, Q), rev(PP, QP), pct_ref=None,
+             bold=True, total=True)
+    # Fix % for total: should be 100%
+    ws.cell(tot_r, 4, "=100.0%").number_format = "0.0%"
+    ws.cell(tot_r, 4).font = mkfont(NAVY, 11, True)
+    ws.cell(tot_r, 4).fill = mkfill("FFD1FAE5")
+    ws.cell(tot_r, 4).alignment = mkalign("center", "center")
+    ws.cell(tot_r, 4).border = mkborder()
+
+    spacer()
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 3 — РАСХОДЫ ПО КАТЕГОРИЯМ
+    # ════════════════════════════════════════════════════════
+    sec_title("  3. РАСХОДЫ ПО КАТЕГОРИЯМ", RED)
+    tbl_hdr(["№", "Категория расходов", "Текущий месяц", "% расходов",
+             "Прошлый месяц", "Δ (Откл.)", "Δ %"])
+
+    # Need a reference to total expenses cell for this table's % column
+    exp_ref_row = r   # we'll write total at the end; need to forward-reference
+    # Write a hidden total cell for % reference — use col 8 (off-screen)
+    ws.cell(r, 8, f'={exp_(P, Q)}')
+    ws.cell(r, 8).font = mkfont(WHITE, 1)
+    exp_hidden_ref = f'$H${r}'
+
+    for i, cat in enumerate(CATS_EXPENSE, 1):
+        data_row(i, cat, exp_(P, Q, cat), exp_(PP, QP, cat),
+                 pct_ref=exp_hidden_ref, alt=(i % 2 == 0), inv=True)
+
+    r_exp_tot = r
+    data_row("", "ИТОГО РАСХОДОВ", exp_(P, Q), exp_(PP, QP),
+             pct_ref=None, bold=True, total=True, inv=True)
+    ws.cell(r_exp_tot, 4, "=100.0%").number_format = "0.0%"
+    ws.cell(r_exp_tot, 4).font = mkfont(NAVY, 11, True)
+    ws.cell(r_exp_tot, 4).fill = mkfill("FFD1FAE5")
+    ws.cell(r_exp_tot, 4).alignment = mkalign("center", "center")
+    ws.cell(r_exp_tot, 4).border = mkborder()
+
+    spacer()
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 4 — ОПЕРАЦИОННАЯ СТАТИСТИКА
+    # ════════════════════════════════════════════════════════
+    sec_title("  4. ОПЕРАЦИОННАЯ СТАТИСТИКА", TEAL)
+    tbl_hdr(["№", "Показатель", "Текущий месяц", "—",
+             "Прошлый месяц", "Δ (Откл.)", "—"],
+            bg=TEAL_M)
+
+    data_row(1, "Дней в периоде (кал.)", f'{Q}-{P}+1', f'{QP}-{PP}+1',
+             fmt='0 "дн."')
+    data_row(2, "Дней с данными",
+             f'IFERROR(SUMPRODUCT((tblБаза[Дата]>={P})*(tblБаза[Дата]<={Q})*(tblБаза[Тип]="Приход"))/3,0)',
+             f'IFERROR(SUMPRODUCT((tblБаза[Дата]>={PP})*(tblБаза[Дата]<={QP})*(tblБаза[Тип]="Приход"))/3,0)',
+             fmt='0 "дн."')
+    data_row(3, "Смен проведено",
+             f'IFERROR(COUNTIFS(tblБаза[Тип],"Приход",tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})/3,0)',
+             f'IFERROR(COUNTIFS(tblБаза[Тип],"Приход",tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})/3,0)',
+             fmt='0 "см."')
+    data_row(4, "Средняя выручка в день",
+             f'IFERROR({rev(P,Q)}/MAX(1,{Q}-{P}+1),0)',
+             f'IFERROR({rev(PP,QP)}/MAX(1,{QP}-{PP}+1),0)')
+    data_row(5, "Средняя выручка за смену",
+             f'IFERROR({rev(P,Q)}/MAX(1,COUNTIFS(tblБаза[Тип],"Приход",tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})/3),0)',
+             f'IFERROR({rev(PP,QP)}/MAX(1,COUNTIFS(tblБаза[Тип],"Приход",tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})/3),0)')
+    data_row(6, "Расхождение касс (сумма)",
+             f'SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+             f'SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+             inv=True)
+    data_row(7, "Кол-во расхождений",
+             f'COUNTIFS(tblБаза[Расхождение],"<>0",tblБаза[Тип],"Приход",tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+             f'COUNTIFS(tblБаза[Расхождение],"<>0",tblБаза[Тип],"Приход",tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+             fmt="0", inv=True)
+
+    spacer()
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 5 — ОБЯЗАТЕЛЬСТВА И ВЫПЛАТЫ
+    # ════════════════════════════════════════════════════════
+    sec_title("  5. ОБЯЗАТЕЛЬСТВА И ВЫПЛАТЫ ПОСТАВЩИКАМ", PURPLE)
+    tbl_hdr(["№", "Статус / Показатель", "Сумма", "% итого",
+             "—", "Кол-во", "—"])
+
+    # Total for % reference — hidden in col 8
+    r_vt = r
+    ws.cell(r_vt, 8, '=SUMIFS(tblВыплаты[Сумма],tblВыплаты[Сумма],">0")')
+    ws.cell(r_vt, 8).font = mkfont(WHITE, 1)
+    vy_ref = f'$H${r_vt}'
+
+    data_row(1, "Запланировано (в периоде)",
+             f'SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Запланировано",'
+             f'tblВыплаты[Дата плановой оплаты],">="&{P},'
+             f'tblВыплаты[Дата плановой оплаты],"<="&{Q})',
+             None, pct_ref=vy_ref)
+    ws.cell(r - 1, 6,
+            f'=COUNTIFS(tblВыплаты[Статус],"Запланировано",'
+            f'tblВыплаты[Дата плановой оплаты],">="&{P},'
+            f'tblВыплаты[Дата плановой оплаты],"<="&{Q})').number_format = '0 "шт."'
+    ws.cell(r - 1, 6).fill = mkfill(WHITE)
+    ws.cell(r - 1, 6).font = mkfont(NAVY, 10)
+    ws.cell(r - 1, 6).alignment = mkalign("center", "center")
+    ws.cell(r - 1, 6).border = mkborder()
+
+    data_row(2, "Просрочено (не оплачено, дата прошла)",
+             'SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Запланировано",'
+             'tblВыплаты[Дата плановой оплаты],"<"&TODAY())',
+             None, pct_ref=vy_ref, inv=True, alt=True)
+    ws.cell(r - 1, 6,
+            '=COUNTIFS(tblВыплаты[Статус],"Запланировано",'
+            'tblВыплаты[Дата плановой оплаты],"<"&TODAY())').number_format = '0 "шт."'
+    ws.cell(r - 1, 6).fill = mkfill(GRAY_L)
+    ws.cell(r - 1, 6).font = mkfont(RED[2:], 10, True)
+    ws.cell(r - 1, 6).alignment = mkalign("center", "center")
+    ws.cell(r - 1, 6).border = mkborder()
+
+    data_row(3, "Оплачено (всего за период)",
+             f'SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Оплачено")',
+             None, pct_ref=vy_ref)
+    ws.cell(r - 1, 6,
+            '=COUNTIFS(tblВыплаты[Статус],"Оплачено")').number_format = '0 "шт."'
+    ws.cell(r - 1, 6).fill = mkfill(WHITE)
+    ws.cell(r - 1, 6).font = mkfont(GREEN[2:], 10, True)
+    ws.cell(r - 1, 6).alignment = mkalign("center", "center")
+    ws.cell(r - 1, 6).border = mkborder()
+
+    r_vy_tot = r
+    data_row("", "ВСЕГО ОБЯЗАТЕЛЬСТВ",
+             'SUMIFS(tblВыплаты[Сумма],tblВыплаты[Сумма],">0")',
+             None, bold=True, total=True)
+    ws.cell(r_vy_tot, 4, "=100.0%").number_format = "0.0%"
+    ws.cell(r_vy_tot, 4).font = mkfont(NAVY, 11, True)
+    ws.cell(r_vy_tot, 4).fill = mkfill("FFD1FAE5")
+    ws.cell(r_vy_tot, 4).alignment = mkalign("center", "center")
+    ws.cell(r_vy_tot, 4).border = mkborder()
+
+    spacer()
+
+    # ════════════════════════════════════════════════════════
+    #  TABLE 6 — ДВИЖЕНИЕ ДОЛГА
+    # ════════════════════════════════════════════════════════
+    sec_title("  6. ДВИЖЕНИЕ ДОЛГА В ПЕРИОДЕ", AMBER)
+    tbl_hdr(["№", "Показатель", "Сумма", "—",
+             "Справка: всего", "—", "—"])
+
+    debt_all = ('SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
+                '-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП")')
+    data_row(1, "Долг на начало периода (остаток)",
+             f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+             f'tblБаза[Дата],"<"&{P})'
+             f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+             f'tblБаза[Дата],"<"&{P})',
+             None)
+    data_row(2, "Взято в долг за период",
+             f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+             f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+             None, inv=True, alt=True)
+    data_row(3, "Выплачено долгов за период",
+             f'SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+             f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
+             None)
+    data_row(4, "Долг на конец периода (остаток)",
+             f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+             f'tblБаза[Дата],"<="&{Q})'
+             f'-SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+             f'tblБаза[Дата],"<="&{Q})',
+             None, inv=True, alt=True, bold=True)
+    data_row("", "Итого долг (все время)",
+             debt_all, None, total=True, bold=True)
+
+    spacer(h=14)
+
+    # ════════════════════════════════════════════════════════
+    #  SIGNATURE BLOCK
+    # ════════════════════════════════════════════════════════
+    def sig_row(col_l, lbl_l, col_r=None, lbl_r=None):
+        nonlocal r
+        ws.row_dimensions[r].height = 28
+        # Left signature
+        ws.merge_cells(start_row=r, start_column=col_l,
+                       end_row=r, end_column=col_l + 2)
+        c = ws.cell(r, col_l, lbl_l)
+        c.font = mkfont(NAVY, 10, True)
+        c.alignment = mkalign("left", "center")
+        # underline for signature
+        ws.merge_cells(start_row=r, start_column=col_l + 3,
+                       end_row=r, end_column=col_l + 3)
+        c2 = ws.cell(r, col_l + 3, "________________________")
+        c2.font = mkfont(GRAY_D, 9)
+        c2.alignment = mkalign("center", "bottom")
+        if col_r and lbl_r:
+            ws.merge_cells(start_row=r, start_column=col_r,
+                           end_row=r, end_column=col_r + 2)
+            c3 = ws.cell(r, col_r, lbl_r)
+            c3.font = mkfont(NAVY, 10, True)
+            c3.alignment = mkalign("left", "center")
+            ws.merge_cells(start_row=r, start_column=col_r + 3,
+                           end_row=r, end_column=col_r + 3)
+            c4 = ws.cell(r, col_r + 3, "________________________")
+            c4.font = mkfont(GRAY_D, 9)
+            c4.alignment = mkalign("center", "bottom")
+        r += 1
+
+    # Separator line before signatures
+    ws.merge_cells(f"A{r}:G{r}")
+    ws.row_dimensions[r].height = 2
+    ws.cell(r, 1).fill = mkfill(GRAY_M)
+    r += 1
+    ws.row_dimensions[r].height = 8
+    r += 1
+
+    sig_row(1, "Составил:")
+    sig_row(1, "Принял:")
+
+    ws.row_dimensions[r].height = 6
+    r += 1
+
+    # Note
+    ws.merge_cells(f"A{r}:G{r}")
+    c = ws.cell(r, 1, "  * Отчёт сформирован автоматически на основе данных БАЗА_ДДС")
+    c.font = mkfont(GRAY_D, 8)
+    c.alignment = mkalign("left", "center")
+
+    ws.freeze_panes = "A5"
 
 
 def inject_button_shapes(xlsx_path):
@@ -2710,11 +3211,14 @@ def main():
     print("Строим ДАШБОРД...")
     build_dashboard(sheets["Дашборд"])
 
+    print("Строим ОТЧЁТ РУКОВОДИТЕЛЯ...")
+    build_otchet_rukovoditelya(sheets["Отчёт_Рук"])
+
     # Stubs for remaining sheets
     for name in SHEET_NAMES:
         if name in ("БАЗА_ДДС", "Ввод_Касса", "Ввод_Расходы",
                     "Запись_Выплат", "Настройки",
-                    "Пульт", "Календарь_Выплат", "Дашборд"):
+                    "Пульт", "Календарь_Выплат", "Дашборд", "Отчёт_Рук"):
             continue
         ws = sheets[name]
         ws.merge_cells("A1:F1")
