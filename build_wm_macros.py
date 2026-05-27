@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-build_wm_macros.py — WAY MARKET cash book builder
+build_wm_macros.py — ФИНАНСОВЫЙ КОНТРОЛЬ cash book builder
 Block 1 of 5: Foundation + БАЗА_ДДС
 
 Outputs:
@@ -27,7 +27,7 @@ random.seed(42)
 # ═══════════════════════════════════════════════════════════════
 
 YEAR = 2025
-SHOP = "WAY MARKET"
+SHOP = "ФИНАНСОВЫЙ КОНТРОЛЬ"
 FONT = "Calibri"
 
 TEAL   = "FF0B4F54"
@@ -2080,9 +2080,9 @@ def build_dashboard_charts(ws):
 #  BLOCK 5: VBA EXPORT (.bas file)
 # ═══════════════════════════════════════════════════════════════
 
-VBA_CODE = r'''Attribute VB_Name = "WayMarketMacros"
+VBA_CODE = r'''Attribute VB_Name = "FinKontrolMacros"
 ' ═══════════════════════════════════════════════════════════════
-'  WAY MARKET — VBA Macros
+'  ФИНАНСОВЫЙ КОНТРОЛЬ — VBA Macros
 '  Импорт: Alt+F11 → File → Import File → выбрать этот .bas
 '  Назначить кнопкам: правый клик по кнопке → Назначить макрос
 ' ═══════════════════════════════════════════════════════════════
@@ -2351,7 +2351,7 @@ End Sub
 '  Private Sub Worksheet_Change(ByVal Target As Range)
 '      If Target.Cells.Count > 1 Then Exit Sub
 '      If Target.Address = "$F$3" Then
-'          Call WayMarketMacros.AC_Kassa(Target)
+'          Call FinKontrolMacros.AC_Kassa(Target)
 '      End If
 '  End Sub
 '
@@ -2360,9 +2360,9 @@ End Sub
 '  Private Sub Worksheet_Change(ByVal Target As Range)
 '      If Target.Cells.Count > 1 Then Exit Sub
 '      If Target.Address = "$B$6" Then
-'          Call WayMarketMacros.AC_Category(Target)
+'          Call FinKontrolMacros.AC_Category(Target)
 '      ElseIf Target.Address = "$B$12" Then
-'          Call WayMarketMacros.AC_Supplier(Target)
+'          Call FinKontrolMacros.AC_Supplier(Target)
 '      End If
 '  End Sub
 '
@@ -2477,23 +2477,23 @@ Public Sub SetupAll()
 
     ' ── Ввод_Касса ──────────────────────────────────────────────
     Call AddBtn(wsK, "A16:G16", "  СОХРАНИТЬ КАССУ", _
-                "WayMarketMacros.SaveKassa", RGB(5, 150, 105))
+                "FinKontrolMacros.SaveKassa", RGB(5, 150, 105))
     Call AddBtn(wsK, "E4:F4", "  СЕГОДНЯ", _
-                "WayMarketMacros.InsertToday_Kassa", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Kassa", RGB(29, 78, 216))
 
     ' ── Ввод_Расходы ────────────────────────────────────────────
     Call AddBtn(wsR, "A16:D16", "  СОХРАНИТЬ", _
-                "WayMarketMacros.SaveRashod", RGB(5, 150, 105))
+                "FinKontrolMacros.SaveRashod", RGB(5, 150, 105))
     Call AddBtn(wsR, "C3:D3", "  СЕГОДНЯ", _
-                "WayMarketMacros.InsertToday_Rashod", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Rashod", RGB(29, 78, 216))
 
     ' ── Календарь_Выплат ────────────────────────────────────────
     Call AddBtn(wsC, "I3:J3", "  СЕГОДНЯ", _
-                "WayMarketMacros.InsertToday_Calendar", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Calendar", RGB(29, 78, 216))
 
     ' ── Дашборд ─────────────────────────────────────────────────
     Call AddBtn(wsD, "K3:L3", "  ОБНОВИТЬ", _
-                "WayMarketMacros.RefreshDashboard", RGB(217, 119, 6))
+                "FinKontrolMacros.RefreshDashboard", RGB(217, 119, 6))
 
     ' ── Автокомплит (Worksheet_Change) ──────────────────────────
     Call TryInjectAutocomplete
@@ -2501,7 +2501,7 @@ Public Sub SetupAll()
     Application.ScreenUpdating = True
     MsgBox "Кнопки установлены!" & vbCrLf & _
            "Сохраните файл как .xlsm чтобы сохранить макросы.", _
-           vbInformation, "WAY MARKET — Установка завершена"
+           vbInformation, "ФИНАНСОВЫЙ КОНТРОЛЬ — Установка завершена"
     Exit Sub
 setupErr:
     Application.ScreenUpdating = True
@@ -2552,7 +2552,7 @@ Private Sub TryInjectAutocomplete()
         "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
         "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
         "    If Target.Address = ""$F$3"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Kassa(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Kassa(Target)" & vbCrLf & _
         "    End If" & vbCrLf & _
         "End Sub")
 
@@ -2560,9 +2560,9 @@ Private Sub TryInjectAutocomplete()
         "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
         "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
         "    If Target.Address = ""$B$6"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Category(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Category(Target)" & vbCrLf & _
         "    ElseIf Target.Address = ""$B$12"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Supplier(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Supplier(Target)" & vbCrLf & _
         "    End If" & vbCrLf & _
         "End Sub")
     Exit Sub
@@ -2688,7 +2688,7 @@ def build_otchet_rukovoditelya(ws):
     # ── ROW 1: Title ──────────────────────────────────────────
     ws.row_dimensions[1].height = 44
     ws.merge_cells("A1:G1")
-    c = ws.cell(1, 1, "  ЕЖЕМЕСЯЧНЫЙ ОТЧЁТ  —  WAY MARKET")
+    c = ws.cell(1, 1, "  ЕЖЕМЕСЯЧНЫЙ ОТЧЁТ  —  ФИНАНСОВЫЙ КОНТРОЛЬ")
     c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 17, True)
     c.alignment = mkalign("center", "center")
     for ci in range(2, NC + 1):
@@ -3486,33 +3486,33 @@ def inject_button_shapes(xlsx_path):
         "Ввод_Касса": [
             {"id": 1, "name": "Btn_SaveKassa",
              "caption": "СОХРАНИТЬ КАССУ",
-             "macro": "WayMarketMacros.SaveKassa",
+             "macro": "FinKontrolMacros.SaveKassa",
              "fc": 0, "fr": 15, "tc": 7, "tr": 16, "color": "059669", "sz": 1400},
             {"id": 2, "name": "Btn_TodayKassa",
              "caption": "СЕГОДНЯ",
-             "macro": "WayMarketMacros.InsertToday_Kassa",
+             "macro": "FinKontrolMacros.InsertToday_Kassa",
              "fc": 4, "fr": 3, "tc": 6, "tr": 4, "color": "1D4ED8", "sz": 1100},
         ],
         "Ввод_Расходы": [
             {"id": 1, "name": "Btn_SaveRashod",
              "caption": "СОХРАНИТЬ",
-             "macro": "WayMarketMacros.SaveRashod",
+             "macro": "FinKontrolMacros.SaveRashod",
              "fc": 0, "fr": 15, "tc": 4, "tr": 16, "color": "059669", "sz": 1400},
             {"id": 2, "name": "Btn_TodayRashod",
              "caption": "СЕГОДНЯ",
-             "macro": "WayMarketMacros.InsertToday_Rashod",
+             "macro": "FinKontrolMacros.InsertToday_Rashod",
              "fc": 2, "fr": 2, "tc": 4, "tr": 3, "color": "1D4ED8", "sz": 1100},
         ],
         "Календарь_Выплат": [
             {"id": 1, "name": "Btn_TodayCal",
              "caption": "СЕГОДНЯ",
-             "macro": "WayMarketMacros.InsertToday_Calendar",
+             "macro": "FinKontrolMacros.InsertToday_Calendar",
              "fc": 8, "fr": 2, "tc": 10, "tr": 3, "color": "1D4ED8", "sz": 1100},
         ],
         "Дашборд": [
             {"id": 1, "name": "Btn_Refresh",
              "caption": "ОБНОВИТЬ",
-             "macro": "WayMarketMacros.RefreshDashboard",
+             "macro": "FinKontrolMacros.RefreshDashboard",
              "fc": 10, "fr": 2, "tc": 12, "tr": 3, "color": "D97706", "sz": 1100},
         ],
     }

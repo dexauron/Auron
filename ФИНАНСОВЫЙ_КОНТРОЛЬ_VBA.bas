@@ -1,6 +1,6 @@
-Attribute VB_Name = "WayMarketMacros"
+Attribute VB_Name = "FinKontrolMacros"
 ' ===============================================================
-'  WAY MARKET — VBA Macros
+'  ÔÈÍÀÍÑÎÂÛÉ ÊÎÍÒÐÎËÜ — VBA Macros
 '  Èìïîðò: Alt+F11 -> File -> Import File -> âûáðàòü ýòîò .bas
 '  Íàçíà÷èòü êíîïêàì: ïðàâûé êëèê ïî êíîïêå -> Íàçíà÷èòü ìàêðîñ
 ' ===============================================================
@@ -269,7 +269,7 @@ End Sub
 '  Private Sub Worksheet_Change(ByVal Target As Range)
 '      If Target.Cells.Count > 1 Then Exit Sub
 '      If Target.Address = "$F$3" Then
-'          Call WayMarketMacros.AC_Kassa(Target)
+'          Call FinKontrolMacros.AC_Kassa(Target)
 '      End If
 '  End Sub
 '
@@ -278,9 +278,9 @@ End Sub
 '  Private Sub Worksheet_Change(ByVal Target As Range)
 '      If Target.Cells.Count > 1 Then Exit Sub
 '      If Target.Address = "$B$6" Then
-'          Call WayMarketMacros.AC_Category(Target)
+'          Call FinKontrolMacros.AC_Category(Target)
 '      ElseIf Target.Address = "$B$12" Then
-'          Call WayMarketMacros.AC_Supplier(Target)
+'          Call FinKontrolMacros.AC_Supplier(Target)
 '      End If
 '  End Sub
 '
@@ -395,23 +395,23 @@ Public Sub SetupAll()
 
     ' -- Ââîä_Êàññà ----------------------------------------------
     Call AddBtn(wsK, "A16:G16", "  ÑÎÕÐÀÍÈÒÜ ÊÀÑÑÓ", _
-                "WayMarketMacros.SaveKassa", RGB(5, 150, 105))
+                "FinKontrolMacros.SaveKassa", RGB(5, 150, 105))
     Call AddBtn(wsK, "E4:F4", "  ÑÅÃÎÄÍß", _
-                "WayMarketMacros.InsertToday_Kassa", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Kassa", RGB(29, 78, 216))
 
     ' -- Ââîä_Ðàñõîäû --------------------------------------------
     Call AddBtn(wsR, "A16:D16", "  ÑÎÕÐÀÍÈÒÜ", _
-                "WayMarketMacros.SaveRashod", RGB(5, 150, 105))
+                "FinKontrolMacros.SaveRashod", RGB(5, 150, 105))
     Call AddBtn(wsR, "C3:D3", "  ÑÅÃÎÄÍß", _
-                "WayMarketMacros.InsertToday_Rashod", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Rashod", RGB(29, 78, 216))
 
     ' -- Êàëåíäàðü_Âûïëàò ----------------------------------------
     Call AddBtn(wsC, "I3:J3", "  ÑÅÃÎÄÍß", _
-                "WayMarketMacros.InsertToday_Calendar", RGB(29, 78, 216))
+                "FinKontrolMacros.InsertToday_Calendar", RGB(29, 78, 216))
 
     ' -- Äàøáîðä -------------------------------------------------
     Call AddBtn(wsD, "K3:L3", "  ÎÁÍÎÂÈÒÜ", _
-                "WayMarketMacros.RefreshDashboard", RGB(217, 119, 6))
+                "FinKontrolMacros.RefreshDashboard", RGB(217, 119, 6))
 
     ' -- Àâòîêîìïëèò (Worksheet_Change) --------------------------
     Call TryInjectAutocomplete
@@ -419,7 +419,7 @@ Public Sub SetupAll()
     Application.ScreenUpdating = True
     MsgBox "Êíîïêè óñòàíîâëåíû!" & vbCrLf & _
            "Ñîõðàíèòå ôàéë êàê .xlsm ÷òîáû ñîõðàíèòü ìàêðîñû.", _
-           vbInformation, "WAY MARKET — Óñòàíîâêà çàâåðøåíà"
+           vbInformation, "ÔÈÍÀÍÑÎÂÛÉ ÊÎÍÒÐÎËÜ — Óñòàíîâêà çàâåðøåíà"
     Exit Sub
 setupErr:
     Application.ScreenUpdating = True
@@ -470,7 +470,7 @@ Private Sub TryInjectAutocomplete()
         "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
         "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
         "    If Target.Address = ""$F$3"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Kassa(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Kassa(Target)" & vbCrLf & _
         "    End If" & vbCrLf & _
         "End Sub")
 
@@ -478,9 +478,9 @@ Private Sub TryInjectAutocomplete()
         "Private Sub Worksheet_Change(ByVal Target As Range)" & vbCrLf & _
         "    If Target.Cells.Count > 1 Then Exit Sub" & vbCrLf & _
         "    If Target.Address = ""$B$6"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Category(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Category(Target)" & vbCrLf & _
         "    ElseIf Target.Address = ""$B$12"" Then" & vbCrLf & _
-        "        Call WayMarketMacros.AC_Supplier(Target)" & vbCrLf & _
+        "        Call FinKontrolMacros.AC_Supplier(Target)" & vbCrLf & _
         "    End If" & vbCrLf & _
         "End Sub")
     Exit Sub
