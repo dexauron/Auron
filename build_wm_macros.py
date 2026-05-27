@@ -275,14 +275,16 @@ def gen_baza():
 def gen_vyplaty():
     """Generate ЗАПИСЬ_ВЫПЛАТ demo data."""
     rows = []
-    today = date.today()
+    # Use a fixed cutoff tied to YEAR so statuses don't flip with today's date.
+    # Payments up to and including Oct 2025 are mostly paid; Nov-Dec are planned.
+    paid_cutoff = date(YEAR, 10, 31)
     idx = 1
     for m in range(1, 13):
         ld = last_day(m)
         for sup in random.sample(SUPPLIERS, random.randint(2, 4)):
             pd = date(YEAR, m, random.randint(10, min(25, ld)))
             amt = rr(30000, 80000)
-            if pd < today and random.random() > 0.25:
+            if pd <= paid_cutoff and random.random() > 0.15:
                 status = "Оплачено"
             else:
                 status = "Запланировано"
@@ -1231,14 +1233,13 @@ def build_calendar(ws):
             )
             c.number_format = '[=0]"";#,##0'
 
-            # План row
+            # План row — ALL "Запланировано" on their plan_date (no TODAY filter)
             r_plan = week_top + 2
             f_plan = (
                 f'=IFERROR(IF({get_column_letter(day_col)}{week_top}="","",'
                 f'SUMIFS(tblВыплаты[Сумма],tblВыплаты[Статус],"Запланировано",'
                 f'tblВыплаты[Дата плановой оплаты],'
-                f'DATE($D$3,MONTH($A$4),{get_column_letter(day_col)}{week_top}),'
-                f'tblВыплаты[Дата плановой оплаты],">="&TODAY())),"")'
+                f'DATE($D$3,MONTH($A$4),{get_column_letter(day_col)}{week_top}))),"")'
             )
             c = ws.cell(r_plan, day_col, f_plan)
             c.fill = mkfill(WHITE)
@@ -1250,7 +1251,8 @@ def build_calendar(ws):
             )
             c.number_format = '[=0]"";#,##0'
 
-            # Просрочено row
+            # Просрочено row — planned AND past-due (plan_date < TODAY); visual only,
+            # NOT added to total (it is a subset of the Plan row above)
             r_over = week_top + 3
             f_over = (
                 f'=IFERROR(IF({get_column_letter(day_col)}{week_top}="","",'
@@ -1269,10 +1271,10 @@ def build_calendar(ws):
             )
             c.number_format = '[=0]"";#,##0'
 
-            # ИТОГО row
+            # ИТОГО row — paid + plan (over is already included in plan, don't double-count)
             r_total = week_top + 4
             cl = get_column_letter(day_col)
-            f_total = f'=IFERROR(IF({cl}{week_top}="","",{cl}{r_paid}+{cl}{r_plan}+{cl}{r_over}),"")'
+            f_total = f'=IFERROR(IF({cl}{week_top}="","",{cl}{r_paid}+{cl}{r_plan}),"")'
             c = ws.cell(r_total, day_col, f_total)
             c.fill = mkfill(GRAY_M)
             c.font = mkfont(NAVY, 10, True)
