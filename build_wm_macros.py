@@ -529,10 +529,12 @@ def build_vvod_kassa(ws):
     _form_label(ws, 13, 4, "  Комментарий:", bg=GRAY_M, size=11)
     _form_input(ws, 13, 5, value="", ncols=3)
 
-    # Row 14: Выплата из кассы
+    # Row 14: Выплата из кассы — сумма (D14) + кому/цель (G14)
     ws.row_dimensions[14].height = 30
     _form_label(ws, 14, 1, "  Выплата из кассы:", ncols=3, bg=AMBER, fg=WHITE, size=11)
-    _form_input(ws, 14, 4, value=0, ncols=4, fmt=FMT_RUB, halign="right")
+    _form_input(ws, 14, 4, value=0, ncols=2, fmt=FMT_RUB, halign="right")   # D14:E14
+    _form_label(ws, 14, 6, "  Кому / цель:", bg=GRAY_M, size=10)             # F14
+    _form_input(ws, 14, 7, value="")                                           # G14
 
     # Rows 15-16: spacer
     ws.row_dimensions[15].height = 12
@@ -1786,6 +1788,87 @@ def build_dashboard(ws):
          FMT_RUB, False),
     ])
 
+    # ── РАСХОЖДЕНИЯ ПО КАССИРАМ ──────────────────────────────────
+    sec_hdr(ws, r, "  РАСХОЖДЕНИЯ ПО КАССИРАМ", bg=RED, ncols=12, height=22)
+    r += 1
+    ws.row_dimensions[r].height = 22
+    for j, h in enumerate(["", "Кассир", "", "", "Смен с расх.", "",
+                            "Сумма расх., ₽", "", "", "Смен всего", "", "% смен"], 1):
+        c = ws.cell(r, j, h)
+        c.fill = mkfill(RED); c.font = mkfont(WHITE, 9, True)
+        c.alignment = mkalign("center", "center"); c.border = mkborder()
+    r += 1
+
+    base_cr = r
+    for i, cashier in enumerate(CASHIERS):
+        rn = base_cr + i
+        ws.row_dimensions[rn].height = 24
+        alt = (i % 2 == 1)
+        bg_r = GRAY_L if alt else WHITE
+
+        d_cell(ws, rn, 1, "", alt)
+
+        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=4)
+        c = ws.cell(rn, 2, cashier)
+        c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 11, True)
+        c.alignment = mkalign("left", "center"); c.border = mkborder()
+        for col in (3, 4):
+            ws.cell(rn, col).fill = mkfill(bg_r); ws.cell(rn, col).border = mkborder()
+
+        # Смен с расхождением (distinct count via SUMPRODUCT / divide-by-count trick)
+        dsc_f = (
+            f'=IFERROR(SUMPRODUCT('
+            f'((tblБаза[Дата]>={P})*(tblБаза[Дата]<={Q})'
+            f'*(tblБаза[Кассир]="{cashier}")*(tblБаза[Тип]="Приход")'
+            f'*(tblБаза[Расхождение]<>0)'
+            f'*(1/COUNTIFS(tblБаза[Дата],tblБаза[Дата],'
+            f'tblБаза[Смена],tblБаза[Смена],tblБаза[Кассир],"{cashier}",'
+            f'tblБаза[Тип],"Приход",tblБаза[Расхождение],"<>0"))),0)'
+        )
+        ws.merge_cells(start_row=rn, start_column=5, end_row=rn, end_column=6)
+        c = ws.cell(rn, 5, dsc_f)
+        c.fill = mkfill(bg_r); c.font = mkfont(RED, 12, True)
+        c.alignment = mkalign("center", "center"); c.border = mkborder()
+        c.number_format = "0"
+        ws.cell(rn, 6).fill = mkfill(bg_r); ws.cell(rn, 6).border = mkborder()
+
+        # Сумма расхождений
+        sum_f = (
+            f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
+            f'tblБаза[Кассир],"{cashier}",'
+            f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
+        )
+        ws.merge_cells(start_row=rn, start_column=7, end_row=rn, end_column=9)
+        c = ws.cell(rn, 7, sum_f)
+        c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 10)
+        c.alignment = mkalign("right", "center"); c.border = mkborder()
+        c.number_format = '#,##0;[Red]-#,##0'
+        for col in (8, 9):
+            ws.cell(rn, col).fill = mkfill(bg_r); ws.cell(rn, col).border = mkborder()
+
+        # Смен всего
+        tot_f = (
+            f'=IFERROR(COUNTIFS(tblБаза[Тип],"Приход",'
+            f'tblБаза[Кассир],"{cashier}",'
+            f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})/3,0)'
+        )
+        ws.merge_cells(start_row=rn, start_column=10, end_row=rn, end_column=11)
+        c = ws.cell(rn, 10, tot_f)
+        c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 10)
+        c.alignment = mkalign("center", "center"); c.border = mkborder()
+        c.number_format = "0"
+        ws.cell(rn, 11).fill = mkfill(bg_r); ws.cell(rn, 11).border = mkborder()
+
+        # % смен с расхождением = E{rn} / J{rn}
+        c = ws.cell(rn, 12, f'=IFERROR(E{rn}/J{rn},0)')
+        c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 10)
+        c.alignment = mkalign("center", "center"); c.border = mkborder()
+        c.number_format = "0.0%"
+
+    r = base_cr + len(CASHIERS)
+    ws.row_dimensions[r].height = 5
+    r += 1
+
     _sec("  ДОЛГИ И ОБЯЗАТЕЛЬСТВА", AMBER, [
         ("Текущий долг",
          '=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг")'
@@ -1969,9 +2052,9 @@ def build_dashboard_charts(ws):
         c = ws.cell(r, 15, f'={src}'); c.number_format = FMT_RUB; c.font = mkfont(NAVY, 8)
 
     # ── SECTION HEADER ───────────────────────────────────────────
-    # Extended analytics ends at row ~85 (r=86 after last _sec).
-    # CSEC must be past the shifts section: shifts end at row ~(49 + extra_shifts)
-    CSEC = 87 + (len(SHIFTS) - 2)
+    # Extended analytics ends at r~93 (3 shifts, 3 cashiers baseline).
+    # Each extra shift or cashier beyond baseline adds 1 row.
+    CSEC = 95 + (len(SHIFTS) - 2) + max(0, len(CASHIERS) - 3)
     ws.row_dimensions[CSEC].height = 8
     sec_hdr(ws, CSEC + 1, "  ДИАГРАММЫ — ВИЗУАЛЬНАЯ АНАЛИТИКА",
             bg=TEAL, ncols=12, height=26)
@@ -2157,9 +2240,10 @@ Public Sub SaveKassa()
         wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
 
-    ' Выплата из кассы (D14) — если сумма > 0
-    Dim vyplAmt As Double
-    vyplAmt = CDbl(Nz(wsK.Range("D14").Value))
+    ' Выплата из кассы (D14) — если сумма > 0; получатель/цель в G14
+    Dim vyplAmt As Double, vyplKomu As String
+    vyplAmt  = CDbl(Nz(wsK.Range("D14").Value))
+    vyplKomu = Trim(CStr(wsK.Range("G14").Value))
     If vyplAmt > 0 Then
         r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
@@ -2170,7 +2254,7 @@ Public Sub SaveKassa()
         wsB.Cells(r, 6).Value = "Наличные"
         wsB.Cells(r, 7).Value = vyplAmt
         wsB.Cells(r, 8).Value = ""
-        wsB.Cells(r, 9).Value = "Выплата из кассы"
+        wsB.Cells(r, 9).Value = IIf(Len(vyplKomu) > 0, "Выплата: " & vyplKomu, "Выплата из кассы")
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
     End If
@@ -2184,6 +2268,7 @@ Public Sub SaveKassa()
         wsK.Cells(i, 3).Value = 0
     Next i
     wsK.Range("D14").Value = 0
+    wsK.Range("G14").ClearContents
     wsK.Range("E13").ClearContents
 
     MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
