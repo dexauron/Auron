@@ -458,9 +458,9 @@ def build_vvod_kassa(ws):
     _form_label(ws, 3, 5, "  Кассир:")
     _form_input(ws, 3, 6, value=None, ncols=2, halign="center")
 
-    # Data validations for B3, D3, F3
-    _add_dv(ws, '"' + ",".join(SHIFTS) + '"', "D3")
-    _add_dv(ws, '"' + ",".join(CASHIERS) + '"', "F3", show_error=False)  # autocomplete
+    # Data validations for D3 (shift), F3 (cashier) — reference Настройки справочники
+    _add_dv(ws, "'Настройки'!$H$22:$H$45", "D3")
+    _add_dv(ws, "'Настройки'!$B$22:$B$45", "F3", show_error=False)  # autocomplete
 
     # Row 4: TODAY button at E4 (replaces mockup text)
     ws.row_dimensions[4].height = 26
@@ -567,13 +567,13 @@ def build_vvod_rashody(ws):
     ws.row_dimensions[6].height = 30
     _form_label(ws, 6, 1, "  Категория:")
     _form_input(ws, 6, 2, ncols=3, halign="center")
-    _add_dv(ws, '"' + ",".join(c for c in CATS_EXPENSE if c != "Оплата ТП" or True) + '"', "B6", show_error=False)  # autocomplete
+    _add_dv(ws, "'Настройки'!$C$22:$C$45", "B6", show_error=False)  # autocomplete
 
     # Row 7: Способ оплаты
     ws.row_dimensions[7].height = 30
     _form_label(ws, 7, 1, "  Способ оплаты:")
     _form_input(ws, 7, 2, ncols=3, halign="center")
-    _add_dv(ws, '"' + ",".join(PAY_METHODS) + '"', "B7")
+    _add_dv(ws, "'Настройки'!$D$22:$D$45", "B7")
 
     # Row 8: Сумма
     ws.row_dimensions[8].height = 30
@@ -596,7 +596,7 @@ def build_vvod_rashody(ws):
     ws.row_dimensions[12].height = 30
     _form_label(ws, 12, 1, "  Поставщик:")
     _form_input(ws, 12, 2, ncols=3, halign="center")
-    _add_dv(ws, '"' + ",".join(SUPPLIERS) + '"', "B12", show_error=False)  # autocomplete
+    _add_dv(ws, "'Настройки'!$G$22:$G$45", "B12", show_error=False)  # autocomplete
 
     # Row 13: Сумма долга
     ws.row_dimensions[13].height = 30
@@ -732,13 +732,13 @@ def build_zapis_vyplat(ws, rows):
     ws.add_data_validation(dv_st)
     dv_st.add(f"E7:E{ZV_LAST_ROW}")
 
-    dv_m = DataValidation(type="list", formula1='"Наличные,Карта,Перевод"',
+    dv_m = DataValidation(type="list", formula1="'Настройки'!$D$22:$D$45",
                            allow_blank=True)
     ws.add_data_validation(dv_m)
     dv_m.add(f"G7:G{ZV_LAST_ROW}")
 
     dv_sup = DataValidation(type="list",
-                            formula1='"' + ",".join(SUPPLIERS) + '"',
+                            formula1="'Настройки'!$G$22:$G$45",
                             allow_blank=True)
     ws.add_data_validation(dv_sup)
     dv_sup.add(f"C7:C{ZV_LAST_ROW}")
@@ -805,7 +805,7 @@ def build_nastroyki(ws):
 
     # Sub-headers row 21
     sub_headers = ["", "Кассиры", "Категории расход", "Способы оплаты",
-                   "Типы операций", "Месяцы", "Поставщики (см. Р9)", ""]
+                   "Типы операций", "Месяцы", "Поставщики", "Смены"]
     ws.row_dimensions[21].height = 24
     for i, h in enumerate(sub_headers, 1):
         c = ws.cell(21, i, h)
@@ -816,12 +816,13 @@ def build_nastroyki(ws):
 
     # Lookup data — 24 rows (22-45)
     columns_data = {
-        2: CASHIERS,
-        3: [c for c in CATS_EXPENSE],
+        2: list(CASHIERS),
+        3: list(CATS_EXPENSE),
         4: PAY_METHODS,
         5: TYPES_ALL,
         6: MONTHS_RU,
         7: SUPPLIERS,
+        8: list(SHIFTS),
     }
     for rn in range(22, 46):
         ws.row_dimensions[rn].height = 18
@@ -830,11 +831,10 @@ def build_nastroyki(ws):
             v = lst[idx] if idx < len(lst) else None
             d_cell(ws, rn, col, v,
                    alt=(idx % 2 == 1), halign="left")
-        # Cols 1 and 8 padding
-        for col in (1, 8):
-            c = ws.cell(rn, col)
-            c.fill = mkfill(GRAY_L if idx % 2 == 1 else WHITE)
-            c.border = mkborder()
+        # Col 1 padding only (col 8 now has Смены data)
+        c = ws.cell(rn, 1)
+        c.fill = mkfill(GRAY_L if idx % 2 == 1 else WHITE)
+        c.border = mkborder()
 
     ws.row_dimensions[46].height = 10
 
@@ -1753,10 +1753,12 @@ def build_dashboard(ws):
          f'=IFERROR(({_rev(PP, QP)[1:]})/MAX(1,({_cnt(PP, QP, "Приход")[1:]})/3),0)',
          FMT_RUB, False),
         ("Лучший день",
-         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
-         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         f'=IFERROR(AGGREGATE(14,7,'
+         f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",tblБаза[Дата],tblБаза[Дата])'
+         f'/((tblБаза[Дата]>={P})*(tblБаза[Дата]<={Q})*(tblБаза[Тип]="Приход")),1),0)',
+         f'=IFERROR(AGGREGATE(14,7,'
+         f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",tblБаза[Дата],tblБаза[Дата])'
+         f'/((tblБаза[Дата]>={PP})*(tblБаза[Дата]<={QP})*(tblБаза[Тип]="Приход")),1),0)',
          FMT_RUB, False),
     ])
 
@@ -1889,14 +1891,17 @@ def build_dashboard(ws):
         ("Всего операций",
          _cnt(P, Q), None, "0", False, False),
         ("Макс. выручка/день",
-         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
-         f'=MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-         f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
+         f'=IFERROR(AGGREGATE(14,7,'
+         f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",tblБаза[Дата],tblБаза[Дата])'
+         f'/((tblБаза[Дата]>={P})*(tblБаза[Дата]<={Q})*(tblБаза[Тип]="Приход")),1),0)',
+         f'=IFERROR(AGGREGATE(14,7,'
+         f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",tblБаза[Дата],tblБаза[Дата])'
+         f'/((tblБаза[Дата]>={PP})*(tblБаза[Дата]<={QP})*(tblБаза[Тип]="Приход")),1),0)',
          FMT_RUB, False),
         ("Мин. выручка/день",
-         f'=IFERROR(MINIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-         f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q}),0)',
+         f'=IFERROR(AGGREGATE(15,7,'
+         f'SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",tblБаза[Дата],tblБаза[Дата])'
+         f'/((tblБаза[Дата]>={P})*(tblБаза[Дата]<={Q})*(tblБаза[Тип]="Приход")),1),0)',
          None, FMT_RUB, False, False),
     ])
 
@@ -2087,6 +2092,7 @@ Private Const SH_CAL   As String = "Календарь_Выплат"
 Private Const SH_DASH  As String = "Дашборд"
 Private Const SH_PULT  As String = "Пульт"
 Private Const SH_SETS  As String = "Настройки"
+Private Const SH_SVOD  As String = "Сводные"
 
 ' ── Автокомплит: вспомогательные колонки в Настройки ──
 ' Col I (9) = фильтр Кассиры, Col J (10) = Категории, Col K (11) = Поставщики
@@ -2423,27 +2429,41 @@ End Sub
 ' ── Публичные методы — вызываются из Worksheet_Change листов ──
 
 Public Sub AC_Kassa(inputCell As Range)
-    ' Читаем кассиров из Настройки столбец I (динамически — редактируй там)
+    ' Читаем кассиров из Настройки Р7 (столбец B, строки 22+)
     Dim wsS As Worksheet
     Set wsS = ThisWorkbook.Worksheets(SH_SETS)
-    Dim n As Long, i As Long
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 22
     n = 0
-    Do While Len(CStr(wsS.Cells(n + 1, AC_COL_KASSA).Value)) > 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 2).Value)) > 0
         n = n + 1
     Loop
     If n = 0 Then Exit Sub
     Dim lst() As String
     ReDim lst(n - 1)
     For i = 0 To n - 1
-        lst(i) = CStr(wsS.Cells(i + 1, AC_COL_KASSA).Value)
+        lst(i) = CStr(wsS.Cells(startRow + i, 2).Value)
     Next i
     Call AC_DoFilter(inputCell, lst, AC_COL_KASSA)
 End Sub
 
 Public Sub AC_Category(inputCell As Range)
-    Call AC_DoFilter(inputCell, _
-        Array("ЗП", "Аренда", "Налоги", "Интернет", "Закуп товара", _
-              "Оплата ТП", "Коммуналка", "Реклама", "Другое"), AC_COL_CAT)
+    ' Читаем категории из Настройки Р7 (столбец C, строки 22+)
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 22
+    n = 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 3).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(startRow + i, 3).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_CAT)
 End Sub
 
 Public Sub AC_Supplier(inputCell As Range)
@@ -2514,6 +2534,11 @@ Public Sub SetupAll()
     ' ── Дашборд ─────────────────────────────────────────────────
     Call AddBtn(wsD, "K3:L3", "  ОБНОВИТЬ", _
                 "FinKontrolMacros.RefreshDashboard", RGB(217, 119, 6))
+
+    ' ── Сводные ─────────────────────────────────────────────────
+    Call AddBtn(ThisWorkbook.Worksheets(SH_SVOD), "A3:L3", _
+                "  СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ", _
+                "FinKontrolMacros.CreatePivotTables", RGB(14, 116, 144))
 
     ' ── Автокомплит (Worksheet_Change) ──────────────────────────
     Call TryInjectAutocomplete
@@ -2598,6 +2623,180 @@ Private Sub InjectWSChange(ws As Worksheet, code As String)
     If InStr(1, cm.Lines(1, cm.CountOfLines), "Worksheet_Change") = 0 Then
         cm.InsertLines cm.CountOfLines + 1, vbCrLf & code
     End If
+End Sub
+
+
+' ═══════════════════════════════════════════════════════════════
+'  СВОДНЫЕ ТАБЛИЦЫ — реальные Excel PivotTables из tblБаза
+'  Alt+F8 -> CreatePivotTables -> Выполнить  (или нажать кнопку на листе)
+' ═══════════════════════════════════════════════════════════════
+Public Sub CreatePivotTables()
+    On Error GoTo pivErr
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    Dim wbk As Workbook
+    Set wbk = ThisWorkbook
+
+    Dim wsSrc As Worksheet
+    Set wsSrc = wbk.Worksheets(SH_BAZA)
+
+    Dim wsPT As Worksheet
+    Set wsPT = wbk.Worksheets(SH_SVOD)
+
+    ' Очистить старые сводные таблицы
+    Dim pt As PivotTable
+    For Each pt In wsPT.PivotTables
+        pt.TableRange2.Clear
+    Next pt
+
+    ' Источник — умная таблица tblБаза
+    Dim tbl As ListObject
+    Set tbl = wsSrc.ListObjects("tblБаза")
+    Dim srcAddr As String
+    srcAddr = "'" & wsSrc.Name & "'!" & tbl.Range.Address
+
+    ' Создать общий PivotCache
+    Dim pc As PivotCache
+    Set pc = wbk.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=srcAddr)
+
+    ' ── ПТ1: Выручка по месяцам ─────────────────────────────────
+    Dim pt1 As PivotTable
+    Set pt1 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(10, 2), TableName:="PT_VyruchkaMesyac")
+    With pt1
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Приход"
+        End With
+        With .PivotFields("Дата")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Выручка (руб.)"
+        End With
+        .NullString = "0"
+        .RowAxisLayout xlTabularRow
+    End With
+    On Error Resume Next
+    pt1.PivotFields("Дата").AutoGroup
+    On Error GoTo pivErr
+
+    ' ── ПТ2: Расходы по категориям ──────────────────────────────
+    Dim pt2 As PivotTable
+    Set pt2 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(10, 9), TableName:="PT_RaskhodKat")
+    With pt2
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Расход"
+        End With
+        With .PivotFields("Категория")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Сумма расходов"
+        End With
+        .NullString = "0"
+    End With
+
+    ' ── ПТ3: Выручка кассиры x смены ────────────────────────────
+    Dim pt3 As PivotTable
+    Set pt3 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(30, 2), TableName:="PT_VyruchkaKassir")
+    With pt3
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Приход"
+        End With
+        With .PivotFields("Кассир")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Смена")
+            .Orientation = xlColumnField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Выручка"
+        End With
+        .NullString = "0"
+    End With
+
+    ' ── ПТ4: Долги по поставщикам ───────────────────────────────
+    Dim pt4 As PivotTable
+    Set pt4 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(30, 9), TableName:="PT_DolgiPost")
+    With pt4
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Долг"
+        End With
+        With .PivotFields("Комментарий")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Долг (руб.)"
+        End With
+        .NullString = "0"
+    End With
+
+    ' ── ПТ5: Итоговая сводная по всем типам ─────────────────────
+    Dim pt5 As PivotTable
+    Set pt5 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(50, 2), TableName:="PT_ObshchayaSvodnaya")
+    With pt5
+        With .PivotFields("Тип")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Категория")
+            .Orientation = xlRowField
+            .Position = 2
+        End With
+        With .PivotFields("Способ оплаты")
+            .Orientation = xlColumnField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Итого"
+        End With
+        .NullString = "0"
+    End With
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "5 сводных таблиц созданы!" & vbCrLf & vbCrLf & _
+           "ПТ1 - Выручка по месяцам" & vbCrLf & _
+           "ПТ2 - Расходы по категориям" & vbCrLf & _
+           "ПТ3 - Выручка: кассиры x смены" & vbCrLf & _
+           "ПТ4 - Долги по поставщикам" & vbCrLf & _
+           "ПТ5 - Итоговая сводная (тип x категория x метод оплаты)", _
+           vbInformation, "ФИНАНСОВЫЙ КОНТРОЛЬ — Сводные таблицы"
+    Exit Sub
+pivErr:
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "Ошибка при создании сводных таблиц:" & vbCrLf & Err.Description, _
+           vbCritical, "CreatePivotTables"
 End Sub
 
 
@@ -3151,7 +3350,7 @@ def build_otchet_rukovoditelya(ws):
 
 
 def build_svodnye(ws):
-    """Сводные таблицы — формульный аналог Power Pivot: 3 кросс-таблицы по месяцам."""
+    """Сводные — landing page; VBA CreatePivotTables builds real Excel PivotTables."""
     ws.sheet_view.showGridLines = False
     ws.page_setup.orientation  = "landscape"
     ws.page_setup.paperSize    = 9
@@ -3160,328 +3359,102 @@ def build_svodnye(ws):
     ws.page_setup.fitToPage    = True
     ws.print_options.gridLines = False
 
-    NC = 12  # cols A-L
-
+    NC = 12
     set_widths(ws, [
-        ("A",  4),   # hidden month-number helper
-        ("B", 16),   # Месяц
-        ("C", 14), ("D", 14), ("E", 14), ("F", 14), ("G", 14),
-        ("H", 14), ("I", 14), ("J", 14), ("K", 14), ("L", 14),
+        ("A",  4), ("B", 24), ("C", 18), ("D", 18), ("E", 18),
+        ("F", 18), ("G", 18), ("H", 18), ("I", 18), ("J", 18),
+        ("K", 18), ("L", 18),
     ])
 
     sheet_title(ws, "  СВОДНЫЕ ТАБЛИЦЫ",
-                "  Ежемесячный анализ · формульный аналог Power Pivot"
-                "  (изменить год — ячейка B3)",
+                "  Нажмите кнопку ниже — VBA построит 5 реальных Excel PivotTables",
                 ncols=NC)
 
-    # Row 3: year filter
-    ws.row_dimensions[3].height = 30
-    _form_label(ws, 3, 1, "  Год:")
-    _form_input(ws, 3, 2, value=YEAR, halign="center")
-    ws.merge_cells("C3:L3")
-    c = ws.cell(3, 3, "  ← введите год, все таблицы пересчитаются автоматически")
-    c.font = mkfont(GRAY_D, 9)
-    c.alignment = mkalign("left", "center")
+    # Row 3: big button (replaced by DrawingML shape via inject_button_shapes)
+    ws.row_dimensions[3].height = 48
+    _form_btn(ws, 3, 1, "СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ", bg=TEAL, ncols=NC, size=16)
 
     ws.row_dimensions[4].height = 10
 
-    # ── formula helpers ──────────────────────────────────────────
-    def _ms(m):  return f'DATE($B$3,{m},1)'
-    def _me(m):  return f'EOMONTH(DATE($B$3,{m},1),0)'
-
-    def _rev_m(m):
-        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
-
-    def _exp_m(m, cat=''):
-        if cat:
-            return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
-                    f'tblБаза[Категория],"{cat}",'
-                    f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
-        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
-                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
-
-    def _pay_m(m, method):
-        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-                f'tblБаза[Способ оплаты],"{method}",'
-                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
-
-    def _total_row(ws, rn, data_start, data_end, col_first, col_last,
-                   fmt=FMT_RUB, extra_col=None, extra_fmt=None):
+    # Instructions block
+    sec_hdr(ws, 5, "  КАК СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ", bg=NAVY, ncols=NC, height=26)
+    steps = [
+        "1.  Нажмите кнопку «СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ» выше (или Alt+F8 → CreatePivotTables)",
+        "2.  VBA автоматически создаст 5 настоящих Excel PivotTables из таблицы БАЗА_ДДС",
+        "3.  Для обновления данных: нажмите кнопку снова (старые таблицы будут заменены)",
+        "4.  После создания — перетаскивайте поля прямо в PivotTable для своего анализа",
+        "5.  Для фильтрации по году/месяцу — используйте встроенные фильтры PivotTable",
+    ]
+    for i, text in enumerate(steps):
+        rn = 6 + i
         ws.row_dimensions[rn].height = 22
-        for ci in range(1, NC + 1):
-            c = ws.cell(rn, ci, "")
-            c.fill = mkfill(TEAL); c.border = mkborder()
-        c = ws.cell(rn, 2, "ИТОГО")
-        c.font = mkfont(WHITE, 10, True)
-        c.fill = mkfill(TEAL); c.alignment = mkalign("left", "center")
-        for ci in range(col_first, col_last + 1):
-            cl = get_column_letter(ci)
-            c = ws.cell(rn, ci, f'=SUM({cl}{data_start}:{cl}{data_end})')
-            c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-            c.alignment = mkalign("right", "center")
-            c.number_format = fmt; c.border = mkborder()
-        if extra_col and extra_fmt:
-            c_rev  = get_column_letter(col_first)
-            c_exp  = get_column_letter(col_first + 1)
-            c_prf  = get_column_letter(col_first + 2)
-            c = ws.cell(rn, extra_col,
-                        f'=IFERROR({c_prf}{rn}/MAX(1,{c_rev}{rn}),0)')
-            c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-            c.alignment = mkalign("right", "center")
-            c.number_format = extra_fmt; c.border = mkborder()
-
-    # ─────────────────────────────────────────────────────────────
-    # TABLE 1  Выручка по способу оплаты
-    # Cols: A=#, B=Месяц, C=Наличные, D=Карта, E=Перевод, F=Итого
-    # ─────────────────────────────────────────────────────────────
-    T1S = 5;  T1H = 6;  T1R1 = 7;  T1R2 = 18;  T1T = 19;  T1SP = 20
-
-    sec_hdr(ws, T1S, "  ВЫРУЧКА ПО СПОСОБУ ОПЛАТЫ", bg=GREEN, ncols=NC, height=24)
-
-    ws.row_dimensions[T1H].height = 22
-    hdrs1 = ["#", "Месяц", "Наличные", "Карта", "Перевод", "Итого",
-             "", "", "", "", "", ""]
-    tbl_hdr(ws, T1H, hdrs1, bg=TEAL_M)
-
-    for mi in range(12):
-        m = mi + 1; rn = T1R1 + mi
-        ws.row_dimensions[rn].height = 20
-        alt = (mi % 2 == 1)
-
-        c = ws.cell(rn, 1, m)
+        alt = (i % 2 == 0)
+        c0 = ws.cell(rn, 1)
+        c0.fill = mkfill(GRAY_L if alt else WHITE); c0.border = mkborder()
+        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=NC)
+        c = ws.cell(rn, 2, text)
         c.fill = mkfill(GRAY_L if alt else WHITE)
-        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.font = mkfont(NAVY, 10)
+        c.alignment = mkalign("left", "center")
         c.border = mkborder()
 
-        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+    ws.row_dimensions[11].height = 14
 
-        for ci, method in enumerate(PAY_METHODS, 3):
-            d_cell(ws, rn, ci, _pay_m(m, method), alt, "right", FMT_RUB)
+    # Table of 5 PivotTables to be created
+    sec_hdr(ws, 12, "  ЧТО БУДЕТ СОЗДАНО", bg=TEAL_M, ncols=NC, height=24)
+    ws.row_dimensions[13].height = 26
+    for ci, h in enumerate(["", "№", "Название", "", "Описание"], 1):
+        c = ws.cell(13, ci, h)
+        c.fill = mkfill(TEAL); c.font = mkfont(WHITE, 10, True)
+        c.alignment = mkalign("center" if ci != 4 else "left", "center")
+        c.border = mkborder()
+    ws.merge_cells("D13:L13")
 
-        cl3 = get_column_letter(3); cl5 = get_column_letter(5)
-        d_cell(ws, rn, 6, f'=SUM({cl3}{rn}:{cl5}{rn})', alt, "right", FMT_RUB, bold=True)
+    pt_list = [
+        ("ПТ1", "Выручка по месяцам",
+         "Фильтр: Тип=Приход | Строки: Дата (по месяцам) | Значения: Сумма"),
+        ("ПТ2", "Расходы по категориям",
+         "Фильтр: Тип=Расход | Строки: Категория | Значения: Сумма"),
+        ("ПТ3", "Выручка: кассиры × смены",
+         "Фильтр: Тип=Приход | Строки: Кассир | Колонки: Смена | Значения: Сумма"),
+        ("ПТ4", "Долги по поставщикам",
+         "Фильтр: Тип=Долг | Строки: Поставщик (Комментарий) | Значения: Сумма"),
+        ("ПТ5", "Итоговая сводная",
+         "Строки: Тип + Категория | Колонки: Способ оплаты | Значения: Сумма"),
+    ]
+    for i, (num, name, desc) in enumerate(pt_list):
+        rn = 14 + i
+        ws.row_dimensions[rn].height = 22
+        alt = (i % 2 == 1)
+        d_cell(ws, rn, 1, "", alt)
+        d_cell(ws, rn, 2, num, alt, "center", bold=True)
+        d_cell(ws, rn, 3, name, alt, "left", bold=True)
+        ws.merge_cells(start_row=rn, start_column=4, end_row=rn, end_column=NC)
+        d_cell(ws, rn, 4, desc, alt, "left")
 
-        for ci in range(7, NC + 1):
-            c = ws.cell(rn, ci, "")
-            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
+    ws.row_dimensions[19].height = 10
 
-    _total_row(ws, T1T, T1R1, T1R2, 3, 6)
-    ws.row_dimensions[T1SP].height = 12
-
-    # ─────────────────────────────────────────────────────────────
-    # TABLE 2  Расходы по категориям
-    # Cols: A=#, B=Месяц, C..K=9 категорий, L=Итого
-    # ─────────────────────────────────────────────────────────────
-    T2S = T1SP + 1;  T2H = T2S + 1;  T2R1 = T2H + 1
-    T2R2 = T2R1 + 11;  T2T = T2R2 + 1;  T2SP = T2T + 1
-
-    sec_hdr(ws, T2S, "  РАСХОДЫ ПО КАТЕГОРИЯМ", bg=RED, ncols=NC, height=24)
-
-    ws.row_dimensions[T2H].height = 22
-    hdrs2 = ["#", "Месяц"] + CATS_EXPENSE + ["Итого"]   # 2+9+1 = 12
-    tbl_hdr(ws, T2H, hdrs2, bg=TEAL_M)
-
-    for mi in range(12):
-        m = mi + 1; rn = T2R1 + mi
-        ws.row_dimensions[rn].height = 20
-        alt = (mi % 2 == 1)
-
-        c = ws.cell(rn, 1, m)
+    # Note about import
+    sec_hdr(ws, 20, "  ТРЕБОВАНИЯ", bg=AMBER, ncols=NC, height=22)
+    notes = [
+        "Файл должен быть сохранён как .xlsm (Книга Excel с поддержкой макросов)",
+        "VBA макрос FinKontrolMacros.bas должен быть импортирован (Alt+F11 → Import File)",
+    ]
+    for i, note in enumerate(notes):
+        rn = 21 + i
+        ws.row_dimensions[rn].height = 22
+        alt = (i % 2 == 0)
+        c0 = ws.cell(rn, 1)
+        c0.fill = mkfill(GRAY_L if alt else WHITE); c0.border = mkborder()
+        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=NC)
+        c = ws.cell(rn, 2, f"  {note}")
         c.fill = mkfill(GRAY_L if alt else WHITE)
-        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.font = mkfont(NAVY, 10)
+        c.alignment = mkalign("left", "center")
         c.border = mkborder()
 
-        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+    ws.freeze_panes = "B4"
 
-        for ci, cat in enumerate(CATS_EXPENSE, 3):
-            d_cell(ws, rn, ci, _exp_m(m, cat), alt, "right", FMT_RUB)
-
-        last_cat_col = 3 + len(CATS_EXPENSE) - 1   # col 11 = K
-        tot_col      = last_cat_col + 1             # col 12 = L
-        cl3  = get_column_letter(3)
-        cllc = get_column_letter(last_cat_col)
-        d_cell(ws, rn, tot_col,
-               f'=SUM({cl3}{rn}:{cllc}{rn})', alt, "right", FMT_RUB, bold=True)
-
-    _total_row(ws, T2T, T2R1, T2R2, 3, 3 + len(CATS_EXPENSE))
-    ws.row_dimensions[T2SP].height = 12
-
-    # ─────────────────────────────────────────────────────────────
-    # TABLE 3  P&L по месяцам
-    # Cols: A=#, B=Месяц, C=Выручка, D=Расходы, E=Прибыль, F=Рентаб.%
-    # ─────────────────────────────────────────────────────────────
-    T3S = T2SP + 1;  T3H = T3S + 1;  T3R1 = T3H + 1
-    T3R2 = T3R1 + 11;  T3T = T3R2 + 1;  T3SP = T3T + 1
-
-    sec_hdr(ws, T3S, "  P&L — ПРИБЫЛИ И УБЫТКИ ПО МЕСЯЦАМ", bg=BLUE, ncols=NC, height=24)
-
-    ws.row_dimensions[T3H].height = 22
-    hdrs3 = ["#", "Месяц", "Выручка", "Расходы", "Прибыль", "Рентаб. %",
-             "", "", "", "", "", ""]
-    tbl_hdr(ws, T3H, hdrs3, bg=TEAL_M)
-
-    for mi in range(12):
-        m = mi + 1; rn = T3R1 + mi
-        ws.row_dimensions[rn].height = 20
-        alt = (mi % 2 == 1)
-
-        c = ws.cell(rn, 1, m)
-        c.fill = mkfill(GRAY_L if alt else WHITE)
-        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
-        c.border = mkborder()
-
-        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
-        d_cell(ws, rn, 3, _rev_m(m),  alt, "right", FMT_RUB)
-        d_cell(ws, rn, 4, _exp_m(m),  alt, "right", FMT_RUB)
-        d_cell(ws, rn, 5, f'=C{rn}-D{rn}', alt, "right", FMT_RUB, bold=True)
-        d_cell(ws, rn, 6, f'=IFERROR((C{rn}-D{rn})/MAX(1,C{rn}),0)',
-               alt, "right", "0.0%")
-
-        for ci in range(7, NC + 1):
-            c = ws.cell(rn, ci, "")
-            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
-
-    # Total row for P&L (Revenue, Expenses, Profit summed; Margin = E_tot/C_tot)
-    _total_row(ws, T3T, T3R1, T3R2, 3, 5,
-               extra_col=6, extra_fmt="0.0%")
-    ws.row_dimensions[T3SP].height = 12
-
-    # ─────────────────────────────────────────────────────────────
-    # TABLE 4  Операционная статистика по месяцам
-    # Cols: A=#, B=Месяц, C=Смен, D=Операций, E=Ср.выручка/день,
-    #       F=Лучший день, G=Расхожд.
-    # ─────────────────────────────────────────────────────────────
-    T4S = T3SP + 1;  T4H = T4S + 1;  T4R1 = T4H + 1
-    T4R2 = T4R1 + 11;  T4T = T4R2 + 1;  T4SP = T4T + 1
-
-    sec_hdr(ws, T4S, "  ОПЕРАЦИОННАЯ СТАТИСТИКА ПО МЕСЯЦАМ", bg=PURPLE, ncols=NC, height=24)
-
-    ws.row_dimensions[T4H].height = 22
-    hdrs4 = ["#", "Месяц", "Смен", "Операций",
-             "Ср. выр./день", "Лучший день", "Расхождений",
-             "", "", "", "", ""]
-    tbl_hdr(ws, T4H, hdrs4, bg=TEAL_M)
-
-    for mi in range(12):
-        m = mi + 1; rn = T4R1 + mi
-        ws.row_dimensions[rn].height = 20
-        alt = (mi % 2 == 1)
-
-        c = ws.cell(rn, 1, m)
-        c.fill = mkfill(GRAY_L if alt else WHITE)
-        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
-        c.border = mkborder()
-
-        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
-
-        # Смен
-        d_cell(ws, rn, 3,
-               f'=ROUND(COUNTIFS(tblБаза[Тип],"Приход",'
-               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})/3,0)',
-               alt, "right", "0")
-        # Операций
-        d_cell(ws, rn, 4,
-               f'=COUNTIFS(tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
-               alt, "right", "0")
-        # Ср. выр./день (days = EOMONTH-date+1)
-        days = f'(DAY({_me(m)}))'
-        d_cell(ws, rn, 5,
-               f'=IFERROR(({_rev_m(m)[1:]})/MAX(1,{days}),0)',
-               alt, "right", FMT_RUB)
-        # Лучший день
-        d_cell(ws, rn, 6,
-               f'=IFERROR(MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
-               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)}),0)',
-               alt, "right", FMT_RUB)
-        # Расхождений (сумма)
-        d_cell(ws, rn, 7,
-               f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
-               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
-               alt, "right", FMT_RUB)
-
-        for ci in range(8, NC + 1):
-            c = ws.cell(rn, ci, "")
-            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
-
-    # Total row — sum ops, sum sessions; no mean for Лучший день
-    ws.row_dimensions[T4T].height = 22
-    for ci in range(1, NC + 1):
-        c = ws.cell(T4T, ci, ""); c.fill = mkfill(TEAL); c.border = mkborder()
-    c = ws.cell(T4T, 2, "ИТОГО / СРЕДНЕЕ")
-    c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-    c.alignment = mkalign("left", "center")
-    for ci, fmt in [(3, "0"), (4, "0")]:
-        cl = get_column_letter(ci)
-        c = ws.cell(T4T, ci, f'=SUM({cl}{T4R1}:{cl}{T4R2})')
-        c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-        c.alignment = mkalign("right", "center")
-        c.number_format = fmt; c.border = mkborder()
-    for ci, fmt in [(5, FMT_RUB), (6, FMT_RUB), (7, FMT_RUB)]:
-        cl = get_column_letter(ci)
-        c = ws.cell(T4T, ci, f'=IFERROR(AVERAGE({cl}{T4R1}:{cl}{T4R2}),0)')
-        c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-        c.alignment = mkalign("right", "center")
-        c.number_format = fmt; c.border = mkborder()
-
-    ws.row_dimensions[T4SP].height = 12
-
-    # ─────────────────────────────────────────────────────────────
-    # TABLE 5  Долги по месяцам
-    # Cols: A=#, B=Месяц, C=Взято в долг, D=Выплачено, E=Остаток, F=% выплат
-    # ─────────────────────────────────────────────────────────────
-    T5S = T4SP + 1;  T5H = T5S + 1;  T5R1 = T5H + 1
-    T5R2 = T5R1 + 11;  T5T = T5R2 + 1
-
-    sec_hdr(ws, T5S, "  ДОЛГИ И ВЫПЛАТЫ ПО МЕСЯЦАМ", bg=AMBER, ncols=NC, height=24)
-
-    ws.row_dimensions[T5H].height = 22
-    hdrs5 = ["#", "Месяц", "Взято в долг", "Выплачено",
-             "Нетто долг", "% выплат", "", "", "", "", "", ""]
-    tbl_hdr(ws, T5H, hdrs5, bg=TEAL_M)
-
-    for mi in range(12):
-        m = mi + 1; rn = T5R1 + mi
-        ws.row_dimensions[rn].height = 20
-        alt = (mi % 2 == 1)
-
-        c = ws.cell(rn, 1, m)
-        c.fill = mkfill(GRAY_L if alt else WHITE)
-        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
-        c.border = mkborder()
-
-        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
-
-        # Взято в долг
-        d_cell(ws, rn, 3,
-               f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
-               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
-               alt, "right", FMT_RUB)
-        # Выплачено (Оплата ТП)
-        d_cell(ws, rn, 4,
-               f'=SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
-               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
-               alt, "right", FMT_RUB)
-        # Нетто долг = взято - выплачено
-        d_cell(ws, rn, 5, f'=C{rn}-D{rn}', alt, "right", FMT_RUB, bold=True)
-        # % выплат
-        d_cell(ws, rn, 6,
-               f'=IFERROR(D{rn}/MAX(1,C{rn}),0)', alt, "right", "0.0%")
-
-        for ci in range(7, NC + 1):
-            c = ws.cell(rn, ci, "")
-            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
-
-    _total_row(ws, T5T, T5R1, T5R2, 3, 5)
-    # Overwrite % выплат total
-    c = ws.cell(T5T, 6,
-                f'=IFERROR(SUM({get_column_letter(4)}{T5R1}:{get_column_letter(4)}{T5R2})'
-                f'/MAX(1,SUM({get_column_letter(3)}{T5R1}:{get_column_letter(3)}{T5R2})),0)')
-    c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
-    c.alignment = mkalign("right", "center")
-    c.number_format = "0.0%"; c.border = mkborder()
-
-    ws.freeze_panes = "C7"
 
 
 def inject_button_shapes(xlsx_path):
@@ -3534,6 +3507,12 @@ def inject_button_shapes(xlsx_path):
              "caption": "ОБНОВИТЬ",
              "macro": "FinKontrolMacros.RefreshDashboard",
              "fc": 10, "fr": 2, "tc": 12, "tr": 3, "color": "D97706", "sz": 1100},
+        ],
+        "Сводные": [
+            {"id": 1, "name": "Btn_CreatePivot",
+             "caption": "СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ",
+             "macro": "FinKontrolMacros.CreatePivotTables",
+             "fc": 0, "fr": 2, "tc": 12, "tr": 3, "color": "0E7490", "sz": 1400},
         ],
     }
 

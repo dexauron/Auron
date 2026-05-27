@@ -16,6 +16,7 @@ Private Const SH_CAL   As String = "Календарь_Выплат"
 Private Const SH_DASH  As String = "Дашборд"
 Private Const SH_PULT  As String = "Пульт"
 Private Const SH_SETS  As String = "Настройки"
+Private Const SH_SVOD  As String = "Сводные"
 
 ' -- Автокомплит: вспомогательные колонки в Настройки --
 ' Col I (9) = фильтр Кассиры, Col J (10) = Категории, Col K (11) = Поставщики
@@ -352,27 +353,41 @@ End Sub
 ' -- Публичные методы — вызываются из Worksheet_Change листов --
 
 Public Sub AC_Kassa(inputCell As Range)
-    ' Читаем кассиров из Настройки столбец I (динамически — редактируй там)
+    ' Читаем кассиров из Настройки Р7 (столбец B, строки 22+)
     Dim wsS As Worksheet
     Set wsS = ThisWorkbook.Worksheets(SH_SETS)
-    Dim n As Long, i As Long
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 22
     n = 0
-    Do While Len(CStr(wsS.Cells(n + 1, AC_COL_KASSA).Value)) > 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 2).Value)) > 0
         n = n + 1
     Loop
     If n = 0 Then Exit Sub
     Dim lst() As String
     ReDim lst(n - 1)
     For i = 0 To n - 1
-        lst(i) = CStr(wsS.Cells(i + 1, AC_COL_KASSA).Value)
+        lst(i) = CStr(wsS.Cells(startRow + i, 2).Value)
     Next i
     Call AC_DoFilter(inputCell, lst, AC_COL_KASSA)
 End Sub
 
 Public Sub AC_Category(inputCell As Range)
-    Call AC_DoFilter(inputCell, _
-        Array("ЗП", "Аренда", "Налоги", "Интернет", "Закуп товара", _
-              "Оплата ТП", "Коммуналка", "Реклама", "Другое"), AC_COL_CAT)
+    ' Читаем категории из Настройки Р7 (столбец C, строки 22+)
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 22
+    n = 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 3).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(startRow + i, 3).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_CAT)
 End Sub
 
 Public Sub AC_Supplier(inputCell As Range)
@@ -443,6 +458,11 @@ Public Sub SetupAll()
     ' -- Дашборд -------------------------------------------------
     Call AddBtn(wsD, "K3:L3", "  ОБНОВИТЬ", _
                 "FinKontrolMacros.RefreshDashboard", RGB(217, 119, 6))
+
+    ' -- Сводные -------------------------------------------------
+    Call AddBtn(ThisWorkbook.Worksheets(SH_SVOD), "A3:L3", _
+                "  СОЗДАТЬ СВОДНЫЕ ТАБЛИЦЫ", _
+                "FinKontrolMacros.CreatePivotTables", RGB(14, 116, 144))
 
     ' -- Автокомплит (Worksheet_Change) --------------------------
     Call TryInjectAutocomplete
@@ -527,6 +547,180 @@ Private Sub InjectWSChange(ws As Worksheet, code As String)
     If InStr(1, cm.Lines(1, cm.CountOfLines), "Worksheet_Change") = 0 Then
         cm.InsertLines cm.CountOfLines + 1, vbCrLf & code
     End If
+End Sub
+
+
+' ===============================================================
+'  СВОДНЫЕ ТАБЛИЦЫ — реальные Excel PivotTables из tblБаза
+'  Alt+F8 -> CreatePivotTables -> Выполнить  (или нажать кнопку на листе)
+' ===============================================================
+Public Sub CreatePivotTables()
+    On Error GoTo pivErr
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+
+    Dim wbk As Workbook
+    Set wbk = ThisWorkbook
+
+    Dim wsSrc As Worksheet
+    Set wsSrc = wbk.Worksheets(SH_BAZA)
+
+    Dim wsPT As Worksheet
+    Set wsPT = wbk.Worksheets(SH_SVOD)
+
+    ' Очистить старые сводные таблицы
+    Dim pt As PivotTable
+    For Each pt In wsPT.PivotTables
+        pt.TableRange2.Clear
+    Next pt
+
+    ' Источник — умная таблица tblБаза
+    Dim tbl As ListObject
+    Set tbl = wsSrc.ListObjects("tblБаза")
+    Dim srcAddr As String
+    srcAddr = "'" & wsSrc.Name & "'!" & tbl.Range.Address
+
+    ' Создать общий PivotCache
+    Dim pc As PivotCache
+    Set pc = wbk.PivotCaches.Create(SourceType:=xlDatabase, SourceData:=srcAddr)
+
+    ' -- ПТ1: Выручка по месяцам ---------------------------------
+    Dim pt1 As PivotTable
+    Set pt1 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(10, 2), TableName:="PT_VyruchkaMesyac")
+    With pt1
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Приход"
+        End With
+        With .PivotFields("Дата")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Выручка (руб.)"
+        End With
+        .NullString = "0"
+        .RowAxisLayout xlTabularRow
+    End With
+    On Error Resume Next
+    pt1.PivotFields("Дата").AutoGroup
+    On Error GoTo pivErr
+
+    ' -- ПТ2: Расходы по категориям ------------------------------
+    Dim pt2 As PivotTable
+    Set pt2 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(10, 9), TableName:="PT_RaskhodKat")
+    With pt2
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Расход"
+        End With
+        With .PivotFields("Категория")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Сумма расходов"
+        End With
+        .NullString = "0"
+    End With
+
+    ' -- ПТ3: Выручка кассиры x смены ----------------------------
+    Dim pt3 As PivotTable
+    Set pt3 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(30, 2), TableName:="PT_VyruchkaKassir")
+    With pt3
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Приход"
+        End With
+        With .PivotFields("Кассир")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Смена")
+            .Orientation = xlColumnField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Выручка"
+        End With
+        .NullString = "0"
+    End With
+
+    ' -- ПТ4: Долги по поставщикам -------------------------------
+    Dim pt4 As PivotTable
+    Set pt4 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(30, 9), TableName:="PT_DolgiPost")
+    With pt4
+        With .PivotFields("Тип")
+            .Orientation = xlPageField
+            .CurrentPage = "Долг"
+        End With
+        With .PivotFields("Комментарий")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Долг (руб.)"
+        End With
+        .NullString = "0"
+    End With
+
+    ' -- ПТ5: Итоговая сводная по всем типам ---------------------
+    Dim pt5 As PivotTable
+    Set pt5 = pc.CreatePivotTable( _
+        TableDestination:=wsPT.Cells(50, 2), TableName:="PT_ObshchayaSvodnaya")
+    With pt5
+        With .PivotFields("Тип")
+            .Orientation = xlRowField
+            .Position = 1
+        End With
+        With .PivotFields("Категория")
+            .Orientation = xlRowField
+            .Position = 2
+        End With
+        With .PivotFields("Способ оплаты")
+            .Orientation = xlColumnField
+            .Position = 1
+        End With
+        With .PivotFields("Сумма")
+            .Orientation = xlDataField
+            .Function = xlSum
+            .NumberFormat = "#,##0"
+            .Name = "Итого"
+        End With
+        .NullString = "0"
+    End With
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "5 сводных таблиц созданы!" & vbCrLf & vbCrLf & _
+           "ПТ1 - Выручка по месяцам" & vbCrLf & _
+           "ПТ2 - Расходы по категориям" & vbCrLf & _
+           "ПТ3 - Выручка: кассиры x смены" & vbCrLf & _
+           "ПТ4 - Долги по поставщикам" & vbCrLf & _
+           "ПТ5 - Итоговая сводная (тип x категория x метод оплаты)", _
+           vbInformation, "ФИНАНСОВЫЙ КОНТРОЛЬ — Сводные таблицы"
+    Exit Sub
+pivErr:
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    MsgBox "Ошибка при создании сводных таблиц:" & vbCrLf & Err.Description, _
+           vbCritical, "CreatePivotTables"
 End Sub
 
 
