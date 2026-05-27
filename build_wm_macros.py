@@ -17,6 +17,8 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.chart import BarChart, LineChart, PieChart, Reference
+from openpyxl.chart.series import SeriesLabel
 
 random.seed(42)
 
@@ -1928,6 +1930,150 @@ def build_dashboard(ws):
     ])
 
 
+def build_dashboard_charts(ws):
+    """Append 6 charts to Дашборд after extended analytics (~row 86)."""
+
+    # ── HELPER TABLE: monthly aggregates ────────────────────────
+    # Cols N-Q (14-17), rows 3-15  (piggyback on empty right side)
+    HC = 14   # col N — month label
+    HR = 15   # col O — revenue
+    HE = 16   # col P — expenses
+    HP = 17   # col Q — profit
+
+    for col, txt in [(HC, "Месяц"), (HR, "Выручка"), (HE, "Расходы"), (HP, "Прибыль")]:
+        c = ws.cell(3, col, txt)
+        c.font  = mkfont(GRAY_D, 8)
+        c.fill  = mkfill(GRAY_L)
+
+    for m in range(1, 13):
+        row = 3 + m   # rows 4-15
+        c = ws.cell(row, HC, MONTHS_RU[m - 1])
+        c.font = mkfont(NAVY, 8)
+
+        rf = (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+              f'tblБаза[Дата],">="&DATE($B$3,{m},1),'
+              f'tblБаза[Дата],"<="&EOMONTH(DATE($B$3,{m},1),0))')
+        ef = (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+              f'tblБаза[Дата],">="&DATE($B$3,{m},1),'
+              f'tblБаза[Дата],"<="&EOMONTH(DATE($B$3,{m},1),0))')
+
+        c = ws.cell(row, HR, rf);  c.number_format = FMT_RUB; c.font = mkfont(NAVY, 8)
+        c = ws.cell(row, HE, ef);  c.number_format = FMT_RUB; c.font = mkfont(NAVY, 8)
+        cl_r = get_column_letter(HR); cl_e = get_column_letter(HE)
+        c = ws.cell(row, HP, f'={cl_r}{row}-{cl_e}{row}')
+        c.number_format = FMT_RUB; c.font = mkfont(NAVY, 8)
+
+    # ── HELPER TABLE: payment methods ───────────────────────────
+    # Cols N-O (14-15), rows 17-20
+    # D8=Наличные, G8=Карта, J8=Перевод (first cell of each merged KPI tile)
+    for col, txt in [(14, "Способ"), (15, "Сумма")]:
+        c = ws.cell(17, col, txt); c.font = mkfont(GRAY_D, 8); c.fill = mkfill(GRAY_L)
+    for i, (lbl, src) in enumerate([("Наличные", "D8"), ("Карта", "G8"), ("Перевод", "J8")]):
+        r = 18 + i
+        ws.cell(r, 14, lbl).font = mkfont(NAVY, 8)
+        c = ws.cell(r, 15, f'={src}'); c.number_format = FMT_RUB; c.font = mkfont(NAVY, 8)
+
+    # ── SECTION HEADER ───────────────────────────────────────────
+    # Extended analytics ends at row ~85 (r=86 after last _sec).
+    CSEC = 87
+    ws.row_dimensions[CSEC].height = 8
+    sec_hdr(ws, CSEC + 1, "  ДИАГРАММЫ — ВИЗУАЛЬНАЯ АНАЛИТИКА",
+            bg=TEAL, ncols=12, height=26)
+    ws.row_dimensions[CSEC + 2].height = 6
+    C1 = CSEC + 3   # row 90 — first chart anchor row
+
+    # Row numbers for existing dashboard data (computed from build_dashboard layout)
+    # Expense categories: header row 20, data rows 21-29, col B(2), col E(5)
+    # Weekday:            header row 33, data rows 34-40, col B(2), col E(5)
+    # Shift:              header row 44, data rows 45-46, col B(2), col E(5)
+    EXP_HDR = 20;  EXP_R1 = 21;  EXP_R2 = 29
+    WD_HDR  = 33;  WD_R1  = 34;  WD_R2  = 40
+    SH_HDR  = 44;  SH_R1  = 45;  SH_R2  = 46
+
+    # ── CHART 1: Monthly trend — Line chart ──────────────────────
+    ch1 = LineChart()
+    ch1.title  = "Выручка / Расходы / Прибыль по месяцам"
+    ch1.style  = 10
+    ch1.height = 12;  ch1.width = 24
+    ch1.y_axis.numFmt = '#,##0'
+    ch1.x_axis.title  = "Месяц"
+
+    cats1 = Reference(ws, min_col=HC, min_row=4, max_row=15)
+    data1 = Reference(ws, min_col=HR, min_row=3, max_col=HP, max_row=15)
+    ch1.add_data(data1, titles_from_data=True)
+    ch1.set_categories(cats1)
+    ws.add_chart(ch1, f"A{C1}")
+
+    # ── CHART 2: Payment method — Pie chart ──────────────────────
+    C2 = C1 + 19   # ~row 109
+    ch2 = PieChart()
+    ch2.title  = "Выручка по способу оплаты"
+    ch2.style  = 10
+    ch2.height = 12;  ch2.width = 12
+
+    data2 = Reference(ws, min_col=15, min_row=18, max_row=20)
+    cats2 = Reference(ws, min_col=14, min_row=18, max_row=20)
+    ch2.add_data(data2)
+    ch2.set_categories(cats2)
+    ws.add_chart(ch2, f"A{C2}")
+
+    # ── CHART 3: Expense by category — Horizontal bar chart ──────
+    ch3 = BarChart()
+    ch3.barDir  = "bar"
+    ch3.title   = "Расходы по категориям"
+    ch3.style   = 10
+    ch3.height  = 12;  ch3.width = 12
+    ch3.x_axis.title = "Сумма, ₽"
+
+    data3 = Reference(ws, min_col=5, min_row=EXP_HDR, max_row=EXP_R2)
+    cats3 = Reference(ws, min_col=2, min_row=EXP_R1,  max_row=EXP_R2)
+    ch3.add_data(data3, titles_from_data=True)
+    ch3.set_categories(cats3)
+    ws.add_chart(ch3, f"G{C2}")
+
+    # ── CHART 4: Revenue by weekday — Column chart ───────────────
+    C3 = C2 + 19   # ~row 128
+    ch4 = BarChart()
+    ch4.barDir  = "col"
+    ch4.title   = "Выручка по дням недели"
+    ch4.style   = 10
+    ch4.height  = 12;  ch4.width = 24
+    ch4.y_axis.numFmt = '#,##0'
+    ch4.x_axis.title  = "День"
+
+    data4 = Reference(ws, min_col=5, min_row=WD_HDR, max_row=WD_R2)
+    cats4 = Reference(ws, min_col=2, min_row=WD_R1,  max_row=WD_R2)
+    ch4.add_data(data4, titles_from_data=True)
+    ch4.set_categories(cats4)
+    ws.add_chart(ch4, f"A{C3}")
+
+    # ── CHART 5: Revenue by shift — Column chart ─────────────────
+    C4 = C3 + 19   # ~row 147
+    ch5 = BarChart()
+    ch5.barDir  = "col"
+    ch5.title   = "Выручка по сменам"
+    ch5.style   = 10
+    ch5.height  = 10;  ch5.width = 12
+
+    data5 = Reference(ws, min_col=5, min_row=SH_HDR, max_row=SH_R2)
+    cats5 = Reference(ws, min_col=2, min_row=SH_R1,  max_row=SH_R2)
+    ch5.add_data(data5, titles_from_data=True)
+    ch5.set_categories(cats5)
+    ws.add_chart(ch5, f"A{C4}")
+
+    # ── CHART 6: Expense share by category — Pie chart ───────────
+    ch6 = PieChart()
+    ch6.title  = "Доля расходов по категориям"
+    ch6.style  = 10
+    ch6.height = 10;  ch6.width = 12
+
+    data6 = Reference(ws, min_col=5, min_row=EXP_R1, max_row=EXP_R2)
+    cats6 = Reference(ws, min_col=2, min_row=EXP_R1, max_row=EXP_R2)
+    ch6.add_data(data6)
+    ch6.set_categories(cats6)
+    ws.add_chart(ch6, f"G{C4}")
+
+
 # ═══════════════════════════════════════════════════════════════
 #  BLOCK 5: VBA EXPORT (.bas file)
 # ═══════════════════════════════════════════════════════════════
@@ -2467,7 +2613,7 @@ def write_vba_file(path="WAY_MARKET_VBA.bas"):
 SHEET_NAMES = [
     "Пульт", "Ввод_Касса", "Ввод_Расходы", "БАЗА_ДДС",
     "Запись_Выплат", "Календарь_Выплат", "Дашборд", "Настройки",
-    "Отчёт_Рук",
+    "Отчёт_Рук", "Сводные",
 ]
 TAB_COLORS = {
     "Пульт":            "0B4F54",
@@ -2479,6 +2625,7 @@ TAB_COLORS = {
     "Дашборд":          "B45309",
     "Настройки":        "6B7280",
     "Отчёт_Рук":        "065F46",
+    "Сводные":          "0E7490",
 }
 
 
@@ -2981,6 +3128,340 @@ def build_otchet_rukovoditelya(ws):
     ws.freeze_panes = "A5"
 
 
+def build_svodnye(ws):
+    """Сводные таблицы — формульный аналог Power Pivot: 3 кросс-таблицы по месяцам."""
+    ws.sheet_view.showGridLines = False
+    ws.page_setup.orientation  = "landscape"
+    ws.page_setup.paperSize    = 9
+    ws.page_setup.fitToWidth   = 1
+    ws.page_setup.fitToHeight  = 0
+    ws.page_setup.fitToPage    = True
+    ws.print_options.gridLines = False
+
+    NC = 12  # cols A-L
+
+    set_widths(ws, [
+        ("A",  4),   # hidden month-number helper
+        ("B", 16),   # Месяц
+        ("C", 14), ("D", 14), ("E", 14), ("F", 14), ("G", 14),
+        ("H", 14), ("I", 14), ("J", 14), ("K", 14), ("L", 14),
+    ])
+
+    sheet_title(ws, "  СВОДНЫЕ ТАБЛИЦЫ",
+                "  Ежемесячный анализ · формульный аналог Power Pivot"
+                "  (изменить год — ячейка B3)",
+                ncols=NC)
+
+    # Row 3: year filter
+    ws.row_dimensions[3].height = 30
+    _form_label(ws, 3, 1, "  Год:")
+    _form_input(ws, 3, 2, value=YEAR, halign="center")
+    ws.merge_cells("C3:L3")
+    c = ws.cell(3, 3, "  ← введите год, все таблицы пересчитаются автоматически")
+    c.font = mkfont(GRAY_D, 9)
+    c.alignment = mkalign("left", "center")
+
+    ws.row_dimensions[4].height = 10
+
+    # ── formula helpers ──────────────────────────────────────────
+    def _ms(m):  return f'DATE($B$3,{m},1)'
+    def _me(m):  return f'EOMONTH(DATE($B$3,{m},1),0)'
+
+    def _rev_m(m):
+        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
+
+    def _exp_m(m, cat=''):
+        if cat:
+            return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                    f'tblБаза[Категория],"{cat}",'
+                    f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
+        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
+                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
+
+    def _pay_m(m, method):
+        return (f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+                f'tblБаза[Способ оплаты],"{method}",'
+                f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})')
+
+    def _total_row(ws, rn, data_start, data_end, col_first, col_last,
+                   fmt=FMT_RUB, extra_col=None, extra_fmt=None):
+        ws.row_dimensions[rn].height = 22
+        for ci in range(1, NC + 1):
+            c = ws.cell(rn, ci, "")
+            c.fill = mkfill(TEAL); c.border = mkborder()
+        c = ws.cell(rn, 2, "ИТОГО")
+        c.font = mkfont(WHITE, 10, True)
+        c.fill = mkfill(TEAL); c.alignment = mkalign("left", "center")
+        for ci in range(col_first, col_last + 1):
+            cl = get_column_letter(ci)
+            c = ws.cell(rn, ci, f'=SUM({cl}{data_start}:{cl}{data_end})')
+            c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+            c.alignment = mkalign("right", "center")
+            c.number_format = fmt; c.border = mkborder()
+        if extra_col and extra_fmt:
+            c_rev  = get_column_letter(col_first)
+            c_exp  = get_column_letter(col_first + 1)
+            c_prf  = get_column_letter(col_first + 2)
+            c = ws.cell(rn, extra_col,
+                        f'=IFERROR({c_prf}{rn}/MAX(1,{c_rev}{rn}),0)')
+            c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+            c.alignment = mkalign("right", "center")
+            c.number_format = extra_fmt; c.border = mkborder()
+
+    # ─────────────────────────────────────────────────────────────
+    # TABLE 1  Выручка по способу оплаты
+    # Cols: A=#, B=Месяц, C=Наличные, D=Карта, E=Перевод, F=Итого
+    # ─────────────────────────────────────────────────────────────
+    T1S = 5;  T1H = 6;  T1R1 = 7;  T1R2 = 18;  T1T = 19;  T1SP = 20
+
+    sec_hdr(ws, T1S, "  ВЫРУЧКА ПО СПОСОБУ ОПЛАТЫ", bg=GREEN, ncols=NC, height=24)
+
+    ws.row_dimensions[T1H].height = 22
+    hdrs1 = ["#", "Месяц", "Наличные", "Карта", "Перевод", "Итого",
+             "", "", "", "", "", ""]
+    tbl_hdr(ws, T1H, hdrs1, bg=TEAL_M)
+
+    for mi in range(12):
+        m = mi + 1; rn = T1R1 + mi
+        ws.row_dimensions[rn].height = 20
+        alt = (mi % 2 == 1)
+
+        c = ws.cell(rn, 1, m)
+        c.fill = mkfill(GRAY_L if alt else WHITE)
+        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.border = mkborder()
+
+        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+
+        for ci, method in enumerate(PAY_METHODS, 3):
+            d_cell(ws, rn, ci, _pay_m(m, method), alt, "right", FMT_RUB)
+
+        cl3 = get_column_letter(3); cl5 = get_column_letter(5)
+        d_cell(ws, rn, 6, f'=SUM({cl3}{rn}:{cl5}{rn})', alt, "right", FMT_RUB, bold=True)
+
+        for ci in range(7, NC + 1):
+            c = ws.cell(rn, ci, "")
+            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
+
+    _total_row(ws, T1T, T1R1, T1R2, 3, 6)
+    ws.row_dimensions[T1SP].height = 12
+
+    # ─────────────────────────────────────────────────────────────
+    # TABLE 2  Расходы по категориям
+    # Cols: A=#, B=Месяц, C..K=9 категорий, L=Итого
+    # ─────────────────────────────────────────────────────────────
+    T2S = T1SP + 1;  T2H = T2S + 1;  T2R1 = T2H + 1
+    T2R2 = T2R1 + 11;  T2T = T2R2 + 1;  T2SP = T2T + 1
+
+    sec_hdr(ws, T2S, "  РАСХОДЫ ПО КАТЕГОРИЯМ", bg=RED, ncols=NC, height=24)
+
+    ws.row_dimensions[T2H].height = 22
+    hdrs2 = ["#", "Месяц"] + CATS_EXPENSE + ["Итого"]   # 2+9+1 = 12
+    tbl_hdr(ws, T2H, hdrs2, bg=TEAL_M)
+
+    for mi in range(12):
+        m = mi + 1; rn = T2R1 + mi
+        ws.row_dimensions[rn].height = 20
+        alt = (mi % 2 == 1)
+
+        c = ws.cell(rn, 1, m)
+        c.fill = mkfill(GRAY_L if alt else WHITE)
+        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.border = mkborder()
+
+        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+
+        for ci, cat in enumerate(CATS_EXPENSE, 3):
+            d_cell(ws, rn, ci, _exp_m(m, cat), alt, "right", FMT_RUB)
+
+        last_cat_col = 3 + len(CATS_EXPENSE) - 1   # col 11 = K
+        tot_col      = last_cat_col + 1             # col 12 = L
+        cl3  = get_column_letter(3)
+        cllc = get_column_letter(last_cat_col)
+        d_cell(ws, rn, tot_col,
+               f'=SUM({cl3}{rn}:{cllc}{rn})', alt, "right", FMT_RUB, bold=True)
+
+    _total_row(ws, T2T, T2R1, T2R2, 3, 3 + len(CATS_EXPENSE))
+    ws.row_dimensions[T2SP].height = 12
+
+    # ─────────────────────────────────────────────────────────────
+    # TABLE 3  P&L по месяцам
+    # Cols: A=#, B=Месяц, C=Выручка, D=Расходы, E=Прибыль, F=Рентаб.%
+    # ─────────────────────────────────────────────────────────────
+    T3S = T2SP + 1;  T3H = T3S + 1;  T3R1 = T3H + 1
+    T3R2 = T3R1 + 11;  T3T = T3R2 + 1;  T3SP = T3T + 1
+
+    sec_hdr(ws, T3S, "  P&L — ПРИБЫЛИ И УБЫТКИ ПО МЕСЯЦАМ", bg=BLUE, ncols=NC, height=24)
+
+    ws.row_dimensions[T3H].height = 22
+    hdrs3 = ["#", "Месяц", "Выручка", "Расходы", "Прибыль", "Рентаб. %",
+             "", "", "", "", "", ""]
+    tbl_hdr(ws, T3H, hdrs3, bg=TEAL_M)
+
+    for mi in range(12):
+        m = mi + 1; rn = T3R1 + mi
+        ws.row_dimensions[rn].height = 20
+        alt = (mi % 2 == 1)
+
+        c = ws.cell(rn, 1, m)
+        c.fill = mkfill(GRAY_L if alt else WHITE)
+        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.border = mkborder()
+
+        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+        d_cell(ws, rn, 3, _rev_m(m),  alt, "right", FMT_RUB)
+        d_cell(ws, rn, 4, _exp_m(m),  alt, "right", FMT_RUB)
+        d_cell(ws, rn, 5, f'=C{rn}-D{rn}', alt, "right", FMT_RUB, bold=True)
+        d_cell(ws, rn, 6, f'=IFERROR((C{rn}-D{rn})/MAX(1,C{rn}),0)',
+               alt, "right", "0.0%")
+
+        for ci in range(7, NC + 1):
+            c = ws.cell(rn, ci, "")
+            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
+
+    # Total row for P&L (Revenue, Expenses, Profit summed; Margin = E_tot/C_tot)
+    _total_row(ws, T3T, T3R1, T3R2, 3, 5,
+               extra_col=6, extra_fmt="0.0%")
+    ws.row_dimensions[T3SP].height = 12
+
+    # ─────────────────────────────────────────────────────────────
+    # TABLE 4  Операционная статистика по месяцам
+    # Cols: A=#, B=Месяц, C=Смен, D=Операций, E=Ср.выручка/день,
+    #       F=Лучший день, G=Расхожд.
+    # ─────────────────────────────────────────────────────────────
+    T4S = T3SP + 1;  T4H = T4S + 1;  T4R1 = T4H + 1
+    T4R2 = T4R1 + 11;  T4T = T4R2 + 1;  T4SP = T4T + 1
+
+    sec_hdr(ws, T4S, "  ОПЕРАЦИОННАЯ СТАТИСТИКА ПО МЕСЯЦАМ", bg=PURPLE, ncols=NC, height=24)
+
+    ws.row_dimensions[T4H].height = 22
+    hdrs4 = ["#", "Месяц", "Смен", "Операций",
+             "Ср. выр./день", "Лучший день", "Расхождений",
+             "", "", "", "", ""]
+    tbl_hdr(ws, T4H, hdrs4, bg=TEAL_M)
+
+    for mi in range(12):
+        m = mi + 1; rn = T4R1 + mi
+        ws.row_dimensions[rn].height = 20
+        alt = (mi % 2 == 1)
+
+        c = ws.cell(rn, 1, m)
+        c.fill = mkfill(GRAY_L if alt else WHITE)
+        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.border = mkborder()
+
+        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+
+        # Смен
+        d_cell(ws, rn, 3,
+               f'=ROUND(COUNTIFS(tblБаза[Тип],"Приход",'
+               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})/3,0)',
+               alt, "right", "0")
+        # Операций
+        d_cell(ws, rn, 4,
+               f'=COUNTIFS(tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
+               alt, "right", "0")
+        # Ср. выр./день (days = EOMONTH-date+1)
+        days = f'(DAY({_me(m)}))'
+        d_cell(ws, rn, 5,
+               f'=IFERROR(({_rev_m(m)[1:]})/MAX(1,{days}),0)',
+               alt, "right", FMT_RUB)
+        # Лучший день
+        d_cell(ws, rn, 6,
+               f'=IFERROR(MAXIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
+               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)}),0)',
+               alt, "right", FMT_RUB)
+        # Расхождений (сумма)
+        d_cell(ws, rn, 7,
+               f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
+               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
+               alt, "right", FMT_RUB)
+
+        for ci in range(8, NC + 1):
+            c = ws.cell(rn, ci, "")
+            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
+
+    # Total row — sum ops, sum sessions; no mean for Лучший день
+    ws.row_dimensions[T4T].height = 22
+    for ci in range(1, NC + 1):
+        c = ws.cell(T4T, ci, ""); c.fill = mkfill(TEAL); c.border = mkborder()
+    c = ws.cell(T4T, 2, "ИТОГО / СРЕДНЕЕ")
+    c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+    c.alignment = mkalign("left", "center")
+    for ci, fmt in [(3, "0"), (4, "0")]:
+        cl = get_column_letter(ci)
+        c = ws.cell(T4T, ci, f'=SUM({cl}{T4R1}:{cl}{T4R2})')
+        c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+        c.alignment = mkalign("right", "center")
+        c.number_format = fmt; c.border = mkborder()
+    for ci, fmt in [(5, FMT_RUB), (6, FMT_RUB), (7, FMT_RUB)]:
+        cl = get_column_letter(ci)
+        c = ws.cell(T4T, ci, f'=IFERROR(AVERAGE({cl}{T4R1}:{cl}{T4R2}),0)')
+        c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+        c.alignment = mkalign("right", "center")
+        c.number_format = fmt; c.border = mkborder()
+
+    ws.row_dimensions[T4SP].height = 12
+
+    # ─────────────────────────────────────────────────────────────
+    # TABLE 5  Долги по месяцам
+    # Cols: A=#, B=Месяц, C=Взято в долг, D=Выплачено, E=Остаток, F=% выплат
+    # ─────────────────────────────────────────────────────────────
+    T5S = T4SP + 1;  T5H = T5S + 1;  T5R1 = T5H + 1
+    T5R2 = T5R1 + 11;  T5T = T5R2 + 1
+
+    sec_hdr(ws, T5S, "  ДОЛГИ И ВЫПЛАТЫ ПО МЕСЯЦАМ", bg=AMBER, ncols=NC, height=24)
+
+    ws.row_dimensions[T5H].height = 22
+    hdrs5 = ["#", "Месяц", "Взято в долг", "Выплачено",
+             "Нетто долг", "% выплат", "", "", "", "", "", ""]
+    tbl_hdr(ws, T5H, hdrs5, bg=TEAL_M)
+
+    for mi in range(12):
+        m = mi + 1; rn = T5R1 + mi
+        ws.row_dimensions[rn].height = 20
+        alt = (mi % 2 == 1)
+
+        c = ws.cell(rn, 1, m)
+        c.fill = mkfill(GRAY_L if alt else WHITE)
+        c.font = mkfont(GRAY_D, 8); c.alignment = mkalign("center", "center")
+        c.border = mkborder()
+
+        d_cell(ws, rn, 2, MONTHS_RU[mi], alt, "left", bold=True)
+
+        # Взято в долг
+        d_cell(ws, rn, 3,
+               f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Долг",'
+               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
+               alt, "right", FMT_RUB)
+        # Выплачено (Оплата ТП)
+        d_cell(ws, rn, 4,
+               f'=SUMIFS(tblБаза[Сумма],tblБаза[Категория],"Оплата ТП",'
+               f'tblБаза[Дата],">="&{_ms(m)},tblБаза[Дата],"<="&{_me(m)})',
+               alt, "right", FMT_RUB)
+        # Нетто долг = взято - выплачено
+        d_cell(ws, rn, 5, f'=C{rn}-D{rn}', alt, "right", FMT_RUB, bold=True)
+        # % выплат
+        d_cell(ws, rn, 6,
+               f'=IFERROR(D{rn}/MAX(1,C{rn}),0)', alt, "right", "0.0%")
+
+        for ci in range(7, NC + 1):
+            c = ws.cell(rn, ci, "")
+            c.fill = mkfill(GRAY_L if alt else WHITE); c.border = mkborder()
+
+    _total_row(ws, T5T, T5R1, T5R2, 3, 5)
+    # Overwrite % выплат total
+    c = ws.cell(T5T, 6,
+                f'=IFERROR(SUM({get_column_letter(4)}{T5R1}:{get_column_letter(4)}{T5R2})'
+                f'/MAX(1,SUM({get_column_letter(3)}{T5R1}:{get_column_letter(3)}{T5R2})),0)')
+    c.font = mkfont(WHITE, 10, True); c.fill = mkfill(TEAL)
+    c.alignment = mkalign("right", "center")
+    c.number_format = "0.0%"; c.border = mkborder()
+
+    ws.freeze_panes = "C7"
+
+
 def inject_button_shapes(xlsx_path):
     """
     Post-process the saved XLSX: embed DrawingML shapes as real clickable buttons.
@@ -3210,15 +3691,19 @@ def main():
 
     print("Строим ДАШБОРД...")
     build_dashboard(sheets["Дашборд"])
+    build_dashboard_charts(sheets["Дашборд"])
 
     print("Строим ОТЧЁТ РУКОВОДИТЕЛЯ...")
     build_otchet_rukovoditelya(sheets["Отчёт_Рук"])
+
+    print("Строим СВОДНЫЕ ТАБЛИЦЫ...")
+    build_svodnye(sheets["Сводные"])
 
     # Stubs for remaining sheets
     for name in SHEET_NAMES:
         if name in ("БАЗА_ДДС", "Ввод_Касса", "Ввод_Расходы",
                     "Запись_Выплат", "Настройки",
-                    "Пульт", "Календарь_Выплат", "Дашборд", "Отчёт_Рук"):
+                    "Пульт", "Календарь_Выплат", "Дашборд", "Отчёт_Рук", "Сводные"):
             continue
         ws = sheets[name]
         ws.merge_cells("A1:F1")
