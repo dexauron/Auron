@@ -1764,7 +1764,7 @@ def build_dashboard(ws):
 
     _sec("  КОНТРОЛЬ КАССЫ", BLUE, [
         ("Выплаты из кассы",
-         _exp(P, Q), _exp(PP, QP), FMT_RUB, True),
+         _exp(P, Q, "Выплата"), _exp(PP, QP, "Выплата"), FMT_RUB, True),
         ("Расхождений сумма",
          f'=SUMIFS(tblБаза[Расхождение],tblБаза[Тип],"Приход",'
          f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
@@ -2103,7 +2103,7 @@ Private Const AC_MAX_ROWS  As Integer = 15
 
 ' ═══════════════════════════════════════════════════════════════
 '  SAVE KASSA — Сохранить кассу в БАЗА_ДДС
-'  Назначить на кнопку A16:G16 на листе Ввод_Касса
+'  Назначить на кнопку A17:G17 на листе Ввод_Касса
 ' ═══════════════════════════════════════════════════════════════
 Public Sub SaveKassa()
     Dim wsK As Worksheet, wsB As Worksheet
@@ -2151,7 +2151,7 @@ Public Sub SaveKassa()
         wsB.Cells(r, 6).Value = methods(i)
         wsB.Cells(r, 7).Value = factVal
         If discVal <> 0 Then wsB.Cells(r, 8).Value = discVal
-        wsB.Cells(r, 9).Value = ""
+        wsB.Cells(r, 9).Value = CStr(wsK.Range("E13").Value)
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
         wsB.Cells(r, 8).NumberFormat = "#,##0"
@@ -2184,6 +2184,7 @@ Public Sub SaveKassa()
         wsK.Cells(i, 3).Value = 0
     Next i
     wsK.Range("D14").Value = 0
+    wsK.Range("E13").ClearContents
 
     MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
            & " (" & shVal & ", " & cashVal & ")", _
@@ -2516,7 +2517,7 @@ Public Sub SetupAll()
     Set wsD = ThisWorkbook.Worksheets(SH_DASH)
 
     ' ── Ввод_Касса ──────────────────────────────────────────────
-    Call AddBtn(wsK, "A16:G16", "  СОХРАНИТЬ КАССУ", _
+    Call AddBtn(wsK, "A17:G17", "  СОХРАНИТЬ КАССУ", _
                 "FinKontrolMacros.SaveKassa", RGB(5, 150, 105))
     Call AddBtn(wsK, "E4:F4", "  СЕГОДНЯ", _
                 "FinKontrolMacros.InsertToday_Kassa", RGB(29, 78, 216))
@@ -3466,12 +3467,13 @@ def inject_button_shapes(xlsx_path):
     no SetupAll needed.
 
     Positions (0-indexed col/row, exclusive to-boundary):
-      Ввод_Касса  : СОХРАНИТЬ A16:G16 → (0,15)→(7,16)
+      Ввод_Касса  : СОХРАНИТЬ A17:G17 → (0,16)→(7,17)
                     СЕГОДНЯ   E4:F4   → (4,3)→(6,4)
       Ввод_Расходы: СОХРАНИТЬ A16:D16 → (0,15)→(4,16)
                     СЕГОДНЯ   C3:D3   → (2,2)→(4,3)
       Календарь   : СЕГОДНЯ   I3:J3   → (8,2)→(10,3)
       Дашборд     : ОБНОВИТЬ  K3:L3   → (10,2)→(12,3)
+      Сводные     : СОЗДАТЬ   A3:L3   → (0,2)→(12,3)
     """
     import zipfile, re, os
 
@@ -3596,10 +3598,51 @@ def inject_button_shapes(xlsx_path):
 
     ct_xml = files['[Content_Types].xml'].decode('utf-8')
 
+    XDR_NS = ('xmlns:xdr="http://schemas.openxmlformats.org/'
+               'drawingml/2006/spreadsheetDrawing"')
+    R_NS = ('xmlns:r="http://schemas.openxmlformats.org/'
+             'officeDocument/2006/relationships"')
+
     for sheet_name, btn_list in BUTTONS.items():
         if sheet_name not in sheet2file:
             continue
         sheet_file = sheet2file[sheet_name]
+        sheet_base = os.path.basename(sheet_file).replace('.xml', '')
+        rels_path  = f'xl/worksheets/_rels/{sheet_base}.xml.rels'
+
+        ws_xml = files[sheet_file].decode('utf-8')
+        if R_NS not in ws_xml:
+            ws_xml = ws_xml.replace('<worksheet ', '<worksheet ' + R_NS + ' ', 1)
+
+        # If the worksheet already has a <drawing> element, merge button shapes
+        # into that existing drawing file (a worksheet can only have one <drawing>).
+        existing_m = re.search(r'<drawing\b[^>]+r:id="([^"]+)"', ws_xml)
+        if existing_m and rels_path in files:
+            existing_rid = existing_m.group(1)
+            rels_xml = files[rels_path].decode('utf-8')
+            # Find the <Relationship> element with the matching Id (attribute order varies)
+            tgt_m = None
+            for elem_m in re.finditer(r'<Relationship\b[^>]*/>', rels_xml):
+                elem_str = elem_m.group(0)
+                if f'Id="{existing_rid}"' in elem_str:
+                    tgt_m = re.search(r'Target="([^"]+)"', elem_str)
+                    break
+            if tgt_m:
+                tgt_rel = tgt_m.group(1)
+                drw_merge = ('xl/drawings/' + os.path.basename(tgt_rel)
+                             if not tgt_rel.startswith('/') else tgt_rel.lstrip('/'))
+                if drw_merge in files:
+                    drw_xml = files[drw_merge].decode('utf-8')
+                    # Ensure xdr: prefix is declared so our shapes parse correctly
+                    if XDR_NS not in drw_xml:
+                        drw_xml = re.sub(r'(<\w*:?wsDr\b)', r'\1 ' + XDR_NS, drw_xml, count=1)
+                    shapes = ''.join(make_anchor(b) for b in btn_list)
+                    drw_xml = re.sub(r'</(\w*:?wsDr)>', shapes + r'</\1>', drw_xml, count=1)
+                    files[drw_merge] = drw_xml.encode('utf-8')
+                    files[sheet_file] = ws_xml.encode('utf-8')
+                    continue  # no new drawing file needed
+
+        # No existing <drawing> — create a new drawing file and wire it up
         drw_file   = f'xl/drawings/drawing{drw_idx}.xml'
         drw_rel_id = f'rId_drw{drw_idx}'
         drw_target = f'../drawings/drawing{drw_idx}.xml'
@@ -3612,8 +3655,6 @@ def inject_button_shapes(xlsx_path):
                 '</Types>',
                 f'<Override PartName="{part}" ContentType="{DRAWING_CT}"/></Types>')
 
-        sheet_base = os.path.basename(sheet_file).replace('.xml', '')
-        rels_path  = f'xl/worksheets/_rels/{sheet_base}.xml.rels'
         rel_entry  = (f'<Relationship Id="{drw_rel_id}" '
                       f'Type="{DRAWING_NS}" Target="{drw_target}"/>')
         if rels_path in files:
@@ -3627,18 +3668,11 @@ def inject_button_shapes(xlsx_path):
                 'package/2006/relationships">' + rel_entry + '</Relationships>')
         files[rels_path] = rels_xml.encode('utf-8')
 
-        ws_xml = files[sheet_file].decode('utf-8')
-        # Ensure xmlns:r is declared on the root <worksheet> element
-        R_NS = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
-        if R_NS not in ws_xml:
-            ws_xml = ws_xml.replace('<worksheet ', '<worksheet ' + R_NS + ' ', 1)
         drw_elem = f'<drawing r:id="{drw_rel_id}"/>'
-        if '<drawing' not in ws_xml:
-            # Insert before <tableParts> (correct schema order) or before </worksheet>
-            if '<tableParts' in ws_xml:
-                ws_xml = ws_xml.replace('<tableParts', drw_elem + '<tableParts', 1)
-            else:
-                ws_xml = ws_xml.replace('</worksheet>', drw_elem + '</worksheet>', 1)
+        if '<tableParts' in ws_xml:
+            ws_xml = ws_xml.replace('<tableParts', drw_elem + '<tableParts', 1)
+        else:
+            ws_xml = ws_xml.replace('</worksheet>', drw_elem + '</worksheet>', 1)
         files[sheet_file] = ws_xml.encode('utf-8')
 
         drw_idx += 1

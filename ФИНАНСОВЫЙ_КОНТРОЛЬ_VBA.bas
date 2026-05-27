@@ -27,7 +27,7 @@ Private Const AC_MAX_ROWS  As Integer = 15
 
 ' ===============================================================
 '  SAVE KASSA — Сохранить кассу в БАЗА_ДДС
-'  Назначить на кнопку A16:G16 на листе Ввод_Касса
+'  Назначить на кнопку A17:G17 на листе Ввод_Касса
 ' ===============================================================
 Public Sub SaveKassa()
     Dim wsK As Worksheet, wsB As Worksheet
@@ -75,7 +75,7 @@ Public Sub SaveKassa()
         wsB.Cells(r, 6).Value = methods(i)
         wsB.Cells(r, 7).Value = factVal
         If discVal <> 0 Then wsB.Cells(r, 8).Value = discVal
-        wsB.Cells(r, 9).Value = ""
+        wsB.Cells(r, 9).Value = CStr(wsK.Range("E13").Value)
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
         wsB.Cells(r, 8).NumberFormat = "#,##0"
@@ -108,6 +108,7 @@ Public Sub SaveKassa()
         wsK.Cells(i, 3).Value = 0
     Next i
     wsK.Range("D14").Value = 0
+    wsK.Range("E13").ClearContents
 
     MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
            & " (" & shVal & ", " & cashVal & ")", _
@@ -440,7 +441,7 @@ Public Sub SetupAll()
     Set wsD = ThisWorkbook.Worksheets(SH_DASH)
 
     ' -- Ввод_Касса ----------------------------------------------
-    Call AddBtn(wsK, "A16:G16", "  СОХРАНИТЬ КАССУ", _
+    Call AddBtn(wsK, "A17:G17", "  СОХРАНИТЬ КАССУ", _
                 "FinKontrolMacros.SaveKassa", RGB(5, 150, 105))
     Call AddBtn(wsK, "E4:F4", "  СЕГОДНЯ", _
                 "FinKontrolMacros.InsertToday_Kassa", RGB(29, 78, 216))
