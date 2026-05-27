@@ -4,8 +4,8 @@ build_wm_macros.py — WAY MARKET cash book builder
 Block 1 of 5: Foundation + БАЗА_ДДС
 
 Outputs:
-  WAY_MARKET.xlsx       — full workbook (rename to .xlsm after VBA import)
-  WAY_MARKET_VBA.bas    — VBA code to import (created in Block 5)
+  ФИНАНСОВЫЙ_КОНТРОЛЬ.xlsx       — full workbook (rename to .xlsm after VBA import)
+  ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas    — VBA code to import (created in Block 5)
 """
 
 import os
@@ -2583,8 +2583,8 @@ End Sub
 
 ' ═══════════════════════════════════════════════════════════════
 '  КАК ИСПОЛЬЗОВАТЬ:
-'  1) Открыть WAY_MARKET.xlsx в Excel
-'  2) Alt+F11 → File → Import File → выбрать WAY_MARKET_VBA.bas
+'  1) Открыть ФИНАНСОВЫЙ_КОНТРОЛЬ.xlsx в Excel
+'  2) Alt+F11 → File → Import File → выбрать ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas
 '  3) Alt+F8 → выбрать "SetupAll" → нажать "Выполнить"
 '     Кнопки появятся на листах, макросы назначатся автоматически.
 '  4) Файл → Сохранить как → Книга Excel с поддержкой макросов (.xlsm)
@@ -2592,7 +2592,7 @@ End Sub
 '''
 
 
-def write_vba_file(path="WAY_MARKET_VBA.bas"):
+def write_vba_file(path="ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas"):
     code = VBA_CODE
     # Replace characters not in cp1251 (box-drawing, etc.)
     # VBA IDE imports .bas files using system ANSI (cp1251 on Russian Windows)
@@ -3468,7 +3468,7 @@ def inject_button_shapes(xlsx_path):
     """
     Post-process the saved XLSX: embed DrawingML shapes as real clickable buttons.
 
-    Shapes carry macro= attribute. After the user imports WAY_MARKET_VBA.bas
+    Shapes carry macro= attribute. After the user imports ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas
     and saves as .xlsm, clicking a shape triggers the assigned macro directly —
     no SetupAll needed.
 
@@ -3719,14 +3719,14 @@ def main():
     wb.calculation.fullCalcOnLoad = True
     wb.calculation.calcMode = "auto"
 
-    out = "WAY_MARKET.xlsx"
+    out = "ФИНАНСОВЫЙ_КОНТРОЛЬ.xlsx"
     wb.save(out)
     inject_button_shapes(out)
     sz = os.path.getsize(out) // 1024
     print(f"\n✓ Сохранено: {out}  ({sz} KB)")
     print(f"  Строк данных в БАЗА_ДДС: {len(baza)}")
 
-    vba_path = write_vba_file("WAY_MARKET_VBA.bas")
+    vba_path = write_vba_file("ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas")
     vsz = os.path.getsize(vba_path) // 1024
     print(f"✓ Сохранено: {vba_path}  ({vsz} KB)")
 
@@ -3734,9 +3734,9 @@ def main():
 ==============================================================
   ИНСТРУКЦИЯ
 ==============================================================
-  1. Откройте WAY_MARKET.xlsx в Excel
+  1. Откройте ФИНАНСОВЫЙ_КОНТРОЛЬ.xlsx в Excel
      (кнопки уже видны как зелёные/синие/жёлтые фигуры)
-  2. Alt+F11 -> File -> Import File -> WAY_MARKET_VBA.bas
+  2. Alt+F11 -> File -> Import File -> ФИНАНСОВЫЙ_КОНТРОЛЬ_VBA.bas
   3. Файл -> Сохранить как -> .xlsm
      (кнопки станут кликабельными)
 ==============================================================""")
