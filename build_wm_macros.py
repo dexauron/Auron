@@ -247,8 +247,8 @@ def gen_baza():
         for _ in range(random.randint(2, 4)):
             sup = random.choice(SUPPLIERS)
             rows.append((date(YEAR, m, random.randint(1, ld)), "Утро",
-                         random.choice(CASHIERS), "Долг", "Закуп товара", sup,
-                         rr(60000 * mf, 150000 * mf), 0, "Закуп в долг"))
+                         random.choice(CASHIERS), "Долг", "Закуп товара", "Перевод",
+                         rr(60000 * mf, 150000 * mf), 0, sup))
 
     # ─── DEBT PAYMENTS ───
     for m in range(1, 13):
@@ -1915,10 +1915,10 @@ def build_dashboard(ws):
     _sec("  ДОПОЛНИТЕЛЬНО", NAVY, [
         ("Иман (хозяин)",
          f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
-         f'tblБаза[Поставщик],"Иман",'
+         f'tblБаза[Комментарий],"Иман",'
          f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})',
          f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Расход",'
-         f'tblБаза[Поставщик],"Иман",'
+         f'tblБаза[Комментарий],"Иман",'
          f'tblБаза[Дата],">="&{PP},tblБаза[Дата],"<="&{QP})',
          FMT_RUB, True),
         ("Списания+Возвраты",
