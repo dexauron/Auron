@@ -49,7 +49,8 @@ FMT_RUB  = '#,##0\\ ₽'
 FMT_DATE = 'DD.MM.YYYY'
 
 CASHIERS     = ["Айгуль", "Зарина", "Данияр"]
-SHIFTS       = ["Утро", "Вечер"]
+SHIFTS       = ["Утро", "Вечер", "Ночная"]
+SHIFT_FACTOR = {"Утро": 0.30, "Вечер": 0.50, "Ночная": 0.20}
 PAY_METHODS  = ["Наличные", "Карта", "Перевод"]
 SUPPLIERS    = ["ТД Метро", "Лента", "Вкусвилл", "Магнит", "Х5 Ритейл", "Юнилевер"]
 CATS_EXPENSE = ["ЗП", "Аренда", "Налоги", "Интернет", "Закуп товара",
@@ -179,7 +180,7 @@ def gen_baza():
         for shift in SHIFTS:
             cashier = random.choice(CASHIERS)
             shift_base = rr(70000 * mf, 140000 * mf, 1000)
-            sf = 0.42 if shift == "Утро" else 0.58
+            sf = SHIFT_FACTOR.get(shift, 0.33)
             total = int(shift_base * sf)
 
             cp = random.uniform(0.34, 0.44)
@@ -458,7 +459,7 @@ def build_vvod_kassa(ws):
     _form_input(ws, 3, 6, value=None, ncols=2, halign="center")
 
     # Data validations for B3, D3, F3
-    _add_dv(ws, '"Утро,Вечер"', "D3")
+    _add_dv(ws, '"' + ",".join(SHIFTS) + '"', "D3")
     _add_dv(ws, '"' + ",".join(CASHIERS) + '"', "F3", show_error=False)  # autocomplete
 
     # Row 4: TODAY button at E4 (replaces mockup text)
@@ -470,7 +471,7 @@ def build_vvod_kassa(ws):
     # Row 6: section header
     sec_hdr(ws, 6, "  Z-ОТЧЁТ vs ФАКТ", size=11, bg=TEAL_M, ncols=7, height=24)
 
-    # Row 7: column headers
+    # Row 7: column headers (only cols A-D, no padding)
     ws.row_dimensions[7].height = 24
     headers = ["  Способ оплаты", "Z-отчёт", "Факт", "Расхождение"]
     for i, h in enumerate(headers, 1):
@@ -479,37 +480,24 @@ def build_vvod_kassa(ws):
         c.font = mkfont(WHITE, 10, True)
         c.alignment = mkalign("center" if i > 1 else "left", "center")
         c.border = mkborder()
-    # E7-G7 padded
-    for col in (5, 6, 7):
-        ws.cell(7, col).fill = mkfill(TEAL)
-        ws.cell(7, col).border = mkborder()
 
     # Rows 8-10: data rows for each payment method
     for i, method in enumerate(PAY_METHODS):
         rn = 8 + i
         ws.row_dimensions[rn].height = 28
-        # Label
         c = ws.cell(rn, 1, f"  {method}")
         c.fill = mkfill(GRAY_L if i % 2 == 0 else WHITE)
         c.font = mkfont(NAVY, 11, True)
         c.alignment = mkalign("left", "center")
         c.border = mkborder()
-        # Z-отчёт input
         _form_input(ws, rn, 2, value=0, fmt='#,##0', halign="right")
-        # Факт input
         _form_input(ws, rn, 3, value=0, fmt='#,##0', halign="right")
-        # Расхождение formula = Факт - Z
         c = ws.cell(rn, 4, f"=C{rn}-B{rn}")
         c.fill = mkfill(GRAY_L if i % 2 == 0 else WHITE)
         c.font = mkfont(NAVY, 11, True)
         c.alignment = mkalign("right", "center")
         c.border = mkborder()
         c.number_format = '#,##0;[Red]-#,##0'
-        # Padding cells
-        for col in (5, 6, 7):
-            pc = ws.cell(rn, col)
-            pc.fill = mkfill(GRAY_L if i % 2 == 0 else WHITE)
-            pc.border = mkborder()
 
     # Row 11: ИТОГО
     ws.row_dimensions[11].height = 30
@@ -525,10 +513,6 @@ def build_vvod_kassa(ws):
         c.alignment = mkalign("right", "center")
         c.border = mkborder()
         c.number_format = '#,##0' if col != 4 else '#,##0;[Red]-#,##0'
-    for col in (5, 6, 7):
-        pc = ws.cell(11, col)
-        pc.fill = mkfill(TEAL_M)
-        pc.border = mkborder()
 
     # Row 12: spacer
     ws.row_dimensions[12].height = 8
@@ -545,13 +529,18 @@ def build_vvod_kassa(ws):
     _form_label(ws, 13, 4, "  Комментарий:", bg=GRAY_M, size=11)
     _form_input(ws, 13, 5, value="", ncols=3)
 
-    # Rows 14-15: spacer
-    ws.row_dimensions[14].height = 12
-    ws.row_dimensions[15].height = 12
+    # Row 14: Выплата из кассы
+    ws.row_dimensions[14].height = 30
+    _form_label(ws, 14, 1, "  Выплата из кассы:", ncols=3, bg=AMBER, fg=WHITE, size=11)
+    _form_input(ws, 14, 4, value=0, ncols=4, fmt=FMT_RUB, halign="right")
 
-    # Row 16: SAVE button (large, merged across A:G)
-    ws.row_dimensions[16].height = 44
-    _form_btn(ws, 16, 1, "💾  СОХРАНИТЬ КАССУ", bg=GREEN, ncols=7, size=14)
+    # Rows 15-16: spacer
+    ws.row_dimensions[15].height = 12
+    ws.row_dimensions[16].height = 12
+
+    # Row 17: SAVE button (large, merged across A:G)
+    ws.row_dimensions[17].height = 44
+    _form_btn(ws, 17, 1, "💾  СОХРАНИТЬ КАССУ", bg=GREEN, ncols=7, size=14)
 
 
 def build_vvod_rashody(ws):
@@ -1976,7 +1965,8 @@ def build_dashboard_charts(ws):
 
     # ── SECTION HEADER ───────────────────────────────────────────
     # Extended analytics ends at row ~85 (r=86 after last _sec).
-    CSEC = 87
+    # CSEC must be past the shifts section: shifts end at row ~(49 + extra_shifts)
+    CSEC = 87 + (len(SHIFTS) - 2)
     ws.row_dimensions[CSEC].height = 8
     sec_hdr(ws, CSEC + 1, "  ДИАГРАММЫ — ВИЗУАЛЬНАЯ АНАЛИТИКА",
             bg=TEAL, ncols=12, height=26)
@@ -1989,7 +1979,7 @@ def build_dashboard_charts(ws):
     # Shift:              header row 44, data rows 45-46, col B(2), col E(5)
     EXP_HDR = 20;  EXP_R1 = 21;  EXP_R2 = 29
     WD_HDR  = 33;  WD_R1  = 34;  WD_R2  = 40
-    SH_HDR  = 44;  SH_R1  = 45;  SH_R2  = 46
+    SH_HDR  = 44;  SH_R1  = 45;  SH_R2  = 45 + len(SHIFTS) - 1
 
     # ── CHART 1: Monthly trend — Line chart ──────────────────────
     ch1 = LineChart()
@@ -2133,23 +2123,16 @@ Public Sub SaveKassa()
         Exit Sub
     End If
 
-    ' Найти последнюю строку в БАЗА_ДДС
-    Dim lastRow As Long
-    lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 6 Then lastRow = 5
-    If lastRow + 3 > 3005 Then
-        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
-               "Удалите старые записи или расширьте таблицу.", _
-               vbCritical, "Нет места"
-        Exit Sub
-    End If
+    ' Добавляем строки через ListObject — таблица расширяется автоматически
+    Dim tblB As ListObject
+    Set tblB = wsB.ListObjects("tblБаза")
 
-    ' 3 Приход-строки (Наличные, Карта, Перевод) — всегда пишем все 3
+    ' 3 Приход-строки (Наличные, Карта, Перевод)
     Dim methods As Variant, i As Long, r As Long
     Dim factVal As Double, zVal As Double, discVal As Double
     methods = Array("Наличные", "Карта", "Перевод")
     For i = 0 To 2
-        r = lastRow + 1 + i
+        r = tblB.ListRows.Add.Range.Row
         zVal    = CDbl(Nz(wsK.Cells(8 + i, 2).Value))
         factVal = CDbl(Nz(wsK.Cells(8 + i, 3).Value))
         discVal = factVal - zVal
@@ -2161,16 +2144,30 @@ Public Sub SaveKassa()
         wsB.Cells(r, 5).Value = "Продажи"
         wsB.Cells(r, 6).Value = methods(i)
         wsB.Cells(r, 7).Value = factVal
-        If discVal <> 0 Then
-            wsB.Cells(r, 8).Value = discVal
-        End If
+        If discVal <> 0 Then wsB.Cells(r, 8).Value = discVal
         wsB.Cells(r, 9).Value = ""
-
-        ' Форматирование
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
         wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
+
+    ' Выплата из кассы (D14) — если сумма > 0
+    Dim vyplAmt As Double
+    vyplAmt = CDbl(Nz(wsK.Range("D14").Value))
+    If vyplAmt > 0 Then
+        r = tblB.ListRows.Add.Range.Row
+        wsB.Cells(r, 1).Value = CDate(dtVal)
+        wsB.Cells(r, 2).Value = shVal
+        wsB.Cells(r, 3).Value = cashVal
+        wsB.Cells(r, 4).Value = "Расход"
+        wsB.Cells(r, 5).Value = "Выплата"
+        wsB.Cells(r, 6).Value = "Наличные"
+        wsB.Cells(r, 7).Value = vyplAmt
+        wsB.Cells(r, 8).Value = ""
+        wsB.Cells(r, 9).Value = "Выплата из кассы"
+        wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
+        wsB.Cells(r, 7).NumberFormat = "#,##0"
+    End If
 
     ' Очистить форму
     wsK.Range("B3").ClearContents
@@ -2180,8 +2177,9 @@ Public Sub SaveKassa()
         wsK.Cells(i, 2).Value = 0
         wsK.Cells(i, 3).Value = 0
     Next i
+    wsK.Range("D14").Value = 0
 
-    MsgBox "Сохранено 3 строки в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
+    MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
            & " (" & shVal & ", " & cashVal & ")", _
            vbInformation, "Касса сохранена"
 End Sub
@@ -2219,16 +2217,9 @@ Public Sub SaveRashod()
         Exit Sub
     End If
 
-    Dim lastRow As Long
-    lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 6 Then lastRow = 5
-    If lastRow + 1 > 3005 Then
-        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
-               "Удалите старые записи или расширьте таблицу.", _
-               vbCritical, "Нет места"
-        Exit Sub
-    End If
-    Dim r As Long: r = lastRow + 1
+    Dim tblB As ListObject
+    Set tblB = wsB.ListObjects("tblБаза")
+    Dim r As Long
 
     If rashSum > 0 Then
         ' Обычный расход
@@ -2244,6 +2235,7 @@ Public Sub SaveRashod()
             Exit Sub
         End If
 
+        r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
         wsB.Cells(r, 2).Value = ""
         wsB.Cells(r, 3).Value = ""
@@ -2265,15 +2257,16 @@ Public Sub SaveRashod()
             Exit Sub
         End If
 
+        r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
         wsB.Cells(r, 2).Value = ""
         wsB.Cells(r, 3).Value = ""
         wsB.Cells(r, 4).Value = "Долг"
         wsB.Cells(r, 5).Value = "Закуп товара"
-        wsB.Cells(r, 6).Value = supVal
+        wsB.Cells(r, 6).Value = "Перевод"
         wsB.Cells(r, 7).Value = dolgSum
         wsB.Cells(r, 8).Value = ""
-        wsB.Cells(r, 9).Value = "Закуп в долг"
+        wsB.Cells(r, 9).Value = supVal
 
         MsgBox "Закуп в долг сохранён: " & Format(dolgSum, "#,##0") & " " & ChrW(8381) & _
                " (" & supVal & ")" & vbCrLf & vbCrLf & _
@@ -2430,7 +2423,21 @@ End Sub
 ' ── Публичные методы — вызываются из Worksheet_Change листов ──
 
 Public Sub AC_Kassa(inputCell As Range)
-    Call AC_DoFilter(inputCell, Array("Айгуль", "Зарина", "Данияр"), AC_COL_KASSA)
+    ' Читаем кассиров из Настройки столбец I (динамически — редактируй там)
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim n As Long, i As Long
+    n = 0
+    Do While Len(CStr(wsS.Cells(n + 1, AC_COL_KASSA).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(i + 1, AC_COL_KASSA).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_KASSA)
 End Sub
 
 Public Sub AC_Category(inputCell As Range)
@@ -2440,9 +2447,23 @@ Public Sub AC_Category(inputCell As Range)
 End Sub
 
 Public Sub AC_Supplier(inputCell As Range)
-    Call AC_DoFilter(inputCell, _
-        Array("ТД Метро", "Лента", "Вкусвилл", "Магнит", "Х5 Ритейл", "Юнилевер"), _
-        AC_COL_SUP)
+    ' Читаем поставщиков из Настройки P9 (столбец C, строки 79+)
+    ' Добавляй новых поставщиков прямо в таблицу Настройки — список бесконечный
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 79
+    n = 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 3).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(startRow + i, 3).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_SUP)
 End Sub
 
 
@@ -3486,7 +3507,7 @@ def inject_button_shapes(xlsx_path):
             {"id": 1, "name": "Btn_SaveKassa",
              "caption": "СОХРАНИТЬ КАССУ",
              "macro": "FinKontrolMacros.SaveKassa",
-             "fc": 0, "fr": 15, "tc": 7, "tr": 16, "color": "059669", "sz": 1400},
+             "fc": 0, "fr": 16, "tc": 7, "tr": 17, "color": "059669", "sz": 1400},
             {"id": 2, "name": "Btn_TodayKassa",
              "caption": "СЕГОДНЯ",
              "macro": "FinKontrolMacros.InsertToday_Kassa",

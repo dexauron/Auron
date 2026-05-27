@@ -52,23 +52,16 @@ Public Sub SaveKassa()
         Exit Sub
     End If
 
-    ' Найти последнюю строку в БАЗА_ДДС
-    Dim lastRow As Long
-    lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 6 Then lastRow = 5
-    If lastRow + 3 > 3005 Then
-        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
-               "Удалите старые записи или расширьте таблицу.", _
-               vbCritical, "Нет места"
-        Exit Sub
-    End If
+    ' Добавляем строки через ListObject — таблица расширяется автоматически
+    Dim tblB As ListObject
+    Set tblB = wsB.ListObjects("tblБаза")
 
-    ' 3 Приход-строки (Наличные, Карта, Перевод) — всегда пишем все 3
+    ' 3 Приход-строки (Наличные, Карта, Перевод)
     Dim methods As Variant, i As Long, r As Long
     Dim factVal As Double, zVal As Double, discVal As Double
     methods = Array("Наличные", "Карта", "Перевод")
     For i = 0 To 2
-        r = lastRow + 1 + i
+        r = tblB.ListRows.Add.Range.Row
         zVal    = CDbl(Nz(wsK.Cells(8 + i, 2).Value))
         factVal = CDbl(Nz(wsK.Cells(8 + i, 3).Value))
         discVal = factVal - zVal
@@ -80,16 +73,30 @@ Public Sub SaveKassa()
         wsB.Cells(r, 5).Value = "Продажи"
         wsB.Cells(r, 6).Value = methods(i)
         wsB.Cells(r, 7).Value = factVal
-        If discVal <> 0 Then
-            wsB.Cells(r, 8).Value = discVal
-        End If
+        If discVal <> 0 Then wsB.Cells(r, 8).Value = discVal
         wsB.Cells(r, 9).Value = ""
-
-        ' Форматирование
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
         wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
+
+    ' Выплата из кассы (D14) — если сумма > 0
+    Dim vyplAmt As Double
+    vyplAmt = CDbl(Nz(wsK.Range("D14").Value))
+    If vyplAmt > 0 Then
+        r = tblB.ListRows.Add.Range.Row
+        wsB.Cells(r, 1).Value = CDate(dtVal)
+        wsB.Cells(r, 2).Value = shVal
+        wsB.Cells(r, 3).Value = cashVal
+        wsB.Cells(r, 4).Value = "Расход"
+        wsB.Cells(r, 5).Value = "Выплата"
+        wsB.Cells(r, 6).Value = "Наличные"
+        wsB.Cells(r, 7).Value = vyplAmt
+        wsB.Cells(r, 8).Value = ""
+        wsB.Cells(r, 9).Value = "Выплата из кассы"
+        wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
+        wsB.Cells(r, 7).NumberFormat = "#,##0"
+    End If
 
     ' Очистить форму
     wsK.Range("B3").ClearContents
@@ -99,8 +106,9 @@ Public Sub SaveKassa()
         wsK.Cells(i, 2).Value = 0
         wsK.Cells(i, 3).Value = 0
     Next i
+    wsK.Range("D14").Value = 0
 
-    MsgBox "Сохранено 3 строки в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
+    MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
            & " (" & shVal & ", " & cashVal & ")", _
            vbInformation, "Касса сохранена"
 End Sub
@@ -138,16 +146,9 @@ Public Sub SaveRashod()
         Exit Sub
     End If
 
-    Dim lastRow As Long
-    lastRow = wsB.Cells(wsB.Rows.Count, 1).End(xlUp).Row
-    If lastRow < 6 Then lastRow = 5
-    If lastRow + 1 > 3005 Then
-        MsgBox "Таблица БАЗА_ДДС заполнена (строки 5-3005)." & vbCrLf & _
-               "Удалите старые записи или расширьте таблицу.", _
-               vbCritical, "Нет места"
-        Exit Sub
-    End If
-    Dim r As Long: r = lastRow + 1
+    Dim tblB As ListObject
+    Set tblB = wsB.ListObjects("tblБаза")
+    Dim r As Long
 
     If rashSum > 0 Then
         ' Обычный расход
@@ -163,6 +164,7 @@ Public Sub SaveRashod()
             Exit Sub
         End If
 
+        r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
         wsB.Cells(r, 2).Value = ""
         wsB.Cells(r, 3).Value = ""
@@ -184,15 +186,16 @@ Public Sub SaveRashod()
             Exit Sub
         End If
 
+        r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
         wsB.Cells(r, 2).Value = ""
         wsB.Cells(r, 3).Value = ""
         wsB.Cells(r, 4).Value = "Долг"
         wsB.Cells(r, 5).Value = "Закуп товара"
-        wsB.Cells(r, 6).Value = supVal
+        wsB.Cells(r, 6).Value = "Перевод"
         wsB.Cells(r, 7).Value = dolgSum
         wsB.Cells(r, 8).Value = ""
-        wsB.Cells(r, 9).Value = "Закуп в долг"
+        wsB.Cells(r, 9).Value = supVal
 
         MsgBox "Закуп в долг сохранён: " & Format(dolgSum, "#,##0") & " " & ChrW(8381) & _
                " (" & supVal & ")" & vbCrLf & vbCrLf & _
@@ -349,7 +352,21 @@ End Sub
 ' -- Публичные методы — вызываются из Worksheet_Change листов --
 
 Public Sub AC_Kassa(inputCell As Range)
-    Call AC_DoFilter(inputCell, Array("Айгуль", "Зарина", "Данияр"), AC_COL_KASSA)
+    ' Читаем кассиров из Настройки столбец I (динамически — редактируй там)
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim n As Long, i As Long
+    n = 0
+    Do While Len(CStr(wsS.Cells(n + 1, AC_COL_KASSA).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(i + 1, AC_COL_KASSA).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_KASSA)
 End Sub
 
 Public Sub AC_Category(inputCell As Range)
@@ -359,9 +376,23 @@ Public Sub AC_Category(inputCell As Range)
 End Sub
 
 Public Sub AC_Supplier(inputCell As Range)
-    Call AC_DoFilter(inputCell, _
-        Array("ТД Метро", "Лента", "Вкусвилл", "Магнит", "Х5 Ритейл", "Юнилевер"), _
-        AC_COL_SUP)
+    ' Читаем поставщиков из Настройки P9 (столбец C, строки 79+)
+    ' Добавляй новых поставщиков прямо в таблицу Настройки — список бесконечный
+    Dim wsS As Worksheet
+    Set wsS = ThisWorkbook.Worksheets(SH_SETS)
+    Dim startRow As Long, n As Long, i As Long
+    startRow = 79
+    n = 0
+    Do While Len(CStr(wsS.Cells(startRow + n, 3).Value)) > 0
+        n = n + 1
+    Loop
+    If n = 0 Then Exit Sub
+    Dim lst() As String
+    ReDim lst(n - 1)
+    For i = 0 To n - 1
+        lst(i) = CStr(wsS.Cells(startRow + i, 3).Value)
+    Next i
+    Call AC_DoFilter(inputCell, lst, AC_COL_SUP)
 End Sub
 
 
