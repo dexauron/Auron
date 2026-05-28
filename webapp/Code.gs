@@ -3,7 +3,7 @@
 //  Deploy as Web App: Execute as Me, Access: Anyone
 // ═══════════════════════════════════════════════════════════════════════
 
-var SS_ID = '';  // Optional: hardcode your spreadsheet ID here
+var SS_ID = '1MkPEUT2XJlciHthlVcCyaZp_6A9rBAxayRC3i1I82hg';
 
 // ── Sheet names ──────────────────────────────────────────────────────────
 var SH_BASE     = 'БАЗА';
@@ -31,17 +31,7 @@ var SET_SUPPLIERS  = 'G2:G20';
 
 // ────────────────────────────────────────────────────────────────────────
 function getSpreadsheet() {
-  if (SS_ID) return SpreadsheetApp.openById(SS_ID);
-
-  // Standalone script: reuse or auto-create a spreadsheet
-  var props = PropertiesService.getScriptProperties();
-  var storedId = props.getProperty('SPREADSHEET_ID');
-  if (storedId) {
-    try { return SpreadsheetApp.openById(storedId); } catch(e) {}
-  }
-  var ss = SpreadsheetApp.create('Финансовый контроль — Данные');
-  props.setProperty('SPREADSHEET_ID', ss.getId());
-  return ss;
+  return SpreadsheetApp.openById(SS_ID);
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────
