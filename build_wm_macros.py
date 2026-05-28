@@ -529,16 +529,27 @@ def build_vvod_kassa(ws):
     _form_label(ws, 13, 4, "  Комментарий:", bg=GRAY_M, size=11)
     _form_input(ws, 13, 5, value="", ncols=3)
 
-    # Row 14: Выплата из кассы — сумма (D14) + кому/цель (G14)
+    # Row 14: Выплата из кассы (только сумма, D14:G14)
     ws.row_dimensions[14].height = 30
     _form_label(ws, 14, 1, "  Выплата из кассы:", ncols=3, bg=AMBER, fg=WHITE, size=11)
-    _form_input(ws, 14, 4, value=0, ncols=2, fmt=FMT_RUB, halign="right")   # D14:E14
-    _form_label(ws, 14, 6, "  Кому / цель:", bg=GRAY_M, size=10)             # F14
-    _form_input(ws, 14, 7, value="")                                           # G14
+    _form_input(ws, 14, 4, value=0, ncols=4, fmt=FMT_RUB, halign="right")   # D14:G14
 
-    # Rows 15-16: spacer
-    ws.row_dimensions[15].height = 12
-    ws.row_dimensions[16].height = 12
+    # Row 15: Проверка баланса — Факт Наличные + Выплата vs Z-отчёт Наличные
+    # Формула: (C8 + D14) - B8 = 0 означает баланс (выплата объясняет расхождение)
+    ws.row_dimensions[15].height = 28
+    _form_label(ws, 15, 1, "  Баланс (Факт+Выплата−Z):", ncols=3, bg=TEAL_M, fg=WHITE, size=10)
+    ws.merge_cells(start_row=15, start_column=4, end_row=15, end_column=7)
+    c = ws.cell(15, 4, "=(C8+D14)-B8")
+    c.fill = mkfill(WHITE)
+    c.font = mkfont(NAVY, 13, True)
+    c.alignment = mkalign("center", "center")
+    c.border = mkborder()
+    # 0 = green ✓, positive surplus = black, negative = red deficit
+    # 0=green ✓ Баланс, positive=surplus (black), negative=deficit (red)
+    c.number_format = '#,##0 ₽;[Red]-#,##0 ₽;[Green]"✓ Баланс"'
+
+    # Row 16: spacer
+    ws.row_dimensions[16].height = 10
 
     # Row 17: SAVE button (large, merged across A:G)
     ws.row_dimensions[17].height = 44
@@ -2240,10 +2251,9 @@ Public Sub SaveKassa()
         wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
 
-    ' Выплата из кассы (D14) — если сумма > 0; получатель/цель в G14
-    Dim vyplAmt As Double, vyplKomu As String
-    vyplAmt  = CDbl(Nz(wsK.Range("D14").Value))
-    vyplKomu = Trim(CStr(wsK.Range("G14").Value))
+    ' Выплата из кассы (D14) — если сумма > 0
+    Dim vyplAmt As Double
+    vyplAmt = CDbl(Nz(wsK.Range("D14").Value))
     If vyplAmt > 0 Then
         r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
@@ -2254,7 +2264,7 @@ Public Sub SaveKassa()
         wsB.Cells(r, 6).Value = "Наличные"
         wsB.Cells(r, 7).Value = vyplAmt
         wsB.Cells(r, 8).Value = ""
-        wsB.Cells(r, 9).Value = IIf(Len(vyplKomu) > 0, "Выплата: " & vyplKomu, "Выплата из кассы")
+        wsB.Cells(r, 9).Value = "Выплата из кассы"
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
     End If
@@ -2268,7 +2278,6 @@ Public Sub SaveKassa()
         wsK.Cells(i, 3).Value = 0
     Next i
     wsK.Range("D14").Value = 0
-    wsK.Range("G14").ClearContents
     wsK.Range("E13").ClearContents
 
     MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _

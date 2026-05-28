@@ -81,10 +81,9 @@ Public Sub SaveKassa()
         wsB.Cells(r, 8).NumberFormat = "#,##0"
     Next i
 
-    ' Выплата из кассы (D14) — если сумма > 0; получатель/цель в G14
-    Dim vyplAmt As Double, vyplKomu As String
-    vyplAmt  = CDbl(Nz(wsK.Range("D14").Value))
-    vyplKomu = Trim(CStr(wsK.Range("G14").Value))
+    ' Выплата из кассы (D14) — если сумма > 0
+    Dim vyplAmt As Double
+    vyplAmt = CDbl(Nz(wsK.Range("D14").Value))
     If vyplAmt > 0 Then
         r = tblB.ListRows.Add.Range.Row
         wsB.Cells(r, 1).Value = CDate(dtVal)
@@ -95,7 +94,7 @@ Public Sub SaveKassa()
         wsB.Cells(r, 6).Value = "Наличные"
         wsB.Cells(r, 7).Value = vyplAmt
         wsB.Cells(r, 8).Value = ""
-        wsB.Cells(r, 9).Value = IIf(Len(vyplKomu) > 0, "Выплата: " & vyplKomu, "Выплата из кассы")
+        wsB.Cells(r, 9).Value = "Выплата из кассы"
         wsB.Cells(r, 1).NumberFormat = "DD.MM.YYYY"
         wsB.Cells(r, 7).NumberFormat = "#,##0"
     End If
@@ -109,7 +108,6 @@ Public Sub SaveKassa()
         wsK.Cells(i, 3).Value = 0
     Next i
     wsK.Range("D14").Value = 0
-    wsK.Range("G14").ClearContents
     wsK.Range("E13").ClearContents
 
     MsgBox "Сохранено в БАЗА_ДДС за " & Format(dtVal, "DD.MM.YYYY") _
