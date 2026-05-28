@@ -34,18 +34,11 @@ function getSpreadsheet() {
   return SpreadsheetApp.openById(SS_ID);
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────
+// ── Entry point — just serves HTML, zero spreadsheet calls here ──────────
 function doGet(e) {
-  try {
-    ensureSheets();
-  } catch(err) {
-    // Non-fatal — page still loads, data calls will surface errors
-  }
-  var tpl = HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Финансовый контроль')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1');
-  tpl.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-  return tpl;
 }
 
 // ── Sheet bootstrap ──────────────────────────────────────────────────────
