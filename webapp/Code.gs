@@ -3,7 +3,7 @@
 //  Deploy as Web App: Execute as Me, Access: Anyone
 // ═══════════════════════════════════════════════════════════════════════
 
-var SS_ID = '';  // Leave empty to use active spreadsheet, or set your sheet ID
+var SS_ID = '';  // Optional: hardcode your spreadsheet ID here
 
 // ── Sheet names ──────────────────────────────────────────────────────────
 var SH_BASE     = 'БАЗА';
@@ -32,12 +32,25 @@ var SET_SUPPLIERS  = 'G2:G20';
 // ────────────────────────────────────────────────────────────────────────
 function getSpreadsheet() {
   if (SS_ID) return SpreadsheetApp.openById(SS_ID);
-  return SpreadsheetApp.getActiveSpreadsheet();
+
+  // Standalone script: reuse or auto-create a spreadsheet
+  var props = PropertiesService.getScriptProperties();
+  var storedId = props.getProperty('SPREADSHEET_ID');
+  if (storedId) {
+    try { return SpreadsheetApp.openById(storedId); } catch(e) {}
+  }
+  var ss = SpreadsheetApp.create('Финансовый контроль — Данные');
+  props.setProperty('SPREADSHEET_ID', ss.getId());
+  return ss;
 }
 
 // ── Entry point ──────────────────────────────────────────────────────────
 function doGet(e) {
-  ensureSheets();
+  try {
+    ensureSheets();
+  } catch(err) {
+    // Non-fatal — page still loads, data calls will surface errors
+  }
   var tpl = HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Финансовый контроль')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1');
