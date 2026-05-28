@@ -186,7 +186,7 @@ function saveKassa(data) {
 }
 
 // ── Save expense ─────────────────────────────────────────────────────────
-// data = { date, shift, cashier, category, payType, amount, supplier, comment }
+// data = { date, category, payType, amount, comment }
 function saveExpense(data) {
   try {
     ensureSheets();
@@ -196,14 +196,14 @@ function saveExpense(data) {
 
     var row = [
       dt,
-      data.shift,
-      data.cashier,
+      '',
+      '',
       'Расход',
       data.category,
       data.payType,
       parseFloat(data.amount) || 0,
       0,
-      (data.supplier ? data.supplier + '. ' : '') + (data.comment || '')
+      data.comment || ''
     ];
 
     var lastRow = base.getLastRow();
@@ -212,6 +212,158 @@ function saveExpense(data) {
     base.getRange(lastRow + 1, COL_AMOUNT, 1, 1).setNumberFormat('#,##0');
 
     return { ok: true };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ── Seed sample data (~12 months of realistic retail data) ───────────────
+function seedSampleData() {
+  try {
+    ensureSheets();
+    var ss   = getSpreadsheet();
+    var base = ss.getSheetByName(SH_BASE);
+
+    // Clear existing data (keep header row 1)
+    var lastRow = base.getLastRow();
+    if (lastRow > 1) {
+      base.deleteRows(2, lastRow - 1);
+    }
+
+    var cashiers    = ['Иванова А.', 'Петрова Б.', 'Сидорова В.'];
+    var expCats     = ['Аренда', 'ЗП', 'Закупка', 'Хозрасходы', 'Прочий расход'];
+    var expPayTypes = ['Наличные', 'Карта', 'Безналичный'];
+
+    // Track monthly caps for Аренда and ЗП
+    var monthArenda = {}; // monthKey → true if Аренда already written
+    var monthZP     = {}; // monthKey → count of ЗП written (max 2)
+
+    var rows = [];
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Start from 12 months ago
+    var startDate = new Date(today);
+    startDate.setMonth(startDate.getMonth() - 12);
+    startDate.setDate(1);
+
+    function rnd(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+    function rndFloat(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+    function pick(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    var cur = new Date(startDate);
+    while (cur <= today) {
+      var dayOfMonth = cur.getDate();
+      var monthKey = Utilities.formatDate(cur, Session.getScriptTimeZone(), 'yyyy-MM');
+
+      // Determine shifts for the day: 80% → 2 shifts (Утро+Вечер), 20% → 1 shift (Утро only)
+      var dayShifts = (Math.random() < 0.80) ? ['Утро', 'Вечер'] : ['Утро'];
+
+      // ── Касса rows ────────────────────────────────────────────────
+      dayShifts.forEach(function(shiftName) {
+        var cashier = pick(cashiers);
+        // Total shift revenue: 40000–150000
+        var totalRev = rnd(40000, 150000);
+        // Split: ~40% Наличные, ~40% Карта, ~20% СБП
+        var nalPct  = rndFloat(0.32, 0.48);
+        var cardPct = rndFloat(0.32, 0.48);
+        var sbpPct  = 1 - nalPct - cardPct;
+
+        var zNal  = Math.round(totalRev * nalPct);
+        var zCard = Math.round(totalRev * cardPct);
+        var zSBP  = Math.round(totalRev * sbpPct);
+
+        // 20% chance of cash discrepancy in Наличные row only
+        var discNal = 0;
+        if (Math.random() < 0.20) {
+          discNal = rnd(-2000, 2000);
+          if (discNal === 0) discNal = rnd(200, 500);
+        }
+
+        var dtCopy = new Date(cur.getTime());
+
+        // Приход rows: Наличные, Карта, СБП
+        rows.push([dtCopy, shiftName, cashier, 'Приход', 'Z-отчёт', 'Наличные', zNal,  discNal, '']);
+        rows.push([dtCopy, shiftName, cashier, 'Приход', 'Z-отчёт', 'Карта',    zCard, 0,       '']);
+        rows.push([dtCopy, shiftName, cashier, 'Приход', 'Z-отчёт', 'СБП',      zSBP,  0,       '']);
+
+        // 15% chance of payout (Расход / Выплата)
+        if (Math.random() < 0.15) {
+          var vyplata = rnd(1000, 8000);
+          rows.push([dtCopy, shiftName, cashier, 'Расход', 'Выплата', 'Наличные', vyplata, 0, 'Выплата из кассы']);
+        }
+      });
+
+      // ── Expense rows ─────────────────────────────────────────────
+      // 2–3 expense rows per day
+      var expCount = rnd(2, 3);
+      for (var ei = 0; ei < expCount; ei++) {
+        // Pick category with special rules
+        var cat = null;
+        var amount = 0;
+        var payType = pick(expPayTypes);
+        var attempt = 0;
+
+        while (cat === null && attempt < 10) {
+          attempt++;
+          var candidate = pick(expCats);
+
+          if (candidate === 'Аренда') {
+            // Only once per month, and only on days 1–5
+            if (!monthArenda[monthKey] && dayOfMonth >= 1 && dayOfMonth <= 5) {
+              cat    = candidate;
+              amount = rnd(60000, 120000);
+              monthArenda[monthKey] = true;
+            }
+          } else if (candidate === 'ЗП') {
+            // Only 2× per month
+            if (!monthZP[monthKey]) monthZP[monthKey] = 0;
+            if (monthZP[monthKey] < 2) {
+              cat    = candidate;
+              amount = rnd(15000, 35000);
+              monthZP[monthKey]++;
+            }
+          } else if (candidate === 'Закупка') {
+            cat    = candidate;
+            amount = rnd(5000, 40000);
+          } else {
+            // Хозрасходы / Прочий расход
+            cat    = candidate;
+            amount = rnd(500, 8000);
+          }
+        }
+
+        // Fallback if constraints prevent selection (e.g., Аренда already done)
+        if (cat === null) {
+          cat    = (Math.random() < 0.5) ? 'Хозрасходы' : 'Прочий расход';
+          amount = rnd(500, 8000);
+        }
+
+        var dtExp = new Date(cur.getTime());
+        rows.push([dtExp, '', '', 'Расход', cat, payType, amount, 0, '']);
+      }
+
+      // Advance to next day
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    // Write all rows at once
+    if (rows.length > 0) {
+      base.getRange(2, 1, rows.length, 9).setValues(rows);
+
+      // Format date column
+      base.getRange(2, COL_DATE,   rows.length, 1).setNumberFormat('dd.mm.yyyy');
+      base.getRange(2, COL_AMOUNT, rows.length, 1).setNumberFormat('#,##0');
+      base.getRange(2, COL_DISC,   rows.length, 1).setNumberFormat('#,##0;[Red]-#,##0;"✓"');
+    }
+
+    return { ok: true, rows: rows.length };
   } catch(e) {
     return { ok: false, error: e.message };
   }

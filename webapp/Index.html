@@ -93,6 +93,7 @@ input[type="date"].form-control{cursor:pointer}
 .btn-primary:active{opacity:.75}
 .btn-primary:disabled{opacity:.4;cursor:default}
 .btn-danger{background:var(--danger)}
+.btn-secondary{background:var(--label3)}
 
 /* ── KPI tiles ──────────────────────────────────────────────────── */
 .kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:0}
@@ -166,6 +167,29 @@ table tr:nth-child(even) td{background:rgba(0,0,0,.018)}
 /* ── Settings hint ───────────────────────────────────────────────── */
 .sheet-hint{background:rgba(11,79,84,.08);border-radius:10px;padding:12px 14px;font-size:13px;color:var(--primary);margin-bottom:16px;line-height:1.5}
 .sheet-hint strong{font-weight:700}
+
+/* ── Report panel ────────────────────────────────────────────────── */
+.report-header{text-align:center;margin-bottom:20px;padding:16px}
+.report-header h1{font-size:20px;font-weight:700;color:var(--primary);margin-bottom:4px}
+.report-header p{font-size:14px;color:var(--label3)}
+.report-section{margin-bottom:16px}
+.report-section-title{font-size:13px;font-weight:600;color:var(--label3);text-transform:uppercase;letter-spacing:.5px;padding:0 4px 8px}
+.report-summary-table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.report-summary-table td{padding:12px 16px;border-bottom:1px solid var(--separator);font-size:15px}
+.report-summary-table td:first-child{color:var(--label2);font-weight:500}
+.report-summary-table td:last-child{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.report-summary-table tr:last-child td{border-bottom:none}
+
+/* ── Print styles ────────────────────────────────────────────────── */
+@media print {
+  .tab-bar, .nav-bar, .period-bar, .btn-primary, #btnPrint, #btnSeed { display: none !important; }
+  .content { overflow: visible !important; padding-bottom: 0 !important; }
+  body { background: white; overflow: auto; }
+  .card, .chart-wrap { box-shadow: none; border: 1px solid #ddd; }
+  .report-header { text-align: center; margin-bottom: 20px; }
+  #panel-report { display: block !important; padding: 0; }
+  table { page-break-inside: avoid; }
+}
 </style>
 </head>
 <body>
@@ -278,24 +302,12 @@ table tr:nth-child(even) td{background:rgba(0,0,0,.018)}
 
     <!-- ══ РАСХОДЫ panel ═══════════════════════════════════════════ -->
     <div class="panel" id="panel-expenses">
-      <div class="section-hdr">Основное</div>
+      <div class="section-hdr">Расход</div>
       <div class="card">
         <div class="form-row">
           <span class="form-label">Дата</span>
           <input class="form-control" type="date" id="e_date">
         </div>
-        <div class="form-row">
-          <span class="form-label">Смена</span>
-          <select class="form-control" id="e_shift"></select>
-        </div>
-        <div class="form-row">
-          <span class="form-label">Кассир</span>
-          <select class="form-control" id="e_cashier"></select>
-        </div>
-      </div>
-
-      <div class="section-hdr">Расход</div>
-      <div class="card">
         <div class="form-row">
           <span class="form-label">Категория</span>
           <select class="form-control" id="e_category"></select>
@@ -309,12 +321,6 @@ table tr:nth-child(even) td{background:rgba(0,0,0,.018)}
           <input class="form-control" type="number" inputmode="decimal" id="e_amount" placeholder="0" min="0" step="0.01" style="font-weight:600">
         </div>
         <div class="form-row">
-          <span class="form-label">Поставщик</span>
-          <select class="form-control" id="e_supplier">
-            <option value="">— не указан —</option>
-          </select>
-        </div>
-        <div class="form-row">
           <span class="form-label">Примечание</span>
           <input class="form-control" type="text" id="e_comment" placeholder="Необязательно…" style="text-align:left">
         </div>
@@ -326,10 +332,10 @@ table tr:nth-child(even) td{background:rgba(0,0,0,.018)}
     <!-- ══ ДАШБОРД panel ══════════════════════════════════════════ -->
     <div class="panel" id="panel-dashboard">
       <div class="period-bar">
-        <button class="period-btn active" data-period="week"   onclick="setPeriod('week',this)">7 дней</button>
-        <button class="period-btn"        data-period="month"  onclick="setPeriod('month',this)">Месяц</button>
-        <button class="period-btn"        data-period="quarter"onclick="setPeriod('quarter',this)">Квартал</button>
-        <button class="period-btn"        data-period="all"    onclick="setPeriod('all',this)">Всё</button>
+        <button class="period-btn active" data-period="week"    onclick="setPeriod('week',this)">7 дней</button>
+        <button class="period-btn"        data-period="month"   onclick="setPeriod('month',this)">Месяц</button>
+        <button class="period-btn"        data-period="quarter" onclick="setPeriod('quarter',this)">Квартал</button>
+        <button class="period-btn"        data-period="all"     onclick="setPeriod('all',this)">Всё</button>
       </div>
 
       <div id="dashContent">
@@ -352,25 +358,50 @@ table tr:nth-child(even) td{background:rgba(0,0,0,.018)}
       </div>
     </div>
 
+    <!-- ══ ОТЧЁТ panel ════════════════════════════════════════════ -->
+    <div class="panel" id="panel-report">
+      <div class="period-bar">
+        <button class="period-btn"        data-rperiod="week"    onclick="setReportPeriod('week',this)">7 дней</button>
+        <button class="period-btn"        data-rperiod="month"   onclick="setReportPeriod('month',this)">Месяц</button>
+        <button class="period-btn"        data-rperiod="quarter" onclick="setReportPeriod('quarter',this)">Квартал</button>
+        <button class="period-btn active" data-rperiod="all"     onclick="setReportPeriod('all',this)">Всё</button>
+      </div>
+
+      <button class="btn-primary" id="btnPrint" onclick="window.print()" style="margin-top:0;margin-bottom:12px">🖨️ Печать / Сохранить PDF</button>
+      <button class="btn-primary btn-secondary" id="btnSeed" onclick="seedData()" style="margin-top:0;margin-bottom:16px">Загрузить тестовые данные</button>
+
+      <div id="reportContent">
+        <div class="empty-state">
+          <div class="empty-icon">🖨️</div>
+          <div class="empty-title">Отчёт</div>
+          <div class="empty-sub">Загрузка…</div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 
   <!-- Tab bar -->
   <div class="tab-bar">
-    <button class="tab-item active" id="tab-kassa"    onclick="switchTab('kassa')">
+    <button class="tab-item active" id="tab-kassa"     onclick="switchTab('kassa')">
       <span class="tab-icon">🧾</span>
       <span class="tab-label">Касса</span>
     </button>
-    <button class="tab-item" id="tab-expenses"  onclick="switchTab('expenses')">
+    <button class="tab-item" id="tab-expenses"   onclick="switchTab('expenses')">
       <span class="tab-icon">💸</span>
       <span class="tab-label">Расходы</span>
     </button>
-    <button class="tab-item" id="tab-dashboard" onclick="switchTab('dashboard')">
+    <button class="tab-item" id="tab-dashboard"  onclick="switchTab('dashboard')">
       <span class="tab-icon">📊</span>
       <span class="tab-label">Дашборд</span>
     </button>
-    <button class="tab-item" id="tab-history"   onclick="switchTab('history')">
+    <button class="tab-item" id="tab-history"    onclick="switchTab('history')">
       <span class="tab-icon">📋</span>
       <span class="tab-label">История</span>
+    </button>
+    <button class="tab-item" id="tab-report"     onclick="switchTab('report')">
+      <span class="tab-icon">🖨️</span>
+      <span class="tab-label">Отчёт</span>
     </button>
   </div>
 </div><!-- /app -->
@@ -395,7 +426,9 @@ var state = {
   settings: null,
   currentTab: 'kassa',
   period: 'week',
+  reportPeriod: 'all',
   dashData: null,
+  reportData: null,
   chartsRendered: { monthly: null, payMethods: null, expenses: null }
 };
 
@@ -468,24 +501,13 @@ function populateDefaults() {
 function populateSelects(s) {
   fillSelect('k_shift',    s.shifts   || []);
   fillSelect('k_cashier',  s.cashiers || []);
-  fillSelect('e_shift',    s.shifts   || []);
-  fillSelect('e_cashier',  s.cashiers || []);
   fillSelect('e_category', s.catsOut  || []);
   fillSelect('e_payType',  s.payTypes || []);
-
-  var supSel = document.getElementById('e_supplier');
-  var existing = Array.from(supSel.options).map(function(o){return o.value;});
-  (s.suppliers || []).forEach(function(sup) {
-    if (sup && !existing.includes(sup)) {
-      var opt = document.createElement('option');
-      opt.value = opt.textContent = sup;
-      supSel.appendChild(opt);
-    }
-  });
 }
 
 function fillSelect(id, items) {
   var sel = document.getElementById(id);
+  if (!sel) return;
   sel.innerHTML = '';
   items.forEach(function(v) {
     var o = document.createElement('option');
@@ -506,6 +528,7 @@ function switchTab(tab) {
 
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'history')   loadHistory();
+  if (tab === 'report')    loadReport();
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -622,20 +645,19 @@ function resetKassaForm() {
 // ═══════════════════════════════════════════════════════════
 function saveExpense() {
   var date     = document.getElementById('e_date').value;
-  var shift    = document.getElementById('e_shift').value;
-  var cashier  = document.getElementById('e_cashier').value;
   var category = document.getElementById('e_category').value;
   var payType  = document.getElementById('e_payType').value;
   var amount   = parseFloat(document.getElementById('e_amount').value) || 0;
 
-  if (!date)     { showToast('Выберите дату', true); return; }
-  if (!category) { showToast('Выберите категорию', true); return; }
+  if (!date)      { showToast('Выберите дату', true); return; }
+  if (!category)  { showToast('Выберите категорию', true); return; }
   if (amount <= 0){ showToast('Введите сумму', true); return; }
 
   var data = {
-    date: date, shift: shift, cashier: cashier,
-    category: category, payType: payType, amount: amount,
-    supplier: document.getElementById('e_supplier').value,
+    date:     date,
+    category: category,
+    payType:  payType,
+    amount:   amount,
     comment:  document.getElementById('e_comment').value.trim()
   };
 
@@ -668,7 +690,7 @@ function saveExpense() {
 // ═══════════════════════════════════════════════════════════
 function setPeriod(period, btn) {
   state.period = period;
-  document.querySelectorAll('.period-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelectorAll('#panel-dashboard .period-btn').forEach(function(b){ b.classList.remove('active'); });
   btn.classList.add('active');
   state.dashData = null;
   loadDashboard();
@@ -823,7 +845,7 @@ function renderMonthlyChart(months) {
         x: { grid: { display: false }, ticks: { font: { size: 11 } } },
         y: { grid: { color: 'rgba(0,0,0,0.05)' },
              ticks: { font: { size: 11 },
-                      callback: function(v){ return v>=1000 ? (v/1000)+'к' : v; } } }
+                      callback: function(val){ return val>=1000 ? (val/1000)+'к' : val; } } }
       }
     }
   });
@@ -916,6 +938,177 @@ function renderHistory(entries) {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  Report
+// ═══════════════════════════════════════════════════════════
+function setReportPeriod(period, btn) {
+  state.reportPeriod = period;
+  document.querySelectorAll('#panel-report .period-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  state.reportData = null;
+  loadReport();
+}
+
+function loadReport() {
+  if (state.reportData) { renderReport(state.reportData); return; }
+  var container = document.getElementById('reportContent');
+  container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+  var dates = getPeriodDates(state.reportPeriod);
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (!res || !res.ok) {
+        container.innerHTML = buildEmpty('Ошибка загрузки', (res && res.error) || 'Попробуйте позже');
+        return;
+      }
+      if (res.empty) {
+        container.innerHTML = buildEmpty('Данных нет', 'Загрузите тестовые данные или введите смену');
+        return;
+      }
+      state.reportData = res;
+      renderReport(res);
+    })
+    .withFailureHandler(function(err) {
+      container.innerHTML = buildEmpty('Нет соединения', err.message);
+    })
+    .getDashboardData(dates);
+}
+
+function renderReport(d) {
+  var kpi = d.kpi || {};
+  var html = '';
+
+  // Period label
+  var periodLabels = { week: '7 дней', month: 'Месяц', quarter: 'Квартал', all: 'Весь период' };
+  var periodLabel = periodLabels[state.reportPeriod] || 'Весь период';
+
+  // Report header
+  html += '<div class="report-header">';
+  html += '<h1>Финансовый контроль</h1>';
+  html += '<p>' + esc(periodLabel) + '</p>';
+  html += '</div>';
+
+  // a) Summary table
+  html += '<div class="report-section">';
+  html += '<div class="report-section-title">Сводка</div>';
+  html += '<table class="report-summary-table">';
+  html += '<tr><td>Выручка</td><td style="color:var(--primary)">' + fmt(kpi.revenue || 0) + ' ₽</td></tr>';
+  html += '<tr><td>Расходы</td><td style="color:var(--danger)">' + fmt(kpi.expense || 0) + ' ₽</td></tr>';
+  var profitColor = (kpi.profit || 0) >= 0 ? 'var(--accent)' : 'var(--danger)';
+  html += '<tr><td>Прибыль</td><td style="color:' + profitColor + '">' + fmt(kpi.profit || 0) + ' ₽</td></tr>';
+  html += '<tr><td>Расхождения</td><td style="color:var(--danger)">' + fmt(kpi.discAmt || 0) + ' ₽ (' + (kpi.discCount || 0) + ' шт)</td></tr>';
+  html += '</table>';
+  html += '</div>';
+
+  // b) By shift table
+  if (d.shifts && d.shifts.length > 0) {
+    html += '<div class="report-section">';
+    html += '<div class="report-section-title">По сменам</div>';
+    html += '<div class="card"><div class="tbl-wrap"><table>';
+    html += '<tr><th>Смена</th><th>Выручка</th><th>Расходы</th><th>Прибыль</th></tr>';
+    d.shifts.forEach(function(s) {
+      var profit = s.revenue - s.expense;
+      html += '<tr>' +
+        '<td>' + esc(s.shift) + '</td>' +
+        '<td class="td-num">' + fmt(s.revenue) + '</td>' +
+        '<td class="td-num td-red">' + fmt(s.expense) + '</td>' +
+        '<td class="td-num ' + (profit >= 0 ? 'td-green' : 'td-red') + '">' + fmt(profit) + '</td>' +
+        '</tr>';
+    });
+    html += '</table></div></div>';
+    html += '</div>';
+  }
+
+  // c) By payment method table
+  if (d.payMethods && d.payMethods.length > 0) {
+    var totalPay = d.payMethods.reduce(function(sum, m){ return sum + m.amount; }, 0);
+    html += '<div class="report-section">';
+    html += '<div class="report-section-title">По способам оплаты</div>';
+    html += '<div class="card"><div class="tbl-wrap"><table>';
+    html += '<tr><th>Способ</th><th>Сумма</th><th>%</th></tr>';
+    d.payMethods.forEach(function(m) {
+      var pct = totalPay > 0 ? Math.round(m.amount / totalPay * 100) : 0;
+      html += '<tr>' +
+        '<td>' + esc(m.method) + '</td>' +
+        '<td class="td-num">' + fmt(m.amount) + ' ₽</td>' +
+        '<td class="td-num">' + pct + '%</td>' +
+        '</tr>';
+    });
+    html += '</table></div></div>';
+    html += '</div>';
+  }
+
+  // d) By cashier table
+  if (d.cashiers && d.cashiers.length > 0) {
+    html += '<div class="report-section">';
+    html += '<div class="report-section-title">По кассирам</div>';
+    html += '<div class="card"><div class="tbl-wrap"><table>';
+    html += '<tr><th>Кассир</th><th>Смен всего</th><th>С расхождением</th><th>%</th><th>Сумма расх.</th></tr>';
+    d.cashiers.forEach(function(c) {
+      var hasDisc = c.shiftsDisc > 0;
+      html += '<tr>' +
+        '<td>' + esc(c.cashier) + '</td>' +
+        '<td class="td-num">' + c.shiftsTotal + '</td>' +
+        '<td class="td-num ' + (hasDisc ? 'td-red' : 'td-green') + '">' + c.shiftsDisc + '</td>' +
+        '<td class="td-num ' + (hasDisc ? 'td-red' : '') + '">' + c.discPct + '%</td>' +
+        '<td class="td-num ' + (hasDisc ? 'td-red' : 'td-green') + '">' + fmt(c.discAmount) + ' ₽</td>' +
+        '</tr>';
+    });
+    html += '</table></div></div>';
+    html += '</div>';
+  }
+
+  // e) By month table
+  if (d.months && d.months.length > 0) {
+    html += '<div class="report-section">';
+    html += '<div class="report-section-title">По месяцам</div>';
+    html += '<div class="card"><div class="tbl-wrap"><table>';
+    html += '<tr><th>Месяц</th><th>Выручка</th><th>Расходы</th><th>Прибыль</th></tr>';
+    d.months.forEach(function(m) {
+      var profit = m.revenue - m.expense;
+      html += '<tr>' +
+        '<td>' + esc(m.label) + '</td>' +
+        '<td class="td-num">' + fmt(m.revenue) + '</td>' +
+        '<td class="td-num td-red">' + fmt(m.expense) + '</td>' +
+        '<td class="td-num ' + (profit >= 0 ? 'td-green' : 'td-red') + '">' + fmt(profit) + '</td>' +
+        '</tr>';
+    });
+    html += '</table></div></div>';
+    html += '</div>';
+  }
+
+  document.getElementById('reportContent').innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  Seed Data
+// ═══════════════════════════════════════════════════════════
+function seedData() {
+  showLoading('Генерация тестовых данных…');
+  var btn = document.getElementById('btnSeed');
+  if (btn) btn.disabled = true;
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      hideLoading();
+      if (btn) btn.disabled = false;
+      if (res && res.ok) {
+        showToast('Тестовые данные загружены (' + res.rows + ' записей)');
+        state.dashData   = null;
+        state.reportData = null;
+        loadReport();
+      } else {
+        showToast((res && res.error) || 'Ошибка генерации данных', true);
+      }
+    })
+    .withFailureHandler(function(err) {
+      hideLoading();
+      if (btn) btn.disabled = false;
+      showToast('Ошибка: ' + err.message, true);
+    })
+    .seedSampleData();
+}
+
+// ═══════════════════════════════════════════════════════════
 //  UI Helpers
 // ═══════════════════════════════════════════════════════════
 function showLoading(text) {
@@ -939,6 +1132,7 @@ function showToast(msg, isError) {
 
 function setBtn(id, disabled) {
   var btn = document.getElementById(id);
+  if (!btn) return;
   btn.disabled = disabled;
   btn.textContent = disabled ? 'Сохранение…' : (id === 'btnSaveKassa' ? 'Сохранить смену' : 'Записать расход');
 }
