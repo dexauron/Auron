@@ -97,30 +97,28 @@ def set_widths(ws, pairs):
 
 
 def sheet_title(ws, text, subtitle="", ncols=9):
-    cl = get_column_letter(ncols)
-    ws.merge_cells(f"A1:{cl}1")
-    c = ws.cell(1, 1, text)
-    c.fill = mkfill(TEAL)
-    c.font = mkfont(WHITE, 16, True)
-    c.alignment = mkalign("left", "center")
+    for ci in range(1, ncols + 1):
+        c = ws.cell(1, ci, text if ci == 1 else None)
+        c.fill = mkfill(TEAL)
+        c.font = mkfont(WHITE, 16, True)
+        c.alignment = mkalign("left", "center")
     ws.row_dimensions[1].height = 38
     if subtitle:
-        ws.merge_cells(f"A2:{cl}2")
-        c = ws.cell(2, 1, subtitle)
-        c.fill = mkfill(TEAL_M)
-        c.font = mkfont(WHITE, 10)
-        c.alignment = mkalign("left", "center")
+        for ci in range(1, ncols + 1):
+            c = ws.cell(2, ci, subtitle if ci == 1 else None)
+            c.fill = mkfill(TEAL_M)
+            c.font = mkfont(WHITE, 10)
+            c.alignment = mkalign("left", "center")
         ws.row_dimensions[2].height = 20
 
 
 def sec_hdr(ws, row, text, size=11, bg=TEAL, fg=WHITE,
             ncols=9, height=22, bold=True):
-    ws.merge_cells(start_row=row, start_column=1,
-                   end_row=row, end_column=ncols)
-    c = ws.cell(row, 1, text)
-    c.fill = mkfill(bg)
-    c.font = mkfont(fg, size, bold)
-    c.alignment = mkalign("left", "center")
+    for ci in range(1, ncols + 1):
+        c = ws.cell(row, ci, text if ci == 1 else None)
+        c.fill = mkfill(bg)
+        c.font = mkfont(fg, size, bold)
+        c.alignment = mkalign("left", "center")
     ws.row_dimensions[row].height = height
 
 
@@ -144,6 +142,25 @@ def d_cell(ws, row, col, v, alt=False, halign="left", fmt=None,
     if fmt:
         c.number_format = fmt
     return c
+
+
+def _span(ws, row, c1, c2, text=None, bg=WHITE, fg=NAVY, sz=10, bold=False,
+          halign="left", valign="center", fmt=None, brd=True, border_obj=None):
+    """Style cells c1..c2 without merging. Text in c1 only.
+    halign='center' auto-applies centerContinuous across span."""
+    ha = "centerContinuous" if halign == "center" and c2 > c1 else halign
+    for ci in range(c1, c2 + 1):
+        c = ws.cell(row, ci)
+        if ci == c1 and text is not None:
+            c.value = text
+        c.fill = mkfill(bg)
+        c.font = mkfont(fg, sz, bold)
+        c.alignment = mkalign(ha, valign)
+        if brd:
+            c.border = border_obj if border_obj else mkborder()
+        if fmt and ci == c1:
+            c.number_format = fmt
+    return ws.cell(row, c1)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -322,17 +339,21 @@ def build_baza(ws, rows):
 
     # Stats row 3
     ws.row_dimensions[3].height = 18
-    ws.merge_cells("A3:D3")
     c = ws.cell(3, 1, f"Магазин: {SHOP}   |   Год: {YEAR}")
     c.font = mkfont(GRAY_D, 9)
     c.alignment = mkalign("left", "center")
+    for ci in range(2, 5):
+        ws.cell(3, ci).font = mkfont(GRAY_D, 9)
+        ws.cell(3, ci).alignment = mkalign("left", "center")
 
-    ws.merge_cells("E3:I3")
     c = ws.cell(3, 5)
     c.value = ('=COUNTA(tblБаза[Дата])&" записей  |  Обновлено: "'
                '&TEXT(MAX(tblБаза[Дата]),"DD.MM.YYYY")')
     c.font = mkfont(GRAY_D, 9)
     c.alignment = mkalign("right", "center")
+    for ci in range(6, 10):
+        ws.cell(3, ci).font = mkfont(GRAY_D, 9)
+        ws.cell(3, ci).alignment = mkalign("right", "center")
 
     ws.row_dimensions[4].height = 5  # spacer
 
@@ -375,53 +396,61 @@ def build_baza(ws, rows):
 # ═══════════════════════════════════════════════════════════════
 
 def _form_label(ws, row, col, text, ncols=1, bg=TEAL_L, fg=NAVY, size=10):
-    """Label cell with light teal bg, bold text."""
-    if ncols > 1:
-        ws.merge_cells(start_row=row, start_column=col,
-                       end_row=row, end_column=col + ncols - 1)
+    """Label span: text in first cell, same styling across all cells."""
     c = ws.cell(row, col, text)
     c.fill = mkfill(bg)
     c.font = mkfont(fg, size, True)
     c.alignment = mkalign("left", "center")
+    c.border = mkborder()
+    for ci in range(col + 1, col + ncols):
+        cx = ws.cell(row, ci)
+        cx.fill = mkfill(bg)
+        cx.font = mkfont(fg, size, True)
+        cx.alignment = mkalign("left", "center")
+        cx.border = mkborder()
     return c
 
 
 def _form_input(ws, row, col, value=None, ncols=1, fmt=None, halign="left"):
-    """Editable input cell with strong teal underline."""
-    if ncols > 1:
-        ws.merge_cells(start_row=row, start_column=col,
-                       end_row=row, end_column=col + ncols - 1)
-    c = ws.cell(row, col, value)
-    c.fill = mkfill(WHITE)
-    c.font = mkfont(NAVY, 11, True)
-    c.alignment = mkalign(halign, "center")
-    c.border = Border(
+    """Input span: value in first cell, same styling across all cells."""
+    _brd = Border(
         left=Side(style="thin", color="FFD1D5DB"),
         right=Side(style="thin", color="FFD1D5DB"),
         top=Side(style="thin", color="FFD1D5DB"),
         bottom=Side(style="medium", color="FF0B4F54"),
     )
+    c = ws.cell(row, col, value)
+    c.fill = mkfill(WHITE)
+    c.font = mkfont(NAVY, 11, True)
+    c.alignment = mkalign(halign, "center")
+    c.border = _brd
     if fmt:
         c.number_format = fmt
+    for ci in range(col + 1, col + ncols):
+        cx = ws.cell(row, ci)
+        cx.fill = mkfill(WHITE)
+        cx.font = mkfont(NAVY, 11, True)
+        cx.alignment = mkalign(halign, "center")
+        cx.border = _brd
     return c
 
 
 def _form_btn(ws, row, col, text, bg=GREEN, ncols=1, nrows=1, size=12):
-    """Button-styled cell."""
-    if ncols > 1 or nrows > 1:
-        ws.merge_cells(start_row=row, start_column=col,
-                       end_row=row + nrows - 1, end_column=col + ncols - 1)
-    c = ws.cell(row, col, text)
-    c.fill = mkfill(bg)
-    c.font = mkfont(WHITE, size, True)
-    c.alignment = mkalign("center", "center")
-    c.border = Border(
+    """Button span: text in first cell, same styling across all cells."""
+    _brd = Border(
         left=Side(style="thin", color=bg),
         right=Side(style="thin", color=bg),
         top=Side(style="thin", color=bg),
         bottom=Side(style="medium", color=NAVY),
     )
-    return c
+    for ri in range(row, row + nrows):
+        for ci in range(col, col + ncols):
+            c = ws.cell(ri, ci, text if (ri == row and ci == col) else None)
+            c.fill = mkfill(bg)
+            c.font = mkfont(WHITE, size, True)
+            c.alignment = mkalign("center", "center")
+            c.border = _brd
+    return ws.cell(row, col)
 
 
 def _add_dv(ws, formula, cell_ref, show_error=True):
@@ -538,7 +567,6 @@ def build_vvod_kassa(ws):
     # Формула: (C8 + D14) - B8 = 0 означает баланс (выплата объясняет расхождение)
     ws.row_dimensions[15].height = 28
     _form_label(ws, 15, 1, "  Баланс (Факт+Выплата−Z):", ncols=3, bg=TEAL_M, fg=WHITE, size=10)
-    ws.merge_cells(start_row=15, start_column=4, end_row=15, end_column=7)
     c = ws.cell(15, 4, "=(C8+D14)-B8")
     c.fill = mkfill(WHITE)
     c.font = mkfont(NAVY, 13, True)
@@ -547,6 +575,12 @@ def build_vvod_kassa(ws):
     # 0 = green ✓, positive surplus = black, negative = red deficit
     # 0=green ✓ Баланс, positive=surplus (black), negative=deficit (red)
     c.number_format = '#,##0 ₽;[Red]-#,##0 ₽;[Green]"✓ Баланс"'
+    for ci in range(5, 8):
+        cx = ws.cell(15, ci)
+        cx.fill = mkfill(WHITE)
+        cx.font = mkfont(NAVY, 13, True)
+        cx.alignment = mkalign("center", "center")
+        cx.border = mkborder()
 
     # Row 16: spacer
     ws.row_dimensions[16].height = 10
@@ -620,12 +654,16 @@ def build_vvod_rashody(ws):
     ws.row_dimensions[14].height = 14
 
     # Row 15: hint
-    ws.merge_cells("A15:D15")
     c = ws.cell(15, 1,
                 "  Можно заполнить ТОЛЬКО один раздел: либо РАСХОД, либо ЗАКУП В ДОЛГ")
     c.fill = mkfill(GRAY_L)
     c.font = mkfont(GRAY_D, 9, False)
-    c.alignment = mkalign("center", "center")
+    c.alignment = mkalign("centerContinuous", "center")
+    for ci in range(2, 5):
+        cx = ws.cell(15, ci)
+        cx.fill = mkfill(GRAY_L)
+        cx.font = mkfont(GRAY_D, 9, False)
+        cx.alignment = mkalign("centerContinuous", "center")
     ws.row_dimensions[15].height = 18
 
     # Row 16: SAVE button
@@ -674,23 +712,25 @@ def build_zapis_vyplat(ws, rows):
         c1 = i * 2 + 1
         c2 = c1 + 1
         # Label row 3
-        ws.merge_cells(start_row=3, start_column=c1, end_row=3, end_column=c2)
-        c = ws.cell(3, c1, lbl)
-        c.fill = mkfill(color)
-        c.font = mkfont(WHITE, 9, True)
-        c.alignment = mkalign("center", "center")
+        for ci in range(c1, c2 + 1):
+            c = ws.cell(3, ci, lbl if ci == c1 else None)
+            c.fill = mkfill(color)
+            c.font = mkfont(WHITE, 9, True)
+            c.alignment = mkalign("centerContinuous", "center")
         # Value row 4
-        ws.merge_cells(start_row=4, start_column=c1, end_row=4, end_column=c2)
-        c = ws.cell(4, c1, formula)
-        c.fill = mkfill(WHITE)
-        c.font = mkfont(color, 14, True)
-        c.alignment = mkalign("center", "center")
-        c.number_format = FMT_RUB
-        c.border = Border(
+        _val_brd = Border(
             left=Side(style="medium", color=color),
             right=Side(style="medium", color=color),
             bottom=Side(style="medium", color=color),
         )
+        for ci in range(c1, c2 + 1):
+            c = ws.cell(4, ci, formula if ci == c1 else None)
+            c.fill = mkfill(WHITE)
+            c.font = mkfont(color, 14, True)
+            c.alignment = mkalign("centerContinuous", "center")
+            c.border = _val_brd
+            if ci == c1:
+                c.number_format = FMT_RUB
 
     ws.row_dimensions[5].height = 8  # spacer
 
