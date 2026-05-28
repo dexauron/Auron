@@ -1016,28 +1016,25 @@ def build_nastroyki(ws):
 
 def _kpi_tile(ws, row, col, ncols, label, formula, color,
               fmt=FMT_RUB, lbl_size=9, val_size=14):
-    """Render a 2-row KPI tile (label + value)."""
-    # Label
-    ws.merge_cells(start_row=row, start_column=col,
-                   end_row=row, end_column=col + ncols - 1)
-    c = ws.cell(row, col, label)
-    c.fill = mkfill(color)
-    c.font = mkfont(WHITE, lbl_size, True)
-    c.alignment = mkalign("center", "center")
-
-    # Value
-    ws.merge_cells(start_row=row + 1, start_column=col,
-                   end_row=row + 1, end_column=col + ncols - 1)
-    c = ws.cell(row + 1, col, formula)
-    c.fill = mkfill(WHITE)
-    c.font = mkfont(color, val_size, True)
-    c.alignment = mkalign("center", "center")
-    c.number_format = fmt
-    c.border = Border(
+    """Render a 2-row KPI tile (label + value) without merging."""
+    _val_brd = Border(
         left=Side(style="medium", color=color),
         right=Side(style="medium", color=color),
         bottom=Side(style="medium", color=color),
     )
+    for ci in range(col, col + ncols):
+        c = ws.cell(row, ci, label if ci == col else None)
+        c.fill = mkfill(color)
+        c.font = mkfont(WHITE, lbl_size, True)
+        c.alignment = mkalign("centerContinuous" if ncols > 1 else "center", "center")
+    for ci in range(col, col + ncols):
+        c = ws.cell(row + 1, ci, formula if ci == col else None)
+        c.fill = mkfill(WHITE)
+        c.font = mkfont(color, val_size, True)
+        c.alignment = mkalign("centerContinuous" if ncols > 1 else "center", "center")
+        c.border = _val_brd
+        if ci == col:
+            c.number_format = fmt
 
 
 def build_pult(ws):
@@ -1156,10 +1153,12 @@ def build_pult(ws):
     ws.row_dimensions[17].height = 10
 
     # Footer note
-    ws.merge_cells("A18:F18")
     c = ws.cell(18, 1, "  Подсказка: при первом открытии нажмите F9 для пересчёта")
     c.font = mkfont(GRAY_D, 9)
     c.alignment = mkalign("left", "center")
+    for ci in range(2, 7):
+        ws.cell(18, ci).font = mkfont(GRAY_D, 9)
+        ws.cell(18, ci).alignment = mkalign("left", "center")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1331,8 +1330,10 @@ def build_calendar(ws):
     # Side panel (col I-J), rows 6-12: monthly summary
     ws.cell(6, 9, "СВОДКА ЗА МЕСЯЦ").fill = mkfill(TEAL)
     ws.cell(6, 9).font = mkfont(WHITE, 10, True)
-    ws.cell(6, 9).alignment = mkalign("center", "center")
-    ws.merge_cells("I6:J6")
+    ws.cell(6, 9).alignment = mkalign("centerContinuous", "center")
+    ws.cell(6, 10).fill = mkfill(TEAL)
+    ws.cell(6, 10).font = mkfont(WHITE, 10, True)
+    ws.cell(6, 10).alignment = mkalign("centerContinuous", "center")
 
     side_kpis = [
         ("Оплачено",
@@ -1530,7 +1531,6 @@ def build_dashboard(ws):
         alt = (i % 2 == 1)
         d_cell(ws, rn, 1, "", alt)
         c = ws.cell(rn, 2, cat)
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=4)
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10, True)
         c.alignment = mkalign("left", "center")
@@ -1545,7 +1545,6 @@ def build_dashboard(ws):
             f'tblБаза[Категория],"{cat}",'
             f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
         )
-        ws.merge_cells(start_row=rn, start_column=5, end_row=rn, end_column=7)
         c = ws.cell(rn, 5, formula)
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10, True)
@@ -1557,7 +1556,6 @@ def build_dashboard(ws):
             ws.cell(rn, col).border = mkborder()
 
         # Доля
-        ws.merge_cells(start_row=rn, start_column=8, end_row=rn, end_column=12)
         c = ws.cell(rn, 8, f'=IFERROR(E{rn}/$A$11,0)')
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10)
@@ -1589,7 +1587,6 @@ def build_dashboard(ws):
         ws.row_dimensions[rn].height = 20
         alt = (i % 2 == 1)
         d_cell(ws, rn, 1, "", alt)
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=4)
         c = ws.cell(rn, 2, wd)
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10, True)
@@ -1599,7 +1596,6 @@ def build_dashboard(ws):
             ws.cell(rn, col).fill = mkfill(GRAY_L if alt else WHITE)
             ws.cell(rn, col).border = mkborder()
 
-        ws.merge_cells(start_row=rn, start_column=5, end_row=rn, end_column=7)
         formula = (
             f'=SUMPRODUCT((WEEKDAY(tblБаза[Дата],2)={i+1})*'
             f'(tblБаза[Тип]="Приход")*'
@@ -1614,7 +1610,6 @@ def build_dashboard(ws):
             ws.cell(rn, col).fill = mkfill(GRAY_L if alt else WHITE)
             ws.cell(rn, col).border = mkborder()
 
-        ws.merge_cells(start_row=rn, start_column=8, end_row=rn, end_column=12)
         c = ws.cell(rn, 8, f'=IFERROR(E{rn}/$A$8,0)')
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10)
@@ -1642,7 +1637,6 @@ def build_dashboard(ws):
         ws.row_dimensions[rn].height = 20
         alt = (i % 2 == 1)
         d_cell(ws, rn, 1, "", alt)
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=4)
         c = ws.cell(rn, 2, sh)
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10, True)
@@ -1651,7 +1645,6 @@ def build_dashboard(ws):
             ws.cell(rn, col).fill = mkfill(GRAY_L if alt else WHITE)
             ws.cell(rn, col).border = mkborder()
 
-        ws.merge_cells(start_row=rn, start_column=5, end_row=rn, end_column=7)
         formula = (
             f'=SUMIFS(tblБаза[Сумма],tblБаза[Тип],"Приход",'
             f'tblБаза[Смена],"{sh}",'
@@ -1666,7 +1659,6 @@ def build_dashboard(ws):
             ws.cell(rn, col).fill = mkfill(GRAY_L if alt else WHITE)
             ws.cell(rn, col).border = mkborder()
 
-        ws.merge_cells(start_row=rn, start_column=8, end_row=rn, end_column=12)
         c = ws.cell(rn, 8, f'=IFERROR(E{rn}/$A$8,0)')
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10)
@@ -1678,11 +1670,12 @@ def build_dashboard(ws):
 
     # Footer hint
     footer_row = base_sh_row + len(SHIFTS) + 2
-    ws.merge_cells(start_row=footer_row, start_column=1,
-                   end_row=footer_row, end_column=12)
     c = ws.cell(footer_row, 1, "  Подсказка: после изменения периода нажмите F9 для пересчёта")
     c.font = mkfont(GRAY_D, 9)
     c.alignment = mkalign("left", "center")
+    for ci in range(2, 13):
+        ws.cell(footer_row, ci).font = mkfont(GRAY_D, 9)
+        ws.cell(footer_row, ci).alignment = mkalign("left", "center")
 
     # ── РАСШИРЕННАЯ АНАЛИТИКА (добавлено) ──────────────────────
     pp_r = footer_row + 2
@@ -1729,27 +1722,21 @@ def build_dashboard(ws):
     def _xt(lr, vr, col, lbl, cf, pf, fmt, bg, inv=False, has_trend=True):
         """Write one 3-col KPI tile: label + value + optional trend delta."""
         n = 3
-        ws.merge_cells(start_row=lr, start_column=col,
-                       end_row=lr, end_column=col + n - 1)
-        c = ws.cell(lr, col, lbl)
-        c.fill = mkfill(bg)
-        c.font = mkfont(WHITE, 9)
-        c.alignment = mkalign("center", "center")
-        for ci in range(col + 1, col + n):
-            ws.cell(lr, ci).fill = mkfill(bg)
+        for ci in range(col, col + n):
+            c = ws.cell(lr, ci, lbl if ci == col else None)
+            c.fill = mkfill(bg)
+            c.font = mkfont(WHITE, 9)
+            c.alignment = mkalign("centerContinuous", "center")
 
         v_end = col + 1 if has_trend else col + 2
-        ws.merge_cells(start_row=vr, start_column=col,
-                       end_row=vr, end_column=v_end)
-        c = ws.cell(vr, col, cf)
-        c.fill = mkfill(WHITE)
-        c.font = mkfont(NAVY, 13, True)
-        c.alignment = mkalign("center", "center")
-        c.number_format = fmt
-        c.border = mkborder()
-        for ci in range(col + 1, v_end + 1):
-            ws.cell(vr, ci).fill = mkfill(WHITE)
-            ws.cell(vr, ci).border = mkborder()
+        for ci in range(col, v_end + 1):
+            c = ws.cell(vr, ci, cf if ci == col else None)
+            c.fill = mkfill(WHITE)
+            c.font = mkfont(NAVY, 13, True)
+            c.alignment = mkalign("centerContinuous" if v_end > col else "center", "center")
+            c.border = mkborder()
+            if ci == col:
+                c.number_format = fmt
 
         if has_trend and pf is not None:
             tc = col + 2
@@ -1859,7 +1846,6 @@ def build_dashboard(ws):
 
         d_cell(ws, rn, 1, "", alt)
 
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=4)
         c = ws.cell(rn, 2, cashier)
         c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 11, True)
         c.alignment = mkalign("left", "center"); c.border = mkborder()
@@ -1876,10 +1862,9 @@ def build_dashboard(ws):
             f'tblБаза[Смена],tblБаза[Смена],tblБаза[Кассир],"{cashier}",'
             f'tblБаза[Тип],"Приход",tblБаза[Расхождение],"<>0"))),0)'
         )
-        ws.merge_cells(start_row=rn, start_column=5, end_row=rn, end_column=6)
         c = ws.cell(rn, 5, dsc_f)
         c.fill = mkfill(bg_r); c.font = mkfont(RED, 12, True)
-        c.alignment = mkalign("center", "center"); c.border = mkborder()
+        c.alignment = mkalign("centerContinuous", "center"); c.border = mkborder()
         c.number_format = "0"
         ws.cell(rn, 6).fill = mkfill(bg_r); ws.cell(rn, 6).border = mkborder()
 
@@ -1889,7 +1874,6 @@ def build_dashboard(ws):
             f'tblБаза[Кассир],"{cashier}",'
             f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})'
         )
-        ws.merge_cells(start_row=rn, start_column=7, end_row=rn, end_column=9)
         c = ws.cell(rn, 7, sum_f)
         c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 10)
         c.alignment = mkalign("right", "center"); c.border = mkborder()
@@ -1903,10 +1887,9 @@ def build_dashboard(ws):
             f'tblБаза[Кассир],"{cashier}",'
             f'tblБаза[Дата],">="&{P},tblБаза[Дата],"<="&{Q})/3,0)'
         )
-        ws.merge_cells(start_row=rn, start_column=10, end_row=rn, end_column=11)
         c = ws.cell(rn, 10, tot_f)
         c.fill = mkfill(bg_r); c.font = mkfont(NAVY, 10)
-        c.alignment = mkalign("center", "center"); c.border = mkborder()
+        c.alignment = mkalign("centerContinuous", "center"); c.border = mkborder()
         c.number_format = "0"
         ws.cell(rn, 11).fill = mkfill(bg_r); ws.cell(rn, 11).border = mkborder()
 
@@ -3041,19 +3024,23 @@ def build_otchet_rukovoditelya(ws):
 
     # ── ROW 1: Title ──────────────────────────────────────────
     ws.row_dimensions[1].height = 44
-    ws.merge_cells("A1:G1")
     c = ws.cell(1, 1, "  ЕЖЕМЕСЯЧНЫЙ ОТЧЁТ  —  ФИНАНСОВЫЙ КОНТРОЛЬ")
     c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 17, True)
-    c.alignment = mkalign("center", "center")
+    c.alignment = mkalign("centerContinuous", "center")
     for ci in range(2, NC + 1):
         ws.cell(1, ci).fill = mkfill(NAVY)
+        ws.cell(1, ci).font = mkfont(WHITE, 17, True)
+        ws.cell(1, ci).alignment = mkalign("centerContinuous", "center")
 
     # ── ROW 2: Subtitle ───────────────────────────────────────
     ws.row_dimensions[2].height = 22
-    ws.merge_cells("A2:G2")
     c = ws.cell(2, 1, "  Управленческий отчёт по движению денежных средств магазина")
     c.fill = mkfill(TEAL); c.font = mkfont(WHITE, 11)
     c.alignment = mkalign("left", "center")
+    for ci in range(2, NC + 1):
+        ws.cell(2, ci).fill = mkfill(TEAL)
+        ws.cell(2, ci).font = mkfont(WHITE, 11)
+        ws.cell(2, ci).alignment = mkalign("left", "center")
 
     # ── ROW 3: Period controls ────────────────────────────────
     ws.row_dimensions[3].height = 36
@@ -3089,11 +3076,12 @@ def build_otchet_rukovoditelya(ws):
     c.fill = mkfill(NAVY); c.font = mkfont(WHITE, 10, True)
     c.alignment = mkalign("right", "center")
     # F3-G3: today's date
-    ws.merge_cells("F3:G3")
     c = ws.cell(3, 6, '=TEXT(TODAY(),"DD MMMM YYYY")&" г."')
     c.fill = mkfill(ctrl_bg); c.font = mkfont(NAVY, 11, True)
-    c.alignment = mkalign("center", "center"); c.border = _mb()
+    c.alignment = mkalign("centerContinuous", "center"); c.border = _mb()
     ws.cell(3, 7).fill = mkfill(ctrl_bg)
+    ws.cell(3, 7).font = mkfont(NAVY, 11, True)
+    ws.cell(3, 7).alignment = mkalign("centerContinuous", "center")
 
     # ── ROW 4: Hidden date helpers ────────────────────────────
     ws.row_dimensions[4].height = 0
@@ -3437,34 +3425,32 @@ def build_otchet_rukovoditelya(ws):
         nonlocal r
         ws.row_dimensions[r].height = 28
         # Left signature
-        ws.merge_cells(start_row=r, start_column=col_l,
-                       end_row=r, end_column=col_l + 2)
         c = ws.cell(r, col_l, lbl_l)
         c.font = mkfont(NAVY, 10, True)
         c.alignment = mkalign("left", "center")
+        for ci in range(col_l + 1, col_l + 3):
+            ws.cell(r, ci).font = mkfont(NAVY, 10, True)
+            ws.cell(r, ci).alignment = mkalign("left", "center")
         # underline for signature
-        ws.merge_cells(start_row=r, start_column=col_l + 3,
-                       end_row=r, end_column=col_l + 3)
         c2 = ws.cell(r, col_l + 3, "________________________")
         c2.font = mkfont(GRAY_D, 9)
         c2.alignment = mkalign("center", "bottom")
         if col_r and lbl_r:
-            ws.merge_cells(start_row=r, start_column=col_r,
-                           end_row=r, end_column=col_r + 2)
             c3 = ws.cell(r, col_r, lbl_r)
             c3.font = mkfont(NAVY, 10, True)
             c3.alignment = mkalign("left", "center")
-            ws.merge_cells(start_row=r, start_column=col_r + 3,
-                           end_row=r, end_column=col_r + 3)
+            for ci in range(col_r + 1, col_r + 3):
+                ws.cell(r, ci).font = mkfont(NAVY, 10, True)
+                ws.cell(r, ci).alignment = mkalign("left", "center")
             c4 = ws.cell(r, col_r + 3, "________________________")
             c4.font = mkfont(GRAY_D, 9)
             c4.alignment = mkalign("center", "bottom")
         r += 1
 
     # Separator line before signatures
-    ws.merge_cells(f"A{r}:G{r}")
     ws.row_dimensions[r].height = 2
-    ws.cell(r, 1).fill = mkfill(GRAY_M)
+    for ci in range(1, NC + 1):
+        ws.cell(r, ci).fill = mkfill(GRAY_M)
     r += 1
     ws.row_dimensions[r].height = 8
     r += 1
@@ -3476,10 +3462,12 @@ def build_otchet_rukovoditelya(ws):
     r += 1
 
     # Note
-    ws.merge_cells(f"A{r}:G{r}")
     c = ws.cell(r, 1, "  * Отчёт сформирован автоматически на основе данных БАЗА_ДДС")
     c.font = mkfont(GRAY_D, 8)
     c.alignment = mkalign("left", "center")
+    for ci in range(2, NC + 1):
+        ws.cell(r, ci).font = mkfont(GRAY_D, 8)
+        ws.cell(r, ci).alignment = mkalign("left", "center")
 
     ws.freeze_panes = "A5"
 
@@ -3526,12 +3514,17 @@ def build_svodnye(ws):
         alt = (i % 2 == 0)
         c0 = ws.cell(rn, 1)
         c0.fill = mkfill(GRAY_L if alt else WHITE); c0.border = mkborder()
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=NC)
         c = ws.cell(rn, 2, text)
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10)
         c.alignment = mkalign("left", "center")
         c.border = mkborder()
+        for ci in range(3, NC + 1):
+            cx = ws.cell(rn, ci)
+            cx.fill = mkfill(GRAY_L if alt else WHITE)
+            cx.font = mkfont(NAVY, 10)
+            cx.alignment = mkalign("left", "center")
+            cx.border = mkborder()
 
     ws.row_dimensions[11].height = 14
 
@@ -3543,7 +3536,10 @@ def build_svodnye(ws):
         c.fill = mkfill(TEAL); c.font = mkfont(WHITE, 10, True)
         c.alignment = mkalign("center" if ci != 4 else "left", "center")
         c.border = mkborder()
-    ws.merge_cells("D13:L13")
+    for ci in range(5, NC + 1):
+        ws.cell(13, ci).fill = mkfill(TEAL)
+        ws.cell(13, ci).font = mkfont(WHITE, 10, True)
+        ws.cell(13, ci).border = mkborder()
 
     pt_list = [
         ("ПТ1", "Выручка по месяцам",
@@ -3564,8 +3560,9 @@ def build_svodnye(ws):
         d_cell(ws, rn, 1, "", alt)
         d_cell(ws, rn, 2, num, alt, "center", bold=True)
         d_cell(ws, rn, 3, name, alt, "left", bold=True)
-        ws.merge_cells(start_row=rn, start_column=4, end_row=rn, end_column=NC)
         d_cell(ws, rn, 4, desc, alt, "left")
+        for ci in range(5, NC + 1):
+            d_cell(ws, rn, ci, "", alt, "left")
 
     ws.row_dimensions[19].height = 10
 
@@ -3581,12 +3578,17 @@ def build_svodnye(ws):
         alt = (i % 2 == 0)
         c0 = ws.cell(rn, 1)
         c0.fill = mkfill(GRAY_L if alt else WHITE); c0.border = mkborder()
-        ws.merge_cells(start_row=rn, start_column=2, end_row=rn, end_column=NC)
         c = ws.cell(rn, 2, f"  {note}")
         c.fill = mkfill(GRAY_L if alt else WHITE)
         c.font = mkfont(NAVY, 10)
         c.alignment = mkalign("left", "center")
         c.border = mkborder()
+        for ci in range(3, NC + 1):
+            cx = ws.cell(rn, ci)
+            cx.fill = mkfill(GRAY_L if alt else WHITE)
+            cx.font = mkfont(NAVY, 10)
+            cx.alignment = mkalign("left", "center")
+            cx.border = mkborder()
 
     ws.freeze_panes = "B4"
 
@@ -3875,10 +3877,12 @@ def main():
                     "Пульт", "Календарь_Выплат", "Дашборд", "Отчёт_Рук", "Сводные"):
             continue
         ws = sheets[name]
-        ws.merge_cells("A1:F1")
         c = ws.cell(1, 1, f"[ {name} ]  —  будет добавлен в следующих блоках")
         c.font = mkfont(GRAY_D, 12, True)
-        c.alignment = mkalign("center", "center")
+        c.alignment = mkalign("centerContinuous", "center")
+        for ci in range(2, 7):
+            ws.cell(1, ci).font = mkfont(GRAY_D, 12, True)
+            ws.cell(1, ci).alignment = mkalign("centerContinuous", "center")
         ws.row_dimensions[1].height = 36
 
     # Force full recalculation on file open — avoids Excel's
