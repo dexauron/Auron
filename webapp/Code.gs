@@ -4,10 +4,13 @@
 // ═══════════════════════════════════════════════════════════════════════
 
 var SS_ID       = '1MkPEUT2XJlciHthlVcCyaZp_6A9rBAxayRC3i1I82hg';
-var SH_BASE     = 'БАЗА';
-var SH_SETTINGS = 'НАСТРОЙКИ';
-var SH_REPS     = 'ТОРГ_ПРЕД';
-var SH_TIMESHEET= 'ТАБЕЛЬ';
+var SH_BASE      = 'БАЗА';
+var SH_SETTINGS  = 'НАСТРОЙКИ';
+var SH_REPS      = 'ТОРГ_ПРЕД';
+var SH_TIMESHEET = 'ТАБЕЛЬ';
+var SH_PULSE     = 'Пульт';
+var SH_MONTHLY   = 'По_Месяцам';
+var SH_REPORT    = 'Отчёт_Ф';
 
 // ── БАЗА columns (1-indexed) ─────────────────────────────────────────────
 // A:Дата  B:Смена  C:Кассир  D:Тип  E:Категория  F:Способ  G:Сумма  H:Расхождение  I:Комментарий
@@ -1353,6 +1356,230 @@ function seedAllData() {
         timesheet: tsRows.length
       }
     };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// importExcelRows — batch-import БАЗА rows from Excel (called from browser)
+// rows: [{date, shift, cashier, type, category, payType, amount, disc, comment}]
+// ────────────────────────────────────────────────────────────────────────────
+function importExcelRows(rows) {
+  try {
+    ensureSheets();
+    var ss   = getSpreadsheet();
+    var base = ss.getSheetByName(SH_BASE);
+    var data = rows.map(function(r) {
+      return [
+        r.date || '',
+        r.shift || '',
+        r.cashier || '',
+        r.type || '',
+        r.category || '',
+        r.payType || '',
+        Number(r.amount) || 0,
+        Number(r.disc) || 0,
+        r.comment || ''
+      ];
+    });
+    if (data.length > 0) {
+      var startRow = base.getLastRow() + 1;
+      base.getRange(startRow, 1, data.length, 9).setValues(data);
+    }
+    return { ok: true, imported: data.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// importRepExcelRows — batch-import ТОРГ_ПРЕД rows from Excel
+// ────────────────────────────────────────────────────────────────────────────
+function importRepExcelRows(rows) {
+  try {
+    ensureSheets();
+    var ss   = getSpreadsheet();
+    var reps = ss.getSheetByName(SH_REPS);
+    var now  = new Date();
+    var data = rows.map(function(r) {
+      return [
+        Utilities.getUuid(),
+        r.date || '',
+        r.repName || '',
+        r.invoiceNum || '',
+        Number(r.amount) || 0,
+        r.status || '',
+        r.comment || '',
+        now
+      ];
+    });
+    if (data.length > 0) {
+      var startRow = reps.getLastRow() + 1;
+      reps.getRange(startRow, 1, data.length, 8).setValues(data);
+    }
+    return { ok: true, imported: data.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// clearBase — удалить все данные из БАЗА (без заголовка), для реимпорта
+// ────────────────────────────────────────────────────────────────────────────
+function clearBase() {
+  try {
+    var ss   = getSpreadsheet();
+    var base = ss.getSheetByName(SH_BASE);
+    if (!base) return { ok: true };
+    var last = base.getLastRow();
+    if (last > 1) base.getRange(2, 1, last - 1, 9).clearContent();
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// buildAnalyticsSheets — создать/пересоздать формульные листы Пульт, По_Месяцам, Отчёт_Ф
+// ────────────────────────────────────────────────────────────────────────────
+function buildAnalyticsSheets() {
+  try {
+    var ss = getSpreadsheet();
+    ensureSheets();
+
+    // ── Пульт ──────────────────────────────────────────────────────────────
+    var pulse = ss.getSheetByName(SH_PULSE);
+    if (pulse) ss.deleteSheet(pulse);
+    pulse = ss.insertSheet(SH_PULSE, 0); // first tab
+
+    var tealBg = '#0B4F54'; var white = '#FFFFFF'; var lightBg = '#E8F5E9';
+
+    pulse.setColumnWidth(1, 200); pulse.setColumnWidth(2, 160); pulse.setColumnWidth(3, 160);
+    pulse.setColumnWidths(4, 5, 120);
+
+    pulse.getRange('A1:F1').merge().setValue('  ПУЛЬТ — Быстрый обзор магазина')
+      .setBackground(tealBg).setFontColor(white).setFontWeight('bold').setFontSize(14);
+
+    // Current year label
+    pulse.getRange('A2').setValue('Год:').setFontWeight('bold');
+    pulse.getRange('B2').setFormula('=YEAR(TODAY())');
+
+    var kpiLabels = [
+      ['Выручка (все время)', '=SUMPRODUCT((БАЗА!D2:D="Приход")*(БАЗА!G2:G))'],
+      ['Расходы (все время)', '=SUMPRODUCT((БАЗА!D2:D="Расход")*(БАЗА!G2:G))'],
+      ['Прибыль', '=B4-B5'],
+      ['Расхождения', '=SUMPRODUCT(ISNUMBER(БАЗА!H2:H)*1*БАЗА!H2:H)'],
+      ['Записей всего', '=COUNTA(БАЗА!A2:A)'],
+    ];
+
+    pulse.getRange('A4:B4').getCell(1,1).setValue('ПОКАЗАТЕЛЬ').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    pulse.getRange('B4').setValue('ЗНАЧЕНИЕ').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+
+    kpiLabels.forEach(function(row, i) {
+      var r = i + 5;
+      pulse.getRange(r, 1).setValue(row[0]).setBackground(i % 2 === 0 ? lightBg : white);
+      pulse.getRange(r, 2).setFormula(row[1]).setBackground(i % 2 === 0 ? lightBg : white)
+        .setNumberFormat('#,##0').setFontWeight('bold');
+    });
+
+    // Monthly breakdown mini-table on same sheet
+    pulse.getRange('A12').setValue('ВЫРУЧКА ПО МЕСЯЦАМ (текущий год)').setFontWeight('bold')
+      .setBackground(tealBg).setFontColor(white);
+    pulse.getRange('B12').setValue('Выручка').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    pulse.getRange('C12').setValue('Расходы').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    pulse.getRange('D12').setValue('Прибыль').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+
+    var months = ['Январь','Февраль','Март','Апрель','Май','Июнь',
+                  'Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    months.forEach(function(m, i) {
+      var r = i + 13;
+      var mn = i + 1;
+      pulse.getRange(r, 1).setValue(m).setBackground(i % 2 === 0 ? lightBg : white);
+      pulse.getRange(r, 2).setFormula(
+        '=SUMPRODUCT((YEAR(БАЗА!A2:A)=YEAR(TODAY()))*(MONTH(БАЗА!A2:A)=' + mn + ')*(БАЗА!D2:D="Приход")*(БАЗА!G2:G))'
+      ).setNumberFormat('#,##0').setBackground(i % 2 === 0 ? lightBg : white).setFontWeight('bold');
+      pulse.getRange(r, 3).setFormula(
+        '=SUMPRODUCT((YEAR(БАЗА!A2:A)=YEAR(TODAY()))*(MONTH(БАЗА!A2:A)=' + mn + ')*(БАЗА!D2:D="Расход")*(БАЗА!G2:G))'
+      ).setNumberFormat('#,##0').setBackground(i % 2 === 0 ? lightBg : white);
+      pulse.getRange(r, 4).setFormula('=B' + r + '-C' + r)
+        .setNumberFormat('#,##0').setBackground(i % 2 === 0 ? lightBg : white);
+    });
+
+    pulse.setFrozenRows(1);
+
+    // ── По_Месяцам ──────────────────────────────────────────────────────────
+    var monthly = ss.getSheetByName(SH_MONTHLY);
+    if (monthly) ss.deleteSheet(monthly);
+    monthly = ss.insertSheet(SH_MONTHLY);
+
+    monthly.getRange('A1:H1').merge().setValue('  СВОДНАЯ ПО МЕСЯЦАМ И КАССИРАМ')
+      .setBackground(tealBg).setFontColor(white).setFontWeight('bold').setFontSize(13);
+
+    var mHeaders = ['Год', 'Месяц', 'Выручка', 'Расходы', 'Прибыль', 'Расхождения', 'Смен', 'Ср/смена'];
+    monthly.getRange(2, 1, 1, mHeaders.length).setValues([mHeaders])
+      .setFontWeight('bold').setBackground('#C8E6C9');
+    monthly.setFrozenRows(2);
+
+    // QUERY to summarize by year-month
+    monthly.getRange('A3').setFormula(
+      '=IFERROR(QUERY(БАЗА!A:I,"SELECT YEAR(A), MONTH(A), ' +
+      'SUM(G), SUM(H) WHERE D=\'Приход\' AND A IS NOT NULL GROUP BY YEAR(A), MONTH(A) ' +
+      'ORDER BY YEAR(A) DESC, MONTH(A) DESC LABEL YEAR(A) \'Год\', MONTH(A) \'Месяц\', ' +
+      'SUM(G) \'Выручка\', SUM(H) \'Расхождения\'",0),"")'
+    );
+    monthly.setColumnWidths(1, 8, 120);
+
+    // ── Отчёт_Ф ─────────────────────────────────────────────────────────────
+    var rpt = ss.getSheetByName(SH_REPORT);
+    if (rpt) ss.deleteSheet(rpt);
+    rpt = ss.insertSheet(SH_REPORT);
+
+    rpt.setColumnWidth(1, 220); rpt.setColumnWidth(2, 160);
+    rpt.getRange('A1:B1').merge().setValue('  УПРАВЛЕНЧЕСКИЙ ОТЧЁТ')
+      .setBackground(tealBg).setFontColor(white).setFontWeight('bold').setFontSize(13);
+
+    rpt.getRange('A2').setValue('Фильтр — Год:').setFontWeight('bold');
+    rpt.getRange('B2').setValue(new Date().getFullYear());
+    rpt.getRange('A3').setValue('Фильтр — Месяц (1-12):').setFontWeight('bold');
+    rpt.getRange('B3').setValue(new Date().getMonth() + 1);
+
+    var rptRows = [
+      ['Выручка', '=SUMPRODUCT((YEAR(БАЗА!A2:A)=B2)*(MONTH(БАЗА!A2:A)=B3)*(БАЗА!D2:D="Приход")*(БАЗА!G2:G))'],
+      ['Расходы', '=SUMPRODUCT((YEAR(БАЗА!A2:A)=B2)*(MONTH(БАЗА!A2:A)=B3)*(БАЗА!D2:D="Расход")*(БАЗА!G2:G))'],
+      ['Прибыль', '=B5-B6'],
+      ['Расхождения', '=SUMPRODUCT((YEAR(БАЗА!A2:A)=B2)*(MONTH(БАЗА!A2:A)=B3)*ISNUMBER(БАЗА!H2:H)*1*БАЗА!H2:H)'],
+      ['Смен', '=COUNTIFS(БАЗА!D2:D,"Приход",БАЗА!A2:A,">="&DATE(B2,B3,1),БАЗА!A2:A,"<"&DATE(B2,B3+1,1))'],
+    ];
+
+    rpt.getRange('A4:B4').getCell(1,1).setValue('Показатель').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    rpt.getRange('B4').setValue('Сумма').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+
+    rptRows.forEach(function(row, i) {
+      var r = i + 5;
+      rpt.getRange(r, 1).setValue(row[0]).setBackground(i % 2 === 0 ? lightBg : white);
+      rpt.getRange(r, 2).setFormula(row[1]).setNumberFormat('#,##0')
+        .setBackground(i % 2 === 0 ? lightBg : white).setFontWeight('bold');
+    });
+
+    // By category breakdown
+    rpt.getRange('A11').setValue('РАСХОДЫ ПО КАТЕГОРИЯМ').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    rpt.getRange('B11').setValue('Сумма').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    rpt.getRange('A12').setFormula(
+      '=IFERROR(QUERY(БАЗА!A:I,"SELECT E, SUM(G) WHERE D=\'Расход\' AND YEAR(A)="&B2&" AND MONTH(A)="&B3&" GROUP BY E ORDER BY SUM(G) DESC LABEL E \'Категория\', SUM(G) \'Сумма\'",0),"")'
+    );
+
+    // By payment method
+    rpt.getRange('D4').setValue('СПОСОБЫ ОПЛАТЫ').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    rpt.getRange('E4').setValue('Сумма').setFontWeight('bold').setBackground(tealBg).setFontColor(white);
+    rpt.getRange('D5').setFormula(
+      '=IFERROR(QUERY(БАЗА!A:I,"SELECT F, SUM(G) WHERE D=\'Приход\' AND YEAR(A)="&B2&" AND MONTH(A)="&B3&" GROUP BY F ORDER BY SUM(G) DESC LABEL F \'Способ\', SUM(G) \'Сумма\'",0),"")'
+    );
+
+    rpt.setColumnWidth(1, 220); rpt.setColumnWidth(2, 140); rpt.setColumnWidth(4, 180); rpt.setColumnWidth(5, 140);
+    rpt.setFrozenRows(1);
+
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message };
   }

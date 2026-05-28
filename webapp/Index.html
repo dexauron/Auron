@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Финконтроль">
 <title>Финконтроль</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
   --teal:       #0ea5e9;
@@ -548,6 +549,38 @@ html,body{height:100%;background:var(--bg);font-family:-apple-system,BlinkMacSys
     <div class="settings-section">
       <div class="settings-header">Виджеты дашборда</div>
       <div class="settings-card" id="s-widgets-list"></div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-header">Excel-синхронизация</div>
+      <div class="settings-card">
+        <div class="settings-row" onclick="document.getElementById('xl-file').click()">
+          <div class="settings-row-icon" style="background:#dcfce7;">📥</div>
+          <div class="settings-row-main">
+            <div class="settings-row-title">Импортировать из Excel</div>
+            <div class="settings-row-sub">Загрузи ФИНАНСОВЫЙ_КОНТРОЛЬ.xlsx</div>
+          </div>
+          <div class="chevron">›</div>
+        </div>
+        <input type="file" id="xl-file" accept=".xlsx,.xls" style="display:none" onchange="handleExcelImport(this)">
+        <div class="settings-row" onclick="buildAnalyticsSheets()">
+          <div class="settings-row-icon" style="background:#e0f2fe;">📊</div>
+          <div class="settings-row-main">
+            <div class="settings-row-title">Создать аналитические листы</div>
+            <div class="settings-row-sub">Пульт, По_Месяцам, Отчёт_Ф в Google Sheets</div>
+          </div>
+          <div class="chevron">›</div>
+        </div>
+      </div>
+      <div id="xl-progress" style="display:none;" class="card" style="margin-top:8px;">
+        <div class="card-body">
+          <div id="xl-status" style="font-size:14px;font-weight:600;color:var(--teal);margin-bottom:8px;"></div>
+          <div style="background:var(--bg);border-radius:8px;height:8px;overflow:hidden;">
+            <div id="xl-bar" style="height:100%;background:var(--teal);border-radius:8px;transition:width .3s;width:0%;"></div>
+          </div>
+          <div id="xl-details" style="font-size:12px;color:var(--sub);margin-top:6px;"></div>
+        </div>
+      </div>
     </div>
 
     <div class="section-gap"></div>
@@ -1745,6 +1778,202 @@ document.addEventListener('click', function(ev) {
   var tsOvr = document.getElementById('ts-sheet');
   if(tsOvr && ev.target === tsOvr.parentElement && tsOvr.parentElement.classList.contains('open')) closeTsSheet();
 });
+
+// ═══════════════════════════════════════════════════
+//  EXCEL IMPORT
+// ═══════════════════════════════════════════════════
+function handleExcelImport(input) {
+  var file = input.files[0];
+  if(!file) return;
+  input.value = '';
+
+  var prog = document.getElementById('xl-progress');
+  var statusEl = document.getElementById('xl-status');
+  var barEl = document.getElementById('xl-bar');
+  var detailsEl = document.getElementById('xl-details');
+
+  prog.style.display = '';
+  statusEl.textContent = 'Читаем файл…';
+  barEl.style.width = '5%';
+  detailsEl.textContent = file.name;
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+
+      // Find БАЗА_ДДС sheet
+      var baseSheetName = wb.SheetNames.find(function(n) { return n === 'БАЗА_ДДС'; });
+      var repSheetName  = wb.SheetNames.find(function(n) { return n === 'Запись_Выплат'; });
+
+      if(!baseSheetName) { showToast('Лист БАЗА_ДДС не найден в файле'); prog.style.display='none'; return; }
+
+      statusEl.textContent = 'Парсим данные…';
+      barEl.style.width = '15%';
+
+      var baseRows = parseBaseSheet(wb.Sheets[baseSheetName]);
+      var repRows  = repSheetName ? parseRepSheet(wb.Sheets[repSheetName]) : [];
+
+      detailsEl.textContent = 'БАЗА: ' + baseRows.length + ' строк, Выплаты: ' + repRows.length + ' строк';
+
+      if(!baseRows.length) { showToast('Нет данных в БАЗА_ДДС'); prog.style.display='none'; return; }
+
+      if(!confirm('Импортировать ' + baseRows.length + ' записей из Excel? Существующие данные будут сохранены.')) {
+        prog.style.display='none'; return;
+      }
+
+      importBatch(baseRows, repRows, 0, statusEl, barEl, detailsEl, prog);
+    } catch(err) {
+      showToast('Ошибка чтения: ' + err.message);
+      prog.style.display='none';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function parseBaseSheet(ws) {
+  var rows = [];
+  var range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  // Find header row (row with 'Дата')
+  var headerRow = -1;
+  for(var r = range.s.r; r <= Math.min(range.e.r, 10); r++) {
+    var cell = ws[XLSX.utils.encode_cell({r:r, c:0})];
+    if(cell && String(cell.v).indexOf('Дата') !== -1) { headerRow = r; break; }
+  }
+  if(headerRow < 0) return rows;
+
+  for(var r2 = headerRow + 1; r2 <= range.e.r; r2++) {
+    var dateCell = ws[XLSX.utils.encode_cell({r:r2, c:0})];
+    if(!dateCell || !dateCell.v) continue;
+    var d = dateCell.v;
+    var dateStr = '';
+    if(d instanceof Date) {
+      dateStr = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    } else if(typeof d === 'number') {
+      var dt = XLSX.SSF.parse_date_code(d);
+      dateStr = dt.y + '-' + pad(dt.m) + '-' + pad(dt.d);
+    } else {
+      dateStr = String(d).slice(0, 10);
+    }
+    var getV = function(c) {
+      var cl = ws[XLSX.utils.encode_cell({r:r2, c:c})];
+      return cl ? (cl.v !== null && cl.v !== undefined ? cl.v : '') : '';
+    };
+    rows.push({
+      date: dateStr, shift: String(getV(1)||''), cashier: String(getV(2)||''),
+      type: String(getV(3)||''), category: String(getV(4)||''), payType: String(getV(5)||''),
+      amount: Number(getV(6))||0, disc: Number(getV(7))||0, comment: String(getV(8)||'')
+    });
+  }
+  return rows;
+}
+
+function parseRepSheet(ws) {
+  var rows = [];
+  var range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  var headerRow = -1;
+  for(var r = range.s.r; r <= Math.min(range.e.r, 10); r++) {
+    var cell = ws[XLSX.utils.encode_cell({r:r, c:1})];
+    if(cell && String(cell.v).indexOf('Дата') !== -1) { headerRow = r; break; }
+  }
+  if(headerRow < 0) return rows;
+
+  for(var r2 = headerRow + 1; r2 <= range.e.r; r2++) {
+    var dateCell = ws[XLSX.utils.encode_cell({r:r2, c:1})];
+    if(!dateCell || !dateCell.v) continue;
+    var d = dateCell.v;
+    var dateStr = '';
+    if(d instanceof Date) {
+      dateStr = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    } else if(typeof d === 'number') {
+      var dt = XLSX.SSF.parse_date_code(d);
+      dateStr = dt.y + '-' + pad(dt.m) + '-' + pad(dt.d);
+    } else {
+      dateStr = String(d).slice(0,10);
+    }
+    var getV = function(c) {
+      var cl = ws[XLSX.utils.encode_cell({r:r2, c:c})];
+      return cl ? (cl.v !== null && cl.v !== undefined ? cl.v : '') : '';
+    };
+    rows.push({
+      date: dateStr, repName: String(getV(2)||''), amount: Number(getV(3))||0,
+      status: String(getV(4)||''), invoiceNum: String(getV(5)||''),
+      payType: String(getV(6)||''), comment: String(getV(8)||'')
+    });
+  }
+  return rows;
+}
+
+var BATCH_SIZE = 200;
+
+function importBatch(baseRows, repRows, offset, statusEl, barEl, detailsEl, prog) {
+  var total = baseRows.length;
+  var batch = baseRows.slice(offset, offset + BATCH_SIZE);
+
+  statusEl.textContent = 'Импорт БАЗА: ' + Math.min(offset + BATCH_SIZE, total) + ' / ' + total;
+  barEl.style.width = Math.round(10 + 70 * offset / total) + '%';
+
+  google.script.run
+    .withSuccessHandler(function() {
+      var nextOffset = offset + BATCH_SIZE;
+      if(nextOffset < total) {
+        importBatch(baseRows, repRows, nextOffset, statusEl, barEl, detailsEl, prog);
+      } else if(repRows.length > 0) {
+        importRepBatch(repRows, 0, statusEl, barEl, detailsEl, prog, total);
+      } else {
+        finishImport(statusEl, barEl, detailsEl, prog, total, 0);
+      }
+    })
+    .withFailureHandler(function(e) {
+      showToast('Ошибка импорта: ' + e.message);
+      prog.style.display = 'none';
+    })
+    .importExcelRows(batch);
+}
+
+function importRepBatch(repRows, offset, statusEl, barEl, detailsEl, prog, baseDone) {
+  var total = repRows.length;
+  var batch = repRows.slice(offset, offset + BATCH_SIZE);
+
+  statusEl.textContent = 'Импорт выплат: ' + Math.min(offset + BATCH_SIZE, total) + ' / ' + total;
+  barEl.style.width = Math.round(80 + 15 * offset / Math.max(total,1)) + '%';
+
+  google.script.run
+    .withSuccessHandler(function() {
+      var nextOffset = offset + BATCH_SIZE;
+      if(nextOffset < total) {
+        importRepBatch(repRows, nextOffset, statusEl, barEl, detailsEl, prog, baseDone);
+      } else {
+        finishImport(statusEl, barEl, detailsEl, prog, baseDone, total);
+      }
+    })
+    .withFailureHandler(function(e) {
+      showToast('Ошибка импорта выплат: ' + e.message);
+      prog.style.display = 'none';
+    })
+    .importRepExcelRows(batch);
+}
+
+function finishImport(statusEl, barEl, detailsEl, prog, baseCount, repCount) {
+  barEl.style.width = '100%';
+  statusEl.textContent = '✓ Импорт завершён!';
+  detailsEl.textContent = 'БАЗА: ' + baseCount + ' записей, Выплаты: ' + repCount + ' записей';
+  showToast('Импорт завершён: ' + baseCount + ' записей');
+  loadDashboard();
+  loadHistory();
+  setTimeout(function() { prog.style.display = 'none'; }, 4000);
+}
+
+function buildAnalyticsSheets() {
+  showToast('Создаём аналитические листы…');
+  google.script.run
+    .withSuccessHandler(function(r) {
+      if(r.ok) showToast('Готово! Открой Google Sheets — появились листы Пульт, По_Месяцам, Отчёт_Ф');
+      else showToast('Ошибка: ' + r.error);
+    })
+    .withFailureHandler(function(e) { showToast('Ошибка: ' + e.message); })
+    .buildAnalyticsSheets();
+}
 </script>
 </body>
 </html>
