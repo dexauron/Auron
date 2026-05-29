@@ -231,6 +231,15 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
 .empty-icon{font-size:48px;margin-bottom:12px;}
 .empty-text{font-size:16px;}
 .privacy-note{font-size:13px;color:var(--text-2);text-align:center;margin-top:20px;line-height:1.5;}
+.field label{font-size:13px;color:var(--text-2);font-weight:500;margin-bottom:6px;display:block;}
+.field input,.field select,.field textarea{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;-webkit-appearance:none;font-family:inherit;}
+.field input:focus,.field select:focus{border-color:var(--brand);}
+@media print{
+  .nav,#fab,.topbar,.sheet-overlay,.modal-overlay,#toast,.j-tabs,#btn-print{display:none!important;}
+  #j-report{display:block!important;}
+  #report-out{padding:0;}
+  body{background:#fff;color:#000;}
+}
 </style>
 </head>
 <body>
@@ -322,10 +331,13 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
           <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="field" style="margin:0;"><label>Дата</label><input type="date" id="k-date"></div>
             <div class="field" style="margin:0;"><label>Смена</label>
-              <select id="k-shift"><option value="1">Смена 1</option><option value="2">Смена 2</option></select>
+              <select id="k-shift"></select>
             </div>
             <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
               <select id="k-cashier"><option value="">— выбрать —</option></select>
+            </div>
+            <div class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
+              <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
             </div>
           </div>
         </div>
@@ -360,6 +372,22 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
         <button class="j-tab active" onclick="App.setJTab('history',this)">История</button>
         <button class="j-tab" onclick="App.setJTab('reps',this)">Представители</button>
         <button class="j-tab" onclick="App.setJTab('timesheet',this)">Табель</button>
+        <button class="j-tab" onclick="App.setJTab('shifts',this)">Смены</button>
+        <button class="j-tab" onclick="App.setJTab('report',this)">Отчёт</button>
+      </div>
+      <div id="j-shifts" class="j-panel" style="padding-top:12px;"></div>
+      <div id="j-report" class="j-panel" style="padding-top:12px;">
+        <div style="background:var(--card);border-radius:14px;padding:16px;margin-bottom:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+            <div><label style="font-size:12px;color:var(--text-2);display:block;margin-bottom:4px;">С</label>
+              <input type="date" id="r-from" style="width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--text-1);font-size:14px;outline:none;"></div>
+            <div><label style="font-size:12px;color:var(--text-2);display:block;margin-bottom:4px;">По</label>
+              <input type="date" id="r-to" style="width:100%;padding:10px;border-radius:10px;border:1.5px solid var(--sep);background:var(--bg);color:var(--text-1);font-size:14px;outline:none;"></div>
+          </div>
+          <button class="btn-primary" onclick="App.buildReport()" style="margin:0;">Сформировать отчёт</button>
+        </div>
+        <div id="report-out"></div>
+        <button onclick="window.print()" id="btn-print" style="display:none;width:100%;padding:14px;border-radius:14px;border:1.5px solid var(--brand);background:none;color:var(--brand);font-size:16px;font-weight:600;cursor:pointer;margin-top:8px;">🖨 Распечатать / PDF</button>
       </div>
       <div id="j-history" class="j-panel active">
         <div style="padding:12px 0 8px;">
@@ -402,6 +430,26 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
         <div class="settings-sec-title">Категории</div>
         <div class="settings-list" id="settings-cats-list"></div>
         <button class="btn-secondary" onclick="App.openAddCat()" style="margin-top:10px;">+ Добавить категорию</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Смены</div>
+        <div class="settings-list" id="settings-shifts-list"></div>
+        <button class="btn-secondary" onclick="App.openAddShift()" style="margin-top:10px;">+ Добавить смену</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Способы оплаты</div>
+        <div class="settings-list" id="settings-paytypes-list"></div>
+        <button class="btn-secondary" onclick="App.openAddPayType()" style="margin-top:10px;">+ Добавить способ</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Статусы накладных</div>
+        <div class="settings-list" id="settings-repstatuses-list"></div>
+        <button class="btn-secondary" onclick="App.openAddRepStatus()" style="margin-top:10px;">+ Добавить статус</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Сотрудники</div>
+        <div class="settings-list" id="settings-employees-list"></div>
+        <button class="btn-secondary" onclick="App.openAddEmployee()" style="margin-top:10px;">+ Добавить сотрудника</button>
       </div>
       <div class="settings-sec">
         <div class="settings-sec-title">Организации</div>
@@ -560,7 +608,8 @@ var App={
      anPeriod:'month',anTab:'pl',
      npType:'expense',npVal:'',npAcc:null,npAcc2:null,npCat:null,npDate:null,npEditId:null,
      wyplatas:[],tsYear:new Date().getFullYear(),tsMonth:new Date().getMonth(),
-     settings:{cats:[],cashiers:[]},chart1:null,chart2:null,searchTimer:null},
+     settings:{cats:[],cashiers:[],payTypes:[],repStatuses:[],employees:[],shifts:[]},
+     chart1:null,chart2:null,searchTimer:null},
 
   init:function(){
     this.s.npDate=new Date();
@@ -645,9 +694,13 @@ var App={
 
   loadSettings:function(cb){
     gs('getSettings',{ssId:App.s.ssId}).then(function(r){
-      App.s.settings=r||{cats:[],cashiers:[]};
+      App.s.settings=r||{};
       if(!App.s.settings.cats)App.s.settings.cats=[];
       if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
+      if(!App.s.settings.payTypes)App.s.settings.payTypes=['Наличные','Карта','СБП','Безналичный'];
+      if(!App.s.settings.repStatuses)App.s.settings.repStatuses=['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён','❓ Не пришёл'];
+      if(!App.s.settings.employees)App.s.settings.employees=[];
+      if(!App.s.settings.shifts)App.s.settings.shifts=['Смена 1','Смена 2','Смена 3'];
       if(cb)cb();
     }).catch(function(){if(cb)cb();});
   },
@@ -859,6 +912,11 @@ var App={
   // ── Kassa ─────────────────────────────────────────────────────
   initKassa:function(){
     document.getElementById('k-date').value=fmtISO(new Date());
+    var shiftSel=document.getElementById('k-shift');
+    shiftSel.innerHTML='';
+    (App.s.settings.shifts||['Смена 1','Смена 2','Смена 3']).forEach(function(s){
+      shiftSel.innerHTML+='<option value="'+App._e(s)+'">'+App._e(s)+'</option>';
+    });
     var sel=document.getElementById('k-cashier');
     sel.innerHTML='<option value="">— выбрать —</option>';
     (App.s.settings.cashiers||[]).forEach(function(c){
@@ -956,6 +1014,12 @@ var App={
     if(tab==='history')App.loadHistory();
     else if(tab==='reps')App.loadReps();
     else if(tab==='timesheet')App.loadTimesheet();
+    else if(tab==='shifts')App.loadShiftsLog();
+    else if(tab==='report'){
+      var now=new Date();var from=new Date(now.getFullYear(),now.getMonth(),1);
+      document.getElementById('r-from').value=fmtISO(from);
+      document.getElementById('r-to').value=fmtISO(now);
+    }
   },
 
   loadHistory:function(){
@@ -1016,8 +1080,11 @@ var App={
 
   openDebtModal:function(repId,repName,type){
     var isOp=type==='oplata';
+    var statOpts=(App.s.settings.repStatuses||['✅ Оплачено','❌ Не оплачено']).map(function(s){return'<option>'+App._e(s)+'</option>';}).join('');
     App.openModal('<div class="modal-title">'+(isOp?'Оплата':'Закупка')+' — '+repName+'</div>'+
       '<div class="field"><label>Сумма (₽)</label><input id="dm-amt" type="number" placeholder="0"></div>'+
+      (!isOp?'<div class="field"><label>Номер накладной</label><input id="dm-invoice" type="text" placeholder="№ 123"></div>':'')+
+      (!isOp?'<div class="field"><label>Статус</label><select id="dm-status">'+statOpts+'</select></div>':'')+
       (isOp?'<div class="field"><label>Счёт списания</label><select id="dm-acc">'+App.s.accounts.map(function(a){return'<option>'+App._e(a.name)+'</option>';}).join('')+'</select></div>':'')+
       '<div class="field"><label>Комментарий</label><input id="dm-comment" type="text" placeholder="…"></div>'+
       '<button class="btn-primary" onclick="App._saveDebt(\''+repId+'\',\''+type+'\')">Сохранить</button>');
@@ -1027,8 +1094,10 @@ var App={
     var amt=parseFloat(document.getElementById('dm-amt').value)||0;
     var comment=document.getElementById('dm-comment').value.trim();
     var accEl=document.getElementById('dm-acc');var acc=accEl?accEl.value:'';
+    var invEl=document.getElementById('dm-invoice');var invoice=invEl?invEl.value.trim():'';
+    var stEl=document.getElementById('dm-status');var status=stEl?stEl.value:'';
     if(!amt){App.toast('Введите сумму',true);return;}
-    gs('saveDebtEntry',{ssId:App.s.ssId,data:{repId:repId,type:type,amount:amt,account:acc,comment:comment}}).then(function(){
+    gs('saveDebtEntry',{ssId:App.s.ssId,data:{repId:repId,type:type,amount:amt,account:acc,comment:comment,invoice:invoice,status:status}}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadReps();
     }).catch(function(e){App.toast(e.message,true);});
   },
@@ -1036,16 +1105,52 @@ var App={
   openRepHistory:function(repId,repName){
     gs('getRepDebt',{ssId:App.s.ssId,repId:repId}).then(function(r){
       var entries=r||[];
+      var typeLabels={zakupka:'🛒 Закупка',oplata:'💸 Оплата',начальный_долг:'📋 Нач. долг'};
       App.openModal('<div class="modal-title">'+repName+'</div>'+
         (entries.length?entries.map(function(e){
-          var isOp=e.type==='oplata'||e.type==='Оплата';
-          return '<div class="cashier-row">'+
-            '<div class="cashier-info"><div class="cashier-name">'+(isOp?'💸 Оплата':'🛒 Закупка')+'</div>'+
-            '<div class="cashier-sub">'+fmtDate(e.date)+(e.comment?' · '+App._e(e.comment):'')+'</div></div>'+
-            '<div class="cashier-amount" style="color:'+(isOp?'var(--income)':'var(--expense)')+'">'+
-              (isOp?'−':'+')+'₽ '+fmtFull(e.amount)+'</div></div>';
+          var isOp=e.type==='oplata';
+          var label=typeLabels[e.type]||(isOp?'💸 Оплата':'🛒 Закупка');
+          var sub=[fmtDate(e.date)];
+          if(e.invoice)sub.push('№ '+App._e(e.invoice));
+          if(e.status)sub.push(App._e(e.status));
+          if(e.comment)sub.push(App._e(e.comment));
+          return '<div class="cashier-row" style="position:relative;">'+
+            '<div class="cashier-info"><div class="cashier-name">'+label+'</div>'+
+            '<div class="cashier-sub">'+sub.join(' · ')+'</div></div>'+
+            '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">'+
+              '<div class="cashier-amount" style="color:'+(isOp?'var(--income)':'var(--expense)')+'">'+
+                (isOp?'−':'+')+'₽ '+fmtFull(e.amount)+'</div>'+
+              '<div style="display:flex;gap:6px;">'+
+                (!isOp?'<button onclick="App.editDebtEntry(\''+App._e(String(e.id))+'\',\''+repName+'\')" style="background:rgba(255,159,10,.15);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#FF9F0A;">✎</button>':'')+
+                '<button onclick="App.deleteDebtEntry(\''+App._e(String(e.id))+'\',\''+repName+'\')" style="background:rgba(255,69,58,.12);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--expense);">✕</button>'+
+              '</div></div></div>';
         }).join(''):'<div class="empty-state"><div class="empty-text">Нет операций</div></div>'));
     });
+  },
+
+  editDebtEntry:function(id,repName){
+    var statOpts=(App.s.settings.repStatuses||[]).map(function(s){return'<option>'+App._e(s)+'</option>';}).join('');
+    App.openModal('<div class="modal-title">Редактировать накладную</div>'+
+      '<div class="field"><label>Номер накладной</label><input id="ede-invoice" type="text" placeholder="№ 123"></div>'+
+      '<div class="field"><label>Статус</label><select id="ede-status">'+statOpts+'</select></div>'+
+      '<div class="field"><label>Комментарий</label><input id="ede-comment" type="text"></div>'+
+      '<button class="btn-primary" onclick="App._saveDebtEdit(\''+id+'\',\''+repName+'\')">Сохранить</button>');
+  },
+
+  _saveDebtEdit:function(id,repName){
+    var invoice=document.getElementById('ede-invoice').value.trim();
+    var status=document.getElementById('ede-status').value;
+    var comment=document.getElementById('ede-comment').value.trim();
+    gs('updateDebtEntry',{ssId:App.s.ssId,data:{id:id,invoice:invoice,status:status,comment:comment}}).then(function(){
+      App.toast('Обновлено ✓');App.closeModal();App.openRepHistory(repName,repName);
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  deleteDebtEntry:function(id,repName){
+    if(!confirm('Удалить запись?'))return;
+    gs('deleteDebtEntry',{ssId:App.s.ssId,id:id}).then(function(){
+      App.toast('Удалено');App.closeModal();App.loadReps();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   // ── Timesheet ─────────────────────────────────────────────────
@@ -1053,21 +1158,48 @@ var App={
     var d=new Date(App.s.tsYear,App.s.tsMonth,1);
     document.getElementById('ts-month-label').textContent=monthName(d);
     gs('getTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1}).then(function(r){
-      var emp=r.summary||{};var keys=Object.keys(emp);
+      // Summary table
       var sumEl=document.getElementById('ts-summary');
-      sumEl.innerHTML=keys.length?keys.map(function(k){return'<span class="rep-stat">'+App._e(k)+': <span>'+emp[k]+' дн.</span></span>';}).join(''):'<span style="color:var(--text-2);font-size:14px;">Нет данных</span>';
+      var sumArr=r.summary||[];
+      if(sumArr.length){
+        sumEl.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px;">'+
+          '<tr style="color:var(--text-2);"><th style="text-align:left;padding:4px 6px;">Сотрудник</th>'+
+          '<th style="padding:4px;">П</th><th style="padding:4px;">О</th><th style="padding:4px;">Б</th><th style="padding:4px;">Отп</th><th style="padding:4px;">В</th>'+
+          '<th style="padding:4px;">Часы</th><th style="text-align:right;padding:4px 6px;">Зарплата</th></tr>'+
+          sumArr.map(function(s){
+            if(!s.daysP&&!s.daysO&&!s.daysB&&!s.daysOt&&!s.daysV)return'';
+            return '<tr><td style="padding:4px 6px;font-weight:600;">'+App._e(s.employee)+'</td>'+
+              '<td style="text-align:center;padding:4px;color:var(--income);">'+s.daysP+'</td>'+
+              '<td style="text-align:center;padding:4px;color:var(--transfer);">'+s.daysO+'</td>'+
+              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysB+'</td>'+
+              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysOt+'</td>'+
+              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysV+'</td>'+
+              '<td style="text-align:center;padding:4px;">'+s.totalHours+'</td>'+
+              '<td style="text-align:right;padding:4px 6px;font-weight:700;">₽ '+fmtFull(s.totalSalary)+'</td></tr>';
+          }).join('')+'</table>';
+      } else {
+        sumEl.innerHTML='<span style="color:var(--text-2);font-size:14px;">Нет данных</span>';
+      }
+      // Day grid
       var grid=document.getElementById('ts-grid');grid.innerHTML='';
       var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
       var days=r.days||[];
+      var statusColors={П:'var(--income)',О:'var(--transfer)',Б:'var(--text-2)',Отп:'var(--brand)',В:'var(--text-2)'};
       for(var i=1;i<=dIM;i++){
-        var dd=days.find(function(x){return x.day===i;})||{};
+        var di=i;var dd=days.find(function(x){return x.day===di;})||{};
         var cell=document.createElement('div');cell.className='ts-day';
         var dn=new Date(App.s.tsYear,App.s.tsMonth,i);
         var dow=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dn.getDay()];
-        var dayIdx=i;
-        cell.innerHTML='<div class="ts-day-num">'+i+' '+dow+'</div>'+
-          (dd.employee?'<div class="ts-day-emp">'+App._e(dd.employee)+'</div>':'<div class="ts-day-empty">—</div>')+
-          '<button class="ts-add-btn" onclick="App.openTsEntry('+dayIdx+',\''+App._e(dd.employee||'')+'\')">'+(dd.employee?'Изменить':'+ Добавить')+'</button>';
+        var isWeekend=dn.getDay()===0||dn.getDay()===6;
+        var statusColor=statusColors[dd.status]||'var(--text-2)';
+        cell.innerHTML='<div style="font-size:12px;color:'+(isWeekend?'var(--expense)':'var(--text-2)')+';margin-bottom:2px;">'+i+' '+dow+'</div>'+
+          (dd.employee?
+            '<div style="font-size:13px;font-weight:600;margin-bottom:2px;">'+App._e(dd.employee)+'</div>'+
+            '<div style="font-size:11px;color:'+statusColor+';">'+App._e(dd.status||'П')+(dd.timeIn?' '+App._e(dd.timeIn)+(dd.timeOut?'–'+App._e(dd.timeOut):''):'')+'</div>'+
+            (dd.rate?'<div style="font-size:11px;color:var(--text-2);">₽ '+fmtFull(dd.rate)+'</div>':'')
+          :'<div style="font-size:12px;color:var(--sep);">—</div>')+
+          '<button class="ts-add-btn" style="margin-top:4px;" onclick="App.openTsEntry('+di+')">'+
+            (dd.employee?'✎':'＋')+'</button>';
         grid.appendChild(cell);
       }
     });
@@ -1076,20 +1208,131 @@ var App={
   tsPrevMonth:function(){App.s.tsMonth--;if(App.s.tsMonth<0){App.s.tsMonth=11;App.s.tsYear--;}App.loadTimesheet();},
   tsNextMonth:function(){App.s.tsMonth++;if(App.s.tsMonth>11){App.s.tsMonth=0;App.s.tsYear++;}App.loadTimesheet();},
 
-  openTsEntry:function(day,cur){
-    App.openModal('<div class="modal-title">'+day+' — табель</div>'+
-      '<div class="field"><label>Сотрудник</label><select id="ts-emp">'+
-        '<option value="">— выходной —</option>'+
-        (App.s.settings.cashiers||[]).map(function(c){return'<option value="'+App._e(c)+'"'+(c===cur?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+
-      '</select></div>'+
-      '<button class="btn-primary" onclick="App._saveTsEntry('+day+')">Сохранить</button>');
+  openTsEntry:function(day){
+    var days=[];
+    gs('getTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1}).then(function(r){
+      var existing=(r.days||[]).find(function(x){return x.day===day;})||{};
+      var empList=App.s.settings.cashiers||[];
+      // Also add employees from settings.employees
+      (App.s.settings.employees||[]).forEach(function(e){
+        var n=typeof e==='object'?e.name:e;
+        if(empList.indexOf(n)<0)empList.push(n);
+      });
+      var defaultRate=typeof existing.rate!=='undefined'?existing.rate:
+        (function(){var emp=(App.s.settings.employees||[]).find(function(e){return(typeof e==='object'?e.name:e)===existing.employee;});return emp&&emp.dailySalary?emp.dailySalary:0;})();
+      App.openModal('<div class="modal-title">'+day+' '+new Date(App.s.tsYear,App.s.tsMonth,day).toLocaleDateString('ru',{month:'long'})+'</div>'+
+        '<div class="field"><label>Сотрудник</label><select id="ts-emp">'+
+          '<option value="">— выходной / не работал —</option>'+
+          empList.map(function(c){return'<option value="'+App._e(c)+'"'+(c===existing.employee?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+
+        '</select></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+          '<div class="field" style="margin:0;"><label>Приход</label><input type="time" id="ts-in" value="'+App._e(existing.timeIn||'')+'"></div>'+
+          '<div class="field" style="margin:0;"><label>Уход</label><input type="time" id="ts-out" value="'+App._e(existing.timeOut||'')+'"></div>'+
+        '</div>'+
+        '<div class="field"><label>Статус</label><select id="ts-status">'+
+          ['П','О','Б','Отп','В'].map(function(s){
+            var l={П:'П — присутствовал',О:'О — опоздал',Б:'Б — больничный',Отп:'Отп — отпуск',В:'В — выходной'};
+            return'<option value="'+s+'"'+(s===(existing.status||'П')?' selected':'')+'>'+l[s]+'</option>';
+          }).join('')+
+        '</select></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+          '<div class="field" style="margin:0;"><label>Часов</label><input type="number" id="ts-hours" step="0.5" placeholder="8" value="'+App._e(String(existing.hours||''))+'"></div>'+
+          '<div class="field" style="margin:0;"><label>Дневная ставка (₽)</label><input type="number" id="ts-rate" placeholder="0" value="'+App._e(String(defaultRate||''))+'"></div>'+
+        '</div>'+
+        '<div class="field"><label>Комментарий</label><input type="text" id="ts-comment" placeholder="…" value="'+App._e(existing.comment||'')+'"></div>'+
+        '<button class="btn-primary" onclick="App._saveTsEntry('+day+')">Сохранить</button>');
+    });
   },
 
   _saveTsEntry:function(day){
     var emp=document.getElementById('ts-emp').value;
-    gs('saveTimesheetEntry',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,day:day,employee:emp}).then(function(){
+    var timeIn=document.getElementById('ts-in').value;
+    var timeOut=document.getElementById('ts-out').value;
+    var status=document.getElementById('ts-status').value;
+    var hours=parseFloat(document.getElementById('ts-hours').value)||0;
+    var rate=parseFloat(document.getElementById('ts-rate').value)||0;
+    var comment=document.getElementById('ts-comment').value.trim();
+    gs('saveTimesheetEntry',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,
+       day:day,employee:emp,timeIn:timeIn,timeOut:timeOut,status:status,hours:hours,rate:rate,comment:comment}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadTimesheet();
     });
+  },
+
+  // ── Shifts Log ────────────────────────────────────────────────
+  loadShiftsLog:function(){
+    var el=document.getElementById('j-shifts');
+    el.innerHTML='<div style="color:var(--text-2);padding:20px;text-align:center;">Загрузка…</div>';
+    gs('getShifts',{ssId:App.s.ssId,limit:50}).then(function(r){
+      var shifts=r||[];
+      if(!shifts.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-text">Нет сохранённых смен</div></div>';return;}
+      el.innerHTML=shifts.map(function(s){
+        var rows=s.rows||[];var discCls=s.discrepancy===0?'zero':s.discrepancy>0?'pos':'neg';
+        return '<div style="background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
+            '<div>'+
+              '<div style="font-size:15px;font-weight:700;">'+fmtDate(s.date)+'</div>'+
+              '<div style="font-size:13px;color:var(--text-2);">'+App._e(s.shift)+' · '+App._e(s.cashier)+'</div>'+
+            '</div>'+
+            '<div style="text-align:right;">'+
+              '<div style="font-size:17px;font-weight:700;color:var(--income);">₽ '+fmtFull(s.revenue)+'</div>'+
+              (s.discrepancy!==0?'<div class="kassa-diff '+discCls+'" style="font-size:12px;">'+(s.discrepancy>0?'+':'')+fmtFull(s.discrepancy)+'</div>':'<div style="font-size:12px;color:var(--text-2);">✓ 0</div>')+
+            '</div>'+
+          '</div>'+
+          (rows.length?'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+rows.filter(function(r){return r.zAmount;}).map(function(row){
+            return '<span style="font-size:12px;background:var(--bg);border-radius:8px;padding:3px 8px;color:var(--text-2);">'+App._e(row.account||'')+' ₽'+fmtFull(parseFloat(row.zAmount)||0)+'</span>';
+          }).join('')+'</div>':'')+
+        '</div>';
+      }).join('');
+    });
+  },
+
+  // ── Report ────────────────────────────────────────────────────
+  buildReport:function(){
+    var from=document.getElementById('r-from').value;
+    var to=document.getElementById('r-to').value;
+    if(!from||!to){App.toast('Укажите диапазон',true);return;}
+    var el=document.getElementById('report-out');
+    el.innerHTML='<div style="color:var(--text-2);padding:20px;text-align:center;">Формирую…</div>';
+    Promise.all([
+      gs('getAnalytics',{ssId:App.s.ssId,period:'custom',from:from,to:to}),
+      gs('getAllTransactions',{ssId:App.s.ssId})
+    ]).then(function(res){
+      var an=res[0]||{};var txs=(res[1]||[]).filter(function(t){
+        if(!t.date)return false;
+        var d=t.date.substring(0,10);return d>=from&&d<=to;
+      });
+      var html='<div style="background:var(--card);border-radius:14px;padding:16px;margin-top:12px;">'+
+        '<div style="font-size:18px;font-weight:700;margin-bottom:4px;">Отчёт за период</div>'+
+        '<div style="font-size:13px;color:var(--text-2);margin-bottom:16px;">'+from+' — '+to+'</div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'+
+          '<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:12px;color:var(--text-2);">Доходы</div><div style="font-size:20px;font-weight:700;color:var(--income);">₽ '+fmtFull(an.income||0)+'</div></div>'+
+          '<div style="background:var(--bg);border-radius:12px;padding:12px;"><div style="font-size:12px;color:var(--text-2);">Расходы</div><div style="font-size:20px;font-weight:700;color:var(--expense);">₽ '+fmtFull(an.expense||0)+'</div></div>'+
+        '</div>'+
+        '<div style="background:var(--bg);border-radius:12px;padding:12px;margin-bottom:16px;">'+
+          '<div style="font-size:12px;color:var(--text-2);">Прибыль</div>'+
+          '<div style="font-size:22px;font-weight:700;color:'+((an.income-an.expense)>=0?'var(--income)':'var(--expense)')+'">₽ '+fmtFull((an.income||0)-(an.expense||0))+'</div>'+
+        '</div>';
+      if((an.byCategory||[]).length){
+        html+='<div style="font-size:15px;font-weight:700;margin-bottom:10px;">По категориям</div>'+
+          '<table style="width:100%;font-size:13px;border-collapse:collapse;">'+
+          (an.byCategory||[]).slice(0,15).map(function(c){
+            return'<tr><td style="padding:5px 0;">'+App._e(c.category)+'</td>'+
+              '<td style="text-align:right;font-weight:600;color:'+(c.type==='income'?'var(--income)':'var(--expense)')+'">₽ '+fmtFull(c.total)+'</td></tr>';
+          }).join('')+'</table>';
+      }
+      html+='<div style="font-size:15px;font-weight:700;margin:16px 0 10px;">Операции ('+txs.length+')</div>'+
+        txs.slice(0,100).map(function(t){
+          var ci=catIcon(t.category);var isInc=t.type==='Доход';
+          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--sep);">'+
+            '<div style="width:32px;height:32px;border-radius:8px;background:'+ci.bg+'20;color:'+ci.bg+';display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">'+ci.icon+'</div>'+
+            '<div style="flex:1;"><div style="font-size:13px;font-weight:600;">'+App._e(t.category)+'</div>'+
+            '<div style="font-size:11px;color:var(--text-2);">'+t.date.substring(0,10)+(t.comment?' · '+App._e(t.comment):'')+'</div></div>'+
+            '<div style="font-size:14px;font-weight:700;color:'+(isInc?'var(--income)':'var(--expense)')+'">'+
+              (isInc?'+':'−')+'₽ '+fmtFull(t.amount)+'</div></div>';
+        }).join('')+'</div>';
+      el.innerHTML=html;
+      document.getElementById('btn-print').style.display='block';
+    }).catch(function(e){el.innerHTML='<div style="color:var(--expense);padding:20px;">Ошибка: '+App._e(e.message)+'</div>';});
   },
 
   // ── Settings ──────────────────────────────────────────────────
@@ -1120,6 +1363,43 @@ var App={
         '<span class="settings-row-label">'+App._e(c)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.cats.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Используются стандартные</span></div>';
+    // Shifts
+    var sEl=document.getElementById('settings-shifts-list');
+    var shifts=App.s.settings.shifts||[];
+    sEl.innerHTML=shifts.map(function(s,i){
+      return '<div class="settings-row"><span class="settings-row-icon">🕐</span>'+
+        '<span class="settings-row-label">'+App._e(s)+'</span>'+
+        '<span class="settings-row-action" onclick="App.s.settings.shifts.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет смен</span></div>';
+    // Pay types
+    var ptEl=document.getElementById('settings-paytypes-list');
+    var pts=App.s.settings.payTypes||[];
+    ptEl.innerHTML=pts.map(function(pt,i){
+      return '<div class="settings-row"><span class="settings-row-icon">💳</span>'+
+        '<span class="settings-row-label">'+App._e(pt)+'</span>'+
+        '<span class="settings-row-action" onclick="App.s.settings.payTypes.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет способов</span></div>';
+    // Rep statuses
+    var rsEl=document.getElementById('settings-repstatuses-list');
+    var rss=App.s.settings.repStatuses||[];
+    rsEl.innerHTML=rss.map(function(rs,i){
+      return '<div class="settings-row"><span class="settings-row-icon">🏷</span>'+
+        '<span class="settings-row-label">'+App._e(rs)+'</span>'+
+        '<span class="settings-row-action" onclick="App.s.settings.repStatuses.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет статусов</span></div>';
+    // Employees
+    var empEl=document.getElementById('settings-employees-list');
+    var emps=App.s.settings.employees||[];
+    empEl.innerHTML=emps.map(function(e,i){
+      var n=typeof e==='object'?e.name:e;
+      var sub=typeof e==='object'?(e.schedule?e.schedule+' ':'')+( e.dailySalary?'₽'+e.dailySalary+'/день':''):'';
+      return '<div class="settings-row">'+
+        '<span class="settings-row-icon">🧑‍💼</span>'+
+        '<div style="flex:1;"><div class="settings-row-label">'+App._e(n)+'</div>'+
+          (sub?'<div style="font-size:12px;color:var(--text-2);">'+App._e(sub)+'</div>':'')+
+        '</div>'+
+        '<span class="settings-row-action" onclick="App.s.settings.employees.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет сотрудников</span></div>';
   },
 
   openAddCashier:function(){
@@ -1149,6 +1429,67 @@ var App={
     if(!App.s.settings.cats)App.s.settings.cats=[];
     if(App.s.settings.cats.indexOf(c)<0)App.s.settings.cats.push(c);
     App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(c+' добавлена');
+  },
+
+  openAddShift:function(){
+    App.openModal('<div class="modal-title">Новая смена</div>'+
+      '<div class="field"><label>Название</label><input id="ns-name" type="text" placeholder="Смена 1 / Утро / 09-18"></div>'+
+      '<button class="btn-primary" onclick="App._saveShift()">Добавить</button>');
+  },
+  _saveShift:function(){
+    var n=document.getElementById('ns-name').value.trim();if(!n)return;
+    if(!App.s.settings.shifts)App.s.settings.shifts=[];
+    App.s.settings.shifts.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(n+' добавлена');
+  },
+
+  openAddPayType:function(){
+    App.openModal('<div class="modal-title">Способ оплаты</div>'+
+      '<div class="field"><label>Название</label><input id="npt-name" type="text" placeholder="Наличные / Карта / СБП"></div>'+
+      '<button class="btn-primary" onclick="App._savePayType()">Добавить</button>');
+  },
+  _savePayType:function(){
+    var n=document.getElementById('npt-name').value.trim();if(!n)return;
+    if(!App.s.settings.payTypes)App.s.settings.payTypes=[];
+    App.s.settings.payTypes.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Добавлено');
+  },
+
+  openAddRepStatus:function(){
+    App.openModal('<div class="modal-title">Статус накладной</div>'+
+      '<div class="field"><label>Название</label><input id="nrs-name" type="text" placeholder="✅ Оплачено"></div>'+
+      '<button class="btn-primary" onclick="App._saveRepStatus()">Добавить</button>');
+  },
+  _saveRepStatus:function(){
+    var n=document.getElementById('nrs-name').value.trim();if(!n)return;
+    if(!App.s.settings.repStatuses)App.s.settings.repStatuses=[];
+    App.s.settings.repStatuses.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Добавлено');
+  },
+
+  openAddEmployee:function(){
+    App.openModal('<div class="modal-title">Новый сотрудник</div>'+
+      '<div class="field"><label>ФИО</label><input id="ne-name" type="text" placeholder="Иванова Анна"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Расписание</label><input id="ne-sched" type="text" placeholder="09:00-18:00"></div>'+
+        '<div class="field" style="margin:0;"><label>Дневная ставка (₽)</label><input id="ne-sal" type="number" placeholder="2500"></div>'+
+      '</div>'+
+      '<div class="field"><label>Частота выплат</label><select id="ne-freq">'+
+        '<option value="monthly">Раз в месяц</option><option value="biweekly">2 раза в месяц</option><option value="daily">Ежедневно</option>'+
+      '</select></div>'+
+      '<button class="btn-primary" onclick="App._saveEmployee()">Добавить</button>');
+  },
+  _saveEmployee:function(){
+    var name=document.getElementById('ne-name').value.trim();
+    if(!name){App.toast('Введите имя',true);return;}
+    var emp={name:name,schedule:document.getElementById('ne-sched').value.trim(),
+             dailySalary:parseFloat(document.getElementById('ne-sal').value)||0,
+             payFreq:document.getElementById('ne-freq').value};
+    if(!App.s.settings.employees)App.s.settings.employees=[];
+    App.s.settings.employees.push(emp);
+    // Also add to cashiers if not there
+    if((App.s.settings.cashiers||[]).indexOf(name)<0){
+      if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
+      App.s.settings.cashiers.push(name);
+    }
+    App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(name+' добавлен');
   },
 
   openAccountForm:function(id){

@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════
-//  AURON FINANCE v2.0 — Google Apps Script Backend
+//  AURON FINANCE v2.1 — Google Apps Script Backend
 //  Deploy: Execute as User accessing, Access: Anyone with Google account
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -20,7 +20,14 @@ var SH_ORGS      = 'ОРГАНИЗАЦИИ';
 // БАЗА columns (1-based)
 var C_ID=1; var C_UUID=2; var C_DATE=3; var C_TYPE=4; var C_CAT=5;
 var C_AMOUNT=6; var C_ACCOUNT=7; var C_EMPLOYEE=8; var C_COMMENT=9;
-var C_RECEIPT=10; var C_ZREF=11; var C_LOCKED=12; var C_COLS=12;
+var C_RECEIPT=10; var C_ZREF=11; var C_LOCKED=12; var C_SHIFT_N=13;
+var C_COLS=13;
+
+// ДОЛГИ columns (1-based): ID|Представитель|Тип|Сумма|Дата|Счёт|Комментарий|Создано|Накладная|Статус
+var D_COLS=10;
+
+// ТАБЕЛЬ columns (1-based): Год|Месяц|День|Сотрудник|Приход|Уход|Статус|Часы|Ставка|Комментарий
+var TS_COLS=10;
 
 // ── doGet ─────────────────────────────────────────────────────────────
 function doGet() {
@@ -30,8 +37,7 @@ function doGet() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// AUTH — uses UserProperties to avoid DriveApp.getFilesByName (needs full drive scope)
-// PropertiesService.getUserProperties() is per-user per-script — works across devices
+// AUTH
 // ═══════════════════════════════════════════════════════════════════════
 
 function _getUserProps() { return PropertiesService.getUserProperties(); }
@@ -68,21 +74,18 @@ function registerUser(p) {
   var name = _s(p.name); var phone = _s(p.phone);
   try {
     var lock = LockService.getUserLock(); lock.waitLock(10000);
-    // If profile already exists, return existing data
     var existingSS = _getProfileSS();
     if (existingSS) {
       lock.releaseLock();
       var r = initUserApp();
       return { ssId: (r.orgs && r.orgs[0]) ? r.orgs[0].ssId : '', orgName: (r.orgs && r.orgs[0]) ? r.orgs[0].name : '' };
     }
-    // Create profile spreadsheet
     var profileSS = SpreadsheetApp.create(PROFILE_FILE_NAME);
     var profileSh = profileSS.getSheets()[0]; profileSh.setName(SH_PROFILE);
     profileSh.getRange(1,1,1,3).setValues([['Имя','Телефон','Создано']]);
     profileSh.appendRow([name, phone, new Date()]);
     var orgsSh = profileSS.insertSheet(SH_ORGS);
     orgsSh.getRange(1,1,1,3).setValues([['ID','Название','SS_ID']]);
-    // Save profile SS ID to user properties (no DriveApp search needed later)
     _getUserProps().setProperty('PROFILE_SS_ID', profileSS.getId());
     var orgResult = _createOrgSpreadsheet('Мой магазин', profileSS);
     lock.releaseLock();
@@ -125,14 +128,18 @@ function _createOrgSpreadsheet(orgName, profileSS) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function ensureSheets(ss) {
-  _ensureSheet(ss, SH_BASE,     ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked']);
+  _ensureSheet(ss, SH_BASE,     ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена']);
   _ensureSheet(ss, SH_ACCOUNTS, ['ID','Название','Нач_Баланс','Статус','Иконка','Цвет']);
   _ensureSheet(ss, SH_SHIFTS,   ['ID','Дата','Смена','Кассир','Rows_JSON','Wyplatas_JSON','Расхождение','Создано']);
-  _ensureSheet(ss, SH_DEBTS,    ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано']);
-  _ensureSheet(ss, SH_TIMESHEET,['Год','Месяц','День','Сотрудник']);
+  _ensureSheet(ss, SH_DEBTS,    ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано','Накладная','Статус']);
+  _ensureSheet(ss, SH_TIMESHEET,['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий']);
   _ensureSheet(ss, SH_SETTINGS, ['Ключ','Значение']);
-  _ensureSheet(ss, SH_TRASH,    ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Удалено']);
+  _ensureSheet(ss, SH_TRASH,    ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
+  // Add new columns to existing sheets that have fewer columns
+  _expandSheet(ss, SH_BASE,     ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена']);
+  _expandSheet(ss, SH_DEBTS,    ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано','Накладная','Статус']);
+  _expandSheet(ss, SH_TIMESHEET,['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий']);
 }
 
 function _ensureSheet(ss, name, headers) {
@@ -143,8 +150,17 @@ function _ensureSheet(ss, name, headers) {
   }
 }
 
+function _expandSheet(ss, name, headers) {
+  var sh = ss.getSheetByName(name); if (!sh) return;
+  var cur = sh.getLastColumn();
+  if (cur < headers.length) {
+    sh.getRange(1,cur+1,1,headers.length-cur).setValues([headers.slice(cur)])
+      .setFontWeight('bold').setBackground('#1E1B4B').setFontColor('#FFFFFF');
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
-// SETTINGS — {cats, cashiers}
+// SETTINGS
 // ═══════════════════════════════════════════════════════════════════════
 
 function getSettings(p) {
@@ -155,8 +171,15 @@ function getSettings(p) {
     var map = {};
     if (sh.getLastRow() >= 2) sh.getRange(2,1,sh.getLastRow()-1,2).getValues().forEach(function(r){if(r[0])map[String(r[0])]=String(r[1]);});
     function gj(k,def){ try{return JSON.parse(map[k]||'null')||def;}catch(e){return def;} }
-    return { cats: gj('CATS',[]), cashiers: gj('CASHIERS',[]) };
-  } catch(e) { return { cats:[], cashiers:[] }; }
+    return {
+      cats:        gj('CATS',[]),
+      cashiers:    gj('CASHIERS',[]),
+      payTypes:    gj('PAY_TYPES',['Наличные','Карта','СБП','Безналичный']),
+      repStatuses: gj('REP_STATUSES',['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён','❓ Не пришёл']),
+      employees:   gj('EMPLOYEES',[]),
+      shifts:      gj('SHIFTS',['Смена 1','Смена 2','Смена 3'])
+    };
+  } catch(e) { return { cats:[], cashiers:[], payTypes:[], repStatuses:[], employees:[], shifts:[] }; }
 }
 
 function saveSettings(p) {
@@ -164,7 +187,14 @@ function saveSettings(p) {
   try {
     var ss = SpreadsheetApp.openById(ssId);
     var sh = ss.getSheetByName(SH_SETTINGS);
-    var toSave = { CATS: JSON.stringify(data.cats||[]), CASHIERS: JSON.stringify(data.cashiers||[]) };
+    var toSave = {
+      CATS:        JSON.stringify(data.cats||[]),
+      CASHIERS:    JSON.stringify(data.cashiers||[]),
+      PAY_TYPES:   JSON.stringify(data.payTypes||[]),
+      REP_STATUSES:JSON.stringify(data.repStatuses||[]),
+      EMPLOYEES:   JSON.stringify(data.employees||[]),
+      SHIFTS:      JSON.stringify(data.shifts||[])
+    };
     var last = sh.getLastRow(); var keys = {};
     if (last >= 2) sh.getRange(2,1,last-1,1).getValues().forEach(function(r,i){if(r[0])keys[String(r[0])]=i+2;});
     Object.keys(toSave).forEach(function(k){
@@ -176,7 +206,7 @@ function saveSettings(p) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// ACCOUNTS — returns array directly
+// ACCOUNTS
 // ═══════════════════════════════════════════════════════════════════════
 
 function getAccounts(p) {
@@ -259,7 +289,7 @@ function saveQuickEntry(p) {
     var dt = data.date ? new Date(data.date) : new Date();
     var row = [id, uid, dt, _s(data.type), _s(data.category||''),
                Math.round(parseFloat(data.amount)||0), _s(data.account||''), _s(data.employee||''),
-               _s(data.comment||''), '', data.zRef||'', data.locked?true:false];
+               _s(data.comment||''), '', data.zRef||'', data.locked?true:false, _s(data.shift||'')];
     base.appendRow(row);
     var nr = base.getLastRow();
     base.getRange(nr,C_DATE,1,1).setNumberFormat('dd.mm.yyyy');
@@ -306,6 +336,15 @@ function deleteTransaction(p) {
   } catch(e) { return { __error: e.message }; }
 }
 
+function _txRow(r) {
+  var d=r[C_DATE-1];
+  return { id:String(r[C_ID-1]), date:(d instanceof Date)?d.toISOString():'',
+           type:String(r[C_TYPE-1]), category:String(r[C_CAT-1]), account:String(r[C_ACCOUNT-1]),
+           amount:parseFloat(r[C_AMOUNT-1])||0, comment:String(r[C_COMMENT-1]),
+           employee:String(r[C_EMPLOYEE-1]||''), shift:String(r[C_SHIFT_N-1]||''),
+           locked:r[C_LOCKED-1]===true||r[C_LOCKED-1]==='true' };
+}
+
 // Returns {accounts, totals, transactions}
 function getHomeSummary(p) {
   var ssId = p.ssId; var period = p.period;
@@ -330,38 +369,23 @@ function getHomeSummary(p) {
       if(type==='Доход') totals[acc].income+=amt;
       else if(type==='Расход') totals[acc].expense+=amt;
     });
-    var txs = allRows.slice().reverse().slice(0,60).map(function(r){
-      var d=r[C_DATE-1];
-      return { id:String(r[C_ID-1]), date:(d instanceof Date)?d.toISOString():'',
-               type:String(r[C_TYPE-1]), category:String(r[C_CAT-1]), account:String(r[C_ACCOUNT-1]),
-               amount:parseFloat(r[C_AMOUNT-1])||0, comment:String(r[C_COMMENT-1]),
-               locked:r[C_LOCKED-1]===true||r[C_LOCKED-1]==='true' };
-    });
+    var txs = allRows.slice().reverse().slice(0,60).map(_txRow);
     var result = { accounts:accounts, totals:totals, transactions:txs };
     try { CacheService.getScriptCache().put(cKey,JSON.stringify(result),60); } catch(ex){}
     return result;
   } catch(e) { return { accounts:[], totals:{}, transactions:[], __error:e.message }; }
 }
 
-// Returns array directly
 function getAllTransactions(p) {
   var ssId = p.ssId;
   try {
     var ss = SpreadsheetApp.openById(ssId);
     var base = ss.getSheetByName(SH_BASE);
-    var tz = Session.getScriptTimeZone();
     if (!base || base.getLastRow()<2) return [];
-    return base.getRange(2,1,base.getLastRow()-1,C_COLS).getValues().map(function(r){
-      var d=r[C_DATE-1];
-      return { id:String(r[C_ID-1]), date:(d instanceof Date)?d.toISOString():'',
-               type:String(r[C_TYPE-1]), category:String(r[C_CAT-1]), account:String(r[C_ACCOUNT-1]),
-               amount:parseFloat(r[C_AMOUNT-1])||0, comment:String(r[C_COMMENT-1]),
-               locked:r[C_LOCKED-1]===true||r[C_LOCKED-1]==='true' };
-    }).reverse();
+    return base.getRange(2,1,base.getLastRow()-1,C_COLS).getValues().map(_txRow).reverse();
   } catch(e) { return []; }
 }
 
-// Returns array directly
 function searchTransactions(p) {
   var ssId = p.ssId; var query = String(p.query||'').toLowerCase();
   try {
@@ -372,12 +396,7 @@ function searchTransactions(p) {
       return String(r[C_AMOUNT-1]).indexOf(query)!==-1 ||
              String(r[C_COMMENT-1]).toLowerCase().indexOf(query)!==-1 ||
              String(r[C_CAT-1]).toLowerCase().indexOf(query)!==-1;
-    }).map(function(r){
-      var d=r[C_DATE-1];
-      return { id:String(r[C_ID-1]), date:(d instanceof Date)?d.toISOString():'',
-               type:String(r[C_TYPE-1]), category:String(r[C_CAT-1]), account:String(r[C_ACCOUNT-1]),
-               amount:parseFloat(r[C_AMOUNT-1])||0, comment:String(r[C_COMMENT-1]) };
-    }).reverse().slice(0,50);
+    }).map(_txRow).reverse().slice(0,50);
   } catch(e) { return []; }
 }
 
@@ -401,13 +420,13 @@ function saveKassa(p) {
       zTotal+=z; factTotal+=f;
       if (z>0) {
         baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Z-отчёт',
-          Math.round(z),_s(row.account),_s(data.cashier||''),'','',zRef,true]);
+          Math.round(z),_s(row.account),_s(data.cashier||''),'','',zRef,true,_s(data.shift||'')]);
       }
     });
     wyplatas.forEach(function(w){
       var amt=parseFloat(w.amount)||0; if(!amt) return;
       baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Выплата',
-        Math.round(amt),_s(w.account||'Наличные'),_s(data.cashier||''),_s(w.desc||'Выплата'),'',zRef,true]);
+        Math.round(amt),_s(w.account||'Наличные'),_s(data.cashier||''),_s(w.desc||'Выплата'),'',zRef,true,_s(data.shift||'')]);
     });
     if (baseRows.length>0) {
       var sr = base.getLastRow()+1;
@@ -424,22 +443,39 @@ function saveKassa(p) {
   } catch(e) { return { __error: e.message }; }
 }
 
+// Returns array of past shifts
+function getShifts(p) {
+  var ssId = p.ssId; var limit = parseInt(p.limit)||50;
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    var sh = ss.getSheetByName(SH_SHIFTS);
+    var tz = Session.getScriptTimeZone();
+    if (!sh || sh.getLastRow()<2) return [];
+    return sh.getRange(2,1,sh.getLastRow()-1,8).getValues().map(function(r){
+      var d=r[1];
+      var rows=[]; try{rows=JSON.parse(r[4]||'[]');}catch(e){}
+      var revenue=0; rows.forEach(function(row){revenue+=parseFloat(row.zAmount)||0;});
+      return { id:String(r[0]), date:(d instanceof Date)?Utilities.formatDate(d,tz,'yyyy-MM-dd'):'',
+               shift:String(r[2]), cashier:String(r[3]), revenue:Math.round(revenue),
+               discrepancy:parseFloat(r[6])||0, rows:rows };
+    }).reverse().slice(0,limit);
+  } catch(e) { return []; }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // DEBTS / REPS
-// ДОЛГИ columns: ID | Представитель | Тип | Сумма | Дата | Счёт | Комментарий | Создано
+// ДОЛГИ: ID|Представитель|Тип|Сумма|Дата|Счёт|Комментарий|Создано|Накладная|Статус
 // Тип: начальный_долг | zakupka | oplata
 // ═══════════════════════════════════════════════════════════════════════
 
-// Returns array: [{id, name, debt, totalBuy, totalPay}]
 function getDebts(p) {
   var ssId = p.ssId;
   try {
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_DEBTS);
-    var tz = Session.getScriptTimeZone();
     if (!sh || sh.getLastRow()<2) return [];
     var repMap = {};
-    sh.getRange(2,1,sh.getLastRow()-1,8).getValues().forEach(function(r){
+    sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
       var repName=String(r[1]); var type=String(r[2]); var amt=parseFloat(r[3])||0;
       if (!repName) return;
       if (!repMap[repName]) repMap[repName]={id:repName,name:repName,debt:0,totalBuy:0,totalPay:0};
@@ -462,7 +498,7 @@ function saveRep(p) {
     var sh = ss.getSheetByName(SH_DEBTS);
     if (data.initDebt && data.initDebt>0) {
       var id = Utilities.getUuid();
-      sh.appendRow([id,_s(data.name),'начальный_долг',Math.round(parseFloat(data.initDebt)||0),new Date(),'','Начальный долг',new Date()]);
+      sh.appendRow([id,_s(data.name),'начальный_долг',Math.round(parseFloat(data.initDebt)||0),new Date(),'','Начальный долг',new Date(),'','']);
     }
     return { ok:true };
   } catch(e) { return { __error: e.message }; }
@@ -475,23 +511,59 @@ function saveDebtEntry(p) {
     var ss = SpreadsheetApp.openById(ssId);
     var sh = ss.getSheetByName(SH_DEBTS);
     var id = Utilities.getUuid();
-    var repName = _s(data.repId); // repId is the rep name
-    var type = _s(data.type);    // 'zakupka' or 'oplata'
+    var repName = _s(data.repId);
+    var type = _s(data.type);
     var amt = Math.round(parseFloat(data.amount)||0);
-    sh.appendRow([id,repName,type,amt,new Date(),_s(data.account||''),_s(data.comment||''),new Date()]);
+    var invoice = _s(data.invoice||'');
+    var status = _s(data.status||'');
+    sh.appendRow([id,repName,type,amt,new Date(),_s(data.account||''),_s(data.comment||''),new Date(),invoice,status]);
     sh.getRange(sh.getLastRow(),5,1,1).setNumberFormat('dd.mm.yyyy');
     sh.getRange(sh.getLastRow(),4,1,1).setNumberFormat('#,##0');
-    // If oplata, also deduct from account in БАЗА
     if (type==='oplata' && data.account && amt>0) {
       saveQuickEntry({ssId:ssId,data:{uuid:id,date:new Date().toISOString(),type:'Расход',
         category:'Долг ТП',account:data.account,amount:amt,
         comment:'Оплата долга: '+repName,zRef:id}});
     }
+    return { ok:true, id:id };
+  } catch(e) { return { __error: e.message }; }
+}
+
+// Update an existing debt entry (invoice, status, amount, comment)
+function updateDebtEntry(p) {
+  var ssId = p.ssId; var data = p.data || {};
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    var sh = ss.getSheetByName(SH_DEBTS);
+    if (!sh || sh.getLastRow()<2) return { __error:'not found' };
+    var vals = sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    var rowNum = -1;
+    for (var i=0;i<vals.length;i++) { if (String(vals[i][0])===String(data.id)){ rowNum=i+2; break; } }
+    if (rowNum===-1) return { __error:'not found' };
+    var cur = sh.getRange(rowNum,1,1,D_COLS).getValues()[0];
+    if (data.amount !== undefined) sh.getRange(rowNum,4).setValue(Math.round(parseFloat(data.amount)||0));
+    if (data.comment !== undefined) sh.getRange(rowNum,7).setValue(_s(data.comment));
+    if (data.invoice !== undefined) sh.getRange(rowNum,9).setValue(_s(data.invoice));
+    if (data.status !== undefined) sh.getRange(rowNum,10).setValue(_s(data.status));
     return { ok:true };
   } catch(e) { return { __error: e.message }; }
 }
 
-// Returns history for a rep: array of entries
+// Delete a debt entry
+function deleteDebtEntry(p) {
+  var ssId = p.ssId; var id = p.id;
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    var sh = ss.getSheetByName(SH_DEBTS);
+    if (!sh || sh.getLastRow()<2) return { __error:'not found' };
+    var vals = sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=0;i<vals.length;i++) {
+      if (String(vals[i][0])===String(id)) { sh.deleteRow(i+2); return { ok:true }; }
+    }
+    return { __error:'not found' };
+  } catch(e) { return { __error: e.message }; }
+}
+
+// Returns history for a rep
 function getRepDebt(p) {
   var ssId = p.ssId; var repId = String(p.repId);
   try {
@@ -499,51 +571,77 @@ function getRepDebt(p) {
     var sh = ss.getSheetByName(SH_DEBTS);
     if (!sh || sh.getLastRow()<2) return [];
     var tz = Session.getScriptTimeZone();
-    return sh.getRange(2,1,sh.getLastRow()-1,8).getValues().filter(function(r){
+    return sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues().filter(function(r){
       return String(r[1])===repId;
     }).map(function(r){
       var d=r[4];
       return { id:String(r[0]), type:String(r[2]), amount:parseFloat(r[3])||0,
                date:(d instanceof Date)?Utilities.formatDate(d,tz,'yyyy-MM-dd'):'',
-               account:String(r[5]), comment:String(r[6]) };
+               account:String(r[5]), comment:String(r[6]),
+               invoice:String(r[8]||''), status:String(r[9]||'') };
     }).reverse();
   } catch(e) { return []; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // TIMESHEET
-// ТАБЕЛЬ columns: Год | Месяц | День | Сотрудник
+// ТАБЕЛЬ: Год|Месяц|День|Сотрудник|Приход|Уход|Статус|Часы|Ставка|Комментарий
 // ═══════════════════════════════════════════════════════════════════════
 
-// Returns {days:[{day,employee}], summary:{[emp]:daysCount}}
+// Returns {days:[{day,employee,timeIn,timeOut,status,hours,rate,comment}], summary:[...], employees:[]}
 function getTimesheetMonth(p) {
   var ssId = p.ssId; var year = parseInt(p.year); var month = parseInt(p.month);
   try {
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_TIMESHEET);
+    var sett = getSettings({ssId:ssId});
+    var employees = sett.employees || [];
     var days = [];
-    var summary = {};
+    var summaryMap = {};
+    employees.forEach(function(emp){
+      var n = typeof emp==='object'?emp.name:emp;
+      summaryMap[n]={employee:n,daysP:0,daysO:0,daysB:0,daysOt:0,daysV:0,totalHours:0,totalSalary:0};
+    });
+    // Also include cashiers as employees if no detailed employees defined
+    if (!employees.length) {
+      (sett.cashiers||[]).forEach(function(c){
+        summaryMap[c]={employee:c,daysP:0,daysO:0,daysB:0,daysOt:0,daysV:0,totalHours:0,totalSalary:0};
+      });
+    }
     if (sh.getLastRow()>=2) {
-      sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
+      var cols = Math.min(sh.getLastColumn(), TS_COLS);
+      sh.getRange(2,1,sh.getLastRow()-1,cols).getValues().forEach(function(r){
         var y=parseInt(r[0]); var m=parseInt(r[1]); var d=parseInt(r[2]); var emp=String(r[3]);
         if (y===year && m===month && d && emp) {
-          days.push({day:d,employee:emp});
-          if (!summary[emp]) summary[emp]=0;
-          summary[emp]++;
+          var timeIn=String(r[4]||''), timeOut=String(r[5]||'');
+          var status=String(r[6]||'П'), hours=parseFloat(r[7])||0;
+          var rate=parseFloat(r[8])||0, comment=String(r[9]||'');
+          days.push({day:d,employee:emp,timeIn:timeIn,timeOut:timeOut,status:status,hours:hours,rate:rate,comment:comment});
+          if (!summaryMap[emp]) summaryMap[emp]={employee:emp,daysP:0,daysO:0,daysB:0,daysOt:0,daysV:0,totalHours:0,totalSalary:0};
+          var s=summaryMap[emp];
+          switch(status){
+            case 'П': s.daysP++; break; case 'О': s.daysO++; break;
+            case 'Б': s.daysB++; break; case 'Отп': s.daysOt++; break; case 'В': s.daysV++; break;
+          }
+          s.totalHours+=hours;
+          s.totalSalary+=rate;
         }
       });
     }
-    return { days:days, summary:summary };
-  } catch(e) { return { days:[], summary:{} }; }
+    var summary = Object.keys(summaryMap).map(function(k){ return summaryMap[k]; });
+    return { days:days, summary:summary, employees:employees };
+  } catch(e) { return { days:[], summary:[], employees:[] }; }
 }
 
 function saveTimesheetEntry(p) {
   var ssId = p.ssId; var year = parseInt(p.year); var month = parseInt(p.month);
   var day = parseInt(p.day); var employee = _s(p.employee||'');
+  var timeIn = _s(p.timeIn||''), timeOut = _s(p.timeOut||'');
+  var status = _s(p.status||'П'), hours = parseFloat(p.hours)||0;
+  var rate = parseFloat(p.rate)||0, comment = _s(p.comment||'');
   try {
     var ss = SpreadsheetApp.openById(ssId);
     var sh = ss.getSheetByName(SH_TIMESHEET);
-    // Find and update existing row or add
     var rowNum = -1;
     if (sh.getLastRow()>=2) {
       var vals = sh.getRange(2,1,sh.getLastRow()-1,3).getValues();
@@ -554,19 +652,18 @@ function saveTimesheetEntry(p) {
       }
     }
     if (!employee) {
-      // Remove entry (mark as empty)
       if (rowNum>0) sh.deleteRow(rowNum);
       return { ok:true };
     }
-    if (rowNum>0) sh.getRange(rowNum,4).setValue(employee);
-    else sh.appendRow([year,month,day,employee]);
+    var rowData = [year,month,day,employee,timeIn,timeOut,status,hours,rate,comment];
+    if (rowNum>0) sh.getRange(rowNum,1,1,TS_COLS).setValues([rowData]);
+    else sh.appendRow(rowData);
     return { ok:true };
   } catch(e) { return { __error: e.message }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // ANALYTICS
-// Returns {income, expense, byCategory:[{category,total,type}], timeline:[{label,income,expense}], totalDebt}
 // ═══════════════════════════════════════════════════════════════════════
 
 function getAnalytics(p) {
@@ -613,7 +710,6 @@ function getAnalytics(p) {
   } catch(e) { return { income:0, expense:0, byCategory:[], timeline:[], totalDebt:0 }; }
 }
 
-// Returns {list:[{name,shifts,revenue,discrepancy}]}
 function getCashierAnalytics(p) {
   var ssId = p.ssId; var period = p.period;
   try {
