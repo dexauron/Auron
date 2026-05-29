@@ -30,14 +30,23 @@ function doGet() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// AUTH — all accept single object param
+// AUTH — uses UserProperties to avoid DriveApp.getFilesByName (needs full drive scope)
+// PropertiesService.getUserProperties() is per-user per-script — works across devices
 // ═══════════════════════════════════════════════════════════════════════
+
+function _getUserProps() { return PropertiesService.getUserProperties(); }
+
+function _getProfileSS() {
+  var props = _getUserProps();
+  var ssId = props.getProperty('PROFILE_SS_ID');
+  if (!ssId) return null;
+  try { return SpreadsheetApp.openById(ssId); } catch(e) { return null; }
+}
 
 function initUserApp() {
   try {
-    var files = DriveApp.getFilesByName(PROFILE_FILE_NAME);
-    if (!files.hasNext()) return { isNew: true };
-    var profileSS = SpreadsheetApp.open(files.next());
+    var profileSS = _getProfileSS();
+    if (!profileSS) return { isNew: true };
     var profile = {};
     var profileSh = profileSS.getSheetByName(SH_PROFILE);
     if (profileSh && profileSh.getLastRow() >= 2) {
@@ -58,19 +67,23 @@ function initUserApp() {
 function registerUser(p) {
   var name = _s(p.name); var phone = _s(p.phone);
   try {
-    var lock = LockService.getScriptLock(); lock.waitLock(10000);
-    var existing = DriveApp.getFilesByName(PROFILE_FILE_NAME);
-    if (existing.hasNext()) {
+    var lock = LockService.getUserLock(); lock.waitLock(10000);
+    // If profile already exists, return existing data
+    var existingSS = _getProfileSS();
+    if (existingSS) {
       lock.releaseLock();
       var r = initUserApp();
       return { ssId: (r.orgs && r.orgs[0]) ? r.orgs[0].ssId : '', orgName: (r.orgs && r.orgs[0]) ? r.orgs[0].name : '' };
     }
+    // Create profile spreadsheet
     var profileSS = SpreadsheetApp.create(PROFILE_FILE_NAME);
     var profileSh = profileSS.getSheets()[0]; profileSh.setName(SH_PROFILE);
     profileSh.getRange(1,1,1,3).setValues([['Имя','Телефон','Создано']]);
     profileSh.appendRow([name, phone, new Date()]);
     var orgsSh = profileSS.insertSheet(SH_ORGS);
     orgsSh.getRange(1,1,1,3).setValues([['ID','Название','SS_ID']]);
+    // Save profile SS ID to user properties (no DriveApp search needed later)
+    _getUserProps().setProperty('PROFILE_SS_ID', profileSS.getId());
     var orgResult = _createOrgSpreadsheet('Мой магазин', profileSS);
     lock.releaseLock();
     if (REG_WEBHOOK) {
@@ -84,9 +97,8 @@ function registerUser(p) {
 function createOrg(p) {
   var name = _s(p.name);
   try {
-    var files = DriveApp.getFilesByName(PROFILE_FILE_NAME);
-    if (!files.hasNext()) return { __error: 'Профиль не найден' };
-    var profileSS = SpreadsheetApp.open(files.next());
+    var profileSS = _getProfileSS();
+    if (!profileSS) return { __error: 'Профиль не найден. Пройдите регистрацию.' };
     var result = _createOrgSpreadsheet(name, profileSS);
     return { ssId: result.ssId, orgName: name };
   } catch(e) { return { __error: e.message }; }
