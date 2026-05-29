@@ -9,6 +9,6 @@
   ],
   "webapp": {
     "executeAs": "USER_ACCESSING",
-    "access": "ANYONE_WITH_GOOGLE_ACCOUNT"
+    "access": "ANYONE"
   }
 }
