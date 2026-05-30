@@ -125,6 +125,28 @@ function createOrg(p) {
   } catch(e) { return { __error: e.message }; }
 }
 
+function deleteOrg(p) {
+  var ssId = _s(p.ssId);
+  if (!ssId) return { __error: 'ssId обязателен' };
+  try {
+    var profileSS = _profileSS();
+    if (!profileSS) return { __error: 'Профиль не найден' };
+    var orgsSh = profileSS.getSheetByName(SH_ORGS);
+    if (!orgsSh) return { __error: 'Список организаций не найден' };
+    var data = orgsSh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][2]) === ssId) {
+        orgsSh.deleteRow(i + 1);
+        if (p.trash) {
+          try { DriveApp.getFileById(ssId).setTrashed(true); } catch(e2) {}
+        }
+        return { ok: true };
+      }
+    }
+    return { __error: 'Организация не найдена в профиле' };
+  } catch(e) { return { __error: e.message }; }
+}
+
 function _mkOrg(name, profileSS) {
   var fn = ORG_PREFIX + name.replace(/[\/\\:*?"<>|]/g,'_');
   var orgSS = SpreadsheetApp.create(fn);
