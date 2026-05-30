@@ -240,6 +240,63 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
   #report-out{padding:0;}
   body{background:#fff;color:#000;}
 }
+
+/* ── Accounts extended ── */
+.acc-card{position:relative;cursor:pointer;transition:transform .15s;}
+.acc-card:active{transform:scale(.97);}
+.acc-card-actions{display:flex;gap:6px;margin-top:10px;border-top:1px solid var(--sep);padding-top:10px;}
+.acc-act-btn{flex:1;padding:7px 0;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--bg);color:var(--text-2);}
+.acc-act-btn:active{opacity:.7;}
+.acc-card.hidden-acc{opacity:.45;}
+.acc-card.hidden-acc .acc-card-bal{color:var(--text-2);}
+
+/* ── Budget ── */
+.budget-item{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.budget-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.budget-cat{font-size:15px;font-weight:600;}
+.budget-amounts{font-size:13px;color:var(--text-2);}
+.budget-amounts .actual{font-weight:700;}
+.budget-amounts .actual.over{color:var(--expense);}
+.budget-amounts .actual.ok{color:var(--income);}
+.budget-bar-bg{height:6px;background:var(--sep);border-radius:3px;overflow:hidden;}
+.budget-bar-fill{height:100%;border-radius:3px;transition:width .4s;}
+.budget-bar-fill.over{background:var(--expense);}
+.budget-bar-fill.ok{background:var(--income);}
+.budget-bar-fill.warn{background:var(--transfer);}
+
+/* ── Recurring ── */
+.rc-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--sep);}
+.rc-item:last-child{border-bottom:none;}
+.rc-toggle{width:42px;height:24px;border-radius:12px;border:none;cursor:pointer;position:relative;flex-shrink:0;transition:background .2s;}
+.rc-toggle.on{background:var(--income);}
+.rc-toggle.off{background:var(--sep);}
+.rc-toggle::after{content:'';position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:3px;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.rc-toggle.on::after{left:21px;}
+.rc-toggle.off::after{left:3px;}
+
+/* ── Payments ── */
+.pay-item{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+.pay-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;}
+.pay-name{font-size:15px;font-weight:700;}
+.pay-amount{font-size:17px;font-weight:700;color:var(--expense);}
+.pay-meta{font-size:12px;color:var(--text-2);margin-bottom:10px;}
+.pay-status{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:10px;font-size:12px;font-weight:600;}
+.pay-status.pending{background:rgba(255,159,10,.15);color:#FF9F0A;}
+.pay-status.overdue{background:rgba(255,69,58,.15);color:var(--expense);}
+.pay-status.paid{background:rgba(48,209,88,.15);color:var(--income);}
+.pay-actions{display:flex;gap:8px;margin-top:10px;}
+.pay-btn{flex:1;padding:9px;border-radius:10px;border:none;font-size:13px;font-weight:600;cursor:pointer;}
+.pay-btn-pay{background:rgba(48,209,88,.12);color:var(--income);}
+.pay-btn-edit{background:rgba(94,92,230,.1);color:var(--brand);}
+.pay-btn-del{background:rgba(255,69,58,.1);color:var(--expense);}
+
+/* ── Account detail sheet ── */
+.acc-detail-bal{font-size:36px;font-weight:700;text-align:center;padding:16px 0 8px;letter-spacing:-1px;}
+.acc-detail-sub{text-align:center;font-size:13px;color:var(--text-2);margin-bottom:16px;}
+.acc-detail-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;}
+.acc-detail-btn{display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 4px;border:none;background:var(--bg);border-radius:12px;cursor:pointer;}
+.acc-detail-btn-icon{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+.acc-detail-btn-label{font-size:11px;color:var(--text-2);font-weight:500;text-align:center;}
 </style>
 </head>
 <body>
@@ -311,12 +368,14 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
       </div>
       <div class="an-tabs">
         <button class="an-tab active" onclick="App.setAnTab('pl',this)">P&amp;L</button>
+        <button class="an-tab" onclick="App.setAnTab('budget',this)">Бюджет</button>
         <button class="an-tab" onclick="App.setAnTab('cats',this)">Категории</button>
         <button class="an-tab" onclick="App.setAnTab('cashiers',this)">Кассиры</button>
         <button class="an-tab" onclick="App.setAnTab('heatmap',this)">Дни</button>
         <button class="an-tab" onclick="App.setAnTab('debts',this)">Долги</button>
       </div>
       <div id="an-pl" class="an-panel active"></div>
+      <div id="an-budget" class="an-panel"></div>
       <div id="an-cats" class="an-panel"></div>
       <div id="an-cashiers" class="an-panel"></div>
       <div id="an-heatmap" class="an-panel"></div>
@@ -370,10 +429,18 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
     <div id="tab-journal" class="panel" style="padding:0;">
       <div class="j-tabs">
         <button class="j-tab active" onclick="App.setJTab('history',this)">История</button>
-        <button class="j-tab" onclick="App.setJTab('reps',this)">Представители</button>
+        <button class="j-tab" onclick="App.setJTab('payments',this)">Выплаты</button>
+        <button class="j-tab" onclick="App.setJTab('reps',this)">Поставщики</button>
         <button class="j-tab" onclick="App.setJTab('timesheet',this)">Табель</button>
         <button class="j-tab" onclick="App.setJTab('shifts',this)">Смены</button>
         <button class="j-tab" onclick="App.setJTab('report',this)">Отчёт</button>
+      </div>
+      <div id="j-payments" class="j-panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0 8px;">
+          <span id="pay-total" style="font-size:15px;color:var(--text-2);"></span>
+          <button onclick="App.openPaymentForm(null)" class="btn-primary" style="width:auto;padding:8px 16px;font-size:14px;margin:0;">+ Добавить</button>
+        </div>
+        <div id="pay-list"></div>
       </div>
       <div id="j-shifts" class="j-panel" style="padding-top:12px;"></div>
       <div id="j-report" class="j-panel" style="padding-top:12px;">
@@ -450,6 +517,19 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
         <div class="settings-sec-title">Сотрудники</div>
         <div class="settings-list" id="settings-employees-list"></div>
         <button class="btn-secondary" onclick="App.openAddEmployee()" style="margin-top:10px;">+ Добавить сотрудника</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Ежемесячные расходы</div>
+        <div class="settings-list" id="settings-recurring-list"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn-secondary" onclick="App.openRecurringForm(null)" style="flex:1;margin:0;">+ Добавить шаблон</button>
+          <button class="btn-secondary" onclick="App.applyRecurring()" style="flex:1;margin:0;color:var(--income);border-color:var(--income);">▶ Применить сейчас</button>
+        </div>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Бюджет по категориям</div>
+        <div class="settings-list" id="settings-budget-list"></div>
+        <button class="btn-secondary" onclick="App.openBudgetEdit()" style="margin-top:10px;">✎ Редактировать бюджет</button>
       </div>
       <div class="settings-sec">
         <div class="settings-sec-title">Организации</div>
@@ -534,6 +614,42 @@ html,body{height:100dvh;background:var(--bg);font-family:-apple-system,BlinkMacS
       <button class="np-key" style="grid-column:span 2;" onclick="App.npKey('0')">0</button>
       <button class="np-key" onclick="App.npKey('00')">00</button>
     </div>
+  </div>
+</div>
+
+<!-- Account detail -->
+<div class="sheet" id="sheet-acc-detail" style="max-height:90dvh;">
+  <div class="sheet-handle"></div>
+  <button class="sheet-close" onclick="App.closeSheet()">✕</button>
+  <div class="sheet-title" id="acc-detail-name"></div>
+  <div class="sheet-body">
+    <div class="acc-detail-bal" id="acc-detail-bal"></div>
+    <div class="acc-detail-sub" id="acc-detail-sub"></div>
+    <div class="acc-detail-btns">
+      <button class="acc-detail-btn" onclick="App.accAction('income')">
+        <div class="acc-detail-btn-icon" style="background:rgba(48,209,88,.15);color:var(--income);">+</div>
+        <span class="acc-detail-btn-label">Доход</span>
+      </button>
+      <button class="acc-detail-btn" onclick="App.accAction('expense')">
+        <div class="acc-detail-btn-icon" style="background:rgba(255,69,58,.15);color:var(--expense);">−</div>
+        <span class="acc-detail-btn-label">Расход</span>
+      </button>
+      <button class="acc-detail-btn" onclick="App.accAction('transfer')">
+        <div class="acc-detail-btn-icon" style="background:rgba(255,159,10,.15);color:var(--transfer);">⇄</div>
+        <span class="acc-detail-btn-label">Перевод</span>
+      </button>
+      <button class="acc-detail-btn" onclick="App.accAction('adjust')">
+        <div class="acc-detail-btn-icon" style="background:rgba(94,92,230,.15);color:var(--brand);">✎</div>
+        <span class="acc-detail-btn-label">Коррекция</span>
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button id="acc-detail-hide-btn" onclick="App.accAction('hide')" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--sep);background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-2);">👁 Скрыть</button>
+      <button onclick="App.accAction('archive')" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--sep);background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--transfer);">📦 Архив</button>
+      <button onclick="App.accAction('delete')" style="flex:1;padding:10px;border-radius:10px;border:1.5px solid var(--expense);background:none;font-size:13px;font-weight:600;cursor:pointer;color:var(--expense);">🗑 Удалить</button>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text-2);margin-bottom:8px;">Последние операции</div>
+    <div id="acc-detail-txs"></div>
   </div>
 </div>
 
@@ -712,8 +828,13 @@ var App={
   // ── Home ──────────────────────────────────────────────────────
   loadHome:function(){
     if(!App.s.ssId)return;
-    gs('getHomeSummary',{ssId:App.s.ssId,period:App.s.period}).then(function(r){
-      App.renderAccounts(r.accounts,r.totals);
+    Promise.all([
+      gs('getHomeSummary',{ssId:App.s.ssId,period:App.s.period}),
+      gs('getAccountsAll',{ssId:App.s.ssId})
+    ]).then(function(res){
+      var r=res[0]||{};var allAcc=res[1]||[];
+      App.s.accounts=allAcc.filter(function(a){return a.status!=='archived';});
+      App.renderAccounts(App.s.accounts,r.totals);
       App.renderTxList(r.transactions||[],'tx-list');
     }).catch(function(e){App.toast(e.message,true);});
   },
@@ -727,17 +848,98 @@ var App={
   renderAccounts:function(accounts,totals){
     var el=document.getElementById('accounts-scroll');
     App.s.accounts=accounts||[];
-    if(!accounts||!accounts.length){
+    var visible=(accounts||[]).filter(function(a){return a.status!=='archived';});
+    if(!visible.length){
       el.innerHTML='<div style="padding:20px;color:var(--text-2);font-size:14px;">Нет счетов. Добавьте в Настройках.</div>';return;
     }
-    el.innerHTML=accounts.map(function(a){
+    el.innerHTML=visible.map(function(a){
       var ci=catIcon(a.name);var tot=(totals&&totals[a.name])||{};
-      return '<div class="acc-card">'+
-        '<div class="acc-card-name"><span style="background:'+ci.bg+';padding:2px 6px;border-radius:6px;font-size:14px;">'+ci.icon+'</span>'+App._e(a.name)+'</div>'+
-        '<div class="acc-card-bal">₽ '+fmtFull(a.balance)+'</div>'+
+      var isHidden=a.status==='hidden';
+      return '<div class="acc-card'+(isHidden?' hidden-acc':'')+'" onclick="App.openAccDetail(\''+App._e(String(a.id))+'\')">'+
+        '<div class="acc-card-name"><span style="background:'+ci.bg+';padding:2px 6px;border-radius:6px;font-size:14px;">'+ci.icon+'</span>'+App._e(a.name)+(isHidden?' <span style="font-size:10px;color:var(--text-2);">(скрыт)</span>':'')+'</div>'+
+        '<div class="acc-card-bal">'+(!isHidden?'₽ '+fmtFull(a.balance):'****')+'</div>'+
         '<div class="acc-card-sub"><span class="acc-card-in">+₽'+fmt(tot.income||0)+'</span><span class="acc-card-out">−₽'+fmt(tot.expense||0)+'</span></div>'+
+        '<div class="acc-card-actions" onclick="event.stopPropagation()">'+
+          '<button class="acc-act-btn" style="color:var(--income);" onclick="App.accQuickAction(\'income\',\''+App._e(String(a.id))+'\')">+ Приход</button>'+
+          '<button class="acc-act-btn" style="color:var(--expense);" onclick="App.accQuickAction(\'expense\',\''+App._e(String(a.id))+'\')">− Расход</button>'+
+          '<button class="acc-act-btn" style="color:var(--transfer);" onclick="App.accQuickAction(\'transfer\',\''+App._e(String(a.id))+'\')">⇄ Перевод</button>'+
+        '</div>'+
       '</div>';
     }).join('');
+  },
+
+  openAccDetail:function(id){
+    var acc=(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);});
+    if(!acc)return;
+    App.s._detailAccId=id;
+    var ci=catIcon(acc.name);
+    document.getElementById('acc-detail-name').textContent=ci.icon+' '+acc.name;
+    document.getElementById('acc-detail-bal').textContent='₽ '+fmtFull(acc.balance);
+    document.getElementById('acc-detail-sub').textContent=(acc.status==='hidden'?'👁 Скрыт · ':'')+'Начальный баланс: ₽ '+fmtFull(acc.startBalance||0);
+    var hideBtn=document.getElementById('acc-detail-hide-btn');
+    hideBtn.textContent=acc.status==='hidden'?'👁 Показать':'👁 Скрыть';
+    // Load account transactions
+    var txEl=document.getElementById('acc-detail-txs');
+    txEl.innerHTML='<div style="color:var(--text-2);text-align:center;padding:12px;">Загрузка…</div>';
+    gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){
+      var filtered=(r||[]).filter(function(t){return t.account===acc.name;}).slice(0,20);
+      if(!filtered.length){txEl.innerHTML='<div class="empty-state" style="padding:20px;"><div class="empty-text">Нет операций по этому счёту</div></div>';return;}
+      txEl.innerHTML=filtered.map(function(tx){return App._txItem(tx);}).join('');
+    });
+    App.openSheet('sheet-acc-detail');
+  },
+
+  accAction:function(action){
+    var id=App.s._detailAccId;
+    var acc=(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);});
+    if(!acc)return;
+    if(action==='income'||action==='expense'||action==='transfer'){
+      App.closeSheet();
+      setTimeout(function(){
+        App.s.npAcc=acc;App.s.npType=action;App.s.npVal='';App.s.npCat=null;
+        App._npRefresh();App.openSheet('sheet-numpad');
+      },200);
+    } else if(action==='adjust'){
+      App.closeSheet();
+      setTimeout(function(){
+        App.openModal('<div class="modal-title">Коррекция баланса</div>'+
+          '<div style="font-size:13px;color:var(--text-2);margin-bottom:16px;">Текущий баланс: ₽ '+fmtFull(acc.balance)+'</div>'+
+          '<div class="field"><label>Новый баланс (₽)</label><input id="adj-bal" type="number" placeholder="'+acc.balance+'" value="'+acc.balance+'"></div>'+
+          '<div class="field"><label>Комментарий</label><input id="adj-cmt" type="text" placeholder="Коррекция остатка"></div>'+
+          '<button class="btn-primary" onclick="App._doAdjust(\''+App._e(String(acc.id))+'\',\''+App._e(acc.name)+'\','+acc.balance+')">Применить</button>');
+      },200);
+    } else if(action==='hide'){
+      gs('toggleAccountVisibility',{ssId:App.s.ssId,id:id}).then(function(r){
+        App.closeSheet();App.toast(r.status==='hidden'?'Счёт скрыт':'Счёт отображается');App.loadHome();
+      });
+    } else if(action==='archive'){
+      if(!confirm('Архивировать счёт? Операции сохранятся.'))return;
+      gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
+        App.closeSheet();App.toast('Счёт архивирован');App.loadHome();
+      });
+    } else if(action==='delete'){
+      if(!confirm('Удалить счёт? Все операции по нему останутся в базе.'))return;
+      gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
+        App.closeSheet();App.toast('Удалён');App.loadHome();
+      });
+    }
+  },
+
+  accQuickAction:function(type,id){
+    var acc=(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);});
+    if(!acc)return;
+    App.s.npAcc=acc;App.s.npType=type;App.s.npVal='';App.s.npCat=null;App.s.npDate=new Date();
+    App._npRefresh();App.openSheet('sheet-numpad');
+  },
+
+  _doAdjust:function(id,name,currentBal){
+    var newBal=parseFloat(document.getElementById('adj-bal').value);
+    var cmt=document.getElementById('adj-cmt').value.trim()||'Коррекция баланса';
+    if(isNaN(newBal)){App.toast('Введите сумму',true);return;}
+    var diff=newBal-currentBal;
+    gs('adjustBalance',{ssId:App.s.ssId,data:{account:name,amount:diff,comment:cmt}}).then(function(){
+      App.toast('Баланс скорректирован ✓');App.closeModal();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   renderTxList:function(txs,cid){
@@ -822,6 +1024,75 @@ var App={
     gs('getCashierAnalytics',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){
       App._renderCashiers(r);App._renderHeatmap(r);
     });
+    if(App.s.anTab==='budget') App.loadBudget();
+  },
+
+  // ── Budget ────────────────────────────────────────────────────
+  loadBudget:function(){
+    var el=document.getElementById('an-budget');
+    el.innerHTML='<div style="color:var(--text-2);text-align:center;padding:20px;">Загрузка…</div>';
+    gs('getBudget',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){
+      App.s._budgetMap=r.budgetMap||{};
+      var items=r.items||[];
+      if(!items.length){
+        el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">Нет данных бюджета</div>'+
+          '<div style="margin-top:16px;"><button class="btn-primary" style="width:auto;padding:10px 24px;" onclick="App.openBudgetEdit()">+ Настроить бюджет</button></div></div>';
+        return;
+      }
+      var totalPlan=items.reduce(function(s,x){return s+(x.planned||0);},0);
+      var totalActual=items.reduce(function(s,x){return s+(x.actual||0);},0);
+      var html='<div class="metric-row" style="margin-bottom:16px;">'+
+        '<div class="metric-card"><div class="metric-label">Запланировано</div><div class="metric-value">₽ '+fmt(totalPlan)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Потрачено</div><div class="metric-value '+(totalActual>totalPlan?'red':'green')+'">₽ '+fmt(totalActual)+'</div></div>'+
+        '</div>'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+          '<span style="font-size:15px;font-weight:700;">По категориям</span>'+
+          '<button onclick="App.openBudgetEdit()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">✎ Изменить</button>'+
+        '</div>'+
+        items.map(function(item){
+          var ci=catIcon(item.category);
+          var pct=item.planned>0?Math.min(Math.round(item.actual/item.planned*100),100):0;
+          var barCls=pct>=100?'over':pct>=80?'warn':'ok';
+          return '<div class="budget-item">'+
+            '<div class="budget-row">'+
+              '<div class="budget-cat"><span style="margin-right:6px;">'+ci.icon+'</span>'+App._e(item.category)+'</div>'+
+              '<div class="budget-amounts">'+
+                '<span class="actual '+(item.over?'over':'ok')+'">₽ '+fmt(item.actual)+'</span>'+
+                (item.planned?'<span style="color:var(--text-2);"> / ₽ '+fmt(item.planned)+'</span>':'<span style="color:var(--text-2);font-size:11px;"> (план не задан)</span>')+
+              '</div>'+
+            '</div>'+
+            (item.planned?'<div class="budget-bar-bg"><div class="budget-bar-fill '+barCls+'" style="width:'+pct+'%;"></div></div>':'')+
+          '</div>';
+        }).join('');
+      el.innerHTML=html;
+    }).catch(function(){el.innerHTML='<div class="empty-state"><div class="empty-text">Ошибка загрузки</div></div>';});
+  },
+
+  openBudgetEdit:function(){
+    var cats=['ЗП','Аренда','Закупка','Хозрасходы','Коммуналка','Реклама','Прочий расход','Налоги'];
+    (App.s.settings.cats||[]).forEach(function(c){if(cats.indexOf(c)<0)cats.push(c);});
+    var bm=App.s._budgetMap||{};
+    App.openModal('<div class="modal-title">Бюджет по категориям</div>'+
+      '<div style="font-size:13px;color:var(--text-2);margin-bottom:16px;">Укажите плановые суммы расходов на месяц</div>'+
+      cats.map(function(c){var ci=catIcon(c);
+        return '<div class="field" style="margin-bottom:10px;"><label>'+ci.icon+' '+App._e(c)+'</label>'+
+          '<input type="number" id="bgt-'+App._e(c.replace(/[^a-zа-яА-ЯA-Z0-9]/gi,'_'))+'" placeholder="0 = не задан" value="'+(bm[c]||'')+'"></div>';
+      }).join('')+
+      '<button class="btn-primary" onclick="App._saveBudget([\''+cats.map(function(c){return App._e(c);}).join("','")+'\'])">Сохранить</button>');
+  },
+
+  _saveBudget:function(cats){
+    var bm={};
+    cats.forEach(function(c){
+      var id='bgt-'+c.replace(/[^a-zа-яА-ЯA-Z0-9]/gi,'_');
+      var el=document.getElementById(id);
+      var v=el?parseFloat(el.value)||0:0;
+      if(v>0)bm[c]=v;
+    });
+    gs('saveBudget',{ssId:App.s.ssId,budgetMap:bm}).then(function(){
+      App.s._budgetMap=bm;App.toast('Бюджет сохранён ✓');App.closeModal();
+      if(App.s.anTab==='budget')App.loadBudget();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   _renderPL:function(r){
@@ -1012,6 +1283,7 @@ var App={
     if(btn)btn.classList.add('active');
     document.getElementById('j-'+tab).classList.add('active');
     if(tab==='history')App.loadHistory();
+    else if(tab==='payments')App.loadPayments();
     else if(tab==='reps')App.loadReps();
     else if(tab==='timesheet')App.loadTimesheet();
     else if(tab==='shifts')App.loadShiftsLog();
@@ -1337,13 +1609,37 @@ var App={
 
   // ── Settings ──────────────────────────────────────────────────
   renderSettingsPage:function(){
-    gs('getAccounts',{ssId:App.s.ssId}).then(function(r){
-      App.s.accounts=r||[];
+    App.loadRecurring();
+    // Budget summary
+    gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){
+      App.s._budgetMap=r.budgetMap||{};
+      var el=document.getElementById('settings-budget-list');
+      var items=(r.items||[]).filter(function(x){return x.planned>0;});
+      if(!items.length){
+        el.innerHTML='<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Не настроен</span></div>';return;
+      }
+      el.innerHTML=items.slice(0,5).map(function(item){var ci=catIcon(item.category);
+        var pct=Math.min(Math.round(item.actual/item.planned*100),100);
+        return '<div class="settings-row" style="flex-direction:column;align-items:stretch;gap:6px;">'+
+          '<div style="display:flex;justify-content:space-between;">'+
+            '<span>'+ci.icon+' '+App._e(item.category)+'</span>'+
+            '<span style="color:'+(item.over?'var(--expense)':'var(--income)')+'">₽'+fmt(item.actual)+' / ₽'+fmt(item.planned)+'</span>'+
+          '</div>'+
+          '<div class="budget-bar-bg"><div class="budget-bar-fill '+(pct>=100?'over':pct>=80?'warn':'ok')+'" style="width:'+pct+'%;"></div></div>'+
+        '</div>';
+      }).join('');
+    });
+    gs('getAccountsAll',{ssId:App.s.ssId}).then(function(r){
+      App.s.accounts=(r||[]).filter(function(a){return a.status!=='archived';});
       var el=document.getElementById('settings-accounts-list');
       el.innerHTML=(r||[]).map(function(a){
+        var statusLabel={active:'',hidden:' 👁 скрыт',archived:' 📦 архив'};
+        var ci=catIcon(a.name);
         return '<div class="settings-row">'+
-          '<span class="settings-row-icon">'+catIcon(a.name).icon+'</span>'+
-          '<span class="settings-row-label">'+App._e(a.name)+'<span style="color:var(--text-2);font-size:13px;margin-left:8px;">₽ '+fmtFull(a.balance)+'</span></span>'+
+          '<span class="settings-row-icon" style="background:'+ci.bg+'20;border-radius:8px;padding:2px;">'+ci.icon+'</span>'+
+          '<div style="flex:1;"><div class="settings-row-label">'+App._e(a.name)+(statusLabel[a.status]||'')+'</div>'+
+            '<div style="font-size:12px;color:var(--text-2);">₽ '+fmtFull(a.balance)+'</div></div>'+
+          '<span class="settings-row-action" style="margin-right:12px;" onclick="App.openAccDetail(\''+App._e(String(a.id||''))+'\')">→</span>'+
           '<span class="settings-row-action" onclick="App.openAccountForm(\''+App._e(String(a.id||''))+'\')">✎</span>'+
         '</div>';
       }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет счетов</span></div>';
@@ -1693,6 +1989,161 @@ var App={
     var el=document.getElementById('toast');
     el.textContent=msg;el.className='show'+(isErr?' error':'');
     clearTimeout(App._tt);App._tt=setTimeout(function(){el.className='';},2500);
+  },
+
+  // ── Payments (Выплаты) ────────────────────────────────────────
+  loadPayments:function(){
+    var el=document.getElementById('pay-list');
+    el.innerHTML='<div style="color:var(--text-2);text-align:center;padding:20px;">Загрузка…</div>';
+    gs('getPayments',{ssId:App.s.ssId}).then(function(r){
+      var pays=r||[];
+      var pending=pays.filter(function(p){return p.status!=='paid';});
+      var total=pending.reduce(function(s,p){return s+p.amount;},0);
+      document.getElementById('pay-total').textContent='К выплате: ₽ '+fmtFull(total);
+      if(!pays.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">💸</div><div class="empty-text">Нет записей на выплату</div></div>';return;}
+      var statusLabel={pending:'⏳ Ожидает',overdue:'🔴 Просрочено',paid:'✅ Оплачено'};
+      el.innerHTML=pays.map(function(p){
+        var isPaid=p.status==='paid';
+        return '<div class="pay-item"'+(isPaid?' style="opacity:.6;"':'')+'>'+
+          '<div class="pay-header">'+
+            '<div class="pay-name">'+App._e(p.name)+'</div>'+
+            '<div class="pay-amount">₽ '+fmtFull(p.amount)+'</div>'+
+          '</div>'+
+          '<div class="pay-meta">'+
+            (p.due?'📅 Срок: '+p.due+' · ':'')+(p.category?App._e(p.category)+' · ':'')+
+            (p.account?'💳 '+App._e(p.account):'')+(isPaid&&p.paidAt?' · Оплачено '+p.paidAt:'')+'</div>'+
+          '<span class="pay-status '+p.status+'">'+(statusLabel[p.status]||p.status)+'</span>'+
+          (!isPaid?'<div class="pay-actions">'+
+            '<button class="pay-btn pay-btn-pay" onclick="App.openPaymentPay(\''+App._e(p.id)+'\',\''+App._e(p.name)+'\','+p.amount+')">✓ Оплатить</button>'+
+            '<button class="pay-btn pay-btn-edit" onclick="App.openPaymentForm(\''+App._e(JSON.stringify(p).replace(/'/g,''))+'\')">✎ Изменить</button>'+
+            '<button class="pay-btn pay-btn-del" onclick="App.deletePayment(\''+App._e(p.id)+'\')">✕</button>'+
+          '</div>':
+          '<div class="pay-actions"><button class="pay-btn pay-btn-del" onclick="App.deletePayment(\''+App._e(p.id)+'\')">✕ Удалить</button></div>')+
+        '</div>';
+      }).join('');
+    });
+  },
+
+  openPaymentForm:function(dataJson){
+    var d=null;
+    if(dataJson&&typeof dataJson==='string'){try{d=JSON.parse(dataJson);}catch(e){}}
+    else if(dataJson&&typeof dataJson==='object')d=dataJson;
+    var cats=['Аренда','Налоги','ЗП','Коммуналка','Прочий расход'].concat(App.s.settings.cats||[]);
+    App.openModal('<div class="modal-title">'+(d?'Редактировать':'Новая выплата')+'</div>'+
+      '<div class="field"><label>Название</label><input id="pf-name" type="text" placeholder="Аренда за декабрь" value="'+(d?App._e(d.name):'')+'" ></div>'+
+      '<div class="field"><label>Сумма (₽)</label><input id="pf-amt" type="number" placeholder="0" value="'+(d?d.amount:'')+'"></div>'+
+      '<div class="field"><label>Срок оплаты</label><input id="pf-due" type="date" value="'+(d&&d.due?d.due:fmtISO(new Date()))+'"></div>'+
+      '<div class="field"><label>Категория</label><select id="pf-cat">'+cats.map(function(c){return'<option'+(d&&d.category===c?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>Счёт для оплаты</label><select id="pf-acc"><option value="">— выбрать при оплате —</option>'+App.s.accounts.map(function(a){return'<option value="'+App._e(a.name)+'"'+(d&&d.account===a.name?' selected':'')+'>'+App._e(a.name)+'</option>';}).join('')+'</select></div>'+
+      '<button class="btn-primary" onclick="App._savePayment(\''+(d?App._e(d.id):'')+'\')">Сохранить</button>');
+  },
+
+  _savePayment:function(id){
+    var name=document.getElementById('pf-name').value.trim();
+    var amt=parseFloat(document.getElementById('pf-amt').value)||0;
+    var due=document.getElementById('pf-due').value;
+    var cat=document.getElementById('pf-cat').value;
+    var acc=document.getElementById('pf-acc').value;
+    if(!name||!amt){App.toast('Заполните обязательные поля',true);return;}
+    gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,name:name,amount:amt,due:due,category:cat,account:acc,status:'pending'}}).then(function(){
+      App.toast('Сохранено ✓');App.closeModal();App.loadPayments();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  openPaymentPay:function(id,name,amount){
+    App.openModal('<div class="modal-title">Оплатить</div>'+
+      '<div style="text-align:center;margin-bottom:20px;">'+
+        '<div style="font-size:18px;font-weight:700;">'+App._e(name)+'</div>'+
+        '<div style="font-size:24px;font-weight:700;color:var(--expense);margin-top:4px;">₽ '+fmtFull(amount)+'</div>'+
+      '</div>'+
+      '<div class="field"><label>Счёт списания</label><select id="pp-acc">'+
+        App.s.accounts.map(function(a){return'<option value="'+App._e(a.name)+'">'+App._e(a.name)+' (₽ '+fmtFull(a.balance)+')</option>';}).join('')+
+      '</select></div>'+
+      '<button class="btn-primary" onclick="App._confirmPaymentPay(\''+App._e(id)+'\')">✓ Подтвердить оплату</button>');
+  },
+
+  _confirmPaymentPay:function(id){
+    var acc=document.getElementById('pp-acc').value;
+    gs('markPaymentPaid',{ssId:App.s.ssId,id:id,account:acc}).then(function(){
+      App.toast('Оплачено ✓');App.closeModal();App.loadPayments();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  deletePayment:function(id){
+    if(!confirm('Удалить запись?'))return;
+    gs('deletePayment',{ssId:App.s.ssId,id:id}).then(function(){
+      App.toast('Удалено');App.loadPayments();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Recurring expenses ────────────────────────────────────────
+  loadRecurring:function(){
+    gs('getRecurring',{ssId:App.s.ssId}).then(function(r){
+      var recs=r||[];
+      var el=document.getElementById('settings-recurring-list');
+      if(!recs.length){
+        el.innerHTML='<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет шаблонов</span></div>';return;
+      }
+      el.innerHTML='<div class="settings-list" style="background:var(--card);border-radius:16px;overflow:hidden;">'+
+        recs.map(function(rc){
+          return '<div class="rc-item">'+
+            '<button class="rc-toggle '+(rc.active?'on':'off')+'" onclick="App.toggleRecurring(\''+App._e(rc.id)+'\','+rc.active+')"></button>'+
+            '<div style="flex:1;">'+
+              '<div style="font-size:15px;font-weight:600;">'+App._e(rc.name)+'</div>'+
+              '<div style="font-size:12px;color:var(--text-2);">'+App._e(rc.category)+' · ₽ '+fmtFull(rc.amount)+' · '+rc.day+'-го числа · '+App._e(rc.account)+'</div>'+
+            '</div>'+
+            '<span onclick="App.openRecurringForm(\''+App._e(JSON.stringify(rc))+'\')" style="color:var(--brand);font-size:18px;cursor:pointer;padding:0 4px;">✎</span>'+
+            '<span onclick="App.deleteRecurring(\''+App._e(rc.id)+'\')" style="color:var(--expense);font-size:18px;cursor:pointer;padding:0 4px;">✕</span>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+    });
+  },
+
+  toggleRecurring:function(id,currentActive){
+    gs('saveRecurring',{ssId:App.s.ssId,data:{id:id,active:!currentActive}}).then(function(){
+      App.loadRecurring();
+    });
+  },
+
+  openRecurringForm:function(dataJson){
+    var d=null;
+    if(dataJson&&typeof dataJson==='string'){try{d=JSON.parse(dataJson);}catch(e){}}
+    var cats=['Аренда','Налоги','ЗП','Коммуналка','Реклама','Хозрасходы','Закупка','Прочий расход'].concat(App.s.settings.cats||[]);
+    var days=[];for(var i=1;i<=28;i++)days.push(i);
+    App.openModal('<div class="modal-title">'+(d?'Редактировать':'Новый шаблон')+'</div>'+
+      '<div class="field"><label>Название</label><input id="rc-name" type="text" placeholder="Аренда помещения" value="'+(d?App._e(d.name):'')+'" ></div>'+
+      '<div class="field"><label>Категория</label><select id="rc-cat">'+cats.map(function(c){return'<option'+(d&&d.category===c?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>Сумма (₽)</label><input id="rc-amt" type="number" placeholder="0" value="'+(d?d.amount:'')+'"></div>'+
+      '<div class="field"><label>Счёт списания</label><select id="rc-acc">'+App.s.accounts.map(function(a){return'<option'+(d&&d.account===a.name?' selected':'')+'>'+App._e(a.name)+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>День месяца</label><select id="rc-day">'+days.map(function(n){return'<option value="'+n+'"'+(d&&d.day===n?' selected':'')+'>'+n+'-го числа</option>';}).join('')+'</select></div>'+
+      '<button class="btn-primary" onclick="App._saveRecurring(\''+(d?App._e(d.id):'')+'\')">Сохранить</button>');
+  },
+
+  _saveRecurring:function(id){
+    var name=document.getElementById('rc-name').value.trim();
+    var cat=document.getElementById('rc-cat').value;
+    var amt=parseFloat(document.getElementById('rc-amt').value)||0;
+    var acc=document.getElementById('rc-acc').value;
+    var day=parseInt(document.getElementById('rc-day').value)||1;
+    if(!name||!amt){App.toast('Заполните поля',true);return;}
+    gs('saveRecurring',{ssId:App.s.ssId,data:{id:id||null,name:name,category:cat,amount:amt,account:acc,day:day,active:true}}).then(function(){
+      App.toast('Сохранено ✓');App.closeModal();App.loadRecurring();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  deleteRecurring:function(id){
+    if(!confirm('Удалить шаблон?'))return;
+    gs('deleteRecurring',{ssId:App.s.ssId,id:id}).then(function(){
+      App.toast('Удалено');App.loadRecurring();
+    });
+  },
+
+  applyRecurring:function(){
+    if(!confirm('Создать расходы по всем активным шаблонам за текущий месяц?'))return;
+    gs('applyRecurring',{ssId:App.s.ssId}).then(function(r){
+      App.toast('Применено: '+r.applied+' записей');App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   _e:function(s){

@@ -17,6 +17,16 @@ var SH_TRASH     = 'КОРЗИНА';
 var SH_TIMESHEET = 'ТАБЕЛЬ';
 var SH_PROFILE   = 'ПРОФИЛЬ';
 var SH_ORGS      = 'ОРГАНИЗАЦИИ';
+var SH_RECURRING = 'РЕКУРРЕНТНЫЕ';
+var SH_PAYMENTS  = 'ВЫПЛАТЫ';
+
+// РЕКУРРЕНТНЫЕ columns
+var RC_ID=1,RC_NAME=2,RC_CAT=3,RC_AMT=4,RC_ACC=5,RC_DAY=6,RC_ACTIVE=7,RC_CREATED=8;
+var RC_COLS=8;
+
+// ВЫПЛАТЫ columns
+var PY_ID=1,PY_NAME=2,PY_AMT=3,PY_ACC=4,PY_DUE=5,PY_STATUS=6,PY_CAT=7,PY_CREATED=8,PY_PAID=9;
+var PY_COLS=9;
 
 // БАЗА columns (1-based)
 var B_ID=1,B_UUID=2,B_DATE=3,B_TYPE=4,B_CAT=5,B_AMT=6,B_ACC=7,
@@ -140,8 +150,10 @@ function ensureSheets(ss) {
   _mk(ss,SH_SHIFTS,  ['ID','Дата','Смена','Кассир','Rows_JSON','Wyplatas_JSON','Расхождение','Создано']);
   _mk(ss,SH_DEBTS,   ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано','Накладная','Статус']);
   _mk(ss,SH_TIMESHEET,['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий']);
-  _mk(ss,SH_SETTINGS,['Ключ','Значение']);
+  _mk(ss,SH_SETTINGS, ['Ключ','Значение']);
   _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
+  _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
+  _mk(ss,SH_PAYMENTS, ['ID','Название','Сумма','Счёт','Срок','Статус','Категория','Создано','Оплачено']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -931,3 +943,273 @@ function _period(period, tz) {
 }
 
 function _s(v) { return String(v||'').replace(/[<>"'`]/g,'').trim().slice(0,500); }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: RECURRING EXPENSES (Ежемесячные расходы)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getRecurring(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_RECURRING);
+    if (!sh||sh.getLastRow()<2) return [];
+    return sh.getRange(2,1,sh.getLastRow()-1,RC_COLS).getValues().map(function(r){
+      var dt=r[RC_CREATED-1];
+      return {id:String(r[RC_ID-1]),name:String(r[RC_NAME-1]),category:String(r[RC_CAT-1]),
+              amount:parseFloat(r[RC_AMT-1])||0,account:String(r[RC_ACC-1]),
+              day:parseInt(r[RC_DAY-1])||1,active:r[RC_ACTIVE-1]===true||r[RC_ACTIVE-1]==='true',
+              created:(dt instanceof Date)?dt.toISOString():''};
+    });
+  } catch(e) { return []; }
+}
+
+function saveRecurring(p) {
+  var ssId=p.ssId, d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_RECURRING);
+    var id=d.id||Utilities.getUuid();
+    var row=[id,_s(d.name),_s(d.category),Math.round(parseFloat(d.amount)||0),
+             _s(d.account),parseInt(d.day)||1,d.active!==false,new Date()];
+    if (d.id&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,RC_ID,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) {
+        if (String(vs[i][0])===String(d.id)) {
+          sh.getRange(i+2,1,1,RC_COLS).setValues([row]); return {ok:true,id:id};
+        }
+      }
+    }
+    sh.appendRow(row);
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function deleteRecurring(p) {
+  var ssId=p.ssId, id=p.id;
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_RECURRING);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,RC_ID,sh.getLastRow()-1,1).getValues();
+    for (var i=vs.length-1;i>=0;i--) {
+      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+    }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Creates expense transactions for all active recurring templates for current month
+function applyRecurring(p) {
+  var ssId=p.ssId;
+  try {
+    var recs=getRecurring({ssId:ssId});
+    var active=recs.filter(function(r){return r.active&&r.amount>0;});
+    if (!active.length) return {ok:true,applied:0};
+    var now=new Date();
+    var applied=0;
+    active.forEach(function(r){
+      var dt=new Date(now.getFullYear(),now.getMonth(),Math.min(r.day,28));
+      var res=saveQuickEntry({ssId:ssId,data:{
+        uuid:'rc_'+r.id+'_'+now.getFullYear()+'_'+(now.getMonth()+1),
+        date:dt.toISOString(),type:'Расход',category:r.category,
+        account:r.account,amount:r.amount,comment:r.name
+      }});
+      if (res.ok&&!res.duplicate) applied++;
+    });
+    return {ok:true,applied:applied};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: BUDGET (Планово/Фактически)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getBudget(p) {
+  var ssId=p.ssId, period=p.period||'month';
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_SETTINGS);
+    var budgetMap={};
+    if (sh.getLastRow()>=2) {
+      sh.getRange(2,1,sh.getLastRow()-1,2).getValues().forEach(function(r){
+        if (String(r[0])==='BUDGET') {
+          try { budgetMap=JSON.parse(r[1])||{}; } catch(e){}
+        }
+      });
+    }
+    var an=getAnalytics({ssId:ssId,period:period});
+    var actualMap={};
+    (an.byCategory||[]).forEach(function(c){
+      if (c.type==='expense'||c.type==='Расход') actualMap[c.category]=c.total;
+    });
+    var allCats=[];
+    Object.keys(budgetMap).forEach(function(k){if(allCats.indexOf(k)<0)allCats.push(k);});
+    Object.keys(actualMap).forEach(function(k){if(allCats.indexOf(k)<0)allCats.push(k);});
+    var items=allCats.map(function(cat){
+      var planned=parseFloat(budgetMap[cat])||0;
+      var actual=parseFloat(actualMap[cat])||0;
+      var pct=planned>0?Math.min(Math.round(actual/planned*100),100):0;
+      return {category:cat,planned:planned,actual:actual,
+              remaining:Math.max(planned-actual,0),pct:pct,over:actual>planned&&planned>0};
+    }).sort(function(a,b){return (b.planned||b.actual)-(a.planned||a.actual);});
+    return {items:items,totalPlanned:Math.round(an.expense||0),budgetMap:budgetMap};
+  } catch(e) { return {items:[],totalPlanned:0,budgetMap:{}}; }
+}
+
+function saveBudget(p) {
+  var ssId=p.ssId, budgetMap=p.budgetMap||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_SETTINGS);
+    var val=JSON.stringify(budgetMap);
+    if (sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) {
+        if (String(vs[i][0])==='BUDGET') { sh.getRange(i+2,2).setValue(val); return {ok:true}; }
+      }
+    }
+    sh.appendRow(['BUDGET',val]);
+    return {ok:true};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: PAYMENTS (Записи на выплату)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getPayments(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_PAYMENTS);
+    if (!sh||sh.getLastRow()<2) return [];
+    var tz=Session.getScriptTimeZone();
+    var now=new Date();
+    return sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues().map(function(r){
+      var due=r[PY_DUE-1]; var paid=r[PY_PAID-1];
+      var dueStr=(due instanceof Date)?Utilities.formatDate(due,tz,'yyyy-MM-dd'):'';
+      var isOverdue=dueStr&&dueStr<Utilities.formatDate(now,tz,'yyyy-MM-dd')&&String(r[PY_STATUS-1])!=='paid';
+      return {id:String(r[PY_ID-1]),name:String(r[PY_NAME-1]),amount:parseFloat(r[PY_AMT-1])||0,
+              account:String(r[PY_ACC-1]),due:dueStr,status:isOverdue?'overdue':String(r[PY_STATUS-1]),
+              category:String(r[PY_CAT-1]),paidAt:(paid instanceof Date)?Utilities.formatDate(paid,tz,'yyyy-MM-dd'):'',
+              created:''};
+    }).sort(function(a,b){return (a.due||'').localeCompare(b.due||'');});
+  } catch(e) { return []; }
+}
+
+function savePayment(p) {
+  var ssId=p.ssId, d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_PAYMENTS);
+    var id=d.id||Utilities.getUuid();
+    var due=d.due?new Date(d.due):new Date();
+    var row=[id,_s(d.name),Math.round(parseFloat(d.amount)||0),_s(d.account),
+             due,d.status||'pending',_s(d.category||''),new Date(),''];
+    if (d.id&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) {
+        if (String(vs[i][0])===String(d.id)) {
+          sh.getRange(i+2,1,1,PY_COLS).setValues([row]);
+          sh.getRange(i+2,PY_DUE,1,1).setNumberFormat('dd.mm.yyyy');
+          return {ok:true,id:id};
+        }
+      }
+    }
+    sh.appendRow(row);
+    sh.getRange(sh.getLastRow(),PY_DUE,1,1).setNumberFormat('dd.mm.yyyy');
+    sh.getRange(sh.getLastRow(),PY_AMT,1,1).setNumberFormat('#,##0');
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function markPaymentPaid(p) {
+  var ssId=p.ssId, id=p.id, account=_s(p.account||'');
+  try {
+    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_PAYMENTS);
+    if (!sh||sh.getLastRow()<2) { lock.releaseLock(); return {__error:'not found'}; }
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
+    var rowNum=-1,rowData=null;
+    for (var i=0;i<vs.length;i++) {
+      if (String(vs[i][PY_ID-1])===String(id)) { rowNum=i+2; rowData=vs[i]; break; }
+    }
+    if (rowNum===-1) { lock.releaseLock(); return {__error:'not found'}; }
+    sh.getRange(rowNum,PY_STATUS).setValue('paid');
+    sh.getRange(rowNum,PY_PAID).setValue(new Date());
+    if (account&&rowData) {
+      var amt=parseFloat(rowData[PY_AMT-1])||0;
+      var cat=String(rowData[PY_CAT-1])||'Выплата';
+      var name=String(rowData[PY_NAME-1]);
+      if (amt>0) {
+        saveQuickEntry({ssId:ssId,data:{uuid:Utilities.getUuid(),date:new Date().toISOString(),
+          type:'Расход',category:cat,account:account,amount:amt,comment:name}});
+      }
+    }
+    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    lock.releaseLock();
+    return {ok:true};
+  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+}
+
+function deletePayment(p) {
+  var ssId=p.ssId, id=p.id;
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
+    for (var i=vs.length-1;i>=0;i--) {
+      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+    }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Toggle account visibility: active ↔ hidden
+function toggleAccountVisibility(p) {
+  var ssId=p.ssId, id=p.id;
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ACCOUNTS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,4).getValues();
+    for (var i=0;i<vs.length;i++) {
+      if (String(vs[i][0])===String(id)) {
+        var cur=String(vs[i][3]);
+        var next=cur==='hidden'?'active':'hidden';
+        sh.getRange(i+2,4).setValue(next);
+        return {ok:true,status:next};
+      }
+    }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Returns all accounts including hidden ones
+function getAccountsAll(p) {
+  var ssId=p&&p.ssId?p.ssId:p;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var accSh=ss.getSheetByName(SH_ACCOUNTS);
+    var baseSh=ss.getSheetByName(SH_BASE);
+    var accounts=[];
+    if (accSh.getLastRow()>=2) {
+      accSh.getRange(2,1,accSh.getLastRow()-1,6).getValues().forEach(function(r){
+        if (r[0])
+          accounts.push({id:String(r[0]),name:String(r[1]),startBalance:parseFloat(r[2])||0,
+                         status:String(r[3]||'active'),icon:String(r[4]),color:String(r[5])});
+      });
+    }
+    var bals={};
+    accounts.forEach(function(a){bals[a.name]=a.startBalance;});
+    if (baseSh.getLastRow()>=2) {
+      baseSh.getRange(2,1,baseSh.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        var t=String(r[B_TYPE-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]);
+        if (!bals.hasOwnProperty(acc)) bals[acc]=0;
+        if (t==='Доход') bals[acc]+=amt; else if (t==='Расход') bals[acc]-=amt;
+      });
+    }
+    accounts.forEach(function(a){a.balance=Math.round(bals[a.name]||0);});
+    return accounts;
+  } catch(e) { return []; }
+}
