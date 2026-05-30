@@ -55,6 +55,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 /* ── App shell ── */
 #app{display:none;height:100dvh;flex-direction:column;}
 #app.active{display:flex;}
+.app-body{display:flex;flex-direction:column;flex:1;overflow:hidden;min-width:0;}
 .topbar{background:var(--card);padding:calc(var(--safe-top) + 14px) 18px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--sep);flex-shrink:0;}
 .topbar-left{display:flex;flex-direction:column;}
 .topbar-org{font-size:18px;font-weight:800;color:var(--text-1);cursor:pointer;display:flex;align-items:center;gap:5px;letter-spacing:-.3px;}
@@ -78,6 +79,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 /* ── FAB ── */
 #fab{position:fixed;right:18px;bottom:calc(var(--nav-h) + var(--safe-bot) + 14px);width:54px;height:54px;background:var(--brand);border-radius:50%;border:none;color:#000;font-size:28px;display:flex;align-items:center;justify-content:center;box-shadow:var(--glow),0 4px 24px rgba(255,159,10,.45);cursor:pointer;z-index:50;transition:transform .15s,box-shadow .15s;font-weight:700;}
 #fab:active{transform:scale(.9);}
+
+/* ── Sidebar (desktop only) ── */
+#sidebar{display:none;}
 
 /* ── Period pills ── */
 .period-bar{display:flex;gap:8px;padding:14px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
@@ -263,6 +267,40 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .empty-text{font-size:16px;font-weight:600;}
 .privacy-note{font-size:13px;color:var(--text-2);text-align:center;margin-top:20px;line-height:1.5;font-weight:500;}
 
+/* ── Desktop layout (≥768px) ── */
+@media(min-width:768px){
+  #app{flex-direction:row;}
+  #sidebar{
+    display:flex;flex-direction:column;width:236px;flex-shrink:0;
+    background:var(--card);border-right:1px solid var(--sep);
+    padding:calc(var(--safe-top) + 16px) 12px 20px;overflow-y:auto;
+  }
+  .sb-brand{display:flex;align-items:center;gap:12px;padding:4px 8px 24px;border-bottom:1px solid var(--sep);margin-bottom:8px;}
+  .sb-brand-icon{width:42px;height:42px;background:linear-gradient(135deg,#FF9F0A,#FF6B0A);border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;box-shadow:0 4px 12px rgba(255,159,10,.35);}
+  .sb-brand-name{font-size:15px;font-weight:800;letter-spacing:-.3px;}
+  .sb-brand-sub{font-size:11px;color:var(--text-2);font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+  .sb-nav{display:flex;flex-direction:column;gap:2px;}
+  .sb-nav-item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;border:none;background:none;color:var(--text-2);font-size:14px;font-weight:600;cursor:pointer;text-align:left;transition:background .15s,color .15s;width:100%;font-family:var(--font);}
+  .sb-nav-item:hover{background:var(--card2);color:var(--text-1);}
+  .sb-nav-item.active{background:var(--brand-dim);color:var(--brand);}
+  .sb-nav-icon{font-size:18px;width:22px;text-align:center;flex-shrink:0;}
+  .sb-spacer{flex:1;}
+  .sb-capital{background:var(--card2);border-radius:14px;padding:14px 16px;margin-bottom:10px;border:1px solid var(--sep);}
+  .sb-capital-lbl{font-size:10px;color:var(--text-2);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+  .sb-capital-val{font-size:22px;font-weight:800;letter-spacing:-.6px;}
+  .sb-capital-profit{font-size:12px;font-weight:600;margin-top:3px;}
+  .sb-user{display:flex;align-items:center;gap:10px;padding:10px 8px 0;}
+  .sb-avatar{width:36px;height:36px;border-radius:50%;background:var(--brand-dim);border:2px solid var(--brand);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--brand);flex-shrink:0;}
+  .sb-user-name{font-size:13px;font-weight:700;}
+  .sb-user-role{font-size:11px;color:var(--text-2);}
+
+  /* Desktop: hide bottom nav, adjust FAB and panels */
+  .nav{display:none;}
+  .panel{padding-bottom:24px;}
+  #fab{right:28px;bottom:28px;}
+  .topbar{padding-top:18px;padding-bottom:18px;}
+}
+
 @media print{
   .nav,#fab,.topbar,.sheet-overlay,.modal-overlay,#toast,.j-tabs,#btn-print{display:none!important;}
   #j-report{display:block!important;}
@@ -361,6 +399,49 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 </div>
 
 <div id="app">
+  <!-- Sidebar (desktop) -->
+  <aside id="sidebar">
+    <div class="sb-brand">
+      <div class="sb-brand-icon">💰</div>
+      <div>
+        <div class="sb-brand-name">Auron Finance</div>
+        <div class="sb-brand-sub" id="sb-org-name">Загрузка...</div>
+      </div>
+    </div>
+    <nav class="sb-nav">
+      <button class="sb-nav-item active" data-tab="home" onclick="App.setTab('home',this)">
+        <span class="sb-nav-icon">🏠</span>Главная
+      </button>
+      <button class="sb-nav-item" data-tab="analytics" onclick="App.setTab('analytics',this)">
+        <span class="sb-nav-icon">📊</span>Аналитика
+      </button>
+      <button class="sb-nav-item" data-tab="kassa" onclick="App.setTab('kassa',this)">
+        <span class="sb-nav-icon">🧾</span>Касса
+      </button>
+      <button class="sb-nav-item" data-tab="journal" onclick="App.setTab('journal',this)">
+        <span class="sb-nav-icon">📋</span>Журнал
+      </button>
+      <button class="sb-nav-item" data-tab="settings" onclick="App.setTab('settings',this)">
+        <span class="sb-nav-icon">⚙️</span>Настройки
+      </button>
+    </nav>
+    <div class="sb-spacer"></div>
+    <div class="sb-capital">
+      <div class="sb-capital-lbl">Общий капитал</div>
+      <div class="sb-capital-val" id="sb-total-bal">—</div>
+      <div class="sb-capital-profit" id="sb-month-profit"></div>
+    </div>
+    <div class="sb-user">
+      <div class="sb-avatar" id="sb-avatar">А</div>
+      <div>
+        <div class="sb-user-name" id="sb-user-name">—</div>
+        <div class="sb-user-role">Администратор</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <div class="app-body">
   <div class="topbar">
     <div class="topbar-left">
       <div class="topbar-org" id="topbar-org-name" onclick="App.showScreen('scr-orgs')">Загрузка...</div>
@@ -590,6 +671,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <span class="nav-icon">⚙️</span><span class="nav-label">Настройки</span>
     </button>
   </nav>
+  </div><!-- /app-body -->
 </div>
 
 <button id="fab" onclick="App.openNumpad()">＋</button>
@@ -790,6 +872,13 @@ var App={
     document.getElementById('fab').style.display='flex';
     document.getElementById('topbar-org-name').textContent=App.s.orgName||'Магазин';
     document.getElementById('topbar-user').textContent=App.s.userName||'';
+    // sidebar
+    var sbOrg=document.getElementById('sb-org-name');
+    if(sbOrg)sbOrg.textContent=App.s.orgName||'Магазин';
+    var sbName=document.getElementById('sb-user-name');
+    if(sbName)sbName.textContent=App.s.userName||'Пользователь';
+    var sbAv=document.getElementById('sb-avatar');
+    if(sbAv)sbAv.textContent=(App.s.userName||'А').charAt(0).toUpperCase();
   },
 
   register:function(){
@@ -828,8 +917,12 @@ var App={
   setTab:function(tab,btn){
     document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
     document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
+    document.querySelectorAll('.sb-nav-item').forEach(function(b){b.classList.remove('active');});
     document.getElementById('tab-'+tab).classList.add('active');
     if(btn)btn.classList.add('active');
+    // also activate the matching sidebar item
+    var sbMatch=document.querySelector('.sb-nav-item[data-tab="'+tab+'"]');
+    if(sbMatch)sbMatch.classList.add('active');
     if(tab==='home')App.loadHome();
     else if(tab==='analytics')App.loadAnalytics();
     else if(tab==='kassa')App.initKassa();
@@ -865,6 +958,16 @@ var App={
       App.s.accounts=allAcc.filter(function(a){return a.status!=='archived';});
       App.renderAccounts(App.s.accounts,r.totals);
       App.renderTxList(r.transactions||[],'tx-list');
+      // update sidebar capital card
+      var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
+      var sbBal=document.getElementById('sb-total-bal');
+      if(sbBal)sbBal.textContent='₽ '+fmtFull(totalBal);
+      var sbProfit=document.getElementById('sb-month-profit');
+      if(sbProfit&&r.summary){
+        var p=r.summary.income-r.summary.expense;
+        sbProfit.textContent=(p>=0?'+':'')+fmtFull(p)+' ₽ за период';
+        sbProfit.style.color=p>=0?'var(--income)':'var(--expense)';
+      }
     }).catch(function(e){App.toast(e.message,true);});
   },
 
