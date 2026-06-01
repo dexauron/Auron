@@ -725,7 +725,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
     background:linear-gradient(145deg,var(--brand),#8f5cff);
     border-radius:11px;display:flex;align-items:center;justify-content:center;
     flex-shrink:0;
-    box-shadow:0 6px 18px -5px rgba(255,159,10,.6);
+    box-shadow:0 6px 18px -5px rgba(94,92,230,.6);
   }
   .sb-brand-name{font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.05;}
   .sb-brand-sub{
@@ -1088,7 +1088,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         </div>
         <div class="split-tile">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:rgba(255,159,10,.15);color:var(--brand);">📤</div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);">📤</div>
             Расход
           </div>
           <div class="split-tile-v num" id="split-expense">—</div>
@@ -1486,7 +1486,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <span class="acc-detail-btn-label">Расход</span>
       </button>
       <button class="acc-detail-btn" onclick="App.accAction('transfer')">
-        <div class="acc-detail-btn-icon" style="background:rgba(255,159,10,.15);color:var(--transfer);">⇄</div>
+        <div class="acc-detail-btn-icon" style="background:rgba(129,140,248,.15);color:var(--transfer);">⇄</div>
         <span class="acc-detail-btn-label">Перевод</span>
       </button>
       <button class="acc-detail-btn" onclick="App.accAction('adjust')">
