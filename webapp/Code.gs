@@ -24,7 +24,7 @@ var SH_PAYMENTS  = 'ВЫПЛАТЫ';
 var RC_ID=1,RC_NAME=2,RC_CAT=3,RC_AMT=4,RC_ACC=5,RC_DAY=6,RC_ACTIVE=7,RC_CREATED=8;
 var RC_COLS=8;
 
-// ВЫПЛАТЫ columns
+// ВЫПЛАТЫ columns (PY_NAME=payee, PY_CAT=title, PY_ACC=comment, PY_PAID=amount paid so far)
 var PY_ID=1,PY_NAME=2,PY_AMT=3,PY_ACC=4,PY_DUE=5,PY_STATUS=6,PY_CAT=7,PY_CREATED=8,PY_PAID=9;
 var PY_COLS=9;
 
@@ -175,7 +175,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_SETTINGS, ['Ключ','Значение']);
   _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
   _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
-  _mk(ss,SH_PAYMENTS, ['ID','Название','Сумма','Счёт','Срок','Статус','Категория','Создано','Оплачено']);
+  _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -1106,16 +1106,27 @@ function getPayments(p) {
     var sh=ss.getSheetByName(SH_PAYMENTS);
     if (!sh||sh.getLastRow()<2) return [];
     var tz=Session.getScriptTimeZone();
-    var now=new Date();
     return sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues().map(function(r){
-      var due=r[PY_DUE-1]; var paid=r[PY_PAID-1];
+      var due=r[PY_DUE-1];
       var dueStr=(due instanceof Date)?Utilities.formatDate(due,tz,'yyyy-MM-dd'):'';
-      var isOverdue=dueStr&&dueStr<Utilities.formatDate(now,tz,'yyyy-MM-dd')&&String(r[PY_STATUS-1])!=='paid';
-      return {id:String(r[PY_ID-1]),name:String(r[PY_NAME-1]),amount:parseFloat(r[PY_AMT-1])||0,
-              account:String(r[PY_ACC-1]),due:dueStr,status:isOverdue?'overdue':String(r[PY_STATUS-1]),
-              category:String(r[PY_CAT-1]),paidAt:(paid instanceof Date)?Utilities.formatDate(paid,tz,'yyyy-MM-dd'):'',
-              created:''};
-    }).sort(function(a,b){return (a.due||'').localeCompare(b.due||'');});
+      var paidAmt=parseFloat(r[PY_PAID-1])||0;
+      var status=String(r[PY_STATUS-1])||'open';
+      // normalize legacy statuses
+      if(status==='pending')status='open';
+      if(status==='overdue')status='open';
+      return {
+        id:String(r[PY_ID-1]),
+        payee:String(r[PY_NAME-1]),
+        title:String(r[PY_CAT-1]),
+        amount:parseFloat(r[PY_AMT-1])||0,
+        paid:paidAmt,
+        comment:String(r[PY_ACC-1]),
+        date:dueStr,
+        status:status,
+        created:''
+      };
+    }).filter(function(r){return r.id&&r.id!=='';})
+     .sort(function(a,b){return (a.date||'').localeCompare(b.date||'');});
   } catch(e) { return []; }
 }
 
@@ -1125,9 +1136,12 @@ function savePayment(p) {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_PAYMENTS);
     var id=d.id||Utilities.getUuid();
-    var due=d.due?new Date(d.due):new Date();
-    var row=[id,_s(d.name),Math.round(parseFloat(d.amount)||0),_s(d.account),
-             due,d.status||'pending',_s(d.category||''),new Date(),''];
+    var date=d.date?new Date(d.date):(d.due?new Date(d.due):new Date());
+    // PY: id, payee, amount, comment, date, status, title, created, paidAmt
+    var paidAmt=parseFloat(d.paid)||0;
+    var row=[id,_s(d.payee||d.name||''),Math.round(parseFloat(d.amount)||0),
+             _s(d.comment||d.account||''),date,d.status||'open',
+             _s(d.title||d.category||''),new Date(),paidAmt];
     if (d.id&&sh.getLastRow()>=2) {
       var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
       for (var i=0;i<vs.length;i++) {
@@ -1143,6 +1157,50 @@ function savePayment(p) {
     sh.getRange(sh.getLastRow(),PY_AMT,1,1).setNumberFormat('#,##0');
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+}
+
+// Update payment status: pay / postpone / cancel / restore
+function updatePayment(p) {
+  var ssId=p.ssId, d=p.data||{};
+  var id=String(d.id||'');
+  if (!id) return {__error:'no id'};
+  try {
+    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_PAYMENTS);
+    if (!sh||sh.getLastRow()<2) { lock.releaseLock(); return {__error:'not found'}; }
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
+    var rowNum=-1, rowData=null;
+    for (var i=0;i<vs.length;i++) {
+      if (String(vs[i][PY_ID-1])===id) { rowNum=i+2; rowData=vs[i]; break; }
+    }
+    if (rowNum===-1) { lock.releaseLock(); return {__error:'not found'}; }
+    if (d.action==='pay') {
+      var paidBefore=parseFloat(rowData[PY_PAID-1])||0;
+      var payAmt=parseFloat(d.amount)||0;
+      var totalAmt=parseFloat(rowData[PY_AMT-1])||0;
+      var newPaid=Math.min(paidBefore+payAmt,totalAmt);
+      var newStatus=newPaid>=totalAmt?'paid':'open';
+      sh.getRange(rowNum,PY_PAID).setValue(newPaid);
+      sh.getRange(rowNum,PY_STATUS).setValue(newStatus);
+      // write expense transaction
+      if (payAmt>0&&d.account) {
+        saveQuickEntry({ssId:ssId,data:{uuid:Utilities.getUuid(),date:new Date().toISOString(),
+          type:'Расход',category:String(rowData[PY_CAT-1])||'Выплата поставщику',
+          account:_s(d.account),amount:payAmt,comment:String(rowData[PY_NAME-1])+(d.comment?' — '+_s(d.comment):''),locked:false}});
+      }
+    } else if (d.action==='postpone') {
+      sh.getRange(rowNum,PY_STATUS).setValue('postponed');
+      if (d.date) sh.getRange(rowNum,PY_DUE).setValue(new Date(d.date));
+    } else if (d.action==='cancel') {
+      sh.getRange(rowNum,PY_STATUS).setValue('cancelled');
+    } else if (d.action==='restore') {
+      sh.getRange(rowNum,PY_STATUS).setValue('open');
+    }
+    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    lock.releaseLock();
+    return {ok:true};
+  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function markPaymentPaid(p) {
@@ -1367,14 +1425,18 @@ function seedDemoData(p) {
     ];
     shiftSh.getRange(2, 1, shifts.length, 8).setValues(shifts);
 
-    // --- scheduled payments ---
+    // --- supplier payment records (new format: payee, amount, comment, date, status, title, created, paidAmt) ---
     var paysSh = ss.getSheetByName(SH_PAYMENTS);
     var pays = [
-      [uid(), 'Аренда помещения',  85000, 'Карта',    dt(-15,10), 'pending', 'Аренда',     dt(0,10), ''],
-      [uid(), 'ЗП — Иванова А.',   35000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
-      [uid(), 'ЗП — Петров В.',    30000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
-      [uid(), 'ЗП — Сидорова М.', 28000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
-      [uid(), 'Коммуналка июнь',   12400, 'Карта',    dt(3,10),   'overdue', 'Коммуналка', dt(0,10), '']
+      // id, payee, amount, comment, date, status, title, created, paidAmt
+      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-5,10),  'open',      'Аренда помещения',       dt(0,10), 0],
+      [uid(), 'ООО Альфа-Трейд',   120000, '',  dt(-3,10),  'open',      'Поставка прод. №12',     dt(0,10), 0],
+      [uid(), 'ООО Альфа-Трейд',    75000, '',  dt(2,10),   'open',      'Поставка прод. №13',     dt(0,10), 0],
+      [uid(), 'ИП Захаров К.С.',    48000, '',  dt(-8,10),  'paid',      'Поставка косметики №7',  dt(0,10), 48000],
+      [uid(), 'ИП Захаров К.С.',    62000, '',  dt(5,10),   'open',      'Поставка косметики №8',  dt(0,10), 0],
+      [uid(), 'ГУП Горгаз',         12400, '',  dt(-2,10),  'open',      'Коммуналка',             dt(0,10), 0],
+      [uid(), 'ООО Альфа-Трейд',    95000, '',  dt(7,10),   'open',      'Поставка прод. №14',     dt(0,10), 0],
+      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-35,10), 'paid',      'Аренда прошлый месяц',   dt(0,10), 85000]
     ];
     paysSh.getRange(2, 1, pays.length, PY_COLS).setValues(pays);
 
