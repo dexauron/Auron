@@ -1235,3 +1235,151 @@ function getAccountsAll(p) {
     return accounts;
   } catch(e) { return []; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: SEED / DEMO DATA
+// ═══════════════════════════════════════════════════════════════════════
+
+function seedDemoData(p) {
+  var ssId = _s(p.ssId);
+  if (!ssId) return { __error: 'ssId required' };
+  try {
+    var lock = LockService.getScriptLock(); lock.waitLock(20000);
+    var ss = SpreadsheetApp.openById(ssId);
+    ensureSheets(ss);
+
+    // helpers
+    var now = new Date();
+    function dt(daysAgo, h, m) {
+      var x = new Date(now);
+      x.setDate(x.getDate() - (daysAgo || 0));
+      x.setHours(h || 10, m || 0, 0, 0);
+      return x;
+    }
+    function uid() { return Utilities.getUuid(); }
+
+    // --- clear sheets ---
+    var sheets = [SH_BASE, SH_ACCOUNTS, SH_DEBTS, SH_SHIFTS, SH_PAYMENTS, SH_SETTINGS];
+    sheets.forEach(function(n) {
+      var sh = ss.getSheetByName(n);
+      if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+    });
+
+    // --- settings ---
+    var settSh = ss.getSheetByName(SH_SETTINGS);
+    var sett = [
+      ['CATS',         JSON.stringify(['Продажи','Закупка','ЗП','Аренда','Хозрасходы','Коммуналка','Реклама','Налоги'])],
+      ['CASHIERS',     JSON.stringify(['Иванова Анна','Петров Виктор','Сидорова Мария'])],
+      ['PAY_TYPES',    JSON.stringify(['Наличные','Карта','СБП','Безналичный'])],
+      ['REP_STATUSES', JSON.stringify(['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён'])],
+      ['EMPLOYEES',    JSON.stringify(['Иванова Анна','Петров Виктор','Сидорова Мария','Козлова Татьяна'])],
+      ['SHIFTS',       JSON.stringify(['Утренняя','Дневная','Вечерняя'])]
+    ];
+    settSh.getRange(2, 1, sett.length, 2).setValues(sett);
+
+    // --- accounts (starting balances = 0, real balance built from transactions) ---
+    var accSh = ss.getSheetByName(SH_ACCOUNTS);
+    accSh.getRange(2, 1, 3, 6).setValues([
+      [uid(), 'Наличные', 0, 'active', '💵', '#10B981'],
+      [uid(), 'Карта',    0, 'active', '💳', '#6366F1'],
+      [uid(), 'СБП',      0, 'active', '📱', '#8B5CF6']
+    ]);
+
+    // --- transactions ---
+    var rows = [];
+    var cashiers = ['Иванова Анна', 'Петров Виктор', 'Сидорова Мария'];
+    // daily sales data [daysAgo, нал, карта, СБП, cashier_idx]
+    var sales = [
+      [0,  24800, 48200, 18300, 0],
+      [1,  21500, 52100, 15800, 1],
+      [2,  28300, 45600, 22100, 2],
+      [3,  19200, 41300, 16500, 0],
+      [4,  32100, 56800, 24200, 1],
+      [5,  25700, 48900, 19600, 2],
+      [6,  18600, 38400, 14200, 0],
+      [7,  27400, 51200, 21800, 1],
+      [8,  22900, 44700, 17300, 2],
+      [9,  30500, 58300, 23400, 0],
+      [10, 24100, 46200, 18900, 1],
+      [11, 16800, 35600, 13500, 2],
+      [12, 29700, 53800, 22600, 0],
+      [13, 23400, 47500, 19100, 1]
+    ];
+    function addRow(dAgo, h, type, cat, amt, acc, emp, cmt) {
+      rows.push([0, uid(), dt(dAgo,h), type, cat, amt, acc, emp||'', cmt||'', '', '', false, '']);
+    }
+    sales.forEach(function(s) {
+      var emp = cashiers[s[4]];
+      if (s[1]) addRow(s[0],  9, 'Доход', 'Продажи', s[1], 'Наличные', emp, 'Z-отчёт наличные');
+      if (s[2]) addRow(s[0], 10, 'Доход', 'Продажи', s[2], 'Карта',    emp, 'Z-отчёт карта');
+      if (s[3]) addRow(s[0], 11, 'Доход', 'Продажи', s[3], 'СБП',      emp, 'Z-отчёт СБП');
+    });
+    // expenses
+    var exps = [
+      [0,  13, 'Расход', 'Закупка',    45000, 'Наличные', 'Иванова Анна',  'Закупка — ООО Альфа Трейд'],
+      [1,  15, 'Расход', 'Хозрасходы', 2800,  'Наличные', '',              'Хозтовары, упаковка'],
+      [2,  11, 'Расход', 'Закупка',    28500, 'Карта',    'Петров Виктор', 'Закупка — ИП Мухамедов'],
+      [3,  16, 'Расход', 'Реклама',    8500,  'Карта',    '',              '2ГИС продвижение'],
+      [5,  10, 'Расход', 'Закупка',    52000, 'Наличные', 'Иванова Анна',  'Закупка — оптовый склад'],
+      [7,  11, 'Расход', 'Хозрасходы', 3200,  'Наличные', '',              'Пакеты, канцелярия'],
+      [9,  10, 'Расход', 'Закупка',    38000, 'Карта',    'Сидорова Мария','Закупка — ООО Альфа Трейд'],
+      [10,  9, 'Расход', 'Коммуналка', 12400, 'Карта',    '',              'Электричество и водоснабжение'],
+      [12, 10, 'Расход', 'Аренда',     85000, 'Карта',    '',              'Аренда помещения за июнь'],
+      [12, 11, 'Расход', 'ЗП',         35000, 'Наличные', '',              'ЗП — Иванова А.'],
+      [12, 11, 'Расход', 'ЗП',         30000, 'Наличные', '',              'ЗП — Петров В.'],
+      [12, 12, 'Расход', 'ЗП',         28000, 'Наличные', '',              'ЗП — Сидорова М.'],
+      [13, 14, 'Расход', 'Закупка',    41000, 'Наличные', 'Петров Виктор', 'Закупка — Меркурий']
+    ];
+    exps.forEach(function(e) { addRow(e[0],e[1],e[2],e[3],e[4],e[5],e[6],e[7]); });
+
+    // sort by date desc, re-number
+    rows.sort(function(a,b){ return b[2]-a[2]; });
+    rows.forEach(function(r,i){ r[0]=i+1; });
+
+    var baseSh = ss.getSheetByName(SH_BASE);
+    baseSh.getRange(2, 1, rows.length, B_COLS).setValues(rows);
+    baseSh.getRange(2, B_DATE, rows.length, 1).setNumberFormat('dd.mm.yyyy');
+    baseSh.getRange(2, B_AMT,  rows.length, 1).setNumberFormat('#,##0');
+
+    // --- supplier debts ---
+    var debtSh = ss.getSheetByName(SH_DEBTS);
+    var debts = [
+      [uid(),'ООО Альфа Трейд',   'Начальный долг', 47000, dt(30,10), 'Карта',    'Входящий остаток долга',  dt(30,10), 'НК-001', '❌ Не оплачено'],
+      [uid(),'ООО Альфа Трейд',   'Закупка',        45000, dt(9,13),  'Наличные', 'Закупка товара',          dt(9,13),  'НК-018', '❌ Не оплачено'],
+      [uid(),'ООО Альфа Трейд',   'Оплата',        -30000, dt(6,11),  'Карта',    'Частичная оплата',        dt(6,11),  '',       '✅ Оплачено'],
+      [uid(),'ИП Мухамедов Р.А.', 'Начальный долг', 23500, dt(45,10), 'Карта',    '',                        dt(45,10), 'МУХ-12', '❌ Не оплачено'],
+      [uid(),'ИП Мухамедов Р.А.', 'Закупка',        28500, dt(2,11),  'Карта',    'Закупка товара',          dt(2,11),  'МУХ-23', '❌ Не оплачено'],
+      [uid(),'ИП Мухамедов Р.А.', 'Оплата',        -15000, dt(1,12),  'Наличные', 'Частичная оплата',        dt(1,12),  '',       '✅ Оплачено'],
+      [uid(),'Оптовый склад Меркурий','Начальный долг',15000,dt(20,10),'Наличные','',                        dt(20,10), 'МЕР-07', '❌ Не оплачено'],
+      [uid(),'Оптовый склад Меркурий','Закупка',     41000, dt(13,14), 'Наличные', 'Закупка товара',          dt(13,14), 'МЕР-15', '❌ Не оплачено'],
+      [uid(),'Оптовый склад Меркурий','Оплата',     -41000, dt(5,9),   'Наличные', 'Полная оплата',           dt(5,9),   '',       '✅ Оплачено']
+    ];
+    debtSh.getRange(2, 1, debts.length, D_COLS).setValues(debts);
+
+    // --- shifts ---
+    var shiftSh = ss.getSheetByName(SH_SHIFTS);
+    var shifts = [
+      [uid(), dt(0,9),  'Утренняя', 'Иванова Анна',   JSON.stringify([{acc:'Наличные',z:24800,fact:24800},{acc:'Карта',z:48200,fact:48200},{acc:'СБП',z:18300,fact:18300}]), '[]',    0,   dt(0,20)],
+      [uid(), dt(1,9),  'Утренняя', 'Петров Виктор',  JSON.stringify([{acc:'Наличные',z:21500,fact:21000},{acc:'Карта',z:52100,fact:52100},{acc:'СБП',z:15800,fact:15800}]), '[]', -500,   dt(1,20)],
+      [uid(), dt(2,9),  'Утренняя', 'Сидорова Мария', JSON.stringify([{acc:'Наличные',z:28300,fact:28300},{acc:'Карта',z:45600,fact:45800},{acc:'СБП',z:22100,fact:22100}]), '[]',  200,   dt(2,20)],
+      [uid(), dt(5,9),  'Утренняя', 'Петров Виктор',  JSON.stringify([{acc:'Наличные',z:25700,fact:25700},{acc:'Карта',z:48900,fact:48900},{acc:'СБП',z:19600,fact:19600}]), '[]',    0,   dt(5,20)],
+      [uid(), dt(7,9),  'Утренняя', 'Иванова Анна',   JSON.stringify([{acc:'Наличные',z:27400,fact:27400},{acc:'Карта',z:51200,fact:51200},{acc:'СБП',z:21800,fact:21800}]), '[]',    0,   dt(7,20)]
+    ];
+    shiftSh.getRange(2, 1, shifts.length, 8).setValues(shifts);
+
+    // --- scheduled payments ---
+    var paysSh = ss.getSheetByName(SH_PAYMENTS);
+    var pays = [
+      [uid(), 'Аренда помещения',  85000, 'Карта',    dt(-15,10), 'pending', 'Аренда',     dt(0,10), ''],
+      [uid(), 'ЗП — Иванова А.',   35000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
+      [uid(), 'ЗП — Петров В.',    30000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
+      [uid(), 'ЗП — Сидорова М.', 28000, 'Наличные', dt(-20,10), 'pending', 'ЗП',         dt(0,10), ''],
+      [uid(), 'Коммуналка июнь',   12400, 'Карта',    dt(3,10),   'overdue', 'Коммуналка', dt(0,10), '']
+    ];
+    paysSh.getRange(2, 1, pays.length, PY_COLS).setValues(pays);
+
+    try { CacheService.getScriptCache().remove('dash_' + ssId); } catch(e) {}
+    lock.releaseLock();
+    return { ok: true, txCount: rows.length };
+  } catch(e) { return { __error: e.message }; }
+}

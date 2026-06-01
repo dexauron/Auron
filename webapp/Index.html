@@ -1227,6 +1227,17 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
           </div>
         </div>
       </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Демо-данные</div>
+        <div class="settings-list">
+          <div class="settings-row">
+            <span class="settings-row-icon">🧪</span>
+            <span class="settings-row-label" style="flex:1;">Заполнить тестовыми данными</span>
+            <button onclick="App.seedDemo()" style="background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);border:none;border-radius:10px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Заполнить</button>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">Сбрасывает все данные и добавляет 14 дней продаж, 3 поставщика, смены и выплаты.</div>
+      </div>
     </div>
   </div>
 
@@ -1640,6 +1651,15 @@ var App={
 
   saveSettings:function(){
     gs('saveSettings',{ssId:App.s.ssId,data:App.s.settings}).catch(function(){});
+  },
+
+  seedDemo:function(){
+    if(!confirm('Сбросить все данные и заполнить демо-данными?\n\nВсе текущие записи будут удалены.'))return;
+    App.toast('Заполняю данные…');
+    gs('seedDemoData',{ssId:App.s.ssId}).then(function(r){
+      App.toast('Готово — добавлено '+r.txCount+' операций ✓');
+      App.loadSettings(function(){App.loadHome();});
+    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
 
   // ── Home ──────────────────────────────────────────────────────
