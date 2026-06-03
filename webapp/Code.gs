@@ -89,7 +89,7 @@ function initUserApp() {
 }
 
 function registerUser(p) {
-  var name=_s(p.name), phone=_s(p.phone);
+  var name=_s(p.name), phone=_s(p.phone), orgName0=p.orgName?_s(p.orgName):'Мой магазин';
   try {
     var lock = LockService.getUserLock(); lock.waitLock(10000);
     var ex = _profileSS();
@@ -105,13 +105,13 @@ function registerUser(p) {
     var orgsSh = ss.insertSheet(SH_ORGS);
     orgsSh.getRange(1,1,1,3).setValues([['ID','Название','SS_ID']]);
     _props().setProperty('PROFILE_SS_ID', ss.getId());
-    var res = _mkOrg('Мой магазин', ss);
+    var res = _mkOrg(orgName0, ss);
     lock.releaseLock();
     if (REG_WEBHOOK) {
       try { UrlFetchApp.fetch(REG_WEBHOOK,{method:'post',contentType:'application/json',
         muteHttpExceptions:true,payload:JSON.stringify({name:name,phone:phone,ts:new Date().toISOString()})}); } catch(e){}
     }
-    return { ssId: res.ssId, orgName: 'Мой магазин' };
+    return { ssId: res.ssId, orgName: orgName0 };
   } catch(e) { return { __error: e.message }; }
 }
 
