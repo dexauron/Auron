@@ -1878,7 +1878,7 @@ var App={
       document.getElementById('loader').classList.add('hide');
       if(r.isNew){
         var _saved=null;try{var _raw=localStorage.getItem(OB_KEY);if(_raw)_saved=JSON.parse(_raw);}catch(e){}
-        App.ob={step:(_saved&&_saved.step)||0,maxStep:(_saved&&_saved.step)||0,d:App._obDefault(_saved&&_saved.d)};
+        App.ob={step:(_saved&&_saved.step)||0,maxStep:(_saved&&(_saved.maxStep||_saved.step))||0,d:App._obDefault(_saved&&_saved.d)};
         App.obRender();App.showScreen('scr-onboarding');
       }
       else{
@@ -3648,7 +3648,7 @@ var App={
   },
 
   _obSave:function(){
-    try{localStorage.setItem(OB_KEY,JSON.stringify({step:App.ob.step,d:App.ob.d}));}catch(e){}
+    try{localStorage.setItem(OB_KEY,JSON.stringify({step:App.ob.step,maxStep:App.ob.maxStep,d:App.ob.d}));}catch(e){}
   },
   _obRefreshFooter:function(){
     var meta=OB_STEPS[App.ob.step],d=App.ob.d;
