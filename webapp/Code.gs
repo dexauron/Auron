@@ -547,6 +547,7 @@ function getHomeSummary(p) {
     var pd=_period(period,tz);
     var allRows=base.getLastRow()>=2?base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues():[];
     var totals={};
+    var sumInc=0,sumExp=0,txCnt=0;
     accounts.forEach(function(a){totals[a.name]={income:0,expense:0};});
     allRows.forEach(function(r){
       var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
@@ -554,13 +555,28 @@ function getHomeSummary(p) {
       if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
       var t=String(r[B_TYPE-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]);
       if(!totals[acc]) totals[acc]={income:0,expense:0};
-      if(t==='Доход') totals[acc].income+=amt; else if(t==='Расход') totals[acc].expense+=amt;
+      if(t==='Доход'){totals[acc].income+=amt;sumInc+=amt;txCnt++;}
+      else if(t==='Расход'){totals[acc].expense+=amt;sumExp+=amt;txCnt++;}
     });
+    // Also compute Z-report (shift) revenue for the period
+    var shiftRev=0;
+    try {
+      var shSh=ss.getSheetByName(SH_SHIFTS);
+      if(shSh&&shSh.getLastRow()>=2){
+        shSh.getRange(2,1,shSh.getLastRow()-1,8).getValues().forEach(function(sr){
+          var sd=sr[1];if(!(sd instanceof Date))return;
+          var ms=sd.getTime();if(pd.from&&ms<pd.from)return;if(pd.to&&ms>pd.to)return;
+          var rj=[];try{rj=JSON.parse(sr[4]||'[]');}catch(e2){}
+          rj.forEach(function(row){shiftRev+=parseFloat(row.zAmount||0);});
+        });
+      }
+    } catch(e2){}
     var txs=allRows.slice().reverse().slice(0,60).map(_txObj);
-    var res={accounts:accounts,totals:totals,transactions:txs};
+    var res={accounts:accounts,totals:totals,transactions:txs,
+             summary:{income:sumInc,expense:sumExp,count:txCnt,shiftRevenue:shiftRev}};
     try { CacheService.getScriptCache().put(cKey,JSON.stringify(res),60); } catch(e){}
     return res;
-  } catch(e) { return {accounts:[],totals:{},transactions:[],__error:e.message}; }
+  } catch(e) { return {accounts:[],totals:{},transactions:[],summary:{income:0,expense:0,count:0,shiftRevenue:0},__error:e.message}; }
 }
 
 function getAllTransactions(p) {
@@ -1140,6 +1156,10 @@ function _period(period, tz) {
     from=pm.getTime(); to=new Date(today.getFullYear(),today.getMonth(),0,23,59,59,999).getTime();
   }
   else if (period==='year') { from=new Date(today.getFullYear(),0,1).getTime(); to=now.getTime(); }
+  else if (period&&period.indexOf('custom:')===0) {
+    var parts=period.split(':');
+    if(parts.length>=3){var fd=new Date(parts[1]),td=new Date(parts[2]);from=fd.getTime();to=td.getTime()+86399999;}
+  }
   else if (period==='prev_week') {
     var thisMon=new Date(today); thisMon.setDate(today.getDate()-((today.getDay()+6)%7));
     var prevMon=new Date(thisMon); prevMon.setDate(thisMon.getDate()-7);
