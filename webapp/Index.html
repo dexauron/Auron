@@ -2069,7 +2069,7 @@ var App={
   showApp:function(){
     document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
     document.getElementById('app').classList.add('active');
-    document.getElementById('fab').style.display='flex';
+    document.getElementById('fab').style.display='';
     document.getElementById('topbar-org-name').textContent=App.s.orgName||'Магазин';
     document.getElementById('topbar-user').textContent=App.s.userName||'';
     // sidebar
