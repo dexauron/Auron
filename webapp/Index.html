@@ -762,7 +762,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   #sidebar>*{position:relative;z-index:1;}
   .sb-brand{
     display:flex;align-items:center;gap:11px;
-    padding:6px 8px 22px;border-bottom:1px solid var(--line);margin-bottom:10px;
+    padding:6px 8px 22px;border-bottom:1px solid rgba(94,92,230,.18);margin-bottom:10px;
   }
   .sb-brand-icon{
     width:36px;height:36px;
@@ -1248,13 +1248,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .icon-btn:hover{background:rgba(255,255,255,.1);}
 .icon-btn:active{transform:scale(.92);}
 
-/* Sidebar brand section glow line */
-.sb-brand{
-  display:flex;align-items:center;gap:11px;
-  padding:6px 8px 22px;
-  border-bottom:1px solid rgba(94,92,230,.18);
-  margin-bottom:10px;
-}
+/* Sidebar brand section glow line — overrides media query default */
 
 /* Split tile icon - font-size fix */
 .split-tile-ic{font-size:17px;}
@@ -1349,11 +1343,17 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   <aside id="sidebar">
     <div class="sb-brand">
       <div class="sb-brand-icon">
-        <svg width="26" height="26" viewBox="0 0 56 56" fill="none">
-          <path d="M7 30L28 10L49 30V50H7V30Z" fill="rgba(0,0,0,.2)" stroke="rgba(0,0,0,.25)" stroke-width="2.5" stroke-linejoin="round"/>
-          <rect x="14" y="38" width="7" height="12" rx="2" fill="rgba(255,255,255,.5)"/>
-          <rect x="25" y="32" width="7" height="18" rx="2" fill="rgba(255,255,255,.7)"/>
-          <rect x="36" y="24" width="7" height="26" rx="2" fill="rgba(255,255,255,.9)"/>
+        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
+          <defs>
+            <linearGradient id="sb-bar-a" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="rgba(255,255,255,.95)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,.6)"/>
+            </linearGradient>
+          </defs>
+          <rect x="3" y="18" width="5" height="11" rx="1.5" fill="url(#sb-bar-a)" opacity=".55"/>
+          <rect x="10" y="13" width="5" height="16" rx="1.5" fill="url(#sb-bar-a)" opacity=".75"/>
+          <rect x="17" y="7" width="5" height="22" rx="1.5" fill="url(#sb-bar-a)"/>
+          <rect x="24" y="3" width="5" height="26" rx="1.5" fill="url(#sb-bar-a)"/>
         </svg>
       </div>
       <div>
