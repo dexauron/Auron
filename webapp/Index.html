@@ -1712,6 +1712,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="btn-secondary" onclick="App.openAddPayType()" style="margin-top:10px;">+ Добавить способ</button>
       </div>
       <div class="settings-sec">
+        <div class="settings-sec-title">Справочник поставщиков</div>
+        <div class="settings-list" id="settings-suppliers-list"></div>
+        <button class="btn-secondary" onclick="App.openAddSupplier()" style="margin-top:10px;">+ Добавить поставщика</button>
+      </div>
+      <div class="settings-sec">
         <div class="settings-sec-title">Статусы накладных</div>
         <div class="settings-list" id="settings-repstatuses-list"></div>
         <button class="btn-secondary" onclick="App.openAddRepStatus()" style="margin-top:10px;">+ Добавить статус</button>
@@ -2038,12 +2043,12 @@ function gs(fn,args){
 
 function fmt(n){
   if(n===undefined||n===null)return'—';
-  var a=Math.abs(n);
-  if(a>=1000000)return(n/1000000).toFixed(1).replace('.',',')+' млн';
-  if(a>=1000)return(n/1000).toFixed(a>=10000?0:1).replace('.',',')+' тыс';
-  return(n||0).toLocaleString('ru');
+  var a=Math.abs(n),r=Math.round(n);
+  if(a>=1000000){var m=r/1000000;return(m%1===0?m.toFixed(0):m.toFixed(1)).replace('.',',')+' млн';}
+  if(a>=1000){var k=r/1000;return(k%1===0?k.toFixed(0):k.toFixed(1)).replace('.',',')+' тыс';}
+  return r.toLocaleString('ru');
 }
-function fmtFull(n){return(n||0).toLocaleString('ru');}
+function fmtFull(n){return Math.round(n||0).toLocaleString('ru');}
 function fmtDate(iso){
   if(!iso)return'';
   var d=new Date(iso),now=new Date();
@@ -2384,7 +2389,7 @@ var App={
               (active?'<button class="pay-btn pay-btn-edit" onclick="App._payPostpone(\''+App._e(String(r.id||''))+'\')">📅 Перенести</button>':'')+
               (active?'<button class="pay-btn pay-btn-del" onclick="App._payCancel(\''+App._e(String(r.id||''))+'\')">✕ Отменить</button>':'')+
               (!active?'<button class="pay-btn pay-btn-edit" onclick="App._payRestore(\''+App._e(String(r.id||''))+'\')">↩ Вернуть в долг</button>':'')+
-              '<button class="pay-btn" style="margin-left:auto;background:var(--surface-2);color:var(--ink-2);" onclick="App.openPaymentForm('+JSON.stringify(r)+')">✎ Изменить</button>'+
+              '<button class="pay-btn" style="margin-left:auto;background:var(--surface-2);color:var(--ink-2);" onclick="App._editPayment(\''+App._e(String(r.id||''))+'\')">✎ Изменить</button>'+
             '</div>'+
           '</div>':'')+
       '</div>';
@@ -2422,6 +2427,12 @@ var App={
   },
 
   suppCalClear:function(){App._suppFilterClear();},
+
+  _editPayment:function(id){
+    var r=(App._suppPayables||[]).find(function(x){return String(x.id)===String(id);});
+    if(r)App.openPaymentForm(r);
+    else App.toast('Запись не найдена',true);
+  },
 
   _dayKey:function(d){var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
 
@@ -2497,6 +2508,7 @@ var App={
       if(!App.s.settings.repStatuses)App.s.settings.repStatuses=['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён','❓ Не пришёл'];
       if(!App.s.settings.employees)App.s.settings.employees=[];
       if(!App.s.settings.shifts)App.s.settings.shifts=['Смена 1','Смена 2','Смена 3'];
+      if(!App.s.settings.suppliers)App.s.settings.suppliers=[];
       if(App.s.settings.showKassaBalance===undefined)App.s.settings.showKassaBalance=true;
       App._applyKassaBalanceToggle();
       if(cb)cb();
@@ -3297,18 +3309,36 @@ var App={
 
   editDebtEntry:function(id,repId,repName){
     var statOpts=(App.s.settings.repStatuses||[]).map(function(s){return'<option>'+App._e(s)+'</option>';}).join('');
+    // find current amount to pre-fill
     App.openModal('<div class="modal-title">Редактировать накладную</div>'+
+      '<div class="field"><label>Сумма (₽)</label><input id="ede-amt" type="number" placeholder="0"></div>'+
       '<div class="field"><label>Номер накладной</label><input id="ede-invoice" type="text" placeholder="№ 123"></div>'+
       '<div class="field"><label>Статус</label><select id="ede-status">'+statOpts+'</select></div>'+
       '<div class="field"><label>Комментарий</label><input id="ede-comment" type="text"></div>'+
       '<button class="btn-primary" onclick="App._saveDebtEdit(\''+id+'\',\''+App._e(String(repId))+'\',\''+repName+'\')">Сохранить</button>');
+    // Pre-fill from backend
+    gs('getRepDebt',{ssId:App.s.ssId,repId:repId}).then(function(r){
+      var e=(r||[]).find(function(x){return String(x.id)===String(id);});
+      if(!e)return;
+      var amtEl=document.getElementById('ede-amt');
+      var invEl=document.getElementById('ede-invoice');
+      var stEl=document.getElementById('ede-status');
+      var cmtEl=document.getElementById('ede-comment');
+      if(amtEl)amtEl.value=e.amount||0;
+      if(invEl)invEl.value=e.invoice||'';
+      if(stEl&&e.status){for(var i=0;i<stEl.options.length;i++){if(stEl.options[i].value===e.status){stEl.selectedIndex=i;break;}}}
+      if(cmtEl)cmtEl.value=e.comment||'';
+    });
   },
 
   _saveDebtEdit:function(id,repId,repName){
+    var amt=parseFloat(document.getElementById('ede-amt').value)||undefined;
     var invoice=document.getElementById('ede-invoice').value.trim();
     var status=document.getElementById('ede-status').value;
     var comment=document.getElementById('ede-comment').value.trim();
-    gs('updateDebtEntry',{ssId:App.s.ssId,data:{id:id,invoice:invoice,status:status,comment:comment}}).then(function(){
+    var data={id:id,invoice:invoice,status:status,comment:comment};
+    if(amt!==undefined)data.amount=amt;
+    gs('updateDebtEntry',{ssId:App.s.ssId,data:data}).then(function(){
       App.toast('Обновлено ✓');App.closeModal();App.openRepHistory(repId,repName);
     }).catch(function(e){App.toast(e.message,true);});
   },
@@ -3570,6 +3600,14 @@ var App={
         '<span class="settings-row-label">'+App._e(pt)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.payTypes.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет способов</span></div>';
+    // Supplier directory
+    var suppDirEl=document.getElementById('settings-suppliers-list');
+    var suppDir=App.s.settings.suppliers||[];
+    suppDirEl.innerHTML=suppDir.map(function(s,i){
+      return '<div class="settings-row"><span class="settings-row-icon">📦</span>'+
+        '<span class="settings-row-label" style="flex:1;">'+App._e(s)+'</span>'+
+        '<span class="settings-row-action" onclick="App.s.settings.suppliers.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет поставщиков</span></div>';
     // Rep statuses
     var rsEl=document.getElementById('settings-repstatuses-list');
     var rss=App.s.settings.repStatuses||[];
@@ -3642,6 +3680,19 @@ var App={
     var n=document.getElementById('npt-name').value.trim();if(!n)return;
     if(!App.s.settings.payTypes)App.s.settings.payTypes=[];
     App.s.settings.payTypes.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Добавлено');
+  },
+
+  openAddSupplier:function(){
+    App.openModal('<div class="modal-title">Добавить поставщика</div>'+
+      '<div class="field"><label>Полное наименование</label><input id="ns-supp" type="text" placeholder="ООО Альфа Трейд"></div>'+
+      '<button class="btn-primary" onclick="App._saveSupplierDir()">Добавить</button>');
+    setTimeout(function(){var el=document.getElementById('ns-supp');if(el)el.focus();},100);
+  },
+  _saveSupplierDir:function(){
+    var n=document.getElementById('ns-supp').value.trim();if(!n){App.toast('Введите название',true);return;}
+    if(!App.s.settings.suppliers)App.s.settings.suppliers=[];
+    if(App.s.settings.suppliers.indexOf(n)!==-1){App.toast('Уже есть в справочнике',true);return;}
+    App.s.settings.suppliers.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('📦 '+n+' добавлен');
   },
 
   openAddRepStatus:function(){
@@ -3894,15 +3945,19 @@ var App={
     var d=null;
     if(initData&&typeof initData==='string'){try{d=JSON.parse(initData);}catch(e){}}
     else if(initData&&typeof initData==='object')d=initData;
-    var payeeOpts='';
+    // Build supplier autocomplete: directory first, then any existing payees
+    var dirList=App.s.settings.suppliers||[];
     var byPayee={};
-    (App._suppPayables||[]).forEach(function(r){byPayee[r.payee]=1;});
-    var payeeList=Object.keys(byPayee);
-    if(payeeList.length)payeeOpts='<datalist id="pf-payee-list">'+payeeList.map(function(p){return'<option value="'+App._e(p)+'">';}).join('')+'</datalist>';
+    (App._suppPayables||[]).forEach(function(r){if(r.payee)byPayee[r.payee]=1;});
+    var allSupps=dirList.slice();
+    Object.keys(byPayee).forEach(function(p){if(allSupps.indexOf(p)===-1)allSupps.push(p);});
+    var payeeOpts='<datalist id="pf-payee-list">'+allSupps.map(function(p){return'<option value="'+App._e(p)+'">';}).join('')+'</datalist>';
+    // Description options datalist
+    var descOpts='<datalist id="pf-title-list"><option value="Поставка товара"><option value="Аванс по договору"><option value="Оплата услуг"><option value="За материалы"><option value="Плата за аренду"><option value="Коммунальные платежи"><option value="Логистика и доставка"></datalist>';
     App.openModal('<div class="modal-title">'+(d&&d.id?'Редактировать запись':'Новая запись на выплату')+'</div>'+
-      payeeOpts+
-      '<div class="field"><label>Контрагент</label><input id="pf-payee" type="text" list="pf-payee-list" placeholder="Поставщик ООО" value="'+(d?App._e(d.payee||''):'')+'" ></div>'+
-      '<div class="field"><label>Назначение</label><input id="pf-title" type="text" placeholder="Поставка товара" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
+      payeeOpts+descOpts+
+      '<div class="field"><label>Поставщик</label><input id="pf-payee" type="text" list="pf-payee-list" placeholder="Начните вводить название…" value="'+(d?App._e(d.payee||''):'')+'" autocomplete="off"></div>'+
+      '<div class="field"><label>Описание (назначение)</label><input id="pf-title" type="text" list="pf-title-list" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
       '<div class="field"><label>Сумма (₽)</label><input id="pf-amt" type="number" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
       '<div class="field"><label>Дата платежа</label><input id="pf-due" type="date" value="'+(d&&d.date?d.date:(d&&d.due?d.due:fmtISO(new Date())))+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="pf-comment" type="text" placeholder="…" value="'+(d?App._e(d.comment||d.note||''):'')+'" ></div>'+

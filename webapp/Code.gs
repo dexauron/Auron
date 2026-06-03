@@ -297,6 +297,7 @@ function getSettings(p) {
       repStatuses:      gj('REP_STATUSES'),
       employees:        gj('EMPLOYEES'),
       shifts:           gj('SHIFTS'),
+      suppliers:        gj('SUPPLIERS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
@@ -316,6 +317,7 @@ function saveSettings(p) {
       REP_STATUSES:        JSON.stringify(d.repStatuses||[]),
       EMPLOYEES:           JSON.stringify(d.employees||[]),
       SHIFTS:              JSON.stringify(d.shifts||[]),
+      SUPPLIERS:           JSON.stringify(d.suppliers||[]),
       SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
