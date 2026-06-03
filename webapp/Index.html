@@ -1414,10 +1414,19 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <button class="icon-btn" onclick="App.openSearch()" title="Поиск">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
+      <button class="icon-btn" onclick="App.shareReport()" title="Поделиться">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      </button>
       <button class="icon-btn" onclick="App.setTab('settings',null)" title="Настройки">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       </button>
     </div>
+  </div>
+
+  <!-- Notification banner -->
+  <div id="notif-banner" style="display:none;background:var(--neg);color:#fff;padding:10px 16px;font-size:13px;font-weight:600;display:none;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;z-index:200;position:relative;" onclick="App.setTab('suppliers',null)">
+    <span id="notif-text">📋 Есть просроченные выплаты</span>
+    <button onclick="event.stopPropagation();document.getElementById('notif-banner').style.display='none';" style="background:rgba(255,255,255,.2);border:none;border-radius:6px;padding:2px 10px;color:#fff;cursor:pointer;font-size:14px;font-weight:700;">✕</button>
   </div>
 
   <div class="panels">
@@ -1573,8 +1582,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
     <!-- JOURNAL (История) -->
     <div id="tab-journal" class="panel" style="padding:0;">
       <div style="padding:20px 16px 8px;">
-        <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:12px;">История</div>
-        <input id="j-search" type="text" placeholder="Поиск по сумме или комментарию…" style="width:100%;padding:11px 16px;border-radius:14px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);" oninput="App.searchHistory(this.value)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">История</div>
+          <button onclick="App.exportReport()" style="background:var(--surface-2);border:none;border-radius:10px;padding:7px 12px;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Экспорт
+          </button>
+        </div>
+        <input id="j-search" type="text" placeholder="Поиск по сумме, категории, комментарию…" style="width:100%;padding:11px 16px;border-radius:14px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);" oninput="App.searchHistory(this.value)">
       </div>
       <div id="j-tx-list" style="padding:0 0 8px;"></div>
     </div>
@@ -1622,6 +1637,12 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
           <div class="card-head" style="padding:18px 20px 14px;margin:0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;gap:8px;">
             <h3 id="supp-records-title">Все записи на выплаты</h3>
             <span id="supp-filter-chip" style="display:none;"></span>
+          </div>
+          <div style="padding:10px 16px 4px;">
+            <div style="background:var(--surface-2);border-radius:12px;display:flex;align-items:center;padding:0 12px;gap:8px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="supp-search" type="search" placeholder="Поиск: поставщик, сумма, описание…" oninput="App._suppSearch(this.value)" style="flex:1;background:none;border:none;padding:10px 0;color:var(--ink);font-size:14px;font-family:var(--font);outline:none;" autocomplete="off">
+            </div>
           </div>
           <div id="pay-list"></div>
         </div>
@@ -1773,8 +1794,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
     </button>
     <!-- Left: Поставщики -->
     <button class="nav-item" data-tab="suppliers" onclick="App.setTab('suppliers',this)">
-      <div class="nav-icon-wrap">
+      <div class="nav-icon-wrap" style="position:relative;">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span id="pay-badge" style="display:none;position:absolute;top:-5px;right:-6px;background:var(--neg);color:#fff;border-radius:50%;min-width:16px;height:16px;font-size:10px;font-weight:800;align-items:center;justify-content:center;line-height:1;padding:0 3px;"></span>
       </div>
       <span class="nav-label">Поставщики</span>
     </button>
@@ -1863,7 +1885,12 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <span class="np-field-label">Дата</span>
         <span class="np-field-value" id="np-date-val">—</span>
       </div>
-      <input type="text" id="np-comment" placeholder="Примечание…" style="width:100%;padding:12px 16px;border-radius:12px;border:1.5px solid var(--sep);background:var(--bg);color:var(--text-1);font-size:15px;outline:none;">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="flex:1;background:var(--bg);border-radius:12px;border:1.5px solid var(--sep);overflow:hidden;">
+          <input type="text" id="np-comment" placeholder="Примечание…" style="width:100%;background:none;border:none;padding:12px 16px;color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);">
+        </div>
+        <button onclick="App._attachReceipt()" class="np-receipt-btn" style="background:var(--bg);border:1.5px solid var(--sep);border-radius:12px;padding:12px;cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0;" title="Прикрепить чек">📷</button>
+      </div>
     </div>
     <div class="np-grid">
       <button class="np-key" onclick="App.npKey('7')">7</button>
@@ -2043,10 +2070,7 @@ function gs(fn,args){
 
 function fmt(n){
   if(n===undefined||n===null)return'—';
-  var a=Math.abs(n),r=Math.round(n);
-  if(a>=1000000){var m=r/1000000;return(m%1===0?m.toFixed(0):m.toFixed(1)).replace('.',',')+' млн';}
-  if(a>=1000){var k=r/1000;return(k%1===0?k.toFixed(0):k.toFixed(1)).replace('.',',')+' тыс';}
-  return r.toLocaleString('ru');
+  return Math.round(n).toLocaleString('ru');
 }
 function fmtFull(n){return Math.round(n||0).toLocaleString('ru');}
 function fmtDate(iso){
@@ -2108,6 +2132,63 @@ var App={
     App.s.ssId='';App.s.userName='';App.s.orgName='';App.s.settings={};
     gs('logoutUser',{}).then(function(){}).catch(function(){});
     setTimeout(function(){window.location.reload();},300);
+  },
+
+  _uploadPhoto:function(cb){
+    var inp=document.createElement('input');inp.type='file';inp.accept='image/*,application/pdf';
+    inp.onchange=function(){
+      var file=inp.files[0];if(!file)return;
+      if(file.size>8*1024*1024){App.toast('Файл слишком большой (макс 8 МБ)',true);return;}
+      App.toast('Загружаю фото…');
+      var reader=new FileReader();
+      reader.onload=function(e){
+        var b64=e.target.result.split(',')[1];
+        gs('uploadReceipt',{ssId:App.s.ssId,base64:b64,name:file.name,mimeType:file.type}).then(function(r){
+          if(r.__error){App.toast('Ошибка загрузки: '+r.__error,true);return;}
+          App.toast('Фото загружено ✓');cb(r.viewUrl);
+        }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+      };
+      reader.readAsDataURL(file);
+    };
+    inp.click();
+  },
+
+  _attachReceipt:function(){
+    App._uploadPhoto(function(url){
+      App.s.npReceiptUrl=url;
+      var btn=document.querySelector('#sheet-numpad .np-receipt-btn');
+      if(btn){btn.style.color='var(--pos)';btn.title='Чек прикреплён: '+url;}
+    });
+  },
+
+  _checkNotifications:function(){
+    var pays=App._suppPayables||[];
+    var today=new Date();today.setHours(0,0,0,0);
+    var d3=new Date(today);d3.setDate(today.getDate()+3);
+    var overdueAmt=0,overdueN=0,upcomingAmt=0,upcomingN=0;
+    pays.forEach(function(r){
+      if(r.status!=='open'&&r.status!=='postponed')return;
+      var plan=Math.max((r.amount||0)-(r.paid||0),0);if(!plan)return;
+      var d=new Date(r.date+'T00:00:00');
+      if(d<today){overdueAmt+=plan;overdueN++;}
+      else if(d<=d3){upcomingAmt+=plan;upcomingN++;}
+    });
+    var badge=document.getElementById('pay-badge');
+    var total=overdueN+upcomingN;
+    if(badge){badge.textContent=total>9?'9+':total;badge.style.display=total>0?'flex':'none';}
+    var banner=document.getElementById('notif-banner');
+    var text=document.getElementById('notif-text');
+    if(banner&&text){
+      if(overdueN>0){
+        text.textContent='🔴 Просрочено '+overdueN+(overdueN===1?' выплата':' выплат')+' на ₽ '+fmtFull(overdueAmt);
+        banner.style.background='var(--neg)';banner.style.display='flex';
+      } else if(upcomingN>0){
+        text.textContent='🟡 Через 3 дня: '+upcomingN+' выплат на ₽ '+fmtFull(upcomingAmt);
+        banner.style.background='#B45309';banner.style.display='flex';
+      } else {
+        banner.style.display='none';
+      }
+    }
   },
 
   showApp:function(){
@@ -2228,7 +2309,7 @@ var App={
   },
 
   // ── Suppliers (new unified view) ──────────────────────────────
-  _suppPayables:[],_suppFilter:{payee:null,day:null},
+  _suppPayables:[],_suppFilter:{payee:null,day:null},_suppSearchQ:'',
 
   loadSuppliers:function(){
     if(!App.s.ssId)return;
@@ -2244,6 +2325,7 @@ var App={
       App._renderContractorGrid(App._suppPayables,reps);
       App._renderSuppCalendar(App._suppPayables);
       App._renderPayList(App._suppPayables);
+      App._checkNotifications();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -2346,6 +2428,15 @@ var App={
       filtered=filtered.filter(function(r){return App._dayKey(new Date(r.date+'T12:00:00'))===App._suppFilter.day;});
       if(!filterLabel){var parts=App._suppFilter.day.split('-');filterLabel=parseInt(parts[2])+' '+MON[parseInt(parts[1])-1];}
     }
+    if(App._suppSearchQ){
+      var sq=App._suppSearchQ;
+      filtered=filtered.filter(function(r){
+        return (r.payee||'').toLowerCase().indexOf(sq)!==-1||
+               (r.title||r.name||'').toLowerCase().indexOf(sq)!==-1||
+               (r.comment||'').toLowerCase().indexOf(sq)!==-1||
+               String(Math.round(r.amount||0)).indexOf(sq)!==-1;
+      });
+    }
     var SO={open:0,postponed:1,paid:2,cancelled:3};
     filtered=filtered.slice().sort(function(a,b){return(SO[a.status]-SO[b.status])||new Date(a.date)-new Date(b.date);});
     // update title and filter chip
@@ -2389,6 +2480,7 @@ var App={
               (active?'<button class="pay-btn pay-btn-edit" onclick="App._payPostpone(\''+App._e(String(r.id||''))+'\')">📅 Перенести</button>':'')+
               (active?'<button class="pay-btn pay-btn-del" onclick="App._payCancel(\''+App._e(String(r.id||''))+'\')">✕ Отменить</button>':'')+
               (!active?'<button class="pay-btn pay-btn-edit" onclick="App._payRestore(\''+App._e(String(r.id||''))+'\')">↩ Вернуть в долг</button>':'')+
+              (active?'<button class="pay-btn" style="background:rgba(94,92,230,.12);color:var(--brand);" onclick="App._addCalReminder(\''+App._e(String(r.id||''))+'\')">📅 Напомнить</button>':'')+
               '<button class="pay-btn" style="margin-left:auto;background:var(--surface-2);color:var(--ink-2);" onclick="App._editPayment(\''+App._e(String(r.id||''))+'\')">✎ Изменить</button>'+
             '</div>'+
           '</div>':'')+
@@ -2427,6 +2519,61 @@ var App={
   },
 
   suppCalClear:function(){App._suppFilterClear();},
+
+  _suppSearch:function(q){
+    App._suppSearchQ=(q||'').toLowerCase().trim();
+    App._renderPayList(App._suppPayables);
+  },
+
+  _addCalReminder:function(id){
+    var r=(App._suppPayables||[]).find(function(x){return String(x.id)===String(id);});
+    if(!r)return;
+    var d=new Date((r.date||fmtISO(new Date()))+'T09:00:00');
+    var pad=function(n){return String(n).padStart(2,'0');};
+    var dt=d.getFullYear()+''+pad(d.getMonth()+1)+''+pad(d.getDate());
+    var plan=Math.max((r.amount||0)-(r.paid||0),0);
+    var title=encodeURIComponent('💸 Выплата: '+(r.payee||'Поставщик')+(r.title?' — '+r.title:''));
+    var details=encodeURIComponent('К оплате: ₽'+Math.round(plan)+'\n'+(r.comment||'')+'\nAuron Finance');
+    window.open('https://calendar.google.com/calendar/r/eventedit?text='+title+'&dates='+dt+'/'+dt+'&details='+details,'_blank');
+  },
+
+  exportReport:function(){
+    App.toast('Формирую экспорт…');
+    var period=App.s.anPeriod||App.s.period||'month';
+    gs('exportTransactions',{ssId:App.s.ssId,period:period}).then(function(r){
+      if(r.__error){App.toast('Ошибка: '+r.__error,true);return;}
+      var bom='﻿';
+      var blob=new Blob([bom+r.csv],{type:'text/csv;charset=utf-8'});
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');a.href=url;
+      a.download='auron_'+new Date().toISOString().slice(0,10)+'.csv';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      App.toast('Файл скачан ✓');
+    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+  },
+
+  shareReport:function(){
+    var s=App.s,accs=s.accounts||[];
+    var pLabel=App._periodLabel(s.period||'today');
+    var lines=['📊 Auron Finance — '+pLabel,''];
+    accs.forEach(function(a){lines.push('💳 '+a.name+': ₽ '+fmtFull(a.balance));});
+    lines.push('');lines.push('📅 '+new Date().toLocaleDateString('ru'));
+    var text=lines.join('\n');
+    if(navigator.share){
+      navigator.share({title:'Auron Finance',text:text}).catch(function(){});
+    } else if(navigator.clipboard){
+      navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано в буфер ✓');})
+        .catch(function(){App.toast('Не удалось скопировать',true);});
+    } else {
+      App.toast('Поделиться не поддерживается',true);
+    }
+  },
+
+  _periodLabel:function(p){
+    var m={today:'Сегодня',week:'Неделя',month:'Месяц',year:'Год',prev_week:'Прошлая неделя'};
+    return m[p]||p;
+  },
 
   _editPayment:function(id){
     var r=(App._suppPayables||[]).find(function(x){return String(x.id)===String(id);});
@@ -3285,7 +3432,9 @@ var App={
     gs('getRepDebt',{ssId:App.s.ssId,repId:repId}).then(function(r){
       var entries=r||[];
       var typeLabels={zakupka:'🛒 Закупка',oplata:'💸 Оплата',начальный_долг:'📋 Нач. долг'};
-      App.openModal('<div class="modal-title">'+repName+'</div>'+
+      App.openModal(
+        '<button onclick="App.closeModal();App.loadReps();" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;padding:0 0 6px;display:block;">← К поставщикам</button>'+
+        '<div class="modal-title">'+repName+'</div>'+
         (entries.length?entries.map(function(e){
           var isOp=e.type==='oplata';
           var label=typeLabels[e.type]||(isOp?'💸 Оплата':'🛒 Закупка');
@@ -3870,8 +4019,12 @@ var App={
       category:s.npCat||'',amount:amt,
       account:s.npAcc.name,
       toAccount:s.npAcc2?s.npAcc2.name:null,
-      comment:document.getElementById('np-comment').value.trim()
+      comment:document.getElementById('np-comment').value.trim(),
+      receiptUrl:s.npReceiptUrl||''
     };
+    App.s.npReceiptUrl=null;
+    var rcpBtn=document.querySelector('#sheet-numpad .np-receipt-btn');
+    if(rcpBtn){rcpBtn.style.color='';rcpBtn.title='Прикрепить чек';}
     App.closeSheet();App.toast('Сохраняю…');
     var fn=s.npType==='transfer'?'saveTransfer':'saveQuickEntry';
     gs(fn,{ssId:s.ssId,data:data}).then(function(){
@@ -3957,7 +4110,7 @@ var App={
     App.openModal('<div class="modal-title">'+(d&&d.id?'Редактировать запись':'Новая запись на выплату')+'</div>'+
       payeeOpts+descOpts+
       '<div class="field"><label>Поставщик</label><input id="pf-payee" type="text" list="pf-payee-list" placeholder="Начните вводить название…" value="'+(d?App._e(d.payee||''):'')+'" autocomplete="off"></div>'+
-      '<div class="field"><label>Описание (назначение)</label><input id="pf-title" type="text" list="pf-title-list" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
+      '<div class="field"><label>Описание <span style="color:var(--muted);font-size:12px;font-weight:400;">(необязательно)</span></label><input id="pf-title" type="text" list="pf-title-list" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
       '<div class="field"><label>Сумма (₽)</label><input id="pf-amt" type="number" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
       '<div class="field"><label>Дата платежа</label><input id="pf-due" type="date" value="'+(d&&d.date?d.date:(d&&d.due?d.due:fmtISO(new Date())))+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="pf-comment" type="text" placeholder="…" value="'+(d?App._e(d.comment||d.note||''):'')+'" ></div>'+
