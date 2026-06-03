@@ -1630,25 +1630,3 @@ function seedDemoData(p) {
     return { ok: true, txCount: rows.length };
   } catch(e) { return { __error: e.message }; }
 }
-
-function exportTransactions(p) {
-  var ssId=p.ssId,period=p.period||'month';
-  try {
-    var ss=SpreadsheetApp.openById(ssId);
-    var sh=ss.getSheetByName(SH_BASE);
-    if(!sh||sh.getLastRow()<2) return {csv:'Нет данных\n'};
-    var tz=Session.getScriptTimeZone();
-    var pd=_period(period,tz);
-    var rows=sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues();
-    var csv='Дата;Тип;Категория;Сумма;Счёт;Сотрудник;Комментарий\n';
-    rows.forEach(function(r){
-      var dt=r[B_DATE-1];if(!(dt instanceof Date))return;
-      var ms=dt.getTime();
-      if(pd.from&&ms<pd.from)return;if(pd.to&&ms>pd.to)return;
-      csv+=[Utilities.formatDate(dt,tz,'dd.MM.yyyy'),r[B_TYPE-1],r[B_CAT-1],
-        Math.round(parseFloat(r[B_AMT-1])||0),r[B_ACC-1],r[B_EMP-1],r[B_CMT-1]]
-        .map(function(v){return'"'+String(v||'').replace(/"/g,'""')+'"';}).join(';')+'\n';
-    });
-    return {csv:csv};
-  } catch(e){return{__error:e.message};}
-}

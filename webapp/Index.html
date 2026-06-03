@@ -1574,6 +1574,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
           </div>
           <div id="wyplata-list"></div>
         </div>
+        <div style="padding:0 0 8px;display:flex;align-items:center;gap:8px;">
+          <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);">📷 Прикрепить Z-отчёт</button>
+        </div>
         <button class="btn-primary" onclick="App.saveKassa()">Сохранить смену</button>
       </div>
     </div>
@@ -2158,6 +2161,14 @@ var App={
       App.s.npReceiptUrl=url;
       var btn=document.querySelector('#sheet-numpad .np-receipt-btn');
       if(btn){btn.style.color='var(--pos)';btn.title='Чек прикреплён: '+url;}
+    });
+  },
+
+  _attachKassaReceipt:function(){
+    App._uploadPhoto(function(url){
+      App.s.kassaReceiptUrl=url;
+      var btn=document.getElementById('k-receipt-btn');
+      if(btn){btn.style.color='var(--pos)';btn.textContent='📷 Z-отчёт прикреплён ✓';}
     });
   },
 
