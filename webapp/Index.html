@@ -2028,7 +2028,7 @@ var App={
     if(!App.s.ssId)return;
     Promise.all([
       gs('getPayments',{ssId:App.s.ssId}),
-      gs('getReps',{ssId:App.s.ssId})
+      gs('getDebts',{ssId:App.s.ssId})
     ]).then(function(res){
       App._suppPayables=res[0]||[];
       var reps=res[1]||[];
@@ -2352,7 +2352,7 @@ var App={
       }
     }).catch(function(e){App.toast(e.message,true);});
     // load supplier debt total asynchronously
-    gs('getReps',{ssId:App.s.ssId}).then(function(reps){
+    gs('getDebts',{ssId:App.s.ssId}).then(function(reps){
       var total=(reps||[]).reduce(function(s,r){return s+(r.debt||0);},0);
       var e=document.getElementById('split-payable');
       if(e)e.textContent='₽ '+fmt(total);
@@ -3758,6 +3758,9 @@ var App={
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
       App.s.userName=userName;App.s.ssId=r.ssId;App.s.orgName=r.orgName||orgName;
       try{localStorage.setItem(OB_KEY+'_done','1');}catch(e){}
+      if(btn)btn.textContent='Заполняю данные…';
+      return gs('seedDemoData',{ssId:r.ssId});
+    }).then(function(){
       App.loadSettings(function(){App.showApp();App.loadHome();});
     }).catch(function(e){
       App.toast(e.message||'Ошибка регистрации',true);
