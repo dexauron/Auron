@@ -147,6 +147,11 @@ function deleteOrg(p) {
   } catch(e) { return { __error: e.message }; }
 }
 
+function logoutUser() {
+  try { _props().deleteAllProperties(); } catch(e) {}
+  return { ok: true };
+}
+
 function _mkOrg(name, profileSS) {
   var fn = ORG_PREFIX + name.replace(/[\/\\:*?"<>|]/g,'_');
   var orgSS = SpreadsheetApp.create(fn);
@@ -441,9 +446,15 @@ function saveTransfer(p) {
     category:'Перевод',account:d.account,amount:d.amount,
     comment:d.comment||('→ '+d.toAccount),zRef:ref,shift:d.shift}});
   if (r1.__error) return r1;
-  return saveQuickEntry({ssId:ssId,data:{uuid:d.uuid+'_in',date:d.date,type:'Доход',
+  var r2=saveQuickEntry({ssId:ssId,data:{uuid:d.uuid+'_in',date:d.date,type:'Доход',
     category:'Перевод',account:d.toAccount,amount:d.amount,
     comment:d.comment||('← '+d.account),zRef:ref,shift:d.shift}});
+  if (r2.__error) {
+    // Rollback first entry to avoid balance corruption
+    try { deleteTransaction({ssId:ssId,id:r1.id}); } catch(e) {}
+    return r2;
+  }
+  return r2;
 }
 
 function deleteTransaction(p) {
@@ -474,13 +485,17 @@ function deleteTransaction(p) {
 
 function _txObj(r) {
   var d=r[B_DATE-1];
+  var type=String(r[B_TYPE-1]),cat=String(r[B_CAT-1]),cmt=String(r[B_CMT-1]||'');
+  var toAccount=null;
+  if(type==='Расход'&&cat==='Перевод'){var m=cmt.match(/^→\s*(.+)/);if(m)toAccount=m[1].trim();}
   return {
     id:String(r[B_ID-1]), date:(d instanceof Date)?d.toISOString():'',
-    type:String(r[B_TYPE-1]), category:String(r[B_CAT-1]),
+    type:type, category:cat,
     account:String(r[B_ACC-1]), amount:parseFloat(r[B_AMT-1])||0,
-    comment:String(r[B_CMT-1]||''), employee:String(r[B_EMP-1]||''),
+    comment:cmt, employee:String(r[B_EMP-1]||''),
     receipt:String(r[B_REC-1]||''), shift:String(r[B_SHIFT-1]||''),
-    locked:r[B_LOCK-1]===true||r[B_LOCK-1]==='true'
+    locked:r[B_LOCK-1]===true||r[B_LOCK-1]==='true',
+    toAccount:toAccount
   };
 }
 
@@ -997,7 +1012,7 @@ function getShiftAnalytics(p) {
       if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
       var shiftName=String(r[2]);
       var rj=[]; try{rj=JSON.parse(r[4]||'[]');}catch(e){}
-      var rev=0; rj.forEach(function(row){rev+=parseFloat(row.z||row.zAmount||row.fact||0);});
+      var rev=0; rj.forEach(function(row){rev+=parseFloat(row.zAmount||0);});
       var disc=parseFloat(r[6])||0;
       var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
       if(!shiftMap[shiftName]) shiftMap[shiftName]={name:shiftName,count:0,revenue:0,discrepancy:0};

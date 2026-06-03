@@ -1392,10 +1392,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
     </div>
     <div class="sb-user">
       <div class="sb-avatar" id="sb-avatar">А</div>
-      <div>
+      <div style="flex:1;">
         <div class="sb-user-name" id="sb-user-name">—</div>
         <div class="sb-user-role">Администратор</div>
       </div>
+      <button onclick="App.logout()" title="Выйти" style="background:rgba(255,69,58,.12);border:none;border-radius:8px;padding:6px 8px;cursor:pointer;color:var(--neg);font-size:12px;display:flex;align-items:center;gap:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Выйти
+      </button>
     </div>
   </aside>
 
@@ -2093,6 +2097,14 @@ var App={
     document.getElementById('fab').style.display='none';
   },
 
+  logout:function(){
+    if(!confirm('Выйти из аккаунта?\n\nВаши данные останутся в Google Drive. При следующем входе всё восстановится.'))return;
+    try{localStorage.removeItem('auron_ob');localStorage.removeItem('auron_ssid');}catch(e){}
+    App.s.ssId='';App.s.userName='';App.s.orgName='';App.s.settings={};
+    gs('logoutUser',{}).then(function(){}).catch(function(){});
+    setTimeout(function(){window.location.reload();},300);
+  },
+
   showApp:function(){
     document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
     document.getElementById('app').classList.add('active');
@@ -2302,7 +2314,7 @@ var App={
     var html='';
     for(var i=0;i<startDow;i++)html+='<div class="cal-cell empty"></div>';
     for(var d=1;d<=daysInMonth;d++){
-      var key=y+'-'+m+'-'+d;var sum=byDay[key]||0;
+      var key=y+'-'+(m+1<10?'0'+(m+1):(m+1))+'-'+(d<10?'0'+d:d);var sum=byDay[key]||0;
       var cls='cal-cell'+(sum>0?' has':'')+(key===todayKey?' today':'')+(key===App._suppFilter.day?' sel':'');
       html+='<div class="'+cls+'" '+(sum>0?'onclick="App._suppFilterDay(\''+key+'\')"':'')+'>'+
         '<span class="dnum">'+d+'</span>'+
@@ -2327,7 +2339,7 @@ var App={
     if(App._suppFilter.payee){filtered=filtered.filter(function(r){return r.payee===App._suppFilter.payee;});filterLabel=App._suppFilter.payee;}
     if(App._suppFilter.day){
       filtered=filtered.filter(function(r){return App._dayKey(new Date(r.date+'T12:00:00'))===App._suppFilter.day;});
-      if(!filterLabel){var parts=App._suppFilter.day.split('-');filterLabel=parts[2]+' '+MON[parseInt(parts[1])];}
+      if(!filterLabel){var parts=App._suppFilter.day.split('-');filterLabel=parseInt(parts[2])+' '+MON[parseInt(parts[1])-1];}
     }
     var SO={open:0,postponed:1,paid:2,cancelled:3};
     filtered=filtered.slice().sort(function(a,b){return(SO[a.status]-SO[b.status])||new Date(a.date)-new Date(b.date);});
@@ -2411,7 +2423,7 @@ var App={
 
   suppCalClear:function(){App._suppFilterClear();},
 
-  _dayKey:function(d){return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();},
+  _dayKey:function(d){var p=function(n){return String(n).padStart(2,'0');};return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());},
 
   _payPay:function(id){
     var r=(App._suppPayables||[]).find(function(x){return String(x.id)===id;});
@@ -3276,35 +3288,35 @@ var App={
               '<div class="cashier-amount" style="color:'+(isOp?'var(--income)':'var(--expense)')+'">'+
                 (isOp?'−':'+')+'₽ '+fmtFull(e.amount)+'</div>'+
               '<div style="display:flex;gap:6px;">'+
-                (!isOp?'<button onclick="App.editDebtEntry(\''+App._e(String(e.id))+'\',\''+repName+'\')" style="background:rgba(94,92,230,.15);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#5E5CE6;">✎</button>':'')+
-                '<button onclick="App.deleteDebtEntry(\''+App._e(String(e.id))+'\',\''+repName+'\')" style="background:rgba(255,69,58,.12);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--expense);">✕</button>'+
+                (!isOp?'<button onclick="App.editDebtEntry(\''+App._e(String(e.id))+'\',\''+App._e(String(repId))+'\',\''+repName+'\')" style="background:rgba(94,92,230,.15);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:#5E5CE6;">✎</button>':'')+
+                '<button onclick="App.deleteDebtEntry(\''+App._e(String(e.id))+'\',\''+App._e(String(repId))+'\',\''+repName+'\')" style="background:rgba(255,69,58,.12);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;color:var(--expense);">✕</button>'+
               '</div></div></div>';
         }).join(''):'<div class="empty-state"><div class="empty-text">Нет операций</div></div>'));
     });
   },
 
-  editDebtEntry:function(id,repName){
+  editDebtEntry:function(id,repId,repName){
     var statOpts=(App.s.settings.repStatuses||[]).map(function(s){return'<option>'+App._e(s)+'</option>';}).join('');
     App.openModal('<div class="modal-title">Редактировать накладную</div>'+
       '<div class="field"><label>Номер накладной</label><input id="ede-invoice" type="text" placeholder="№ 123"></div>'+
       '<div class="field"><label>Статус</label><select id="ede-status">'+statOpts+'</select></div>'+
       '<div class="field"><label>Комментарий</label><input id="ede-comment" type="text"></div>'+
-      '<button class="btn-primary" onclick="App._saveDebtEdit(\''+id+'\',\''+repName+'\')">Сохранить</button>');
+      '<button class="btn-primary" onclick="App._saveDebtEdit(\''+id+'\',\''+App._e(String(repId))+'\',\''+repName+'\')">Сохранить</button>');
   },
 
-  _saveDebtEdit:function(id,repName){
+  _saveDebtEdit:function(id,repId,repName){
     var invoice=document.getElementById('ede-invoice').value.trim();
     var status=document.getElementById('ede-status').value;
     var comment=document.getElementById('ede-comment').value.trim();
     gs('updateDebtEntry',{ssId:App.s.ssId,data:{id:id,invoice:invoice,status:status,comment:comment}}).then(function(){
-      App.toast('Обновлено ✓');App.closeModal();App.openRepHistory(repName,repName);
+      App.toast('Обновлено ✓');App.closeModal();App.openRepHistory(repId,repName);
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  deleteDebtEntry:function(id,repName){
+  deleteDebtEntry:function(id,repId,repName){
     if(!confirm('Удалить запись?'))return;
     gs('deleteDebtEntry',{ssId:App.s.ssId,id:id}).then(function(){
-      App.toast('Удалено');App.closeModal();App.loadReps();
+      App.toast('Удалено');App.closeModal();App.openRepHistory(repId,repName);
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -3701,7 +3713,7 @@ var App={
     s.npCat=editData?editData.category:null;
     s.npDate=editData?new Date(editData.date):new Date();
     s.npAcc=(s.accounts||[])[0]||null;
-    s.npAcc2=(s.accounts||[])[1]||null;
+    s.npAcc2=null;
     document.getElementById('np-comment').value='';
     App._npRefresh();App.openSheet('sheet-numpad');
   },
@@ -3822,7 +3834,8 @@ var App={
       var tx=(r||[]).find(function(t){return String(t.id)===String(id);});
       if(!tx){App.toast('Не найдено',true);return;}
       var acc=(App.s.accounts||[]).find(function(a){return a.name===tx.account;})||{name:tx.account};
-      App.s.npAcc=acc;App.s.npAcc2=null;App.s.npCat=tx.category;
+      var acc2=tx.toAccount?(App.s.accounts||[]).find(function(a){return a.name===tx.toAccount;})||{name:tx.toAccount}:null;
+      App.s.npAcc=acc;App.s.npAcc2=acc2;App.s.npCat=tx.category;
       App.s.npDate=new Date(tx.date);App.s.npVal=String(tx.amount||0);
       App.s.npType=tx.type==='Доход'?'income':tx.type==='Перевод'?'transfer':'expense';
       App.s.npEditId=id;
