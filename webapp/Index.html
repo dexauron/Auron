@@ -3650,6 +3650,12 @@ var App={
   _obSave:function(){
     try{localStorage.setItem(OB_KEY,JSON.stringify({step:App.ob.step,d:App.ob.d}));}catch(e){}
   },
+  _obRefreshFooter:function(){
+    var meta=OB_STEPS[App.ob.step],d=App.ob.d;
+    if(meta.customFooter||!meta.canNext)return;
+    var btn=document.querySelector('#ob-footer .ob-btn-primary');
+    if(btn)btn.disabled=!meta.canNext(d);
+  },
 
   obRender:function(){
     var step=App.ob.step,d=App.ob.d,meta=OB_STEPS[step];
@@ -3814,7 +3820,7 @@ var App={
         '</div>'+
         '<div class="ob-field"><label>Название бизнеса</label>'+
           '<input id="ob-cname" class="ob-input" value="'+App._e(d.company.name)+'" placeholder="Например, магазин «Берекет»" '+
-          'oninput="App.ob.d.company.name=this.value;App._obSave();">'+
+          'oninput="App.ob.d.company.name=this.value;App._obSave();App._obRefreshFooter();">'+
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">'+
           '<div class="ob-field"><label>Город</label>'+
@@ -3908,7 +3914,7 @@ var App={
                 '<span class="ob-tag">'+obIcon('users',13,2)+' Только смены</span>')+
             '</div>';
           }).join('')+
-          '<button type="button" class="ob-add"'+(canAdd?'onclick="App.obAddCashier()"':' disabled style="opacity:.5;cursor:default;color:var(--muted)"')+'>'+
+          '<button type="button" class="ob-add"'+(canAdd?' onclick="App.obAddCashier()"':' disabled style="opacity:.5;cursor:default;color:var(--muted)"')+'>'+
             obIcon('plus',18,2)+' '+(canAdd?'Пригласить кассира':'Все демо-кассиры добавлены')+
           '</button>'+
         '</div>'+
