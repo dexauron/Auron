@@ -1527,7 +1527,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
               <select id="k-cashier"><option value="">— выбрать —</option></select>
             </div>
-            <div class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
+            <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
               <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
             </div>
           </div>
@@ -1674,6 +1674,25 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <div class="settings-sec-title">Смены</div>
         <div class="settings-list" id="settings-shifts-list"></div>
         <button class="btn-secondary" onclick="App.openAddShift()" style="margin-top:10px;">+ Добавить смену</button>
+      </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Касса</div>
+        <div class="settings-list">
+          <div class="settings-row">
+            <span class="settings-row-icon">💰</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Баланс на начало смены</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Показывать поле ввода в форме смены</div>
+            </div>
+            <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer;">
+              <input type="checkbox" id="toggle-kassa-balance" style="opacity:0;position:absolute;width:0;height:0;"
+                onchange="App.s.settings.showKassaBalance=this.checked;App.saveSettings();App._applyKassaBalanceToggle();">
+              <span id="toggle-kassa-balance-track" style="display:inline-block;width:44px;height:26px;border-radius:13px;background:var(--surface-3);transition:background .2s;position:relative;">
+                <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);display:block;" id="toggle-kassa-balance-thumb"></span>
+              </span>
+            </label>
+          </div>
+        </div>
       </div>
       <div class="settings-sec">
         <div class="settings-sec-title">Способы оплаты</div>
@@ -2458,8 +2477,22 @@ var App={
       if(!App.s.settings.repStatuses)App.s.settings.repStatuses=['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён','❓ Не пришёл'];
       if(!App.s.settings.employees)App.s.settings.employees=[];
       if(!App.s.settings.shifts)App.s.settings.shifts=['Смена 1','Смена 2','Смена 3'];
+      if(App.s.settings.showKassaBalance===undefined)App.s.settings.showKassaBalance=true;
+      App._applyKassaBalanceToggle();
       if(cb)cb();
     }).catch(function(){if(cb)cb();});
+  },
+
+  _applyKassaBalanceToggle:function(){
+    var on=App.s.settings.showKassaBalance!==false;
+    var wrap=document.getElementById('k-balance-wrap');
+    if(wrap)wrap.style.display=on?'':'none';
+    var cb=document.getElementById('toggle-kassa-balance');
+    if(cb)cb.checked=on;
+    var track=document.getElementById('toggle-kassa-balance-track');
+    if(track)track.style.background=on?'var(--brand)':'var(--surface-3)';
+    var thumb=document.getElementById('toggle-kassa-balance-thumb');
+    if(thumb)thumb.style.transform=on?'translateX(18px)':'translateX(0)';
   },
 
   saveSettings:function(){

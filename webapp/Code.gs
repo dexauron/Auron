@@ -280,13 +280,19 @@ function getSettings(p) {
       try { return JSON.parse(map[k]||SETT_DEFAULTS[k]||'null')||[]; }
       catch(e) { try { return JSON.parse(SETT_DEFAULTS[k])||[]; } catch(e2){return[];} }
     }
+    function gb(k,def) {
+      var v=map[k];
+      if(v===undefined||v==='')return def;
+      return v==='true'||v==='1';
+    }
     return {
-      cats:        gj('CATS'),
-      cashiers:    gj('CASHIERS'),
-      payTypes:    gj('PAY_TYPES'),
-      repStatuses: gj('REP_STATUSES'),
-      employees:   gj('EMPLOYEES'),
-      shifts:      gj('SHIFTS')
+      cats:             gj('CATS'),
+      cashiers:         gj('CASHIERS'),
+      payTypes:         gj('PAY_TYPES'),
+      repStatuses:      gj('REP_STATUSES'),
+      employees:        gj('EMPLOYEES'),
+      shifts:           gj('SHIFTS'),
+      showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
     return { cats:[], cashiers:[], payTypes:['Наличные','Карта','СБП'], repStatuses:[], employees:[], shifts:[] };
@@ -299,12 +305,13 @@ function saveSettings(p) {
     var ss = SpreadsheetApp.openById(ssId);
     var sh = ss.getSheetByName(SH_SETTINGS);
     var save = {
-      CATS:         JSON.stringify(d.cats||[]),
-      CASHIERS:     JSON.stringify(d.cashiers||[]),
-      PAY_TYPES:    JSON.stringify(d.payTypes||[]),
-      REP_STATUSES: JSON.stringify(d.repStatuses||[]),
-      EMPLOYEES:    JSON.stringify(d.employees||[]),
-      SHIFTS:       JSON.stringify(d.shifts||[])
+      CATS:                JSON.stringify(d.cats||[]),
+      CASHIERS:            JSON.stringify(d.cashiers||[]),
+      PAY_TYPES:           JSON.stringify(d.payTypes||[]),
+      REP_STATUSES:        JSON.stringify(d.repStatuses||[]),
+      EMPLOYEES:           JSON.stringify(d.employees||[]),
+      SHIFTS:              JSON.stringify(d.shifts||[]),
+      SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
     if (sh.getLastRow()>=2) {
