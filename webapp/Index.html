@@ -1495,18 +1495,26 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       </div>
       <div class="an-tabs">
         <button class="an-tab active" onclick="App.setAnTab('pl',this)">P&amp;L</button>
-        <button class="an-tab" onclick="App.setAnTab('budget',this)">Бюджет</button>
+        <button class="an-tab" onclick="App.setAnTab('growth',this)">Динамика</button>
         <button class="an-tab" onclick="App.setAnTab('cats',this)">Категории</button>
         <button class="an-tab" onclick="App.setAnTab('cashiers',this)">Кассиры</button>
+        <button class="an-tab" onclick="App.setAnTab('shifts',this)">Смены</button>
+        <button class="an-tab" onclick="App.setAnTab('accounts',this)">Счета</button>
+        <button class="an-tab" onclick="App.setAnTab('suppliers',this)">Поставщики</button>
         <button class="an-tab" onclick="App.setAnTab('heatmap',this)">Дни</button>
         <button class="an-tab" onclick="App.setAnTab('debts',this)">Долги</button>
+        <button class="an-tab" onclick="App.setAnTab('budget',this)">Бюджет</button>
       </div>
       <div id="an-pl" class="an-panel active"></div>
-      <div id="an-budget" class="an-panel"></div>
+      <div id="an-growth" class="an-panel"></div>
       <div id="an-cats" class="an-panel"></div>
       <div id="an-cashiers" class="an-panel"></div>
+      <div id="an-shifts" class="an-panel"></div>
+      <div id="an-accounts" class="an-panel"></div>
+      <div id="an-suppliers" class="an-panel"></div>
       <div id="an-heatmap" class="an-panel"></div>
       <div id="an-debts" class="an-panel"></div>
+      <div id="an-budget" class="an-panel"></div>
     </div>
 
     <!-- KASSA -->
@@ -2725,14 +2733,17 @@ var App={
 
   loadAnalytics:function(){
     if(!App.s.ssId)return;
-    if(App.s.chart1){App.s.chart1.destroy();App.s.chart1=null;}
-    if(App.s.chart2){App.s.chart2.destroy();App.s.chart2=null;}
+    ['chart1','chart2','chart3','chart4'].forEach(function(k){if(App.s[k]){App.s[k].destroy();App.s[k]=null;}});
     gs('getAnalytics',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){
       App._renderPL(r);App._renderCats(r);App._renderDebtAn(r);
     });
     gs('getCashierAnalytics',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){
       App._renderCashiers(r);App._renderHeatmap(r);
     });
+    gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(function(r){App._renderSuppliers(r);});
+    gs('getShiftAnalytics',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){App._renderShifts(r);});
+    gs('getAccountFlow',{ssId:App.s.ssId,period:App.s.anPeriod}).then(function(r){App._renderAccFlow(r);});
+    gs('getGrowthData',{ssId:App.s.ssId}).then(function(r){App._renderGrowth(r);});
     if(App.s.anTab==='budget') App.loadBudget();
   },
 
@@ -2887,6 +2898,176 @@ var App={
     var el=document.getElementById('an-debts');
     el.innerHTML='<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Суммарный долг ТП</div>'+
       '<div class="metric-value red">₽ '+fmt(r.totalDebt||0)+'</div></div>';
+  },
+
+  _renderSuppliers:function(r){
+    var el=document.getElementById('an-suppliers');
+    var list=r.suppliers||[];
+    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Нет данных по поставщикам</div></div>';return;}
+    var colBg=function(ratio){return ratio>=80?'var(--pos)':ratio>=50?'var(--brand)':'var(--neg)';};
+    el.innerHTML=
+      '<div class="metric-row" style="margin-bottom:16px;">'+
+        '<div class="metric-card"><div class="metric-label">Всего закупок</div><div class="metric-value">₽ '+fmt(r.totalBuy||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Общий долг</div><div class="metric-value red">₽ '+fmt(r.totalDebt||0)+'</div></div>'+
+      '</div>'+
+      '<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Выплачено поставщикам</div><div class="metric-value green">₽ '+fmt(r.totalPay||0)+'</div></div>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">ТОП поставщиков по закупкам</div>'+
+      '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);">'+
+      list.map(function(s,i){
+        var medals=['🥇','🥈','🥉'];
+        var pct=r.totalBuy>0?Math.round(s.totalBuy/r.totalBuy*100):0;
+        var debtColor=s.debt>0?'var(--neg)':s.debt<0?'var(--pos)':'var(--muted)';
+        return '<div style="padding:14px 16px;border-top:'+(i>0?'1px solid rgba(255,255,255,.06)':'none')+';">'+
+          '<div style="display:flex;align-items:center;gap:12px;">'+
+            '<span style="font-size:20px;width:28px;text-align:center;">'+(medals[i]||'#'+(i+1))+'</span>'+
+            '<div style="flex:1;min-width:0;">'+
+              '<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(s.name)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.txCount+' операций · оплачено '+s.payRatio+'%</div>'+
+              '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;">'+
+                '<div style="height:100%;width:'+pct+'%;background:var(--brand);border-radius:2px;"></div>'+
+              '</div>'+
+            '</div>'+
+            '<div style="text-align:right;flex-shrink:0;">'+
+              '<div style="font-size:15px;font-weight:800;font-variant-numeric:tabular-nums;">₽ '+fmt(s.totalBuy)+'</div>'+
+              '<div style="font-size:12px;font-weight:700;color:'+debtColor+';margin-top:2px;">'+(s.debt>0?'долг ₽'+fmt(s.debt):s.debt<0?'переплата ₽'+fmt(Math.abs(s.debt)):'закрыто')+'</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      }).join('')+'</div>';
+  },
+
+  _renderShifts:function(r){
+    var el=document.getElementById('an-shifts');
+    var list=r.byShift||[];
+    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🕐</div><div class="empty-text">Нет данных по сменам</div></div>';return;}
+    var shiftColors=['#5E5CE6','#30D158','#FF9F0A','#FF453A','#BF5AF2'];
+    el.innerHTML=
+      '<div class="metric-row" style="margin-bottom:16px;">'+
+        '<div class="metric-card"><div class="metric-label">Выручка за период</div><div class="metric-value green">₽ '+fmt(r.total||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Расхождений</div><div class="metric-value '+(r.totalDisc?'red':'')+'">₽ '+fmt(Math.abs(r.totalDisc||0))+'</div></div>'+
+      '</div>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">По типам смен</div>'+
+      '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);margin-bottom:16px;">'+
+      list.map(function(s,i){
+        var col=shiftColors[i%shiftColors.length];
+        var pct=r.total>0?Math.round(s.revenue/r.total*100):0;
+        return '<div style="display:flex;align-items:center;gap:14px;padding:15px 16px;border-top:'+(i>0?'1px solid rgba(255,255,255,.06)':'none')+';">'+
+          '<div style="width:40px;height:40px;border-radius:12px;background:'+col+'22;display:grid;place-items:center;flex-shrink:0;">'+
+            '<span style="font-size:18px;">🕐</span>'+
+          '</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:15px;font-weight:700;">'+App._e(s.name)+'</div>'+
+            '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.count+' смен · ср. ₽'+fmt(s.avgRevenue)+'</div>'+
+            '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;">'+
+              '<div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px;"></div>'+
+            '</div>'+
+          '</div>'+
+          '<div style="text-align:right;flex-shrink:0;">'+
+            '<div style="font-size:15px;font-weight:800;">₽ '+fmt(s.revenue)+'</div>'+
+            (s.discrepancy?'<div style="font-size:12px;color:var(--neg);margin-top:2px;">⚠ ₽'+fmt(Math.abs(s.discrepancy))+'</div>':'')+
+          '</div>'+
+        '</div>';
+      }).join('')+'</div>'+
+      (r.byDay&&r.byDay.length?
+        '<div class="chart-wrap"><div class="chart-title">Выручка по дням (из смен)</div><canvas id="chart-shifts" height="150"></canvas></div>':''
+      );
+    if(r.byDay&&r.byDay.length){
+      var ctx=document.getElementById('chart-shifts');
+      if(ctx){
+        App.s.chart3=new Chart(ctx.getContext('2d'),{type:'bar',data:{
+          labels:r.byDay.map(function(d){return d.label;}),
+          datasets:[{label:'Выручка',data:r.byDay.map(function(d){return d.revenue;}),
+            backgroundColor:'rgba(94,92,230,.7)',borderRadius:6}]
+        },options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{display:false}},y:{grid:{color:'rgba(128,128,128,.1)'}}}}});
+      }
+    }
+  },
+
+  _renderAccFlow:function(r){
+    var el=document.getElementById('an-accounts');
+    var list=r.accounts||[];
+    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">Нет данных по счетам</div></div>';return;}
+    var totalIncome=list.reduce(function(s,a){return s+a.income;},0);
+    var totalExp=list.reduce(function(s,a){return s+a.expense;},0);
+    el.innerHTML=
+      '<div class="metric-row" style="margin-bottom:16px;">'+
+        '<div class="metric-card"><div class="metric-label">Поступления</div><div class="metric-value green">₽ '+fmt(totalIncome)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Расходы</div><div class="metric-value red">₽ '+fmt(totalExp)+'</div></div>'+
+      '</div>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Оборот по счетам</div>'+
+      '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);">'+
+      list.map(function(a,i){
+        var accColors={'Наличные':'#30D158','Карта':'#6366F1','СБП':'#BF5AF2'};
+        var col=accColors[a.name]||'#5E5CE6';
+        var netColor=a.net>=0?'var(--pos)':'var(--neg)';
+        return '<div style="padding:16px;border-top:'+(i>0?'1px solid rgba(255,255,255,.06)':'none')+';">'+
+          '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'+
+            '<div style="display:flex;align-items:center;gap:10px;">'+
+              '<div style="width:10px;height:10px;border-radius:3px;background:'+col+';flex-shrink:0;"></div>'+
+              '<span style="font-size:16px;font-weight:700;">'+App._e(a.name)+'</span>'+
+              '<span style="font-size:12px;color:var(--muted);">'+a.txCount+' операций</span>'+
+            '</div>'+
+            '<span style="font-size:16px;font-weight:800;color:'+netColor+';">'+(a.net>=0?'+':'')+'₽ '+fmt(a.net)+'</span>'+
+          '</div>'+
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+            '<div style="background:rgba(48,209,88,.1);border-radius:12px;padding:10px 12px;">'+
+              '<div style="font-size:11px;color:var(--pos);font-weight:700;margin-bottom:3px;">↑ ПРИХОД</div>'+
+              '<div style="font-size:15px;font-weight:800;color:var(--pos);">₽ '+fmt(a.income)+'</div>'+
+            '</div>'+
+            '<div style="background:rgba(255,69,58,.1);border-radius:12px;padding:10px 12px;">'+
+              '<div style="font-size:11px;color:var(--neg);font-weight:700;margin-bottom:3px;">↓ РАСХОД</div>'+
+              '<div style="font-size:15px;font-weight:800;color:var(--neg);">₽ '+fmt(a.expense)+'</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>';
+      }).join('')+'</div>';
+  },
+
+  _renderGrowth:function(r){
+    var el=document.getElementById('an-growth');
+    var m=r.month||{},w=r.week||{};
+    function badge(v){
+      if(v===undefined||v===null)return '';
+      var col=v>0?'var(--pos)':v<0?'var(--neg)':'var(--muted)';
+      var arrow=v>0?'↑':v<0?'↓':'→';
+      return '<span style="font-size:12px;font-weight:700;color:'+col+';margin-left:8px;">'+arrow+Math.abs(v)+'%</span>';
+    }
+    function row(label,cur,prev,change,color){
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-top:1px solid rgba(255,255,255,.06);">'+
+        '<div>'+
+          '<div style="font-size:14px;font-weight:600;">'+label+'</div>'+
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px;">пред.: ₽ '+fmt(prev||0)+'</div>'+
+        '</div>'+
+        '<div style="text-align:right;">'+
+          '<div style="font-size:16px;font-weight:800;color:'+(color||'var(--ink)')+';">₽ '+fmt(cur||0)+badge(change)+'</div>'+
+        '</div>'+
+      '</div>';
+    }
+    el.innerHTML=
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Месяц к прошлому месяцу</div>'+
+      '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);margin-bottom:16px;">'+
+        row('Выручка',m.income,m.prevIncome,m.incomeChange,'var(--pos)')+
+        row('Расходы',m.expense,m.prevExpense,m.expenseChange,'var(--neg)')+
+        row('Прибыль',m.profit,m.prevProfit,m.profitChange,m.profit>=0?'var(--pos)':'var(--neg)')+
+      '</div>'+
+      '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Неделя к прошлой неделе</div>'+
+      '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);margin-bottom:16px;">'+
+        row('Выручка',w.income,w.prevIncome,w.incomeChange,'var(--pos)')+
+        row('Расходы',w.expense,w.prevExpense,w.expenseChange,'var(--neg)')+
+      '</div>'+
+      (r.topCashier?
+        '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Лучший кассир месяца</div>'+
+        '<div style="background:linear-gradient(135deg,rgba(94,92,230,.2),rgba(94,92,230,.08));border-radius:20px;padding:18px 16px;border:1px solid rgba(94,92,230,.3);">'+
+          '<div style="display:flex;align-items:center;gap:14px;">'+
+            '<span style="font-size:32px;">🏆</span>'+
+            '<div style="flex:1;">'+
+              '<div style="font-size:17px;font-weight:800;">'+App._e(r.topCashier.name)+'</div>'+
+              '<div style="font-size:13px;color:var(--muted);margin-top:3px;">'+r.topCashier.shifts+' смен</div>'+
+            '</div>'+
+            '<div style="font-size:18px;font-weight:800;color:var(--pos);">₽ '+fmt(r.topCashier.revenue)+'</div>'+
+          '</div>'+
+        '</div>'
+      :'');
   },
 
   // ── Kassa ─────────────────────────────────────────────────────

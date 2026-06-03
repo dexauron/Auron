@@ -954,6 +954,127 @@ function payEmployeeSalary(p) {
 // HELPERS
 // ═══════════════════════════════════════════════════════════════════════
 
+function getSupplierAnalytics(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_DEBTS);
+    if (!sh||sh.getLastRow()<2) return {suppliers:[],totalBuy:0,totalDebt:0,totalPay:0};
+    var map={};
+    sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+      var rep=String(r[D_REP-1]),type=String(r[D_TYPE-1]),amt=parseFloat(r[D_AMT-1])||0;
+      if (!rep) return;
+      if (!map[rep]) map[rep]={name:rep,totalBuy:0,totalPay:0,debt:0,txCount:0};
+      var m=map[rep]; m.txCount++;
+      if (type==='zakupka'||type==='начальный_долг') { m.debt+=amt; m.totalBuy+=amt; }
+      else if (type==='oplata') { m.debt-=amt; m.totalPay+=amt; }
+    });
+    var list=Object.keys(map).map(function(k){
+      var m=map[k];
+      return {name:m.name,totalBuy:Math.round(m.totalBuy),totalPay:Math.round(m.totalPay),
+              debt:Math.round(m.debt),txCount:m.txCount,
+              payRatio:m.totalBuy>0?Math.round(m.totalPay/m.totalBuy*100):0};
+    }).sort(function(a,b){return b.totalBuy-a.totalBuy;});
+    var totalBuy=list.reduce(function(s,x){return s+x.totalBuy;},0);
+    var totalDebt=list.reduce(function(s,x){return s+Math.max(x.debt,0);},0);
+    var totalPay=list.reduce(function(s,x){return s+x.totalPay;},0);
+    return {suppliers:list,totalBuy:Math.round(totalBuy),totalDebt:Math.round(totalDebt),totalPay:Math.round(totalPay)};
+  } catch(e) { return {suppliers:[],totalBuy:0,totalDebt:0,totalPay:0}; }
+}
+
+function getShiftAnalytics(p) {
+  var ssId=p.ssId,period=p.period;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_SHIFTS);
+    var tz=Session.getScriptTimeZone();
+    if (!sh||sh.getLastRow()<2) return {byShift:[],byDay:[],total:0,totalDisc:0};
+    var pd=_period(period,tz);
+    var shiftMap={},dayMap={};
+    sh.getRange(2,1,sh.getLastRow()-1,8).getValues().forEach(function(r){
+      var dt=r[1]; if(!(dt instanceof Date)) return;
+      var ms=dt.getTime();
+      if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
+      var shiftName=String(r[2]);
+      var rj=[]; try{rj=JSON.parse(r[4]||'[]');}catch(e){}
+      var rev=0; rj.forEach(function(row){rev+=parseFloat(row.z||row.zAmount||row.fact||0);});
+      var disc=parseFloat(r[6])||0;
+      var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      if(!shiftMap[shiftName]) shiftMap[shiftName]={name:shiftName,count:0,revenue:0,discrepancy:0};
+      shiftMap[shiftName].count++; shiftMap[shiftName].revenue+=rev; shiftMap[shiftName].discrepancy+=disc;
+      if(!dayMap[dk]) dayMap[dk]={label:dk,revenue:0,disc:0};
+      dayMap[dk].revenue+=rev; dayMap[dk].disc+=disc;
+    });
+    var byShift=Object.keys(shiftMap).map(function(k){
+      var s=shiftMap[k];
+      return {name:s.name,count:s.count,revenue:Math.round(s.revenue),
+              avgRevenue:s.count>0?Math.round(s.revenue/s.count):0,discrepancy:Math.round(s.discrepancy)};
+    }).sort(function(a,b){return b.revenue-a.revenue;});
+    var byDay=Object.keys(dayMap).sort().map(function(dk){
+      var p2=dk.split('-');
+      return {label:parseInt(p2[2])+'.'+parseInt(p2[1]),revenue:Math.round(dayMap[dk].revenue)};
+    });
+    var total=byShift.reduce(function(s,x){return s+x.revenue;},0);
+    var totalDisc=byShift.reduce(function(s,x){return s+x.discrepancy;},0);
+    return {byShift:byShift,byDay:byDay,total:Math.round(total),totalDisc:Math.round(totalDisc)};
+  } catch(e) { return {byShift:[],byDay:[],total:0,totalDisc:0}; }
+}
+
+function getAccountFlow(p) {
+  var ssId=p.ssId,period=p.period;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var tz=Session.getScriptTimeZone();
+    if (!base||base.getLastRow()<2) return {accounts:[]};
+    var pd=_period(period,tz);
+    var map={};
+    base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      var ms=dt.getTime();
+      if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
+      var type=String(r[B_TYPE-1]),acc=String(r[B_ACC-1]||''),amt=parseFloat(r[B_AMT-1])||0;
+      if(!acc||acc==='undefined'||acc==='') return;
+      if(!map[acc]) map[acc]={name:acc,income:0,expense:0,txCount:0};
+      map[acc].txCount++;
+      if(type==='Доход') map[acc].income+=amt;
+      else if(type==='Расход') map[acc].expense+=amt;
+    });
+    var accounts=Object.keys(map).map(function(k){
+      var a=map[k];
+      return {name:a.name,income:Math.round(a.income),expense:Math.round(a.expense),
+              net:Math.round(a.income-a.expense),txCount:a.txCount};
+    }).sort(function(a,b){return b.income-a.income;});
+    return {accounts:accounts};
+  } catch(e) { return {accounts:[]}; }
+}
+
+function getGrowthData(p) {
+  var ssId=p.ssId;
+  try {
+    var cur=getAnalytics({ssId:ssId,period:'month'});
+    var prev=getAnalytics({ssId:ssId,period:'prev_month'});
+    var curW=getAnalytics({ssId:ssId,period:'week'});
+    var prevW=getAnalytics({ssId:ssId,period:'prev_week'});
+    var curC=getCashierAnalytics({ssId:ssId,period:'month'});
+    function pct(a,b){if(!b)return a>0?100:0;return Math.round((a-b)/Math.abs(b)*100);}
+    return {
+      month:{
+        income:cur.income,prevIncome:prev.income,incomeChange:pct(cur.income,prev.income),
+        expense:cur.expense,prevExpense:prev.expense,expenseChange:pct(cur.expense,prev.expense),
+        profit:cur.income-cur.expense,prevProfit:prev.income-prev.expense,
+        profitChange:pct(cur.income-cur.expense,Math.abs(prev.income-prev.expense||1)),
+        byCategory:cur.byCategory
+      },
+      week:{
+        income:curW.income,prevIncome:prevW.income,incomeChange:pct(curW.income,prevW.income),
+        expense:curW.expense,prevExpense:prevW.expense,expenseChange:pct(curW.expense,prevW.expense)
+      },
+      topCashier:curC.list&&curC.list[0]?curC.list[0]:null
+    };
+  } catch(e){return {month:{},week:{},topCashier:null};}
+}
+
 function _period(period, tz) {
   var now=new Date(), today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
   var from=null, to=null;
@@ -968,6 +1089,12 @@ function _period(period, tz) {
     from=pm.getTime(); to=new Date(today.getFullYear(),today.getMonth(),0,23,59,59,999).getTime();
   }
   else if (period==='year') { from=new Date(today.getFullYear(),0,1).getTime(); to=now.getTime(); }
+  else if (period==='prev_week') {
+    var thisMon=new Date(today); thisMon.setDate(today.getDate()-((today.getDay()+6)%7));
+    var prevMon=new Date(thisMon); prevMon.setDate(thisMon.getDate()-7);
+    var prevSun=new Date(thisMon); prevSun.setDate(thisMon.getDate()-1);
+    from=prevMon.getTime(); to=prevSun.getTime()+86399999;
+  }
   return {from:from,to:to};
 }
 
