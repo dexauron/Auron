@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Генератор иконок — Auron Finance</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #111; color: #eee; padding: 2rem; }
+    canvas { border-radius: 12px; margin: 1rem; display: block; }
+    button { margin: 0.5rem; padding: 0.6rem 1.2rem; background: #5E5CE6; color: #fff;
+             border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+    button:hover { background: #7b79f0; }
+    .note { background: #2a2a2a; border-left: 4px solid #5E5CE6; padding: 1rem; margin-top: 1.5rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Генератор иконок Auron Finance</h1>
+  <p>Нажмите кнопки ниже, чтобы скачать иконки PNG и поместить их в папку <code>icons/</code>.</p>
+
+  <canvas id="c192" width="192" height="192"></canvas>
+  <button onclick="download(192)">Скачать icon-192.png</button>
+
+  <canvas id="c512" width="512" height="512"></canvas>
+  <button onclick="download(512)">Скачать icon-512.png</button>
+
+  <div class="note">
+    <strong>Инструкция:</strong> Откройте этот файл в браузере, скачайте оба PNG и
+    положите их в папку <code>app/icons/</code> с именами
+    <code>icon-192.png</code> и <code>icon-512.png</code>.
+    После этого PWA-иконки будут отображаться корректно на всех устройствах.
+  </div>
+
+  <script>
+    function drawIcon(canvas) {
+      const size = canvas.width;
+      const ctx = canvas.getContext('2d');
+      const radius = size * 0.1875; // ~96/512
+
+      // Background rounded rect
+      ctx.beginPath();
+      ctx.moveTo(radius, 0);
+      ctx.lineTo(size - radius, 0);
+      ctx.quadraticCurveTo(size, 0, size, radius);
+      ctx.lineTo(size, size - radius);
+      ctx.quadraticCurveTo(size, size, size - radius, size);
+      ctx.lineTo(radius, size);
+      ctx.quadraticCurveTo(0, size, 0, size - radius);
+      ctx.lineTo(0, radius);
+      ctx.quadraticCurveTo(0, 0, radius, 0);
+      ctx.closePath();
+      ctx.fillStyle = '#5E5CE6';
+      ctx.fill();
+
+      // Letter "A"
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = `700 ${size * 0.625}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('A', size / 2, size * 0.54);
+    }
+
+    function download(size) {
+      const canvas = document.getElementById('c' + size);
+      const link = document.createElement('a');
+      link.download = `icon-${size}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    drawIcon(document.getElementById('c192'));
+    drawIcon(document.getElementById('c512'));
+  </script>
+</body>
+</html>
