@@ -22,6 +22,9 @@
         const body = await resp.json();
         message = (body.error && body.error.message) ? body.error.message : message;
       } catch (_) {}
+      if (resp.status === 403 && message.includes('disabled')) {
+        message = 'Google Sheets API не включён. Включите его на console.cloud.google.com → APIs & Services → Enable APIs → Google Sheets API.';
+      }
       throw new Error(message);
     }
 
@@ -156,6 +159,9 @@
         const body = await resp.json();
         message = (body.error && body.error.message) ? body.error.message : message;
       } catch (_) {}
+      if (resp.status === 403 && message.includes('disabled')) {
+        message = 'Google Drive API не включён. Включите его на console.cloud.google.com → APIs & Services → Enable APIs → Google Drive API.';
+      }
       throw new Error(message);
     }
 
