@@ -224,11 +224,6 @@ const API = (() => {
       }));
       return { isNew: false, profile, orgs };
     } catch (e) {
-      // Profile file exists but sheets are not set up (partial/failed registration).
-      // Return isNew:true so the onboarding shows and registerUser can fix the profile.
-      const msg = (e.message || '').toLowerCase();
-      // Only re-throw auth errors — everything else is a broken/partial profile
-      if (msg.includes('session expired') || msg.includes('401')) throw e;
       return { isNew: true };
     }
   }
