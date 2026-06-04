@@ -180,8 +180,21 @@ const API = (() => {
 
   // ── Module: AUTH ──────────────────────────────────────────────────
 
+  async function _findProfileInDrive() {
+    try {
+      const files = await DRIVE.findByName(PROFILE_NAME);
+      if (files.length > 0) {
+        _setProfileSsId(files[0].id);
+        return files[0].id;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   async function initUserApp() {
-    const ssId = _profileSsId();
+    let ssId = _profileSsId();
+    // If not cached locally, search the user's Drive — works cross-device / after cache clear
+    if (!ssId) ssId = await _findProfileInDrive();
     if (!ssId) return { isNew: true };
     try {
       const [profRows, orgRows] = await SHEETS.batchGet(ssId, [
@@ -200,8 +213,8 @@ const API = (() => {
 
   async function registerUser(p) {
     const name = _s(p.name), phone = _s(p.phone), orgName0 = _s(p.orgName || '') || 'Мой магазин';
-    // Check if already registered
-    const ssId = _profileSsId();
+    // Guard: if profile already exists (localStorage or Drive), return it without creating duplicates
+    let ssId = _profileSsId() || await _findProfileInDrive();
     if (ssId) {
       const d = await initUserApp();
       return { ssId: d.orgs?.[0]?.ssId || '', orgName: d.orgs?.[0]?.name || '' };
