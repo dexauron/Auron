@@ -4697,16 +4697,27 @@ var App={
     var orgName=d.company.name.trim()||'Мой магазин';
     var userName=(d.team[0]&&d.team[0].name.trim())||orgName;
     var btn=document.querySelector('#ob-content .ob-btn-primary');
+    var errEl=document.getElementById('ob-reg-error');
     if(btn){btn.disabled=true;btn.textContent='Создаём аккаунт…';}
+    if(errEl)errEl.style.display='none';
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
       App.s.userName=userName;App.s.ssId=r.ssId;App.s.orgName=r.orgName||orgName;
       try{localStorage.setItem(OB_KEY+'_done','1');}catch(e){}
       if(btn)btn.textContent='Заполняю данные…';
-      return gs('seedDemoData',{ssId:r.ssId});
+      // seedDemoData is optional — ignore its errors so registration always succeeds
+      return gs('seedDemoData',{ssId:r.ssId}).catch(function(){});
     }).then(function(){
       App.loadSettings(function(){App.showApp();App.loadHome();});
     }).catch(function(e){
-      App.toast(e.message||'Ошибка регистрации',true);
+      var msg=e.message||'Ошибка регистрации';
+      var isApi=msg.includes('disabled')||msg.includes('403')||msg.includes('API');
+      if(errEl){
+        errEl.innerHTML=isApi
+          ? '⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.'
+          : '⚠️ '+msg;
+        errEl.style.display='block';
+      }
+      App.toast(msg,true);
       if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
     });
   },
@@ -4913,7 +4924,8 @@ var App={
         '<div class="ob-kpi"><div class="kk">Долг поставщикам</div><div class="kv neg">184 500 ₽</div></div>'+
         '<div class="ob-kpi"><div class="kk">Прибыль за месяц</div><div class="kv pos">486 200 ₽</div></div>'+
       '</div>'+
-      '<div class="ob-actions" style="margin-top:28px">'+
+      '<div id="ob-reg-error" style="display:none;margin-top:16px;padding:12px 14px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink)"></div>'+
+      '<div class="ob-actions" style="margin-top:16px">'+
         '<button class="ob-btn ob-btn-primary ob-btn-lg" onclick="App.obFinish()" style="margin-left:0;flex:1">'+
           obIcon('store',19,2)+' Войти в Auron Finance'+
         '</button>'+
