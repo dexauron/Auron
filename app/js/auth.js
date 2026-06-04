@@ -58,7 +58,7 @@
     return new Promise((resolve, reject) => {
       _resolveToken = resolve;
       _rejectToken  = reject;
-      _tokenClient.requestAccessToken({ prompt: 'consent' });
+      _tokenClient.requestAccessToken({ prompt: 'select_account consent' });
     });
   }
 
