@@ -2158,33 +2158,37 @@ var App={
 
   init:async function(){
     this.s.npDate=new Date();
-    // Register service worker for PWA
-    if('serviceWorker' in navigator){
-      navigator.serviceWorker.register('./sw.js').catch(function(){});
+    // One-time setup — guard against double-call from googleSignIn
+    if(!App._initDone){
+      App._initDone=true;
+      if('serviceWorker' in navigator){
+        navigator.serviceWorker.register('./sw.js').catch(function(){});
+      }
+      window.addEventListener('beforeinstallprompt',function(e){
+        e.preventDefault();App._pwaPrompt=e;
+      });
+      document.addEventListener('keydown',function(e){
+        if(e.key==='Escape')App.closeSheet();
+      });
     }
-    // Capture PWA install prompt
-    window.addEventListener('beforeinstallprompt',function(e){
-      e.preventDefault();App._pwaPrompt=e;
-    });
-    document.addEventListener('keydown',function(e){
-      if(e.key==='Escape')App.closeSheet();
-    });
     // GIS popup flow — no redirect handling needed
     if(!AUTH.isSignedIn()){
       document.getElementById('loader').classList.add('hide');
       App.showScreen('scr-signin');
       return;
     }
-    // Authenticated — load app
+    App._bootApp();
+  },
+
+  _bootApp:function(){
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
       if(r.isNew){
         var _saved=null;try{var _raw=localStorage.getItem(OB_KEY);if(_raw)_saved=JSON.parse(_raw);}catch(e){}
         App.ob={step:(_saved&&_saved.step)||0,maxStep:(_saved&&(_saved.maxStep||_saved.step))||0,d:App._obDefault(_saved&&_saved.d)};
         App.obRender();App.showScreen('scr-onboarding');
-      }
-      else{
-        App.s.userName=r.profile&&r.profile.name||'';
+      } else {
+        App.s.userName=(r.profile&&r.profile.name)||'';
         if(!r.orgs||!r.orgs.length){App.showScreen('scr-new-org');}
         else if(r.orgs.length===1){App.selectOrg(r.orgs[0]);}
         else{App.renderOrgList(r.orgs);App.showScreen('scr-orgs');}
@@ -2192,26 +2196,19 @@ var App={
     }).catch(function(e){
       document.getElementById('loader').classList.add('hide');
       var msg=e.message||'';
-      // Only sign out on actual auth failures (token expired/invalid)
+      var errEl=document.getElementById('signin-error');
       if(msg.includes('Session expired')||msg.includes('401')){
         if(window.AUTH)AUTH.signOut();
         App.showScreen('scr-signin');
-        var errEl=document.getElementById('signin-error');
         if(errEl){errEl.textContent='⚠️ Сессия истекла. Войдите снова.';errEl.style.display='block';}
         return;
       }
-      // API not enabled or other error — stay signed in, show explanation
       App.showScreen('scr-signin');
-      var errEl=document.getElementById('signin-error');
       if(errEl){
-        var hint=msg;
         if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
-          hint='Google API не включён. Перейдите в '+
-            '<a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;font-weight:700;text-decoration:underline">Google Cloud Console</a>'+
-            ' и включите <b>Google Drive API</b> и <b>Google Sheets API</b>, затем нажмите «Войти» снова.';
-          errEl.innerHTML='⚠️ '+hint;
+          errEl.innerHTML='⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;font-weight:700;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.';
         } else {
-          errEl.textContent='⚠️ Ошибка загрузки: '+hint;
+          errEl.textContent='⚠️ Ошибка загрузки: '+msg;
         }
         errEl.style.display='block';
       }
@@ -2225,9 +2222,8 @@ var App={
     if(errEl)errEl.style.display='none';
     try{
       await AUTH.signIn();
-      document.getElementById('loader').classList.remove('hide');
       App.showScreen('loader');
-      await App.init();
+      App._bootApp();
     }catch(e){
       var msg=e.message||'Неизвестная ошибка';
       var hint='';
@@ -2272,7 +2268,6 @@ var App={
       reader.onload=function(e){
         var b64=e.target.result.split(',')[1];
         gs('uploadReceipt',{ssId:App.s.ssId,base64:b64,name:file.name,mimeType:file.type}).then(function(r){
-          if(r.__error){App.toast('Ошибка загрузки: '+r.__error,true);return;}
           App.toast('Фото загружено ✓');cb(r.viewUrl);
         }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
       };
@@ -4735,6 +4730,7 @@ var App={
     if(btn){btn.disabled=true;btn.textContent='Создаём аккаунт…';}
     if(errEl)errEl.style.display='none';
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
+      if(!r.ssId)throw new Error('Не удалось создать организацию — попробуйте ещё раз');
       App.s.userName=userName;App.s.ssId=r.ssId;App.s.orgName=r.orgName||orgName;
       try{localStorage.setItem(OB_KEY+'_done','1');}catch(e){}
       if(btn)btn.textContent='Заполняю данные…';
