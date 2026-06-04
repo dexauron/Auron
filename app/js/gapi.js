@@ -12,7 +12,6 @@
 
     if (resp.status === 401) {
       window.AUTH.signOut();
-      window.location.reload();
       throw new Error('Session expired');
     }
 
@@ -149,7 +148,6 @@
 
     if (resp.status === 401) {
       window.AUTH.signOut();
-      window.location.reload();
       throw new Error('Session expired');
     }
 

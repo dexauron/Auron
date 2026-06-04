@@ -62,22 +62,16 @@
     });
   }
 
-  // Get a valid token (from cache or silent refresh)
+  // Get a valid token (from cache only — expired token requires explicit re-sign-in)
   async function getToken() {
     const token  = localStorage.getItem(KEY_TOKEN);
     const expiry = localStorage.getItem(KEY_EXPIRY);
 
-    // Token still valid
     if (token && expiry && Date.now() < Number(expiry)) return token;
 
-    // Try silent re-auth (no popup if user already consented)
-    await _loadGIS();
-    _initTokenClient();
-    return new Promise((resolve, reject) => {
-      _resolveToken = resolve;
-      _rejectToken  = reject;
-      _tokenClient.requestAccessToken({ prompt: '' });
-    });
+    // Token expired — clear stale data so the caller sees a clean Session expired error
+    [KEY_TOKEN, KEY_EXPIRY].forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
+    throw new Error('Session expired');
   }
 
   // Check if we have a valid non-expired token
