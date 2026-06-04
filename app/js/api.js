@@ -151,6 +151,16 @@ const API = (() => {
     });
   }
 
+  function _makeHeaderReq(sheetId, headers) {
+    return {
+      updateCells: {
+        rows: [{ values: headers.map(h => ({ userEnteredValue: { stringValue: String(h) } })) }],
+        fields: 'userEnteredValue',
+        start: { sheetId, rowIndex: 0, columnIndex: 0 }
+      }
+    };
+  }
+
   // ── Profile SS helpers ────────────────────────────────────────────
 
   function _profileSsId() { return localStorage.getItem('auron_ssid') || null; }
@@ -228,66 +238,94 @@ const API = (() => {
   async function registerUser(p) {
     const name = _s(p.name), phone = _s(p.phone), orgName0 = _s(p.orgName || '') || 'Мой магазин';
 
-    // Step 1: Find existing profile or create a new one
     let profileSsId = _profileSsId() || await _findProfileInDrive();
-    const profileExisted = !!profileSsId;
 
-    if (profileExisted) {
-      // Fast path: try to load the complete profile
+    if (profileSsId) {
+      // Profile file found — try fast path first
       let d;
       try { d = await initUserApp(); } catch (_) { d = null; }
       if (d && !d.isNew) {
-        // Profile is fully set up
         if (d.orgs && d.orgs.length) return { ssId: d.orgs[0].ssId, orgName: d.orgs[0].name };
-        // Profile complete but no orgs recorded — create one
         const res = await _createOrgSS(orgName0, profileSsId);
         return { ssId: res.ssId, orgName: orgName0 };
       }
-      // Profile file exists but sheets incomplete — fall through to repair it
+      // Sheets are missing/broken — repair below
     } else {
-      // Create fresh profile spreadsheet
-      const f = await DRIVE.createSpreadsheet(PROFILE_NAME);
-      profileSsId = f.id;
+      // Brand new user: create profile with both sheets in one API call
+      const ss = await SHEETS.create({
+        properties: { title: PROFILE_NAME },
+        sheets: [
+          { properties: { title: SH_PROFILE } },
+          { properties: { title: SH_ORGS } }
+        ]
+      });
+      profileSsId = ss.spreadsheetId;
       _setProfileSsId(profileSsId);
+      const profSheetId = ss.sheets[0].properties.sheetId;
+      const orgsSheetId = ss.sheets[1].properties.sheetId;
+      await SHEETS.batchUpdate(profileSsId, [
+        _makeHeaderReq(profSheetId, ['Имя', 'Телефон']),
+        _makeHeaderReq(orgsSheetId, ['ID', 'Название', 'SS_ID'])
+      ]);
+      await SHEETS.append(profileSsId, `${SH_PROFILE}!A:B`, [[name, phone]]);
+      const res = await _createOrgSS(orgName0, profileSsId);
+      return { ssId: res.ssId, orgName: orgName0 };
     }
 
-    // Step 2: Ensure ПРОФИЛЬ and ОРГАНИЗАЦИИ sheets exist (idempotent)
+    // Repair: profile file exists but sheets are missing/malformed
     const meta = await SHEETS.getMeta(profileSsId);
-    const sheetNames = new Set((meta.sheets || []).map(s => s.properties.title));
+    const existing = new Set((meta.sheets || []).map(s => s.properties.title));
+    (meta.sheets || []).forEach(s => {
+      _sheetIds[profileSsId + ':' + s.properties.title] = s.properties.sheetId;
+    });
 
-    if (!sheetNames.has(SH_PROFILE)) {
-      // Rename the default "Sheet1" / "Лист1" to ПРОФИЛЬ
+    if (!existing.has(SH_PROFILE)) {
       const defaultSheet = meta.sheets && meta.sheets[0];
-      if (defaultSheet) {
-        await SHEETS.batchUpdate(profileSsId, [{
-          updateSheetProperties: { properties: { sheetId: defaultSheet.properties.sheetId, title: SH_PROFILE }, fields: 'title' }
-        }]);
+      const sheetId = defaultSheet ? defaultSheet.properties.sheetId : null;
+      const reqs = [];
+      if (sheetId && defaultSheet.properties.title !== SH_PROFILE) {
+        reqs.push({ updateSheetProperties: { properties: { sheetId, title: SH_PROFILE }, fields: 'title' } });
       }
-      await SHEETS.update(profileSsId, `${SH_PROFILE}!A1`, [['Имя', 'Телефон']]);
+      if (sheetId) reqs.push(_makeHeaderReq(sheetId, ['Имя', 'Телефон']));
+      if (reqs.length) await SHEETS.batchUpdate(profileSsId, reqs);
       await SHEETS.append(profileSsId, `${SH_PROFILE}!A:B`, [[name, phone]]);
     }
 
-    if (!sheetNames.has(SH_ORGS)) {
-      await SHEETS.addSheet(profileSsId, SH_ORGS);
-      await SHEETS.update(profileSsId, `${SH_ORGS}!A1`, [['ID', 'Название', 'SS_ID']]);
+    if (!existing.has(SH_ORGS)) {
+      const res2 = await SHEETS.addSheet(profileSsId, SH_ORGS);
+      const orgsSheetId = res2.replies[0].addSheet.properties.sheetId;
+      await SHEETS.batchUpdate(profileSsId, [_makeHeaderReq(orgsSheetId, ['ID', 'Название', 'SS_ID'])]);
     } else {
-      // ОРГАНИЗАЦИИ sheet exists — check if an org was already registered
       const orgRows = await SHEETS.getRange(profileSsId, `${SH_ORGS}!A2:C`);
       const validOrgs = (orgRows || []).filter(r => r[0] && r[2]);
       if (validOrgs.length) return { ssId: String(validOrgs[0][2]), orgName: String(validOrgs[0][1] || orgName0) };
     }
 
-    // Step 3: Create the first org spreadsheet
     const res = await _createOrgSS(orgName0, profileSsId);
     return { ssId: res.ssId, orgName: orgName0 };
   }
 
   async function _createOrgSS(name, profileSsId) {
-    const orgFile = await DRIVE.createSpreadsheet(ORG_PREFIX + name.replace(/[\/\\:*?"<>|]/g, '_'));
-    const orgSsId = orgFile.id;
+    const sheetNames = Object.keys(SHEET_HEADERS);
+    // Create org spreadsheet with all 9 sheets in one API call
+    const ss = await SHEETS.create({
+      properties: { title: ORG_PREFIX + name.replace(/[\/\\:*?"<>|]/g, '_') },
+      sheets: sheetNames.map(t => ({ properties: { title: t } }))
+    });
+    const orgSsId = ss.spreadsheetId;
     const orgId = _uuid();
+    // Cache sheet IDs from creation response
+    (ss.sheets || []).forEach(s => {
+      _sheetIds[orgSsId + ':' + s.properties.title] = s.properties.sheetId;
+    });
+    // Write all headers in one batch call
+    const headerReqs = (ss.sheets || []).map(s => {
+      const hdrs = SHEET_HEADERS[s.properties.title];
+      return hdrs ? _makeHeaderReq(s.properties.sheetId, hdrs) : null;
+    }).filter(Boolean);
+    if (headerReqs.length) await SHEETS.batchUpdate(orgSsId, headerReqs);
+    // Register org in profile
     await SHEETS.append(profileSsId, `${SH_ORGS}!A:C`, [[orgId, name, orgSsId]]);
-    await ensureSheets(orgSsId);
     // Default accounts
     await SHEETS.append(orgSsId, `${SH_ACCOUNTS}!A:F`, [
       [_uuid(), 'Наличные', 0, 'active', '💵', '#10B981'],
