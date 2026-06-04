@@ -196,19 +196,16 @@ const API = (() => {
     // If not cached locally, search the user's Drive — works cross-device / after cache clear
     if (!ssId) ssId = await _findProfileInDrive();
     if (!ssId) return { isNew: true };
-    try {
-      const [profRows, orgRows] = await SHEETS.batchGet(ssId, [
-        `${SH_PROFILE}!A2:B2`,
-        `${SH_ORGS}!A2:C`
-      ]);
-      const profile = profRows[0] ? { name: String(profRows[0][0] || ''), phone: String(profRows[0][1] || '') } : {};
-      const orgs = (orgRows || []).filter(r => r[0] && r[2]).map(r => ({
-        id: String(r[0]), name: String(r[1] || ''), ssId: String(r[2])
-      }));
-      return { isNew: false, profile, orgs };
-    } catch (e) {
-      return { isNew: true, __error: e.message };
-    }
+    // Profile exists — load it. Let errors propagate so the caller can show a clear message.
+    const [profRows, orgRows] = await SHEETS.batchGet(ssId, [
+      `${SH_PROFILE}!A2:B2`,
+      `${SH_ORGS}!A2:C`
+    ]);
+    const profile = profRows[0] ? { name: String(profRows[0][0] || ''), phone: String(profRows[0][1] || '') } : {};
+    const orgs = (orgRows || []).filter(r => r[0] && r[2]).map(r => ({
+      id: String(r[0]), name: String(r[1] || ''), ssId: String(r[2])
+    }));
+    return { isNew: false, profile, orgs };
   }
 
   async function registerUser(p) {

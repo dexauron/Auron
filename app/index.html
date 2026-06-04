@@ -2191,10 +2191,30 @@ var App={
       }
     }).catch(function(e){
       document.getElementById('loader').classList.add('hide');
-      // If error, clear token and show sign-in (token might be invalid)
-      if(window.AUTH)AUTH.signOut();
+      var msg=e.message||'';
+      // Only sign out on actual auth failures (token expired/invalid)
+      if(msg.includes('Session expired')||msg.includes('401')){
+        if(window.AUTH)AUTH.signOut();
+        App.showScreen('scr-signin');
+        var errEl=document.getElementById('signin-error');
+        if(errEl){errEl.textContent='⚠️ Сессия истекла. Войдите снова.';errEl.style.display='block';}
+        return;
+      }
+      // API not enabled or other error — stay signed in, show explanation
       App.showScreen('scr-signin');
-      App.toast('Ошибка: '+e.message,true);
+      var errEl=document.getElementById('signin-error');
+      if(errEl){
+        var hint=msg;
+        if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
+          hint='Google API не включён. Перейдите в '+
+            '<a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;font-weight:700;text-decoration:underline">Google Cloud Console</a>'+
+            ' и включите <b>Google Drive API</b> и <b>Google Sheets API</b>, затем нажмите «Войти» снова.';
+          errEl.innerHTML='⚠️ '+hint;
+        } else {
+          errEl.textContent='⚠️ Ошибка загрузки: '+hint;
+        }
+        errEl.style.display='block';
+      }
     });
   },
 
