@@ -80,6 +80,13 @@ const API = (() => {
       const pm = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       from = pm.getTime(); to = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999).getTime();
     }
+    else if (period === 'prev_week') {
+      const dow = (today.getDay() + 6) % 7;
+      const monThisWeek = new Date(today); monThisWeek.setDate(today.getDate() - dow);
+      const monPrevWeek = new Date(monThisWeek); monPrevWeek.setDate(monThisWeek.getDate() - 7);
+      const sunPrevWeek = new Date(monThisWeek); sunPrevWeek.setDate(monThisWeek.getDate() - 1); sunPrevWeek.setHours(23,59,59,999);
+      from = monPrevWeek.getTime(); to = sunPrevWeek.getTime();
+    }
     else if (period && period.startsWith('custom:')) {
       const parts = period.split(':');
       if (parts.length >= 3) { from = new Date(parts[1]).getTime(); to = new Date(parts[2]).getTime() + 86399999; }
@@ -214,7 +221,12 @@ const API = (() => {
     let ssId = _profileSsId() || await _findProfileInDrive();
     if (ssId) {
       const d = await initUserApp();
-      return { ssId: d.orgs?.[0]?.ssId || '', orgName: d.orgs?.[0]?.name || '' };
+      // Profile exists but has no orgs — create a first org now
+      if (!d.orgs || !d.orgs.length) {
+        const res = await _createOrgSS(orgName0, ssId);
+        return { ssId: res.ssId, orgName: orgName0 };
+      }
+      return { ssId: d.orgs[0].ssId, orgName: d.orgs[0].name };
     }
     // Create profile spreadsheet
     const profileFile = await DRIVE.createSpreadsheet(PROFILE_NAME);
@@ -222,7 +234,8 @@ const API = (() => {
     _setProfileSsId(profileSsId);
     // Rename Sheet1 to ПРОФИЛЬ
     const meta = await SHEETS.getMeta(profileSsId);
-    const sheet1Id = meta.sheets[0].properties.sheetId;
+    const sheet1Id = (meta.sheets && meta.sheets[0]) ? meta.sheets[0].properties.sheetId : null;
+    if (sheet1Id === null) throw new Error('Не удалось получить структуру таблицы профиля');
     await SHEETS.batchUpdate(profileSsId, [
       { updateSheetProperties: { properties: { sheetId: sheet1Id, title: SH_PROFILE }, fields: 'title' } }
     ]);
@@ -694,9 +707,11 @@ const API = (() => {
       if (shIdx < 0) return { __error: 'Смена не найдена' };
       // Find zRef for this shift
       const shiftRow = shiftRows[shIdx];
-      // All base entries locked by this shift have same zRef — unlock them
+      // Unlock only base entries whose zRef matches this shift row's ID
+      const shiftZRef = String(shiftRow[0] || '');
       for (let i = 0; i < baseRows.length; i++) {
-        if (_bool(baseRows[i][B_LOCK - 1])) {
+        const zRef = String(baseRows[i][B_ZREF - 1] || '');
+        if (_bool(baseRows[i][B_LOCK - 1]) && zRef === shiftZRef) {
           const row = _pad(baseRows[i].slice(), B_COLS);
           row[B_LOCK - 1] = 'false';
           await _updateRow(ssId, SH_BASE, i, row);
@@ -1036,13 +1051,17 @@ const API = (() => {
     const ssId = p.ssId, d = p.data || {};
     try {
       const id = d.id || _uuid();
-      const row = [id, _s(d.name||''), _s(d.category||''), Math.round(parseFloat(d.amount)||0), _s(d.account||''), parseInt(d.day)||1, d.active!==false?'true':'false', d.id?undefined:_now()].filter(v=>v!==undefined);
+      const baseRow = [id, _s(d.name||''), _s(d.category||''), Math.round(parseFloat(d.amount)||0), _s(d.account||''), parseInt(d.day)||1, d.active!==false?'true':'false'];
       if (d.id) {
         const rows = await _rows(ssId, SH_RECURRING);
         const idx = rows.findIndex(r => String(r[0]||'')===String(d.id));
-        if (idx >= 0) { await _updateRow(ssId, SH_RECURRING, idx, row); return {ok:true}; }
+        if (idx >= 0) {
+          const existing = _pad(rows[idx].slice(), RC_COLS);
+          const row = [...baseRow, existing[RC_CREATED-1] || _now()];
+          await _updateRow(ssId, SH_RECURRING, idx, row); return {ok:true};
+        }
       }
-      await _append(ssId, SH_RECURRING, [...row.slice(0,7), _now()]);
+      await _append(ssId, SH_RECURRING, [...baseRow, _now()]);
       return { ok: true, id };
     } catch (e) { return { __error: e.message }; }
   }

@@ -167,16 +167,16 @@
     return text ? JSON.parse(text) : null;
   }
 
+  function _driveQ(q) { return encodeURIComponent(q.replace(/'/g, "\\'")); }
+
   async function findByName(name) {
-    const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and trashed=false`);
+    const q = _driveQ(`name='${name}' and trashed=false`);
     const data = await driveReq(`${DRIVE_BASE}/files?q=${q}&fields=files(id,name,webViewLink)`);
     return data.files || [];
   }
 
   async function findFolderByName(name) {
-    const q = encodeURIComponent(
-      `name='${name.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
-    );
+    const q = _driveQ(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     const data = await driveReq(`${DRIVE_BASE}/files?q=${q}&fields=files(id,name)`);
     return data.files || [];
   }
@@ -203,9 +203,11 @@
     });
   }
 
-  async function uploadFile(name, mimeType, base64data) {
+  async function uploadFile(name, mimeType, base64data, parentId) {
     const boundary = 'auron_boundary_' + Date.now();
-    const metadata = JSON.stringify({ name, mimeType });
+    const meta = { name, mimeType };
+    if (parentId) meta.parents = [parentId];
+    const metadata = JSON.stringify(meta);
     const binaryStr = atob(base64data);
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
