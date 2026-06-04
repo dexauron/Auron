@@ -1827,6 +1827,24 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         </div>
         <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">Сбрасывает все данные и добавляет 14 дней продаж, 3 поставщика, смены и выплаты.</div>
       </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Аккаунт</div>
+        <div class="settings-list">
+          <div class="settings-row">
+            <span class="settings-row-icon">👤</span>
+            <div style="flex:1;">
+              <div class="settings-row-label" id="settings-user-name">Аккаунт Google</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Данные хранятся в вашем Google Drive</div>
+            </div>
+          </div>
+          <div class="settings-row" onclick="App.logout()" style="cursor:pointer;">
+            <span class="settings-row-icon" style="color:var(--neg);">🚪</span>
+            <span class="settings-row-label" style="color:var(--neg);">Выйти из аккаунта</span>
+            <span class="settings-row-arrow" style="color:var(--neg);">›</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">При выходе данные остаются в Google Drive. При следующем входе всё восстановится.</div>
+      </div>
     </div>
   </div>
 
@@ -2163,6 +2181,21 @@ var App={
     }
     // GIS popup flow — no redirect handling needed
     if(!AUTH.isSignedIn()){
+      // If user had a previous session, try silent token refresh first
+      if(localStorage.getItem('auron_ssid')){
+        AUTH.tryAutoSignIn().then(function(token){
+          if(token){
+            App._bootApp();
+          }else{
+            document.getElementById('loader').classList.add('hide');
+            App.showScreen('scr-signin');
+          }
+        }).catch(function(){
+          document.getElementById('loader').classList.add('hide');
+          App.showScreen('scr-signin');
+        });
+        return;
+      }
       document.getElementById('loader').classList.add('hide');
       App.showScreen('scr-signin');
       return;
@@ -2179,6 +2212,7 @@ var App={
         App.obRender();App.showScreen('scr-onboarding');
       } else {
         App.s.userName=(r.profile&&r.profile.name)||'';
+        if(App.s.userName){try{localStorage.setItem('auron_user_name',App.s.userName);}catch(e){}}
         if(!r.orgs||!r.orgs.length){App.showScreen('scr-new-org');}
         else if(r.orgs.length===1){App.selectOrg(r.orgs[0]);}
         else{App.renderOrgList(r.orgs);App.showScreen('scr-orgs');}
@@ -4040,6 +4074,8 @@ var App={
 
   // ── Settings ──────────────────────────────────────────────────
   renderSettingsPage:function(){
+    var unEl=document.getElementById('settings-user-name');
+    if(unEl)unEl.textContent=App.s.userName||(localStorage.getItem('auron_user_name')||'Аккаунт Google');
     App.loadRecurring();
     // Budget summary
     gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){

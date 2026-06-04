@@ -1,4 +1,4 @@
-const CACHE_NAME = 'auron-v14';
+const CACHE_NAME = 'auron-v15';
 const APP_FILES = [
   './',
   './index.html',
