@@ -2188,7 +2188,8 @@ var App={
       var msg=e.message||'';
       var errEl=document.getElementById('signin-error');
       if(msg.includes('Session expired')||msg.includes('401')){
-        if(window.AUTH)AUTH.signOut();
+        // Only clear the token — preserve auron_ssid so next sign-in finds the profile fast
+        try{localStorage.removeItem('auron_token');localStorage.removeItem('auron_expiry');}catch(_){}
         App.showScreen('scr-signin');
         if(errEl){errEl.textContent='⚠️ Сессия истекла. Войдите снова.';errEl.style.display='block';}
         return;
@@ -4595,10 +4596,14 @@ var App={
     if(ov.type)base.type=ov.type;
     if(ov.company)base.company=Object.assign(base.company,ov.company);
     if(ov.mods)base.mods=Object.assign(base.mods,ov.mods);
-    if(ov.plan)base.plan=ov.plan;
     if(ov.hideProfit!==undefined)base.hideProfit=ov.hideProfit;
     if(ov.blind!==undefined)base.blind=ov.blind;
     if(ov.team&&ov.team.length)base.team=ov.team;
+    // Restore extra from type if missing (old saved state compat)
+    if(base.type&&!base.company.extra){
+      var ty=OB_TYPES.find(function(t){return t.id===base.type;});
+      if(ty&&ty.q&&ty.q.options&&ty.q.options.length)base.company.extra=ty.q.options[0];
+    }
     return base;
   },
 
@@ -4727,13 +4732,21 @@ var App={
     }).catch(function(e){
       var msg=e.message||'Ошибка регистрации';
       console.error('[obFinish] FAILED:',msg);
+      if(msg.includes('Session expired')||msg.includes('истекла')||msg.includes('401')){
+        // Token expired — offer a direct re-auth link so popup isn't blocked
+        setStep('Нужно обновить сессию…');
+        showErr('⚠️ Сессия Google истекла. <a href="javascript:void(0)" '+
+          'style="color:var(--brand);font-weight:700;text-decoration:underline" '+
+          'onclick="AUTH.signIn().then(function(){App.obFinish();}).catch(function(e2){App.toast(e2.message,true);})">'+
+          'Нажмите здесь</a> чтобы войти снова и продолжить — данные сохранены.');
+        if(btn){btn.disabled=false;btn.textContent='Повторить попытку';}
+        return;
+      }
       if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
-      if(msg.includes('Session expired')||msg.includes('истекла')){
-        showErr('⚠️ Сессия Google истекла во время регистрации. <b>Нажмите кнопку ещё раз</b> — токен обновится автоматически, и регистрация продолжится с того места, где остановилась.');
-      } else if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
+      if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
         showErr('⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.');
       } else {
-        showErr('⚠️ '+msg+'<br><small style="opacity:.7">Нажмите кнопку ещё раз — регистрация идемпотентна и продолжится с того места, где остановилась.</small>');
+        showErr('⚠️ '+msg+'<br><small style="opacity:.7">Нажмите кнопку ещё раз — регистрация продолжится с того места, где остановилась.</small>');
       }
       App.toast(msg,true);
     });
