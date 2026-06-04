@@ -203,49 +203,81 @@ const API = (() => {
     // If not cached locally, search the user's Drive — works cross-device / after cache clear
     if (!ssId) ssId = await _findProfileInDrive();
     if (!ssId) return { isNew: true };
-    // Profile exists — load it. Let errors propagate so the caller can show a clear message.
-    const [profRows, orgRows] = await SHEETS.batchGet(ssId, [
-      `${SH_PROFILE}!A2:B2`,
-      `${SH_ORGS}!A2:C`
-    ]);
-    const profile = profRows[0] ? { name: String(profRows[0][0] || ''), phone: String(profRows[0][1] || '') } : {};
-    const orgs = (orgRows || []).filter(r => r[0] && r[2]).map(r => ({
-      id: String(r[0]), name: String(r[1] || ''), ssId: String(r[2])
-    }));
-    return { isNew: false, profile, orgs };
+    try {
+      const [profRows, orgRows] = await SHEETS.batchGet(ssId, [
+        `${SH_PROFILE}!A2:B2`,
+        `${SH_ORGS}!A2:C`
+      ]);
+      const profile = profRows[0] ? { name: String(profRows[0][0] || ''), phone: String(profRows[0][1] || '') } : {};
+      const orgs = (orgRows || []).filter(r => r[0] && r[2]).map(r => ({
+        id: String(r[0]), name: String(r[1] || ''), ssId: String(r[2])
+      }));
+      return { isNew: false, profile, orgs };
+    } catch (e) {
+      // Profile file exists but sheets are not set up (partial/failed registration).
+      // Return isNew:true so the onboarding shows and registerUser can fix the profile.
+      const msg = (e.message || '').toLowerCase();
+      if (msg.includes('unable to parse') || msg.includes('parse range') ||
+          msg.includes('not found') || msg.includes('400') || msg.includes('invalid')) {
+        return { isNew: true };
+      }
+      throw e;
+    }
   }
 
   async function registerUser(p) {
     const name = _s(p.name), phone = _s(p.phone), orgName0 = _s(p.orgName || '') || 'Мой магазин';
-    // Guard: if profile already exists (localStorage or Drive), return it without creating duplicates
-    let ssId = _profileSsId() || await _findProfileInDrive();
-    if (ssId) {
-      const d = await initUserApp();
-      // Profile exists but has no orgs — create a first org now
-      if (!d.orgs || !d.orgs.length) {
-        const res = await _createOrgSS(orgName0, ssId);
+
+    // Step 1: Find existing profile or create a new one
+    let profileSsId = _profileSsId() || await _findProfileInDrive();
+    const profileExisted = !!profileSsId;
+
+    if (profileExisted) {
+      // Fast path: try to load the complete profile
+      let d;
+      try { d = await initUserApp(); } catch (_) { d = null; }
+      if (d && !d.isNew) {
+        // Profile is fully set up
+        if (d.orgs && d.orgs.length) return { ssId: d.orgs[0].ssId, orgName: d.orgs[0].name };
+        // Profile complete but no orgs recorded — create one
+        const res = await _createOrgSS(orgName0, profileSsId);
         return { ssId: res.ssId, orgName: orgName0 };
       }
-      return { ssId: d.orgs[0].ssId, orgName: d.orgs[0].name };
+      // Profile file exists but sheets incomplete — fall through to repair it
+    } else {
+      // Create fresh profile spreadsheet
+      const f = await DRIVE.createSpreadsheet(PROFILE_NAME);
+      profileSsId = f.id;
+      _setProfileSsId(profileSsId);
     }
-    // Create profile spreadsheet
-    const profileFile = await DRIVE.createSpreadsheet(PROFILE_NAME);
-    const profileSsId = profileFile.id;
-    _setProfileSsId(profileSsId);
-    // Rename Sheet1 to ПРОФИЛЬ
+
+    // Step 2: Ensure ПРОФИЛЬ and ОРГАНИЗАЦИИ sheets exist (idempotent)
     const meta = await SHEETS.getMeta(profileSsId);
-    const sheet1Id = (meta.sheets && meta.sheets[0]) ? meta.sheets[0].properties.sheetId : null;
-    if (sheet1Id === null) throw new Error('Не удалось получить структуру таблицы профиля');
-    await SHEETS.batchUpdate(profileSsId, [
-      { updateSheetProperties: { properties: { sheetId: sheet1Id, title: SH_PROFILE }, fields: 'title' } }
-    ]);
-    // Write headers + user row
-    await SHEETS.update(profileSsId, `${SH_PROFILE}!A1`, [['Имя', 'Телефон']]);
-    await SHEETS.append(profileSsId, `${SH_PROFILE}!A:B`, [[name, phone]]);
-    // Create ОРГАНИЗАЦИИ sheet
-    await SHEETS.addSheet(profileSsId, SH_ORGS);
-    await SHEETS.update(profileSsId, `${SH_ORGS}!A1`, [['ID', 'Название', 'SS_ID']]);
-    // Create first org
+    const sheetNames = new Set((meta.sheets || []).map(s => s.properties.title));
+
+    if (!sheetNames.has(SH_PROFILE)) {
+      // Rename the default "Sheet1" / "Лист1" to ПРОФИЛЬ
+      const defaultSheet = meta.sheets && meta.sheets[0];
+      if (defaultSheet) {
+        await SHEETS.batchUpdate(profileSsId, [{
+          updateSheetProperties: { properties: { sheetId: defaultSheet.properties.sheetId, title: SH_PROFILE }, fields: 'title' }
+        }]);
+      }
+      await SHEETS.update(profileSsId, `${SH_PROFILE}!A1`, [['Имя', 'Телефон']]);
+      await SHEETS.append(profileSsId, `${SH_PROFILE}!A:B`, [[name, phone]]);
+    }
+
+    if (!sheetNames.has(SH_ORGS)) {
+      await SHEETS.addSheet(profileSsId, SH_ORGS);
+      await SHEETS.update(profileSsId, `${SH_ORGS}!A1`, [['ID', 'Название', 'SS_ID']]);
+    } else {
+      // ОРГАНИЗАЦИИ sheet exists — check if an org was already registered
+      const orgRows = await SHEETS.getRange(profileSsId, `${SH_ORGS}!A2:C`);
+      const validOrgs = (orgRows || []).filter(r => r[0] && r[2]);
+      if (validOrgs.length) return { ssId: String(validOrgs[0][2]), orgName: String(validOrgs[0][1] || orgName0) };
+    }
+
+    // Step 3: Create the first org spreadsheet
     const res = await _createOrgSS(orgName0, profileSsId);
     return { ssId: res.ssId, orgName: orgName0 };
   }

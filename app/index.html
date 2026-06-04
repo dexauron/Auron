@@ -4707,28 +4707,35 @@ var App={
     var userName=(d.team[0]&&d.team[0].name.trim())||orgName;
     var btn=document.querySelector('#ob-content .ob-btn-primary');
     var errEl=document.getElementById('ob-reg-error');
-    if(btn){btn.disabled=true;btn.textContent='Создаём аккаунт…';}
+    function setStep(txt){if(btn)btn.textContent=txt;console.log('[obFinish]',txt);}
+    function showErr(html){
+      if(errEl){errEl.innerHTML=html;errEl.style.display='block';errEl.scrollIntoView({behavior:'smooth',block:'center'});}
+    }
+    if(btn){btn.disabled=true;}
     if(errEl)errEl.style.display='none';
+    setStep('Шаг 1/3 — Создаём профиль в Google Drive…');
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
-      if(!r.ssId)throw new Error('Не удалось создать организацию — попробуйте ещё раз');
+      if(!r||!r.ssId)throw new Error('Не получили ID таблицы — попробуйте ещё раз');
+      console.log('[obFinish] registerUser OK, ssId=',r.ssId);
       App.s.userName=userName;App.s.ssId=r.ssId;App.s.orgName=r.orgName||orgName;
       try{localStorage.setItem(OB_KEY+'_done','1');}catch(e){}
-      if(btn)btn.textContent='Заполняю данные…';
-      // seedDemoData is optional — ignore its errors so registration always succeeds
-      return gs('seedDemoData',{ssId:r.ssId}).catch(function(){});
+      setStep('Шаг 2/3 — Заполняем данные…');
+      return gs('seedDemoData',{ssId:r.ssId}).catch(function(e){console.warn('[obFinish] seedDemoData error (ignored):',e.message);});
     }).then(function(){
+      setStep('Шаг 3/3 — Открываем приложение…');
       App.loadSettings(function(){App.showApp();App.loadHome();});
     }).catch(function(e){
       var msg=e.message||'Ошибка регистрации';
-      var isApi=msg.includes('disabled')||msg.includes('403')||msg.includes('API');
-      if(errEl){
-        errEl.innerHTML=isApi
-          ? '⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.'
-          : '⚠️ '+msg;
-        errEl.style.display='block';
+      console.error('[obFinish] FAILED:',msg);
+      if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
+      if(msg.includes('Session expired')||msg.includes('истекла')){
+        showErr('⚠️ Сессия Google истекла во время регистрации. <b>Нажмите кнопку ещё раз</b> — токен обновится автоматически, и регистрация продолжится с того места, где остановилась.');
+      } else if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
+        showErr('⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.');
+      } else {
+        showErr('⚠️ '+msg+'<br><small style="opacity:.7">Нажмите кнопку ещё раз — регистрация идемпотентна и продолжится с того места, где остановилась.</small>');
       }
       App.toast(msg,true);
-      if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
     });
   },
 

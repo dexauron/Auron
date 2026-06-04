@@ -11,7 +11,7 @@
     const resp = await fetch(url, Object.assign({}, opts, { headers }));
 
     if (resp.status === 401) {
-      window.AUTH.signOut();
+      try { localStorage.removeItem('auron_token'); localStorage.removeItem('auron_expiry'); } catch (_) {}
       throw new Error('Session expired');
     }
 
@@ -147,7 +147,7 @@
     const resp = await fetch(url, Object.assign({}, opts, { headers }));
 
     if (resp.status === 401) {
-      window.AUTH.signOut();
+      try { localStorage.removeItem('auron_token'); localStorage.removeItem('auron_expiry'); } catch (_) {}
       throw new Error('Session expired');
     }
 
