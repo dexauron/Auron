@@ -62,6 +62,21 @@
     });
   }
 
+  // Try silent token refresh — no popup if user is still signed into Google
+  async function tryAutoSignIn() {
+    try {
+      await _loadGIS();
+      _initTokenClient();
+      return await new Promise((resolve) => {
+        _resolveToken = (token) => { _resolveToken = null; _rejectToken = null; resolve(token); };
+        _rejectToken = () => { _resolveToken = null; _rejectToken = null; resolve(null); };
+        _tokenClient.requestAccessToken({ prompt: '' });
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Get a valid token (from cache only — expired token requires explicit re-sign-in)
   async function getToken() {
     const token  = localStorage.getItem(KEY_TOKEN);
@@ -91,5 +106,5 @@
     });
   }
 
-  window.AUTH = { signIn, getToken, isSignedIn, signOut };
+  window.AUTH = { signIn, tryAutoSignIn, getToken, isSignedIn, signOut };
 })();
