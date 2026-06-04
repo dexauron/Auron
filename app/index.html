@@ -1325,11 +1325,12 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div style="font-size:32px;font-weight:800;letter-spacing:-.04em;margin-bottom:10px;">Auron Finance</div>
       <div style="font-size:15px;color:var(--muted);line-height:1.6;max-width:28ch;margin:0 auto;">Финансовый учёт для розничного магазина</div>
     </div>
-    <button class="btn-primary" onclick="App.googleSignIn()" style="display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;padding:16px;border-radius:16px;box-shadow:0 16px 40px -8px rgba(94,92,230,.85);">
+    <button id="signin-btn" class="btn-primary" onclick="App.googleSignIn()" style="display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;padding:16px;border-radius:16px;box-shadow:0 16px 40px -8px rgba(94,92,230,.85);">
       <svg width="22" height="22" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
       Войти через Google
     </button>
-    <div style="text-align:center;margin-top:24px;font-size:12.5px;color:var(--muted);line-height:1.6;display:flex;align-items:center;justify-content:center;gap:8px;">
+    <div id="signin-error" style="display:none;margin-top:14px;padding:12px 14px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);text-align:left;"></div>
+    <div style="text-align:center;margin-top:20px;font-size:12.5px;color:var(--muted);line-height:1.6;display:flex;align-items:center;justify-content:center;gap:8px;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L5 6v5c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/><path d="m9 12 2 2 4-4"/></svg>
       Данные хранятся только в вашем Google Drive
     </div>
@@ -2198,16 +2199,29 @@ var App={
   },
 
   googleSignIn:async function(){
-    var btn=document.querySelector('#scr-signin .btn-primary');
+    var btn=document.getElementById('signin-btn');
+    var errEl=document.getElementById('signin-error');
     if(btn){btn.disabled=true;btn.style.opacity='0.6';}
+    if(errEl)errEl.style.display='none';
     try{
       await AUTH.signIn();
-      // Token stored — boot the app
       document.getElementById('loader').classList.remove('hide');
       App.showScreen('loader');
       await App.init();
     }catch(e){
-      App.toast('Ошибка входа: '+e.message,true);
+      var msg=e.message||'Неизвестная ошибка';
+      var hint='';
+      if(msg.includes('popup')||msg.includes('blocked')||msg.toLowerCase().includes('pop')){
+        hint='Браузер заблокировал всплывающее окно Google. Разрешите попапы для этого сайта и попробуйте снова.';
+      } else if(msg.includes('cancelled')||msg.includes('cancel')||msg.includes('closed')){
+        hint='Вход отменён. Нажмите кнопку ещё раз и выберите аккаунт Google.';
+      } else if(msg.includes('origin')||msg.includes('client')){
+        hint='Домен не добавлен в OAuth-клиент. Добавьте https://dexauron.github.io в Authorized JavaScript origins в Google Cloud Console.';
+      } else {
+        hint=msg;
+      }
+      if(errEl){errEl.textContent='⚠️ '+hint;errEl.style.display='block';}
+      App.toast(msg,true);
     }finally{
       if(btn){btn.disabled=false;btn.style.opacity='';}
     }
