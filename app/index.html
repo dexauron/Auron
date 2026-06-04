@@ -1172,7 +1172,6 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   .ob-progress>span{display:block;height:100%;background:var(--brand);border-radius:20px;transition:width .4s cubic-bezier(.2,.8,.2,1);}
   .ob-panel{padding:22px 18px 20px;flex:1;}
   .ob-h1{font-size:25px;}
-  .ob-plans{grid-template-columns:1fr;}
   .ob-summary{grid-template-columns:1fr;}
   .ob-actions{position:sticky;bottom:0;margin:24px -18px 0;padding:16px 18px calc(16px + env(safe-area-inset-bottom));
     background:color-mix(in oklab,var(--surface) 92%,transparent);backdrop-filter:blur(16px);border-top:1px solid var(--line);}
@@ -1335,15 +1334,6 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       Данные хранятся только в вашем Google Drive
     </div>
   </div>
-</div>
-
-<div id="scr-reg" class="screen">
-  <div class="screen-title">Добро пожаловать</div>
-  <div class="screen-sub">Ваши данные хранятся только в вашем Google Drive. Разработчик не имеет к ним доступа.</div>
-  <div class="field"><label>Ваше имя</label><input id="reg-name" type="text" placeholder="Иванова Анна" autocomplete="name"></div>
-  <div class="field"><label>Телефон</label><input id="reg-phone" type="tel" placeholder="+7 900 000-00-00" autocomplete="tel"></div>
-  <button class="btn-primary" onclick="App.register()">Создать аккаунт →</button>
-  <div class="privacy-note">🔒 Данные хранятся только в вашем Google Drive</div>
 </div>
 
 <div id="scr-orgs" class="screen">
@@ -2335,16 +2325,6 @@ var App={
     if(sbName)sbName.textContent=App.s.userName||'Пользователь';
     var sbAv=document.getElementById('sb-avatar');
     if(sbAv)sbAv.textContent=(App.s.userName||'А').charAt(0).toUpperCase();
-  },
-
-  register:function(){
-    var name=document.getElementById('reg-name').value.trim();
-    var phone=document.getElementById('reg-phone').value.trim();
-    if(!name){App.toast('Введите имя',true);return;}
-    gs('registerUser',{name:name,phone:phone}).then(function(r){
-      App.s.userName=name;App.s.ssId=r.ssId;App.s.orgName=r.orgName||name;
-      App.loadSettings(function(){App.showApp();App.loadHome();});
-    }).catch(function(e){App.toast(e.message,true);});
   },
 
   renderOrgList:function(orgs){
@@ -4608,7 +4588,7 @@ var App={
 
   _obDefault:function(ov){
     var base={type:null,company:{name:'',city:'Махачкала',points:'1',extra:''},
-      mods:{},plan:'free',hideProfit:true,blind:true,
+      mods:{},hideProfit:true,blind:true,
       team:[{id:'owner',name:'',role:'Владелец',initials:'',color:'#FF9F0A'}]};
     OB_FEATURES.forEach(function(f){base.mods[f.id]=false;});
     if(!ov)return base;
@@ -4905,34 +4885,6 @@ var App={
           '</button>'+
         '</div>'+
       '</div></div>';
-  },
-
-  _obStep5:function(){
-    var d=App.ob.d,hasPro=!!(d.mods.smartpaste||d.mods.whatsapp);
-    var fOn=['Открытие и закрытие смен','Внесение расходов','Базовый учёт долгов','Слепая инкассация'];
-    var fOff=['Импорт из 1С (Smart Paste)','WhatsApp-уведомления'];
-    var pro=['Всё из «Базового»','Smart Paste — импорт из 1С','Товарная аналитика: топ товаров','Рейтинги кассиров','WhatsApp-рассылки','Экспорт в Google Drive'];
-    function li(on,text){return'<li class="'+(on?'':'off')+'">'+obIcon(on?'check':'x',15,2.4)+' '+App._e(text)+'</li>';}
-    return '<div class="ob-body">'+
-      '<div class="ob-anim">'+
-        '<div class="ob-eyebrow">Шаг 5</div>'+
-        '<h1 class="ob-h1">Выберите тариф</h1>'+
-        '<p class="ob-sub">Начните бесплатно — слепая инкассация и смены уже внутри. «Профи» открывает импорт из 1С и рассылки.</p>'+
-      '</div>'+
-      '<div class="ob-plans ob-anim" style="animation-delay:.05s">'+
-        '<button type="button" class="ob-plan" data-on="'+(d.plan==='free'?'1':'0')+'" onclick="App.obSet({plan:\'free\'})">'+
-          '<div class="pname">Базовый</div><div class="pprice">0 ₽</div><div class="pper">навсегда · 1 точка</div>'+
-          '<ul>'+fOn.map(function(x){return li(true,x);}).join('')+fOff.map(function(x){return li(false,x);}).join('')+'</ul>'+
-        '</button>'+
-        '<button type="button" class="ob-plan" data-on="'+(d.plan==='pro'?'1':'0')+'" onclick="App.obSet({plan:\'pro\'})">'+
-          (hasPro?'<span class="recommend">Рекомендуем</span>':'')+
-          '<div class="pname">Профи</div><div class="pprice">990 ₽</div><div class="pper">в месяц за точку</div>'+
-          '<ul>'+pro.map(function(x){return li(true,x);}).join('')+'</ul>'+
-        '</button>'+
-      '</div>'+
-      (hasPro?'<div class="ob-note warn"><span class="ni">'+obIcon('alert',17,2)+'</span>'+
-        '<div>Вы включили импорт из 1С или WhatsApp-уведомления — они доступны только на тарифе «Профи».</div></div>':'')+
-    '</div>';
   },
 
   _obStep6:function(){

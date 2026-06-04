@@ -91,8 +91,5 @@
     });
   }
 
-  // No-op: GIS uses popup, not redirect
-  async function handleCallback() { return false; }
-
-  window.AUTH = { signIn, handleCallback, getToken, isSignedIn, signOut };
+  window.AUTH = { signIn, getToken, isSignedIn, signOut };
 })();
