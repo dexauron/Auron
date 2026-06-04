@@ -2027,8 +2027,8 @@ var OB_FEATURES=[
   {id:'calendar',icon:'calendar',label:'Платёжный календарь',desc:'Сроки оплат поставщикам и кассовые разрывы.'},
   {id:'payroll',icon:'users',label:'Зарплата',desc:'Табель, оклад или процент, суммы к выплате.'},
   {id:'taxes',icon:'percent',label:'Налоги',desc:'Расчёт УСН/патент, налоговый календарь.'},
-  {id:'smartpaste',icon:'clipboard',label:'Импорт из 1С (Smart Paste)',desc:'Вставка таблицы из 1С/Excel с сопоставлением столбцов.',pro:true,key:true},
-  {id:'whatsapp',icon:'mega',label:'Уведомления WhatsApp',desc:'Закрытие смены, разрывы, напоминания о выплатах.',pro:true}
+  {id:'smartpaste',icon:'clipboard',label:'Импорт из 1С (Smart Paste)',desc:'Вставка таблицы из 1С/Excel с сопоставлением столбцов.',key:true},
+  {id:'whatsapp',icon:'mega',label:'Уведомления WhatsApp',desc:'Закрытие смены, разрывы, напоминания о выплатах.'}
 ];
 var OB_STEPS=[
   {id:'welcome',rail:false,next:'Поехали'},
@@ -2036,7 +2036,6 @@ var OB_STEPS=[
   {id:'company',rail:true,railTitle:'О компании',canNext:function(d){return!!(d.company.name.trim()&&d.company.extra);}},
   {id:'modules',rail:true,railTitle:'Модули'},
   {id:'roles',rail:true,railTitle:'Команда'},
-  {id:'plan',rail:true,railTitle:'Тариф',canNext:function(d){return!!d.plan;}},
   {id:'done',rail:false,customFooter:true}
 ];
 var OB_CASHIERS=[
@@ -4581,7 +4580,7 @@ var App={
     var railSteps=OB_STEPS.reduce(function(a,s,i){if(s.rail)a.push(Object.assign({i:i},s));return a;},[]);
     var railPos=railSteps.findIndex(function(s){return s.i===step;});
     var progressPct=Math.round(step/(OB_STEPS.length-1)*100);
-    var fns=[App._obStep0,App._obStep1,App._obStep2,App._obStep3,App._obStep4,App._obStep5,App._obStep6];
+    var fns=[App._obStep0,App._obStep1,App._obStep2,App._obStep3,App._obStep4,App._obStep6];
     var el=document.getElementById('ob-content');
     if(el&&fns[step])el.innerHTML=fns[step]();
     var rail=document.getElementById('ob-rail');
@@ -4640,7 +4639,6 @@ var App={
         t.mods=mods;
         t.company=Object.assign({},t.company,{extra:ty.q.options[0]});
         t.blind=patch.type!=='opt';
-        t.plan=(mods.smartpaste||mods.whatsapp)?'pro':'free';
       }
     }
     App.ob.d=t;App._obSave();App.obRender();
@@ -4655,8 +4653,6 @@ var App={
     var mods=Object.assign({},App.ob.d.mods);
     mods[id]=!mods[id];
     App.ob.d=Object.assign({},App.ob.d,{mods:mods});
-    if(id==='smartpaste'||id==='whatsapp')
-      App.ob.d.plan=(mods.smartpaste||mods.whatsapp)?'pro':'free';
     App._obSave();App.obRender();
   },
 
@@ -4776,7 +4772,6 @@ var App={
         '<span class="mi">'+obIcon(f.icon,20,2)+'</span>'+
         '<div class="mmain">'+
           '<div class="mt">'+App._e(f.label)+
-            (f.pro?'<span class="pill pill-pro">Профи</span>':'')+
             (f.key?'<span class="pill pill-key">Ключевая</span>':'')+
           '</div>'+
           '<div class="ms">'+App._e(f.desc)+'</div>'+
@@ -4874,7 +4869,6 @@ var App={
   _obStep6:function(){
     var d=App.ob.d;
     var type=OB_TYPES.find(function(t){return t.id===d.type;});
-    var planName=d.plan==='pro'?'Профи':'Базовый';
     var modCount=Object.keys(d.mods).filter(function(k){return d.mods[k];}).length+(d.blind?1:0);
     return '<div class="ob-body ob-anim">'+
       '<div class="ob-done-icon">'+obIcon('check',36,2.4)+'</div>'+
@@ -4885,7 +4879,6 @@ var App={
         '<div class="s"><div class="sk">Тип бизнеса</div><div class="sv">'+(type?type.title:'—')+'</div></div>'+
         '<div class="s"><div class="sk">Компания · точки</div><div class="sv">'+(d.company.name?App._e(d.company.name):'—')+', '+d.company.points+'</div></div>'+
         '<div class="s"><div class="sk">Активных модулей</div><div class="sv">'+modCount+'</div></div>'+
-        '<div class="s"><div class="sk">Тариф</div><div class="sv">'+planName+(d.plan==='pro'?' · 990 ₽/мес':'')+'</div></div>'+
       '</div>'+
       '<div class="ob-kpis">'+
         '<div class="ob-kpi"><div class="kk">Касса сейчас</div><div class="kv pos">312 400 ₽</div></div>'+
