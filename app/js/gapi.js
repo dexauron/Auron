@@ -80,11 +80,14 @@
     });
   }
 
-  async function createSpreadsheet(title) {
+  async function createSpreadsheet(titleOrBody) {
+    const body = typeof titleOrBody === 'string'
+      ? { properties: { title: titleOrBody } }
+      : titleOrBody;
     return sheetsReq(SHEETS_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ properties: { title } }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -167,16 +170,16 @@
     return text ? JSON.parse(text) : null;
   }
 
-  function _driveQ(q) { return encodeURIComponent(q.replace(/'/g, "\\'")); }
+  function _escDriveVal(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
 
   async function findByName(name) {
-    const q = _driveQ(`name='${name}' and trashed=false`);
+    const q = encodeURIComponent(`name='${_escDriveVal(name)}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
     const data = await driveReq(`${DRIVE_BASE}/files?q=${q}&fields=files(id,name,webViewLink)`);
     return data.files || [];
   }
 
   async function findFolderByName(name) {
-    const q = _driveQ(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const q = encodeURIComponent(`name='${_escDriveVal(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
     const data = await driveReq(`${DRIVE_BASE}/files?q=${q}&fields=files(id,name)`);
     return data.files || [];
   }
