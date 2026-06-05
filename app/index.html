@@ -2396,14 +2396,20 @@ var App={
       }
     }catch(e){
       var msg=e.message||'Ошибка';
+      console.error('[Auron auth error]', msg);
       var friendly=msg;
-      if(msg.includes('Invalid login')||msg.includes('invalid_grant'))friendly='⚠️ Неверный email или пароль';
+      if(msg.includes('Invalid login')||msg.includes('invalid_grant')||msg.includes('Invalid credentials'))friendly='⚠️ Неверный email или пароль';
       else if(msg.includes('Email not confirmed'))friendly='⚠️ Сначала подтвердите email — проверьте почту';
       else if(msg.includes('User already registered'))friendly='⚠️ Аккаунт уже существует — войдите';
       else if(msg.includes('Password should'))friendly='⚠️ Пароль слишком короткий (минимум 6 символов)';
-      else if(msg.includes('Failed to fetch')||msg.includes('NetworkError'))friendly='⚠️ Нет соединения с сервером. Проверьте интернет.';
+      else if(msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('fetch'))friendly='⚠️ Нет соединения с сервером. Проверьте интернет.';
+      else if(msg.includes('Host not in allowlist'))friendly='⚠️ Ошибка настройки ключа Supabase (Host not in allowlist). Обратитесь к разработчику.';
       else friendly='⚠️ '+msg;
-      if(errEl){errEl.textContent=friendly;errEl.style.display='block';}
+      if(errEl){
+        errEl.innerHTML=friendly+'<br><span style="font-size:11px;opacity:.6;display:block;margin-top:4px;">'+msg+'</span>';
+        errEl.style.display='block';
+        errEl.scrollIntoView({behavior:'smooth',block:'nearest'});
+      }
     }finally{
       if(btn){btn.disabled=false;btn.textContent=App._siMode==='signup'?'Создать аккаунт':'Войти';}
     }
