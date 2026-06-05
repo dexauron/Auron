@@ -131,12 +131,21 @@ ALTER TABLE categories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recurring   ENABLE ROW LEVEL SECURITY;
 
--- Orgs: только свои (USING для SELECT/UPDATE/DELETE, WITH CHECK для INSERT/UPDATE)
+-- Пересоздаём политики (DROP IF EXISTS + CREATE — идемпотентно)
+DROP POLICY IF EXISTS "own_orgs"          ON orgs;
+DROP POLICY IF EXISTS "own_accounts"      ON accounts;
+DROP POLICY IF EXISTS "own_transactions"  ON transactions;
+DROP POLICY IF EXISTS "own_shifts"        ON shifts;
+DROP POLICY IF EXISTS "own_debts"         ON debts;
+DROP POLICY IF EXISTS "own_trash"         ON trash;
+DROP POLICY IF EXISTS "own_categories"    ON categories;
+DROP POLICY IF EXISTS "own_employees"     ON employees;
+DROP POLICY IF EXISTS "own_recurring"     ON recurring;
+
 CREATE POLICY "own_orgs" ON orgs FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
--- Остальные таблицы: через принадлежность к org
 CREATE POLICY "own_accounts"     ON accounts     FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = accounts.org_id    AND orgs.user_id = auth.uid()));
 CREATE POLICY "own_transactions" ON transactions FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = transactions.org_id AND orgs.user_id = auth.uid()));
 CREATE POLICY "own_shifts"       ON shifts       FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = shifts.org_id       AND orgs.user_id = auth.uid()));
@@ -167,13 +176,3 @@ BEGIN
     );
 END;
 $$;
-
--- ══════════════════════════════════════
--- FIX: Если уже существует — пересоздай политику orgs с WITH CHECK
--- Запусти в Supabase Dashboard → SQL Editor если видишь ошибку
--- "The caller does not have permission" при регистрации
--- ══════════════════════════════════════
-DROP POLICY IF EXISTS "own_orgs" ON orgs;
-CREATE POLICY "own_orgs" ON orgs FOR ALL
-  USING (auth.uid() = user_id)
-  WITH CHECK (auth.uid() = user_id);

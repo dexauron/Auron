@@ -2300,10 +2300,44 @@ var App={
   },
 
   _bootApp:function(){
+    var _errEl=document.getElementById('signin-error');
+    function _bdbg(msg){
+      if(_errEl){
+        _errEl.style.display='block';
+        _errEl.style.background='rgba(94,92,230,.15)';
+        _errEl.style.borderColor='rgba(94,92,230,.4)';
+        _errEl.innerHTML=(_errEl.innerHTML||'')+'<div>→ '+msg+'</div>';
+      }
+      console.log('[boot]',msg);
+    }
+    function _berr(html){
+      if(_errEl){
+        _errEl.innerHTML=html;
+        _errEl.style.background='rgba(255,69,58,.12)';
+        _errEl.style.borderColor='rgba(255,69,58,.3)';
+        _errEl.style.display='block';
+      }
+    }
+    _bdbg('загружаю данные пользователя...');
+    // Timeout: if Supabase doesn't respond in 15s, show error
+    var _tid=setTimeout(function(){
+      try{document.getElementById('loader').classList.add('hide');}catch(e){}
+      _berr('⚠️ Нет ответа от сервера (15 сек).<br>'
+        +'<span style="font-size:12px;opacity:.8;">Supabase недоступен из вашей сети. Попробуйте VPN.</span><br>'
+        +'<button type="button" onclick="App._bootApp()" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">↻ Повторить</button>');
+    },15000);
     gs('initUserApp',{}).then(function(r){
+      clearTimeout(_tid);
       document.getElementById('loader').classList.add('hide');
+      _bdbg('ответ получен, isNew='+r.isNew+(r.noSession?' (noSession)':''));
       if(r.isNew){
-        if(r.noSession){AUTH.signOut().catch(function(){});App.showScreen('scr-signin');return;}
+        if(r.noSession){
+          AUTH.signOut().catch(function(){});
+          _berr('⚠️ Не удалось получить данные пользователя.<br>'
+            +'<span style="font-size:12px;opacity:.8;">Попробуйте войти снова.</span>');
+          App.showScreen('scr-signin');
+          return;
+        }
         var _saved=null;try{var _raw=localStorage.getItem(OB_KEY);if(_raw)_saved=JSON.parse(_raw);}catch(e){}
         var _step=(_saved&&typeof _saved.step==='number')?_saved.step:0;
         if(_step<0||_step>=OB_STEPS.length)_step=0;
@@ -2317,26 +2351,24 @@ var App={
         else{App.renderOrgList(r.orgs);App.showScreen('scr-orgs');}
       }
     }).catch(function(e){
+      clearTimeout(_tid);
       document.getElementById('loader').classList.add('hide');
       var msg=e.message||'';
-      var errEl=document.getElementById('signin-error');
+      console.error('[boot error]',msg);
       if(msg.includes('Session expired')||msg.includes('401')){
-        // Only clear the token — preserve auron_ssid so next sign-in finds the profile fast
         try{localStorage.removeItem('auron_token');localStorage.removeItem('auron_expiry');}catch(_){}
+        _berr('⚠️ Сессия истекла. Войдите снова.');
         App.showScreen('scr-signin');
-        if(errEl){errEl.textContent='⚠️ Сессия истекла. Войдите снова.';errEl.style.display='block';}
         return;
       }
       App.showScreen('scr-signin');
-      if(errEl){
-        var isNet=msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('CORS')||msg.includes('соединения');
-        if(isNet){
-          errEl.innerHTML='⚠️ Нет соединения с сервером.<br><span style="font-size:12px;opacity:.8;">Supabase может быть недоступен без VPN в России.</span>'
-            +'<br><button type="button" onclick="App._bootApp()" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">↻ Повторить</button>';
-        } else {
-          errEl.textContent='⚠️ Ошибка загрузки: '+msg;
-        }
-        errEl.style.display='block';
+      var isNet=msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('CORS')||msg.includes('соединения')||msg.includes('Timeout');
+      if(isNet){
+        _berr('⚠️ Нет соединения с сервером.<br>'
+          +'<span style="font-size:12px;opacity:.8;">Supabase может быть недоступен без VPN в России.</span><br>'
+          +'<button type="button" onclick="App._bootApp()" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">↻ Повторить</button>');
+      } else {
+        _berr('⚠️ Ошибка загрузки: '+msg);
       }
     });
   },
