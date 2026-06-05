@@ -1,6 +1,6 @@
 // Auron Finance — Configuration
 window.SUPABASE_URL      = 'https://zdxkhlxbmwyvvrmvjnfy.supabase.co';
-window.SUPABASE_ANON_KEY = 'sb_publishable_ny8r2yQ9lmRSjg2Ffp8cbQ_CZ5Ypktg';
+window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkeGtobHhibXd5dnZybXZqbmZ5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MTk1ODMsImV4cCI6MjA5NjE5NTU4M30.ZrZDc7HIQzCPHo4tQjImRIyg53Hzi5Y1nBMf22aGS0E';
 
 // Cloudflare Worker прокси (оставьте '' если не используете)
 window.SUPABASE_PROXY_URL = '';
