@@ -1295,6 +1295,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#5E5CE6">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./js/config.js"></script>
 <script src="./js/auth.js"></script>
 <script src="./js/api.js"></script>
@@ -2178,28 +2179,14 @@ var App={
         if(e.key==='Escape')App.closeSheet();
       });
     }
-    // JWT-based auth: if signed in → boot, else try silent refresh, else show sign-in
-    if(!AUTH.isSignedIn()){
-      // If JWT exists but expired, try silent Google refresh to get new JWT
-      if(localStorage.getItem('auron_jwt')){
-        AUTH.tryAutoSignIn().then(function(jwt){
-          if(jwt){
-            App._bootApp();
-          }else{
-            document.getElementById('loader').classList.add('hide');
-            App.showScreen('scr-signin');
-          }
-        }).catch(function(){
-          document.getElementById('loader').classList.add('hide');
-          App.showScreen('scr-signin');
-        });
-        return;
-      }
+    // Supabase auth: init() проверяет сессию и слушает изменения
+    var signedIn = await AUTH.init();
+    if(signedIn){
+      App._bootApp();
+    }else{
       document.getElementById('loader').classList.add('hide');
       App.showScreen('scr-signin');
-      return;
     }
-    App._bootApp();
   },
 
   _bootApp:function(){
@@ -2242,28 +2229,15 @@ var App={
   googleSignIn:async function(){
     var btn=document.getElementById('signin-btn');
     var errEl=document.getElementById('signin-error');
-    if(btn){btn.disabled=true;btn.style.opacity='0.6';}
+    if(btn){btn.disabled=true;btn.textContent='Перенаправление...';}
     if(errEl)errEl.style.display='none';
     try{
+      // Supabase перенаправляет на Google — страница уйдёт, обработчик в AUTH.init()
       await AUTH.signIn();
-      App.showScreen('loader');
-      App._bootApp();
     }catch(e){
-      var msg=e.message||'Неизвестная ошибка';
-      var hint='';
-      if(msg.includes('popup')||msg.includes('blocked')||msg.toLowerCase().includes('pop')){
-        hint='Браузер заблокировал всплывающее окно Google. Разрешите попапы для этого сайта и попробуйте снова.';
-      } else if(msg.includes('cancelled')||msg.includes('cancel')||msg.includes('closed')){
-        hint='Вход отменён. Нажмите кнопку ещё раз и выберите аккаунт Google.';
-      } else if(msg.includes('origin')||msg.includes('client')){
-        hint='Домен не добавлен в OAuth-клиент. Добавьте https://dexauron.github.io в Authorized JavaScript origins в Google Cloud Console.';
-      } else {
-        hint=msg;
-      }
-      if(errEl){errEl.textContent='⚠️ '+hint;errEl.style.display='block';}
-      App.toast(msg,true);
-    }finally{
-      if(btn){btn.disabled=false;btn.style.opacity='';}
+      var msg=e.message||'Ошибка входа';
+      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
+      if(btn){btn.disabled=false;btn.textContent='Войти через Google';}
     }
   },
 

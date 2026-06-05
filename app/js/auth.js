@@ -1,117 +1,72 @@
 (() => {
   'use strict';
 
-  const KEY_JWT    = 'auron_jwt';
-  const KEY_OB     = 'auron_ob';
-  const SCOPES     = 'openid email profile';
+  let _sb   = null;
+  let _session = null;
 
-  let _tokenClient  = null;
-  let _resolveToken = null;
-  let _rejectToken  = null;
-
-  function _loadGIS() {
-    return new Promise((resolve, reject) => {
-      if (window.google && window.google.accounts) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = 'https://accounts.google.com/gsi/client';
-      s.async = true; s.defer = true;
-      s.onload  = resolve;
-      s.onerror = () => reject(new Error('Не удалось загрузить Google Identity Services'));
-      document.head.appendChild(s);
-    });
+  function _client() {
+    if (!_sb) _sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+    return _sb;
   }
 
-  function _initTokenClient() {
-    if (_tokenClient) return;
-    _tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: window.GOOGLE_CLIENT_ID,
-      scope: SCOPES,
-      callback: (resp) => {
-        if (resp.error) {
-          const e = new Error(resp.error_description || resp.error);
-          if (_rejectToken) { _rejectToken(e); _resolveToken = null; _rejectToken = null; }
-          return;
-        }
-        if (_resolveToken) { _resolveToken(resp.access_token); _resolveToken = null; _rejectToken = null; }
-      },
-      error_callback: (err) => {
-        const e = new Error((err && err.message) || 'Auth cancelled');
-        if (_rejectToken) { _rejectToken(e); _resolveToken = null; _rejectToken = null; }
+  // Called once from App.init() — resolves true if already signed in
+  async function init() {
+    const sb = _client();
+    const { data } = await sb.auth.getSession();
+    _session = data.session;
+
+    sb.auth.onAuthStateChange((event, session) => {
+      _session = session;
+      if (event === 'SIGNED_IN' && window.App && App._bootApp) {
+        document.getElementById('loader') && document.getElementById('loader').classList.remove('hide');
+        App._bootApp();
+      } else if (event === 'SIGNED_OUT' && window.App) {
+        App.showScreen && App.showScreen('scr-signin');
       }
     });
+
+    return !!_session;
   }
 
-  async function _getGoogleToken(prompt) {
-    await _loadGIS();
-    _initTokenClient();
-    return new Promise((resolve, reject) => {
-      _resolveToken = resolve;
-      _rejectToken  = reject;
-      _tokenClient.requestAccessToken({ prompt });
-    });
-  }
-
-  async function _exchangeForJWT(googleToken) {
-    const r = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ googleToken })
-    });
-    if (!r.ok) {
-      const body = await r.json().catch(() => ({}));
-      throw new Error(body.error || 'Ошибка сервера при входе');
-    }
-    const data = await r.json();
-    localStorage.setItem(KEY_JWT, data.jwt);
-    return data.jwt;
-  }
-
+  // Open Google OAuth popup/redirect
   async function signIn() {
-    const googleToken = await _getGoogleToken('select_account consent');
-    return _exchangeForJWT(googleToken);
-  }
-
-  async function tryAutoSignIn() {
-    try {
-      // If JWT is still valid — no action needed
-      if (isSignedIn()) return localStorage.getItem(KEY_JWT);
-      // JWT expired — try silent Google token refresh
-      const googleToken = await _getGoogleToken('');
-      if (!googleToken) return null;
-      return await _exchangeForJWT(googleToken);
-    } catch (e) {
-      return null;
-    }
+    const { error } = await _client().auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.href.split('#')[0],
+        queryParams: { access_type: 'offline', prompt: 'select_account' }
+      }
+    });
+    if (error) throw new Error(error.message);
   }
 
   function isSignedIn() {
-    const jwt = localStorage.getItem(KEY_JWT);
-    if (!jwt) return false;
-    try {
-      const payload = JSON.parse(atob(jwt.split('.')[1]));
-      return payload.exp * 1000 > Date.now() + 60000; // 1 min buffer
-    } catch (_) {
-      return false;
-    }
+    return !!_session;
   }
 
+  // Returns Supabase access token (used by api.js for RLS)
   function getToken() {
-    if (!isSignedIn()) throw new Error('Session expired');
-    return localStorage.getItem(KEY_JWT);
+    if (!_session) throw new Error('Session expired');
+    return _session.access_token;
   }
 
-  function signOut() {
-    try {
-      const jwt = localStorage.getItem(KEY_JWT);
-      if (jwt && window.google && google.accounts && google.accounts.oauth2) {
-        // No Google token to revoke (we only exchanged for JWT)
-      }
-    } catch (_) {}
-    [KEY_JWT, KEY_OB, 'auron_ssid', 'auron_token', 'auron_expiry', 'auron_profile',
-     'auron_user_name', 'auron_ob'].forEach(k => {
-      try { localStorage.removeItem(k); } catch (_) {}
-    });
+  // Returns the current Supabase client (for api.js)
+  function client() {
+    return _client();
   }
 
-  window.AUTH = { signIn, tryAutoSignIn, isSignedIn, getToken, signOut };
+  async function signOut() {
+    _session = null;
+    try { localStorage.clear(); } catch (_) {}
+    await _client().auth.signOut();
+  }
+
+  // tryAutoSignIn — with Supabase, session persists automatically (no action needed)
+  async function tryAutoSignIn() {
+    const { data } = await _client().auth.getSession();
+    _session = data.session;
+    return _session ? _session.access_token : null;
+  }
+
+  window.AUTH = { init, signIn, isSignedIn, getToken, signOut, tryAutoSignIn, client };
 })();
