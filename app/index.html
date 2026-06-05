@@ -2287,8 +2287,11 @@ var App={
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
       if(r.isNew){
+        if(r.noSession){AUTH.signOut().catch(function(){});App.showScreen('scr-signin');return;}
         var _saved=null;try{var _raw=localStorage.getItem(OB_KEY);if(_raw)_saved=JSON.parse(_raw);}catch(e){}
-        App.ob={step:(_saved&&_saved.step)||0,maxStep:(_saved&&(_saved.maxStep||_saved.step))||0,d:App._obDefault(_saved&&_saved.d)};
+        var _step=(_saved&&typeof _saved.step==='number')?_saved.step:0;
+        if(_step<0||_step>=OB_STEPS.length)_step=0;
+        App.ob={step:_step,maxStep:Math.min((_saved&&(_saved.maxStep||_saved.step))||0,OB_STEPS.length-1),d:App._obDefault(_saved&&_saved.d)};
         App.obRender();App.showScreen('scr-onboarding');
       } else {
         App.s.userName=(r.profile&&r.profile.name)||'';
@@ -5327,14 +5330,17 @@ var App={
     try{localStorage.setItem(OB_KEY,JSON.stringify({step:App.ob.step,maxStep:App.ob.maxStep,d:App.ob.d}));}catch(e){}
   },
   _obRefreshFooter:function(){
-    var meta=OB_STEPS[App.ob.step],d=App.ob.d;
-    if(meta.customFooter||!meta.canNext)return;
+    var step=App.ob&&App.ob.step||0;
+    var meta=OB_STEPS[step<OB_STEPS.length?step:0],d=App.ob&&App.ob.d;
+    if(!meta||meta.customFooter||!meta.canNext)return;
     var btn=document.querySelector('#ob-footer .ob-btn-primary');
     if(btn)btn.disabled=!meta.canNext(d);
   },
 
   obRender:function(){
-    var step=App.ob.step,d=App.ob.d,meta=OB_STEPS[step];
+    var step=App.ob.step;
+    if(step<0||step>=OB_STEPS.length)step=App.ob.step=0;
+    var d=App.ob.d,meta=OB_STEPS[step];
     var railSteps=OB_STEPS.reduce(function(a,s,i){if(s.rail)a.push(Object.assign({i:i},s));return a;},[]);
     var railPos=railSteps.findIndex(function(s){return s.i===step;});
     var progressPct=Math.round(step/(OB_STEPS.length-1)*100);
@@ -5378,7 +5384,7 @@ var App={
   },
 
   obNext:function(){
-    var meta=OB_STEPS[App.ob.step];
+    var meta=OB_STEPS[App.ob.step]||{};
     if(meta.canNext&&!meta.canNext(App.ob.d)){App.toast('Заполните обязательные поля',true);return;}
     if(App.ob.step<OB_STEPS.length-1)App.obGo(App.ob.step+1);
   },
