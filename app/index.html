@@ -5392,10 +5392,12 @@ var App={
         return;
       }
       if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
-      if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
-        showErr('⚠️ Google API не включён. Перейдите в <a href="https://console.cloud.google.com/apis/library" target="_blank" style="color:inherit;text-decoration:underline">Google Cloud Console</a> и включите <b>Google Drive API</b> и <b>Google Sheets API</b>.');
+      if(msg.includes('permission')||msg.includes('Caller')||msg.includes('caller')||msg.includes('row-level')||msg.includes('RLS')||msg.includes('violates')){
+        showErr('⚠️ Ошибка доступа к базе данных. Обновите страницу и попробуйте войти снова — если ошибка повторяется, обратитесь в поддержку.');
+      } else if(msg.includes('disabled')||msg.includes('403')||msg.includes('API')){
+        showErr('⚠️ Ошибка доступа. Попробуйте выйти и войти снова.');
       } else {
-        showErr('⚠️ '+msg+'<br><small style="opacity:.7">Нажмите кнопку ещё раз — регистрация продолжится с того места, где остановилась.</small>');
+        showErr('⚠️ '+msg+'<br><small style="opacity:.7">Нажмите кнопку ещё раз — приложение продолжит с того места, где остановилось.</small>');
       }
       App.toast(msg,true);
     });
@@ -5441,7 +5443,20 @@ var App={
   _obStep2:function(){
     var d=App.ob.d;
     var type=OB_TYPES.find(function(t){return t.id===d.type;});
-    var cities=['Махачкала','Грозный','Нальчик','Владикавказ','Ставрополь','Черкесск','Магас','Назрань','Дербент','Каспийск'];
+    var cities=[
+      'Москва','Санкт-Петербург','Новосибирск','Екатеринбург','Казань','Нижний Новгород',
+      'Челябинск','Самара','Омск','Ростов-на-Дону','Уфа','Красноярск','Воронеж','Пермь',
+      'Волгоград','Краснодар','Саратов','Тюмень','Тольятти','Ижевск','Барнаул','Ульяновск',
+      'Иркутск','Хабаровск','Ярославль','Владивосток','Махачкала','Томск','Оренбург','Кемерово',
+      'Новокузнецк','Рязань','Астрахань','Набережные Челны','Пенза','Липецк','Киров','Чебоксары',
+      'Тула','Балашиха','Калининград','Курск','Улан-Удэ','Ставрополь','Сочи','Тверь','Магнитогорск',
+      'Иваново','Брянск','Белгород','Сургут','Владимир','Нижний Тагил','Архангельск','Чита','Симферополь',
+      'Смоленск','Калуга','Волжский','Якутск','Саранск','Мурманск','Орёл','Грозный','Тамбов',
+      'Стерлитамак','Нижневартовск','Кострома','Улан-Удэ','Нальчик','Петрозаводск','Череповец',
+      'Владикавказ','Вологда','Череповец','Рыбинск','Норильск','Сыктывкар','Нефтеюганск','Абакан',
+      'Петропавловск-Камчатский','Южно-Сахалинск','Черкесск','Йошкар-Ола','Магас','Элиста',
+      'Назрань','Дербент','Каспийск','Майкоп','Горно-Алтайск','Кызыл','Биробиджан','Анадырь'
+    ].sort(function(a,b){return a.localeCompare(b,'ru');});
     return '<div class="ob-body">'+
       '<div class="ob-anim">'+
         '<div class="ob-eyebrow">Шаг 2</div>'+
@@ -5455,7 +5470,7 @@ var App={
           'App.ob.d.team[0].initials=this.value.split(\' \').filter(Boolean).map(function(w){return w[0];}).join(\'\').slice(0,2).toUpperCase();}App._obSave();">'+
         '</div>'+
         '<div class="ob-field"><label>Название бизнеса</label>'+
-          '<input id="ob-cname" class="ob-input" value="'+App._e(d.company.name)+'" placeholder="Например, магазин «Берекет»" '+
+          '<input id="ob-cname" class="ob-input" value="'+App._e(d.company.name)+'" placeholder="Например, «Продукты на Садовой»" '+
           'oninput="App.ob.d.company.name=this.value;App._obSave();App._obRefreshFooter();">'+
         '</div>'+
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">'+

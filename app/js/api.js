@@ -70,9 +70,9 @@ const API = (() => {
     const { data: { user } } = await sb().auth.getUser();
     if (!user) return { __error: 'Not signed in' };
     const orgName = s(p.orgName) || s(p.company && p.company.name) || 'Мой магазин';
-    const { data: existing } = await sb().from('orgs').select('*').order('created_at').limit(1);
+    const { data: existing } = await sb().from('orgs').select('*').eq('user_id', user.id).order('created_at').limit(1);
     if (existing && existing.length) return { ssId: existing[0].id, orgName: existing[0].name };
-    const { data: org, error } = await sb().from('orgs').insert({ name: orgName }).select().single();
+    const { data: org, error } = await sb().from('orgs').insert({ name: orgName, user_id: user.id }).select().single();
     if (error) return { __error: error.message };
     await _createDefaultAccounts(org.id);
     return { ssId: org.id, orgName: org.name };
@@ -87,7 +87,9 @@ const API = (() => {
   }
 
   async function createOrg(p) { return _err(async () => {
-    const { data: org, error } = await sb().from('orgs').insert({ name: s(p.name) }).select().single();
+    const { data: { user } } = await sb().auth.getUser();
+    if (!user) return { __error: 'Not signed in' };
+    const { data: org, error } = await sb().from('orgs').insert({ name: s(p.name), user_id: user.id }).select().single();
     if (error) return { __error: error.message };
     await _createDefaultAccounts(org.id);
     return { id: org.id, name: org.name, ssId: org.id };
