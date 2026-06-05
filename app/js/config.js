@@ -2,8 +2,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Supabase: Project Settings → API → Project URL + anon public key
 // ─────────────────────────────────────────────────────────────────────────────
-window.SUPABASE_URL      = 'https://ВСТАВЬ_СЮДА.supabase.co';
-window.SUPABASE_ANON_KEY = 'ВСТАВЬ_СЮДА_ANON_KEY';
+window.SUPABASE_URL      = 'https://zdxkhlxbmwyvvrmvjnfy.supabase.co';
+window.SUPABASE_ANON_KEY = 'sb_publishable_ny8r2yQ9lmRSjg2Ffp8cbQ_CZ5Ypktg';
 
 // CONFIG CHECK — вызывается из App.init() при старте
 window.checkConfig = function () {
