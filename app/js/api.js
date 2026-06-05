@@ -844,6 +844,285 @@ const API = (() => {
   async function getTimesheet(p)  { return getTimesheetMonth(p); }
   async function saveTimesheet(p) { return saveTimesheetEntry(p); }
 
+  // ── Salary Calculation (Phase 2) ──────────────────────────────
+
+  async function getSalaryCalc(p) { return _err(async () => {
+    const year = p.year || new Date().getFullYear();
+    const month = p.month || (new Date().getMonth() + 1);
+    const key = `auron_ts_${p.orgId}_${year}_${month}`;
+    const tsData = lsGet(key, { days: [] });
+    const days = tsData.days || [];
+
+    // Load employees from settings
+    const settingsKey = `auron_ui_${p.orgId}`;
+    const uiSettings = lsGet(settingsKey, {});
+    const employees = uiSettings.employees || [];
+
+    // Load advances and penalties for this month
+    const apKey = `auron_ap_${p.orgId}_${year}_${month}`;
+    const apData = lsGet(apKey, { advances: [], penalties: [] });
+
+    const empMap = {};
+    employees.forEach(e => {
+      const name = typeof e === 'object' ? e.name : e;
+      empMap[name] = e;
+    });
+
+    // Group timesheet by employee
+    const byEmp = {};
+    days.forEach(d => {
+      if (!d.employee) return;
+      if (!byEmp[d.employee]) byEmp[d.employee] = { name: d.employee, daysP: 0, daysO: 0, daysB: 0, daysOt: 0, daysV: 0, totalHours: 0, workedDays: 0 };
+      const e = byEmp[d.employee];
+      const st = d.status || 'П';
+      if (st === 'П') { e.daysP++; e.workedDays++; }
+      else if (st === 'О') { e.daysO++; e.workedDays++; }
+      else if (st === 'Б') e.daysB++;
+      else if (st === 'Отп') e.daysOt++;
+      else if (st === 'В') e.daysV++;
+      e.totalHours += (d.hours || 0);
+    });
+
+    const results = Object.values(byEmp).map(e => {
+      const cfg = empMap[e.name] || {};
+      let baseSalary = 0;
+      const salaryType = cfg.salaryType || 'daily';
+      if (salaryType === 'daily') {
+        baseSalary = (cfg.dailySalary || 0) * e.workedDays;
+      } else if (salaryType === 'monthly') {
+        baseSalary = cfg.monthlySalary || 0;
+      } else if (salaryType === 'hourly') {
+        baseSalary = (cfg.hourlyRate || 0) * e.totalHours;
+      }
+      const advances = (apData.advances || []).filter(a => a.employee === e.name).reduce((s,a) => s + a.amount, 0);
+      const penalties = (apData.penalties || []).filter(pen => pen.employee === e.name).reduce((s,pen) => s + pen.amount, 0);
+      const toPay = Math.max(0, baseSalary - advances - penalties);
+      return {
+        name: e.name, daysP: e.daysP, daysO: e.daysO, daysB: e.daysB, daysOt: e.daysOt, daysV: e.daysV,
+        totalHours: e.totalHours, workedDays: e.workedDays, salaryType, baseSalary,
+        advances, penalties, toPay,
+        advanceList: (apData.advances||[]).filter(a=>a.employee===e.name),
+        penaltyList: (apData.penalties||[]).filter(pen=>pen.employee===e.name)
+      };
+    });
+
+    const totalToPay = results.reduce((s,r) => s + r.toPay, 0);
+    return { year, month, employees: results, totalToPay };
+  }); }
+
+  async function saveAdvance(p) { return _err(async () => {
+    const year = p.year || new Date().getFullYear();
+    const month = p.month || (new Date().getMonth() + 1);
+    const key = `auron_ap_${p.orgId}_${year}_${month}`;
+    const data = lsGet(key, { advances: [], penalties: [] });
+    data.advances.push({ id: uid(), employee: s(p.employee), amount: n(p.amount), date: s(p.date)||new Date().toISOString().slice(0,10), comment: s(p.comment) });
+    lsSet(key, data);
+    // Also save as transaction if account specified
+    if (p.account || p.accountId) {
+      const accountId = p.accountId || await _accId(p.orgId, p.account);
+      await sb().from('transactions').insert({ uuid: uid(), org_id: p.orgId, date: s(p.date)||new Date().toISOString().slice(0,10), type: 'Расход', category: 'ЗП', amount: n(p.amount), account_id: accountId, comment: `Аванс: ${s(p.employee)}`, employee: s(p.employee) });
+      await _balanceDelta(accountId, 'Расход', n(p.amount));
+    }
+    return { ok: true };
+  }); }
+
+  async function savePenalty(p) { return _err(async () => {
+    const year = p.year || new Date().getFullYear();
+    const month = p.month || (new Date().getMonth() + 1);
+    const key = `auron_ap_${p.orgId}_${year}_${month}`;
+    const data = lsGet(key, { advances: [], penalties: [] });
+    data.penalties.push({ id: uid(), employee: s(p.employee), amount: n(p.amount), date: s(p.date)||new Date().toISOString().slice(0,10), reason: s(p.reason||p.comment) });
+    lsSet(key, data);
+    return { ok: true };
+  }); }
+
+  async function deleteAdvance(p) { return _err(async () => {
+    const key = `auron_ap_${p.orgId}_${p.year}_${p.month}`;
+    const data = lsGet(key, { advances: [], penalties: [] });
+    data.advances = data.advances.filter(a => a.id !== p.id);
+    lsSet(key, data);
+    return { ok: true };
+  }); }
+
+  async function deletePenalty(p) { return _err(async () => {
+    const key = `auron_ap_${p.orgId}_${p.year}_${p.month}`;
+    const data = lsGet(key, { advances: [], penalties: [] });
+    data.penalties = data.penalties.filter(a => a.id !== p.id);
+    lsSet(key, data);
+    return { ok: true };
+  }); }
+
+  async function paySalaryAll(p) { return _err(async () => {
+    const calc = await getSalaryCalc(p);
+    const accountId = p.accountId || (p.account ? await _accId(p.orgId, p.account) : null);
+    const date = s(p.date) || new Date().toISOString().slice(0,10);
+    const toInsert = [];
+    for (const e of (calc.employees || [])) {
+      if (e.toPay <= 0) continue;
+      toInsert.push({ uuid: uid(), org_id: p.orgId, date, type: 'Расход', category: 'ЗП', amount: e.toPay, account_id: accountId, comment: `ЗП: ${e.name} (${p.month}/${p.year})`, employee: e.name });
+      if (accountId) await _balanceDelta(accountId, 'Расход', e.toPay);
+    }
+    if (toInsert.length) await sb().from('transactions').insert(toInsert);
+    return { paid: toInsert.length, total: calc.totalToPay };
+  }); }
+
+  // ── ABC Analysis (Phase 5) ────────────────────────────────────
+
+  async function getAbcAnalysis(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    const { data } = await sb().from('transactions').select('category,amount,type').eq('org_id', p.orgId).gte('date', from).lte('date', to);
+    const catMap = {};
+    (data||[]).forEach(t => {
+      if (!t.category) return;
+      if (!catMap[t.category]) catMap[t.category] = { income: 0, expense: 0 };
+      if (t.type === 'Доход') catMap[t.category].income += t.amount;
+      else catMap[t.category].expense += t.amount;
+    });
+    const items = Object.entries(catMap).map(([cat, v]) => ({ category: cat, income: v.income, expense: v.expense, total: v.income + v.expense })).sort((a,b) => b.expense - a.expense);
+    const totalExp = items.reduce((s,i) => s + i.expense, 0);
+    let cumulative = 0;
+    const withAbc = items.map(i => {
+      cumulative += i.expense;
+      const pct = totalExp > 0 ? cumulative / totalExp : 0;
+      return { ...i, abc: pct <= 0.8 ? 'A' : pct <= 0.95 ? 'B' : 'C', share: totalExp > 0 ? i.expense / totalExp : 0 };
+    });
+    return { items: withAbc, totalExpense: totalExp, period: { from, to } };
+  }); }
+
+  // ── Cash Flow Forecast (Phase 5) ──────────────────────────────
+
+  async function getCashFlowForecast(p) { return _err(async () => {
+    const days = p.days || 30;
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0,10);
+
+    // Get last 90 days avg daily income/expense
+    const past = new Date(today); past.setDate(today.getDate() - 90);
+    const pastStr = past.toISOString().slice(0,10);
+    const { data: txs } = await sb().from('transactions').select('date,type,amount').eq('org_id', p.orgId).gte('date', pastStr).lte('date', todayStr);
+
+    const dayMap = {};
+    (txs||[]).forEach(t => {
+      if (!dayMap[t.date]) dayMap[t.date] = { income: 0, expense: 0 };
+      if (t.type === 'Доход') dayMap[t.date].income += t.amount;
+      else if (t.type === 'Расход') dayMap[t.date].expense += t.amount;
+    });
+    const dayVals = Object.values(dayMap);
+    const avgIncome  = dayVals.length ? dayVals.reduce((s,d) => s + d.income, 0) / 90 : 0;
+    const avgExpense = dayVals.length ? dayVals.reduce((s,d) => s + d.expense, 0) / 90 : 0;
+
+    // Get upcoming scheduled payments
+    const payments = _getPayments(p.orgId).filter(pay => pay.status === 'open' && pay.date >= todayStr);
+    const payMap = {};
+    payments.forEach(pay => { payMap[pay.date] = (payMap[pay.date]||0) + pay.amount; });
+
+    // Get current balance
+    const { data: accs } = await sb().from('accounts').select('balance').eq('org_id', p.orgId).eq('status','active');
+    let currentBalance = (accs||[]).reduce((s,a) => s + (a.balance||0), 0);
+
+    const forecast = [];
+    let runningBalance = currentBalance;
+    for (let i = 1; i <= days; i++) {
+      const dt = new Date(today); dt.setDate(today.getDate() + i);
+      const dateStr = dt.toISOString().slice(0,10);
+      const scheduled = payMap[dateStr] || 0;
+      const projected = avgIncome - avgExpense - scheduled;
+      runningBalance += projected;
+      forecast.push({ date: dateStr, projectedIncome: Math.round(avgIncome), projectedExpense: Math.round(avgExpense + scheduled), scheduledPayments: scheduled, balance: Math.round(runningBalance) });
+    }
+
+    const gapDays = forecast.filter(f => f.balance < 0);
+    return { currentBalance, avgDailyIncome: Math.round(avgIncome), avgDailyExpense: Math.round(avgExpense), forecast, cashGap: gapDays.length > 0, gapFirstDate: gapDays.length ? gapDays[0].date : null };
+  }); }
+
+  // ── Inventory (Phase 7) ────────────────────────────────────────
+  // Stored in localStorage as simple item list
+
+  function _getInventory(orgId) { return lsGet('auron_inv_' + orgId, []); }
+  function _setInventory(orgId, list) { lsSet('auron_inv_' + orgId, list); }
+
+  async function getInventory(p) { return _err(async () => {
+    const items = _getInventory(p.orgId);
+    return { items, totalValue: items.reduce((s,i) => s + (i.qty||0) * (i.costPrice||0), 0) };
+  }); }
+
+  async function saveInventoryItem(p) { return _err(async () => {
+    const list = _getInventory(p.orgId);
+    if (p.id) {
+      const idx = list.findIndex(x => x.id === p.id);
+      if (idx >= 0) list[idx] = { ...list[idx], name: s(p.name), qty: n(p.qty), unit: s(p.unit)||'шт', costPrice: n(p.costPrice), sellPrice: n(p.sellPrice), category: s(p.category), minQty: n(p.minQty) };
+      else list.push({ id: p.id, name: s(p.name), qty: n(p.qty), unit: s(p.unit)||'шт', costPrice: n(p.costPrice), sellPrice: n(p.sellPrice), category: s(p.category), minQty: n(p.minQty) });
+    } else {
+      list.push({ id: uid(), name: s(p.name), qty: n(p.qty), unit: s(p.unit)||'шт', costPrice: n(p.costPrice), sellPrice: n(p.sellPrice), category: s(p.category), minQty: n(p.minQty), created: new Date().toISOString().slice(0,10) });
+    }
+    _setInventory(p.orgId, list);
+    return { ok: true };
+  }); }
+
+  async function deleteInventoryItem(p) { return _err(async () => {
+    _setInventory(p.orgId, _getInventory(p.orgId).filter(x => x.id !== p.id));
+    return { ok: true };
+  }); }
+
+  async function adjustInventoryQty(p) { return _err(async () => {
+    const list = _getInventory(p.orgId);
+    const idx = list.findIndex(x => x.id === p.id);
+    if (idx < 0) return { __error: 'Item not found' };
+    list[idx].qty = Math.max(0, (list[idx].qty||0) + n(p.delta));
+    _setInventory(p.orgId, list);
+    // Record as transaction if requested
+    if (p.saveTransaction && p.accountId) {
+      const cost = Math.abs(n(p.delta)) * (list[idx].costPrice||0);
+      if (cost > 0) {
+        await sb().from('transactions').insert({ uuid: uid(), org_id: p.orgId, date: new Date().toISOString().slice(0,10), type: n(p.delta) > 0 ? 'Расход' : 'Доход', category: 'Закупка', amount: cost, account_id: p.accountId, comment: `${list[idx].name}: ${n(p.delta)>0?'+':''} ${n(p.delta)} ${list[idx].unit}` });
+        await _balanceDelta(p.accountId, n(p.delta) > 0 ? 'Расход' : 'Доход', cost);
+      }
+    }
+    return { ok: true, newQty: list[idx].qty };
+  }); }
+
+  // ── Expense Approvals (Phase 8) ───────────────────────────────
+  // Stored in localStorage
+
+  function _getApprovals(orgId) { return lsGet('auron_approv_' + orgId, []); }
+  function _setApprovals(orgId, list) { lsSet('auron_approv_' + orgId, list); }
+
+  async function getApprovals(p) { return _err(async () => {
+    let list = _getApprovals(p.orgId);
+    if (p.status) list = list.filter(a => a.status === p.status);
+    return { items: list };
+  }); }
+
+  async function saveApprovalRequest(p) { return _err(async () => {
+    const list = _getApprovals(p.orgId);
+    const item = { id: uid(), title: s(p.title), amount: n(p.amount), category: s(p.category), requestedBy: s(p.requestedBy||p.employee), comment: s(p.comment), date: s(p.date)||new Date().toISOString().slice(0,10), status: 'pending', accountId: p.accountId||null };
+    list.unshift(item);
+    _setApprovals(p.orgId, list);
+    return { id: item.id };
+  }); }
+
+  async function approveRequest(p) { return _err(async () => {
+    const list = _getApprovals(p.orgId);
+    const idx = list.findIndex(x => x.id === p.id);
+    if (idx < 0) return { __error: 'Not found' };
+    list[idx].status = p.action === 'approve' ? 'approved' : 'rejected';
+    list[idx].approvedBy = s(p.approvedBy);
+    list[idx].approvedAt = new Date().toISOString().slice(0,10);
+    list[idx].approvalComment = s(p.comment);
+    _setApprovals(p.orgId, list);
+    // If approved, save transaction
+    if (p.action === 'approve' && list[idx].accountId && list[idx].amount > 0) {
+      await sb().from('transactions').insert({ uuid: uid(), org_id: p.orgId, date: list[idx].approvedAt, type: 'Расход', category: list[idx].category||'Прочий расход', amount: list[idx].amount, account_id: list[idx].accountId, comment: `Утверждено: ${list[idx].title}` });
+      await _balanceDelta(list[idx].accountId, 'Расход', list[idx].amount);
+    }
+    return { ok: true };
+  }); }
+
+  async function deleteApprovalRequest(p) { return _err(async () => {
+    _setApprovals(p.orgId, _getApprovals(p.orgId).filter(x => x.id !== p.id));
+    return { ok: true };
+  }); }
+
   // ── Seed Demo Data ────────────────────────────────────────────
 
   async function seedDemoData(p) { return _err(async () => {
@@ -927,6 +1206,10 @@ const API = (() => {
     savePayment, savePayments, getPayments, updatePayment, deletePayment, markPaymentPaid,
     saveRecurring, getRecurring, deleteRecurring, applyRecurring,
     getTimesheet, saveTimesheet, getTimesheetMonth, saveTimesheetEntry,
+    getSalaryCalc, saveAdvance, savePenalty, deleteAdvance, deletePenalty, paySalaryAll,
+    getAbcAnalysis, getCashFlowForecast,
+    getInventory, saveInventoryItem, deleteInventoryItem, adjustInventoryQty,
+    getApprovals, saveApprovalRequest, approveRequest, deleteApprovalRequest,
     getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData
   };
 })();

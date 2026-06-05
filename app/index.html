@@ -1560,6 +1560,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="an-tab" onclick="App.setAnTab('heatmap',this)">Дни</button>
         <button class="an-tab" onclick="App.setAnTab('debts',this)">Долги</button>
         <button class="an-tab" onclick="App.setAnTab('budget',this)">План/Факт</button>
+        <button class="an-tab" onclick="App.setAnTab('abc',this)">ABC</button>
+        <button class="an-tab" onclick="App.setAnTab('cashflow',this)">Прогноз</button>
       </div>
       <div id="an-pl" class="an-panel active"></div>
       <div id="an-growth" class="an-panel"></div>
@@ -1571,6 +1573,60 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div id="an-heatmap" class="an-panel"></div>
       <div id="an-debts" class="an-panel"></div>
       <div id="an-budget" class="an-panel"></div>
+      <div id="an-abc" class="an-panel"></div>
+      <div id="an-cashflow" class="an-panel"></div>
+    </div>
+
+    <!-- PAYROLL -->
+    <div id="tab-payroll" class="panel" style="padding:0;">
+      <div style="padding:16px 16px 0;"><button onclick="App.setTab('settings',null)" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">← Назад</button></div>
+      <div style="padding:12px 16px 8px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Зарплата</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px;" id="payroll-period-label"></div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="App.prPrevMonth()" style="background:var(--surface-2);border:none;border-radius:10px;width:36px;height:36px;font-size:18px;cursor:pointer;color:var(--text-2);">‹</button>
+          <button onclick="App.prNextMonth()" style="background:var(--surface-2);border:none;border-radius:10px;width:36px;height:36px;font-size:18px;cursor:pointer;color:var(--text-2);">›</button>
+        </div>
+      </div>
+      <div id="payroll-summary" style="padding:0 16px 12px;"></div>
+      <div id="payroll-list" style="padding:0 16px 16px;"></div>
+    </div>
+
+    <!-- INVENTORY -->
+    <div id="tab-inventory" class="panel" style="padding:0;">
+      <div style="padding:16px 16px 0;"><button onclick="App.setTab('settings',null)" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">← Назад</button></div>
+      <div style="padding:12px 16px 8px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Товарный учёт</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px;" id="inv-stats"></div>
+        </div>
+        <button onclick="App.openInventoryForm(null)" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Товар</button>
+      </div>
+      <div style="padding:0 16px 6px;">
+        <input type="text" id="inv-search" placeholder="Поиск по названию, категории…" oninput="App._invSearch(this.value)" style="width:100%;padding:11px 16px;border-radius:14px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:14px;outline:none;font-family:var(--font);">
+      </div>
+      <div id="inv-list" style="padding:0 16px 80px;"></div>
+    </div>
+
+    <!-- APPROVALS -->
+    <div id="tab-approvals" class="panel" style="padding:0;">
+      <div style="padding:16px 16px 0;"><button onclick="App.setTab('settings',null)" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">← Назад</button></div>
+      <div style="padding:12px 16px 8px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Согласования</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:2px;">Заявки на расходы</div>
+        </div>
+        <button onclick="App.openApprovalForm()" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Заявка</button>
+      </div>
+      <div style="padding:0 16px;display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="pill active" data-appst="all" onclick="App.setApprovalFilter('all',this)">Все</button>
+        <button class="pill" data-appst="pending" onclick="App.setApprovalFilter('pending',this)">Ожидают</button>
+        <button class="pill" data-appst="approved" onclick="App.setApprovalFilter('approved',this)">Одобрены</button>
+        <button class="pill" data-appst="rejected" onclick="App.setApprovalFilter('rejected',this)">Отклонены</button>
+      </div>
+      <div id="approvals-list" style="padding:0 16px 80px;"></div>
     </div>
 
     <!-- KASSA -->
@@ -1828,6 +1884,26 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">Сбрасывает все данные и добавляет 14 дней продаж, 3 поставщика, смены и выплаты.</div>
       </div>
       <div class="settings-sec">
+        <div class="settings-sec-title">Инструменты</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openPayroll()" style="cursor:pointer;">
+            <span class="settings-row-icon">👥</span>
+            <span class="settings-row-label">Зарплата и табель</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.openInventory()" style="cursor:pointer;">
+            <span class="settings-row-icon">📦</span>
+            <span class="settings-row-label">Товарный учёт</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.openApprovals()" style="cursor:pointer;">
+            <span class="settings-row-icon">✅</span>
+            <span class="settings-row-label">Согласования расходов</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-sec">
         <div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row">
@@ -1910,6 +1986,21 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div class="am-icon" style="background:var(--expense-dim);">📊</div>
       <div class="am-name">Перейти к отчёту</div>
       <div class="am-sub">Финансовый отчёт</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.openPayroll()">
+      <div class="am-icon" style="background:#e8f5e9;">👥</div>
+      <div class="am-name">Зарплата</div>
+      <div class="am-sub">Табель и расчёт</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.openInventory()">
+      <div class="am-icon" style="background:#fff3e0;">📦</div>
+      <div class="am-name">Товарный учёт</div>
+      <div class="am-sub">Остатки, себестоимость</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.openApprovals()">
+      <div class="am-icon" style="background:#e3f2fd;">✅</div>
+      <div class="am-name">Согласования</div>
+      <div class="am-sub">Заявки на расходы</div>
     </button>
   </div>
 </div>
@@ -2165,6 +2256,8 @@ var App={
      customFrom:null,customTo:null,anCustomFrom:null,anCustomTo:null,
      npType:'expense',npVal:'',npAcc:null,npAcc2:null,npCat:null,npDate:null,npEditId:null,
      wyplatas:[],tsYear:new Date().getFullYear(),tsMonth:new Date().getMonth(),
+     prYear:new Date().getFullYear(),prMonth:new Date().getMonth()+1,
+     _invItems:[],_approvalFilter:'all',
      settings:{cats:[],cashiers:[],payTypes:[],repStatuses:[],employees:[],shifts:[]},
      chart1:null,chart2:null,searchTimer:null},
 
@@ -2413,6 +2506,9 @@ var App={
     else if(tab==='suppliers')App.loadSuppliers();
     else if(tab==='report'){App.initReport();App.loadShiftsLog();}
     else if(tab==='settings')App.renderSettingsPage();
+    else if(tab==='payroll')App.loadPayroll();
+    else if(tab==='inventory')App.loadInventory();
+    else if(tab==='approvals')App.loadApprovals();
   },
 
   openActionMenu:function(){
@@ -3039,8 +3135,11 @@ var App={
     document.querySelectorAll('.an-tab').forEach(function(b){b.classList.remove('active');});
     document.querySelectorAll('.an-panel').forEach(function(p){p.classList.remove('active');});
     if(btn)btn.classList.add('active');
-    document.getElementById('an-'+tab).classList.add('active');
+    var panel=document.getElementById('an-'+tab);
+    if(panel)panel.classList.add('active');
     if(tab==='budget')App.loadBudget();
+    else if(tab==='abc')App.loadAbcAnalysis();
+    else if(tab==='cashflow')App.loadCashFlow();
   },
 
   _getPeriod:function(){
@@ -3125,6 +3224,8 @@ var App={
     gs('getAccountFlow',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderAccFlow(r);});
     gs('getGrowthData',{ssId:App.s.ssId}).then(function(r){App._renderGrowth(r);});
     if(App.s.anTab==='budget') App.loadBudget();
+    else if(App.s.anTab==='abc') App.loadAbcAnalysis();
+    else if(App.s.anTab==='cashflow') App.loadCashFlow();
   },
 
   // ── Budget ────────────────────────────────────────────────────
@@ -3222,6 +3323,439 @@ var App={
     gs('saveBudget',{ssId:App.s.ssId,budgetMap:bm}).then(function(){
       App.s._budgetMap=bm;App.toast('Бюджет сохранён ✓');App.closeModal();
       if(App.s.anTab==='budget')App.loadBudget();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── ABC Analysis ───────────────────────────────────────────────
+  loadAbcAnalysis:function(){
+    var el=document.getElementById('an-abc');
+    if(!el)return;
+    el.innerHTML='<div class="skel" style="height:240px;border-radius:16px;"></div>';
+    gs('getAbcAnalysis',{ssId:App.s.ssId,period:App._getAnPeriod()}).then(function(r){
+      if(!r||!r.items||!r.items.length){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Нет данных за период</div>';return;}
+      var colors={A:'var(--neg)',B:'var(--transfer)',C:'var(--muted)'};
+      var html='<div style="padding:0 16px 12px;">'+
+        '<div style="font-size:15px;font-weight:700;margin-bottom:4px;">ABC-анализ расходов</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">A — 80% расходов · B — 15% · C — 5%</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+          ['A','B','C'].map(function(g){
+            var gi=r.items.filter(function(i){return i.abc===g;});
+            var sum=gi.reduce(function(s,i){return s+i.expense;},0);
+            return '<div style="flex:1;background:var(--card);border-radius:14px;padding:12px;border-top:3px solid '+colors[g]+';">'+
+              '<div style="font-size:18px;font-weight:800;color:'+colors[g]+';">'+g+'</div>'+
+              '<div style="font-size:15px;font-weight:700;margin-top:4px;">₽ '+fmtFull(sum)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);">'+gi.length+' катег.</div></div>';
+          }).join('')+
+        '</div>';
+      html+=r.items.slice(0,20).map(function(item){
+        var pct=Math.round((item.share||0)*100);
+        var bar=Math.min(Math.round((item.share||0)*300),100);
+        return '<div style="background:var(--card);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">'+
+          '<div style="min-width:28px;height:28px;border-radius:50%;background:'+colors[item.abc]+';display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;">'+item.abc+'</div>'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(item.category)+'</div>'+
+            '<div style="height:4px;background:var(--sep);border-radius:2px;margin-top:6px;">'+
+              '<div style="height:4px;width:'+bar+'%;background:'+colors[item.abc]+';border-radius:2px;"></div></div></div>'+
+          '<div style="text-align:right;min-width:80px;"><div style="font-size:15px;font-weight:700;">₽ '+fmtFull(item.expense)+'</div>'+
+            '<div style="font-size:11px;color:var(--muted);">'+pct+'%</div></div>'+
+        '</div>';
+      }).join('')+'</div>';
+      el.innerHTML=html;
+    }).catch(function(){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Ошибка загрузки</div>';});
+  },
+
+  // ── Cash Flow Forecast ─────────────────────────────────────────
+  loadCashFlow:function(){
+    var el=document.getElementById('an-cashflow');
+    if(!el)return;
+    el.innerHTML='<div class="skel" style="height:200px;border-radius:16px;"></div>';
+    gs('getCashFlowForecast',{ssId:App.s.ssId,days:30}).then(function(r){
+      if(!r){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Нет данных</div>';return;}
+      var gapAlert=r.cashGap?
+        '<div style="background:var(--neg);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-size:14px;font-weight:600;">⚠️ Кассовый разрыв прогнозируется с '+r.gapFirstDate+'</div>':'';
+      var html='<div style="padding:0 16px 12px;">'+
+        '<div style="font-size:15px;font-weight:700;margin-bottom:12px;">Прогноз денежного потока (30 дней)</div>'+
+        gapAlert+
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;">'+
+          '<div style="background:var(--card);border-radius:12px;padding:10px;"><div style="font-size:11px;color:var(--muted);font-weight:700;">Текущий баланс</div><div style="font-size:16px;font-weight:800;margin-top:4px;">₽ '+fmtFull(r.currentBalance||0)+'</div></div>'+
+          '<div style="background:var(--card);border-radius:12px;padding:10px;"><div style="font-size:11px;color:var(--muted);font-weight:700;">Ср. доход/день</div><div style="font-size:16px;font-weight:800;color:var(--pos);margin-top:4px;">₽ '+fmtFull(r.avgDailyIncome||0)+'</div></div>'+
+          '<div style="background:var(--card);border-radius:12px;padding:10px;"><div style="font-size:11px;color:var(--muted);font-weight:700;">Ср. расход/день</div><div style="font-size:16px;font-weight:800;color:var(--neg);margin-top:4px;">₽ '+fmtFull(r.avgDailyExpense||0)+'</div></div>'+
+        '</div>';
+      var forecast=r.forecast||[];
+      if(forecast.length){
+        var maxBal=Math.max.apply(null,forecast.map(function(f){return Math.abs(f.balance);}));
+        html+='<div style="background:var(--card);border-radius:14px;padding:14px;overflow-x:auto;">'+
+          '<div style="display:flex;gap:2px;align-items:flex-end;height:80px;min-width:'+Math.max(forecast.length*12,300)+'px;">';
+        forecast.forEach(function(f){
+          var h=maxBal>0?Math.max(4,Math.round(Math.abs(f.balance)/maxBal*76)):4;
+          var color=f.balance<0?'var(--neg)':f.balance<r.currentBalance*0.3?'var(--transfer)':'var(--pos)';
+          html+='<div title="'+f.date+': ₽'+fmtFull(f.balance)+'" style="flex:1;min-width:10px;height:'+h+'px;background:'+color+';border-radius:3px;"></div>';
+        });
+        html+='</div>'+
+          '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:11px;color:var(--muted);">'+
+            '<span>+1 день</span><span>+15 дней</span><span>+30 дней</span></div></div>';
+        // Next 7 days table
+        html+='<div style="margin-top:12px;font-size:14px;font-weight:700;margin-bottom:8px;">Ближайшие 7 дней</div>'+
+          '<div style="background:var(--card);border-radius:14px;overflow:hidden;">';
+        forecast.slice(0,7).forEach(function(f,i){
+          var scheduled=f.scheduledPayments;
+          html+='<div style="padding:10px 14px;'+(i<6?'border-bottom:1px solid var(--sep)':'')+';display:flex;justify-content:space-between;align-items:center;">'+
+            '<div><div style="font-size:13px;font-weight:600;">'+fmtDate(f.date)+'</div>'+
+              (scheduled>0?'<div style="font-size:11px;color:var(--neg);">Выплата: ₽'+fmtFull(scheduled)+'</div>':'')+'</div>'+
+            '<div style="text-align:right;"><div style="font-size:14px;font-weight:700;color:'+(f.balance>=0?'var(--pos)':'var(--neg)')+';">₽ '+fmtFull(f.balance)+'</div>'+
+              '<div style="font-size:11px;color:var(--muted);">баланс</div></div>'+
+          '</div>';
+        });
+        html+='</div>';
+      }
+      html+='</div>';
+      el.innerHTML=html;
+    }).catch(function(){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Ошибка загрузки</div>';});
+  },
+
+  // ── Payroll ────────────────────────────────────────────────────
+  openPayroll:function(){
+    App.setTab('payroll',null);
+  },
+
+  prPrevMonth:function(){
+    App.s.prMonth--;
+    if(App.s.prMonth<1){App.s.prMonth=12;App.s.prYear--;}
+    App.loadPayroll();
+  },
+  prNextMonth:function(){
+    App.s.prMonth++;
+    if(App.s.prMonth>12){App.s.prMonth=1;App.s.prYear++;}
+    App.loadPayroll();
+  },
+
+  loadPayroll:function(){
+    var lbl=document.getElementById('payroll-period-label');
+    var mnNames=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    if(lbl)lbl.textContent=mnNames[(App.s.prMonth||1)-1]+' '+App.s.prYear;
+    var sumEl=document.getElementById('payroll-summary');
+    var listEl=document.getElementById('payroll-list');
+    if(sumEl)sumEl.innerHTML='<div class="skel" style="height:60px;border-radius:14px;"></div>';
+    if(listEl)listEl.innerHTML='<div class="skel" style="height:200px;border-radius:14px;margin-top:12px;"></div>';
+    gs('getSalaryCalc',{ssId:App.s.ssId,year:App.s.prYear,month:App.s.prMonth}).then(function(r){
+      var emps=r.employees||[];
+      var total=r.totalToPay||0;
+      if(sumEl){
+        sumEl.innerHTML=
+          '<div style="background:var(--card);border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">'+
+            '<div><div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">К выплате итого</div>'+
+              '<div style="font-size:26px;font-weight:800;color:var(--neg);margin-top:4px;">₽ '+fmtFull(total)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);">'+emps.length+' сотрудников</div></div>'+
+            (emps.length?'<button onclick="App.openPayAllSalary('+total+')" style="padding:10px 18px;background:var(--neg);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">Выплатить всем</button>':'')+
+          '</div>';
+      }
+      if(!listEl)return;
+      if(!emps.length){
+        listEl.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);"><div style="font-size:32px;margin-bottom:12px;">👥</div>Заполните табель, чтобы рассчитать зарплаты</div>';
+        return;
+      }
+      listEl.innerHTML=emps.map(function(e){
+        var stColor=e.toPay>0?'var(--neg)':'var(--muted)';
+        return '<div style="background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">'+
+            '<div><div style="font-size:16px;font-weight:700;">'+App._e(e.name)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);margin-top:2px;">'+
+                'П:'+e.daysP+' О:'+e.daysO+' Б:'+e.daysB+' Отп:'+e.daysOt+' · '+e.totalHours+'ч</div></div>'+
+            '<div style="text-align:right;">'+
+              '<div style="font-size:18px;font-weight:800;color:'+stColor+';">₽ '+fmtFull(e.toPay)+'</div>'+
+              '<div style="font-size:11px;color:var(--muted);">начислено: ₽ '+fmtFull(e.baseSalary)+'</div>'+
+            '</div>'+
+          '</div>'+
+          '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+
+            (e.advances>0?'<span style="font-size:12px;background:var(--surface-2);border-radius:8px;padding:3px 8px;color:var(--transfer);">Аванс: ₽'+fmtFull(e.advances)+'</span>':'')+
+            (e.penalties>0?'<span style="font-size:12px;background:var(--surface-2);border-radius:8px;padding:3px 8px;color:var(--neg);">Штраф: ₽'+fmtFull(e.penalties)+'</span>':'')+
+          '</div>'+
+          '<div style="display:flex;gap:8px;margin-top:10px;">'+
+            '<button onclick="App.openAdvanceForm(\''+App._e(e.name)+'\')" style="flex:1;padding:8px 0;background:var(--surface-2);border:none;border-radius:10px;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);">+ Аванс</button>'+
+            '<button onclick="App.openPenaltyForm(\''+App._e(e.name)+'\')" style="flex:1;padding:8px 0;background:var(--surface-2);border:none;border-radius:10px;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);">+ Штраф</button>'+
+            '<button onclick="App.openPayOneSalary(\''+App._e(e.name)+'\','+e.toPay+')" style="flex:1;padding:8px 0;background:'+(e.toPay>0?'var(--neg)':'var(--surface-2)')+';color:'+(e.toPay>0?'#fff':'var(--muted)')+';border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Выплатить</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+    });
+  },
+
+  openAdvanceForm:function(empName){
+    App.openModal(
+      '<div class="modal-title">Аванс — '+App._e(empName)+'</div>'+
+      '<div class="field"><label>Сумма (₽)</label><input type="number" id="adv-amt" placeholder="0"></div>'+
+      '<div class="field"><label>Счёт списания</label><select id="adv-acc">'+
+        (App.s.accounts||[]).filter(function(a){return a.status==='active';}).map(function(a){return '<option value="'+App._e(a.name)+'">'+App._e(a.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<div class="field"><label>Комментарий</label><input type="text" id="adv-comment" placeholder="…"></div>'+
+      '<button class="btn-primary" onclick="App._saveAdvance(\''+App._e(empName)+'\')">Сохранить аванс</button>'
+    );
+  },
+
+  _saveAdvance:function(empName){
+    var amt=parseFloat(document.getElementById('adv-amt').value)||0;
+    var acc=document.getElementById('adv-acc').value;
+    var comment=document.getElementById('adv-comment').value.trim();
+    if(amt<=0){App.toast('Введите сумму',true);return;}
+    gs('saveAdvance',{ssId:App.s.ssId,employee:empName,amount:amt,account:acc,comment:comment,year:App.s.prYear,month:App.s.prMonth}).then(function(){
+      App.toast('Аванс записан ✓');App.closeModal();App.loadPayroll();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  openPenaltyForm:function(empName){
+    App.openModal(
+      '<div class="modal-title">Штраф — '+App._e(empName)+'</div>'+
+      '<div class="field"><label>Сумма (₽)</label><input type="number" id="pen-amt" placeholder="0"></div>'+
+      '<div class="field"><label>Причина</label><input type="text" id="pen-reason" placeholder="Опоздание, нарушение…"></div>'+
+      '<button class="btn-primary" onclick="App._savePenalty(\''+App._e(empName)+'\')">Добавить штраф</button>'
+    );
+  },
+
+  _savePenalty:function(empName){
+    var amt=parseFloat(document.getElementById('pen-amt').value)||0;
+    var reason=document.getElementById('pen-reason').value.trim();
+    if(amt<=0){App.toast('Введите сумму',true);return;}
+    gs('savePenalty',{ssId:App.s.ssId,employee:empName,amount:amt,reason:reason,year:App.s.prYear,month:App.s.prMonth}).then(function(){
+      App.toast('Штраф записан ✓');App.closeModal();App.loadPayroll();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  openPayOneSalary:function(empName,amount){
+    if(amount<=0){App.toast('Нечего выплачивать',true);return;}
+    App.openModal(
+      '<div class="modal-title">Выплата зарплаты</div>'+
+      '<div style="font-size:22px;font-weight:800;text-align:center;padding:12px 0;color:var(--neg);">₽ '+fmtFull(amount)+'</div>'+
+      '<div style="text-align:center;font-size:14px;color:var(--muted);margin-bottom:16px;">'+App._e(empName)+'</div>'+
+      '<div class="field"><label>Счёт списания</label><select id="pay-emp-acc">'+
+        (App.s.accounts||[]).filter(function(a){return a.status==='active';}).map(function(a){return '<option value="'+App._e(a.name)+'">'+App._e(a.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<button class="btn-primary" onclick="App._payOneSalary(\''+App._e(empName)+'\','+amount+')">Выплатить ₽ '+fmtFull(amount)+'</button>'
+    );
+  },
+
+  _payOneSalary:function(empName,amount){
+    var acc=document.getElementById('pay-emp-acc').value;
+    gs('payEmployeeSalary',{ssId:App.s.ssId,employee:empName,amount:amount,account:acc}).then(function(){
+      App.toast('Зарплата выплачена ✓');App.closeModal();App.loadPayroll();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  openPayAllSalary:function(total){
+    App.openModal(
+      '<div class="modal-title">Выплата всем сотрудникам</div>'+
+      '<div style="font-size:22px;font-weight:800;text-align:center;padding:12px 0;color:var(--neg);">₽ '+fmtFull(total)+'</div>'+
+      '<div class="field"><label>Счёт списания</label><select id="payall-acc">'+
+        (App.s.accounts||[]).filter(function(a){return a.status==='active';}).map(function(a){return '<option value="'+App._e(a.name)+'">'+App._e(a.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<button class="btn-primary" onclick="App._payAllSalary('+total+')">Выплатить всем ₽ '+fmtFull(total)+'</button>'
+    );
+  },
+
+  _payAllSalary:function(total){
+    var acc=document.getElementById('payall-acc').value;
+    gs('paySalaryAll',{ssId:App.s.ssId,account:acc,year:App.s.prYear,month:App.s.prMonth}).then(function(r){
+      App.toast('Выплачено '+(r.paid||0)+' сотрудникам ✓');App.closeModal();App.loadPayroll();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Inventory ──────────────────────────────────────────────────
+  openInventory:function(){
+    App.setTab('inventory',null);
+  },
+
+  loadInventory:function(){
+    var listEl=document.getElementById('inv-list');
+    var statsEl=document.getElementById('inv-stats');
+    if(listEl)listEl.innerHTML='<div class="skel" style="height:200px;border-radius:14px;"></div>';
+    gs('getInventory',{ssId:App.s.ssId}).then(function(r){
+      var items=r.items||[];
+      App.s._invItems=items;
+      if(statsEl){
+        var lowStock=items.filter(function(i){return i.minQty>0&&i.qty<=i.minQty;});
+        statsEl.textContent=items.length+' позиций · стоимость: ₽'+fmtFull(r.totalValue||0)+(lowStock.length?' · ⚠️ '+lowStock.length+' мало':'');
+      }
+      App._invRender(items);
+    });
+  },
+
+  _invSearch:function(q){
+    var items=App.s._invItems||[];
+    if(!q)return App._invRender(items);
+    q=q.toLowerCase();
+    App._invRender(items.filter(function(i){return (i.name||'').toLowerCase().includes(q)||(i.category||'').toLowerCase().includes(q);}));
+  },
+
+  _invRender:function(items){
+    var listEl=document.getElementById('inv-list');
+    if(!listEl)return;
+    if(!items.length){
+      listEl.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);"><div style="font-size:32px;margin-bottom:12px;">📦</div>Нет товаров. Добавьте первый товар.</div>';
+      return;
+    }
+    var byGroup={};
+    items.forEach(function(i){var g=i.category||'Без категории';if(!byGroup[g])byGroup[g]=[];byGroup[g].push(i);});
+    listEl.innerHTML=Object.entries(byGroup).map(function(entry){
+      var g=entry[0],gItems=entry[1];
+      return '<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:10px 0 6px;">'+App._e(g)+'</div>'+
+        gItems.map(function(item){
+          var low=item.minQty>0&&item.qty<=item.minQty;
+          var margin=item.sellPrice>0&&item.costPrice>0?Math.round((item.sellPrice-item.costPrice)/item.sellPrice*100):0;
+          return '<div style="background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:8px;"'+
+            ' onclick="App.openInventoryForm(\''+App._e(JSON.stringify(item).replace(/'/g,'&#39;'))+'\')">'+
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;">'+
+              '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(item.name)+'</div>'+
+                '<div style="font-size:12px;color:var(--muted);margin-top:2px;">'+
+                  (item.costPrice?'Себест.: ₽'+fmtFull(item.costPrice)+' ':'')+
+                  (item.sellPrice?'Продажа: ₽'+fmtFull(item.sellPrice)+' ':'')+
+                  (margin?'Наценка: '+margin+'%':'')+
+                '</div></div>'+
+              '<div style="text-align:right;min-width:70px;">'+
+                '<div style="font-size:22px;font-weight:800;color:'+(low?'var(--neg)':item.qty===0?'var(--muted)':'var(--ink)')+';">'+item.qty+'</div>'+
+                '<div style="font-size:12px;color:var(--muted);">'+App._e(item.unit||'шт')+
+                  (low?' ⚠️':'')+
+                '</div>'+
+              '</div>'+
+            '</div>'+
+            '<div style="display:flex;gap:6px;margin-top:10px;">'+
+              '<button onclick="event.stopPropagation();App._invQtyChange(\''+item.id+'\',-1)" style="flex:1;padding:7px;background:var(--surface-2);border:none;border-radius:10px;font-size:16px;cursor:pointer;">−</button>'+
+              '<button onclick="event.stopPropagation();App._invQtyChange(\''+item.id+'\',1)" style="flex:1;padding:7px;background:var(--surface-2);border:none;border-radius:10px;font-size:16px;cursor:pointer;">+</button>'+
+              '<button onclick="event.stopPropagation();App.deleteInventoryItem(\''+item.id+'\')" style="flex:1;padding:7px;background:var(--surface-2);border:none;border-radius:10px;font-size:13px;cursor:pointer;color:var(--neg);">✕</button>'+
+            '</div>'+
+          '</div>';
+        }).join('');
+    }).join('');
+  },
+
+  _invQtyChange:function(id,delta){
+    gs('adjustInventoryQty',{ssId:App.s.ssId,id:id,delta:delta}).then(function(){App.loadInventory();}).catch(function(e){App.toast(e.message,true);});
+  },
+
+  openInventoryForm:function(itemJson){
+    var item=null;try{if(itemJson)item=typeof itemJson==='string'?JSON.parse(itemJson):itemJson;}catch(_){}
+    App.openModal(
+      '<div class="modal-title">'+(item?'Редактировать товар':'Новый товар')+'</div>'+
+      '<div class="field"><label>Название</label><input type="text" id="inv-name" value="'+App._e((item&&item.name)||'')+'" placeholder="Молоко 3.2%"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Кол-во</label><input type="number" id="inv-qty" value="'+App._e(String((item&&item.qty)||0))+'"></div>'+
+        '<div class="field" style="margin:0;"><label>Единица</label><input type="text" id="inv-unit" value="'+App._e((item&&item.unit)||'шт')+'" placeholder="шт"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Себестоимость ₽</label><input type="number" id="inv-cost" value="'+App._e(String((item&&item.costPrice)||''))+'" placeholder="0"></div>'+
+        '<div class="field" style="margin:0;"><label>Цена продажи ₽</label><input type="number" id="inv-sell" value="'+App._e(String((item&&item.sellPrice)||''))+'" placeholder="0"></div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Категория</label><input type="text" id="inv-cat" value="'+App._e((item&&item.category)||'')+'" placeholder="Молочные"></div>'+
+        '<div class="field" style="margin:0;"><label>Минимум (алерт)</label><input type="number" id="inv-min" value="'+App._e(String((item&&item.minQty)||''))+'" placeholder="0"></div>'+
+      '</div>'+
+      '<button class="btn-primary" onclick="App._saveInventoryItem('+(item?'\''+item.id+'\'':'')+')">Сохранить</button>'+
+      (item?'<button onclick="App.deleteInventoryItem(\''+item.id+'\')" style="width:100%;margin-top:8px;padding:12px;border-radius:14px;border:1.5px solid var(--neg);background:none;color:var(--neg);font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);">Удалить товар</button>':'')
+    );
+  },
+
+  _saveInventoryItem:function(id){
+    var name=document.getElementById('inv-name').value.trim();
+    var qty=parseFloat(document.getElementById('inv-qty').value)||0;
+    var unit=document.getElementById('inv-unit').value.trim()||'шт';
+    var costPrice=parseFloat(document.getElementById('inv-cost').value)||0;
+    var sellPrice=parseFloat(document.getElementById('inv-sell').value)||0;
+    var category=document.getElementById('inv-cat').value.trim();
+    var minQty=parseFloat(document.getElementById('inv-min').value)||0;
+    if(!name){App.toast('Введите название',true);return;}
+    gs('saveInventoryItem',{ssId:App.s.ssId,id:id||null,name:name,qty:qty,unit:unit,costPrice:costPrice,sellPrice:sellPrice,category:category,minQty:minQty}).then(function(){
+      App.toast('Товар сохранён ✓');App.closeModal();App.loadInventory();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  deleteInventoryItem:function(id){
+    if(!confirm('Удалить товар?'))return;
+    gs('deleteInventoryItem',{ssId:App.s.ssId,id:id}).then(function(){
+      App.toast('Удалено');App.closeModal();App.loadInventory();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Expense Approvals ──────────────────────────────────────────
+  openApprovals:function(){
+    App.s._approvalFilter='all';
+    App.setTab('approvals',null);
+  },
+
+  setApprovalFilter:function(status,btn){
+    App.s._approvalFilter=status;
+    document.querySelectorAll('[data-appst]').forEach(function(b){b.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+    App.loadApprovals();
+  },
+
+  loadApprovals:function(){
+    var el=document.getElementById('approvals-list');
+    if(!el)return;
+    el.innerHTML='<div class="skel" style="height:160px;border-radius:14px;"></div>';
+    var filter=App.s._approvalFilter;
+    gs('getApprovals',{ssId:App.s.ssId,status:filter==='all'?undefined:filter}).then(function(r){
+      var items=r.items||[];
+      if(!items.length){
+        el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);"><div style="font-size:32px;margin-bottom:12px;">✅</div>Нет заявок</div>';
+        return;
+      }
+      var stIcon={pending:'⏳',approved:'✅',rejected:'❌'};
+      var stColor={pending:'var(--transfer)',approved:'var(--pos)',rejected:'var(--neg)'};
+      el.innerHTML=items.map(function(item){
+        return '<div style="background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'+
+            '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;">'+App._e(item.title)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);margin-top:2px;">'+App._e(item.requestedBy)+' · '+fmtDate(item.date)+'</div>'+
+              (item.comment?'<div style="font-size:13px;color:var(--muted);margin-top:4px;">'+App._e(item.comment)+'</div>':'')+
+            '</div>'+
+            '<div style="text-align:right;min-width:90px;">'+
+              '<div style="font-size:17px;font-weight:800;">₽ '+fmtFull(item.amount)+'</div>'+
+              '<div style="font-size:12px;color:'+stColor[item.status]+';">'+(stIcon[item.status]||'')+' '+App._e(item.status)+'</div>'+
+            '</div>'+
+          '</div>'+
+          (item.status==='pending'?
+            '<div style="display:flex;gap:8px;margin-top:8px;">'+
+              '<button onclick="App._handleApproval(\''+item.id+'\',\'approve\')" style="flex:1;padding:9px;background:var(--pos);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">✓ Одобрить</button>'+
+              '<button onclick="App._handleApproval(\''+item.id+'\',\'reject\')" style="flex:1;padding:9px;background:var(--neg);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">✕ Отклонить</button>'+
+            '</div>':'')+
+        '</div>';
+      }).join('');
+    });
+  },
+
+  openApprovalForm:function(){
+    App.openModal(
+      '<div class="modal-title">Заявка на расход</div>'+
+      '<div class="field"><label>Название</label><input type="text" id="appr-title" placeholder="Покупка оборудования"></div>'+
+      '<div class="field"><label>Сумма (₽)</label><input type="number" id="appr-amt" placeholder="0"></div>'+
+      '<div class="field"><label>Категория</label><select id="appr-cat">'+
+        (App.s.settings&&App.s.settings.cats||[]).map(function(c){return'<option value="'+App._e(c)+'">'+App._e(c)+'</option>';}).join('')+
+      '</select></div>'+
+      '<div class="field"><label>Заявитель</label><input type="text" id="appr-who" placeholder="Иванов А." value="'+App._e((App.s.settings&&App.s.settings.cashiers&&App.s.settings.cashiers[0])||'')+'"></div>'+
+      '<div class="field"><label>Счёт</label><select id="appr-acc">'+
+        (App.s.accounts||[]).filter(function(a){return a.status==='active';}).map(function(a){return '<option value="'+App._e(a.id)+'">'+App._e(a.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<div class="field"><label>Комментарий</label><textarea id="appr-comment" rows="2" style="width:100%;padding:10px 12px;border-radius:12px;border:1.5px solid var(--sep);background:var(--surface-2);color:var(--ink);font-size:14px;outline:none;font-family:var(--font);resize:none;" placeholder="Описание расхода…"></textarea></div>'+
+      '<button class="btn-primary" onclick="App._saveApprovalRequest()">Отправить заявку</button>'
+    );
+  },
+
+  _saveApprovalRequest:function(){
+    var title=document.getElementById('appr-title').value.trim();
+    var amt=parseFloat(document.getElementById('appr-amt').value)||0;
+    var cat=document.getElementById('appr-cat').value;
+    var who=document.getElementById('appr-who').value.trim();
+    var accEl=document.getElementById('appr-acc');
+    var accountId=accEl?accEl.value:'';
+    var comment=document.getElementById('appr-comment').value.trim();
+    if(!title){App.toast('Введите название',true);return;}
+    if(amt<=0){App.toast('Введите сумму',true);return;}
+    gs('saveApprovalRequest',{ssId:App.s.ssId,title:title,amount:amt,category:cat,requestedBy:who,accountId:accountId,comment:comment}).then(function(){
+      App.toast('Заявка отправлена ✓');App.closeModal();App.loadApprovals();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  _handleApproval:function(id,action){
+    gs('approveRequest',{ssId:App.s.ssId,id:id,action:action}).then(function(){
+      App.toast(action==='approve'?'Одобрено ✓':'Отклонено');App.loadApprovals();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
