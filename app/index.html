@@ -1328,9 +1328,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <label>Пароль</label>
       <input type="password" id="si-pass" placeholder="Минимум 6 символов" autocomplete="current-password" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.emailSignIn()">
     </div>
-    <button id="signin-btn" class="btn-primary" onclick="App.emailSignIn()" style="font-size:15px;padding:15px;border-radius:14px;margin-top:4px;">Войти</button>
+    <button type="button" id="signin-btn" class="btn-primary" onclick="App.emailSignIn()" style="font-size:15px;padding:15px;border-radius:14px;margin-top:4px;">Войти</button>
     <div style="display:flex;justify-content:space-between;margin-top:14px;">
-      <button onclick="App.toggleSignupMode()" id="toggle-signup-btn" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Нет аккаунта? Создать</button>
+      <button type="button" onclick="App.toggleSignupMode()" id="toggle-signup-btn" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Нет аккаунта? Создать</button>
       <button onclick="App.resetPassword()" style="background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;padding:0;font-family:var(--font);">Забыл пароль</button>
     </div>
 
@@ -2313,8 +2313,10 @@ var App={
       }
       App.showScreen('scr-signin');
       if(errEl){
-        if(msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('CORS')){
-          errEl.textContent='⚠️ Нет соединения с сервером. В России может потребоваться VPN или настройка прокси (cloudflare/worker.js).';
+        var isNet=msg.includes('Failed to fetch')||msg.includes('NetworkError')||msg.includes('CORS')||msg.includes('соединения');
+        if(isNet){
+          errEl.innerHTML='⚠️ Нет соединения с сервером.<br><span style="font-size:12px;opacity:.8;">Supabase может быть недоступен без VPN в России.</span>'
+            +'<br><button type="button" onclick="App._bootApp()" style="margin-top:8px;padding:6px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">↻ Повторить</button>';
         } else {
           errEl.textContent='⚠️ Ошибка загрузки: '+msg;
         }

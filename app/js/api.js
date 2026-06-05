@@ -53,13 +53,18 @@ const API = (() => {
   // ── Auth / Init ────────────────────────────────────────────────
 
   async function initUserApp(p) {
+    // getSession() reads from localStorage — no network call, works offline/Russia
+    const { data: { session } } = await sb().auth.getSession();
+    const user = session && session.user;
+    if (!user) return { isNew: true, noSession: true };
+    // Network call only for orgs — separate try so a network error doesn't sign user out
     try {
-      const { data: { user } } = await sb().auth.getUser();
-      if (!user) return { isNew: true, noSession: true };
       const { data: orgs } = await sb().from('orgs').select('*').eq('user_id', user.id).order('created_at');
       if (!orgs || !orgs.length) return { isNew: true, profile: _profile(user) };
       return { isNew: false, profile: _profile(user), orgs: orgs.map(o => ({ id: o.id, name: o.name, ssId: o.id })) };
-    } catch (e) { return { isNew: true, noSession: true }; }
+    } catch (e) {
+      throw new Error('Нет соединения с сервером. Проверьте интернет.');
+    }
   }
 
   function _profile(user) {
