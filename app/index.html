@@ -1307,7 +1307,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 </div>
 
 <div id="scr-signin" class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(80% 60% at 50% 0%,rgba(94,92,230,.25) 0%,var(--bg) 60%),var(--bg);">
-  <div style="width:100%;max-width:380px;padding:0 24px;">
+  <div style="width:100%;max-width:360px;padding:0 24px;">
     <div style="text-align:center;margin-bottom:36px;">
       <div style="width:72px;height:72px;background:linear-gradient(135deg,#6e6bff 0%,var(--brand) 45%,#8f5cff 100%);border-radius:22px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 16px 48px -10px rgba(94,92,230,.7),0 0 0 1px rgba(255,255,255,.1) inset;">
         <svg width="38" height="38" viewBox="0 0 52 52" fill="none">
@@ -1315,47 +1315,27 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
           <line x1="17" y1="33" x2="35" y2="33" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity=".6"/>
         </svg>
       </div>
-      <div style="font-size:28px;font-weight:800;letter-spacing:-.04em;margin-bottom:8px;">Auron</div>
-      <div style="font-size:14px;color:var(--muted);line-height:1.5;max-width:26ch;margin:0 auto;">Финансовый учёт и аналитика для бизнеса</div>
+      <div style="font-size:28px;font-weight:800;letter-spacing:-.04em;margin-bottom:6px;">Auron</div>
+      <div style="font-size:14px;color:var(--muted);line-height:1.5;">Финансовый учёт и аналитика</div>
     </div>
 
-    <!-- Переключатель: Email / Google -->
-    <div id="signin-tabs" style="display:flex;background:var(--surface-2);border-radius:12px;padding:3px;margin-bottom:20px;">
-      <button id="tab-email-btn" onclick="App.signinTab('email')" style="flex:1;padding:8px;border:none;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;background:var(--brand);color:#fff;font-family:var(--font);transition:all .15s;">Email</button>
-      <button id="tab-google-btn" onclick="App.signinTab('google')" style="flex:1;padding:8px;border:none;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;background:none;color:var(--muted);font-family:var(--font);transition:all .15s;">Google</button>
+    <div id="signin-mode-label" style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:18px;">Вход</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="si-email" placeholder="you@example.com" autocomplete="email" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.emailSignIn()">
+    </div>
+    <div class="field">
+      <label>Пароль</label>
+      <input type="password" id="si-pass" placeholder="Минимум 6 символов" autocomplete="current-password" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.emailSignIn()">
+    </div>
+    <button id="signin-btn" class="btn-primary" onclick="App.emailSignIn()" style="font-size:15px;padding:15px;border-radius:14px;margin-top:4px;">Войти</button>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;">
+      <button onclick="App.toggleSignupMode()" id="toggle-signup-btn" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Нет аккаунта? Создать</button>
+      <button onclick="App.resetPassword()" style="background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;padding:0;font-family:var(--font);">Забыл пароль</button>
     </div>
 
-    <!-- Email форма -->
-    <div id="signin-email-form">
-      <div id="signin-mode-label" style="font-size:22px;font-weight:800;letter-spacing:-.02em;margin-bottom:18px;">Вход</div>
-      <div class="field">
-        <label>Email</label>
-        <input type="email" id="si-email" placeholder="you@example.com" autocomplete="email" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.emailSignIn()">
-      </div>
-      <div class="field" id="si-pass-field">
-        <label>Пароль</label>
-        <input type="password" id="si-pass" placeholder="Минимум 6 символов" autocomplete="current-password" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.emailSignIn()">
-      </div>
-      <button id="signin-btn" class="btn-primary" onclick="App.emailSignIn()" style="font-size:15px;padding:15px;border-radius:14px;margin-top:4px;">Войти</button>
-      <div style="display:flex;justify-content:space-between;margin-top:14px;">
-        <button onclick="App.toggleSignupMode()" id="toggle-signup-btn" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Нет аккаунта? Создать</button>
-        <button onclick="App.resetPassword()" style="background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;padding:0;font-family:var(--font);">Забыл пароль</button>
-      </div>
-    </div>
-
-    <!-- Google -->
-    <div id="signin-google-form" style="display:none;">
-      <button id="signin-google-btn" class="btn-primary" onclick="App.googleSignIn()" style="display:flex;align-items:center;justify-content:center;gap:12px;font-size:15px;padding:15px;border-radius:14px;">
-        <svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-        Войти через Google
-      </button>
-      <div style="margin-top:14px;padding:12px 14px;background:rgba(255,149,0,.1);border:1px solid rgba(255,149,0,.25);border-radius:12px;font-size:12.5px;color:var(--ink-2);line-height:1.6;">
-        ⚠️ В России Google OAuth может не работать без VPN. Используйте вкладку <b>Email</b>.
-      </div>
-    </div>
-
-    <div id="signin-error" style="display:none;margin-top:12px;padding:11px 14px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);text-align:left;"></div>
-    <div id="signin-success" style="display:none;margin-top:12px;padding:11px 14px;background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);text-align:left;"></div>
+    <div id="signin-error" style="display:none;margin-top:14px;padding:11px 14px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);"></div>
+    <div id="signin-success" style="display:none;margin-top:14px;padding:11px 14px;background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);"></div>
   </div>
 </div>
 
@@ -1925,7 +1905,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             <span class="settings-row-icon">👤</span>
             <div style="flex:1;">
               <div class="settings-row-label" id="settings-user-name">Аккаунт Google</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Данные хранятся в вашем Google Drive</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Данные хранятся в защищённой базе данных</div>
             </div>
           </div>
           <div class="settings-row" onclick="App.logout()" style="cursor:pointer;">
@@ -1934,7 +1914,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             <span class="settings-row-arrow" style="color:var(--neg);">›</span>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">При выходе данные остаются в Google Drive. При следующем входе всё восстановится.</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">При выходе данные сохраняются. При следующем входе всё восстановится.</div>
       </div>
     </div>
   </div>
@@ -2343,30 +2323,6 @@ var App={
   // ── Sign-in tabs ────────────────────────────────────────────────
   _siMode:'login', // 'login' | 'signup'
 
-  signinTab:function(tab){
-    var emailForm=document.getElementById('signin-email-form');
-    var googleForm=document.getElementById('signin-google-form');
-    var tabEmail=document.getElementById('tab-email-btn');
-    var tabGoogle=document.getElementById('tab-google-btn');
-    var active='background:var(--brand);color:#fff;';
-    var inactive='background:none;color:var(--muted);';
-    if(tab==='email'){
-      if(emailForm)emailForm.style.display='';
-      if(googleForm)googleForm.style.display='none';
-      if(tabEmail)tabEmail.style.cssText=active;
-      if(tabGoogle)tabGoogle.style.cssText=inactive;
-    }else{
-      if(emailForm)emailForm.style.display='none';
-      if(googleForm)googleForm.style.display='';
-      if(tabEmail)tabEmail.style.cssText=inactive;
-      if(tabGoogle)tabGoogle.style.cssText=active;
-    }
-    var errEl=document.getElementById('signin-error');
-    var okEl=document.getElementById('signin-success');
-    if(errEl)errEl.style.display='none';
-    if(okEl)okEl.style.display='none';
-  },
-
   toggleSignupMode:function(){
     App._siMode=App._siMode==='login'?'signup':'login';
     var lbl=document.getElementById('signin-mode-label');
@@ -2449,20 +2405,6 @@ var App={
     }
   },
 
-  googleSignIn:async function(){
-    var btn=document.getElementById('signin-google-btn');
-    var errEl=document.getElementById('signin-error');
-    if(btn){btn.disabled=true;btn.textContent='Перенаправление...';}
-    if(errEl)errEl.style.display='none';
-    try{
-      await AUTH.signIn();
-    }catch(e){
-      var msg=e.message||'Ошибка входа';
-      if(errEl){errEl.textContent='⚠️ '+msg;errEl.style.display='block';}
-      if(btn){btn.disabled=false;btn.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg> Войти через Google';}
-    }
-  },
-
   showScreen:function(id){
     document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
     document.getElementById(id).classList.add('active');
@@ -2471,7 +2413,7 @@ var App={
   },
 
   logout:function(){
-    if(!confirm('Выйти из аккаунта?\n\nВаши данные останутся в Google Drive. При следующем входе всё восстановится.'))return;
+    if(!confirm('Выйти из аккаунта?\n\nВаши данные сохранятся. При следующем входе всё восстановится.'))return;
     try{localStorage.removeItem('auron_ob');}catch(e){}
     App.s.ssId='';App.s.userName='';App.s.orgName='';App.s.settings={};
     if(window.AUTH)AUTH.signOut();
@@ -2579,7 +2521,7 @@ var App={
   },
 
   deleteOrg:function(ssId,name){
-    if(!confirm('Удалить организацию «'+name+'»?\n\nТаблица в Google Drive останется, только уберём её из списка.'))return;
+    if(!confirm('Удалить организацию «'+name+'»?\n\nВсе данные этой организации будут удалены безвозвратно.'))return;
     gs('deleteOrg',{ssId:ssId}).then(function(r){
       App.toast('Удалено ✓');
       // reload orgs list
@@ -5492,7 +5434,7 @@ var App={
     }
     if(btn){btn.disabled=true;}
     if(errEl)errEl.style.display='none';
-    setStep('Шаг 1/3 — Создаём профиль в Google Drive…');
+    setStep('Шаг 1/3 — Создаём профиль…');
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
       if(!r||!r.ssId)throw new Error('Не получили ID таблицы — попробуйте ещё раз');
       console.log('[obFinish] registerUser OK, ssId=',r.ssId);
@@ -5704,7 +5646,7 @@ var App={
       '<div class="ob-done-icon">'+obIcon('check',36,2.4)+'</div>'+
       '<div class="ob-eyebrow">Готово</div>'+
       '<h1 class="ob-h1">'+(d.company.name?App._e(d.company.name):'Ваш бизнес')+' настроен</h1>'+
-      '<p class="ob-sub">Рабочее пространство собрано под '+(type?type.shortName:'ваш бизнес')+'. Сейчас создадим ваше хранилище в Google Drive.</p>'+
+      '<p class="ob-sub">Рабочее пространство собрано под '+(type?type.shortName:'ваш бизнес')+'. Сейчас настраиваем ваше рабочее пространство.</p>'+
       '<div class="ob-summary">'+
         '<div class="s"><div class="sk">Тип бизнеса</div><div class="sv">'+(type?type.title:'—')+'</div></div>'+
         '<div class="s"><div class="sk">Компания · точки</div><div class="sv">'+(d.company.name?App._e(d.company.name):'—')+', '+d.company.points+'</div></div>'+
@@ -5722,7 +5664,7 @@ var App={
         '</button>'+
       '</div>'+
       '<div style="text-align:center;margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.5">'+
-        'Данные изолированы в вашем Google Drive. Демо-цифры исчезнут после первой операции.'+
+        'Данные надёжно сохранены. Демо-цифры исчезнут после первой операции.'+
       '</div></div>';
   },
 
