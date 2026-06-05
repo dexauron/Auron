@@ -1448,7 +1448,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   <div class="app-body">
   <div class="topbar">
     <div class="topbar-left">
-      <div class="topbar-org" id="topbar-org-name" onclick="App.showScreen('scr-orgs')">Загрузка...</div>
+      <div class="topbar-org" id="topbar-org-name" onclick="App.openOrgQuickSwitch()" style="cursor:pointer;">Загрузка...</div>
       <div class="topbar-user" id="topbar-user"></div>
     </div>
     <div class="topbar-right">
@@ -2470,6 +2470,26 @@ var App={
   selectOrgById:function(ssId){
     var org=(App.s._orgs||[]).find(function(o){return String(o.ssId)===ssId;});
     if(org)App.selectOrg(org);
+  },
+
+  openOrgQuickSwitch:function(){
+    var orgs=App.s._orgs||[];
+    if(orgs.length<=1){App.showScreen('scr-orgs');return;}
+    var items=orgs.map(function(o){
+      var isCur=o.ssId===App.s.ssId;
+      return '<div onclick="App.closeModal();App.selectOrgById(\''+App._e(String(o.ssId||''))+'\');" style="display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;'+(isCur?'background:var(--surface-2);border-radius:10px;':'')+'">'+
+        '<div style="width:36px;height:36px;border-radius:10px;background:var(--brand-dim);color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;flex-shrink:0;">'+App._e(o.name.charAt(0))+'</div>'+
+        '<div style="flex:1;"><div style="font-size:15px;font-weight:700;">'+App._e(o.name)+'</div>'+
+          (isCur?'<div style="font-size:12px;color:var(--brand);">Активна</div>':'')+
+        '</div>'+
+        (isCur?'<span style="color:var(--brand);">✓</span>':'')+
+      '</div>';
+    }).join('');
+    App.openModal(
+      '<div class="modal-title">Переключить организацию</div>'+
+      items+
+      '<button onclick="App.closeModal();App.showScreen(\'scr-orgs\')" style="width:100%;margin-top:12px;padding:12px;border-radius:14px;border:1.5px solid var(--sep);background:none;color:var(--ink-2);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);">+ Добавить организацию</button>'
+    );
   },
 
   selectOrg:function(org){
@@ -4721,13 +4741,16 @@ var App={
     var emps=App.s.settings.employees||[];
     empEl.innerHTML=emps.map(function(e,i){
       var n=typeof e==='object'?e.name:e;
-      var sub=typeof e==='object'?(e.schedule?e.schedule+' ':'')+( e.dailySalary?'₽'+e.dailySalary+'/день':''):'';
-      return '<div class="settings-row">'+
+      var salType=typeof e==='object'?e.salaryType:'daily';
+      var salVal=typeof e==='object'?(salType==='monthly'?e.monthlySalary:salType==='hourly'?e.hourlyRate:e.dailySalary)||0:0;
+      var salLabel=salType==='monthly'?'₽'+fmtFull(salVal)+'/мес':salType==='hourly'?'₽'+fmtFull(salVal)+'/ч':'₽'+fmtFull(salVal)+'/день';
+      var sub=typeof e==='object'?(e.schedule?e.schedule+' ':'')+(salVal?salLabel:''):'';
+      return '<div class="settings-row" style="cursor:pointer;" onclick="App.openAddEmployee('+i+')">'+
         '<span class="settings-row-icon">🧑‍💼</span>'+
         '<div style="flex:1;"><div class="settings-row-label">'+App._e(n)+'</div>'+
           (sub?'<div style="font-size:12px;color:var(--text-2);">'+App._e(sub)+'</div>':'')+
         '</div>'+
-        '<span class="settings-row-action" onclick="App.s.settings.employees.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
+        '<span class="settings-row-arrow">›</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет сотрудников</span></div>';
   },
 
@@ -4806,32 +4829,64 @@ var App={
     App.s.settings.repStatuses.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Добавлено');
   },
 
-  openAddEmployee:function(){
-    App.openModal('<div class="modal-title">Новый сотрудник</div>'+
-      '<div class="field"><label>ФИО</label><input id="ne-name" type="text" placeholder="Иванова Анна"></div>'+
-      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-        '<div class="field" style="margin:0;"><label>Расписание</label><input id="ne-sched" type="text" placeholder="09:00-18:00"></div>'+
-        '<div class="field" style="margin:0;"><label>Дневная ставка (₽)</label><input id="ne-sal" type="number" placeholder="2500"></div>'+
-      '</div>'+
-      '<div class="field"><label>Частота выплат</label><select id="ne-freq">'+
-        '<option value="monthly">Раз в месяц</option><option value="biweekly">2 раза в месяц</option><option value="daily">Ежедневно</option>'+
+  openAddEmployee:function(editIdx){
+    var existingEmp=editIdx!=null?(App.s.settings.employees||[])[editIdx]:null;
+    var e=existingEmp||{};
+    App.openModal('<div class="modal-title">'+(existingEmp?'Редактировать':'Новый сотрудник')+'</div>'+
+      '<div class="field"><label>ФИО</label><input id="ne-name" type="text" placeholder="Иванова Анна" value="'+App._e(e.name||'')+'"></div>'+
+      '<div class="field"><label>Тип начисления</label><select id="ne-type" onchange="App._empTypeChange(this.value)">'+
+        '<option value="daily"'+(e.salaryType==='daily'||!e.salaryType?' selected':'')+'>Дневная ставка</option>'+
+        '<option value="monthly"'+(e.salaryType==='monthly'?' selected':'')+'>Оклад (в месяц)</option>'+
+        '<option value="hourly"'+(e.salaryType==='hourly'?' selected':'')+'>Почасовая ставка</option>'+
       '</select></div>'+
-      '<button class="btn-primary" onclick="App._saveEmployee()">Добавить</button>');
+      '<div id="ne-sal-wrap" class="field"><label id="ne-sal-label">'+(e.salaryType==='monthly'?'Оклад (₽/мес)':e.salaryType==='hourly'?'Ставка (₽/час)':'Дневная ставка (₽/день)')+'</label>'+
+        '<input id="ne-sal" type="number" placeholder="0" value="'+App._e(String(e.dailySalary||e.monthlySalary||e.hourlyRate||''))+'"></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Расписание</label><input id="ne-sched" type="text" placeholder="09:00-18:00" value="'+App._e(e.schedule||'')+'"></div>'+
+        '<div class="field" style="margin:0;"><label>Телефон</label><input id="ne-phone" type="tel" placeholder="+7 999 000 00 00" value="'+App._e(e.phone||'')+'"></div>'+
+      '</div>'+
+      '<button class="btn-primary" onclick="App._saveEmployee('+(editIdx!=null?editIdx:'null')+')">Сохранить</button>'+
+      (existingEmp?'<button onclick="App._deleteEmployee('+editIdx+')" style="width:100%;margin-top:8px;padding:12px;border-radius:14px;border:1.5px solid var(--neg);background:none;color:var(--neg);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);">Удалить сотрудника</button>':''));
   },
-  _saveEmployee:function(){
+
+  _empTypeChange:function(val){
+    var lbl=document.getElementById('ne-sal-label');
+    if(!lbl)return;
+    if(val==='monthly')lbl.textContent='Оклад (₽/мес)';
+    else if(val==='hourly')lbl.textContent='Ставка (₽/час)';
+    else lbl.textContent='Дневная ставка (₽/день)';
+  },
+
+  _deleteEmployee:function(idx){
+    if(!confirm('Удалить сотрудника?'))return;
+    var list=App.s.settings.employees||[];
+    list.splice(idx,1);
+    App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Удалено');
+  },
+
+  _saveEmployee:function(editIdx){
     var name=document.getElementById('ne-name').value.trim();
     if(!name){App.toast('Введите имя',true);return;}
+    var salType=document.getElementById('ne-type').value;
+    var salVal=parseFloat(document.getElementById('ne-sal').value)||0;
     var emp={name:name,schedule:document.getElementById('ne-sched').value.trim(),
-             dailySalary:parseFloat(document.getElementById('ne-sal').value)||0,
-             payFreq:document.getElementById('ne-freq').value};
+             phone:document.getElementById('ne-phone').value.trim(),
+             salaryType:salType,
+             dailySalary:salType==='daily'?salVal:0,
+             monthlySalary:salType==='monthly'?salVal:0,
+             hourlyRate:salType==='hourly'?salVal:0};
     if(!App.s.settings.employees)App.s.settings.employees=[];
-    App.s.settings.employees.push(emp);
+    if(editIdx!=null&&editIdx<App.s.settings.employees.length){
+      App.s.settings.employees[editIdx]=emp;
+    } else {
+      App.s.settings.employees.push(emp);
+    }
     // Also add to cashiers if not there
     if((App.s.settings.cashiers||[]).indexOf(name)<0){
       if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
       App.s.settings.cashiers.push(name);
     }
-    App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(name+' добавлен');
+    App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(name+' сохранён');
   },
 
   openAccountForm:function(id){
