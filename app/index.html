@@ -4466,6 +4466,7 @@ var App={
       if(!shifts.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🧾</div><div class="empty-text">Нет сохранённых смен</div></div>';return;}
       el.innerHTML=shifts.map(function(s){
         var rows=s.rows||[];var discCls=s.discrepancy===0?'zero':s.discrepancy>0?'pos':'neg';
+        var wyp=s.wyplatas||[];
         return '<div style="background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;">'+
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'+
             '<div>'+
@@ -4477,12 +4478,58 @@ var App={
               (s.discrepancy!==0?'<div class="kassa-diff '+discCls+'" style="font-size:12px;">'+(s.discrepancy>0?'+':'')+fmtFull(s.discrepancy)+'</div>':'<div style="font-size:12px;color:var(--text-2);">✓ 0</div>')+
             '</div>'+
           '</div>'+
-          (rows.length?'<div style="display:flex;gap:8px;flex-wrap:wrap;">'+rows.filter(function(r){return r.zAmount;}).map(function(row){
+          (rows.length?'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">'+rows.filter(function(r){return r.zAmount;}).map(function(row){
             return '<span style="font-size:12px;background:var(--bg);border-radius:8px;padding:3px 8px;color:var(--text-2);">'+App._e(row.account||'')+' ₽'+fmtFull(parseFloat(row.zAmount)||0)+'</span>';
           }).join('')+'</div>':'')+
+          '<div style="display:flex;gap:8px;">'+
+            '<button onclick="App.printZReport(\''+App._e(JSON.stringify(s).replace(/'/g,'&#39;'))+'\')" style="flex:1;padding:7px 0;background:var(--surface-2);border:none;border-radius:10px;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--font);">🖨 Печать Z</button>'+
+          '</div>'+
         '</div>';
       }).join('');
     });
+  },
+
+  // ── Print Z-Report ────────────────────────────────────────────
+  printZReport:function(shiftJson){
+    var s;try{s=typeof shiftJson==='string'?JSON.parse(shiftJson):shiftJson;}catch(_){App.toast('Ошибка данных',true);return;}
+    var rows=s.rows||[];var wyp=s.wyplatas||[];
+    var orgName=App._e(App.s.orgName||'Auron Finance');
+    var disc=s.discrepancy||0;
+    var html='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Z-Отчёт</title>'+
+      '<style>body{font-family:monospace;font-size:13px;max-width:380px;margin:0 auto;padding:20px;}'+
+      'h1{text-align:center;font-size:16px;margin:0 0 4px;}'+
+      '.center{text-align:center;}.sep{border-top:1px dashed #666;margin:8px 0;}'+
+      '.row{display:flex;justify-content:space-between;padding:2px 0;}'+
+      '.total{font-weight:bold;font-size:15px;}'+
+      '.disc-neg{color:red;}.disc-pos{color:green;}</style></head><body>'+
+      '<h1>'+orgName+'</h1>'+
+      '<div class="center">Z-ОТЧЁТ</div>'+
+      '<div class="center">'+App._e(fmtDate(s.date))+'</div>'+
+      '<div class="sep"></div>'+
+      '<div class="row"><span>Смена</span><span>'+App._e(s.shift||'')+'</span></div>'+
+      '<div class="row"><span>Кассир</span><span>'+App._e(s.cashier||'')+'</span></div>'+
+      '<div class="sep"></div>'+
+      '<div class="row"><b>Счёт</b><span><b>Z-отчёт</b></span><span><b>Факт</b></span></div>';
+    rows.forEach(function(r){
+      if(!r.zAmount&&!r.factAmount)return;
+      var d=(parseFloat(r.factAmount||0))-(parseFloat(r.zAmount||0));
+      html+='<div class="row"><span>'+App._e(r.account||'')+'</span><span>₽'+fmtFull(parseFloat(r.zAmount||0))+'</span><span>₽'+fmtFull(parseFloat(r.factAmount||0))+'</span></div>';
+    });
+    html+='<div class="sep"></div>'+
+      '<div class="row total"><span>Итого (Z)</span><span>₽ '+fmtFull(s.revenue||0)+'</span></div>'+
+      '<div class="row '+(disc<0?'disc-neg':disc>0?'disc-pos':'')+'" style="font-weight:'+(disc!==0?'bold':'normal')+'"><span>Расхождение</span><span>'+(disc>0?'+':'')+fmtFull(disc)+'</span></div>';
+    if(wyp.length){
+      html+='<div class="sep"></div><div><b>Выплаты с кассы:</b></div>';
+      wyp.forEach(function(w){
+        html+='<div class="row"><span>'+App._e(w.description||w.desc||'')+'</span><span>₽ '+fmtFull(w.amount||0)+'</span></div>';
+      });
+    }
+    html+='<div class="sep"></div>'+
+      '<div class="center" style="font-size:11px;color:#888;margin-top:8px;">Auron Finance · '+new Date().toLocaleString('ru')+'</div>'+
+      '<script>window.onload=function(){window.print();window.onfocus=function(){setTimeout(function(){window.close();},200);};}<\/script>'+
+      '</body></html>';
+    var w=window.open('','_blank','width=420,height=600');
+    if(w){w.document.write(html);w.document.close();}
   },
 
   // ── Report ────────────────────────────────────────────────────
