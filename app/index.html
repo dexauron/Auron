@@ -1297,7 +1297,6 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
 <script src="./js/config.js"></script>
 <script src="./js/auth.js"></script>
-<script src="./js/gapi.js"></script>
 <script src="./js/api.js"></script>
 </head>
 <body>
@@ -2179,12 +2178,12 @@ var App={
         if(e.key==='Escape')App.closeSheet();
       });
     }
-    // GIS popup flow — no redirect handling needed
+    // JWT-based auth: if signed in → boot, else try silent refresh, else show sign-in
     if(!AUTH.isSignedIn()){
-      // If user had a previous session, try silent token refresh first
-      if(localStorage.getItem('auron_ssid')){
-        AUTH.tryAutoSignIn().then(function(token){
-          if(token){
+      // If JWT exists but expired, try silent Google refresh to get new JWT
+      if(localStorage.getItem('auron_jwt')){
+        AUTH.tryAutoSignIn().then(function(jwt){
+          if(jwt){
             App._bootApp();
           }else{
             document.getElementById('loader').classList.add('hide');

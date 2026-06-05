@@ -1,26 +1,20 @@
 (() => {
   'use strict';
 
-  const KEY_TOKEN  = 'auron_token';
-  const KEY_EXPIRY = 'auron_expiry';
-  const KEY_SSID   = 'auron_ssid';
+  const KEY_JWT    = 'auron_jwt';
   const KEY_OB     = 'auron_ob';
-  const KEY_PROFILE= 'auron_profile';
-
-  const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+  const SCOPES     = 'openid email profile';
 
   let _tokenClient  = null;
   let _resolveToken = null;
   let _rejectToken  = null;
 
-  // Load GIS script dynamically
   function _loadGIS() {
     return new Promise((resolve, reject) => {
       if (window.google && window.google.accounts) { resolve(); return; }
       const s = document.createElement('script');
       s.src = 'https://accounts.google.com/gsi/client';
-      s.async = true;
-      s.defer = true;
+      s.async = true; s.defer = true;
       s.onload  = resolve;
       s.onerror = () => reject(new Error('Не удалось загрузить Google Identity Services'));
       document.head.appendChild(s);
@@ -34,77 +28,90 @@
       scope: SCOPES,
       callback: (resp) => {
         if (resp.error) {
-          const err = new Error(resp.error_description || resp.error);
-          if (_rejectToken) { _rejectToken(err); _rejectToken = null; _resolveToken = null; }
+          const e = new Error(resp.error_description || resp.error);
+          if (_rejectToken) { _rejectToken(e); _resolveToken = null; _rejectToken = null; }
           return;
         }
-        // Store token
-        localStorage.setItem(KEY_TOKEN, resp.access_token);
-        const exp = Date.now() + (parseInt(resp.expires_in || 3600) - 120) * 1000;
-        localStorage.setItem(KEY_EXPIRY, String(exp));
         if (_resolveToken) { _resolveToken(resp.access_token); _resolveToken = null; _rejectToken = null; }
       },
       error_callback: (err) => {
         const e = new Error((err && err.message) || 'Auth cancelled');
-        if (_rejectToken) { _rejectToken(e); _rejectToken = null; _resolveToken = null; }
+        if (_rejectToken) { _rejectToken(e); _resolveToken = null; _rejectToken = null; }
       }
     });
   }
 
-  // Show Google sign-in popup — returns Promise<token>
-  async function signIn() {
+  async function _getGoogleToken(prompt) {
     await _loadGIS();
     _initTokenClient();
     return new Promise((resolve, reject) => {
       _resolveToken = resolve;
       _rejectToken  = reject;
-      _tokenClient.requestAccessToken({ prompt: 'select_account consent' });
+      _tokenClient.requestAccessToken({ prompt });
     });
   }
 
-  // Try silent token refresh — no popup if user is still signed into Google
+  async function _exchangeForJWT(googleToken) {
+    const r = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ googleToken })
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || 'Ошибка сервера при входе');
+    }
+    const data = await r.json();
+    localStorage.setItem(KEY_JWT, data.jwt);
+    return data.jwt;
+  }
+
+  async function signIn() {
+    const googleToken = await _getGoogleToken('select_account consent');
+    return _exchangeForJWT(googleToken);
+  }
+
   async function tryAutoSignIn() {
     try {
-      await _loadGIS();
-      _initTokenClient();
-      return await new Promise((resolve) => {
-        _resolveToken = (token) => { _resolveToken = null; _rejectToken = null; resolve(token); };
-        _rejectToken = () => { _resolveToken = null; _rejectToken = null; resolve(null); };
-        _tokenClient.requestAccessToken({ prompt: '' });
-      });
+      // If JWT is still valid — no action needed
+      if (isSignedIn()) return localStorage.getItem(KEY_JWT);
+      // JWT expired — try silent Google token refresh
+      const googleToken = await _getGoogleToken('');
+      if (!googleToken) return null;
+      return await _exchangeForJWT(googleToken);
     } catch (e) {
       return null;
     }
   }
 
-  // Get a valid token (from cache only — expired token requires explicit re-sign-in)
-  async function getToken() {
-    const token  = localStorage.getItem(KEY_TOKEN);
-    const expiry = localStorage.getItem(KEY_EXPIRY);
-
-    if (token && expiry && Date.now() < Number(expiry)) return token;
-
-    // Token expired — clear stale data so the caller sees a clean Session expired error
-    [KEY_TOKEN, KEY_EXPIRY].forEach(k => { try { localStorage.removeItem(k); } catch (_) {} });
-    throw new Error('Session expired');
+  function isSignedIn() {
+    const jwt = localStorage.getItem(KEY_JWT);
+    if (!jwt) return false;
+    try {
+      const payload = JSON.parse(atob(jwt.split('.')[1]));
+      return payload.exp * 1000 > Date.now() + 60000; // 1 min buffer
+    } catch (_) {
+      return false;
+    }
   }
 
-  // Check if we have a valid non-expired token
-  function isSignedIn() {
-    const token  = localStorage.getItem(KEY_TOKEN);
-    const expiry = localStorage.getItem(KEY_EXPIRY);
-    return !!(token && expiry && Date.now() < Number(expiry));
+  function getToken() {
+    if (!isSignedIn()) throw new Error('Session expired');
+    return localStorage.getItem(KEY_JWT);
   }
 
   function signOut() {
-    const token = localStorage.getItem(KEY_TOKEN);
-    if (token && window.google && google.accounts && google.accounts.oauth2) {
-      try { google.accounts.oauth2.revoke(token, () => {}); } catch (_) {}
-    }
-    [KEY_TOKEN, KEY_EXPIRY, KEY_SSID, KEY_OB, KEY_PROFILE].forEach(k => {
+    try {
+      const jwt = localStorage.getItem(KEY_JWT);
+      if (jwt && window.google && google.accounts && google.accounts.oauth2) {
+        // No Google token to revoke (we only exchanged for JWT)
+      }
+    } catch (_) {}
+    [KEY_JWT, KEY_OB, 'auron_ssid', 'auron_token', 'auron_expiry', 'auron_profile',
+     'auron_user_name', 'auron_ob'].forEach(k => {
       try { localStorage.removeItem(k); } catch (_) {}
     });
   }
 
-  window.AUTH = { signIn, tryAutoSignIn, getToken, isSignedIn, signOut };
+  window.AUTH = { signIn, tryAutoSignIn, isSignedIn, getToken, signOut };
 })();
