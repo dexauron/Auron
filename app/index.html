@@ -2387,7 +2387,11 @@ var App={
         if(tog)tog.textContent='Нет аккаунта? Создать';
       }else{
         await AUTH.signInEmail(email,pass);
-        // onAuthStateChange сработает и загрузит приложение
+        // Явно запускаем загрузку — не ждём onAuthStateChange
+        var loader=document.getElementById('loader');
+        if(loader)loader.classList.remove('hide');
+        App._bootApp();
+        return; // не восстанавливаем кнопку — loader уже показан
       }
     }catch(e){
       var msg=e.message||'Ошибка';

@@ -1,109 +1,123 @@
 (() => {
   'use strict';
 
-  // One-time migration: wipe stale Google OAuth sessions so init() won't
-  // see them as valid and trigger _bootApp → obRender crash.
-  (function _clearGoogleSessions() {
-    try {
-      const keys = Object.keys(localStorage);
-      for (const k of keys) {
-        if (!k.includes('auth')) continue;
-        try {
-          const v = JSON.parse(localStorage.getItem(k));
-          const provider =
-            (v && v.user && v.user.app_metadata && v.user.app_metadata.provider) ||
-            (v && v.currentSession && v.currentSession.user &&
-             v.currentSession.user.app_metadata &&
-             v.currentSession.user.app_metadata.provider);
-          if (provider === 'google') localStorage.removeItem(k);
-        } catch (_) {}
-      }
-    } catch (_) {}
-  })();
-
-  let _sb      = null;
+  const SESSION_KEY = 'auron_v2_session';
   let _session = null;
-  let _bootLock = false;  // prevent double _bootApp calls
+  let _client  = null;
 
-  function _client() {
-    if (!_sb) {
-      const url = window.SUPABASE_PROXY_URL || window.SUPABASE_URL;
-      _sb = window.supabase.createClient(url, window.SUPABASE_ANON_KEY, {
-        auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: true }
+  // ── helpers ──────────────────────────────────────────────────────
+  function _base() { return (window.SUPABASE_PROXY_URL || window.SUPABASE_URL) + '/auth/v1'; }
+  function _key()  { return window.SUPABASE_ANON_KEY; }
+
+  async function _post(path, body) {
+    let res, data;
+    try {
+      res = await fetch(_base() + path, {
+        method:  'POST',
+        headers: { apikey: _key(), Authorization: 'Bearer ' + _key(), 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body)
       });
+      data = await res.json();
+    } catch(e) {
+      throw new Error('Нет соединения с сервером (' + e.message + ')');
     }
-    return _sb;
+    if (!res.ok) {
+      throw new Error(data.error_description || data.msg || data.error || ('HTTP ' + res.status));
+    }
+    return data;
   }
 
-  async function init() {
-    const sb = _client();
-    const { data } = await sb.auth.getSession();
-    _session = data.session;
-
-    sb.auth.onAuthStateChange((event, session) => {
-      _session = session;
-      if (event === 'PASSWORD_RECOVERY' && window.App) {
-        // User clicked password-reset link — show new-password form
-        App.showScreen && App.showScreen('scr-signin');
-        App.showPasswordReset && App.showPasswordReset();
-        return;
-      }
-      if (event === 'SIGNED_IN' && window.App && App._bootApp) {
-        if (_bootLock) return;  // already booting from init()
-        const loader = document.getElementById('loader');
-        if (loader) loader.classList.remove('hide');
-        App._bootApp();
-      } else if (event === 'SIGNED_OUT' && window.App) {
-        _bootLock = false;
-        App.showScreen && App.showScreen('scr-signin');
-      }
+  function _mkClient(token) {
+    const url = window.SUPABASE_PROXY_URL || window.SUPABASE_URL;
+    return window.supabase.createClient(url, _key(), {
+      global: { headers: { Authorization: 'Bearer ' + token } },
+      auth:   { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
     });
+  }
 
-    if (_session) _bootLock = true;  // mark that init() will boot
-    return !!_session;
+  function _save(data) {
+    _session = {
+      access_token:  data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at:    Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+      user:          data.user
+    };
+    _client = _mkClient(_session.access_token);
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(_session)); } catch(_) {}
+  }
+
+  // ── public API ───────────────────────────────────────────────────
+  async function init() {
+    // Remove old Supabase-JS sessions (Google OAuth or old format)
+    try {
+      Object.keys(localStorage).forEach(k => {
+        if (k === SESSION_KEY) return;
+        if (k.includes('supabase') || k.includes('-auth-token') || k.includes('auron_token')) {
+          try { localStorage.removeItem(k); } catch(_) {}
+        }
+      });
+    } catch(_) {}
+
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      if (!saved.access_token) return false;
+
+      const now = Math.floor(Date.now() / 1000);
+
+      // Token still valid?
+      if (saved.expires_at && now < saved.expires_at - 300) {
+        _session = saved;
+        _client  = _mkClient(saved.access_token);
+        return true;
+      }
+
+      // Try refresh
+      if (saved.refresh_token) {
+        const data = await _post('/token?grant_type=refresh_token', { refresh_token: saved.refresh_token });
+        _save(data);
+        return true;
+      }
+    } catch(e) {
+      console.warn('[auth] restore failed:', e.message);
+      try { localStorage.removeItem(SESSION_KEY); } catch(_) {}
+    }
+    return false;
   }
 
   async function signInEmail(email, password) {
-    const { data, error } = await _client().auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-    _session = data.session;
+    const data = await _post('/token?grant_type=password', { email, password });
+    _save(data);
     return data;
   }
 
   async function signUpEmail(email, password) {
-    const { data, error } = await _client().auth.signUp({ email, password });
-    if (error) throw new Error(error.message);
-    return data;
+    return await _post('/signup', { email, password });
   }
 
   async function resetPassword(email) {
-    const { error } = await _client().auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.href.split('#')[0]
-    });
-    if (error) throw new Error(error.message);
+    await _post('/recover', { email, redirect_to: window.location.href.split('#')[0] });
   }
-
-  function isSignedIn() { return !!_session; }
-
-  function getToken() {
-    if (!_session) throw new Error('Session expired');
-    return _session.access_token;
-  }
-
-  function client() { return _client(); }
 
   async function signOut() {
+    try {
+      if (_session?.access_token) {
+        await fetch(_base() + '/logout', {
+          method: 'POST', headers: { apikey: _key(), Authorization: 'Bearer ' + _session.access_token }
+        });
+      }
+    } catch(_) {}
     _session = null;
-    _bootLock = false;
-    try { localStorage.clear(); } catch (_) {}
-    await _client().auth.signOut();
+    _client  = null;
+    try { localStorage.removeItem(SESSION_KEY); } catch(_) {}
   }
 
-  async function tryAutoSignIn() {
-    const { data } = await _client().auth.getSession();
-    _session = data.session;
-    return _session ? _session.access_token : null;
-  }
+  function isSignedIn()  { return !!_session; }
+  function getToken()    { if (!_session) throw new Error('Session expired'); return _session.access_token; }
+  function getUser()     { return _session && _session.user; }
+  function client()      { return _client; }
+  async function tryAutoSignIn() { return _session?.access_token || null; }
 
-  window.AUTH = { init, signInEmail, signUpEmail, resetPassword, isSignedIn, getToken, signOut, tryAutoSignIn, client };
+  window.AUTH = { init, signInEmail, signUpEmail, resetPassword, signOut, isSignedIn, getToken, getUser, client, tryAutoSignIn };
 })();

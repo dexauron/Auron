@@ -53,11 +53,8 @@ const API = (() => {
   // ── Auth / Init ────────────────────────────────────────────────
 
   async function initUserApp(p) {
-    // getSession() reads from localStorage — no network call, works offline/Russia
-    const { data: { session } } = await sb().auth.getSession();
-    const user = session && session.user;
+    const user = AUTH.getUser();
     if (!user) return { isNew: true, noSession: true };
-    // Network call only for orgs — separate try so a network error doesn't sign user out
     try {
       const { data: orgs } = await sb().from('orgs').select('*').eq('user_id', user.id).order('created_at');
       if (!orgs || !orgs.length) return { isNew: true, profile: _profile(user) };
@@ -72,7 +69,7 @@ const API = (() => {
   }
 
   async function registerUser(p) { return _err(async () => {
-    const { data: { user } } = await sb().auth.getUser();
+    const user = AUTH.getUser();
     if (!user) return { __error: 'Not signed in' };
     const orgName = s(p.orgName) || s(p.company && p.company.name) || 'Мой магазин';
     const { data: existing } = await sb().from('orgs').select('*').eq('user_id', user.id).order('created_at').limit(1);
@@ -92,7 +89,7 @@ const API = (() => {
   }
 
   async function createOrg(p) { return _err(async () => {
-    const { data: { user } } = await sb().auth.getUser();
+    const user = AUTH.getUser();
     if (!user) return { __error: 'Not signed in' };
     const { data: org, error } = await sb().from('orgs').insert({ name: s(p.name), user_id: user.id }).select().single();
     if (error) return { __error: error.message };
