@@ -113,6 +113,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   padding:calc(var(--safe-top) + 60px) 24px calc(var(--safe-bot) + 32px);
 }
 .screen.active{display:block;}
+#scr-signin.active{display:flex;}
 .screen-title{font-size:32px;font-weight:800;margin-bottom:8px;letter-spacing:-.03em;}
 .screen-sub{font-size:15px;color:var(--muted);margin-bottom:36px;line-height:1.6;}
 .field{margin-bottom:16px;}
@@ -1306,7 +1307,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   <p>Финансовый учёт</p>
 </div>
 
-<div id="scr-signin" class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(80% 60% at 50% 0%,rgba(94,92,230,.25) 0%,var(--bg) 60%),var(--bg);">
+<div id="scr-signin" class="screen" style="flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(80% 60% at 50% 0%,rgba(94,92,230,.25) 0%,var(--bg) 60%),var(--bg);">
   <div style="width:100%;max-width:360px;padding:0 24px;">
     <div style="text-align:center;margin-bottom:36px;">
       <div style="width:72px;height:72px;background:linear-gradient(135deg,#6e6bff 0%,var(--brand) 45%,#8f5cff 100%);border-radius:22px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;box-shadow:0 16px 48px -10px rgba(94,92,230,.7),0 0 0 1px rgba(255,255,255,.1) inset;">
