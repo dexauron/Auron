@@ -9,6 +9,13 @@
   function _base() { return (window.SUPABASE_PROXY_URL || window.SUPABASE_URL) + '/auth/v1'; }
   function _key()  { return window.SUPABASE_ANON_KEY; }
 
+  // Extract payload from JWT without verification (for user info only)
+  function _parseJwt(tok) {
+    try {
+      return JSON.parse(atob(tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    } catch(_) { return {}; }
+  }
+
   async function _post(path, body) {
     let res, data;
     try {
@@ -36,11 +43,17 @@
   }
 
   function _save(data) {
+    // Supabase sometimes omits 'user' from the token response — fall back to JWT payload
+    let user = data.user;
+    if (!user && data.access_token) {
+      const p = _parseJwt(data.access_token);
+      if (p.sub) user = { id: p.sub, email: p.email || '', role: p.role || 'authenticated', aud: p.aud || 'authenticated' };
+    }
     _session = {
       access_token:  data.access_token,
       refresh_token: data.refresh_token,
       expires_at:    Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
-      user:          data.user
+      user:          user
     };
     _client = _mkClient(_session.access_token);
     try { localStorage.setItem(SESSION_KEY, JSON.stringify(_session)); } catch(_) {}
