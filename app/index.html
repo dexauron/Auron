@@ -2131,7 +2131,11 @@ function gs(fn,args){
   return new Promise(function(ok,fail){
     var fn_=window.API&&window.API[fn];
     if(typeof fn_!=='function'){fail(new Error('Unknown API function: '+fn));return;}
-    fn_(args||{}).then(function(r){
+    // Normalize: ssId→orgId, flatten data:{} into top level
+    var p=Object.assign({},args||{});
+    if(!p.orgId&&p.ssId)p.orgId=p.ssId;
+    if(p.data&&typeof p.data==='object')Object.assign(p,p.data);
+    fn_(p).then(function(r){
       if(r&&r.__error)fail(new Error(r.__error));else ok(r);
     }).catch(fail);
   });
