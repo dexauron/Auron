@@ -2367,11 +2367,21 @@ var App={
     var okEl=document.getElementById('signin-success');
     if(errEl)errEl.style.display='none';
     if(okEl)okEl.style.display='none';
+
+    // Debug: show step-by-step what's happening
+    function dbg(msg){
+      if(errEl){errEl.style.display='block';errEl.style.background='rgba(94,92,230,.15)';errEl.style.borderColor='rgba(94,92,230,.4)';
+        errEl.innerHTML=(errEl.innerHTML||'')+'<div>→ '+msg+'</div>';}
+      console.log('[signin]', msg);
+    }
+    dbg('кнопка нажата, email='+email.substring(0,5)+'...');
+
     if(!email||!pass){
-      if(errEl){errEl.textContent='⚠️ Введите email и пароль';errEl.style.display='block';}
+      if(errEl){errEl.style.background='rgba(255,69,58,.12)';errEl.style.borderColor='rgba(255,69,58,.3)';errEl.textContent='⚠️ Введите email и пароль';}
       return;
     }
     if(btn){btn.disabled=true;btn.textContent=App._siMode==='signup'?'Создаём аккаунт…':'Входим…';}
+    dbg('отправляю запрос к Supabase...');
     try{
       if(App._siMode==='signup'){
         await AUTH.signUpEmail(email,pass);
@@ -2386,7 +2396,9 @@ var App={
         if(btn){btn.textContent='Войти';}
         if(tog)tog.textContent='Нет аккаунта? Создать';
       }else{
+        dbg('вход...');
         await AUTH.signInEmail(email,pass);
+        dbg('✓ вход успешен! загружаю приложение...');
         // Явно запускаем загрузку — не ждём onAuthStateChange
         var loader=document.getElementById('loader');
         if(loader)loader.classList.remove('hide');
