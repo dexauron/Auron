@@ -2397,13 +2397,13 @@ var App={
     var btn=document.getElementById('signin-btn');
     var errEl=document.getElementById('signin-error');
     var okEl=document.getElementById('signin-success');
-    if(errEl)errEl.style.display='none';
+    if(errEl){errEl.style.display='none';errEl.innerHTML='';}
     if(okEl)okEl.style.display='none';
 
     // Debug: show step-by-step what's happening
     function dbg(msg){
       if(errEl){errEl.style.display='block';errEl.style.background='rgba(94,92,230,.15)';errEl.style.borderColor='rgba(94,92,230,.4)';
-        errEl.innerHTML=(errEl.innerHTML||'')+'<div>→ '+msg+'</div>';}
+        errEl.innerHTML=errEl.innerHTML+'<div>→ '+msg+'</div>';}
       console.log('[signin]', msg);
     }
     dbg('кнопка нажата, email='+email.substring(0,5)+'...');
