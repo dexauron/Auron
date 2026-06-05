@@ -9,11 +9,33 @@
     return _sb;
   }
 
+  // Check URL for OAuth errors or tokens and expose them
+  function _checkUrlParams() {
+    const params = new URLSearchParams(window.location.search);
+    const err    = params.get('error');
+    const errDesc = params.get('error_description');
+    if (err) {
+      window._authUrlError = errDesc ? decodeURIComponent(errDesc).replace(/\+/g,' ') : err;
+      // Clean URL without reloading
+      try { window.history.replaceState({}, '', window.location.pathname); } catch (_) {}
+    }
+  }
+
   // Called once from App.init() — resolves true if already signed in
   async function init() {
+    _checkUrlParams();
+
     const sb = _client();
-    const { data } = await sb.auth.getSession();
+
+    // Give Supabase a moment to exchange the PKCE code from URL if present
+    await new Promise(res => setTimeout(res, 100));
+
+    const { data, error } = await sb.auth.getSession();
     _session = data.session;
+
+    if (error) {
+      window._authUrlError = window._authUrlError || error.message;
+    }
 
     sb.auth.onAuthStateChange((event, session) => {
       _session = session;
@@ -28,12 +50,13 @@
     return !!_session;
   }
 
-  // Open Google OAuth popup/redirect
+  // Open Google OAuth redirect
   async function signIn() {
+    const base = window.location.origin + window.location.pathname;
     const { error } = await _client().auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.href.split('#')[0],
+        redirectTo: base,
         queryParams: { access_type: 'offline', prompt: 'select_account' }
       }
     });
@@ -44,13 +67,11 @@
     return !!_session;
   }
 
-  // Returns Supabase access token (used by api.js for RLS)
   function getToken() {
     if (!_session) throw new Error('Session expired');
     return _session.access_token;
   }
 
-  // Returns the current Supabase client (for api.js)
   function client() {
     return _client();
   }
@@ -61,7 +82,6 @@
     await _client().auth.signOut();
   }
 
-  // tryAutoSignIn — with Supabase, session persists automatically (no action needed)
   async function tryAutoSignIn() {
     const { data } = await _client().auth.getSession();
     _session = data.session;

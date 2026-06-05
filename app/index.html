@@ -2186,6 +2186,11 @@ var App={
     }else{
       document.getElementById('loader').classList.add('hide');
       App.showScreen('scr-signin');
+      // Show OAuth error from URL if any
+      if(window._authUrlError){
+        var errEl=document.getElementById('signin-error');
+        if(errEl){errEl.textContent='⚠️ Ошибка входа: '+window._authUrlError;errEl.style.display='block';}
+      }
     }
   },
 
