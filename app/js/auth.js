@@ -1,8 +1,29 @@
 (() => {
   'use strict';
 
+  // One-time migration: wipe stale Google OAuth sessions so init() won't
+  // see them as valid and trigger _bootApp → obRender crash.
+  (function _clearGoogleSessions() {
+    try {
+      const keys = Object.keys(localStorage);
+      for (const k of keys) {
+        if (!k.includes('auth')) continue;
+        try {
+          const v = JSON.parse(localStorage.getItem(k));
+          const provider =
+            (v && v.user && v.user.app_metadata && v.user.app_metadata.provider) ||
+            (v && v.currentSession && v.currentSession.user &&
+             v.currentSession.user.app_metadata &&
+             v.currentSession.user.app_metadata.provider);
+          if (provider === 'google') localStorage.removeItem(k);
+        } catch (_) {}
+      }
+    } catch (_) {}
+  })();
+
   let _sb      = null;
   let _session = null;
+  let _bootLock = false;  // prevent double _bootApp calls
 
   function _client() {
     if (!_sb) {
@@ -22,18 +43,20 @@
     sb.auth.onAuthStateChange((event, session) => {
       _session = session;
       if (event === 'SIGNED_IN' && window.App && App._bootApp) {
+        if (_bootLock) return;  // already booting from init()
         const loader = document.getElementById('loader');
         if (loader) loader.classList.remove('hide');
         App._bootApp();
       } else if (event === 'SIGNED_OUT' && window.App) {
+        _bootLock = false;
         App.showScreen && App.showScreen('scr-signin');
       }
     });
 
+    if (_session) _bootLock = true;  // mark that init() will boot
     return !!_session;
   }
 
-  // Email + пароль — работает без VPN в РФ
   async function signInEmail(email, password) {
     const { data, error } = await _client().auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
@@ -65,6 +88,7 @@
 
   async function signOut() {
     _session = null;
+    _bootLock = false;
     try { localStorage.clear(); } catch (_) {}
     await _client().auth.signOut();
   }
