@@ -2665,7 +2665,8 @@ var App={
 
   selectOrg:function(org){
     App.s.ssId=org.ssId||org.spreadsheet_id;App.s.orgName=org.name;
-    App.loadSettings(function(){App.showApp();App.loadHome();});
+    App.showApp();  // show immediately — don't block on settings
+    App.loadSettings(function(){App.loadHome();});
   },
 
   createOrg:function(){
@@ -3057,7 +3058,9 @@ var App={
   },
 
   loadSettings:function(cb){
-    gs('getSettings',{ssId:App.s.ssId}).then(function(r){
+    var _called=false;
+    function _done(r){
+      if(_called)return;_called=true;
       App.s.settings=r||{};
       if(!App.s.settings.cats)App.s.settings.cats=[];
       if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
@@ -3069,7 +3072,9 @@ var App={
       if(App.s.settings.showKassaBalance===undefined)App.s.settings.showKassaBalance=true;
       App._applyKassaBalanceToggle();
       if(cb)cb();
-    }).catch(function(){if(cb)cb();});
+    }
+    setTimeout(function(){_done({});},8000); // fallback: use defaults after 8s
+    gs('getSettings',{ssId:App.s.ssId}).then(function(r){_done(r);}).catch(function(){_done({});});
   },
 
   _applyKassaBalanceToggle:function(){
