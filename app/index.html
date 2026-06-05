@@ -5,11 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Auron Finance</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<title>Auron — Финансовый учёт</title>
+<script src="./js/chart.min.js" defer></script>
 <style>
 /* ═══════════════════════════════════════════════
    AURON FINANCE — Design System v5.0
@@ -40,9 +37,9 @@
   --shadow-xl:0 2px 4px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.85);
   --glow-brand:0 0 40px rgba(94,92,230,.25);
   --inner-light:0 1px 0 rgba(255,255,255,.06) inset;
-  /* Fonts */
-  --font:"Plus Jakarta Sans",system-ui,sans-serif;
-  --font-num:"Space Grotesk","Plus Jakarta Sans",system-ui,sans-serif;
+  /* Fonts — system stack, no CDN required */
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --font-num:-apple-system,BlinkMacSystemFont,"SF Pro Display","Segoe UI","Helvetica Neue",Arial,sans-serif;
   /* Radius */
   --radius:20px;--radius-sm:14px;
   /* Layout */
@@ -99,14 +96,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 }
 #loader.hide{opacity:0;pointer-events:none;}
 #loader-icon{
-  width:96px;height:96px;
-  background:linear-gradient(135deg,var(--brand) 0%,#8f5cff 100%);
-  border-radius:28px;display:flex;align-items:center;justify-content:center;
-  font-size:46px;margin-bottom:24px;
-  box-shadow:0 12px 40px -6px rgba(94,92,230,.6),0 0 0 1px rgba(94,92,230,.25);
+  width:88px;height:88px;
+  background:linear-gradient(145deg,#6e6bff 0%,var(--brand) 55%,#8f5cff 100%);
+  border-radius:26px;display:flex;align-items:center;justify-content:center;
+  margin-bottom:22px;
+  box-shadow:0 16px 48px -8px rgba(94,92,230,.65),0 0 0 1px rgba(255,255,255,.08) inset;
 }
-#loader h1{color:var(--ink);font-size:28px;font-weight:800;letter-spacing:-.8px;}
-#loader p{color:var(--muted);font-size:14px;margin-top:8px;font-weight:500;}
+#loader h1{color:var(--ink);font-size:26px;font-weight:800;letter-spacing:-.6px;}
+#loader p{color:var(--muted);font-size:13px;margin-top:6px;font-weight:500;}
 
 /* ── Auth screens ── */
 .screen{
@@ -1295,34 +1292,31 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#5E5CE6">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./js/config.js"></script>
-<script src="./js/auth.js"></script>
-<script src="./js/api.js"></script>
 </head>
 <body>
 
 <div id="loader">
   <div id="loader-icon">
-    <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-      <path d="M7 30L28 10L49 30V50H7V30Z" fill="rgba(0,0,0,.18)" stroke="rgba(0,0,0,.22)" stroke-width="2.5" stroke-linejoin="round"/>
-      <rect x="14" y="38" width="7" height="12" rx="2" fill="rgba(255,255,255,.45)"/>
-      <rect x="25" y="32" width="7" height="18" rx="2" fill="rgba(255,255,255,.65)"/>
-      <rect x="36" y="24" width="7" height="26" rx="2" fill="rgba(255,255,255,.88)"/>
+    <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+      <path d="M26 8L10 44H19L26 27L33 44H42L26 8Z" fill="white" opacity=".95"/>
+      <line x1="17" y1="33" x2="35" y2="33" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity=".6"/>
     </svg>
   </div>
-  <h1>Auron Finance</h1>
-  <p>Загрузка…</p>
+  <h1>Auron</h1>
+  <p>Финансовый учёт</p>
 </div>
 
 <div id="scr-signin" class="screen" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(80% 60% at 50% 0%,rgba(94,92,230,.25) 0%,var(--bg) 60%),var(--bg);">
   <div style="width:100%;max-width:380px;padding:0 24px;">
     <div style="text-align:center;margin-bottom:48px;">
       <div style="width:80px;height:80px;background:linear-gradient(135deg,#6e6bff 0%,var(--brand) 45%,#8f5cff 100%);border-radius:24px;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;box-shadow:0 20px 60px -12px rgba(94,92,230,.7),0 0 0 1px rgba(255,255,255,.1) inset;">
-        <svg width="44" height="44" viewBox="0 0 56 56" fill="none"><path d="M7 30L28 10L49 30V50H7V30Z" fill="rgba(0,0,0,.18)" stroke="rgba(0,0,0,.22)" stroke-width="2.5" stroke-linejoin="round"/><rect x="14" y="38" width="7" height="12" rx="2" fill="rgba(255,255,255,.45)"/><rect x="25" y="32" width="7" height="18" rx="2" fill="rgba(255,255,255,.65)"/><rect x="36" y="24" width="7" height="26" rx="2" fill="rgba(255,255,255,.88)"/></svg>
+        <svg width="44" height="44" viewBox="0 0 52 52" fill="none">
+          <path d="M26 8L10 44H19L26 27L33 44H42L26 8Z" fill="white" opacity=".95"/>
+          <line x1="17" y1="33" x2="35" y2="33" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity=".6"/>
+        </svg>
       </div>
-      <div style="font-size:32px;font-weight:800;letter-spacing:-.04em;margin-bottom:10px;">Auron Finance</div>
-      <div style="font-size:15px;color:var(--muted);line-height:1.6;max-width:28ch;margin:0 auto;">Финансовый учёт для розничного магазина</div>
+      <div style="font-size:32px;font-weight:800;letter-spacing:-.04em;margin-bottom:10px;">Auron</div>
+      <div style="font-size:15px;color:var(--muted);line-height:1.6;max-width:28ch;margin:0 auto;">Финансовый учёт и аналитика для бизнеса</div>
     </div>
     <button id="signin-btn" class="btn-primary" onclick="App.googleSignIn()" style="display:flex;align-items:center;justify-content:center;gap:12px;font-size:16px;padding:16px;border-radius:16px;box-shadow:0 16px 40px -8px rgba(94,92,230,.85);">
       <svg width="22" height="22" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
@@ -1384,21 +1378,13 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   <aside id="sidebar">
     <div class="sb-brand">
       <div class="sb-brand-icon">
-        <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
-          <defs>
-            <linearGradient id="sb-bar-a" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="rgba(255,255,255,.95)"/>
-              <stop offset="100%" stop-color="rgba(255,255,255,.6)"/>
-            </linearGradient>
-          </defs>
-          <rect x="3" y="18" width="5" height="11" rx="1.5" fill="url(#sb-bar-a)" opacity=".55"/>
-          <rect x="10" y="13" width="5" height="16" rx="1.5" fill="url(#sb-bar-a)" opacity=".75"/>
-          <rect x="17" y="7" width="5" height="22" rx="1.5" fill="url(#sb-bar-a)"/>
-          <rect x="24" y="3" width="5" height="26" rx="1.5" fill="url(#sb-bar-a)"/>
+        <svg width="22" height="22" viewBox="0 0 52 52" fill="none">
+          <path d="M26 6L8 46H18L26 26L34 46H44L26 6Z" fill="white" opacity=".95"/>
+          <line x1="15" y1="35" x2="37" y2="35" stroke="white" stroke-width="4" stroke-linecap="round" opacity=".55"/>
         </svg>
       </div>
       <div>
-        <div class="sb-brand-name">Auron Finance</div>
+        <div class="sb-brand-name">Auron</div>
         <div class="sb-brand-sub" id="sb-org-name">Загрузка...</div>
       </div>
     </div>
@@ -2263,6 +2249,8 @@ var App={
 
   init:async function(){
     this.s.npDate=new Date();
+    // Validate Supabase config
+    if(window.checkConfig && !window.checkConfig()) return;
     // One-time setup — guard against double-call from googleSignIn
     if(!App._initDone){
       App._initDone=true;
@@ -5608,6 +5596,10 @@ var App={
 
 window.addEventListener('load',function(){App.init();});
 </script>
+<script src="./js/supabase.min.js"></script>
+<script src="./js/config.js"></script>
+<script src="./js/auth.js"></script>
+<script src="./js/api.js"></script>
 </body>
 </html>
 <!-- v1.0 -->

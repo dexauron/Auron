@@ -56,7 +56,7 @@ const API = (() => {
     try {
       const { data: { user } } = await sb().auth.getUser();
       if (!user) return { isNew: true };
-      const { data: orgs } = await sb().from('orgs').select('*').order('created_at');
+      const { data: orgs } = await sb().from('orgs').select('*').eq('user_id', user.id).order('created_at');
       if (!orgs || !orgs.length) return { isNew: true, profile: _profile(user) };
       return { isNew: false, profile: _profile(user), orgs: orgs.map(o => ({ id: o.id, name: o.name, ssId: o.id })) };
     } catch (e) { return { isNew: true }; }
@@ -194,7 +194,7 @@ const API = (() => {
     const accountId = p.accountId || await _accId(p.orgId, p.account);
     const { error } = await sb().from('transactions').insert({
       uuid: uid(), org_id: p.orgId, date: s(p.date) || new Date().toISOString().slice(0,10),
-      type: 'Корректировка', category: 'Корректировка', amount: Math.abs(n(p.amount)),
+      type: 'Корректировка', category: 'Корректировка', amount: n(p.amount),
       account_id: accountId, comment: s(p.comment)
     });
     if (error) return { __error: error.message };
