@@ -42,6 +42,12 @@
 
     sb.auth.onAuthStateChange((event, session) => {
       _session = session;
+      if (event === 'PASSWORD_RECOVERY' && window.App) {
+        // User clicked password-reset link — show new-password form
+        App.showScreen && App.showScreen('scr-signin');
+        App.showPasswordReset && App.showPasswordReset();
+        return;
+      }
       if (event === 'SIGNED_IN' && window.App && App._bootApp) {
         if (_bootLock) return;  // already booting from init()
         const loader = document.getElementById('loader');

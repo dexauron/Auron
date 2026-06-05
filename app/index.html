@@ -1336,6 +1336,17 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 
     <div id="signin-error" style="display:none;margin-top:14px;padding:11px 14px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);"></div>
     <div id="signin-success" style="display:none;margin-top:14px;padding:11px 14px;background:rgba(48,209,88,.12);border:1px solid rgba(48,209,88,.3);border-radius:12px;font-size:13px;line-height:1.6;color:var(--ink);"></div>
+
+    <!-- Password-reset form (shown only after user clicks link from email) -->
+    <div id="pw-reset-form" style="display:none;margin-top:14px;padding:16px;background:var(--card);border:1px solid var(--sep);border-radius:16px;">
+      <div style="font-size:15px;font-weight:700;margin-bottom:12px;">Новый пароль</div>
+      <div class="field" style="margin-bottom:10px;">
+        <label>Новый пароль</label>
+        <input type="password" id="pw-new" placeholder="Минимум 6 символов" style="font-size:16px;" onkeydown="if(event.key==='Enter')App.saveNewPassword()">
+      </div>
+      <button type="button" class="btn-primary" onclick="App.saveNewPassword()" style="font-size:15px;padding:13px;border-radius:12px;">Сохранить пароль</button>
+      <div id="pw-reset-error" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(255,69,58,.12);border:1px solid rgba(255,69,58,.3);border-radius:10px;font-size:13px;color:var(--ink);"></div>
+    </div>
   </div>
 </div>
 
@@ -2390,6 +2401,34 @@ var App={
       if(errEl){errEl.textContent=friendly;errEl.style.display='block';}
     }finally{
       if(btn){btn.disabled=false;btn.textContent=App._siMode==='signup'?'Создать аккаунт':'Войти';}
+    }
+  },
+
+  showPasswordReset:function(){
+    var form=document.getElementById('pw-reset-form');
+    var main=document.querySelector('#scr-signin .field');
+    if(form)form.style.display='block';
+    // hide normal login fields so the UI is clean
+    document.querySelectorAll('#scr-signin .field,#signin-btn,#toggle-signup-btn,#signin-mode-label').forEach(function(el){if(el)el.style.display='none';});
+  },
+
+  saveNewPassword:async function(){
+    var pass=(document.getElementById('pw-new')||{}).value||'';
+    var errEl=document.getElementById('pw-reset-error');
+    if(errEl)errEl.style.display='none';
+    if(!pass||pass.length<6){
+      if(errEl){errEl.textContent='⚠️ Минимум 6 символов';errEl.style.display='block';}
+      return;
+    }
+    try{
+      const {error}=await AUTH.client().auth.updateUser({password:pass});
+      if(error)throw new Error(error.message);
+      // password updated — boot the app
+      var form=document.getElementById('pw-reset-form');
+      if(form)form.style.display='none';
+      App._bootApp();
+    }catch(e){
+      if(errEl){errEl.textContent='⚠️ '+e.message;errEl.style.display='block';}
     }
   },
 
