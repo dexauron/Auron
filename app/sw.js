@@ -1,12 +1,14 @@
-const CACHE_NAME = 'auron-v19';
+const CACHE_NAME = 'auron-v21';
 const APP_FILES = [
   './',
   './index.html',
   './js/auth.js',
-  './js/gapi.js',
   './js/api.js',
   './js/config.js',
-  './manifest.json'
+  './js/supabase.min.js',
+  './js/chart.min.js',
+  './manifest.json',
+  './icons/icon.svg'
 ];
 
 // Install: pre-cache all app shell files
@@ -36,6 +38,7 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
   const isApiCall =
+    url.hostname.includes('supabase.co') ||
     url.hostname.includes('googleapis.com') ||
     url.hostname.includes('accounts.google.com');
 

@@ -1,7 +1,7 @@
 {
-  "name": "Auron Finance",
+  "name": "Auron",
   "short_name": "Auron",
-  "description": "Финансовый учёт магазина",
+  "description": "Финансовый учёт и аналитика",
   "start_url": "./",
   "display": "standalone",
   "orientation": "portrait",

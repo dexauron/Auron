@@ -131,8 +131,10 @@ ALTER TABLE categories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recurring   ENABLE ROW LEVEL SECURITY;
 
--- Orgs: только свои
-CREATE POLICY "own_orgs" ON orgs FOR ALL USING (auth.uid() = user_id);
+-- Orgs: только свои (USING для SELECT/UPDATE/DELETE, WITH CHECK для INSERT/UPDATE)
+CREATE POLICY "own_orgs" ON orgs FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
 
 -- Остальные таблицы: через принадлежность к org
 CREATE POLICY "own_accounts"     ON accounts     FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = accounts.org_id    AND orgs.user_id = auth.uid()));
@@ -165,3 +167,13 @@ BEGIN
     );
 END;
 $$;
+
+-- ══════════════════════════════════════
+-- FIX: Если уже существует — пересоздай политику orgs с WITH CHECK
+-- Запусти в Supabase Dashboard → SQL Editor если видишь ошибку
+-- "The caller does not have permission" при регистрации
+-- ══════════════════════════════════════
+DROP POLICY IF EXISTS "own_orgs" ON orgs;
+CREATE POLICY "own_orgs" ON orgs FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
