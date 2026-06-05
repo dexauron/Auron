@@ -4,5 +4,5 @@ window.GOOGLE_CLIENT_ID = '41549444388-vlvtj0itbq5ag2rftrlorhl8b7ncl5m4.apps.goo
 
 // Supabase (заполни после создания проекта на supabase.com)
 // Project Settings → API → Project URL и anon public key
-window.SUPABASE_URL      = 'https://ВСТАВЬ_СЮДА.supabase.co';
-window.SUPABASE_ANON_KEY = 'ВСТАВЬ_СЮДА_ANON_KEY';
+window.SUPABASE_URL      = 'https://zdxkhlxbmwyvvrmvjnfy.supabase.co';
+window.SUPABASE_ANON_KEY = 'sb_publishable_ny8r2yQ9lmRSjg2Ffp8cbQ_CZ5Ypktg';
