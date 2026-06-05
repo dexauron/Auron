@@ -5,6 +5,11 @@
 window.SUPABASE_URL      = 'https://zdxkhlxbmwyvvrmvjnfy.supabase.co';
 window.SUPABASE_ANON_KEY = 'sb_publishable_ny8r2yQ9lmRSjg2Ffp8cbQ_CZ5Ypktg';
 
+// Cloudflare Worker прокси (для работы без VPN в России).
+// Оставьте пустым ('') если не используете Worker.
+// Инструкция: см. cloudflare/worker.js в репозитории.
+window.SUPABASE_PROXY_URL = '';
+
 // CONFIG CHECK — вызывается из App.init() при старте
 window.checkConfig = function () {
   var urlOk = window.SUPABASE_URL  && !window.SUPABASE_URL.includes('ВСТАВЬ_СЮДА');
