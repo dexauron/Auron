@@ -225,6 +225,48 @@ BEGIN
 END;
 $$;
 
+-- ───────────────────────────────────────────────────────────────────────────
+-- ВОЗВРАТ ТОВАРА: реверс себестоимости + восстановление остатка на складе.
+-- Возвращённый товар приходуется новой партией по последней закупочной цене,
+-- и фиксируется cogs_allocation, чтобы P&L симметрично сторнировал маржу.
+-- Возврат: себестоимость возвращённого товара (коп).
+-- ───────────────────────────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION fifo_return(p_receipt_item_id UUID)
+RETURNS BIGINT
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_item  receipt_items%ROWTYPE;
+  v_org   UUID;
+  v_cost  BIGINT;
+  v_batch UUID;
+  v_total BIGINT;
+BEGIN
+  SELECT * INTO v_item FROM receipt_items WHERE id = p_receipt_item_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'receipt_item % not found', p_receipt_item_id; END IF;
+  SELECT org_id INTO v_org FROM products WHERE id = v_item.product_id;
+
+  -- последняя известная закупочная цена (или 0)
+  SELECT unit_cost INTO v_cost FROM batches
+    WHERE product_id = v_item.product_id ORDER BY received_at DESC, id DESC LIMIT 1;
+  v_cost := COALESCE(v_cost, 0);
+  v_total := ROUND(ABS(v_item.qty) * v_cost);
+
+  -- приход возврата на склад новой партией
+  INSERT INTO batches(org_id, product_id, received_at, qty_received, qty_remaining, unit_cost)
+    VALUES (v_org, v_item.product_id, NOW(), ABS(v_item.qty), ABS(v_item.qty), v_cost)
+    RETURNING id INTO v_batch;
+
+  -- фиксируем себестоимость возврата (для симметрии P&L)
+  INSERT INTO cogs_allocations(receipt_item_id, batch_id, qty, unit_cost, cost_total)
+    VALUES (p_receipt_item_id, v_batch, ABS(v_item.qty), v_cost, v_total);
+
+  RETURN v_total;
+END;
+$$;
+
 -- ═══════════════════════════════════════════════════════════════════════════
 -- АНАЛИТИЧЕСКИЕ ПРЕДСТАВЛЕНИЯ
 -- ═══════════════════════════════════════════════════════════════════════════

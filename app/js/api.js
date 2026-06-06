@@ -1328,16 +1328,18 @@ const API = (() => {
           receipt_id: rec.id, product_id: pid, qty, unit_price: kop(it.price || it.price_rub),
           discount: kop(it.discount || it.discount_rub || 0), line_total: line
         }).select('id').single();
-        // списание себестоимости (FIFO/средняя) только для продаж
-        if (ri && (rec_op_is_sale(op))) {
-          try { await sb().rpc('fifo_issue', { p_receipt_item_id: ri.id }); } catch (_) {}
+        // списание себестоимости (FIFO/средняя) для продаж; реверс — для возвратов
+        if (ri) {
+          try {
+            if (op === 'sale')        await sb().rpc('fifo_issue',  { p_receipt_item_id: ri.id });
+            else if (op === 'refund') await sb().rpc('fifo_return', { p_receipt_item_id: ri.id });
+          } catch (_) {}
         }
       }
       imported++;
     }
     return { ok: true, imported, skipped, errors };
   }); }
-  function rec_op_is_sale(op) { return op === 'sale'; }
 
   async function getInventoryValue(p) { return _err(async () => {
     const { data, error } = await sb().from('v_inventory_value').select('*').eq('org_id', p.orgId);
@@ -1406,6 +1408,108 @@ const API = (() => {
     }));
   }); }
 
+  // ═══════════════════════════════════════════════════════════════
+  // ОБЯЗАТЕЛЬСТВА + ПЛАТЁЖНЫЙ КАЛЕНДАРЬ (таблица obligations)
+  // ═══════════════════════════════════════════════════════════════
+  async function _ensureCounterparty(orgId, name, kind) {
+    if (!name) return null;
+    const { data } = await sb().from('counterparties')
+      .upsert({ org_id: orgId, name: s(name), kind: kind || 'supplier' }, { onConflict: 'org_id,name,kind' })
+      .select('id').single();
+    return data ? data.id : null;
+  }
+
+  async function getObligations(p) { return _err(async () => {
+    const { data, error } = await sb().from('obligations')
+      .select('*, counterparties(name,phone)').eq('org_id', p.orgId).order('due_date', { nullsFirst: false });
+    if (error) return { __error: error.message };
+    const today = new Date().toISOString().slice(0, 10);
+    const items = (data || []).map(r => {
+      const left = Math.max((r.amount || 0) - (r.paid || 0), 0);
+      const overdue = r.due_date && r.due_date < today && left > 0 && r.status !== 'closed';
+      return {
+        id: r.id, kind: r.kind, name: (r.counterparties && r.counterparties.name) || '',
+        phone: (r.counterparties && r.counterparties.phone) || '',
+        amount: (r.amount || 0) / 100, paid: (r.paid || 0) / 100, left: left / 100,
+        dueDate: r.due_date, status: overdue ? 'overdue' : r.status
+      };
+    });
+    const payable = items.filter(x => x.kind === 'payable' && x.left > 0);
+    const receivable = items.filter(x => x.kind === 'receivable' && x.left > 0);
+    return {
+      items,
+      totalPayable: payable.reduce((s, x) => s + x.left, 0),
+      totalReceivable: receivable.reduce((s, x) => s + x.left, 0),
+      overdueCount: items.filter(x => x.status === 'overdue').length
+    };
+  }); }
+
+  async function saveObligation(p) { return _err(async () => {
+    const cpId = p.counterpartyId || await _ensureCounterparty(p.orgId, p.name, p.kind === 'receivable' ? 'customer' : 'supplier');
+    const row = {
+      org_id: p.orgId, counterparty_id: cpId, kind: p.kind === 'receivable' ? 'receivable' : 'payable',
+      amount: kop(p.amount), due_date: p.dueDate || null
+    };
+    if (p.id) {
+      const { error } = await sb().from('obligations').update(row).eq('id', p.id).eq('org_id', p.orgId);
+      if (error) return { __error: error.message };
+      return { id: p.id };
+    }
+    const { data, error } = await sb().from('obligations').insert(row).select('id').single();
+    if (error) return { __error: error.message };
+    return { id: data.id };
+  }); }
+
+  async function payObligation(p) { return _err(async () => {
+    const { data: o } = await sb().from('obligations').select('*').eq('id', p.id).eq('org_id', p.orgId).single();
+    if (!o) return { __error: 'Не найдено' };
+    const add = kop(p.amount);
+    const paid = (o.paid || 0) + add;
+    const status = paid >= o.amount ? 'closed' : (paid > 0 ? 'partial' : 'open');
+    const { error } = await sb().from('obligations').update({ paid, status }).eq('id', p.id);
+    if (error) return { __error: error.message };
+    // отразить оплату как расход/доход по счёту (если указан)
+    if (p.account) {
+      const accountId = await _accId(p.orgId, p.account);
+      const type = o.kind === 'payable' ? 'Расход' : 'Доход';
+      await sb().from('transactions').insert({
+        uuid: uid(), org_id: p.orgId, date: new Date().toISOString().slice(0, 10),
+        type, category: o.kind === 'payable' ? 'Оплата поставщику' : 'Оплата от клиента',
+        amount: add, account_id: accountId, comment: s(p.comment)
+      });
+      await _balanceDelta(accountId, type, add);
+    }
+    return { ok: true };
+  }); }
+
+  async function deleteObligation(p) { return _err(async () => {
+    await sb().from('obligations').delete().eq('id', p.id).eq('org_id', p.orgId);
+    return { ok: true };
+  }); }
+
+  // Прогноз остатка денег по платёжному календарю (на N дней вперёд)
+  async function getPaymentForecast(p) { return _err(async () => {
+    const days = p.days || 30;
+    const [accR, oblR] = await Promise.all([
+      sb().from('accounts').select('balance').eq('org_id', p.orgId).neq('status', 'archived'),
+      sb().from('obligations').select('kind,amount,paid,due_date,status').eq('org_id', p.orgId).neq('status', 'closed')
+    ]);
+    let balance = (accR.data || []).reduce((s, a) => s + (a.balance || 0), 0);
+    const today = new Date();
+    const horizon = new Date(today.getTime() + days * 86400000).toISOString().slice(0, 10);
+    const flows = (oblR.data || [])
+      .filter(o => o.due_date && o.due_date <= horizon)
+      .map(o => ({ date: o.due_date, delta: (o.kind === 'payable' ? -1 : 1) * Math.max((o.amount || 0) - (o.paid || 0), 0) }))
+      .sort((a, b) => a.date < b.date ? -1 : 1);
+    let running = balance, minBal = balance, minDate = null;
+    const timeline = flows.map(f => {
+      running += f.delta;
+      if (running < minBal) { minBal = running; minDate = f.date; }
+      return { date: f.date, delta: f.delta / 100, balance: running / 100 };
+    });
+    return { startBalance: balance / 100, endBalance: running / 100, minBalance: minBal / 100, minDate, timeline };
+  }); }
+
   // ── Public API ─────────────────────────────────────────────────
   return {
     initUserApp, registerUser, createOrg, deleteOrg, logoutUser,
@@ -1428,7 +1532,8 @@ const API = (() => {
     getApprovals, saveApprovalRequest, approveRequest, deleteApprovalRequest,
     getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData,
     getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
-    getInventoryValue, getGrossMargin, getPnL, getLossControl
+    getInventoryValue, getGrossMargin, getPnL, getLossControl,
+    getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast
   };
 })();
 
