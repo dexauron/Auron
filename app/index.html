@@ -1834,7 +1834,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="btn-secondary" style="margin:0;flex:1;color:var(--expense);border-color:var(--expense);" onclick="App.openObligation('payable')">− Мы должны</button>
         <button class="btn-secondary" style="margin:0;flex:1;color:var(--income);border-color:var(--income);" onclick="App.openObligation('receivable')">+ Нам должны</button>
       </div>
+      <div style="padding:0 16px 8px;">
+        <button class="btn-secondary" style="margin:0;width:100%;color:#25D366;border-color:#25D366;" onclick="App.openImportCashFlow()">📥 Импорт финансов (ДДС) из CSV</button>
+      </div>
       <div id="fin-forecast"></div>
+      <div id="fin-ddstotals"></div>
       <div id="fin-obligations"></div>
       <div style="height:90px;"></div>
     </div>
@@ -2978,11 +2982,55 @@ var App={
   // ── ФИНАНСЫ / Платёжный календарь (обязательства) ───────────────
   loadFinance:function(){
     if(!App.s.ssId)return;
-    ['fin-forecast','fin-obligations'].forEach(function(id){
+    ['fin-forecast','fin-ddstotals','fin-obligations'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.innerHTML='<div class="skel" style="height:80px;border-radius:16px;margin:8px 16px;"></div>';
     });
     gs('getPaymentForecast',{ssId:App.s.ssId,days:30}).then(App._renderForecast).catch(App._whErr('fin-forecast'));
+    gs('getCashFlow',{ssId:App.s.ssId,period:'month'}).then(App._renderDds).catch(function(){var el=document.getElementById('fin-ddstotals');if(el)el.innerHTML='';});
     gs('getObligations',{ssId:App.s.ssId}).then(App._renderObligations).catch(App._whErr('fin-obligations'));
+  },
+  _renderDds:function(r){
+    r=r||{};var el=document.getElementById('fin-ddstotals');if(!el)return;
+    var items=r.items||[];
+    if(!items.length&&!(r.income||r.expense)){el.innerHTML='';return;}
+    var secNames={operating:'Операционная',investing:'Инвестиционная',financing:'Финансовая'};
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">ДДС за месяц</div>'+
+      '<div class="metric-row">'+
+        '<div class="metric-card"><div class="metric-label">Приток</div><div class="metric-value green">₽ '+fmt(r.income||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Отток</div><div class="metric-value red">₽ '+fmt(r.expense||0)+'</div></div>'+
+      '</div>'+
+      '<div class="metric-card" style="margin-bottom:8px;"><div class="metric-label">Чистый денежный поток</div>'+
+        '<div class="metric-value" style="color:'+((r.net||0)>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(r.net||0)+'</div></div>'+
+      (r.sections&&r.sections.length?'<div class="settings-list">'+r.sections.map(function(s){
+        return '<div class="settings-row"><span class="settings-row-label" style="flex:1;">'+App._e(secNames[s.section]||s.section)+'</span>'+
+          '<span style="color:var(--income);margin-right:8px;">+'+fmt(s.income)+'</span>'+
+          '<span style="color:var(--expense);">−'+fmt(s.expense)+'</span></div>';
+      }).join('')+'</div>':'')+
+    '</div>';
+  },
+  openImportCashFlow:function(){
+    App.openModal('<div style="font-size:18px;font-weight:700;margin-bottom:8px;">Импорт финансов (ДДС)</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6;">Колонки (первая строка — заголовки):<br>'+
+      '<code style="font-size:12px;">date,amount,item,section,direction,counterparty,tag</code><br>'+
+      'direction: income / expense. section: operating / investing / financing. Сумма — в рублях.</div>'+
+      '<input id="impcf-file" type="file" accept=".csv,text/csv" style="margin-bottom:12px;">'+
+      '<div id="impcf-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.runImportCashFlow()">Загрузить</button>');
+  },
+  runImportCashFlow:function(){
+    var inp=document.getElementById('impcf-file');var st=document.getElementById('impcf-status');
+    if(!inp||!inp.files||!inp.files[0]){if(st)st.textContent='Выберите CSV-файл';return;}
+    var reader=new FileReader();
+    reader.onload=function(){
+      var rows;try{rows=App._parseCsv(reader.result);}catch(e){if(st)st.textContent='Ошибка чтения: '+e.message;return;}
+      if(!rows.length){if(st)st.textContent='Файл пуст';return;}
+      if(st)st.textContent='Загружаю '+rows.length+' строк…';
+      gs('importCashFlow',{ssId:App.s.ssId,rows:rows}).then(function(r){
+        if(st)st.innerHTML='✓ Импортировано: '+(r.imported||0)+(r.errors?(', ошибок: '+r.errors):'');
+        App.toast('Импорт ДДС завершён ✓');App.loadFinance();
+      }).catch(function(e){if(st)st.textContent='Ошибка: '+e.message;});
+    };
+    reader.readAsText(inp.files[0]);
   },
   _renderForecast:function(r){
     r=r||{};var el=document.getElementById('fin-forecast');if(!el)return;
