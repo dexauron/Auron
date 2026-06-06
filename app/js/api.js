@@ -1475,6 +1475,66 @@ const API = (() => {
   }
 
   // ═══════════════════════════════════════════════════════════════
+  // ДДС (Cash Flow): импорт из CSV + отчёт по жёсткому справочнику статей
+  // ═══════════════════════════════════════════════════════════════
+  async function _ensureCfItem(orgId, name, section, direction) {
+    const code = (s(name) || 'без статьи').toLowerCase().slice(0, 60);
+    const { data } = await sb().from('cf_items').upsert({
+      org_id: orgId, code, name: s(name) || code,
+      section: ['operating', 'investing', 'financing'].includes(section) ? section : 'operating',
+      direction: direction === 'income' ? 'income' : 'expense'
+    }, { onConflict: 'org_id,code' }).select('id').single();
+    return data ? data.id : null;
+  }
+
+  // Импорт ДДС: rows = [{date,amount,item,section,direction,counterparty,tag}]
+  async function importCashFlow(p) { return _err(async () => {
+    const rows = Array.isArray(p.rows) ? p.rows : [];
+    if (!rows.length) return { __error: 'Нет строк для импорта' };
+    let imported = 0, errors = 0;
+    for (const r of rows) {
+      const dir = (r.direction || '').toString().toLowerCase();
+      const direction = (dir === 'income' || dir === 'доход' || dir === 'приход') ? 'income' : 'expense';
+      const cfId = await _ensureCfItem(p.orgId, r.item || r.статья, r.section, direction);
+      const cpId = r.counterparty ? await _ensureCounterparty(p.orgId, r.counterparty, 'other') : null;
+      const { error } = await sb().from('cash_flow').insert({
+        org_id: p.orgId, date: (r.date || new Date().toISOString().slice(0, 10)),
+        amount: Math.abs(kop(r.amount)), cf_item_id: cfId, counterparty_id: cpId, tag: s(r.tag)
+      });
+      if (error) errors++; else imported++;
+    }
+    return { ok: true, imported, errors };
+  }); }
+
+  // Отчёт ДДС за период: приток/отток по разделам и статьям
+  async function getCashFlow(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    const { data, error } = await sb().from('cash_flow')
+      .select('amount,date,cf_items(name,section,direction)')
+      .eq('org_id', p.orgId).gte('date', from).lte('date', to);
+    if (error) return { __error: error.message };
+    let income = 0, expense = 0;
+    const sections = {};
+    const byItem = {};
+    (data || []).forEach(r => {
+      const ci = r.cf_items || {};
+      const dir = ci.direction || 'expense';
+      const amt = r.amount || 0;
+      if (dir === 'income') income += amt; else expense += amt;
+      const sec = ci.section || 'operating';
+      const sObj = sections[sec] || (sections[sec] = { income: 0, expense: 0 });
+      sObj[dir === 'income' ? 'income' : 'expense'] += amt;
+      const key = (ci.name || 'Без статьи') + '|' + dir;
+      byItem[key] = (byItem[key] || 0) + amt;
+    });
+    return {
+      income: income / 100, expense: expense / 100, net: (income - expense) / 100,
+      sections: Object.keys(sections).map(k => ({ section: k, income: sections[k].income / 100, expense: sections[k].expense / 100 })),
+      items: Object.keys(byItem).map(k => ({ name: k.split('|')[0], direction: k.split('|')[1], amount: byItem[k] / 100 })).sort((a, b) => b.amount - a.amount)
+    };
+  }); }
+
+  // ═══════════════════════════════════════════════════════════════
   // ОБЯЗАТЕЛЬСТВА + ПЛАТЁЖНЫЙ КАЛЕНДАРЬ (таблица obligations)
   // ═══════════════════════════════════════════════════════════════
   async function _ensureCounterparty(orgId, name, kind) {
@@ -1600,7 +1660,7 @@ const API = (() => {
     getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
     getInventoryValue, getGrossMargin, getPnL, getLossControl,
     getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast,
-    getDailyDashboard, getAbcXyz
+    getDailyDashboard, getAbcXyz, importCashFlow, getCashFlow
   };
 })();
 
