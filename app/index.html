@@ -1289,6 +1289,57 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 @keyframes cardIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .card{animation:cardIn .3s cubic-bezier(.2,.8,.2,1) both;}
 
+/* ── Полировка в стиле iOS / Telegram ───────────────────────────── */
+/* Плавное появление активной вкладки */
+@keyframes panelIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.panel.active{animation:panelIn .26s cubic-bezier(.2,.8,.2,1) both;}
+
+/* Тактильный отклик нажатий (как в iOS) */
+button,.settings-row[onclick],.pill,.nav-item,.sb-nav-item,.am-item,.org-card,.metric-card{
+  transition:transform .12s cubic-bezier(.2,.8,.2,1),background .18s ease,border-color .18s ease,box-shadow .18s ease,color .18s ease;
+}
+button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{transform:scale(.97);}
+.btn-primary:active,.btn-secondary:active{transform:scale(.98);}
+
+/* Кнопки — чуть мягче и «живее» */
+.btn-primary{box-shadow:var(--shadow-brand);}
+.btn-primary:hover{filter:brightness(1.05);}
+.btn-secondary:hover{border-color:var(--brand);color:var(--brand);}
+
+/* Пилюли периода — капсула в стиле iOS segmented control */
+.pill{border-radius:999px;}
+.pill.active{box-shadow:var(--shadow-glow);}
+
+/* Карточки метрик — единый radius и тонкая подсветка */
+.metric-card{border-radius:var(--radius-sm);transition:transform .12s ease;}
+.metric-card:active{transform:scale(.985);}
+
+/* Ряды настроек — мягкое выделение при нажатии */
+.settings-row[onclick]:active{background:var(--surface-2);}
+
+/* Модалки и шторки — плавный вход */
+.modal-overlay,.sheet-overlay,.am-overlay{transition:opacity .22s ease;}
+@keyframes sheetUp{from{transform:translateY(28px);opacity:.4}to{transform:none;opacity:1}}
+.modal-overlay.show #modal-body,.sheet.show{animation:sheetUp .28s cubic-bezier(.2,.85,.25,1) both;}
+
+/* Тонкий, аккуратный скроллбар (десктоп) */
+*::-webkit-scrollbar{width:9px;height:9px;}
+*::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:999px;border:2px solid transparent;background-clip:content-box;}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted);background-clip:content-box;}
+*::-webkit-scrollbar-track{background:transparent;}
+
+/* Поля ввода — фокус в фирменном цвете с мягким кольцом */
+.field input:focus,.field select:focus,.field textarea:focus{
+  border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-dim);outline:none;
+}
+
+/* Аккуратные бейджи ABC */
+@keyframes badgePop{from{transform:scale(.6);opacity:0}to{transform:none;opacity:1}}
+
+/* Уважение к prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}
+}
 </style>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#5E5CE6">
