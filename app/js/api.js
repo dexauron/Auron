@@ -1227,6 +1227,185 @@ const API = (() => {
 
   async function uploadReceipt() { return { url: '' }; }
 
+  // ═══════════════════════════════════════════════════════════════
+  // RETAIL: товары / партии / импорт чеков / COGS / маржа / P&L
+  // (требует supabase/retail_schema.sql)
+  // ═══════════════════════════════════════════════════════════════
+  function kop(v) { return Math.round((Number(String(v).replace(',', '.')) || 0) * 100); }
+
+  async function getProducts(p) { return _err(async () => {
+    const { data, error } = await sb().from('products').select('*').eq('org_id', p.orgId).order('name');
+    if (error) return { __error: error.message };
+    return (data || []).map(r => ({
+      id: r.id, sku: r.sku, barcode: r.barcode || '', name: r.name, category: r.category || '',
+      unit: r.unit || 'шт', retailPrice: (r.retail_price || 0) / 100, costMethod: r.cost_method || 'fifo', active: r.is_active
+    }));
+  }); }
+
+  async function saveProduct(p) { return _err(async () => {
+    const row = {
+      org_id: p.orgId, sku: s(p.sku), barcode: s(p.barcode), name: s(p.name) || s(p.sku),
+      category: s(p.category), unit: s(p.unit) || 'шт', retail_price: kop(p.retailPrice),
+      cost_method: (p.costMethod === 'avg' ? 'avg' : 'fifo')
+    };
+    if (p.id) {
+      const { error } = await sb().from('products').update(row).eq('id', p.id).eq('org_id', p.orgId);
+      if (error) return { __error: error.message };
+      return { id: p.id };
+    }
+    const { data, error } = await sb().from('products').upsert(row, { onConflict: 'org_id,sku' }).select('id').single();
+    if (error) return { __error: error.message };
+    return { id: data.id };
+  }); }
+
+  async function deleteProduct(p) { return _err(async () => {
+    await sb().from('products').update({ is_active: false }).eq('id', p.id).eq('org_id', p.orgId);
+    return { ok: true };
+  }); }
+
+  // Поиск/создание товара по SKU — для импорта
+  async function _ensureProduct(orgId, sku, name, category) {
+    const { data } = await sb().from('products').select('id').eq('org_id', orgId).eq('sku', sku).maybeSingle();
+    if (data) return data.id;
+    const { data: ins } = await sb().from('products')
+      .insert({ org_id: orgId, sku, name: name || sku, category: category || '' }).select('id').single();
+    return ins ? ins.id : null;
+  }
+
+  // Приход партии (закупка). qty + unit_cost (в рублях)
+  async function receiveBatch(p) { return _err(async () => {
+    const productId = p.productId || await _ensureProduct(p.orgId, s(p.sku), s(p.name), s(p.category));
+    if (!productId) return { __error: 'Товар не найден' };
+    let supplierId = p.supplierId || null;
+    if (!supplierId && p.supplier) {
+      const { data: cp } = await sb().from('counterparties')
+        .upsert({ org_id: p.orgId, name: s(p.supplier), kind: 'supplier' }, { onConflict: 'org_id,name,kind' })
+        .select('id').single();
+      supplierId = cp ? cp.id : null;
+    }
+    const qty = Number(p.qty) || 0;
+    const { error } = await sb().from('batches').insert({
+      org_id: p.orgId, product_id: productId, supplier_id: supplierId,
+      received_at: p.date ? new Date(p.date).toISOString() : new Date().toISOString(),
+      qty_received: qty, qty_remaining: qty, unit_cost: kop(p.unitCost)
+    });
+    if (error) return { __error: error.message };
+    return { ok: true };
+  }); }
+
+  // Импорт продаж: p.rows = [{ts,receipt_id,register,cashier,op_type,sku,qty,price,discount,name,category}]
+  async function importSales(p) { return _err(async () => {
+    const rows = Array.isArray(p.rows) ? p.rows : [];
+    if (!rows.length) return { __error: 'Нет строк для импорта' };
+    // группируем по чеку
+    const groups = {};
+    rows.forEach(r => {
+      const rid = String(r.receipt_id || r.receiptId || (r.ts + '_' + (r.register || '')));
+      (groups[rid] = groups[rid] || { head: r, items: [] }).items.push(r);
+    });
+    let imported = 0, skipped = 0, errors = 0;
+    for (const rid of Object.keys(groups)) {
+      const g = groups[rid], h = g.head;
+      // идемпотентность
+      const { data: ex } = await sb().from('receipts').select('id').eq('org_id', p.orgId).eq('external_id', rid).maybeSingle();
+      if (ex) { skipped++; continue; }
+      const op = (h.op_type || h.opType || 'sale').toString().trim();
+      let total = 0;
+      g.items.forEach(it => { total += Math.round((Number(it.qty) || 0) * kop(it.price || it.price_rub) - kop(it.discount || it.discount_rub || 0)); });
+      const { data: rec, error: rErr } = await sb().from('receipts').insert({
+        org_id: p.orgId, external_id: rid,
+        ts: h.ts ? new Date(h.ts).toISOString() : new Date().toISOString(),
+        register_id: s(h.register || h.register_id), cashier: s(h.cashier),
+        op_type: ['sale', 'refund', 'void', 'storno'].includes(op) ? op : 'sale',
+        total, manual_discount: kop(h.manual_discount || 0)
+      }).select('id').single();
+      if (rErr) { errors++; continue; }
+      for (const it of g.items) {
+        const pid = await _ensureProduct(p.orgId, s(it.sku), s(it.name), s(it.category));
+        const qty = Number(it.qty) || 0;
+        const line = Math.round(qty * kop(it.price || it.price_rub) - kop(it.discount || it.discount_rub || 0));
+        const { data: ri } = await sb().from('receipt_items').insert({
+          receipt_id: rec.id, product_id: pid, qty, unit_price: kop(it.price || it.price_rub),
+          discount: kop(it.discount || it.discount_rub || 0), line_total: line
+        }).select('id').single();
+        // списание себестоимости (FIFO/средняя) только для продаж
+        if (ri && (rec_op_is_sale(op))) {
+          try { await sb().rpc('fifo_issue', { p_receipt_item_id: ri.id }); } catch (_) {}
+        }
+      }
+      imported++;
+    }
+    return { ok: true, imported, skipped, errors };
+  }); }
+  function rec_op_is_sale(op) { return op === 'sale'; }
+
+  async function getInventoryValue(p) { return _err(async () => {
+    const { data, error } = await sb().from('v_inventory_value').select('*').eq('org_id', p.orgId);
+    if (error) return { __error: error.message };
+    const items = (data || []).map(r => ({ sku: r.sku, name: r.name, category: r.category, qty: Number(r.qty_on_hand), value: (r.stock_value_cost || 0) / 100 }));
+    const total = items.reduce((sum, x) => sum + x.value, 0);
+    return { items, total };
+  }); }
+
+  async function getGrossMargin(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    const { data, error } = await sb().from('v_gross_margin').select('*')
+      .eq('org_id', p.orgId).gte('date', from).lte('date', to);
+    if (error) return { __error: error.message };
+    const bySku = {};
+    (data || []).forEach(r => {
+      const k = r.sku || r.product_id;
+      const o = bySku[k] || (bySku[k] = { sku: r.sku, name: r.name, category: r.category, revenue: 0, cogs: 0, gross: 0, qty: 0 });
+      const sgn = r.op_type === 'refund' ? -1 : 1;
+      o.revenue += sgn * (r.revenue || 0); o.cogs += sgn * (r.cogs || 0);
+      o.gross += sgn * (r.gross_profit || 0); o.qty += sgn * Number(r.qty || 0);
+    });
+    const items = Object.values(bySku).map(o => ({
+      sku: o.sku, name: o.name, category: o.category, qty: o.qty,
+      revenue: o.revenue / 100, cogs: o.cogs / 100, gross: o.gross / 100,
+      marginPct: o.revenue ? Math.round(100 * o.gross / o.revenue) : 0
+    })).sort((a, b) => b.gross - a.gross);
+    const tot = items.reduce((s, x) => ({ revenue: s.revenue + x.revenue, cogs: s.cogs + x.cogs, gross: s.gross + x.gross }), { revenue: 0, cogs: 0, gross: 0 });
+    return { items, total: tot };
+  }); }
+
+  async function getPnL(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    // Валовая прибыль из чеков/COGS
+    const { data: gm } = await sb().from('v_gross_margin').select('revenue,cogs,gross_profit,op_type')
+      .eq('org_id', p.orgId).gte('date', from).lte('date', to);
+    let revenue = 0, cogs = 0;
+    (gm || []).forEach(r => { const sgn = r.op_type === 'refund' ? -1 : 1; revenue += sgn * (r.revenue || 0); cogs += sgn * (r.cogs || 0); });
+    const gross = revenue - cogs;
+    // Операционные расходы из существующих транзакций (тип Расход, кроме Закупка/Перевод)
+    const { data: tx } = await sb().from('transactions').select('category,amount,type')
+      .eq('org_id', p.orgId).eq('type', 'Расход').gte('date', from).lte('date', to);
+    const opexByCat = {};
+    let opex = 0;
+    (tx || []).forEach(t => {
+      if (t.category === 'Закупка' || t.category === 'Перевод') return;
+      opexByCat[t.category || 'Прочее'] = (opexByCat[t.category || 'Прочее'] || 0) + t.amount;
+      opex += t.amount;
+    });
+    return {
+      revenue: revenue / 100, cogs: cogs / 100, gross: gross / 100,
+      opex: opex / 100, net: (gross - opex) / 100,
+      grossPct: revenue ? Math.round(100 * gross / revenue) : 0,
+      opexByCat: Object.keys(opexByCat).map(k => ({ category: k, amount: opexByCat[k] / 100 })).sort((a, b) => b.amount - a.amount)
+    };
+  }); }
+
+  async function getLossControl(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    const { data, error } = await sb().from('v_loss_control').select('*')
+      .eq('org_id', p.orgId).gte('date', from).lte('date', to).limit(200);
+    if (error) return { __error: error.message };
+    return (data || []).map(r => ({
+      date: r.date, cashier: r.cashier, register: r.register_id, opType: r.op_type,
+      manualDiscount: (r.manual_discount || 0) / 100, total: (r.total || 0) / 100, receiptId: r.external_id
+    }));
+  }); }
+
   // ── Public API ─────────────────────────────────────────────────
   return {
     initUserApp, registerUser, createOrg, deleteOrg, logoutUser,
@@ -1247,7 +1426,9 @@ const API = (() => {
     getAbcAnalysis, getCashFlowForecast,
     getInventory, saveInventoryItem, deleteInventoryItem, adjustInventoryQty,
     getApprovals, saveApprovalRequest, approveRequest, deleteApprovalRequest,
-    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData
+    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData,
+    getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
+    getInventoryValue, getGrossMargin, getPnL, getLossControl
   };
 })();
 
