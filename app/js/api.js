@@ -126,6 +126,9 @@ const API = (() => {
       repStatuses:  extra.repStatuses || ['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён','❓ Не пришёл'],
       shifts:       extra.shifts      || ['Смена 1','Смена 2'],
       suppliers:    extra.suppliers   || [],
+      catMeta:      extra.catMeta     || {},
+      accent:       extra.accent      || '#5E5CE6',
+      theme:        extra.theme       || 'dark',
       showKassaBalance: extra.showKassaBalance !== undefined ? extra.showKassaBalance : true
     };
   }); }
@@ -153,7 +156,7 @@ const API = (() => {
     }
 
     // Store UI settings in localStorage
-    const uiKeys = ['cashiers','payTypes','repStatuses','shifts','suppliers','showKassaBalance'];
+    const uiKeys = ['cashiers','payTypes','repStatuses','shifts','suppliers','showKassaBalance','catMeta','accent','theme'];
     const existing = lsGet('auron_ui_' + p.orgId, {});
     uiKeys.forEach(k => { if (p[k] !== undefined) existing[k] = p[k]; });
     lsSet('auron_ui_' + p.orgId, existing);
