@@ -1428,6 +1428,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <button class="sb-nav-item" data-tab="warehouse" onclick="App.setTab('warehouse',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 9h18"/><path d="M9 21V12h6v9"/></svg></span>Товары
       </button>
+      <button class="sb-nav-item" data-tab="finance" onclick="App.setTab('finance',this)">
+        <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>Календарь
+      </button>
       <button class="sb-nav-item" data-tab="report" onclick="App.setTab('report',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Отчёт
       </button>
@@ -1822,6 +1825,18 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div style="height:90px;"></div>
     </div>
 
+    <!-- FINANCE / ПЛАТЁЖНЫЙ КАЛЕНДАРЬ -->
+    <div id="tab-finance" class="panel">
+      <div style="padding:18px 16px 6px;font-size:24px;font-weight:700;">Платёжный календарь</div>
+      <div style="display:flex;gap:8px;padding:0 16px 8px;">
+        <button class="btn-secondary" style="margin:0;flex:1;color:var(--expense);border-color:var(--expense);" onclick="App.openObligation('payable')">− Мы должны</button>
+        <button class="btn-secondary" style="margin:0;flex:1;color:var(--income);border-color:var(--income);" onclick="App.openObligation('receivable')">+ Нам должны</button>
+      </div>
+      <div id="fin-forecast"></div>
+      <div id="fin-obligations"></div>
+      <div style="height:90px;"></div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
       <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
@@ -2069,6 +2084,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div class="am-icon" style="background:#e8f5e9;">🏷️</div>
       <div class="am-name">Товары и склад</div>
       <div class="am-sub">COGS, валовая прибыль, P&amp;L</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.setTab('finance',null)">
+      <div class="am-icon" style="background:#fff8e1;">📅</div>
+      <div class="am-name">Платёжный календарь</div>
+      <div class="am-sub">Долги, отсрочки, прогноз баланса</div>
     </button>
   </div>
 </div>
@@ -2748,6 +2768,7 @@ var App={
     else if(tab==='inventory')App.loadInventory();
     else if(tab==='approvals')App.loadApprovals();
     else if(tab==='warehouse')App.loadWarehouse();
+    else if(tab==='finance')App.loadFinance();
   },
 
   // ── СКЛАД / ТОВАРЫ (реальная себестоимость, COGS, P&L) ──────────
@@ -2910,6 +2931,84 @@ var App={
       head.forEach(function(h,i){o[h]=(cells[i]||'').trim();});
       return o;
     });
+  },
+
+  // ── ФИНАНСЫ / Платёжный календарь (обязательства) ───────────────
+  loadFinance:function(){
+    if(!App.s.ssId)return;
+    ['fin-forecast','fin-obligations'].forEach(function(id){
+      var el=document.getElementById(id);if(el)el.innerHTML='<div class="skel" style="height:80px;border-radius:16px;margin:8px 16px;"></div>';
+    });
+    gs('getPaymentForecast',{ssId:App.s.ssId,days:30}).then(App._renderForecast).catch(App._whErr('fin-forecast'));
+    gs('getObligations',{ssId:App.s.ssId}).then(App._renderObligations).catch(App._whErr('fin-obligations'));
+  },
+  _renderForecast:function(r){
+    r=r||{};var el=document.getElementById('fin-forecast');if(!el)return;
+    var danger=(r.minBalance||0)<0;
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Прогноз баланса (30 дней)</div>'+
+      '<div class="metric-row">'+
+        '<div class="metric-card"><div class="metric-label">Сейчас на счетах</div><div class="metric-value">₽ '+fmt(r.startBalance||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Через 30 дней</div><div class="metric-value" style="color:'+((r.endBalance||0)>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(r.endBalance||0)+'</div></div>'+
+      '</div>'+
+      (danger?'<div class="metric-card" style="background:var(--expense-dim);margin-top:8px;"><div class="metric-label">⚠️ Кассовый разрыв</div>'+
+        '<div class="metric-value" style="color:var(--expense)">₽ '+fmt(r.minBalance)+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);">ожидается '+App._e(String(r.minDate||''))+'</div></div>':'')+
+    '</div>';
+  },
+  _renderObligations:function(r){
+    r=r||{};var el=document.getElementById('fin-obligations');if(!el)return;
+    var items=r.items||[];
+    var pay=items.filter(function(x){return x.kind==='payable'&&x.left>0;});
+    var rec=items.filter(function(x){return x.kind==='receivable'&&x.left>0;});
+    function row(x){
+      var over=x.status==='overdue';
+      return '<div class="settings-row">'+
+        '<div style="flex:1;"><div class="settings-row-label">'+App._e(x.name||'—')+(over?' <span style="color:var(--expense);font-size:11px;font-weight:800;">ПРОСРОЧЕНО</span>':'')+'</div>'+
+          '<div style="font-size:12px;color:'+(over?'var(--expense)':'var(--muted)')+';">'+(x.dueDate?('до '+App._e(x.dueDate)):'без срока')+(x.paid>0?(' • внесено ₽'+fmt(x.paid)):'')+'</div></div>'+
+        '<div style="text-align:right;margin-right:8px;font-weight:700;">₽ '+fmt(x.left)+'</div>'+
+        '<span class="settings-row-action" style="margin-right:8px;color:var(--income);" onclick="App.openPayObligation(\''+x.id+'\','+x.left+')" title="Внести оплату">₽</span>'+
+        '<span class="settings-row-action" onclick="App.delObligation(\''+x.id+'\')">✕</span></div>';
+    }
+    var html='<div class="settings-sec"><div class="settings-sec-title">Мы должны (к оплате) — ₽ '+fmt(r.totalPayable||0)+'</div>'+
+      '<div class="settings-list">'+(pay.length?pay.map(row).join(''):'<div class="settings-row"><span class="settings-row-label" style="color:var(--muted);">Нет долгов</span></div>')+'</div></div>';
+    html+='<div class="settings-sec"><div class="settings-sec-title">Нам должны (к получению) — ₽ '+fmt(r.totalReceivable||0)+'</div>'+
+      '<div class="settings-list">'+(rec.length?rec.map(row).join(''):'<div class="settings-row"><span class="settings-row-label" style="color:var(--muted);">Нет долгов</span></div>')+'</div></div>';
+    el.innerHTML=html;
+  },
+  openObligation:function(kind){
+    var isRec=kind==='receivable';
+    App.openModal('<div style="font-size:18px;font-weight:700;margin-bottom:14px;">'+(isRec?'Нам должны':'Мы должны')+'</div>'+
+      '<div class="field"><label>'+(isRec?'Клиент':'Поставщик / кому')+'</label><input id="ob-name" placeholder="Название"></div>'+
+      '<div class="field"><label>Сумма, ₽</label><input id="ob-amount" type="number" inputmode="decimal" placeholder="0"></div>'+
+      '<div class="field"><label>Срок оплаты</label><input id="ob-due" type="date"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.saveObligationForm(\''+kind+'\')">Сохранить</button>');
+  },
+  saveObligationForm:function(kind){
+    var g=function(id){return (document.getElementById(id)||{}).value||'';};
+    if(!g('ob-name')){App.toast('Укажите контрагента',true);return;}
+    if(!(Number(g('ob-amount'))>0)){App.toast('Сумма > 0',true);return;}
+    gs('saveObligation',{ssId:App.s.ssId,kind:kind,name:g('ob-name'),amount:g('ob-amount'),dueDate:g('ob-due')||null})
+      .then(function(){App.closeModal();App.toast('Сохранено ✓');App.loadFinance();})
+      .catch(function(e){App.toast('Ошибка: '+e.message,true);});
+  },
+  openPayObligation:function(id,left){
+    var accOpts=(App.s.accounts||[]).map(function(a){return'<option>'+App._e(a.name)+'</option>';}).join('');
+    App.openModal('<div style="font-size:18px;font-weight:700;margin-bottom:14px;">Внести оплату</div>'+
+      '<div class="field"><label>Сумма, ₽</label><input id="po-amount" type="number" inputmode="decimal" value="'+left+'"></div>'+
+      '<div class="field"><label>Счёт</label><select id="po-acc"><option value="">— не списывать со счёта —</option>'+accOpts+'</select></div>'+
+      '<div class="field"><label>Комментарий</label><input id="po-cmt" placeholder="…"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.submitPayObligation(\''+id+'\')">Оплатить</button>');
+  },
+  submitPayObligation:function(id){
+    var g=function(x){return (document.getElementById(x)||{}).value||'';};
+    if(!(Number(g('po-amount'))>0)){App.toast('Сумма > 0',true);return;}
+    gs('payObligation',{ssId:App.s.ssId,id:id,amount:g('po-amount'),account:g('po-acc'),comment:g('po-cmt')})
+      .then(function(){App.closeModal();App.toast('Оплата внесена ✓');App.loadFinance();})
+      .catch(function(e){App.toast('Ошибка: '+e.message,true);});
+  },
+  delObligation:function(id){
+    if(!confirm('Удалить обязательство?'))return;
+    gs('deleteObligation',{ssId:App.s.ssId,id:id}).then(function(){App.loadFinance();}).catch(function(e){App.toast(e.message,true);});
   },
 
   openActionMenu:function(){
