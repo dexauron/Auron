@@ -117,6 +117,17 @@ CREATE TABLE IF NOT EXISTS recurring (
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Универсальное облачное хранилище ключ-значение (настройки, персонализация,
+-- платежи, табель, бюджет, склад, согласования, авансы/штрафы — всё, что
+-- раньше хранилось только в браузере). Синхронизируется между устройствами.
+CREATE TABLE IF NOT EXISTS app_kv (
+  org_id     UUID NOT NULL REFERENCES orgs(id) ON DELETE CASCADE,
+  key        TEXT NOT NULL,
+  value      JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  PRIMARY KEY (org_id, key)
+);
+
 -- ══════════════════════════════════════
 -- Row Level Security (каждый видит только свои данные)
 -- ══════════════════════════════════════
@@ -130,6 +141,7 @@ ALTER TABLE trash       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE employees   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE recurring   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE app_kv      ENABLE ROW LEVEL SECURITY;
 
 -- Пересоздаём политики (DROP IF EXISTS + CREATE — идемпотентно)
 DROP POLICY IF EXISTS "own_orgs"          ON orgs;
@@ -141,6 +153,7 @@ DROP POLICY IF EXISTS "own_trash"         ON trash;
 DROP POLICY IF EXISTS "own_categories"    ON categories;
 DROP POLICY IF EXISTS "own_employees"     ON employees;
 DROP POLICY IF EXISTS "own_recurring"     ON recurring;
+DROP POLICY IF EXISTS "own_kv"            ON app_kv;
 
 CREATE POLICY "own_orgs" ON orgs FOR ALL
   USING (auth.uid() = user_id)
@@ -154,6 +167,7 @@ CREATE POLICY "own_trash"        ON trash        FOR ALL USING (EXISTS (SELECT 1
 CREATE POLICY "own_categories"   ON categories   FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = categories.org_id  AND orgs.user_id = auth.uid()));
 CREATE POLICY "own_employees"    ON employees    FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = employees.org_id   AND orgs.user_id = auth.uid()));
 CREATE POLICY "own_recurring"    ON recurring    FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = recurring.org_id   AND orgs.user_id = auth.uid()));
+CREATE POLICY "own_kv"           ON app_kv       FOR ALL USING (EXISTS (SELECT 1 FROM orgs WHERE orgs.id = app_kv.org_id      AND orgs.user_id = auth.uid()));
 
 -- ══════════════════════════════════════
 -- Вспомогательная функция: атомарное обновление баланса
