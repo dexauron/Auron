@@ -1812,6 +1812,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="btn-secondary" style="margin:0;flex:1;min-width:120px;" onclick="App.openReceiveBatch()">📦 Приход</button>
         <button class="btn-secondary" style="margin:0;flex:1;min-width:120px;color:#25D366;border-color:#25D366;" onclick="App.openImportSales()">📥 Импорт продаж</button>
       </div>
+      <div id="wh-daily"></div>
       <div class="period-bar">
         <button class="pill active" data-wp="month" onclick="App.setWhPeriod('month',this)">Месяц</button>
         <button class="pill" data-wp="week" onclick="App.setWhPeriod('week',this)">Неделя</button>
@@ -1820,6 +1821,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       </div>
       <div id="wh-pnl"></div>
       <div id="wh-margin"></div>
+      <div id="wh-abc"></div>
       <div id="wh-inventory"></div>
       <div id="wh-loss"></div>
       <div style="height:90px;"></div>
@@ -2781,13 +2783,53 @@ var App={
   loadWarehouse:function(){
     if(!App.s.ssId)return;
     var per=App.s.whPeriod||'month';
-    ['wh-pnl','wh-margin','wh-inventory','wh-loss'].forEach(function(id){
+    ['wh-daily','wh-pnl','wh-margin','wh-abc','wh-inventory','wh-loss'].forEach(function(id){
       var el=document.getElementById(id);if(el)el.innerHTML='<div class="skel" style="height:80px;border-radius:16px;margin:8px 16px;"></div>';
     });
+    gs('getDailyDashboard',{ssId:App.s.ssId,date:fmtISO(new Date())}).then(App._renderDaily).catch(App._whErr('wh-daily'));
     gs('getPnL',{ssId:App.s.ssId,period:per}).then(App._renderWhPnl).catch(App._whErr('wh-pnl'));
     gs('getGrossMargin',{ssId:App.s.ssId,period:per}).then(App._renderWhMargin).catch(App._whErr('wh-margin'));
+    gs('getAbcXyz',{ssId:App.s.ssId,period:per}).then(App._renderAbc).catch(App._whErr('wh-abc'));
     gs('getInventoryValue',{ssId:App.s.ssId}).then(App._renderWhInventory).catch(App._whErr('wh-inventory'));
     gs('getLossControl',{ssId:App.s.ssId,period:per}).then(App._renderWhLoss).catch(App._whErr('wh-loss'));
+  },
+  _renderDaily:function(r){
+    r=r||{};var el=document.getElementById('wh-daily');if(!el)return;
+    var bh=r.byHour||[],max=Math.max.apply(null,bh.map(function(h){return h.revenue;}).concat([1]));
+    var bars=bh.filter(function(h){return h.hour>=7&&h.hour<=23;}).map(function(h){
+      var ht=Math.round((h.revenue/max)*48);
+      return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">'+
+        '<div style="width:100%;max-width:11px;height:'+(ht||2)+'px;background:'+(h.revenue>0?'var(--brand)':'var(--surface-3)')+';border-radius:3px;" title="'+h.hour+':00 — ₽'+fmt(h.revenue)+'"></div>'+
+        '<div style="font-size:8px;color:var(--muted);">'+h.hour+'</div></div>';
+    }).join('');
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Дашборд дня — '+App._e(String(r.date||''))+'</div>'+
+      '<div class="metric-row">'+
+        '<div class="metric-card"><div class="metric-label">Выручка</div><div class="metric-value green">₽ '+fmt(r.revenue||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Чеков</div><div class="metric-value">'+(r.traffic||0)+'</div></div>'+
+      '</div>'+
+      '<div class="metric-row">'+
+        '<div class="metric-card"><div class="metric-label">Средний чек</div><div class="metric-value">₽ '+fmt(r.avgCheck||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Возвраты / отмены</div><div class="metric-value red">'+(r.refundCount||0)+' / '+(r.voidCount||0)+'</div></div>'+
+      '</div>'+
+      '<div style="margin-top:10px;font-size:12px;color:var(--muted);margin-bottom:4px;">Трафик по часам</div>'+
+      '<div style="display:flex;align-items:flex-end;gap:2px;height:60px;">'+(bars||'<span style="color:var(--muted);font-size:13px;">Нет продаж за сегодня</span>')+'</div>'+
+    '</div>';
+  },
+  _renderAbc:function(r){
+    r=r||{};var items=r.items||[];var el=document.getElementById('wh-abc');if(!el)return;
+    if(!items.length){el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">ABC/XYZ-анализ</div><div style="padding:12px;color:var(--muted);font-size:13px;">Недостаточно данных о продажах.</div></div>';return;}
+    var abcColor={A:'#30D158',B:'#FF9F0A',C:'#FF453A'};
+    var xyzLabel={X:'стабильный',Y:'колеблется',Z:'нерегулярный'};
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">ABC/XYZ-анализ ассортимента</div>'+
+      '<div style="font-size:12px;color:var(--muted);padding:0 4px 8px;">A — топ 80% выручки, B — 15%, C — 5%. X/Y/Z — стабильность спроса.</div>'+
+      '<div class="settings-list">'+items.slice(0,40).map(function(x){
+        return '<div class="settings-row">'+
+          '<span style="display:inline-flex;width:26px;height:26px;border-radius:8px;align-items:center;justify-content:center;font-weight:800;color:#fff;background:'+(abcColor[x.abc]||'#888')+';margin-right:4px;">'+x.abc+'</span>'+
+          '<span style="display:inline-flex;width:22px;height:22px;border-radius:6px;align-items:center;justify-content:center;font-weight:700;border:1.5px solid var(--line);margin-right:8px;font-size:12px;">'+x.xyz+'</span>'+
+          '<div style="flex:1;"><div class="settings-row-label">'+App._e(x.name||x.sku)+'</div>'+
+            '<div style="font-size:12px;color:var(--muted);">'+(xyzLabel[x.xyz]||'')+' • разброс '+x.cv+'%</div></div>'+
+          '<span style="font-weight:700;">₽ '+fmt(x.revenue)+'</span></div>';
+      }).join('')+'</div></div>';
   },
   _whErr:function(id){return function(e){
     var el=document.getElementById(id);

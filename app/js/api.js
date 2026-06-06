@@ -1408,6 +1408,72 @@ const API = (() => {
     }));
   }); }
 
+  // Дашборд дня: выручка, трафик по часам, средний чек, потери
+  async function getDailyDashboard(p) { return _err(async () => {
+    const date = p.date || new Date().toISOString().slice(0, 10);
+    const { data: recs, error } = await sb().from('receipts')
+      .select('ts,op_type,total').eq('org_id', p.orgId)
+      .gte('ts', date + 'T00:00:00').lte('ts', date + 'T23:59:59.999');
+    if (error) return { __error: error.message };
+    const hours = Array.from({ length: 24 }, () => ({ count: 0, revenue: 0 }));
+    let revenue = 0, sales = 0, refundSum = 0, refundCnt = 0, voidCnt = 0;
+    (recs || []).forEach(r => {
+      const h = new Date(r.ts).getHours();
+      if (r.op_type === 'sale') {
+        revenue += r.total || 0; sales++;
+        hours[h].count++; hours[h].revenue += r.total || 0;
+      } else if (r.op_type === 'refund') { refundSum += r.total || 0; refundCnt++; }
+      else if (r.op_type === 'void')     { voidCnt++; }
+    });
+    return {
+      date, revenue: revenue / 100, traffic: sales,
+      avgCheck: sales ? Math.round(revenue / sales) / 100 : 0,
+      refundSum: refundSum / 100, refundCount: refundCnt, voidCount: voidCnt,
+      byHour: hours.map((h, i) => ({ hour: i, count: h.count, revenue: h.revenue / 100 }))
+    };
+  }); }
+
+  // ABC/XYZ-анализ ассортимента (ABC — по выручке, XYZ — по стабильности спроса)
+  async function getAbcXyz(p) { return _err(async () => {
+    const { from, to } = _periodDates(p.period || 'month');
+    const { data, error } = await sb().from('v_gross_margin').select('date,sku,name,qty,revenue,op_type')
+      .eq('org_id', p.orgId).gte('date', from).lte('date', to);
+    if (error) return { __error: error.message };
+    const sku = {};
+    (data || []).forEach(r => {
+      if (r.op_type !== 'sale') return;
+      const o = sku[r.sku] || (sku[r.sku] = { sku: r.sku, name: r.name, revenue: 0, weeks: {} });
+      o.revenue += r.revenue || 0;
+      const wk = _isoWeek(r.date);
+      o.weeks[wk] = (o.weeks[wk] || 0) + Number(r.qty || 0);
+    });
+    const list = Object.values(sku);
+    const totalRev = list.reduce((s, x) => s + x.revenue, 0) || 1;
+    list.sort((a, b) => b.revenue - a.revenue);
+    let cum = 0;
+    list.forEach(x => {
+      cum += x.revenue;
+      const share = cum / totalRev;
+      x.abc = share <= 0.8 ? 'A' : share <= 0.95 ? 'B' : 'C';
+      const vals = Object.values(x.weeks);
+      const mean = vals.reduce((s, v) => s + v, 0) / (vals.length || 1);
+      const variance = vals.reduce((s, v) => s + (v - mean) * (v - mean), 0) / (vals.length || 1);
+      const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
+      x.cv = Math.round(cv * 100);
+      x.xyz = cv <= 0.1 ? 'X' : cv <= 0.25 ? 'Y' : 'Z';
+      x.revenueRub = x.revenue / 100;
+    });
+    return { items: list.map(x => ({ sku: x.sku, name: x.name, revenue: x.revenueRub, abc: x.abc, xyz: x.xyz, cv: x.cv })) };
+  }); }
+
+  function _isoWeek(dStr) {
+    const d = new Date(dStr + 'T00:00:00');
+    const day = (d.getDay() + 6) % 7;
+    d.setDate(d.getDate() - day + 3);
+    const firstThu = new Date(d.getFullYear(), 0, 4);
+    return d.getFullYear() + '-' + (1 + Math.round(((d - firstThu) / 86400000 - 3 + ((firstThu.getDay() + 6) % 7)) / 7));
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // ОБЯЗАТЕЛЬСТВА + ПЛАТЁЖНЫЙ КАЛЕНДАРЬ (таблица obligations)
   // ═══════════════════════════════════════════════════════════════
@@ -1533,7 +1599,8 @@ const API = (() => {
     getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData,
     getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
     getInventoryValue, getGrossMargin, getPnL, getLossControl,
-    getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast
+    getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast,
+    getDailyDashboard, getAbcXyz
   };
 })();
 
