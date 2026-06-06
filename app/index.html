@@ -1556,6 +1556,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="pill" data-ap="year" onclick="App.setAnPeriod('year',this)">Год</button>
         <button class="pill" data-ap="custom" onclick="App.openCustomPeriod('analytics')">⊞ Свой</button>
       </div>
+      <div style="display:flex;gap:8px;padding:0 16px 4px;">
+        <button class="btn-secondary" style="flex:1;margin:0;color:#25D366;border-color:#25D366;" onclick="App.shareReport('whatsapp')">📲 Отправить в WhatsApp</button>
+        <button class="btn-secondary" style="flex:1;margin:0;" onclick="App.shareReport('copy')">📋 Скопировать</button>
+      </div>
       <div class="an-tabs">
         <button class="an-tab active" onclick="App.setAnTab('pl',this)">P&amp;L</button>
         <button class="an-tab" onclick="App.setAnTab('growth',this)">Динамика</button>
@@ -1797,6 +1801,19 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
       <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Внешний вид</div>
+        <div class="settings-list">
+          <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div class="settings-row-label">Тема</div>
+            <div id="theme-picker" style="display:flex;gap:8px;"></div>
+          </div>
+          <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:10px;">
+            <div class="settings-row-label">Акцентный цвет</div>
+            <div id="accent-picker" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;"></div>
+          </div>
+        </div>
+      </div>
       <div class="settings-sec">
         <div class="settings-sec-title">Счета</div>
         <div class="settings-list" id="settings-accounts-list"></div>
@@ -2223,7 +2240,17 @@ var CAT_ICONS={
   'Инвестиция владельца':{icon:'💎',bg:'#5E5CE6'},
   '_default':{icon:'💸',bg:'#5E5CE6'}
 };
-function catIcon(n){return CAT_ICONS[n]||CAT_ICONS['_default'];}
+function catIcon(n){
+  // 1) пользовательская настройка (иконка+цвет, заданные в Настройках)
+  try{
+    var meta=App&&App.s&&App.s.settings&&App.s.settings.catMeta;
+    if(meta&&meta[n]&&(meta[n].icon||meta[n].bg))
+      return {icon:meta[n].icon||(CAT_ICONS[n]||CAT_ICONS['_default']).icon,
+              bg:  meta[n].bg  ||(CAT_ICONS[n]||CAT_ICONS['_default']).bg};
+  }catch(e){}
+  // 2) встроенный справочник  3) дефолт
+  return CAT_ICONS[n]||CAT_ICONS['_default'];
+}
 
 function gs(fn,args){
   return new Promise(function(ok,fail){
@@ -2302,15 +2329,6 @@ var App={
 
   _bootApp:function(){
     var _errEl=document.getElementById('signin-error');
-    function _bdbg(msg){
-      if(_errEl){
-        _errEl.style.display='block';
-        _errEl.style.background='rgba(94,92,230,.15)';
-        _errEl.style.borderColor='rgba(94,92,230,.4)';
-        _errEl.innerHTML=(_errEl.innerHTML||'')+'<div>→ '+msg+'</div>';
-      }
-      console.log('[boot]',msg);
-    }
     function _berr(html){
       if(_errEl){
         _errEl.innerHTML=html;
@@ -2319,7 +2337,8 @@ var App={
         _errEl.style.display='block';
       }
     }
-    _bdbg('загружаю данные пользователя...');
+    var loader=document.getElementById('loader');
+    if(loader)loader.classList.remove('hide');
     // Timeout: if Supabase doesn't respond in 15s, show error
     var _tid=setTimeout(function(){
       try{document.getElementById('loader').classList.add('hide');}catch(e){}
@@ -2330,7 +2349,6 @@ var App={
     gs('initUserApp',{}).then(function(r){
       clearTimeout(_tid);
       document.getElementById('loader').classList.add('hide');
-      _bdbg('ответ получен, isNew='+r.isNew+(r.noSession?' (noSession)':''));
       if(r.isNew){
         if(r.noSession){
           AUTH.signOut().catch(function(){});
@@ -2406,20 +2424,11 @@ var App={
     if(errEl){errEl.style.display='none';errEl.innerHTML='';}
     if(okEl)okEl.style.display='none';
 
-    // Debug: show step-by-step what's happening
-    function dbg(msg){
-      if(errEl){errEl.style.display='block';errEl.style.background='rgba(94,92,230,.15)';errEl.style.borderColor='rgba(94,92,230,.4)';
-        errEl.innerHTML=errEl.innerHTML+'<div>→ '+msg+'</div>';}
-      console.log('[signin]', msg);
-    }
-    dbg('кнопка нажата, email='+email.substring(0,5)+'...');
-
     if(!email||!pass){
-      if(errEl){errEl.style.background='rgba(255,69,58,.12)';errEl.style.borderColor='rgba(255,69,58,.3)';errEl.textContent='⚠️ Введите email и пароль';}
+      if(errEl){errEl.style.display='block';errEl.style.background='rgba(255,69,58,.12)';errEl.style.borderColor='rgba(255,69,58,.3)';errEl.textContent='⚠️ Введите email и пароль';}
       return;
     }
     if(btn){btn.disabled=true;btn.textContent=App._siMode==='signup'?'Создаём аккаунт…':'Входим…';}
-    dbg('отправляю запрос к Supabase...');
     try{
       if(App._siMode==='signup'){
         await AUTH.signUpEmail(email,pass);
@@ -2434,9 +2443,7 @@ var App={
         if(btn){btn.textContent='Войти';}
         if(tog)tog.textContent='Нет аккаунта? Создать';
       }else{
-        dbg('вход...');
         await AUTH.signInEmail(email,pass);
-        dbg('✓ вход успешен! загружаю приложение...');
         // Явно запускаем загрузку — не ждём onAuthStateChange
         var loader=document.getElementById('loader');
         if(loader)loader.classList.remove('hide');
@@ -3069,12 +3076,131 @@ var App={
       if(!App.s.settings.employees)App.s.settings.employees=[];
       if(!App.s.settings.shifts)App.s.settings.shifts=['Смена 1','Смена 2','Смена 3'];
       if(!App.s.settings.suppliers)App.s.settings.suppliers=[];
+      if(!App.s.settings.catMeta)App.s.settings.catMeta={};
       if(App.s.settings.showKassaBalance===undefined)App.s.settings.showKassaBalance=true;
       App._applyKassaBalanceToggle();
+      App.applyTheme();
       if(cb)cb();
     }
     setTimeout(function(){_done({});},8000); // fallback: use defaults after 8s
     gs('getSettings',{ssId:App.s.ssId}).then(function(r){_done(r);}).catch(function(){_done({});});
+  },
+
+  // ── Персонализация: тема + акцентный цвет ───────────────────────
+  applyTheme:function(){
+    var st=App.s.settings||{};
+    // Тема: dark | light | auto
+    var theme=st.theme||'dark';
+    if(theme==='auto'){
+      theme=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
+    }
+    document.documentElement.setAttribute('data-theme',theme);
+    // Акцентный цвет
+    var accent=st.accent||'#5E5CE6';
+    var root=document.documentElement.style;
+    root.setProperty('--brand',accent);
+    var rgb=App._hexToRgb(accent);
+    if(rgb){
+      var c=rgb.r+','+rgb.g+','+rgb.b;
+      root.setProperty('--brand-dim','rgba('+c+',.14)');
+      root.setProperty('--brand-glow','0 8px 22px rgba('+c+',.45)');
+      root.setProperty('--shadow-glow','0 8px 22px rgba('+c+',.45)');
+      root.setProperty('--shadow-brand','0 8px 28px -6px rgba('+c+',.55)');
+      root.setProperty('--glow-brand','0 0 40px rgba('+c+',.25)');
+      root.setProperty('--transfer',accent);
+    }
+  },
+  _hexToRgb:function(hex){
+    if(!hex)return null;
+    var m=String(hex).replace('#','');
+    if(m.length===3)m=m[0]+m[0]+m[1]+m[1]+m[2]+m[2];
+    if(m.length!==6)return null;
+    return {r:parseInt(m.slice(0,2),16),g:parseInt(m.slice(2,4),16),b:parseInt(m.slice(4,6),16)};
+  },
+  setAccent:function(hex){
+    App.s.settings.accent=hex;App.applyTheme();App.saveSettings();
+    if(App.toast)App.toast('Цвет применён ✓');
+    App.renderSettingsPage();
+  },
+  setTheme:function(mode){
+    App.s.settings.theme=mode;App.applyTheme();App.saveSettings();
+    App.renderSettingsPage();
+  },
+  ACCENTS:['#5E5CE6','#0A84FF','#30D158','#FF453A','#FF9F0A','#FF375F','#BF5AF2','#64D2FF','#FFD60A','#AC8E68'],
+  _renderAppearance:function(){
+    var st=App.s.settings||{};
+    // Тема
+    var tp=document.getElementById('theme-picker');
+    if(tp){
+      var cur=st.theme||'dark';
+      var modes=[['dark','🌙 Тёмная'],['light','☀️ Светлая'],['auto','🔄 Авто']];
+      tp.innerHTML=modes.map(function(m){
+        var on=cur===m[0];
+        return '<button type="button" onclick="App.setTheme(\''+m[0]+'\')" style="flex:1;padding:10px;border-radius:12px;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600;'
+          +'border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';'
+          +'background:'+(on?'var(--brand-dim)':'transparent')+';'
+          +'color:'+(on?'var(--brand)':'var(--ink-2)')+';">'+m[1]+'</button>';
+      }).join('');
+    }
+    // Акцентный цвет
+    var ap=document.getElementById('accent-picker');
+    if(ap){
+      var acc=(st.accent||'#5E5CE6').toLowerCase();
+      var html=App.ACCENTS.map(function(c){
+        var on=c.toLowerCase()===acc;
+        return '<button type="button" onclick="App.setAccent(\''+c+'\')" title="'+c+'" style="width:36px;height:36px;border-radius:50%;cursor:pointer;background:'+c+';'
+          +'border:3px solid '+(on?'var(--ink)':'transparent')+';box-shadow:0 2px 8px rgba(0,0,0,.3);"></button>';
+      }).join('');
+      // Произвольный цвет
+      html+='<label style="width:36px;height:36px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;'
+        +'border:1.5px dashed var(--line);font-size:16px;position:relative;" title="Свой цвет">🎨'
+        +'<input type="color" value="'+acc+'" oninput="App.setAccent(this.value)" style="opacity:0;position:absolute;inset:0;width:100%;height:100%;cursor:pointer;"></label>';
+      ap.innerHTML=html;
+    }
+  },
+
+  // ── Редактор иконки/цвета категории ─────────────────────────────
+  EMOJI_CHOICES:['💸','🛒','💰','🏠','👥','💡','📢','🔧','🧾','🏛','📋','📦','🚗','🍔','📱','💊','🎁','✂️','⚡','🌐','📕','🪑','💳','🏦','📈','🔌','🧹','🚚','☕','🎯'],
+  openCatStyle:function(name){
+    var keep=(App._catStyleName===name&&App._catStyleSel);
+    App._catStyleName=name;
+    var meta=(App.s.settings.catMeta&&App.s.settings.catMeta[name])||catIcon(name);
+    var curIcon=keep?App._catStyleSel.icon:(meta.icon||'💸');
+    var curBg=(keep?App._catStyleSel.bg:(meta.bg||'#5E5CE6')).toLowerCase();
+    var emojiHtml=App.EMOJI_CHOICES.map(function(e){
+      var on=e===curIcon;
+      return '<button type="button" onclick="App._catPickIcon(\''+e+'\')" style="width:42px;height:42px;border-radius:12px;font-size:20px;cursor:pointer;'
+        +'border:2px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'var(--brand-dim)':'var(--surface-2)')+';">'+e+'</button>';
+    }).join('');
+    var colorHtml=App.ACCENTS.map(function(c){
+      var on=c.toLowerCase()===curBg;
+      return '<button type="button" onclick="App._catPickColor(\''+c+'\')" style="width:34px;height:34px;border-radius:50%;cursor:pointer;background:'+c+';border:3px solid '+(on?'var(--ink)':'transparent')+';"></button>';
+    }).join('');
+    colorHtml+='<label style="width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;border:1.5px dashed var(--line);position:relative;">🎨'
+      +'<input type="color" value="'+curBg+'" oninput="App._catPickColor(this.value)" style="opacity:0;position:absolute;inset:0;cursor:pointer;"></label>';
+    var body='<div style="text-align:center;margin-bottom:14px;">'
+      +'<div id="cat-style-preview" style="width:56px;height:56px;border-radius:16px;display:inline-flex;align-items:center;justify-content:center;font-size:28px;background:'+curBg+'25;">'+curIcon+'</div>'
+      +'<div style="font-weight:700;margin-top:8px;font-size:17px;">'+App._e(name)+'</div></div>'
+      +'<div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Иконка</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">'+emojiHtml+'</div>'
+      +'<div style="font-size:13px;color:var(--muted);margin-bottom:8px;">Цвет</div>'
+      +'<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px;">'+colorHtml+'</div>'
+      +'<button type="button" class="btn-primary" onclick="App._catStyleSave()" style="width:100%;">Сохранить</button>';
+    App._catStyleSel={icon:curIcon,bg:curBg};
+    App.openModal(body);
+  },
+  _catPickIcon:function(e){App._catStyleSel.icon=e;App.openCatStyle(App._catStyleName);},
+  _catPickColor:function(c){App._catStyleSel.bg=c;App.openCatStyle(App._catStyleName);},
+  _catStylePreview:function(){
+    var p=document.getElementById('cat-style-preview');
+    if(p){p.textContent=App._catStyleSel.icon;p.style.background=App._catStyleSel.bg+'25';}
+  },
+  _catStyleSave:function(){
+    if(!App.s.settings.catMeta)App.s.settings.catMeta={};
+    App.s.settings.catMeta[App._catStyleName]={icon:App._catStyleSel.icon,bg:App._catStyleSel.bg};
+    App._catStyleSel=null;
+    App.saveSettings();App.closeModal();App.renderSettingsPage();
+    if(App.toast)App.toast('Оформление сохранено ✓');
   },
 
   _applyKassaBalanceToggle:function(){
@@ -3399,6 +3525,63 @@ var App={
       if(apBtn)apBtn.textContent='📅 '+from.substring(5)+' – '+to.substring(5);
       App.loadAnalytics();
     }
+  },
+
+  _periodLabel:function(p){
+    var m={today:'Сегодня',week:'Неделя',month:'Месяц',year:'Год',all:'Всё время'};
+    if(p&&p.indexOf('custom:')===0){var x=p.split(':');return x[1]+' — '+x[2];}
+    return m[p]||p;
+  },
+  // ── Отчёт в WhatsApp / буфер обмена ─────────────────────────────
+  shareReport:function(mode){
+    if(!App.s.ssId){App.toast('Сначала выберите организацию',true);return;}
+    App.toast('Готовлю отчёт…');
+    var ap=App._getAnPeriod();
+    Promise.all([
+      gs('getAnalytics',{ssId:App.s.ssId,period:ap}),
+      gs('getAccountsAll',{ssId:App.s.ssId})
+    ]).then(function(res){
+      var r=res[0]||{},accs=(res[1]||[]).filter(function(a){return a.status!=='archived';});
+      var income=r.income||0,expense=r.expense||0,profit=income-expense;
+      var L=[];
+      L.push('📊 *'+(App.s.orgName||'Отчёт')+'*');
+      L.push('🗓 Период: '+App._periodLabel(ap));
+      L.push('');
+      L.push('💰 Выручка:  ₽ '+fmtFull(income));
+      L.push('💸 Расходы:  ₽ '+fmtFull(expense));
+      L.push((profit>=0?'✅':'🔻')+' Прибыль:  ₽ '+fmtFull(profit));
+      var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';}).slice(0,7);
+      if(cats.length){
+        L.push('');L.push('*Расходы по категориям:*');
+        cats.forEach(function(c){var ci=catIcon(c.category);L.push(ci.icon+' '+c.category+': ₽ '+fmtFull(c.total));});
+      }
+      if(accs.length){
+        L.push('');L.push('*Остатки по счетам:*');
+        var total=0;
+        accs.forEach(function(a){total+=(a.balance||0);var ci=catIcon(a.name);L.push(ci.icon+' '+a.name+': ₽ '+fmtFull(a.balance));});
+        L.push('━━━━━━━━━━');
+        L.push('💼 Итого: ₽ '+fmtFull(total));
+      }
+      L.push('');
+      L.push('_Сформировано в Auron • '+new Date().toLocaleDateString('ru')+'_');
+      var text=L.join('\n');
+      if(mode==='whatsapp'){
+        window.open('https://wa.me/?text='+encodeURIComponent(text),'_blank');
+      }else{
+        App._copyText(text);
+        App.toast('Отчёт скопирован ✓');
+      }
+    }).catch(function(e){App.toast('Ошибка: '+(e.message||e),true);});
+  },
+  _copyText:function(text){
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text);return;}
+    }catch(e){}
+    try{
+      var ta=document.createElement('textarea');ta.value=text;
+      ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);
+      ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    }catch(e){}
   },
 
   loadAnalytics:function(){
@@ -4830,6 +5013,7 @@ var App={
   renderSettingsPage:function(){
     var unEl=document.getElementById('settings-user-name');
     if(unEl)unEl.textContent=App.s.userName||(localStorage.getItem('auron_user_name')||'Аккаунт Google');
+    App._renderAppearance();
     App.loadRecurring();
     // Budget summary
     gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){
@@ -4878,6 +5062,7 @@ var App={
       return '<div class="settings-row">'+
         '<span class="settings-row-icon" style="background:'+ci.bg+'20;border-radius:8px;">'+ci.icon+'</span>'+
         '<span class="settings-row-label">'+App._e(c)+'</span>'+
+        '<span class="settings-row-action" style="margin-right:12px;" onclick="App.openCatStyle(\''+App._e(c).replace(/'/g,"\\'")+'\')" title="Иконка и цвет">✎</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.cats.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Используются стандартные</span></div>';
     // Shifts
