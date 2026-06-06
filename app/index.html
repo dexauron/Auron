@@ -3694,7 +3694,7 @@ var App={
     if(!confirm('Сбросить все данные и заполнить демо-данными?\n\nВсе текущие записи будут удалены.'))return;
     App.toast('Заполняю данные…');
     gs('seedDemoData',{ssId:App.s.ssId}).then(function(r){
-      App.toast('Готово — добавлено '+r.txCount+' операций ✓');
+      App.toast('Готово — '+(r.txCount||0)+' операций, '+(r.shiftCount||0)+' смен, '+(r.debtCount||0)+' долгов ✓');
       App.loadSettings(function(){App.loadHome();});
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
@@ -4813,7 +4813,7 @@ var App={
         '</div>';
       }).join('')+'</div>'+
       (r.byDay&&r.byDay.length?
-        '<div class="chart-wrap"><div class="chart-title">Выручка по дням (из смен)</div><canvas id="chart-shifts" height="150"></canvas></div>':''
+        '<div class="chart-wrap"><div class="chart-title">Выручка по дням (из смен)</div><canvas id="chart-shifts" height="90"></canvas></div>':''
       );
     if(r.byDay&&r.byDay.length){
       var ctx=document.getElementById('chart-shifts');
