@@ -315,7 +315,9 @@ const API = (() => {
     const today = new Date();
     const pad = x => String(x).padStart(2,'0');
     const iso  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    if (!period || period === 'all') return { from: null, to: null };
+    // 'all' / unknown → very wide range so unconditional .gte/.lte calls never break
+    const ALL = { from: '1970-01-01', to: '2999-12-31' };
+    if (!period || period === 'all') return ALL;
     if (period === 'today') { const d = iso(today); return { from: d, to: d }; }
     if (period === 'week') {
       const mon = new Date(today); mon.setDate(today.getDate() - ((today.getDay()+6)%7));
@@ -328,8 +330,8 @@ const API = (() => {
       const last = new Date(today.getFullYear(), today.getMonth(), 0);
       return { from: iso(pm), to: iso(last) };
     }
-    if (period && period.startsWith('custom:')) { const pts = period.split(':'); return { from: pts[1], to: pts[2] }; }
-    return { from: null, to: null };
+    if (period && period.startsWith('custom:')) { const pts = period.split(':'); return { from: pts[1] || ALL.from, to: pts[2] || ALL.to }; }
+    return ALL;
   }
 
   // ── Trash ─────────────────────────────────────────────────────
@@ -857,20 +859,16 @@ const API = (() => {
     const tsData = lsGet(key, { days: [] });
     const days = tsData.days || [];
 
-    // Load employees from settings
-    const settingsKey = `auron_ui_${p.orgId}`;
-    const uiSettings = lsGet(settingsKey, {});
-    const employees = uiSettings.employees || [];
+    // Load employees from the DB (employees table); rate = daily salary
+    const { data: empRows } = await sb().from('employees').select('*').eq('org_id', p.orgId);
+    const employees = (empRows || []).map(e => ({ name: e.name, dailySalary: e.rate, salaryType: 'daily' }));
 
     // Load advances and penalties for this month
     const apKey = `auron_ap_${p.orgId}_${year}_${month}`;
     const apData = lsGet(apKey, { advances: [], penalties: [] });
 
     const empMap = {};
-    employees.forEach(e => {
-      const name = typeof e === 'object' ? e.name : e;
-      empMap[name] = e;
-    });
+    employees.forEach(e => { empMap[e.name] = e; });
 
     // Group timesheet by employee
     const byEmp = {};
