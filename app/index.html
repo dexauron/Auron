@@ -3744,11 +3744,12 @@ var App={
       }
     }).catch(function(e){App.toast(e.message,true);});
     // load supplier debt total asynchronously
-    gs('getDebts',{ssId:App.s.ssId}).then(function(reps){
-      var total=(reps||[]).reduce(function(s,r){return s+(r.debt||0);},0);
+    gs('getDebts',{ssId:App.s.ssId}).then(function(r){
+      var reps=(r&&r.reps)||(Array.isArray(r)?r:[]);
+      var total=reps.reduce(function(s,x){return s+Math.max((x.balance||x.debt||0),0);},0);
       var e=document.getElementById('split-payable');
       if(e)e.textContent='₽ '+fmt(total);
-    }).catch(function(){});
+    }).catch(function(){var e=document.getElementById('split-payable');if(e)e.textContent='₽ 0';});
   },
 
   setPeriod:function(p){

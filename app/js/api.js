@@ -395,19 +395,28 @@ const API = (() => {
 
   async function getHomeSummary(p) { return _err(async () => {
     const { from, to } = _periodDates(p.period || 'today');
-    const [accsR, txsR] = await Promise.all([
+    const [accsR, txsR, aggR, shiftsR] = await Promise.all([
       sb().from('accounts').select('*').eq('org_id', p.orgId).neq('status','archived').order('sort_order'),
+      // последние операции для списка
       sb().from('transactions').select('*').eq('org_id', p.orgId)
         .gte('date', from).lte('date', to)
-        .order('date', { ascending: false }).order('created_at', { ascending: false }).limit(50)
+        .order('date', { ascending: false }).order('created_at', { ascending: false }).limit(50),
+      // агрегат за весь период (а не только по 50 строкам)
+      sb().from('transactions').select('type,amount').eq('org_id', p.orgId).gte('date', from).lte('date', to),
+      // Z-выручка по сменам за период
+      sb().from('shifts').select('z_total,z_cash,z_card,z_sbp').eq('org_id', p.orgId).gte('date', from).lte('date', to)
     ]);
     const txs = (txsR.data || []).map(fmtTx);
-    const income  = txs.filter(t => t.type === 'Доход').reduce((s, t) => s + t.amount, 0);
-    const expense = txs.filter(t => t.type === 'Расход').reduce((s, t) => s + t.amount, 0);
+    const agg = aggR.data || [];
+    const income  = agg.filter(t => t.type === 'Доход').reduce((s, t) => s + (t.amount || 0), 0);
+    const expense = agg.filter(t => t.type === 'Расход').reduce((s, t) => s + (t.amount || 0), 0);
+    const count = agg.length;
+    const shiftRevenue = (shiftsR.data || []).reduce((s, r) =>
+      s + (r.z_total || ((r.z_cash || 0) + (r.z_card || 0) + (r.z_sbp || 0))), 0);
     return {
       accounts: (accsR.data || []).map(r => ({ id: r.id, name: r.name, balance: r.balance, status: r.status, icon: r.icon, color: r.color })),
       transactions: txs,
-      summary: { income, expense }
+      summary: { income, expense, count, shiftRevenue }
     };
   }); }
 
