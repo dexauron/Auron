@@ -1425,6 +1425,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <button class="sb-nav-item" data-tab="analytics" onclick="App.setTab('analytics',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>Аналитика
       </button>
+      <button class="sb-nav-item" data-tab="warehouse" onclick="App.setTab('warehouse',this)">
+        <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 9h18"/><path d="M9 21V12h6v9"/></svg></span>Товары
+      </button>
       <button class="sb-nav-item" data-tab="report" onclick="App.setTab('report',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Отчёт
       </button>
@@ -1798,6 +1801,27 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       </div>
     </div>
 
+    <!-- WAREHOUSE / ТОВАРЫ -->
+    <div id="tab-warehouse" class="panel">
+      <div style="padding:18px 16px 6px;font-size:24px;font-weight:700;">Товары и склад</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 16px 8px;">
+        <button class="btn-secondary" style="margin:0;flex:1;min-width:120px;" onclick="App.openProductForm(null)">+ Товар</button>
+        <button class="btn-secondary" style="margin:0;flex:1;min-width:120px;" onclick="App.openReceiveBatch()">📦 Приход</button>
+        <button class="btn-secondary" style="margin:0;flex:1;min-width:120px;color:#25D366;border-color:#25D366;" onclick="App.openImportSales()">📥 Импорт продаж</button>
+      </div>
+      <div class="period-bar">
+        <button class="pill active" data-wp="month" onclick="App.setWhPeriod('month',this)">Месяц</button>
+        <button class="pill" data-wp="week" onclick="App.setWhPeriod('week',this)">Неделя</button>
+        <button class="pill" data-wp="year" onclick="App.setWhPeriod('year',this)">Год</button>
+        <button class="pill" data-wp="all" onclick="App.setWhPeriod('all',this)">Всё</button>
+      </div>
+      <div id="wh-pnl"></div>
+      <div id="wh-margin"></div>
+      <div id="wh-inventory"></div>
+      <div id="wh-loss"></div>
+      <div style="height:90px;"></div>
+    </div>
+
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
       <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
@@ -2025,6 +2049,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div class="am-icon" style="background:#e3f2fd;">✅</div>
       <div class="am-name">Согласования</div>
       <div class="am-sub">Заявки на расходы</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.setTab('warehouse',null)">
+      <div class="am-icon" style="background:#e8f5e9;">🏷️</div>
+      <div class="am-name">Товары и склад</div>
+      <div class="am-sub">COGS, валовая прибыль, P&amp;L</div>
     </button>
   </div>
 </div>
@@ -2708,6 +2737,169 @@ var App={
     else if(tab==='payroll')App.loadPayroll();
     else if(tab==='inventory')App.loadInventory();
     else if(tab==='approvals')App.loadApprovals();
+    else if(tab==='warehouse')App.loadWarehouse();
+  },
+
+  // ── СКЛАД / ТОВАРЫ (реальная себестоимость, COGS, P&L) ──────────
+  setWhPeriod:function(p,btn){
+    App.s.whPeriod=p;
+    document.querySelectorAll('[data-wp]').forEach(function(b){b.classList.remove('active');});
+    if(btn)btn.classList.add('active');
+    App.loadWarehouse();
+  },
+  loadWarehouse:function(){
+    if(!App.s.ssId)return;
+    var per=App.s.whPeriod||'month';
+    ['wh-pnl','wh-margin','wh-inventory','wh-loss'].forEach(function(id){
+      var el=document.getElementById(id);if(el)el.innerHTML='<div class="skel" style="height:80px;border-radius:16px;margin:8px 16px;"></div>';
+    });
+    gs('getPnL',{ssId:App.s.ssId,period:per}).then(App._renderWhPnl).catch(App._whErr('wh-pnl'));
+    gs('getGrossMargin',{ssId:App.s.ssId,period:per}).then(App._renderWhMargin).catch(App._whErr('wh-margin'));
+    gs('getInventoryValue',{ssId:App.s.ssId}).then(App._renderWhInventory).catch(App._whErr('wh-inventory'));
+    gs('getLossControl',{ssId:App.s.ssId,period:per}).then(App._renderWhLoss).catch(App._whErr('wh-loss'));
+  },
+  _whErr:function(id){return function(e){
+    var el=document.getElementById(id);
+    if(el)el.innerHTML='<div class="settings-sec"><div style="padding:14px;color:var(--muted);font-size:13px;">Раздел недоступен. Выполните <b>retail_schema.sql</b> в Supabase.<br><span style="opacity:.6;">'+App._e((e&&e.message)||'')+'</span></div></div>';
+  };},
+  _renderWhPnl:function(r){
+    r=r||{};
+    var el=document.getElementById('wh-pnl');if(!el)return;
+    var net=r.net||0;
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Прибыли и убытки (P&amp;L)</div>'+
+      '<div class="metric-row">'+
+        '<div class="metric-card"><div class="metric-label">Выручка</div><div class="metric-value green">₽ '+fmt(r.revenue||0)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Себестоимость</div><div class="metric-value red">₽ '+fmt(r.cogs||0)+'</div></div>'+
+      '</div>'+
+      '<div class="metric-card" style="margin-bottom:10px;"><div class="metric-label">Валовая прибыль</div>'+
+        '<div class="metric-value" style="color:var(--income)">₽ '+fmt(r.gross||0)+' <span style="font-size:13px;color:var(--muted);">('+(r.grossPct||0)+'%)</span></div></div>'+
+      '<div class="metric-card" style="margin-bottom:10px;"><div class="metric-label">Операционные расходы (ФОТ, аренда, …)</div>'+
+        '<div class="metric-value red">₽ '+fmt(r.opex||0)+'</div></div>'+
+      '<div class="metric-card" style="background:'+(net>=0?'var(--income-dim)':'var(--expense-dim)')+';"><div class="metric-label">ЧИСТАЯ ПРИБЫЛЬ</div>'+
+        '<div class="metric-value" style="color:'+(net>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(net)+'</div></div>'+
+      '<button class="btn-secondary" style="margin-top:10px;color:#25D366;border-color:#25D366;" onclick="App.shareReport(\'whatsapp\')">📲 Отправить P&amp;L в WhatsApp</button>'+
+    '</div>';
+  },
+  _renderWhMargin:function(r){
+    r=r||{};var items=r.items||[];
+    var el=document.getElementById('wh-margin');if(!el)return;
+    if(!items.length){el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Валовая прибыль по товарам</div><div style="padding:12px;color:var(--muted);font-size:13px;">Нет продаж за период. Импортируйте продажи.</div></div>';return;}
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Валовая прибыль по товарам</div>'+
+      '<div class="settings-list">'+items.slice(0,30).map(function(x){
+        var col=x.gross>=0?'var(--income)':'var(--expense)';
+        return '<div class="settings-row">'+
+          '<div style="flex:1;"><div class="settings-row-label">'+App._e(x.name||x.sku)+'</div>'+
+            '<div style="font-size:12px;color:var(--muted);">'+fmt(x.qty)+' '+'шт • выручка ₽'+fmt(x.revenue)+' • COGS ₽'+fmt(x.cogs)+'</div></div>'+
+          '<div style="text-align:right;"><div style="color:'+col+';font-weight:700;">₽ '+fmt(x.gross)+'</div>'+
+            '<div style="font-size:12px;color:var(--muted);">'+(x.marginPct||0)+'%</div></div>'+
+        '</div>';
+      }).join('')+'</div></div>';
+  },
+  _renderWhInventory:function(r){
+    r=r||{};var items=r.items||[];
+    var el=document.getElementById('wh-inventory');if(!el)return;
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Замороженный капитал (склад)</div>'+
+      '<div class="metric-card" style="margin-bottom:8px;"><div class="metric-label">Стоимость остатков по закупке</div>'+
+        '<div class="metric-value">₽ '+fmt(r.total||0)+'</div></div>'+
+      (items.length?'<div class="settings-list">'+items.slice(0,30).map(function(x){
+        return '<div class="settings-row"><span class="settings-row-label" style="flex:1;">'+App._e(x.name||x.sku)+'</span>'+
+          '<span style="color:var(--muted);font-size:13px;margin-right:10px;">'+fmt(x.qty)+' шт</span>'+
+          '<span style="font-weight:700;">₽ '+fmt(x.value)+'</span></div>';
+      }).join('')+'</div>':'<div style="padding:8px 4px;color:var(--muted);font-size:13px;">Нет остатков. Оформите приход партии.</div>')+
+    '</div>';
+  },
+  _renderWhLoss:function(r){
+    var items=r||[];
+    var el=document.getElementById('wh-loss');if(!el)return;
+    if(!items.length){el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">Контроль потерь</div><div style="padding:12px;color:var(--income);font-size:13px;">✓ Подозрительных операций нет</div></div>';return;}
+    el.innerHTML='<div class="settings-sec"><div class="settings-sec-title">⚠️ Контроль потерь (отмены / возвраты / ручные скидки)</div>'+
+      '<div class="settings-list">'+items.slice(0,40).map(function(x){
+        var lbl={refund:'Возврат',void:'Отмена',storno:'Сторно',sale:'Скидка'}[x.opType]||x.opType;
+        return '<div class="settings-row"><div style="flex:1;"><div class="settings-row-label">'+lbl+' • '+App._e(x.cashier||'—')+'</div>'+
+          '<div style="font-size:12px;color:var(--muted);">'+App._e(String(x.date||''))+' • касса '+App._e(String(x.register||'—'))+'</div></div>'+
+          '<div style="text-align:right;color:var(--expense);font-weight:700;">'+(x.manualDiscount?'−₽'+fmt(x.manualDiscount):'₽'+fmt(x.total))+'</div></div>';
+      }).join('')+'</div></div>';
+  },
+
+  // ── Формы: товар / приход / импорт ──────────────────────────────
+  openProductForm:function(id){
+    App._prodEdit=id||null;
+    var html='<div style="font-size:18px;font-weight:700;margin-bottom:14px;">'+(id?'Изменить товар':'Новый товар')+'</div>'+
+      '<div class="field"><label>Название</label><input id="pf-name" placeholder="Кока-кола 0.5"></div>'+
+      '<div class="field"><label>SKU / артикул</label><input id="pf-sku" placeholder="CC-05"></div>'+
+      '<div class="field"><label>Штрихкод</label><input id="pf-barcode" placeholder="4600..."></div>'+
+      '<div class="field"><label>Категория</label><input id="pf-category" placeholder="Напитки"></div>'+
+      '<div class="field"><label>Розничная цена, ₽</label><input id="pf-price" type="number" inputmode="decimal" placeholder="89"></div>'+
+      '<div class="field"><label>Метод себестоимости</label><select id="pf-method"><option value="fifo">FIFO (по партиям)</option><option value="avg">Средняя</option></select></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.saveProductForm()">Сохранить</button>';
+    App.openModal(html);
+  },
+  saveProductForm:function(){
+    var g=function(id){return (document.getElementById(id)||{}).value||'';};
+    var name=g('pf-name'),sku=g('pf-sku');
+    if(!name&&!sku){App.toast('Введите название или SKU',true);return;}
+    gs('saveProduct',{ssId:App.s.ssId,id:App._prodEdit,name:name,sku:sku||name,barcode:g('pf-barcode'),
+      category:g('pf-category'),retailPrice:g('pf-price'),costMethod:g('pf-method')})
+      .then(function(){App.closeModal();App.toast('Товар сохранён ✓');App.loadWarehouse();})
+      .catch(function(e){App.toast('Ошибка: '+e.message,true);});
+  },
+  openReceiveBatch:function(){
+    var html='<div style="font-size:18px;font-weight:700;margin-bottom:14px;">Приход партии</div>'+
+      '<div class="field"><label>SKU / артикул товара</label><input id="rb-sku" placeholder="CC-05"></div>'+
+      '<div class="field"><label>Название (если новый товар)</label><input id="rb-name" placeholder="Кока-кола 0.5"></div>'+
+      '<div class="field"><label>Количество</label><input id="rb-qty" type="number" inputmode="decimal" placeholder="100"></div>'+
+      '<div class="field"><label>Закупочная цена за единицу, ₽</label><input id="rb-cost" type="number" inputmode="decimal" placeholder="55"></div>'+
+      '<div class="field"><label>Поставщик</label><input id="rb-supplier" placeholder="ООО Поставщик"></div>'+
+      '<div class="field"><label>Дата поступления</label><input id="rb-date" type="date" value="'+fmtISO(new Date())+'"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.submitReceiveBatch()">Оприходовать</button>';
+    App.openModal(html);
+  },
+  submitReceiveBatch:function(){
+    var g=function(id){return (document.getElementById(id)||{}).value||'';};
+    var sku=g('rb-sku');
+    if(!sku){App.toast('Укажите SKU',true);return;}
+    if(!(Number(g('rb-qty'))>0)){App.toast('Количество > 0',true);return;}
+    gs('receiveBatch',{ssId:App.s.ssId,sku:sku,name:g('rb-name'),qty:g('rb-qty'),
+      unitCost:g('rb-cost'),supplier:g('rb-supplier'),date:g('rb-date')})
+      .then(function(){App.closeModal();App.toast('Партия оприходована ✓');App.loadWarehouse();})
+      .catch(function(e){App.toast('Ошибка: '+e.message,true);});
+  },
+  openImportSales:function(){
+    var html='<div style="font-size:18px;font-weight:700;margin-bottom:8px;">Импорт продаж (CSV)</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.6;">Колонки (первая строка — заголовки):<br>'+
+      '<code style="font-size:12px;">ts,receipt_id,register,cashier,op_type,sku,qty,price,discount</code><br>'+
+      'op_type: sale / refund / void. Цена и скидка — в рублях.</div>'+
+      '<input id="imp-file" type="file" accept=".csv,text/csv" style="margin-bottom:12px;">'+
+      '<div id="imp-status" style="font-size:13px;color:var(--muted);margin-bottom:12px;"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.runImportSales()">Загрузить</button>';
+    App.openModal(html);
+  },
+  runImportSales:function(){
+    var inp=document.getElementById('imp-file');
+    var st=document.getElementById('imp-status');
+    if(!inp||!inp.files||!inp.files[0]){if(st)st.textContent='Выберите CSV-файл';return;}
+    var reader=new FileReader();
+    reader.onload=function(){
+      var rows;try{rows=App._parseCsv(reader.result);}catch(e){if(st)st.textContent='Ошибка чтения: '+e.message;return;}
+      if(!rows.length){if(st)st.textContent='Файл пуст';return;}
+      if(st)st.textContent='Загружаю '+rows.length+' строк…';
+      gs('importSales',{ssId:App.s.ssId,rows:rows}).then(function(r){
+        if(st)st.innerHTML='✓ Импортировано чеков: '+(r.imported||0)+', пропущено: '+(r.skipped||0)+(r.errors?(', ошибок: '+r.errors):'');
+        App.toast('Импорт завершён ✓');App.loadWarehouse();
+      }).catch(function(e){if(st)st.textContent='Ошибка: '+e.message;});
+    };
+    reader.readAsText(inp.files[0]);
+  },
+  _parseCsv:function(text){
+    var lines=String(text).replace(/\r/g,'').split('\n').filter(function(l){return l.trim();});
+    if(lines.length<2)return [];
+    var sep=lines[0].indexOf(';')>=0&&lines[0].indexOf(',')<0?';':',';
+    var head=lines[0].split(sep).map(function(h){return h.trim();});
+    return lines.slice(1).map(function(l){
+      var cells=l.split(sep),o={};
+      head.forEach(function(h,i){o[h]=(cells[i]||'').trim();});
+      return o;
+    });
   },
 
   openActionMenu:function(){
