@@ -113,6 +113,31 @@
     await _post('/recover', { email, redirect_to: window.location.href.split('#')[0] });
   }
 
+  // Обновление профиля/пароля/email через GoTrue REST (PUT /auth/v1/user)
+  async function updateUser(payload) {
+    if (!_session || !_session.access_token) throw new Error('Не выполнен вход');
+    let res, data;
+    try {
+      res = await fetch(_base() + '/user', {
+        method:  'PUT',
+        headers: { apikey: _key(), Authorization: 'Bearer ' + _session.access_token, 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload)
+      });
+      data = await res.json();
+    } catch(e) {
+      throw new Error('Нет соединения с сервером (' + e.message + ')');
+    }
+    if (!res.ok) throw new Error(data.error_description || data.msg || data.error || ('HTTP ' + res.status));
+    if (data && data.id) {
+      _session.user = data;
+      try { localStorage.setItem(SESSION_KEY, JSON.stringify(_session)); } catch(_) {}
+    }
+    return data;
+  }
+
+  async function updateProfile(fullName) { return updateUser({ data: { full_name: fullName } }); }
+  async function changePassword(password) { return updateUser({ password: password }); }
+
   async function signOut() {
     try {
       if (_session?.access_token) {
@@ -132,5 +157,5 @@
   function client()      { return _client; }
   async function tryAutoSignIn() { return _session?.access_token || null; }
 
-  window.AUTH = { init, signInEmail, signUpEmail, resetPassword, signOut, isSignedIn, getToken, getUser, client, tryAutoSignIn };
+  window.AUTH = { init, signInEmail, signUpEmail, resetPassword, signOut, isSignedIn, getToken, getUser, client, tryAutoSignIn, updateUser, updateProfile, changePassword };
 })();

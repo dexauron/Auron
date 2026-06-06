@@ -1955,11 +1955,26 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row">
-            <span class="settings-row-icon">👤</span>
+            <span class="settings-row-icon" id="settings-avatar" style="background:var(--brand-dim);color:var(--brand);font-weight:800;">А</span>
             <div style="flex:1;">
-              <div class="settings-row-label" id="settings-user-name">Аккаунт Google</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Данные хранятся в защищённой базе данных</div>
+              <div class="settings-row-label" id="settings-user-name">—</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="settings-user-email">—</div>
             </div>
+          </div>
+          <div class="settings-row" onclick="App.openEditName()" style="cursor:pointer;">
+            <span class="settings-row-icon">✏️</span>
+            <span class="settings-row-label">Изменить имя</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.openChangePassword()" style="cursor:pointer;">
+            <span class="settings-row-icon">🔒</span>
+            <span class="settings-row-label">Сменить пароль</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.showScreen('scr-orgs')" style="cursor:pointer;">
+            <span class="settings-row-icon">🏪</span>
+            <span class="settings-row-label">Мои организации</span>
+            <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.logout()" style="cursor:pointer;">
             <span class="settings-row-icon" style="color:var(--neg);">🚪</span>
@@ -3158,28 +3173,6 @@ var App={
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
 
-  shareReport:function(){
-    var s=App.s,accs=s.accounts||[];
-    var pLabel=App._periodLabel(s.period||'today');
-    var lines=['📊 Auron Finance — '+pLabel,''];
-    accs.forEach(function(a){lines.push('💳 '+a.name+': ₽ '+fmtFull(a.balance));});
-    lines.push('');lines.push('📅 '+new Date().toLocaleDateString('ru'));
-    var text=lines.join('\n');
-    if(navigator.share){
-      navigator.share({title:'Auron Finance',text:text}).catch(function(){});
-    } else if(navigator.clipboard){
-      navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано в буфер ✓');})
-        .catch(function(){App.toast('Не удалось скопировать',true);});
-    } else {
-      App.toast('Поделиться не поддерживается',true);
-    }
-  },
-
-  _periodLabel:function(p){
-    var m={today:'Сегодня',week:'Неделя',month:'Месяц',year:'Год',prev_week:'Прошлая неделя'};
-    return m[p]||p;
-  },
-
   _editPayment:function(id){
     var r=(App._suppPayables||[]).find(function(x){return String(x.id)===String(id);});
     if(r)App.openPaymentForm(r);
@@ -3314,6 +3307,57 @@ var App={
     App.renderSettingsPage();
   },
   ACCENTS:['#5E5CE6','#0A84FF','#30D158','#FF453A','#FF9F0A','#FF375F','#BF5AF2','#64D2FF','#FFD60A','#AC8E68'],
+  // ── Аккаунт пользователя ────────────────────────────────────────
+  _renderAccount:function(){
+    var u=(window.AUTH&&AUTH.getUser&&AUTH.getUser())||{};
+    var name=App.s.userName||(u.user_metadata&&u.user_metadata.full_name)||(localStorage.getItem('auron_user_name')||'');
+    var email=u.email||'';
+    var nEl=document.getElementById('settings-user-name');
+    if(nEl)nEl.textContent=name||'Без имени';
+    var eEl=document.getElementById('settings-user-email');
+    if(eEl)eEl.textContent=email||'—';
+    var av=document.getElementById('settings-avatar');
+    if(av)av.textContent=(name||email||'А').charAt(0).toUpperCase();
+  },
+  openEditName:function(){
+    var cur=App.s.userName||'';
+    App.openModal('<div style="font-size:18px;font-weight:700;margin-bottom:14px;">Изменить имя</div>'+
+      '<div class="field"><label>Ваше имя</label><input id="acc-name" value="'+App._e(cur)+'" placeholder="Иван Иванов"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.saveEditName()">Сохранить</button>');
+  },
+  saveEditName:function(){
+    var name=((document.getElementById('acc-name')||{}).value||'').trim();
+    if(!name){App.toast('Введите имя',true);return;}
+    App.s.userName=name;
+    try{localStorage.setItem('auron_user_name',name);}catch(e){}
+    // мгновенно обновляем интерфейс
+    App._renderAccount();
+    var tu=document.getElementById('topbar-user');if(tu)tu.textContent=name;
+    var sbn=document.getElementById('sb-user-name');if(sbn)sbn.textContent=name;
+    App.closeModal();App.toast('Имя обновлено ✓');
+    // синхронизируем в облаке (необязательно для работы)
+    if(window.AUTH&&AUTH.updateProfile)AUTH.updateProfile(name).catch(function(){});
+  },
+  openChangePassword:function(){
+    App.openModal('<div style="font-size:18px;font-weight:700;margin-bottom:14px;">Сменить пароль</div>'+
+      '<div class="field"><label>Новый пароль</label><input id="acc-pw1" type="password" placeholder="Минимум 6 символов" autocomplete="new-password"></div>'+
+      '<div class="field"><label>Повторите пароль</label><input id="acc-pw2" type="password" placeholder="Ещё раз" autocomplete="new-password"></div>'+
+      '<div id="acc-pw-err" style="display:none;color:var(--neg);font-size:13px;margin-bottom:10px;"></div>'+
+      '<button class="btn-primary" style="width:100%;" onclick="App.saveChangePassword()">Сменить пароль</button>');
+  },
+  saveChangePassword:function(){
+    var p1=(document.getElementById('acc-pw1')||{}).value||'';
+    var p2=(document.getElementById('acc-pw2')||{}).value||'';
+    var err=document.getElementById('acc-pw-err');
+    function showErr(m){if(err){err.textContent='⚠️ '+m;err.style.display='block';}}
+    if(p1.length<6){showErr('Пароль минимум 6 символов');return;}
+    if(p1!==p2){showErr('Пароли не совпадают');return;}
+    if(!(window.AUTH&&AUTH.changePassword)){showErr('Недоступно');return;}
+    AUTH.changePassword(p1).then(function(){
+      App.closeModal();App.toast('Пароль изменён ✓');
+    }).catch(function(e){showErr(e.message||'Ошибка');});
+  },
+
   _renderAppearance:function(){
     var st=App.s.settings||{};
     // Тема
@@ -5198,8 +5242,7 @@ var App={
 
   // ── Settings ──────────────────────────────────────────────────
   renderSettingsPage:function(){
-    var unEl=document.getElementById('settings-user-name');
-    if(unEl)unEl.textContent=App.s.userName||(localStorage.getItem('auron_user_name')||'Аккаунт Google');
+    App._renderAccount();
     App._renderAppearance();
     App.loadRecurring();
     // Budget summary
