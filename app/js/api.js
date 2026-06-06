@@ -18,6 +18,36 @@ const API = (() => {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch(_) {}
   }
 
+  // ── Облачное хранилище ключ-значение (app_kv) с кэшем в localStorage ──
+  // Читает из Supabase (синхронизация между устройствами); при недоступности
+  // сети возвращает локальный кэш. legacyKey — старый localStorage-ключ для
+  // одноразовой миграции существующих данных в облако.
+  async function _kvGet(orgId, key, def, legacyKey) {
+    const cacheKey = 'auron_kv_' + orgId + '_' + key;
+    try {
+      const { data } = await sb().from('app_kv').select('value').eq('org_id', orgId).eq('key', key).maybeSingle();
+      if (data && data.value !== null && data.value !== undefined) {
+        lsSet(cacheKey, data.value);
+        return data.value;
+      }
+      // Нет записи в облаке — мигрируем из старого localStorage-ключа, если есть
+      if (legacyKey) {
+        const legacy = lsGet(legacyKey, undefined);
+        if (legacy !== undefined) { await _kvSet(orgId, key, legacy); return legacy; }
+      }
+    } catch(_) {
+      // офлайн — отдаём кэш
+      const cached = lsGet(cacheKey, undefined);
+      if (cached !== undefined) return cached;
+      if (legacyKey) { const legacy = lsGet(legacyKey, undefined); if (legacy !== undefined) return legacy; }
+    }
+    return def;
+  }
+  async function _kvSet(orgId, key, val) {
+    lsSet('auron_kv_' + orgId + '_' + key, val); // оптимистичный кэш
+    try { await sb().from('app_kv').upsert({ org_id: orgId, key, value: val, updated_at: new Date().toISOString() }); } catch(_) {}
+  }
+
   // ── TX formatter ──────────────────────────────────────────────
   function fmtTx(r) {
     if (!r) return null;
@@ -114,7 +144,7 @@ const API = (() => {
       sb().from('recurring').select('*').eq('org_id', p.orgId).order('name')
     ]);
 
-    const extra = lsGet('auron_ui_' + p.orgId, {});
+    const extra = await _kvGet(p.orgId, 'ui', {}, 'auron_ui_' + p.orgId);
 
     return {
       cats:         (catsR.data||[]).map(c => c.name),
@@ -155,11 +185,11 @@ const API = (() => {
       }
     }
 
-    // Store UI settings in localStorage
+    // Store UI/personalization settings in cloud (app_kv) with local cache
     const uiKeys = ['cashiers','payTypes','repStatuses','shifts','suppliers','showKassaBalance','catMeta','accent','theme'];
-    const existing = lsGet('auron_ui_' + p.orgId, {});
+    const existing = await _kvGet(p.orgId, 'ui', {}, 'auron_ui_' + p.orgId);
     uiKeys.forEach(k => { if (p[k] !== undefined) existing[k] = p[k]; });
-    lsSet('auron_ui_' + p.orgId, existing);
+    await _kvSet(p.orgId, 'ui', existing);
 
     return { ok: true };
   }); }
@@ -661,7 +691,7 @@ const API = (() => {
 
   async function getBudget(p) { return _err(async () => {
     const { from, to } = _periodDates(p.period || 'month');
-    const budgetMap = lsGet('auron_budget_' + p.orgId, {});
+    const budgetMap = await _kvGet(p.orgId, 'budget', {}, 'auron_budget_' + p.orgId);
     const { data: txs } = await sb().from('transactions').select('category,amount').eq('org_id', p.orgId).eq('type','Расход').gte('date', from).lte('date', to);
     const actualMap = {};
     (txs||[]).forEach(t => { actualMap[t.category] = (actualMap[t.category]||0) + t.amount; });
@@ -675,9 +705,9 @@ const API = (() => {
   }); }
 
   async function saveBudget(p) { return _err(async () => {
-    const existing = lsGet('auron_budget_' + p.orgId, {});
+    const existing = await _kvGet(p.orgId, 'budget', {}, 'auron_budget_' + p.orgId);
     const merged = Object.assign(existing, p.budgetMap || {});
-    lsSet('auron_budget_' + p.orgId, merged);
+    await _kvSet(p.orgId, 'budget', merged);
     return { ok: true };
   }); }
 
@@ -742,11 +772,11 @@ const API = (() => {
   // ── Scheduled Payments ────────────────────────────────────────
   // Stored in localStorage per org
 
-  function _getPayments(orgId) { return lsGet('auron_payments_' + orgId, []); }
-  function _setPayments(orgId, list) { lsSet('auron_payments_' + orgId, list); }
+  async function _getPayments(orgId) { return _kvGet(orgId, 'payments', [], 'auron_payments_' + orgId); }
+  async function _setPayments(orgId, list) { return _kvSet(orgId, 'payments', list); }
 
   async function savePayment(p) { return _err(async () => {
-    const list = _getPayments(p.orgId);
+    const list = await _getPayments(p.orgId);
     if (p.id) {
       const idx = list.findIndex(x => x.id === p.id);
       if (idx >= 0) { list[idx] = { ...list[idx], ...p, orgId: undefined }; }
@@ -754,16 +784,16 @@ const API = (() => {
     } else {
       list.push({ id: uid(), payee: s(p.payee), title: s(p.title), amount: n(p.amount), date: s(p.date), comment: s(p.comment), status: 'open' });
     }
-    _setPayments(p.orgId, list);
+    await _setPayments(p.orgId, list);
     return { ok: true };
   }); }
 
   async function getPayments(p) { return _err(async () => {
-    return _getPayments(p.orgId);
+    return await _getPayments(p.orgId);
   }); }
 
   async function updatePayment(p) { return _err(async () => {
-    const list = _getPayments(p.orgId);
+    const list = await _getPayments(p.orgId);
     const idx = list.findIndex(x => x.id === p.id);
     if (idx < 0) return { __error: 'Not found' };
     if (p.action === 'pay') {
@@ -782,13 +812,13 @@ const API = (() => {
     } else if (p.action === 'restore') {
       list[idx].status = 'open';
     }
-    _setPayments(p.orgId, list);
+    await _setPayments(p.orgId, list);
     return { ok: true };
   }); }
 
   async function deletePayment(p) { return _err(async () => {
-    const list = _getPayments(p.orgId).filter(x => x.id !== p.id);
-    _setPayments(p.orgId, list);
+    const list = (await _getPayments(p.orgId)).filter(x => x.id !== p.id);
+    await _setPayments(p.orgId, list);
     return { ok: true };
   }); }
 
@@ -834,19 +864,19 @@ const API = (() => {
   // Stored in localStorage
 
   async function getTimesheetMonth(p) { return _err(async () => {
-    const key = `auron_ts_${p.orgId}_${p.year}_${p.month}`;
-    const data = lsGet(key, { days: [] });
-    return data;
+    const kkey = `ts_${p.year}_${p.month}`;
+    return await _kvGet(p.orgId, kkey, { days: [] }, `auron_ts_${p.orgId}_${p.year}_${p.month}`);
   }); }
 
   async function saveTimesheetEntry(p) { return _err(async () => {
-    const key = `auron_ts_${p.orgId}_${p.year}_${p.month}`;
-    const data = lsGet(key, { days: [] });
+    const kkey = `ts_${p.year}_${p.month}`;
+    const data = await _kvGet(p.orgId, kkey, { days: [] }, `auron_ts_${p.orgId}_${p.year}_${p.month}`);
+    if (!data.days) data.days = [];
     const idx = data.days.findIndex(d => d.day === p.day && d.employee === p.employee);
     const entry = { day: p.day, employee: s(p.employee), status: s(p.status)||'П', timeIn: s(p.timeIn), timeOut: s(p.timeOut), rate: n(p.rate) };
     if (idx >= 0) data.days[idx] = entry;
     else data.days.push(entry);
-    lsSet(key, data);
+    await _kvSet(p.orgId, kkey, data);
     return { ok: true };
   }); }
 
@@ -858,8 +888,7 @@ const API = (() => {
   async function getSalaryCalc(p) { return _err(async () => {
     const year = p.year || new Date().getFullYear();
     const month = p.month || (new Date().getMonth() + 1);
-    const key = `auron_ts_${p.orgId}_${year}_${month}`;
-    const tsData = lsGet(key, { days: [] });
+    const tsData = await _kvGet(p.orgId, `ts_${year}_${month}`, { days: [] }, `auron_ts_${p.orgId}_${year}_${month}`);
     const days = tsData.days || [];
 
     // Load employees from the DB (employees table); rate = daily salary
@@ -867,8 +896,7 @@ const API = (() => {
     const employees = (empRows || []).map(e => ({ name: e.name, dailySalary: e.rate, salaryType: 'daily' }));
 
     // Load advances and penalties for this month
-    const apKey = `auron_ap_${p.orgId}_${year}_${month}`;
-    const apData = lsGet(apKey, { advances: [], penalties: [] });
+    const apData = await _kvGet(p.orgId, `ap_${year}_${month}`, { advances: [], penalties: [] }, `auron_ap_${p.orgId}_${year}_${month}`);
 
     const empMap = {};
     employees.forEach(e => { empMap[e.name] = e; });
@@ -918,10 +946,11 @@ const API = (() => {
   async function saveAdvance(p) { return _err(async () => {
     const year = p.year || new Date().getFullYear();
     const month = p.month || (new Date().getMonth() + 1);
-    const key = `auron_ap_${p.orgId}_${year}_${month}`;
-    const data = lsGet(key, { advances: [], penalties: [] });
+    const kkey = `ap_${year}_${month}`;
+    const data = await _kvGet(p.orgId, kkey, { advances: [], penalties: [] }, `auron_ap_${p.orgId}_${year}_${month}`);
+    if(!data.advances)data.advances=[]; if(!data.penalties)data.penalties=[];
     data.advances.push({ id: uid(), employee: s(p.employee), amount: n(p.amount), date: s(p.date)||new Date().toISOString().slice(0,10), comment: s(p.comment) });
-    lsSet(key, data);
+    await _kvSet(p.orgId, kkey, data);
     // Also save as transaction if account specified
     if (p.account || p.accountId) {
       const accountId = p.accountId || await _accId(p.orgId, p.account);
@@ -934,26 +963,29 @@ const API = (() => {
   async function savePenalty(p) { return _err(async () => {
     const year = p.year || new Date().getFullYear();
     const month = p.month || (new Date().getMonth() + 1);
-    const key = `auron_ap_${p.orgId}_${year}_${month}`;
-    const data = lsGet(key, { advances: [], penalties: [] });
+    const kkey = `ap_${year}_${month}`;
+    const data = await _kvGet(p.orgId, kkey, { advances: [], penalties: [] }, `auron_ap_${p.orgId}_${year}_${month}`);
+    if(!data.advances)data.advances=[]; if(!data.penalties)data.penalties=[];
     data.penalties.push({ id: uid(), employee: s(p.employee), amount: n(p.amount), date: s(p.date)||new Date().toISOString().slice(0,10), reason: s(p.reason||p.comment) });
-    lsSet(key, data);
+    await _kvSet(p.orgId, kkey, data);
     return { ok: true };
   }); }
 
   async function deleteAdvance(p) { return _err(async () => {
-    const key = `auron_ap_${p.orgId}_${p.year}_${p.month}`;
-    const data = lsGet(key, { advances: [], penalties: [] });
+    const kkey = `ap_${p.year}_${p.month}`;
+    const data = await _kvGet(p.orgId, kkey, { advances: [], penalties: [] }, `auron_ap_${p.orgId}_${p.year}_${p.month}`);
+    if(!data.advances)data.advances=[];
     data.advances = data.advances.filter(a => a.id !== p.id);
-    lsSet(key, data);
+    await _kvSet(p.orgId, kkey, data);
     return { ok: true };
   }); }
 
   async function deletePenalty(p) { return _err(async () => {
-    const key = `auron_ap_${p.orgId}_${p.year}_${p.month}`;
-    const data = lsGet(key, { advances: [], penalties: [] });
+    const kkey = `ap_${p.year}_${p.month}`;
+    const data = await _kvGet(p.orgId, kkey, { advances: [], penalties: [] }, `auron_ap_${p.orgId}_${p.year}_${p.month}`);
+    if(!data.penalties)data.penalties=[];
     data.penalties = data.penalties.filter(a => a.id !== p.id);
-    lsSet(key, data);
+    await _kvSet(p.orgId, kkey, data);
     return { ok: true };
   }); }
 
@@ -1017,7 +1049,7 @@ const API = (() => {
     const avgExpense = dayVals.length ? dayVals.reduce((s,d) => s + d.expense, 0) / 90 : 0;
 
     // Get upcoming scheduled payments
-    const payments = _getPayments(p.orgId).filter(pay => pay.status === 'open' && pay.date >= todayStr);
+    const payments = (await _getPayments(p.orgId)).filter(pay => pay.status === 'open' && pay.date >= todayStr);
     const payMap = {};
     payments.forEach(pay => { payMap[pay.date] = (payMap[pay.date]||0) + pay.amount; });
 
@@ -1043,16 +1075,16 @@ const API = (() => {
   // ── Inventory (Phase 7) ────────────────────────────────────────
   // Stored in localStorage as simple item list
 
-  function _getInventory(orgId) { return lsGet('auron_inv_' + orgId, []); }
-  function _setInventory(orgId, list) { lsSet('auron_inv_' + orgId, list); }
+  async function _getInventory(orgId) { return _kvGet(orgId, 'inv', [], 'auron_inv_' + orgId); }
+  async function _setInventory(orgId, list) { return _kvSet(orgId, 'inv', list); }
 
   async function getInventory(p) { return _err(async () => {
-    const items = _getInventory(p.orgId);
+    const items = await _getInventory(p.orgId);
     return { items, totalValue: items.reduce((s,i) => s + (i.qty||0) * (i.costPrice||0), 0) };
   }); }
 
   async function saveInventoryItem(p) { return _err(async () => {
-    const list = _getInventory(p.orgId);
+    const list = await _getInventory(p.orgId);
     if (p.id) {
       const idx = list.findIndex(x => x.id === p.id);
       if (idx >= 0) list[idx] = { ...list[idx], name: s(p.name), qty: n(p.qty), unit: s(p.unit)||'шт', costPrice: n(p.costPrice), sellPrice: n(p.sellPrice), category: s(p.category), minQty: n(p.minQty) };
@@ -1060,21 +1092,21 @@ const API = (() => {
     } else {
       list.push({ id: uid(), name: s(p.name), qty: n(p.qty), unit: s(p.unit)||'шт', costPrice: n(p.costPrice), sellPrice: n(p.sellPrice), category: s(p.category), minQty: n(p.minQty), created: new Date().toISOString().slice(0,10) });
     }
-    _setInventory(p.orgId, list);
+    await _setInventory(p.orgId, list);
     return { ok: true };
   }); }
 
   async function deleteInventoryItem(p) { return _err(async () => {
-    _setInventory(p.orgId, _getInventory(p.orgId).filter(x => x.id !== p.id));
+    await _setInventory(p.orgId, (await _getInventory(p.orgId)).filter(x => x.id !== p.id));
     return { ok: true };
   }); }
 
   async function adjustInventoryQty(p) { return _err(async () => {
-    const list = _getInventory(p.orgId);
+    const list = await _getInventory(p.orgId);
     const idx = list.findIndex(x => x.id === p.id);
     if (idx < 0) return { __error: 'Item not found' };
     list[idx].qty = Math.max(0, (list[idx].qty||0) + n(p.delta));
-    _setInventory(p.orgId, list);
+    await _setInventory(p.orgId, list);
     // Record as transaction if requested
     if (p.saveTransaction && p.accountId) {
       const cost = Math.abs(n(p.delta)) * (list[idx].costPrice||0);
@@ -1089,32 +1121,32 @@ const API = (() => {
   // ── Expense Approvals (Phase 8) ───────────────────────────────
   // Stored in localStorage
 
-  function _getApprovals(orgId) { return lsGet('auron_approv_' + orgId, []); }
-  function _setApprovals(orgId, list) { lsSet('auron_approv_' + orgId, list); }
+  async function _getApprovals(orgId) { return _kvGet(orgId, 'approv', [], 'auron_approv_' + orgId); }
+  async function _setApprovals(orgId, list) { return _kvSet(orgId, 'approv', list); }
 
   async function getApprovals(p) { return _err(async () => {
-    let list = _getApprovals(p.orgId);
+    let list = await _getApprovals(p.orgId);
     if (p.status) list = list.filter(a => a.status === p.status);
     return { items: list };
   }); }
 
   async function saveApprovalRequest(p) { return _err(async () => {
-    const list = _getApprovals(p.orgId);
+    const list = await _getApprovals(p.orgId);
     const item = { id: uid(), title: s(p.title), amount: n(p.amount), category: s(p.category), requestedBy: s(p.requestedBy||p.employee), comment: s(p.comment), date: s(p.date)||new Date().toISOString().slice(0,10), status: 'pending', accountId: p.accountId||null };
     list.unshift(item);
-    _setApprovals(p.orgId, list);
+    await _setApprovals(p.orgId, list);
     return { id: item.id };
   }); }
 
   async function approveRequest(p) { return _err(async () => {
-    const list = _getApprovals(p.orgId);
+    const list = await _getApprovals(p.orgId);
     const idx = list.findIndex(x => x.id === p.id);
     if (idx < 0) return { __error: 'Not found' };
     list[idx].status = p.action === 'approve' ? 'approved' : 'rejected';
     list[idx].approvedBy = s(p.approvedBy);
     list[idx].approvedAt = new Date().toISOString().slice(0,10);
     list[idx].approvalComment = s(p.comment);
-    _setApprovals(p.orgId, list);
+    await _setApprovals(p.orgId, list);
     // If approved, save transaction
     if (p.action === 'approve' && list[idx].accountId && list[idx].amount > 0) {
       await sb().from('transactions').insert({ uuid: uid(), org_id: p.orgId, date: list[idx].approvedAt, type: 'Расход', category: list[idx].category||'Прочий расход', amount: list[idx].amount, account_id: list[idx].accountId, comment: `Утверждено: ${list[idx].title}` });
@@ -1124,7 +1156,7 @@ const API = (() => {
   }); }
 
   async function deleteApprovalRequest(p) { return _err(async () => {
-    _setApprovals(p.orgId, _getApprovals(p.orgId).filter(x => x.id !== p.id));
+    await _setApprovals(p.orgId, (await _getApprovals(p.orgId)).filter(x => x.id !== p.id));
     return { ok: true };
   }); }
 
