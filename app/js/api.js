@@ -848,6 +848,20 @@ const API = (() => {
     return (data||[]).map(r => ({ id: r.id, name: r.name, category: r.category, amount: r.amount, account: '', accountId: r.account_id, day: r.day_of_month, dayOfMonth: r.day_of_month, active: r.active }));
   }); }
 
+  async function updateRecurring(p) { return _err(async () => {
+    if (!p.id) return { __error: 'id required' };
+    const upd = {};
+    if (p.active !== undefined) upd.active = !!p.active;
+    if (p.name)     upd.name = s(p.name);
+    if (p.category) upd.category = s(p.category);
+    if (p.amount !== undefined) upd.amount = n(p.amount);
+    if (p.day || p.dayOfMonth) upd.day_of_month = n(p.day || p.dayOfMonth);
+    if (p.account || p.accountId) upd.account_id = p.accountId || (p.account ? await _accId(p.orgId, p.account) : null);
+    const { error } = await sb().from('recurring').update(upd).eq('id', p.id).eq('org_id', p.orgId);
+    if (error) return { __error: error.message };
+    return { ok: true };
+  }); }
+
   async function deleteRecurring(p) { return _err(async () => {
     await sb().from('recurring').delete().eq('id', p.id).eq('org_id', p.orgId);
     return { ok: true };
@@ -1771,7 +1785,7 @@ const API = (() => {
     getBudget, saveBudget,
     getSettings, saveSettings, saveCategories: saveSettings, saveEmployees: saveSettings,
     savePayment, savePayments, getPayments, updatePayment, deletePayment, markPaymentPaid,
-    saveRecurring, getRecurring, deleteRecurring, applyRecurring,
+    saveRecurring, updateRecurring, getRecurring, deleteRecurring, applyRecurring,
     getTimesheet, saveTimesheet, getTimesheetMonth, saveTimesheetEntry,
     getSalaryCalc, saveAdvance, savePenalty, deleteAdvance, deletePenalty, paySalaryAll,
     getAbcAnalysis, getCashFlowForecast,

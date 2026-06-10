@@ -198,6 +198,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .panel{
   display:none;height:100%;overflow-y:auto;
   -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
   padding-bottom:calc(var(--nav-h) + var(--safe-bot) + 24px);
 }
 .panel.active{display:block;}
@@ -290,9 +291,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .home-hero-delta.up{color:var(--pos);}
 .home-hero-delta.dn{color:var(--neg);}
 /* Account pills inside hero */
-.acct-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+.acct-row{display:flex;gap:10px;flex-wrap:nowrap;margin-top:18px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;padding-bottom:4px;}
+.acct-row::-webkit-scrollbar{display:none;}
 .acct-pill{
-  flex:1;min-width:90px;padding:13px 14px;
+  flex:0 0 auto;min-width:120px;max-width:160px;padding:13px 14px;
   border-radius:16px;
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.1);
@@ -580,7 +582,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .tsc-chip.tsc-empty{background:transparent;color:var(--sep);}
 .tsc-chip:hover{filter:brightness(.93);}
 .tsc-weekend th,.tsc-chip.tsc-weekend{opacity:.7;}
-.tsc-status-picker{position:fixed;z-index:9200;background:var(--card);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.25);padding:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:220px;}
+.tsc-status-picker{position:fixed;z-index:600;background:var(--card);border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,.25);padding:10px;display:flex;gap:6px;flex-wrap:wrap;max-width:220px;}
 .tsc-sp-btn{flex:1;min-width:80px;padding:8px 6px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);}
 
 /* ── Roles ── */
@@ -884,6 +886,65 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   #tab-report{display:block!important;}
   #report-out{padding:0;}
   body{background:#fff;color:#000;}
+}
+
+/* ── Touch & accessibility ── */
+button,a,[role="button"]{touch-action:manipulation;}
+input,select,textarea{touch-action:manipulation;}
+
+/* ── Tiny phone fixes (≤390px) ── */
+@media(max-width:390px){
+  .home-hero{margin:0 10px 12px;padding:18px;}
+  .home-hero-bal{font-size:clamp(32px,8vw,48px);}
+  .np-key{padding:12px 0;font-size:18px;}
+  .np-display{font-size:38px;}
+  .kassa-grid{font-size:12px;}
+  .kassa-cell{padding:8px 4px;}
+  .kassa-cell input{font-size:12px;}
+  .card{padding:14px;}
+  .an-tab{font-size:12px;padding:7px 10px;}
+  .modal-title{font-size:18px;}
+  .supp-summary{grid-template-columns:1fr;}
+  .contractor-grid{grid-template-columns:1fr 1fr;}
+  .home-split{gap:8px;}
+  .split-tile{padding:14px 12px;}
+}
+
+/* ── Tablet (768-1199px) — sidebar stays but content gets breathing room ── */
+@media(min-width:768px) and (max-width:1199px){
+  #sidebar{width:200px;}
+  .sb-nav-item{font-size:13px;padding:9px 12px;}
+  .home-hero-bal{font-size:clamp(34px,3.5vw,50px);}
+}
+
+/* ── Large desktop (≥1440px) ── */
+@media(min-width:1440px){
+  #sidebar{width:260px;}
+  .panels{max-width:900px;margin:0 auto;}
+}
+
+/* ── iPhone safe-area bottom fix for action menu ── */
+.am-inner{padding-bottom:max(20px,calc(var(--safe-bot) + 8px));}
+
+/* ── Landscape phone (short screens) ── */
+@media(max-height:600px) and (orientation:landscape){
+  .sheet{max-height:96dvh;}
+  .np-display{font-size:32px;min-height:48px;padding:6px 16px 0;}
+  .np-shadow-warn{margin:0 16px 2px;}
+  .np-fields{gap:5px;margin-bottom:8px;}
+  .np-field{padding:9px 12px;}
+  .np-key{padding:10px 0;font-size:18px;}
+  .sheet-handle{margin:8px auto 0;}
+  .sheet-title{padding:8px 16px 0;}
+  .sheet-body{padding:10px 16px calc(var(--safe-bot) + 12px);}
+  .topbar{padding-top:calc(var(--safe-top) + 8px);padding-bottom:8px;}
+}
+
+/* ── Kassa grid mobile — horizontal scroll on tiny screens ── */
+@media(max-width:480px){
+  .kassa-grid{min-width:320px;}
+  .kassa-row .kassa-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .kassa-row{overflow:hidden;}
 }
 
 /* ── Payments ── */
@@ -1389,7 +1450,8 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
 /* ── Magic Paste ─────────────────────────────────────────────── */
 #mp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:none;align-items:center;justify-content:center;padding:16px;}
 #mp-overlay.show{display:flex;}
-#mp-modal{background:var(--card);border-radius:20px;width:min(700px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.3);overflow:hidden;}
+#mp-modal{background:var(--card);border-radius:20px;width:min(700px,100%);max-height:90dvh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.3);overflow:hidden;}
+#mp-overlay{padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));}
 .mp-header{padding:16px 20px 14px;border-bottom:1px solid var(--sep);display:flex;align-items:center;gap:12px;flex-shrink:0;}
 .mp-steps{display:flex;gap:6px;margin-left:auto;}
 .mp-step-dot{width:8px;height:8px;border-radius:50%;background:var(--sep);transition:.2s;}
@@ -1821,13 +1883,15 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
         </div>
         <div class="kassa-row">
           <div class="kassa-row-hdr">Сверка по счетам</div>
-          <div class="kassa-grid" style="background:var(--bg);">
+          <div class="kassa-grid-wrap" style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <div class="kassa-grid" style="background:var(--bg);min-width:280px;">
             <div class="kassa-col-hdr" style="text-align:left;">Счёт</div>
             <div class="kassa-col-hdr">Z-отчёт</div>
             <div class="kassa-col-hdr">Факт</div>
             <div class="kassa-col-hdr">Расх.</div>
           </div>
-          <div id="kassa-accounts-grid"></div>
+          <div id="kassa-accounts-grid" style="min-width:280px;"></div>
+          </div>
           <div class="kassa-total-row">
             <span>Итого расхождение</span>
             <span id="k-total-diff" class="kassa-diff zero">—</span>
@@ -6359,9 +6423,9 @@ var App={
   },
 
   toggleRecurring:function(id,currentActive){
-    gs('saveRecurring',{ssId:App.s.ssId,data:{id:id,active:!currentActive}}).then(function(){
+    gs('updateRecurring',{ssId:App.s.ssId,id:id,active:!currentActive}).then(function(){
       App.loadRecurring();
-    });
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   openRecurringForm:function(dataJson){
@@ -6385,7 +6449,8 @@ var App={
     var acc=document.getElementById('rc-acc').value;
     var day=parseInt(document.getElementById('rc-day').value)||1;
     if(!name||!amt){App.toast('Заполните поля',true);return;}
-    gs('saveRecurring',{ssId:App.s.ssId,data:{id:id||null,name:name,category:cat,amount:amt,account:acc,day:day,active:true}}).then(function(){
+    var fn=id?'updateRecurring':'saveRecurring';
+    gs(fn,{ssId:App.s.ssId,id:id||undefined,name:name,category:cat,amount:amt,account:acc,day:day,active:true}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadRecurring();
       if(App.s.anTab==='budget')App.loadBudget();
     }).catch(function(e){App.toast(e.message,true);});
