@@ -653,6 +653,30 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   display:flex;align-items:center;justify-content:center;color:var(--ink);
   font-family:var(--font-num);
 }
+.np-shadow-warn{
+  margin:0 16px 4px;padding:10px 14px;border-radius:12px;
+  font-size:13px;font-weight:600;display:none;gap:8px;align-items:flex-start;
+  animation:shadowIn .18s ease;
+}
+@keyframes shadowIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:none;}}
+.np-shadow-warn.show{display:flex;}
+.np-shadow-warn.warn{background:rgba(255,69,58,.1);color:var(--neg);border:1.5px solid rgba(255,69,58,.22);}
+.np-shadow-warn.soft{background:rgba(255,159,10,.1);color:var(--transfer);border:1.5px solid rgba(255,159,10,.22);}
+.np-shadow-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+.np-shadow-title{font-weight:700;font-size:13px;}
+.np-shadow-body{font-weight:400;font-size:12px;opacity:.85;margin-top:2px;line-height:1.4;}
+/* Shadow findings card */
+.shadow-finding{
+  display:flex;gap:12px;align-items:flex-start;padding:12px 14px;
+  border-radius:13px;border:1.5px solid var(--line);margin-bottom:8px;
+  background:var(--surface-2);
+}
+.shadow-finding.warn{border-color:rgba(255,69,58,.3);background:rgba(255,69,58,.06);}
+.shadow-finding.soft{border-color:rgba(255,159,10,.3);background:rgba(255,159,10,.06);}
+.shadow-finding-icon{font-size:20px;flex-shrink:0;}
+.shadow-finding-title{font-size:14px;font-weight:700;color:var(--ink);}
+.shadow-finding-body{font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4;}
+.shadow-finding-meta{font-size:11px;color:var(--muted);margin-top:4px;}
 .np-fields{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
 .np-field{
   display:flex;align-items:center;justify-content:space-between;
@@ -1689,6 +1713,7 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
         <button class="an-tab" onclick="App.setAnTab('budget',this)">План/Факт</button>
         <button class="an-tab" onclick="App.setAnTab('abc',this)">ABC</button>
         <button class="an-tab" onclick="App.setAnTab('cashflow',this)">Прогноз</button>
+        <button class="an-tab" onclick="App.setAnTab('shadow',this)">🧠 Аналитик</button>
       </div>
       <div id="an-pl" class="an-panel active"></div>
       <div id="an-growth" class="an-panel"></div>
@@ -1702,6 +1727,7 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
       <div id="an-budget" class="an-panel"></div>
       <div id="an-abc" class="an-panel"></div>
       <div id="an-cashflow" class="an-panel"></div>
+      <div id="an-shadow" class="an-panel"></div>
     </div>
 
     <!-- PAYROLL -->
@@ -2264,6 +2290,10 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
       <button class="np-type-btn transfer" onclick="App.setNType('transfer',this)">Перевод</button>
     </div>
     <div class="np-display" id="np-display">₽ 0</div>
+    <div class="np-shadow-warn" id="np-shadow-warn">
+      <span class="np-shadow-icon" id="np-shadow-icon">⚠️</span>
+      <div><div class="np-shadow-title" id="np-shadow-title"></div><div class="np-shadow-body" id="np-shadow-body"></div></div>
+    </div>
     <div class="np-fields">
       <div class="np-field" onclick="App.pickAccount('from')">
         <span class="np-field-label">Счёт</span>
@@ -3827,6 +3857,7 @@ var App={
       var r=res[0]||{};var allAcc=res[1]||[];
       App.s.accounts=allAcc.filter(function(a){return a.status!=='archived';});
       App.renderAccounts(App.s.accounts);
+      App._txCache=r.transactions||[];
       App.renderTxList(r.transactions||[],'tx-list');
       // hero balance
       var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
@@ -4052,6 +4083,7 @@ var App={
     if(tab==='budget')App.loadBudget();
     else if(tab==='abc')App.loadAbcAnalysis();
     else if(tab==='cashflow')App.loadCashFlow();
+    else if(tab==='shadow')App.loadAnShadow();
   },
 
   _getPeriod:function(){
@@ -4195,6 +4227,7 @@ var App={
     if(App.s.anTab==='budget') App.loadBudget();
     else if(App.s.anTab==='abc') App.loadAbcAnalysis();
     else if(App.s.anTab==='cashflow') App.loadCashFlow();
+    else if(App.s.anTab==='shadow') App.loadAnShadow();
   },
 
   // ── Budget ────────────────────────────────────────────────────
@@ -4379,6 +4412,67 @@ var App={
       }
       html+='</div>';
       el.innerHTML=html;
+    }).catch(function(){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Ошибка загрузки</div>';});
+  },
+
+  // ── Shadow Intelligence ────────────────────────────────────────
+  loadAnShadow:function(){
+    var el=document.getElementById('an-shadow');
+    if(!el)return;
+    el.innerHTML='<div class="skel" style="height:80px;border-radius:14px;margin:16px 16px 8px;"></div>';
+    gs('getHomeSummary',{ssId:App.s.ssId,period:'month'}).then(function(r){
+      var txs=(r&&r.transactions)||App._txCache||[];
+      App._txCache=txs;
+      var findings=window.SHADOW?SHADOW.getFindings(txs):[];
+      var cashGapHtml='';
+      gs('getCashFlowForecast',{ssId:App.s.ssId,days:14}).then(function(fc){
+        if(fc&&fc.cashGap){
+          cashGapHtml='<div style="background:rgba(255,69,58,.08);border:1.5px solid rgba(255,69,58,.25);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start;">'+
+            '<span style="font-size:22px;">🚨</span>'+
+            '<div><div style="font-size:14px;font-weight:700;color:var(--neg);">Прогноз: кассовый разрыв</div>'+
+            '<div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Прогнозируется нехватка средств с '+fmtDate(fc.gapFirstDate)+'. Ср. расход: ₽'+fmtFull(fc.avgDailyExpense)+'/день.</div></div>'+
+          '</div>';
+        }
+        var html='<div style="padding:16px;">';
+        html+='<div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:4px;">🧠 Тихий аналитик</div>';
+        html+='<div style="font-size:13px;color:var(--muted);margin-bottom:16px;">Автоматический мониторинг аномалий в ваших данных</div>';
+        html+=cashGapHtml;
+        if(!findings.length){
+          html+='<div style="text-align:center;padding:40px 20px;color:var(--muted);">'+
+            '<div style="font-size:36px;margin-bottom:12px;">✅</div>'+
+            '<div style="font-size:15px;font-weight:600;">Всё чисто</div>'+
+            '<div style="font-size:13px;margin-top:6px;">Подозрительных операций не обнаружено</div>'+
+          '</div>';
+        } else {
+          html+='<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Находки ('+findings.length+')</div>';
+          findings.forEach(function(f){
+            var icons={typo:'⚠️',dup:'🔁',over:'📊'};
+            var ic=icons[f.result.kind]||'💡';
+            html+='<div class="shadow-finding '+f.result.level+'">'+
+              '<span class="shadow-finding-icon">'+ic+'</span>'+
+              '<div><div class="shadow-finding-title">'+f.result.title+'</div>'+
+              '<div class="shadow-finding-body">'+f.result.body+'</div>'+
+              '<div class="shadow-finding-meta">'+App._e(f.tx.category||'')+' · ₽'+fmtFull(f.tx.amount||0)+' · '+fmtDate(f.tx.date||'')+'</div>'+
+              '</div></div>';
+          });
+        }
+        html+='</div>';
+        el.innerHTML=html;
+      }).catch(function(){
+        var html='<div style="padding:16px;">';
+        html+='<div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:4px;">🧠 Тихий аналитик</div>';
+        if(!findings.length){
+          html+='<div style="text-align:center;padding:40px 20px;color:var(--muted);"><div style="font-size:36px;margin-bottom:12px;">✅</div><div style="font-size:15px;font-weight:600;">Всё чисто</div></div>';
+        } else {
+          findings.forEach(function(f){
+            html+='<div class="shadow-finding '+f.result.level+'"><span class="shadow-finding-icon">⚠️</span>'+
+              '<div><div class="shadow-finding-title">'+f.result.title+'</div>'+
+              '<div class="shadow-finding-body">'+f.result.body+'</div></div></div>';
+          });
+        }
+        html+='</div>';
+        el.innerHTML=html;
+      });
     }).catch(function(){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">Ошибка загрузки</div>';});
   },
 
@@ -6033,6 +6127,7 @@ var App={
   npUpdateDisplay:function(){
     var n=parseFloat(App.s.npVal)||0;
     document.getElementById('np-display').textContent='₽ '+fmtFull(n);
+    if(window.SHADOW)SHADOW.check();
   },
 
   pickAccount:function(which){
@@ -6991,6 +7086,71 @@ App._mpImport=function(){
     else if(App.s.activeTab==='report')App.loadReport();
   }).catch(function(e){App.toast('Ошибка импорта: '+e.message,true);App._mpRender();});
 };
+
+// ── Shadow Intelligence ──────────────────────────────────────────
+window.SHADOW = (function(){
+  function _catVals(cat, type, txs){
+    return (txs||[]).filter(function(t){return t.category===cat&&t.type===type;}).map(function(t){return t.amount||0;});
+  }
+  function _p90(vals){
+    if(vals.length<3)return 0;
+    var s=vals.slice().sort(function(a,b){return a-b;});
+    return s[Math.floor(s.length*0.9)]||0;
+  }
+  function _avg(vals){
+    if(!vals.length)return 0;
+    return vals.reduce(function(a,b){return a+b;},0)/vals.length;
+  }
+  return {
+    inspect:function(type,cat,amount){
+      if(!amount||amount<100||!cat)return null;
+      var txs=App&&App._txCache?App._txCache:[];
+      var ruType=type==='income'?'Доход':'Расход';
+      var vals=_catVals(cat,ruType,txs);
+      var p90=_p90(vals);
+      if(p90>0&&amount>=p90*6){
+        return{level:'warn',kind:'typo',title:'Необычно большая сумма',body:'Типично для «'+cat+'»: ₽'+fmtFull(Math.round(p90))+'. Проверьте, не опечатка ли.'};
+      }
+      var now=Date.now();
+      var dup=(txs).find(function(t){
+        return t.category===cat&&t.type===ruType&&Math.abs(t.amount-amount)<0.01&&(now-new Date(t.created_at||t.date+'T12:00').getTime())<3600000;
+      });
+      if(dup){
+        return{level:'warn',kind:'dup',title:'Возможный дубликат',body:'Точно такая же операция была менее часа назад.'};
+      }
+      var avg=_avg(vals);
+      if(avg>0&&amount>avg*2.5){
+        return{level:'soft',kind:'over',title:'Выше среднего по категории',body:'Средняя сумма «'+cat+'»: ₽'+fmtFull(Math.round(avg))+'. Это в '+Math.round(amount/avg)+'× больше.'};
+      }
+      return null;
+    },
+    check:function(){
+      var el=document.getElementById('np-shadow-warn');
+      if(!el)return;
+      var amount=parseFloat(App.s.npVal)||0;
+      var cat=App.s.npCat;
+      var type=App.s.npType;
+      if(!cat||amount<100){el.classList.remove('show');return;}
+      var r=this.inspect(type,cat,amount);
+      if(!r){el.classList.remove('show');return;}
+      el.className='np-shadow-warn show '+r.level;
+      var iconMap={typo:'⚠️',dup:'🔁',over:'📊'};
+      document.getElementById('np-shadow-icon').textContent=iconMap[r.kind]||'💡';
+      document.getElementById('np-shadow-title').textContent=r.title;
+      document.getElementById('np-shadow-body').textContent=r.body;
+    },
+    getFindings:function(txs){
+      var findings=[];
+      var sorted=(txs||[]).slice().sort(function(a,b){return new Date(b.created_at||b.date)-new Date(a.created_at||a.date);});
+      sorted.slice(0,150).forEach(function(t){
+        var type=t.type==='Доход'?'income':'expense';
+        var r=window.SHADOW.inspect(type,t.category,t.amount);
+        if(r)findings.push({tx:t,result:r});
+      });
+      return findings.slice(0,12);
+    }
+  };
+})();
 
 window.addEventListener('load',function(){App.init();});
 </script>
