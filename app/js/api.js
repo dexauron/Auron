@@ -848,6 +848,20 @@ const API = (() => {
     return (data||[]).map(r => ({ id: r.id, name: r.name, category: r.category, amount: r.amount, account: '', accountId: r.account_id, day: r.day_of_month, dayOfMonth: r.day_of_month, active: r.active }));
   }); }
 
+  async function updateRecurring(p) { return _err(async () => {
+    if (!p.id) return { __error: 'id required' };
+    const upd = {};
+    if (p.active !== undefined) upd.active = !!p.active;
+    if (p.name)     upd.name = s(p.name);
+    if (p.category) upd.category = s(p.category);
+    if (p.amount !== undefined) upd.amount = n(p.amount);
+    if (p.day || p.dayOfMonth) upd.day_of_month = n(p.day || p.dayOfMonth);
+    if (p.account || p.accountId) upd.account_id = p.accountId || (p.account ? await _accId(p.orgId, p.account) : null);
+    const { error } = await sb().from('recurring').update(upd).eq('id', p.id).eq('org_id', p.orgId);
+    if (error) return { __error: error.message };
+    return { ok: true };
+  }); }
+
   async function deleteRecurring(p) { return _err(async () => {
     await sb().from('recurring').delete().eq('id', p.id).eq('org_id', p.orgId);
     return { ok: true };
@@ -1181,45 +1195,107 @@ const API = (() => {
 
     const now = new Date();
     const pad = x => String(x).padStart(2,'0');
-    const d = (daysAgo) => {
+    const dStr = (daysAgo) => {
       const dt = new Date(now); dt.setDate(now.getDate()-daysAgo);
       return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
     };
 
-    const txs = [
-      { date: d(0),  type:'Доход',  category:'Z-отчёт',      amount:54000, account_id:cash   },
-      { date: d(0),  type:'Доход',  category:'Z-отчёт',      amount:28000, account_id:card   },
-      { date: d(0),  type:'Расход', category:'Закупка',       amount:15000, account_id:cash   },
-      { date: d(1),  type:'Доход',  category:'Z-отчёт',      amount:61500, account_id:cash   },
-      { date: d(1),  type:'Доход',  category:'Z-отчёт',      amount:19000, account_id:sbp    },
-      { date: d(1),  type:'Расход', category:'ЗП',            amount:12000, account_id:cash   },
-      { date: d(2),  type:'Доход',  category:'Z-отчёт',      amount:48000, account_id:card   },
-      { date: d(2),  type:'Расход', category:'Аренда',        amount:35000, account_id:cash   },
-      { date: d(3),  type:'Доход',  category:'Z-отчёт',      amount:72000, account_id:cash   },
-      { date: d(3),  type:'Расход', category:'Хозрасходы',   amount:3500,  account_id:cash   },
-      { date: d(4),  type:'Доход',  category:'Z-отчёт',      amount:55000, account_id:cash   },
-      { date: d(4),  type:'Расход', category:'Закупка',       amount:22000, account_id:card   },
-      { date: d(5),  type:'Доход',  category:'Z-отчёт',      amount:38000, account_id:sbp    },
-      { date: d(5),  type:'Расход', category:'Коммуналка',   amount:8000,  account_id:cash   },
-      { date: d(6),  type:'Доход',  category:'Z-отчёт',      amount:65000, account_id:cash   },
-      { date: d(7),  type:'Расход', category:'Закупка',       amount:18000, account_id:cash   },
-      { date: d(8),  type:'Доход',  category:'Z-отчёт',      amount:49000, account_id:card   },
-      { date: d(10), type:'Расход', category:'ЗП',            amount:15000, account_id:cash   },
-      { date: d(12), type:'Доход',  category:'Z-отчёт',      amount:58000, account_id:cash   },
-      { date: d(14), type:'Расход', category:'Реклама',       amount:5000,  account_id:card   },
-    ];
+    // ── Transactions (60 days) ────────────────────────────────────
+    const CASHIERS = ['Иванова А.','Петрова М.','Сидоров К.'];
+    const txs = [];
+    const shiftRows = [];
+    const revenues = [54000,61500,48000,72000,55000,38000,65000,58000,43000,67000,71000,50000,44000,63000,59000,76000,52000,46000,69000,57000,42000,68000,74000,51000,47000,62000,56000,45000,70000,53000,64000,60000];
+    for (let i = 0; i < 60; i++) {
+      const dayStr = dStr(i);
+      const cashier = CASHIERS[i % CASHIERS.length];
+      const rev = revenues[i % revenues.length] + (i < 10 ? 3000 : 0);
+      const zCash = Math.round(rev * 0.55);
+      const zCard = Math.round(rev * 0.30);
+      const zSbp  = rev - zCash - zCard;
+      // Z-report transactions
+      txs.push({ date: dayStr, type:'Доход', category:'Z-отчёт', amount: zCash, account_id: cash, employee: cashier });
+      txs.push({ date: dayStr, type:'Доход', category:'Z-отчёт', amount: zCard, account_id: card, employee: cashier });
+      if (zSbp > 0) txs.push({ date: dayStr, type:'Доход', category:'Z-отчёт', amount: zSbp, account_id: sbp, employee: cashier });
+      shiftRows.push({ org_id: p.orgId, date: dayStr, shift_num: 1, cashier, z_cash: zCash, z_card: zCard, z_sbp: zSbp, z_total: rev, fact_cash: zCash - (i%7===5?500:0), fact_card: zCard, fact_sbp: zSbp, discrepancy: i%7===5?-500:0 });
+      // Purchases every 3 days
+      if (i % 3 === 0) txs.push({ date: dayStr, type:'Расход', category:'Закупка', amount: Math.round(rev * 0.28), account_id: cash, comment: 'Поставщик Молокозавод' });
+      if (i % 3 === 1) txs.push({ date: dayStr, type:'Расход', category:'Закупка', amount: Math.round(rev * 0.22), account_id: card, comment: 'Поставщик Бакалея-Опт' });
+      // Salary twice a month
+      if (i === 5)  txs.push({ date: dayStr, type:'Расход', category:'ЗП', amount: 45000, account_id: cash });
+      if (i === 20) txs.push({ date: dayStr, type:'Расход', category:'ЗП', amount: 45000, account_id: cash });
+      if (i === 35) txs.push({ date: dayStr, type:'Расход', category:'ЗП', amount: 48000, account_id: cash });
+      if (i === 50) txs.push({ date: dayStr, type:'Расход', category:'ЗП', amount: 48000, account_id: cash });
+      // Rent on the 1st
+      if (i === 30) txs.push({ date: dayStr, type:'Расход', category:'Аренда', amount: 55000, account_id: cash, comment: 'Аренда помещения' });
+      // Utilities
+      if (i === 15) txs.push({ date: dayStr, type:'Расход', category:'Коммуналка', amount: 12000, account_id: cash });
+      if (i === 45) txs.push({ date: dayStr, type:'Расход', category:'Коммуналка', amount: 11500, account_id: cash });
+      // Misc
+      if (i === 7)  txs.push({ date: dayStr, type:'Расход', category:'Реклама', amount: 8000, account_id: card });
+      if (i === 25) txs.push({ date: dayStr, type:'Расход', category:'Хозрасходы', amount: 4500, account_id: cash });
+    }
 
     const rows = txs.map(t => ({ uuid: uid(), org_id: p.orgId, ...t }));
     await sb().from('transactions').insert(rows);
+    await sb().from('shifts').insert(shiftRows);
 
-    // Reset + set balances
-    for (const acc of accs) {
-      const related = rows.filter(t => t.account_id === acc.id);
-      const bal = related.reduce((s,t) => s + (t.type==='Доход' ? t.amount : -t.amount), 0);
-      await sb().from('accounts').update({ balance: bal }).eq('id', acc.id);
+    // ── Debts (supplier records) ──────────────────────────────────
+    const debtRows = [
+      { org_id: p.orgId, rep_name:'Молокозавод ООО',  type:'закупка', amount: 180000, date: dStr(45), status:'active', comment:'Молочная продукция' },
+      { org_id: p.orgId, rep_name:'Молокозавод ООО',  type:'оплата',  amount:-80000,  date: dStr(30), status:'active', comment:'Частичная оплата' },
+      { org_id: p.orgId, rep_name:'Молокозавод ООО',  type:'закупка', amount: 95000,  date: dStr(15), status:'active', comment:'Молочная продукция' },
+      { org_id: p.orgId, rep_name:'Бакалея-Опт',      type:'закупка', amount: 240000, date: dStr(50), status:'active', comment:'Крупы, консервы, масло' },
+      { org_id: p.orgId, rep_name:'Бакалея-Опт',      type:'оплата',  amount:-150000, date: dStr(35), status:'active', comment:'Оплата' },
+      { org_id: p.orgId, rep_name:'Бакалея-Опт',      type:'закупка', amount: 120000, date: dStr(20), status:'active', comment:'Крупы, консервы' },
+      { org_id: p.orgId, rep_name:'Хлебокомбинат №3', type:'закупка', amount: 45000,  date: dStr(10), status:'active', comment:'Хлеб, выпечка' },
+      { org_id: p.orgId, rep_name:'Хлебокомбинат №3', type:'оплата',  amount:-45000,  date: dStr(5),  status:'active', comment:'Полная оплата' },
+      { org_id: p.orgId, rep_name:'Мясокомбинат',     type:'закупка', amount: 310000, date: dStr(40), status:'active', comment:'Мясная продукция' },
+      { org_id: p.orgId, rep_name:'Мясокомбинат',     type:'оплата',  amount:-200000, date: dStr(25), status:'active', comment:'Оплата долга' },
+      { org_id: p.orgId, rep_name:'Фрукты-Логистик',  type:'закупка', amount: 75000,  date: dStr(8),  status:'active', comment:'Овощи и фрукты' },
+    ];
+    await sb().from('debts').insert(debtRows);
+
+    // ── Payment calendar records (localStorage) ───────────────────
+    const futurePay = (daysAhead) => {
+      const dt = new Date(now); dt.setDate(now.getDate()+daysAhead);
+      return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}`;
+    };
+    const payments = [
+      { id: uid(), payee:'Молокозавод ООО',  title:'Закупка молочной продукции', amount:95000,  date: futurePay(3),  status:'open',      paid:0,    comment:'Срочно' },
+      { id: uid(), payee:'Бакалея-Опт',      title:'Оплата за крупы и консервы',  amount:120000, date: futurePay(7),  status:'open',      paid:30000,comment:'Договор № 45' },
+      { id: uid(), payee:'Мясокомбинат',     title:'Долг за мясную продукцию',   amount:110000, date: futurePay(1),  status:'open',      paid:0,    comment:'Просрочено!' },
+      { id: uid(), payee:'Фрукты-Логистик',  title:'Овощи и фрукты',             amount:75000,  date: futurePay(12), status:'open',      paid:0,    comment:'' },
+      { id: uid(), payee:'Аренда',           title:'Аренда помещения июль',       amount:55000,  date: futurePay(5),  status:'open',      paid:0,    comment:'Ежемесячно' },
+      { id: uid(), payee:'ЖКХ',             title:'Коммунальные платежи',        amount:12000,  date: futurePay(10), status:'open',      paid:0,    comment:'' },
+      { id: uid(), payee:'Молокозавод ООО',  title:'Закупка апрель',             amount:80000,  date: dStr(30),      status:'paid',      paid:80000,comment:'', paidAt: dStr(28) },
+      { id: uid(), payee:'Бакалея-Опт',      title:'Закупка март',               amount:150000, date: dStr(35),      status:'paid',      paid:150000,comment:'', paidAt: dStr(33) },
+      { id: uid(), payee:'Хлебокомбинат №3', title:'Хлеб выпечка',              amount:45000,  date: dStr(5),       status:'paid',      paid:45000,comment:'', paidAt: dStr(4) },
+    ];
+    lsSet('auron_payments_' + p.orgId, payments);
+
+    // ── Employees ─────────────────────────────────────────────────
+    const { data: existEmps } = await sb().from('employees').select('id').eq('org_id', p.orgId);
+    if (!existEmps || !existEmps.length) {
+      await sb().from('employees').insert([
+        { org_id: p.orgId, name:'Иванова А.', rate:18000, status:'active' },
+        { org_id: p.orgId, name:'Петрова М.',  rate:16000, status:'active' },
+        { org_id: p.orgId, name:'Сидоров К.',  rate:17000, status:'active' },
+      ]);
     }
 
-    return { txCount: rows.length };
+    // ── Recalculate account balances ──────────────────────────────
+    const balMap = {};
+    accs.forEach(a => { balMap[a.id] = 0; });
+    rows.forEach(t => {
+      if (balMap[t.account_id] !== undefined) {
+        balMap[t.account_id] += t.type === 'Доход' ? t.amount : -t.amount;
+      }
+    });
+    for (const acc of accs) {
+      await sb().from('accounts').update({ balance: Math.max(balMap[acc.id] || 0, 0) }).eq('id', acc.id);
+    }
+
+    return { txCount: rows.length, shiftCount: shiftRows.length, debtCount: debtRows.length };
   }); }
 
   // ── Org Info ──────────────────────────────────────────────────
@@ -1643,9 +1719,59 @@ const API = (() => {
       return { date: f.date, delta: f.delta / 100, balance: running / 100 };
     });
     return { startBalance: balance / 100, endBalance: running / 100, minBalance: minBal / 100, minDate, timeline };
-  }); }
+  // ── Magic Paste Import ────────────────────────────────────────
 
-  // ── Public API ─────────────────────────────────────────────────
+  async function saveImport(p) { return _err(async () => {
+    const items = p.items || [];
+    if (!items.length) return { txCount: 0, total: 0, debtCount: 0 };
+
+    const GROUPS = { dairy:'Молочка', bakery:'Хлеб и выпечка', drinks:'Напитки', produce:'Овощи и фрукты', grocery:'Бакалея', chemistry:'Бытовая химия', meat:'Мясо и колбасы', other:'Прочее' };
+    const today = new Date().toISOString().slice(0,10);
+
+    // Resolve cash account (first non-archived account)
+    const { data: accs } = await sb().from('accounts').select('id,name').eq('org_id', p.orgId).neq('status','archived');
+    const defaultAcc = accs && accs.length ? accs[0].id : null;
+    const accByName = accs ? Object.fromEntries(accs.map(a => [a.name, a.id])) : {};
+    const cashAcc = accByName['Наличные'] || accByName['Касса'] || defaultAcc;
+
+    // Build transaction rows
+    const txRows = items.map(it => ({
+      uuid: uid(),
+      org_id: p.orgId,
+      date: today,
+      type: 'Расход',
+      category: GROUPS[it.internalGroup] || 'Закупка',
+      amount: Math.round(Math.abs(it.sum)),
+      account_id: cashAcc,
+      employee: '',
+      comment: it.name || '',
+    }));
+
+    await sb().from('transactions').insert(txRows);
+
+    // Balance delta
+    const total = txRows.reduce((s, t) => s + t.amount, 0);
+    if (cashAcc) await _balanceDelta(cashAcc, 'Расход', total);
+
+    // Debt entries per supplier (aggregate by supplier name)
+    const suppMap = {};
+    items.forEach(it => {
+      if (it.supplier) {
+        suppMap[it.supplier] = (suppMap[it.supplier] || 0) + Math.round(Math.abs(it.sum));
+      }
+    });
+    const debtRows = Object.entries(suppMap).map(([name, amt]) => ({
+      org_id: p.orgId,
+      rep_name: name,
+      type: 'закупка',
+      amount: amt,
+      date: today,
+      status: 'active',
+      comment: 'Magic Paste импорт',
+    }));
+    if (debtRows.length) await sb().from('debts').insert(debtRows);
+
+    return { txCount: txRows.length, total, debtCount: debtRows.length }; ─────────────────────────────────────────────────
   return {
     initUserApp, registerUser, createOrg, deleteOrg, logoutUser,
     getAccounts, getAccountsAll, saveAccount, deleteAccount, toggleAccountVisibility, adjustBalance,
@@ -1659,13 +1785,13 @@ const API = (() => {
     getBudget, saveBudget,
     getSettings, saveSettings, saveCategories: saveSettings, saveEmployees: saveSettings,
     savePayment, savePayments, getPayments, updatePayment, deletePayment, markPaymentPaid,
-    saveRecurring, getRecurring, deleteRecurring, applyRecurring,
+    saveRecurring, updateRecurring, getRecurring, deleteRecurring, applyRecurring,
     getTimesheet, saveTimesheet, getTimesheetMonth, saveTimesheetEntry,
     getSalaryCalc, saveAdvance, savePenalty, deleteAdvance, deletePenalty, paySalaryAll,
     getAbcAnalysis, getCashFlowForecast,
     getInventory, saveInventoryItem, deleteInventoryItem, adjustInventoryQty,
     getApprovals, saveApprovalRequest, approveRequest, deleteApprovalRequest,
-    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData,
+    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData, saveImport,
     getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
     getInventoryValue, getGrossMargin, getPnL, getLossControl,
     getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast,
