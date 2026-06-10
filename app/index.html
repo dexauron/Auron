@@ -1340,6 +1340,44 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}
 }
+
+/* ── Magic Paste ─────────────────────────────────────────────── */
+#mp-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9100;display:none;align-items:center;justify-content:center;padding:16px;}
+#mp-overlay.show{display:flex;}
+#mp-modal{background:var(--card);border-radius:20px;width:min(700px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.3);overflow:hidden;}
+.mp-header{padding:16px 20px 14px;border-bottom:1px solid var(--sep);display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.mp-steps{display:flex;gap:6px;margin-left:auto;}
+.mp-step-dot{width:8px;height:8px;border-radius:50%;background:var(--sep);transition:.2s;}
+.mp-step-dot.active{background:var(--brand);transform:scale(1.3);}
+.mp-step-dot.done{background:var(--pos);}
+.mp-body{flex:1;overflow-y:auto;padding:16px 20px;}
+.mp-footer{padding:12px 20px 16px;border-top:1px solid var(--sep);display:flex;gap:8px;flex-shrink:0;}
+.mp-footer .btn-primary{flex:1;}
+.mp-drop{border:2px dashed var(--sep);border-radius:16px;padding:48px 24px;text-align:center;cursor:pointer;transition:.2s;color:var(--muted);}
+.mp-drop.hot{border-color:var(--brand);background:color-mix(in oklab,var(--brand) 6%,transparent);}
+.mp-drop-icon{font-size:48px;margin-bottom:12px;}
+.mp-drop-title{font-size:18px;font-weight:700;color:var(--text-1);margin-bottom:6px;}
+.mp-tbl-wrap{overflow-x:auto;border-radius:12px;border:1px solid var(--sep);}
+.mp-tbl{width:100%;border-collapse:collapse;font-size:13px;}
+.mp-tbl th{padding:8px 12px;background:var(--bg);font-size:12px;font-weight:600;color:var(--muted);text-align:left;border-bottom:1px solid var(--sep);white-space:nowrap;}
+.mp-tbl td{padding:7px 12px;border-bottom:1px solid var(--sep);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;color:var(--text-1);}
+.mp-tbl tr:last-child td{border-bottom:none;}
+.mp-col-sel{width:100%;border:1.5px solid var(--sep);border-radius:8px;padding:5px 8px;font-size:12px;background:var(--card);color:var(--text-1);font-family:var(--font);cursor:pointer;}
+.mp-col-sel.mapped{border-color:var(--brand);background:color-mix(in oklab,var(--brand) 8%,transparent);}
+.mp-cat-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--sep);}
+.mp-cat-row:last-child{border-bottom:none;}
+.mp-cat-src{flex:1;font-size:14px;font-weight:600;color:var(--text-1);}
+.mp-cat-tag{font-size:11px;padding:2px 7px;border-radius:20px;margin-left:6px;}
+.mp-cat-sel{border:1.5px solid var(--sep);border-radius:10px;padding:8px 10px;font-size:13px;background:var(--card);color:var(--text-1);font-family:var(--font);min-width:150px;}
+.mp-cat-sel.unmapped{border-color:var(--transfer);}
+.mp-sum-card{background:var(--bg);border-radius:14px;padding:16px;margin-bottom:12px;}
+.mp-sum-row{display:flex;justify-content:space-between;align-items:center;padding:4px 0;}
+.mp-sum-val{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.02em;}
+.mp-chip{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700;margin:2px;}
+.mp-done{text-align:center;padding:40px 20px;}
+.mp-done-icon{font-size:64px;margin-bottom:12px;}
+.mp-tpl-banner{background:color-mix(in oklab,var(--brand) 10%,transparent);border-radius:12px;padding:10px 14px;margin-bottom:14px;font-size:13px;display:flex;align-items:center;gap:10px;}
+
 </style>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#5E5CE6">
@@ -2147,6 +2185,11 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
       <div class="am-name">Платёжный календарь</div>
       <div class="am-sub">Долги, отсрочки, прогноз баланса</div>
     </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.mpOpen()">
+      <div class="am-icon" style="background:color-mix(in oklab,var(--brand) 14%,transparent);">📋</div>
+      <div class="am-name">Magic Paste</div>
+      <div class="am-sub">Импорт из 1С / Excel</div>
+    </button>
   </div>
 </div>
 
@@ -2266,6 +2309,27 @@ button:active,.settings-row[onclick]:active,.am-item:active,.org-card:active{tra
 <!-- Modal -->
 <div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)App.closeModal()">
   <div class="modal" id="modal-body"></div>
+</div>
+
+<!-- Magic Paste -->
+<div id="mp-overlay" onclick="if(event.target===this)App.mpClose()">
+  <div id="mp-modal">
+    <div class="mp-header">
+      <button onclick="App.mpClose()" style="background:var(--bg);border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center;">✕</button>
+      <div>
+        <div style="font-weight:700;font-size:16px;">Magic Paste</div>
+        <div style="font-size:12px;color:var(--muted);" id="mp-step-label">Вставьте таблицу из 1С или Excel</div>
+      </div>
+      <div class="mp-steps" id="mp-step-dots">
+        <div class="mp-step-dot active" id="mpd0"></div>
+        <div class="mp-step-dot" id="mpd1"></div>
+        <div class="mp-step-dot" id="mpd2"></div>
+        <div class="mp-step-dot" id="mpd3"></div>
+      </div>
+    </div>
+    <div class="mp-body" id="mp-body"></div>
+    <div class="mp-footer" id="mp-footer"></div>
+  </div>
 </div>
 
 <div id="toast"></div>
@@ -6439,6 +6503,311 @@ var App={
   _e:function(s){
     return String(s||'').replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});
   }
+};
+
+// ══════════════════════════════════════════════════════════════
+// MAGIC PASTE — парсер и UI (импорт из 1С / Excel)
+// ══════════════════════════════════════════════════════════════
+(function(){
+  var SAMPLE_TSV='Номенклатура\tГруппа\tКол-во\tЦена\tСумма\tПоставщик\nМолоко «Домик в деревне» 1л\tМолочная продукция\t40\t68,00\t2720,00\tМолоко Дома\nКефир 2,5% 0,9л\tМолочная продукция\t25\t72,00\t1800,00\tМолоко Дома\nХлеб «Бородинский»\tХлебобулочные изделия\t60\t32,50\t1950,00\tХлебозавод №2\nБатон нарезной\tХлебобулочные изделия\t50\t28,00\t1400,00\tХлебозавод №2\nКока-Кола 1,5л\tНапитки\t24\t89,00\t2136,00\tНапитки+\nСок «Добрый» 1л\tНапитки\t30\t74,00\t2220,00\tНапитки+\nПомидоры розовые\tОвощи и фрукты\t35\t145,00\t5075,00\tФрут-Лайн\nОгурцы гладкие\tОвощи и фрукты\t28\t98,00\t2744,00\tФрут-Лайн\nСахар-песок 1кг\tБакалея\t80\t62,00\t4960,00\tОптТорг\nМыло хозяйственное\tБытовая химия\t40\t34,00\t1360,00\tБытХим Сервис';
+
+  var FIELDS=[
+    {id:'name',ru:'Наименование',req:true},
+    {id:'group',ru:'Группа / категория',req:false},
+    {id:'qty',ru:'Количество',req:false},
+    {id:'price',ru:'Цена',req:false},
+    {id:'sum',ru:'Сумма',req:true},
+    {id:'supplier',ru:'Поставщик',req:false},
+    {id:'date',ru:'Дата',req:false},
+    {id:'ignore',ru:'Не импортировать',req:false},
+  ];
+
+  var GROUPS={
+    dairy:    {ru:'Молочка',       color:'#3FB6FF'},
+    bakery:   {ru:'Хлеб и выпечка',color:'#e0a458'},
+    drinks:   {ru:'Напитки',       color:'#5E5CE6'},
+    produce:  {ru:'Овощи и фрукты',color:'#1f9d6b'},
+    grocery:  {ru:'Бакалея',       color:'#d8a23f'},
+    chemistry:{ru:'Бытовая химия', color:'#d36fa8'},
+    meat:     {ru:'Мясо и колбасы',color:'#c2683a'},
+    other:    {ru:'Прочее',        color:'#9a958a'},
+  };
+
+  var HINTS=[
+    [/наимен|номенклат|товар|продук/i,'name'],
+    [/групп|категор|раздел/i,'group'],
+    [/кол-?во|колич|шт/i,'qty'],
+    [/цена|стоим за|за ед/i,'price'],
+    [/сумм|итог|всего|оборот/i,'sum'],
+    [/поставщ|контрагент/i,'supplier'],
+    [/дата|период|число/i,'date'],
+  ];
+
+  function autoMap(headers){
+    var used={};
+    return headers.map(function(h){
+      for(var i=0;i<HINTS.length;i++){
+        var field=HINTS[i][1];
+        if(HINTS[i][0].test(h)&&!used[field]){used[field]=true;return field;}
+      }
+      return 'ignore';
+    });
+  }
+
+  function parse(text){
+    var lines=String(text).replace(/\r/g,'').split('\n').filter(function(l){return l.trim()!=='';});
+    if(!lines.length)return null;
+    var delim=lines[0].includes('\t')?'\t':(lines[0].includes(';')?';':'\t');
+    var rows=lines.map(function(l){return l.split(delim).map(function(c){return c.trim();});});
+    var firstNumeric=rows[0].some(function(c){return/^\d[\d\s.,]*$/.test(c)&&c.length>0;});
+    var headers=firstNumeric?rows[0].map(function(_,i){return'Столбец '+(i+1);}):rows[0];
+    var body=firstNumeric?rows:rows.slice(1);
+    var width=headers.length;
+    var norm=body.map(function(r){var x=r.slice(0,width);while(x.length<width)x.push('');return x;});
+    return{headers:headers,rows:norm};
+  }
+
+  function numParse(s){
+    if(s==null)return 0;
+    var t=String(s).replace(/\s/g,'').replace(/ /g,'').replace(',','.');
+    var v=parseFloat(t.replace(/[^\d.\-]/g,''));
+    return isFinite(v)?v:0;
+  }
+
+  function loadDict(){try{return JSON.parse(localStorage.getItem('auron_mp_dict')||'{}');}catch(e){return{};}}
+  function saveDict(d){try{localStorage.setItem('auron_mp_dict',JSON.stringify(d));}catch(e){}}
+  function loadTpl(){try{return JSON.parse(localStorage.getItem('auron_mp_tpl')||'null');}catch(e){return null;}}
+  function saveTpl(t){try{localStorage.setItem('auron_mp_tpl',JSON.stringify(t));}catch(e){}}
+
+  window.MPASTE={SAMPLE_TSV,FIELDS,GROUPS,HINTS,autoMap,parse,numParse,loadDict,saveDict,loadTpl,saveTpl};
+})();
+
+// ── App.mp* ─ Magic Paste UI ──────────────────────────────────
+App.mpOpen=function(){
+  if(!App.s.ssId){App.toast('Сначала выберите организацию',true);return;}
+  App._mp={step:0,parsed:null,mapping:[],catMap:{},saveTpl:true,pasteHandler:null};
+  document.getElementById('mp-overlay').classList.add('show');
+  App._mpRender();
+};
+App.mpClose=function(){
+  document.getElementById('mp-overlay').classList.remove('show');
+  if(App._mp&&App._mp.pasteHandler)document.removeEventListener('paste',App._mp.pasteHandler);
+};
+App._mpSetStep=function(s){
+  var labels=['Вставьте таблицу из 1С или Excel','Укажите назначение столбцов','Сопоставьте категории','Проверьте и импортируйте'];
+  document.getElementById('mp-step-label').textContent=labels[Math.min(s,3)];
+  ['mpd0','mpd1','mpd2','mpd3'].forEach(function(id,i){
+    var el=document.getElementById(id);
+    el.classList.remove('active','done');
+    if(i<s)el.classList.add('done');
+    else if(i===s)el.classList.add('active');
+  });
+};
+App._mpRender=function(){
+  var mp=App._mp;
+  App._mpSetStep(mp.step);
+  var body=document.getElementById('mp-body');
+  var footer=document.getElementById('mp-footer');
+
+  if(mp.step===0){
+    // ── Шаг 0: Вставка ──
+    var tpl=MPASTE.loadTpl();
+    var tplBanner=tpl?'<div class="mp-tpl-banner">📌 <div><div style="font-weight:700;font-size:13px;">Найден шаблон «'+App._e(tpl.name)+'»</div><div style="font-size:12px;color:var(--muted);">Применялся '+tpl.used+' раз · '+App._e(tpl.last)+'</div></div></div>':'';
+    body.innerHTML=tplBanner+
+      '<div class="mp-drop" id="mp-drop" onclick="document.getElementById(\'mp-drop\').focus()" tabindex="0">'+
+        '<div class="mp-drop-icon">📋</div>'+
+        '<div class="mp-drop-title">Нажмите Ctrl+V чтобы вставить</div>'+
+        '<div style="font-size:13px;color:var(--muted);margin-top:4px;">Скопируйте таблицу из 1С, Excel или Google Sheets</div>'+
+      '</div>'+
+      '<button class="btn-secondary" onclick="App._mpLoadSample()" style="width:100%;margin-top:12px;">Попробовать на примере отчёта 1С</button>';
+    footer.innerHTML='';
+    // global paste listener
+    if(mp.pasteHandler)document.removeEventListener('paste',mp.pasteHandler);
+    mp.pasteHandler=function(e){
+      var txt=(e.clipboardData||window.clipboardData).getData('text');
+      if(txt&&txt.trim()){e.preventDefault();App._mpIngest(txt);}
+    };
+    document.addEventListener('paste',mp.pasteHandler);
+    // dragover highlight
+    var drop=document.getElementById('mp-drop');
+    if(drop){
+      drop.addEventListener('dragover',function(e){e.preventDefault();drop.classList.add('hot');});
+      drop.addEventListener('dragleave',function(){drop.classList.remove('hot');});
+      drop.addEventListener('drop',function(e){e.preventDefault();drop.classList.remove('hot');var txt=e.dataTransfer.getData('text');if(txt)App._mpIngest(txt);});
+    }
+  } else if(mp.step===1){
+    // ── Шаг 1: Столбцы ──
+    var p=mp.parsed;
+    var preview=p.rows.slice(0,5);
+    var colOpts=MPASTE.FIELDS.map(function(f){return'<option value="'+f.id+'">'+f.ru+(f.req?' *':'')+'</option>';}).join('');
+    var ths=p.headers.map(function(h,i){
+      var cur=mp.mapping[i]||'ignore';
+      var isMapped=cur!=='ignore';
+      return'<th>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;" title="'+App._e(h)+'">'+App._e(h)+'</div>'+
+        '<select class="mp-col-sel'+(isMapped?' mapped':'')+'" onchange="App._mpSetMapping('+i+',this.value)" data-ci="'+i+'">'+
+          '<option value="ignore">— Не импортировать</option>'+
+          colOpts.replace('value="'+cur+'"','value="'+cur+'" selected')+
+        '</select>'+
+      '</th>';
+    }).join('');
+    var trs=preview.map(function(r){
+      return'<tr>'+r.map(function(c){return'<td>'+App._e(c)+'</td>';}).join('')+'</tr>';
+    }).join('');
+    body.innerHTML='<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Определите какой столбец что означает. Поля со * обязательны.</p>'+
+      '<div class="mp-tbl-wrap"><table class="mp-tbl"><thead><tr>'+ths+'</tr></thead><tbody>'+trs+'</tbody></table></div>';
+    footer.innerHTML='<button class="btn-secondary" onclick="App._mp.step=0;App._mpRender()">← Назад</button>'+
+      '<button class="btn-primary" id="mp-next1" onclick="App._mpToStep2()">Далее →</button>';
+  } else if(mp.step===2){
+    // ── Шаг 2: Категории ──
+    var hasGroup=mp.mapping.indexOf('group')>=0;
+    if(!hasGroup){App._mp.step=3;App._mpRender();return;}
+    var gi=mp.mapping.indexOf('group');
+    var seen={};var srcGroups=[];
+    mp.parsed.rows.forEach(function(r){var g=r[gi];if(g&&!seen[g]){seen[g]=true;srcGroups.push(g);}});
+    var dict=MPASTE.loadDict();
+    // prefill known
+    srcGroups.forEach(function(g){if(!mp.catMap[g]&&dict[g.toLowerCase()])mp.catMap[g]=dict[g.toLowerCase()];});
+    var gOpts=Object.keys(MPASTE.GROUPS).map(function(k){return'<option value="'+k+'">'+MPASTE.GROUPS[k].ru+'</option>';}).join('');
+    var rows=srcGroups.map(function(g){
+      var mapped=mp.catMap[g];
+      var tag=mapped?'<span class="mp-cat-tag" style="background:color-mix(in oklab,'+MPASTE.GROUPS[mapped].color+' 18%,transparent);color:'+MPASTE.GROUPS[mapped].color+';">запомнено</span>':
+        '<span class="mp-cat-tag" style="background:color-mix(in oklab,var(--transfer) 18%,transparent);color:var(--transfer);">нужен выбор</span>';
+      var selVal=mapped||'';
+      return'<div class="mp-cat-row">'+
+        '<div class="mp-cat-src">'+App._e(g)+tag+'</div>'+
+        '<select class="mp-cat-sel'+(mapped?'':' unmapped')+'" onchange="App._mpSetCat(\''+App._e(g)+'\',this.value)">'+
+          '<option value="">— Выберите</option>'+
+          gOpts.replace('value="'+selVal+'"','value="'+selVal+'" selected')+
+        '</select>'+
+      '</div>';
+    }).join('');
+    body.innerHTML='<p style="font-size:13px;color:var(--muted);margin-bottom:12px;">Сопоставьте категории из 1С с внутренними группами. Выбор запоминается.</p>'+
+      '<div>'+rows+'</div>';
+    footer.innerHTML='<button class="btn-secondary" onclick="App._mp.step=1;App._mpRender()">← Назад</button>'+
+      '<button class="btn-primary" id="mp-next2" onclick="App._mpToStep3()">Далее →</button>';
+  } else if(mp.step===3){
+    // ── Шаг 3: Обзор ──
+    var items=App._mpGetItems();
+    var total=items.reduce(function(s,it){return s+it.sum;},0);
+    var totalQty=items.reduce(function(s,it){return s+(it.qty||0);},0);
+    var suppliers=[...new Set(items.map(function(it){return it.supplier;}).filter(Boolean))];
+    // group summary
+    var gMap={};
+    items.forEach(function(it){var g=it.internalGroup||'other';gMap[g]=(gMap[g]||0)+1;});
+    var chips=Object.keys(gMap).map(function(k){
+      var gr=MPASTE.GROUPS[k]||{ru:k,color:'#888'};
+      return'<span class="mp-chip" style="background:color-mix(in oklab,'+gr.color+' 18%,transparent);color:'+gr.color+';">'+gr.ru+' × '+gMap[k]+'</span>';
+    }).join('');
+    body.innerHTML='<div class="mp-sum-card">'+
+      '<div class="mp-sum-row"><span style="font-size:14px;color:var(--muted);">Позиций</span><span class="mp-sum-val" style="font-size:20px;">'+items.length+'</span></div>'+
+      '<div class="mp-sum-row"><span style="font-size:14px;color:var(--muted);">Сумма закупки</span><span class="mp-sum-val" style="color:var(--neg);">−₽ '+fmt(total)+'</span></div>'+
+      (totalQty?'<div class="mp-sum-row"><span style="font-size:14px;color:var(--muted);">Единиц товара</span><span class="mp-sum-val" style="font-size:16px;">'+Math.round(totalQty)+'</span></div>':'')+
+      (suppliers.length?'<div class="mp-sum-row"><span style="font-size:14px;color:var(--muted);">Поставщиков</span><span class="mp-sum-val" style="font-size:16px;">'+suppliers.length+'</span></div>':'')+
+      '</div>'+
+      '<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--muted);margin-bottom:6px;">По группам:</div>'+chips+'</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;">'+
+        '<input type="checkbox" id="mp-save-tpl" '+(App._mp.saveTpl?'checked':'')+' onchange="App._mp.saveTpl=this.checked" style="width:18px;height:18px;accent-color:var(--brand);">'+
+        '<label for="mp-save-tpl" style="font-size:13px;cursor:pointer;">Запомнить шаблон маппинга</label>'+
+      '</div>'+
+      (suppliers.length?'<div style="font-size:12px;color:var(--muted);margin-top:4px;">Долги поставщикам будут обновлены автоматически</div>':'');
+    footer.innerHTML='<button class="btn-secondary" onclick="App._mp.step='+(mp.mapping.indexOf(\'group\')>=0?2:1)+';App._mpRender()">← Назад</button>'+
+      '<button class="btn-primary" onclick="App._mpImport()">📋 Импортировать '+items.length+' позиций</button>';
+  }
+};
+
+App._mpLoadSample=function(){App._mpIngest(MPASTE.SAMPLE_TSV);};
+App._mpIngest=function(text){
+  var p=MPASTE.parse(text);
+  if(!p||!p.rows.length){App.toast('Не удалось разобрать таблицу',true);return;}
+  if(App._mp.pasteHandler)document.removeEventListener('paste',App._mp.pasteHandler);
+  var tpl=MPASTE.loadTpl();
+  App._mp.parsed=p;
+  App._mp.mapping=MPASTE.autoMap(p.headers);
+  if(tpl&&tpl.cols&&tpl.cols.length===p.headers.length)App._mp.mapping=tpl.cols;
+  App._mp.catMap={};
+  App._mp.step=1;
+  App._mpRender();
+};
+App._mpSetMapping=function(ci,val){
+  // ensure unique (clear previous same)
+  if(val!=='ignore'){
+    App._mp.mapping=App._mp.mapping.map(function(v,i){return(i!==ci&&v===val)?'ignore':v;});
+  }
+  App._mp.mapping[ci]=val;
+  App._mpRender();
+};
+App._mpSetCat=function(src,val){
+  App._mp.catMap[src]=val;
+  App._mpRender();
+};
+App._mpToStep2=function(){
+  var req=['name','sum'];
+  for(var i=0;i<req.length;i++){
+    if(App._mp.mapping.indexOf(req[i])<0){App.toast('Необходимо указать столбец «'+MPASTE.FIELDS.find(function(f){return f.id===req[i];}).ru+'»',true);return;}
+  }
+  App._mp.step=2;App._mpRender();
+};
+App._mpToStep3=function(){
+  var gi=App._mp.mapping.indexOf('group');
+  if(gi>=0){
+    var seen={};App._mp.parsed.rows.forEach(function(r){if(r[gi])seen[r[gi]]=true;});
+    var unmapped=Object.keys(seen).filter(function(g){return!App._mp.catMap[g];});
+    if(unmapped.length){App.toast('Сопоставьте все категории: '+unmapped[0],true);return;}
+  }
+  App._mp.step=3;App._mpRender();
+};
+App._mpGetItems=function(){
+  var mp=App._mp;var p=mp.parsed;
+  var ci={};MPASTE.FIELDS.forEach(function(f){ci[f.id]=mp.mapping.indexOf(f.id);});
+  var gi=ci.group;
+  return p.rows.map(function(r){
+    var src=gi>=0?r[gi]:'';
+    return{
+      name:ci.name>=0?r[ci.name]:'—',
+      sum:ci.sum>=0?MPASTE.numParse(r[ci.sum]):0,
+      qty:ci.qty>=0?MPASTE.numParse(r[ci.qty]):0,
+      supplier:ci.supplier>=0?r[ci.supplier]:'',
+      date:ci.date>=0?r[ci.date]:'',
+      internalGroup:src?(mp.catMap[src]||'other'):'other',
+      srcGroup:src,
+    };
+  }).filter(function(it){return it.sum>0;});
+};
+App._mpImport=function(){
+  var mp=App._mp;
+  var items=App._mpGetItems();
+  if(!items.length){App.toast('Нет строк для импорта',true);return;}
+  // save template
+  if(mp.saveTpl){
+    var tpl=MPASTE.loadTpl()||{name:'Шаблон',used:0};
+    tpl.name='1С: Поступление товаров';tpl.used=(tpl.used||0)+1;
+    var now=new Date();tpl.last=now.getDate()+' '+['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'][now.getMonth()];
+    tpl.cols=mp.mapping;MPASTE.saveTpl(tpl);
+    // save dict
+    var dict=MPASTE.loadDict();
+    items.forEach(function(it){if(it.srcGroup&&it.internalGroup)dict[it.srcGroup.toLowerCase()]=it.internalGroup;});
+    MPASTE.saveDict(dict);
+  }
+  var btn=document.getElementById('mp-footer');
+  if(btn)btn.innerHTML='<div style="padding:8px;color:var(--muted);font-size:13px;">Импортирую…</div>';
+  gs('saveImport',{ssId:App.s.ssId,items:items}).then(function(r){
+    var body=document.getElementById('mp-body');
+    var footer=document.getElementById('mp-footer');
+    App._mpSetStep(4);
+    document.getElementById('mp-step-label').textContent='Успешно импортировано';
+    body.innerHTML='<div class="mp-done">'+
+      '<div class="mp-done-icon">✅</div>'+
+      '<div style="font-size:20px;font-weight:700;margin-bottom:8px;">Импортировано!</div>'+
+      '<div style="color:var(--muted);font-size:14px;margin-bottom:4px;">'+r.txCount+' операций на сумму ₽ '+fmt(r.total)+'</div>'+
+      (r.debtCount?'<div style="color:var(--muted);font-size:13px;">Долги '+r.debtCount+' поставщиков обновлены</div>':'')+
+      (mp.saveTpl?'<div style="font-size:12px;color:var(--pos);margin-top:8px;">Шаблон сохранён</div>':'')+
+    '</div>';
+    footer.innerHTML='<button class="btn-secondary" onclick="App.mpClose()" style="flex:1;">Закрыть</button>'+
+      '<button class="btn-primary" onclick="App.mpOpen()" style="flex:1;">Импортировать ещё</button>';
+    if(App.s.activeTab==='home')App.loadHome();
+    else if(App.s.activeTab==='report')App.loadReport();
+  }).catch(function(e){App.toast('Ошибка импорта: '+e.message,true);App._mpRender();});
 };
 
 window.addEventListener('load',function(){App.init();});

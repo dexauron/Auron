@@ -1705,9 +1705,59 @@ const API = (() => {
       return { date: f.date, delta: f.delta / 100, balance: running / 100 };
     });
     return { startBalance: balance / 100, endBalance: running / 100, minBalance: minBal / 100, minDate, timeline };
-  }); }
+  // ── Magic Paste Import ────────────────────────────────────────
 
-  // ── Public API ─────────────────────────────────────────────────
+  async function saveImport(p) { return _err(async () => {
+    const items = p.items || [];
+    if (!items.length) return { txCount: 0, total: 0, debtCount: 0 };
+
+    const GROUPS = { dairy:'Молочка', bakery:'Хлеб и выпечка', drinks:'Напитки', produce:'Овощи и фрукты', grocery:'Бакалея', chemistry:'Бытовая химия', meat:'Мясо и колбасы', other:'Прочее' };
+    const today = new Date().toISOString().slice(0,10);
+
+    // Resolve cash account (first non-archived account)
+    const { data: accs } = await sb().from('accounts').select('id,name').eq('org_id', p.orgId).neq('status','archived');
+    const defaultAcc = accs && accs.length ? accs[0].id : null;
+    const accByName = accs ? Object.fromEntries(accs.map(a => [a.name, a.id])) : {};
+    const cashAcc = accByName['Наличные'] || accByName['Касса'] || defaultAcc;
+
+    // Build transaction rows
+    const txRows = items.map(it => ({
+      uuid: uid(),
+      org_id: p.orgId,
+      date: today,
+      type: 'Расход',
+      category: GROUPS[it.internalGroup] || 'Закупка',
+      amount: Math.round(Math.abs(it.sum)),
+      account_id: cashAcc,
+      employee: '',
+      comment: it.name || '',
+    }));
+
+    await sb().from('transactions').insert(txRows);
+
+    // Balance delta
+    const total = txRows.reduce((s, t) => s + t.amount, 0);
+    if (cashAcc) await _balanceDelta(cashAcc, 'Расход', total);
+
+    // Debt entries per supplier (aggregate by supplier name)
+    const suppMap = {};
+    items.forEach(it => {
+      if (it.supplier) {
+        suppMap[it.supplier] = (suppMap[it.supplier] || 0) + Math.round(Math.abs(it.sum));
+      }
+    });
+    const debtRows = Object.entries(suppMap).map(([name, amt]) => ({
+      org_id: p.orgId,
+      rep_name: name,
+      type: 'закупка',
+      amount: amt,
+      date: today,
+      status: 'active',
+      comment: 'Magic Paste импорт',
+    }));
+    if (debtRows.length) await sb().from('debts').insert(debtRows);
+
+    return { txCount: txRows.length, total, debtCount: debtRows.length }; ─────────────────────────────────────────────────
   return {
     initUserApp, registerUser, createOrg, deleteOrg, logoutUser,
     getAccounts, getAccountsAll, saveAccount, deleteAccount, toggleAccountVisibility, adjustBalance,
@@ -1727,7 +1777,7 @@ const API = (() => {
     getAbcAnalysis, getCashFlowForecast,
     getInventory, saveInventoryItem, deleteInventoryItem, adjustInventoryQty,
     getApprovals, saveApprovalRequest, approveRequest, deleteApprovalRequest,
-    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData,
+    getHomeSummary, uploadReceipt, getOrgInfo, saveOrgInfo, seedDemoData, saveImport,
     getProducts, saveProduct, deleteProduct, receiveBatch, importSales,
     getInventoryValue, getGrossMargin, getPnL, getLossControl,
     getObligations, saveObligation, payObligation, deleteObligation, getPaymentForecast,
