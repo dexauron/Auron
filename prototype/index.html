@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Auron Finance — прототип</title>
+<style>
+:root{
+  --bg-primary:#F2F2F7; --bg-card:#FFFFFF; --bg-secondary:#F2F2F7;
+  --text-1:#1C1C1E; --text-2:#8E8E93; --text-3:#C7C7CC; --separator:#E5E5EA;
+  --brand:#5E5CE6; --income:#30D158; --expense:#FF453A; --transfer:#FF9F0A; --neutral:#8E8E93;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg-primary:#000; --bg-card:#1C1C1E; --bg-secondary:#2C2C2E;
+    --text-1:#FFF; --text-2:#8E8E93; --text-3:#48484A; --separator:#38383A; }
+}
+*{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',Roboto,Inter,sans-serif;
+  background:#3a3a3c; display:flex; justify-content:center; min-height:100vh}
+.phone{width:100%; max-width:430px; background:var(--bg-primary); min-height:100vh;
+  display:flex; flex-direction:column; position:relative; overflow:hidden}
+/* ---------- Шапка ---------- */
+.header{display:flex; align-items:center; gap:8px; padding:14px 16px; background:var(--bg-card);
+  position:sticky; top:0; z-index:20; border-bottom:1px solid var(--separator)}
+.pulse{font-size:18px; cursor:pointer}
+.header .title{font-size:17px; font-weight:600; color:var(--text-1); flex:1;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.hbtn{font-size:18px; cursor:pointer; position:relative; padding:4px}
+.hbtn .badge{position:absolute; top:0; right:-2px; background:var(--expense); color:#fff;
+  font-size:10px; min-width:15px; height:15px; border-radius:8px; display:flex;
+  align-items:center; justify-content:center; padding:0 3px}
+/* ---------- Контент ---------- */
+.content{flex:1; overflow-y:auto; padding:16px 16px 180px}
+.screen{display:none} .screen.active{display:block}
+.card{background:var(--bg-card); border-radius:16px; padding:16px; margin-bottom:16px}
+.section-label{font-size:13px; color:var(--text-2); margin:8px 0; text-transform:uppercase; letter-spacing:.3px}
+h1{font-size:28px; font-weight:700; color:var(--text-1); margin-bottom:16px}
+h2{font-size:22px; font-weight:600; color:var(--text-1); margin-bottom:8px}
+.hero{font-size:34px; font-weight:700; color:var(--text-1)}
+.muted{color:var(--text-2); font-size:13px}
+.row{display:flex; justify-content:space-between; align-items:center}
+/* чеклист */
+.checklist{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px}
+.chip{background:var(--bg-card); border-radius:12px; padding:8px 12px; font-size:13px;
+  color:var(--text-1); cursor:pointer; border:1px solid var(--separator)}
+.chip.done{color:var(--text-2); text-decoration:line-through}
+/* быстрые действия */
+.quick{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px}
+.qbtn{background:var(--bg-card); border-radius:12px; padding:12px 4px; text-align:center;
+  cursor:pointer; font-size:12px; color:var(--text-1)}
+.qbtn span{display:block; font-size:22px; margin-bottom:4px}
+/* списки */
+.list-row{display:flex; align-items:center; gap:12px; padding:12px 0; cursor:pointer;
+  border-bottom:1px solid var(--separator)}
+.list-row:last-child{border-bottom:none}
+.cat-icon{width:40px; height:40px; border-radius:50%; display:flex; align-items:center;
+  justify-content:center; font-size:18px; flex-shrink:0}
+.lr-main{flex:1; min-width:0}
+.lr-title{font-size:17px; color:var(--text-1)}
+.lr-sub{font-size:13px; color:var(--text-2)}
+.lr-amount{font-size:17px; font-weight:500; text-align:right; white-space:nowrap}
+.pos{color:var(--income)} .neg{color:var(--expense)} .tr{color:var(--transfer)}
+/* прогресс */
+.pbar{height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden; margin:6px 0}
+.pbar i{display:block; height:100%; border-radius:3px}
+/* вкладки-сегменты */
+.seg{display:flex; gap:6px; margin-bottom:16px; overflow-x:auto; padding-bottom:2px}
+.seg button{border:none; background:var(--bg-card); color:var(--text-2); padding:8px 14px;
+  border-radius:12px; font-size:14px; cursor:pointer; white-space:nowrap}
+.seg button.on{background:var(--brand); color:#fff}
+.subtab{display:none} .subtab.on{display:block}
+/* кнопки */
+.btn{display:block; width:100%; border:none; background:var(--brand); color:#fff; height:50px;
+  border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; margin-top:8px}
+.btn.sec{background:var(--bg-secondary); color:var(--brand)}
+.btn.danger{background:rgba(255,69,58,.1); color:var(--expense)}
+.btn:disabled{opacity:.4}
+/* поля */
+.field{background:var(--bg-secondary); border-radius:12px; padding:12px 16px; margin:8px 0;
+  display:flex; justify-content:space-between; align-items:center}
+.field label{font-size:13px; color:var(--text-2)}
+.field input{border:none; background:transparent; text-align:right; font-size:17px;
+  color:var(--text-1); width:120px; outline:none}
+/* навигация */
+.nav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px;
+  background:var(--bg-card); backdrop-filter:blur(20px); display:flex; z-index:30;
+  border-top:1px solid var(--separator); padding-bottom:env(safe-area-inset-bottom)}
+.nav button{flex:1; border:none; background:none; padding:10px 0 12px; cursor:pointer;
+  font-size:10px; color:var(--text-3); position:relative}
+.nav button span{display:block; font-size:22px; margin-bottom:2px}
+.nav button.on{color:var(--brand)}
+.nav .dot{position:absolute; top:8px; right:50%; margin-right:-18px; width:8px; height:8px;
+  border-radius:50%; background:var(--expense)}
+/* FAB */
+.fab{position:fixed; bottom:88px; right:max(16px, calc(50% - 215px + 16px)); width:56px; height:56px;
+  border-radius:16px; background:var(--brand); color:#fff; font-size:26px; border:none;
+  cursor:pointer; box-shadow:0 4px 16px rgba(94,92,230,.4); z-index:25}
+/* bottom sheet */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; display:none}
+.overlay.show{display:block}
+.sheet{position:fixed; bottom:0; left:50%; transform:translate(-50%,100%); width:100%; max-width:430px;
+  background:var(--bg-card); border-radius:24px 24px 0 0; z-index:50; max-height:90vh;
+  overflow-y:auto; transition:transform .3s cubic-bezier(.32,.72,0,1); padding:8px 16px 32px}
+.sheet.show{transform:translate(-50%,0)}
+.handle{width:36px; height:4px; border-radius:2px; background:var(--separator); margin:4px auto 16px}
+/* нумпад */
+.types{display:flex; gap:4px; margin-bottom:12px}
+.types button{flex:1; border:none; padding:10px; border-radius:12px; background:var(--bg-secondary);
+  color:var(--text-2); font-size:14px; font-weight:600; cursor:pointer}
+.types button.on-exp{background:rgba(255,69,58,.12); color:var(--expense)}
+.types button.on-inc{background:rgba(48,209,88,.12); color:var(--income)}
+.types button.on-tr{background:rgba(255,159,10,.12); color:var(--transfer)}
+.np-amount{font-size:40px; font-weight:700; text-align:center; margin:12px 0; color:var(--text-1); min-height:48px}
+.np-meta{margin-bottom:8px}
+.np-meta .field{cursor:pointer}
+.numpad{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
+.numpad button{border:none; background:var(--bg-secondary); border-radius:12px; height:58px;
+  font-size:24px; font-weight:500; color:var(--text-1); cursor:pointer}
+.numpad .save{grid-row:span 2; background:var(--brand); color:#fff; font-size:17px; font-weight:600; height:auto}
+.numpad .save:disabled{opacity:.4}
+/* toast */
+.toast{position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:#1C1C1E;
+  color:#fff; padding:12px 20px; border-radius:14px; font-size:15px; z-index:99;
+  opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap}
+.toast.show{opacity:1}
+/* календарь */
+.cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center}
+.cal .dow{font-size:11px; color:var(--text-2); padding:4px 0}
+.cal .day{padding:8px 0; border-radius:10px; font-size:14px; cursor:pointer; color:var(--text-1)}
+.cal .day.g{background:rgba(48,209,88,.15)} .cal .day.r{background:rgba(255,69,58,.18)}
+.cal .day.y{background:rgba(255,159,10,.18)}
+/* мини-бар графика */
+.bars{display:flex; align-items:flex-end; gap:3px; height:60px; margin:12px 0}
+.bars i{flex:1; background:var(--brand); border-radius:3px 3px 0 0; opacity:.85}
+.banner{background:rgba(94,92,230,.1); border-radius:12px; padding:12px; font-size:14px;
+  color:var(--text-1); margin-bottom:16px}
+.demo-note{position:fixed; top:0; left:50%; transform:translateX(-50%); z-index:60;
+  background:var(--transfer); color:#fff; font-size:10px; padding:2px 10px; border-radius:0 0 8px 8px}
+.sheet h3{font-size:18px; font-weight:600; color:var(--text-1); margin-bottom:12px}
+.sheet .act{display:block; width:100%; text-align:left; border:none; background:var(--bg-secondary);
+  border-radius:12px; padding:14px 16px; font-size:16px; color:var(--text-1); margin-bottom:8px; cursor:pointer}
+</style>
+</head>
+<body>
+<div class="demo-note">ПРОТОТИП · демо-данные · ничего не сохраняется</div>
+<div class="phone">
+
+  <!-- Шапка -->
+  <div class="header">
+    <div class="pulse" onclick="openSheet('pulse')">🟢</div>
+    <div class="title">Way Market</div>
+    <div class="hbtn" onclick="openSheet('notif')">🔔<span class="badge">3</span></div>
+    <div class="hbtn" onclick="openSheet('ai')">💬</div>
+    <div class="hbtn" onclick="go('more'); showSub('more','settings')">⚙️</div>
+  </div>
+
+  <div class="content">
+
+  <!-- ГЛАВНАЯ -->
+  <div class="screen active" id="scr-home">
+    <div class="checklist">
+      <div class="chip done">☑ Z-отчёт</div>
+      <div class="chip" onclick="go('suppliers')">☐ 3 выплаты</div>
+      <div class="chip done">☑ Табель</div>
+      <div class="chip" onclick="toast('Отчёт сформируется после выплат')">☐ Отчёт</div>
+    </div>
+
+    <div class="card">
+      <div class="muted">Наличных в кассе</div>
+      <div class="hero">₽ 48 500</div>
+      <div class="row" style="margin-top:10px">
+        <div><div class="muted">Выручка сегодня</div><div style="font-size:20px;font-weight:600" class="pos">₽ 62 000</div></div>
+        <div style="text-align:right"><div class="muted">Свободно</div><div style="font-size:20px;font-weight:600">₽ 15 200</div></div>
+      </div>
+    </div>
+
+    <div class="quick">
+      <div class="qbtn" onclick="go('kassa')"><span>🧾</span>Z-отчёт</div>
+      <div class="qbtn" onclick="go('suppliers')"><span>💸</span>Выплата</div>
+      <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')"><span>📦</span>Заказ</div>
+      <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')"><span>📤</span>Отчёт</div>
+    </div>
+
+    <div class="card" onclick="openSheet('payments')" style="cursor:pointer">
+      <div class="row"><b style="color:var(--text-1)">Выплаты сегодня</b><span class="muted">↓</span></div>
+      <div class="muted" style="margin-top:4px">3 поставщика • ₽ 81 000</div>
+    </div>
+
+    <div class="card">
+      <b style="color:var(--text-1)">Ожидаемые заказы</b>
+      <div class="list-row" onclick="toast('Карточка заказа — демо')">
+        <div class="cat-icon" style="background:#0EA5E9">🥛</div>
+        <div class="lr-main"><div class="lr-title">Молочка • Иванов П.</div><div class="lr-sub">сегодня</div></div>
+        <div class="lr-amount">~₽15К</div>
+      </div>
+      <div class="list-row" onclick="toast('Карточка заказа — демо')">
+        <div class="cat-icon" style="background:#F59E0B">🍞</div>
+        <div class="lr-main"><div class="lr-title">Бакалея • ООО Альфа</div><div class="lr-sub">16 июня</div></div>
+        <div class="lr-amount">~₽22К</div>
+      </div>
+    </div>
+
+    <div class="card" onclick="go('finance')" style="cursor:pointer">
+      <b style="color:var(--text-1)">Накопления</b>
+      <div style="margin-top:8px">
+        <div class="row"><span class="muted">Аренда</span><span class="muted">₽42К / ₽60К</span></div>
+        <div class="pbar"><i style="width:70%;background:var(--income)"></i></div>
+        <div class="row"><span class="muted">Налоги</span><span class="muted">₽18К / ₽45К</span></div>
+        <div class="pbar"><i style="width:40%;background:var(--transfer)"></i></div>
+        <div class="row"><span class="muted">Зарплата</span><span class="muted">₽90К / ₽90К</span></div>
+        <div class="pbar"><i style="width:100%;background:var(--income)"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- КАССА -->
+  <div class="screen" id="scr-kassa">
+    <h1>Касса</h1>
+    <div class="seg">
+      <button class="on" onclick="showSub('kassa','new',this)">Новая смена</button>
+      <button onclick="showSub('kassa','hist',this)">История</button>
+    </div>
+
+    <div class="subtab on" id="kassa-new">
+      <div class="card">
+        <div class="field"><label>Дата</label><span>12.06.2026</span></div>
+        <div class="field"><label>Смена</label><span>Дневная ▾</span></div>
+        <div class="field"><label>Кассир</label><span>Иванова А. ▾</span></div>
+      </div>
+      <div class="section-label">По Z-отчёту</div>
+      <div class="card">
+        <div class="field"><label>Наличные</label><input inputmode="numeric" id="z-cash" value="62000" oninput="calcDiff()"></div>
+        <div class="field"><label>Карта</label><input inputmode="numeric" value="28000"></div>
+        <div class="field"><label>Переводы (СБП)</label><input inputmode="numeric" value="3500"></div>
+      </div>
+      <div class="section-label">Фактически в кассе</div>
+      <div class="card">
+        <div class="field"><label>Наличные</label><input inputmode="numeric" id="f-cash" value="38200" oninput="calcDiff()"></div>
+      </div>
+      <div class="section-label">Выплаты с кассы</div>
+      <div class="card">
+        <div class="row" style="padding:6px 0"><span>Инкассация</span><b>₽ 20 000</b></div>
+        <div class="row" style="padding:6px 0"><span>Иман</span><b>₽ 3 500</b></div>
+        <button class="btn sec" onclick="toast('Добавление выплаты — демо')">+ Добавить выплату</button>
+      </div>
+      <div class="card">
+        <div class="row"><b>Расхождение</b><b id="diff">🔴 −₽300</b></div>
+        <div class="muted" style="margin-top:6px">(Факт + Выплаты) − Z-отчёт. Тап на число → формула.</div>
+      </div>
+      <button class="btn" onclick="toast('Смена сохранена ✓ (демо)')">Сохранить смену</button>
+    </div>
+
+    <div class="subtab" id="kassa-hist">
+      <div class="section-label">Сегодня, 12 июня</div>
+      <div class="card">
+        <div class="list-row" onclick="toast('Детали смены — демо')">
+          <div class="lr-main"><div class="lr-title">Дневная · Иванова А.</div><div class="lr-sub">₽62 000</div></div>
+          <div class="lr-amount pos">✓ 0₽</div>
+        </div>
+        <div class="list-row" onclick="toast('Детали смены — демо')">
+          <div class="lr-main"><div class="lr-title">Ночная · Петров В.</div><div class="lr-sub">₽31 000</div></div>
+          <div class="lr-amount neg">−₽300</div>
+        </div>
+      </div>
+      <div class="section-label">Вчера, 11 июня</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Дневная · Иванова А.</div><div class="lr-sub">₽58 000</div></div><div class="lr-amount pos">✓ 0₽</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Ночная · Петров В.</div><div class="lr-sub">₽29 500</div></div><div class="lr-amount tr">+₽150</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ПОСТАВЩИКИ -->
+  <div class="screen" id="scr-suppliers">
+    <h1>Поставщики</h1>
+    <div class="seg">
+      <button class="on" onclick="showSub('sup','pay',this)">Выплаты</button>
+      <button onclick="showSub('sup','dir',this)">Поставщики</button>
+      <button onclick="showSub('sup','orders',this)">Заказы</button>
+    </div>
+
+    <div class="subtab on" id="sup-pay">
+      <div class="section-label">Сегодня</div>
+      <div class="card">
+        <div class="list-row" onclick="openSheet('supAct')">
+          <div class="lr-main"><div class="lr-title">Иванов П.</div><div class="lr-sub">Долг: ₽120К</div></div>
+          <div class="lr-amount">₽ 35 000</div>
+        </div>
+        <div class="list-row" onclick="openSheet('supAct')">
+          <div class="lr-main"><div class="lr-title">ООО Альфа</div><div class="lr-sub">Долг: ₽55К</div></div>
+          <div class="lr-amount">₽ 28 000</div>
+        </div>
+        <div class="list-row" onclick="openSheet('supAct')">
+          <div class="lr-main"><div class="lr-title">Петров К.</div><div class="lr-sub">Долг: ₽90К</div></div>
+          <div class="lr-amount">₽ 18 000</div>
+        </div>
+      </div>
+      <div class="section-label">Завтра</div>
+      <div class="card">
+        <div class="list-row" onclick="openSheet('supAct')">
+          <div class="lr-main"><div class="lr-title">Нурмат ИП</div><div class="lr-sub">Долг: ₽42К</div></div>
+          <div class="lr-amount">₽ 13 000</div>
+        </div>
+      </div>
+      <button class="btn sec" onclick="toast('Новая запись на выплату — демо')">+ Записать выплату</button>
+    </div>
+
+    <div class="subtab" id="sup-dir">
+      <div class="card"><div class="row"><span class="muted">Общий долг поставщикам</span><b class="neg">₽ 420 000</b></div></div>
+      <div class="card">
+        <div class="list-row" onclick="openSheet('supCard')">
+          <div class="cat-icon" style="background:#0EA5E9">🥛</div>
+          <div class="lr-main"><div class="lr-title">Иванов П.</div><div class="lr-sub">ООО Иванов</div></div>
+          <div class="lr-amount neg">₽120К</div>
+        </div>
+        <div class="list-row" onclick="openSheet('supCard')">
+          <div class="cat-icon" style="background:#F59E0B">🍞</div>
+          <div class="lr-main"><div class="lr-title">ООО Альфа</div><div class="lr-sub">Альфа ТД</div></div>
+          <div class="lr-amount neg">₽55К</div>
+        </div>
+        <div class="list-row" onclick="openSheet('supCard')">
+          <div class="cat-icon" style="background:#8B5CF6">🧴</div>
+          <div class="lr-main"><div class="lr-title">Петров К.</div><div class="lr-sub">ИП Петров</div></div>
+          <div class="lr-amount neg">₽90К</div>
+        </div>
+      </div>
+      <button class="btn sec" onclick="toast('Добавление поставщика — демо')">+ Добавить поставщика</button>
+    </div>
+
+    <div class="subtab" id="sup-orders">
+      <div class="section-label">Активные</div>
+      <div class="card">
+        <div class="list-row" onclick="openSheet('orderAct')">
+          <div class="lr-main"><div class="lr-title">Молочка · Иванов П.</div><div class="lr-sub">сегодня</div></div>
+          <div class="lr-amount">~₽15К</div>
+        </div>
+        <div class="list-row" onclick="openSheet('orderAct')">
+          <div class="lr-main"><div class="lr-title">Бакалея · ООО Альфа</div><div class="lr-sub">16 июня</div></div>
+          <div class="lr-amount">~₽22К</div>
+        </div>
+      </div>
+      <div class="section-label">История</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Молочка · Иванов П.</div><div class="lr-sub">10 июн · получен ✓</div></div><div class="lr-amount">₽14 800</div></div>
+      </div>
+      <button class="btn sec" onclick="toast('Новый заказ — демо')">+ Новый заказ</button>
+    </div>
+  </div>
+
+  <!-- ФИНАНСЫ -->
+  <div class="screen" id="scr-finance">
+    <h1>Финансы</h1>
+    <div class="seg">
+      <button class="on" onclick="showSub('fin','sav',this)">Накопления</button>
+      <button onclick="showSub('fin','goals',this)">Цели</button>
+      <button onclick="showSub('fin','cal',this)">Календарь</button>
+      <button onclick="showSub('fin','an',this)">Аналитика</button>
+      <button onclick="showSub('fin','rep',this)">Отчёт</button>
+    </div>
+
+    <div class="subtab on" id="fin-sav">
+      <div class="banner">Июнь 2026 · 18 дней до конца месяца</div>
+      <div class="card">
+        <b>Аренда</b>
+        <div class="pbar"><i style="width:70%;background:var(--income)"></i></div>
+        <div class="row"><span class="muted">₽ 42 000 / ₽ 60 000</span><span class="muted">в день: ₽1 000 ✓</span></div>
+      </div>
+      <div class="card">
+        <b>Налоги</b>
+        <div class="pbar"><i style="width:40%;background:var(--transfer)"></i></div>
+        <div class="row"><span class="muted">₽ 18 000 / ₽ 45 000</span><span class="tr">⚠️ отстаём</span></div>
+      </div>
+      <div class="card">
+        <b>Зарплата</b>
+        <div class="pbar"><i style="width:100%;background:var(--income)"></i></div>
+        <div class="row"><span class="muted">₽ 90 000 / ₽ 90 000</span><span class="pos">готово ✓</span></div>
+      </div>
+      <button class="btn" onclick="toast('Пополнение — демо')">+ Пополнить</button>
+    </div>
+
+    <div class="subtab" id="fin-goals">
+      <div class="card">
+        <b>Выручка за июнь</b>
+        <div class="muted">Цель: ₽ 8 000 000</div>
+        <div class="pbar"><i style="width:65%;background:var(--income)"></i></div>
+        <div class="row"><span class="muted">₽ 5 200 000 (65%)</span><span class="pos">🟢 успеваем · прогноз ₽8.3 млн</span></div>
+      </div>
+      <div class="card">
+        <b>Долг поставщикам — снизить до ₽300К</b>
+        <div class="pbar"><i style="width:50%;background:var(--transfer)"></i></div>
+        <div class="row"><span class="muted">снижен на ₽60К (50%)</span><span class="tr">🟡 под вопросом</span></div>
+      </div>
+      <button class="btn sec" onclick="toast('Цели ставит Владелец')">+ Новая цель</button>
+    </div>
+
+    <div class="subtab" id="fin-cal">
+      <div class="card">
+        <div class="row" style="margin-bottom:10px"><b>Июнь 2026</b><span class="muted">🟢 приток · 🔴 выплаты · 🟡 риск</span></div>
+        <div class="cal" id="calendar"></div>
+      </div>
+    </div>
+
+    <div class="subtab" id="fin-an">
+      <div class="card">
+        <div class="row"><b>Выручка — июнь</b><span class="pos">🟢 +8% vs май</span></div>
+        <div class="hero" style="font-size:26px;margin-top:4px">₽ 5 200 000</div>
+        <div class="bars">
+          <i style="height:30%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:50%"></i>
+          <i style="height:75%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:60%"></i>
+          <i style="height:55%"></i><i style="height:70%"></i><i style="height:85%"></i><i style="height:100%"></i>
+        </div>
+        <div class="row"><span class="muted">Среднее в день: ₽274К</span><span class="muted">Лучший: 7 июн ₽341К</span></div>
+      </div>
+      <div class="card">
+        <b>Расходы по категориям</b>
+        <div style="margin-top:8px">
+          <div class="row"><span class="muted">Поставщики</span><span class="muted">₽3 100К · 60%</span></div>
+          <div class="pbar"><i style="width:60%;background:#0EA5E9"></i></div>
+          <div class="row"><span class="muted">Зарплата</span><span class="muted">₽850К · 16%</span></div>
+          <div class="pbar"><i style="width:16%;background:#10B981"></i></div>
+          <div class="row"><span class="muted">Аренда</span><span class="muted">₽420К · 8%</span></div>
+          <div class="pbar"><i style="width:8%;background:#F59E0B"></i></div>
+        </div>
+      </div>
+      <div class="card">
+        <b>Кассиры</b>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">🥇 Иванова А.</div><div class="lr-sub">18 смен · 0 расхождений</div></div><div class="lr-amount pos">₽2 900К</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">🥈 Петров В.</div><div class="lr-sub">14 смен · ⚠️ −₽1 200</div></div><div class="lr-amount">₽2 100К</div></div>
+      </div>
+      <div class="card">
+        💡 <b>ИИ-инсайт:</b> <span class="muted">«Выручка по средам на 23% выше среднего. Проверь — есть ли завоз во вторник» (Пакет ИИ)</span>
+      </div>
+    </div>
+
+    <div class="subtab" id="fin-rep">
+      <div class="card">
+        <b>Дневной отчёт</b>
+        <div class="muted" style="margin:4px 0 8px">Сегодня, 12 июня — данные актуальны</div>
+        <button class="btn" onclick="toast('Отправлено в WhatsApp ✓ (демо)')">📤 Отправить в WhatsApp</button>
+        <button class="btn sec" onclick="toast('PDF скачан (демо)')">📄 Скачать PDF</button>
+      </div>
+      <div class="card">
+        <b>Месячный отчёт</b>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Май 2026</div><div class="lr-sub">закрыт ✓</div></div><div class="lr-amount muted">PDF · Excel</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Апрель 2026</div><div class="lr-sub">закрыт ✓</div></div><div class="lr-amount muted">PDF · Excel</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ЕЩЁ -->
+  <div class="screen" id="scr-more">
+    <h1>Ещё</h1>
+    <div class="seg">
+      <button class="on" onclick="showSub('more','ops',this)">Операции</button>
+      <button onclick="showSub('more','staff',this)">Персонал</button>
+      <button onclick="showSub('more','goods',this)">Товары</button>
+      <button onclick="showSub('more','settings',this)">Настройки</button>
+    </div>
+
+    <div class="subtab on" id="more-ops">
+      <div class="section-label">Сегодня</div>
+      <div class="card" id="ops-today">
+        <div class="list-row"><div class="cat-icon" style="background:#5E5CE6">🧾</div>
+          <div class="lr-main"><div class="lr-title">Z-отчёт · Дневная</div><div class="lr-sub">09:15 · Наличные</div></div>
+          <div class="lr-amount pos">+₽62 000</div></div>
+        <div class="list-row"><div class="cat-icon" style="background:#0EA5E9">🛒</div>
+          <div class="lr-main"><div class="lr-title">Закупка · Иванов П.</div><div class="lr-sub">14:32 · Наличные</div></div>
+          <div class="lr-amount neg">−₽15 000</div></div>
+        <div class="list-row"><div class="cat-icon" style="background:#FF9F0A">↔</div>
+          <div class="lr-main"><div class="lr-title">Инкассация</div><div class="lr-sub">18:00 · Наличные → Банк</div></div>
+          <div class="lr-amount tr">₽20 000</div></div>
+      </div>
+      <div class="section-label">Вчера</div>
+      <div class="card">
+        <div class="list-row"><div class="cat-icon" style="background:#5E5CE6">🧾</div>
+          <div class="lr-main"><div class="lr-title">Z-отчёт · Дневная</div><div class="lr-sub">Наличные</div></div>
+          <div class="lr-amount pos">+₽58 000</div></div>
+        <div class="list-row"><div class="cat-icon" style="background:#10B981">👥</div>
+          <div class="lr-main"><div class="lr-title">Аванс · Сафина Г.</div><div class="lr-sub">Наличные</div></div>
+          <div class="lr-amount neg">−₽10 000</div></div>
+      </div>
+    </div>
+
+    <div class="subtab" id="more-staff">
+      <div class="banner">◀ 12 июня, четверг ▶ &nbsp;&nbsp;<b>[Подтвердить день ✓]</b></div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Сафина Г.</div><div class="lr-sub">5/2, рабочий</div></div><div class="lr-amount pos">Вышла ▾</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Петров В.</div><div class="lr-sub">2/2, выходной</div></div><div class="lr-amount muted">Выходной ▾</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Иванова А.</div><div class="lr-sub">отпуск до 28 июн</div></div><div class="lr-amount tr">Отпуск ▾</div></div>
+      </div>
+      <div class="section-label">Зарплата — расчёт за май</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Сафина Г.</div><div class="lr-sub">22 дн × ₽1 500 − аванс ₽10 000</div></div><div class="lr-amount">₽23 000</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Петров В.</div><div class="lr-sub">168 ч × ₽180 − аванс ₽5 000</div></div><div class="lr-amount">₽25 240</div></div>
+      </div>
+    </div>
+
+    <div class="subtab" id="more-goods">
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Молоко 1л</div><div class="lr-sub">Закупка ₽65 · Продажа ₽89</div></div><div class="lr-amount pos">37%</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Хлеб б/н</div><div class="lr-sub">Закупка ₽42 · Продажа ₽58</div></div><div class="lr-amount pos">38%</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Сахар 1кг</div><div class="lr-sub">Закупка ₽78 · Продажа ₽99</div></div><div class="lr-amount tr">27%</div></div>
+      </div>
+      <div class="card">
+        <div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div>
+        <div class="muted" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div>
+      </div>
+    </div>
+
+    <div class="subtab" id="more-settings">
+      <div class="section-label">Магазин</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Название магазина</div></div><div class="lr-amount muted">Way Market ›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Отделы</div></div><div class="lr-amount muted">7 ›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Статьи накоплений</div></div><div class="lr-amount muted">4 ›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Метод накоплений</div></div><div class="lr-amount muted">Виртуальный ›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Дата ночной смены</div></div><div class="lr-amount muted">Начало смены ›</div></div>
+      </div>
+      <div class="section-label">Персонализация</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Уровень сложности</div></div><div class="lr-amount muted">Стандартный ›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Карточки на Главной</div></div><div class="lr-amount muted">›</div></div>
+      </div>
+      <div class="section-label">Безопасность</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Изменить PIN</div></div><div class="lr-amount muted">›</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Face ID / Touch ID</div></div><div class="lr-amount pos">вкл</div></div>
+        <div class="list-row" onclick="toast('Журнал изменений — демо')"><div class="lr-main"><div class="lr-title">Журнал изменений</div></div><div class="lr-amount muted">›</div></div>
+      </div>
+      <div class="section-label">Подписка</div>
+      <div class="card">
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Тариф</div><div class="lr-sub">Ритейл · 1 магазин</div></div><div class="lr-amount">₽890/мес</div></div>
+        <div class="list-row"><div class="lr-main"><div class="lr-title">Пакет ИИ</div></div><div class="lr-amount muted">+₽290/мес ›</div></div>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- /content -->
+
+  <!-- FAB -->
+  <button class="fab" onclick="openSheet('numpad')">＋</button>
+
+  <!-- Навигация -->
+  <div class="nav">
+    <button class="on" id="nav-home" onclick="go('home')"><span>🏠</span>Главная</button>
+    <button id="nav-kassa" onclick="go('kassa')"><span>🧾</span>Касса</button>
+    <button id="nav-suppliers" onclick="go('suppliers')"><span>💸</span>Поставщики<i class="dot"></i></button>
+    <button id="nav-finance" onclick="go('finance')"><span>📊</span>Финансы</button>
+    <button id="nav-more" onclick="go('more')"><span>≡</span>Ещё</button>
+  </div>
+
+  <!-- Overlay + Sheets -->
+  <div class="overlay" id="overlay" onclick="closeSheets()"></div>
+
+  <!-- Нумпад -->
+  <div class="sheet" id="sheet-numpad">
+    <div class="handle"></div>
+    <div class="types">
+      <button class="on-exp" id="t-exp" onclick="setType('exp')">РАСХОД</button>
+      <button id="t-inc" onclick="setType('inc')">ДОХОД</button>
+      <button id="t-tr" onclick="setType('tr')">ПЕРЕВОД</button>
+    </div>
+    <div class="np-amount" id="np-amount">₽ 0</div>
+    <div class="np-meta">
+      <div class="field" onclick="toast('Выбор категории — демо')"><label>Категория</label><span id="np-cat">🛒 Закупка ›</span></div>
+      <div class="field" onclick="toast('Выбор счёта — демо')"><label>Счёт</label><span>💵 Наличные ›</span></div>
+      <div class="field" onclick="toast('Выбор даты — демо')"><label>Дата</label><span>Сегодня, 12 июн ›</span></div>
+    </div>
+    <div class="numpad">
+      <button onclick="npKey('7')">7</button><button onclick="npKey('8')">8</button><button onclick="npKey('9')">9</button>
+      <button onclick="npKey('back')">⌫</button>
+      <button onclick="npKey('4')">4</button><button onclick="npKey('5')">5</button><button onclick="npKey('6')">6</button>
+      <button class="save" id="np-save" disabled onclick="npSave()">✓<br>Сохранить</button>
+      <button onclick="npKey('1')">1</button><button onclick="npKey('2')">2</button><button onclick="npKey('3')">3</button>
+      <button onclick="npKey('0')" style="grid-column:span 2">0</button><button onclick="npKey('00')">00</button>
+    </div>
+  </div>
+
+  <!-- Пульс -->
+  <div class="sheet" id="sheet-pulse">
+    <div class="handle"></div>
+    <h3>🟢 Финансовый пульс: всё хорошо</h3>
+    <div class="card" style="background:var(--bg-secondary)">
+      <div class="row" style="padding:6px 0"><span>Выручка</span><span class="pos">в норме, +8% к маю</span></div>
+      <div class="row" style="padding:6px 0"><span>Долг поставщикам</span><span class="pos">снижается ▼</span></div>
+      <div class="row" style="padding:6px 0"><span>Накопления</span><span class="tr">налоги отстают</span></div>
+      <div class="row" style="padding:6px 0"><span>Расхождения</span><span class="pos">1 за неделю</span></div>
+    </div>
+    <div class="muted">Пульс считается из 4 показателей и обновляется в реальном времени. Тап на любую строку → детали.</div>
+  </div>
+
+  <!-- Уведомления -->
+  <div class="sheet" id="sheet-notif">
+    <div class="handle"></div>
+    <h3>Уведомления</h3>
+    <div class="section-label">Сегодня</div>
+    <button class="act" onclick="closeSheets();go('suppliers')">💸 Иванов П. запланирован на сегодня — ₽35 000 <span class="muted">08:00</span></button>
+    <button class="act" onclick="closeSheets();go('suppliers');showSub('sup','orders')">📦 Ожидается приход: Молочка · Иванов П. <span class="muted">08:00</span></button>
+    <button class="act" onclick="toast('Резервная копия — всё в порядке ✓')">✓ Резервная копия создана <span class="muted">03:00</span></button>
+  </div>
+
+  <!-- ИИ -->
+  <div class="sheet" id="sheet-ai">
+    <div class="handle"></div>
+    <h3>💬 ИИ-ассистент</h3>
+    <div class="card" style="background:var(--bg-secondary)">
+      <div class="muted" style="margin-bottom:8px">Вы: Почему выручка упала на прошлой неделе?</div>
+      <div style="font-size:15px">📊 Вижу снижение на 18% (пн–ср). Возможные причины:<br>
+      • Пн: смена закрыта только в 23:00 (Петров В.)<br>
+      • Вт: не было прихода молочки от Иванова П.<br>
+      • Ср: расхождение −₽800<br><br>
+      Показать детали по каждому дню?</div>
+    </div>
+    <div class="field"><label>🎤</label><input placeholder="Спроси что-нибудь..." style="width:100%;text-align:left"></div>
+    <div class="muted" style="margin-top:8px">Пакет ИИ · ₽290/мес · отвечает по данным вашего магазина</div>
+  </div>
+
+  <!-- Действия по выплате -->
+  <div class="sheet" id="sheet-supAct">
+    <div class="handle"></div>
+    <h3>Иванов П. · Долг ₽120К</h3>
+    <div class="muted" style="margin-bottom:12px">Запланировано: ₽35 000, сегодня</div>
+    <button class="act" onclick="toast('Оплата проведена ✓ (демо)');closeSheets()">💸 Оплатить</button>
+    <button class="act" onclick="toast('Перенос: завтра / дата / освободить (демо)')">📅 Перенести</button>
+    <button class="act" onclick="toast('Отмечено: не пришёл (демо)');closeSheets()">✗ Не пришёл</button>
+    <button class="act" style="color:var(--expense)" onclick="toast('Запись отменена (демо)');closeSheets()">🗑 Отменить запись</button>
+  </div>
+
+  <!-- Карточка поставщика -->
+  <div class="sheet" id="sheet-supCard">
+    <div class="handle"></div>
+    <h3>Иванов П. · ООО Иванов</h3>
+    <div class="card" style="background:var(--bg-secondary)">
+      <div class="row"><span class="muted">Долг</span><b class="neg">₽ 120 000</b></div>
+      <div class="row" style="margin-top:6px"><span class="muted">Взяли всего: ₽580К</span><span class="muted">Выплатили: ₽460К</span></div>
+      <div class="row" style="margin-top:6px"><span class="muted">Надёжность</span><b class="pos">94%</b></div>
+    </div>
+    <div class="section-label">История</div>
+    <div class="card" style="background:var(--bg-secondary)">
+      <div class="row" style="padding:4px 0"><span>12.06 Оплата</span><span class="pos">−₽35 000 ✓</span></div>
+      <div class="row" style="padding:4px 0"><span>08.06 Накладная</span><span class="neg">+₽50 000</span></div>
+      <div class="row" style="padding:4px 0"><span>05.06 Оплата</span><span class="pos">−₽28 000 ✓</span></div>
+    </div>
+    <button class="act" onclick="toast('Выплата — демо')">💸 Выплатить</button>
+    <button class="act" onclick="toast('Накладная — демо')">📋 Записать накладную</button>
+    <button class="act" onclick="toast('Возврат поставщику — демо')">↩ Возврат</button>
+  </div>
+
+  <!-- Действия по заказу -->
+  <div class="sheet" id="sheet-orderAct">
+    <div class="handle"></div>
+    <h3>Молочка · Иванов П.</h3>
+    <div class="muted" style="margin-bottom:12px">Заказано: ~₽15 000 · сегодня</div>
+    <button class="act" onclick="toast('Форма: факт. сумма + сразу/в долг (демо)')">✓ Товар пришёл</button>
+    <button class="act" onclick="toast('Перенос даты — демо')">📅 Перенести дату</button>
+    <button class="act" style="color:var(--expense)" onclick="toast('Заказ отменён (демо)');closeSheets()">✕ Отменить заказ</button>
+  </div>
+
+  <!-- День календаря -->
+  <div class="sheet" id="sheet-calDay">
+    <div class="handle"></div>
+    <h3 id="calDayTitle">18 июня</h3>
+    <div class="card" style="background:var(--bg-secondary)">
+      <div class="row" style="padding:4px 0"><span>Аренда</span><span class="neg">−₽60 000</span></div>
+      <div class="row" style="padding:4px 0"><span>ООО Бета</span><span class="neg">−₽45 000</span></div>
+      <div class="row" style="padding:4px 0"><span>Ожидаемая выручка</span><span class="pos">+₽85 000</span></div>
+      <div class="row" style="padding:8px 0 0; border-top:1px solid var(--separator); margin-top:8px"><b>Прогнозный остаток</b><b class="tr">₽28 500</b></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+// ---------- навигация ----------
+function go(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('scr-'+name).classList.add('active');
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('on'));
+  document.getElementById('nav-'+name).classList.add('on');
+  document.querySelector('.content').scrollTop=0;
+  closeSheets();
+}
+// ---------- вкладки внутри экрана ----------
+function showSub(prefix,name,btn){
+  const map={kassa:'scr-kassa',sup:'scr-suppliers',fin:'scr-finance',more:'scr-more'};
+  const scr=document.getElementById(map[prefix]);
+  scr.querySelectorAll('.subtab').forEach(t=>t.classList.remove('on'));
+  const idPrefix = prefix==='sup'?'sup':prefix==='fin'?'fin':prefix;
+  scr.querySelector('#'+idPrefix+'-'+name).classList.add('on');
+  if(btn){scr.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+  else{ // программный переход — подсветить нужную кнопку по индексу
+    const tabs=[...scr.querySelectorAll('.subtab')];
+    const idx=tabs.findIndex(t=>t.classList.contains('on'));
+    scr.querySelectorAll('.seg button').forEach((b,i)=>b.classList.toggle('on',i===idx));
+  }
+}
+// ---------- bottom sheets ----------
+function openSheet(name){
+  document.getElementById('overlay').classList.add('show');
+  document.getElementById('sheet-'+name).classList.add('show');
+}
+function closeSheets(){
+  document.getElementById('overlay').classList.remove('show');
+  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('show'));
+}
+// ---------- toast ----------
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+}
+// ---------- нумпад ----------
+let npVal='', npType='exp';
+const cats={exp:'🛒 Закупка ›', inc:'💰 Продажи ›', tr:'↔ Перевод ›'};
+function setType(t){
+  npType=t;
+  document.getElementById('t-exp').className = t==='exp'?'on-exp':'';
+  document.getElementById('t-inc').className = t==='inc'?'on-inc':'';
+  document.getElementById('t-tr').className  = t==='tr' ?'on-tr':'';
+  document.getElementById('np-cat').textContent=cats[t];
+}
+function npKey(k){
+  if(k==='back') npVal=npVal.slice(0,-1);
+  else if(npVal.length<9) npVal+=k;
+  npVal=npVal.replace(/^0+(?=\d)/,'');
+  const n=parseInt(npVal||'0');
+  document.getElementById('np-amount').textContent='₽ '+n.toLocaleString('ru-RU');
+  document.getElementById('np-save').disabled = n===0;
+}
+function npSave(){
+  const n=parseInt(npVal||'0');
+  const sign = npType==='exp'?'−':npType==='inc'?'+':'';
+  const cls  = npType==='exp'?'neg':npType==='inc'?'pos':'tr';
+  const label= npType==='exp'?'Закупка':npType==='inc'?'Продажи':'Перевод';
+  const icon = npType==='exp'?'🛒':npType==='inc'?'💰':'↔';
+  const bg   = npType==='exp'?'#0EA5E9':npType==='inc'?'#10B981':'#FF9F0A';
+  const row=document.createElement('div');
+  row.className='list-row';
+  row.innerHTML=`<div class="cat-icon" style="background:${bg}">${icon}</div>
+    <div class="lr-main"><div class="lr-title">${label}</div><div class="lr-sub">только что · Наличные</div></div>
+    <div class="lr-amount ${cls}">${sign}₽${n.toLocaleString('ru-RU')}</div>`;
+  document.getElementById('ops-today').prepend(row);
+  npVal=''; npKey('');
+  closeSheets(); toast('Сохранено ✓ — смотри в Ещё → Операции');
+}
+// ---------- календарь ----------
+(function(){
+  const cal=document.getElementById('calendar');
+  ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(d=>{
+    const e=document.createElement('div'); e.className='dow'; e.textContent=d; cal.appendChild(e);
+  });
+  const red=[5,12,18,25], yellow=[7,15,20,29];
+  for(let i=0;i<30;i++){
+    const day=i+1, e=document.createElement('div');
+    e.className='day '+(red.includes(day)?'r':yellow.includes(day)?'y':'g');
+    e.textContent=day;
+    if(i===0) e.style.gridColumnStart=1; // июнь 2026 начинается с понедельника
+    e.onclick=()=>{document.getElementById('calDayTitle').textContent=day+' июня';openSheet('calDay')};
+    cal.appendChild(e);
+  }
+})();
+// ---------- расхождение кассы ----------
+function calcDiff(){
+  const z=parseInt(document.getElementById('z-cash').value||'0');
+  const f=parseInt(document.getElementById('f-cash').value||'0');
+  const payouts=23500; // инкассация 20000 + Иман 3500
+  const d=(f+payouts)-z;
+  const el=document.getElementById('diff');
+  if(d<0){el.textContent='🔴 −₽'+Math.abs(d).toLocaleString('ru-RU');el.className='neg';}
+  else if(d>0){el.textContent='🟡 +₽'+d.toLocaleString('ru-RU');el.className='tr';}
+  else{el.textContent='✓ 0₽';el.className='pos';}
+}
+calcDiff();
+</script>
+</body>
+</html>
