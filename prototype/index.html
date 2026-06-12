@@ -3,352 +3,598 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Auron Finance — прототип</title>
+<title>Auron Finance</title>
 <style>
 :root{
-  --bg-primary:#F2F2F7; --bg-card:#FFFFFF; --bg-secondary:#F2F2F7;
-  --text-1:#1C1C1E; --text-2:#8E8E93; --text-3:#C7C7CC; --separator:#E5E5EA;
-  --brand:#5E5CE6; --income:#30D158; --expense:#FF453A; --transfer:#FF9F0A; --neutral:#8E8E93;
+  --bg:#F2F2F7; --card:#fff; --card2:#F2F2F7;
+  --t1:#1C1C1E; --t2:#8E8E93; --t3:#C7C7CC; --sep:#E5E5EA;
+  --brand:#5E5CE6; --brand2:#7D7BFF;
+  --green:#30D158; --red:#FF453A; --orange:#FF9F0A;
+  --cshadow:0 2px 8px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.04);
 }
-@media (prefers-color-scheme: dark){
-  :root{ --bg-primary:#000; --bg-card:#1C1C1E; --bg-secondary:#2C2C2E;
-    --text-1:#FFF; --text-2:#8E8E93; --text-3:#48484A; --separator:#38383A; }
+@media(prefers-color-scheme:dark){
+  :root{--bg:#000;--card:#1C1C1E;--card2:#2C2C2E;--t1:#fff;--t2:#8E8E93;--t3:#3A3A3C;--sep:#38383A;--cshadow:none}
 }
-*{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro','Segoe UI',Roboto,Inter,sans-serif;
-  background:#3a3a3c; display:flex; justify-content:center; min-height:100vh}
-.phone{width:100%; max-width:430px; background:var(--bg-primary); min-height:100vh;
-  display:flex; flex-direction:column; position:relative; overflow:hidden}
-/* ---------- Шапка ---------- */
-.header{display:flex; align-items:center; gap:8px; padding:14px 16px; background:var(--bg-card);
-  position:sticky; top:0; z-index:20; border-bottom:1px solid var(--separator)}
-.pulse{font-size:18px; cursor:pointer}
-.header .title{font-size:17px; font-weight:600; color:var(--text-1); flex:1;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
-.hbtn{font-size:18px; cursor:pointer; position:relative; padding:4px}
-.hbtn .badge{position:absolute; top:0; right:-2px; background:var(--expense); color:#fff;
-  font-size:10px; min-width:15px; height:15px; border-radius:8px; display:flex;
-  align-items:center; justify-content:center; padding:0 3px}
-/* ---------- Контент ---------- */
-.content{flex:1; overflow-y:auto; padding:16px 16px 180px}
-.screen{display:none} .screen.active{display:block}
-.card{background:var(--bg-card); border-radius:16px; padding:16px; margin-bottom:16px}
-.section-label{font-size:13px; color:var(--text-2); margin:8px 0; text-transform:uppercase; letter-spacing:.3px}
-h1{font-size:28px; font-weight:700; color:var(--text-1); margin-bottom:16px}
-h2{font-size:22px; font-weight:600; color:var(--text-1); margin-bottom:8px}
-.hero{font-size:34px; font-weight:700; color:var(--text-1)}
-.muted{color:var(--text-2); font-size:13px}
-.row{display:flex; justify-content:space-between; align-items:center}
-/* чеклист */
-.checklist{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px}
-.chip{background:var(--bg-card); border-radius:12px; padding:8px 12px; font-size:13px;
-  color:var(--text-1); cursor:pointer; border:1px solid var(--separator)}
-.chip.done{color:var(--text-2); text-decoration:line-through}
-/* быстрые действия */
-.quick{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:16px}
-.qbtn{background:var(--bg-card); border-radius:12px; padding:12px 4px; text-align:center;
-  cursor:pointer; font-size:12px; color:var(--text-1)}
-.qbtn span{display:block; font-size:22px; margin-bottom:4px}
-/* списки */
-.list-row{display:flex; align-items:center; gap:12px; padding:12px 0; cursor:pointer;
-  border-bottom:1px solid var(--separator)}
-.list-row:last-child{border-bottom:none}
-.cat-icon{width:40px; height:40px; border-radius:50%; display:flex; align-items:center;
-  justify-content:center; font-size:18px; flex-shrink:0}
-.lr-main{flex:1; min-width:0}
-.lr-title{font-size:17px; color:var(--text-1)}
-.lr-sub{font-size:13px; color:var(--text-2)}
-.lr-amount{font-size:17px; font-weight:500; text-align:right; white-space:nowrap}
-.pos{color:var(--income)} .neg{color:var(--expense)} .tr{color:var(--transfer)}
-/* прогресс */
-.pbar{height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden; margin:6px 0}
-.pbar i{display:block; height:100%; border-radius:3px}
-/* вкладки-сегменты */
-.seg{display:flex; gap:6px; margin-bottom:16px; overflow-x:auto; padding-bottom:2px}
-.seg button{border:none; background:var(--bg-card); color:var(--text-2); padding:8px 14px;
-  border-radius:12px; font-size:14px; cursor:pointer; white-space:nowrap}
-.seg button.on{background:var(--brand); color:#fff}
-.subtab{display:none} .subtab.on{display:block}
-/* кнопки */
-.btn{display:block; width:100%; border:none; background:var(--brand); color:#fff; height:50px;
-  border-radius:14px; font-size:17px; font-weight:600; cursor:pointer; margin-top:8px}
-.btn.sec{background:var(--bg-secondary); color:var(--brand)}
-.btn.danger{background:rgba(255,69,58,.1); color:var(--expense)}
-.btn:disabled{opacity:.4}
-/* поля */
-.field{background:var(--bg-secondary); border-radius:12px; padding:12px 16px; margin:8px 0;
-  display:flex; justify-content:space-between; align-items:center}
-.field label{font-size:13px; color:var(--text-2)}
-.field input{border:none; background:transparent; text-align:right; font-size:17px;
-  color:var(--text-1); width:120px; outline:none}
-/* навигация */
-.nav{position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:430px;
-  background:var(--bg-card); backdrop-filter:blur(20px); display:flex; z-index:30;
-  border-top:1px solid var(--separator); padding-bottom:env(safe-area-inset-bottom)}
-.nav button{flex:1; border:none; background:none; padding:10px 0 12px; cursor:pointer;
-  font-size:10px; color:var(--text-3); position:relative}
-.nav button span{display:block; font-size:22px; margin-bottom:2px}
-.nav button.on{color:var(--brand)}
-.nav .dot{position:absolute; top:8px; right:50%; margin-right:-18px; width:8px; height:8px;
-  border-radius:50%; background:var(--expense)}
-/* FAB */
-.fab{position:fixed; bottom:88px; right:max(16px, calc(50% - 215px + 16px)); width:56px; height:56px;
-  border-radius:16px; background:var(--brand); color:#fff; font-size:26px; border:none;
-  cursor:pointer; box-shadow:0 4px 16px rgba(94,92,230,.4); z-index:25}
-/* bottom sheet */
-.overlay{position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:40; display:none}
-.overlay.show{display:block}
-.sheet{position:fixed; bottom:0; left:50%; transform:translate(-50%,100%); width:100%; max-width:430px;
-  background:var(--bg-card); border-radius:24px 24px 0 0; z-index:50; max-height:90vh;
-  overflow-y:auto; transition:transform .3s cubic-bezier(.32,.72,0,1); padding:8px 16px 32px}
-.sheet.show{transform:translate(-50%,0)}
-.handle{width:36px; height:4px; border-radius:2px; background:var(--separator); margin:4px auto 16px}
-/* нумпад */
-.types{display:flex; gap:4px; margin-bottom:12px}
-.types button{flex:1; border:none; padding:10px; border-radius:12px; background:var(--bg-secondary);
-  color:var(--text-2); font-size:14px; font-weight:600; cursor:pointer}
-.types button.on-exp{background:rgba(255,69,58,.12); color:var(--expense)}
-.types button.on-inc{background:rgba(48,209,88,.12); color:var(--income)}
-.types button.on-tr{background:rgba(255,159,10,.12); color:var(--transfer)}
-.np-amount{font-size:40px; font-weight:700; text-align:center; margin:12px 0; color:var(--text-1); min-height:48px}
-.np-meta{margin-bottom:8px}
-.np-meta .field{cursor:pointer}
-.numpad{display:grid; grid-template-columns:repeat(4,1fr); gap:6px}
-.numpad button{border:none; background:var(--bg-secondary); border-radius:12px; height:58px;
-  font-size:24px; font-weight:500; color:var(--text-1); cursor:pointer}
-.numpad .save{grid-row:span 2; background:var(--brand); color:#fff; font-size:17px; font-weight:600; height:auto}
-.numpad .save:disabled{opacity:.4}
-/* toast */
-.toast{position:fixed; bottom:100px; left:50%; transform:translateX(-50%); background:#1C1C1E;
-  color:#fff; padding:12px 20px; border-radius:14px; font-size:15px; z-index:99;
-  opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap}
-.toast.show{opacity:1}
-/* календарь */
-.cal{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; text-align:center}
-.cal .dow{font-size:11px; color:var(--text-2); padding:4px 0}
-.cal .day{padding:8px 0; border-radius:10px; font-size:14px; cursor:pointer; color:var(--text-1)}
-.cal .day.g{background:rgba(48,209,88,.15)} .cal .day.r{background:rgba(255,69,58,.18)}
-.cal .day.y{background:rgba(255,159,10,.18)}
-/* мини-бар графика */
-.bars{display:flex; align-items:flex-end; gap:3px; height:60px; margin:12px 0}
-.bars i{flex:1; background:var(--brand); border-radius:3px 3px 0 0; opacity:.85}
-.banner{background:rgba(94,92,230,.1); border-radius:12px; padding:12px; font-size:14px;
-  color:var(--text-1); margin-bottom:16px}
-.demo-note{position:fixed; top:0; left:50%; transform:translateX(-50%); z-index:60;
-  background:var(--transfer); color:#fff; font-size:10px; padding:2px 10px; border-radius:0 0 8px 8px}
-.sheet h3{font-size:18px; font-weight:600; color:var(--text-1); margin-bottom:12px}
-.sheet .act{display:block; width:100%; text-align:left; border:none; background:var(--bg-secondary);
-  border-radius:12px; padding:14px 16px; font-size:16px; color:var(--text-1); margin-bottom:8px; cursor:pointer}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
+  background:#232326;display:flex;justify-content:center;min-height:100vh}
+.phone{width:100%;max-width:430px;background:var(--bg);min-height:100vh;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+/* ── Шапка ───────────────────────────────── */
+.header{display:flex;align-items:center;gap:10px;padding:14px 16px;
+  background:color-mix(in srgb,var(--card) 90%,transparent);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  position:sticky;top:0;z-index:20;border-bottom:1px solid var(--sep)}
+.pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0;cursor:pointer;
+  box-shadow:0 0 0 3px rgba(48,209,88,.2);animation:glow 2.5s ease-in-out infinite}
+@keyframes glow{0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.2)}50%{box-shadow:0 0 0 6px rgba(48,209,88,.07)}}
+.header-title{font-size:16px;font-weight:700;color:var(--t1);flex:1;letter-spacing:-.2px}
+.hbtn{width:34px;height:34px;border-radius:11px;background:var(--card2);border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;color:var(--t1);position:relative;
+  transition:transform .15s,background .15s}
+.hbtn:active{transform:scale(.87)}
+.hbtn .dot{position:absolute;top:-3px;right:-3px;width:15px;height:15px;border-radius:8px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;
+  justify-content:center;border:2px solid var(--card)}
+
+/* ── Контент ─────────────────────────────── */
+.content{flex:1;overflow-y:auto;padding:0 16px 180px}
+.scr{display:none}.scr.on{display:block}
+.card{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:var(--cshadow)}
+.lbl{font-size:12px;font-weight:700;color:var(--t2);letter-spacing:.5px;text-transform:uppercase;margin:16px 0 6px}
+h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18px 0 14px}
+.mu{color:var(--t2);font-size:13px}
+.row{display:flex;justify-content:space-between;align-items:center}
+.pos{color:var(--green)}.neg{color:var(--red)}.tr{color:var(--orange)}
+
+/* ── Hero-баланс ─────────────────────────── */
+.hero-card{background:linear-gradient(145deg,#6E6CF7,#4A48D8);border-radius:24px;
+  padding:20px;margin:14px 0 12px;position:relative;overflow:hidden;box-shadow:0 12px 32px rgba(94,92,230,.35)}
+.hero-card::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;
+  border-radius:50%;background:rgba(255,255,255,.07)}
+.hero-card::after{content:'';position:absolute;bottom:-60px;left:20px;width:120px;height:120px;
+  border-radius:50%;background:rgba(255,255,255,.05)}
+.hero-label{font-size:13px;font-weight:500;color:rgba(255,255,255,.65);margin-bottom:6px}
+.hero-amount{font-size:40px;font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1}
+.hero-row{display:flex;gap:0;margin-top:16px}
+.hero-stat{flex:1}
+.hero-stat-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500}
+.hero-stat-val{font-size:18px;font-weight:700;color:#fff;margin-top:2px}
+.hero-div{width:1px;background:rgba(255,255,255,.2);margin:0 16px}
+
+/* ── Чеклист ─────────────────────────────── */
+.checklist{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;padding-top:4px}
+.chip{display:flex;align-items:center;gap:7px;background:var(--card);border-radius:22px;
+  padding:8px 14px;font-size:13px;font-weight:600;color:var(--t1);cursor:pointer;
+  box-shadow:var(--cshadow);transition:transform .14s}
+.chip:active{transform:scale(.93)}
+.chip.done{color:var(--t3)}
+.chip .ck{width:18px;height:18px;border-radius:50%;border:1.8px solid var(--t3);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;transition:all .2s}
+.chip.done .ck{background:var(--green);border-color:var(--green)}
+
+/* ── Быстрые действия ────────────────────── */
+.quick{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 12px}
+.qbtn{border:none;background:var(--card);border-radius:20px;padding:14px 6px 12px;
+  text-align:center;cursor:pointer;box-shadow:var(--cshadow);transition:transform .14s}
+.qbtn:active{transform:scale(.9)}
+.qbtn-label{font-size:11.5px;font-weight:600;color:var(--t1);margin-top:9px;letter-spacing:-.1px}
+
+/* Иконки быстрых действий */
+.qi{width:52px;height:52px;border-radius:17px;margin:0 auto;display:flex;align-items:center;justify-content:center;position:relative}
+.qi svg{position:relative;z-index:1}
+.qi-receipt{background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 6px 16px rgba(94,92,230,.45),inset 0 1px 0 rgba(255,255,255,.35)}
+.qi-pay{background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 6px 16px rgba(255,149,0,.4),inset 0 1px 0 rgba(255,255,255,.3)}
+.qi-box{background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 6px 16px rgba(0,122,255,.4),inset 0 1px 0 rgba(255,255,255,.3)}
+.qi-send{background:linear-gradient(145deg,#67D83A,#28A745);box-shadow:0 6px 16px rgba(40,167,69,.4),inset 0 1px 0 rgba(255,255,255,.3)}
+
+/* ── Строки списка ───────────────────────── */
+.lr{display:flex;align-items:center;gap:12px;padding:11px 0;cursor:pointer;border-bottom:1px solid var(--sep)}
+.lr:last-child{border-bottom:none}
+.lr-icon{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lr-main{flex:1;min-width:0}
+.lr-t{font-size:16px;font-weight:500;color:var(--t1)}
+.lr-s{font-size:13px;color:var(--t2);margin-top:1px}
+.lr-a{font-size:16px;font-weight:600;color:var(--t1);text-align:right;white-space:nowrap}
+.chevron{color:var(--t3);flex-shrink:0}
+
+/* ── Прогресс-бар ────────────────────────── */
+.pb{height:7px;background:var(--card2);border-radius:4px;overflow:hidden;margin:7px 0}
+.pb i{display:block;height:100%;border-radius:4px}
+.pb-green i{background:linear-gradient(90deg,#4ADE80,#22C55E)}
+.pb-orange i{background:linear-gradient(90deg,#FCD34D,#F59E0B)}
+.pb-blue i{background:linear-gradient(90deg,#60A5FA,#3B82F6)}
+
+/* ── Сегменты-вкладки ────────────────────── */
+.seg{display:flex;gap:6px;padding:2px 0 10px;overflow-x:auto}
+.seg::-webkit-scrollbar{display:none}
+.seg button{border:none;background:var(--card);color:var(--t2);padding:9px 16px;border-radius:22px;
+  font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;box-shadow:var(--cshadow);transition:all .2s}
+.seg button.on{background:linear-gradient(145deg,var(--brand2),var(--brand));color:#fff;box-shadow:0 6px 14px rgba(94,92,230,.38)}
+.sub{display:none}.sub.on{display:block}
+
+/* ── Кнопки ──────────────────────────────── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;border:none;
+  height:54px;border-radius:17px;font-size:16px;font-weight:700;cursor:pointer;
+  background:linear-gradient(145deg,var(--brand2),var(--brand));color:#fff;
+  box-shadow:0 8px 20px rgba(94,92,230,.38),inset 0 1px 0 rgba(255,255,255,.22);
+  letter-spacing:-.1px;transition:transform .15s;margin-top:10px}
+.btn:active{transform:scale(.97)}
+.btn.sec{background:var(--card2);color:var(--brand);box-shadow:none}
+.btn.red{background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 6px 16px rgba(255,69,58,.35)}
+
+/* ── Поля ввода ──────────────────────────── */
+.fld{background:var(--card2);border-radius:14px;padding:13px 16px;margin:7px 0;
+  display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.fld label{font-size:14px;color:var(--t2);pointer-events:none}
+.fld span{font-weight:600;color:var(--t1);font-size:15px}
+.fld input{border:none;background:transparent;text-align:right;font-size:17px;font-weight:600;
+  color:var(--t1);width:130px;outline:none;font-family:inherit}
+
+/* ── Навигация ───────────────────────────── */
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;
+  background:color-mix(in srgb,var(--card) 85%,transparent);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  display:flex;z-index:30;border-top:1px solid var(--sep);
+  padding:6px 0 calc(10px + env(safe-area-inset-bottom))}
+.nb{flex:1;border:none;background:none;cursor:pointer;padding:4px 0;
+  display:flex;flex-direction:column;align-items:center;gap:4px;transition:color .2s;position:relative}
+.nb .ni{width:52px;height:30px;border-radius:16px;display:flex;align-items:center;justify-content:center;transition:background .22s}
+.nb .nl{font-size:10px;font-weight:600;color:var(--t3);transition:color .2s}
+.nb.on .nl{color:var(--brand)}
+.nb.on .ni{background:rgba(94,92,230,.13)}
+.nb .dot{position:absolute;top:2px;right:50%;margin-right:-22px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--card)}
+
+/* ── FAB ─────────────────────────────────── */
+.fab{position:fixed;bottom:98px;right:max(16px,calc(50% - 215px + 16px));
+  width:60px;height:60px;border-radius:20px;border:none;cursor:pointer;z-index:25;
+  background:linear-gradient(145deg,var(--brand2),var(--brand));
+  box-shadow:0 12px 28px rgba(94,92,230,.5),inset 0 1px 0 rgba(255,255,255,.28);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
+.fab:active{transform:scale(.88) rotate(90deg)}
+
+/* ── Оверлей + Нижний лист ───────────────── */
+.ovl{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:none;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.ovl.on{display:block}
+.sht{position:fixed;bottom:0;left:50%;transform:translate(-50%,108%);width:100%;max-width:430px;
+  background:var(--card);border-radius:30px 30px 0 0;z-index:50;max-height:90vh;overflow-y:auto;
+  padding:8px 16px calc(28px + env(safe-area-inset-bottom));
+  transition:transform .32s cubic-bezier(.32,.72,0,1);
+  box-shadow:0 -8px 40px rgba(0,0,0,.18)}
+.sht.on{transform:translate(-50%,0)}
+.hdl{width:40px;height:5px;border-radius:3px;background:var(--sep);margin:6px auto 20px}
+.sht h3{font-size:20px;font-weight:800;color:var(--t1);margin-bottom:14px;letter-spacing:-.4px}
+
+/* ── Нумпад ──────────────────────────────── */
+.types{display:flex;gap:0;background:var(--card2);border-radius:18px;padding:4px;margin-bottom:16px}
+.types button{flex:1;border:none;border-radius:14px;padding:11px 4px;font-size:12px;font-weight:800;
+  letter-spacing:.3px;cursor:pointer;background:transparent;color:var(--t3);transition:all .22s}
+.types button.exp{background:var(--card);color:var(--red);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.types button.inc{background:var(--card);color:var(--green);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.types button.trf{background:var(--card);color:var(--orange);box-shadow:0 2px 8px rgba(0,0,0,.1)}
+.np-num{font-size:44px;font-weight:800;color:var(--t1);text-align:center;margin:10px 0 16px;
+  letter-spacing:-2px;min-height:52px;line-height:1}
+.np-meta .fld{cursor:pointer}
+.npad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.npad button{border:none;background:var(--card2);border-radius:18px;height:62px;
+  font-size:24px;font-weight:500;color:var(--t1);cursor:pointer;transition:transform .1s}
+.npad button:active{transform:scale(.88);background:var(--sep)}
+.npad .do-save{grid-row:span 2;height:auto;background:linear-gradient(145deg,var(--brand2),var(--brand));
+  color:#fff;font-size:15px;font-weight:800;
+  box-shadow:0 8px 20px rgba(94,92,230,.42),inset 0 1px 0 rgba(255,255,255,.26)}
+.npad .do-save:disabled{opacity:.3;box-shadow:none}
+.npad .do-save:not(:disabled):active{transform:scale(.92)}
+
+/* ── Действия в листе ────────────────────── */
+.act-row{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:16px;
+  padding:14px 16px;margin-bottom:8px;cursor:pointer;border:none;width:100%;
+  text-align:left;transition:transform .12s;color:var(--t1)}
+.act-row:active{transform:scale(.97)}
+.act-icon{width:40px;height:40px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.act-text{flex:1;font-size:16px;font-weight:600}
+.act-sub{font-size:12px;color:var(--t2);margin-top:1px;font-weight:400}
+
+/* ── Тост ────────────────────────────────── */
+.toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%) translateY(6px);
+  background:rgba(28,28,30,.92);backdrop-filter:blur(12px);color:#fff;
+  padding:12px 22px;border-radius:18px;font-size:14px;font-weight:600;
+  z-index:99;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap;
+  box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Мини-бары ───────────────────────────── */
+.bars{display:flex;align-items:flex-end;gap:4px;height:70px;margin:14px 0}
+.bars i{flex:1;background:linear-gradient(180deg,var(--brand2),var(--brand));border-radius:5px 5px 2px 2px}
+
+/* ── Календарь ───────────────────────────── */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
+.cal .dow{font-size:11px;font-weight:700;color:var(--t2);padding:4px 0}
+.cal .day{padding:9px 0;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s}
+.cal .day:active{transform:scale(.85)}
+.cal .day.g{background:rgba(48,209,88,.14);color:#1a8c37}
+.cal .day.r{background:rgba(255,69,58,.14);color:#c9261c}
+.cal .day.y{background:rgba(255,159,10,.16);color:#a36400}
+@media(prefers-color-scheme:dark){.cal .day.g{color:#4ADE80}.cal .day.r{color:#FF6B61}.cal .day.y{color:#FFB340}}
+
+/* ── Баннер ──────────────────────────────── */
+.banner{background:linear-gradient(135deg,rgba(125,123,255,.12),rgba(94,92,230,.06));
+  border-radius:16px;padding:14px 16px;margin-bottom:12px;font-size:14px;
+  font-weight:500;color:var(--t1)}
+
+.demo-tag{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99;
+  background:var(--orange);color:#fff;font-size:10px;font-weight:700;
+  padding:3px 14px;border-radius:0 0 12px 12px;letter-spacing:.4px}
+
+/* ── SVG иконки (инлайн) ─────────────────── */
 </style>
 </head>
 <body>
-<div class="demo-note">ПРОТОТИП · демо-данные · ничего не сохраняется</div>
+<div class="demo-tag">ПРОТОТИП · демо-данные</div>
+
+<!-- SVG-спрайт: объёмные иконки в стиле filled+stroke -->
+<svg width="0" height="0" style="position:absolute" xmlns="http://www.w3.org/2000/svg">
+<defs>
+
+<!-- Главная: дом с задней стеной -->
+<g id="ic-home">
+  <path d="M12 3L3 9.5V20a1.5 1.5 0 001.5 1.5H9v-6a1.5 1.5 0 013 0v6h4.5A1.5 1.5 0 0018 20V9.5L12 3z" fill="currentColor" opacity=".2"/>
+  <path d="M2 10l10-7 10 7M5 8.5V20a1 1 0 001 1h4v-5.5a2 2 0 014 0V21h4a1 1 0 001-1V8.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Касса / чек: лента с зубчиками -->
+<g id="ic-receipt">
+  <path d="M7 2h10v20l-3-2-2 2-2-2-3 2z" fill="currentColor" opacity=".15"/>
+  <path d="M7 2h10v20l-3-2-2 2-2-2-3 2V2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+  <line x1="10" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <line x1="10" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <line x1="10" y1="16" x2="12.5" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</g>
+
+<!-- Поставщики / кошелёк -->
+<g id="ic-wallet">
+  <rect x="2" y="7" width="20" height="14" rx="3" fill="currentColor" opacity=".18"/>
+  <rect x="2" y="7" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/>
+  <path d="M2 11h20" stroke="currentColor" stroke-width="1.7"/>
+  <path d="M16 4.5L18.5 7H5.5L8 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="17" cy="15.5" r="1.5" fill="currentColor"/>
+</g>
+
+<!-- Финансы / растущий график -->
+<g id="ic-chart">
+  <path d="M3 17l5-6 4 3.5 5-7.5" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M3 17l5-6 4 3.5 5-7.5L21 5v13H3z" fill="currentColor" opacity=".15"/>
+  <line x1="3" y1="21" x2="21" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</g>
+
+<!-- Ещё / сетка -->
+<g id="ic-grid">
+  <rect x="3" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
+  <rect x="13.5" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
+  <rect x="3" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
+  <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor"/>
+</g>
+
+<!-- Колокол -->
+<g id="ic-bell">
+  <path d="M12 22a2 2 0 004 0" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  <path d="M6 16V11a6 6 0 1112 0v5l1.8 2H4.2L6 16z" fill="currentColor" opacity=".18"/>
+  <path d="M6 16V11a6 6 0 1112 0v5l2 2H4l2-2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+</g>
+
+<!-- Чат / ИИ -->
+<g id="ic-chat">
+  <path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" fill="currentColor" opacity=".18"/>
+  <path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+  <circle cx="9" cy="12" r="1.1" fill="currentColor"/>
+  <circle cx="12" cy="12" r="1.1" fill="currentColor"/>
+  <circle cx="15" cy="12" r="1.1" fill="currentColor"/>
+</g>
+
+<!-- Шестерёнка -->
+<g id="ic-gear">
+  <circle cx="12" cy="12" r="2.8" fill="currentColor" opacity=".25"/>
+  <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.7" fill="none"/>
+</g>
+
+<!-- Плюс -->
+<g id="ic-plus">
+  <line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+  <line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
+</g>
+
+<!-- Стрелка-шеврон -->
+<g id="ic-chev">
+  <polyline points="9 6 15 12 9 18" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Галочка -->
+<g id="ic-check">
+  <polyline points="5 13 9.5 17.5 19 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Отправить -->
+<g id="ic-send">
+  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" fill="currentColor" opacity=".2"/>
+  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Коробка/заказ -->
+<g id="ic-box">
+  <path d="M21 8L12 3 3 8v8l9 5 9-5z" fill="currentColor" opacity=".18"/>
+  <path d="M21 8L12 3 3 8v8l9 5 9-5z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
+  <line x1="12" y1="13" x2="12" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <polyline points="3 8 12 13 21 8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>
+</g>
+
+<!-- Оплата / стрелка вниз с линией -->
+<g id="ic-pay">
+  <circle cx="12" cy="8" r="4" fill="currentColor" opacity=".22"/>
+  <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7" fill="none"/>
+  <path d="M12 12v6M9 15l3 3 3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <line x1="6" y1="21" x2="18" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</g>
+
+<!-- Календарь -->
+<g id="ic-cal">
+  <rect x="3" y="5.5" width="18" height="16" rx="3" fill="currentColor" opacity=".15"/>
+  <rect x="3" y="5.5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/>
+  <line x1="3" y1="10.5" x2="21" y2="10.5" stroke="currentColor" stroke-width="1.7"/>
+  <line x1="8" y1="2.5" x2="8" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <line x1="16" y1="2.5" x2="16" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</g>
+
+<!-- X / отмена -->
+<g id="ic-x">
+  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+</g>
+
+<!-- Урна -->
+<g id="ic-trash">
+  <path d="M6 7h12l-1.5 13H7.5L6 7z" fill="currentColor" opacity=".2"/>
+  <path d="M3 7h18M8 7V4.5h8V7M9 11v6M15 11v6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+
+<!-- Документ -->
+<g id="ic-doc">
+  <path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1z" fill="currentColor" opacity=".18"/>
+  <path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1zM14 2.5V7h4.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+  <line x1="9" y1="16" x2="13" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+</g>
+
+<!-- Возврат -->
+<g id="ic-return">
+  <path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M4 9h10.5a5.5 5.5 0 010 11H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+</g>
+
+</defs>
+</svg>
+
 <div class="phone">
 
-  <!-- Шапка -->
+  <!-- ── Шапка ── -->
   <div class="header">
-    <div class="pulse" onclick="openSheet('pulse')">🟢</div>
-    <div class="title">Way Market</div>
-    <div class="hbtn" onclick="openSheet('notif')">🔔<span class="badge">3</span></div>
-    <div class="hbtn" onclick="openSheet('ai')">💬</div>
-    <div class="hbtn" onclick="go('more'); showSub('more','settings')">⚙️</div>
+    <div class="pulse-dot" onclick="openSht('pulse')"></div>
+    <div class="header-title">Way Market</div>
+    <div class="hbtn" onclick="openSht('notif')">
+      <svg width="20" height="20" fill="none"><use href="#ic-bell" color="var(--t1)"/></svg>
+      <span class="dot">3</span>
+    </div>
+    <div class="hbtn" onclick="openSht('ai')">
+      <svg width="20" height="20" fill="none"><use href="#ic-chat" color="var(--t1)"/></svg>
+    </div>
+    <div class="hbtn" onclick="go('more');showSub('more','settings')">
+      <svg width="20" height="20" fill="none"><use href="#ic-gear" color="var(--t1)"/></svg>
+    </div>
   </div>
 
   <div class="content">
 
-  <!-- ГЛАВНАЯ -->
-  <div class="screen active" id="scr-home">
+  <!-- ══ ГЛАВНАЯ ══ -->
+  <div class="scr on" id="s-home">
+
     <div class="checklist">
-      <div class="chip done">☑ Z-отчёт</div>
-      <div class="chip" onclick="go('suppliers')">☐ 3 выплаты</div>
-      <div class="chip done">☑ Табель</div>
-      <div class="chip" onclick="toast('Отчёт сформируется после выплат')">☐ Отчёт</div>
-    </div>
-
-    <div class="card">
-      <div class="muted">Наличных в кассе</div>
-      <div class="hero">₽ 48 500</div>
-      <div class="row" style="margin-top:10px">
-        <div><div class="muted">Выручка сегодня</div><div style="font-size:20px;font-weight:600" class="pos">₽ 62 000</div></div>
-        <div style="text-align:right"><div class="muted">Свободно</div><div style="font-size:20px;font-weight:600">₽ 15 200</div></div>
+      <div class="chip done">
+        <span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>
+        Z-отчёт
+      </div>
+      <div class="chip" onclick="go('suppliers')">
+        <span class="ck"></span>3 выплаты
+      </div>
+      <div class="chip done">
+        <span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>
+        Табель
+      </div>
+      <div class="chip" onclick="toast('Отчёт формируется после выплат')">
+        <span class="ck"></span>Отчёт
       </div>
     </div>
 
+    <!-- Героическая карточка -->
+    <div class="hero-card">
+      <div class="hero-label">Наличных в кассе</div>
+      <div class="hero-amount">₽ 48 500</div>
+      <div class="hero-row">
+        <div class="hero-stat">
+          <div class="hero-stat-label">Выручка сегодня</div>
+          <div class="hero-stat-val">₽ 62 000</div>
+        </div>
+        <div class="hero-div"></div>
+        <div class="hero-stat">
+          <div class="hero-stat-label">Свободно</div>
+          <div class="hero-stat-val">₽ 15 200</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Быстрые действия -->
     <div class="quick">
-      <div class="qbtn" onclick="go('kassa')"><span>🧾</span>Z-отчёт</div>
-      <div class="qbtn" onclick="go('suppliers')"><span>💸</span>Выплата</div>
-      <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')"><span>📦</span>Заказ</div>
-      <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')"><span>📤</span>Отчёт</div>
+      <div class="qbtn" onclick="go('kassa')">
+        <div class="qi qi-receipt">
+          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-receipt"/></svg>
+        </div>
+        <div class="qbtn-label">Z-отчёт</div>
+      </div>
+      <div class="qbtn" onclick="go('suppliers')">
+        <div class="qi qi-pay">
+          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-pay"/></svg>
+        </div>
+        <div class="qbtn-label">Выплата</div>
+      </div>
+      <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')">
+        <div class="qi qi-box">
+          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-box"/></svg>
+        </div>
+        <div class="qbtn-label">Заказ</div>
+      </div>
+      <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')">
+        <div class="qi qi-send">
+          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-send"/></svg>
+        </div>
+        <div class="qbtn-label">Отчёт</div>
+      </div>
     </div>
 
-    <div class="card" onclick="openSheet('payments')" style="cursor:pointer">
-      <div class="row"><b style="color:var(--text-1)">Выплаты сегодня</b><span class="muted">↓</span></div>
-      <div class="muted" style="margin-top:4px">3 поставщика • ₽ 81 000</div>
+    <!-- Выплаты -->
+    <div class="card" onclick="openSht('payments')" style="cursor:pointer">
+      <div class="row"><b style="color:var(--t1)">Выплаты сегодня</b>
+        <span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+      <div class="mu" style="margin-top:5px">3 поставщика · ₽ 81 000</div>
     </div>
 
+    <!-- Заказы -->
     <div class="card">
-      <b style="color:var(--text-1)">Ожидаемые заказы</b>
-      <div class="list-row" onclick="toast('Карточка заказа — демо')">
-        <div class="cat-icon" style="background:#0EA5E9">🥛</div>
-        <div class="lr-main"><div class="lr-title">Молочка • Иванов П.</div><div class="lr-sub">сегодня</div></div>
-        <div class="lr-amount">~₽15К</div>
+      <div class="lbl" style="margin-top:0">Ожидаемые заказы</div>
+      <div class="lr" onclick="toast('Карточка заказа — демо')">
+        <div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.35)">🥛</div>
+        <div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">сегодня</div></div>
+        <div class="lr-a">~₽15К</div>
       </div>
-      <div class="list-row" onclick="toast('Карточка заказа — демо')">
-        <div class="cat-icon" style="background:#F59E0B">🍞</div>
-        <div class="lr-main"><div class="lr-title">Бакалея • ООО Альфа</div><div class="lr-sub">16 июня</div></div>
-        <div class="lr-amount">~₽22К</div>
+      <div class="lr" onclick="toast('Карточка заказа — демо')">
+        <div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 10px rgba(245,158,11,.35)">🍞</div>
+        <div class="lr-main"><div class="lr-t">Бакалея · ООО Альфа</div><div class="lr-s">16 июня</div></div>
+        <div class="lr-a">~₽22К</div>
       </div>
     </div>
 
+    <!-- Накопления -->
     <div class="card" onclick="go('finance')" style="cursor:pointer">
-      <b style="color:var(--text-1)">Накопления</b>
-      <div style="margin-top:8px">
-        <div class="row"><span class="muted">Аренда</span><span class="muted">₽42К / ₽60К</span></div>
-        <div class="pbar"><i style="width:70%;background:var(--income)"></i></div>
-        <div class="row"><span class="muted">Налоги</span><span class="muted">₽18К / ₽45К</span></div>
-        <div class="pbar"><i style="width:40%;background:var(--transfer)"></i></div>
-        <div class="row"><span class="muted">Зарплата</span><span class="muted">₽90К / ₽90К</span></div>
-        <div class="pbar"><i style="width:100%;background:var(--income)"></i></div>
+      <div class="row"><b style="color:var(--t1)">Накопления</b>
+        <span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+      <div style="margin-top:10px">
+        <div class="row mu"><span>Аренда</span><span>₽42К / ₽60К</span></div>
+        <div class="pb pb-green"><i style="width:70%"></i></div>
+        <div class="row mu"><span>Налоги</span><span>₽18К / ₽45К</span></div>
+        <div class="pb pb-orange"><i style="width:40%"></i></div>
+        <div class="row mu"><span>Зарплата</span><span>₽90К / ₽90К</span></div>
+        <div class="pb pb-green"><i style="width:100%"></i></div>
       </div>
     </div>
-  </div>
+  </div><!-- /home -->
 
-  <!-- КАССА -->
-  <div class="screen" id="scr-kassa">
+  <!-- ══ КАССА ══ -->
+  <div class="scr" id="s-kassa">
     <h1>Касса</h1>
     <div class="seg">
       <button class="on" onclick="showSub('kassa','new',this)">Новая смена</button>
       <button onclick="showSub('kassa','hist',this)">История</button>
     </div>
-
-    <div class="subtab on" id="kassa-new">
+    <div class="sub on" id="kassa-new">
       <div class="card">
-        <div class="field"><label>Дата</label><span>12.06.2026</span></div>
-        <div class="field"><label>Смена</label><span>Дневная ▾</span></div>
-        <div class="field"><label>Кассир</label><span>Иванова А. ▾</span></div>
+        <div class="fld"><label>Дата</label><span>12.06.2026</span></div>
+        <div class="fld"><label>Смена</label><span>Дневная ▾</span></div>
+        <div class="fld"><label>Кассир</label><span>Иванова А. ▾</span></div>
       </div>
-      <div class="section-label">По Z-отчёту</div>
+      <div class="lbl">По Z-отчёту</div>
       <div class="card">
-        <div class="field"><label>Наличные</label><input inputmode="numeric" id="z-cash" value="62000" oninput="calcDiff()"></div>
-        <div class="field"><label>Карта</label><input inputmode="numeric" value="28000"></div>
-        <div class="field"><label>Переводы (СБП)</label><input inputmode="numeric" value="3500"></div>
+        <div class="fld"><label>Наличные</label><input inputmode="numeric" id="z-cash" value="62000" oninput="calcDiff()"></div>
+        <div class="fld"><label>Карта</label><input inputmode="numeric" value="28000"></div>
+        <div class="fld"><label>Переводы (СБП)</label><input inputmode="numeric" value="3500"></div>
       </div>
-      <div class="section-label">Фактически в кассе</div>
+      <div class="lbl">Фактически в кассе</div>
       <div class="card">
-        <div class="field"><label>Наличные</label><input inputmode="numeric" id="f-cash" value="38200" oninput="calcDiff()"></div>
+        <div class="fld"><label>Наличные</label><input inputmode="numeric" id="f-cash" value="38200" oninput="calcDiff()"></div>
       </div>
-      <div class="section-label">Выплаты с кассы</div>
+      <div class="lbl">Выплаты с кассы</div>
       <div class="card">
         <div class="row" style="padding:6px 0"><span>Инкассация</span><b>₽ 20 000</b></div>
         <div class="row" style="padding:6px 0"><span>Иман</span><b>₽ 3 500</b></div>
-        <button class="btn sec" onclick="toast('Добавление выплаты — демо')">+ Добавить выплату</button>
+        <button class="btn sec" style="margin-top:8px" onclick="toast('Добавление выплаты — демо')">+ Добавить выплату</button>
       </div>
       <div class="card">
         <div class="row"><b>Расхождение</b><b id="diff">🔴 −₽300</b></div>
-        <div class="muted" style="margin-top:6px">(Факт + Выплаты) − Z-отчёт. Тап на число → формула.</div>
+        <div class="mu" style="margin-top:6px">(Факт + Выплаты) − Z. Измени цифры выше — пересчитается.</div>
       </div>
-      <button class="btn" onclick="toast('Смена сохранена ✓ (демо)')">Сохранить смену</button>
+      <button class="btn" onclick="toast('Смена сохранена ✓ (демо)')">
+        <svg width="18" height="18" fill="none"><use href="#ic-check" color="#fff"/></svg>
+        Сохранить смену
+      </button>
     </div>
-
-    <div class="subtab" id="kassa-hist">
-      <div class="section-label">Сегодня, 12 июня</div>
+    <div class="sub" id="kassa-hist">
+      <div class="lbl">Сегодня, 12 июня</div>
       <div class="card">
-        <div class="list-row" onclick="toast('Детали смены — демо')">
-          <div class="lr-main"><div class="lr-title">Дневная · Иванова А.</div><div class="lr-sub">₽62 000</div></div>
-          <div class="lr-amount pos">✓ 0₽</div>
-        </div>
-        <div class="list-row" onclick="toast('Детали смены — демо')">
-          <div class="lr-main"><div class="lr-title">Ночная · Петров В.</div><div class="lr-sub">₽31 000</div></div>
-          <div class="lr-amount neg">−₽300</div>
-        </div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Дневная · Иванова А.</div><div class="lr-s">₽62 000</div></div><div class="lr-a pos">✓ 0₽</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Ночная · Петров В.</div><div class="lr-s">₽31 000</div></div><div class="lr-a neg">−₽300</div></div>
       </div>
-      <div class="section-label">Вчера, 11 июня</div>
+      <div class="lbl">Вчера, 11 июня</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Дневная · Иванова А.</div><div class="lr-sub">₽58 000</div></div><div class="lr-amount pos">✓ 0₽</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Ночная · Петров В.</div><div class="lr-sub">₽29 500</div></div><div class="lr-amount tr">+₽150</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Дневная · Иванова А.</div><div class="lr-s">₽58 000</div></div><div class="lr-a pos">✓ 0₽</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Ночная · Петров В.</div><div class="lr-s">₽29 500</div></div><div class="lr-a tr">+₽150</div></div>
       </div>
     </div>
-  </div>
+  </div><!-- /kassa -->
 
-  <!-- ПОСТАВЩИКИ -->
-  <div class="screen" id="scr-suppliers">
+  <!-- ══ ПОСТАВЩИКИ ══ -->
+  <div class="scr" id="s-suppliers">
     <h1>Поставщики</h1>
     <div class="seg">
       <button class="on" onclick="showSub('sup','pay',this)">Выплаты</button>
       <button onclick="showSub('sup','dir',this)">Поставщики</button>
       <button onclick="showSub('sup','orders',this)">Заказы</button>
     </div>
-
-    <div class="subtab on" id="sup-pay">
-      <div class="section-label">Сегодня</div>
+    <div class="sub on" id="sup-pay">
+      <div class="lbl">Сегодня</div>
       <div class="card">
-        <div class="list-row" onclick="openSheet('supAct')">
-          <div class="lr-main"><div class="lr-title">Иванов П.</div><div class="lr-sub">Долг: ₽120К</div></div>
-          <div class="lr-amount">₽ 35 000</div>
-        </div>
-        <div class="list-row" onclick="openSheet('supAct')">
-          <div class="lr-main"><div class="lr-title">ООО Альфа</div><div class="lr-sub">Долг: ₽55К</div></div>
-          <div class="lr-amount">₽ 28 000</div>
-        </div>
-        <div class="list-row" onclick="openSheet('supAct')">
-          <div class="lr-main"><div class="lr-title">Петров К.</div><div class="lr-sub">Долг: ₽90К</div></div>
-          <div class="lr-amount">₽ 18 000</div>
-        </div>
+        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">Долг: ₽120К</div></div><div class="lr-a">₽ 35 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">Долг: ₽55К</div></div><div class="lr-a">₽ 28 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">Долг: ₽90К</div></div><div class="lr-a">₽ 18 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       </div>
-      <div class="section-label">Завтра</div>
+      <div class="lbl">Завтра</div>
       <div class="card">
-        <div class="list-row" onclick="openSheet('supAct')">
-          <div class="lr-main"><div class="lr-title">Нурмат ИП</div><div class="lr-sub">Долг: ₽42К</div></div>
-          <div class="lr-amount">₽ 13 000</div>
-        </div>
+        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Нурмат ИП</div><div class="lr-s">Долг: ₽42К</div></div><div class="lr-a">₽ 13 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       </div>
-      <button class="btn sec" onclick="toast('Новая запись на выплату — демо')">+ Записать выплату</button>
+      <button class="btn sec" onclick="toast('Новая запись — демо')">+ Записать выплату</button>
     </div>
-
-    <div class="subtab" id="sup-dir">
-      <div class="card"><div class="row"><span class="muted">Общий долг поставщикам</span><b class="neg">₽ 420 000</b></div></div>
+    <div class="sub" id="sup-dir">
+      <div class="card"><div class="row"><span class="mu">Общий долг</span><b class="neg">₽ 420 000</b></div></div>
       <div class="card">
-        <div class="list-row" onclick="openSheet('supCard')">
-          <div class="cat-icon" style="background:#0EA5E9">🥛</div>
-          <div class="lr-main"><div class="lr-title">Иванов П.</div><div class="lr-sub">ООО Иванов</div></div>
-          <div class="lr-amount neg">₽120К</div>
-        </div>
-        <div class="list-row" onclick="openSheet('supCard')">
-          <div class="cat-icon" style="background:#F59E0B">🍞</div>
-          <div class="lr-main"><div class="lr-title">ООО Альфа</div><div class="lr-sub">Альфа ТД</div></div>
-          <div class="lr-amount neg">₽55К</div>
-        </div>
-        <div class="list-row" onclick="openSheet('supCard')">
-          <div class="cat-icon" style="background:#8B5CF6">🧴</div>
-          <div class="lr-main"><div class="lr-title">Петров К.</div><div class="lr-sub">ИП Петров</div></div>
-          <div class="lr-amount neg">₽90К</div>
-        </div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">ООО Иванов</div></div><div class="lr-a neg">₽120К</div></div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">Альфа ТД</div></div><div class="lr-a neg">₽55К</div></div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">ИП Петров</div></div><div class="lr-a neg">₽90К</div></div>
       </div>
       <button class="btn sec" onclick="toast('Добавление поставщика — демо')">+ Добавить поставщика</button>
     </div>
-
-    <div class="subtab" id="sup-orders">
-      <div class="section-label">Активные</div>
+    <div class="sub" id="sup-orders">
+      <div class="lbl">Активные</div>
       <div class="card">
-        <div class="list-row" onclick="openSheet('orderAct')">
-          <div class="lr-main"><div class="lr-title">Молочка · Иванов П.</div><div class="lr-sub">сегодня</div></div>
-          <div class="lr-amount">~₽15К</div>
-        </div>
-        <div class="list-row" onclick="openSheet('orderAct')">
-          <div class="lr-main"><div class="lr-title">Бакалея · ООО Альфа</div><div class="lr-sub">16 июня</div></div>
-          <div class="lr-amount">~₽22К</div>
-        </div>
+        <div class="lr" onclick="openSht('orderAct')"><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">сегодня</div></div><div class="lr-a">~₽15К</div></div>
+        <div class="lr" onclick="openSht('orderAct')"><div class="lr-main"><div class="lr-t">Бакалея · ООО Альфа</div><div class="lr-s">16 июня</div></div><div class="lr-a">~₽22К</div></div>
       </div>
-      <div class="section-label">История</div>
+      <div class="lbl">История</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Молочка · Иванов П.</div><div class="lr-sub">10 июн · получен ✓</div></div><div class="lr-amount">₽14 800</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">10 июн · получен ✓</div></div><div class="lr-a">₽14 800</div></div>
       </div>
       <button class="btn sec" onclick="toast('Новый заказ — демо')">+ Новый заказ</button>
     </div>
-  </div>
+  </div><!-- /suppliers -->
 
-  <!-- ФИНАНСЫ -->
-  <div class="screen" id="scr-finance">
+  <!-- ══ ФИНАНСЫ ══ -->
+  <div class="scr" id="s-finance">
     <h1>Финансы</h1>
     <div class="seg">
       <button class="on" onclick="showSub('fin','sav',this)">Накопления</button>
@@ -357,98 +603,54 @@ h2{font-size:22px; font-weight:600; color:var(--text-1); margin-bottom:8px}
       <button onclick="showSub('fin','an',this)">Аналитика</button>
       <button onclick="showSub('fin','rep',this)">Отчёт</button>
     </div>
-
-    <div class="subtab on" id="fin-sav">
+    <div class="sub on" id="fin-sav">
       <div class="banner">Июнь 2026 · 18 дней до конца месяца</div>
-      <div class="card">
-        <b>Аренда</b>
-        <div class="pbar"><i style="width:70%;background:var(--income)"></i></div>
-        <div class="row"><span class="muted">₽ 42 000 / ₽ 60 000</span><span class="muted">в день: ₽1 000 ✓</span></div>
-      </div>
-      <div class="card">
-        <b>Налоги</b>
-        <div class="pbar"><i style="width:40%;background:var(--transfer)"></i></div>
-        <div class="row"><span class="muted">₽ 18 000 / ₽ 45 000</span><span class="tr">⚠️ отстаём</span></div>
-      </div>
-      <div class="card">
-        <b>Зарплата</b>
-        <div class="pbar"><i style="width:100%;background:var(--income)"></i></div>
-        <div class="row"><span class="muted">₽ 90 000 / ₽ 90 000</span><span class="pos">готово ✓</span></div>
-      </div>
+      <div class="card"><b>Аренда</b><div class="pb pb-green"><i style="width:70%"></i></div><div class="row mu"><span>₽42 000 / ₽60 000</span><span>в день ₽1 000 ✓</span></div></div>
+      <div class="card"><b>Налоги</b><div class="pb pb-orange"><i style="width:40%"></i></div><div class="row"><span class="mu">₽18 000 / ₽45 000</span><span class="tr" style="font-size:13px">⚠️ отстаём</span></div></div>
+      <div class="card"><b>Зарплата</b><div class="pb pb-green"><i style="width:100%"></i></div><div class="row mu"><span>₽90 000 / ₽90 000</span><span class="pos">готово ✓</span></div></div>
       <button class="btn" onclick="toast('Пополнение — демо')">+ Пополнить</button>
     </div>
-
-    <div class="subtab" id="fin-goals">
-      <div class="card">
-        <b>Выручка за июнь</b>
-        <div class="muted">Цель: ₽ 8 000 000</div>
-        <div class="pbar"><i style="width:65%;background:var(--income)"></i></div>
-        <div class="row"><span class="muted">₽ 5 200 000 (65%)</span><span class="pos">🟢 успеваем · прогноз ₽8.3 млн</span></div>
-      </div>
-      <div class="card">
-        <b>Долг поставщикам — снизить до ₽300К</b>
-        <div class="pbar"><i style="width:50%;background:var(--transfer)"></i></div>
-        <div class="row"><span class="muted">снижен на ₽60К (50%)</span><span class="tr">🟡 под вопросом</span></div>
-      </div>
+    <div class="sub" id="fin-goals">
+      <div class="card"><b>Выручка за июнь</b><div class="mu">Цель: ₽ 8 000 000</div><div class="pb pb-green"><i style="width:65%"></i></div><div class="row"><span class="mu">₽5 200 000 (65%)</span><span class="pos" style="font-size:13px">🟢 прогноз ₽8.3 млн</span></div></div>
+      <div class="card"><b>Долг — снизить до ₽300К</b><div class="pb pb-orange"><i style="width:50%"></i></div><div class="row"><span class="mu">снижен на ₽60К (50%)</span><span class="tr" style="font-size:13px">🟡 под вопросом</span></div></div>
       <button class="btn sec" onclick="toast('Цели ставит Владелец')">+ Новая цель</button>
     </div>
-
-    <div class="subtab" id="fin-cal">
-      <div class="card">
-        <div class="row" style="margin-bottom:10px"><b>Июнь 2026</b><span class="muted">🟢 приток · 🔴 выплаты · 🟡 риск</span></div>
-        <div class="cal" id="calendar"></div>
-      </div>
+    <div class="sub" id="fin-cal">
+      <div class="card"><div class="row" style="margin-bottom:12px"><b>Июнь 2026</b><span class="mu">🟢 приток · 🔴 выплаты · 🟡 риск</span></div><div class="cal" id="cal"></div></div>
     </div>
-
-    <div class="subtab" id="fin-an">
+    <div class="sub" id="fin-an">
       <div class="card">
-        <div class="row"><b>Выручка — июнь</b><span class="pos">🟢 +8% vs май</span></div>
-        <div class="hero" style="font-size:26px;margin-top:4px">₽ 5 200 000</div>
-        <div class="bars">
-          <i style="height:30%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:50%"></i>
-          <i style="height:75%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:60%"></i>
-          <i style="height:55%"></i><i style="height:70%"></i><i style="height:85%"></i><i style="height:100%"></i>
-        </div>
-        <div class="row"><span class="muted">Среднее в день: ₽274К</span><span class="muted">Лучший: 7 июн ₽341К</span></div>
+        <div class="row"><b>Выручка — июнь</b><span class="pos" style="font-size:13px">+8% к маю</span></div>
+        <div style="font-size:26px;font-weight:800;letter-spacing:-1px;margin:6px 0;color:var(--t1)">₽ 5 200 000</div>
+        <div class="bars"><i style="height:30%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:60%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:85%"></i><i style="height:100%"></i></div>
+        <div class="row mu"><span>Среднее: ₽274К/день</span><span>Лучший: 7 июн ₽341К</span></div>
       </div>
       <div class="card">
         <b>Расходы по категориям</b>
-        <div style="margin-top:8px">
-          <div class="row"><span class="muted">Поставщики</span><span class="muted">₽3 100К · 60%</span></div>
-          <div class="pbar"><i style="width:60%;background:#0EA5E9"></i></div>
-          <div class="row"><span class="muted">Зарплата</span><span class="muted">₽850К · 16%</span></div>
-          <div class="pbar"><i style="width:16%;background:#10B981"></i></div>
-          <div class="row"><span class="muted">Аренда</span><span class="muted">₽420К · 8%</span></div>
-          <div class="pbar"><i style="width:8%;background:#F59E0B"></i></div>
-        </div>
+        <div style="margin-top:8px"><div class="row mu"><span>Поставщики</span><span>₽3 100К · 60%</span></div><div class="pb pb-blue"><i style="width:60%"></i></div><div class="row mu"><span>Зарплата</span><span>₽850К · 16%</span></div><div class="pb pb-green"><i style="width:16%"></i></div><div class="row mu"><span>Аренда</span><span>₽420К · 8%</span></div><div class="pb pb-orange"><i style="width:8%"></i></div></div>
       </div>
       <div class="card">
         <b>Кассиры</b>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">🥇 Иванова А.</div><div class="lr-sub">18 смен · 0 расхождений</div></div><div class="lr-amount pos">₽2 900К</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">🥈 Петров В.</div><div class="lr-sub">14 смен · ⚠️ −₽1 200</div></div><div class="lr-amount">₽2 100К</div></div>
-      </div>
-      <div class="card">
-        💡 <b>ИИ-инсайт:</b> <span class="muted">«Выручка по средам на 23% выше среднего. Проверь — есть ли завоз во вторник» (Пакет ИИ)</span>
+        <div class="lr"><div class="lr-main"><div class="lr-t">🥇 Иванова А.</div><div class="lr-s">18 смен · 0 расхождений</div></div><div class="lr-a pos">₽2 900К</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">🥈 Петров В.</div><div class="lr-s">14 смен · ⚠️ −₽1 200</div></div><div class="lr-a">₽2 100К</div></div>
       </div>
     </div>
-
-    <div class="subtab" id="fin-rep">
+    <div class="sub" id="fin-rep">
       <div class="card">
-        <b>Дневной отчёт</b>
-        <div class="muted" style="margin:4px 0 8px">Сегодня, 12 июня — данные актуальны</div>
-        <button class="btn" onclick="toast('Отправлено в WhatsApp ✓ (демо)')">📤 Отправить в WhatsApp</button>
-        <button class="btn sec" onclick="toast('PDF скачан (демо)')">📄 Скачать PDF</button>
+        <b>Дневной отчёт</b><div class="mu" style="margin:5px 0 10px">Сегодня, 12 июня · данные актуальны</div>
+        <button class="btn" onclick="toast('Отправлено в WhatsApp ✓ (демо)')"><svg width="18" height="18" fill="none"><use href="#ic-send" color="#fff"/></svg>Отправить в WhatsApp</button>
+        <button class="btn sec" onclick="toast('PDF скачан (демо)')">Скачать PDF</button>
       </div>
       <div class="card">
         <b>Месячный отчёт</b>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Май 2026</div><div class="lr-sub">закрыт ✓</div></div><div class="lr-amount muted">PDF · Excel</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Апрель 2026</div><div class="lr-sub">закрыт ✓</div></div><div class="lr-amount muted">PDF · Excel</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Май 2026</div><div class="lr-s">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Апрель 2026</div><div class="lr-s">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
       </div>
     </div>
-  </div>
+  </div><!-- /finance -->
 
-  <!-- ЕЩЁ -->
-  <div class="screen" id="scr-more">
+  <!-- ══ ЕЩЁ ══ -->
+  <div class="scr" id="s-more">
     <h1>Ещё</h1>
     <div class="seg">
       <button class="on" onclick="showSub('more','ops',this)">Операции</button>
@@ -456,316 +658,368 @@ h2{font-size:22px; font-weight:600; color:var(--text-1); margin-bottom:8px}
       <button onclick="showSub('more','goods',this)">Товары</button>
       <button onclick="showSub('more','settings',this)">Настройки</button>
     </div>
-
-    <div class="subtab on" id="more-ops">
-      <div class="section-label">Сегодня</div>
-      <div class="card" id="ops-today">
-        <div class="list-row"><div class="cat-icon" style="background:#5E5CE6">🧾</div>
-          <div class="lr-main"><div class="lr-title">Z-отчёт · Дневная</div><div class="lr-sub">09:15 · Наличные</div></div>
-          <div class="lr-amount pos">+₽62 000</div></div>
-        <div class="list-row"><div class="cat-icon" style="background:#0EA5E9">🛒</div>
-          <div class="lr-main"><div class="lr-title">Закупка · Иванов П.</div><div class="lr-sub">14:32 · Наличные</div></div>
-          <div class="lr-amount neg">−₽15 000</div></div>
-        <div class="list-row"><div class="cat-icon" style="background:#FF9F0A">↔</div>
-          <div class="lr-main"><div class="lr-title">Инкассация</div><div class="lr-sub">18:00 · Наличные → Банк</div></div>
-          <div class="lr-amount tr">₽20 000</div></div>
+    <div class="sub on" id="more-ops">
+      <div class="lbl">Сегодня</div>
+      <div class="card" id="ops-list">
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 8px rgba(94,92,230,.3)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">09:15 · Наличные</div></div><div class="lr-a pos">+₽62 000</div></div>
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🛒</div><div class="lr-main"><div class="lr-t">Закупка · Иванов П.</div><div class="lr-s">14:32 · Наличные</div></div><div class="lr-a neg">−₽15 000</div></div>
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 8px rgba(255,149,0,.3)">↔</div><div class="lr-main"><div class="lr-t">Инкассация</div><div class="lr-s">18:00 · Нал → Банк</div></div><div class="lr-a tr">₽20 000</div></div>
       </div>
-      <div class="section-label">Вчера</div>
+      <div class="lbl">Вчера</div>
       <div class="card">
-        <div class="list-row"><div class="cat-icon" style="background:#5E5CE6">🧾</div>
-          <div class="lr-main"><div class="lr-title">Z-отчёт · Дневная</div><div class="lr-sub">Наличные</div></div>
-          <div class="lr-amount pos">+₽58 000</div></div>
-        <div class="list-row"><div class="cat-icon" style="background:#10B981">👥</div>
-          <div class="lr-main"><div class="lr-title">Аванс · Сафина Г.</div><div class="lr-sub">Наличные</div></div>
-          <div class="lr-amount neg">−₽10 000</div></div>
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">Наличные</div></div><div class="lr-a pos">+₽58 000</div></div>
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👥</div><div class="lr-main"><div class="lr-t">Аванс · Сафина Г.</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽10 000</div></div>
       </div>
     </div>
-
-    <div class="subtab" id="more-staff">
-      <div class="banner">◀ 12 июня, четверг ▶ &nbsp;&nbsp;<b>[Подтвердить день ✓]</b></div>
+    <div class="sub" id="more-staff">
+      <div class="banner">◀ 12 июня, четверг ▶</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Сафина Г.</div><div class="lr-sub">5/2, рабочий</div></div><div class="lr-amount pos">Вышла ▾</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Петров В.</div><div class="lr-sub">2/2, выходной</div></div><div class="lr-amount muted">Выходной ▾</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Иванова А.</div><div class="lr-sub">отпуск до 28 июн</div></div><div class="lr-amount tr">Отпуск ▾</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">5/2, рабочий</div></div><div class="lr-a pos">Вышла ▾</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">2/2, выходной</div></div><div class="lr-a mu">Выходной ▾</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">отпуск до 28 июн</div></div><div class="lr-a tr">Отпуск ▾</div></div>
       </div>
-      <div class="section-label">Зарплата — расчёт за май</div>
+      <div class="lbl">Зарплата за май</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Сафина Г.</div><div class="lr-sub">22 дн × ₽1 500 − аванс ₽10 000</div></div><div class="lr-amount">₽23 000</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Петров В.</div><div class="lr-sub">168 ч × ₽180 − аванс ₽5 000</div></div><div class="lr-amount">₽25 240</div></div>
-      </div>
-    </div>
-
-    <div class="subtab" id="more-goods">
-      <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Молоко 1л</div><div class="lr-sub">Закупка ₽65 · Продажа ₽89</div></div><div class="lr-amount pos">37%</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Хлеб б/н</div><div class="lr-sub">Закупка ₽42 · Продажа ₽58</div></div><div class="lr-amount pos">38%</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Сахар 1кг</div><div class="lr-sub">Закупка ₽78 · Продажа ₽99</div></div><div class="lr-amount tr">27%</div></div>
-      </div>
-      <div class="card">
-        <div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div>
-        <div class="muted" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">22 дн × ₽1 500 − ₽10 000</div></div><div class="lr-a">₽23 000</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">168 ч × ₽180 − ₽5 000</div></div><div class="lr-a">₽25 240</div></div>
       </div>
     </div>
-
-    <div class="subtab" id="more-settings">
-      <div class="section-label">Магазин</div>
+    <div class="sub" id="more-goods">
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Название магазина</div></div><div class="lr-amount muted">Way Market ›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Отделы</div></div><div class="lr-amount muted">7 ›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Статьи накоплений</div></div><div class="lr-amount muted">4 ›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Метод накоплений</div></div><div class="lr-amount muted">Виртуальный ›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Дата ночной смены</div></div><div class="lr-amount muted">Начало смены ›</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">₽65 → ₽89</div></div><div class="lr-a pos">37%</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">₽42 → ₽58</div></div><div class="lr-a pos">38%</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">₽78 → ₽99</div></div><div class="lr-a tr">27%</div></div>
       </div>
-      <div class="section-label">Персонализация</div>
+      <div class="card"><div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div><div class="mu" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div></div>
+    </div>
+    <div class="sub" id="more-settings">
+      <div class="lbl">Магазин</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Уровень сложности</div></div><div class="lr-amount muted">Стандартный ›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Карточки на Главной</div></div><div class="lr-amount muted">›</div></div>
+        <div class="lr"><div class="lr-t">Название магазина</div><div class="lr-a mu">Way Market ›</div></div>
+        <div class="lr"><div class="lr-t">Метод накоплений</div><div class="lr-a mu">Виртуальный ›</div></div>
+        <div class="lr"><div class="lr-t">Дата ночной смены</div><div class="lr-a mu">Начало ›</div></div>
       </div>
-      <div class="section-label">Безопасность</div>
+      <div class="lbl">Безопасность</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Изменить PIN</div></div><div class="lr-amount muted">›</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Face ID / Touch ID</div></div><div class="lr-amount pos">вкл</div></div>
-        <div class="list-row" onclick="toast('Журнал изменений — демо')"><div class="lr-main"><div class="lr-title">Журнал изменений</div></div><div class="lr-amount muted">›</div></div>
+        <div class="lr"><div class="lr-t">Изменить PIN</div><div class="lr-a mu">›</div></div>
+        <div class="lr"><div class="lr-t">Face ID / Touch ID</div><div class="lr-a pos">вкл</div></div>
+        <div class="lr" onclick="toast('Журнал изменений — демо')"><div class="lr-t">Журнал изменений</div><div class="lr-a mu">›</div></div>
       </div>
-      <div class="section-label">Подписка</div>
+      <div class="lbl">Подписка</div>
       <div class="card">
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Тариф</div><div class="lr-sub">Ритейл · 1 магазин</div></div><div class="lr-amount">₽890/мес</div></div>
-        <div class="list-row"><div class="lr-main"><div class="lr-title">Пакет ИИ</div></div><div class="lr-amount muted">+₽290/мес ›</div></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Ритейл · 1 магазин</div><div class="lr-s">активна</div></div><div class="lr-a">₽890/мес</div></div>
+        <div class="lr"><div class="lr-t">Пакет ИИ</div><div class="lr-a mu">+₽290/мес ›</div></div>
       </div>
     </div>
-  </div>
+  </div><!-- /more -->
 
   </div><!-- /content -->
 
   <!-- FAB -->
-  <button class="fab" onclick="openSheet('numpad')">＋</button>
+  <button class="fab" onclick="openSht('numpad')">
+    <svg width="28" height="28" fill="none"><use href="#ic-plus"/></svg>
+  </button>
 
-  <!-- Навигация -->
-  <div class="nav">
-    <button class="on" id="nav-home" onclick="go('home')"><span>🏠</span>Главная</button>
-    <button id="nav-kassa" onclick="go('kassa')"><span>🧾</span>Касса</button>
-    <button id="nav-suppliers" onclick="go('suppliers')"><span>💸</span>Поставщики<i class="dot"></i></button>
-    <button id="nav-finance" onclick="go('finance')"><span>📊</span>Финансы</button>
-    <button id="nav-more" onclick="go('more')"><span>≡</span>Ещё</button>
-  </div>
+  <!-- ── Навигация ── -->
+  <nav class="nav">
+    <button class="nb on" id="nb-home" onclick="go('home')">
+      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-home" color="currentColor"/></svg></span>
+      <span class="nl">Главная</span>
+    </button>
+    <button class="nb" id="nb-kassa" onclick="go('kassa')">
+      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-receipt" color="currentColor"/></svg></span>
+      <span class="nl">Касса</span>
+    </button>
+    <button class="nb" id="nb-suppliers" onclick="go('suppliers')">
+      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-wallet" color="currentColor"/></svg></span>
+      <span class="nl">Поставщики</span>
+      <i class="dot"></i>
+    </button>
+    <button class="nb" id="nb-finance" onclick="go('finance')">
+      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-chart" color="currentColor"/></svg></span>
+      <span class="nl">Финансы</span>
+    </button>
+    <button class="nb" id="nb-more" onclick="go('more')">
+      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-grid" color="currentColor"/></svg></span>
+      <span class="nl">Ещё</span>
+    </button>
+  </nav>
 
-  <!-- Overlay + Sheets -->
-  <div class="overlay" id="overlay" onclick="closeSheets()"></div>
+  <!-- ── Оверлей ── -->
+  <div class="ovl" id="ovl" onclick="closeSht()"></div>
 
-  <!-- Нумпад -->
-  <div class="sheet" id="sheet-numpad">
-    <div class="handle"></div>
+  <!-- ── Нумпад ── -->
+  <div class="sht" id="sht-numpad">
+    <div class="hdl"></div>
     <div class="types">
-      <button class="on-exp" id="t-exp" onclick="setType('exp')">РАСХОД</button>
+      <button class="exp" id="t-exp" onclick="setType('exp')">РАСХОД</button>
       <button id="t-inc" onclick="setType('inc')">ДОХОД</button>
       <button id="t-tr" onclick="setType('tr')">ПЕРЕВОД</button>
     </div>
-    <div class="np-amount" id="np-amount">₽ 0</div>
+    <div class="np-num" id="np-num">₽ 0</div>
     <div class="np-meta">
-      <div class="field" onclick="toast('Выбор категории — демо')"><label>Категория</label><span id="np-cat">🛒 Закупка ›</span></div>
-      <div class="field" onclick="toast('Выбор счёта — демо')"><label>Счёт</label><span>💵 Наличные ›</span></div>
-      <div class="field" onclick="toast('Выбор даты — демо')"><label>Дата</label><span>Сегодня, 12 июн ›</span></div>
+      <div class="fld" onclick="toast('Выбор категории — демо')"><label>Категория</label><span id="np-cat">🛒 Закупка ›</span></div>
+      <div class="fld" onclick="toast('Выбор счёта — демо')"><label>Счёт</label><span>💵 Наличные ›</span></div>
+      <div class="fld" onclick="toast('Выбор даты — демо')"><label>Дата</label><span>Сегодня, 12 июн ›</span></div>
     </div>
-    <div class="numpad">
-      <button onclick="npKey('7')">7</button><button onclick="npKey('8')">8</button><button onclick="npKey('9')">9</button>
-      <button onclick="npKey('back')">⌫</button>
-      <button onclick="npKey('4')">4</button><button onclick="npKey('5')">5</button><button onclick="npKey('6')">6</button>
-      <button class="save" id="np-save" disabled onclick="npSave()">✓<br>Сохранить</button>
-      <button onclick="npKey('1')">1</button><button onclick="npKey('2')">2</button><button onclick="npKey('3')">3</button>
-      <button onclick="npKey('0')" style="grid-column:span 2">0</button><button onclick="npKey('00')">00</button>
+    <div class="npad">
+      <button onclick="nk('7')">7</button><button onclick="nk('8')">8</button><button onclick="nk('9')">9</button>
+      <button onclick="nk('back')" style="font-size:19px">⌫</button>
+      <button onclick="nk('4')">4</button><button onclick="nk('5')">5</button><button onclick="nk('6')">6</button>
+      <button class="do-save" id="np-save" disabled onclick="npSave()">✓<br>Сохранить</button>
+      <button onclick="nk('1')">1</button><button onclick="nk('2')">2</button><button onclick="nk('3')">3</button>
+      <button onclick="nk('0')" style="grid-column:span 2">0</button><button onclick="nk('00')">00</button>
     </div>
   </div>
 
-  <!-- Пульс -->
-  <div class="sheet" id="sheet-pulse">
-    <div class="handle"></div>
-    <h3>🟢 Финансовый пульс: всё хорошо</h3>
-    <div class="card" style="background:var(--bg-secondary)">
-      <div class="row" style="padding:6px 0"><span>Выручка</span><span class="pos">в норме, +8% к маю</span></div>
-      <div class="row" style="padding:6px 0"><span>Долг поставщикам</span><span class="pos">снижается ▼</span></div>
-      <div class="row" style="padding:6px 0"><span>Накопления</span><span class="tr">налоги отстают</span></div>
-      <div class="row" style="padding:6px 0"><span>Расхождения</span><span class="pos">1 за неделю</span></div>
+  <!-- ── Пульс ── -->
+  <div class="sht" id="sht-pulse">
+    <div class="hdl"></div>
+    <h3>🟢 Финансовый пульс — всё хорошо</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:7px 0"><span>Выручка</span><span class="pos">+8% к маю ✓</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Долг поставщикам</span><span class="pos">снижается ▼</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Накопления</span><span class="tr">налоги отстают</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Расхождения</span><span class="pos">1 за неделю</span></div>
     </div>
-    <div class="muted">Пульс считается из 4 показателей и обновляется в реальном времени. Тап на любую строку → детали.</div>
+    <div class="mu" style="margin-top:10px">Пульс считается из 4 показателей и обновляется в реальном времени.</div>
   </div>
 
-  <!-- Уведомления -->
-  <div class="sheet" id="sheet-notif">
-    <div class="handle"></div>
+  <!-- ── Уведомления ── -->
+  <div class="sht" id="sht-notif">
+    <div class="hdl"></div>
     <h3>Уведомления</h3>
-    <div class="section-label">Сегодня</div>
-    <button class="act" onclick="closeSheets();go('suppliers')">💸 Иванов П. запланирован на сегодня — ₽35 000 <span class="muted">08:00</span></button>
-    <button class="act" onclick="closeSheets();go('suppliers');showSub('sup','orders')">📦 Ожидается приход: Молочка · Иванов П. <span class="muted">08:00</span></button>
-    <button class="act" onclick="toast('Резервная копия — всё в порядке ✓')">✓ Резервная копия создана <span class="muted">03:00</span></button>
+    <button class="act-row" onclick="closeSht();go('suppliers')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.35)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <span><div class="act-text">Иванов П. · ₽ 35 000</div><div class="act-sub">Выплата сегодня · 08:00</div></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="closeSht();go('suppliers');showSub('sup','orders')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.35)"><svg width="20" height="20" fill="none"><use href="#ic-box" color="#fff"/></svg></span>
+      <span><div class="act-text">Приход: Молочка · Иванов П.</div><div class="act-sub">Ожидается сегодня · 08:00</div></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Резервная копия в порядке ✓')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.35)"><svg width="20" height="20" fill="none"><use href="#ic-check" color="#fff"/></svg></span>
+      <span><div class="act-text">Резервная копия создана</div><div class="act-sub">03:00</div></span>
+    </button>
   </div>
 
-  <!-- ИИ -->
-  <div class="sheet" id="sheet-ai">
-    <div class="handle"></div>
+  <!-- ── ИИ ── -->
+  <div class="sht" id="sht-ai">
+    <div class="hdl"></div>
     <h3>💬 ИИ-ассистент</h3>
-    <div class="card" style="background:var(--bg-secondary)">
-      <div class="muted" style="margin-bottom:8px">Вы: Почему выручка упала на прошлой неделе?</div>
-      <div style="font-size:15px">📊 Вижу снижение на 18% (пн–ср). Возможные причины:<br>
-      • Пн: смена закрыта только в 23:00 (Петров В.)<br>
-      • Вт: не было прихода молочки от Иванова П.<br>
-      • Ср: расхождение −₽800<br><br>
-      Показать детали по каждому дню?</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="mu" style="margin-bottom:8px">Вы: Почему выручка упала на прошлой неделе?</div>
+      <div style="font-size:15px;line-height:1.55;color:var(--t1)">📊 Вижу снижение на 18% (пн–ср).<br>• Пн: смена закрыта в 23:00 (Петров В.)<br>• Вт: не было прихода молочки<br>• Ср: расхождение −₽800</div>
     </div>
-    <div class="field"><label>🎤</label><input placeholder="Спроси что-нибудь..." style="width:100%;text-align:left"></div>
-    <div class="muted" style="margin-top:8px">Пакет ИИ · ₽290/мес · отвечает по данным вашего магазина</div>
+    <div class="fld" style="margin-top:10px"><label>🎤</label><input placeholder="Спроси что-нибудь..." style="width:100%;text-align:left;font-size:15px"></div>
+    <div class="mu" style="margin-top:8px">Пакет ИИ · ₽290/мес</div>
   </div>
 
-  <!-- Действия по выплате -->
-  <div class="sheet" id="sheet-supAct">
-    <div class="handle"></div>
+  <!-- ── Действия: Выплата ── -->
+  <div class="sht" id="sht-supAct">
+    <div class="hdl"></div>
     <h3>Иванов П. · Долг ₽120К</h3>
-    <div class="muted" style="margin-bottom:12px">Запланировано: ₽35 000, сегодня</div>
-    <button class="act" onclick="toast('Оплата проведена ✓ (демо)');closeSheets()">💸 Оплатить</button>
-    <button class="act" onclick="toast('Перенос: завтра / дата / освободить (демо)')">📅 Перенести</button>
-    <button class="act" onclick="toast('Отмечено: не пришёл (демо)');closeSheets()">✗ Не пришёл</button>
-    <button class="act" style="color:var(--expense)" onclick="toast('Запись отменена (демо)');closeSheets()">🗑 Отменить запись</button>
+    <div class="mu" style="margin-bottom:14px">Запланировано: ₽35 000 · сегодня</div>
+    <button class="act-row" onclick="toast('Оплата проведена ✓ (демо)');closeSht()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <div><div class="act-text">Оплатить</div></div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Перенос — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.3)"><svg width="20" height="20" fill="none"><use href="#ic-cal" color="#fff"/></svg></span>
+      <div><div class="act-text">Перенести</div></div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Отмечено: не пришёл (демо)');closeSht()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.3)"><svg width="20" height="20" fill="none"><use href="#ic-x" color="#fff"/></svg></span>
+      <div><div class="act-text">Не пришёл</div></div><span style="flex:1"></span>
+    </button>
+    <button class="act-row" style="color:var(--red)" onclick="toast('Запись отменена (демо)');closeSht()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 4px 10px rgba(255,69,58,.3)"><svg width="20" height="20" fill="none"><use href="#ic-trash" color="#fff"/></svg></span>
+      <div><div class="act-text" style="color:var(--red)">Отменить запись</div></div>
+    </button>
   </div>
 
-  <!-- Карточка поставщика -->
-  <div class="sheet" id="sheet-supCard">
-    <div class="handle"></div>
+  <!-- ── Карточка поставщика ── -->
+  <div class="sht" id="sht-supCard">
+    <div class="hdl"></div>
     <h3>Иванов П. · ООО Иванов</h3>
-    <div class="card" style="background:var(--bg-secondary)">
-      <div class="row"><span class="muted">Долг</span><b class="neg">₽ 120 000</b></div>
-      <div class="row" style="margin-top:6px"><span class="muted">Взяли всего: ₽580К</span><span class="muted">Выплатили: ₽460К</span></div>
-      <div class="row" style="margin-top:6px"><span class="muted">Надёжность</span><b class="pos">94%</b></div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:3px 0"><span class="mu">Долг</span><b class="neg">₽ 120 000</b></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Взяли / Выплатили</span><span class="mu">₽580К / ₽460К</span></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Надёжность</span><b class="pos">94%</b></div>
     </div>
-    <div class="section-label">История</div>
-    <div class="card" style="background:var(--bg-secondary)">
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
       <div class="row" style="padding:4px 0"><span>12.06 Оплата</span><span class="pos">−₽35 000 ✓</span></div>
       <div class="row" style="padding:4px 0"><span>08.06 Накладная</span><span class="neg">+₽50 000</span></div>
       <div class="row" style="padding:4px 0"><span>05.06 Оплата</span><span class="pos">−₽28 000 ✓</span></div>
     </div>
-    <button class="act" onclick="toast('Выплата — демо')">💸 Выплатить</button>
-    <button class="act" onclick="toast('Накладная — демо')">📋 Записать накладную</button>
-    <button class="act" onclick="toast('Возврат поставщику — демо')">↩ Возврат</button>
+    <button class="act-row" onclick="toast('Выплата — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <div class="act-text">Выплатить</div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Накладная — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 10px rgba(94,92,230,.3)"><svg width="20" height="20" fill="none"><use href="#ic-doc" color="#fff"/></svg></span>
+      <div class="act-text">Записать накладную</div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Возврат поставщику — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 10px rgba(147,51,234,.3)"><svg width="20" height="20" fill="none"><use href="#ic-return" color="#fff"/></svg></span>
+      <div class="act-text">Возврат</div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
   </div>
 
-  <!-- Действия по заказу -->
-  <div class="sheet" id="sheet-orderAct">
-    <div class="handle"></div>
+  <!-- ── Выплаты с главной ── -->
+  <div class="sht" id="sht-payments">
+    <div class="hdl"></div>
+    <h3>Выплаты сегодня · ₽81 000</h3>
+    <button class="act-row" onclick="closeSht();openSht('supAct')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <span><div class="act-text">Иванов П.</div><div class="act-sub">Долг ₽120К</div></span><span style="flex:1"></span><b>₽35 000</b>
+    </button>
+    <button class="act-row" onclick="closeSht();openSht('supAct')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <span><div class="act-text">ООО Альфа</div><div class="act-sub">Долг ₽55К</div></span><span style="flex:1"></span><b>₽28 000</b>
+    </button>
+    <button class="act-row" onclick="closeSht();openSht('supAct')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <span><div class="act-text">Петров К.</div><div class="act-sub">Долг ₽90К</div></span><span style="flex:1"></span><b>₽18 000</b>
+    </button>
+  </div>
+
+  <!-- ── Заказ ── -->
+  <div class="sht" id="sht-orderAct">
+    <div class="hdl"></div>
     <h3>Молочка · Иванов П.</h3>
-    <div class="muted" style="margin-bottom:12px">Заказано: ~₽15 000 · сегодня</div>
-    <button class="act" onclick="toast('Форма: факт. сумма + сразу/в долг (демо)')">✓ Товар пришёл</button>
-    <button class="act" onclick="toast('Перенос даты — демо')">📅 Перенести дату</button>
-    <button class="act" style="color:var(--expense)" onclick="toast('Заказ отменён (демо)');closeSheets()">✕ Отменить заказ</button>
+    <div class="mu" style="margin-bottom:14px">Заказано: ~₽15 000 · сегодня</div>
+    <button class="act-row" onclick="toast('Форма: факт. сумма + оплата/долг')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-check" color="#fff"/></svg></span>
+      <div class="act-text">Товар пришёл</div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Перенос даты — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.3)"><svg width="20" height="20" fill="none"><use href="#ic-cal" color="#fff"/></svg></span>
+      <div class="act-text">Перенести дату</div><span style="flex:1"></span>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" style="color:var(--red)" onclick="toast('Заказ отменён (демо)');closeSht()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 4px 10px rgba(255,69,58,.3)"><svg width="20" height="20" fill="none"><use href="#ic-x" color="#fff"/></svg></span>
+      <div class="act-text" style="color:var(--red)">Отменить заказ</div>
+    </button>
   </div>
 
-  <!-- День календаря -->
-  <div class="sheet" id="sheet-calDay">
-    <div class="handle"></div>
-    <h3 id="calDayTitle">18 июня</h3>
-    <div class="card" style="background:var(--bg-secondary)">
-      <div class="row" style="padding:4px 0"><span>Аренда</span><span class="neg">−₽60 000</span></div>
-      <div class="row" style="padding:4px 0"><span>ООО Бета</span><span class="neg">−₽45 000</span></div>
-      <div class="row" style="padding:4px 0"><span>Ожидаемая выручка</span><span class="pos">+₽85 000</span></div>
-      <div class="row" style="padding:8px 0 0; border-top:1px solid var(--separator); margin-top:8px"><b>Прогнозный остаток</b><b class="tr">₽28 500</b></div>
+  <!-- ── День календаря ── -->
+  <div class="sht" id="sht-calDay">
+    <div class="hdl"></div>
+    <h3 id="cal-day-title">18 июня</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:5px 0"><span>Аренда</span><span class="neg">−₽60 000</span></div>
+      <div class="row" style="padding:5px 0;border-top:1px solid var(--sep)"><span>ООО Бета</span><span class="neg">−₽45 000</span></div>
+      <div class="row" style="padding:5px 0;border-top:1px solid var(--sep)"><span>Ожидаемая выручка</span><span class="pos">+₽85 000</span></div>
+      <div class="row" style="padding:8px 0 2px;border-top:1px solid var(--sep);margin-top:4px"><b>Прогнозный остаток</b><b class="tr">₽28 500</b></div>
     </div>
   </div>
 
   <div class="toast" id="toast"></div>
-</div>
+</div><!-- /phone -->
 
 <script>
-// ---------- навигация ----------
-function go(name){
-  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
-  document.getElementById('scr-'+name).classList.add('active');
-  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('on'));
-  document.getElementById('nav-'+name).classList.add('on');
+// ── Навигация ──
+function go(id){
+  document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
+  document.getElementById('s-'+id).classList.add('on');
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('nb-'+id).classList.add('on');
   document.querySelector('.content').scrollTop=0;
-  closeSheets();
+  closeSht();
 }
-// ---------- вкладки внутри экрана ----------
+
+// ── Вкладки ──
 function showSub(prefix,name,btn){
-  const map={kassa:'scr-kassa',sup:'scr-suppliers',fin:'scr-finance',more:'scr-more'};
+  const map={kassa:'s-kassa',sup:'s-suppliers',fin:'s-finance',more:'s-more'};
   const scr=document.getElementById(map[prefix]);
-  scr.querySelectorAll('.subtab').forEach(t=>t.classList.remove('on'));
-  const idPrefix = prefix==='sup'?'sup':prefix==='fin'?'fin':prefix;
-  scr.querySelector('#'+idPrefix+'-'+name).classList.add('on');
+  scr.querySelectorAll('.sub').forEach(t=>t.classList.remove('on'));
+  const p=prefix==='sup'?'sup':prefix==='fin'?'fin':prefix;
+  const el=scr.querySelector('#'+p+'-'+name);
+  if(el)el.classList.add('on');
   if(btn){scr.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
-  else{ // программный переход — подсветить нужную кнопку по индексу
-    const tabs=[...scr.querySelectorAll('.subtab')];
-    const idx=tabs.findIndex(t=>t.classList.contains('on'));
-    scr.querySelectorAll('.seg button').forEach((b,i)=>b.classList.toggle('on',i===idx));
-  }
 }
-// ---------- bottom sheets ----------
-function openSheet(name){
-  document.getElementById('overlay').classList.add('show');
-  document.getElementById('sheet-'+name).classList.add('show');
+
+// ── Листы ──
+function openSht(id){
+  document.getElementById('ovl').classList.add('on');
+  document.getElementById('sht-'+id).classList.add('on');
 }
-function closeSheets(){
-  document.getElementById('overlay').classList.remove('show');
-  document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('show'));
+function closeSht(){
+  document.getElementById('ovl').classList.remove('on');
+  document.querySelectorAll('.sht').forEach(s=>s.classList.remove('on'));
 }
-// ---------- toast ----------
-let toastTimer;
+
+// ── Toast ──
+let _tt;
 function toast(msg){
-  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('show'),2500);
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');
+  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('on'),2600);
 }
-// ---------- нумпад ----------
-let npVal='', npType='exp';
-const cats={exp:'🛒 Закупка ›', inc:'💰 Продажи ›', tr:'↔ Перевод ›'};
+
+// ── Нумпад ──
+let npV='',npT='exp';
+const catLabel={exp:'🛒 Закупка ›',inc:'💰 Продажи ›',tr:'↔ Перевод ›'};
 function setType(t){
-  npType=t;
-  document.getElementById('t-exp').className = t==='exp'?'on-exp':'';
-  document.getElementById('t-inc').className = t==='inc'?'on-inc':'';
-  document.getElementById('t-tr').className  = t==='tr' ?'on-tr':'';
-  document.getElementById('np-cat').textContent=cats[t];
+  npT=t;
+  document.getElementById('t-exp').className=t==='exp'?'exp':'';
+  document.getElementById('t-inc').className=t==='inc'?'inc':'';
+  document.getElementById('t-tr').className=t==='tr'?'trf':'';
+  document.getElementById('np-cat').textContent=catLabel[t];
 }
-function npKey(k){
-  if(k==='back') npVal=npVal.slice(0,-1);
-  else if(npVal.length<9) npVal+=k;
-  npVal=npVal.replace(/^0+(?=\d)/,'');
-  const n=parseInt(npVal||'0');
-  document.getElementById('np-amount').textContent='₽ '+n.toLocaleString('ru-RU');
-  document.getElementById('np-save').disabled = n===0;
+function nk(k){
+  if(k==='back')npV=npV.slice(0,-1);
+  else if(npV.length<9)npV+=k;
+  npV=npV.replace(/^0+(?=\d)/,'');
+  const n=parseInt(npV||'0');
+  document.getElementById('np-num').textContent='₽ '+n.toLocaleString('ru-RU');
+  document.getElementById('np-save').disabled=n===0;
 }
 function npSave(){
-  const n=parseInt(npVal||'0');
-  const sign = npType==='exp'?'−':npType==='inc'?'+':'';
-  const cls  = npType==='exp'?'neg':npType==='inc'?'pos':'tr';
-  const label= npType==='exp'?'Закупка':npType==='inc'?'Продажи':'Перевод';
-  const icon = npType==='exp'?'🛒':npType==='inc'?'💰':'↔';
-  const bg   = npType==='exp'?'#0EA5E9':npType==='inc'?'#10B981':'#FF9F0A';
-  const row=document.createElement('div');
-  row.className='list-row';
-  row.innerHTML=`<div class="cat-icon" style="background:${bg}">${icon}</div>
-    <div class="lr-main"><div class="lr-title">${label}</div><div class="lr-sub">только что · Наличные</div></div>
-    <div class="lr-amount ${cls}">${sign}₽${n.toLocaleString('ru-RU')}</div>`;
-  document.getElementById('ops-today').prepend(row);
-  npVal=''; npKey('');
-  closeSheets(); toast('Сохранено ✓ — смотри в Ещё → Операции');
+  const n=parseInt(npV||'0');
+  const sign=npT==='exp'?'−':npT==='inc'?'+':'';
+  const cls=npT==='exp'?'neg':npT==='inc'?'pos':'tr';
+  const label=npT==='exp'?'Закупка':npT==='inc'?'Продажи':'Перевод';
+  const grad=npT==='exp'?'linear-gradient(145deg,#5AC8FA,#007AFF)':npT==='inc'?'linear-gradient(145deg,#4ADE80,#16A34A)':'linear-gradient(145deg,#FFB340,#FF9500)';
+  const emoji=npT==='exp'?'🛒':npT==='inc'?'💰':'↔';
+  const row=document.createElement('div');row.className='lr';
+  row.innerHTML=`<div class="lr-icon" style="background:${grad}">${emoji}</div>
+    <div class="lr-main"><div class="lr-t">${label}</div><div class="lr-s">только что · Наличные</div></div>
+    <div class="lr-a ${cls}">${sign}₽${n.toLocaleString('ru-RU')}</div>`;
+  document.getElementById('ops-list').prepend(row);
+  npV='';nk('');
+  closeSht();toast('Сохранено ✓ — смотри в Ещё → Операции');
 }
-// ---------- календарь ----------
+
+// ── Календарь ──
 (function(){
-  const cal=document.getElementById('calendar');
-  ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(d=>{
-    const e=document.createElement('div'); e.className='dow'; e.textContent=d; cal.appendChild(e);
-  });
-  const red=[5,12,18,25], yellow=[7,15,20,29];
+  const cal=document.getElementById('cal');
+  ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(d=>{const e=document.createElement('div');e.className='dow';e.textContent=d;cal.appendChild(e)});
+  const red=[5,12,18,25],yel=[7,15,20,29];
   for(let i=0;i<30;i++){
-    const day=i+1, e=document.createElement('div');
-    e.className='day '+(red.includes(day)?'r':yellow.includes(day)?'y':'g');
-    e.textContent=day;
-    if(i===0) e.style.gridColumnStart=1; // июнь 2026 начинается с понедельника
-    e.onclick=()=>{document.getElementById('calDayTitle').textContent=day+' июня';openSheet('calDay')};
+    const d=i+1,e=document.createElement('div');
+    e.className='day '+(red.includes(d)?'r':yel.includes(d)?'y':'g');
+    e.textContent=d;
+    e.onclick=()=>{document.getElementById('cal-day-title').textContent=d+' июня';openSht('calDay')};
     cal.appendChild(e);
   }
 })();
-// ---------- расхождение кассы ----------
+
+// ── Расхождение ──
 function calcDiff(){
   const z=parseInt(document.getElementById('z-cash').value||'0');
   const f=parseInt(document.getElementById('f-cash').value||'0');
-  const payouts=23500; // инкассация 20000 + Иман 3500
-  const d=(f+payouts)-z;
+  const d=(f+23500)-z;
   const el=document.getElementById('diff');
   if(d<0){el.textContent='🔴 −₽'+Math.abs(d).toLocaleString('ru-RU');el.className='neg';}
   else if(d>0){el.textContent='🟡 +₽'+d.toLocaleString('ru-RU');el.className='tr';}
