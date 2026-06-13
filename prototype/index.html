@@ -636,6 +636,38 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
           <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>MoM выручка</span><b class="pos">+8%</b></div>
           <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>MoM прибыль</span><b class="pos">+12%</b></div>
         </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:10px"><b>Бюджет vs Факт</b></div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:var(--t2)"><th style="text-align:left;padding:4px 0;font-weight:600">Категория</th><th style="text-align:right;padding:4px">План</th><th style="text-align:right;padding:4px">Факт</th><th style="text-align:right;padding:4px">Откл.</th></tr></thead>
+              <tbody>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">Закупка</td><td style="text-align:right;padding:6px 4px">₽180К</td><td style="text-align:right;padding:6px 4px">₽195К</td><td style="text-align:right;padding:6px 4px" class="neg">⚠ +₽15К</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">ЗП</td><td style="text-align:right;padding:6px 4px">₽45К</td><td style="text-align:right;padding:6px 4px">₽45К</td><td style="text-align:right;padding:6px 4px" class="pos">✓</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">Аренда</td><td style="text-align:right;padding:6px 4px">₽60К</td><td style="text-align:right;padding:6px 4px">₽60К</td><td style="text-align:right;padding:6px 4px" class="pos">✓</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">Коммуналка</td><td style="text-align:right;padding:6px 4px">₽15К</td><td style="text-align:right;padding:6px 4px">₽18К</td><td style="text-align:right;padding:6px 4px" class="neg">⚠ +₽3К</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Точка безубыточности</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Постоянные расходы</span><b>₽123К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Переменные расходы</span><b>38%</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Break-even точка</span><b class="tr">₽198К</b></div>
+          <div style="margin-top:10px">
+            <div class="row mu" style="margin-bottom:6px"><span>Сегодня ₽380К — запас прочности 92%</span></div>
+            <div class="pb pb-green"><i style="width:92%"></i></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Налоговая нагрузка</b><span class="mu" style="font-size:12px">УСН 6%</span></div>
+          <div class="row mu" style="padding:4px 0"><span>Начислено</span><b>₽22 800</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Уплачено</span><b class="pos">₽15 000</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>К уплате</span><b class="neg">₽7 800</b></div>
+          <div class="mu" style="margin-top:8px;font-size:12px">Нарастающий итог за год: ₽138К из лимита ₽450К</div>
+          <div class="pb pb-orange" style="margin-top:6px"><i style="width:31%"></i></div>
+        </div>
       </div>
 
       <!-- Кэшфлоу -->
@@ -657,6 +689,24 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Расчётный счёт</span><b>₽320 000</b></div>
             <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Резервы накопления</span><b>₽150 000</b></div>
           </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Кэш-цикл</b></div>
+          <div class="mu">Закупка → Продажа → Деньги в кассе: в среднем <b>3 дня</b></div>
+          <div class="mu" style="margin-top:6px">Оборотный капитал: <b class="tr">₽95К</b> заморожено в товаре и долгах</div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:6px"><b>Свободный денежный поток</b></div>
+          <div class="mu" style="margin-bottom:6px">FCF = операционный − необходимые вложения</div>
+          <div class="mu">₽217К − ₽18К =</div>
+          <div style="font-size:34px;font-weight:800;color:var(--green);letter-spacing:-1px;margin-top:4px">₽199К</div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Остаток по счетам</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Наличные</span><b>₽48 500</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Банк</span><b>₽126 000</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Резерв</span><b>₽84 000</b></div>
+          <div class="row" style="padding:8px 0 0;border-top:2px solid var(--sep);margin-top:4px"><b>Итого</b><b class="pos">₽258 500</b></div>
         </div>
       </div>
 
@@ -705,6 +755,52 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Худший день недели</span><b class="neg">Понедельник</b></div>
           </div>
         </div>
+        <div class="card">
+          <b>Сезонность · 12 месяцев</b>
+          <div style="margin-top:10px">
+            <div class="bars" style="height:70px;margin:10px 0 4px">
+              <i style="height:55%;opacity:.65" title="Янв"></i>
+              <i style="height:50%;opacity:.65" title="Фев"></i>
+              <i style="height:60%;opacity:.65" title="Мар"></i>
+              <i style="height:65%;opacity:.65" title="Апр"></i>
+              <i style="height:72%;opacity:.65" title="Май"></i>
+              <i style="height:90%;background:linear-gradient(180deg,var(--green),#22C55E)" title="Июн"></i>
+              <i style="height:0%;opacity:.3" title="Июл"></i>
+              <i style="height:0%;opacity:.3" title="Авг"></i>
+              <i style="height:0%;opacity:.3" title="Сен"></i>
+              <i style="height:0%;opacity:.3" title="Окт"></i>
+              <i style="height:0%;opacity:.3" title="Ноя"></i>
+              <i style="height:0%;opacity:.3" title="Дек"></i>
+            </div>
+            <div style="display:flex;justify-content:space-between">
+              <span class="mu" style="font-size:10px">Янв</span><span class="mu" style="font-size:10px">Фев</span><span class="mu" style="font-size:10px">Мар</span><span class="mu" style="font-size:10px">Апр</span><span class="mu" style="font-size:10px">Май</span><span class="mu" style="font-size:10px;color:var(--green);font-weight:700">Июн</span><span class="mu" style="font-size:10px">Июл</span><span class="mu" style="font-size:10px">Авг</span><span class="mu" style="font-size:10px">Сен</span><span class="mu" style="font-size:10px">Окт</span><span class="mu" style="font-size:10px">Ноя</span><span class="mu" style="font-size:10px">Дек</span>
+            </div>
+            <div class="mu" style="font-size:12px;margin-top:8px">Июн 2025 (пр. год): ₽4 230К · Июн 2026: ₽5 200К <span class="pos">+23% YoY</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:10px"><b>YoY сравнение · Июнь 2026 vs 2025</b></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div style="text-align:center;padding:10px 4px;background:var(--card2);border-radius:14px">
+              <div class="mu" style="font-size:11px;margin-bottom:4px">Выручка</div>
+              <div style="font-size:20px;font-weight:800;color:var(--green)">+23%</div>
+            </div>
+            <div style="text-align:center;padding:10px 4px;background:var(--card2);border-radius:14px">
+              <div class="mu" style="font-size:11px;margin-bottom:4px">Расходы</div>
+              <div style="font-size:20px;font-weight:800;color:var(--orange)">+8%</div>
+            </div>
+            <div style="text-align:center;padding:10px 4px;background:var(--card2);border-radius:14px">
+              <div class="mu" style="font-size:11px;margin-bottom:4px">Прибыль</div>
+              <div style="font-size:20px;font-weight:800;color:var(--green)">+41%</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:4px"><b>Скользящее среднее</b></div>
+          <div class="row mu" style="padding:4px 0"><span>7-дн. среднее</span><b>₽274К/день</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>30-дн. среднее</span><b>₽261К/день</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Тренд</span><b class="pos">🟢 растёт</b></div>
+        </div>
       </div>
 
       <!-- KPI -->
@@ -727,6 +823,43 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
           <div class="mu" style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Северная звезда</div>
           <div style="font-size:18px;font-weight:800;color:var(--t1);line-height:1.3">Выручка растёт +8%/мес при марже 35% и нулевых долгах по ЗП</div>
           <div class="mu" style="margin-top:6px;font-size:12px">«Магазин прибылен, долг управляем, команда стабильна» — готов к инвесторам.</div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Сеть магазинов</b></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="padding:10px;background:rgba(48,209,88,.08);border:1px solid rgba(48,209,88,.2);border-radius:14px">
+              <div style="font-size:12px;font-weight:700;margin-bottom:4px">Way Market №1</div>
+              <div class="pos" style="font-size:11px">🟢 все показатели в норме</div>
+              <div class="mu" style="font-size:11px;margin-top:4px">Эталон</div>
+            </div>
+            <div style="padding:10px;background:rgba(255,159,10,.08);border:1px solid rgba(255,159,10,.2);border-radius:14px">
+              <div style="font-size:12px;font-weight:700;margin-bottom:4px">Way Market №2</div>
+              <div class="tr" style="font-size:11px">🟡 Z-отчёт не закрыт</div>
+              <div class="neg" style="font-size:11px;margin-top:4px">выручка −8%</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Инвестор-пакет</b></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+            <div style="text-align:center;padding:8px 4px;background:var(--card2);border-radius:12px">
+              <div class="mu" style="font-size:10px;margin-bottom:2px">Выручка</div>
+              <div style="font-size:14px;font-weight:800;color:var(--t1)">₽5.2М</div>
+            </div>
+            <div style="text-align:center;padding:8px 4px;background:var(--card2);border-radius:12px">
+              <div class="mu" style="font-size:10px;margin-bottom:2px">Маржа</div>
+              <div style="font-size:14px;font-weight:800;color:var(--green)">35%</div>
+            </div>
+            <div style="text-align:center;padding:8px 4px;background:var(--card2);border-radius:12px">
+              <div class="mu" style="font-size:10px;margin-bottom:2px">Рост</div>
+              <div style="font-size:14px;font-weight:800;color:var(--green)">+23%</div>
+            </div>
+          </div>
+          <button class="btn" onclick="toast('PDF инвестор-пакет скачан (демо)')">📄 Скачать PDF</button>
+        </div>
+        <div class="card" style="background:rgba(94,92,230,.08);border:1px solid rgba(94,92,230,.2)">
+          <div class="row" style="margin-bottom:8px"><b>📖 Финансовый дневник</b><span class="mu" style="font-size:11px">ИИ нарратив</span></div>
+          <div style="font-size:13px;color:var(--t1);line-height:1.55">Июнь 2026 — хороший месяц. Выручка выросла на 8% к маю. Главная причина: Иванова А. провела 18 смен против 14 в мае. Риск: ООО Бета просрочила оплату на 5 дней. Рекомендация: запросить объяснение до 15 июня.</div>
         </div>
       </div>
 
@@ -789,6 +922,26 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Средняя выручка/смену</span><b>₽46 500</b></div>
           </div>
         </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Средний чек (выплата)</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Среднее по смене</span><b>₽31К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Лучшая смена</span><b class="pos">₽62К · Иванова А., 7 июн</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Худшая смена</span><b class="neg">₽18К · Петров В., вс</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Операций в день</span><b>~12</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Z-закрываемость</b></div>
+          <div class="row mu" style="margin-bottom:6px"><span>30 из 30 смен закрыты вовремя</span><b class="pos">✓</b></div>
+          <div class="pb pb-green"><i style="width:100%"></i></div>
+          <div class="mu" style="margin-top:8px;font-size:12px">Без нарушений в этом месяце 🟢</div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Выплаты с кассы</b></div>
+          <div class="row mu" style="padding:3px 0"><span>ЗП</span><b>₽45К · 38%</b></div><div class="pb pb-blue"><i style="width:38%"></i></div>
+          <div class="row mu" style="padding:3px 0"><span>Закупки</span><b>₽52К · 44%</b></div><div class="pb pb-green"><i style="width:44%"></i></div>
+          <div class="row mu" style="padding:3px 0"><span>Иные</span><b>₽12К · 10%</b></div><div class="pb pb-orange"><i style="width:10%"></i></div>
+          <div class="row mu" style="padding:3px 0"><span>Инкассация</span><b>₽9К · 8%</b></div><div class="pb" style="margin:7px 0"><i style="display:block;height:100%;border-radius:4px;width:8%;background:linear-gradient(90deg,#C084FC,#9333EA)"></i></div>
+        </div>
       </div>
 
       <!-- Люди -->
@@ -815,6 +968,40 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
           <div class="mu" style="padding:4px 0">Петров В.: редактирует записи смены в 23:00 (3 раза за месяц)</div>
           <div class="mu" style="padding:4px 0;border-top:1px solid var(--sep);margin-top:4px">Сафина Г.: 2 смены закрыты без Z-отчёта (исправлено)</div>
           <button class="btn sec" style="margin-top:8px;height:40px;font-size:13px" onclick="toast('Журнал аномалий открыт — демо')">Смотреть журнал</button>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Зарплата vs Выручка</b></div>
+          <div class="row mu" style="padding:4px 0"><span>ФОТ за месяц</span><b>₽45К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Выручка за месяц</span><b>₽380К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Доля ФОТ</span><b class="pos" style="font-size:18px;font-weight:800">11.8%</b></div>
+          <div class="mu" style="margin-top:6px;font-size:12px">Цель &lt;15% ✓</div>
+          <div class="pb pb-green" style="margin-top:6px"><i style="width:79%"></i></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Табель за месяц</b></div>
+          <div class="row mu" style="padding:5px 0;align-items:center;gap:8px">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1">Иванова А.</span><b>18/18 смен ✓</b>
+          </div>
+          <div class="row mu" style="padding:5px 0;align-items:center;gap:8px;border-top:1px solid var(--sep)">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--orange);flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1">Петров В.</span><b class="tr">14/16 ⚠ 2 прогула</b>
+          </div>
+          <div class="row mu" style="padding:5px 0;align-items:center;gap:8px;border-top:1px solid var(--sep)">
+            <span style="width:10px;height:10px;border-radius:50%;background:var(--orange);flex-shrink:0;display:inline-block"></span>
+            <span style="flex:1">Сафина Г.</span><b class="tr">12/14 ⚠ 1 б/л</b>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Текучесть</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Увольнения за год</span><b>1 (апрель)</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Средний стаж</span><b>8 мес</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Стабильность команды</span><b class="pos">🟢</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Скорость записей</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Среднее время</span><b class="pos">12 мин после операции ✓</b></div>
+          <div class="mu" style="padding:6px 0 2px;border-top:1px solid var(--sep);margin-top:4px">Петров В.: 2 записи внесены через 3+ часа <b class="neg">⚠</b></div>
         </div>
       </div>
 
@@ -851,6 +1038,25 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
           <div class="row mu" style="padding:4px 0"><span>Списания (усушка/бой)</span><b class="neg">1.8% · ₽93К</b></div>
           <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Оборачиваемость запасов</span><b>8.2 дня</b></div>
           <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Out-of-stock (оценка)</span><b class="tr">~3 позиции</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Out-of-stock · потери</b></div>
+          <div class="row mu" style="padding:4px 0"><span class="neg">Молоко</span><b class="neg">3 дня без товара → ~₽4 500</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span class="neg">Хлеб</span><b class="neg">1 день → ~₽1 200</b></div>
+          <div class="mu" style="margin-top:6px;font-size:12px">Итого потерянная выручка: <b class="neg">~₽5 700</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Markdown rate · скидки</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Скидки и уценки</span><b class="neg">₽8 400</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>% от выручки</span><b>2.2%</b></div>
+          <div class="mu" style="margin-top:6px;font-size:12px">Цель &lt;3% <span class="pos">✓</span></div>
+          <div class="pb pb-green" style="margin-top:6px"><i style="width:73%"></i></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Оборачиваемость запасов</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Средняя оборачиваемость</span><b>4.2 раза/мес</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Запас на</span><b>7 дней</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Категория риска</span><b class="neg">Молочка · 1.5 дня</b></div>
         </div>
       </div>
 
@@ -894,6 +1100,29 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Петров К.</span><b class="tr">вовремя 71% ⚠</b></div>
           </div>
         </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:10px"><b>Платёжная дисциплина</b></div>
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:var(--t2)"><th style="text-align:left;padding:4px 0;font-weight:600">Поставщик</th><th style="text-align:right;padding:4px">План</th><th style="text-align:right;padding:4px">Факт</th><th style="text-align:right;padding:4px">Откл.</th></tr></thead>
+              <tbody>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">ООО Бета</td><td style="text-align:right;padding:6px 4px">10-го</td><td style="text-align:right;padding:6px 4px">15-го</td><td style="text-align:right;padding:6px 4px" class="neg">⚠ +5 дн</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0">ИП Громов</td><td style="text-align:right;padding:6px 4px">5-го</td><td style="text-align:right;padding:6px 4px">4-го</td><td style="text-align:right;padding:6px 4px" class="pos">−1 день ✓</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Fill rate поставщиков</b></div>
+          <div class="row mu" style="padding:4px 0"><span>ООО Бета</span><b class="tr">94% · не допоставил 6% ⚠</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>ИП Громов</span><b class="pos">100% ✓</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>ООО Альфа</span><b class="neg">87% ⚠</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Условия закупок</b></div>
+          <div class="row mu" style="padding:4px 0"><span>ООО Бета</span><b>₽55К/нед · 4 раза/мес</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>ИП Громов</span><b>₽28К/2нед · 2 раза/мес</b></div>
+        </div>
       </div>
 
       <!-- Риски -->
@@ -929,6 +1158,32 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <div class="card">
           <div class="row" style="margin-bottom:8px"><b>Волатильность выручки</b><b class="tr">±18%</b></div>
           <div class="mu">Сильное колебание Пн/Пт: −38% vs +22% к среднему. Рекомендация: выровнять промо-акциями на начало недели.</div>
+        </div>
+        <div class="card" style="border:1.5px solid rgba(255,69,58,.25)">
+          <div class="row" style="margin-bottom:8px"><b>🔍 Антифрод-журнал</b><span class="neg" style="font-size:12px">2 аномалии</span></div>
+          <div class="mu" style="padding:4px 0">Петров В. — правки записей в 23:15 и 23:40</div>
+          <div class="mu" style="padding:4px 0;border-top:1px solid var(--sep);margin-top:4px">Удаление × 3 записи за месяц (выше нормы)</div>
+          <button class="btn sec" style="margin-top:8px;height:40px;font-size:13px" onclick="toast('Антифрод-журнал за июнь (демо)')">Показать все</button>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>⚠ Нетипичные суммы</b></div>
+          <div class="mu" style="padding:4px 0">Транзакция <b class="neg">₽95 000</b> (07.06, Петров В.) — в 3× выше обычного</div>
+          <div class="mu" style="padding:4px 0;border-top:1px solid var(--sep);margin-top:4px">Объяснение не предоставлено</div>
+          <button class="btn red" style="margin-top:8px;height:40px;font-size:13px" onclick="toast('Запрос объяснения отправлен Петрову В. (демо)')">Запросить объяснение</button>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Волатильность</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Стандартное отклонение</span><b>±₽42К/день</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Коэффициент вариации</span><b>15%</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Предсказуемость</span><b class="pos">🟢 бизнес предсказуем</b></div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Оборотный капитал</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Товар на складе</span><b>₽68К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Дебиторка</span><b>₽0</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Итого активы</span><b>₽68К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Долг поставщикам</span><b class="neg">₽47К</b></div>
+          <div class="row" style="padding:8px 0 0;border-top:2px solid var(--sep);margin-top:4px"><b>Чистый ОК</b><b class="pos">₽21К 🟢</b></div>
         </div>
       </div>
     </div>
