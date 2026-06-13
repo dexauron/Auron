@@ -484,6 +484,16 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
   <div class="scr on" id="s-home">
     <div class="banner warn" id="role-banner" style="display:none"></div>
 
+    <!-- Баннер закрытия месяца -->
+    <div onclick="openSht('closeMonth')" style="background:linear-gradient(135deg,rgba(94,92,230,.12),rgba(94,92,230,.05));border:1px solid rgba(94,92,230,.2);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px">
+      <div style="font-size:28px">📅</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:700;color:var(--t1)">Закроем июнь вместе?</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:2px">Осталось 18 дней · займёт 2 минуты</div>
+      </div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--brand)"/></svg>
+    </div>
+
     <div class="checklist">
       <div class="chip done"><span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>Z-отчёт</div>
       <div class="chip" onclick="go('suppliers')"><span class="ck"></span>3 выплаты</div>
@@ -1760,19 +1770,167 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
     </div>
   </div>
 
-  <!-- ── Закрытие месяца ── -->
+  <!-- ── Закрытие месяца — wizard ── -->
   <div class="sht" id="sht-closeMonth">
     <div class="hdl"></div>
-    <h3>Закрыть июнь 2026?</h3>
-    <div class="card" style="background:var(--card2);box-shadow:none">
-      <div class="row" style="padding:6px 0"><span>Z-отчёты закрыты</span><span class="pos">30 из 30 ✓</span></div>
-      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Табель подтверждён</span><span class="pos">до 30.06 ✓</span></div>
-      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Запланированные выплаты</span><span class="tr" style="cursor:pointer" onclick="toast('2 выплаты не отмечены — показать')">⚠ 2 не отмечены ›</span></div>
-      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Балансы сходятся</span><span class="pos">✓</span></div>
+
+    <!-- Прогресс -->
+    <div id="mc-progress" style="display:flex;gap:6px;margin-bottom:20px">
+      <div class="mc-dot on" style="flex:1;height:4px;border-radius:2px;background:var(--brand);transition:background .3s"></div>
+      <div class="mc-dot" style="flex:1;height:4px;border-radius:2px;background:var(--sep);transition:background .3s"></div>
+      <div class="mc-dot" style="flex:1;height:4px;border-radius:2px;background:var(--sep);transition:background .3s"></div>
+      <div class="mc-dot" style="flex:1;height:4px;border-radius:2px;background:var(--sep);transition:background .3s"></div>
+      <div class="mc-dot" style="flex:1;height:4px;border-radius:2px;background:var(--sep);transition:background .3s"></div>
+      <div class="mc-dot" style="flex:1;height:4px;border-radius:2px;background:var(--sep);transition:background .3s"></div>
     </div>
-    <div class="mu" style="margin:10px 0">После закрытия записи июня изменить нельзя. Исправление — только через запрос с одобрением Владельца (сторно).</div>
-    <button class="btn" disabled>Закрыть месяц</button>
-    <div class="mu" style="text-align:center;margin-top:6px">Кнопка станет активной когда все пункты ✓</div>
+
+    <!-- Шаг 1: Приветствие -->
+    <div class="mc-step on" id="mc-s1">
+      <div style="font-size:48px;text-align:center;margin-bottom:16px">📅</div>
+      <h3 style="text-align:center;font-size:22px">Закроем июнь вместе</h3>
+      <p style="text-align:center;color:var(--t2);font-size:15px;line-height:1.6;margin:12px 0 24px">Я проверю все записи за июнь и скажу если что-то не так. Займёт 2–3 минуты.</p>
+      <div class="card" style="background:rgba(94,92,230,.07);box-shadow:none;border:1px solid rgba(94,92,230,.15);margin-bottom:20px">
+        <div style="font-size:14px;color:var(--t2);line-height:1.6">После закрытия <b style="color:var(--t1)">данные июня нельзя изменить.</b> Это защита — чтобы никто случайно не испортил отчёт. Если найдёте ошибку позже — её можно исправить через запрос.</div>
+      </div>
+      <button class="btn" onclick="nextMC(2)">Начать проверку →</button>
+      <button class="btn sec" onclick="closeSht()" style="margin-top:8px">Не сейчас</button>
+    </div>
+
+    <!-- Шаг 2: Смены -->
+    <div class="mc-step" id="mc-s2" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:6px">ШАГ 1 ИЗ 5</div>
+      <h3>Все смены записаны?</h3>
+      <p style="color:var(--t2);font-size:14px;line-height:1.6;margin:8px 0 16px">Проверяю: была ли выручка записана за каждый день июня.</p>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:12px">
+        <div class="row" style="padding:7px 0"><span style="font-size:15px">1–10 июня</span><span class="pos" style="font-weight:700">✓ 10 из 10</span></div>
+        <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span style="font-size:15px">11–20 июня</span><span class="pos" style="font-weight:700">✓ 10 из 10</span></div>
+        <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span style="font-size:15px">21–30 июня</span><span class="pos" style="font-weight:700">✓ 10 из 10</span></div>
+      </div>
+      <div class="card" style="background:rgba(48,209,88,.09);box-shadow:none;border:1px solid rgba(48,209,88,.2);margin-bottom:20px">
+        <div style="font-size:15px;font-weight:600;color:var(--green)">✓ Отлично! Все 30 дней заполнены.</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:4px">Общая выручка за июнь: <b style="color:var(--t1)">₽ 5 200 000</b></div>
+      </div>
+      <button class="btn" onclick="nextMC(3)">Дальше →</button>
+    </div>
+
+    <!-- Шаг 3: Табель -->
+    <div class="mc-step" id="mc-s3" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:6px">ШАГ 2 ИЗ 5</div>
+      <h3>Кто работал в июне?</h3>
+      <p style="color:var(--t2);font-size:14px;line-height:1.6;margin:8px 0 16px">Проверьте что у каждого сотрудника правильно стоит количество смен.</p>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:12px">
+        <div class="lr" style="padding:10px 0">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👤</div>
+          <div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">Старший кассир</div></div>
+          <div style="text-align:right"><div style="font-weight:700;color:var(--t1)">18 смен</div><div class="mu">✓ подтверждено</div></div>
+        </div>
+        <div class="lr" style="padding:10px 0">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">👤</div>
+          <div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">Кассир</div></div>
+          <div style="text-align:right"><div style="font-weight:700;color:var(--t1)">14 смен</div><div class="mu">✓ подтверждено</div></div>
+        </div>
+        <div class="lr" style="padding:10px 0;border-bottom:none">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA)">👤</div>
+          <div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">Кассир</div></div>
+          <div style="text-align:right"><div style="font-weight:700;color:var(--t1)">12 смен</div><div class="mu">✓ подтверждено</div></div>
+        </div>
+      </div>
+      <div class="card" style="background:rgba(48,209,88,.09);box-shadow:none;border:1px solid rgba(48,209,88,.2);margin-bottom:20px">
+        <div style="font-size:15px;font-weight:600;color:var(--green)">✓ Табель за июнь подтверждён</div>
+      </div>
+      <button class="btn" onclick="nextMC(4)">Дальше →</button>
+      <button onclick="toast('Изменить табель — перейти в журнал (демо)')" class="btn sec" style="margin-top:8px">Исправить табель</button>
+    </div>
+
+    <!-- Шаг 4: Расходы / выплаты -->
+    <div class="mc-step" id="mc-s4" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:6px">ШАГ 3 ИЗ 5</div>
+      <h3>Все выплаты отмечены?</h3>
+      <p style="color:var(--t2);font-size:14px;line-height:1.6;margin:8px 0 16px">Я нашёл выплаты которые были запланированы в июне. Отметьте — они состоялись?</p>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:12px">
+        <div class="lr" style="padding:10px 0">
+          <div class="lr-main"><div class="lr-t">Аренда</div><div class="lr-s">1 июня · ₽60 000</div></div>
+          <button class="sw on" onclick="this.classList.toggle('on');checkMC4()"></button>
+        </div>
+        <div class="lr" style="padding:10px 0">
+          <div class="lr-main"><div class="lr-t">Коммуналка</div><div class="lr-s">15 июня · ₽18 000</div></div>
+          <button class="sw on" onclick="this.classList.toggle('on');checkMC4()"></button>
+        </div>
+        <div class="lr" style="padding:10px 0">
+          <div class="lr-main"><div class="lr-t" style="color:var(--red)">ООО Бета — накладная</div><div class="lr-s" style="color:var(--orange)">⚠ 20 июня · ₽55 000 — не отмечена</div></div>
+          <button class="sw" id="mc4-beta" onclick="this.classList.toggle('on');checkMC4()"></button>
+        </div>
+        <div class="lr" style="padding:10px 0;border-bottom:none">
+          <div class="lr-main"><div class="lr-t" style="color:var(--red)">ИП Громов</div><div class="lr-s" style="color:var(--orange)">⚠ 28 июня · ₽28 000 — не отмечена</div></div>
+          <button class="sw" id="mc4-gromov" onclick="this.classList.toggle('on');checkMC4()"></button>
+        </div>
+      </div>
+      <div id="mc4-warn" class="card" style="background:rgba(255,159,10,.1);box-shadow:none;border:1px solid rgba(255,159,10,.3);margin-bottom:12px">
+        <div style="font-size:14px;color:var(--orange);font-weight:600">⚠ Есть не отмеченные выплаты</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:4px">Включите тумблер если выплата состоялась — или запишите её сейчас.</div>
+      </div>
+      <div id="mc4-ok" class="card" style="background:rgba(48,209,88,.09);box-shadow:none;border:1px solid rgba(48,209,88,.2);margin-bottom:12px;display:none">
+        <div style="font-size:15px;font-weight:600;color:var(--green)">✓ Все выплаты отмечены</div>
+      </div>
+      <button class="btn" id="mc4-next" onclick="nextMC(5)" disabled>Дальше →</button>
+      <button onclick="toast('Добавить выплату — открыть форму (демо)')" class="btn sec" style="margin-top:8px">+ Добавить пропущенную выплату</button>
+    </div>
+
+    <!-- Шаг 5: Баланс -->
+    <div class="mc-step" id="mc-s5" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:6px">ШАГ 4 ИЗ 5</div>
+      <h3>Деньги сходятся?</h3>
+      <p style="color:var(--t2);font-size:14px;line-height:1.6;margin:8px 0 16px">Сравниваю то что вы записали с тем что показывает касса.</p>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:12px">
+        <div class="row" style="padding:6px 0"><span style="color:var(--t2)">По записям выручка</span><span style="font-weight:700">₽ 5 200 000</span></div>
+        <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span style="color:var(--t2)">По записям расходы</span><span style="font-weight:700">₽ 1 820 000</span></div>
+        <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span style="color:var(--t2)">Должно быть в кассе</span><span style="font-weight:700">₽ 258 500</span></div>
+        <div class="row" style="padding:8px 0;border-top:1px solid var(--sep);margin-top:2px"><span style="font-weight:700">Фактически в кассе</span><span style="font-weight:800;font-size:17px;color:var(--green)">₽ 258 500 ✓</span></div>
+      </div>
+      <div class="card" style="background:rgba(48,209,88,.09);box-shadow:none;border:1px solid rgba(48,209,88,.2);margin-bottom:20px">
+        <div style="font-size:15px;font-weight:600;color:var(--green)">✓ Всё сходится. Расхождений нет.</div>
+        <div style="font-size:13px;color:var(--t2);margin-top:4px">Это хороший знак — учёт ведётся правильно.</div>
+      </div>
+      <button class="btn" onclick="nextMC(6)">Дальше →</button>
+      <button onclick="toast('Открыть детали по счетам (демо)')" class="btn sec" style="margin-top:8px">Проверить детально</button>
+    </div>
+
+    <!-- Шаг 6: Итог -->
+    <div class="mc-step" id="mc-s6" style="display:none">
+      <div style="font-size:14px;font-weight:700;color:var(--t2);margin-bottom:6px">ШАГ 5 ИЗ 5</div>
+      <h3>Вот что получилось в июне</h3>
+      <div class="card" style="background:linear-gradient(145deg,rgba(94,92,230,.1),rgba(94,92,230,.04));box-shadow:none;border:1px solid rgba(94,92,230,.15);margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <div><div style="font-size:12px;color:var(--t2);font-weight:600">ВЫРУЧКА</div><div style="font-size:22px;font-weight:800;color:var(--green);margin-top:2px">₽5.2М</div><div style="font-size:12px;color:var(--green)">+8% к маю</div></div>
+          <div><div style="font-size:12px;color:var(--t2);font-weight:600">РАСХОДЫ</div><div style="font-size:22px;font-weight:800;color:var(--red);margin-top:2px">₽1.8М</div><div style="font-size:12px;color:var(--t2)">−3% к маю</div></div>
+        </div>
+        <div style="border-top:1px solid rgba(94,92,230,.15);padding-top:12px">
+          <div style="font-size:12px;color:var(--t2);font-weight:600">ПРИБЫЛЬ</div>
+          <div style="font-size:28px;font-weight:800;color:var(--t1);margin-top:2px;letter-spacing:-1px">₽ 3 380 000</div>
+          <div style="font-size:13px;color:var(--green);margin-top:2px">🎉 Лучший месяц за последние 6 месяцев!</div>
+        </div>
+      </div>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:4px">
+        <div class="row" style="padding:5px 0"><span style="color:var(--t2)">Лучший день</span><span style="font-weight:700">7 июня · ₽341 000</span></div>
+        <div class="row" style="padding:5px 0;border-top:1px solid var(--sep)"><span style="color:var(--t2)">Рекордный кассир</span><span style="font-weight:700">Иванова А. · 18 смен</span></div>
+        <div class="row" style="padding:5px 0;border-top:1px solid var(--sep)"><span style="color:var(--t2)">Расхождений</span><span class="pos" style="font-weight:700">0 ₽</span></div>
+      </div>
+      <p style="color:var(--t2);font-size:13px;line-height:1.6;margin:12px 0 16px;text-align:center">Всё проверено ✓ После закрытия данные июня будут защищены — никто не сможет их случайно изменить.</p>
+      <button class="btn" onclick="nextMC(7)" style="background:linear-gradient(145deg,#4ADE80,#22C55E);box-shadow:0 8px 20px rgba(34,197,94,.4)">Закрыть июнь 2026 ✓</button>
+      <button onclick="closeSht()" class="btn sec" style="margin-top:8px">Ещё раз проверить</button>
+    </div>
+
+    <!-- Шаг 7: Успех -->
+    <div class="mc-step" id="mc-s7" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:72px;margin-bottom:16px">🎉</div>
+      <h3 style="font-size:24px;margin-bottom:8px">Июнь закрыт!</h3>
+      <p style="color:var(--t2);font-size:15px;line-height:1.6;margin-bottom:24px">Отличная работа. Данные июня защищены.<br>Теперь начинается июль.</p>
+      <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:20px;text-align:left">
+        <div class="row" style="padding:5px 0"><span style="color:var(--t2)">PDF-отчёт</span><button onclick="toast('Отчёт готов — скачать PDF (демо)')" style="font-weight:700;color:var(--brand);background:none;border:none;cursor:pointer;font-size:15px">Скачать ›</button></div>
+        <div class="row" style="padding:5px 0;border-top:1px solid var(--sep)"><span style="color:var(--t2)">Отправить в WhatsApp</span><button onclick="toast('Отправлено ✓')" style="font-weight:700;color:var(--brand);background:none;border:none;cursor:pointer;font-size:15px">Отправить ›</button></div>
+      </div>
+      <button class="btn" onclick="closeSht();toast('Добро пожаловать в июль! 🚀')">Готово</button>
+    </div>
   </div>
 
   <!-- ── Корзина ── -->
@@ -2136,6 +2294,32 @@ function calcDiff(){
   else{el.textContent='✓ 0₽';el.className='pos';}
 }
 calcDiff();
+
+// Wizard закрытия месяца
+var mcCurrent = 1;
+function nextMC(step){
+  document.getElementById('mc-s'+mcCurrent).style.display='none';
+  mcCurrent = step;
+  document.getElementById('mc-s'+step).style.display='block';
+  var dots = document.querySelectorAll('.mc-dot');
+  dots.forEach(function(d,i){ d.style.background = i < step-1 ? 'var(--brand)' : 'var(--sep)'; });
+  // прокрутить лист наверх
+  document.getElementById('sht-closeMonth').scrollTop = 0;
+}
+function checkMC4(){
+  var b = document.getElementById('mc4-beta');
+  var g = document.getElementById('mc4-gromov');
+  var ok = b && b.classList.contains('on') && g && g.classList.contains('on');
+  document.getElementById('mc4-warn').style.display = ok ? 'none' : 'block';
+  document.getElementById('mc4-ok').style.display  = ok ? 'block' : 'none';
+  document.getElementById('mc4-next').disabled = !ok;
+}
+// сбросить wizard при открытии
+var _origOpenSht = window.openSht || function(){};
+window.openSht = function(id){
+  if(id==='closeMonth'){ mcCurrent=1; document.querySelectorAll('.mc-step').forEach(function(s){s.style.display='none';}); document.getElementById('mc-s1').style.display='block'; document.querySelectorAll('.mc-dot').forEach(function(d,i){d.style.background=i<0?'var(--brand)':'var(--sep)';}); }
+  _origOpenSht(id);
+};
 
 function selectBank(name,color,acct){
   document.getElementById('add-bank-title').textContent=name+' — подключение';
