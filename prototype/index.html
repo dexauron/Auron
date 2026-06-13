@@ -349,6 +349,20 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
 .beznal-fields{background:var(--card2);border-radius:14px;padding:12px 16px;margin:8px 0;
   display:none;gap:10px;flex-direction:column}
 .beznal-fields.on{display:flex}
+
+/* ── Онбординг ───────────────────────────── */
+.onboard{padding:40px 24px 32px;display:flex;flex-direction:column;min-height:100vh}
+.ob-step{display:none}.ob-step.on{display:block}
+.ob-dots{display:flex;gap:8px;justify-content:center;margin:24px 0 32px}
+.ob-dot{width:8px;height:8px;border-radius:4px;background:var(--card2);transition:all .3s}
+.ob-dot.on{width:24px;background:var(--brand)}
+.ob-title{font-size:26px;font-weight:800;color:var(--t1);letter-spacing:-.5px;margin-bottom:8px}
+.ob-sub{font-size:15px;color:var(--t2);line-height:1.5;margin-bottom:24px}
+.ob-input{width:100%;background:var(--card2);border:none;border-radius:14px;padding:16px;font-size:17px;color:var(--t1);outline:none;margin-bottom:16px;font-family:inherit}
+.ob-input:focus{box-shadow:0 0 0 2px var(--brand)}
+.ob-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+.ob-chip{background:var(--brand);color:#fff;border-radius:22px;padding:9px 18px;font-size:14px;font-weight:600}
+.ob-chip.add{background:var(--card2);color:var(--brand)}
 </style>
 </head>
 <body>
@@ -397,6 +411,54 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
   <div class="mu" style="margin-top:18px">Демо: любые 4 цифры или Face ID</div>
 </div>
 
+<!-- ════ ЭКРАН ОНБОРДИНГА ════ -->
+<div class="scr" id="s-onboard" style="display:none;position:fixed;inset:0;z-index:150;background:var(--bg);overflow-y:auto">
+  <div class="onboard">
+    <div class="row" style="margin-bottom:0">
+      <div>
+        <div style="font-size:22px;font-weight:800;color:var(--t1);letter-spacing:-.4px">Auron Finance</div>
+        <div class="mu" style="font-size:13px">Настроим за 3 минуты</div>
+      </div>
+      <button onclick="skipOnboard()" style="font-size:13px;color:var(--t2);background:none;border:none;cursor:pointer;font-weight:600">Пропустить</button>
+    </div>
+
+    <div class="ob-dots">
+      <div class="ob-dot on" id="ob-dot1"></div>
+      <div class="ob-dot" id="ob-dot2"></div>
+      <div class="ob-dot" id="ob-dot3"></div>
+    </div>
+
+    <!-- Шаг 1 -->
+    <div class="ob-step on" id="ob-s1">
+      <div class="ob-title">Как называется ваш магазин?</div>
+      <div class="ob-sub">Это имя будет отображаться в шапке и отчётах</div>
+      <input class="ob-input" type="text" placeholder="Например: Way Market" id="ob-name">
+      <button class="btn" onclick="nextOb()">Далее →</button>
+    </div>
+
+    <!-- Шаг 2 -->
+    <div class="ob-step" id="ob-s2">
+      <div class="ob-title">Сколько сейчас денег в кассе?</div>
+      <div class="ob-sub">Это стартовый баланс. Можно уточнить позже.</div>
+      <input class="ob-input" type="text" inputmode="numeric" placeholder="₽ 0" id="ob-balance">
+      <div class="mu" style="margin-bottom:16px">Это стартовый баланс. Можно уточнить позже.</div>
+      <button class="btn" onclick="nextOb()">Далее →</button>
+    </div>
+
+    <!-- Шаг 3 -->
+    <div class="ob-step" id="ob-s3">
+      <div class="ob-title">Кто работает у вас?</div>
+      <div class="ob-sub">Добавьте сотрудников — они смогут вести смены</div>
+      <div class="ob-chips">
+        <div class="ob-chip">Иванова А. ✓</div>
+        <div class="ob-chip">Петров В. ✓</div>
+        <div class="ob-chip add" onclick="toast('Добавить сотрудника — демо')">+ Добавить</div>
+      </div>
+      <button class="btn" onclick="skipOnboard()" style="margin-top:8px">Начать работу</button>
+    </div>
+  </div>
+</div>
+
 <div class="phone">
 
   <!-- ── Шапка ── -->
@@ -427,6 +489,27 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
       <div class="chip" onclick="go('suppliers')"><span class="ck"></span>3 выплаты</div>
       <div class="chip done"><span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>Табель</div>
       <div class="chip" onclick="toast('Отчёт формируется после выплат')"><span class="ck"></span>Отчёт</div>
+    </div>
+
+    <div class="card" style="background:linear-gradient(135deg,rgba(94,92,230,.08),rgba(94,92,230,.03));border:1px solid rgba(94,92,230,.15);margin-bottom:12px">
+      <div class="row" style="margin-bottom:10px">
+        <b style="font-size:15px">✨ Что делать сегодня</b>
+        <span class="mu" style="font-size:12px">от ИИ</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div onclick="go('kassa')" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <div style="width:22px;height:22px;border-radius:6px;background:var(--red);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><circle cx="6" cy="6" r="4.5"/><line x1="6" y1="3.5" x2="6" y2="6"/><line x1="6" y1="8" x2="6" y2="8.5"/></svg></div>
+          <span style="font-size:14px;color:var(--t1)">Закройте вчерашнюю смену <span class="mu">(не закрыта с 23:00)</span></span>
+        </div>
+        <div onclick="go('suppliers')" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <div style="width:22px;height:22px;border-radius:6px;background:var(--orange);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="1.5" y="3" width="9" height="7.5" rx="1.5"/><path d="M3.5 3V2a2.5 2.5 0 015 0v1"/></svg></div>
+          <span style="font-size:14px;color:var(--t1)">Оплатите ООО Бета до 15:00 <span class="mu">(срок сегодня)</span></span>
+        </div>
+        <div onclick="toast('Табель открыт — демо')" style="display:flex;align-items:center;gap:10px;cursor:pointer">
+          <div style="width:22px;height:22px;border-radius:6px;background:var(--green);display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="12" height="12" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><path d="M2 6l2.5 2.5L10 3"/></svg></div>
+          <span style="font-size:14px;color:var(--t2);text-decoration:line-through">Внести выручку за смену</span>
+        </div>
+      </div>
     </div>
 
     <div class="hero-card">
@@ -464,6 +547,24 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <div class="row mu"><span>Налоги</span><span>₽18К / ₽45К</span></div><div class="pb pb-orange"><i style="width:40%"></i></div>
         <div class="row mu"><span>Зарплата</span><span>₽90К / ₽90К</span></div><div class="pb pb-green"><i style="width:100%"></i></div>
       </div>
+    </div>
+
+    <div class="lbl" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Быстрый ввод</span>
+      <button onclick="toggleSimple()" id="simple-btn" style="font-size:12px;color:var(--brand);background:none;border:none;cursor:pointer;font-weight:600">Режим 3 кнопки</button>
+    </div>
+    <div id="simple-mode" style="display:none">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+        <button onclick="openSht('numpad');document.querySelector('.np-type-btn') && document.querySelector('.np-type-btn').click()" class="btn" style="background:linear-gradient(145deg,#4ADE80,#22C55E);height:72px;border-radius:18px;font-size:15px;flex-direction:column;gap:4px"><span style="font-size:24px">💰</span>Выручка</button>
+        <button onclick="openSht('numpad')" class="btn" style="background:linear-gradient(145deg,#FF8A80,#FF453A);height:72px;border-radius:18px;font-size:15px;flex-direction:column;gap:4px"><span style="font-size:24px">🛒</span>Расход</button>
+        <button onclick="go('kassa')" class="btn" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);height:72px;border-radius:18px;font-size:15px;flex-direction:column;gap:4px"><span style="font-size:24px">📋</span>Смена</button>
+      </div>
+      <div class="mu" style="text-align:center;margin-bottom:8px">Только самое нужное · <span style="color:var(--brand);cursor:pointer" onclick="toggleSimple()">вернуть полный режим</span></div>
+    </div>
+
+    <div class="lbl" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Демо</span>
+      <button onclick="showOnboard()" style="font-size:12px;color:var(--t2);background:none;border:none;cursor:pointer;font-weight:600">Онбординг ›</button>
     </div>
   </div><!-- /home -->
 
