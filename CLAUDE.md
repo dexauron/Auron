@@ -37,6 +37,8 @@
 
 ## Технический контекст (текущее состояние кода)
 - `app/` — SPA в одном файле `index.html` (~7000 строк), деплой на GitHub Pages через `.github/workflows/deploy.yml` → https://dexauron.github.io/Auron/
-- Backend: Supabase (PostgreSQL + Auth + PostgREST), API-слой в `app/js/api.js`, auth в `app/js/auth.js`
+- Backend: **self-hosted Supabase на российском облаке** (Яндекс Cloud / Timeweb / VK Cloud — выбирается перед стартом кода). Стек: PostgreSQL + Auth + PostgREST + Realtime + Storage. API-слой в `app/js/api.js`, auth в `app/js/auth.js`
+- Роли: **Владелец / Бухгалтер / Администратор / Сотрудник зала**. Роли «Кассир» нет.
+- Безопасность: PIN 4 цифры, автоблокировка 1 мин (настраивается), 5 попыток → блок + email reset
 - PWA: `app/sw.js`, версию кэша (`auron-vNN`) бампать при каждом изменении фронта
 - Существующий код НЕ трогаем до завершения этапов проектирования
