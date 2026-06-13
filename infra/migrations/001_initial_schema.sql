@@ -1115,7 +1115,7 @@ DECLARE
     'accounts','categories','chart_of_accounts','fiscal_periods',
     'journal_entries','transactions','shifts','shift_withdrawals',
     'suppliers','debt_entries','purchase_orders',
-    'employees','timesheet_entries','salary_calculations','employee_contracts',
+    'employees','timesheet_entries','salary_calculations',
     'goals','budgets','notifications','tasks','files','ai_insights',
     'pulse_snapshots','fraud_rules','audit_log',
     'analytics_events','custom_field_definitions','invitations',
@@ -1125,11 +1125,9 @@ DECLARE
     'disputes','comments','data_exports','sync_log','offline_queue',
     'incidents','store_closures','exclusion_periods',
     'substitute_assignments','emergency_access_grants',
-    'account_balance_snapshots','bank_connections','reconciliation_sessions',
-    'category_rules','budget_allocations','file_links',
-    'notification_deliveries','user_notification_preferences',
-    'ai_feedback','usage_records','subscription_items',
-    'webhook_deliveries','bank_statement_lines',
+    'bank_connections','reconciliation_sessions',
+    'category_rules','user_notification_preferences',
+    'usage_records',
     'inventory_snapshots','user_feature_flags',
     'acknowledgments','fraud_alerts'
   ];
