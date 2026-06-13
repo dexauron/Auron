@@ -597,29 +597,339 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
       <div class="banner warn">⚠ ИИ: 20 июня прогнозный остаток ₽4 200 при выплатах ₽45 000. Совет: перенести ООО Бета на 22-е или откладывать +₽2 000/день. <b style="color:var(--brand);cursor:pointer" onclick="toast('Выплата перенесена ✓ (демо)')">Перенести</b></div>
     </div>
     <div class="sub" id="fin-an">
-      <div class="card">
-        <div class="row"><b>Выручка — июнь</b><span class="pos" style="font-size:13px">+8% к маю</span></div>
-        <div style="font-size:26px;font-weight:800;letter-spacing:-1px;margin:6px 0;color:var(--t1)">₽ 5 200 000</div>
-        <div class="bars"><i style="height:30%"></i><i style="height:45%"></i><i style="height:60%"></i><i style="height:50%"></i><i style="height:75%"></i><i style="height:65%"></i><i style="height:90%"></i><i style="height:60%"></i><i style="height:55%"></i><i style="height:70%"></i><i style="height:85%"></i><i style="height:100%"></i></div>
-        <div class="row mu"><span>Среднее: ₽274К/день</span><span>Лучший: 7 июн ₽341К</span></div>
+      <div class="an-seg">
+        <button class="on" onclick="showAnTab('pl',this)">P&amp;L</button>
+        <button onclick="showAnTab('cf',this)">Кэшфлоу</button>
+        <button onclick="showAnTab('tr',this)">Тренды</button>
+        <button onclick="showAnTab('kpi',this)">KPI</button>
+        <button onclick="showAnTab('hm',this)">Heatmap</button>
+        <button onclick="showAnTab('kas',this)">Касса</button>
+        <button onclick="showAnTab('ppl',this)">Люди</button>
+        <button onclick="showAnTab('goods',this)">Товары</button>
+        <button onclick="showAnTab('sup',this)">Поставщики</button>
+        <button onclick="showAnTab('risk',this)">Риски</button>
       </div>
-      <div class="card">
-        <b>Расходы по категориям</b>
-        <div style="margin-top:8px">
-          <div class="row mu"><span>Поставщики</span><span>₽3 100К · 60%</span></div><div class="pb pb-blue"><i style="width:60%"></i></div>
-          <div class="row mu"><span>Зарплата</span><span>₽850К · 16%</span></div><div class="pb pb-green"><i style="width:16%"></i></div>
-          <div class="row mu"><span>Аренда</span><span>₽420К · 8%</span></div><div class="pb pb-orange"><i style="width:8%"></i></div>
-          <div class="row mu"><span>Хозрасходы владельца (Иман)</span><span>₽96К · 2%</span></div><div class="pb pb-red"><i style="width:2%"></i></div>
+
+      <!-- P&L -->
+      <div class="an-sub on" id="an-pl">
+        <div class="card">
+          <div class="row"><b>P&amp;L · Июнь 2026</b><span class="pos" style="font-size:12px">+8% к маю</span></div>
+          <div style="margin-top:10px">
+            <div class="wf-bar"><span class="wf-label">Выручка</span><div class="wf-track"><div class="wf-fill" style="width:100%;background:var(--green)"></div></div><span class="wf-val pos">₽5 200К</span></div>
+            <div class="wf-bar"><span class="wf-label">Себестоимость (COGS)</span><div class="wf-track"><div class="wf-fill" style="width:60%;background:var(--red)"></div></div><span class="wf-val neg">−₽3 100К</span></div>
+            <div class="wf-bar" style="border-top:2px solid var(--sep);margin-top:4px;padding-top:10px"><span class="wf-label" style="font-weight:700">Валовая прибыль</span><div class="wf-track"><div class="wf-fill" style="width:40%;background:var(--brand)"></div></div><span class="wf-val" style="color:var(--brand)">₽2 100К</span></div>
+            <div style="margin-top:8px">
+              <div class="row mu" style="padding:3px 0"><span>Зарплата</span><span class="neg">−₽850К</span></div>
+              <div class="row mu" style="padding:3px 0"><span>Аренда</span><span class="neg">−₽420К</span></div>
+              <div class="row mu" style="padding:3px 0"><span>Коммуналка</span><span class="neg">−₽180К</span></div>
+              <div class="row mu" style="padding:3px 0"><span>Реклама</span><span class="neg">−₽65К</span></div>
+              <div class="row mu" style="padding:3px 0"><span>Хозрасходы</span><span class="neg">−₽96К</span></div>
+            </div>
+            <div class="wf-bar" style="border-top:2px solid var(--sep);margin-top:8px;padding-top:10px"><span class="wf-label" style="font-weight:700">Чистая прибыль</span><div class="wf-track"><div class="wf-fill" style="width:18%;background:var(--green)"></div></div><span class="wf-val pos">₽489К</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Ключевые метрики</b></div>
+          <div class="row mu" style="padding:4px 0"><span>EBITDA</span><b class="pos">₽621К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Валовая маржа</span><b>40.4%</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Чистая маржа</span><b>9.4%</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>MoM выручка</span><b class="pos">+8%</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>MoM прибыль</span><b class="pos">+12%</b></div>
         </div>
       </div>
-      <div class="card">
-        <b>Кассиры</b>
-        <div class="lr"><div class="lr-main"><div class="lr-t">🥇 Иванова А.</div><div class="lr-s">18 смен · 0 расхождений</div></div><div class="lr-a pos">₽2 900К</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">🥈 Петров В.</div><div class="lr-s">14 смен · ⚠️ −₽1 200</div></div><div class="lr-a">₽2 100К</div></div>
+
+      <!-- Кэшфлоу -->
+      <div class="an-sub" id="an-cf">
+        <div class="card">
+          <div class="row" style="margin-bottom:10px"><b>Кэшфлоу · Июнь 2026</b></div>
+          <div class="wf-bar"><span class="wf-label">Выручка (входящий)</span><div class="wf-track"><div class="wf-fill" style="width:100%;background:var(--green)"></div></div><span class="wf-val pos">+₽5 200К</span></div>
+          <div class="wf-bar"><span class="wf-label">Операционные расходы</span><div class="wf-track"><div class="wf-fill" style="width:88%;background:var(--red)"></div></div><span class="wf-val neg">−₽4 560К</span></div>
+          <div class="wf-bar" style="padding-top:10px;border-top:2px solid var(--sep);margin-top:4px"><span class="wf-label" style="font-weight:700">Операционный CF</span><div class="wf-track"><div class="wf-fill" style="width:12%;background:var(--brand)"></div></div><span class="wf-val" style="color:var(--brand)">+₽640К</span></div>
+          <div class="wf-bar"><span class="wf-label">Инвестиционный CF</span><div class="wf-track"><div class="wf-fill" style="width:4%;background:var(--orange)"></div></div><span class="wf-val tr">−₽95К</span></div>
+          <div class="wf-bar"><span class="wf-label">Финансовый CF</span><div class="wf-track"><div class="wf-fill" style="width:0%;background:var(--t3)"></div></div><span class="wf-val mu">₽0</span></div>
+          <div class="wf-bar" style="padding-top:10px;border-top:2px solid var(--sep);margin-top:4px"><span class="wf-label" style="font-weight:700">Чистый CF</span><div class="wf-track"><div class="wf-fill" style="width:10%;background:var(--green)"></div></div><span class="wf-val pos">+₽545К</span></div>
+        </div>
+        <div class="card">
+          <div class="row"><b>FCF (свободный кэш)</b><b class="pos">₽545К</b></div>
+          <div class="mu" style="margin-top:6px">Операционный CF − Инвестиции. Рост +₽80К vs май ✓</div>
+          <div style="margin-top:10px">
+            <div class="row mu" style="padding:4px 0"><span>Наличные (касса)</span><b>₽48 500</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Расчётный счёт</span><b>₽320 000</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Резервы накопления</span><b>₽150 000</b></div>
+          </div>
+        </div>
       </div>
-      <div class="card" onclick="toast('Тап на цифру → формула расчёта (демо)')">
-        <div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div>
-        <div class="mu" style="margin-top:4px">(Выручка − Себестоимость) / Выручка · Цель 25% ✓ · тап → формула</div>
+
+      <!-- Тренды -->
+      <div class="an-sub" id="an-tr">
+        <div class="card">
+          <b>6 месяцев: выручка / расходы / прибыль</b>
+          <div style="margin-top:12px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span class="mu" style="font-size:11px">Янв</span><span class="mu" style="font-size:11px">Фев</span><span class="mu" style="font-size:11px">Мар</span><span class="mu" style="font-size:11px">Апр</span><span class="mu" style="font-size:11px">Май</span><span class="mu" style="font-size:11px">Июн</span>
+            </div>
+            <div style="display:flex;align-items:flex-end;gap:5px;height:80px">
+              <div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:55px;opacity:.7"></div>
+                <div style="width:100%;background:var(--red);border-radius:3px 3px 0 0;height:44px;opacity:.7;margin-top:-44px;transform:translateY(44px)"></div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:52px;opacity:.7"></div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:62px;opacity:.7"></div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:66px;opacity:.7"></div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:71px;opacity:.7"></div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;align-items:center">
+                <div style="width:100%;background:var(--green);border-radius:3px 3px 0 0;height:80px"></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap">
+              <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:var(--green);display:inline-block"></span>Выручка</span>
+              <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:var(--red);display:inline-block"></span>Расходы</span>
+              <span style="font-size:11px;display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:var(--brand);display:inline-block"></span>Прибыль</span>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row"><b>Скользящее среднее (7 дней)</b><b class="pos">₽274К/день</b></div>
+          <div class="mu" style="margin-top:4px">Тренд стабилен ✓ · Пиковые дни: Пт–Сб +22%</div>
+          <div style="margin-top:10px">
+            <div class="row mu" style="padding:4px 0"><span>Сезонность: июнь vs июнь-2025</span><b class="pos">+14% YoY</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Лучший день недели</span><b>Суббота</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Худший день недели</span><b class="neg">Понедельник</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="an-sub" id="an-kpi">
+        <div class="card">
+          <div class="row" style="margin-bottom:4px"><b>KPI-дашборд</b><span style="font-size:20px;font-weight:800;color:var(--green)">78/100</span></div>
+          <div class="mu" style="margin-bottom:10px">Auron Score · инвесторная оценка</div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Чистая маржа</span><span class="kpi-val">9.4%<span class="kpi-bench">цель 8%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Выручка MoM</span><span class="kpi-val">+8%<span class="kpi-bench">цель +5%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Рентабельность</span><span class="kpi-val">35.5%<span class="kpi-bench">цель 25%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Расхождения/смен</span><span class="kpi-val">0.06<span class="kpi-bench">цель &lt;0.1</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--orange)"></span><span class="kpi-label">Накопления — налоги</span><span class="kpi-val">40%<span class="kpi-bench">цель 100%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--orange)"></span><span class="kpi-label">Долг / Выручка мес.</span><span class="kpi-val">8.1%<span class="kpi-bench">цель &lt;6%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Оборачиваемость долга</span><span class="kpi-val">DPO 12 дн<span class="kpi-bench">цель &lt;14</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Выручка/сотрудник</span><span class="kpi-val">₽1.73М<span class="kpi-bench">цель ₽1.5М</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--red)"></span><span class="kpi-label">Потери (списания)</span><span class="kpi-val">1.8%<span class="kpi-bench">цель &lt;1.2%</span></span></div>
+          <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Z-отчёты закрыты</span><span class="kpi-val">100%<span class="kpi-bench">цель 100%</span></span></div>
+        </div>
+        <div class="card" style="background:linear-gradient(135deg,rgba(94,92,230,.1),rgba(125,123,255,.05));border:1px solid rgba(94,92,230,.15)">
+          <div class="mu" style="font-size:11px;letter-spacing:.4px;text-transform:uppercase;margin-bottom:4px">Северная звезда</div>
+          <div style="font-size:18px;font-weight:800;color:var(--t1);line-height:1.3">Выручка растёт +8%/мес при марже 35% и нулевых долгах по ЗП</div>
+          <div class="mu" style="margin-top:6px;font-size:12px">«Магазин прибылен, долг управляем, команда стабильна» — готов к инвесторам.</div>
+        </div>
+      </div>
+
+      <!-- Heatmap -->
+      <div class="an-sub" id="an-hm">
+        <div class="card">
+          <div class="row" style="margin-bottom:4px"><b>Тепловая карта выручки</b></div>
+          <div class="mu" style="margin-bottom:10px">По дням недели и сменам · ₽ тыс.</div>
+          <div class="heatmap">
+            <div class="hm-hdr">Пн</div><div class="hm-hdr">Вт</div><div class="hm-hdr">Ср</div><div class="hm-hdr">Чт</div><div class="hm-hdr">Пт</div><div class="hm-hdr">Сб</div><div class="hm-hdr">Вс</div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.18)" onclick="toast('Пн Дневная: ₽38К — средняя')">38<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.22)" onclick="toast('Вт Дневная: ₽42К')">42<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.28)" onclick="toast('Ср Дневная: ₽47К')">47<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.32)" onclick="toast('Чт Дневная: ₽51К')">51<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.55)" onclick="toast('Пт Дневная: ₽72К — хороший!')">72<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.75)" onclick="toast('Сб Дневная: ₽88К — лучший!')">88<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.45)" onclick="toast('Вс Дневная: ₽62К')">62<div class="hm-shift">День</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.10)" onclick="toast('Пн Ночная: ₽22К — тихая')">22<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.12)" onclick="toast('Вт Ночная: ₽25К')">25<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.13)" onclick="toast('Ср Ночная: ₽26К')">26<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.14)" onclick="toast('Чт Ночная: ₽28К')">28<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.20)" onclick="toast('Пт Ночная: ₽38К')">38<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.30)" onclick="toast('Сб Ночная: ₽52К')">52<div class="hm-shift">Ночь</div></div>
+            <div class="hm-cell" style="background:rgba(48,209,88,.18)" onclick="toast('Вс Ночная: ₽35К')">35<div class="hm-shift">Ночь</div></div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <span class="mu" style="font-size:12px">🟢 <b>Лучший:</b> Сб Дневная ₽88К</span>
+            <span class="mu" style="font-size:12px">⬜ <b>Тихий:</b> Пн Ночная ₽22К</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Касса -->
+      <div class="an-sub" id="an-kas">
+        <div class="card">
+          <b>Расхождения — тренд (5 дней)</b>
+          <div class="bars" style="height:60px;margin-top:10px">
+            <i style="height:5%;background:linear-gradient(180deg,var(--green),#22C55E)"></i>
+            <i style="height:25%;background:linear-gradient(180deg,var(--red),#FF453A)"></i>
+            <i style="height:5%;background:linear-gradient(180deg,var(--green),#22C55E)"></i>
+            <i style="height:15%;background:linear-gradient(180deg,var(--orange),#FF9500)"></i>
+            <i style="height:5%;background:linear-gradient(180deg,var(--green),#22C55E)"></i>
+          </div>
+          <div class="row mu" style="margin-top:4px"><span>8–12 июня</span><span>1 расхождение из 10 смен · −₽300</span></div>
+        </div>
+        <div class="card">
+          <b>Структура платежей</b>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>Наличные</span><b>58% · ₽36К</b></div><div class="pb pb-orange"><i style="width:58%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>Карта</span><b>30% · ₽18К</b></div><div class="pb pb-blue"><i style="width:30%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>СБП</span><b>12% · ₽8К</b></div><div class="pb pb-green"><i style="width:12%"></i></div>
+          </div>
+          <div class="mu" style="margin-top:8px;font-size:12px">Комиссия банка за эквайринг: ~₽540/день (1.8%) · за месяц ~₽16К потеряно</div>
+        </div>
+        <div class="card">
+          <div class="row"><b>Ликвидность</b><b class="pos">₽48 500</b></div>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>Runaway (при расходах ₽4К/д)</span><b class="pos">12 дней</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Z-отчёты закрыты</span><b class="pos">100% смен</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Средняя выручка/смену</span><b>₽46 500</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Люди -->
+      <div class="an-sub" id="an-ppl">
+        <div class="card">
+          <b>KPI кассиров · Июнь</b>
+          <div style="overflow-x:auto;margin-top:10px">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:var(--t2)"><th style="text-align:left;padding:4px 0;font-weight:600">Кассир</th><th style="text-align:right;padding:4px">Выр./смен</th><th style="text-align:right;padding:4px">Расх.</th><th style="text-align:right;padding:4px">Смен</th><th style="text-align:right;padding:4px">ФОТ/Выр.</th></tr></thead>
+              <tbody>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0;font-weight:600">Иванова А.</td><td style="text-align:right;padding:6px 4px" class="pos">₽161К</td><td style="text-align:right;padding:6px 4px" class="pos">₽0</td><td style="text-align:right;padding:6px 4px">18</td><td style="text-align:right;padding:6px 4px">1.7%</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0;font-weight:600">Петров В.</td><td style="text-align:right;padding:6px 4px">₽150К</td><td style="text-align:right;padding:6px 4px" class="neg">−₽1 200</td><td style="text-align:right;padding:6px 4px">14</td><td style="text-align:right;padding:6px 4px">2.3%</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:6px 0;font-weight:600">Сафина Г.</td><td style="text-align:right;padding:6px 4px">₽137К</td><td style="text-align:right;padding:6px 4px" class="pos">₽0</td><td style="text-align:right;padding:6px 4px">10</td><td style="text-align:right;padding:6px 4px">2.2%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Посещаемость</b><b class="pos">94%</b></div>
+          <div class="mu">Пропуски в июне: Иванова А. 2 дня (отпуск), Петров В. 1 день (больничный)</div>
+        </div>
+        <div class="card" style="border:1.5px solid rgba(255,69,58,.25)">
+          <div class="row" style="margin-bottom:6px"><b style="color:var(--red)">⚠ Аномалии</b></div>
+          <div class="mu" style="padding:4px 0">Петров В.: редактирует записи смены в 23:00 (3 раза за месяц)</div>
+          <div class="mu" style="padding:4px 0;border-top:1px solid var(--sep);margin-top:4px">Сафина Г.: 2 смены закрыты без Z-отчёта (исправлено)</div>
+          <button class="btn sec" style="margin-top:8px;height:40px;font-size:13px" onclick="toast('Журнал аномалий открыт — демо')">Смотреть журнал</button>
+        </div>
+      </div>
+
+      <!-- Товары -->
+      <div class="an-sub" id="an-goods">
+        <div class="card">
+          <b>ABC-анализ товаров</b>
+          <div style="margin-top:10px">
+            <div style="padding:8px 10px;background:rgba(48,209,88,.1);border-radius:10px;margin-bottom:6px">
+              <div style="font-weight:700;color:var(--green);margin-bottom:4px">A — топ (80% выручки)</div>
+              <div class="mu" style="font-size:12px">Молоко 1л · Хлеб б/н · Яйца С1 · Сметана 400г · Масло сл. 200г</div>
+            </div>
+            <div style="padding:8px 10px;background:rgba(255,159,10,.1);border-radius:10px;margin-bottom:6px">
+              <div style="font-weight:700;color:var(--orange);margin-bottom:4px">B — средние (15% выручки)</div>
+              <div class="mu" style="font-size:12px">Сахар 1кг · Мука 2кг · Рис 1кг · Кефир 1л</div>
+            </div>
+            <div style="padding:8px 10px;background:rgba(142,142,147,.1);border-radius:10px">
+              <div style="font-weight:700;color:var(--t2);margin-bottom:4px">C — хвост (5% выручки)</div>
+              <div class="mu" style="font-size:12px">38 позиций · рассмотреть вывод из ассортимента</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <b>Рентабельность по категориям</b>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>Молочка</span><b class="pos">37%</b></div><div class="pb pb-green"><i style="width:74%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>Бакалея</span><b class="pos">28%</b></div><div class="pb pb-blue"><i style="width:56%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>Напитки</span><b class="tr">22%</b></div><div class="pb pb-orange"><i style="width:44%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>Бытовая химия</span><b class="neg">18%</b></div><div class="pb pb-red"><i style="width:36%"></i></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Потери и остатки</b></div>
+          <div class="row mu" style="padding:4px 0"><span>Списания (усушка/бой)</span><b class="neg">1.8% · ₽93К</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Оборачиваемость запасов</span><b>8.2 дня</b></div>
+          <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Out-of-stock (оценка)</span><b class="tr">~3 позиции</b></div>
+        </div>
+      </div>
+
+      <!-- Поставщики -->
+      <div class="an-sub" id="an-sup">
+        <div class="card">
+          <b>ABC поставщиков</b>
+          <div style="margin-top:8px">
+            <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">Иванов П. (молочка)</span><span class="kpi-val">₽580К <span class="kpi-bench">38%</span></span></div>
+            <div class="kpi-row"><span class="kpi-dot" style="background:var(--green)"></span><span class="kpi-label">ООО Альфа (бакалея)</span><span class="kpi-val">₽420К <span class="kpi-bench">27%</span></span></div>
+            <div class="kpi-row"><span class="kpi-dot" style="background:var(--orange)"></span><span class="kpi-label">ООО Бета <span class="beznal">Безнал</span></span><span class="kpi-val">₽230К <span class="kpi-bench">15%</span></span></div>
+            <div class="kpi-row"><span class="kpi-dot" style="background:var(--t3)"></span><span class="kpi-label">Прочие (4)</span><span class="kpi-val">₽310К <span class="kpi-bench">20%</span></span></div>
+          </div>
+          <div class="mu" style="margin-top:6px;font-size:12px">Топ-3 = 80% закупок — концентрация ⚠</div>
+        </div>
+        <div class="card">
+          <b>Динамика долга · 6 мес.</b>
+          <div class="bars" style="margin-top:10px">
+            <i style="height:55%"></i><i style="height:65%"></i><i style="height:80%"></i><i style="height:70%"></i><i style="height:60%"></i><i style="height:50%"></i>
+          </div>
+          <div class="row mu" style="margin-top:4px"><span>Янв–Июн · снижается ▼</span><span class="pos">−12%</span></div>
+        </div>
+        <div class="card">
+          <b>Старение долга</b>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>0–7 дней</span><b class="pos">₽120К</b></div><div class="pb pb-green"><i style="width:30%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>7–30 дней</span><b class="tr">₽215К</b></div><div class="pb pb-orange"><i style="width:52%"></i></div>
+            <div class="row mu" style="padding:4px 0"><span>Свыше 30 дней</span><b class="neg">₽85К</b></div><div class="pb pb-red"><i style="width:20%"></i></div>
+          </div>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>DPO (срок оплаты)</span><b>12 дней</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Безнал / Наличные</span><b>35% / 65%</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <b>Дисциплина платежей</b>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>Иванов П.</span><b class="pos">вовремя 94%</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>ООО Альфа</span><b class="pos">вовремя 88%</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>ООО Бета <span class="beznal">Безнал</span></span><b class="pos">вовремя 96%</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Петров К.</span><b class="tr">вовремя 71% ⚠</b></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Риски -->
+      <div class="an-sub" id="an-risk">
+        <div class="card" style="border:1.5px solid rgba(255,159,10,.3)">
+          <div class="row" style="margin-bottom:6px"><b>⚠ Концентрация поставщиков</b></div>
+          <div class="mu">3 поставщика = 80% закупок. Если один уйдёт — дефицит через 5–7 дней. Рекомендация: добавить 2 альтернативных поставщика молочки.</div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Runway</b><b class="pos">45 дней</b></div>
+          <div class="mu">При текущих расходах ₽152К/день свободных средств хватит на 45 дней без новой выручки.</div>
+        </div>
+        <div class="card">
+          <b>Что если: выручка −10%</b>
+          <div style="margin-top:10px">
+            <div class="row" style="margin-bottom:6px"><span class="mu">Снижение выручки:</span><span style="font-weight:700;color:var(--t1)">−<span id="risk-pct">10</span>%</span></div>
+            <input type="range" min="5" max="40" value="10" style="width:100%;accent-color:var(--brand)" oninput="document.getElementById('risk-pct').textContent=this.value;const p=parseInt(this.value);const rev=Math.round(5200*p/100);document.getElementById('risk-rev-calc').textContent=rev;const prof=Math.round(489-rev);document.getElementById('risk-prof').textContent=prof>0?'₽'+prof+'К':'−₽'+Math.abs(prof)+'К';document.getElementById('risk-prof').className=prof>0?'pos':'neg';">
+            <div style="margin-top:10px">
+              <div class="row mu" style="padding:4px 0"><span>Потеря выручки/мес</span><b class="neg">−₽<span id="risk-rev-calc">520</span>К</b></div>
+              <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Прибыль после шока</span><b id="risk-prof" class="neg">−₽31К</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <b>Стресс-тест: поставщик +15%</b>
+          <div class="mu" style="margin-top:6px">Если Иванов П. поднимет цены на 15%:</div>
+          <div style="margin-top:8px">
+            <div class="row mu" style="padding:4px 0"><span>Доп. расходы/мес</span><b class="neg">−₽87К</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Прибыль упадёт</span><b class="neg">на ₽87К (−18%)</b></div>
+            <div class="row mu" style="padding:4px 0;border-top:1px solid var(--sep)"><span>Маржа снизится</span><b class="tr">с 9.4% до 7.7%</b></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="row" style="margin-bottom:8px"><b>Волатильность выручки</b><b class="tr">±18%</b></div>
+          <div class="mu">Сильное колебание Пн/Пт: −38% vs +22% к среднему. Рекомендация: выровнять промо-акциями на начало недели.</div>
+        </div>
       </div>
     </div>
     <div class="sub" id="fin-rep">
@@ -978,6 +1288,47 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
     </button>
   </div>
 
+  <!-- ── Карточка поставщика ООО Бета (безнал) ── -->
+  <div class="sht" id="sht-supBeta">
+    <div class="hdl"></div>
+    <h3>ООО Бета <span class="beznal">Безнал</span></h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:3px 0"><span class="mu">Долг</span><b class="neg">₽ 85 000</b></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Взяли / Выплатили</span><span class="mu">₽230К / ₽145К</span></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Надёжность</span><b class="pos">96%</b></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Контакты</span><span class="mu">+7 (495) 123-45-67 ›</span></div>
+    </div>
+
+    <div class="lbl">Реквизиты</div>
+    <div class="card">
+      <div class="lr" style="border:none;cursor:default">
+        <div class="lr-main"><div class="lr-t">Работает по перечислению</div><div class="lr-s">При оплате — счёт Банк подставляется автоматически</div></div>
+        <button class="sw on" id="beznal-sw" onclick="toggleBeznal(this)"></button>
+      </div>
+      <div class="beznal-fields on" id="beznal-fields">
+        <div class="fld"><label>ИНН</label><input inputmode="numeric" value="7704567890" style="text-align:right;font-size:15px;width:140px"></div>
+        <div class="fld"><label>Расчётный счёт</label><input inputmode="numeric" value="40702810 0000 0000 1234" style="text-align:right;font-size:15px;width:140px"></div>
+        <div class="fld"><label>БИК</label><input inputmode="numeric" value="044525225" style="text-align:right;font-size:15px;width:140px"></div>
+        <div class="fld"><label>Банк</label><span>Сбербанк</span></div>
+      </div>
+    </div>
+
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:4px 0"><span>11.06 Перечисление</span><span class="pos">−₽40 000 ✓</span></div>
+      <div class="row" style="padding:4px 0"><span>05.06 Накладная</span><span class="neg">+₽55 000</span></div>
+      <div class="row" style="padding:4px 0"><span>28.05 Перечисление</span><span class="pos">−₽35 000 ✓</span></div>
+    </div>
+    <button class="act-row" onclick="toast('Счёт Банк выбран автоматически · Перечисление инициировано ✓ (демо)');closeSht()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
+      <div class="act-text">Выплатить (Банк — авто)</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Фото накладной → ИИ заполнит форму (Пакет ИИ)')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 10px rgba(94,92,230,.3)"><svg width="20" height="20" fill="none"><use href="#ic-doc" color="#fff"/></svg></span>
+      <div class="act-text">Записать накладную</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+  </div>
+
   <!-- ── Выплаты с главной ── -->
   <div class="sht" id="sht-payments">
     <div class="hdl"></div>
@@ -1226,6 +1577,20 @@ function showGoodsTab(name,btn){
   wrap.querySelectorAll('.sub').forEach(t=>t.classList.remove('on'));
   wrap.querySelector('#goods-'+name).classList.add('on');
   wrap.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+}
+function showAnTab(name,btn){
+  const wrap=document.getElementById('fin-an');
+  wrap.querySelectorAll('.an-sub').forEach(t=>t.classList.remove('on'));
+  wrap.querySelector('#an-'+name).classList.add('on');
+  wrap.querySelectorAll('.an-seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+}
+
+// ── Безнал-переключатель ──
+function toggleBeznal(sw){
+  sw.classList.toggle('on');
+  const fields=document.getElementById('beznal-fields');
+  fields.classList.toggle('on',sw.classList.contains('on'));
+  toast(sw.classList.contains('on')?'Перечисление включено · счёт Банк — авто':'Перечисление выключено');
 }
 
 // ── Листы ──
