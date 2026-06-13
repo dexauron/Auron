@@ -123,19 +123,18 @@
     window.dispatchEvent(new CustomEvent('auron:unlocked'));
   }
 
-  // ── Phone OTP ──────────────────────────────────────────────────────
+  // ── Email + Password ───────────────────────────────────────────────
 
-  // Step 1: send OTP (SMS). Returns formatted phone.
-  async function sendOTP(phone) {
-    const formatted = _formatPhone(phone);
-    await _post('/otp', { phone: formatted, channel: 'sms' });
-    return formatted;
+  async function signIn(email, password) {
+    const data = await _post('/token?grant_type=password', { email, password });
+    _persist(data);
+    return data;
   }
 
-  // Step 2: verify OTP → get Supabase session
-  async function verifyOTP(phone, code) {
-    const data = await _post('/verify', { phone, token: code, type: 'sms' });
-    _persist(data);
+  async function signUp(email, password) {
+    const data = await _post('/signup', { email, password });
+    // auto-confirm enabled on server, session returned immediately
+    if (data.access_token) _persist(data);
     return data;
   }
 
@@ -272,7 +271,7 @@
   function getUser()    { return _session?.user ?? null; }
 
   window.AUTH = {
-    init, sendOTP, verifyOTP,
+    init, signIn, signUp,
     setupPIN, verifyPIN, hasPIN, isBlocked, unblock,
     setupBiometrics, verifyBiometrics, hasBiometrics, biometricAvailable,
     lock, setLockSeconds, signOut, isSignedIn, getToken, getUser

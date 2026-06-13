@@ -350,27 +350,36 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 </head>
 <body>
 
-<!-- ══ OTP SCREEN ════════════════════════════════════════════════════════ -->
+<!-- ══ LOGIN SCREEN ═══════════════════════════════════════════════════════ -->
 <div id="screen-otp" class="screen">
   <div class="auth-logo">🏪</div>
   <div class="auth-title">Auron Finance</div>
-  <div class="auth-sub" id="otp-subtitle">Введите номер телефона для входа</div>
+  <div class="auth-sub" id="otp-subtitle">Войдите в свой аккаунт</div>
 
-  <div id="otp-phone-step" style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:16px">
+  <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
     <div class="auth-input-wrap">
-      <span>📱</span>
-      <input id="inp-phone" type="tel" placeholder="+7 900 000 00 00" inputmode="tel">
+      <span>📧</span>
+      <input id="inp-email" type="email" placeholder="email@example.com" autocomplete="email">
     </div>
-    <button class="btn-primary" id="btn-send-otp">Получить SMS-код</button>
+    <div class="auth-input-wrap">
+      <span>🔑</span>
+      <input id="inp-password" type="password" placeholder="Пароль" autocomplete="current-password">
+    </div>
+    <button class="btn-primary" id="btn-signin">Войти</button>
+    <button class="btn-ghost" id="btn-show-signup">Нет аккаунта? Зарегистрироваться</button>
   </div>
 
-  <div id="otp-code-step" style="width:100%;max-width:320px;display:none;flex-direction:column;gap:16px">
+  <div id="signup-step" style="width:100%;max-width:320px;display:none;flex-direction:column;gap:12px">
     <div class="auth-input-wrap">
-      <span>🔐</span>
-      <input id="inp-code" type="number" placeholder="000000" inputmode="numeric" maxlength="6">
+      <span>📧</span>
+      <input id="inp-email2" type="email" placeholder="email@example.com" autocomplete="email">
     </div>
-    <button class="btn-primary" id="btn-verify-otp">Войти</button>
-    <button class="btn-ghost" id="btn-back-phone">Изменить номер</button>
+    <div class="auth-input-wrap">
+      <span>🔑</span>
+      <input id="inp-password2" type="password" placeholder="Придумайте пароль" autocomplete="new-password">
+    </div>
+    <button class="btn-primary" id="btn-signup">Создать аккаунт</button>
+    <button class="btn-ghost" id="btn-show-signin">Уже есть аккаунт? Войти</button>
   </div>
 </div>
 
@@ -784,48 +793,55 @@ const App = (() => {
     openSheet('picker-overlay','picker-sheet');
   }
 
-  // ── OTP Flow ───────────────────────────────────────────────────────
-  let _phone = '';
-
+  // ── Email auth ─────────────────────────────────────────────────────
   function initOTP() {
     showScreen('screen-otp');
-    $('otp-phone-step').style.display = 'flex';
-    $('otp-code-step').style.display  = 'none';
 
-    $('btn-send-otp').onclick = async () => {
-      const raw = $('inp-phone').value.trim();
+    const showSignin = () => {
+      qs('#screen-otp > div:not(#signup-step)').style.display = 'flex';
+      $('signup-step').style.display = 'none';
+    };
+    const showSignup = () => {
+      qs('#screen-otp > div:not(#signup-step)').style.display = 'none';
+      $('signup-step').style.display = 'flex';
+    };
+
+    $('btn-show-signup').onclick = showSignup;
+    $('btn-show-signin').onclick = showSignin;
+
+    $('btn-signin').onclick = async () => {
+      const email = $('inp-email').value.trim();
+      const pass  = $('inp-password').value;
+      if (!email || !pass) { toast('Введите email и пароль'); return; }
+      $('btn-signin').disabled = true;
       try {
-        $('btn-send-otp').disabled = true;
-        _phone = await AUTH.sendOTP(raw);
-        $('otp-phone-step').style.display = 'none';
-        $('otp-code-step').style.display  = 'flex';
-        $('otp-subtitle').textContent = 'Код отправлен на ' + _phone;
-        $('inp-code').focus();
+        await AUTH.signIn(email, pass);
+        if (!AUTH.hasPIN()) initPINSetup();
+        else await startApp();
       } catch (e) { toast(e.message); }
-      finally { $('btn-send-otp').disabled = false; }
+      finally { $('btn-signin').disabled = false; }
     };
 
-    $('btn-verify-otp').onclick = async () => {
-      const code = $('inp-code').value.trim();
+    $('btn-signup').onclick = async () => {
+      const email = $('inp-email2').value.trim();
+      const pass  = $('inp-password2').value;
+      if (!email || !pass) { toast('Введите email и пароль'); return; }
+      if (pass.length < 6) { toast('Пароль минимум 6 символов'); return; }
+      $('btn-signup').disabled = true;
       try {
-        $('btn-verify-otp').disabled = true;
-        await AUTH.verifyOTP(_phone, code);
-        if (!AUTH.hasPIN()) {
-          initPINSetup();
-        } else {
-          await startApp();
-        }
+        await AUTH.signUp(email, pass);
+        if (!AUTH.hasPIN()) initPINSetup();
+        else await startApp();
       } catch (e) { toast(e.message); }
-      finally { $('btn-verify-otp').disabled = false; }
+      finally { $('btn-signup').disabled = false; }
     };
 
-    $('btn-back-phone').onclick = () => {
-      $('otp-phone-step').style.display = 'flex';
-      $('otp-code-step').style.display  = 'none';
-    };
-
-    $('inp-phone').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-send-otp').click(); });
-    $('inp-code').addEventListener('keydown',  e => { if (e.key === 'Enter') $('btn-verify-otp').click(); });
+    ['inp-email','inp-password'].forEach(id => {
+      $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-signin').click(); });
+    });
+    ['inp-email2','inp-password2'].forEach(id => {
+      $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-signup').click(); });
+    });
   }
 
   // ── PIN Setup ──────────────────────────────────────────────────────
