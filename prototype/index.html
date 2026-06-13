@@ -1384,6 +1384,11 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <div class="card">
           <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л · Иванов П.</div><div class="lr-s">20 шт · в долг</div></div><div class="lr-a">₽1 300</div></div>
         </div>
+        <div class="card" style="border:1.5px dashed var(--brand);background:rgba(94,92,230,.04);text-align:center;padding:20px;cursor:pointer" onclick="toast('ИИ распознал накладную: 12 позиций, сумма ₽38 400 → проверьте и подтвердите (демо)')">
+          <div style="font-size:32px;margin-bottom:8px">📸</div>
+          <div style="font-size:15px;font-weight:600;color:var(--brand)">Сфотографировать накладную</div>
+          <div class="mu" style="margin-top:4px">ИИ распознает позиции и суммы автоматически</div>
+        </div>
         <button class="btn" onclick="toast('Приход записан, долг поставщика вырос ✓')">+ Зафиксировать приход</button>
         <button class="btn sec" onclick="toast('Продажа записана, выручка дня выросла ✓')">− Зафиксировать продажу</button>
       </div>
@@ -1406,6 +1411,27 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <div class="lr"><div class="lr-t">Дата ночной смены</div><div class="lr-a mu">По началу ›</div></div>
         <div class="lr"><div class="lr-t">Целевая рентабельность</div><div class="lr-a mu">25% ›</div></div>
         <div class="lr"><div class="lr-t">Режим учёта товаров</div><div class="lr-a mu">Ручной ›</div></div>
+      </div>
+
+      <div class="lbl">Умные правила</div>
+      <div class="card">
+        <div class="mu" style="margin-bottom:10px">Auron автоматически категоризирует операции по вашим правилам</div>
+        <div class="lr" onclick="toast('Правило активно — демо')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">📦</div>
+          <div class="lr-main"><div class="lr-t">ООО Бета → Закупка</div><div class="lr-s">Счёт: Банк · применено 12 раз</div></div>
+          <button class="sw on" onclick="event.stopPropagation();this.classList.toggle('on')"></button>
+        </div>
+        <div class="lr" onclick="toast('Правило активно — демо')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👥</div>
+          <div class="lr-main"><div class="lr-t">Сумма 45 000 → ЗП</div><div class="lr-s">Счёт: Наличные · применено 2 раза</div></div>
+          <button class="sw on" onclick="event.stopPropagation();this.classList.toggle('on')"></button>
+        </div>
+        <div class="lr" onclick="toast('Правило активно — демо')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#EAB308,#CA8A04)">💡</div>
+          <div class="lr-main"><div class="lr-t">«коммун» в комментарии → Коммуналка</div><div class="lr-s">применено 4 раза</div></div>
+          <button class="sw on" onclick="event.stopPropagation();this.classList.toggle('on')"></button>
+        </div>
+        <button class="btn sec" onclick="toast('Новое правило — демо')" style="margin-top:4px">+ Добавить правило</button>
       </div>
 
       <div class="lbl">Персонализация — работает, попробуй</div>
@@ -1881,6 +1907,43 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
 </div><!-- /phone -->
 
 <script>
+// ── Онбординг ──
+var obStep = 1;
+function nextOb() {
+  if (obStep < 3) {
+    document.querySelector('.ob-step.on').classList.remove('on');
+    document.querySelectorAll('.ob-dot')[obStep-1].classList.remove('on');
+    obStep++;
+    document.getElementById('ob-s'+obStep).classList.add('on');
+    document.querySelectorAll('.ob-dot')[obStep-1].classList.add('on');
+  }
+}
+function skipOnboard() {
+  document.getElementById('s-onboard').style.display = 'none';
+  document.getElementById('s-home').classList.add('on');
+}
+function showOnboard() {
+  obStep = 1;
+  document.querySelectorAll('.ob-step').forEach(function(s){s.classList.remove('on');});
+  document.querySelectorAll('.ob-dot').forEach(function(d){d.classList.remove('on');});
+  document.getElementById('ob-s1').classList.add('on');
+  document.getElementById('ob-dot1').classList.add('on');
+  document.getElementById('s-onboard').style.display = 'block';
+}
+
+// ── Режим 3 кнопки ──
+function toggleSimple() {
+  var el = document.getElementById('simple-mode');
+  var btn = document.getElementById('simple-btn');
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+    btn.textContent = 'Полный режим';
+  } else {
+    el.style.display = 'none';
+    btn.textContent = 'Режим 3 кнопки';
+  }
+}
+
 // ── Вход (PIN) ──
 let pinN=0;
 function pin(d){
