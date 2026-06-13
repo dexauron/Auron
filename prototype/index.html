@@ -534,7 +534,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
 
     <div class="quick">
       <div class="qbtn" onclick="go('kassa')"><div class="qi qi-receipt"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-receipt"/></svg></div><div class="qbtn-label">Отчёт кассы</div></div>
-      <div class="qbtn" onclick="go('suppliers')"><div class="qi qi-pay"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-pay"/></svg></div><div class="qbtn-label">Выплата</div></div>
+      <div class="qbtn" onclick="go('suppliers');showSub('sup','pay')"><div class="qi qi-pay"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-pay"/></svg></div><div class="qbtn-label">Выплата</div></div>
       <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')"><div class="qi qi-box"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-box"/></svg></div><div class="qbtn-label">Заказ</div></div>
       <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')"><div class="qi qi-send"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-send"/></svg></div><div class="qbtn-label">Отчёт</div></div>
     </div>
@@ -631,52 +631,277 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
   <div class="scr" id="s-suppliers">
     <h1>Поставщики</h1>
     <div class="seg">
-      <button class="on" onclick="showSub('sup','pay',this)">Выплаты</button>
-      <button onclick="showSub('sup','dir',this)">Поставщики</button>
+      <button class="on" onclick="showSub('sup','dir',this)">Каталог</button>
+      <button onclick="showSub('sup','pay',this)">Выплаты</button>
       <button onclick="showSub('sup','orders',this)">Заказы</button>
     </div>
-    <div class="sub on" id="sup-pay">
-      <div class="banner warn">⚠ Нужно ₽81 000, свободно ₽64 000<br>
-        <span class="mu">ИИ: 1) Иванов — ждать не будет · 2) Альфа — товар завтра · 3) Петрова перенести на чт</span><br>
-        <span style="display:inline-flex;gap:10px;margin-top:8px">
-          <b style="color:var(--brand);cursor:pointer" onclick="toast('План применён ✓ (демо)')">Применить план</b>
-          <b style="color:var(--t2);cursor:pointer" onclick="this.closest('.banner').style.display='none'">Решу сам</b>
-        </span>
+
+    <!-- ── Каталог поставщиков ── -->
+    <div class="sub on" id="sup-dir">
+      <!-- Сводка -->
+      <div style="background:linear-gradient(135deg,rgba(94,92,230,.10),rgba(94,92,230,.04));border:1px solid rgba(94,92,230,.18);border-radius:18px;padding:14px 16px;margin-bottom:12px">
+        <div style="display:flex;gap:0;justify-content:space-between;flex-wrap:wrap;gap:10px">
+          <div><div class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Поставщиков</div><div style="font-size:22px;font-weight:800;color:var(--t1);margin-top:2px">4</div></div>
+          <div><div class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">Общий долг</div><div style="font-size:22px;font-weight:800;color:var(--red);margin-top:2px">₽350 000</div></div>
+          <div><div class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px">К оплате сегодня</div><div style="font-size:22px;font-weight:800;color:var(--orange);margin-top:2px">₽63 000</div></div>
+        </div>
       </div>
-      <div class="lbl">Сегодня</div>
-      <div class="card">
-        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">Долг: ₽120К</div></div><div class="lr-a">₽ 35 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
-        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">Долг: ₽55К</div></div><div class="lr-a">₽ 28 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
-        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">Долг: ₽90К</div></div><div class="lr-a">₽ 18 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+
+      <!-- ООО Бета -->
+      <div class="card" style="margin-bottom:10px" onclick="openSht('supBeta')">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#4ADE80,#16A34A);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(22,163,74,.3)">🏭</div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:var(--t1)">ООО Бета <span class="beznal">Безнал</span></div>
+            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 11 июн · надёжность 96%</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--red)">₽85 000</div>
+            <div class="mu" style="font-size:11px">долг</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽85К из лимита ₽200К</div>
+        <div class="pb pb-orange"><i style="width:42%"></i></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="event.stopPropagation();toast('Выплата инициирована — безнал (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
+          <button onclick="event.stopPropagation();toast('Новый заказ у ООО Бета (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
+          <button onclick="event.stopPropagation();openSht('supBeta')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        </div>
       </div>
-      <div class="lbl">Завтра</div>
-      <div class="card">
-        <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Нурмат ИП</div><div class="lr-s">Долг: ₽42К</div></div><div class="lr-a">₽ 13 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
-        <div class="lr" onclick="openSht('supBeta')"><div class="lr-main"><div class="lr-t">ООО Бета <span class="beznal">Безнал</span></div><div class="lr-s">Долг: ₽85К · на расчётный счёт</div></div><div class="lr-a">₽ 45 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+
+      <!-- ИП Громов -->
+      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:var(--t1)">ИП Громов</div>
+            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 10 июн · надёжность 100%</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--red)">₽120 000</div>
+            <div class="mu" style="font-size:11px">долг</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽120К из лимита ₽150К</div>
+        <div class="pb pb-red"><i style="width:80%"></i></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="event.stopPropagation();toast('Выплата ИП Громов (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
+          <button onclick="event.stopPropagation();toast('Новый заказ у ИП Громов (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
+          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        </div>
       </div>
-      <button class="btn sec" onclick="toast('Новая запись: поставщик + сумма + дата')">+ Записать выплату</button>
+
+      <!-- ООО Альфа -->
+      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#5AC8FA,#007AFF);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:var(--t1)">ООО Альфа</div>
+            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 8 июн · надёжность 88%</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--red)">₽55 000</div>
+            <div class="mu" style="font-size:11px">долг</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽55К из лимита ₽120К</div>
+        <div class="pb pb-orange"><i style="width:46%"></i></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="event.stopPropagation();toast('Выплата ООО Альфа (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
+          <button onclick="event.stopPropagation();toast('Новый заказ у ООО Альфа (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
+          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        </div>
+      </div>
+
+      <!-- Иванов П. -->
+      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#C084FC,#9333EA);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:700;color:var(--t1)">Иванов П.</div>
+            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 7 июн · надёжность 71% ⚠</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--green)">₽0</div>
+            <div class="mu" style="font-size:11px">долг</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽0 из лимита ₽90К</div>
+        <div class="pb pb-green"><i style="width:2%"></i></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button onclick="event.stopPropagation();toast('Нет долга — выплата не нужна')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t3)">Оплатить</button>
+          <button onclick="event.stopPropagation();toast('Новый заказ у Иванова П. (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
+          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        </div>
+      </div>
+
+      <button class="btn sec" onclick="toast('Добавление поставщика: имя + лимит + контакт — демо')">+ Добавить поставщика</button>
     </div>
-    <div class="sub" id="sup-dir">
-      <div class="card"><div class="row"><span class="mu">Общий долг</span><b class="neg">₽ 420 000</b></div></div>
-      <div class="card">
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">надёжность 94%</div></div><div class="lr-a neg">₽120К</div></div>
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">надёжность 88%</div></div><div class="lr-a neg">₽55К</div></div>
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">надёжность 71% ⚠</div></div><div class="lr-a neg">₽90К</div></div>
-        <div class="lr" onclick="openSht('supBeta')"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 8px rgba(22,163,74,.3)">🏭</div><div class="lr-main"><div class="lr-t">ООО Бета <span class="beznal">Безнал</span></div><div class="lr-s">надёжность 96%</div></div><div class="lr-a neg">₽85К</div></div>
+
+    <!-- ── Выплаты ── -->
+    <div class="sub" id="sup-pay">
+      <!-- Period selector -->
+      <div class="opts" style="margin:0 0 12px">
+        <button class="on" onclick="optPick(this)">Сегодня</button>
+        <button onclick="optPick(this)">Неделя</button>
+        <button onclick="optPick(this)">Месяц</button>
       </div>
-      <button class="btn sec" onclick="toast('Добавление поставщика — демо')">+ Добавить поставщика</button>
+
+      <!-- Просрочено -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></div>
+        <span class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--red)">Просрочено</span>
+      </div>
+      <div class="card" style="border:1px solid rgba(255,69,58,.25);margin-bottom:12px">
+        <div onclick="openSht('supAct')" style="display:flex;align-items:center;gap:10px;padding:4px 0;cursor:pointer">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:15px;font-weight:600;color:var(--t1)">ИП Громов</span>
+              <span style="font-size:10px;font-weight:700;background:rgba(255,69,58,.14);color:var(--red);padding:2px 7px;border-radius:6px">+3 дня</span>
+            </div>
+            <div class="mu" style="font-size:12px;margin-top:2px">10 июня · Наличные</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--red)">₽28 000</div>
+            <div class="mu" style="font-size:11px">просрочено</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Запланировано сегодня -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0"></div>
+        <span class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--orange)">Запланировано</span>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div onclick="openSht('supAct')" style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:15px;font-weight:600;color:var(--t1)">ООО Бета</span>
+              <span class="beznal">Безнал</span>
+            </div>
+            <div class="mu" style="font-size:12px;margin-top:2px">13 июня · Банк</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--t1)">₽45 000</div>
+            <div class="mu" style="font-size:11px">сегодня</div>
+          </div>
+        </div>
+        <div onclick="openSht('supAct')" style="display:flex;align-items:center;gap:10px;padding:6px 0;cursor:pointer">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:600;color:var(--t1)">ООО Альфа</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">15 июня · Наличные · через 2 дня</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:17px;font-weight:700;color:var(--t1)">₽35 000</div>
+            <div class="mu" style="font-size:11px">через 2 дня</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Выплачено -->
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0"></div>
+        <span class="mu" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:700;color:var(--green)">Выплачено</span>
+      </div>
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:600;color:var(--t1)">Иванов П.</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">11 июня · Наличные</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:var(--green)">✓ ₽35 000</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:600;color:var(--t1)">ООО Бета</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">11 июня · Банк</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:var(--green)">✓ ₽40 000</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Итог месяца -->
+      <div style="background:var(--card2);border-radius:14px;padding:12px 16px;margin-bottom:12px">
+        <div class="row mu"><span>К выплате в июне</span><b style="color:var(--t1)">₽183 000</b></div>
+        <div class="row mu" style="margin-top:6px"><span>Оплачено</span><b class="pos">₽75 000</b></div>
+        <div class="pb pb-green" style="margin-top:8px"><i style="width:41%"></i></div>
+      </div>
+
+      <button class="btn sec" onclick="toast('Новая выплата: поставщик + сумма + дата — демо')">+ Записать выплату</button>
     </div>
+
+    <!-- ── Заказы ── -->
     <div class="sub" id="sup-orders">
-      <div class="lbl">Активные</div>
-      <div class="card">
-        <div class="lr" onclick="openSht('orderAct')"><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">сегодня</div></div><div class="lr-a">~₽15К</div></div>
-        <div class="lr" onclick="openSht('orderAct')"><div class="lr-main"><div class="lr-t">Бакалея · ООО Альфа</div><div class="lr-s">16 июня</div></div><div class="lr-a">~₽22К</div></div>
+      <!-- Статус-фильтр -->
+      <div class="opts" style="margin:0 0 12px">
+        <button class="on" onclick="optPick(this)">Активные</button>
+        <button onclick="optPick(this)">Ожидаемые</button>
+        <button onclick="optPick(this)">Завершённые</button>
       </div>
-      <div class="lbl">История</div>
-      <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">10 июн · получен ✓</div></div><div class="lr-a">₽14 800</div></div>
+
+      <!-- Активный заказ 1 -->
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700;color:var(--t1)">Молочка · Иванов П.</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">Заказ от 12 июня</div>
+          </div>
+          <div style="background:rgba(255,159,10,.14);color:var(--orange);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700">Ожидается сегодня</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="mu" style="font-size:13px">Сумма</span>
+          <b style="font-size:15px;color:var(--t1)">~₽15 000</b>
+        </div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Позиций: ожидается 12 · принято 0</div>
+        <div class="pb" style="margin:0 0 10px"><i style="display:block;height:100%;border-radius:4px;width:0%;background:linear-gradient(90deg,var(--green),#22C55E)"></i></div>
+        <div style="display:flex;gap:8px">
+          <button onclick="toast('Форма приёма: факт. кол-во + сумма + оплата/долг (демо)')" style="flex:1;border:none;border-radius:12px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Подтвердить приход</button>
+          <button onclick="toast('Проблема с заказом: недостача / брак / не приехал (демо)')" style="flex:1;border:none;border-radius:12px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,69,58,.12);color:var(--red)">Проблема</button>
+        </div>
       </div>
-      <button class="btn sec" onclick="toast('Новый заказ: поставщик + отдел + сумма + дата')">+ Новый заказ</button>
+
+      <!-- Активный заказ 2 -->
+      <div class="card" style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:700;color:var(--t1)">Бакалея · ООО Альфа</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">Заказ от 11 июня</div>
+          </div>
+          <div style="background:rgba(94,92,230,.12);color:var(--brand);border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700">Ожидается 15 июня</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span class="mu" style="font-size:13px">Сумма</span>
+          <b style="font-size:15px;color:var(--t1)">₽22 000</b>
+        </div>
+        <div style="font-size:12px;color:var(--t2);margin-bottom:6px">Позиций: ожидается 8 · принято 0</div>
+        <div class="pb" style="margin:0 0 10px"><i style="display:block;height:100%;border-radius:4px;width:0%;background:linear-gradient(90deg,var(--brand2),var(--brand))"></i></div>
+        <div style="display:flex;gap:8px">
+          <button onclick="toast('Приём возможен только после даты поставки')" style="flex:1;border:none;border-radius:12px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t3)">Подтвердить приход</button>
+          <button onclick="openSht('orderAct')" style="flex:1;border:none;border-radius:12px;padding:10px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,69,58,.12);color:var(--red)">Проблема</button>
+        </div>
+      </div>
+
+      <!-- Завершён -->
+      <div class="lbl">Завершённые</div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;padding:4px 0">
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:600;color:var(--t1)">Молочка · Иванов П.</div>
+            <div class="mu" style="font-size:12px;margin-top:2px">10 июня · 12 из 12 позиций</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:15px;font-weight:700;color:var(--green)">✓ ₽14 800</div>
+            <div class="mu" style="font-size:11px">доставлен</div>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn" onclick="toast('Новый заказ: поставщик + отдел + позиции + дата (демо)')">+ Новый заказ</button>
     </div>
   </div><!-- /suppliers -->
 
@@ -704,7 +929,73 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
       <button class="btn sec" onclick="toast('Цели создаёт только Владелец')">+ Новая цель</button>
     </div>
     <div class="sub" id="fin-cal">
-      <div class="card"><div class="row" style="margin-bottom:12px"><b>Июнь 2026</b><span class="mu">🟢 приток · 🔴 выплаты · 🟡 риск</span></div><div class="cal" id="cal"></div></div>
+      <div class="card">
+        <!-- Навигация месяца -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <button onclick="toast('Май 2026')" style="width:34px;height:34px;border-radius:10px;border:none;background:var(--card2);font-size:18px;cursor:pointer;color:var(--t2)">‹</button>
+          <b style="font-size:16px;color:var(--t1)">Июнь 2026</b>
+          <button onclick="toast('Июль 2026 — ещё не начался')" style="width:34px;height:34px;border-radius:10px;border:none;background:var(--card2);font-size:18px;cursor:pointer;color:var(--t2)">›</button>
+        </div>
+        <!-- Сетка календаря -->
+        <div class="cal" id="cal"></div>
+        <!-- Легенда -->
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--sep)">
+          <span style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:rgba(48,209,88,.22);display:inline-block"></span>Выручка</span>
+          <span style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:rgba(255,69,58,.18);display:inline-block"></span>Расход/выплата</span>
+          <span style="font-size:11px;color:var(--t2);display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:3px;background:rgba(255,159,10,.18);display:inline-block"></span>Риск</span>
+        </div>
+      </div>
+
+      <!-- Сводка выбранного дня -->
+      <div class="card" id="cal-day-summary" style="display:none">
+        <div style="font-size:15px;font-weight:700;color:var(--t1);margin-bottom:8px" id="cal-summary-title">13 июня</div>
+        <div style="display:flex;gap:0;justify-content:space-around">
+          <div style="text-align:center">
+            <div class="mu" style="font-size:11px">Выручка</div>
+            <div style="font-size:17px;font-weight:800;color:var(--green);margin-top:2px">₽62 000</div>
+          </div>
+          <div style="width:1px;background:var(--sep)"></div>
+          <div style="text-align:center">
+            <div class="mu" style="font-size:11px">Расходы</div>
+            <div style="font-size:17px;font-weight:800;color:var(--red);margin-top:2px">₽15 000</div>
+          </div>
+          <div style="width:1px;background:var(--sep)"></div>
+          <div style="text-align:center">
+            <div class="mu" style="font-size:11px">Операций</div>
+            <div style="font-size:17px;font-weight:800;color:var(--t1);margin-top:2px">3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ближайшие выплаты -->
+      <div class="lbl">Ближайшие выплаты</div>
+      <div class="card">
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)" onclick="openSht('supBeta')">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0"></div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">ООО Бета <span class="beznal">Безнал</span></div>
+            <div class="mu" style="font-size:12px">13 июня · Банк · сегодня</div>
+          </div>
+          <b style="color:var(--orange)">₽45 000</b>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)" onclick="openSht('supAct')">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--brand);flex-shrink:0"></div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">Аренда</div>
+            <div class="mu" style="font-size:12px">20 июня · Банк · через 7 дней</div>
+          </div>
+          <b style="color:var(--t1)">₽60 000</b>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:6px 0" onclick="openSht('supAct')">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--t3);flex-shrink:0"></div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">Зарплата</div>
+            <div class="mu" style="font-size:12px">25 июня · Наличные · через 12 дней</div>
+          </div>
+          <b style="color:var(--t1)">₽45 000</b>
+        </div>
+      </div>
+
       <div class="banner warn">⚠ ИИ: 20 июня прогнозный остаток ₽4 200 при выплатах ₽45 000. Совет: перенести ООО Бета на 22-е или откладывать +₽2 000/день. <b style="color:var(--brand);cursor:pointer" onclick="toast('Выплата перенесена ✓ (демо)')">Перенести</b></div>
     </div>
     <div class="sub" id="fin-an">
@@ -1349,13 +1640,164 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <button onclick="showStaffTab('sal',this)">Зарплата</button>
       </div>
       <div class="sub on" id="staff-tab">
-        <div class="banner">◀ 12 июня, четверг ▶ · тапни статус — изменится</div>
-        <div class="card">
-          <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">5/2, рабочий</div></div><div class="lr-a pos st" onclick="cycleSt(this)">Вышла ▾</div></div>
-          <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">2/2, выходной</div></div><div class="lr-a mu st" onclick="cycleSt(this)">Выходной ▾</div></div>
-          <div class="lr"><div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">отпуск до 28 июн</div></div><div class="lr-a tr st" onclick="cycleSt(this)">Отпуск ▾</div></div>
+        <!-- Навигация месяца -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;background:var(--card);border-radius:16px;padding:12px 16px;box-shadow:var(--cshadow)">
+          <button onclick="toast('Май 2026')" style="width:32px;height:32px;border-radius:10px;border:none;background:var(--card2);font-size:18px;cursor:pointer;color:var(--t2)">‹</button>
+          <div style="text-align:center">
+            <div style="font-size:16px;font-weight:800;color:var(--t1)">Июнь 2026</div>
+            <div class="mu" style="font-size:11px;margin-top:2px">Тапни на день — изменить статус</div>
+          </div>
+          <button onclick="toast('Июль 2026 — ещё не начался')" style="width:32px;height:32px;border-radius:10px;border:none;background:var(--card2);font-size:18px;cursor:pointer;color:var(--t2)">›</button>
         </div>
-        <button class="btn" onclick="toast('Табель за 12 июня подтверждён ✓')">Подтвердить день</button>
+
+        <!-- Легенда -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:rgba(48,209,88,.25);display:inline-block"></span>Вышел</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:rgba(255,69,58,.2);display:inline-block"></span>Прогул</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:rgba(255,159,10,.22);display:inline-block"></span>Б/л</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:var(--card2);border:1px solid var(--sep);display:inline-block"></span>Выходной</span>
+          <span style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--t2)"><span style="width:12px;height:12px;border-radius:4px;background:rgba(192,132,252,.3);display:inline-block"></span>Переработка</span>
+        </div>
+
+        <!-- Иванова А. -->
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#C084FC,#9333EA);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">👤</div>
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700;color:var(--t1)">Иванова А.</div>
+              <div class="mu" style="font-size:11px">Старший кассир · 5/2</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:var(--green)">₽27 000</div>
+              <div class="mu" style="font-size:10px">18 смен</div>
+            </div>
+          </div>
+          <!-- День-сетка -->
+          <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin-bottom:8px">
+            <div onclick="toast('Иванова А. 1 июн → цикл статуса')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 2 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 3 июн')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 4 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 5 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 6 июн')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 7 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 8 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 9 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 10 июн')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 11 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 12 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Иванова А. 13 июн — сегодня')" style="height:22px;border-radius:5px;background:rgba(94,92,230,.35);cursor:pointer;outline:2px solid var(--brand)"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:600;color:var(--green)">18 смен</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;color:var(--t2)">2 выходных</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;color:var(--t2)">0 прогулов</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;font-weight:600;color:var(--green)">₽27 000</span>
+          </div>
+        </div>
+
+        <!-- Петров В. -->
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#5AC8FA,#007AFF);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">👤</div>
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700;color:var(--t1)">Петров В.</div>
+              <div class="mu" style="font-size:11px">Кассир · 2/2</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:var(--orange)">₽25 200</div>
+              <div class="mu" style="font-size:10px;color:var(--orange)">14 смен ⚠</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin-bottom:8px">
+            <div onclick="toast('Петров В. 1 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 2 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 3 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 4 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 5 июн — ПРОГУЛ')" style="height:22px;border-radius:5px;background:rgba(255,69,58,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 6 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 7 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 8 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 9 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 10 июн — ПРОГУЛ')" style="height:22px;border-radius:5px;background:rgba(255,69,58,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 11 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 12 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Петров В. 13 июн — выходной (сегодня)')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer;outline:2px solid var(--sep)"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:600;color:var(--t1)">14 смен</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;color:var(--t2)">4 выходных</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;font-weight:600;color:var(--red)">2 прогула</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;font-weight:600;color:var(--orange)">₽25 200</span>
+          </div>
+        </div>
+
+        <!-- Сафина Г. -->
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <div style="width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,#4ADE80,#16A34A);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0">👤</div>
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700;color:var(--t1)">Сафина Г.</div>
+              <div class="mu" style="font-size:11px">Кассир · 5/2</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:13px;font-weight:700;color:var(--orange)">₽18 000</div>
+              <div class="mu" style="font-size:10px;color:var(--orange)">12 смен · б/л</div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(15,1fr);gap:3px;margin-bottom:8px">
+            <div onclick="toast('Сафина Г. 1 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 2 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 3 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 4 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 5 июн — Б/Л')" style="height:22px;border-radius:5px;background:rgba(255,159,10,.28);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 6 июн — Б/Л')" style="height:22px;border-radius:5px;background:rgba(255,159,10,.28);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 7 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 8 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 9 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 10 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 11 июн — выходной')" style="height:22px;border-radius:5px;background:var(--card2);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 12 июн')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer"></div>
+            <div onclick="toast('Сафина Г. 13 июн — сегодня')" style="height:22px;border-radius:5px;background:rgba(48,209,88,.25);cursor:pointer;outline:2px solid var(--brand)"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+            <div style="height:22px;border-radius:5px;background:var(--sep);opacity:.4"></div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:600;color:var(--t1)">12 смен</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;color:var(--t2)">3 выходных</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;font-weight:600;color:var(--orange)">2 б/л</span>
+            <span style="font-size:12px;color:var(--t2)">·</span>
+            <span style="font-size:12px;font-weight:600;color:var(--t1)">₽18 000</span>
+          </div>
+        </div>
+
+        <!-- Итог магазина -->
+        <div style="background:var(--card2);border-radius:14px;padding:12px 16px;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">Итого · Way Market №1</div>
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div style="text-align:center"><div class="mu" style="font-size:11px">Смен</div><div style="font-size:18px;font-weight:800;color:var(--t1)">44</div></div>
+            <div style="text-align:center"><div class="mu" style="font-size:11px">Прогулов</div><div style="font-size:18px;font-weight:800;color:var(--red)">2</div></div>
+            <div style="text-align:center"><div class="mu" style="font-size:11px">Б/л</div><div style="font-size:18px;font-weight:800;color:var(--orange)">2</div></div>
+            <div style="text-align:center"><div class="mu" style="font-size:11px">ФОТ</div><div style="font-size:18px;font-weight:800;color:var(--t1)">₽70 200</div></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px">
+          <button class="btn" onclick="toast('Табель за июнь утверждён ✓ — готов к расчёту ЗП')" style="flex:2">Утвердить табель</button>
+          <button class="btn sec" onclick="toast('Экспорт: WhatsApp / PDF (демо)')" style="flex:1">Экспорт</button>
+        </div>
       </div>
       <div class="sub" id="staff-emp">
         <div class="card">
@@ -1381,33 +1823,260 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <button onclick="showGoodsTab('in',this)">Приход</button>
         <button onclick="showGoodsTab('rent',this)">Рентабельность</button>
       </div>
+
+      <!-- ── Товары ── -->
       <div class="sub on" id="goods-list">
-        <div class="card">
-          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">₽65 → ₽89</div></div><div class="lr-a pos">37%</div></div>
-          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">₽42 → ₽58</div></div><div class="lr-a pos">38%</div></div>
-          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">₽78 → ₽99</div></div><div class="lr-a tr">27%</div></div>
+        <!-- Поиск -->
+        <div style="display:flex;align-items:center;gap:8px;background:var(--card);border-radius:14px;padding:10px 14px;margin-bottom:10px;box-shadow:var(--cshadow)">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="var(--t3)" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="var(--t3)" stroke-width="2" stroke-linecap="round"/></svg>
+          <span style="font-size:14px;color:var(--t3)">Поиск товара…</span>
         </div>
-        <button class="btn sec" onclick="toast('Новый товар: название + цены')">+ Добавить товар</button>
+
+        <!-- Категории -->
+        <div class="seg" style="padding:0 0 8px">
+          <button class="on" onclick="optPick(this)">Все</button>
+          <button onclick="optPick(this)">Молочка</button>
+          <button onclick="optPick(this)">Бакалея</button>
+          <button onclick="optPick(this)">Напитки</button>
+          <button onclick="optPick(this)">Химия</button>
+        </div>
+
+        <!-- Сортировка -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span class="mu" style="font-size:12px">127 позиций · ₽380К себестоимость</span>
+          <button onclick="toast('Сортировка: по марже / остатку / названию (демо)')" style="font-size:12px;font-weight:600;color:var(--brand);background:none;border:none;cursor:pointer">Сортировка ›</button>
+        </div>
+
+        <!-- Список товаров -->
+        <div class="card">
+          <!-- Молоко 1л -->
+          <div onclick="toast('Карточка товара: история прихода, продажи, маржа (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+            <div style="width:10px;height:10px;border-radius:50%;background:rgba(0,122,255,.7);flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:500;color:var(--t1)">Молоко 1л</div>
+              <div class="mu" style="font-size:12px">Молочка · 48 шт · ₽89</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;color:var(--green)">37%</div>
+            </div>
+          </div>
+          <!-- Хлеб -->
+          <div onclick="toast('Карточка товара: хлеб б/н (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+            <div style="width:10px;height:10px;border-radius:50%;background:rgba(245,158,11,.8);flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:500;color:var(--t1)">Хлеб б/н</div>
+              <div class="mu" style="font-size:12px">Бакалея · 32 шт · ₽58</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;color:var(--green)">38%</div>
+            </div>
+          </div>
+          <!-- Яйца С1 -->
+          <div onclick="toast('Карточка товара: яйца С1 (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+            <div style="width:10px;height:10px;border-radius:50%;background:rgba(0,122,255,.7);flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px">
+                <span style="font-size:15px;font-weight:500;color:var(--t1)">Яйца С1</span>
+                <span style="font-size:10px;font-weight:700;background:rgba(255,159,10,.15);color:var(--orange);padding:1px 5px;border-radius:5px">⚠ мало</span>
+              </div>
+              <div class="mu" style="font-size:12px">Молочка · 8 шт · ₽99</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;color:var(--green)">34%</div>
+            </div>
+          </div>
+          <!-- Сахар -->
+          <div onclick="toast('Карточка товара: сахар 1кг (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+            <div style="width:10px;height:10px;border-radius:50%;background:rgba(245,158,11,.8);flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:500;color:var(--t1)">Сахар 1кг</div>
+              <div class="mu" style="font-size:12px">Бакалея · 95 шт · ₽99</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;color:var(--orange)">27%</div>
+            </div>
+          </div>
+          <!-- Стиральный порошок -->
+          <div onclick="toast('Карточка товара: стиральный порошок (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
+            <div style="width:10px;height:10px;border-radius:50%;background:rgba(147,51,234,.7);flex-shrink:0"></div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:15px;font-weight:500;color:var(--t1)">Порошок стир. 1кг</div>
+              <div class="mu" style="font-size:12px">Химия · 21 шт · ₽189</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:14px;font-weight:700;color:var(--red)">14%</div>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn sec" onclick="toast('Новый товар: название + закупочная + розничная цена — демо')">+ Добавить товар</button>
       </div>
+
+      <!-- ── Приход ── -->
       <div class="sub" id="goods-in">
-        <div class="lbl">Сегодня</div>
-        <div class="card">
-          <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л · Иванов П.</div><div class="lr-s">20 шт · в долг</div></div><div class="lr-a">₽1 300</div></div>
-        </div>
-        <div class="card" style="border:1.5px dashed var(--brand);background:rgba(94,92,230,.04);text-align:center;padding:20px;cursor:pointer" onclick="toast('ИИ распознал накладную: 12 позиций, сумма ₽38 400 → проверьте и подтвердите (демо)')">
+        <!-- Фото накладной -->
+        <div style="border:1.5px dashed var(--brand);background:rgba(94,92,230,.04);border-radius:18px;text-align:center;padding:20px;cursor:pointer;margin-bottom:12px" onclick="toast('ИИ распознал накладную: 12 позиций, сумма ₽38 400 → проверьте и подтвердите (демо)')">
           <div style="font-size:32px;margin-bottom:8px">📸</div>
-          <div style="font-size:15px;font-weight:600;color:var(--brand)">Сфотографировать накладную</div>
-          <div class="mu" style="margin-top:4px">ИИ распознает позиции и суммы автоматически</div>
+          <div style="font-size:15px;font-weight:700;color:var(--brand)">Сфотографировать накладную</div>
+          <div class="mu" style="margin-top:4px;font-size:13px">ИИ распознает позиции и суммы автоматически</div>
         </div>
-        <button class="btn" onclick="toast('Приход записан, долг поставщика вырос ✓')">+ Зафиксировать приход</button>
-        <button class="btn sec" onclick="toast('Продажа записана, выручка дня выросла ✓')">− Зафиксировать продажу</button>
-      </div>
-      <div class="sub" id="goods-rent">
-        <div class="card"><div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div><div class="mu" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div></div>
+
+        <!-- Ожидается сегодня -->
+        <div onclick="openSht('orderAct')" style="background:rgba(255,159,10,.1);border:1px solid rgba(255,159,10,.3);border-radius:16px;padding:14px 16px;margin-bottom:12px;cursor:pointer">
+          <div style="font-size:12px;font-weight:700;color:var(--orange);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Ожидается сегодня</div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div style="font-size:15px;font-weight:700;color:var(--t1)">ООО Бета · Молочка</div>
+              <div class="mu" style="font-size:12px;margin-top:2px">Примерно 15:00 · ~12 позиций</div>
+            </div>
+            <b style="font-size:17px;color:var(--orange)">₽38 400</b>
+          </div>
+        </div>
+
+        <!-- Форма нового прихода -->
+        <div class="lbl" style="margin-top:0">Новый приход</div>
         <div class="card">
-          <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">320 шт</div></div><div class="lr-a pos">37% 🟢</div></div>
-          <div class="lr"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">180 шт</div></div><div class="lr-a pos">38% 🟢</div></div>
-          <div class="lr"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">95 шт</div></div><div class="lr-a tr">27% 🟡</div></div>
+          <div class="fld"><label>Поставщик</label><span>ООО Бета ▾</span></div>
+          <div class="fld"><label>Дата</label><span>13 июня ▾</span></div>
+          <div class="fld"><label>Способ оплаты</label><span>В долг ▾</span></div>
+        </div>
+        <div class="card">
+          <div class="lbl" style="margin:0 0 8px">Позиции</div>
+          <div style="display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <div style="flex:1;font-size:14px;color:var(--t1)">Молоко 1л</div>
+            <div style="font-size:13px;color:var(--t2);margin-right:4px">20 шт × ₽65</div>
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">₽1 300</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:6px 0">
+            <div style="flex:1;font-size:14px;color:var(--t1)">Хлеб б/н</div>
+            <div style="font-size:13px;color:var(--t2);margin-right:4px">30 шт × ₽42</div>
+            <div style="font-size:14px;font-weight:600;color:var(--t1)">₽1 260</div>
+          </div>
+          <button onclick="toast('Добавить позицию вручную или из каталога (демо)')" style="width:100%;border:none;border-radius:12px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;background:rgba(94,92,230,.1);color:var(--brand);margin-top:8px">+ Добавить позицию</button>
+        </div>
+        <div class="card" style="margin-bottom:4px">
+          <div class="row"><b>Итого</b><b style="font-size:18px;color:var(--t1)">₽2 560</b></div>
+        </div>
+        <button class="btn" onclick="toast('Приход записан, долг поставщика обновлён ✓')">Зафиксировать приход</button>
+
+        <!-- Недавние приходы -->
+        <div class="lbl">Недавние приходы</div>
+        <div class="card">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600;color:var(--t1)">Молочка · Иванов П.</div>
+              <div class="mu" style="font-size:12px">10 июня · 20 шт · в долг</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:14px;font-weight:600;color:var(--t1)">₽1 300</div>
+              <div style="font-size:10px;font-weight:700;background:rgba(48,209,88,.14);color:var(--green);padding:1px 6px;border-radius:5px">✓ принят</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600;color:var(--t1)">Бакалея · ООО Альфа</div>
+              <div class="mu" style="font-size:12px">7 июня · 15 позиций · оплачено</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:14px;font-weight:600;color:var(--t1)">₽18 400</div>
+              <div style="font-size:10px;font-weight:700;background:rgba(48,209,88,.14);color:var(--green);padding:1px 6px;border-radius:5px">✓ принят</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Рентабельность ── -->
+      <div class="sub" id="goods-rent">
+        <!-- Средняя маржа — большой показатель -->
+        <div style="background:linear-gradient(145deg,rgba(48,209,88,.14),rgba(48,209,88,.05));border:1px solid rgba(48,209,88,.25);border-radius:20px;padding:20px;margin-bottom:12px;text-align:center">
+          <div class="mu" style="font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Средняя маржа</div>
+          <div style="font-size:52px;font-weight:900;color:var(--green);letter-spacing:-2px;line-height:1">35.5%</div>
+          <div class="mu" style="margin-top:8px;font-size:13px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div>
+          <div style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;background:rgba(48,209,88,.18);border-radius:8px;padding:4px 10px">
+            <span style="font-size:12px;font-weight:700;color:var(--green)">▲ +2.3% к маю</span>
+          </div>
+        </div>
+
+        <!-- По категориям -->
+        <div class="lbl" style="margin-top:0">По категориям</div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="overflow-x:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:13px">
+              <thead><tr style="color:var(--t2)"><th style="text-align:left;padding:4px 0;font-weight:600">Категория</th><th style="text-align:right;padding:4px">Выручка</th><th style="text-align:right;padding:4px">Себест.</th><th style="text-align:right;padding:4px">Маржа</th></tr></thead>
+              <tbody>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:8px 0">🥛 Молочка</td><td style="text-align:right;padding:8px 4px">₽140К</td><td style="text-align:right;padding:8px 4px">₽88К</td><td style="text-align:right;padding:8px 4px;font-weight:700" class="pos">37%</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:8px 0">🍞 Бакалея</td><td style="text-align:right;padding:8px 4px">₽105К</td><td style="text-align:right;padding:8px 4px">₽76К</td><td style="text-align:right;padding:8px 4px;font-weight:700" class="pos">28%</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:8px 0">🥤 Напитки</td><td style="text-align:right;padding:8px 4px">₽80К</td><td style="text-align:right;padding:8px 4px">₽62К</td><td style="text-align:right;padding:8px 4px;font-weight:700" class="tr">22%</td></tr>
+                <tr style="border-top:1px solid var(--sep)"><td style="padding:8px 0">🧴 Химия</td><td style="text-align:right;padding:8px 4px">₽55К</td><td style="text-align:right;padding:8px 4px">₽45К</td><td style="text-align:right;padding:8px 4px;font-weight:700" class="neg">18%</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Топ-5 -->
+        <div class="lbl">Топ-5 по марже</div>
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--green);width:24px;text-align:center">1</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Хлеб б/н</div><div class="mu" style="font-size:11px">180 шт · ₽58</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--green)">38%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--green);width:24px;text-align:center">2</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Молоко 1л</div><div class="mu" style="font-size:11px">320 шт · ₽89</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--green)">37%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--green);width:24px;text-align:center">3</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Яйца С1</div><div class="mu" style="font-size:11px">95 шт · ₽99</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--green)">34%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--green);width:24px;text-align:center">4</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Кефир 1л</div><div class="mu" style="font-size:11px">86 шт · ₽79</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--green)">31%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+            <span style="font-size:13px;font-weight:700;color:var(--green);width:24px;text-align:center">5</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Сахар 1кг</div><div class="mu" style="font-size:11px">95 шт · ₽99</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--orange)">27%</div>
+          </div>
+        </div>
+
+        <!-- Кандидаты на замену -->
+        <div class="lbl">Кандидаты на замену</div>
+        <div class="card" style="border:1px solid rgba(255,69,58,.2)">
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--red);width:24px;text-align:center">↓</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Порошок стир.</div><div class="mu" style="font-size:11px">21 шт · ₽189</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--red)">14%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--sep)">
+            <span style="font-size:13px;font-weight:700;color:var(--red);width:24px;text-align:center">↓</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Жидкость для мытья</div><div class="mu" style="font-size:11px">14 шт · ₽129</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--red)">12%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0">
+            <span style="font-size:13px;font-weight:700;color:var(--red);width:24px;text-align:center">↓</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--t1)">Газировка 2л дешёвая</div><div class="mu" style="font-size:11px">8 шт · ₽69</div></div>
+            <div style="font-size:15px;font-weight:700;color:var(--red)">8%</div>
+          </div>
+        </div>
+
+        <!-- Тренд -->
+        <div class="card" style="margin-top:12px">
+          <div class="row" style="margin-bottom:6px"><b>Тренд маржи</b><span class="pos" style="font-size:13px">🟢 растёт</span></div>
+          <div style="display:flex;align-items:flex-end;gap:4px;height:50px;margin:8px 0 4px">
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.4);height:60%"></div>
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.4);height:65%"></div>
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.4);height:62%"></div>
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.5);height:70%"></div>
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.5);height:72%"></div>
+            <div style="flex:1;border-radius:3px 3px 0 0;background:rgba(48,209,88,.7);height:80%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between">
+            <span class="mu" style="font-size:10px">Янв</span><span class="mu" style="font-size:10px">Фев</span><span class="mu" style="font-size:10px">Мар</span><span class="mu" style="font-size:10px">Апр</span><span class="mu" style="font-size:10px">Май</span><span class="mu" style="font-size:10px;color:var(--green);font-weight:700">Июн</span>
+          </div>
         </div>
       </div>
     </div>
@@ -2140,7 +2809,7 @@ function showSub(prefix,name,btn){
   const seg=scr.querySelector(':scope > .seg');
   if(seg){seg.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
     if(btn)btn.classList.add('on');
-    else{const i={ops:0,staff:1,goods:2,settings:3,new:0,hist:1,pay:0,dir:1,orders:2,sav:0,goals:1,cal:2,an:3,rep:4}[name];
+    else{const i={ops:0,staff:1,goods:2,settings:3,new:0,hist:1,dir:0,pay:1,orders:2,sav:0,goals:1,cal:2,an:3,rep:4}[name];
       if(i!==undefined)seg.querySelectorAll('button')[i].classList.add('on');}}
 }
 function showStaffTab(name,btn){
@@ -2274,11 +2943,25 @@ function npSave(){
   const cal=document.getElementById('cal');
   ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].forEach(d=>{const e=document.createElement('div');e.className='dow';e.textContent=d;cal.appendChild(e)});
   const red=[5,12,18,25],yel=[7,15,20,29];
+  const revenues={1:58,2:61,3:55,4:42,5:72,6:68,7:63,8:59,9:54,10:51,11:70,12:62,13:65};
+  const expenses={5:81,12:35,18:105,20:45,25:60};
   for(let i=0;i<30;i++){
     const d=i+1,e=document.createElement('div');
     e.className='day '+(red.includes(d)?'r':yel.includes(d)?'y':'g');
-    e.textContent=d;
-    e.onclick=()=>{document.getElementById('cal-day-title').textContent=d+' июня';openSht('calDay')};
+    e.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.2;padding:5px 0;border-radius:12px;cursor:pointer;transition:transform .1s';
+    const rev=revenues[d]?`<div style="font-size:9px;color:var(--green);font-weight:700">${revenues[d]}К</div>`:'';
+    const exp=expenses[d]?`<div style="font-size:7px;color:var(--red)">●</div>`:'';
+    e.innerHTML=`<div style="font-size:13px;font-weight:600">${d}</div>${rev}${exp}`;
+    e.addEventListener('click',()=>{
+      document.getElementById('cal-day-title').textContent=d+' июня';
+      const summaryEl=document.getElementById('cal-day-summary');
+      if(summaryEl){
+        summaryEl.style.display='block';
+        const titleEl=document.getElementById('cal-summary-title');
+        if(titleEl)titleEl.textContent=d+' июня';
+      }
+      openSht('calDay');
+    });
     cal.appendChild(e);
   }
 })();
