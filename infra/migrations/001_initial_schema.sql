@@ -1114,10 +1114,10 @@ DECLARE
   tables TEXT[] := ARRAY[
     'accounts','categories','chart_of_accounts','fiscal_periods',
     'journal_entries','transactions','shifts','shift_withdrawals',
-    'suppliers','debt_entries','purchase_orders','supplier_contacts',
+    'suppliers','debt_entries','purchase_orders',
     'employees','timesheet_entries','salary_calculations','employee_contracts',
     'goals','budgets','notifications','tasks','files','ai_insights',
-    'pulse_snapshots','fraud_rules','fraud_alerts','audit_log',
+    'pulse_snapshots','fraud_rules','audit_log',
     'analytics_events','custom_field_definitions','invitations',
     'api_keys','webhook_endpoints','subscriptions','invoices',
     'cloud_backup_connections','products','product_categories',
@@ -1149,6 +1149,18 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+-- supplier_contacts: нет org_id, доступ через suppliers
+CREATE POLICY "supplier_contacts_policy" ON public.supplier_contacts
+  FOR ALL USING (
+    supplier_id IN (
+      SELECT id FROM public.suppliers
+      WHERE org_id IN (
+        SELECT org_id FROM public.org_members
+        WHERE user_id = auth.uid() AND status = 'active'
+      )
+    )
+  );
 
 -- Sessions: own sessions only
 CREATE POLICY "sessions_self" ON public.sessions
