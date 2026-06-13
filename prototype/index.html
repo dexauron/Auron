@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Auron Finance</title>
+<title>Auron Finance — полный макет</title>
 <style>
 :root{
   --bg:#F2F2F7; --card:#fff; --card2:#F2F2F7;
@@ -12,8 +12,10 @@
   --green:#30D158; --red:#FF453A; --orange:#FF9F0A;
   --cshadow:0 2px 8px rgba(0,0,0,.06),0 8px 24px rgba(0,0,0,.04);
 }
+[data-theme="dark"]{
+  --bg:#000;--card:#1C1C1E;--card2:#2C2C2E;--t1:#fff;--t2:#8E8E93;--t3:#3A3A3C;--sep:#38383A;--cshadow:none}
 @media(prefers-color-scheme:dark){
-  :root{--bg:#000;--card:#1C1C1E;--card2:#2C2C2E;--t1:#fff;--t2:#8E8E93;--t3:#3A3A3C;--sep:#38383A;--cshadow:none}
+  :root:not([data-theme="light"]){--bg:#000;--card:#1C1C1E;--card2:#2C2C2E;--t1:#fff;--t2:#8E8E93;--t3:#3A3A3C;--sep:#38383A;--cshadow:none}
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
@@ -28,10 +30,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sa
 .pulse-dot{width:10px;height:10px;border-radius:50%;background:var(--green);flex-shrink:0;cursor:pointer;
   box-shadow:0 0 0 3px rgba(48,209,88,.2);animation:glow 2.5s ease-in-out infinite}
 @keyframes glow{0%,100%{box-shadow:0 0 0 3px rgba(48,209,88,.2)}50%{box-shadow:0 0 0 6px rgba(48,209,88,.07)}}
-.header-title{font-size:16px;font-weight:700;color:var(--t1);flex:1;letter-spacing:-.2px}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;cursor:pointer}
+.header-title{font-size:16px;font-weight:700;color:var(--t1);flex:1;letter-spacing:-.2px;cursor:pointer}
+.header-title small{font-weight:500;color:var(--t2);font-size:11px;display:block}
 .hbtn{width:34px;height:34px;border-radius:11px;background:var(--card2);border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;color:var(--t1);position:relative;
-  transition:transform .15s,background .15s}
+  transition:transform .15s,background .15s;flex-shrink:0}
 .hbtn:active{transform:scale(.87)}
 .hbtn .dot{position:absolute;top:-3px;right:-3px;width:15px;height:15px;border-radius:8px;
   background:var(--red);color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;
@@ -47,7 +51,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .row{display:flex;justify-content:space-between;align-items:center}
 .pos{color:var(--green)}.neg{color:var(--red)}.tr{color:var(--orange)}
 
-/* ── Hero-баланс ─────────────────────────── */
+/* ── Hero ────────────────────────────────── */
 .hero-card{background:linear-gradient(145deg,#6E6CF7,#4A48D8);border-radius:24px;
   padding:20px;margin:14px 0 12px;position:relative;overflow:hidden;box-shadow:0 12px 32px rgba(94,92,230,.35)}
 .hero-card::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;
@@ -56,7 +60,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   border-radius:50%;background:rgba(255,255,255,.05)}
 .hero-label{font-size:13px;font-weight:500;color:rgba(255,255,255,.65);margin-bottom:6px}
 .hero-amount{font-size:40px;font-weight:800;color:#fff;letter-spacing:-1.5px;line-height:1}
-.hero-row{display:flex;gap:0;margin-top:16px}
+.hero-row{display:flex;margin-top:16px}
 .hero-stat{flex:1}
 .hero-stat-label{font-size:12px;color:rgba(255,255,255,.6);font-weight:500}
 .hero-stat-val{font-size:18px;font-weight:700;color:#fff;margin-top:2px}
@@ -79,8 +83,6 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   text-align:center;cursor:pointer;box-shadow:var(--cshadow);transition:transform .14s}
 .qbtn:active{transform:scale(.9)}
 .qbtn-label{font-size:11.5px;font-weight:600;color:var(--t1);margin-top:9px;letter-spacing:-.1px}
-
-/* Иконки быстрых действий */
 .qi{width:52px;height:52px;border-radius:17px;margin:0 auto;display:flex;align-items:center;justify-content:center;position:relative}
 .qi svg{position:relative;z-index:1}
 .qi-receipt{background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 6px 16px rgba(94,92,230,.45),inset 0 1px 0 rgba(255,255,255,.35)}
@@ -88,7 +90,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .qi-box{background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 6px 16px rgba(0,122,255,.4),inset 0 1px 0 rgba(255,255,255,.3)}
 .qi-send{background:linear-gradient(145deg,#67D83A,#28A745);box-shadow:0 6px 16px rgba(40,167,69,.4),inset 0 1px 0 rgba(255,255,255,.3)}
 
-/* ── Строки списка ───────────────────────── */
+/* ── Строки ──────────────────────────────── */
 .lr{display:flex;align-items:center;gap:12px;padding:11px 0;cursor:pointer;border-bottom:1px solid var(--sep)}
 .lr:last-child{border-bottom:none}
 .lr-icon{width:44px;height:44px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
@@ -98,14 +100,15 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .lr-a{font-size:16px;font-weight:600;color:var(--t1);text-align:right;white-space:nowrap}
 .chevron{color:var(--t3);flex-shrink:0}
 
-/* ── Прогресс-бар ────────────────────────── */
+/* ── Прогресс ────────────────────────────── */
 .pb{height:7px;background:var(--card2);border-radius:4px;overflow:hidden;margin:7px 0}
 .pb i{display:block;height:100%;border-radius:4px}
 .pb-green i{background:linear-gradient(90deg,#4ADE80,#22C55E)}
 .pb-orange i{background:linear-gradient(90deg,#FCD34D,#F59E0B)}
 .pb-blue i{background:linear-gradient(90deg,#60A5FA,#3B82F6)}
+.pb-red i{background:linear-gradient(90deg,#FF8A80,#FF453A)}
 
-/* ── Сегменты-вкладки ────────────────────── */
+/* ── Сегменты ────────────────────────────── */
 .seg{display:flex;gap:6px;padding:2px 0 10px;overflow-x:auto}
 .seg::-webkit-scrollbar{display:none}
 .seg button{border:none;background:var(--card);color:var(--t2);padding:9px 16px;border-radius:22px;
@@ -122,14 +125,29 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .btn:active{transform:scale(.97)}
 .btn.sec{background:var(--card2);color:var(--brand);box-shadow:none}
 .btn.red{background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 6px 16px rgba(255,69,58,.35)}
+.btn:disabled{opacity:.35;box-shadow:none}
 
-/* ── Поля ввода ──────────────────────────── */
+/* ── Поля ────────────────────────────────── */
 .fld{background:var(--card2);border-radius:14px;padding:13px 16px;margin:7px 0;
   display:flex;justify-content:space-between;align-items:center;cursor:pointer}
 .fld label{font-size:14px;color:var(--t2);pointer-events:none}
 .fld span{font-weight:600;color:var(--t1);font-size:15px}
 .fld input{border:none;background:transparent;text-align:right;font-size:17px;font-weight:600;
   color:var(--t1);width:130px;outline:none;font-family:inherit}
+
+/* ── Переключатель ───────────────────────── */
+.sw{width:48px;height:28px;border-radius:15px;background:var(--sep);position:relative;cursor:pointer;
+  transition:background .2s;flex-shrink:0;border:none}
+.sw::after{content:'';position:absolute;top:2px;left:2px;width:24px;height:24px;border-radius:50%;
+  background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);transition:transform .2s}
+.sw.on{background:var(--green)}
+.sw.on::after{transform:translateX(20px)}
+
+/* ── Сег-опции (радио-пилюли) ────────────── */
+.opts{display:flex;gap:5px;background:var(--card2);border-radius:13px;padding:3px;margin:6px 0 10px}
+.opts button{flex:1;border:none;border-radius:10px;padding:8px 4px;font-size:12.5px;font-weight:700;
+  cursor:pointer;background:transparent;color:var(--t2);transition:all .2s;font-family:inherit}
+.opts button.on{background:var(--card);color:var(--brand);box-shadow:0 2px 6px rgba(0,0,0,.1)}
 
 /* ── Навигация ───────────────────────────── */
 .nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;
@@ -139,10 +157,10 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   padding:6px 0 calc(10px + env(safe-area-inset-bottom))}
 .nb{flex:1;border:none;background:none;cursor:pointer;padding:4px 0;
   display:flex;flex-direction:column;align-items:center;gap:4px;transition:color .2s;position:relative}
-.nb .ni{width:52px;height:30px;border-radius:16px;display:flex;align-items:center;justify-content:center;transition:background .22s}
+.nb .ni{width:52px;height:30px;border-radius:16px;display:flex;align-items:center;justify-content:center;transition:background .22s;color:var(--t3)}
 .nb .nl{font-size:10px;font-weight:600;color:var(--t3);transition:color .2s}
 .nb.on .nl{color:var(--brand)}
-.nb.on .ni{background:rgba(94,92,230,.13)}
+.nb.on .ni{background:rgba(94,92,230,.13);color:var(--brand)}
 .nb .dot{position:absolute;top:2px;right:50%;margin-right:-22px;width:8px;height:8px;border-radius:50%;background:var(--red);border:2px solid var(--card)}
 
 /* ── FAB ─────────────────────────────────── */
@@ -154,7 +172,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
 .fab:active{transform:scale(.88) rotate(90deg)}
 
-/* ── Оверлей + Нижний лист ───────────────── */
+/* ── Листы ───────────────────────────────── */
 .ovl{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40;display:none;
   backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
 .ovl.on{display:block}
@@ -168,7 +186,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .sht h3{font-size:20px;font-weight:800;color:var(--t1);margin-bottom:14px;letter-spacing:-.4px}
 
 /* ── Нумпад ──────────────────────────────── */
-.types{display:flex;gap:0;background:var(--card2);border-radius:18px;padding:4px;margin-bottom:16px}
+.types{display:flex;background:var(--card2);border-radius:18px;padding:4px;margin-bottom:16px}
 .types button{flex:1;border:none;border-radius:14px;padding:11px 4px;font-size:12px;font-weight:800;
   letter-spacing:.3px;cursor:pointer;background:transparent;color:var(--t3);transition:all .22s}
 .types button.exp{background:var(--card);color:var(--red);box-shadow:0 2px 8px rgba(0,0,0,.1)}
@@ -176,7 +194,6 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 .types button.trf{background:var(--card);color:var(--orange);box-shadow:0 2px 8px rgba(0,0,0,.1)}
 .np-num{font-size:44px;font-weight:800;color:var(--t1);text-align:center;margin:10px 0 16px;
   letter-spacing:-2px;min-height:52px;line-height:1}
-.np-meta .fld{cursor:pointer}
 .npad{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
 .npad button{border:none;background:var(--card2);border-radius:18px;height:62px;
   font-size:24px;font-weight:500;color:var(--t1);cursor:pointer;transition:transform .1s}
@@ -190,7 +207,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 /* ── Действия в листе ────────────────────── */
 .act-row{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:16px;
   padding:14px 16px;margin-bottom:8px;cursor:pointer;border:none;width:100%;
-  text-align:left;transition:transform .12s;color:var(--t1)}
+  text-align:left;transition:transform .12s;color:var(--t1);font-family:inherit}
 .act-row:active{transform:scale(.97)}
 .act-icon{width:40px;height:40px;border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .act-text{flex:1;font-size:16px;font-weight:600}
@@ -204,183 +221,143 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ── Мини-бары ───────────────────────────── */
+/* ── Графики/календарь/баннер ────────────── */
 .bars{display:flex;align-items:flex-end;gap:4px;height:70px;margin:14px 0}
 .bars i{flex:1;background:linear-gradient(180deg,var(--brand2),var(--brand));border-radius:5px 5px 2px 2px}
-
-/* ── Календарь ───────────────────────────── */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}
 .cal .dow{font-size:11px;font-weight:700;color:var(--t2);padding:4px 0}
-.cal .day{padding:9px 0;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s}
+.cal .day{padding:9px 0;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;transition:transform .1s;color:var(--t1)}
 .cal .day:active{transform:scale(.85)}
 .cal .day.g{background:rgba(48,209,88,.14);color:#1a8c37}
 .cal .day.r{background:rgba(255,69,58,.14);color:#c9261c}
 .cal .day.y{background:rgba(255,159,10,.16);color:#a36400}
-@media(prefers-color-scheme:dark){.cal .day.g{color:#4ADE80}.cal .day.r{color:#FF6B61}.cal .day.y{color:#FFB340}}
-
-/* ── Баннер ──────────────────────────────── */
+[data-theme="dark"] .cal .day.g{color:#4ADE80}[data-theme="dark"] .cal .day.r{color:#FF6B61}[data-theme="dark"] .cal .day.y{color:#FFB340}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .cal .day.g{color:#4ADE80}
+  :root:not([data-theme="light"]) .cal .day.r{color:#FF6B61}
+  :root:not([data-theme="light"]) .cal .day.y{color:#FFB340}}
 .banner{background:linear-gradient(135deg,rgba(125,123,255,.12),rgba(94,92,230,.06));
   border-radius:16px;padding:14px 16px;margin-bottom:12px;font-size:14px;
   font-weight:500;color:var(--t1)}
+.banner.warn{background:linear-gradient(135deg,rgba(255,159,10,.14),rgba(255,159,10,.05))}
 
 .demo-tag{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99;
   background:var(--orange);color:#fff;font-size:10px;font-weight:700;
   padding:3px 14px;border-radius:0 0 12px 12px;letter-spacing:.4px}
 
-/* ── SVG иконки (инлайн) ─────────────────── */
+/* ── Экран блокировки (вход) ─────────────── */
+.lock{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;transition:opacity .4s,visibility .4s}
+.lock.off{opacity:0;visibility:hidden}
+.lock-logo{width:84px;height:84px;border-radius:26px;background:linear-gradient(145deg,#6E6CF7,#4A48D8);
+  display:flex;align-items:center;justify-content:center;font-size:38px;
+  box-shadow:0 16px 40px rgba(94,92,230,.4);margin-bottom:6px}
+.lock h2{font-size:24px;font-weight:800;color:var(--t1);letter-spacing:-.5px}
+.lock .mu{margin-bottom:14px}
+.pin-dots{display:flex;gap:14px;margin:10px 0 22px}
+.pin-dots i{width:14px;height:14px;border-radius:50%;border:1.8px solid var(--t3);transition:all .15s}
+.pin-dots i.f{background:var(--brand);border-color:var(--brand)}
+.pinpad{display:grid;grid-template-columns:repeat(3,72px);gap:14px}
+.pinpad button{width:72px;height:72px;border-radius:50%;border:none;background:var(--card);
+  font-size:26px;font-weight:600;color:var(--t1);cursor:pointer;box-shadow:var(--cshadow);
+  transition:transform .1s;font-family:inherit}
+.pinpad button:active{transform:scale(.88)}
+.pinpad .faceid{font-size:13px;font-weight:700;color:var(--brand);background:transparent;box-shadow:none}
+
+/* ════ СТИЛЬ «КЛАССИКА» ════ */
+body.classic .hero-card{background:var(--card);box-shadow:var(--cshadow)}
+body.classic .hero-card::before,body.classic .hero-card::after{display:none}
+body.classic .hero-label{color:var(--t2)}
+body.classic .hero-amount{color:var(--t1)}
+body.classic .hero-stat-label{color:var(--t2)}
+body.classic .hero-stat-val{color:var(--t1)}
+body.classic .hero-div{background:var(--sep)}
+body.classic .qi{box-shadow:none!important}
+body.classic .qi-receipt{background:rgba(94,92,230,.13)}
+body.classic .qi-pay{background:rgba(255,149,0,.13)}
+body.classic .qi-box{background:rgba(0,122,255,.13)}
+body.classic .qi-send{background:rgba(40,167,69,.13)}
+body.classic .qi-receipt svg{color:#5E5CE6}
+body.classic .qi-pay svg{color:#FF9500}
+body.classic .qi-box svg{color:#007AFF}
+body.classic .qi-send svg{color:#28A745}
+body.classic .btn{background:var(--brand);box-shadow:none}
+body.classic .btn.sec{background:var(--card2);color:var(--brand)}
+body.classic .btn.red{background:var(--red)}
+body.classic .seg button.on{background:var(--brand);box-shadow:none}
+body.classic .fab{background:var(--brand);box-shadow:0 4px 14px rgba(94,92,230,.4)}
+body.classic .card{box-shadow:none}
+body.classic .qbtn,body.classic .chip{box-shadow:none}
+body.classic .lr-icon{box-shadow:none!important}
+body.classic .npad .do-save{background:var(--brand);box-shadow:none}
+body.classic .lock-logo{box-shadow:none}
+
+/* ════ ПЛОТНОСТЬ «КОМПАКТНО» ════ */
+body.compact .lr{padding:7px 0}
+body.compact .card{padding:12px;margin-bottom:8px;border-radius:16px}
+body.compact h1{font-size:23px;margin:12px 0 10px}
+body.compact .lr-icon{width:36px;height:36px;border-radius:11px}
+body.compact .lr-t{font-size:14.5px}
+body.compact .lr-a{font-size:14.5px}
+body.compact .hero-amount{font-size:33px}
+body.compact .hero-card{padding:16px}
+body.compact .quick{gap:7px}
+body.compact .qi{width:44px;height:44px;border-radius:14px}
 </style>
 </head>
 <body>
-<div class="demo-tag">ПРОТОТИП · демо-данные</div>
+<div class="demo-tag">ПРОТОТИП · демо-данные · все модули</div>
 
-<!-- SVG-спрайт: объёмные иконки в стиле filled+stroke -->
+<!-- SVG-спрайт -->
 <svg width="0" height="0" style="position:absolute" xmlns="http://www.w3.org/2000/svg">
 <defs>
-
-<!-- Главная: дом с задней стеной -->
-<g id="ic-home">
-  <path d="M12 3L3 9.5V20a1.5 1.5 0 001.5 1.5H9v-6a1.5 1.5 0 013 0v6h4.5A1.5 1.5 0 0018 20V9.5L12 3z" fill="currentColor" opacity=".2"/>
-  <path d="M2 10l10-7 10 7M5 8.5V20a1 1 0 001 1h4v-5.5a2 2 0 014 0V21h4a1 1 0 001-1V8.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-
-<!-- Касса / чек: лента с зубчиками -->
-<g id="ic-receipt">
-  <path d="M7 2h10v20l-3-2-2 2-2-2-3 2z" fill="currentColor" opacity=".15"/>
-  <path d="M7 2h10v20l-3-2-2 2-2-2-3 2V2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
-  <line x1="10" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <line x1="10" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <line x1="10" y1="16" x2="12.5" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-</g>
-
-<!-- Поставщики / кошелёк -->
-<g id="ic-wallet">
-  <rect x="2" y="7" width="20" height="14" rx="3" fill="currentColor" opacity=".18"/>
-  <rect x="2" y="7" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/>
-  <path d="M2 11h20" stroke="currentColor" stroke-width="1.7"/>
-  <path d="M16 4.5L18.5 7H5.5L8 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <circle cx="17" cy="15.5" r="1.5" fill="currentColor"/>
-</g>
-
-<!-- Финансы / растущий график -->
-<g id="ic-chart">
-  <path d="M3 17l5-6 4 3.5 5-7.5" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M3 17l5-6 4 3.5 5-7.5L21 5v13H3z" fill="currentColor" opacity=".15"/>
-  <line x1="3" y1="21" x2="21" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-</g>
-
-<!-- Ещё / сетка -->
-<g id="ic-grid">
-  <rect x="3" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
-  <rect x="13.5" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
-  <rect x="3" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/>
-  <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor"/>
-</g>
-
-<!-- Колокол -->
-<g id="ic-bell">
-  <path d="M12 22a2 2 0 004 0" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/>
-  <path d="M6 16V11a6 6 0 1112 0v5l1.8 2H4.2L6 16z" fill="currentColor" opacity=".18"/>
-  <path d="M6 16V11a6 6 0 1112 0v5l2 2H4l2-2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
-</g>
-
-<!-- Чат / ИИ -->
-<g id="ic-chat">
-  <path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" fill="currentColor" opacity=".18"/>
-  <path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
-  <circle cx="9" cy="12" r="1.1" fill="currentColor"/>
-  <circle cx="12" cy="12" r="1.1" fill="currentColor"/>
-  <circle cx="15" cy="12" r="1.1" fill="currentColor"/>
-</g>
-
-<!-- Шестерёнка -->
-<g id="ic-gear">
-  <circle cx="12" cy="12" r="2.8" fill="currentColor" opacity=".25"/>
-  <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.7" fill="none"/>
-</g>
-
-<!-- Плюс -->
-<g id="ic-plus">
-  <line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
-  <line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/>
-</g>
-
-<!-- Стрелка-шеврон -->
-<g id="ic-chev">
-  <polyline points="9 6 15 12 9 18" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-
-<!-- Галочка -->
-<g id="ic-check">
-  <polyline points="5 13 9.5 17.5 19 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-
-<!-- Отправить -->
-<g id="ic-send">
-  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" fill="currentColor" opacity=".2"/>
-  <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-
-<!-- Коробка/заказ -->
-<g id="ic-box">
-  <path d="M21 8L12 3 3 8v8l9 5 9-5z" fill="currentColor" opacity=".18"/>
-  <path d="M21 8L12 3 3 8v8l9 5 9-5z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/>
-  <line x1="12" y1="13" x2="12" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <polyline points="3 8 12 13 21 8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/>
-</g>
-
-<!-- Оплата / стрелка вниз с линией -->
-<g id="ic-pay">
-  <circle cx="12" cy="8" r="4" fill="currentColor" opacity=".22"/>
-  <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7" fill="none"/>
-  <path d="M12 12v6M9 15l3 3 3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <line x1="6" y1="21" x2="18" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-</g>
-
-<!-- Календарь -->
-<g id="ic-cal">
-  <rect x="3" y="5.5" width="18" height="16" rx="3" fill="currentColor" opacity=".15"/>
-  <rect x="3" y="5.5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/>
-  <line x1="3" y1="10.5" x2="21" y2="10.5" stroke="currentColor" stroke-width="1.7"/>
-  <line x1="8" y1="2.5" x2="8" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <line x1="16" y1="2.5" x2="16" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-</g>
-
-<!-- X / отмена -->
-<g id="ic-x">
-  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-</g>
-
-<!-- Урна -->
-<g id="ic-trash">
-  <path d="M6 7h12l-1.5 13H7.5L6 7z" fill="currentColor" opacity=".2"/>
-  <path d="M3 7h18M8 7V4.5h8V7M9 11v6M15 11v6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
-
-<!-- Документ -->
-<g id="ic-doc">
-  <path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1z" fill="currentColor" opacity=".18"/>
-  <path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1zM14 2.5V7h4.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-  <line x1="9" y1="16" x2="13" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-</g>
-
-<!-- Возврат -->
-<g id="ic-return">
-  <path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-  <path d="M4 9h10.5a5.5 5.5 0 010 11H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
-</g>
-
+<g id="ic-home"><path d="M12 3L3 9.5V20a1.5 1.5 0 001.5 1.5H9v-6a1.5 1.5 0 013 0v6h4.5A1.5 1.5 0 0018 20V9.5L12 3z" fill="currentColor" opacity=".2"/><path d="M2 10l10-7 10 7M5 8.5V20a1 1 0 001 1h4v-5.5a2 2 0 014 0V21h4a1 1 0 001-1V8.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="ic-receipt"><path d="M7 2h10v20l-3-2-2 2-2-2-3 2z" fill="currentColor" opacity=".15"/><path d="M7 2h10v20l-3-2-2 2-2-2-3 2V2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><line x1="10" y1="8" x2="14" y2="8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="10" y1="12" x2="14" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="10" y1="16" x2="12.5" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></g>
+<g id="ic-wallet"><rect x="2" y="7" width="20" height="14" rx="3" fill="currentColor" opacity=".18"/><rect x="2" y="7" width="20" height="14" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M2 11h20" stroke="currentColor" stroke-width="1.7"/><path d="M16 4.5L18.5 7H5.5L8 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="17" cy="15.5" r="1.5" fill="currentColor"/></g>
+<g id="ic-chart"><path d="M3 17l5-6 4 3.5 5-7.5" stroke="currentColor" stroke-width="1.9" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 17l5-6 4 3.5 5-7.5L21 5v13H3z" fill="currentColor" opacity=".15"/><line x1="3" y1="21" x2="21" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></g>
+<g id="ic-grid"><rect x="3" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor" opacity=".2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.5" fill="currentColor"/></g>
+<g id="ic-bell"><path d="M12 22a2 2 0 004 0" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><path d="M6 16V11a6 6 0 1112 0v5l1.8 2H4.2L6 16z" fill="currentColor" opacity=".18"/><path d="M6 16V11a6 6 0 1112 0v5l2 2H4l2-2z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></g>
+<g id="ic-chat"><path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" fill="currentColor" opacity=".18"/><path d="M21 12a9 9 0 01-13.5 7.8L3 21l1.2-4.5A9 9 0 1121 12z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><circle cx="9" cy="12" r="1.1" fill="currentColor"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/><circle cx="15" cy="12" r="1.1" fill="currentColor"/></g>
+<g id="ic-gear"><circle cx="12" cy="12" r="2.8" fill="currentColor" opacity=".25"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.7" fill="none"/></g>
+<g id="ic-plus"><line x1="12" y1="5" x2="12" y2="19" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></g>
+<g id="ic-chev"><polyline points="9 6 15 12 9 18" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="ic-check"><polyline points="5 13 9.5 17.5 19 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="ic-send"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" fill="currentColor" opacity=".2"/><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="ic-box"><path d="M21 8L12 3 3 8v8l9 5 9-5z" fill="currentColor" opacity=".18"/><path d="M21 8L12 3 3 8v8l9 5 9-5z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/><line x1="12" y1="13" x2="12" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><polyline points="3 8 12 13 21 8" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></g>
+<g id="ic-pay"><circle cx="12" cy="8" r="4" fill="currentColor" opacity=".22"/><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M12 12v6M9 15l3 3 3-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/><line x1="6" y1="21" x2="18" y2="21" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></g>
+<g id="ic-cal"><rect x="3" y="5.5" width="18" height="16" rx="3" fill="currentColor" opacity=".15"/><rect x="3" y="5.5" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><line x1="3" y1="10.5" x2="21" y2="10.5" stroke="currentColor" stroke-width="1.7"/><line x1="8" y1="2.5" x2="8" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="16" y1="2.5" x2="16" y2="7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></g>
+<g id="ic-x"><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>
+<g id="ic-trash"><path d="M6 7h12l-1.5 13H7.5L6 7z" fill="currentColor" opacity=".2"/><path d="M3 7h18M8 7V4.5h8V7M9 11v6M15 11v6" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g id="ic-doc"><path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1z" fill="currentColor" opacity=".18"/><path d="M7 2.5h7L18.5 7v14a1 1 0 01-1 1H6.5a1 1 0 01-1-1V3.5a1 1 0 011-1zM14 2.5V7h4.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="9" y1="12" x2="15" y2="12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><line x1="9" y1="16" x2="13" y2="16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></g>
+<g id="ic-return"><path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><path d="M4 9h10.5a5.5 5.5 0 010 11H10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></g>
+<g id="ic-cloud"><path d="M7 18a4.5 4.5 0 01-.4-9A6 6 0 0118.5 9.5 4 4 0 0118 18H7z" fill="currentColor" opacity=".18"/><path d="M7 18a4.5 4.5 0 01-.4-9A6 6 0 0118.5 9.5 4 4 0 0118 18H7z" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linejoin="round"/></g>
+<g id="ic-users"><circle cx="9" cy="8" r="3.5" fill="currentColor" opacity=".2"/><circle cx="9" cy="8" r="3.5" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M2.5 20c.7-3.2 3.3-5 6.5-5s5.8 1.8 6.5 5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><path d="M16 5a3 3 0 110 6M18.5 15.5c1.6.7 2.7 2 3 4.5" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/></g>
+<g id="ic-lock"><rect x="5" y="10" width="14" height="11" rx="3" fill="currentColor" opacity=".18"/><rect x="5" y="10" width="14" height="11" rx="3" stroke="currentColor" stroke-width="1.7" fill="none"/><path d="M8 10V7a4 4 0 018 0v3" stroke="currentColor" stroke-width="1.7" fill="none" stroke-linecap="round"/><circle cx="12" cy="15.5" r="1.5" fill="currentColor"/></g>
 </defs>
 </svg>
+
+<!-- ════ ЭКРАН ВХОДА (PIN) ════ -->
+<div class="lock" id="lock">
+  <div class="lock-logo">🏪</div>
+  <h2>Auron Finance</h2>
+  <div class="mu">Гульнара А. · Бухгалтер · Way Market</div>
+  <div class="pin-dots" id="pin-dots"><i></i><i></i><i></i><i></i></div>
+  <div class="pinpad">
+    <button onclick="pin(1)">1</button><button onclick="pin(2)">2</button><button onclick="pin(3)">3</button>
+    <button onclick="pin(4)">4</button><button onclick="pin(5)">5</button><button onclick="pin(6)">6</button>
+    <button onclick="pin(7)">7</button><button onclick="pin(8)">8</button><button onclick="pin(9)">9</button>
+    <button class="faceid" onclick="unlock()">Face ID</button><button onclick="pin(0)">0</button><button class="faceid" onclick="pinBack()">⌫</button>
+  </div>
+  <div class="mu" style="margin-top:18px">Демо: любые 4 цифры или Face ID</div>
+</div>
 
 <div class="phone">
 
   <!-- ── Шапка ── -->
   <div class="header">
     <div class="pulse-dot" onclick="openSht('pulse')"></div>
-    <div class="header-title">Way Market</div>
+    <div class="sync-dot" title="Синхронизировано" onclick="toast('🟢 Все данные синхронизированы')"></div>
+    <div class="header-title" onclick="openSht('stores')">Way Market №1 ▾<small id="role-label">Бухгалтер · Гульнара А.</small></div>
     <div class="hbtn" onclick="openSht('notif')">
       <svg width="20" height="20" fill="none"><use href="#ic-bell" color="var(--t1)"/></svg>
       <span class="dot">3</span>
@@ -397,102 +374,49 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
 
   <!-- ══ ГЛАВНАЯ ══ -->
   <div class="scr on" id="s-home">
+    <div class="banner warn" id="role-banner" style="display:none"></div>
 
     <div class="checklist">
-      <div class="chip done">
-        <span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>
-        Z-отчёт
-      </div>
-      <div class="chip" onclick="go('suppliers')">
-        <span class="ck"></span>3 выплаты
-      </div>
-      <div class="chip done">
-        <span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>
-        Табель
-      </div>
-      <div class="chip" onclick="toast('Отчёт формируется после выплат')">
-        <span class="ck"></span>Отчёт
-      </div>
+      <div class="chip done"><span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>Z-отчёт</div>
+      <div class="chip" onclick="go('suppliers')"><span class="ck"></span>3 выплаты</div>
+      <div class="chip done"><span class="ck"><svg width="9" height="9" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5 5 4 7.5 7.5 1.5"/></svg></span>Табель</div>
+      <div class="chip" onclick="toast('Отчёт формируется после выплат')"><span class="ck"></span>Отчёт</div>
     </div>
 
-    <!-- Героическая карточка -->
     <div class="hero-card">
       <div class="hero-label">Наличных в кассе</div>
       <div class="hero-amount">₽ 48 500</div>
       <div class="hero-row">
-        <div class="hero-stat">
-          <div class="hero-stat-label">Выручка сегодня</div>
-          <div class="hero-stat-val">₽ 62 000</div>
-        </div>
+        <div class="hero-stat"><div class="hero-stat-label">Выручка сегодня</div><div class="hero-stat-val">₽ 62 000</div></div>
         <div class="hero-div"></div>
-        <div class="hero-stat">
-          <div class="hero-stat-label">Свободно</div>
-          <div class="hero-stat-val">₽ 15 200</div>
-        </div>
+        <div class="hero-stat"><div class="hero-stat-label">Свободно</div><div class="hero-stat-val">₽ 15 200</div></div>
       </div>
     </div>
 
-    <!-- Быстрые действия -->
     <div class="quick">
-      <div class="qbtn" onclick="go('kassa')">
-        <div class="qi qi-receipt">
-          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-receipt"/></svg>
-        </div>
-        <div class="qbtn-label">Z-отчёт</div>
-      </div>
-      <div class="qbtn" onclick="go('suppliers')">
-        <div class="qi qi-pay">
-          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-pay"/></svg>
-        </div>
-        <div class="qbtn-label">Выплата</div>
-      </div>
-      <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')">
-        <div class="qi qi-box">
-          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-box"/></svg>
-        </div>
-        <div class="qbtn-label">Заказ</div>
-      </div>
-      <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')">
-        <div class="qi qi-send">
-          <svg width="26" height="26" fill="none" color="#fff"><use href="#ic-send"/></svg>
-        </div>
-        <div class="qbtn-label">Отчёт</div>
-      </div>
+      <div class="qbtn" onclick="go('kassa')"><div class="qi qi-receipt"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-receipt"/></svg></div><div class="qbtn-label">Z-отчёт</div></div>
+      <div class="qbtn" onclick="go('suppliers')"><div class="qi qi-pay"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-pay"/></svg></div><div class="qbtn-label">Выплата</div></div>
+      <div class="qbtn" onclick="go('suppliers');showSub('sup','orders')"><div class="qi qi-box"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-box"/></svg></div><div class="qbtn-label">Заказ</div></div>
+      <div class="qbtn" onclick="toast('Отчёт отправлен владельцу ✓')"><div class="qi qi-send"><svg width="26" height="26" fill="none" color="#fff"><use href="#ic-send"/></svg></div><div class="qbtn-label">Отчёт</div></div>
     </div>
 
-    <!-- Выплаты -->
     <div class="card" onclick="openSht('payments')" style="cursor:pointer">
-      <div class="row"><b style="color:var(--t1)">Выплаты сегодня</b>
-        <span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+      <div class="row"><b style="color:var(--t1)">Выплаты сегодня</b><span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       <div class="mu" style="margin-top:5px">3 поставщика · ₽ 81 000</div>
     </div>
 
-    <!-- Заказы -->
     <div class="card">
       <div class="lbl" style="margin-top:0">Ожидаемые заказы</div>
-      <div class="lr" onclick="toast('Карточка заказа — демо')">
-        <div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.35)">🥛</div>
-        <div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">сегодня</div></div>
-        <div class="lr-a">~₽15К</div>
-      </div>
-      <div class="lr" onclick="toast('Карточка заказа — демо')">
-        <div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 10px rgba(245,158,11,.35)">🍞</div>
-        <div class="lr-main"><div class="lr-t">Бакалея · ООО Альфа</div><div class="lr-s">16 июня</div></div>
-        <div class="lr-a">~₽22К</div>
-      </div>
+      <div class="lr" onclick="openSht('orderAct')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.35)">🥛</div><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">сегодня</div></div><div class="lr-a">~₽15К</div></div>
+      <div class="lr" onclick="openSht('orderAct')"><div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 10px rgba(245,158,11,.35)">🍞</div><div class="lr-main"><div class="lr-t">Бакалея · ООО Альфа</div><div class="lr-s">16 июня</div></div><div class="lr-a">~₽22К</div></div>
     </div>
 
-    <!-- Накопления -->
     <div class="card" onclick="go('finance')" style="cursor:pointer">
-      <div class="row"><b style="color:var(--t1)">Накопления</b>
-        <span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+      <div class="row"><b style="color:var(--t1)">Накопления</b><span class="chevron"><svg width="16" height="16" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       <div style="margin-top:10px">
-        <div class="row mu"><span>Аренда</span><span>₽42К / ₽60К</span></div>
-        <div class="pb pb-green"><i style="width:70%"></i></div>
-        <div class="row mu"><span>Налоги</span><span>₽18К / ₽45К</span></div>
-        <div class="pb pb-orange"><i style="width:40%"></i></div>
-        <div class="row mu"><span>Зарплата</span><span>₽90К / ₽90К</span></div>
-        <div class="pb pb-green"><i style="width:100%"></i></div>
+        <div class="row mu"><span>Аренда</span><span>₽42К / ₽60К</span></div><div class="pb pb-green"><i style="width:70%"></i></div>
+        <div class="row mu"><span>Налоги</span><span>₽18К / ₽45К</span></div><div class="pb pb-orange"><i style="width:40%"></i></div>
+        <div class="row mu"><span>Зарплата</span><span>₽90К / ₽90К</span></div><div class="pb pb-green"><i style="width:100%"></i></div>
       </div>
     </div>
   </div><!-- /home -->
@@ -513,8 +437,8 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="lbl">По Z-отчёту</div>
       <div class="card">
         <div class="fld"><label>Наличные</label><input inputmode="numeric" id="z-cash" value="62000" oninput="calcDiff()"></div>
-        <div class="fld"><label>Карта</label><input inputmode="numeric" value="28000"></div>
-        <div class="fld"><label>Переводы (СБП)</label><input inputmode="numeric" value="3500"></div>
+        <div class="fld"><label>Карта → Банк</label><input inputmode="numeric" value="28000"></div>
+        <div class="fld"><label>СБП → Банк</label><input inputmode="numeric" value="3500"></div>
       </div>
       <div class="lbl">Фактически в кассе</div>
       <div class="card">
@@ -523,23 +447,20 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="lbl">Выплаты с кассы</div>
       <div class="card">
         <div class="row" style="padding:6px 0"><span>Инкассация</span><b>₽ 20 000</b></div>
-        <div class="row" style="padding:6px 0"><span>Иман</span><b>₽ 3 500</b></div>
+        <div class="row" style="padding:6px 0"><span>Иман → Хозрасходы владельца</span><b>₽ 3 500</b></div>
         <button class="btn sec" style="margin-top:8px" onclick="toast('Добавление выплаты — демо')">+ Добавить выплату</button>
       </div>
       <div class="card">
         <div class="row"><b>Расхождение</b><b id="diff">🔴 −₽300</b></div>
         <div class="mu" style="margin-top:6px">(Факт + Выплаты) − Z. Измени цифры выше — пересчитается.</div>
       </div>
-      <button class="btn" onclick="toast('Смена сохранена ✓ (демо)')">
-        <svg width="18" height="18" fill="none"><use href="#ic-check" color="#fff"/></svg>
-        Сохранить смену
-      </button>
+      <button class="btn" onclick="toast('Смена сохранена ✓ (демо)')"><svg width="18" height="18" fill="none"><use href="#ic-check" color="#fff"/></svg>Сохранить смену</button>
     </div>
     <div class="sub" id="kassa-hist">
       <div class="lbl">Сегодня, 12 июня</div>
       <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Дневная · Иванова А.</div><div class="lr-s">₽62 000</div></div><div class="lr-a pos">✓ 0₽</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Ночная · Петров В.</div><div class="lr-s">₽31 000</div></div><div class="lr-a neg">−₽300</div></div>
+        <div class="lr" onclick="toast('Карточка смены: история исправлений, отмена')"><div class="lr-main"><div class="lr-t">Дневная · Иванова А.</div><div class="lr-s">₽62 000</div></div><div class="lr-a pos">✓ 0₽</div></div>
+        <div class="lr" onclick="toast('Карточка смены: история исправлений, отмена')"><div class="lr-main"><div class="lr-t">Ночная · Петров В.</div><div class="lr-s">₽31 000</div></div><div class="lr-a neg">−₽300</div></div>
       </div>
       <div class="lbl">Вчера, 11 июня</div>
       <div class="card">
@@ -558,6 +479,13 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <button onclick="showSub('sup','orders',this)">Заказы</button>
     </div>
     <div class="sub on" id="sup-pay">
+      <div class="banner warn">⚠ Нужно ₽81 000, свободно ₽64 000<br>
+        <span class="mu">ИИ: 1) Иванов — ждать не будет · 2) Альфа — товар завтра · 3) Петрова перенести на чт</span><br>
+        <span style="display:inline-flex;gap:10px;margin-top:8px">
+          <b style="color:var(--brand);cursor:pointer" onclick="toast('План применён ✓ (демо)')">Применить план</b>
+          <b style="color:var(--t2);cursor:pointer" onclick="this.closest('.banner').style.display='none'">Решу сам</b>
+        </span>
+      </div>
       <div class="lbl">Сегодня</div>
       <div class="card">
         <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">Долг: ₽120К</div></div><div class="lr-a">₽ 35 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
@@ -568,14 +496,14 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="card">
         <div class="lr" onclick="openSht('supAct')"><div class="lr-main"><div class="lr-t">Нурмат ИП</div><div class="lr-s">Долг: ₽42К</div></div><div class="lr-a">₽ 13 000</div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       </div>
-      <button class="btn sec" onclick="toast('Новая запись — демо')">+ Записать выплату</button>
+      <button class="btn sec" onclick="toast('Новая запись: поставщик + сумма + дата')">+ Записать выплату</button>
     </div>
     <div class="sub" id="sup-dir">
       <div class="card"><div class="row"><span class="mu">Общий долг</span><b class="neg">₽ 420 000</b></div></div>
       <div class="card">
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">ООО Иванов</div></div><div class="lr-a neg">₽120К</div></div>
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">Альфа ТД</div></div><div class="lr-a neg">₽55К</div></div>
-        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">ИП Петров</div></div><div class="lr-a neg">₽90К</div></div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div><div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">надёжность 94%</div></div><div class="lr-a neg">₽120К</div></div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div><div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">надёжность 88%</div></div><div class="lr-a neg">₽55К</div></div>
+        <div class="lr" onclick="openSht('supCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div><div class="lr-main"><div class="lr-t">Петров К.</div><div class="lr-s">надёжность 71% ⚠</div></div><div class="lr-a neg">₽90К</div></div>
       </div>
       <button class="btn sec" onclick="toast('Добавление поставщика — демо')">+ Добавить поставщика</button>
     </div>
@@ -589,7 +517,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="card">
         <div class="lr"><div class="lr-main"><div class="lr-t">Молочка · Иванов П.</div><div class="lr-s">10 июн · получен ✓</div></div><div class="lr-a">₽14 800</div></div>
       </div>
-      <button class="btn sec" onclick="toast('Новый заказ — демо')">+ Новый заказ</button>
+      <button class="btn sec" onclick="toast('Новый заказ: поставщик + отдел + сумма + дата')">+ Новый заказ</button>
     </div>
   </div><!-- /suppliers -->
 
@@ -604,19 +532,21 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <button onclick="showSub('fin','rep',this)">Отчёт</button>
     </div>
     <div class="sub on" id="fin-sav">
-      <div class="banner">Июнь 2026 · 18 дней до конца месяца</div>
+      <div class="banner">Июнь 2026 · 18 дней до конца месяца · метод: виртуальный резерв</div>
       <div class="card"><b>Аренда</b><div class="pb pb-green"><i style="width:70%"></i></div><div class="row mu"><span>₽42 000 / ₽60 000</span><span>в день ₽1 000 ✓</span></div></div>
-      <div class="card"><b>Налоги</b><div class="pb pb-orange"><i style="width:40%"></i></div><div class="row"><span class="mu">₽18 000 / ₽45 000</span><span class="tr" style="font-size:13px">⚠️ отстаём</span></div></div>
+      <div class="card"><b>Налоги</b><div class="pb pb-orange"><i style="width:40%"></i></div><div class="row"><span class="mu">₽18 000 / ₽45 000</span><span class="tr" style="font-size:13px">⚠️ отстаём — нужно ₽1 500/день</span></div></div>
       <div class="card"><b>Зарплата</b><div class="pb pb-green"><i style="width:100%"></i></div><div class="row mu"><span>₽90 000 / ₽90 000</span><span class="pos">готово ✓</span></div></div>
-      <button class="btn" onclick="toast('Пополнение — демо')">+ Пополнить</button>
+      <button class="btn" onclick="toast('Пополнение резерва — демо')">+ Пополнить</button>
+      <button class="btn sec" onclick="toast('Настройка статей — демо')">⚙ Настроить статьи</button>
     </div>
     <div class="sub" id="fin-goals">
-      <div class="card"><b>Выручка за июнь</b><div class="mu">Цель: ₽ 8 000 000</div><div class="pb pb-green"><i style="width:65%"></i></div><div class="row"><span class="mu">₽5 200 000 (65%)</span><span class="pos" style="font-size:13px">🟢 прогноз ₽8.3 млн</span></div></div>
+      <div class="card"><b>Выручка за июнь</b><div class="mu">Цель Владельца: ₽ 8 000 000</div><div class="pb pb-green"><i style="width:65%"></i></div><div class="row"><span class="mu">₽5 200 000 (65%)</span><span class="pos" style="font-size:13px">🟢 прогноз ₽8.3 млн</span></div></div>
       <div class="card"><b>Долг — снизить до ₽300К</b><div class="pb pb-orange"><i style="width:50%"></i></div><div class="row"><span class="mu">снижен на ₽60К (50%)</span><span class="tr" style="font-size:13px">🟡 под вопросом</span></div></div>
-      <button class="btn sec" onclick="toast('Цели ставит Владелец')">+ Новая цель</button>
+      <button class="btn sec" onclick="toast('Цели создаёт только Владелец')">+ Новая цель</button>
     </div>
     <div class="sub" id="fin-cal">
       <div class="card"><div class="row" style="margin-bottom:12px"><b>Июнь 2026</b><span class="mu">🟢 приток · 🔴 выплаты · 🟡 риск</span></div><div class="cal" id="cal"></div></div>
+      <div class="banner warn">⚠ ИИ: 20 июня прогнозный остаток ₽4 200 при выплатах ₽45 000. Совет: перенести ООО Бета на 22-е или откладывать +₽2 000/день. <b style="color:var(--brand);cursor:pointer" onclick="toast('Выплата перенесена ✓ (демо)')">Перенести</b></div>
     </div>
     <div class="sub" id="fin-an">
       <div class="card">
@@ -627,12 +557,21 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       </div>
       <div class="card">
         <b>Расходы по категориям</b>
-        <div style="margin-top:8px"><div class="row mu"><span>Поставщики</span><span>₽3 100К · 60%</span></div><div class="pb pb-blue"><i style="width:60%"></i></div><div class="row mu"><span>Зарплата</span><span>₽850К · 16%</span></div><div class="pb pb-green"><i style="width:16%"></i></div><div class="row mu"><span>Аренда</span><span>₽420К · 8%</span></div><div class="pb pb-orange"><i style="width:8%"></i></div></div>
+        <div style="margin-top:8px">
+          <div class="row mu"><span>Поставщики</span><span>₽3 100К · 60%</span></div><div class="pb pb-blue"><i style="width:60%"></i></div>
+          <div class="row mu"><span>Зарплата</span><span>₽850К · 16%</span></div><div class="pb pb-green"><i style="width:16%"></i></div>
+          <div class="row mu"><span>Аренда</span><span>₽420К · 8%</span></div><div class="pb pb-orange"><i style="width:8%"></i></div>
+          <div class="row mu"><span>Хозрасходы владельца (Иман)</span><span>₽96К · 2%</span></div><div class="pb pb-red"><i style="width:2%"></i></div>
+        </div>
       </div>
       <div class="card">
         <b>Кассиры</b>
         <div class="lr"><div class="lr-main"><div class="lr-t">🥇 Иванова А.</div><div class="lr-s">18 смен · 0 расхождений</div></div><div class="lr-a pos">₽2 900К</div></div>
         <div class="lr"><div class="lr-main"><div class="lr-t">🥈 Петров В.</div><div class="lr-s">14 смен · ⚠️ −₽1 200</div></div><div class="lr-a">₽2 100К</div></div>
+      </div>
+      <div class="card" onclick="toast('Тап на цифру → формула расчёта (демо)')">
+        <div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div>
+        <div class="mu" style="margin-top:4px">(Выручка − Себестоимость) / Выручка · Цель 25% ✓ · тап → формула</div>
       </div>
     </div>
     <div class="sub" id="fin-rep">
@@ -643,8 +582,13 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       </div>
       <div class="card">
         <b>Месячный отчёт</b>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Май 2026</div><div class="lr-s">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Апрель 2026</div><div class="lr-s">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
+        <div class="lr" onclick="openSht('closeMonth')"><div class="lr-main"><div class="lr-t">Июнь 2026</div><div class="lr-s tr">не закрыт</div></div><div class="lr-a" style="color:var(--brand)">Закрыть ›</div></div>
+        <div class="lr" onclick="toast('Открыт отчёт за май (демо)')"><div class="lr-main"><div class="lr-t">Май 2026</div><div class="lr-s pos">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
+        <div class="lr" onclick="toast('Открыт отчёт за апрель (демо)')"><div class="lr-main"><div class="lr-t">Апрель 2026</div><div class="lr-s pos">закрыт ✓</div></div><div class="lr-a mu">PDF · Excel</div></div>
+      </div>
+      <div class="card">
+        <b>Кассовая книга</b><div class="mu" style="margin:4px 0 8px">Хронологический журнал всех операций</div>
+        <button class="btn sec" style="margin-top:0" onclick="toast('Кассовая книга за май скачана (демо)')">Скачать за май</button>
       </div>
     </div>
   </div><!-- /finance -->
@@ -658,6 +602,7 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <button onclick="showSub('more','goods',this)">Товары</button>
       <button onclick="showSub('more','settings',this)">Настройки</button>
     </div>
+
     <div class="sub on" id="more-ops">
       <div class="lbl">Сегодня</div>
       <div class="card" id="ops-list">
@@ -669,46 +614,155 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="card">
         <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">Наличные</div></div><div class="lr-a pos">+₽58 000</div></div>
         <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👥</div><div class="lr-main"><div class="lr-t">Аванс · Сафина Г.</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽10 000</div></div>
+        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</div><div class="lr-main"><div class="lr-t">Списание · просрочка</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽840</div></div>
       </div>
     </div>
+
     <div class="sub" id="more-staff">
-      <div class="banner">◀ 12 июня, четверг ▶</div>
-      <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">5/2, рабочий</div></div><div class="lr-a pos">Вышла ▾</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">2/2, выходной</div></div><div class="lr-a mu">Выходной ▾</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">отпуск до 28 июн</div></div><div class="lr-a tr">Отпуск ▾</div></div>
+      <div class="seg" style="padding-top:0">
+        <button class="on" onclick="showStaffTab('tab',this)">Табель</button>
+        <button onclick="showStaffTab('emp',this)">Сотрудники</button>
+        <button onclick="showStaffTab('sal',this)">Зарплата</button>
       </div>
-      <div class="lbl">Зарплата за май</div>
-      <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">22 дн × ₽1 500 − ₽10 000</div></div><div class="lr-a">₽23 000</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">168 ч × ₽180 − ₽5 000</div></div><div class="lr-a">₽25 240</div></div>
+      <div class="sub on" id="staff-tab">
+        <div class="banner">◀ 12 июня, четверг ▶ · тапни статус — изменится</div>
+        <div class="card">
+          <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">5/2, рабочий</div></div><div class="lr-a pos st" onclick="cycleSt(this)">Вышла ▾</div></div>
+          <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">2/2, выходной</div></div><div class="lr-a mu st" onclick="cycleSt(this)">Выходной ▾</div></div>
+          <div class="lr"><div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">отпуск до 28 июн</div></div><div class="lr-a tr st" onclick="cycleSt(this)">Отпуск ▾</div></div>
+        </div>
+        <button class="btn" onclick="toast('Табель за 12 июня подтверждён ✓')">Подтвердить день</button>
+      </div>
+      <div class="sub" id="staff-emp">
+        <div class="card">
+          <div class="lr" onclick="openSht('empCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👤</div><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">Кассир · 5/2 · ₽1 500/день</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+          <div class="lr" onclick="openSht('empCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">👤</div><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">Кассир · 2/2 · ₽180/час</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+          <div class="lr" onclick="openSht('empCard')"><div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA)">👤</div><div class="lr-main"><div class="lr-t">Иванова А.</div><div class="lr-s">Старший кассир · 5/2</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+        </div>
+        <button class="btn sec" onclick="toast('Новый сотрудник: имя + график + ставка')">+ Добавить сотрудника</button>
+      </div>
+      <div class="sub" id="staff-sal">
+        <div class="lbl">Май 2026 · к выплате ₽48 240</div>
+        <div class="card">
+          <div class="lr"><div class="lr-main"><div class="lr-t">Сафина Г.</div><div class="lr-s">22 дн × ₽1 500 − аванс ₽10 000</div></div><div class="lr-a">₽23 000</div></div>
+          <div class="lr"><div class="lr-main"><div class="lr-t">Петров В.</div><div class="lr-s">168 ч × ₽180 − аванс ₽5 000</div></div><div class="lr-a">₽25 240</div></div>
+        </div>
+        <button class="btn" onclick="toast('Зарплата выплачена, расход записан ✓')">Выплатить всем</button>
       </div>
     </div>
+
     <div class="sub" id="more-goods">
-      <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">₽65 → ₽89</div></div><div class="lr-a pos">37%</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">₽42 → ₽58</div></div><div class="lr-a pos">38%</div></div>
-        <div class="lr"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">₽78 → ₽99</div></div><div class="lr-a tr">27%</div></div>
+      <div class="seg" style="padding-top:0">
+        <button class="on" onclick="showGoodsTab('list',this)">Товары</button>
+        <button onclick="showGoodsTab('in',this)">Приход</button>
+        <button onclick="showGoodsTab('rent',this)">Рентабельность</button>
       </div>
-      <div class="card"><div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div><div class="mu" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div></div>
+      <div class="sub on" id="goods-list">
+        <div class="card">
+          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">₽65 → ₽89</div></div><div class="lr-a pos">37%</div></div>
+          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">₽42 → ₽58</div></div><div class="lr-a pos">38%</div></div>
+          <div class="lr" onclick="toast('Карточка товара: цены, история прихода')"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">₽78 → ₽99</div></div><div class="lr-a tr">27%</div></div>
+        </div>
+        <button class="btn sec" onclick="toast('Новый товар: название + цены')">+ Добавить товар</button>
+      </div>
+      <div class="sub" id="goods-in">
+        <div class="lbl">Сегодня</div>
+        <div class="card">
+          <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л · Иванов П.</div><div class="lr-s">20 шт · в долг</div></div><div class="lr-a">₽1 300</div></div>
+        </div>
+        <button class="btn" onclick="toast('Приход записан, долг поставщика вырос ✓')">+ Зафиксировать приход</button>
+        <button class="btn sec" onclick="toast('Продажа записана, выручка дня выросла ✓')">− Зафиксировать продажу</button>
+      </div>
+      <div class="sub" id="goods-rent">
+        <div class="card"><div class="row"><b>Рентабельность</b><b class="pos">35.5%</b></div><div class="mu" style="margin-top:4px">₽380К выручки · ₽245К себестоимости · цель 25% ✓</div></div>
+        <div class="card">
+          <div class="lr"><div class="lr-main"><div class="lr-t">Молоко 1л</div><div class="lr-s">320 шт</div></div><div class="lr-a pos">37% 🟢</div></div>
+          <div class="lr"><div class="lr-main"><div class="lr-t">Хлеб б/н</div><div class="lr-s">180 шт</div></div><div class="lr-a pos">38% 🟢</div></div>
+          <div class="lr"><div class="lr-main"><div class="lr-t">Сахар 1кг</div><div class="lr-s">95 шт</div></div><div class="lr-a tr">27% 🟡</div></div>
+        </div>
+      </div>
     </div>
+
     <div class="sub" id="more-settings">
       <div class="lbl">Магазин</div>
       <div class="card">
-        <div class="lr"><div class="lr-t">Название магазина</div><div class="lr-a mu">Way Market ›</div></div>
+        <div class="lr"><div class="lr-t">Название</div><div class="lr-a mu">Way Market №1 ›</div></div>
+        <div class="lr"><div class="lr-t">Отделы</div><div class="lr-a mu">Молочка, Бакалея… ›</div></div>
         <div class="lr"><div class="lr-t">Метод накоплений</div><div class="lr-a mu">Виртуальный ›</div></div>
-        <div class="lr"><div class="lr-t">Дата ночной смены</div><div class="lr-a mu">Начало ›</div></div>
+        <div class="lr"><div class="lr-t">Дата ночной смены</div><div class="lr-a mu">По началу ›</div></div>
+        <div class="lr"><div class="lr-t">Целевая рентабельность</div><div class="lr-a mu">25% ›</div></div>
+        <div class="lr"><div class="lr-t">Режим учёта товаров</div><div class="lr-a mu">Ручной ›</div></div>
       </div>
-      <div class="lbl">Безопасность</div>
+
+      <div class="lbl">Персонализация — работает, попробуй</div>
       <div class="card">
-        <div class="lr"><div class="lr-t">Изменить PIN</div><div class="lr-a mu">›</div></div>
-        <div class="lr"><div class="lr-t">Face ID / Touch ID</div><div class="lr-a pos">вкл</div></div>
-        <div class="lr" onclick="toast('Журнал изменений — демо')"><div class="lr-t">Журнал изменений</div><div class="lr-a mu">›</div></div>
+        <div class="mu" style="margin-bottom:2px">Стиль оформления</div>
+        <div class="opts" id="opt-style">
+          <button class="on" onclick="setStyle('grad',this)">Градиент</button>
+          <button onclick="setStyle('classic',this)">Классика</button>
+        </div>
+        <div class="mu" style="margin-bottom:2px">Тема</div>
+        <div class="opts" id="opt-theme">
+          <button class="on" onclick="setTheme('auto',this)">Авто</button>
+          <button onclick="setTheme('light',this)">Светлая</button>
+          <button onclick="setTheme('dark',this)">Тёмная</button>
+        </div>
+        <div class="mu" style="margin-bottom:2px">Плотность</div>
+        <div class="opts" id="opt-dens">
+          <button class="on" onclick="setDens('norm',this)">Просторно</button>
+          <button onclick="setDens('compact',this)">Компактно</button>
+        </div>
+        <div class="lr" style="border:none"><div class="lr-t">Уровень сложности</div><div class="lr-a mu">Стандартный ›</div></div>
       </div>
+
+      <div class="lbl">Уведомления (свои у каждого)</div>
+      <div class="card">
+        <div class="lr"><div class="lr-main"><div class="lr-t">Z-отчёт не закрыт</div><div class="lr-s">15:00 · Push</div></div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Табель не подтверждён</div><div class="lr-s">21:00 · Push</div></div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Поставщик не пришёл</div><div class="lr-s">19:00 · Telegram</div></div><button class="sw" onclick="this.classList.toggle('on')"></button></div>
+        <div class="lr"><div class="lr-main"><div class="lr-t">Утренний план</div><div class="lr-s">08:00 · Push</div></div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+      </div>
+
+      <div class="lbl">Команда (Владелец)</div>
+      <div class="card">
+        <div class="lr" onclick="toast('Управление доступом — демо')"><div class="lr-t">Управление доступом</div><div class="lr-a mu">3 активных ›</div></div>
+        <div class="lr" onclick="openSht('roles')"><div class="lr-t">Посмотреть глазами роли</div><div class="lr-a mu" id="cur-role">Бухгалтер ›</div></div>
+      </div>
+
+      <div class="lbl">Данные</div>
+      <div class="card">
+        <div class="lr" onclick="openSht('backup')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)"><svg width="20" height="20" fill="none" color="#fff"><use href="#ic-cloud"/></svg></div><div class="lr-main"><div class="lr-t">Резервные копии</div><div class="lr-s">Яндекс.Диск · сегодня 04:00 ✓</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+        <div class="lr" onclick="openSht('trash')"><div class="lr-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)"><svg width="20" height="20" fill="none" color="#fff"><use href="#ic-trash"/></svg></div><div class="lr-main"><div class="lr-t">Корзина</div><div class="lr-s">3 записи · хранится 30 дней</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+        <div class="lr" onclick="toast('Экспорт: Excel + JSON (демо)')"><div class="lr-t">Экспорт данных</div><div class="lr-a mu">Excel / JSON ›</div></div>
+      </div>
+
+      <div class="lbl">Интеграции (Владелец)</div>
+      <div class="card">
+        <div class="lr" onclick="toast('Подключение WhatsApp — демо')"><div class="lr-t">WhatsApp</div><div class="lr-a mu">Подключить ›</div></div>
+        <div class="lr" onclick="toast('Telegram подключён ✓')"><div class="lr-t">Telegram</div><div class="lr-a pos">✓ подключён</div></div>
+        <div class="lr" onclick="toast('Настройка 1С — демо')"><div class="lr-t">1С</div><div class="lr-a mu">Настроить ›</div></div>
+        <div class="lr" onclick="toast('OAuth банка — демо')"><div class="lr-t">Банк</div><div class="lr-a mu">Подключить ›</div></div>
+      </div>
+
       <div class="lbl">Подписка</div>
       <div class="card">
-        <div class="lr"><div class="lr-main"><div class="lr-t">Ритейл · 1 магазин</div><div class="lr-s">активна</div></div><div class="lr-a">₽890/мес</div></div>
-        <div class="lr"><div class="lr-t">Пакет ИИ</div><div class="lr-a mu">+₽290/мес ›</div></div>
+        <div class="lr" onclick="openSht('tariff')"><div class="lr-main"><div class="lr-t">Ритейл · 1 магазин</div><div class="lr-s">активна до 12 июля</div></div><div class="lr-a">₽890/мес ›</div></div>
+        <div class="lr" onclick="openSht('tariff')"><div class="lr-t">Пакет ИИ</div><div class="lr-a mu">+₽290/мес ›</div></div>
+      </div>
+
+      <div class="lbl">Безопасность</div>
+      <div class="card">
+        <div class="lr" onclick="toast('Смена PIN — демо')"><div class="lr-t">Изменить PIN</div><div class="lr-a mu">›</div></div>
+        <div class="lr"><div class="lr-t">Face ID / Touch ID</div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+        <div class="lr" onclick="openSht('audit')"><div class="lr-t">Журнал изменений</div><div class="lr-a mu">›</div></div>
+      </div>
+
+      <div class="lbl">Аккаунт</div>
+      <div class="card">
+        <div class="lr"><div class="lr-t">Гульнара А.</div><div class="lr-a mu">+7 ••• ••• 42 19 ›</div></div>
+        <div class="lr" onclick="openSht('wrapped')"><div class="lr-t">🎉 Auron Wrapped 2026</div><div class="lr-a mu">›</div></div>
+        <div class="lr" onclick="lockApp()"><div class="lr-t" style="color:var(--brand)">Выйти</div></div>
+        <div class="lr" onclick="toast('Удаление: экспорт + 30 дней на отмену (только Владелец)')"><div class="lr-t" style="color:var(--red)">Удалить аккаунт</div></div>
       </div>
     </div>
   </div><!-- /more -->
@@ -716,36 +770,19 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
   </div><!-- /content -->
 
   <!-- FAB -->
-  <button class="fab" onclick="openSht('numpad')">
+  <button class="fab" id="fab" onclick="openSht('numpad')">
     <svg width="28" height="28" fill="none"><use href="#ic-plus"/></svg>
   </button>
 
   <!-- ── Навигация ── -->
   <nav class="nav">
-    <button class="nb on" id="nb-home" onclick="go('home')">
-      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-home" color="currentColor"/></svg></span>
-      <span class="nl">Главная</span>
-    </button>
-    <button class="nb" id="nb-kassa" onclick="go('kassa')">
-      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-receipt" color="currentColor"/></svg></span>
-      <span class="nl">Касса</span>
-    </button>
-    <button class="nb" id="nb-suppliers" onclick="go('suppliers')">
-      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-wallet" color="currentColor"/></svg></span>
-      <span class="nl">Поставщики</span>
-      <i class="dot"></i>
-    </button>
-    <button class="nb" id="nb-finance" onclick="go('finance')">
-      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-chart" color="currentColor"/></svg></span>
-      <span class="nl">Финансы</span>
-    </button>
-    <button class="nb" id="nb-more" onclick="go('more')">
-      <span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-grid" color="currentColor"/></svg></span>
-      <span class="nl">Ещё</span>
-    </button>
+    <button class="nb on" id="nb-home" onclick="go('home')"><span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-home" color="currentColor"/></svg></span><span class="nl">Главная</span></button>
+    <button class="nb" id="nb-kassa" onclick="go('kassa')"><span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-receipt" color="currentColor"/></svg></span><span class="nl">Касса</span></button>
+    <button class="nb" id="nb-suppliers" onclick="go('suppliers')"><span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-wallet" color="currentColor"/></svg></span><span class="nl">Поставщики</span><i class="dot"></i></button>
+    <button class="nb" id="nb-finance" onclick="go('finance')"><span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-chart" color="currentColor"/></svg></span><span class="nl">Финансы</span></button>
+    <button class="nb" id="nb-more" onclick="go('more')"><span class="ni"><svg width="22" height="22" fill="none"><use href="#ic-grid" color="currentColor"/></svg></span><span class="nl">Ещё</span></button>
   </nav>
 
-  <!-- ── Оверлей ── -->
   <div class="ovl" id="ovl" onclick="closeSht()"></div>
 
   <!-- ── Нумпад ── -->
@@ -758,8 +795,8 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
     </div>
     <div class="np-num" id="np-num">₽ 0</div>
     <div class="np-meta">
-      <div class="fld" onclick="toast('Выбор категории — демо')"><label>Категория</label><span id="np-cat">🛒 Закупка ›</span></div>
-      <div class="fld" onclick="toast('Выбор счёта — демо')"><label>Счёт</label><span>💵 Наличные ›</span></div>
+      <div class="fld" onclick="toast('Категории: Закупка · ЗП · Аренда · Хозрасходы · Списание · …')"><label>Категория</label><span id="np-cat">🛒 Закупка ›</span></div>
+      <div class="fld" onclick="toast('Счета: Наличные · Банк · Резерв')"><label>Счёт</label><span>💵 Наличные ›</span></div>
       <div class="fld" onclick="toast('Выбор даты — демо')"><label>Дата</label><span>Сегодня, 12 июн ›</span></div>
     </div>
     <div class="npad">
@@ -777,12 +814,33 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
     <div class="hdl"></div>
     <h3>🟢 Финансовый пульс — всё хорошо</h3>
     <div class="card" style="background:var(--card2);box-shadow:none">
-      <div class="row" style="padding:7px 0"><span>Выручка</span><span class="pos">+8% к маю ✓</span></div>
-      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Долг поставщикам</span><span class="pos">снижается ▼</span></div>
-      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Накопления</span><span class="tr">налоги отстают</span></div>
-      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Расхождения</span><span class="pos">1 за неделю</span></div>
+      <div class="row" style="padding:7px 0"><span>Выручка (вес 30%)</span><span class="pos">+8% к маю ✓</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Долг поставщикам (30%)</span><span class="pos">снижается ▼</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Накопления (20%)</span><span class="tr">налоги отстают</span></div>
+      <div class="row" style="padding:7px 0;border-top:1px solid var(--sep)"><span>Расхождения (20%)</span><span class="pos">1 за неделю</span></div>
     </div>
-    <div class="mu" style="margin-top:10px">Пульс считается из 4 показателей и обновляется в реальном времени.</div>
+    <div class="mu" style="margin-top:10px">Оценка 78/100. Пересчитывается при каждом закрытии смены, история — по дням.</div>
+  </div>
+
+  <!-- ── Сводка по сети ── -->
+  <div class="sht" id="sht-stores">
+    <div class="hdl"></div>
+    <h3>Мои магазины</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:4px 0"><span class="mu">Сеть за сегодня</span><b>₽ 117 000</b></div>
+    </div>
+    <button class="act-row" onclick="closeSht();toast('Way Market №1 — текущий')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🏪</span>
+      <span><div class="act-text">Way Market №1 🟢</div><div class="act-sub">выручка ₽62 000 · касса ₽48 500</div></span><b class="pos">✓</b>
+    </button>
+    <button class="act-row" onclick="toast('Переключение на №2 (демо)')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500)">🏪</span>
+      <span><div class="act-text">Way Market №2 🟡</div><div class="act-sub">выручка ₽55 000 · Z-отчёт не закрыт ⚠</div></span>
+    </button>
+    <button class="act-row" onclick="toast('Новый магазин — тариф Сеть')">
+      <span class="act-icon" style="background:var(--card2);border:1.5px dashed var(--t3)">＋</span>
+      <div class="act-text" style="color:var(--brand)">Добавить магазин</div>
+    </button>
   </div>
 
   <!-- ── Уведомления ── -->
@@ -791,54 +849,54 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
     <h3>Уведомления</h3>
     <button class="act-row" onclick="closeSht();go('suppliers')">
       <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.35)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
-      <span><div class="act-text">Иванов П. · ₽ 35 000</div><div class="act-sub">Выплата сегодня · 08:00</div></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <span><div class="act-text">Иванов П. · ₽ 35 000</div><div class="act-sub">Выплата сегодня · 08:00 · [Оплачено] [Перенести]</div></span>
     </button>
     <button class="act-row" onclick="closeSht();go('suppliers');showSub('sup','orders')">
       <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.35)"><svg width="20" height="20" fill="none"><use href="#ic-box" color="#fff"/></svg></span>
       <span><div class="act-text">Приход: Молочка · Иванов П.</div><div class="act-sub">Ожидается сегодня · 08:00</div></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
     <button class="act-row" onclick="toast('Резервная копия в порядке ✓')">
       <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.35)"><svg width="20" height="20" fill="none"><use href="#ic-check" color="#fff"/></svg></span>
-      <span><div class="act-text">Резервная копия создана</div><div class="act-sub">03:00</div></span>
+      <span><div class="act-text">Резервная копия создана</div><div class="act-sub">Яндекс.Диск · 04:00</div></span>
     </button>
+    <div class="mu" style="margin-top:6px">Максимум 3 в день · остальное здесь, в центре уведомлений</div>
   </div>
 
   <!-- ── ИИ ── -->
   <div class="sht" id="sht-ai">
     <div class="hdl"></div>
     <h3>💬 ИИ-ассистент</h3>
-    <div class="card" style="background:var(--card2);box-shadow:none">
-      <div class="mu" style="margin-bottom:8px">Вы: Почему выручка упала на прошлой неделе?</div>
-      <div style="font-size:15px;line-height:1.55;color:var(--t1)">📊 Вижу снижение на 18% (пн–ср).<br>• Пн: смена закрыта в 23:00 (Петров В.)<br>• Вт: не было прихода молочки<br>• Ср: расхождение −₽800</div>
+    <div id="ai-log">
+      <div class="card" style="background:var(--card2);box-shadow:none">
+        <div class="mu" style="margin-bottom:8px">Вы: Почему выручка упала на прошлой неделе?</div>
+        <div style="font-size:15px;line-height:1.55;color:var(--t1)">📊 Вижу снижение на 18% (пн–ср).<br>• Пн: смена закрыта в 23:00 (Петров В.)<br>• Вт: не было прихода молочки<br>• Ср: расхождение −₽800<br><span class="mu">на основе 47 записей · уверенность 82%</span></div>
+      </div>
     </div>
-    <div class="fld" style="margin-top:10px"><label>🎤</label><input placeholder="Спроси что-нибудь..." style="width:100%;text-align:left;font-size:15px"></div>
+    <div class="fld" style="margin-top:10px"><label>🎤</label><input id="ai-q" placeholder="Спроси что-нибудь..." style="width:100%;text-align:left;font-size:15px" onkeydown="if(event.key==='Enter')aiAsk()"></div>
+    <button class="btn" onclick="aiAsk()">Спросить</button>
     <div class="mu" style="margin-top:8px">Пакет ИИ · ₽290/мес</div>
   </div>
 
-  <!-- ── Действия: Выплата ── -->
+  <!-- ── Действия по выплате ── -->
   <div class="sht" id="sht-supAct">
     <div class="hdl"></div>
     <h3>Иванов П. · Долг ₽120К</h3>
     <div class="mu" style="margin-bottom:14px">Запланировано: ₽35 000 · сегодня</div>
     <button class="act-row" onclick="toast('Оплата проведена ✓ (демо)');closeSht()">
       <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
-      <div><div class="act-text">Оплатить</div></div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Оплатить</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
-    <button class="act-row" onclick="toast('Перенос — демо')">
+    <button class="act-row" onclick="toast('Перенос: завтра / с +суммой / дата / освободить')">
       <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.3)"><svg width="20" height="20" fill="none"><use href="#ic-cal" color="#fff"/></svg></span>
-      <div><div class="act-text">Перенести</div></div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Перенести</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
     <button class="act-row" onclick="toast('Отмечено: не пришёл (демо)');closeSht()">
       <span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 10px rgba(255,149,0,.3)"><svg width="20" height="20" fill="none"><use href="#ic-x" color="#fff"/></svg></span>
-      <div><div class="act-text">Не пришёл</div></div><span style="flex:1"></span>
+      <div class="act-text">Не пришёл</div><span style="flex:1"></span>
     </button>
-    <button class="act-row" style="color:var(--red)" onclick="toast('Запись отменена (демо)');closeSht()">
+    <button class="act-row" onclick="toast('Запись в корзине 30 дней (демо)');closeSht()">
       <span class="act-icon" style="background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 4px 10px rgba(255,69,58,.3)"><svg width="20" height="20" fill="none"><use href="#ic-trash" color="#fff"/></svg></span>
-      <div><div class="act-text" style="color:var(--red)">Отменить запись</div></div>
+      <div class="act-text" style="color:var(--red)">Отменить запись</div>
     </button>
   </div>
 
@@ -850,27 +908,25 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
       <div class="row" style="padding:3px 0"><span class="mu">Долг</span><b class="neg">₽ 120 000</b></div>
       <div class="row" style="padding:3px 0"><span class="mu">Взяли / Выплатили</span><span class="mu">₽580К / ₽460К</span></div>
       <div class="row" style="padding:3px 0"><span class="mu">Надёжность</span><b class="pos">94%</b></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Контакты</span><span class="mu">2 номера · WhatsApp ›</span></div>
     </div>
     <div class="lbl">История</div>
     <div class="card" style="background:var(--card2);box-shadow:none">
       <div class="row" style="padding:4px 0"><span>12.06 Оплата</span><span class="pos">−₽35 000 ✓</span></div>
-      <div class="row" style="padding:4px 0"><span>08.06 Накладная</span><span class="neg">+₽50 000</span></div>
+      <div class="row" style="padding:4px 0"><span>08.06 Накладная 📷</span><span class="neg">+₽50 000</span></div>
       <div class="row" style="padding:4px 0"><span>05.06 Оплата</span><span class="pos">−₽28 000 ✓</span></div>
     </div>
     <button class="act-row" onclick="toast('Выплата — демо')">
       <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-pay" color="#fff"/></svg></span>
-      <div class="act-text">Выплатить</div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Выплатить</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
-    <button class="act-row" onclick="toast('Накладная — демо')">
+    <button class="act-row" onclick="toast('Фото накладной → ИИ заполнит форму (Пакет ИИ)')">
       <span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 10px rgba(94,92,230,.3)"><svg width="20" height="20" fill="none"><use href="#ic-doc" color="#fff"/></svg></span>
-      <div class="act-text">Записать накладную</div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Записать накладную</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
-    <button class="act-row" onclick="toast('Возврат поставщику — демо')">
+    <button class="act-row" onclick="toast('Возврат: долг уменьшится (демо)')">
       <span class="act-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 10px rgba(147,51,234,.3)"><svg width="20" height="20" fill="none"><use href="#ic-return" color="#fff"/></svg></span>
-      <div class="act-text">Возврат</div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Возврат</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
   </div>
 
@@ -899,15 +955,13 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
     <div class="mu" style="margin-bottom:14px">Заказано: ~₽15 000 · сегодня</div>
     <button class="act-row" onclick="toast('Форма: факт. сумма + оплата/долг')">
       <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 10px rgba(22,163,74,.3)"><svg width="20" height="20" fill="none"><use href="#ic-check" color="#fff"/></svg></span>
-      <div class="act-text">Товар пришёл</div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Товар пришёл</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
     <button class="act-row" onclick="toast('Перенос даты — демо')">
       <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 10px rgba(0,122,255,.3)"><svg width="20" height="20" fill="none"><use href="#ic-cal" color="#fff"/></svg></span>
-      <div class="act-text">Перенести дату</div><span style="flex:1"></span>
-      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+      <div class="act-text">Перенести дату</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
     </button>
-    <button class="act-row" style="color:var(--red)" onclick="toast('Заказ отменён (демо)');closeSht()">
+    <button class="act-row" onclick="toast('Заказ отменён (демо)');closeSht()">
       <span class="act-icon" style="background:linear-gradient(145deg,#FF6B61,var(--red));box-shadow:0 4px 10px rgba(255,69,58,.3)"><svg width="20" height="20" fill="none"><use href="#ic-x" color="#fff"/></svg></span>
       <div class="act-text" style="color:var(--red)">Отменить заказ</div>
     </button>
@@ -925,10 +979,173 @@ h1{font-size:28px;font-weight:800;color:var(--t1);letter-spacing:-.7px;margin:18
     </div>
   </div>
 
+  <!-- ── Закрытие месяца ── -->
+  <div class="sht" id="sht-closeMonth">
+    <div class="hdl"></div>
+    <h3>Закрыть июнь 2026?</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:6px 0"><span>Z-отчёты закрыты</span><span class="pos">30 из 30 ✓</span></div>
+      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Табель подтверждён</span><span class="pos">до 30.06 ✓</span></div>
+      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Запланированные выплаты</span><span class="tr" style="cursor:pointer" onclick="toast('2 выплаты не отмечены — показать')">⚠ 2 не отмечены ›</span></div>
+      <div class="row" style="padding:6px 0;border-top:1px solid var(--sep)"><span>Балансы сходятся</span><span class="pos">✓</span></div>
+    </div>
+    <div class="mu" style="margin:10px 0">После закрытия записи июня изменить нельзя. Исправление — только через запрос с одобрением Владельца (сторно).</div>
+    <button class="btn" disabled>Закрыть месяц</button>
+    <div class="mu" style="text-align:center;margin-top:6px">Кнопка станет активной когда все пункты ✓</div>
+  </div>
+
+  <!-- ── Корзина ── -->
+  <div class="sht" id="sht-trash">
+    <div class="hdl"></div>
+    <h3>Корзина</h3>
+    <div class="mu" style="margin-bottom:12px">Удалённые записи хранятся 30 дней, затем скрываются окончательно</div>
+    <button class="act-row" onclick="toast('Восстановлено, баланс пересчитан ✓');this.remove()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</span>
+      <span><div class="act-text">Расход ₽3 000 «ГСМ»</div><div class="act-sub">удалено 11 июня · осталось 29 дней</div></span>
+      <b style="color:var(--brand)">↩</b>
+    </button>
+    <button class="act-row" onclick="toast('Восстановлено, долг пересчитан ✓');this.remove()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</span>
+      <span><div class="act-text">Накладная Иванов П. ₽15 000</div><div class="act-sub">удалено 9 июня · осталось 27 дней</div></span>
+      <b style="color:var(--brand)">↩</b>
+    </button>
+    <button class="act-row" onclick="toast('Восстановлено ✓');this.remove()">
+      <span class="act-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</span>
+      <span><div class="act-text">Расход ₽500 «пакеты»</div><div class="act-sub">удалено 2 июня · осталось 21 день</div></span>
+      <b style="color:var(--brand)">↩</b>
+    </button>
+  </div>
+
+  <!-- ── Резервные копии ── -->
+  <div class="sht" id="sht-backup">
+    <div class="hdl"></div>
+    <h3>Резервные копии</h3>
+    <div class="mu" style="margin-bottom:12px">Зашифрованная копия всех данных — в вашем облаке. Пароль шифрования знаете только вы.</div>
+    <button class="act-row" onclick="toast('Подключено ✓ копия каждую ночь в 04:00')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FF5C5C,#E53935)">Я</span>
+      <span><div class="act-text">Яндекс.Диск</div><div class="act-sub">подключено ✓ · сегодня 04:00</div></span><b class="pos">✓</b>
+    </button>
+    <button class="act-row" onclick="toast('OAuth VK — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#42A5F5,#1976D2)">VK</span>
+      <span><div class="act-text">VK Облако</div><div class="act-sub">подключить</div></span>
+    </button>
+    <button class="act-row" onclick="toast('OAuth Сбер — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#66BB6A,#2E7D32)">С</span>
+      <span><div class="act-text">СберДиск</div><div class="act-sub">подключить</div></span>
+    </button>
+    <button class="act-row" onclick="toast('WebDAV: адрес + логин + пароль')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)"><svg width="20" height="20" fill="none" color="#fff"><use href="#ic-cloud"/></svg></span>
+      <span><div class="act-text">Свой сервер (WebDAV)</div><div class="act-sub">NAS, своё облако</div></span>
+    </button>
+    <div class="mu" style="margin:8px 0 2px">Расписание</div>
+    <div class="opts">
+      <button class="on" onclick="optPick(this);toast('Ежедневно в 04:00')">Ежедневно</button>
+      <button onclick="optPick(this);toast('Еженедельно')">Еженедельно</button>
+      <button onclick="optPick(this);toast('Только вручную')">Вручную</button>
+    </div>
+    <button class="btn" onclick="toast('Копия создана и отправлена в Яндекс.Диск ✓')">⬇ Создать копию сейчас</button>
+  </div>
+
+  <!-- ── Тарифы ── -->
+  <div class="sht" id="sht-tariff">
+    <div class="hdl"></div>
+    <h3>Тарифы</h3>
+    <button class="act-row"><span class="act-icon" style="background:var(--card2)">🆓</span><span><div class="act-text">Личный</div><div class="act-sub">ядро: счета, бюджеты, цели</div></span><b>₽0</b></button>
+    <button class="act-row"><span class="act-icon" style="background:var(--card2)">💼</span><span><div class="act-text">ИП</div><div class="act-sub">+налоги, счета-фактуры</div></span><b>₽299</b></button>
+    <button class="act-row"><span class="act-icon" style="background:var(--card2)">🏢</span><span><div class="act-text">Бизнес</div><div class="act-sub">+сотрудники, отчёты</div></span><b>₽590</b></button>
+    <button class="act-row" style="border:2px solid var(--brand)"><span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🏪</span><span><div class="act-text">Ритейл — ваш тариф ✓</div><div class="act-sub">касса, поставщики, персонал, товары · 1 магазин</div></span><b>₽890</b></button>
+    <button class="act-row"><span class="act-icon" style="background:var(--card2)">🏬</span><span><div class="act-text">Сеть</div><div class="act-sub">от 3 магазинов, сводная аналитика</div></span><b>₽690×маг</b></button>
+    <div class="lbl">Пакеты сверху</div>
+    <button class="act-row" onclick="toast('Триал ИИ 14 дней — демо')"><span class="act-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA)">✨</span><span><div class="act-text">Пакет ИИ</div><div class="act-sub">прогнозы, инсайты, фото-накладные, что-если</div></span><b>+₽290</b></button>
+  </div>
+
+  <!-- ── Роли ── -->
+  <div class="sht" id="sht-roles">
+    <div class="hdl"></div>
+    <h3>Посмотреть глазами роли</h3>
+    <div class="mu" style="margin-bottom:12px">Демо: интерфейс перестроится под выбранную роль</div>
+    <button class="act-row" onclick="setRole('acc')"><span class="act-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">👩‍💼</span><span><div class="act-text">Бухгалтер</div><div class="act-sub">всё: касса, выплаты, финансы</div></span></button>
+    <button class="act-row" onclick="setRole('adm')"><span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">👨‍💼</span><span><div class="act-text">Администратор</div><div class="act-sub">заказы и записи — без сумм кассы</div></span></button>
+    <button class="act-row" onclick="setRole('own')"><span class="act-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500)">👑</span><span><div class="act-text">Владелец</div><div class="act-sub">режим просмотра + цели</div></span></button>
+    <button class="act-row" onclick="setRole('staff')"><span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">🧑</span><span><div class="act-text">Сотрудник зала</div><div class="act-sub">только товары и поставки</div></span></button>
+  </div>
+
+  <!-- ── Журнал изменений ── -->
+  <div class="sht" id="sht-audit">
+    <div class="hdl"></div>
+    <h3>Журнал изменений</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div style="padding:6px 0"><b>12 июн 14:32 · Гульнара А.</b><div class="mu">Изменила выплату Иванову: ₽30 000 → ₽35 000</div></div>
+      <div style="padding:6px 0;border-top:1px solid var(--sep)"><b>12 июн 09:15 · Иванова А.</b><div class="mu">Закрыла смену: ₽62 000, расхождение 0</div></div>
+      <div style="padding:6px 0;border-top:1px solid var(--sep)"><b>11 июн 21:40 · Гульнара А.</b><div class="mu">Удалила расход ₽3 000 «ГСМ» (в корзине 29 дней)</div></div>
+    </div>
+    <div class="mu" style="margin-top:10px">Каждое изменение: кто, когда, было → стало. Хранится вечно.</div>
+  </div>
+
+  <!-- ── Сотрудник ── -->
+  <div class="sht" id="sht-empCard">
+    <div class="hdl"></div>
+    <h3>Сафина Г. · Кассир</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:3px 0"><span class="mu">График</span><span>5/2 · ₽1 500/день</span></div>
+      <div class="row" style="padding:3px 0"><span class="mu">В этом месяце</span><span>10 смен · 0 расхождений</span></div>
+      <div class="row" style="padding:3px 0"><span class="mu">Авансы за июнь</span><span class="neg">₽10 000</span></div>
+    </div>
+    <button class="act-row" onclick="toast('Аванс выдан, будет вычтен из ЗП ✓')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">💸</span><div class="act-text">Выдать аванс</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Отпуск/больничный с датами — демо')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">🏖</span><div class="act-text">Отпуск / больничный</div><span style="flex:1"></span><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="toast('Статус «уволена», история сохраняется')">
+      <span class="act-icon" style="background:linear-gradient(145deg,#FF6B61,var(--red))">🚫</span><div class="act-text" style="color:var(--red)">Уволить</div>
+    </button>
+  </div>
+
+  <!-- ── Wrapped ── -->
+  <div class="sht" id="sht-wrapped">
+    <div class="hdl"></div>
+    <div class="hero-card" style="margin-top:4px">
+      <div class="hero-label">🎉 Auron Wrapped 2026</div>
+      <div class="hero-amount" style="font-size:32px">₽ 58 000 000</div>
+      <div class="hero-row">
+        <div class="hero-stat"><div class="hero-stat-label">Лучший месяц</div><div class="hero-stat-val">Декабрь</div></div>
+        <div class="hero-div"></div>
+        <div class="hero-stat"><div class="hero-stat-label">Auron Score</div><div class="hero-stat-val">81/100 🟢</div></div>
+      </div>
+    </div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row" style="padding:4px 0"><span>Долг снижен</span><b class="pos">−₽160 000 ▼</b></div>
+      <div class="row" style="padding:4px 0"><span>Дней без расхождений подряд</span><b>🎯 23</b></div>
+      <div class="row" style="padding:4px 0"><span>Записей за год</span><b>4 812</b></div>
+    </div>
+    <button class="btn" onclick="toast('Карточка отправлена 📤 (суммы скрыты в режиме конфиденциальности)')">📤 Поделиться</button>
+  </div>
+
   <div class="toast" id="toast"></div>
 </div><!-- /phone -->
 
 <script>
+// ── Вход (PIN) ──
+let pinN=0;
+function pin(d){
+  pinN++;
+  const dots=document.querySelectorAll('#pin-dots i');
+  if(pinN<=4)dots[pinN-1].classList.add('f');
+  if(pinN>=4)setTimeout(unlock,180);
+}
+function pinBack(){
+  if(pinN>0){pinN--;document.querySelectorAll('#pin-dots i')[pinN].classList.remove('f');}
+}
+function unlock(){
+  document.getElementById('lock').classList.add('off');
+  setTimeout(()=>toast('Добро пожаловать, Гульнара! ☀ Сегодня: 3 выплаты, 1 заказ'),600);
+}
+function lockApp(){
+  pinN=0;document.querySelectorAll('#pin-dots i').forEach(i=>i.classList.remove('f'));
+  document.getElementById('lock').classList.remove('off');closeSht();
+}
+
 // ── Навигация ──
 function go(id){
   document.querySelectorAll('.scr').forEach(s=>s.classList.remove('on'));
@@ -938,16 +1155,29 @@ function go(id){
   document.querySelector('.content').scrollTop=0;
   closeSht();
 }
-
-// ── Вкладки ──
 function showSub(prefix,name,btn){
   const map={kassa:'s-kassa',sup:'s-suppliers',fin:'s-finance',more:'s-more'};
   const scr=document.getElementById(map[prefix]);
-  scr.querySelectorAll('.sub').forEach(t=>t.classList.remove('on'));
-  const p=prefix==='sup'?'sup':prefix==='fin'?'fin':prefix;
-  const el=scr.querySelector('#'+p+'-'+name);
+  scr.querySelectorAll(':scope > .sub').forEach(t=>t.classList.remove('on'));
+  const el=scr.querySelector('#'+prefix+'-'+name);
   if(el)el.classList.add('on');
-  if(btn){scr.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+  const seg=scr.querySelector(':scope > .seg');
+  if(seg){seg.querySelectorAll('button').forEach(b=>b.classList.remove('on'));
+    if(btn)btn.classList.add('on');
+    else{const i={ops:0,staff:1,goods:2,settings:3,new:0,hist:1,pay:0,dir:1,orders:2,sav:0,goals:1,cal:2,an:3,rep:4}[name];
+      if(i!==undefined)seg.querySelectorAll('button')[i].classList.add('on');}}
+}
+function showStaffTab(name,btn){
+  const wrap=document.getElementById('more-staff');
+  wrap.querySelectorAll('.sub').forEach(t=>t.classList.remove('on'));
+  wrap.querySelector('#staff-'+name).classList.add('on');
+  wrap.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
+}
+function showGoodsTab(name,btn){
+  const wrap=document.getElementById('more-goods');
+  wrap.querySelectorAll('.sub').forEach(t=>t.classList.remove('on'));
+  wrap.querySelector('#goods-'+name).classList.add('on');
+  wrap.querySelectorAll('.seg button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');
 }
 
 // ── Листы ──
@@ -964,7 +1194,55 @@ function closeSht(){
 let _tt;
 function toast(msg){
   const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');
-  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('on'),2600);
+  clearTimeout(_tt);_tt=setTimeout(()=>t.classList.remove('on'),2800);
+}
+
+// ── Персонализация (работает) ──
+function optPick(btn){btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
+function setStyle(s,btn){optPick(btn);document.body.classList.toggle('classic',s==='classic');
+  toast(s==='classic'?'Стиль: Классика — плоский':'Стиль: Градиент');}
+function setTheme(t,btn){optPick(btn);
+  if(t==='auto')document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t);
+  toast('Тема: '+(t==='auto'?'как в системе':t==='dark'?'тёмная':'светлая'));}
+function setDens(d,btn){optPick(btn);document.body.classList.toggle('compact',d==='compact');
+  toast(d==='compact'?'Компактно — больше на экране':'Просторно');}
+
+// ── Роли (демо) ──
+const roleNames={acc:'Бухгалтер',adm:'Администратор',own:'Владелец',staff:'Сотрудник зала'};
+function setRole(r){
+  const showKassa=r==='acc',showFin=r==='acc'||r==='own',showFab=r==='acc'||r==='adm';
+  document.getElementById('nb-kassa').style.display=showKassa?'':'none';
+  document.getElementById('nb-finance').style.display=showFin?'':'none';
+  document.getElementById('nb-suppliers').style.display=r==='own'?'none':'';
+  document.getElementById('fab').style.display=showFab?'':'none';
+  document.getElementById('role-label').textContent=roleNames[r]+(r==='acc'?' · Гульнара А.':'');
+  document.getElementById('cur-role').textContent=roleNames[r]+' ›';
+  const b=document.getElementById('role-banner');
+  if(r==='acc'){b.style.display='none';}
+  else{b.style.display='block';
+    b.textContent=r==='adm'?'👨‍💼 Администратор: суммы кассы скрыты, доступны заказы и записи':
+      r==='own'?'👑 Владелец: режим просмотра. Создаёт только цели':
+      '🧑 Сотрудник зала: только товары и поставки, без финансов';}
+  closeSht();go('home');
+}
+
+// ── ИИ ──
+function aiAsk(){
+  const q=document.getElementById('ai-q');
+  if(!q.value.trim())return;
+  const c=document.createElement('div');c.className='card';c.style.cssText='background:var(--card2);box-shadow:none';
+  c.innerHTML=`<div class="mu" style="margin-bottom:8px">Вы: ${q.value.replace(/</g,'&lt;')}</div>
+    <div style="font-size:15px;line-height:1.55;color:var(--t1)">🤖 Демо-ответ: в реальном приложении ИИ проанализирует данные магазина и ответит по сути.<br><span class="mu">уверенность 90% · Пакет ИИ</span></div>`;
+  document.getElementById('ai-log').appendChild(c);q.value='';
+}
+
+// ── Табель: смена статуса по тапу ──
+const stList=[['Вышла ▾','pos'],['Полдня ▾','tr'],['Выходной ▾','mu'],['Больничный ▾','tr'],['Прогул ▾','neg']];
+function cycleSt(el){
+  const i=(parseInt(el.dataset.i||'0')+1)%stList.length;
+  el.dataset.i=i;el.textContent=stList[i][0];el.className='lr-a st '+stList[i][1];
+  toast('Статус изменён — не забудь «Подтвердить день»');
 }
 
 // ── Нумпад ──
@@ -998,7 +1276,7 @@ function npSave(){
     <div class="lr-a ${cls}">${sign}₽${n.toLocaleString('ru-RU')}</div>`;
   document.getElementById('ops-list').prepend(row);
   npV='';nk('');
-  closeSht();toast('Сохранено ✓ — смотри в Ещё → Операции');
+  closeSht();toast('Сохранено ✓ · Отменить (5 сек) · смотри Ещё → Операции');
 }
 
 // ── Календарь ──
