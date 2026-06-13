@@ -1481,7 +1481,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <div class="lr" onclick="toast('Подключение WhatsApp — демо')"><div class="lr-t">WhatsApp</div><div class="lr-a mu">Подключить ›</div></div>
         <div class="lr" onclick="toast('Telegram подключён ✓')"><div class="lr-t">Telegram</div><div class="lr-a pos">✓ подключён</div></div>
         <div class="lr" onclick="toast('Настройка 1С — демо')"><div class="lr-t">1С</div><div class="lr-a mu">Настроить ›</div></div>
-        <div class="lr" onclick="toast('OAuth банка — демо')"><div class="lr-t">Банк</div><div class="lr-a mu">Подключить ›</div></div>
+        <div class="lr" onclick="openSht('banks')"><div class="lr-icon" style="background:linear-gradient(145deg,#30D158,#1A9E3F)"><svg width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><rect x="2" y="5" width="16" height="11" rx="2"/><line x1="2" y1="9" x2="18" y2="9"/><line x1="5" y1="13" x2="8" y2="13"/></svg></div><div class="lr-main"><div class="lr-t">Банки</div><div class="lr-s">2 подключено · последний синк 09:14</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
       </div>
 
       <div class="lbl">Подписка</div>
@@ -2136,6 +2136,145 @@ function calcDiff(){
   else{el.textContent='✓ 0₽';el.className='pos';}
 }
 calcDiff();
+
+function selectBank(name,color,acct){
+  document.getElementById('add-bank-title').textContent=name+' — подключение';
+  document.getElementById('add-bank-acct').textContent=acct;
+  closeSht();
+  setTimeout(function(){openSht('addBank');},220);
+}
+function confirmBankAdd(){
+  closeSht();
+  setTimeout(function(){
+    openSht('banks');
+    toast('✓ Банк подключён · первая синхронизация запущена');
+  },220);
+}
 </script>
+  <!-- ── Банки — управление ── -->
+  <div class="sht" id="sht-banks">
+    <div class="hdl"></div>
+    <h3>Подключённые банки</h3>
+    <div class="mu" style="margin-bottom:14px">Транзакции импортируются автоматически и сопоставляются с вашими записями</div>
+
+    <!-- Подключённые -->
+    <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:8px">
+      <div class="lr" onclick="toast('Тинькофф Бизнес · *9241 · последняя синхронизация 09:14 (демо)')">
+        <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#FFDD2D,#F5A623);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;font-weight:900;color:#222">Т</div>
+        <div class="lr-main">
+          <div class="lr-t">Тинькофф Бизнес</div>
+          <div class="lr-s">*9241 · синк 09:14 · <span class="pos">✓ активен</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="pos" style="font-size:13px;font-weight:700">₽126 000</span>
+          <button onclick="event.stopPropagation();toast('Синхронизация запущена ✓')" style="font-size:11px;color:var(--brand);background:none;border:none;cursor:pointer;font-weight:600">Синк ↻</button>
+        </div>
+      </div>
+      <div class="lr" onclick="toast('Сбербанк Бизнес · *3187 · последняя синхронизация 07:30 (демо)')">
+        <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#2ECC71,#1A9B50);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px;font-weight:900;color:#fff">С</div>
+        <div class="lr-main">
+          <div class="lr-t">Сбербанк Бизнес</div>
+          <div class="lr-s">*3187 · синк 07:30 · <span class="pos">✓ активен</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+          <span class="pos" style="font-size:13px;font-weight:700">₽58 200</span>
+          <button onclick="event.stopPropagation();toast('Синхронизация запущена ✓')" style="font-size:11px;color:var(--brand);background:none;border:none;cursor:pointer;font-weight:600">Синк ↻</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lbl">Настройки синхронизации</div>
+    <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:8px">
+      <div class="lr"><div class="lr-main"><div class="lr-t">Автосинхронизация</div><div class="lr-s">каждые 15 минут</div></div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Автокатегоризация</div><div class="lr-s">ИИ распределяет транзакции по категориям</div></div><button class="sw on" onclick="this.classList.toggle('on')"></button></div>
+      <div class="lr" onclick="toast('Настройка сопоставления счетов (демо)')"><div class="lr-main"><div class="lr-t">Сопоставить счета</div><div class="lr-s">Тинькофф → Банк · Сбер → Банк 2</div></div><span class="chevron"><svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg></span></div>
+    </div>
+
+    <div class="lbl">Последние импорты</div>
+    <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:16px">
+      <div class="lr" style="cursor:default"><div class="lr-main"><div class="lr-t">Сегодня 09:14</div><div class="lr-s">Тинькофф · 3 новые транзакции · ₽48 000</div></div><span class="pos" style="font-size:13px">✓</span></div>
+      <div class="lr" style="cursor:default"><div class="lr-main"><div class="lr-t">Сегодня 07:30</div><div class="lr-s">Сбер · 1 новая транзакция · ₽12 000</div></div><span class="pos" style="font-size:13px">✓</span></div>
+      <div class="lr" style="cursor:default"><div class="lr-main"><div class="lr-t">Вчера 22:15</div><div class="lr-s">Тинькофф · 5 транзакций · ₽95 000</div></div><span class="pos" style="font-size:13px">✓</span></div>
+    </div>
+
+    <button class="btn" onclick="closeSht();setTimeout(function(){openSht('addBank');},220)">+ Добавить банк</button>
+    <button class="btn sec" onclick="toast('Загрузка выписки: PDF или CSV (демо)')" style="margin-top:8px">📄 Загрузить выписку вручную</button>
+  </div>
+
+  <!-- ── Добавить банк — выбор ── -->
+  <div class="sht" id="sht-addBank">
+    <div class="hdl"></div>
+    <h3 id="add-bank-title">Подключить банк</h3>
+    <div class="mu" style="margin-bottom:14px">Выберите банк — откроется страница авторизации. Auron получит доступ только к выпискам, не к управлению счётом.</div>
+
+    <div class="lbl">Популярные</div>
+    <button class="act-row" onclick="selectBank('Тинькофф Бизнес','#FFDD2D','р/с 40702810200000009241')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#FFDD2D,#F5A623);font-size:20px;font-weight:900;color:#222">Т</div>
+      <div><div class="act-text">Тинькофф Бизнес</div><div class="act-sub">OAuth · мгновенный доступ к выпискам</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('Сбербанк Бизнес','#2ECC71','р/с 40702810938000003187')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#2ECC71,#1A9B50);font-size:20px;font-weight:900;color:#fff">С</div>
+      <div><div class="act-text">Сбербанк Бизнес</div><div class="act-sub">Сбербанк Бизнес Онлайн API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('Альфа-Банк','#EF3124','р/с 40702810801300001022')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#FF5C5C,#EF3124);font-size:20px;font-weight:900;color:#fff">А</div>
+      <div><div class="act-text">Альфа-Банк</div><div class="act-sub">Alfa Open API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('ВТБ','#009FDF','р/с 40702810900250000714')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#40C0FF,#009FDF);font-size:20px;font-weight:900;color:#fff">В</div>
+      <div><div class="act-text">ВТБ</div><div class="act-sub">ВТБ Бизнес-Онлайн API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+
+    <div class="lbl">Другие банки</div>
+    <button class="act-row" onclick="selectBank('Газпромбанк','#003087','')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#3A6CC8,#003087);font-size:14px;font-weight:900;color:#fff">ГПБ</div>
+      <div><div class="act-text">Газпромбанк</div><div class="act-sub">выписка по API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('Банк Открытие','#FF6B1A','')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#FF9F5A,#FF6B1A);font-size:14px;font-weight:900;color:#fff">ОТК</div>
+      <div><div class="act-text">Открытие</div><div class="act-sub">Бизнес-портал API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('Совкомбанк','#7C3AED','')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#A855F7,#7C3AED);font-size:14px;font-weight:900;color:#fff">СКМ</div>
+      <div><div class="act-text">Совкомбанк</div><div class="act-sub">API выписок</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+    <button class="act-row" onclick="selectBank('МТС Банк','#E5002B','')">
+      <div class="act-icon" style="background:linear-gradient(145deg,#FF3D5A,#E5002B);font-size:14px;font-weight:900;color:#fff">МТС</div>
+      <div><div class="act-text">МТС Банк</div><div class="act-sub">МТС Бизнес API</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+
+    <div class="lbl">Любой банк</div>
+    <button class="act-row" onclick="toast('Загрузите выписку в формате CSV или PDF — демо')">
+      <div class="act-icon" style="background:var(--card2);font-size:22px">📄</div>
+      <div><div class="act-text">Загрузить выписку</div><div class="act-sub">CSV · PDF · любой банк · ИИ распознаёт формат</div></div>
+      <svg width="15" height="15" fill="none"><use href="#ic-chev" color="var(--t3)"/></svg>
+    </button>
+
+    <div style="background:rgba(94,92,230,.07);border-radius:14px;padding:14px;margin-top:8px">
+      <div style="font-size:13px;color:var(--t2);line-height:1.55">🔒 <b style="color:var(--t1)">Только чтение.</b> Auron никогда не получает доступ к управлению счётом или переводам. Только выписки — для сверки с вашими записями.</div>
+    </div>
+  </div>
+
+  <!-- ── Подтверждение подключения банка ── -->
+  <div class="sht" id="sht-bankConfirm">
+    <div class="hdl"></div>
+    <h3 id="add-bank-title2">Подключить банк</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none;margin-bottom:12px">
+      <div class="lr" style="cursor:default"><div class="lr-t">Счёт</div><div class="lr-a mu" id="add-bank-acct">р/с ••••••••</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Доступ</div><div class="lr-a mu">только выписки 🔒</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Синхронизация</div><div class="lr-a mu">каждые 15 мин</div></div>
+    </div>
+    <button class="btn" onclick="confirmBankAdd()">Подтвердить подключение</button>
+    <button class="btn sec" onclick="closeSht()" style="margin-top:8px">Отмена</button>
+  </div>
+
 </body>
 </html>
