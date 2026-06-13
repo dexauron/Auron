@@ -350,6 +350,13 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
   display:none;gap:10px;flex-direction:column}
 .beznal-fields.on{display:flex}
 
+/* ── Аккордеон ───────────────────────────── */
+.acc-body{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--sep)}
+.acc.open .acc-body{display:block}
+.acc-head{display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.acc-chev{transition:transform .22s;color:var(--t3);flex-shrink:0}
+.acc.open .acc-chev{transform:rotate(90deg)}
+
 /* ── Онбординг ───────────────────────────── */
 .onboard{padding:40px 24px 32px;display:flex;flex-direction:column;min-height:100vh}
 .ob-step{display:none}.ob-step.on{display:block}
@@ -647,91 +654,27 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         </div>
       </div>
 
-      <!-- ООО Бета -->
-      <div class="card" style="margin-bottom:10px" onclick="openSht('supBeta')">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#4ADE80,#16A34A);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(22,163,74,.3)">🏭</div>
-          <div style="flex:1">
-            <div style="font-size:16px;font-weight:700;color:var(--t1)">ООО Бета <span class="beznal">Безнал</span></div>
-            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 11 июн · надёжность 96%</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:17px;font-weight:700;color:var(--red)">₽85 000</div>
-            <div class="mu" style="font-size:11px">долг</div>
-          </div>
+      <!-- Компактные строки поставщиков -->
+      <div class="card" style="margin-bottom:10px">
+        <div class="lr" onclick="openSht('sup1')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A);box-shadow:0 4px 8px rgba(22,163,74,.3);color:#fff;font-weight:800;font-size:16px">Б</div>
+          <div class="lr-main"><div class="lr-t">ООО Бета <span class="beznal">Безнал</span></div><div class="lr-s">Долг: ₽85 000 · посл. поставка 11 июня</div></div>
+          <span class="neg" style="font-weight:700;white-space:nowrap">₽85 000 ›</span>
         </div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽85К из лимита ₽200К</div>
-        <div class="pb pb-orange"><i style="width:42%"></i></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="event.stopPropagation();toast('Выплата инициирована — безнал (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
-          <button onclick="event.stopPropagation();toast('Новый заказ у ООО Бета (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
-          <button onclick="event.stopPropagation();openSht('supBeta')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        <div class="lr" onclick="openSht('sup2')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#FBBF24,#F59E0B);box-shadow:0 4px 8px rgba(245,158,11,.3);color:#fff;font-weight:800;font-size:16px">Г</div>
+          <div class="lr-main"><div class="lr-t">ИП Громов</div><div class="lr-s">Долг: ₽120 000 · посл. поставка 10 июня</div></div>
+          <span class="neg" style="font-weight:700;white-space:nowrap">₽120 000 ›</span>
         </div>
-      </div>
-
-      <!-- ИП Громов -->
-      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#FBBF24,#F59E0B);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(245,158,11,.3)">🍞</div>
-          <div style="flex:1">
-            <div style="font-size:16px;font-weight:700;color:var(--t1)">ИП Громов</div>
-            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 10 июн · надёжность 100%</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:17px;font-weight:700;color:var(--red)">₽120 000</div>
-            <div class="mu" style="font-size:11px">долг</div>
-          </div>
+        <div class="lr" onclick="openSht('sup3')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3);color:#fff;font-weight:800;font-size:16px">А</div>
+          <div class="lr-main"><div class="lr-t">ООО Альфа</div><div class="lr-s">Долг: ₽55 000 · посл. поставка 8 июня</div></div>
+          <span class="neg" style="font-weight:700;white-space:nowrap">₽55 000 ›</span>
         </div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽120К из лимита ₽150К</div>
-        <div class="pb pb-red"><i style="width:80%"></i></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="event.stopPropagation();toast('Выплата ИП Громов (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
-          <button onclick="event.stopPropagation();toast('Новый заказ у ИП Громов (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
-          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
-        </div>
-      </div>
-
-      <!-- ООО Альфа -->
-      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#5AC8FA,#007AFF);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(0,122,255,.3)">🥛</div>
-          <div style="flex:1">
-            <div style="font-size:16px;font-weight:700;color:var(--t1)">ООО Альфа</div>
-            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 8 июн · надёжность 88%</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:17px;font-weight:700;color:var(--red)">₽55 000</div>
-            <div class="mu" style="font-size:11px">долг</div>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽55К из лимита ₽120К</div>
-        <div class="pb pb-orange"><i style="width:46%"></i></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="event.stopPropagation();toast('Выплата ООО Альфа (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--green);color:#fff">Оплатить</button>
-          <button onclick="event.stopPropagation();toast('Новый заказ у ООО Альфа (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
-          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
-        </div>
-      </div>
-
-      <!-- Иванов П. -->
-      <div class="card" style="margin-bottom:10px" onclick="openSht('supCard')">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-          <div style="width:44px;height:44px;border-radius:14px;background:linear-gradient(145deg,#C084FC,#9333EA);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;box-shadow:0 4px 8px rgba(147,51,234,.3)">🧴</div>
-          <div style="flex:1">
-            <div style="font-size:16px;font-weight:700;color:var(--t1)">Иванов П.</div>
-            <div class="mu" style="font-size:12px;margin-top:1px">Последняя поставка: 7 июн · надёжность 71% ⚠</div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:17px;font-weight:700;color:var(--green)">₽0</div>
-            <div class="mu" style="font-size:11px">долг</div>
-          </div>
-        </div>
-        <div style="font-size:11px;color:var(--t2);margin-bottom:4px">Долг ₽0 из лимита ₽90К</div>
-        <div class="pb pb-green"><i style="width:2%"></i></div>
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button onclick="event.stopPropagation();toast('Нет долга — выплата не нужна')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t3)">Оплатить</button>
-          <button onclick="event.stopPropagation();toast('Новый заказ у Иванова П. (демо)')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(94,92,230,.12);color:var(--brand)">Закупка</button>
-          <button onclick="event.stopPropagation();openSht('supCard')" style="flex:1;border:none;border-radius:12px;padding:9px 4px;font-size:12px;font-weight:700;cursor:pointer;background:var(--card2);color:var(--t2)">История</button>
+        <div class="lr" onclick="openSht('sup4')">
+          <div class="lr-icon" style="background:linear-gradient(145deg,#C084FC,#9333EA);box-shadow:0 4px 8px rgba(147,51,234,.3);color:#fff;font-weight:800;font-size:16px">И</div>
+          <div class="lr-main"><div class="lr-t">Иванов П.</div><div class="lr-s">Долг: ₽0 · посл. поставка 7 июня · надёжность 71% ⚠</div></div>
+          <span class="pos" style="font-weight:700;white-space:nowrap">₽0 ›</span>
         </div>
       </div>
 
@@ -1621,15 +1564,15 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
     <div class="sub on" id="more-ops">
       <div class="lbl">Сегодня</div>
       <div class="card" id="ops-list">
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 8px rgba(94,92,230,.3)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">09:15 · Наличные</div></div><div class="lr-a pos">+₽62 000</div></div>
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🛒</div><div class="lr-main"><div class="lr-t">Закупка · Иванов П.</div><div class="lr-s">14:32 · Наличные</div></div><div class="lr-a neg">−₽15 000</div></div>
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 8px rgba(255,149,0,.3)">↔</div><div class="lr-main"><div class="lr-t">Инкассация</div><div class="lr-s">18:00 · Нал → Банк</div></div><div class="lr-a tr">₽20 000</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6);box-shadow:0 4px 8px rgba(94,92,230,.3)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">09:15 · Наличные</div></div><div class="lr-a pos">+₽62 000</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF);box-shadow:0 4px 8px rgba(0,122,255,.3)">🛒</div><div class="lr-main"><div class="lr-t">Закупка · Иванов П.</div><div class="lr-s">14:32 · Наличные</div></div><div class="lr-a neg">−₽15 000</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#FFB340,#FF9500);box-shadow:0 4px 8px rgba(255,149,0,.3)">↔</div><div class="lr-main"><div class="lr-t">Инкассация</div><div class="lr-s">18:00 · Нал → Банк</div></div><div class="lr-a tr">₽20 000</div></div>
       </div>
       <div class="lbl">Вчера</div>
       <div class="card">
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">Наличные</div></div><div class="lr-a pos">+₽58 000</div></div>
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👥</div><div class="lr-main"><div class="lr-t">Аванс · Сафина Г.</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽10 000</div></div>
-        <div class="lr"><div class="lr-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</div><div class="lr-main"><div class="lr-t">Списание · просрочка</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽840</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#8B89FF,#5E5CE6)">🧾</div><div class="lr-main"><div class="lr-t">Z-отчёт · Дневная</div><div class="lr-s">Наличные</div></div><div class="lr-a pos">+₽58 000</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#4ADE80,#16A34A)">👥</div><div class="lr-main"><div class="lr-t">Аванс · Сафина Г.</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽10 000</div></div>
+        <div class="lr" onclick="openSht('txDetail')"><div class="lr-icon" style="background:linear-gradient(145deg,#94A3B8,#64748B)">🗑</div><div class="lr-main"><div class="lr-t">Списание · просрочка</div><div class="lr-s">Наличные</div></div><div class="lr-a neg">−₽840</div></div>
       </div>
     </div>
 
@@ -1850,7 +1793,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
         <!-- Список товаров -->
         <div class="card">
           <!-- Молоко 1л -->
-          <div onclick="toast('Карточка товара: история прихода, продажи, маржа (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+          <div onclick="openSht('product')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
             <div style="width:10px;height:10px;border-radius:50%;background:rgba(0,122,255,.7);flex-shrink:0"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:15px;font-weight:500;color:var(--t1)">Молоко 1л</div>
@@ -1861,7 +1804,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             </div>
           </div>
           <!-- Хлеб -->
-          <div onclick="toast('Карточка товара: хлеб б/н (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+          <div onclick="openSht('product')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
             <div style="width:10px;height:10px;border-radius:50%;background:rgba(245,158,11,.8);flex-shrink:0"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:15px;font-weight:500;color:var(--t1)">Хлеб б/н</div>
@@ -1872,7 +1815,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             </div>
           </div>
           <!-- Яйца С1 -->
-          <div onclick="toast('Карточка товара: яйца С1 (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+          <div onclick="openSht('product')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
             <div style="width:10px;height:10px;border-radius:50%;background:rgba(0,122,255,.7);flex-shrink:0"></div>
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:6px">
@@ -1886,7 +1829,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             </div>
           </div>
           <!-- Сахар -->
-          <div onclick="toast('Карточка товара: сахар 1кг (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
+          <div onclick="openSht('product')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;border-bottom:1px solid var(--sep)">
             <div style="width:10px;height:10px;border-radius:50%;background:rgba(245,158,11,.8);flex-shrink:0"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:15px;font-weight:500;color:var(--t1)">Сахар 1кг</div>
@@ -1897,7 +1840,7 @@ body.compact .qi{width:44px;height:44px;border-radius:14px}
             </div>
           </div>
           <!-- Стиральный порошок -->
-          <div onclick="toast('Карточка товара: стиральный порошок (демо)')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
+          <div onclick="openSht('product')" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer">
             <div style="width:10px;height:10px;border-radius:50%;background:rgba(147,51,234,.7);flex-shrink:0"></div>
             <div style="flex:1;min-width:0">
               <div style="font-size:15px;font-weight:500;color:var(--t1)">Порошок стир. 1кг</div>
@@ -3004,6 +2947,9 @@ window.openSht = function(id){
   _origOpenSht(id);
 };
 
+// ── Аккордеон ──
+function toggleAcc(el){el.closest('.acc').classList.toggle('open');}
+
 function selectBank(name,color,acct){
   document.getElementById('add-bank-title').textContent=name+' — подключение';
   document.getElementById('add-bank-acct').textContent=acct;
@@ -3141,6 +3087,151 @@ function confirmBankAdd(){
     </div>
     <button class="btn" onclick="confirmBankAdd()">Подтвердить подключение</button>
     <button class="btn sec" onclick="closeSht()" style="margin-top:8px">Отмена</button>
+  </div>
+
+  <!-- ── Шторка: ООО Бета ── -->
+  <div class="sht" id="sht-sup1">
+    <div class="hdl"></div>
+    <h3>ООО Бета <span class="beznal">Безнал</span></h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row"><span class="mu">Долг</span><span style="font-size:22px;font-weight:800;color:var(--red)">₽ 85 000</span></div>
+      <div style="font-size:12px;color:var(--t2);margin:6px 0 4px">42% от лимита ₽200К</div>
+      <div class="pb pb-orange"><i style="width:42%"></i></div>
+      <div class="row" style="margin-top:10px">
+        <span class="mu">Надёжность</span><span class="pos" style="font-weight:600">96% ✓</span>
+      </div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px">
+        <span class="mu">Последняя поставка</span><span style="font-weight:600">11 июня</span>
+      </div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px">
+        <span class="mu">Способ оплаты</span><span style="font-weight:600">Перечисление · р/с ••9241</span>
+      </div>
+    </div>
+    <div class="lbl">Действия</div>
+    <button class="act-row" onclick="toast('Перечисление инициировано · счёт Банк выбран авто ✓')"><span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#22C55E)">💳</span><div><div class="act-text">Оплатить долг</div><div class="act-sub">₽85 000 · через Банк (авто)</div></div></button>
+    <button class="act-row" onclick="toast('Новый заказ у ООО Бета (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">📦</span><div><div class="act-text">Новая закупка</div><div class="act-sub">Записать новый приход</div></div></button>
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr"><div class="lr-main"><div class="lr-t">Перечисление</div><div class="lr-s">11 июня</div></div><div class="lr-a pos">−₽40 000 ✓</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Накладная №847</div><div class="lr-s">5 июня · ₽38 400</div></div><div class="lr-a neg">+₽38 400</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Перечисление</div><div class="lr-s">28 мая</div></div><div class="lr-a pos">−₽35 000 ✓</div></div>
+    </div>
+  </div>
+
+  <!-- ── Шторка: ИП Громов ── -->
+  <div class="sht" id="sht-sup2">
+    <div class="hdl"></div>
+    <h3>ИП Громов</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row"><span class="mu">Долг</span><span style="font-size:22px;font-weight:800;color:var(--red)">₽ 120 000</span></div>
+      <div style="font-size:12px;color:var(--red);margin:6px 0 4px">⚠ 80% от лимита ₽150К — высокая нагрузка</div>
+      <div class="pb pb-red"><i style="width:80%"></i></div>
+      <div class="row" style="margin-top:10px"><span class="mu">Надёжность</span><span class="pos" style="font-weight:600">100% ✓</span></div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px"><span class="mu">Последняя поставка</span><span style="font-weight:600">10 июня</span></div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px"><span class="mu">Просрочка оплаты</span><span class="neg" style="font-weight:600">+3 дня ⚠</span></div>
+    </div>
+    <div class="lbl">Действия</div>
+    <button class="act-row" onclick="toast('Выплата ИП Громов ₽28 000 (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#22C55E)">💳</span><div><div class="act-text">Оплатить долг</div><div class="act-sub">₽120 000 · Наличные или Банк</div></div></button>
+    <button class="act-row" onclick="toast('Новый заказ у ИП Громов (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">📦</span><div><div class="act-text">Новая закупка</div><div class="act-sub">Хлеб и выпечка</div></div></button>
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr"><div class="lr-main"><div class="lr-t">Накладная №312</div><div class="lr-s">10 июня · хлеб, кондитерка</div></div><div class="lr-a neg">+₽28 000</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Оплата наличными</div><div class="lr-s">1 июня</div></div><div class="lr-a pos">−₽45 000 ✓</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Накладная №298</div><div class="lr-s">28 мая</div></div><div class="lr-a neg">+₽52 000</div></div>
+    </div>
+  </div>
+
+  <!-- ── Шторка: ООО Альфа ── -->
+  <div class="sht" id="sht-sup3">
+    <div class="hdl"></div>
+    <h3>ООО Альфа</h3>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="row"><span class="mu">Долг</span><span style="font-size:22px;font-weight:800;color:var(--red)">₽ 55 000</span></div>
+      <div style="font-size:12px;color:var(--t2);margin:6px 0 4px">46% от лимита ₽120К</div>
+      <div class="pb pb-orange"><i style="width:46%"></i></div>
+      <div class="row" style="margin-top:10px"><span class="mu">Надёжность</span><span class="tr" style="font-weight:600">88% ·</span></div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px"><span class="mu">Последняя поставка</span><span style="font-weight:600">8 июня</span></div>
+    </div>
+    <div class="lbl">Действия</div>
+    <button class="act-row" onclick="toast('Выплата ООО Альфа (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#4ADE80,#22C55E)">💳</span><div><div class="act-text">Оплатить долг</div><div class="act-sub">₽55 000</div></div></button>
+    <button class="act-row" onclick="toast('Новый заказ у ООО Альфа (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">📦</span><div><div class="act-text">Новая закупка</div><div class="act-sub">Молочные продукты</div></div></button>
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr"><div class="lr-main"><div class="lr-t">Накладная №519</div><div class="lr-s">8 июня · молоко, сыр, масло</div></div><div class="lr-a neg">+₽55 000</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Оплата</div><div class="lr-s">25 мая</div></div><div class="lr-a pos">−₽48 000 ✓</div></div>
+    </div>
+  </div>
+
+  <!-- ── Шторка: Иванов П. ── -->
+  <div class="sht" id="sht-sup4">
+    <div class="hdl"></div>
+    <h3>Иванов П.</h3>
+    <div class="card" style="background:rgba(48,209,88,.07);box-shadow:none;border:1px solid rgba(48,209,88,.2)">
+      <div class="row"><span class="mu">Долг</span><span style="font-size:22px;font-weight:800;color:var(--green)">₽ 0</span></div>
+      <div style="font-size:13px;color:var(--green);margin-top:4px">✓ Долгов нет — всё оплачено</div>
+      <div class="row" style="margin-top:10px"><span class="mu">Надёжность</span><span class="tr" style="font-weight:600">71% ⚠ — бывают задержки</span></div>
+      <div class="row" style="padding-top:6px;border-top:1px solid var(--sep);margin-top:6px"><span class="mu">Последняя поставка</span><span style="font-weight:600">7 июня</span></div>
+    </div>
+    <div class="lbl">Действия</div>
+    <button class="act-row" onclick="toast('Новый заказ у Иванова П. (демо)')"><span class="act-icon" style="background:linear-gradient(145deg,#5AC8FA,#007AFF)">📦</span><div><div class="act-text">Новая закупка</div><div class="act-sub">Бытовая химия</div></div></button>
+    <div class="lbl">История</div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr"><div class="lr-main"><div class="lr-t">Накладная №88</div><div class="lr-s">7 июня</div></div><div class="lr-a neg">+₽22 000</div></div>
+      <div class="lr"><div class="lr-main"><div class="lr-t">Оплата наличными</div><div class="lr-s">7 июня</div></div><div class="lr-a pos">−₽22 000 ✓</div></div>
+    </div>
+  </div>
+
+  <!-- ── Шторка: Детали транзакции ── -->
+  <div class="sht" id="sht-txDetail">
+    <div class="hdl"></div>
+    <div style="text-align:center;padding:8px 0 20px">
+      <div style="font-size:36px;font-weight:800;color:var(--red);letter-spacing:-1px">−₽ 15 000</div>
+      <div style="font-size:14px;color:var(--t2);margin-top:4px">Расход · Закупка</div>
+    </div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr" style="cursor:default"><div class="lr-t">Категория</div><div class="lr-a mu">🛒 Закупка</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Счёт</div><div class="lr-a mu">💵 Наличные</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Дата и время</div><div class="lr-a mu">12 июня · 14:32</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Кассир</div><div class="lr-a mu">Иванова А.</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Поставщик</div><div class="lr-a mu">ИП Громов</div></div>
+      <div class="lr" style="cursor:default;border-bottom:none"><div class="lr-t">Комментарий</div><div class="lr-a mu">Хлеб, молоко</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button onclick="toast('Редактирование операции (демо)')" class="btn sec" style="margin-top:0">✏️ Изменить</button>
+      <button onclick="toast('Операция скопирована — открыть форму? (демо)')" class="btn sec" style="margin-top:0">↩ Повторить</button>
+    </div>
+    <button onclick="toast('Перемещено в корзину · Отменить?')" class="btn" style="background:rgba(255,69,58,.1);color:var(--red);box-shadow:none;margin-top:8px">🗑 Удалить операцию</button>
+  </div>
+
+  <!-- ── Шторка: Детали товара ── -->
+  <div class="sht" id="sht-product">
+    <div class="hdl"></div>
+    <h3 id="prod-name">Молоко 1л "Простоквашино"</h3>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="card" style="flex:1;text-align:center;margin-bottom:0;box-shadow:none;background:var(--card2)">
+        <div style="font-size:11px;color:var(--t2);font-weight:600;margin-bottom:4px">ЦЕНА</div>
+        <div style="font-size:22px;font-weight:800;color:var(--t1)">₽89</div>
+      </div>
+      <div class="card" style="flex:1;text-align:center;margin-bottom:0;box-shadow:none;background:var(--card2)">
+        <div style="font-size:11px;color:var(--t2);font-weight:600;margin-bottom:4px">МАРЖА</div>
+        <div style="font-size:22px;font-weight:800;color:var(--green)">32%</div>
+      </div>
+      <div class="card" style="flex:1;text-align:center;margin-bottom:0;box-shadow:none;background:var(--card2)">
+        <div style="font-size:11px;color:var(--t2);font-weight:600;margin-bottom:4px">ОСТАТОК</div>
+        <div style="font-size:22px;font-weight:800;color:var(--t1)">48 шт</div>
+      </div>
+    </div>
+    <div class="card" style="background:var(--card2);box-shadow:none">
+      <div class="lr" style="cursor:default"><div class="lr-t">Себестоимость</div><div class="lr-a mu">₽60.5 / шт</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Поставщик</div><div class="lr-a mu">ООО Альфа</div></div>
+      <div class="lr" style="cursor:default"><div class="lr-t">Продано за 30 дней</div><div class="lr-a mu">312 шт · ₽27 768</div></div>
+      <div class="lr" style="cursor:default;border-bottom:none"><div class="lr-t">Оборачиваемость</div><div class="lr-a pos">2.1 дня ✓</div></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button onclick="toast('Изменить цену (демо)')" class="btn sec" style="margin-top:0;flex:1">✏️ Цена</button>
+      <button onclick="toast('Списание товара (демо)')" class="btn sec" style="margin-top:0;flex:1">📋 Списать</button>
+    </div>
+    <button onclick="toast('История цен и продаж за 6 мес (демо)')" class="btn sec" style="margin-top:8px">История изменений ›</button>
   </div>
 
 </body>
