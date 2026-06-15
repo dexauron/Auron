@@ -16,6 +16,15 @@ git clone --depth 1 --branch claude/optimistic-einstein-Afzmv \
 cp -r auron_tmp/app/* "$APP_DIR/"
 rm -rf auron_tmp
 
+# Подставляем реальный ANON_KEY с сервера в config.js
+if [ -f /opt/supabase/docker/.env ]; then
+  ANON_KEY=$(grep "^ANON_KEY=" /opt/supabase/docker/.env | cut -d= -f2)
+  if [ -n "$ANON_KEY" ]; then
+    sed -i "s|window.SUPABASE_ANON_KEY.*|window.SUPABASE_ANON_KEY = '${ANON_KEY}';|" "$APP_DIR/js/config.js"
+    echo "  ✓ ANON_KEY обновлён в config.js"
+  fi
+fi
+
 echo "[3/3] Настраиваем nginx..."
 cat > /etc/nginx/sites-available/auron << 'NGINX'
 server {
