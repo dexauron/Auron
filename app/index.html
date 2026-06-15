@@ -36,7 +36,7 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 .screen{position:fixed;inset:0;display:none;flex-direction:column;background:var(--bg)}
 .screen.active{display:flex}
 /* ── Auth screens ───────────────────────────────────────────────────── */
-#screen-otp,#screen-pin,#screen-pin-setup{
+#screen-login,#screen-signup,#screen-pin,#screen-pin-setup{
   align-items:center;justify-content:center;padding:32px 24px;gap:24px;
   padding-top:calc(var(--safe-t) + 32px);
 }
@@ -351,11 +351,10 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 <body>
 
 <!-- ══ LOGIN SCREEN ═══════════════════════════════════════════════════════ -->
-<div id="screen-otp" class="screen">
+<div id="screen-login" class="screen">
   <div class="auth-logo">🏪</div>
   <div class="auth-title">Auron Finance</div>
-  <div class="auth-sub" id="otp-subtitle">Войдите в свой аккаунт</div>
-
+  <div class="auth-sub">Войдите в свой аккаунт</div>
   <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
     <div class="auth-input-wrap">
       <span>📧</span>
@@ -368,8 +367,14 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
     <button class="btn-primary" id="btn-signin">Войти</button>
     <button class="btn-ghost" id="btn-show-signup">Нет аккаунта? Зарегистрироваться</button>
   </div>
+</div>
 
-  <div id="signup-step" style="width:100%;max-width:320px;display:none;flex-direction:column;gap:12px">
+<!-- ══ SIGNUP SCREEN ══════════════════════════════════════════════════════ -->
+<div id="screen-signup" class="screen">
+  <div class="auth-logo">🏪</div>
+  <div class="auth-title">Регистрация</div>
+  <div class="auth-sub">Создайте аккаунт Auron Finance</div>
+  <div style="width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px">
     <div class="auth-input-wrap">
       <span>📧</span>
       <input id="inp-email2" type="email" placeholder="email@example.com" autocomplete="email">
@@ -795,19 +800,10 @@ const App = (() => {
 
   // ── Email auth ─────────────────────────────────────────────────────
   function initOTP() {
-    showScreen('screen-otp');
+    showScreen('screen-login');
 
-    const showSignin = () => {
-      qs('#screen-otp > div:not(#signup-step)').style.display = 'flex';
-      $('signup-step').style.display = 'none';
-    };
-    const showSignup = () => {
-      qs('#screen-otp > div:not(#signup-step)').style.display = 'none';
-      $('signup-step').style.display = 'flex';
-    };
-
-    $('btn-show-signup').onclick = showSignup;
-    $('btn-show-signin').onclick = showSignin;
+    $('btn-show-signup').onclick = () => showScreen('screen-signup');
+    $('btn-show-signin').onclick = () => showScreen('screen-login');
 
     $('btn-signin').onclick = async () => {
       const email = $('inp-email').value.trim();
