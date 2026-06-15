@@ -28,3 +28,27 @@ BEGIN
   WHERE  id = p_account_id;
 END;
 $$;
+
+-- 3. Выдача прав на все таблицы роли authenticated
+-- В self-hosted Supabase при ручном запуске миграций GRANT не выдаётся
+-- автоматически → "permission denied for table ...".
+-- RLS-политики при этом остаются в силе и ограничивают доступ к строкам.
+GRANT USAGE ON SCHEMA public TO authenticated, anon;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.users           TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.organizations   TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.org_members     TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.accounts        TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.categories      TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.employees       TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.transactions    TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.shifts          TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.counterparties  TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.debt_entries    TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.org_settings    TO authenticated;
+
+-- Права на последовательности (если есть SERIAL/BIGSERIAL колонки)
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO authenticated;
+
+-- Функции
+GRANT EXECUTE ON FUNCTION public.increment_account_balance(UUID, BIGINT) TO authenticated;
