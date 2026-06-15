@@ -346,6 +346,116 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 .text-muted{color:var(--muted)}
 .fw600{font-weight:600}
 .divider{height:1px;background:var(--line);margin:0 20px}
+
+/* ══ SIDEBAR (скрыта на мобиле) ════════════════════════════════════════ */
+.sidebar{display:none}
+
+/* ══ DESKTOP ≥768px ════════════════════════════════════════════════════ */
+@media(min-width:768px){
+  html,body{overflow:auto}
+  #screen-app{flex-direction:row}
+  .main-area{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+
+  /* Sidebar */
+  .sidebar{
+    display:flex;flex-direction:column;
+    width:240px;flex-shrink:0;
+    background:var(--card);border-right:1px solid var(--line);height:100%
+  }
+  .sidebar-brand{
+    display:flex;align-items:center;gap:10px;
+    padding:20px 20px 16px;font-size:17px;font-weight:700;
+    border-bottom:1px solid var(--line)
+  }
+  .sidebar-nav{flex:1;padding:10px 8px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+  .sidebar-item{
+    display:flex;align-items:center;gap:12px;
+    padding:11px 12px;border-radius:10px;
+    font-size:15px;font-weight:500;color:var(--ink2);text-align:left;transition:.15s
+  }
+  .sidebar-item:hover{background:var(--card2)}
+  .sidebar-item.active{background:rgba(94,92,230,.15);color:var(--brand)}
+  .sidebar-item svg{flex-shrink:0;color:inherit}
+  .sidebar-footer{padding:10px 8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px}
+  .sidebar-add-btn{
+    display:flex;align-items:center;gap:10px;
+    width:100%;padding:11px 12px;border-radius:10px;
+    background:var(--brand);color:#fff;font-size:15px;font-weight:600;transition:.15s
+  }
+  .sidebar-add-btn:hover{opacity:.9}
+  .sidebar-lock-btn{
+    display:flex;align-items:center;gap:10px;
+    width:100%;padding:9px 12px;border-radius:10px;
+    color:var(--muted);font-size:14px;transition:.15s
+  }
+  .sidebar-lock-btn:hover{background:var(--card2)}
+
+  /* Скрыть мобильные элементы */
+  .bottom-nav{display:none!important}
+  .fab{display:none!important}
+
+  /* Header */
+  .app-header{padding:16px 28px;border-bottom:1px solid var(--line)}
+
+  /* Content */
+  .tab-content{padding-bottom:24px}
+  .section-title{padding:0 28px}
+
+  /* Account cards → grid */
+  .accounts-scroll{
+    display:grid!important;
+    grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+    overflow-x:visible;padding:0 28px 4px;gap:12px
+  }
+  .account-card{width:auto;flex-shrink:unset}
+
+  /* Period, summary */
+  .period-pills{padding:12px 28px 0}
+  .period-summary{padding:0 28px}
+
+  /* Tx list */
+  .tx-group-header{padding:0 28px}
+  .tx-item{padding:12px 28px}
+
+  /* Sheets → центрированные модалки */
+  .sheet{
+    left:50%!important;right:auto!important;
+    bottom:auto!important;top:50%!important;
+    width:520px!important;max-width:95vw;
+    border-radius:20px!important;max-height:88vh;
+    transform:translate(-50%,-44%) scale(.96)!important;
+    opacity:0;pointer-events:none;
+    transition:transform .25s,opacity .2s!important
+  }
+  .sheet.open{
+    transform:translate(-50%,-50%) scale(1)!important;
+    opacity:1;pointer-events:auto
+  }
+  .sheet-handle{display:none}
+
+  /* Toast */
+  #toast{bottom:32px}
+
+  /* Analytics */
+  #analytics-period-pills{padding:12px 28px 0;margin-top:0}
+  .analytics-tabs{padding:12px 28px 0;margin-bottom:8px}
+  #analytics-content{padding:0 12px}
+  .bar-row{padding:10px 28px}
+  .pl-row{padding:14px 28px}
+
+  /* Kassa */
+  .kassa-form{padding:0 28px;max-width:860px}
+
+  /* Journal */
+  .journal-tabs{padding:0 28px}
+  .search-bar{margin:12px 28px}
+  .debt-card{margin:0 28px 10px}
+
+  /* Settings */
+  .settings-section{max-width:700px}
+  .settings-item{padding:14px 28px}
+  .divider{margin:0 28px}
+}
 </style>
 </head>
 <body>
@@ -426,6 +536,50 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 
 <!-- ══ MAIN APP ═══════════════════════════════════════════════════════════ -->
 <div id="screen-app" class="screen">
+
+  <!-- SIDEBAR (только desktop) -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span style="font-size:24px">🏪</span>
+      <span id="sidebar-org-name">Магазин</span>
+    </div>
+    <div class="sidebar-nav">
+      <button class="sidebar-item active" data-tab="home">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Главная
+      </button>
+      <button class="sidebar-item" data-tab="analytics">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Аналитика
+      </button>
+      <button class="sidebar-item" data-tab="kassa">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Касса
+      </button>
+      <button class="sidebar-item" data-tab="journal">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        Журнал
+      </button>
+      <button class="sidebar-item" data-tab="settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Настройки
+      </button>
+    </div>
+    <div class="sidebar-footer">
+      <button class="sidebar-add-btn" id="sidebar-add-btn">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Добавить операцию
+      </button>
+      <button class="sidebar-lock-btn" id="sidebar-lock-btn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Заблокировать
+      </button>
+    </div>
+  </nav>
+
+  <!-- MAIN AREA (header + content) -->
+  <div class="main-area">
+
   <!-- Header -->
   <div class="app-header">
     <button class="org-selector" id="org-selector">
@@ -627,7 +781,9 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
     </div>
   </div>
 
-  <!-- Bottom nav -->
+  </div><!-- /.main-area -->
+
+  <!-- Bottom nav (mobile only) -->
   <nav class="bottom-nav">
     <button class="nav-item active" data-tab="home">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
@@ -764,7 +920,9 @@ const App = (() => {
     document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     $('tab-' + tab).classList.add('active');
-    qs(`.nav-item[data-tab="${tab}"]`).classList.add('active');
+    qs(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
+    document.querySelectorAll('.sidebar-item').forEach(n => n.classList.remove('active'));
+    qs(`.sidebar-item[data-tab="${tab}"]`)?.classList.add('active');
     S.currentTab = tab;
     loadTab(tab);
   }
@@ -947,6 +1105,8 @@ const App = (() => {
       }
       S.activeOrgId = S.orgs[0].id;
       $('org-name').textContent = S.orgs[0].name;
+      const sbn = $('sidebar-org-name');
+      if (sbn) sbn.textContent = S.orgs[0].name;
 
       S.accounts   = await API.getAccounts(S.activeOrgId);
       S.employees  = await API.getEmployees(S.activeOrgId);
@@ -975,10 +1135,15 @@ const App = (() => {
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.onclick = () => navigate(btn.dataset.tab);
     });
+    document.querySelectorAll('.sidebar-item').forEach(btn => {
+      btn.onclick = () => navigate(btn.dataset.tab);
+    });
   }
 
   function initHeaderActions() {
     $('btn-lock').onclick = () => AUTH.lock();
+    const slb = $('sidebar-lock-btn');
+    if (slb) slb.onclick = () => AUTH.lock();
     $('org-selector').onclick = () => {
       if (S.orgs.length <= 1) return;
       openPicker('Организация', S.orgs.map(o => ({ id: o.id, name: o.name, icon: '🏪', color: '#5E5CE6', selected: o.id === S.activeOrgId })), async o => {
@@ -1380,6 +1545,8 @@ const App = (() => {
   // ══ NUMPAD ════════════════════════════════════════════════════════════
   function initNumpad() {
     $('fab').onclick = () => openNumpad();
+    const sab = $('sidebar-add-btn');
+    if (sab) sab.onclick = () => openNumpad();
     $('numpad-overlay').onclick = () => closeNumpad();
 
     // Type tabs
