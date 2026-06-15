@@ -701,7 +701,6 @@ window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5
   }
 
   async function saveTransfer(orgId, data) {
-    const pairId = uuid();
     const out = await saveTransaction(orgId, {
       clientUuid:    data.clientUuidOut || uuid(),
       date:          data.date,
@@ -2127,11 +2126,13 @@ const App = (() => {
 
   // ── Load tab ───────────────────────────────────────────────────────
   async function loadTab(tab) {
-    if (tab === 'home')      loadHome();
-    if (tab === 'analytics') loadAnalytics();
-    if (tab === 'kassa')     loadKassa();
-    if (tab === 'journal')   loadJournal();
-    if (tab === 'settings')  loadSettings();
+    try {
+      if (tab === 'home')      await loadHome();
+      if (tab === 'analytics') await loadAnalytics();
+      if (tab === 'kassa')     loadKassa();
+      if (tab === 'journal')   await loadJournal();
+      if (tab === 'settings')  loadSettings();
+    } catch (e) { toast(e.message); }
   }
 
   // ══ HOME ════════════════════════════════════════════════════════════
@@ -2336,7 +2337,7 @@ const App = (() => {
     try {
       await API.saveShift(S.activeOrgId, {
         date:        today(),
-        shiftNum:    parseInt($('kassa-shift').value),
+        shiftNum:    parseInt($('kassa-shift').value) || 1,
         employeeId:  kassaEmployeeId,
         zCash:       (parseFloat($('z-cash').value)||0) * 100,
         zCard:       (parseFloat($('z-card').value)||0) * 100,
@@ -2354,9 +2355,12 @@ const App = (() => {
   }
 
   // ══ JOURNAL ══════════════════════════════════════════════════════════
+  let _journalAccountId = null;
+
   function initJournalTabs() {
     document.querySelectorAll('.j-tab').forEach(btn => {
       btn.onclick = () => {
+        _journalAccountId = null;
         document.querySelectorAll('.j-tab').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         S.journalTab = btn.dataset.jt;
@@ -2393,9 +2397,12 @@ const App = (() => {
   async function loadJournalOps(query) {
     const el = $('journal-tx-list');
     el.innerHTML = '';
-    const txs = query
-      ? await API.searchTransactions(S.activeOrgId, query)
-      : await API.getTransactions(S.activeOrgId, { limit: 50 });
+    let txs;
+    if (query) {
+      txs = await API.searchTransactions(S.activeOrgId, query);
+    } else {
+      txs = await API.getTransactions(S.activeOrgId, { accountId: _journalAccountId || undefined, limit: 50 });
+    }
     const groups = {};
     txs.forEach(tx => {
       if (!groups[tx.date]) groups[tx.date] = { date: tx.date, items: [], income: 0, expense: 0 };
@@ -2652,7 +2659,13 @@ const App = (() => {
       else                           initOTP();
     },
     navigate,
-    openAccDetail: (id) => { /* TODO: account detail sheet */ },
+    openAccDetail: (id) => {
+      _journalAccountId = id;
+      S.journalTab = 'ops';
+      navigate('journal');
+      const acc = S.accounts.find(a => a.id === id);
+      if (acc) $('journal-search').placeholder = 'Счёт: ' + acc.name;
+    },
     addDebtEntry,
     _addEmployee,
     _wUpdate, _wRemove,

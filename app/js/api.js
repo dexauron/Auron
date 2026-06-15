@@ -400,7 +400,6 @@
   }
 
   async function saveTransfer(orgId, data) {
-    const pairId = uuid();
     const out = await saveTransaction(orgId, {
       clientUuid:    data.clientUuidOut || uuid(),
       date:          data.date,
