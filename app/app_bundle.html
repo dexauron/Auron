@@ -248,9 +248,12 @@ window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5
 
   // ── Public API ─────────────────────────────────────────────────────
 
-  // Call on app start. Returns 'locked' | 'new_user'.
+  // Call on app start. Returns 'locked' | 'session' | 'new_user'.
   async function init() {
-    return hasPIN() ? 'locked' : 'new_user';
+    if (hasPIN()) return 'locked';
+    const ok = await _restoreSession();
+    if (ok) { _afterUnlock(); return 'session'; }
+    return 'new_user';
   }
 
   function lock() { _doLock(); }
@@ -2644,8 +2647,9 @@ const App = (() => {
   return {
     init: async () => {
       const state = await AUTH.init();
-      if (state === 'locked')   initPINLock();
-      else                      initOTP();
+      if (state === 'locked')        initPINLock();
+      else if (state === 'session')  await startApp();
+      else                           initOTP();
     },
     navigate,
     openAccDetail: (id) => { /* TODO: account detail sheet */ },

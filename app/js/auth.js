@@ -232,9 +232,12 @@
 
   // ── Public API ─────────────────────────────────────────────────────
 
-  // Call on app start. Returns 'locked' | 'new_user'.
+  // Call on app start. Returns 'locked' | 'session' | 'new_user'.
   async function init() {
-    return hasPIN() ? 'locked' : 'new_user';
+    if (hasPIN()) return 'locked';
+    const ok = await _restoreSession();
+    if (ok) { _afterUnlock(); return 'session'; }
+    return 'new_user';
   }
 
   function lock() { _doLock(); }
