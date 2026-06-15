@@ -609,7 +609,7 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
         <div class="section-title">Безопасность</div>
         <div class="settings-item" id="si-pin">
           <span class="settings-item-icon">🔑</span>
-          <span class="settings-item-text">Сменить PIN</span>
+          <span class="settings-item-text" id="si-pin-label">PIN-код</span>
           <svg class="settings-item-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
         </div>
         <div class="divider"></div>
@@ -812,8 +812,7 @@ const App = (() => {
       $('btn-signin').disabled = true;
       try {
         await AUTH.signIn(email, pass);
-        if (!AUTH.hasPIN()) initPINSetup();
-        else await startApp();
+        await startApp();
       } catch (e) { toast(e.message); }
       finally { $('btn-signin').disabled = false; }
     };
@@ -826,8 +825,7 @@ const App = (() => {
       $('btn-signup').disabled = true;
       try {
         await AUTH.signUp(email, pass);
-        if (!AUTH.hasPIN()) initPINSetup();
-        else await startApp();
+        await startApp();
       } catch (e) { toast(e.message); }
       finally { $('btn-signup').disabled = false; }
     };
@@ -841,7 +839,7 @@ const App = (() => {
   }
 
   // ── PIN Setup ──────────────────────────────────────────────────────
-  function initPINSetup() {
+  function initPINSetup(onDone) {
     showScreen('screen-pin-setup');
     let first = '', step = 1;
     let current = '';
@@ -868,7 +866,7 @@ const App = (() => {
           if (current === first) {
             await AUTH.setupPIN(current);
             toast('PIN установлен');
-            await startApp();
+            if (onDone) onDone(); else showScreen('screen-app');
           } else {
             first = ''; current = ''; step = 1;
             $('pin-setup-title').textContent = 'Создайте PIN-код';
@@ -1318,7 +1316,11 @@ const App = (() => {
     $('si-signout').onclick = async () => {
       if (confirm('Выйти из аккаунта?')) { await AUTH.signOut(); initOTP(); }
     };
-    $('si-pin').onclick = initPINSetup;
+    $('si-pin-label').textContent = AUTH.hasPIN() ? 'Сменить PIN-код' : 'Установить PIN-код';
+    $('si-pin').onclick = () => initPINSetup(() => {
+      $('si-pin-label').textContent = 'Сменить PIN-код';
+      showScreen('screen-app');
+    });
     $('si-bio').onclick = async () => {
       try { await AUTH.setupBiometrics(); toast('Биометрия настроена'); }
       catch (e) { toast(e.message); }
