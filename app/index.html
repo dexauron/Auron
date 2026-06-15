@@ -938,32 +938,36 @@ const App = (() => {
   // ── App start ──────────────────────────────────────────────────────
   async function startApp() {
     showScreen('screen-app');
-    S.orgs = await API.getOrgs();
-    if (S.orgs.length === 0) {
-      const name = prompt('Название вашего магазина?') || 'Мой магазин';
-      const org  = await API.createOrg(name);
-      S.orgs = [{ id: org.id, name: org.name, role: 'owner' }];
+    try {
+      S.orgs = await API.getOrgs();
+      if (S.orgs.length === 0) {
+        const name = prompt('Название вашего магазина?') || 'Мой магазин';
+        const org  = await API.createOrg(name);
+        S.orgs = [{ id: org.id, name: org.name, role: 'owner' }];
+      }
+      S.activeOrgId = S.orgs[0].id;
+      $('org-name').textContent = S.orgs[0].name;
+
+      S.accounts   = await API.getAccounts(S.activeOrgId);
+      S.employees  = await API.getEmployees(S.activeOrgId);
+      S.categories = await API.getCategories(S.activeOrgId);
+
+      if (S.np.accountId === null && S.accounts.length > 0) {
+        S.np.accountId  = S.accounts[0].id;
+        S.np.account2Id = S.accounts[1]?.id || S.accounts[0].id;
+      }
+
+      navigate('home');
+      initNumpad();
+      initKassa();
+      initJournalTabs();
+      initNavigation();
+      initHeaderActions();
+
+      window.addEventListener('auron:locked', initPINLock);
+    } catch (e) {
+      toast('Ошибка: ' + e.message, 6000);
     }
-    S.activeOrgId = S.orgs[0].id;
-    $('org-name').textContent = S.orgs[0].name;
-
-    S.accounts   = await API.getAccounts(S.activeOrgId);
-    S.employees  = await API.getEmployees(S.activeOrgId);
-    S.categories = await API.getCategories(S.activeOrgId);
-
-    if (S.np.accountId === null && S.accounts.length > 0) {
-      S.np.accountId  = S.accounts[0].id;
-      S.np.account2Id = S.accounts[1]?.id || S.accounts[0].id;
-    }
-
-    navigate('home');
-    initNumpad();
-    initKassa();
-    initJournalTabs();
-    initNavigation();
-    initHeaderActions();
-
-    window.addEventListener('auron:locked', initPINLock);
   }
 
   // ── Navigation ─────────────────────────────────────────────────────
@@ -1249,13 +1253,15 @@ const App = (() => {
   }
 
   async function loadJournal() {
-    loadJournalSection(S.journalTab);
+    await loadJournalSection(S.journalTab);
   }
 
   async function loadJournalSection(jt) {
-    if (jt === 'ops')    loadJournalOps();
-    if (jt === 'debts')  loadJournalDebts();
-    if (jt === 'shifts') loadJournalShifts();
+    try {
+      if (jt === 'ops')    await loadJournalOps();
+      if (jt === 'debts')  await loadJournalDebts();
+      if (jt === 'shifts') await loadJournalShifts();
+    } catch (e) { toast(e.message); }
   }
 
   async function loadJournalOps(query) {
@@ -1517,10 +1523,15 @@ const App = (() => {
   // ── Public API ─────────────────────────────────────────────────────
   return {
     init: async () => {
-      const state = await AUTH.init();
-      if (state === 'locked')        initPINLock();
-      else if (state === 'session')  await startApp();
-      else                           initOTP();
+      try {
+        const state = await AUTH.init();
+        if (state === 'locked')        initPINLock();
+        else if (state === 'session')  await startApp();
+        else                           initOTP();
+      } catch (e) {
+        toast('Ошибка запуска: ' + e.message, 6000);
+        initOTP();
+      }
     },
     navigate,
     openAccDetail: (id) => {
