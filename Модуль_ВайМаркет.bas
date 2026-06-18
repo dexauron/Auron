@@ -8,7 +8,6 @@ Option Explicit
 
 Private Const ПАРОЛЬ As String = "wm"
 
-' --- ВСПОМОГАТЕЛЬНОЕ ---------------------------------------------
 Function ПоследняяСтрока(ws As Worksheet) As Long
     ПоследняяСтрока = ws.Cells(ws.Rows.Count, 1).End(xlUp).Row
 End Function
@@ -30,7 +29,6 @@ Sub ОбеспечитьМесяцГод(ws As Worksheet, r As Long)
     End If
 End Sub
 
-' --- КОНТРОЛЛЕР: КАССА (тип жёстко «Доход») ---------------------
 Sub ЗаписатьКассу()
     Dim wsФ As Worksheet, wsБ As Worksheet
     Set wsФ = ThisWorkbook.Sheets("Ввод_Касса")
@@ -65,7 +63,6 @@ Sub ЗаписатьКассу()
     MsgBox "Касса записана: " & Format(CDbl(сумма), "#,##0") & " руб.", vbInformation
 End Sub
 
-' --- КОНТРОЛЛЕР: РАСХОД / УВЕЛИЧЕНИЕ ДОЛГА ----------------------
 Sub ЗаписатьРасход()
     Dim wsФ As Worksheet, wsБ As Worksheet
     Set wsФ = ThisWorkbook.Sheets("Ввод_Расходы")
@@ -106,7 +103,6 @@ Sub ЗаписатьРасход()
     MsgBox "Записано: " & тип & " — " & Format(CDbl(сумма), "#,##0") & " руб.", vbInformation
 End Sub
 
-' --- СВОДНАЯ + ВРЕМЕННАЯ ШКАЛА (фильтр по дате/времени) ---------
 Sub ПостроитьСводные()
     Dim wsБ As Worksheet, wsС As Worksheet
     Dim pc As PivotCache, pt As PivotTable
@@ -134,7 +130,6 @@ Sub ПостроитьСводные()
         .ShowTableStyleRowStripes = True
     End With
 
-    ' Временная шкала по дате (Excel 2013+); срез по счёту — если доступно
     On Error Resume Next
     Dim scT As SlicerCache
     Set scT = ThisWorkbook.SlicerCaches.Add2(pt, "Дата", , xlTimeline)
@@ -148,7 +143,6 @@ Sub ПостроитьСводные()
     MsgBox "Сводная построена. Период фильтруй Временной шкалой сверху.", vbInformation
 End Sub
 
-' --- УСТАНОВКА КНОПОК -------------------------------------------
 Sub ДобавитьКнопку(имяЛиста As String, макрос As String, подпись As String, адрес As String)
     Dim ws As Worksheet, b As Button, shp As Shape
     Set ws = ThisWorkbook.Sheets(имяЛиста)
