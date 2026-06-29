@@ -159,7 +159,8 @@ function uploadReceipt(p) {
     var folder=folders.hasNext()?folders.next():DriveApp.createFolder('Auron_Receipts');
     var blob=Utilities.newBlob(Utilities.base64Decode(base64),mime,fileName);
     var file=folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK,DriveApp.Permission.VIEW);
+    // Приватно: чек остаётся в Google Drive владельца, не публичный по ссылке.
+    // Владелец видит его, войдя в свой Google; посторонние по ссылке — нет.
     return {ok:true,viewUrl:'https://drive.google.com/file/d/'+file.getId()+'/view'};
   } catch(e){return{__error:e.message};}
 }
