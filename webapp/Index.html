@@ -4324,16 +4324,9 @@ var App={
   },
 
   openSearch:function(){
-    document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
-    document.querySelectorAll('.nav-item')[3].classList.add('active');
-    document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
-    document.getElementById('tab-journal').classList.add('active');
-    document.querySelectorAll('.j-tab').forEach(function(b){b.classList.remove('active');});
-    document.querySelectorAll('.j-tab')[0].classList.add('active');
-    document.querySelectorAll('.j-panel').forEach(function(p){p.classList.remove('active');});
-    document.getElementById('j-history').classList.add('active');
-    App.loadHistory();
-    setTimeout(function(){document.getElementById('j-search').focus();},200);
+    var btn=document.querySelector('.nav-item[data-tab="journal"]');
+    App.setTab('journal',btn);
+    setTimeout(function(){var s=document.getElementById('j-search');if(s)s.focus();},250);
   },
 
   // ── Sheet/Modal helpers ───────────────────────────────────────
