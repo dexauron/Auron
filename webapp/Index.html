@@ -1782,6 +1782,19 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="btn-secondary" onclick="App.openBudgetEdit()" style="margin-top:10px;">✎ Редактировать бюджет</button>
       </div>
       <div class="settings-sec">
+        <div class="settings-sec-title">Импорт из 1С</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openImport()" style="cursor:pointer;">
+            <span class="settings-row-icon">📥</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Импорт из Excel (1С)</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Вставь таблицу из выгрузки 1С</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-sec">
         <div class="settings-sec-title">Организации</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.showScreen('scr-orgs')" style="cursor:pointer;">
@@ -4873,6 +4886,116 @@ var App={
       '<div style="text-align:center;margin-top:14px;font-size:12.5px;color:var(--muted);line-height:1.5">'+
         'Данные изолированы в вашем Google Drive. Демо-цифры исчезнут после первой операции.'+
       '</div></div>';
+  },
+
+  // ── Импорт из 1С (вставка Excel-таблицы) ──────────────────────
+  openImport:function(){
+    App.openModal('<div class="modal-title">Импорт из 1С</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Открой выгрузку из 1С в Excel → выдели данные с заголовками → Ctrl+C → вставь сюда.</div>'+
+      '<textarea id="imp-paste" placeholder="Вставь таблицу сюда…" style="width:100%;height:110px;padding:12px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:monospace;outline:none;resize:vertical;"></textarea>'+
+      '<button class="btn-primary" onclick="App._impParse()">Разобрать таблицу</button>'+
+      '<div id="imp-map"></div>');
+  },
+
+  _impParse:function(){
+    var raw=document.getElementById('imp-paste').value||'';
+    var lines=raw.replace(/\r/g,'').split('\n').filter(function(l){return l.trim()!=='';});
+    if(lines.length<2){App.toast('Нужна шапка и хотя бы одна строка',true);return;}
+    var rows=lines.map(function(l){return l.split('\t');});
+    var ncol=Math.max.apply(null,rows.map(function(r){return r.length;}));
+    App._imp={rows:rows,ncol:ncol};
+    var hdr=rows[0].map(function(h){return String(h||'').toLowerCase();});
+    App._impMap=hdr.map(function(h){
+      if(/дата|date/.test(h))return'date';
+      if(/сумм|оборот|приход|расход|amount|итог/.test(h))return'amount';
+      if(/тип|операц/.test(h))return'type';
+      if(/катег|стать|назнач/.test(h))return'category';
+      if(/сч[её]т|касс|account/.test(h))return'account';
+      if(/коммент|примеч|описан|контраг|поставщ/.test(h))return'comment';
+      return'skip';
+    });
+    App._impRenderMap();
+  },
+
+  _impRenderMap:function(){
+    var imp=App._imp;
+    var fields=[['skip','— пропустить'],['date','Дата'],['amount','Сумма'],['type','Тип'],['category','Категория'],['account','Счёт'],['comment','Комментарий']];
+    var accs=(App.s.accounts||[]).map(function(a){return a.name;});
+    var html='<div style="margin-top:16px;font-size:14px;font-weight:700;">Сопоставь столбцы</div>';
+    for(var c=0;c<imp.ncol;c++){
+      var sample=(imp.rows[1]&&imp.rows[1][c]!==undefined)?imp.rows[1][c]:'';
+      html+='<div style="display:flex;align-items:center;gap:10px;margin-top:8px;">'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(String(imp.rows[0][c]||('Столбец '+(c+1))))+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(String(sample))+'</div></div>'+
+        '<select onchange="App._impMap['+c+']=this.value;App._impPreview();" style="flex-shrink:0;padding:8px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:13px;">'+
+        fields.map(function(f){return'<option value="'+f[0]+'"'+(App._impMap[c]===f[0]?' selected':'')+'>'+f[1]+'</option>';}).join('')+
+        '</select></div>';
+    }
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">'+
+      '<div><label style="font-size:12px;color:var(--muted);font-weight:600;">Тип по умолчанию</label>'+
+        '<select id="imp-deftype" onchange="App._impPreview()" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-top:4px;"><option value="Расход">Расход</option><option value="Доход">Доход</option></select></div>'+
+      '<div><label style="font-size:12px;color:var(--muted);font-weight:600;">Счёт по умолчанию</label>'+
+        '<select id="imp-defacc" style="width:100%;padding:9px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-top:4px;">'+accs.map(function(a){return'<option>'+App._e(a)+'</option>';}).join('')+'</select></div>'+
+    '</div>'+
+    '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:var(--muted);"><input type="checkbox" id="imp-hdr" checked onchange="App._impPreview()"> Первая строка — заголовки</label>'+
+    '<div id="imp-preview" style="margin-top:14px;"></div>'+
+    '<button class="btn-primary" id="imp-btn" onclick="App._impDo()">Импортировать</button>';
+    document.getElementById('imp-map').innerHTML=html;
+    App._impPreview();
+  },
+
+  _impNum:function(s){
+    s=String(s==null?'':s).replace(/ /g,'').replace(/\s/g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'');
+    var n=parseFloat(s);return isNaN(n)?0:n;
+  },
+
+  _impBuild:function(){
+    var imp=App._imp;if(!imp)return[];
+    var skipHdr=document.getElementById('imp-hdr')?document.getElementById('imp-hdr').checked:true;
+    var defType=document.getElementById('imp-deftype')?document.getElementById('imp-deftype').value:'Расход';
+    var defAcc=document.getElementById('imp-defacc')?document.getElementById('imp-defacc').value:'';
+    var out=[];
+    imp.rows.forEach(function(row,i){
+      if(skipHdr&&i===0)return;
+      var rec={date:'',amount:0,type:defType,category:'',account:defAcc,comment:''};
+      App._impMap.forEach(function(f,c){
+        var v=row[c]!==undefined?String(row[c]).trim():'';
+        if(f==='date')rec.date=v;
+        else if(f==='amount')rec.amount=App._impNum(v);
+        else if(f==='type')rec.type=/дох|прих|income|\+/i.test(v)?'Доход':'Расход';
+        else if(f==='category')rec.category=v;
+        else if(f==='account'&&v)rec.account=v;
+        else if(f==='comment')rec.comment=v;
+      });
+      if(rec.date&&rec.amount)out.push(rec);
+    });
+    return out;
+  },
+
+  _impPreview:function(){
+    var rows=App._impBuild();
+    var el=document.getElementById('imp-preview');if(!el)return;
+    if(!rows.length){el.innerHTML='<div style="color:var(--muted);font-size:13px;">Нет строк — проверь сопоставление «Дата» и «Сумма».</div>';return;}
+    var show=rows.slice(0,8);
+    el.innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:6px;">Предпросмотр: '+rows.length+' строк</div>'+
+      '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+      show.map(function(r){
+        return '<div style="display:flex;justify-content:space-between;gap:8px;padding:8px 12px;border-top:1px solid var(--line-2);font-size:12.5px;">'+
+          '<span style="color:var(--muted);">'+App._e(r.date)+'</span>'+
+          '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(r.category||r.comment||'—')+'</span>'+
+          '<span style="font-weight:700;color:'+(r.type==='Доход'?'var(--pos)':'var(--neg)')+';">'+(r.type==='Доход'?'+':'−')+fmt(r.amount)+'</span>'+
+        '</div>';
+      }).join('')+'</div>'+(rows.length>8?'<div style="font-size:12px;color:var(--muted);margin-top:6px;">…и ещё '+(rows.length-8)+'</div>':'');
+  },
+
+  _impDo:function(){
+    var rows=App._impBuild();
+    if(!rows.length){App.toast('Нет строк для импорта',true);return;}
+    var btn=document.getElementById('imp-btn');if(btn){btn.disabled=true;btn.textContent='Импортирую…';}
+    gs('importRows',{ssId:App.s.ssId,rows:rows}).then(function(r){
+      App.toast('Импортировано: '+r.added+(r.skipped?' · пропущено '+r.skipped:''));
+      App.closeModal();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);if(btn){btn.disabled=false;btn.textContent='Импортировать';}});
   },
 
   _e:function(s){
