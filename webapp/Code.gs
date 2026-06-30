@@ -19,6 +19,16 @@ var SH_PROFILE   = 'ПРОФИЛЬ';
 var SH_ORGS      = 'ОРГАНИЗАЦИИ';
 var SH_RECURRING = 'РЕКУРРЕНТНЫЕ';
 var SH_PAYMENTS  = 'ВЫПЛАТЫ';
+var SH_GOODS     = 'ТОВАРЫ';
+var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
+
+// ТОВАРЫ columns (1-based)
+var G_BARCODE=1,G_NAME=2,G_GROUP=3,G_UNIT=4,G_SUPPLIER=5,G_BUY=6,G_RETAIL=7,
+    G_SOLDQTY=8,G_REVENUE=9,G_PROFIT=10,G_STOCKQTY=11,G_STOCKSUM=12,G_UPDATED=13;
+var G_COLS=13;
+// ЦЕНЫ_ИСТ columns
+var PH_DATE=1,PH_BARCODE=2,PH_NAME=3,PH_SUPPLIER=4,PH_PRICE=5;
+var PH_COLS=5;
 
 // РЕКУРРЕНТНЫЕ columns
 var RC_ID=1,RC_NAME=2,RC_CAT=3,RC_AMT=4,RC_ACC=5,RC_DAY=6,RC_ACTIVE=7,RC_CREATED=8;
@@ -216,6 +226,8 @@ function ensureSheets(ss) {
   _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
   _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
+  _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
+  _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -676,6 +688,179 @@ function _parseDate(v) {
   m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (m) return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
   var d = new Date(s); return isNaN(d.getTime()) ? null : d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ТОВАРЫ (товарный справочник + накопление данных из 1С)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Ключ товара: штрихкод (если есть), иначе наименование (нормализованное).
+function _goodsKey(barcode, name) {
+  var b = String(barcode||'').replace(/[^0-9A-Za-z]/g,'').trim();
+  if (b) return 'b:'+b;
+  return 'n:'+String(name||'').toLowerCase().replace(/\s+/g,' ').trim();
+}
+function _gnum(v) {
+  if (typeof v === 'number') return v;
+  var s = String(v==null?'':v).replace(/ /g,'').replace(/ /g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'');
+  var n = parseFloat(s); return isNaN(n) ? 0 : n;
+}
+
+// p.kind in {'Цены','Продажи','Остатки','Закупки'}
+// p.rows = [{barcode,name,group,unit,supplier,buy,retail,qty,revenue,profit,stockQty,stockSum}]
+// Снимок: для каждого вида обновляем соответствующие поля по ключу товара (upsert).
+function saveGoods(p) {
+  var ssId = p.ssId, kind = p.kind || '', rows = p.rows || [];
+  if (!rows.length) return { ok:true, saved:0, updated:0 };
+  try {
+    var lock = LockService.getScriptLock(); lock.waitLock(25000);
+    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_GOODS);
+    var tz = Session.getScriptTimeZone();
+    var now = new Date();
+    var data = sh.getLastRow() >= 2 ? sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues() : [];
+    var idx = {};
+    data.forEach(function(r,i){ idx[_goodsKey(r[G_BARCODE-1], r[G_NAME-1])] = i; });
+    var saved = 0, updated = 0, hist = [];
+    rows.forEach(function(r){
+      var name = _s(r.name||''); if (!name && !r.barcode) return;
+      var key = _goodsKey(r.barcode, name);
+      var row;
+      if (idx[key] !== undefined) { row = data[idx[key]]; updated++; }
+      else {
+        row = new Array(G_COLS).fill('');
+        row[G_SOLDQTY-1]=0; row[G_REVENUE-1]=0; row[G_PROFIT-1]=0; row[G_STOCKQTY-1]=0; row[G_STOCKSUM-1]=0;
+        idx[key] = data.length; data.push(row); saved++;
+      }
+      if (r.barcode) row[G_BARCODE-1] = _s(String(r.barcode));
+      row[G_NAME-1] = name;
+      if (r.group) row[G_GROUP-1] = _s(r.group);
+      if (r.unit) row[G_UNIT-1] = _s(r.unit);
+      if (r.supplier) row[G_SUPPLIER-1] = _s(r.supplier);
+      if (kind === 'Цены' || kind === 'Закупки') {
+        var price = _gnum(r.buy);
+        if (price) {
+          row[G_BUY-1] = price;
+          hist.push([now, String(r.barcode||''), name, _s(r.supplier||''), price]);
+        }
+      } else if (kind === 'Продажи') {
+        row[G_SOLDQTY-1] = _gnum(r.qty);
+        row[G_REVENUE-1] = Math.round(_gnum(r.revenue));
+        row[G_PROFIT-1]  = Math.round(_gnum(r.profit));
+        if (r.retail) row[G_RETAIL-1] = _gnum(r.retail);
+      } else if (kind === 'Остатки') {
+        row[G_STOCKQTY-1] = _gnum(r.stockQty);
+        row[G_STOCKSUM-1] = Math.round(_gnum(r.stockSum));
+      }
+      row[G_UPDATED-1] = now;
+    });
+    if (data.length) {
+      sh.getRange(2,1,data.length,G_COLS).setValues(data);
+      sh.getRange(2,G_UPDATED,data.length,1).setNumberFormat('dd.mm.yyyy');
+    }
+    if (hist.length) {
+      var ph = ss.getSheetByName(SH_PRICEHIST);
+      var pr = ph.getLastRow()+1;
+      ph.getRange(pr,1,hist.length,PH_COLS).setValues(hist);
+      ph.getRange(pr,PH_DATE,hist.length,1).setNumberFormat('dd.mm.yyyy');
+    }
+    lock.releaseLock();
+    return { ok:true, saved:saved, updated:updated, total:data.length };
+  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return { __error:e.message }; }
+}
+
+function getGoods(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_GOODS);
+    if (sh.getLastRow() < 2) return { items:[] };
+    var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+    var q = String(p.q||'').toLowerCase().trim();
+    var items = data.map(function(r){
+      return {
+        barcode:String(r[G_BARCODE-1]||''), name:String(r[G_NAME-1]||''),
+        group:String(r[G_GROUP-1]||''), unit:String(r[G_UNIT-1]||''),
+        supplier:String(r[G_SUPPLIER-1]||''),
+        buy:_gnum(r[G_BUY-1]), retail:_gnum(r[G_RETAIL-1]),
+        soldQty:_gnum(r[G_SOLDQTY-1]), revenue:_gnum(r[G_REVENUE-1]), profit:_gnum(r[G_PROFIT-1]),
+        stockQty:_gnum(r[G_STOCKQTY-1]), stockSum:_gnum(r[G_STOCKSUM-1])
+      };
+    }).filter(function(it){
+      if (!q) return true;
+      return it.name.toLowerCase().indexOf(q)>=0 || it.barcode.indexOf(q)>=0 || it.supplier.toLowerCase().indexOf(q)>=0;
+    });
+    return { items:items.slice(0,500), total:data.length };
+  } catch(e) { return { __error:e.message }; }
+}
+
+function getGoodsAnalytics(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_GOODS);
+    if (sh.getLastRow() < 2) return { empty:true, count:0 };
+    var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+    var items = data.map(function(r){ return {
+      barcode:String(r[G_BARCODE-1]||''), name:String(r[G_NAME-1]||''), group:String(r[G_GROUP-1]||''),
+      supplier:String(r[G_SUPPLIER-1]||''), buy:_gnum(r[G_BUY-1]), retail:_gnum(r[G_RETAIL-1]),
+      soldQty:_gnum(r[G_SOLDQTY-1]), revenue:_gnum(r[G_REVENUE-1]), profit:_gnum(r[G_PROFIT-1]),
+      stockQty:_gnum(r[G_STOCKQTY-1]), stockSum:_gnum(r[G_STOCKSUM-1]) };
+    });
+    var sup = {};   // поставщик → {count, stockSum, buySum}
+    items.forEach(function(it){
+      var s = it.supplier || '—';
+      if (!sup[s]) sup[s] = { name:s, count:0, stockSum:0 };
+      sup[s].count++; sup[s].stockSum += it.stockSum;
+    });
+    var suppliers = Object.keys(sup).map(function(k){return sup[k];})
+      .sort(function(a,b){return b.count-a.count;}).slice(0,8);
+    // топ по прибыли
+    var topProfit = items.filter(function(it){return it.profit;})
+      .sort(function(a,b){return b.profit-a.profit;}).slice(0,6)
+      .map(function(it){return {name:it.name.slice(0,32), profit:Math.round(it.profit), revenue:Math.round(it.revenue)};});
+    // низкая наценка (есть закуп и розница)
+    var lowMargin = items.filter(function(it){return it.buy>0 && it.retail>0;})
+      .map(function(it){return {name:it.name.slice(0,32), markup:Math.round((it.retail-it.buy)/it.buy*1000)/10, buy:it.buy, retail:it.retail};})
+      .sort(function(a,b){return a.markup-b.markup;}).slice(0,6);
+    // ходовой / неликвид
+    var movers = items.filter(function(it){return it.soldQty>0;})
+      .sort(function(a,b){return b.soldQty-a.soldQty;}).slice(0,6)
+      .map(function(it){return {name:it.name.slice(0,32), qty:it.soldQty};});
+    var deadStock = items.filter(function(it){return it.stockQty>0 && it.soldQty===0;})
+      .sort(function(a,b){return b.stockSum-a.stockSum;}).slice(0,6)
+      .map(function(it){return {name:it.name.slice(0,32), stockQty:it.stockQty, stockSum:Math.round(it.stockSum)};});
+    // рост цен из истории
+    var priceUps = [];
+    var ph = ss.getSheetByName(SH_PRICEHIST);
+    if (ph && ph.getLastRow() >= 2) {
+      var pd = ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues();
+      var byKey = {};
+      pd.forEach(function(r){
+        var k = _goodsKey(r[PH_BARCODE-1], r[PH_NAME-1]);
+        var d = r[PH_DATE-1]; var t = (d instanceof Date)?d.getTime():0;
+        if (!byKey[k]) byKey[k] = [];
+        byKey[k].push({t:t, price:_gnum(r[PH_PRICE-1]), name:String(r[PH_NAME-1]||''), supplier:String(r[PH_SUPPLIER-1]||'')});
+      });
+      Object.keys(byKey).forEach(function(k){
+        var arr = byKey[k].sort(function(a,b){return a.t-b.t;});
+        if (arr.length < 2) return;
+        var first = arr[0], last = arr[arr.length-1];
+        if (last.price > first.price && first.price > 0) {
+          priceUps.push({name:last.name.slice(0,32), supplier:last.supplier, from:first.price, to:last.price,
+            pct:Math.round((last.price-first.price)/first.price*1000)/10});
+        }
+      });
+      priceUps.sort(function(a,b){return b.pct-a.pct;});
+      priceUps = priceUps.slice(0,6);
+    }
+    var totRevenue = 0, totProfit = 0, totStock = 0;
+    items.forEach(function(it){ totRevenue+=it.revenue; totProfit+=it.profit; totStock+=it.stockSum; });
+    return {
+      count:items.length, suppliersCount:Object.keys(sup).length,
+      totRevenue:Math.round(totRevenue), totProfit:Math.round(totProfit), totStock:Math.round(totStock),
+      suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
+      movers:movers, deadStock:deadStock, priceUps:priceUps
+    };
+  } catch(e) { return { __error:e.message }; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
