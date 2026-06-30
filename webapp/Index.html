@@ -1474,7 +1474,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div class="home-split">
         <div class="split-tile">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);">📈</div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
             Выручка
           </div>
           <div class="split-tile-v num" id="split-revenue">—</div>
@@ -1482,7 +1482,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         </div>
         <div class="split-tile" onclick="App.setTab('suppliers',null)" style="cursor:pointer;">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--neg) 15%,transparent);color:var(--neg);">📦</div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--neg) 15%,transparent);color:var(--neg);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></div>
             К выплате
           </div>
           <div class="split-tile-v num" id="split-payable">—</div>
@@ -1490,7 +1490,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         </div>
         <div class="split-tile" onclick="App.setTab('kassa',null)" style="cursor:pointer;">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);">🧾</div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div>
             Z-выручка
           </div>
           <div class="split-tile-v num" id="split-shift">—</div>
@@ -1498,7 +1498,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         </div>
         <div class="split-tile">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);">📤</div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
             Расход
           </div>
           <div class="split-tile-v num" id="split-expense">—</div>
@@ -2086,20 +2086,42 @@ function obIcon(n,sz,sw){
   return s.replace('<svg ','<svg width="'+sz+'" height="'+sz+'" stroke-width="'+sw+'" ');
 }
 
+// Лёгкие инлайн-SVG (line-иконки, stroke=currentColor — наследуют цвет контейнера).
+function _sv(p){return '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;display:inline-block;">'+p+'</svg>';}
+var SVG={
+  users:_sv('<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a4 4 0 0 0-3-3.85"/>'),
+  home:_sv('<path d="M3 10l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>'),
+  cart:_sv('<circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/>'),
+  wrench:_sv('<path d="M21 4a4.5 4.5 0 0 1-5.9 5.9L5 20l-2-2L13.1 7.9A4.5 4.5 0 0 1 19 2.1l-2.6 2.6 1.9 1.9z"/>'),
+  bolt:_sv('<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>'),
+  mega:_sv('<path d="M3 11v2a1 1 0 0 0 1 1h2l4 4V6L6 10H4a1 1 0 0 0-1 1z"/><path d="M14 8a4 4 0 0 1 0 8"/>'),
+  cash:_sv('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/><path d="M5.5 12h.01M18.5 12h.01"/>'),
+  receipt:_sv('<path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/>'),
+  bank:_sv('<path d="M3 21h18M5 21V10M19 21V10M3 10l9-6 9 6M9 21v-6h6v6"/>'),
+  swap:_sv('<path d="M7 7h11l-3-3M17 17H6l3 3"/>'),
+  pencil:_sv('<path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
+  doc:_sv('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>'),
+  uleft:_sv('<path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>'),
+  uright:_sv('<path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/>'),
+  trash:_sv('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>'),
+  bag:_sv('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/>'),
+  gem:_sv('<path d="M12 3l3 5 5 1.5-5 3.5-3 6-3-6-5-3.5L9 8z"/>'),
+  money:_sv('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/>')
+};
 var CAT_ICONS={
-  'ЗП':{icon:'👥',bg:'#8B5CF6'},'Аренда':{icon:'🏠',bg:'#F59E0B'},
-  'Закупка':{icon:'🛒',bg:'#0EA5E9'},'Хозрасходы':{icon:'🔧',bg:'#6B7280'},
-  'Коммуналка':{icon:'💡',bg:'#EAB308'},'Реклама':{icon:'📢',bg:'#EC4899'},
-  'Прочий расход':{icon:'📋',bg:'#64748B'},'Продажи':{icon:'💰',bg:'#10B981'},
-  'Z-отчёт':{icon:'🧾',bg:'#5E5CE6'},'Налоги':{icon:'🏛',bg:'#DC2626'},
-  'Перевод':{icon:'→',bg:'#818CF8'},'Корректировка':{icon:'✏️',bg:'#94A3B8'},
-  'Долг ТП':{icon:'📝',bg:'#0EA5E9'},
-  'Возврат от покупателя':{icon:'↩️',bg:'#30D158'},
-  'Возврат поставщику':{icon:'↪️',bg:'#FF9F0A'},
-  'Списание товаров':{icon:'🗑',bg:'#FF453A'},
-  'Изъятие владельца':{icon:'💼',bg:'#BF5AF2'},
-  'Инвестиция владельца':{icon:'💎',bg:'#5E5CE6'},
-  '_default':{icon:'💸',bg:'#5E5CE6'}
+  'ЗП':{icon:SVG.users,bg:'#8B5CF6'},'Аренда':{icon:SVG.home,bg:'#F59E0B'},
+  'Закупка':{icon:SVG.cart,bg:'#0EA5E9'},'Хозрасходы':{icon:SVG.wrench,bg:'#6B7280'},
+  'Коммуналка':{icon:SVG.bolt,bg:'#EAB308'},'Реклама':{icon:SVG.mega,bg:'#EC4899'},
+  'Прочий расход':{icon:SVG.money,bg:'#64748B'},'Продажи':{icon:SVG.cash,bg:'#10B981'},
+  'Z-отчёт':{icon:SVG.receipt,bg:'#5E5CE6'},'Налоги':{icon:SVG.bank,bg:'#DC2626'},
+  'Перевод':{icon:SVG.swap,bg:'#818CF8'},'Корректировка':{icon:SVG.pencil,bg:'#94A3B8'},
+  'Долг ТП':{icon:SVG.doc,bg:'#0EA5E9'},
+  'Возврат от покупателя':{icon:SVG.uleft,bg:'#30D158'},
+  'Возврат поставщику':{icon:SVG.uright,bg:'#FF9F0A'},
+  'Списание товаров':{icon:SVG.trash,bg:'#FF453A'},
+  'Изъятие владельца':{icon:SVG.bag,bg:'#BF5AF2'},
+  'Инвестиция владельца':{icon:SVG.gem,bg:'#5E5CE6'},
+  '_default':{icon:SVG.money,bg:'#5E5CE6'}
 };
 function catIcon(n){return CAT_ICONS[n]||CAT_ICONS['_default'];}
 
@@ -2828,7 +2850,7 @@ var App={
     if(!acc)return;
     App.s._detailAccId=id;
     var ci=catIcon(acc.name);
-    document.getElementById('acc-detail-name').textContent=ci.icon+' '+acc.name;
+    document.getElementById('acc-detail-name').textContent=acc.name;
     document.getElementById('acc-detail-bal').textContent='₽ '+fmtFull(acc.balance);
     document.getElementById('acc-detail-sub').textContent=(acc.status==='hidden'?'👁 Скрыт · ':'')+'Начальный баланс: ₽ '+fmtFull(acc.startBalance||0);
     var hideBtn=document.getElementById('acc-detail-hide-btn');
