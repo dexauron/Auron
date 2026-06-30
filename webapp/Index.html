@@ -3152,6 +3152,9 @@ var App={
   _renderPL:function(r){
     var el=document.getElementById('an-pl');
     var income=r.income||0,expense=r.expense||0,profit=income-expense;
+    var ratio=income>0?Math.round(expense/income*100):0;
+    var mx=Math.max(income,expense,1);
+    var bw=function(v){return Math.max(Math.round(Math.abs(v)/mx*100),2);};
     el.innerHTML=
       '<div class="metric-row">'+
         '<div class="metric-card"><div class="metric-label">Выручка</div><div class="metric-value green">₽ '+fmt(income)+'</div></div>'+
@@ -3159,6 +3162,21 @@ var App={
       '</div>'+
       '<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Прибыль</div>'+
         '<div class="metric-value" style="color:'+(profit>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(profit)+'</div></div>'+
+      '<div class="metric-card" style="margin-bottom:16px;">'+
+        '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">'+
+          '<div class="metric-label" style="margin:0;">Доходы vs Расходы</div>'+
+          '<div style="font-size:22px;font-weight:800;color:'+(ratio>100?'var(--neg)':'var(--ink)')+';font-family:var(--font-num);">'+ratio+'%</div>'+
+        '</div>'+
+        '<div style="display:flex;flex-direction:column;gap:12px;">'+
+          '<div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="color:var(--muted);font-weight:600;">Доходы</span><span style="font-weight:700;font-family:var(--font-num);">₽ '+fmt(income)+'</span></div>'+
+            '<div class="bar"><span style="width:'+bw(income)+'%;background:var(--pos);"></span></div></div>'+
+          '<div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="color:var(--muted);font-weight:600;">Расходы</span><span style="font-weight:700;font-family:var(--font-num);">₽ '+fmt(expense)+'</span></div>'+
+            '<div class="bar"><span style="width:'+bw(expense)+'%;background:var(--muted);"></span></div></div>'+
+          '<div><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="color:var(--muted);font-weight:600;">Остаток</span><span style="font-weight:700;color:'+(profit>=0?'var(--pos)':'var(--neg)')+';font-family:var(--font-num);">'+(profit>=0?'+':'−')+'₽ '+fmt(Math.abs(profit))+'</span></div>'+
+            '<div class="bar"><span style="width:'+bw(profit)+'%;background:'+(profit>=0?'var(--pos)':'var(--neg)')+';"></span></div></div>'+
+        '</div>'+
+        '<div class="note" style="margin:14px 0 0;"><span class="ni">'+(ratio>100?'⚠️':'💡')+'</span><div>На расходы ушло <b style="color:var(--ink);">'+ratio+'%</b> от дохода'+(ratio>100?'. Расходы превысили доходы за период.':'.')+'</div></div>'+
+      '</div>'+
       '<div class="chart-wrap"><div class="chart-title">Динамика</div><canvas id="chart-pl" height="160"></canvas></div>';
     if(r.timeline&&r.timeline.length){
       var ctx=document.getElementById('chart-pl').getContext('2d');
