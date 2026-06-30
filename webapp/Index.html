@@ -2174,6 +2174,7 @@ var App={
 
   init:function(){
     this.s.npDate=new Date();
+    App._installGuards();
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
       if(r.isNew){
@@ -2195,6 +2196,34 @@ var App={
     document.addEventListener('keydown',function(e){
       if(e.key==='Escape')App.closeSheet();
     });
+  },
+
+  // Глобальные защиты: двойное нажатие + перехват ошибок (надёжность и точность)
+  _installGuards:function(){
+    // 1) Анти-дабл-тап: блокируем повторный клик по кнопке действия в течение 1 сек
+    document.addEventListener('click',function(e){
+      var b=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-save'):null;
+      if(!b)return;
+      var now=Date.now();
+      if(b._lastClick&&now-b._lastClick<1000){e.preventDefault();e.stopImmediatePropagation();return;}
+      b._lastClick=now;
+    },true);
+    // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
+    window.addEventListener('unhandledrejection',function(ev){
+      try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
+        if(m&&m!=='undefined')App.toast(App._friendlyErr(m),true);}catch(e){}
+    });
+    // 3) Перехват ошибок JS — приложение не «обеляется» молча
+    window.addEventListener('error',function(ev){
+      try{if(ev&&ev.message)App.toast('Сбой: '+ev.message,true);}catch(e){}
+    });
+  },
+  _friendlyErr:function(m){
+    m=String(m||'');
+    if(/quota|exceeded|too many/i.test(m))return'Google ненадолго ограничил запросы — повтори через минуту';
+    if(/network|fetch|timeout|unavailable/i.test(m))return'Нет связи с сервером — проверь интернет';
+    if(/permission|authoriz|access/i.test(m))return'Нет доступа — войди заново';
+    return'Ошибка: '+m;
   },
 
   showScreen:function(id){
