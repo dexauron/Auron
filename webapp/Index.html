@@ -1826,6 +1826,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.openBrain()" style="cursor:pointer;">
+            <span class="settings-row-icon">🧠</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Контроль операций</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Авто-поиск аномалий: завышенные расходы, дубли — с обучением</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
         </div>
       </div>
       <div class="settings-sec">
@@ -5546,6 +5554,51 @@ var App={
       '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:'+(totDiff===0?'var(--muted)':totDiff>0?'var(--pos)':'var(--neg)')+';">'+(totDiff>0?'+':'')+fm(totDiff)+'</div><div style="font-size:11px;color:var(--muted);">итог расхождения</div></div></div>'+
       '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+rowsHtml+'</div>'+
       '<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Z — выручка по сменам. Журнал — проведённый доход (вкл. импорт из 1С). Подсветка — расхождение ≥ 500 ₽: возможна недостача, забытый Z-отчёт или двойная проводка.</div>';
+  },
+
+  // ── «Мозг»: контроль аномалий с самообучением ─────────────────
+  openBrain:function(){
+    App.openModal('<div class="modal-title">🧠 Контроль операций</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Приложение само находит необычные операции: резко завышенные расходы и дубли. Отмечай «Норма» или «Проблема» — оно подстраивается под твой магазин.</div>'+
+      '<div id="brain-body" style="color:var(--muted);font-size:13px;">Анализирую операции…</div>');
+    gs('getAnomalies',{ssId:App.s.ssId}).then(function(r){App._brain=r;App._brainRender();})
+      .catch(function(e){var b=document.getElementById('brain-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _brainRender:function(){
+    var b=document.getElementById('brain-body');if(!b||!App._brain)return;
+    var r=App._brain;var sens=r.sensitivity||1.0;
+    var seg=function(v,lbl){var on=Math.abs(sens-v)<0.01;return'<button onclick="App._brainSens('+v+')" style="flex:1;padding:8px;border-radius:10px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 16%,transparent)':'var(--surface-2)')+';color:'+(on?'var(--brand)':'var(--ink)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">'+lbl+'</button>';};
+    var h='<div style="display:flex;gap:6px;margin-bottom:14px;">'+seg(0.7,'Спокойный')+seg(1.0,'Обычный')+seg(1.4,'Строгий')+'</div>';
+    var items=r.items||[];
+    if(!items.length){
+      b.innerHTML=h+'<div style="text-align:center;padding:26px 10px;line-height:1.6;color:var(--muted);">✅ Необычных операций не найдено.<br>Всё в пределах нормы для твоего магазина.</div>';return;
+    }
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Найдено необычных: '+items.length+'</div>';
+    h+=items.map(function(it,i){
+      var sevColor=it.score>=3?'var(--neg)':it.score>=2.6?'var(--warn,#FF9F0A)':'var(--brand)';
+      return'<div class="brain-card" data-i="'+i+'" style="background:var(--surface-2);border-left:3px solid '+sevColor+';border-radius:12px;padding:12px 13px;margin-bottom:10px;">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:4px;"><span style="font-size:12px;color:var(--muted);">'+App._e(it.date)+' · '+App._e(it.account||'')+'</span><span style="font-size:15px;font-weight:800;color:'+sevColor+';">'+fmt(it.amount)+' ₽</span></div>'+
+        '<div style="font-size:13px;line-height:1.45;margin-bottom:10px;">'+App._e(it.reason)+(it.comment?' · <span style="color:var(--muted);">'+App._e(it.comment)+'</span>':'')+'</div>'+
+        '<div style="display:flex;gap:8px;">'+
+          '<button onclick="App._brainAct('+i+',\'ok\')" style="flex:1;padding:9px;border-radius:10px;border:none;background:color-mix(in oklab,var(--pos) 16%,transparent);color:var(--pos);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">✓ Это норма</button>'+
+          '<button onclick="App._brainAct('+i+',\'issue\')" style="flex:1;padding:9px;border-radius:10px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🚩 Проблема</button>'+
+        '</div></div>';
+    }).join('');
+    b.innerHTML=h;
+  },
+  _brainSens:function(v){
+    App._brain.sensitivity=v;
+    gs('brainLearn',{ssId:App.s.ssId,action:'sensitivity',value:v}).then(function(){
+      gs('getAnomalies',{ssId:App.s.ssId}).then(function(r){App._brain=r;App._brainRender();});
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _brainAct:function(i,action){
+    var it=App._brain.items[i];if(!it)return;
+    var card=document.querySelector('.brain-card[data-i="'+i+'"]');if(card){card.style.transition='opacity .2s';card.style.opacity='0.35';}
+    gs('brainLearn',{ssId:App.s.ssId,action:action,key:it.key,category:it.category}).then(function(){
+      App._brain.items.splice(i,1);App._brainRender();
+      App.toast(action==='ok'?'Запомнил: это норма':'Запомнил: усилю контроль');
+    }).catch(function(e){App.toast(e.message,true);if(card)card.style.opacity='1';});
   },
 
   _impForceMap:function(){

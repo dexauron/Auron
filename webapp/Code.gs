@@ -1203,6 +1203,124 @@ function getTaxSummary(p) {
   } catch(e) { return {__error:e.message}; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: МОЗГ (статистический детектор аномалий + самообучение)
+// Лёгкая математика (z-оценка по категории + правила), без тяжёлого ИИ.
+// Состояние хранится в НАСТРОЙКАХ (ключ BRAIN) — синхронно между устройствами.
+// ═══════════════════════════════════════════════════════════════════════
+
+function _brainGet(ss) {
+  var sh = ss.getSheetByName(SH_SETTINGS);
+  var def = { sensitivity:1.0, catTol:{}, dismissed:{} };
+  try {
+    if (sh.getLastRow()>=2) {
+      var vals = sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
+      for (var i=0;i<vals.length;i++) if (String(vals[i][0])==='BRAIN') {
+        var o = JSON.parse(vals[i][1]||'{}');
+        return { sensitivity:o.sensitivity||1.0, catTol:o.catTol||{}, dismissed:o.dismissed||{} };
+      }
+    }
+  } catch(e){}
+  return def;
+}
+function _brainSet(ss, obj) {
+  var sh = ss.getSheetByName(SH_SETTINGS);
+  var row = -1;
+  if (sh.getLastRow()>=2) {
+    var vals = sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=0;i<vals.length;i++) if (String(vals[i][0])==='BRAIN'){ row=i+2; break; }
+  }
+  var json = JSON.stringify(obj);
+  if (row>0) sh.getRange(row,2).setValue(json); else sh.appendRow(['BRAIN', json]);
+}
+
+// Анализ операций: возвращает список аномалий с объяснением и «score».
+function getAnomalies(p) {
+  var ssId = p.ssId;
+  try {
+    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var base = ss.getSheetByName(SH_BASE);
+    if (!base || base.getLastRow()<2) return { items:[], sensitivity:1.0 };
+    var brain = _brainGet(ss);
+    var sens = brain.sensitivity||1.0;
+    var tz = Session.getScriptTimeZone();
+    var rows = base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var cutoff = new Date(); cutoff.setDate(cutoff.getDate()-90);
+    // Собираем расходы по категориям для статистики
+    var byCat = {}; var txs = [];
+    rows.forEach(function(r){
+      var dt = r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      if (dt < cutoff) return;
+      var type=String(r[B_TYPE-1]), cat=String(r[B_CAT-1]), amt=parseFloat(r[B_AMT-1])||0;
+      if (type!=='Расход' || cat==='Перевод' || amt<=0) return;
+      var dk = Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      var t = { uuid:String(r[B_UUID-1]||r[B_ID-1]||''), date:dk, cat:cat, amt:amt,
+                acc:String(r[B_ACC-1]||''), cmt:String(r[B_CMT-1]||''),
+                key:dk+'|'+cat+'|'+Math.round(amt)+'|'+String(r[B_ACC-1]||'') };
+      txs.push(t);
+      if(!byCat[cat]) byCat[cat]=[];
+      byCat[cat].push(amt);
+    });
+    // mean/std по категории
+    var stats = {};
+    Object.keys(byCat).forEach(function(c){
+      var a=byCat[c], n=a.length, m=a.reduce(function(s,x){return s+x;},0)/n;
+      var v=a.reduce(function(s,x){return s+(x-m)*(x-m);},0)/n;
+      stats[c]={mean:m, std:Math.sqrt(v), n:n};
+    });
+    // Поиск дублей (одинаковый ключ встречается 2+ раз)
+    var keyCount={}; txs.forEach(function(t){keyCount[t.key]=(keyCount[t.key]||0)+1;});
+    var baseZ = 2.2; // базовый порог отклонения
+    var items=[];
+    txs.forEach(function(t){
+      if (brain.dismissed[t.key]) return;
+      var st=stats[t.cat]; var score=0; var reason='';
+      // 1) z-оценка отклонения суммы вверх
+      if (st && st.n>=4 && st.std>0 && t.amt>st.mean) {
+        var z=(t.amt-st.mean)/st.std;
+        var tol=brain.catTol[t.cat]||1.0;
+        var thr=baseZ*tol/sens;
+        if (z>=thr) {
+          score=z;
+          var ratio=st.mean>0?(t.amt/st.mean):0;
+          reason='Расход «'+t.cat+'» '+Math.round(t.amt).toLocaleString('ru')+' ₽ — в '+(ratio.toFixed(1))+'× выше обычного ('+Math.round(st.mean).toLocaleString('ru')+' ₽)';
+        }
+      }
+      // 2) дубль
+      if (keyCount[t.key]>1) {
+        score=Math.max(score,3.0);
+        reason=(reason?reason+'. ':'')+'Похоже на дубль: '+keyCount[t.key]+' одинаковых операций';
+      }
+      if (score>0) items.push({ uuid:t.uuid, key:t.key, date:t.date, category:t.cat,
+        amount:Math.round(t.amt), account:t.acc, comment:t.cmt,
+        score:Math.round(score*10)/10, reason:reason });
+    });
+    items.sort(function(a,b){return b.score-a.score;});
+    return { items:items.slice(0,25), sensitivity:sens, count:items.length };
+  } catch(e) { return { __error:e.message, items:[] }; }
+}
+
+// Самообучение: реакция владельца «ok» (норма) / «issue» (проблема).
+function brainLearn(p) {
+  var ssId=p.ssId, action=p.action, key=p.key, cat=p.category||'';
+  try {
+    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    var ss=SpreadsheetApp.openById(ssId);
+    var brain=_brainGet(ss);
+    if (action==='ok') {
+      if (key) brain.dismissed[key]=1;                       // больше не показывать эту операцию
+      if (cat) brain.catTol[cat]=Math.min((brain.catTol[cat]||1.0)+0.15, 3.0); // терпимее к категории
+    } else if (action==='issue') {
+      if (cat) brain.catTol[cat]=Math.max((brain.catTol[cat]||1.0)-0.15, 0.4); // чувствительнее
+    } else if (action==='sensitivity') {
+      brain.sensitivity=Math.max(0.5, Math.min(parseFloat(p.value)||1.0, 1.8));
+    }
+    _brainSet(ss, brain);
+    lock.releaseLock();
+    return { ok:true, sensitivity:brain.sensitivity };
+  } catch(e){ try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;
