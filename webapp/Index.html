@@ -1685,6 +1685,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div style="padding:20px 16px 8px;">
         <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:14px;">Отчёт</div>
         <div style="background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+            <button onclick="App.dayReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--brand) 16%,transparent);color:var(--brand);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📅 Дневной отчёт</button>
+            <button onclick="App.monthReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 14%,transparent);color:var(--pos);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📆 Закрыть месяц</button>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label style="font-size:11px;color:var(--text-2);display:block;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">С</label>
@@ -2690,6 +2694,20 @@ var App={
     var rTo=document.getElementById('r-to');
     if(rFrom&&!rFrom.value)rFrom.value=fmtISO(from);
     if(rTo&&!rTo.value)rTo.value=fmtISO(now);
+  },
+
+  dayReport:function(){
+    var t=fmtISO(new Date());
+    document.getElementById('r-from').value=t;
+    document.getElementById('r-to').value=t;
+    App.buildReport();
+  },
+
+  monthReport:function(){
+    var now=new Date();
+    document.getElementById('r-from').value=fmtISO(new Date(now.getFullYear(),now.getMonth(),1));
+    document.getElementById('r-to').value=fmtISO(now);
+    App.buildReport();
   },
 
   goToPayments:function(){
