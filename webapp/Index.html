@@ -657,6 +657,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   box-shadow:0 8px 22px -10px rgba(94,92,230,.8);
 }
 .np-key.del{color:var(--neg);}
+.np-key.op{background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);font-weight:800;border:none;}
+.np-key.op:active{background:color-mix(in oklab,var(--brand) 26%,transparent);}
 
 /* ── Pickers ── */
 .picker-list{display:flex;flex-direction:column;gap:8px;}
@@ -1950,18 +1952,21 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <button class="np-key" onclick="App.npKey('7')">7</button>
       <button class="np-key" onclick="App.npKey('8')">8</button>
       <button class="np-key" onclick="App.npKey('9')">9</button>
-      <button class="np-key del" onclick="App.npDel()">⌫</button>
+      <button class="np-key op" onclick="App.npOp('/')">÷</button>
       <button class="np-key" onclick="App.npKey('4')">4</button>
       <button class="np-key" onclick="App.npKey('5')">5</button>
       <button class="np-key" onclick="App.npKey('6')">6</button>
-      <button class="np-key" onclick="App.npKey('.')">.</button>
+      <button class="np-key op" onclick="App.npOp('*')">×</button>
       <button class="np-key" onclick="App.npKey('1')">1</button>
       <button class="np-key" onclick="App.npKey('2')">2</button>
       <button class="np-key" onclick="App.npKey('3')">3</button>
-      <button class="np-key action" onclick="App.saveEntry()" style="grid-row:span 2;">✓</button>
-      <button class="np-key" style="grid-column:span 2;" onclick="App.npKey('0')">0</button>
-      <button class="np-key" onclick="App.npKey('00')">00</button>
+      <button class="np-key op" onclick="App.npOp('-')">−</button>
+      <button class="np-key" onclick="App.npKey('.')">.</button>
+      <button class="np-key" onclick="App.npKey('0')">0</button>
+      <button class="np-key del" onclick="App.npDel()">⌫</button>
+      <button class="np-key op" onclick="App.npOp('+')">+</button>
     </div>
+    <button class="np-key action" onclick="App.saveEntry()" style="width:100%;padding:16px;margin-top:8px;border-radius:16px;">✓ Сохранить</button>
   </div>
 </div>
 
@@ -4370,15 +4375,47 @@ var App={
   },
 
   npKey:function(k){
-    var v=App.s.npVal;
-    if(k==='.'&&v.indexOf('.')>=0)return;
-    if(v==='0'&&k!=='.')v='';
+    var v=App.s.npVal||'';
+    // точка — только одна в текущем числе (после последнего оператора)
+    if(k==='.'){var seg=v.split(/[+\-*/]/).pop();if(seg.indexOf('.')>=0)return;if(seg==='')k='0.';}
     App.s.npVal=v+k;App.npUpdateDisplay();
   },
-  npDel:function(){App.s.npVal=App.s.npVal.slice(0,-1);App.npUpdateDisplay();},
+  npOp:function(op){
+    var v=App.s.npVal||'';
+    if(v===''){if(op==='-')App.s.npVal='-';App.npUpdateDisplay();return;} // позволяем отрицательное
+    if(/[+\-*/]$/.test(v))v=v.slice(0,-1); // заменяем последний оператор
+    App.s.npVal=v+op;App.npUpdateDisplay();
+  },
+  npDel:function(){App.s.npVal=(App.s.npVal||'').slice(0,-1);App.npUpdateDisplay();},
+  // Безопасный вычислитель с приоритетом × ÷ над + − (без eval)
+  _calcEval:function(expr){
+    var t=String(expr||'').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/,/g,'.');
+    var tokens=t.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
+    if(!tokens||!tokens.length)return 0;
+    while(tokens.length&&/[+\-*/]/.test(tokens[tokens.length-1]))tokens.pop();
+    if(!tokens.length)return 0;
+    if(/[+\-*/]/.test(tokens[0]))tokens.unshift('0'); // ведущий оператор (напр. -5)
+    var stack=[parseFloat(tokens[0])||0];
+    for(var i=1;i<tokens.length;i+=2){
+      var op=tokens[i],num=parseFloat(tokens[i+1])||0;
+      if(op==='*')stack[stack.length-1]*=num;
+      else if(op==='/')stack[stack.length-1]=num!==0?stack[stack.length-1]/num:0;
+      else if(op==='+')stack.push(num);
+      else if(op==='-')stack.push(-num);
+    }
+    var r=stack.reduce(function(a,b){return a+b;},0);
+    return Math.round(r*100)/100;
+  },
   npUpdateDisplay:function(){
-    var n=parseFloat(App.s.npVal)||0;
-    document.getElementById('np-display').textContent='₽ '+fmtFull(n);
+    var v=App.s.npVal||'';
+    var n=App._calcEval(v);
+    var el=document.getElementById('np-display');
+    var pretty=v.replace(/\*/g,' × ').replace(/\//g,' ÷ ').replace(/\+/g,' + ').replace(/(\d)-/g,'$1 − ');
+    if(/[+*/]/.test(v)||/\d-/.test(v)){
+      el.innerHTML='<span style="font-size:15px;color:var(--muted);display:block;line-height:1.2;">'+App._e(pretty)+'</span>₽ '+fmtFull(n);
+    } else {
+      el.textContent='₽ '+fmtFull(n);
+    }
   },
 
   pickAccount:function(which){
@@ -4437,7 +4474,7 @@ var App={
 
   saveEntry:function(){
     var s=App.s;
-    var amt=parseFloat(s.npVal)||0;
+    var amt=Math.abs(App._calcEval(s.npVal));
     if(!amt){App.toast('Введите сумму',true);return;}
     if(!s.npAcc){App.toast('Выберите счёт',true);return;}
     if(s.npType!=='transfer'&&!s.npCat){App.toast('Выберите категорию',true);return;}
