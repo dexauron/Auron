@@ -4961,6 +4961,9 @@ var App={
     var rows=lines.map(function(l){return l.split('\t');});
     var ncol=Math.max.apply(null,rows.map(function(r){return r.length;}));
     App._imp={rows:rows,ncol:ncol};
+    // Распознаём отчёт 1С (Продажи / Остатки / Цены) — показываем сводку
+    var typ=App._imp1cDetect(rows);
+    if(typ!=='?'){App._impShowReport(rows,typ);return;}
     var hdr=rows[0].map(function(h){return String(h||'').toLowerCase();});
     App._impMap=hdr.map(function(h){
       if(/дата|date/.test(h))return'date';
@@ -5053,6 +5056,151 @@ var App={
       App.toast('Импортировано: '+r.added+(r.skipped?' · пропущено '+r.skipped:''));
       App.closeModal();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);if(btn){btn.disabled=false;btn.textContent='Импортировать';}});
+  },
+
+  // ===== Движок «понимания» отчётов 1С (порт parse_1c_reports.py) =====
+  _imp1cDetect:function(rows){
+    var head='';
+    for(var r=0;r<Math.min(4,rows.length);r++)head+=' '+rows[r].join(' ');
+    head=head.toLowerCase();
+    if(head.indexOf('продажи')>=0)return'Продажи';
+    if(head.indexOf('остатки')>=0)return'Остатки';
+    if(head.indexOf('цены')>=0)return'Цены';
+    return'?';
+  },
+  _imp1cNum:function(v){
+    var s=String(v==null?'':v).replace(/ /g,'').replace(/ /g,'').replace(/,/g,'.').replace(/[^0-9.\-]/g,'');
+    var n=parseFloat(s);return isNaN(n)?0:n;
+  },
+  _imp1cCol:function(rows,label,exact,upto){
+    upto=upto||12;var lab=label.toLowerCase().trim();
+    for(var r=0;r<Math.min(upto,rows.length);r++)for(var c=0;c<rows[r].length;c++)
+      if(String(rows[r][c]).toLowerCase().trim()===lab)return c;
+    if(exact)return null;
+    for(var r2=0;r2<Math.min(upto,rows.length);r2++)for(var c2=0;c2<rows[r2].length;c2++)
+      if(String(rows[r2][c2]).toLowerCase().indexOf(lab)>=0)return c2;
+    return null;
+  },
+  _imp1cTotal:function(rows){
+    for(var i=0;i<rows.length;i++)if(String(rows[i][0]).trim().toLowerCase()==='итого')return i;
+    return null;
+  },
+  _imp1cPeriod:function(rows){
+    var re2=/(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})/,re1=/(\d{2}\.\d{2}\.\d{4})/;
+    for(var r=0;r<Math.min(8,rows.length);r++)for(var c=0;c<rows[r].length;c++){
+      var s=String(rows[r][c]);var m=s.match(re2);if(m)return m[1]+' – '+m[2];
+      m=s.match(re1);if(m)return m[1];
+    }
+    return'—';
+  },
+  _imp1cExtract:function(rows,typ){
+    var n=App._imp1cNum,col=App._imp1cCol,tot=App._imp1cTotal(rows);
+    var o={тип:typ,период:App._imp1cPeriod(rows),строк:rows.length,total:tot};
+    var T=tot!=null?rows[tot]:null;
+    if(typ==='Продажи'){
+      var cR=col(rows,'Сумма продажи',true),cC=col(rows,'Себестоимость продажи'),
+          cP=col(rows,'Прибыль',true),cM=col(rows,'Процент наценки'),cQ=col(rows,'Количество',true);
+      o.cR=cR;o.cP=cP;
+      if(T){
+        var rev=cR!=null?Math.round(n(T[cR])):0,cost=cC!=null?Math.round(n(T[cC])):0;
+        o.выручка=rev;o.себестоимость=cost;
+        o.прибыль=cP!=null?Math.round(n(T[cP])):rev-cost;
+        o.наценка=cM!=null?Math.round(n(T[cM])*10)/10:0;
+        o.маржа=rev?Math.round(o.прибыль/rev*1000)/10:0;
+        o.колво=cQ!=null?Math.round(n(T[cQ])*10)/10:0;
+      }
+      var hdr=0;for(var i=0;i<rows.length;i++){if(rows[i].some(function(x){return String(x).toLowerCase().indexOf('сумма продажи')>=0;})){hdr=i;break;}}
+      var items=[];var end=tot!=null?tot:rows.length;
+      for(var k=hdr+1;k<end;k++){var nm=String(rows[k][0]).trim();
+        if(nm&&nm.toLowerCase()!=='итого'&&cP!=null)items.push([nm,n(rows[k][cP]),cR!=null?n(rows[k][cR]):0]);}
+      items.sort(function(a,b){return b[1]-a[1];});
+      o.топ=items.slice(0,5).map(function(x){return[x[0].slice(0,32),Math.round(x[1]),Math.round(x[2])];});
+    }else if(typ==='Остатки'){
+      var cQ2=col(rows,'Количество',true),cZ=col(rows,'Приходная сумма'),cRoz=col(rows,'Розничная сумма');
+      if(T){
+        o.колво=cQ2!=null?Math.round(n(T[cQ2])*10)/10:0;
+        o.закуп=cZ!=null?Math.round(n(T[cZ])):0;
+        o.розница=cRoz!=null?Math.round(n(T[cRoz])):0;
+        o.потенциал=o.розница-o.закуп;
+      }
+    }else if(typ==='Цены'){
+      var cN=col(rows,'Номенклатура'),cK=col(rows,'Контрагент'),cPr=col(rows,'Цена');
+      var data=rows.slice(5).filter(function(r){return String(r[0]).trim();});
+      o.позиций=data.length;
+      if(cPr!=null)o.пример=data.slice(0,5).map(function(r){return[String(cN!=null?r[cN]:r[0]).slice(0,28),String(cK!=null?r[cK]:'').slice(0,20),Math.round(n(r[cPr])*100)/100];});
+    }
+    return o;
+  },
+  _impShowReport:function(rows,typ){
+    var o=App._imp1cExtract(rows,typ);App._imp1c=o;
+    var fm=function(v){return fmt(Math.abs(v));};
+    var card='';
+    if(typ==='Продажи'){
+      var rows2=[['Выручка',fm(o.выручка)+' ₽','var(--ink)'],
+        ['Себестоимость',fm(o.себестоимость)+' ₽','var(--muted)'],
+        ['Валовая прибыль',(o.прибыль<0?'−':'')+fm(o.прибыль)+' ₽',o.прибыль>=0?'var(--pos)':'var(--neg)'],
+        ['Наценка',o.наценка+'%','var(--ink)'],['Маржа',o.маржа+'%','var(--ink)']];
+      card='<div style="display:grid;gap:1px;background:var(--line-2);border-radius:12px;overflow:hidden;">'+
+        rows2.map(function(x){return'<div style="display:flex;justify-content:space-between;padding:11px 14px;background:var(--surface-2);"><span style="font-size:13px;color:var(--muted);">'+x[0]+'</span><span style="font-size:14px;font-weight:700;color:'+x[2]+';">'+x[1]+'</span></div>';}).join('')+'</div>';
+      if(o.топ&&o.топ.length){
+        card+='<div style="margin-top:16px;font-size:14px;font-weight:700;">Топ-5 по прибыли</div>'+
+          '<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+          o.топ.map(function(t){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(t[0])+'</span><span style="font-weight:700;color:var(--pos);">'+fm(t[1])+' ₽</span></div>';}).join('')+'</div>';
+      }
+      card+='<button class="btn-primary" onclick="App._imp1cRevenue()">Записать выручку в журнал</button>';
+    }else if(typ==='Остатки'){
+      var rows3=[['Кол-во на складе',(o.колво||0).toLocaleString('ru-RU')],
+        ['Стоимость (закуп)',fm(o.закуп)+' ₽'],['Стоимость (розница)',fm(o.розница)+' ₽'],
+        ['Потенциальная наценка',fm(o.потенциал)+' ₽']];
+      card='<div style="display:grid;gap:1px;background:var(--line-2);border-radius:12px;overflow:hidden;">'+
+        rows3.map(function(x){return'<div style="display:flex;justify-content:space-between;padding:11px 14px;background:var(--surface-2);"><span style="font-size:13px;color:var(--muted);">'+x[0]+'</span><span style="font-size:14px;font-weight:700;">'+x[1]+'</span></div>';}).join('')+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;">Это справочная сводка остатков из 1С. Товарный учёт ведётся в 1С — здесь только финансовая картина.</div>';
+    }else if(typ==='Цены'){
+      card='<div style="font-size:14px;font-weight:700;">Цены поставщиков: '+o.позиций+' позиций</div>';
+      if(o.пример&&o.пример.length){
+        card+='<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+          o.пример.map(function(p){return'<div style="padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(p[0])+'</div><div style="display:flex;justify-content:space-between;color:var(--muted);margin-top:2px;"><span>'+App._e(p[1])+'</span><span style="font-weight:700;color:var(--ink);">'+p[2]+' ₽</span></div></div>';}).join('')+'</div>';
+      }
+    }
+    var html='<div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;">'+
+        '<div style="font-size:15px;font-weight:800;">Отчёт 1С: '+typ+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);">'+App._e(o.период)+'</div></div>'+
+      '<div style="margin-top:12px;">'+card+'</div>'+
+      '<button class="btn-ghost" style="margin-top:10px;" onclick="App._impForceMap()">Это не отчёт — сопоставить столбцы вручную</button>';
+    document.getElementById('imp-map').innerHTML=html;
+  },
+  _imp1cRevenue:function(){
+    var o=App._imp1c;if(!o||!o.выручка){App.toast('Нет суммы выручки',true);return;}
+    var accs=(App.s.accounts||[]).map(function(a){return a.name;});
+    var d=o.период.split('–')[0].trim().split(' ')[0];
+    if(!/^\d{2}\.\d{2}\.\d{4}$/.test(d)){var t=new Date();d=('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear();}
+    App.openModal('<div class="modal-title">Записать выручку</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Доход «Выручка» на '+fmt(o.выручка)+' ₽ за период '+App._e(o.период)+'.</div>'+
+      '<label style="font-size:12px;color:var(--muted);font-weight:600;">Дата</label>'+
+      '<input id="r1c-date" value="'+d+'" style="width:100%;padding:10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:4px 0 10px;">'+
+      '<label style="font-size:12px;color:var(--muted);font-weight:600;">Счёт</label>'+
+      '<select id="r1c-acc" style="width:100%;padding:10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:4px 0 14px;">'+accs.map(function(a){return'<option>'+App._e(a)+'</option>';}).join('')+'</select>'+
+      '<button class="btn-primary" id="r1c-btn" onclick="App._imp1cRevenueDo()">Записать в журнал</button>');
+  },
+  _imp1cRevenueDo:function(){
+    var o=App._imp1c;var date=document.getElementById('r1c-date').value;var acc=document.getElementById('r1c-acc').value;
+    var btn=document.getElementById('r1c-btn');if(btn){btn.disabled=true;btn.textContent='Записываю…';}
+    gs('importRows',{ssId:App.s.ssId,rows:[{date:date,amount:o.выручка,type:'Доход',category:'Выручка',account:acc,comment:'Импорт продаж 1С · '+o.период}]}).then(function(r){
+      App.toast(r.added?'Выручка записана':'Уже была записана');App.closeModal();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);if(btn){btn.disabled=false;btn.textContent='Записать в журнал';}});
+  },
+  _impForceMap:function(){
+    var rows=App._imp.rows;var hdr=rows[0].map(function(h){return String(h||'').toLowerCase();});
+    App._impMap=hdr.map(function(h){
+      if(/дата|date/.test(h))return'date';
+      if(/сумм|оборот|приход|расход|amount|итог/.test(h))return'amount';
+      if(/тип|операц/.test(h))return'type';
+      if(/катег|стать|назнач/.test(h))return'category';
+      if(/сч[её]т|касс|account/.test(h))return'account';
+      if(/коммент|примеч|описан|контраг|поставщ/.test(h))return'comment';
+      return'skip';
+    });
+    App._impRenderMap();
   },
 
   _e:function(s){
