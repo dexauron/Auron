@@ -628,10 +628,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .np-type-btn.active.income{border-color:var(--pos);color:var(--pos);background:color-mix(in oklab,var(--pos) 12%,transparent);}
 .np-type-btn.active.transfer{border-color:var(--brand);color:var(--brand);background:color-mix(in oklab,var(--brand) 14%,transparent);}
 .np-display{
-  font-size:46px;font-weight:800;text-align:center;
+  font-size:clamp(30px,8.5vw,46px);font-weight:800;text-align:center;
   padding:10px 16px 2px;letter-spacing:-.03em;min-height:68px;
-  display:flex;align-items:center;justify-content:center;color:var(--ink);
-  font-family:var(--font-num);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink);
+  font-family:var(--font-num);max-width:100%;overflow:hidden;
 }
 .np-fields{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
 .np-field{
@@ -1184,6 +1184,18 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   .ob-card{padding:15px;gap:13px;}
   .ob-card .ci{width:42px;height:42px;}
 }
+
+/* ── Адаптив окон: на широких экранах окна не растягиваются, а центрируются ── */
+@media(min-width:768px){
+  .modal-overlay{align-items:center;justify-content:center;}
+  .modal{max-width:560px;margin:auto;border-radius:24px;border-bottom:1px solid var(--border);}
+  .modal-overlay.show .modal{animation:popIn .25s cubic-bezier(.2,.8,.2,1);}
+  .sheet{max-width:560px;left:0;right:0;margin-left:auto;margin-right:auto;border-radius:28px;bottom:24px;}
+  .sheet-overlay,.modal-overlay{padding:0 16px;}
+}
+@keyframes popIn{from{transform:scale(.96);opacity:.4;}to{transform:scale(1);opacity:1;}}
+/* Любая широкая таблица/блок внутри окна прокручивается, а не ломает вёрстку */
+.modal table,.sheet table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 
 /* ── Premium design upgrades v5.1 ── */
 
