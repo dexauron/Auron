@@ -621,6 +621,64 @@ function getTrash(p) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// MODULE: IMPORT (из 1С через Excel-вставку)
+// ═══════════════════════════════════════════════════════════════════════
+
+// p.rows = [{date, type:'Доход'|'Расход', category, amount, account, comment}]
+// Дедуп по ключу дата|тип|сумма|счёт|комментарий, чтобы повторный импорт не задваивал.
+function importRows(p) {
+  var ssId = p.ssId, rows = p.rows || [];
+  if (!rows.length) return { ok:true, added:0, skipped:0 };
+  try {
+    var lock = LockService.getScriptLock(); lock.waitLock(25000);
+    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var base = ss.getSheetByName(SH_BASE);
+    var tz = Session.getScriptTimeZone();
+    var seen = {};
+    if (base.getLastRow() >= 2) {
+      base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        var d = r[B_DATE-1];
+        var dk = (d instanceof Date) ? Utilities.formatDate(d,tz,'yyyy-MM-dd') : '';
+        seen[dk+'|'+r[B_TYPE-1]+'|'+(Math.round(parseFloat(r[B_AMT-1])||0))+'|'+r[B_ACC-1]+'|'+r[B_CMT-1]] = true;
+      });
+    }
+    var out = [], added = 0, skipped = 0;
+    rows.forEach(function(r){
+      var dt = _parseDate(r.date); if (!dt) { skipped++; return; }
+      var amt = Math.round(parseFloat(r.amount)||0); if (!amt) { skipped++; return; }
+      var type = (r.type==='Доход'||r.type==='income') ? 'Доход' : 'Расход';
+      var cat = _s(r.category||''), acc = _s(r.account||''), cmt = _s(r.comment||'');
+      var dk = Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      var key = dk+'|'+type+'|'+amt+'|'+acc+'|'+cmt;
+      if (seen[key]) { skipped++; return; }
+      seen[key] = true;
+      out.push([Utilities.getUuid(),Utilities.getUuid(),dt,type,cat,amt,acc,'',cmt,'','',false,'']);
+      added++;
+    });
+    if (out.length) {
+      var sr = base.getLastRow()+1;
+      base.getRange(sr,1,out.length,B_COLS).setValues(out);
+      base.getRange(sr,B_DATE,out.length,1).setNumberFormat('dd.mm.yyyy');
+      base.getRange(sr,B_AMT,out.length,1).setNumberFormat('#,##0');
+    }
+    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    lock.releaseLock();
+    return { ok:true, added:added, skipped:skipped };
+  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return { __error:e.message }; }
+}
+
+// Разбор даты: dd.mm.yyyy, dd.mm.yy, yyyy-mm-dd, либо Date
+function _parseDate(v) {
+  if (v instanceof Date) return v;
+  var s = String(v||'').trim(); if (!s) return null;
+  var m = s.match(/^(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+  if (m) { var y = parseInt(m[3],10); if (y<100) y += 2000; return new Date(y, parseInt(m[2],10)-1, parseInt(m[1],10)); }
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+  var d = new Date(s); return isNaN(d.getTime()) ? null : d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MODULE: Z-REPORT
 // ═══════════════════════════════════════════════════════════════════════
 
