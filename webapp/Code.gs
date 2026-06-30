@@ -1024,13 +1024,20 @@ function getCashierAnalytics(p) {
       var rj=[]; try{rj=JSON.parse(r[4]||'[]');}catch(e){}
       var rev=0; rj.forEach(function(row){rev+=parseFloat(row.zAmount)||0;});
       var disc=parseFloat(r[6])||0;
-      if(!map[cashier]) map[cashier]={name:cashier,shifts:0,revenue:0,discrepancy:0};
+      if(!map[cashier]) map[cashier]={name:cashier,shifts:0,revenue:0,discrepancy:0,discAbs:0,discCount:0,maxDisc:0};
       map[cashier].shifts++; map[cashier].revenue+=rev; map[cashier].discrepancy+=disc;
+      if(disc!==0){ map[cashier].discCount++; map[cashier].discAbs+=Math.abs(disc);
+        if(Math.abs(disc)>Math.abs(map[cashier].maxDisc)) map[cashier].maxDisc=disc; }
     });
     return {list:Object.keys(map).map(function(k){
       var c=map[k];
-      return {name:c.name,shifts:c.shifts,revenue:Math.round(c.revenue),discrepancy:Math.round(c.discrepancy)};
-    }).sort(function(a,b){return b.revenue-a.revenue;})};
+      var pct=c.shifts?Math.round(c.discCount/c.shifts*100):0;
+      // флаг аномалии: часто расходится (>40% смен) ИЛИ крупная разовая (>= 1000)
+      var anomaly = pct>=40 || Math.abs(c.maxDisc)>=1000;
+      return {name:c.name,shifts:c.shifts,revenue:Math.round(c.revenue),
+              discrepancy:Math.round(c.discrepancy),discAbs:Math.round(c.discAbs),
+              discCount:c.discCount,discPct:pct,maxDisc:Math.round(c.maxDisc),anomaly:anomaly};
+    }).sort(function(a,b){return b.discAbs-a.discAbs||b.revenue-a.revenue;})};
   } catch(e) { return {list:[]}; }
 }
 
