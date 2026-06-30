@@ -685,6 +685,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   border:1px solid var(--border);border-bottom:none;
 }
 .modal-title{font-size:20px;font-weight:800;margin-bottom:20px;letter-spacing:-.4px;}
+.modal-overlay.show .modal{animation:sheetUp .3s cubic-bezier(.2,.8,.2,1);}
+@keyframes sheetUp{from{transform:translateY(100%);opacity:.6;}to{transform:translateY(0);opacity:1;}}
+.modal-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:-8px auto 14px;cursor:grab;}
 
 /* ── Toast ── */
 #toast{
@@ -2200,8 +2203,16 @@ var App={
     });
   },
 
+  // Вибро-отклик (есть на Android; iOS Safari игнорирует — безопасно)
+  haptic:function(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}},
+
   // Глобальные защиты: двойное нажатие + перехват ошибок (надёжность и точность)
   _installGuards:function(){
+    // 0) Тактильный отклик при нажатии на интерактивные элементы
+    document.addEventListener('pointerdown',function(e){
+      var t=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-key,.np-type-btn,.picker-item,.nav-item,.an-tab,.settings-row,.sb-nav-item,#fab'):null;
+      if(t)App.haptic(6);
+    },{passive:true,capture:true});
     // 1) Анти-дабл-тап: блокируем повторный клик по кнопке действия в течение 1 сек
     document.addEventListener('click',function(e){
       var b=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-save'):null;
@@ -4492,14 +4503,45 @@ var App={
     document.querySelectorAll('.sheet').forEach(function(s){s.classList.remove('show');});
   },
   openModal:function(html){
-    document.getElementById('modal-body').innerHTML=html;
+    var m=document.getElementById('modal-body');
+    m.innerHTML='<div class="modal-handle"></div>'+html;
     document.getElementById('modal-overlay').classList.add('show');
+    m.scrollTop=0;m.style.transform='';
+    App._attachSwipeClose(m,App.closeModal);
+    App.haptic(8);
   },
-  closeModal:function(){document.getElementById('modal-overlay').classList.remove('show');},
+  closeModal:function(){
+    var m=document.getElementById('modal-body');if(m)m.style.transform='';
+    document.getElementById('modal-overlay').classList.remove('show');
+  },
+
+  // Смахивание шторки вниз для закрытия (работает только когда прокрутка вверху)
+  _attachSwipeClose:function(el,closeFn){
+    if(el._swipeBound)return;el._swipeBound=true;
+    var startY=0,curY=0,dragging=false;
+    el.addEventListener('touchstart',function(e){
+      if(el.scrollTop>0){dragging=false;return;}
+      startY=e.touches[0].clientY;dragging=true;curY=0;
+      el.style.transition='none';
+    },{passive:true});
+    el.addEventListener('touchmove',function(e){
+      if(!dragging)return;
+      curY=e.touches[0].clientY-startY;
+      if(curY<0){curY=0;return;}
+      el.style.transform='translateY('+curY+'px)';
+    },{passive:true});
+    el.addEventListener('touchend',function(){
+      if(!dragging)return;dragging=false;
+      el.style.transition='transform .25s cubic-bezier(.2,.8,.2,1)';
+      if(curY>110){App.haptic(10);closeFn();}
+      else el.style.transform='';
+    });
+  },
 
   toast:function(msg,isErr){
     var el=document.getElementById('toast');
     el.textContent=msg;el.className='show'+(isErr?' error':'');
+    App.haptic(isErr?[0,30,40,30]:14);
     clearTimeout(App._tt);App._tt=setTimeout(function(){el.className='';},2500);
   },
 
