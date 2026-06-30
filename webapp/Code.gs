@@ -1409,6 +1409,52 @@ function getDayRating(p) {
   } catch(e) { return { __error:e.message, days:[] }; }
 }
 
+// Наблюдения: «машина времени» (этот день недели / месяц назад) + сигнал слабого дня.
+function getInsights(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var tz=Session.getScriptTimeZone();
+    if(!base||base.getLastRow()<2) return { insights:[] };
+    var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var daily={}; var agg={}; for(var i=1;i<=7;i++) agg[i]={total:0,dates:{}};
+    rows.forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      if(String(r[B_TYPE-1])!=='Доход'||String(r[B_CAT-1])==='Перевод') return;
+      var amt=parseFloat(r[B_AMT-1])||0; if(amt<=0) return;
+      var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      daily[dk]=(daily[dk]||0)+amt;
+      var dow=dt.getDay(); dow=(dow===0?7:dow);
+      agg[dow].total+=amt; agg[dow].dates[dk]=true;
+    });
+    var wAvg={}; for(var d=1;d<=7;d++){var n=Object.keys(agg[d].dates).length; wAvg[d]=n>0?agg[d].total/n:0;}
+    var nomn=['понедельник','вторник','среда','четверг','пятница','суббота','воскресенье'];
+    var plr=['понедельникам','вторникам','средам','четвергам','пятницам','субботам','воскресеньям'];
+    var fmtR=function(v){return Math.round(v).toLocaleString('ru');};
+    var insights=[];
+    // вчера
+    var yd=new Date(); yd.setDate(yd.getDate()-1);
+    var yk=Utilities.formatDate(yd,tz,'yyyy-MM-dd'); var yRev=daily[yk]||0;
+    var ydow=yd.getDay(); ydow=(ydow===0?7:ydow); var ya=wAvg[ydow];
+    if(yRev>0 && ya>0){
+      var delta=Math.round((yRev-ya)/ya*100);
+      var tone=delta>=5?'good':(delta<=-10?'bad':'neutral');
+      insights.push({ tone:tone, icon:delta>=0?'📈':'📉',
+        text:'Вчера ('+nomn[ydow-1]+'): '+fmtR(yRev)+' ₽ — на '+Math.abs(delta)+'% '+(delta>=0?'выше':'ниже')+', чем обычно по '+plr[ydow-1]+' ('+fmtR(ya)+' ₽)' });
+    }
+    // машина времени: вчера vs месяц назад
+    var ym=new Date(yd); ym.setMonth(ym.getMonth()-1);
+    var ymk=Utilities.formatDate(ym,tz,'yyyy-MM-dd'); var ymRev=daily[ymk]||0;
+    if(yRev>0 && ymRev>0){
+      var d2=Math.round((yRev-ymRev)/ymRev*100);
+      insights.push({ tone:d2>=0?'good':'bad', icon:'📸',
+        text:'Месяц назад в этот день было '+fmtR(ymRev)+' ₽ — сейчас на '+Math.abs(d2)+'% '+(d2>=0?'больше':'меньше') });
+    }
+    return { insights:insights };
+  } catch(e) { return { __error:e.message, insights:[] }; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;
