@@ -3188,8 +3188,9 @@ var App={
       App._renderPL(r);App._renderCats(r);App._renderDebtAn(r);
     });
     gs('getCashierAnalytics',{ssId:App.s.ssId,period:ap}).then(function(r){
-      App._renderCashiers(r);App._renderHeatmap(r);
+      App._renderCashiers(r);
     });
+    gs('getDayRating',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderDayRating(r);});
     gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(function(r){App._renderSuppliers(r);});
     gs('getShiftAnalytics',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderShifts(r);});
     gs('getAccountFlow',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderAccFlow(r);});
@@ -3434,24 +3435,44 @@ var App={
     });
   },
 
-  _renderHeatmap:function(r){
-    var el=document.getElementById('an-heatmap');
-    var days=r.heatmap||[];
-    var dow=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-    if(!days.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">Нет данных</div></div>';return;}
-    var max=Math.max.apply(null,days.map(function(d){return d.amount||0;}));
-    el.innerHTML='<div class="chart-wrap"><div class="chart-title">Выручка по дням недели</div>'+
-      '<div>'+dow.map(function(d,i){
-        var day=days.find(function(x){return x.dow===i+1;})||{amount:0};
-        var pct=max?Math.round((day.amount/max)*100):0;
-        return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
-          '<span style="width:24px;font-size:12px;color:var(--text-2);">'+d+'</span>'+
-          '<div style="flex:1;background:var(--sep);border-radius:6px;height:20px;">'+
-            '<div style="width:'+pct+'%;background:var(--brand);border-radius:6px;height:100%;"></div>'+
-          '</div>'+
-          '<span style="font-size:12px;color:var(--text-2);width:50px;text-align:right;">₽ '+fmt(day.amount)+'</span>'+
-        '</div>';
-      }).join('')+'</div></div>';
+  _renderDayRating:function(r){
+    var el=document.getElementById('an-heatmap');if(!el)return;
+    if(r&&r.__error){el.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(r.__error)+'</div></div>';return;}
+    var days=(r&&r.days)||[];
+    var hasData=days.some(function(d){return d.days>0;});
+    if(!hasData){el.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">Пока нет данных о выручке по дням</div></div>';return;}
+    var max=Math.max.apply(null,days.map(function(d){return d.avg||0;}))||1;
+    var avg=r.overallAvg||0;
+    // ранги по средней
+    var ranked=days.filter(function(d){return d.days>0;}).slice().sort(function(a,b){return b.avg-a.avg;});
+    var rankOf={};ranked.forEach(function(d,i){rankOf[d.dow]=i+1;});
+    var best=r.best,worst=r.worst;
+    var h='';
+    // верхняя плашка с инсайтом
+    if(best&&worst&&best.dow!==worst.dow){
+      var diff=worst.avg>0?Math.round((best.avg-worst.avg)/worst.avg*100):0;
+      h+='<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+        '<div style="flex:1;background:color-mix(in oklab,var(--pos) 13%,transparent);border-radius:14px;padding:13px;"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">🔥 Лучший день</div><div style="font-size:17px;font-weight:800;color:var(--pos);margin-top:3px;">'+App._e(best.label)+'</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">в среднем '+fmt(best.avg)+' ₽</div></div>'+
+        '<div style="flex:1;background:color-mix(in oklab,var(--neg) 11%,transparent);border-radius:14px;padding:13px;"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;">💤 Слабый день</div><div style="font-size:17px;font-weight:800;color:var(--neg);margin-top:3px;">'+App._e(worst.label)+'</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">в среднем '+fmt(worst.avg)+' ₽</div></div>'+
+      '</div>';
+      if(diff>0)h+='<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5;">📊 '+App._e(best.label)+' приносит на <b style="color:var(--ink);">'+diff+'%</b> больше, чем '+App._e(worst.label)+'. Планируй закупки и смены под сильные дни.</div>';
+    }
+    // рейтинг-бары по средней выручке
+    h+='<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Средняя выручка по дням</div>';
+    h+=days.map(function(d){
+      var pct=Math.round((d.avg/max)*100);
+      var isBest=best&&d.dow===best.dow,isWorst=worst&&d.dow===worst.dow;
+      var bar=isBest?'var(--pos)':isWorst?'var(--neg)':'var(--brand)';
+      var rk=rankOf[d.dow]?'<span style="display:inline-flex;width:18px;height:18px;border-radius:5px;background:var(--surface-3);font-size:10px;font-weight:800;align-items:center;justify-content:center;color:var(--muted);">'+rankOf[d.dow]+'</span>':'';
+      return '<div style="display:flex;align-items:center;gap:9px;margin-bottom:9px;">'+
+        rk+
+        '<span style="width:26px;font-size:12.5px;font-weight:600;color:var(--ink);">'+d.short+'</span>'+
+        '<div style="flex:1;background:var(--surface-3);border-radius:7px;height:22px;overflow:hidden;"><div style="width:'+Math.max(pct,3)+'%;background:'+bar+';border-radius:7px;height:100%;transition:width .4s;"></div></div>'+
+        '<span style="font-size:12px;color:var(--muted);width:62px;text-align:right;">'+(d.days>0?fmt(d.avg)+' ₽':'—')+'</span>'+
+      '</div>';
+    }).join('');
+    h+='<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Считается средняя выручка за один такой день (а не сумма) — честное сравнение, даже если дней было разное количество.</div>';
+    el.innerHTML=h;
   },
 
   _renderDebtAn:function(r){

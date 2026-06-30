@@ -1370,6 +1370,45 @@ function getPulse(p) {
   } catch(e) { return { __error:e.message, score:0 }; }
 }
 
+// Рейтинг дней недели: средняя выручка по каждому дню (Пн…Вс) + лучший/худший.
+function getDayRating(p) {
+  var ssId=p.ssId, period=p.period||'year';
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var tz=Session.getScriptTimeZone();
+    if(!base||base.getLastRow()<2) return { days:[], best:null, worst:null };
+    var pd=_period(period,tz);
+    var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var agg={}; for(var i=1;i<=7;i++) agg[i]={total:0,dates:{}};
+    rows.forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      var ms=dt.getTime(); if(pd.from&&ms<pd.from)return; if(pd.to&&ms>pd.to)return;
+      if(String(r[B_TYPE-1])!=='Доход'||String(r[B_CAT-1])==='Перевод') return;
+      var amt=parseFloat(r[B_AMT-1])||0; if(amt<=0) return;
+      var dow=dt.getDay(); dow=(dow===0?7:dow); // Пн=1…Вс=7
+      var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      agg[dow].total+=amt; agg[dow].dates[dk]=true;
+    });
+    var labels=['Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье'];
+    var sh=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    var days=[]; var withData=[];
+    for(var d=1;d<=7;d++){
+      var nDates=Object.keys(agg[d].dates).length;
+      var avg=nDates>0?agg[d].total/nDates:0;
+      var obj={dow:d, label:labels[d-1], short:sh[d-1], total:Math.round(agg[d].total), days:nDates, avg:Math.round(avg)};
+      days.push(obj); if(nDates>0) withData.push(obj);
+    }
+    var best=null, worst=null, overallAvg=0;
+    if(withData.length){
+      best=withData.slice().sort(function(a,b){return b.avg-a.avg;})[0];
+      worst=withData.slice().sort(function(a,b){return a.avg-b.avg;})[0];
+      overallAvg=Math.round(withData.reduce(function(s,x){return s+x.avg;},0)/withData.length);
+    }
+    return { days:days, best:best, worst:worst, overallAvg:overallAvg };
+  } catch(e) { return { __error:e.message, days:[] }; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;
