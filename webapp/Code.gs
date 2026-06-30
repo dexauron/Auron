@@ -1321,6 +1321,55 @@ function brainLearn(p) {
   } catch(e){ try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ПУЛЬС МАГАЗИНА — единый показатель здоровья бизнеса (0–100)
+// Прозрачная математика: 5 факторов, каждый объясним.
+// ═══════════════════════════════════════════════════════════════════════
+function getPulse(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var an=getAnalytics({ssId:ssId, period:'month'});
+    var income=an.income||0, expense=an.expense||0, profit=income-expense;
+    var growth=getGrowthData({ssId:ssId});
+    var incChange=(growth&&growth.month)?(growth.month.incomeChange||0):0;
+    var debt=0; try{ getDebts({ssId:ssId}).forEach(function(d){if(d.debt>0)debt+=d.debt;}); }catch(e){}
+    var cash=0; try{ getAccounts(ssId).forEach(function(a){cash+=(a.balance||0);}); }catch(e){}
+    var anom=0; try{ var aa=getAnomalies({ssId:ssId}); anom=(aa.items||[]).length; }catch(e){}
+
+    var margin = income>0 ? profit/income : 0;        // рентабельность
+    var clamp=function(v){return Math.max(0,Math.min(100,Math.round(v)));};
+    // Подоценки 0–100
+    var sProfit = clamp(margin>=0.25?100:margin<=0?0:margin/0.25*100);
+    var sGrowth = clamp(50 + incChange*2.5);          // +20% → 100, −20% → 0
+    var debtRatio = income>0?debt/income:(debt>0?3:0);
+    var sDebt   = clamp(debtRatio<=0?100:debtRatio>=3?0:(1-debtRatio/3)*100);
+    var sAnom   = clamp(100 - anom*15);
+    var runway  = expense>0?cash/expense:(cash>0?6:0);
+    var sRunway = clamp(runway>=3?100:runway/3*100);
+    // Веса
+    var score = Math.round(sProfit*0.30 + sGrowth*0.20 + sDebt*0.20 + sAnom*0.15 + sRunway*0.15);
+    var verdict = score>=80?'Отличное здоровье':score>=60?'Стабильно':score>=40?'Требует внимания':'Зона риска';
+    // Слабые места → рекомендации
+    var factors=[
+      {key:'Рентабельность', score:sProfit, hint:'Низкая наценка/прибыль — пересмотри цены или расходы'},
+      {key:'Динамика выручки', score:sGrowth, hint:'Выручка падает к прошлому периоду'},
+      {key:'Долги поставщикам', score:sDebt, hint:'Высокая долговая нагрузка — закрывай накладные'},
+      {key:'Аномалии', score:sAnom, hint:anom+' необычных операций — проверь в Контроле'},
+      {key:'Денежный буфер', score:sRunway, hint:'Мало запаса налички относительно расходов'}
+    ];
+    var weak=factors.slice().sort(function(a,b){return a.score-b.score;});
+    var tips=weak.filter(function(f){return f.score<60;}).slice(0,2).map(function(f){return f.hint;});
+    return {
+      score:score, verdict:verdict, anomalies:anom,
+      income:Math.round(income), expense:Math.round(expense), profit:Math.round(profit),
+      marginPct:Math.round(margin*100), incChange:Math.round(incChange),
+      debt:Math.round(debt), cash:Math.round(cash), runwayMonths:Math.round(runway*10)/10,
+      factors:factors, tips:tips
+    };
+  } catch(e) { return { __error:e.message, score:0 }; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;
