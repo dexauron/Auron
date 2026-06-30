@@ -1177,6 +1177,32 @@ function _emptyHm() {
   return ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(d,i){return{dow:i+1,label:d,amount:0};});
 }
 
+// Доходы/расходы по кварталам за год — основа расчёта налогов (УСН/патент).
+// Доход = выручка (Доход, кроме Перевод). Расход = деловые расходы (Расход,
+// кроме Перевод и «Изъятие владельца» — это не расход бизнеса).
+function getTaxSummary(p) {
+  var ssId=p.ssId, year=parseInt(p.year)||(new Date()).getFullYear();
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var q=[{income:0,expense:0},{income:0,expense:0},{income:0,expense:0},{income:0,expense:0}];
+    if (base && base.getLastRow()>=2) {
+      base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+        if (dt.getFullYear()!==year) return;
+        var qi=Math.floor(dt.getMonth()/3);
+        var t=String(r[B_TYPE-1]),cat=String(r[B_CAT-1]),amt=parseFloat(r[B_AMT-1])||0;
+        if (cat==='Перевод') return;
+        if (t==='Доход') q[qi].income+=amt;
+        else if (t==='Расход' && cat!=='Изъятие владельца') q[qi].expense+=amt;
+      });
+    }
+    var yi=0,ye=0;
+    q.forEach(function(x){x.income=Math.round(x.income);x.expense=Math.round(x.expense);yi+=x.income;ye+=x.expense;});
+    return {year:year, quarters:q, yearIncome:yi, yearExpense:ye};
+  } catch(e) { return {__error:e.message}; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;

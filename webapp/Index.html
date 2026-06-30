@@ -1690,6 +1690,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
             <button onclick="App.dayReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--brand) 16%,transparent);color:var(--brand);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📅 Дневной отчёт</button>
             <button onclick="App.monthReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 14%,transparent);color:var(--pos);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📆 Закрыть месяц</button>
+            <button onclick="App.openTaxes()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 16%,transparent);color:var(--warn,#FF9F0A);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🧮 Налоги</button>
+            <button onclick="App.openReconcile()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Сверка выручки</button>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
@@ -5345,6 +5347,99 @@ var App={
           }).join('');
       }).catch(function(e){var el=document.getElementById('goods-list');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
     },250);
+  },
+
+  // ── Налоги (УСН 6% / УСН 15% / Патент) + календарь ─────────────
+  openTaxes:function(){
+    App.openModal('<div class="modal-title">Налоги</div><div id="tax-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    var y=new Date().getFullYear();
+    gs('getTaxSummary',{ssId:App.s.ssId,year:y}).then(function(r){App._tax=r;App._taxRender();})
+      .catch(function(e){var b=document.getElementById('tax-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _taxRender:function(){
+    var b=document.getElementById('tax-body');if(!b||!App._tax)return;
+    var t=App._tax;var st=App.s.settings||{};
+    var mode=st.taxMode||'usn6';
+    var fm=function(v){return fmt(Math.round(v));};
+    var seg=function(id,lbl){return'<button onclick="App._taxSetMode(\''+id+'\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(mode===id?'var(--brand)':'var(--line)')+';background:'+(mode===id?'color-mix(in oklab,var(--brand) 16%,transparent)':'var(--surface-2)')+';color:'+(mode===id?'var(--brand)':'var(--ink)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">'+lbl+'</button>';};
+    var h='<div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Год '+t.year+' · режим налогообложения:</div>'+
+      '<div style="display:flex;gap:6px;margin-bottom:14px;">'+seg('usn6','УСН 6%')+seg('usn15','УСН 15%')+seg('patent','Патент')+'</div>';
+    if(mode==='patent'){
+      var pc=st.taxPatent||0;
+      h+='<label style="font-size:12px;color:var(--muted);font-weight:600;">Стоимость патента за год, ₽</label>'+
+        '<input id="tax-patent" type="number" value="'+(pc||'')+'" oninput="App._taxPatentChange()" placeholder="например 60000" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:5px 0 14px;">'+
+        '<div style="background:var(--surface-2);border-radius:12px;padding:14px;text-align:center;"><div style="font-size:22px;font-weight:800;">'+fm(pc)+' ₽</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">патент за год · выручка для справки: '+fm(t.yearIncome)+' ₽</div></div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;">Патент платится 2 частями: ⅓ — в первые 90 дней, остаток — до конца срока. При выручке свыше лимита патент не применяется.</div>';
+      b.innerHTML=h;return;
+    }
+    var rate=mode==='usn6'?6:15;
+    var rows=t.quarters.map(function(q,i){
+      var base=mode==='usn6'?q.income:Math.max(q.income-q.expense,0);
+      var tax=Math.round(base*rate/100);
+      return{n:i+1,income:q.income,expense:q.expense,base:base,tax:tax};
+    });
+    var yearTax=rows.reduce(function(s,x){return s+x.tax;},0);
+    var ins=st.taxInsurance||0;
+    var afterIns=mode==='usn6'?Math.max(yearTax-ins,Math.round(yearTax*0)):yearTax; // 6%: взносы уменьшают (упрощённо до 100% для ИП без работников)
+    h+='<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+      '<div style="display:flex;padding:8px 12px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;"><span style="flex:1;">Квартал</span><span style="width:90px;text-align:right;">База</span><span style="width:80px;text-align:right;">Налог</span></div>'+
+      rows.map(function(x){return'<div style="display:flex;padding:10px 12px;border-top:1px solid var(--line-2);font-size:13px;"><span style="flex:1;">'+x.n+' кв · '+(mode==='usn6'?'доход '+fm(x.income):'дох '+fm(x.income)+' − рас '+fm(x.expense))+'</span><span style="width:90px;text-align:right;font-weight:600;">'+fm(x.base)+'</span><span style="width:80px;text-align:right;font-weight:800;color:var(--brand);">'+fm(x.tax)+'</span></div>';}).join('')+
+      '</div>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;background:color-mix(in oklab,var(--brand) 10%,transparent);border-radius:12px;padding:14px;"><span style="font-size:14px;font-weight:700;">Налог за год ('+rate+'%)</span><span style="font-size:20px;font-weight:800;color:var(--brand);">'+fm(yearTax)+' ₽</span></div>';
+    if(mode==='usn6'){
+      h+='<label style="font-size:12px;color:var(--muted);font-weight:600;display:block;margin-top:14px;">Страховые взносы уплачены за год, ₽ (уменьшают налог)</label>'+
+        '<input id="tax-ins" type="number" value="'+(ins||'')+'" oninput="App._taxInsChange()" placeholder="0" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-top:5px;">';
+      if(ins>0)h+='<div style="display:flex;justify-content:space-between;margin-top:10px;font-size:14px;font-weight:700;"><span>К доплате после взносов</span><span style="color:var(--pos);">'+fm(afterIns)+' ₽</span></div>';
+    }
+    // Налоговый календарь
+    var y=t.year;
+    var cal=[['Аванс за 1 кв','28.04.'+y,rows[0].tax],['Аванс за полугодие','28.07.'+y,rows[1].tax],['Аванс за 9 мес','28.10.'+y,rows[2].tax],['Налог за год','28.04.'+(y+1),rows[3].tax]];
+    h+='<div style="margin-top:18px;font-size:14px;font-weight:700;">📅 Налоговый календарь (УСН, ИП)</div>'+
+      '<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+      cal.map(function(c){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:10px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span>'+c[0]+'</span><span style="color:var(--muted);">срок '+c[1]+'</span><span style="font-weight:700;width:80px;text-align:right;">'+fm(c[2])+' ₽</span></div>';}).join('')+'</div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Расчёт ориентировочный по проведённым операциям. Точные суммы и сроки уточняйте у бухгалтера/в личном кабинете ФНС.</div>';
+    b.innerHTML=h;
+  },
+  _taxSetMode:function(m){App.s.settings.taxMode=m;App.saveSettings();App._taxRender();},
+  _taxPatentChange:function(){var v=parseFloat(document.getElementById('tax-patent').value)||0;App.s.settings.taxPatent=v;clearTimeout(App._txt);App._txt=setTimeout(function(){App.saveSettings();App._taxRender();},500);},
+  _taxInsChange:function(){var v=parseFloat(document.getElementById('tax-ins').value)||0;App.s.settings.taxInsurance=v;clearTimeout(App._txt);App._txt=setTimeout(function(){App.saveSettings();App._taxRender();},500);},
+
+  // ── Сверка выручки: касса/Z-отчёты vs проведённая выручка ──────
+  openReconcile:function(){
+    App.openModal('<div class="modal-title">Сверка выручки</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Сравниваем выручку по сменам (Z-отчёты) и проведённый доход в журнале по дням. Расхождения подсвечиваются.</div>'+
+      '<div id="rec-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    var ap=App._getAnPeriod?App._getAnPeriod():'month';
+    Promise.all([gs('getShiftAnalytics',{ssId:App.s.ssId,period:ap}),gs('getAnalytics',{ssId:App.s.ssId,period:ap})])
+      .then(function(res){App._recRender(res[0]||{},res[1]||{});})
+      .catch(function(e){var b=document.getElementById('rec-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _recRender:function(shifts,an){
+    var b=document.getElementById('rec-body');if(!b)return;
+    var fm=function(v){return fmt(Math.round(v));};
+    var zmap={};(shifts.byDay||[]).forEach(function(d){zmap[d.label]=(zmap[d.label]||0)+(d.revenue||0);});
+    var imap={};(an.timeline||[]).forEach(function(d){imap[d.label]=(imap[d.label]||0)+(d.income||0);});
+    var labels={};Object.keys(zmap).forEach(function(k){labels[k]=1;});Object.keys(imap).forEach(function(k){labels[k]=1;});
+    var keys=Object.keys(labels);
+    if(!keys.length){b.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);">Нет данных для сверки за период.<br>Нужны смены (Z-отчёты) и проведённая выручка.</div>';return;}
+    keys.sort(function(a,c){var pa=a.split('.'),pc=c.split('.');return (parseInt(pa[1])*100+parseInt(pa[0]))-(parseInt(pc[1])*100+parseInt(pc[0]));});
+    var totZ=0,totI=0,anomalies=0;
+    var rowsHtml=keys.map(function(k){
+      var z=zmap[k]||0,inc=imap[k]||0,diff=inc-z;totZ+=z;totI+=inc;
+      var bad=Math.abs(diff)>=500;if(bad)anomalies++;
+      var dc=diff===0?'var(--muted)':(diff>0?'var(--pos)':'var(--neg)');
+      return'<div style="display:flex;justify-content:space-between;gap:6px;padding:9px 12px;border-top:1px solid var(--line-2);font-size:12.5px;'+(bad?'background:color-mix(in oklab,var(--neg) 8%,transparent);':'')+'">'+
+        '<span style="width:48px;">'+App._e(k)+'</span>'+
+        '<span style="flex:1;text-align:right;color:var(--muted);">Z '+fm(z)+'</span>'+
+        '<span style="flex:1;text-align:right;color:var(--muted);">журнал '+fm(inc)+'</span>'+
+        '<span style="width:78px;text-align:right;font-weight:800;color:'+dc+';">'+(diff>0?'+':'')+fm(diff)+'</span></div>';
+    }).join('');
+    var totDiff=totI-totZ;
+    b.innerHTML='<div style="display:flex;gap:8px;margin-bottom:12px;">'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;'+(anomalies?'color:var(--neg);':'')+'">'+anomalies+'</div><div style="font-size:11px;color:var(--muted);">дней с расхождением</div></div>'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:'+(totDiff===0?'var(--muted)':totDiff>0?'var(--pos)':'var(--neg)')+';">'+(totDiff>0?'+':'')+fm(totDiff)+'</div><div style="font-size:11px;color:var(--muted);">итог расхождения</div></div></div>'+
+      '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+rowsHtml+'</div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Z — выручка по сменам. Журнал — проведённый доход (вкл. импорт из 1С). Подсветка — расхождение ≥ 500 ₽: возможна недостача, забытый Z-отчёт или двойная проводка.</div>';
   },
 
   _impForceMap:function(){
