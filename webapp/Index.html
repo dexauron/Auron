@@ -1532,6 +1532,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
         <button class="an-tab" onclick="App.setAnTab('shifts',this)">Смены</button>
         <button class="an-tab" onclick="App.setAnTab('accounts',this)">Счета</button>
         <button class="an-tab" onclick="App.setAnTab('suppliers',this)">Поставщики</button>
+        <button class="an-tab" onclick="App.setAnTab('goods',this)">Товары</button>
         <button class="an-tab" onclick="App.setAnTab('heatmap',this)">Дни</button>
         <button class="an-tab" onclick="App.setAnTab('debts',this)">Долги</button>
         <button class="an-tab" onclick="App.setAnTab('budget',this)">План/Факт</button>
@@ -1543,6 +1544,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <div id="an-shifts" class="an-panel"></div>
       <div id="an-accounts" class="an-panel"></div>
       <div id="an-suppliers" class="an-panel"></div>
+      <div id="an-goods" class="an-panel"></div>
       <div id="an-heatmap" class="an-panel"></div>
       <div id="an-debts" class="an-panel"></div>
       <div id="an-budget" class="an-panel"></div>
@@ -3016,6 +3018,14 @@ var App={
     if(btn)btn.classList.add('active');
     document.getElementById('an-'+tab).classList.add('active');
     if(tab==='budget')App.loadBudget();
+    if(tab==='goods')App.loadGoodsAnalytics();
+  },
+
+  loadGoodsAnalytics:function(){
+    var el=document.getElementById('an-goods');if(!el)return;
+    el.innerHTML='<div class="skel" style="height:90px;border-radius:16px;margin-bottom:10px;"></div><div class="skel" style="height:160px;border-radius:16px;"></div>';
+    gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._goodsRender(a,'an-goods');})
+      .catch(function(e){el.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(e.message)+'</div></div>';});
   },
 
   _getPeriod:function(){
@@ -5155,7 +5165,6 @@ var App={
           '<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
           o.топ.map(function(t){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(t[0])+'</span><span style="font-weight:700;color:var(--pos);">'+fm(t[1])+' ₽</span></div>';}).join('')+'</div>';
       }
-      card+='<button class="btn-primary" onclick="App._imp1cRevenue()">Записать выручку в журнал</button>';
     }else if(typ==='Остатки'){
       var rows3=[['Кол-во на складе',(o.колво||0).toLocaleString('ru-RU')],
         ['Стоимость (закуп)',fm(o.закуп)+' ₽'],['Стоимость (розница)',fm(o.розница)+' ₽'],
@@ -5171,7 +5180,8 @@ var App={
       }
     }
     var goodsRows=App._imp1cGoodsRows(typ);App._imp1cGoods=goodsRows;
-    var saveBtn=goodsRows.length?'<button class="btn-primary" onclick="App._impSaveGoods()">Сохранить в справочник товаров ('+goodsRows.length+')</button>':'';
+    var saveLbl=typ==='Продажи'?'Сохранить продажи: товары + выручка в журнал':'Сохранить в справочник товаров ('+goodsRows.length+')';
+    var saveBtn=goodsRows.length?'<button class="btn-primary" onclick="App._impSaveGoods()">'+saveLbl+'</button>':'';
     var html='<div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;">'+
         '<div style="font-size:15px;font-weight:800;">Отчёт 1С: '+typ+'</div>'+
         '<div style="font-size:12px;color:var(--muted);">'+App._e(o.период)+'</div></div>'+
@@ -5231,10 +5241,21 @@ var App={
     return out;
   },
   _impSaveGoods:function(){
-    var rows=App._imp1cGoods||[];var typ=App._imp1c?App._imp1c.тип:'';
+    var rows=App._imp1cGoods||[];var o=App._imp1c||{};var typ=o.тип||'';
     if(!rows.length){App.toast('Нет товарных строк',true);return;}
     App.toast('Сохраняю…');
     gs('saveGoods',{ssId:App.s.ssId,kind:typ,rows:rows}).then(function(r){
+      // Для продаж — сразу пишем выручку в журнал, чтобы цифры были в Главной/Аналитике/Отчёте
+      if(typ==='Продажи'&&o.выручка){
+        var d=String(o.период||'').split('–')[0].trim().split(' ')[0];
+        if(!/^\d{2}\.\d{2}\.\d{4}$/.test(d)){var t=new Date();d=('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear();}
+        var acc=(App.s.accounts&&App.s.accounts[0])?App.s.accounts[0].name:'';
+        return gs('importRows',{ssId:App.s.ssId,rows:[{date:d,amount:o.выручка,type:'Доход',category:'Выручка',account:acc,comment:'Продажи 1С · '+o.период}]}).then(function(ir){
+          App.toast('Сохранено: товаров '+(r.saved+r.updated)+' · выручка '+(ir.added?'записана':'уже была'));
+          App.closeModal();App.setTab('analytics');
+          var gt=document.querySelector('.an-tab[onclick*="goods"]');App.setAnTab('goods',gt);
+        });
+      }
       App.toast('Сохранено: новых '+r.saved+' · обновлено '+r.updated);
       App.closeModal();App.openGoods();
     }).catch(function(e){App.toast(e.message,true);});
@@ -5246,10 +5267,11 @@ var App={
     gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._goodsRender(a);})
       .catch(function(e){var b=document.getElementById('goods-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },
-  _goodsRender:function(a){
-    var b=document.getElementById('goods-body');if(!b)return;
+  _goodsRender:function(a,elId){
+    var b=document.getElementById(elId||'goods-body');if(!b)return;
+    if(a.__error){b.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(a.__error)+'</div></div>';return;}
     if(a.empty||!a.count){
-      b.innerHTML='<div style="text-align:center;padding:24px 8px;line-height:1.6;">Справочник пуст.<br>Загрузи отчёт из 1С (Цены / Продажи / Остатки) — товары появятся здесь с аналитикой.</div>'+
+      b.innerHTML='<div style="text-align:center;padding:24px 8px;line-height:1.6;color:var(--muted);">Справочник пуст.<br>Загрузи отчёт из 1С (Цены / Продажи / Остатки) — товары появятся здесь с аналитикой.</div>'+
         '<button class="btn-primary" onclick="App.openImport()">Загрузить отчёт из 1С</button>';return;
     }
     var fm=function(v){return fmt(Math.abs(Math.round(v)));};
