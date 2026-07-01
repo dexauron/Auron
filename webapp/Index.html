@@ -2345,6 +2345,23 @@ var App={
       fab.addEventListener('pointerdown',start,{passive:true});
       fab.addEventListener('pointerup',stop);fab.addEventListener('pointerleave',stop);fab.addEventListener('pointercancel',stop);
     }
+    // 1.7) Свайп между вкладками Аналитики
+    var anPanel=document.getElementById('tab-analytics');
+    if(anPanel){
+      var sx=0,sy=0,tr=false;
+      anPanel.addEventListener('touchstart',function(e){sx=e.touches[0].clientX;sy=e.touches[0].clientY;tr=true;},{passive:true});
+      anPanel.addEventListener('touchend',function(e){
+        if(!tr)return;tr=false;
+        var dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+        if(Math.abs(dx)<60||Math.abs(dx)<Math.abs(dy)*1.5)return;
+        var tabs=Array.prototype.slice.call(document.querySelectorAll('.an-tab'));
+        var cur=-1;for(var k=0;k<tabs.length;k++)if(tabs[k].classList.contains('active')){cur=k;break;}
+        if(cur<0)return;
+        var nx=dx<0?cur+1:cur-1;
+        if(nx<0||nx>=tabs.length)return;
+        tabs[nx].click();App.haptic(6);
+      },{passive:true});
+    }
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
       try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
@@ -3523,13 +3540,14 @@ var App={
     var el=document.getElementById('an-cats');
     var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';}).slice(0,8);
     if(!cats.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">Нет данных</div></div>';return;}
+    App._anCatList=cats;
     el.innerHTML='<div class="chart-wrap"><div class="chart-title">Расходы по категориям</div><canvas id="chart-cats" height="200"></canvas></div>'+
       '<div style="background:var(--card);border-radius:16px;overflow:hidden;">'+
-      cats.map(function(c){var ci=catIcon(c.category);
-        return '<div class="cashier-row" style="padding:12px 16px;">'+
+      cats.map(function(c,i){var ci=catIcon(c.category);
+        return '<div class="cashier-row" onclick="App._mdCatAn('+i+')" style="padding:12px 16px;cursor:pointer;">'+
           '<div class="tx-icon" style="background:'+ci.bg+'20;color:'+ci.bg+';">'+ci.icon+'</div>'+
           '<div class="cashier-info"><div class="cashier-name">'+App._e(c.category)+'</div></div>'+
-          '<div class="cashier-amount">₽ '+fmt(c.total)+'</div></div>';
+          '<div class="cashier-amount">₽ '+fmt(c.total)+'</div><span style="color:var(--muted);margin-left:6px;">›</span></div>';
       }).join('')+'</div>';
     var ctx=document.getElementById('chart-cats').getContext('2d');
     App.s.chart2=new Chart(ctx,{type:'doughnut',data:{
@@ -3538,6 +3556,11 @@ var App={
     },options:{responsive:true,plugins:{legend:{position:'bottom'}},cutout:'65%'}});
   },
 
+  _mdCatAn:function(i){
+    var c=App._anCatList&&App._anCatList[i];if(!c)return;
+    var btn=document.querySelector('.nav-item[data-tab="journal"]');App.setTab('journal',btn);
+    setTimeout(function(){var s=document.getElementById('j-search');if(s){s.value=c.category;if(App.searchHistory)App.searchHistory(c.category);}},250);
+  },
   _renderCashiers:function(r){
     var el=document.getElementById('an-cashiers');
     var list=r.list||[];
