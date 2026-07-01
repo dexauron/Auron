@@ -3909,7 +3909,7 @@ var App={
     var isOp=type==='oplata';
     var statOpts=(App.s.settings.repStatuses||['✅ Оплачено','❌ Не оплачено']).map(function(s){return'<option>'+App._e(s)+'</option>';}).join('');
     App.openModal('<div class="modal-title">'+(isOp?'Оплата':'Закупка')+' — '+repName+'</div>'+
-      '<div class="field"><label>Сумма (₽)</label><input id="dm-amt" type="number" placeholder="0"></div>'+
+      '<div class="field"><label>Сумма (₽) <span style="color:var(--muted);font-size:11px;font-weight:400;">можно 1200+350</span></label><input id="dm-amt" class="calc-input" type="text" inputmode="decimal" placeholder="0"></div>'+
       (!isOp?'<div class="field"><label>Номер накладной</label><input id="dm-invoice" type="text" placeholder="№ 123"></div>':'')+
       (!isOp?'<div class="field"><label>Статус</label><select id="dm-status">'+statOpts+'</select></div>':'')+
       (isOp?'<div class="field"><label>Счёт списания</label><select id="dm-acc">'+App.s.accounts.map(function(a){return'<option>'+App._e(a.name)+'</option>';}).join('')+'</select></div>':'')+
@@ -3918,7 +3918,7 @@ var App={
   },
 
   _saveDebt:function(repId,type){
-    var amt=parseFloat(document.getElementById('dm-amt').value)||0;
+    var amt=App._calcEval(document.getElementById('dm-amt').value)||0;
     var comment=document.getElementById('dm-comment').value.trim();
     var accEl=document.getElementById('dm-acc');var acc=accEl?accEl.value:'';
     var invEl=document.getElementById('dm-invoice');var invoice=invEl?invEl.value.trim():'';
