@@ -154,6 +154,13 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .rp-chip:active{background:var(--surface-3);}
 .jf-chip.jf-active{background:color-mix(in oklab,var(--brand) 16%,transparent);border-color:var(--brand);color:var(--brand);}
 @keyframes spin{to{transform:rotate(360deg);}}
+/* Индикатор «работаю»: тонкая полоса сверху при обращении к серверу */
+#gs-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:600;background:transparent;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .15s;}
+#gs-bar.show{opacity:1;}
+#gs-bar::before{content:"";position:absolute;left:0;top:0;height:100%;width:40%;background:var(--brand);border-radius:2px;animation:gsslide 1.1s ease-in-out infinite;}
+@keyframes gsslide{0%{left:-40%;}50%{left:35%;}100%{left:110%;}}
+/* Кнопка «занята», пока идёт операция — блокирует повторные нажатия */
+.btn-primary.is-busy{opacity:.6;filter:saturate(.7);}
 #ptr{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:150;opacity:0;transform:translateY(-16px);transition:opacity .2s,transform .2s;}
 #ptr.show{opacity:1;transform:translateY(calc(var(--safe-top) + 8px));}
 #ptr .p{background:var(--surface-2);border:1px solid var(--line);border-radius:20px;padding:7px 15px;font-size:12.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;box-shadow:var(--shadow-lg);}
@@ -1415,6 +1422,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   </div>
 </div>
 
+<div id="gs-bar"></div>
 <div id="ptr"><div class="p"><span class="ic">↻</span> <span id="ptr-txt">Потяните для обновления</span></div></div>
 
 <!-- Экран блокировки (PIN) -->
@@ -2302,11 +2310,19 @@ var CAT_ICONS={
 };
 function catIcon(n){return CAT_ICONS[n]||CAT_ICONS['_default'];}
 
+var _gsBusy=0;
+function _gsBar(on){
+  var b=document.getElementById('gs-bar');if(!b)return;
+  _gsBusy=Math.max(0,_gsBusy+(on?1:-1));
+  b.classList.toggle('show',_gsBusy>0);
+}
 function gs(fn,args){
+  _gsBar(true);
   return new Promise(function(ok,fail){
     google.script.run
-      .withFailureHandler(function(e){fail(e);})
+      .withFailureHandler(function(e){_gsBar(false);fail(e);})
       .withSuccessHandler(function(r){
+        _gsBar(false);
         if(r&&r.__error) fail(new Error(r.__error)); else ok(r);
       })[fn](args);
   });
@@ -2498,13 +2514,19 @@ var App={
       var t=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-key,.np-type-btn,.picker-item,.nav-item,.an-tab,.settings-row,.sb-nav-item,#fab'):null;
       if(t)App.haptic(6);
     },{passive:true,capture:true});
-    // 1) Анти-дабл-тап: блокируем повторный клик по кнопке действия в течение 1 сек
+    // 1) Анти-дабл-тап + блокировка кнопки, пока идёт операция (нет копий)
     document.addEventListener('click',function(e){
-      var b=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-save'):null;
+      var b=e.target&&e.target.closest?e.target.closest('.btn-primary,.btn-secondary,.np-key.action'):null;
       if(!b)return;
+      // если кнопка уже «занята» — повторное нажатие игнорируем
+      if(b._busy){e.preventDefault();e.stopImmediatePropagation();return;}
       var now=Date.now();
-      if(b._lastClick&&now-b._lastClick<1000){e.preventDefault();e.stopImmediatePropagation();return;}
+      if(b._lastClick&&now-b._lastClick<1200){e.preventDefault();e.stopImmediatePropagation();return;}
       b._lastClick=now;
+      // помечаем «занята» и блокируем на 2.5с (перекрывает время ответа сервера)
+      b._busy=true;b.classList.add('is-busy');
+      clearTimeout(b._busyT);
+      b._busyT=setTimeout(function(){b._busy=false;b.classList.remove('is-busy');},2500);
     },true);
     // 1.5) Калькулятор в полях суммы: поле с классом calc-input считает выражение
     document.addEventListener('blur',function(e){

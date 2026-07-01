@@ -493,15 +493,26 @@ function saveQuickEntry(p) {
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var uid=d.uuid||Utilities.getUuid();
-    // Idempotency check
-    if (d.uuid&&base.getLastRow()>=2) {
-      var ex=base.getRange(2,B_UUID,base.getLastRow()-1,1).getValues();
-      for (var i=0;i<ex.length;i++) {
-        if (String(ex[i][0])===String(d.uuid)) { lock.releaseLock(); return {ok:true,duplicate:true}; }
-      }
-    }
     var id=Utilities.getUuid();
     var dt=d.date?new Date(d.date):new Date();
+    // Idempotency + защита от идентичных копий (одинаковый контент за ~2 минуты)
+    if (base.getLastRow()>=2) {
+      var tz=Session.getScriptTimeZone();
+      var nType=_s(d.type), nCat=_s(d.category||''), nAmt=Math.round(parseFloat(d.amount)||0),
+          nAcc=_s(d.account||''), nCmt=_s(d.comment||''), nEmp=_s(d.employee||''), nMs=dt.getTime();
+      var scan=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+      for (var i=scan.length-1;i>=0 && i>=scan.length-60;i--) {
+        var r=scan[i];
+        if (d.uuid && String(r[B_UUID-1])===String(d.uuid)) { lock.releaseLock(); return {ok:true,duplicate:true}; }
+        var rDt=r[B_DATE-1]; var rMs=(rDt instanceof Date)?rDt.getTime():0;
+        if (String(r[B_TYPE-1])===nType && String(r[B_CAT-1])===nCat &&
+            (Math.round(parseFloat(r[B_AMT-1])||0))===nAmt && String(r[B_ACC-1])===nAcc &&
+            String(r[B_CMT-1])===nCmt && String(r[B_EMP-1])===nEmp &&
+            Math.abs(rMs-nMs) < 120000) {
+          lock.releaseLock(); return {ok:true,duplicate:true}; // идентичная запись только что уже есть
+        }
+      }
+    }
     var row=[id,uid,dt,_s(d.type),_s(d.category||''),
              Math.round(parseFloat(d.amount)||0),_s(d.account||''),_s(d.employee||''),
              _s(d.comment||''),_s(d.receiptUrl||''),d.zRef||'',d.locked?true:false,_s(d.shift||'')];
