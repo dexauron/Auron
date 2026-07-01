@@ -5496,6 +5496,20 @@ var App={
     h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽')+metric('прибыль',fm(a.totProfit)+' ₽')+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
+    // ABC-анализ
+    if(a.abc){var ab=a.abc;var mlbl=ab.metric==='profit'?'прибыли':'выручке';
+      var abcRow=function(g,letter,color,desc){return'<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid var(--line-2);">'+
+        '<span style="width:26px;height:26px;border-radius:8px;background:'+color+';color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">'+letter+'</span>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">'+g.count+' товаров ('+g.pct+'%)</div><div style="font-size:11.5px;color:var(--muted);">'+desc+'</div></div>'+
+        '<span style="font-weight:800;color:'+color+';">'+g.share+'%</span></div>';};
+      h+='<div style="margin-top:18px;font-size:14px;font-weight:700;">🔤 ABC-анализ по '+mlbl+'</div>'+
+        '<div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:8px;">Какие товары приносят основной результат</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+        abcRow(ab.a,'A','var(--pos)','дают '+ab.a.share+'% результата — главные')+
+        abcRow(ab.b,'B','var(--brand)','средний вклад')+
+        abcRow(ab.c,'C','var(--muted)','почти не влияют — кандидаты на вывод')+
+        '</div>';
+    }
     h+=list('🔺 Рост цен поставщиков',a.priceUps,function(t){return rowHtml(t.name+(t.supplier?' · '+t.supplier:''),'+'+t.pct+'% ('+fm(t.from)+'→'+fm(t.to)+')','var(--neg)');});
     h+=list('💰 Топ по прибыли',a.topProfit,function(t){return rowHtml(t.name,fm(t.profit)+' ₽','var(--pos)');});
     h+=list('⚠️ Низкая наценка',a.lowMargin,function(t){return rowHtml(t.name,t.markup+'%',t.markup<10?'var(--neg)':'var(--ink)');});

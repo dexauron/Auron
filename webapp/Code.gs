@@ -854,11 +854,26 @@ function getGoodsAnalytics(p) {
     }
     var totRevenue = 0, totProfit = 0, totStock = 0;
     items.forEach(function(it){ totRevenue+=it.revenue; totProfit+=it.profit; totStock+=it.stockSum; });
+    // ABC-анализ по прибыли (или выручке): A=вклад до 80%, B=до 95%, C=остальное
+    var abc=null;
+    var metric=totProfit>0?'profit':'revenue';
+    var ranked=items.filter(function(it){return it[metric]>0;}).sort(function(a,b){return b[metric]-a[metric];});
+    var totM=ranked.reduce(function(s,x){return s+x[metric];},0);
+    if(ranked.length>=3 && totM>0){
+      var cum=0, grp={A:{count:0,sum:0},B:{count:0,sum:0},C:{count:0,sum:0}};
+      ranked.forEach(function(it){ var before=cum/totM; var g=before<0.8?'A':before<0.95?'B':'C';
+        grp[g].count++; grp[g].sum+=it[metric]; cum+=it[metric]; });
+      var tot=ranked.length;
+      abc={ metric:metric, total:tot,
+        a:{count:grp.A.count, share:Math.round(grp.A.sum/totM*100), pct:Math.round(grp.A.count/tot*100)},
+        b:{count:grp.B.count, share:Math.round(grp.B.sum/totM*100), pct:Math.round(grp.B.count/tot*100)},
+        c:{count:grp.C.count, share:Math.round(grp.C.sum/totM*100), pct:Math.round(grp.C.count/tot*100)} };
+    }
     return {
       count:items.length, suppliersCount:Object.keys(sup).length,
       totRevenue:Math.round(totRevenue), totProfit:Math.round(totProfit), totStock:Math.round(totStock),
       suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
-      movers:movers, deadStock:deadStock, priceUps:priceUps
+      movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc
     };
   } catch(e) { return { __error:e.message }; }
 }
