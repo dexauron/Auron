@@ -832,6 +832,12 @@ function getGoodsAnalytics(p) {
     var deadStock = items.filter(function(it){return it.stockQty>0 && it.soldQty===0;})
       .sort(function(a,b){return b.stockSum-a.stockSum;}).slice(0,6)
       .map(function(it){return {name:it.name.slice(0,32), stockQty:it.stockQty, stockSum:Math.round(it.stockSum)};});
+    // План закупки: продаётся, но остаток заканчивается (или уже 0)
+    var restock = items.filter(function(it){return it.soldQty>0 && it.stockQty<=it.soldQty*0.5;})
+      .map(function(it){ var out=it.stockQty<=0;
+        return {name:it.name.slice(0,32), supplier:it.supplier, stockQty:it.stockQty, soldQty:it.soldQty,
+          urgent:out, ratio:it.stockQty>0?Math.round(it.stockQty/it.soldQty*100):0};
+      }).sort(function(a,b){return (a.urgent===b.urgent)?(a.ratio-b.ratio):(a.urgent?-1:1);}).slice(0,8);
     // рост цен из истории
     var priceUps = [], supplierCompare = [], supplierRating = [];
     var ph = ss.getSheetByName(SH_PRICEHIST);
@@ -924,7 +930,7 @@ function getGoodsAnalytics(p) {
       totRevenue:Math.round(totRevenue), totProfit:Math.round(totProfit), totStock:Math.round(totStock),
       suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
       movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc,
-      groups:groups, turnover:turnover,
+      groups:groups, turnover:turnover, restock:restock,
       supplierCompare:supplierCompare, supplierRating:supplierRating
     };
   } catch(e) { return { __error:e.message }; }
