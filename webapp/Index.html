@@ -4160,6 +4160,7 @@ var App={
             '<button onclick="App._shareTo(\'telegram\')" title="Telegram" style="background:#229ED9;border:none;border-radius:10px;width:34px;height:34px;cursor:pointer;display:flex;align-items:center;justify-content:center;"><svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg></button>'+
             '<button onclick="App._copyReport()" style="background:var(--surface-2);border:none;border-radius:10px;padding:7px 12px;color:var(--ink-2);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">'+
               '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Копировать</button>'+
+            '<button onclick="App._exportCSV()" title="Скачать для Excel/бухгалтера" style="background:#217346;border:none;border-radius:10px;padding:7px 12px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">⬇ Excel</button>'+
           '</div>'+
         '</div>'+
         '<div style="font-size:13px;color:var(--text-2);margin-bottom:16px;">'+from+' — '+to+'</div>'+
@@ -4214,6 +4215,18 @@ var App={
     }
   },
 
+  _exportCSV:function(){
+    var from=document.getElementById('r-from').value,to=document.getElementById('r-to').value;
+    App.toast('Готовлю файл…');
+    gs('exportTransactions',{ssId:App.s.ssId,period:'custom:'+from+':'+to}).then(function(r){
+      var csv='﻿'+(r.csv||''); // BOM для корректной кириллицы в Excel
+      var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var url=URL.createObjectURL(blob);var a=document.createElement('a');
+      a.href=url;a.download='Auron_'+from+'_'+to+'.csv';document.body.appendChild(a);a.click();
+      document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);
+      App.toast('Файл скачан ✓');
+    }).catch(function(e){App.toast(e.message,true);});
+  },
   _shareTo:function(channel){
     var text=App._reportText||'';
     if(!text){App.toast('Отчёт не сформирован',true);return;}
