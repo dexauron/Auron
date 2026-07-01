@@ -158,6 +158,22 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 #ptr.show{opacity:1;transform:translateY(calc(var(--safe-top) + 8px));}
 #ptr .p{background:var(--surface-2);border:1px solid var(--line);border-radius:20px;padding:7px 15px;font-size:12.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;box-shadow:var(--shadow-lg);}
 #ptr.spin .ic{display:inline-block;animation:spin .8s linear infinite;}
+#pin-lock{position:fixed;inset:0;z-index:400;background:var(--bg);display:none;align-items:center;justify-content:center;padding:calc(var(--safe-top) + 20px) 20px calc(var(--safe-bot) + 20px);}
+#pin-lock.show{display:flex;}
+.pin-inner{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;}
+.pin-logo{color:var(--brand);margin-bottom:16px;}
+.pin-title{font-size:20px;font-weight:800;letter-spacing:-.02em;}
+.pin-sub{font-size:13px;color:var(--muted);margin-top:6px;min-height:18px;text-align:center;}
+.pin-dots{display:flex;gap:16px;margin:26px 0 30px;}
+.pin-dots span{width:14px;height:14px;border-radius:50%;background:var(--surface-3);border:1.5px solid var(--line);transition:background .15s,transform .15s;}
+.pin-dots span.on{background:var(--brand);border-color:var(--brand);transform:scale(1.1);}
+.pin-lock-err .pin-dots{animation:pinShake .4s;}
+@keyframes pinShake{0%,100%{transform:translateX(0);}20%,60%{transform:translateX(-9px);}40%,80%{transform:translateX(9px);}}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:280px;}
+.pin-key{height:66px;border-radius:50%;border:none;background:var(--surface-2);color:var(--ink);font-size:26px;font-weight:600;cursor:pointer;font-family:var(--font-num);transition:background .1s,transform .08s;}
+.pin-key:active{background:var(--surface-3);transform:scale(.94);}
+.pin-key-x{background:none;font-size:20px;color:var(--muted);}
+.pin-key-x:active{background:var(--surface-2);}
 .org-card{
   background:var(--surface);border-radius:var(--radius);
   padding:18px 20px;margin-bottom:10px;
@@ -1400,6 +1416,31 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 </div>
 
 <div id="ptr"><div class="p"><span class="ic">↻</span> <span id="ptr-txt">Потяните для обновления</span></div></div>
+
+<!-- Экран блокировки (PIN) -->
+<div id="pin-lock">
+  <div class="pin-inner">
+    <div class="pin-logo"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="11" width="16" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>
+    <div class="pin-title" id="pin-title">Введите PIN-код</div>
+    <div class="pin-sub" id="pin-sub"></div>
+    <div class="pin-dots" id="pin-dots"><span></span><span></span><span></span><span></span></div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="App.pinPress('1')">1</button>
+      <button class="pin-key" onclick="App.pinPress('2')">2</button>
+      <button class="pin-key" onclick="App.pinPress('3')">3</button>
+      <button class="pin-key" onclick="App.pinPress('4')">4</button>
+      <button class="pin-key" onclick="App.pinPress('5')">5</button>
+      <button class="pin-key" onclick="App.pinPress('6')">6</button>
+      <button class="pin-key" onclick="App.pinPress('7')">7</button>
+      <button class="pin-key" onclick="App.pinPress('8')">8</button>
+      <button class="pin-key" onclick="App.pinPress('9')">9</button>
+      <button class="pin-key pin-key-x" id="pin-cancel" onclick="App.pinCancel()"></button>
+      <button class="pin-key" onclick="App.pinPress('0')">0</button>
+      <button class="pin-key pin-key-x" onclick="App.pinDel()">⌫</button>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <!-- Sidebar (desktop) -->
   <aside id="sidebar">
@@ -1879,6 +1920,14 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.openSecurity()" style="cursor:pointer;">
+            <span class="settings-row-icon">🔒</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Защита PIN-кодом</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Блокировка входа и по бездействию</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row" onclick="App.toggleViewOnly()" style="cursor:pointer;">
             <span class="settings-row-icon">👁</span>
             <div style="flex:1;">
@@ -2301,8 +2350,10 @@ var App={
     this.s.npDate=new Date();
     App._installGuards();
     App._applyViewOnly();
+    App._secLoad();
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
+      if(App.sec&&App.sec.hash){App.lockNow();App._armLock();}
       if(r.isNew){
         var _saved=null;try{var _raw=localStorage.getItem(OB_KEY);if(_raw)_saved=JSON.parse(_raw);}catch(e){}
         App.ob={step:(_saved&&_saved.step)||0,maxStep:(_saved&&(_saved.maxStep||_saved.step))||0,d:App._obDefault(_saved&&_saved.d)};
@@ -2332,6 +2383,91 @@ var App={
     return '<div class="empty-state"><div class="empty-icon">'+icon+'</div><div class="empty-text">'+App._e(title)+'</div>'+
       (hint?'<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;max-width:280px;margin-left:auto;margin-right:auto;">'+App._e(hint)+'</div>':'')+'</div>';
   },
+
+  // ── Безопасность: PIN-код + автоблокировка (локально на устройстве) ──
+  _secLoad:function(){try{App.sec=JSON.parse(localStorage.getItem('auron_sec')||'{}');}catch(e){App.sec={};}if(!App.sec)App.sec={};},
+  _hashPin:function(pin){
+    try{
+      if(window.crypto&&crypto.subtle){
+        var data=new TextEncoder().encode('auron:'+pin);
+        return crypto.subtle.digest('SHA-256',data).then(function(buf){
+          return Array.prototype.map.call(new Uint8Array(buf),function(b){return('0'+b.toString(16)).slice(-2);}).join('');
+        });
+      }
+    }catch(e){}
+    // запасной простой хэш
+    var h=0,s='auron:'+pin;for(var i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))>>>0;}
+    return Promise.resolve('f'+h.toString(16));
+  },
+  lockNow:function(){ if(App.sec&&App.sec.hash) App.showLock('unlock'); },
+  showLock:function(mode){
+    App._pinMode=mode;App._pinBuf='';App._pinTmp=App._pinTmp||'';
+    var t=document.getElementById('pin-title'),sub=document.getElementById('pin-sub');
+    var cancel=document.getElementById('pin-cancel');
+    if(mode==='unlock'){t.textContent='Введите PIN-код';sub.textContent='';cancel.style.visibility='hidden';}
+    else if(mode==='set'){t.textContent='Придумайте PIN-код';sub.textContent='4 цифры';cancel.textContent='Отмена';cancel.style.visibility='visible';}
+    else if(mode==='confirm'){t.textContent='Повторите PIN-код';sub.textContent='';cancel.textContent='Отмена';cancel.style.visibility='visible';}
+    App._pinDots();
+    document.getElementById('pin-lock').classList.add('show');
+  },
+  _pinDots:function(){
+    var d=document.querySelectorAll('#pin-dots span');var n=(App._pinBuf||'').length;
+    d.forEach(function(s,i){s.classList.toggle('on',i<n);});
+  },
+  pinPress:function(k){
+    if((App._pinBuf||'').length>=4)return;App._pinBuf=(App._pinBuf||'')+k;App.haptic(5);App._pinDots();
+    if(App._pinBuf.length===4)setTimeout(App._pinSubmit,120);
+  },
+  pinDel:function(){App._pinBuf=(App._pinBuf||'').slice(0,-1);App._pinDots();},
+  pinCancel:function(){
+    if(App._pinMode==='unlock')return;
+    App._pinTmp='';document.getElementById('pin-lock').classList.remove('show');
+    if(App._secReturn){App._secReturn();App._secReturn=null;}
+  },
+  _pinShake:function(){var el=document.getElementById('pin-lock');el.classList.add('pin-lock-err');App.haptic([0,40,40,40]);setTimeout(function(){el.classList.remove('pin-lock-err');},450);App._pinBuf='';App._pinDots();},
+  _pinSubmit:function(){
+    var buf=App._pinBuf,mode=App._pinMode;
+    if(mode==='set'){App._pinTmp=buf;App.showLock('confirm');return;}
+    if(mode==='confirm'){
+      if(buf!==App._pinTmp){App._pinTmp='';App._pinShake();App.showLock('set');return;}
+      App._hashPin(buf).then(function(h){
+        App.sec=App.sec||{};App.sec.hash=h;if(App.sec.min===undefined)App.sec.min=1;
+        localStorage.setItem('auron_sec',JSON.stringify(App.sec));App._pinTmp='';
+        document.getElementById('pin-lock').classList.remove('show');
+        App.toast('PIN-код установлен ✓');App._armLock();
+        if(App._secReturn){App._secReturn();App._secReturn=null;}
+      });
+      return;
+    }
+    // unlock
+    App._hashPin(buf).then(function(h){
+      if(h===App.sec.hash){App._pinFails=0;document.getElementById('pin-lock').classList.remove('show');App.haptic(8);App._armLock();}
+      else{App._pinFails=(App._pinFails||0)+1;
+        if(App._pinFails>=5){App.toast('5 неверных попыток — вход заново',true);setTimeout(function(){App.logout&&App.logout();},600);}
+        else{document.getElementById('pin-sub').textContent='Неверно · осталось '+(5-App._pinFails);App._pinShake();}
+      }
+    });
+  },
+  _armLock:function(){
+    clearTimeout(App._lockTimer);
+    if(App.sec&&App.sec.hash&&App.sec.min>0){App._lockTimer=setTimeout(App.lockNow,App.sec.min*60000);}
+  },
+  openSecurity:function(){
+    var has=!!(App.sec&&App.sec.hash);var min=(App.sec&&App.sec.min!==undefined)?App.sec.min:1;
+    var opts=[[0,'Никогда'],[0.5,'30 секунд'],[1,'1 минута'],[2,'2 минуты'],[5,'5 минут']];
+    App.openModal('<div class="modal-title">🔒 Защита PIN-кодом</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5;">PIN хранится только на этом устройстве. После бездействия приложение блокируется.</div>'+
+      (has?'<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+          '<button class="btn-secondary" style="margin:0;" onclick="App._secReturn=function(){App.openSecurity();};App.showLock(\'set\');">Сменить PIN</button>'+
+          '<button class="btn-secondary" style="margin:0;color:var(--neg);" onclick="App._removePin()">Убрать PIN</button>'+
+        '</div>':
+        '<button class="btn-primary" onclick="App._secReturn=function(){App.openSecurity();};App.showLock(\'set\');">Установить PIN-код</button>')+
+      (has?'<label style="font-size:12.5px;font-weight:600;display:block;margin-top:6px;">Автоблокировка</label>'+
+        '<select id="sec-min" onchange="App._secSetMin(this.value)" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-top:5px;">'+
+        opts.map(function(o){return'<option value="'+o[0]+'"'+(min===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>':''));
+  },
+  _secSetMin:function(v){App.sec=App.sec||{};App.sec.min=parseFloat(v);localStorage.setItem('auron_sec',JSON.stringify(App.sec));App._armLock();App.toast('Сохранено');},
+  _removePin:function(){App.sec={};localStorage.removeItem('auron_sec');clearTimeout(App._lockTimer);App.closeModal();App.toast('PIN убран');},
 
   // Обновление текущего экрана (для pull-to-refresh)
   refreshCurrent:function(){
@@ -2417,6 +2553,10 @@ var App={
         setTimeout(function(){ptr.classList.remove('show','spin');},900);}
       else ptr.classList.remove('show');
     },{passive:true});
+    // 1.9) Сброс таймера автоблокировки при активности
+    ['pointerdown','keydown'].forEach(function(ev){
+      document.addEventListener(ev,function(){if(App.sec&&App.sec.hash&&!document.getElementById('pin-lock').classList.contains('show'))App._armLock();},{passive:true});
+    });
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
       try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
