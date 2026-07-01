@@ -152,6 +152,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .btn-secondary:hover{background:var(--surface-3);}
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
 .rp-chip:active{background:var(--surface-3);}
+.jf-chip.jf-active{background:color-mix(in oklab,var(--brand) 16%,transparent);border-color:var(--brand);color:var(--brand);}
 .org-card{
   background:var(--surface);border-radius:var(--radius);
   padding:18px 20px;margin-bottom:10px;
@@ -1656,6 +1657,11 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           </button>
         </div>
         <input id="j-search" type="text" placeholder="Поиск по сумме, категории, комментарию…" style="width:100%;padding:11px 16px;border-radius:14px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);" oninput="App.searchHistory(this.value)">
+        <div style="display:flex;gap:7px;margin-top:10px;">
+          <button class="rp-chip jf-chip jf-active" data-jf="all" onclick="App.jFilter('all')">Все</button>
+          <button class="rp-chip jf-chip" data-jf="income" onclick="App.jFilter('income')">Доходы</button>
+          <button class="rp-chip jf-chip" data-jf="expense" onclick="App.jFilter('expense')">Расходы</button>
+        </div>
       </div>
       <div id="j-tx-list" style="padding:0 0 8px;"></div>
     </div>
@@ -3993,15 +3999,28 @@ var App={
   },
 
   loadHistory:function(){
-    gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){App.renderTxList(r||[],'j-tx-list');});
+    gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){App._jTxAll=r||[];App._jRender();});
   },
 
   searchHistory:function(q){
     clearTimeout(App.s.searchTimer);
     App.s.searchTimer=setTimeout(function(){
       if(!q){App.loadHistory();return;}
-      gs('searchTransactions',{ssId:App.s.ssId,query:q}).then(function(r){App.renderTxList(r||[],'j-tx-list');});
+      gs('searchTransactions',{ssId:App.s.ssId,query:q}).then(function(r){App._jTxAll=r||[];App._jRender();});
     },400);
+  },
+  jFilter:function(f){
+    App._jFilter=f;
+    document.querySelectorAll('.jf-chip').forEach(function(b){b.classList.toggle('jf-active',b.dataset.jf===f);});
+    App.haptic(6);App._jRender();
+  },
+  _jRender:function(){
+    var f=App._jFilter||'all';var all=App._jTxAll||[];
+    var list=f==='all'?all:all.filter(function(t){
+      var ti=(t.type==='Доход'||t.type==='income');
+      return f==='income'?ti:(t.type==='Расход'||t.type==='expense');
+    });
+    App.renderTxList(list,'j-tx-list');
   },
 
   // ── Reps (торговые представители — legacy, used by openDebtModal) ────
