@@ -1489,8 +1489,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <!-- Hero card -->
       <div class="home-hero">
         <div class="home-hero-ring"></div>
-        <div style="position:relative;">
-          <div class="home-hero-label">Общий капитал</div>
+        <div style="position:relative;cursor:pointer;" onclick="App.openCapitalDetail()">
+          <div class="home-hero-label">Общий капитал <span style="opacity:.6;">›</span></div>
           <div class="home-hero-bal num" id="home-total-bal">₽ —</div>
           <div class="home-hero-delta" id="home-hero-delta"></div>
         </div>
@@ -1513,13 +1513,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <div id="insight-card"></div>
       <!-- 2×2 stat tiles -->
       <div class="home-split">
-        <div class="split-tile">
+        <div class="split-tile" onclick="App.openMetricDetail('income')" style="cursor:pointer;">
           <div class="split-tile-k">
             <div class="split-tile-ic" style="background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
             Выручка
           </div>
           <div class="split-tile-v num" id="split-revenue">—</div>
-          <div class="split-tile-x" id="split-revenue-sub"></div>
+          <div class="split-tile-x brand" id="split-revenue-sub">подробнее →</div>
         </div>
         <div class="split-tile" onclick="App.setTab('suppliers',null)" style="cursor:pointer;">
           <div class="split-tile-k">
@@ -1537,13 +1537,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div class="split-tile-v num" id="split-shift">—</div>
           <div class="split-tile-x brand" id="split-shift-sub">смены →</div>
         </div>
-        <div class="split-tile">
+        <div class="split-tile" onclick="App.openMetricDetail('expense')" style="cursor:pointer;">
           <div class="split-tile-k">
             <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
             Расход
           </div>
           <div class="split-tile-v num" id="split-expense">—</div>
-          <div class="split-tile-x">за период</div>
+          <div class="split-tile-x brand">подробнее →</div>
         </div>
       </div>
       <!-- Recent transactions -->
@@ -2993,6 +2993,63 @@ var App={
       var e=document.getElementById('split-payable');
       if(e)animateNumber(e,total,'₽ ',function(){App._fitText(e,13,22);});
     }).catch(function(){});
+  },
+
+  _periodLabel:function(){
+    var m={today:'сегодня',week:'за неделю',month:'за месяц',year:'за год',custom:'за период'};
+    return m[App.s.period]||'за период';
+  },
+  openMetricDetail:function(type){
+    var isInc=type==='income';
+    var title=isInc?'Выручка':'Расходы';
+    App.openModal('<div class="modal-title">'+title+' '+App._periodLabel()+'</div><div id="md-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getAnalytics',{ssId:App.s.ssId,period:App._getPeriod()}).then(function(r){
+      var el=document.getElementById('md-body');if(!el)return;
+      var cats=(r.byCategory||[]).filter(function(c){return c.type===type;}).sort(function(a,b){return b.total-a.total;});
+      App._mdCatList=cats;
+      var total=cats.reduce(function(s,c){return s+c.total;},0);
+      var col=isInc?'var(--pos)':'var(--neg)';
+      var h='<div style="background:var(--surface-2);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:26px;font-weight:800;color:'+col+';">'+(isInc?'+':'−')+fmt(total)+' ₽</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">всего '+App._periodLabel()+'</div></div>';
+      if(!cats.length){h+='<div style="text-align:center;padding:16px;color:var(--muted);">Нет операций за период.</div>';}
+      else{
+        var mx=cats[0].total||1;
+        h+='<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">По категориям</div>';
+        h+=cats.map(function(c,ci_i){var ci=catIcon(c.category);var pct=Math.round(c.total/mx*100);var share=total?Math.round(c.total/total*100):0;
+          return '<div onclick="App._mdCat('+ci_i+')" style="margin-bottom:11px;cursor:pointer;">'+
+            '<div style="display:flex;align-items:center;gap:9px;margin-bottom:4px;">'+
+              '<span style="width:26px;height:26px;border-radius:8px;background:'+ci.bg+'22;display:grid;place-items:center;font-size:13px;flex-shrink:0;">'+ci.icon+'</span>'+
+              '<span style="flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(c.category)+'</span>'+
+              '<span style="font-size:13px;font-weight:700;color:'+col+';">'+fmt(c.total)+' ₽</span>'+
+              '<span style="font-size:11px;color:var(--muted);width:34px;text-align:right;">'+share+'%</span>'+
+            '</div>'+
+            '<div style="height:6px;background:var(--surface-3);border-radius:5px;overflow:hidden;margin-left:35px;"><div style="height:100%;width:'+Math.max(pct,3)+'%;background:'+col+';border-radius:5px;"></div></div>'+
+          '</div>';
+        }).join('');
+      }
+      h+='<button class="btn-secondary" onclick="App.closeModal();App.setTab(\'analytics\');">Открыть в Аналитике</button>';
+      el.innerHTML=h;
+    }).catch(function(e){var el=document.getElementById('md-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _mdCat:function(i){
+    var c=App._mdCatList&&App._mdCatList[i];if(!c)return;
+    // переход в журнал с поиском по категории
+    App.closeModal();var btn=document.querySelector('.nav-item[data-tab="journal"]');App.setTab('journal',btn);
+    setTimeout(function(){var s=document.getElementById('j-search');if(s){s.value=c.category;if(App.searchHistory)App.searchHistory(c.category);}},250);
+  },
+  openCapitalDetail:function(){
+    var accs=(App.s.accounts||[]);
+    var total=accs.reduce(function(s,a){return s+(a.balance||0);},0);
+    var h='<div style="background:var(--surface-2);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:28px;font-weight:800;">'+fmt(total)+' ₽</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">на '+accs.length+' счетах</div></div>';
+    h+='<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Счета</div>';
+    h+='<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+accs.map(function(a){var ci=catIcon(a.name);var share=total?Math.round((a.balance||0)/total*100):0;
+      return '<div onclick="App.closeModal();App.openAccDetail(\''+App._e(String(a.id))+'\')" style="display:flex;align-items:center;gap:11px;padding:12px 13px;border-top:1px solid var(--line-2);cursor:pointer;">'+
+        '<span style="width:32px;height:32px;border-radius:9px;background:'+ci.bg+'22;display:grid;place-items:center;font-size:14px;flex-shrink:0;">'+ci.icon+'</span>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(a.name)+'</div><div style="font-size:11px;color:var(--muted);">'+share+'% капитала</div></div>'+
+        '<span style="font-size:15px;font-weight:800;">'+fmt(a.balance||0)+' ₽</span><span style="color:var(--muted);">›</span>'+
+      '</div>';
+    }).join('')+'</div>';
+    h+='<button class="btn-secondary" onclick="App.closeModal();App.openAccountForm();">+ Добавить счёт</button>';
+    App.openModal('<div class="modal-title">Общий капитал</div>'+h);
   },
 
   setPeriod:function(p){
