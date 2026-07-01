@@ -1869,11 +1869,6 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         </div>
       </div>
       <div class="settings-sec">
-        <div class="settings-sec-title">Способы оплаты</div>
-        <div class="settings-list" id="settings-paytypes-list"></div>
-        <button class="btn-secondary" onclick="App.openAddPayType()" style="margin-top:10px;">+ Добавить способ</button>
-      </div>
-      <div class="settings-sec">
         <div class="settings-sec-title">Справочник поставщиков</div>
         <div class="settings-list" id="settings-suppliers-list"></div>
         <button class="btn-secondary" onclick="App.openAddSupplier()" style="margin-top:10px;">+ Добавить поставщика</button>
@@ -4722,14 +4717,7 @@ var App={
         '<span class="settings-row-label">'+App._e(s)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.shifts.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет смен</span></div>';
-    // Pay types
-    var ptEl=document.getElementById('settings-paytypes-list');
-    var pts=App.s.settings.payTypes||[];
-    ptEl.innerHTML=pts.map(function(pt,i){
-      return '<div class="settings-row"><span class="settings-row-icon">💳</span>'+
-        '<span class="settings-row-label">'+App._e(pt)+'</span>'+
-        '<span class="settings-row-action" onclick="App.s.settings.payTypes.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
-    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет способов</span></div>';
+    // Способы оплаты убраны — счета сами являются способами оплаты
     // Supplier directory
     var suppDirEl=document.getElementById('settings-suppliers-list');
     var suppDir=App.s.settings.suppliers||[];
