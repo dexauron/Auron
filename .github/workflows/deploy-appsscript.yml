@@ -17,28 +17,41 @@ on:
 jobs:
   push:
     runs-on: ubuntu-latest
+    env:
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
     steps:
+      - name: Check secret configured
+        id: cfg
+        run: |
+          if [ -n "$CLASPRC_JSON" ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT";
+          echo "ℹ️ Секрет CLASPRC_JSON не задан — авто-деплой пропущен (см. webapp/DEPLOY.md).";
+          fi
+
       - name: Checkout
+        if: steps.cfg.outputs.ready == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node
+        if: steps.cfg.outputs.ready == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install clasp
+        if: steps.cfg.outputs.ready == 'true'
         run: npm install -g @google/clasp@2.4.2
 
       - name: Auth clasp
+        if: steps.cfg.outputs.ready == 'true'
         run: printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
-        env:
-          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
 
       - name: Push code to Apps Script
+        if: steps.cfg.outputs.ready == 'true'
         working-directory: webapp
         run: clasp push -f
 
       - name: Deploy new version (optional)
-        if: ${{ vars.APPSSCRIPT_DEPLOYMENT_ID != '' }}
+        if: steps.cfg.outputs.ready == 'true' && vars.APPSSCRIPT_DEPLOYMENT_ID != ''
         working-directory: webapp
         run: clasp deploy -i "${{ vars.APPSSCRIPT_DEPLOYMENT_ID }}" -d "Auto-deploy ${{ github.sha }}"
