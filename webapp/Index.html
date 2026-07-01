@@ -3181,54 +3181,67 @@ var App={
   },
 
   // ── Home ──────────────────────────────────────────────────────
+  // Локальный кэш (мгновенная загрузка + мягкая деградация при плохой сети)
+  _cacheSet:function(key,val){try{localStorage.setItem('ac_'+(App.s.ssId||'')+'_'+key,JSON.stringify(val));}catch(e){}},
+  _cacheGet:function(key){try{var v=localStorage.getItem('ac_'+(App.s.ssId||'')+'_'+key);return v?JSON.parse(v):null;}catch(e){return null;}},
+
   loadHome:function(){
     if(!App.s.ssId)return;
     App.loadPulse();
     App.loadInsights();
+    var period=App._getPeriod();
+    // 1) мгновенно из кэша (если есть)
+    var cached=App._cacheGet('home_'+period);
+    if(cached)App._applyHome(cached.r||{},cached.acc||[]);
+    // 2) обновляем с сервера
     Promise.all([
-      gs('getHomeSummary',{ssId:App.s.ssId,period:App._getPeriod()}),
+      gs('getHomeSummary',{ssId:App.s.ssId,period:period}),
       gs('getAccountsAll',{ssId:App.s.ssId})
     ]).then(function(res){
       var r=res[0]||{};var allAcc=res[1]||[];
-      App.s.accounts=allAcc.filter(function(a){return a.status!=='archived';});
-      App.renderAccounts(App.s.accounts);
-      App.renderTxList(r.transactions||[],'tx-list');
-      // hero balance
-      var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
-      var heroEl=document.getElementById('home-total-bal');
-      if(heroEl)animateNumber(heroEl,totalBal,'₽ ');
-      // hero delta + split tiles
-      var sum=r.summary||{income:0,expense:0,count:0,shiftRevenue:0};
-      var inc=sum.income||0,exp=sum.expense||0,prof=inc-exp;
-      var shiftRev=sum.shiftRevenue||0;
-      var deltaEl=document.getElementById('home-hero-delta');
-      if(deltaEl){
-        var displayInc=shiftRev>inc?shiftRev:inc;
-        deltaEl.className='home-hero-delta '+(displayInc>=exp?'up':'dn');
-        deltaEl.textContent=(displayInc>=exp?'▲ ':' ▼ ')+'₽ '+fmtFull(Math.abs(displayInc-exp))+' за период';
-      }
-      var se=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
-      var an=function(id,v){var e=document.getElementById(id);if(e)animateNumber(e,v,'₽ ',function(){App._fitText(e,13,22);});};
-      an('split-revenue',inc);
-      an('split-expense',exp);
-      se('split-revenue-sub',(sum.count||0)+' операций');
-      var shE=document.getElementById('split-shift');
-      if(shE){if(shiftRev>0)animateNumber(shE,shiftRev,'₽ ',function(){App._fitText(shE,13,22);});else shE.textContent='—';}
-      // sidebar capital card
-      var sbBal=document.getElementById('sb-total-bal');
-      if(sbBal)sbBal.textContent='₽ '+fmtFull(totalBal);
-      var sbProfit=document.getElementById('sb-month-profit');
-      if(sbProfit){
-        sbProfit.textContent=(prof>=0?'+':'')+fmtFull(prof)+' ₽ за период';
-        sbProfit.style.color=prof>=0?'var(--pos)':'var(--neg)';
-      }
-    }).catch(function(e){App.toast(e.message,true);});
-    // load supplier debt total asynchronously
+      App._cacheSet('home_'+period,{r:r,acc:allAcc});
+      App._applyHome(r,allAcc);
+    }).catch(function(e){ if(!cached)App.toast(App._friendlyErr(e.message),true); });
+    // долг поставщикам (с кэшем)
+    var cDebt=App._cacheGet('debt');
+    if(cDebt!=null){var e0=document.getElementById('split-payable');if(e0)e0.textContent='₽ '+fmt(cDebt);}
     gs('getDebts',{ssId:App.s.ssId}).then(function(reps){
       var total=(reps||[]).reduce(function(s,r){return s+(r.debt||0);},0);
+      App._cacheSet('debt',total);
       var e=document.getElementById('split-payable');
       if(e)animateNumber(e,total,'₽ ',function(){App._fitText(e,13,22);});
     }).catch(function(){});
+  },
+  _applyHome:function(r,allAcc){
+    App.s.accounts=(allAcc||[]).filter(function(a){return a.status!=='archived';});
+    App.renderAccounts(App.s.accounts);
+    App.renderTxList(r.transactions||[],'tx-list');
+    var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
+    var heroEl=document.getElementById('home-total-bal');
+    if(heroEl)animateNumber(heroEl,totalBal,'₽ ');
+    var sum=r.summary||{income:0,expense:0,count:0,shiftRevenue:0};
+    var inc=sum.income||0,exp=sum.expense||0,prof=inc-exp;
+    var shiftRev=sum.shiftRevenue||0;
+    var deltaEl=document.getElementById('home-hero-delta');
+    if(deltaEl){
+      var displayInc=shiftRev>inc?shiftRev:inc;
+      deltaEl.className='home-hero-delta '+(displayInc>=exp?'up':'dn');
+      deltaEl.textContent=(displayInc>=exp?'▲ ':' ▼ ')+'₽ '+fmtFull(Math.abs(displayInc-exp))+' за период';
+    }
+    var se=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+    var an=function(id,v){var e=document.getElementById(id);if(e)animateNumber(e,v,'₽ ',function(){App._fitText(e,13,22);});};
+    an('split-revenue',inc);
+    an('split-expense',exp);
+    se('split-revenue-sub',(sum.count||0)+' операций');
+    var shE=document.getElementById('split-shift');
+    if(shE){if(shiftRev>0)animateNumber(shE,shiftRev,'₽ ',function(){App._fitText(shE,13,22);});else shE.textContent='—';}
+    var sbBal=document.getElementById('sb-total-bal');
+    if(sbBal)sbBal.textContent='₽ '+fmtFull(totalBal);
+    var sbProfit=document.getElementById('sb-month-profit');
+    if(sbProfit){
+      sbProfit.textContent=(prof>=0?'+':'')+fmtFull(prof)+' ₽ за период';
+      sbProfit.style.color=prof>=0?'var(--pos)':'var(--neg)';
+    }
   },
 
   _periodLabel:function(){
