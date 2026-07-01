@@ -829,7 +829,7 @@ function getGoodsAnalytics(p) {
       .sort(function(a,b){return b.stockSum-a.stockSum;}).slice(0,6)
       .map(function(it){return {name:it.name.slice(0,32), stockQty:it.stockQty, stockSum:Math.round(it.stockSum)};});
     // рост цен из истории
-    var priceUps = [];
+    var priceUps = [], supplierCompare = [], supplierRating = [];
     var ph = ss.getSheetByName(SH_PRICEHIST);
     if (ph && ph.getLastRow() >= 2) {
       var pd = ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues();
@@ -850,6 +850,38 @@ function getGoodsAnalytics(p) {
         }
       });
       priceUps.sort(function(a,b){return b.pct-a.pct;});
+      // Рейтинг поставщиков по числу повышений цен (меньше — надёжнее)
+      var supUp={}; priceUps.forEach(function(u){ if(u.supplier) supUp[u.supplier]=(supUp[u.supplier]||0)+1; });
+      // Сравнение поставщиков по товару: последняя цена каждого поставщика на товар
+      var prodSup={};
+      Object.keys(byKey).forEach(function(k){
+        byKey[k].forEach(function(e){
+          if(!e.supplier||!e.price) return;
+          if(!prodSup[k]) prodSup[k]={name:e.name,sup:{}};
+          var s=prodSup[k].sup[e.supplier];
+          if(!s||e.t>=s.t) prodSup[k].sup[e.supplier]={price:e.price,t:e.t};
+        });
+      });
+      Object.keys(prodSup).forEach(function(k){
+        var P=prodSup[k]; var names=Object.keys(P.sup);
+        if(names.length<2) return;
+        var lo=null,hi=null;
+        names.forEach(function(s){var pr=P.sup[s].price;
+          if(lo===null||pr<lo.price)lo={sup:s,price:pr};
+          if(hi===null||pr>hi.price)hi={sup:s,price:pr};});
+        if(hi.price>lo.price){
+          supplierCompare.push({name:P.name.slice(0,30), cheap:lo.sup, cheapPrice:lo.price,
+            dear:hi.sup, dearPrice:hi.price, save:Math.round((hi.price-lo.price)/hi.price*100)});
+        }
+      });
+      supplierCompare.sort(function(a,b){return b.save-a.save;});
+      supplierCompare=supplierCompare.slice(0,6);
+      // формируем рейтинг из товаров + повышений
+      var supCnt={}; items.forEach(function(it){ if(it.supplier) supCnt[it.supplier]=(supCnt[it.supplier]||0)+1; });
+      supplierRating=Object.keys(supCnt).map(function(s){
+        var ups=supUp[s]||0;
+        return {name:s, products:supCnt[s], priceUps:ups, score:Math.max(0,100-ups*20)};
+      }).sort(function(a,b){return b.score-a.score||b.products-a.products;}).slice(0,6);
       priceUps = priceUps.slice(0,6);
     }
     var totRevenue = 0, totProfit = 0, totStock = 0;
@@ -888,7 +920,8 @@ function getGoodsAnalytics(p) {
       totRevenue:Math.round(totRevenue), totProfit:Math.round(totProfit), totStock:Math.round(totStock),
       suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
       movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc,
-      groups:groups, turnover:turnover
+      groups:groups, turnover:turnover,
+      supplierCompare:supplierCompare, supplierRating:supplierRating
     };
   } catch(e) { return { __error:e.message }; }
 }

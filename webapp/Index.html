@@ -5559,6 +5559,8 @@ var App={
     h+=list('🔥 Ходовой товар',a.movers,function(t){return rowHtml(t.name,(t.qty).toLocaleString('ru-RU')+' шт');});
     h+=list('🧊 Неликвид (лежит, не продаётся)',a.deadStock,function(t){return rowHtml(t.name,fm(t.stockSum)+' ₽','var(--muted)');});
     h+=list('📁 Маржа по группам',a.groups,function(t){return rowHtml(t.name+' · '+t.count+' тов',(t.markup?t.markup+'%':fm(t.profit)+' ₽'),t.markup&&t.markup<10?'var(--neg)':'var(--pos)');});
+    h+=list('💸 Где дешевле (сравнение поставщиков)',a.supplierCompare,function(t){return rowHtml(t.name+' · дешевле у '+t.cheap,'−'+t.save+'% ('+fm(t.cheapPrice)+' vs '+fm(t.dearPrice)+')','var(--pos)');});
+    h+=list('⭐ Рейтинг поставщиков',a.supplierRating,function(t){return rowHtml(t.name+' · '+t.products+' тов',(t.priceUps?t.priceUps+' повыш. цен':'цены стабильны'),t.score>=80?'var(--pos)':t.score>=60?'var(--ink)':'var(--neg)');});
     h+=list('🏭 Поставщики',a.suppliers,function(t){return rowHtml(t.name,t.count+' тов · '+fm(t.stockSum)+' ₽');});
     h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openImport()">Загрузить ещё отчёт из 1С</button>';
     h+='<button class="btn-secondary" style="margin-top:10px;" onclick="App.openGoodsList()">Весь список товаров</button>';
