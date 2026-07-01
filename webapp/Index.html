@@ -4201,6 +4201,9 @@ var App={
   },
 
   loadHistory:function(){
+    var el=document.getElementById('j-tx-list');
+    if(el&&!(App._jTxAll&&App._jTxAll.length))el.innerHTML='<div style="padding:16px;">'+
+      Array(5).join('0').split('0').map(function(){return'<div class="skel" style="height:64px;border-radius:16px;margin-bottom:10px;"></div>';}).join('')+'</div>';
     gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){App._jTxAll=r||[];App._jRender();});
   },
 
