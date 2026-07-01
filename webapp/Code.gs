@@ -1455,6 +1455,33 @@ function getInsights(p) {
   } catch(e) { return { __error:e.message, insights:[] }; }
 }
 
+// Быстрые шаблоны: частые сочетания тип+категория+счёт за 60 дней + последняя.
+function getQuickTemplates(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    if(!base||base.getLastRow()<2) return { templates:[] };
+    var tz=Session.getScriptTimeZone();
+    var cutoff=new Date(); cutoff.setDate(cutoff.getDate()-60);
+    var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var combo={}; var last=null, lastTime=0;
+    rows.forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)||dt<cutoff) return;
+      var type=String(r[B_TYPE-1]), cat=String(r[B_CAT-1]), acc=String(r[B_ACC-1]);
+      if(type==='Перевод'||!cat) return;
+      var k=type+'|'+cat+'|'+acc;
+      if(!combo[k]) combo[k]={type:type,category:cat,account:acc,count:0,amtSum:0};
+      combo[k].count++; combo[k].amtSum+=parseFloat(r[B_AMT-1])||0;
+      var ms=dt.getTime(); if(ms>=lastTime){lastTime=ms; last={type:type,category:cat,account:acc};}
+    });
+    var arr=Object.keys(combo).map(function(k){var c=combo[k];c.avg=Math.round(c.amtSum/c.count);return c;});
+    arr.sort(function(a,b){return b.count-a.count;});
+    var top=arr.slice(0,5).map(function(c){return {type:c.type,category:c.category,account:c.account,avg:c.avg};});
+    return { templates:top, last:last };
+  } catch(e) { return { __error:e.message, templates:[] }; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;

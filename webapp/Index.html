@@ -1948,6 +1948,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       <button class="np-type-btn income" onclick="App.setNType('income',this)">Доход</button>
       <button class="np-type-btn transfer" onclick="App.setNType('transfer',this)">Перевод</button>
     </div>
+    <div class="np-quick" id="np-quick" style="display:flex;gap:7px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;"></div>
     <div class="np-display" id="np-display">₽ 0</div>
     <div class="np-fields">
       <div class="np-field" onclick="App.pickAccount('from')">
@@ -2250,6 +2251,12 @@ var App={
       var now=Date.now();
       if(b._lastClick&&now-b._lastClick<1000){e.preventDefault();e.stopImmediatePropagation();return;}
       b._lastClick=now;
+    },true);
+    // 1.5) Калькулятор в полях суммы: поле с классом calc-input считает выражение
+    document.addEventListener('blur',function(e){
+      var el=e.target;if(!el||!el.classList||!el.classList.contains('calc-input'))return;
+      var v=el.value||'';
+      if(/[+\-*/×÷]/.test(v.replace(/^-/,''))){var r=App._calcEval(v);if(r||r===0)el.value=r;}
     },true);
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
@@ -4423,6 +4430,28 @@ var App={
     s.npAcc2=null;
     document.getElementById('np-comment').value='';
     App._npRefresh();App.openSheet('sheet-numpad');
+    App._loadQuickTemplates();
+  },
+  _loadQuickTemplates:function(){
+    var el=document.getElementById('np-quick');if(!el)return;el.innerHTML='';
+    gs('getQuickTemplates',{ssId:App.s.ssId}).then(function(r){
+      var t=(r&&r.templates)||[];if(!t.length){el.style.display='none';return;}
+      el.style.display='flex';App._quickTpl=t;
+      el.innerHTML=t.map(function(tp,i){
+        var ci=catIcon(tp.category);
+        return'<button onclick="App._applyTemplate('+i+')" style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);">'+
+          '<span style="width:8px;height:8px;border-radius:3px;background:'+ci.bg+';flex-shrink:0;"></span>'+App._e(tp.category)+' · '+App._e(tp.account)+'</button>';
+      }).join('');
+    }).catch(function(){el.style.display='none';});
+  },
+  _applyTemplate:function(i){
+    var tp=App._quickTpl&&App._quickTpl[i];if(!tp)return;
+    var s=App.s;
+    s.npType=tp.type==='Доход'?'income':tp.type==='Перевод'?'transfer':'expense';
+    s.npCat=tp.category;
+    var acc=(s.accounts||[]).find(function(a){return a.name===tp.account;});
+    if(acc)s.npAcc=acc;
+    App._npRefresh();App.haptic(8);
   },
 
   _npRefresh:function(){
@@ -4674,7 +4703,7 @@ var App={
       payeeOpts+descOpts+
       '<div class="field"><label>Поставщик</label><input id="pf-payee" type="text" list="pf-payee-list" placeholder="Начните вводить название…" value="'+(d?App._e(d.payee||''):'')+'" autocomplete="off"></div>'+
       '<div class="field"><label>Описание <span style="color:var(--muted);font-size:12px;font-weight:400;">(необязательно)</span></label><input id="pf-title" type="text" list="pf-title-list" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
-      '<div class="field"><label>Сумма (₽)</label><input id="pf-amt" type="number" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
+      '<div class="field"><label>Сумма (₽) <span style="color:var(--muted);font-size:11px;font-weight:400;">можно 1200+350</span></label><input id="pf-amt" class="calc-input" type="text" inputmode="decimal" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
       '<div class="field"><label>Дата платежа</label><input id="pf-due" type="date" value="'+(d&&d.date?d.date:(d&&d.due?d.due:fmtISO(new Date())))+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="pf-comment" type="text" placeholder="…" value="'+(d?App._e(d.comment||d.note||''):'')+'" ></div>'+
       '<button class="btn-primary" onclick="App._savePayment(\''+(d&&d.id?App._e(String(d.id)):'')+'\')">Сохранить</button>');
@@ -4683,7 +4712,7 @@ var App={
   _savePayment:function(id){
     var payee=document.getElementById('pf-payee').value.trim();
     var title=document.getElementById('pf-title').value.trim();
-    var amt=parseFloat(document.getElementById('pf-amt').value)||0;
+    var amt=App._calcEval(document.getElementById('pf-amt').value)||0;
     var date=document.getElementById('pf-due').value;
     var comment=document.getElementById('pf-comment').value.trim();
     if(!payee||!amt){App.toast('Укажите контрагента и сумму',true);return;}
