@@ -1838,6 +1838,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.backupNow()" style="cursor:pointer;">
+            <span class="settings-row-icon">💾</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Резервная копия</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Сохранить копию всех данных на свой Google-Диск</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
         </div>
       </div>
       <div class="settings-sec">
@@ -5653,6 +5661,17 @@ var App={
       '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:16px;font-weight:800;color:'+(totDiff===0?'var(--muted)':totDiff>0?'var(--pos)':'var(--neg)')+';">'+(totDiff>0?'+':'')+fm(totDiff)+'</div><div style="font-size:11px;color:var(--muted);">итог расхождения</div></div></div>'+
       '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+rowsHtml+'</div>'+
       '<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Z — выручка по сменам. Журнал — проведённый доход (вкл. импорт из 1С). Подсветка — расхождение ≥ 500 ₽: возможна недостача, забытый Z-отчёт или двойная проводка.</div>';
+  },
+
+  backupNow:function(){
+    App.toast('Создаю копию…');
+    gs('backupNow',{ssId:App.s.ssId}).then(function(r){
+      App.openModal('<div class="modal-title">💾 Резервная копия готова</div>'+
+        '<div style="font-size:13.5px;line-height:1.6;color:var(--ink);">Копия всех данных сохранена на твоём Google-Диске:</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:13px;font-weight:600;word-break:break-all;">'+App._e(r.name)+'</div>'+
+        '<a href="'+App._e(r.url)+'" target="_blank" class="btn-primary" style="display:block;text-align:center;text-decoration:none;">Открыть копию на Диске</a>'+
+        '<div style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5;">Совет: делай копию перед крупными изменениями или раз в неделю. Копия — на твоём Диске, отдельно от рабочей таблицы.</div>');
+    }).catch(function(e){App.toast('Не удалось: '+e.message,true);});
   },
 
   // ── Наблюдение: машина времени + сигнал слабого дня ───────────

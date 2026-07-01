@@ -1516,6 +1516,19 @@ function getInsights(p) {
   } catch(e) { return { __error:e.message, insights:[] }; }
 }
 
+// Резервная копия: делает копию таблицы магазина на Диске пользователя.
+function backupNow(p) {
+  var ssId=p.ssId;
+  try {
+    var tz=Session.getScriptTimeZone();
+    var stamp=Utilities.formatDate(new Date(),tz,'yyyy-MM-dd_HH-mm');
+    var file=DriveApp.getFileById(ssId);
+    var name='Auron_backup_'+stamp;
+    var copy=file.makeCopy(name);
+    return { ok:true, name:name, url:copy.getUrl() };
+  } catch(e) { return { __error:e.message }; }
+}
+
 // Быстрые шаблоны: частые сочетания тип+категория+счёт за 60 дней + последняя.
 function getQuickTemplates(p) {
   var ssId=p.ssId;
