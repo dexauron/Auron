@@ -1973,15 +1973,23 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         </div>
       </div>
       <div class="settings-sec">
-        <div class="settings-sec-title">Демо-данные</div>
+        <div class="settings-sec-title">Данные</div>
         <div class="settings-list">
+          <div class="settings-row" onclick="App.clearAllData()" style="cursor:pointer;">
+            <span class="settings-row-icon">🗑</span>
+            <div style="flex:1;">
+              <div class="settings-row-label" style="color:var(--neg);">Удалить все данные</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Демо и реальные операции. Счета и категории останутся</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row">
             <span class="settings-row-icon">🧪</span>
             <span class="settings-row-label" style="flex:1;">Заполнить тестовыми данными</span>
             <button onclick="App.seedDemo()" style="background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);border:none;border-radius:10px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Заполнить</button>
           </div>
         </div>
-        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">Сбрасывает все данные и добавляет 14 дней продаж, 3 поставщика, смены и выплаты.</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;padding:0 4px;line-height:1.6;">«Заполнить» — для теста: сбрасывает всё и добавляет демо-продажи, поставщиков, смены.</div>
       </div>
     </div>
   </div>
@@ -3165,6 +3173,17 @@ var App={
 
   saveSettings:function(){
     gs('saveSettings',{ssId:App.s.ssId,data:App.s.settings}).catch(function(){});
+  },
+
+  clearAllData:function(){
+    if(!confirm('Удалить ВСЕ данные?\n\nБудут удалены операции, смены, долги, выплаты, табель, товары и журнал (демо и реальные). Счета и категории останутся.\n\nОтменить нельзя.'))return;
+    App.toast('Удаляю…');
+    gs('clearAllData',{ssId:App.s.ssId}).then(function(r){
+      // сбросить локальный кэш, чтобы не показывались старые цифры
+      try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('ac_')===0)localStorage.removeItem(k);});}catch(e){}
+      App.toast('Удалено записей: '+(r.removed||0)+' ✓');
+      App.loadHome();App.renderSettingsPage();
+    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
 
   seedDemo:function(){
@@ -5392,8 +5411,16 @@ var App={
     gs('registerUser',{name:userName,phone:'',orgName:orgName}).then(function(r){
       App.s.userName=userName;App.s.ssId=r.ssId;App.s.orgName=r.orgName||orgName;
       try{localStorage.setItem(OB_KEY+'_done','1');}catch(e){}
-      if(btn)btn.textContent='Заполняю данные…';
-      return gs('seedDemoData',{ssId:r.ssId});
+      if(btn)btn.textContent='Настраиваю…';
+      // Без демо-данных: сохраняем только реальные настройки из онбординга
+      var cashiers=(d.team||[]).map(function(mm){return (mm.name||'').trim();}).filter(Boolean);
+      return gs('saveSettings',{ssId:r.ssId,data:{
+        cats:['Продажи','Закупка','ЗП','Аренда','Хозрасходы','Коммуналка','Реклама','Налоги'],
+        cashiers:cashiers, employees:cashiers,
+        payTypes:['Наличные','Карта','СБП','Безналичный'],
+        repStatuses:['✅ Оплачено','❌ Не оплачено','⛔ Отменён','🔄 Перенесён'],
+        shifts:['Утренняя','Дневная','Вечерняя'], suppliers:[], showKassaBalance:true
+      }});
     }).then(function(){
       App.loadSettings(function(){App.showApp();App.loadHome();});
     }).catch(function(e){

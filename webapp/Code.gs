@@ -2351,6 +2351,26 @@ function getAccountsAll(p) {
 // MODULE: SEED / DEMO DATA
 // ═══════════════════════════════════════════════════════════════════════
 
+// Удалить все операции/данные (демо и реальные). Счета и настройки остаются.
+function clearAllData(p) {
+  var ssId=_s(p.ssId);
+  if(!ssId) return {__error:'ssId required'};
+  try {
+    var lock=LockService.getScriptLock(); lock.waitLock(20000);
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var wipe=[SH_BASE,SH_DEBTS,SH_SHIFTS,SH_PAYMENTS,SH_TIMESHEET,SH_RECURRING,
+              SH_GOODS,SH_PRICEHIST,SH_LOG,SH_TRASH];
+    var removed=0;
+    wipe.forEach(function(n){
+      var sh=ss.getSheetByName(n);
+      if(sh&&sh.getLastRow()>1){ var cnt=sh.getLastRow()-1; sh.deleteRows(2,cnt); removed+=cnt; }
+    });
+    try{CacheService.getScriptCache().remove('dash_'+ssId);}catch(e){}
+    lock.releaseLock();
+    return {ok:true, removed:removed};
+  } catch(e){ try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+}
+
 function seedDemoData(p) {
   var ssId = _s(p.ssId);
   if (!ssId) return { __error: 'ssId required' };
