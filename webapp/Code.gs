@@ -1619,6 +1619,63 @@ function backupNow(p) {
   } catch(e) { return { __error:e.message }; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: АВТООТЧЁТ руководителю на email (дневной)
+// ═══════════════════════════════════════════════════════════════════════
+function _buildDayReportText(ssId, orgName) {
+  var an = getAnalytics({ssId:ssId, period:'today'});
+  var income = an.income||0, expense = an.expense||0, profit = income-expense;
+  var tz = Session.getScriptTimeZone();
+  var today = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy');
+  var L = [];
+  L.push('📊 ' + (orgName||'Магазин') + ' — отчёт за ' + today);
+  L.push('');
+  L.push('💰 Выручка: ' + Math.round(income).toLocaleString('ru') + ' ₽');
+  L.push('📉 Расходы: ' + Math.round(expense).toLocaleString('ru') + ' ₽');
+  L.push((profit>=0?'📈':'⚠️') + ' Прибыль: ' + Math.round(profit).toLocaleString('ru') + ' ₽');
+  var cats = (an.byCategory||[]).filter(function(c){return c.type==='expense';}).slice(0,5);
+  if (cats.length) { L.push(''); L.push('Основные расходы:');
+    cats.forEach(function(c){ L.push('• ' + c.category + ': ' + Math.round(c.total).toLocaleString('ru') + ' ₽'); }); }
+  L.push(''); L.push('— Auron Finance');
+  return L.join('\n');
+}
+function sendDailyReportNow(p) {
+  var ssId=p.ssId, email=_s(p.email||''), orgName=_s(p.orgName||'');
+  if(!email || email.indexOf('@')<0) return {__error:'Укажите корректный email'};
+  try {
+    var text = _buildDayReportText(ssId, orgName);
+    MailApp.sendEmail(email, 'Дневной отчёт — '+(orgName||'магазин'), text);
+    return { ok:true };
+  } catch(e) { return {__error:e.message}; }
+}
+function getDailyReportConfig(p) {
+  try { var v=_props().getProperty('DAILY_REPORT'); return v?JSON.parse(v):{enabled:false,email:'',hour:20}; }
+  catch(e){ return {enabled:false,email:'',hour:20}; }
+}
+function setDailyReport(p) {
+  var ssId=p.ssId, email=_s(p.email||''), enabled=!!p.enabled, orgName=_s(p.orgName||''), hour=parseInt(p.hour)||20;
+  try {
+    // снять старые триггеры этого обработчика
+    ScriptApp.getProjectTriggers().forEach(function(t){
+      if(t.getHandlerFunction()==='_dailyReportTrigger') ScriptApp.deleteTrigger(t);
+    });
+    if(enabled){
+      if(!email || email.indexOf('@')<0) return {__error:'Укажите корректный email'};
+      ScriptApp.newTrigger('_dailyReportTrigger').timeBased().everyDays(1).atHour(hour).create();
+    }
+    _props().setProperty('DAILY_REPORT', JSON.stringify({enabled:enabled,email:email,orgName:orgName,ssId:ssId,hour:hour}));
+    return { ok:true, enabled:enabled };
+  } catch(e) { return {__error:e.message}; }
+}
+function _dailyReportTrigger() {
+  try {
+    var v=_props().getProperty('DAILY_REPORT'); if(!v) return;
+    var c=JSON.parse(v); if(!c.enabled||!c.email||!c.ssId) return;
+    var text=_buildDayReportText(c.ssId, c.orgName);
+    MailApp.sendEmail(c.email, 'Дневной отчёт — '+(c.orgName||'магазин'), text);
+  } catch(e) {}
+}
+
 // Быстрые шаблоны: частые сочетания тип+категория+счёт за 60 дней + последняя.
 function getQuickTemplates(p) {
   var ssId=p.ssId;

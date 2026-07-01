@@ -1873,6 +1873,14 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.openDailyReport()" style="cursor:pointer;">
+            <span class="settings-row-icon">📬</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Автоотчёт руководителю</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Отправлять итог дня на email каждый вечер</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row" onclick="App.backupNow()" style="cursor:pointer;">
             <span class="settings-row-icon">💾</span>
             <div style="flex:1;">
@@ -5761,6 +5769,39 @@ var App={
     var on=false;try{on=localStorage.getItem('auron_viewonly')==='1';}catch(e){}
     document.body.classList.toggle('view-only',on);
     var st=document.getElementById('view-only-state');if(st)st.textContent=on?'Вкл':'Выкл';
+  },
+  openDailyReport:function(){
+    App.openModal('<div class="modal-title">📬 Автоотчёт руководителю</div><div id="dr-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getDailyReportConfig',{ssId:App.s.ssId}).then(function(c){
+      c=c||{};var el=document.getElementById('dr-body');if(!el)return;
+      var hours=[];for(var hh=6;hh<=23;hh++)hours.push('<option value="'+hh+'"'+((c.hour||20)===hh?' selected':'')+'>'+hh+':00</option>');
+      el.innerHTML='<div style="line-height:1.5;margin-bottom:14px;">Каждый вечер приложение само пришлёт итог дня (выручка, расходы, прибыль, основные траты) на указанный email.</div>'+
+        '<label style="font-size:12.5px;font-weight:600;">Email руководителя</label>'+
+        '<input id="dr-email" type="email" value="'+App._e(c.email||'')+'" placeholder="boss@example.com" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:5px 0 12px;">'+
+        '<label style="font-size:12.5px;font-weight:600;">Время отправки</label>'+
+        '<select id="dr-hour" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:5px 0 14px;">'+hours.join('')+'</select>'+
+        '<label style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;margin-bottom:16px;cursor:pointer;"><input type="checkbox" id="dr-enabled"'+(c.enabled?' checked':'')+' style="width:18px;height:18px;accent-color:var(--brand);"> Включить ежедневную отправку</label>'+
+        '<button class="btn-primary" onclick="App._saveDailyReport()">Сохранить</button>'+
+        '<button class="btn-secondary" onclick="App._sendDailyNow()">📤 Отправить сейчас (проверка)</button>';
+    }).catch(function(e){var el=document.getElementById('dr-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _saveDailyReport:function(){
+    var email=document.getElementById('dr-email').value.trim();
+    var enabled=document.getElementById('dr-enabled').checked;
+    var hour=parseInt(document.getElementById('dr-hour').value)||20;
+    if(enabled&&email.indexOf('@')<0){App.toast('Укажите корректный email',true);return;}
+    App.toast('Сохраняю…');
+    gs('setDailyReport',{ssId:App.s.ssId,email:email,enabled:enabled,hour:hour,orgName:App.s.orgName||''}).then(function(){
+      App.toast(enabled?'Автоотчёт включён ✓':'Автоотчёт выключен');App.closeModal();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _sendDailyNow:function(){
+    var email=document.getElementById('dr-email').value.trim();
+    if(email.indexOf('@')<0){App.toast('Укажите email',true);return;}
+    App.toast('Отправляю…');
+    gs('sendDailyReportNow',{ssId:App.s.ssId,email:email,orgName:App.s.orgName||''}).then(function(){
+      App.toast('Отчёт отправлен на '+email+' ✓');
+    }).catch(function(e){App.toast(e.message,true);});
   },
   openAuditLog:function(){
     App.openModal('<div class="modal-title">📜 Журнал изменений</div><div id="audit-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
