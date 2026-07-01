@@ -3035,10 +3035,6 @@ var App={
     }
   },
 
-  _periodLabel:function(p){
-    var m={today:'Сегодня',week:'Неделя',month:'Месяц',year:'Год',prev_week:'Прошлая неделя'};
-    return m[p]||p;
-  },
 
   _editPayment:function(id){
     var r=(App._suppPayables||[]).find(function(x){return String(x.id)===String(id);});
@@ -3244,9 +3240,10 @@ var App={
     }
   },
 
-  _periodLabel:function(){
-    var m={today:'сегодня',week:'за неделю',month:'за месяц',year:'за год',custom:'за период'};
-    return m[App.s.period]||'за период';
+  _periodLabel:function(p){
+    p=p||App.s.period;
+    var m={today:'сегодня',week:'за неделю',month:'за месяц',year:'за год',prev_week:'за прошлую неделю',custom:'за период'};
+    return m[p]||'за период';
   },
   openMetricDetail:function(type){
     var isInc=type==='income';
@@ -6236,7 +6233,7 @@ var App={
     return '<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.5;">📊 Твоя маржа <b style="color:'+color+';">'+m+'%</b> — '+verdict+'. <span style="color:var(--muted);">Ориентир для продуктовой розницы: '+lo+'–'+hi+'%.</span></div>';
   },
   openPulse:function(){
-    var r=App._pulse;if(!r)return;
+    var r=App._pulse;if(!r||r.enoughData===false||!r.factors)return;
     var c=App._pulseColor(r.score);
     var bar=function(f){var fc=App._pulseColor(f.score);
       return'<div style="margin-bottom:12px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span>'+App._e(f.key)+'</span><span style="font-weight:700;color:'+fc+';">'+f.score+'</span></div>'+

@@ -2498,6 +2498,3 @@ function seedDemoData(p) {
     return { ok: true, txCount: rows.length };
   } catch(e) { return { __error: e.message }; }
 }
-
-
-// Автомост проверка: 2026-07-01T11:10:54.187Z
