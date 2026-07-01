@@ -234,6 +234,30 @@ function ensureSheets(ss) {
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
   _grow(ss,SH_TIMESHEET,T_COLS);
+  _migrateSchema(ss);
+}
+
+// Версионирование схемы: новые листы/колонки добавляются выше идемпотентно.
+// Здесь — место для будущих миграций данных при росте версии.
+var SCHEMA_VERSION = 2;
+function _migrateSchema(ss) {
+  try {
+    var sh = ss.getSheetByName(SH_SETTINGS); if (!sh) return;
+    var cur = 0;
+    if (sh.getLastRow()>=2) {
+      var v = sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
+      for (var i=0;i<v.length;i++) if (String(v[i][0])==='SCHEMA_VERSION') { cur=parseInt(v[i][1])||0; break; }
+    }
+    if (cur >= SCHEMA_VERSION) return;
+    // (будущие миграции: if (cur < 3) { ... })
+    // записываем актуальную версию
+    var row=-1;
+    if (sh.getLastRow()>=2) {
+      var k=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var j=0;j<k.length;j++) if (String(k[j][0])==='SCHEMA_VERSION'){row=j+2;break;}
+    }
+    if (row>0) sh.getRange(row,2).setValue(SCHEMA_VERSION); else sh.appendRow(['SCHEMA_VERSION', SCHEMA_VERSION]);
+  } catch(e) {}
 }
 
 function _mk(ss, name, hdrs) {
