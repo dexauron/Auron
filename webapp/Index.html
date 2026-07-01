@@ -153,6 +153,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
 .rp-chip:active{background:var(--surface-3);}
 .jf-chip.jf-active{background:color-mix(in oklab,var(--brand) 16%,transparent);border-color:var(--brand);color:var(--brand);}
+@keyframes spin{to{transform:rotate(360deg);}}
+#ptr{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:150;opacity:0;transform:translateY(-16px);transition:opacity .2s,transform .2s;}
+#ptr.show{opacity:1;transform:translateY(calc(var(--safe-top) + 8px));}
+#ptr .p{background:var(--surface-2);border:1px solid var(--line);border-radius:20px;padding:7px 15px;font-size:12.5px;font-weight:600;color:var(--muted);display:flex;align-items:center;gap:7px;box-shadow:var(--shadow-lg);}
+#ptr.spin .ic{display:inline-block;animation:spin .8s linear infinite;}
 .org-card{
   background:var(--surface);border-radius:var(--radius);
   padding:18px 20px;margin-bottom:10px;
@@ -1394,6 +1399,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   </div>
 </div>
 
+<div id="ptr"><div class="p"><span class="ic">↻</span> <span id="ptr-txt">Потяните для обновления</span></div></div>
 <div id="app">
   <!-- Sidebar (desktop) -->
   <aside id="sidebar">
@@ -2321,6 +2327,20 @@ var App={
   // Вибро-отклик (есть на Android; iOS Safari игнорирует — безопасно)
   haptic:function(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}},
 
+  // Обновление текущего экрана (для pull-to-refresh)
+  refreshCurrent:function(){
+    var a=document.querySelector('.nav-item.active,.sb-nav-item.active');
+    var tab=a?a.getAttribute('data-tab'):'home';
+    if(tab==='home')App.loadHome();
+    else if(tab==='analytics')App.loadAnalytics();
+    else if(tab==='kassa')App.initKassa();
+    else if(tab==='journal')App.loadHistory();
+    else if(tab==='suppliers')App.loadSuppliers();
+    else if(tab==='report'){App.initReport();App.loadShiftsLog();}
+    else if(tab==='settings')App.renderSettingsPage();
+    else App.loadHome();
+  },
+
   // Глобальные защиты: двойное нажатие + перехват ошибок (надёжность и точность)
   _installGuards:function(){
     // 0) Тактильный отклик при нажатии на интерактивные элементы
@@ -2368,6 +2388,29 @@ var App={
         tabs[nx].click();App.haptic(6);
       },{passive:true});
     }
+    // 1.8) Pull-to-refresh: потянуть вниз в начале списка → обновить экран
+    var ptr=document.getElementById('ptr');var pTxt=document.getElementById('ptr-txt');
+    var pStartY=0,pPull=false;
+    document.addEventListener('touchstart',function(e){
+      if(document.querySelector('.modal-overlay.show,.sheet.show')){pPull=false;return;} // не в окнах
+      var p=document.querySelector('.panel.active');
+      if(!p||p.scrollTop>2){pPull=false;return;}
+      pStartY=e.touches[0].clientY;pPull=true;
+    },{passive:true});
+    document.addEventListener('touchmove',function(e){
+      if(!pPull||!ptr)return;
+      var dy=e.touches[0].clientY-pStartY;
+      if(dy<=8){ptr.classList.remove('show');return;}
+      ptr.classList.add('show');
+      if(pTxt)pTxt.textContent=dy>70?'Отпустите для обновления':'Потяните для обновления';
+    },{passive:true});
+    document.addEventListener('touchend',function(e){
+      if(!pPull||!ptr)return;pPull=false;
+      var dy=e.changedTouches[0].clientY-pStartY;
+      if(dy>70){ptr.classList.add('spin');if(pTxt)pTxt.textContent='Обновление…';App.haptic(12);App.refreshCurrent();
+        setTimeout(function(){ptr.classList.remove('show','spin');},900);}
+      else ptr.classList.remove('show');
+    },{passive:true});
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
       try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
