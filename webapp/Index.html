@@ -691,6 +691,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .modal-overlay.show .modal{animation:sheetUp .3s cubic-bezier(.2,.8,.2,1);}
 @keyframes sheetUp{from{transform:translateY(100%);opacity:.6;}to{transform:translateY(0);opacity:1;}}
 .modal-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:-8px auto 14px;cursor:grab;}
+body.view-only #fab,body.view-only .tx-actions,body.view-only .np-receipt-btn{display:none!important;}
+.view-badge{display:none;}
+body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--warn,#FF9F0A);background:color-mix(in oklab,var(--warn,#FF9F0A) 15%,transparent);padding:3px 9px;border-radius:20px;}
 
 /* ── Toast ── */
 #toast{
@@ -1838,6 +1841,14 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.toggleViewOnly()" style="cursor:pointer;">
+            <span class="settings-row-icon">👁</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Режим «только просмотр»</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="view-only-sub">Скрыть кнопки ввода и удаления</div>
+            </div>
+            <span class="settings-row-arrow" id="view-only-state">Выкл</span>
+          </div>
           <div class="settings-row" onclick="App.openAuditLog()" style="cursor:pointer;">
             <span class="settings-row-icon">📜</span>
             <div style="flex:1;">
@@ -2228,6 +2239,7 @@ var App={
   init:function(){
     this.s.npDate=new Date();
     App._installGuards();
+    App._applyViewOnly();
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
       if(r.isNew){
@@ -4245,6 +4257,7 @@ var App={
   // ── Settings ──────────────────────────────────────────────────
   renderSettingsPage:function(){
     App.loadRecurring();
+    App._applyViewOnly();
     // Budget summary
     gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){
       App.s._budgetMap=r.budgetMap||{};
@@ -5704,6 +5717,18 @@ var App={
       '<div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.5;">Z — выручка по сменам. Журнал — проведённый доход (вкл. импорт из 1С). Подсветка — расхождение ≥ 500 ₽: возможна недостача, забытый Z-отчёт или двойная проводка.</div>';
   },
 
+  toggleViewOnly:function(){
+    var on=!document.body.classList.contains('view-only');
+    document.body.classList.toggle('view-only',on);
+    try{localStorage.setItem('auron_viewonly',on?'1':'0');}catch(e){}
+    App._applyViewOnly();App.haptic(8);
+    App.toast(on?'Режим просмотра включён':'Режим просмотра выключен');
+  },
+  _applyViewOnly:function(){
+    var on=false;try{on=localStorage.getItem('auron_viewonly')==='1';}catch(e){}
+    document.body.classList.toggle('view-only',on);
+    var st=document.getElementById('view-only-state');if(st)st.textContent=on?'Вкл':'Выкл';
+  },
   openAuditLog:function(){
     App.openModal('<div class="modal-title">📜 Журнал изменений</div><div id="audit-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getAuditLog',{ssId:App.s.ssId}).then(function(r){
