@@ -854,6 +854,20 @@ function getGoodsAnalytics(p) {
     }
     var totRevenue = 0, totProfit = 0, totStock = 0;
     items.forEach(function(it){ totRevenue+=it.revenue; totProfit+=it.profit; totStock+=it.stockSum; });
+    // Маржа по группам товаров
+    var grpMap={};
+    items.forEach(function(it){ var g=it.group||'Без группы';
+      if(!grpMap[g]) grpMap[g]={name:g,count:0,profit:0,revenue:0,mSum:0,mN:0,stock:0};
+      var G=grpMap[g]; G.count++; G.profit+=it.profit; G.revenue+=it.revenue; G.stock+=it.stockSum;
+      if(it.buy>0&&it.retail>0){ G.mSum+=(it.retail-it.buy)/it.buy*100; G.mN++; }
+    });
+    var groups=Object.keys(grpMap).map(function(k){var G=grpMap[k];
+      return {name:G.name, count:G.count, profit:Math.round(G.profit), revenue:Math.round(G.revenue),
+              markup:G.mN>0?Math.round(G.mSum/G.mN*10)/10:0, stock:Math.round(G.stock)};
+    }).sort(function(a,b){return b.profit-a.profit;}).slice(0,8);
+    // Оборачиваемость: доля проданного к остатку (по количеству) — где деньги «спят»
+    var soldQ=0,stockQ=0; items.forEach(function(it){soldQ+=it.soldQty; stockQ+=it.stockQty;});
+    var turnover = stockQ>0 ? Math.round(soldQ/stockQ*100)/100 : 0;
     // ABC-анализ по прибыли (или выручке): A=вклад до 80%, B=до 95%, C=остальное
     var abc=null;
     var metric=totProfit>0?'profit':'revenue';
@@ -873,7 +887,8 @@ function getGoodsAnalytics(p) {
       count:items.length, suppliersCount:Object.keys(sup).length,
       totRevenue:Math.round(totRevenue), totProfit:Math.round(totProfit), totStock:Math.round(totStock),
       suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
-      movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc
+      movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc,
+      groups:groups, turnover:turnover
     };
   } catch(e) { return { __error:e.message }; }
 }
@@ -1380,6 +1395,7 @@ function getPulse(p) {
       income:Math.round(income), expense:Math.round(expense), profit:Math.round(profit),
       marginPct:Math.round(margin*100), incChange:Math.round(incChange),
       debt:Math.round(debt), cash:Math.round(cash), runwayMonths:Math.round(runway*10)/10,
+      freeCash:Math.round(cash-debt),
       factors:factors, tips:tips
     };
   } catch(e) { return { __error:e.message, score:0 }; }

@@ -5533,6 +5533,7 @@ var App={
     h+=list('⚠️ Низкая наценка',a.lowMargin,function(t){return rowHtml(t.name,t.markup+'%',t.markup<10?'var(--neg)':'var(--ink)');});
     h+=list('🔥 Ходовой товар',a.movers,function(t){return rowHtml(t.name,(t.qty).toLocaleString('ru-RU')+' шт');});
     h+=list('🧊 Неликвид (лежит, не продаётся)',a.deadStock,function(t){return rowHtml(t.name,fm(t.stockSum)+' ₽','var(--muted)');});
+    h+=list('📁 Маржа по группам',a.groups,function(t){return rowHtml(t.name+' · '+t.count+' тов',(t.markup?t.markup+'%':fm(t.profit)+' ₽'),t.markup&&t.markup<10?'var(--neg)':'var(--pos)');});
     h+=list('🏭 Поставщики',a.suppliers,function(t){return rowHtml(t.name,t.count+' тов · '+fm(t.stockSum)+' ₽');});
     h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openImport()">Загрузить ещё отчёт из 1С</button>';
     h+='<button class="btn-secondary" style="margin-top:10px;" onclick="App.openGoodsList()">Весь список товаров</button>';
@@ -5729,6 +5730,7 @@ var App={
         '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:15px;font-weight:800;">'+fmt(r.cash)+' ₽</div><div style="font-size:11px;color:var(--muted);">в кассе/счетах</div></div>'+
         '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:15px;font-weight:800;">'+r.runwayMonths+' мес</div><div style="font-size:11px;color:var(--muted);">запас по расходам</div></div>'+
       '</div>'+
+      (r.freeCash!==undefined?'<div style="display:flex;justify-content:space-between;align-items:center;background:color-mix(in oklab,'+(r.freeCash>=0?'var(--pos)':'var(--neg)')+' 10%,transparent);border-radius:12px;padding:12px 14px;margin-bottom:18px;"><span style="font-size:13px;font-weight:600;">💵 Свободные деньги <span style="color:var(--muted);font-weight:400;">(касса − долги)</span></span><span style="font-size:17px;font-weight:800;color:'+(r.freeCash>=0?'var(--pos)':'var(--neg)')+';">'+(r.freeCash<0?'−':'')+fmt(Math.abs(r.freeCash))+' ₽</span></div>':'')+
       App._marginBenchmark(r.marginPct)+
       '<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Из чего складывается</div>'+
       r.factors.map(bar).join('')+tips);
