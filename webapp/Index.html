@@ -2214,6 +2214,21 @@ function fmt(n){
   return Math.round(n).toLocaleString('ru');
 }
 function fmtFull(n){return Math.round(n||0).toLocaleString('ru');}
+// Плавная «накрутка» числа при загрузке (премиум-ощущение)
+function animateNumber(el,to,prefix,onDone){
+  if(!el)return; prefix=prefix||''; to=Math.round(to||0);
+  var reduce=false;try{reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;}catch(e){}
+  var from=parseFloat(el.getAttribute('data-val'));if(isNaN(from))from=to; // первый раз — без прыжка
+  el.setAttribute('data-val',to);
+  if(reduce||from===to){el.textContent=prefix+fmtFull(to);if(onDone)onDone();return;}
+  var start=null,dur=600;
+  function step(ts){ if(start===null)start=ts; var p=Math.min((ts-start)/dur,1);
+    var eased=1-Math.pow(1-p,3);
+    el.textContent=prefix+fmtFull(Math.round(from+(to-from)*eased));
+    if(p<1)requestAnimationFrame(step); else if(onDone)onDone();
+  }
+  requestAnimationFrame(step);
+}
 function fmtDate(iso){
   if(!iso)return'';
   var d=new Date(iso),now=new Date();
@@ -2921,7 +2936,7 @@ var App={
       // hero balance
       var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
       var heroEl=document.getElementById('home-total-bal');
-      if(heroEl)heroEl.textContent='₽ '+fmtFull(totalBal);
+      if(heroEl)animateNumber(heroEl,totalBal,'₽ ');
       // hero delta + split tiles
       var sum=r.summary||{income:0,expense:0,count:0,shiftRevenue:0};
       var inc=sum.income||0,exp=sum.expense||0,prof=inc-exp;
@@ -2933,10 +2948,12 @@ var App={
         deltaEl.textContent=(displayInc>=exp?'▲ ':' ▼ ')+'₽ '+fmtFull(Math.abs(displayInc-exp))+' за период';
       }
       var se=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
-      se('split-revenue','₽ '+fmtFull(inc));
-      se('split-expense','₽ '+fmtFull(exp));
+      var an=function(id,v){var e=document.getElementById(id);if(e)animateNumber(e,v,'₽ ',function(){App._fitText(e,13,22);});};
+      an('split-revenue',inc);
+      an('split-expense',exp);
       se('split-revenue-sub',(sum.count||0)+' операций');
-      se('split-shift',shiftRev>0?'₽ '+fmtFull(shiftRev):'—');
+      var shE=document.getElementById('split-shift');
+      if(shE){if(shiftRev>0)animateNumber(shE,shiftRev,'₽ ',function(){App._fitText(shE,13,22);});else shE.textContent='—';}
       // sidebar capital card
       var sbBal=document.getElementById('sb-total-bal');
       if(sbBal)sbBal.textContent='₽ '+fmtFull(totalBal);
@@ -2950,7 +2967,7 @@ var App={
     gs('getDebts',{ssId:App.s.ssId}).then(function(reps){
       var total=(reps||[]).reduce(function(s,r){return s+(r.debt||0);},0);
       var e=document.getElementById('split-payable');
-      if(e)e.textContent='₽ '+fmt(total);
+      if(e)animateNumber(e,total,'₽ ',function(){App._fitText(e,13,22);});
     }).catch(function(){});
   },
 
@@ -5783,6 +5800,7 @@ var App={
   _renderPulse:function(r){
     var el=document.getElementById('pulse-card');if(!el||!r||r.__error){if(el)el.innerHTML='';return;}
     if(r.enoughData===false){el.innerHTML='';return;} // нет данных за месяц — не показываем счёт
+    if(typeof r.score!=='number'||isNaN(r.score)||!r.verdict){el.innerHTML='';return;} // защита от неполных данных
     var c=App._pulseColor(r.score);
     var circ=2*Math.PI*26;var off=circ*(1-r.score/100);
     var ring='<svg width="64" height="64" viewBox="0 0 64 64" style="flex-shrink:0;">'+
