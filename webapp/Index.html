@@ -150,6 +150,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   transition:background .15s;
 }
 .btn-secondary:hover{background:var(--surface-3);}
+.rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
+.rp-chip:active{background:var(--surface-3);}
 .org-card{
   background:var(--surface);border-radius:var(--radius);
   padding:18px 20px;margin-bottom:10px;
@@ -1734,6 +1736,14 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             <button onclick="App.openTaxes()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 16%,transparent);color:var(--warn,#FF9F0A);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🧮 Налоги</button>
             <button onclick="App.openReconcile()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Сверка выручки</button>
           </div>
+          <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;">
+            <button onclick="App.reportPreset('today')" class="rp-chip">Сегодня</button>
+            <button onclick="App.reportPreset('week')" class="rp-chip">Неделя</button>
+            <button onclick="App.reportPreset('month')" class="rp-chip">Этот месяц</button>
+            <button onclick="App.reportPreset('prevmonth')" class="rp-chip">Прошлый месяц</button>
+            <button onclick="App.reportPreset('quarter')" class="rp-chip">Квартал</button>
+            <button onclick="App.reportPreset('year')" class="rp-chip">Год</button>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
             <div>
               <label style="font-size:11px;color:var(--text-2);display:block;margin-bottom:6px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">С</label>
@@ -2897,6 +2907,20 @@ var App={
     document.getElementById('r-from').value=fmtISO(new Date(now.getFullYear(),now.getMonth(),1));
     document.getElementById('r-to').value=fmtISO(now);
     App.buildReport();
+  },
+  reportPreset:function(type){
+    var now=new Date(),y=now.getFullYear(),m=now.getMonth();
+    var from,to=now;
+    if(type==='today'){from=now;}
+    else if(type==='week'){from=new Date(now);from.setDate(from.getDate()-6);}
+    else if(type==='month'){from=new Date(y,m,1);}
+    else if(type==='prevmonth'){from=new Date(y,m-1,1);to=new Date(y,m,0);}
+    else if(type==='quarter'){from=new Date(y,Math.floor(m/3)*3,1);}
+    else if(type==='year'){from=new Date(y,0,1);}
+    else{from=new Date(y,m,1);}
+    document.getElementById('r-from').value=fmtISO(from);
+    document.getElementById('r-to').value=fmtISO(to);
+    App.haptic(6);App.buildReport();
   },
 
   goToPayments:function(){
@@ -5712,14 +5736,35 @@ var App={
         var el=document.getElementById('goods-list');if(!el)return;
         if(!r.items.length){el.innerHTML='<div style="padding:16px 4px;">Ничего не найдено.</div>';return;}
         var fm=function(v){return fmt(Math.abs(Math.round(v)));};
+        App._goodsItems=r.items;
         el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Найдено: '+r.items.length+(r.total>r.items.length?' из '+r.total:'')+'</div>'+
-          r.items.map(function(it){
+          r.items.map(function(it,gi){
             var sub=[];if(it.supplier)sub.push(it.supplier);if(it.buy)sub.push('закуп '+fm(it.buy)+'₽');if(it.soldQty)sub.push('продано '+it.soldQty);if(it.stockQty)sub.push('ост '+it.stockQty);
-            return'<div style="padding:10px 13px;border-top:1px solid var(--line-2);"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
-              '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div>';
+            return'<div onclick="App.openProductCard('+gi+')" style="padding:10px 13px;border-top:1px solid var(--line-2);cursor:pointer;display:flex;align-items:center;gap:8px;"><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
+              '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div><span style="color:var(--muted);">›</span></div>';
           }).join('');
       }).catch(function(e){var el=document.getElementById('goods-list');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
     },250);
+  },
+
+  openProductCard:function(i){
+    var it=App._goodsItems&&App._goodsItems[i];if(!it)return;
+    var fm=function(v){return fmt(Math.round(v||0));};
+    var markup=(it.buy>0&&it.retail>0)?Math.round((it.retail-it.buy)/it.buy*1000)/10:null;
+    var row=function(lbl,val,col){return val==null||val===''||val===0?'':'<div style="display:flex;justify-content:space-between;padding:10px 13px;border-top:1px solid var(--line-2);font-size:13px;"><span style="color:var(--muted);">'+lbl+'</span><span style="font-weight:700;'+(col?'color:'+col+';':'')+'">'+val+'</span></div>';};
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+(it.barcode?'Штрихкод: '+App._e(it.barcode):'')+(it.group?(it.barcode?' · ':'')+App._e(it.group):'')+'</div>'+
+      '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+      row('Поставщик',it.supplier?App._e(it.supplier):null)+
+      row('Цена закупки',it.buy?fm(it.buy)+' ₽':null)+
+      row('Цена продажи',it.retail?fm(it.retail)+' ₽':null)+
+      row('Наценка',markup!=null?markup+'%':null,markup!=null&&markup<10?'var(--neg)':'var(--pos)')+
+      row('Продано',it.soldQty?it.soldQty+' шт':null)+
+      row('Выручка',it.revenue?fm(it.revenue)+' ₽':null)+
+      row('Прибыль',it.profit?fm(it.profit)+' ₽':null,it.profit>=0?'var(--pos)':'var(--neg)')+
+      row('Остаток',it.stockQty?it.stockQty+' шт':null)+
+      row('Сумма остатка',it.stockSum?fm(it.stockSum)+' ₽':null)+
+      '</div>';
+    App.openModal('<div class="modal-title" style="font-size:17px;line-height:1.3;">'+App._e(it.name)+'</div>'+h);
   },
 
   // ── Налоги (УСН 6% / УСН 15% / Патент) + календарь ─────────────
