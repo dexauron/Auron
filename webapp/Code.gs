@@ -1440,6 +1440,36 @@ function getDayRating(p) {
   } catch(e) { return { __error:e.message, days:[] }; }
 }
 
+// Рекорды магазина за всё время: лучший день, неделя, месяц по выручке.
+function getRecords(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var tz=Session.getScriptTimeZone();
+    if(!base||base.getLastRow()<2) return { };
+    var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var day={}, month={}, week={};
+    rows.forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      if(String(r[B_TYPE-1])!=='Доход'||String(r[B_CAT-1])==='Перевод') return;
+      var amt=parseFloat(r[B_AMT-1])||0; if(amt<=0) return;
+      var dk=Utilities.formatDate(dt,tz,'dd.MM.yyyy');
+      var mk=Utilities.formatDate(dt,tz,'yyyy-MM');
+      var wk=Utilities.formatDate(dt,tz,'yyyy-')+'W'+Utilities.formatDate(dt,tz,'ww');
+      day[dk]=(day[dk]||0)+amt; month[mk]=(month[mk]||0)+amt; week[wk]=(week[wk]||0)+amt;
+    });
+    var top=function(m,fmtk){var bk=null,bv=0;Object.keys(m).forEach(function(k){if(m[k]>bv){bv=m[k];bk=k;}});
+      return bk?{label:fmtk?fmtk(bk):bk, amount:Math.round(bv)}:null;};
+    var mNames=['','Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    return {
+      bestDay: top(day),
+      bestMonth: top(month,function(k){var p2=k.split('-');return mNames[parseInt(p2[1])]+' '+p2[0];}),
+      bestWeek: top(week,function(k){return 'неделя '+k.split('W')[1]+' · '+k.split('-')[0];})
+    };
+  } catch(e) { return { __error:e.message }; }
+}
+
 // Наблюдения: «машина времени» (этот день недели / месяц назад) + сигнал слабого дня.
 function getInsights(p) {
   var ssId=p.ssId;

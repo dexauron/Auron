@@ -3209,7 +3209,8 @@ var App={
     gs('getCashierAnalytics',{ssId:App.s.ssId,period:ap}).then(function(r){
       App._renderCashiers(r);
     });
-    gs('getDayRating',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderDayRating(r);});
+    Promise.all([gs('getDayRating',{ssId:App.s.ssId,period:ap}),gs('getRecords',{ssId:App.s.ssId})])
+      .then(function(res){App._renderDayRating(res[0],res[1]);});
     gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(function(r){App._renderSuppliers(r);});
     gs('getShiftAnalytics',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderShifts(r);});
     gs('getAccountFlow',{ssId:App.s.ssId,period:ap}).then(function(r){App._renderAccFlow(r);});
@@ -3454,9 +3455,15 @@ var App={
     });
   },
 
-  _renderDayRating:function(r){
+  _renderDayRating:function(r,rec){
     var el=document.getElementById('an-heatmap');if(!el)return;
     if(r&&r.__error){el.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(r.__error)+'</div></div>';return;}
+    var recHtml='';
+    if(rec&&(rec.bestDay||rec.bestMonth)){
+      var rc=function(icon,lbl,v){if(!v)return'';return'<div style="flex:1;min-width:0;background:var(--surface-2);border-radius:13px;padding:11px;text-align:center;"><div style="font-size:18px;">'+icon+'</div><div style="font-size:14px;font-weight:800;margin-top:3px;">'+fmt(v.amount)+' ₽</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+lbl+': '+App._e(String(v.label))+'</div></div>';};
+      recHtml='<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">🏆 Рекорды магазина</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:18px;">'+rc('📅','день',rec.bestDay)+rc('🗓',' неделя',rec.bestWeek)+rc('📆','месяц',rec.bestMonth)+'</div>';
+    }
     var days=(r&&r.days)||[];
     var hasData=days.some(function(d){return d.days>0;});
     if(!hasData){el.innerHTML='<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">Пока нет данных о выручке по дням</div></div>';return;}
@@ -3466,7 +3473,7 @@ var App={
     var ranked=days.filter(function(d){return d.days>0;}).slice().sort(function(a,b){return b.avg-a.avg;});
     var rankOf={};ranked.forEach(function(d,i){rankOf[d.dow]=i+1;});
     var best=r.best,worst=r.worst;
-    var h='';
+    var h=recHtml;
     // верхняя плашка с инсайтом
     if(best&&worst&&best.dow!==worst.dow){
       var diff=worst.avg>0?Math.round((best.avg-worst.avg)/worst.avg*100):0;
