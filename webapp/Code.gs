@@ -1466,6 +1466,36 @@ function getInsights(p) {
       insights.push({ tone:d2>=0?'good':'bad', icon:'📸',
         text:'Месяц назад в этот день было '+fmtR(ymRev)+' ₽ — сейчас на '+Math.abs(d2)+'% '+(d2>=0?'больше':'меньше') });
     }
+    // Прогноз выручки на конец месяца по текущему темпу
+    var now=new Date();
+    var ym=Utilities.formatDate(now,tz,'yyyy-MM');
+    var monthSum=0; Object.keys(daily).forEach(function(dk){ if(dk.indexOf(ym+'-')===0) monthSum+=daily[dk]; });
+    var elapsed=now.getDate();
+    var daysInMonth=new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    if(monthSum>0 && elapsed>=3 && elapsed<daysInMonth){
+      var projected=Math.round(monthSum/elapsed*daysInMonth);
+      insights.push({ tone:'neutral', icon:'🔮',
+        text:'По текущему темпу к концу месяца выйдет ~'+projected.toLocaleString('ru')+' ₽ выручки (сейчас '+Math.round(monthSum).toLocaleString('ru')+' ₽)' });
+    }
+    // Напоминание о ближайших платежах (ВЫПЛАТЫ, открытые, срок ≤ завтра)
+    try {
+      var psh=ss.getSheetByName(SH_PAYMENTS);
+      if(psh && psh.getLastRow()>=2){
+        var tomorrow=new Date(now); tomorrow.setDate(tomorrow.getDate()+1);
+        var pv=psh.getRange(2,1,psh.getLastRow()-1,PY_COLS).getValues();
+        pv.forEach(function(r){
+          if(String(r[PY_STATUS-1])==='paid') return;
+          var due=r[PY_DUE-1]; if(!(due instanceof Date)) return;
+          if(due<=tomorrow){
+            var amt=Math.round(parseFloat(r[PY_AMT-1])||0);
+            var payee=String(r[PY_NAME-1]||'');
+            var when=Utilities.formatDate(due,tz,'yyyy-MM-dd')<=Utilities.formatDate(now,tz,'yyyy-MM-dd')?'сегодня/просрочен':'завтра';
+            insights.push({ tone:'bad', icon:'⏰',
+              text:'Платёж '+when+': '+payee+' — '+amt.toLocaleString('ru')+' ₽' });
+          }
+        });
+      }
+    } catch(e){}
     return { insights:insights };
   } catch(e) { return { __error:e.message, insights:[] }; }
 }
