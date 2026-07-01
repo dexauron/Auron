@@ -21,6 +21,7 @@ var SH_RECURRING = 'РЕКУРРЕНТНЫЕ';
 var SH_PAYMENTS  = 'ВЫПЛАТЫ';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
+var SH_LOG       = 'ЖУРНАЛ';
 
 // ТОВАРЫ columns (1-based)
 var G_BARCODE=1,G_NAME=2,G_GROUP=3,G_UNIT=4,G_SUPPLIER=5,G_BUY=6,G_RETAIL=7,
@@ -228,6 +229,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
+  _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -448,6 +450,7 @@ function adjustBalance(p) {
   var ssId=p.ssId, d=p.data||{};
   var amt=Math.round(parseFloat(d.amount)||0);
   if (!amt) return {__error:'Сумма не указана'};
+  try { _log(SpreadsheetApp.openById(ssId), 'Корректировка баланса', _s(d.account)+' на '+amt+' ₽'); } catch(e){}
   return saveQuickEntry({ssId:ssId, data:{
     uuid:Utilities.getUuid(), date:new Date().toISOString(),
     type:amt>0?'Доход':'Расход', category:'Корректировка',
@@ -526,6 +529,7 @@ function deleteTransaction(p) {
     }
     trash.appendRow(row.concat([new Date()]));
     base.deleteRow(rowNum);
+    _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1]));
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return {ok:true};
@@ -1902,6 +1906,30 @@ function _period(period, tz) {
 }
 
 function _s(v) { return String(v||'').replace(/[<>"'`]/g,'').trim().slice(0,500); }
+
+// Журнал изменений: записывает чувствительное действие.
+function _log(ss, action, detail) {
+  try {
+    var sh = ss.getSheetByName(SH_LOG);
+    if (!sh) return;
+    sh.appendRow([new Date(), String(action||''), String(detail||'').slice(0,300)]);
+  } catch(e) {}
+}
+function getAuditLog(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_LOG);
+    if (!sh || sh.getLastRow()<2) return { items:[] };
+    var tz = Session.getScriptTimeZone();
+    var n = Math.min(sh.getLastRow()-1, 100);
+    var vals = sh.getRange(sh.getLastRow()-n+1, 1, n, 3).getValues();
+    var items = vals.map(function(r){
+      var t = r[0] instanceof Date ? Utilities.formatDate(r[0],tz,'dd.MM HH:mm') : '';
+      return { time:t, action:String(r[1]||''), detail:String(r[2]||'') };
+    }).reverse();
+    return { items:items };
+  } catch(e) { return { __error:e.message, items:[] }; }
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // MODULE: RECURRING EXPENSES (Ежемесячные расходы)
