@@ -5782,6 +5782,7 @@ var App={
   _pulseColor:function(s){return s>=80?'var(--pos)':s>=60?'var(--brand)':s>=40?'var(--warn,#FF9F0A)':'var(--neg)';},
   _renderPulse:function(r){
     var el=document.getElementById('pulse-card');if(!el||!r||r.__error){if(el)el.innerHTML='';return;}
+    if(r.enoughData===false){el.innerHTML='';return;} // нет данных за месяц — не показываем счёт
     var c=App._pulseColor(r.score);
     var circ=2*Math.PI*26;var off=circ*(1-r.score/100);
     var ring='<svg width="64" height="64" viewBox="0 0 64 64" style="flex-shrink:0;">'+

@@ -1404,6 +1404,7 @@ function getPulse(p) {
     var ss=SpreadsheetApp.openById(ssId);
     var an=getAnalytics({ssId:ssId, period:'month'});
     var income=an.income||0, expense=an.expense||0, profit=income-expense;
+    if(income===0 && expense===0){ return { enoughData:false, score:0 }; }
     var growth=getGrowthData({ssId:ssId});
     var incChange=(growth&&growth.month)?(growth.month.incomeChange||0):0;
     var debt=0; try{ getDebts({ssId:ssId}).forEach(function(d){if(d.debt>0)debt+=d.debt;}); }catch(e){}
@@ -1558,8 +1559,8 @@ function getInsights(p) {
     }
     // Прогноз выручки на конец месяца по текущему темпу
     var now=new Date();
-    var ym=Utilities.formatDate(now,tz,'yyyy-MM');
-    var monthSum=0; Object.keys(daily).forEach(function(dk){ if(dk.indexOf(ym+'-')===0) monthSum+=daily[dk]; });
+    var ymStr=Utilities.formatDate(now,tz,'yyyy-MM');
+    var monthSum=0; Object.keys(daily).forEach(function(dk){ if(dk.indexOf(ymStr+'-')===0) monthSum+=daily[dk]; });
     var elapsed=now.getDate();
     var daysInMonth=new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
     if(monthSum>0 && elapsed>=3 && elapsed<daysInMonth){
