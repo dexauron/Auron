@@ -1019,13 +1019,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 /* ── Contractor grid / calendar ── */
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;}
 .cal-dow{font-size:11px;font-weight:700;color:var(--muted);text-align:center;padding:4px 0;}
-.cal-cell{aspect-ratio:1/1;border-radius:12px;border:1px solid var(--line-2);background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default;font-size:13px;font-weight:600;color:var(--muted);}
+.cal-cell{aspect-ratio:1/1;border-radius:12px;border:1px solid var(--line-2);background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default;font-size:13px;font-weight:600;color:var(--muted);overflow:hidden;padding:2px;min-width:0;}
 .cal-cell.empty{background:transparent;border-color:transparent;}
 .cal-cell.has{background:color-mix(in oklab,var(--neg) 12%,var(--surface));border-color:color-mix(in oklab,var(--neg) 35%,var(--line));color:var(--ink);cursor:pointer;}
 .cal-cell.today{outline:2px solid var(--brand);outline-offset:1px;color:var(--ink);}
 .cal-cell.sel{background:color-mix(in oklab,var(--brand) 22%,var(--surface));border-color:var(--brand);color:var(--ink);}
 .cal-cell .dnum{font-size:13px;font-weight:700;line-height:1;}
-.cal-cell .dsum{font-size:9px;font-weight:700;color:var(--neg);margin-top:2px;line-height:1;}
+.cal-cell .dsum{font-size:9px;font-weight:700;color:var(--neg);margin-top:2px;line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Supplier summary grid */
 .supp-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 16px 0;}
 .contractor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:0 16px 16px;}
@@ -1587,13 +1587,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div class="split-tile-v num" id="split-payable">—</div>
           <div class="split-tile-x brand">поставщики →</div>
         </div>
-        <div class="split-tile" onclick="App.setTab('kassa',null)" style="cursor:pointer;">
+        <div class="split-tile" onclick="App.setTab('analytics',null)" style="cursor:pointer;">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div>
-            Z-выручка
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+            Прибыль
           </div>
-          <div class="split-tile-v num" id="split-shift">—</div>
-          <div class="split-tile-x brand" id="split-shift-sub">смены →</div>
+          <div class="split-tile-v num" id="split-profit">—</div>
+          <div class="split-tile-x brand">аналитика →</div>
         </div>
         <div class="split-tile" onclick="App.openMetricDetail('expense')" style="cursor:pointer;">
           <div class="split-tile-k">
@@ -1728,8 +1728,12 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Поставщики</div>
           <div style="font-size:13px;color:var(--muted);margin-top:2px;">Контрагенты, долги и выплаты</div>
         </div>
-        <button onclick="App.openPaymentForm(null)" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Запись</button>
+        <div style="display:flex;gap:8px;">
+          <button onclick="App.openTimesheetView()" title="Табель" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📋</button>
+          <button onclick="App.openPaymentForm(null)" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Запись</button>
+        </div>
       </div>
+      <div id="supp-main">
       <!-- Summary cards -->
       <div class="supp-summary" id="supp-summary-cards">
         <div class="card" style="background:linear-gradient(150deg,color-mix(in oklab,var(--brand) 28%,var(--surface)),var(--surface));">
@@ -1774,8 +1778,11 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div id="pay-list"></div>
         </div>
       </div>
-      <!-- Legacy tabs (hidden, kept for timesheet) -->
-      <div id="supp-timesheet" style="display:none;padding:12px 16px;">
+      </div><!-- /supp-main -->
+      <!-- Табель сотрудников -->
+      <div id="supp-timesheet" style="display:none;padding:16px;">
+        <button onclick="App.closeTimesheetView()" style="background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:8px 14px;font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;font-family:var(--font);margin-bottom:14px;">‹ К поставщикам</button>
+        <div style="font-size:20px;font-weight:800;margin-bottom:10px;">Табель сотрудников</div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 10px;">
           <button onclick="App.tsPrevMonth()" style="background:none;border:none;font-size:26px;cursor:pointer;color:var(--text-2);padding:0 6px;">‹</button>
           <span id="ts-month-label" style="font-size:16px;font-weight:700;"></span>
@@ -2791,18 +2798,23 @@ var App={
     if(el)el.classList.remove('open');
   },
 
-  setSuppTab:function(tab,btn){
-    // legacy: only timesheet still uses this
-    var ts=document.getElementById('supp-timesheet');
-    if(ts)ts.style.display=(tab==='timesheet'?'block':'none');
-    if(tab==='timesheet')App.loadTimesheet();
+  openTimesheetView:function(){
+    var main=document.getElementById('supp-main');var ts=document.getElementById('supp-timesheet');
+    if(main)main.style.display='none';if(ts)ts.style.display='block';
+    App.loadTimesheet();App.haptic(6);
   },
+  closeTimesheetView:function(){
+    var main=document.getElementById('supp-main');var ts=document.getElementById('supp-timesheet');
+    if(ts)ts.style.display='none';if(main)main.style.display='';
+  },
+  setSuppTab:function(tab,btn){ if(tab==='timesheet')App.openTimesheetView(); },
 
   // ── Suppliers (new unified view) ──────────────────────────────
   _suppPayables:[],_suppFilter:{payee:null,day:null},_suppSearchQ:'',
 
   loadSuppliers:function(){
     if(!App.s.ssId)return;
+    App.closeTimesheetView();
     Promise.all([
       gs('getPayments',{ssId:App.s.ssId}),
       gs('getDebts',{ssId:App.s.ssId})
@@ -2868,6 +2880,12 @@ var App={
     if(!contractors.length)grid.innerHTML='<div style="padding:12px 0;color:var(--muted);font-size:14px;grid-column:1/-1;">Нет контрагентов — добавьте записи</div>';
   },
 
+  _fmtCompact:function(n){
+    n=Math.round(n||0);
+    if(n>=1000000)return (Math.round(n/100000)/10).toString().replace('.',',')+'м';
+    if(n>=1000)return Math.round(n/1000)+'к';
+    return String(n);
+  },
   _renderSuppCalendar:function(pays){
     var today=new Date();var y=today.getFullYear(),m=today.getMonth();
     var first=new Date(y,m,1);var startDow=(first.getDay()+6)%7;
@@ -2895,7 +2913,7 @@ var App={
       var cls='cal-cell'+(sum>0?' has':'')+(key===todayKey?' today':'')+(key===App._suppFilter.day?' sel':'');
       html+='<div class="'+cls+'" '+(sum>0?'onclick="App._suppFilterDay(\''+key+'\')"':'')+'>'+
         '<span class="dnum">'+d+'</span>'+
-        (sum>0?'<span class="dsum">'+fmt(sum).replace(' ₽','').replace('₽','')+'</span>':'')+
+        (sum>0?'<span class="dsum">'+App._fmtCompact(sum)+'</span>':'')+
       '</div>';
     }
     document.getElementById('supp-cal-grid').innerHTML=html;
@@ -3265,8 +3283,8 @@ var App={
     an('split-revenue',inc);
     an('split-expense',exp);
     se('split-revenue-sub',(sum.count||0)+' операций');
-    var shE=document.getElementById('split-shift');
-    if(shE){if(shiftRev>0)animateNumber(shE,shiftRev,'₽ ',function(){App._fitText(shE,13,22);});else shE.textContent='—';}
+    var pE=document.getElementById('split-profit');
+    if(pE){pE.style.color=prof>=0?'var(--pos)':'var(--neg)';animateNumber(pE,Math.abs(prof),(prof<0?'−₽ ':'₽ '),function(){App._fitText(pE,13,22);});}
     var sbBal=document.getElementById('sb-total-bal');
     if(sbBal)sbBal.textContent='₽ '+fmtFull(totalBal);
     var sbProfit=document.getElementById('sb-month-profit');
@@ -4789,17 +4807,6 @@ var App={
     App.s.settings.shifts.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(n+' добавлена');
   },
 
-  openAddPayType:function(){
-    App.openModal('<div class="modal-title">Способ оплаты</div>'+
-      '<div class="field"><label>Название</label><input id="npt-name" type="text" placeholder="Наличные / Карта / СБП"></div>'+
-      '<button class="btn-primary" onclick="App._savePayType()">Добавить</button>');
-  },
-  _savePayType:function(){
-    var n=document.getElementById('npt-name').value.trim();if(!n)return;
-    if(!App.s.settings.payTypes)App.s.settings.payTypes=[];
-    App.s.settings.payTypes.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('Добавлено');
-  },
-
   openAddSupplier:function(){
     App.openModal('<div class="modal-title">Добавить поставщика</div>'+
       '<div class="field"><label>Полное наименование</label><input id="ns-supp" type="text" placeholder="ООО Альфа Трейд"></div>'+
@@ -5880,26 +5887,6 @@ var App={
       saveBtn+
       '<button class="btn-secondary" style="margin-top:10px;" onclick="App._impForceMap()">Это не отчёт — сопоставить столбцы вручную</button>';
     document.getElementById('imp-map').innerHTML=html;
-  },
-  _imp1cRevenue:function(){
-    var o=App._imp1c;if(!o||!o.выручка){App.toast('Нет суммы выручки',true);return;}
-    var accs=(App.s.accounts||[]).map(function(a){return a.name;});
-    var d=o.период.split('–')[0].trim().split(' ')[0];
-    if(!/^\d{2}\.\d{2}\.\d{4}$/.test(d)){var t=new Date();d=('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear();}
-    App.openModal('<div class="modal-title">Записать выручку</div>'+
-      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Доход «Выручка» на '+fmt(o.выручка)+' ₽ за период '+App._e(o.период)+'.</div>'+
-      '<label style="font-size:12px;color:var(--muted);font-weight:600;">Дата</label>'+
-      '<input id="r1c-date" value="'+d+'" style="width:100%;padding:10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:4px 0 10px;">'+
-      '<label style="font-size:12px;color:var(--muted);font-weight:600;">Счёт</label>'+
-      '<select id="r1c-acc" style="width:100%;padding:10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:4px 0 14px;">'+accs.map(function(a){return'<option>'+App._e(a)+'</option>';}).join('')+'</select>'+
-      '<button class="btn-primary" id="r1c-btn" onclick="App._imp1cRevenueDo()">Записать в журнал</button>');
-  },
-  _imp1cRevenueDo:function(){
-    var o=App._imp1c;var date=document.getElementById('r1c-date').value;var acc=document.getElementById('r1c-acc').value;
-    var btn=document.getElementById('r1c-btn');if(btn){btn.disabled=true;btn.textContent='Записываю…';}
-    gs('importRows',{ssId:App.s.ssId,rows:[{date:date,amount:o.выручка,type:'Доход',category:'Выручка',account:acc,comment:'Импорт продаж 1С · '+o.период}]}).then(function(r){
-      App.toast(r.added?'Выручка записана':'Уже была записана');App.closeModal();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);if(btn){btn.disabled=false;btn.textContent='Записать в журнал';}});
   },
   // Достаёт товарные строки из вставленного отчёта 1С (для справочника товаров)
   _imp1cGoodsRows:function(typ){
