@@ -1396,6 +1396,7 @@ function getPulse(p) {
       marginPct:Math.round(margin*100), incChange:Math.round(incChange),
       debt:Math.round(debt), cash:Math.round(cash), runwayMonths:Math.round(runway*10)/10,
       freeCash:Math.round(cash-debt),
+      income:Math.round(income), expense:Math.round(expense),
       factors:factors, tips:tips
     };
   } catch(e) { return { __error:e.message, score:0 }; }
@@ -1542,6 +1543,21 @@ function getInsights(p) {
         });
       }
     } catch(e){}
+    // Совет дня — практическая мысль, ротация по дню года
+    var tips=[
+      'Сверяй Z-отчёт с кассой каждый день — так недостача не накопится незаметно.',
+      'Заноси расходы сразу, а не в конце недели — иначе теряется до 20% операций.',
+      'Проверяй раздел «Контроль» — приложение само находит завышенные расходы и дубли.',
+      'Раз в неделю делай резервную копию (Настройки → Резервная копия).',
+      'Смотри ABC-анализ: 20% товаров дают 80% прибыли — держи их всегда в наличии.',
+      'Неликвид — это замороженные деньги. Распродавай залежавшийся товар со скидкой.',
+      'Сравнивай цены поставщиков в разделе «Товары» — экономия на закупке = чистая прибыль.',
+      'Планируй закупки и смены под сильные дни недели (Аналитика → Дни).',
+      'Держи запас налички хотя бы на 2–3 недели расходов — защита от кассового разрыва.',
+      'Отправляй дневной отчёт руководителю в один тап (Отчёт → WhatsApp/Telegram).'
+    ];
+    var doy=Math.floor((now-new Date(now.getFullYear(),0,0))/86400000);
+    insights.push({ tone:'neutral', icon:'💡', text:'Совет дня: '+tips[doy%tips.length] });
     return { insights:insights };
   } catch(e) { return { __error:e.message, insights:[] }; }
 }
