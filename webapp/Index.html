@@ -322,9 +322,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .home-hero-delta.up{color:var(--pos);}
 .home-hero-delta.dn{color:var(--neg);}
 /* Account pills inside hero */
-.acct-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(98px,1fr));gap:10px;margin-top:18px;}
+.acct-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px;margin-top:18px;}
 .acct-pill{
-  min-width:0;padding:13px 14px;
+  min-width:0;padding:12px 13px;
   border-radius:16px;
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.1);
@@ -332,8 +332,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   transition:transform .15s,background .15s;
 }
 .acct-pill:active{transform:scale(.97);}
-.acct-pill-top{display:flex;align-items:center;gap:7px;font-size:12px;opacity:.72;font-weight:600;margin-bottom:6px;min-width:0;}
-.acct-pill-dot{width:9px;height:9px;border-radius:3px;flex-shrink:0;}
+.acct-pill-top{display:flex;align-items:center;gap:6px;font-size:11.5px;opacity:.72;font-weight:600;margin-bottom:6px;min-width:0;}
+.acct-pill-dot{width:8px;height:8px;border-radius:3px;flex-shrink:0;}
 .acct-pill-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
 .acct-pill-bal{font-size:17px;font-weight:700;letter-spacing:-.02em;font-family:var(--font-num);white-space:nowrap;display:block;}
 
@@ -362,12 +362,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 
 /* ── Period pills ── */
 .period-bar{
-  display:flex;gap:0;padding:0 16px 14px;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
-  /* segmented control container */
-}
-.period-bar::-webkit-scrollbar{display:none;}
-.period-bar{
+  display:flex;
   background:var(--surface-2);
   border-radius:12px;
   padding:3px;
@@ -376,10 +371,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   border:1px solid rgba(255,255,255,.06);
 }
 .pill{
-  padding:7px 16px;border-radius:9px;font-size:13px;font-weight:650;
+  padding:7px 4px;border-radius:9px;font-size:12.5px;font-weight:650;
   border:none;cursor:pointer;white-space:nowrap;
   background:transparent;color:var(--muted);transition:all .15s;font-family:var(--font);
-  flex:1;text-align:center;
+  flex:1 1 0;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;
 }
 .pill.active{background:var(--surface-3);color:var(--ink);box-shadow:var(--inner-light);}
 
@@ -1339,14 +1334,6 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
 /* Home hero balance - ensure clamp */
 .home-hero-bal{font-size:clamp(38px,9vw,58px);}
-
-/* Topbar brand gradient line indicator */
-.topbar::after{
-  content:"";position:absolute;left:0;top:0;bottom:0;
-  width:3px;
-  background:linear-gradient(180deg,var(--brand) 0%,rgba(94,92,230,.1) 100%);
-  border-radius:0 2px 2px 0;
-}
 
 /* Card glass morphism enhancement - applies to all major cards */
 .tx-day-card,.split-tile,.rep-card,.metric-card,.chart-wrap,.acc-card{
