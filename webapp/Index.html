@@ -1201,6 +1201,22 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 /* Любая широкая таблица/блок внутри окна прокручивается, а не ломает вёрстку */
 .modal table,.sheet table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch;}
 
+/* ═══ Сквозной адаптив под данные: числа и текст не ломают вёрстку ═══ */
+/* Крупные значения ужимаются на узких экранах и не вылезают */
+.metric-value,.stat-tile .v,.split-tile-v,.sb-capital-val{
+  font-size:clamp(17px,5.4vw,24px);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.acc-detail-bal{font-size:clamp(26px,9vw,40px)!important;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Контейнеры значений могут сжиматься (иначе флекс/грид переполняется) */
+.metric-card,.stat-tile,.split-tile,.metric-value,.tx-amount,.tx-info,.picker-name,.settings-row-label{min-width:0;}
+/* Длинные тексты обрезаются многоточием, а не переносятся и не ломают высоту */
+.picker-name,.settings-row-label,.tx-cat{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+/* Метрики и любые «плитки в ряд» — авто-сетка: адаптируются под количество */
+.metric-row{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));}
+/* Списки-строки «слева текст — справа сумма»: сумма не сжимается, текст ужимается */
+.list-row-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
 /* ── Premium design upgrades v5.1 ── */
 
 /* Press animation for buttons */
@@ -3012,7 +3028,7 @@ var App={
     App.s._detailAccId=id;
     var ci=catIcon(acc.name);
     document.getElementById('acc-detail-name').textContent=acc.name;
-    document.getElementById('acc-detail-bal').textContent='₽ '+fmtFull(acc.balance);
+    var adb=document.getElementById('acc-detail-bal');adb.textContent='₽ '+fmtFull(acc.balance);App._fitText(adb,22,40);
     document.getElementById('acc-detail-sub').textContent=(acc.status==='hidden'?'👁 Скрыт · ':'')+'Начальный баланс: ₽ '+fmtFull(acc.startBalance||0);
     var hideBtn=document.getElementById('acc-detail-hide-btn');
     hideBtn.textContent=acc.status==='hidden'?'👁 Показать':'👁 Скрыть';
