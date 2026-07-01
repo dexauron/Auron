@@ -1969,10 +1969,11 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="flex:1;background:var(--bg);border-radius:12px;border:1.5px solid var(--sep);overflow:hidden;">
-          <input type="text" id="np-comment" placeholder="Примечание…" style="width:100%;background:none;border:none;padding:12px 16px;color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);">
+          <input type="text" id="np-comment" oninput="App._npSuggestCat()" placeholder="Примечание…" style="width:100%;background:none;border:none;padding:12px 16px;color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);">
         </div>
         <button onclick="App._attachReceipt()" class="np-receipt-btn" style="background:var(--bg);border:1.5px solid var(--sep);border-radius:12px;padding:12px;cursor:pointer;color:var(--muted);font-size:18px;flex-shrink:0;" title="Прикрепить чек">📷</button>
       </div>
+      <div id="np-cat-suggest" style="display:none;margin-top:8px;"></div>
     </div>
     <div class="np-grid">
       <button class="np-key" onclick="App.npKey('7')">7</button>
@@ -4444,6 +4445,23 @@ var App={
       }).join('');
     }).catch(function(){el.style.display='none';});
   },
+  _npSuggestCat:function(){
+    var box=document.getElementById('np-cat-suggest');if(!box)return;
+    var text=(document.getElementById('np-comment').value||'').trim();
+    if(text.length<3){box.style.display='none';return;}
+    clearTimeout(App._sugT);App._sugT=setTimeout(function(){
+      gs('suggestCategory',{ssId:App.s.ssId,text:text}).then(function(r){
+        var cat=r&&r.category;
+        if(!cat||cat===App.s.npCat){box.style.display='none';return;}
+        box.style.display='block';
+        box.innerHTML='<button onclick="App._applySuggestCat(\''+App._e(cat).replace(/'/g,"\\'")+'\')" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:11px;border:1.5px dashed var(--brand);background:color-mix(in oklab,var(--brand) 10%,transparent);color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💡 Категория: '+App._e(cat)+' — применить</button>';
+      }).catch(function(){box.style.display='none';});
+    },400);
+  },
+  _applySuggestCat:function(cat){
+    App.s.npCat=cat;App._npRefresh();App.haptic(8);
+    var box=document.getElementById('np-cat-suggest');if(box)box.style.display='none';
+  },
   _applyTemplate:function(i){
     var tp=App._quickTpl&&App._quickTpl[i];if(!tp)return;
     var s=App.s;
@@ -5686,6 +5704,15 @@ var App={
     '</div>';
   },
   _plural:function(n,one,few,many){var m=n%100;if(m>=11&&m<=14)return many;var d=n%10;return d===1?one:(d>=2&&d<=4?few:many);},
+  _marginBenchmark:function(m){
+    if(m===undefined||m===null)return'';
+    var lo=20,hi=28; // норма валовой маржи для продуктовой розницы
+    var verdict,color;
+    if(m<lo){verdict='ниже нормы — цены или расходы стоит пересмотреть';color='var(--neg)';}
+    else if(m>hi){verdict='выше нормы — отличный результат';color='var(--pos)';}
+    else{verdict='в пределах нормы для продуктовых';color='var(--pos)';}
+    return '<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.5;">📊 Твоя маржа <b style="color:'+color+';">'+m+'%</b> — '+verdict+'. <span style="color:var(--muted);">Ориентир для продуктовой розницы: '+lo+'–'+hi+'%.</span></div>';
+  },
   openPulse:function(){
     var r=App._pulse;if(!r)return;
     var c=App._pulseColor(r.score);
@@ -5702,6 +5729,7 @@ var App={
         '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:15px;font-weight:800;">'+fmt(r.cash)+' ₽</div><div style="font-size:11px;color:var(--muted);">в кассе/счетах</div></div>'+
         '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div style="font-size:15px;font-weight:800;">'+r.runwayMonths+' мес</div><div style="font-size:11px;color:var(--muted);">запас по расходам</div></div>'+
       '</div>'+
+      App._marginBenchmark(r.marginPct)+
       '<div style="font-size:14px;font-weight:700;margin-bottom:10px;">Из чего складывается</div>'+
       r.factors.map(bar).join('')+tips);
   },

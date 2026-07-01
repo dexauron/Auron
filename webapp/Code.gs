@@ -1497,6 +1497,29 @@ function getQuickTemplates(p) {
   } catch(e) { return { __error:e.message, templates:[] }; }
 }
 
+// Авто-категория: по тексту примечания (контрагенту) — самая частая категория.
+function suggestCategory(p) {
+  var ssId=p.ssId, text=String(p.text||'').toLowerCase().trim();
+  if(text.length<3) return { category:null };
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    if(!base||base.getLastRow()<2) return { category:null };
+    var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var cnt={}, best=null, bestN=0;
+    rows.forEach(function(r){
+      var cmt=String(r[B_CMT-1]||'').toLowerCase(), cat=String(r[B_CAT-1]||'');
+      if(!cat||cat==='Перевод'||!cmt) return;
+      // совпадение по подстроке в любую сторону
+      if(cmt.indexOf(text)>=0 || text.indexOf(cmt)>=0){
+        cnt[cat]=(cnt[cat]||0)+1;
+        if(cnt[cat]>bestN){bestN=cnt[cat];best=cat;}
+      }
+    });
+    return { category:bestN>=2?best:null, count:bestN };
+  } catch(e) { return { category:null }; }
+}
+
 // Returns {current, previous} period comparison
 function getTrendData(p) {
   var ssId=p.ssId;
