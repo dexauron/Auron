@@ -1,0 +1,44 @@
+name: Deploy to Apps Script (clasp)
+
+# Авто-мост: при каждом пуше код из webapp/ заливается в проект Apps Script.
+# Нужен один секрет репозитория: CLASPRC_JSON — содержимое ~/.clasprc.json
+# после `clasp login` на компьютере (см. webapp/DEPLOY.md).
+# Необязательно: переменная APPSSCRIPT_DEPLOYMENT_ID — чтобы обновлять ЖИВУЮ
+# ссылку (/exec) автоматически. Без неё код заливается в проект (виден по /dev),
+# а живую версию разворачиваешь кнопкой один раз.
+
+on:
+  push:
+    branches: [main, master, claude/cool-archimedes-qv458l]
+    paths:
+      - 'webapp/**'
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp@2.4.2
+
+      - name: Auth clasp
+        run: printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+
+      - name: Push code to Apps Script
+        working-directory: webapp
+        run: clasp push -f
+
+      - name: Deploy new version (optional)
+        if: ${{ vars.APPSSCRIPT_DEPLOYMENT_ID != '' }}
+        working-directory: webapp
+        run: clasp deploy -i "${{ vars.APPSSCRIPT_DEPLOYMENT_ID }}" -d "Auto-deploy ${{ github.sha }}"
