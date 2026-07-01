@@ -2267,6 +2267,15 @@ var App={
       var v=el.value||'';
       if(/[+\-*/×÷]/.test(v.replace(/^-/,''))){var r=App._calcEval(v);if(r||r===0)el.value=r;}
     },true);
+    // 1.6) Долгое нажатие на «+» → сразу новая запись (минуя меню)
+    var fab=document.getElementById('fab');
+    if(fab){
+      var t=null;
+      var start=function(){t=setTimeout(function(){App._fabLong=true;App.haptic(18);App.closeActionMenu();App.openNumpad();},480);};
+      var stop=function(){if(t){clearTimeout(t);t=null;}};
+      fab.addEventListener('pointerdown',start,{passive:true});
+      fab.addEventListener('pointerup',stop);fab.addEventListener('pointerleave',stop);fab.addEventListener('pointercancel',stop);
+    }
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
       try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
@@ -2467,6 +2476,7 @@ var App={
   },
 
   openActionMenu:function(){
+    if(App._fabLong){App._fabLong=false;return;} // было долгое нажатие — меню не открываем
     document.getElementById('am-overlay').classList.add('open');
   },
 
