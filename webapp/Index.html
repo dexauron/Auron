@@ -2327,6 +2327,12 @@ var App={
   // Вибро-отклик (есть на Android; iOS Safari игнорирует — безопасно)
   haptic:function(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}},
 
+  // Дружелюбное пустое состояние: иконка + заголовок + подсказка что делать
+  _empty:function(icon,title,hint){
+    return '<div class="empty-state"><div class="empty-icon">'+icon+'</div><div class="empty-text">'+App._e(title)+'</div>'+
+      (hint?'<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;max-width:280px;margin-left:auto;margin-right:auto;">'+App._e(hint)+'</div>':'')+'</div>';
+  },
+
   // Обновление текущего экрана (для pull-to-refresh)
   refreshCurrent:function(){
     var a=document.querySelector('.nav-item.active,.sb-nav-item.active');
@@ -3253,7 +3259,7 @@ var App={
 
   renderTxList:function(txs,cid){
     var el=document.getElementById(cid);
-    if(!txs||!txs.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">Нет операций</div></div>';return;}
+    if(!txs||!txs.length){el.innerHTML=App._empty('📭','Пока нет операций','Нажми «+», чтобы добавить первую запись.');return;}
     var groups={},order=[];
     txs.forEach(function(tx){
       var d=tx.date?String(tx.date).substring(0,10):'';
@@ -3588,7 +3594,7 @@ var App={
   _renderCats:function(r){
     var el=document.getElementById('an-cats');
     var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';}).slice(0,8);
-    if(!cats.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">Нет данных</div></div>';return;}
+    if(!cats.length){el.innerHTML=App._empty('📊','Нет расходов за период','Добавь операции или выбери другой период вверху.');return;}
     App._anCatList=cats;
     el.innerHTML='<div class="chart-wrap"><div class="chart-title">Расходы по категориям</div><canvas id="chart-cats" height="200"></canvas></div>'+
       '<div style="background:var(--card);border-radius:16px;overflow:hidden;">'+
@@ -3613,7 +3619,7 @@ var App={
   _renderCashiers:function(r){
     var el=document.getElementById('an-cashiers');
     var list=r.list||[];
-    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">Нет данных</div></div>';return;}
+    if(!list.length){el.innerHTML=App._empty('👤','Нет данных по кассирам','Открой смену в разделе Касса — здесь появится контроль расхождений.');return;}
     var totalDisc=list.reduce(function(s,c){return s+(c.discAbs||0);},0);
     var anomN=list.filter(function(c){return c.anomaly;}).length;
     el.innerHTML=
@@ -3734,7 +3740,7 @@ var App={
   _renderSuppliers:function(r){
     var el=document.getElementById('an-suppliers');
     var list=r.suppliers||[];
-    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-text">Нет данных по поставщикам</div></div>';return;}
+    if(!list.length){el.innerHTML=App._empty('📦','Нет поставщиков','Добавь поставщика и запиши поставку в разделе Поставщики.');return;}
     var colBg=function(ratio){return ratio>=80?'var(--pos)':ratio>=50?'var(--brand)':'var(--neg)';};
     el.innerHTML=
       '<div class="metric-row" style="margin-bottom:16px;">'+
@@ -3772,7 +3778,7 @@ var App={
   _renderShifts:function(r){
     var el=document.getElementById('an-shifts');
     var list=r.byShift||[];
-    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">🕐</div><div class="empty-text">Нет данных по сменам</div></div>';return;}
+    if(!list.length){el.innerHTML=App._empty('🕐','Нет смен за период','Открой первую смену в разделе Касса.');return;}
     var shiftColors=['#5E5CE6','#30D158','#FF9F0A','#FF453A','#BF5AF2'];
     el.innerHTML=
       '<div class="metric-row" style="margin-bottom:16px;">'+
@@ -3852,7 +3858,7 @@ var App={
   _renderAccFlow:function(r){
     var el=document.getElementById('an-accounts');
     var list=r.accounts||[];
-    if(!list.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">💳</div><div class="empty-text">Нет данных по счетам</div></div>';return;}
+    if(!list.length){el.innerHTML=App._empty('💳','Нет движений по счетам','Добавь доходы и расходы — здесь появится картина по счетам.');return;}
     var totalIncome=list.reduce(function(s,a){return s+a.income;},0);
     var totalExp=list.reduce(function(s,a){return s+a.expense;},0);
     el.innerHTML=
