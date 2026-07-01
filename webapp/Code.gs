@@ -2499,4 +2499,5 @@ function seedDemoData(p) {
   } catch(e) { return { __error: e.message }; }
 }
 
-// Автомост проверка: 2026-07-01T11:06:22Z
+
+// Автомост проверка: 2026-07-01T11:10:54.187Z
