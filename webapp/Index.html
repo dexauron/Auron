@@ -5946,19 +5946,14 @@ var App={
       '<div id="sw-body" style="color:var(--muted);font-size:13px;">Готовим ссылку…</div>');
     var render=function(appUrl){
       var b=document.getElementById('sw-body');if(!b)return;
-      // Приложение Google открывает под «основным» аккаунтом устройства.
-      // Переключение — через параметр authuser (номер аккаунта в браузере).
-      var btns='';
-      for(var i=0;i<4;i++){
-        var u=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'authuser='+i;
-        btns+='<a href="'+App._e(u)+'" target="_top" onclick="App._clearLocalCache()" style="display:block;text-align:center;text-decoration:none;padding:12px;border-radius:13px;background:var(--surface-2);border:1.5px solid var(--line);color:var(--ink);font-size:14px;font-weight:700;margin-bottom:8px;font-family:var(--font);">Аккаунт №'+(i+1)+(i===0?' (основной)':'')+'</a>';
-      }
       var chooser='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(appUrl);
-      b.innerHTML='<div style="font-size:13.5px;line-height:1.6;margin-bottom:14px;">Открой приложение под другим аккаунтом, вошедшим в этот браузер. Номера — в порядке, в котором аккаунты добавлены в Google (аватарка справа вверху браузера).</div>'+
-        btns+
-        '<a href="'+App._e(chooser)+'" target="_top" class="btn-primary" style="display:block;text-align:center;text-decoration:none;margin-top:6px;" onclick="App._clearLocalCache()">➕ Добавить новый аккаунт</a>'+
+      var logout='https://accounts.google.com/Logout?continue='+encodeURIComponent(chooser);
+      b.innerHTML=
+        '<div style="font-size:13.5px;line-height:1.6;margin-bottom:14px;">Приложение открывается под тем Google-аккаунтом, которым ты вошёл в браузер. Самый надёжный способ сменить аккаунт:</div>'+
+        '<a href="'+App._e(logout)+'" target="_top" class="btn-primary" style="display:block;text-align:center;text-decoration:none;" onclick="App._clearLocalCache()">🚪 Выйти из Google и выбрать аккаунт</a>'+
+        '<a href="'+App._e(chooser)+'" target="_top" class="btn-secondary" style="display:block;text-align:center;text-decoration:none;margin-top:8px;" onclick="App._clearLocalCache()">Выбрать без выхода</a>'+
         '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>'+
-        '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">Если нужного аккаунта нет в браузере — сначала «Добавить новый аккаунт», затем вернись сюда и выбери его номер.</div>';
+        '<div style="font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:12px;">«Выйти и выбрать» разлогинит Google во всём браузере (почта, диск) — потом просто войди нужным аккаунтом, и приложение откроется под ним.<br><br>Совет для проверки глазами сотрудника: открой ссылку приложения в режиме инкогнито и войди его аккаунтом — твой вход не тронется.</div>';
     };
     gs('getAppUrl',{}).then(function(r){render((r&&r.url)||'https://script.google.com/macros/s/AKfycbwlPGKcnKq8ENucLdCLnmIt4iZ8Y4BiNjBaIvyfdtVJphvJTHJ8wSDrgBy2g-yHAqs/exec');})
       .catch(function(){render('https://script.google.com/macros/s/AKfycbwlPGKcnKq8ENucLdCLnmIt4iZ8Y4BiNjBaIvyfdtVJphvJTHJ8wSDrgBy2g-yHAqs/exec');});
