@@ -3479,3 +3479,16 @@ function getContractorCard(p) {
             openPay:Math.round(openPay),payments:payments.slice(0,15),orders:orders.slice(0,15),debtHist:debtHist.slice(0,15)};
   } catch(e) { return {__error:e.message}; }
 }
+
+// Свежесть товарных данных: когда последний раз загружали выгрузку из 1С
+function getGoodsMeta(p) {
+  try {
+    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_GOODS);
+    if (!sh||sh.getLastRow()<2) return {lastUpdate:null,count:0};
+    var n=sh.getLastRow()-1;
+    var vals=sh.getRange(2,13,n,1).getValues(); // col 13 = Обновлено
+    var max=0;
+    vals.forEach(function(r){ if(r[0] instanceof Date&&r[0].getTime()>max)max=r[0].getTime(); });
+    return {lastUpdate:max?new Date(max).toISOString():null,count:n};
+  } catch(e) { return {lastUpdate:null,count:0}; }
+}
