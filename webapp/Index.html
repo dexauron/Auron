@@ -5552,6 +5552,7 @@ var App={
   renderSettingsPage:function(){
     App.loadRecurring();
     App._applyViewOnly();
+    App._loadProfileCard();
     // Budget summary
     gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){
       App.s._budgetMap=r.budgetMap||{};
@@ -5961,6 +5962,23 @@ var App={
   },
 
   // ── Мой профиль ──
+  // Заполняет карточку профиля в Настройках: имя, почта, инициалы
+  _loadProfileCard:function(){
+    var fill=function(r){
+      if(!r)return;
+      var n=document.getElementById('prof-name');if(n)n.textContent=r.name||'Мой профиль';
+      var s=document.getElementById('prof-sub');if(s)s.textContent=r.email||'почта не определена';
+      var a=document.getElementById('prof-ava');
+      if(a&&r.name)a.textContent=r.name.trim().split(/\s+/).slice(0,2).map(function(w){return (w[0]||'').toUpperCase();}).join('')||'👤';
+      var tu=document.getElementById('topbar-user');
+      if(tu)tu.textContent=(r.name?r.name:'')+(r.email?(r.name?' · ':'')+r.email:'');
+    };
+    if(App._profile){fill(App._profile);return;}
+    gs('getMyProfile',{}).then(function(r){
+      if(r&&!r.__error){App._profile=r;fill(r);}
+    }).catch(function(){});
+  },
+
   openProfile:function(){
     App.openModal('<div class="modal-title">👤 Мой профиль</div><div id="prof-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getMyProfile',{}).then(function(r){
