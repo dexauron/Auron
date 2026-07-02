@@ -2617,12 +2617,13 @@ function _isOwner(ss) {
 function getTeam(p) {
   var ssId=p.ssId;
   try {
-    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    // Без ensureSheets: чтение должно быть быстрым, лист создаётся при приглашении
+    var ss=SpreadsheetApp.openById(ssId);
     var me=_myEmail(), isOwner=_isOwner(ss);
     var ownerEmail=''; try{ownerEmail=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){}
     var sh=ss.getSheetByName(SH_ACCESS);
     var members=[];
-    if (sh.getLastRow()>=2) {
+    if (sh&&sh.getLastRow()>=2) {
       sh.getRange(2,1,sh.getLastRow()-1,3).getValues().forEach(function(r){
         if (r[0]) members.push({email:String(r[0]).toLowerCase(),role:String(r[1]||'Сотрудник зала'),
           added:(r[2] instanceof Date)?r[2].toISOString():''});

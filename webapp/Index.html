@@ -2458,10 +2458,16 @@ function _gsBar(on){
 function gs(fn,args){
   _gsBar(true);
   return new Promise(function(ok,fail){
+    var done=false;
+    // Сторож: если сервер молчит 45 сек — снимаем «загрузку», говорим честно
+    var wd=setTimeout(function(){
+      if(done)return;done=true;_gsBar(false);
+      fail(new Error('Сервер долго не отвечает. Проверь интернет и попробуй ещё раз.'));
+    },45000);
     google.script.run
-      .withFailureHandler(function(e){_gsBar(false);fail(e);})
+      .withFailureHandler(function(e){if(done)return;done=true;clearTimeout(wd);_gsBar(false);fail(e);})
       .withSuccessHandler(function(r){
-        _gsBar(false);
+        if(done)return;done=true;clearTimeout(wd);_gsBar(false);
         if(r&&r.__error) fail(new Error(r.__error)); else ok(r);
       })[fn](args);
   });
@@ -5977,9 +5983,15 @@ var App={
       var tu=document.getElementById('topbar-user');
       if(tu)tu.textContent=(r.name?r.name:'')+(r.email?(r.name?' · ':'')+r.email:'');
     };
-    if(App._profile){fill(App._profile);return;}
+    // Мгновенно из кэша устройства, потом обновляем с сервера в фоне
+    if(App._profile){fill(App._profile);}
+    else{try{var c=localStorage.getItem('auron_profile');if(c)fill(JSON.parse(c));}catch(e){}}
+    if(App._profileFresh)return;
     gs('getMyProfile',{}).then(function(r){
-      if(r&&!r.__error){App._profile=r;fill(r);}
+      if(r&&!r.__error){
+        App._profile=r;App._profileFresh=true;fill(r);
+        try{localStorage.setItem('auron_profile',JSON.stringify(r));}catch(e){}
+      }
     }).catch(function(){});
   },
 
