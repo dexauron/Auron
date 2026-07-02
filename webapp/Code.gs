@@ -3412,3 +3412,8 @@ function updateMyProfile(p) {
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
 }
+
+// URL приложения — для кнопки «Сменить аккаунт»
+function getAppUrl() {
+  try { return {url:ScriptApp.getService().getUrl()}; } catch(e) { return {url:''}; }
+}

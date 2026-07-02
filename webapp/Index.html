@@ -2106,6 +2106,19 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           </div>
         </div>
       </div>
+      <div class="settings-sec">
+        <div class="settings-sec-title">Аккаунт</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.switchAccount()" style="cursor:pointer;">
+            <span class="settings-row-icon">🚪</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Выйти / сменить аккаунт</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Вход через выбор Google-аккаунта</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
       <div class="settings-sec owner-only">
         <div class="settings-sec-title">Данные</div>
         <div class="settings-list">
@@ -5922,6 +5935,25 @@ var App={
       App.toast('Сохранено ✓');App.loadHome();
       if(data.type==='Расход'&&data.category)App._checkBudgetLimit(data.category);
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);App.loadHome();});
+  },
+
+  // ── Выйти / сменить аккаунт ──
+  switchAccount:function(){
+    if(!confirm('Выйти из аккаунта?\n\nОткроется выбор Google-аккаунта. Локальный кэш на этом устройстве будет очищен, данные в таблицах не пострадают.'))return;
+    // Чистим локальный кэш (кроме ничего — всё пользовательское)
+    try{
+      var keys=[];for(var i=0;i<localStorage.length;i++)keys.push(localStorage.key(i));
+      keys.forEach(function(k){if(/^(auron_|ac_)/.test(k))localStorage.removeItem(k);});
+    }catch(e){}
+    App.toast('Выходим…');
+    gs('getAppUrl',{}).then(function(r){
+      var app=(r&&r.url)||location.href;
+      var url='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(app);
+      try{window.top.location.href=url;}catch(e){location.href=url;}
+    }).catch(function(){
+      var url='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(location.href);
+      try{window.top.location.href=url;}catch(e){location.href=url;}
+    });
   },
 
   // ── Мой профиль ──
