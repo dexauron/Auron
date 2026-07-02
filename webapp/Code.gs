@@ -975,6 +975,51 @@ function getGoodsAnalytics(p) {
 // MODULE: Z-REPORT
 // ═══════════════════════════════════════════════════════════════════════
 
+// Специальный «контрагент» для долга магазина по накладным.
+// Изолирован от графика выплат поставщикам (ВЫПЛАТЫ): это отдельный регистр.
+var STORE_DEBT_REP='🏪 Магазин — накладные';
+
+// Утренняя сверка кассы: сравнивает фактический остаток наличных с расчётным.
+// При apply=true создаёт корректировку, чтобы база всегда равнялась факту.
+// Математика: diff = факт − по базе; diff>0 → Доход «Корректировка», diff<0 → Расход.
+function morningCheck(p) {
+  var ssId=p.ssId, fact=Math.round(parseFloat(p.factCash)||0);
+  var accName=_s(p.account||'Наличные');
+  try {
+    var accounts=getAccounts({ssId:ssId});
+    var acc=null;
+    accounts.forEach(function(a){ if(a.name===accName) acc=a; });
+    if (!acc) return {__error:'Счёт «'+accName+'» не найден'};
+    var calc=Math.round(acc.balance||0);
+    var diff=fact-calc;
+    var applied=false;
+    if (p.apply&&diff!==0) {
+      var r=saveQuickEntry({ssId:ssId,data:{
+        date:new Date().toISOString(),
+        type:diff>0?'Доход':'Расход',
+        category:'Корректировка',
+        account:accName,
+        amount:Math.abs(diff),
+        comment:'Сверка кассы (утро): факт '+fact+', по базе '+calc
+      }});
+      if (r&&r.__error) return {__error:r.__error};
+      applied=true;
+      try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    }
+    return {ok:true, calc:calc, fact:fact, diff:diff, applied:applied};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Текущий долг магазина по накладным (изолирован от долгов ТП и выплат).
+function getStoreDebt(p) {
+  var ssId=p.ssId;
+  try {
+    var debt=0;
+    getDebts({ssId:ssId}).forEach(function(d){ if(d.name===STORE_DEBT_REP) debt=d.debt; });
+    return {debt:Math.round(debt)};
+  } catch(e) { return {debt:0}; }
+}
+
 function saveKassa(p) {
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -996,6 +1041,31 @@ function saveKassa(p) {
       baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход',_s(w.category||'Выплата'),
         Math.round(amt),_s(w.account||'Наличные'),_s(d.cashier||''),_s(w.desc||'Выплата'),'',zRef,true,_s(d.shift||'')]);
     });
+    // Накладные за смену (вечерняя категоризация).
+    // Математика: cashPaid и debtRepaid — реальные движения денег (расход из кассы);
+    // newDebt деньги НЕ двигает — только увеличивает регистр долга магазина.
+    // Долг_вечер = Долг_утро + newDebt − debtRepaid.
+    var inv=d.invoices||{};
+    var invCashPaid=Math.round(parseFloat(inv.cashPaid)||0);
+    var invDebtRepaid=Math.round(parseFloat(inv.debtRepaid)||0);
+    var invNewDebt=Math.round(parseFloat(inv.newDebt)||0);
+    var debtsSh=null;
+    if (invCashPaid>0) {
+      baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Закупка',
+        invCashPaid,'Наличные',_s(d.cashier||''),'Накладные за смену (оплачено наличными)','',zRef,true,_s(d.shift||'')]);
+    }
+    if (invDebtRepaid>0) {
+      baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Долг ТП',
+        invDebtRepaid,'Наличные',_s(d.cashier||''),'Погашение долга по накладным','',zRef,true,_s(d.shift||'')]);
+      debtsSh=debtsSh||ss.getSheetByName(SH_DEBTS);
+      debtsSh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,'oplata',invDebtRepaid,dt,'Наличные',
+        'Погашение при закрытии смены',new Date(),'',_s(zRef)]);
+    }
+    if (invNewDebt>0) {
+      debtsSh=debtsSh||ss.getSheetByName(SH_DEBTS);
+      debtsSh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,'zakupka',invNewDebt,dt,'',
+        'Новые накладные в долг (закрытие смены)',new Date(),'',_s(zRef)]);
+    }
     if (baseRows.length) {
       var sr=base.getLastRow()+1;
       base.getRange(sr,1,baseRows.length,B_COLS).setValues(baseRows);
@@ -1007,7 +1077,9 @@ function saveKassa(p) {
     shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
-    return {ok:true, zRef:zRef};
+    var storeDebt=0;
+    if (invDebtRepaid>0||invNewDebt>0) storeDebt=getStoreDebt({ssId:ssId}).debt;
+    return {ok:true, zRef:zRef, storeDebt:storeDebt};
   } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
@@ -1051,6 +1123,14 @@ function cancelShift(p) {
       var sVals=shiftsSh.getRange(2,1,shiftsSh.getLastRow()-1,1).getValues();
       for (var i=sVals.length-1;i>=0;i--) {
         if (String(sVals[i][0])===String(shiftId)) { shiftsSh.deleteRow(i+2); break; }
+      }
+    }
+    // Roll back store-debt rows created by this shift (zRef stored in status col)
+    var debtsSh=ss.getSheetByName(SH_DEBTS);
+    if (debtsSh&&debtsSh.getLastRow()>=2) {
+      var dVals=debtsSh.getRange(2,1,debtsSh.getLastRow()-1,D_COLS).getValues();
+      for (var j=dVals.length-1;j>=0;j--) {
+        if (String(dVals[j][D_STATUS-1])===String(shiftId)) debtsSh.deleteRow(j+2);
       }
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}

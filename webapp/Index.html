@@ -1649,6 +1649,26 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       </div>
       <div class="kassa-wrap">
         <div class="kassa-row">
+          <div class="kassa-row-hdr">🌅 Утро — сверка наличных</div>
+          <div style="padding:12px 16px;">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin-bottom:10px;">
+              <span style="color:var(--muted);">По базе (расчётный)</span>
+              <span id="km-calc" class="num" style="font-weight:800;">—</span>
+            </div>
+            <div class="field" style="margin:0 0 10px;"><label>Факт в кассе (₽)</label>
+              <input type="number" id="km-fact" placeholder="0" inputmode="decimal" oninput="App.calcMorning()">
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:12px;">
+              <span style="color:var(--muted);">Расхождение</span>
+              <span id="km-diff" class="kassa-diff zero">—</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn-primary" style="flex:1;padding:12px;" onclick="App.applyMorning()">Зафиксировать</button>
+              <button onclick="App.openIzyatie()" style="flex:1;padding:12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--neg);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">− Изъятие</button>
+            </div>
+          </div>
+        </div>
+        <div class="kassa-row">
           <div class="kassa-row-hdr">Параметры смены</div>
           <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
             <div class="field" style="margin:0;"><label>Дата</label><input type="date" id="k-date"></div>
@@ -1683,6 +1703,21 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             <button onclick="App.addWyplata()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">+ Добавить</button>
           </div>
           <div id="wyplata-list"></div>
+        </div>
+        <div class="kassa-row">
+          <div class="kassa-row-hdr">📦 Накладные за день</div>
+          <div style="padding:12px 16px;display:grid;gap:10px;">
+            <div class="field" style="margin:0;"><label>Оплачено наличными (₽)</label>
+              <input type="number" id="ki-cash" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+            </div>
+            <div class="field" style="margin:0;"><label>Погашено старых долгов (₽)</label>
+              <input type="number" id="ki-repaid" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+            </div>
+            <div class="field" style="margin:0;"><label>Осталось в долг — новые накладные (₽)</label>
+              <input type="number" id="ki-new" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+            </div>
+            <div id="ki-summary" style="font-size:13px;color:var(--muted);line-height:1.55;"></div>
+          </div>
         </div>
         <div style="padding:0 0 8px;display:flex;align-items:center;gap:8px;">
           <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);">📷 Прикрепить Z-отчёт</button>
@@ -4151,8 +4186,79 @@ var App={
       sel.innerHTML+='<option value="'+App._e(c)+'">'+App._e(c)+'</option>';
     });
     App.s.wyplatas=[];App.renderWyplatas();
-    if(App.s.accounts&&App.s.accounts.length){App._buildKassaGrid();}
-    else{gs('getAccounts',{ssId:App.s.ssId}).then(function(r){App.s.accounts=r||[];App._buildKassaGrid();});}
+    if(App.s.accounts&&App.s.accounts.length){App._buildKassaGrid();App._loadMorning();}
+    else{gs('getAccounts',{ssId:App.s.ssId}).then(function(r){App.s.accounts=r||[];App._buildKassaGrid();App._loadMorning();});}
+    App._loadStoreDebt();
+  },
+
+  // ── Утро: сверка наличных ──
+  _kMorningCalc:null,
+  _loadMorning:function(){
+    var cash=(App.s.accounts||[]).filter(function(a){return a.name==='Наличные';})[0];
+    App._kMorningCalc=cash?Math.round(cash.balance||0):null;
+    var el=document.getElementById('km-calc');
+    if(el)el.textContent=App._kMorningCalc==null?'—':'₽ '+fmtFull(App._kMorningCalc);
+    App.calcMorning();
+  },
+  calcMorning:function(){
+    var el=document.getElementById('km-diff');if(!el)return;
+    var v=document.getElementById('km-fact').value;
+    if(v===''||App._kMorningCalc==null){el.className='kassa-diff zero';el.textContent='—';return;}
+    var diff=Math.round(parseFloat(v)||0)-App._kMorningCalc;
+    el.className='kassa-diff '+(diff>0?'pos':diff<0?'neg':'zero');
+    el.textContent=diff===0?'✓ сходится':(diff>0?'+':'−')+'₽ '+fmtFull(Math.abs(diff));
+  },
+  applyMorning:function(){
+    var v=document.getElementById('km-fact').value;
+    if(v===''){App.toast('Введите факт в кассе',true);return;}
+    var fact=Math.round(parseFloat(v)||0);
+    var diff=App._kMorningCalc==null?null:fact-App._kMorningCalc;
+    if(diff===0){App.toast('Касса сходится ✓');return;}
+    gs('morningCheck',{ssId:App.s.ssId,factCash:fact,apply:true}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(r.diff===0?'Касса сходится ✓':'Корректировка '+(r.diff>0?'+':'−')+'₽ '+fmtFull(Math.abs(r.diff))+' записана ✓');
+      gs('getAccounts',{ssId:App.s.ssId}).then(function(a){App.s.accounts=a||[];App._loadMorning();});
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  openIzyatie:function(){
+    App.openModal('<div class="modal-title">Изъятие из кассы</div>'+
+      '<div class="field"><label>Сумма (₽)</label><input id="iz-amt" type="number" placeholder="0" inputmode="decimal"></div>'+
+      '<div class="field"><label>Комментарий</label><input id="iz-cmt" type="text" placeholder="Например: личные нужды"></div>'+
+      '<button class="btn-primary" onclick="App._confirmIzyatie()">Записать изъятие</button>');
+  },
+  _confirmIzyatie:function(){
+    var amt=Math.round(parseFloat(document.getElementById('iz-amt').value)||0);
+    if(!amt){App.toast('Введите сумму',true);return;}
+    var cmt=document.getElementById('iz-cmt').value.trim();
+    gs('saveQuickEntry',{ssId:App.s.ssId,data:{date:new Date().toISOString(),type:'Расход',
+      category:'Изъятие владельца',account:'Наличные',amount:amt,comment:cmt||'Изъятие из кассы'}}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Изъятие −₽ '+fmtFull(amt)+' записано ✓');App.closeModal();
+      gs('getAccounts',{ssId:App.s.ssId}).then(function(a){App.s.accounts=a||[];App._loadMorning();});
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Вечер: накладные и долг магазина ──
+  _kStoreDebt:null,
+  _loadStoreDebt:function(){
+    gs('getStoreDebt',{ssId:App.s.ssId}).then(function(r){
+      App._kStoreDebt=Math.round((r&&r.debt)||0);App.calcInvoices();
+    }).catch(function(){});
+  },
+  calcInvoices:function(){
+    var el=document.getElementById('ki-summary');if(!el)return;
+    var cash=Math.round(parseFloat(document.getElementById('ki-cash').value)||0);
+    var rep=Math.round(parseFloat(document.getElementById('ki-repaid').value)||0);
+    var nd=Math.round(parseFloat(document.getElementById('ki-new').value)||0);
+    var out=[];
+    if(cash+rep>0)out.push('Из кассы уйдёт: <b style="color:var(--neg);">−₽ '+fmtFull(cash+rep)+'</b> (наличные '+fmtFull(cash)+' + погашение '+fmtFull(rep)+')');
+    if(App._kStoreDebt!=null&&(rep>0||nd>0)){
+      var after=App._kStoreDebt+nd-rep;
+      out.push('Долг магазина: ₽ '+fmtFull(App._kStoreDebt)+' → <b style="color:'+(after>App._kStoreDebt?'var(--neg)':'var(--pos)')+';">₽ '+fmtFull(after)+'</b>');
+      if(rep>App._kStoreDebt)out.push('<span style="color:var(--warn,#FF9F0A);">⚠️ Погашение больше текущего долга — проверь сумму.</span>');
+    }
+    if(nd>0)out.push('Новые накладные кассу не трогают — только долг.');
+    el.innerHTML=out.join('<br>');
   },
 
   _buildKassaGrid:function(){
@@ -4227,9 +4333,18 @@ var App={
       if(z||f)hasData=true;
       rows.push({account:row.dataset.acc,zAmount:z,factAmount:f});
     });
-    if(!hasData){App.toast('Введите данные',true);return;}
-    gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,rows:rows,wyplatas:App.s.wyplatas}}).then(function(){
-      App.toast('Смена сохранена ✓');App.s.wyplatas=[];App.renderWyplatas();App.initKassa();
+    var inv={
+      cashPaid:Math.round(parseFloat(document.getElementById('ki-cash').value)||0),
+      debtRepaid:Math.round(parseFloat(document.getElementById('ki-repaid').value)||0),
+      newDebt:Math.round(parseFloat(document.getElementById('ki-new').value)||0)
+    };
+    if(!hasData&&!(inv.cashPaid||inv.debtRepaid||inv.newDebt)){App.toast('Введите данные',true);return;}
+    gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,rows:rows,wyplatas:App.s.wyplatas,invoices:inv}}).then(function(r){
+      var msg='Смена сохранена ✓';
+      if(r&&(inv.debtRepaid||inv.newDebt))msg+=' · Долг магазина: ₽ '+fmtFull(r.storeDebt||0);
+      App.toast(msg);App.s.wyplatas=[];App.renderWyplatas();
+      ['ki-cash','ki-repaid','ki-new'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+      App.initKassa();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
