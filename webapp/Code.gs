@@ -2725,11 +2725,39 @@ function acceptInvite(p) {
 // MODULE: CONTRACTORS (справочник контрагентов)
 // ═══════════════════════════════════════════════════════════════════════
 
+// Единый справочник: при первом обращении переносит старые списки
+// (настройка «поставщики», представители из ДОЛГИ, получатели из ВЫПЛАТЫ).
+function _seedContractors(ss, sh) {
+  var names={};
+  try {
+    var st=getSettings({ssId:ss.getId()});
+    (st.suppliers||[]).forEach(function(n){ if(n) names[String(n)]='Поставщик'; });
+  } catch(e){}
+  try {
+    getDebts({ssId:ss.getId()}).forEach(function(d){
+      if (d.name&&d.name!==STORE_DEBT_REP&&!names[d.name]) names[d.name]='Торговый представитель';
+    });
+  } catch(e){}
+  try {
+    var psh=ss.getSheetByName(SH_PAYMENTS);
+    if (psh&&psh.getLastRow()>=2) {
+      psh.getRange(2,PY_NAME,psh.getLastRow()-1,1).getValues().forEach(function(r){
+        var n=String(r[0]||''); if(n&&!names[n]) names[n]='Поставщик';
+      });
+    }
+  } catch(e){}
+  var rows=Object.keys(names).map(function(n){
+    return [Utilities.getUuid(),n,names[n],'','Перенесён из старых списков',new Date()];
+  });
+  if (rows.length) sh.getRange(sh.getLastRow()+1,1,rows.length,6).setValues(rows);
+}
+
 function getContractors(p) {
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_CONTRACTORS);
+    if (sh.getLastRow()<2) { _seedContractors(ss,sh); }
     if (sh.getLastRow()<2) return [];
     return sh.getRange(2,1,sh.getLastRow()-1,6).getValues().filter(function(r){return r[0];})
       .map(function(r){

@@ -545,6 +545,12 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .kassa-total-row{padding:14px 18px;display:flex;justify-content:space-between;font-size:15px;font-weight:700;}
 .k-step-dot{flex:1;height:4px;border-radius:2px;background:var(--surface-3);transition:background .2s;}
 .k-step-dot.on{background:var(--brand);}
+/* Умный поиск-автодополнение */
+.ac-list{position:absolute;left:0;right:0;top:100%;z-index:80;background:var(--surface-3);border:1px solid var(--line);border-radius:12px;margin-top:4px;max-height:186px;overflow-y:auto;box-shadow:0 14px 34px rgba(0,0,0,.55);}
+.ac-item{padding:11px 14px;font-size:14px;cursor:pointer;border-bottom:1px solid var(--line-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:active,.ac-item:hover{background:var(--surface-2);}
+.ac-item b{color:var(--brand);font-weight:800;}
 .wyplata-item{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);}
 .wyplata-del{background:none;border:none;color:var(--neg);font-size:20px;cursor:pointer;}
 
@@ -1936,9 +1942,17 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         </div>
       </div>
       <div class="settings-sec">
-        <div class="settings-sec-title">Справочник поставщиков</div>
-        <div class="settings-list" id="settings-suppliers-list"></div>
-        <button class="btn-secondary" onclick="App.openAddSupplier()" style="margin-top:10px;">+ Добавить поставщика</button>
+        <div class="settings-sec-title">Контрагенты</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openContractorsDir()" style="cursor:pointer;">
+            <span class="settings-row-icon">📇</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Справочник контрагентов</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Поставщики, представители — единый список</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
       </div>
       <div class="settings-sec">
         <div class="settings-sec-title">Статусы накладных</div>
@@ -2977,6 +2991,43 @@ var App={
       App.toast('Сохранено ✓');App.openContractorsDir();
     }).catch(function(e){App.toast(e.message,true);});
   },
+  // ── Умный поиск: автодополнение по буквам для любого поля ──
+  acAttach:function(id,provider){
+    var inp=document.getElementById(id);if(!inp)return;
+    var wrap=inp.parentElement;if(!wrap)return;
+    wrap.style.position='relative';
+    var list=document.createElement('div');list.className='ac-list';list.style.display='none';
+    wrap.appendChild(list);
+    var render=function(){
+      var q=inp.value.trim().toLowerCase();
+      var items=(provider()||[]).filter(function(x){
+        if(!x)return false;var xl=String(x).toLowerCase();
+        return (!q||xl.indexOf(q)>=0)&&xl!==q;
+      }).slice(0,6);
+      if(!items.length){list.style.display='none';return;}
+      list.innerHTML=items.map(function(x){
+        x=String(x);var xl=x.toLowerCase();var i=q?xl.indexOf(q):-1;
+        var lab=i>=0?App._e(x.slice(0,i))+'<b>'+App._e(x.slice(i,i+q.length))+'</b>'+App._e(x.slice(i+q.length)):App._e(x);
+        return '<div class="ac-item" data-v="'+App._e(x)+'">'+lab+'</div>';
+      }).join('');
+      list.style.display='block';
+    };
+    inp.addEventListener('input',render);
+    inp.addEventListener('focus',render);
+    inp.addEventListener('blur',function(){setTimeout(function(){list.style.display='none';},200);});
+    list.addEventListener('mousedown',function(e){
+      e.preventDefault();
+      var it=e.target.closest('.ac-item');if(!it)return;
+      inp.value=it.dataset.v;list.style.display='none';App.haptic(4);
+      inp.dispatchEvent(new Event('change'));
+    });
+  },
+  _contrNames:function(){return (App._contractors||[]).map(function(c){return c.name;});},
+  _contrEnsure:function(cb){
+    if(App._contractors){if(cb)cb();return;}
+    gs('getContractors',{ssId:App.s.ssId}).then(function(r){App._contractors=r||[];if(cb)cb();}).catch(function(){if(cb)cb();});
+  },
+
   // ── Заказы товара ──
   // Заказ — обязательство, не деньги. Касса и долг не трогаются:
   // оплата/долг учитываются накладными при закрытии дня (нет двойного учёта).
@@ -3094,45 +3145,36 @@ var App={
   openOrderForm:function(){
     var today=fmtISO(new Date());
     var exp=fmtISO(new Date(Date.now()+3*86400000));
-    var render=function(contractors){
-      var opts=(contractors||[]).map(function(c){return '<option>'+App._e(c.name)+'</option>';}).join('');
-      App.openModal('<div class="modal-title">🚚 Новый заказ</div>'+
-        '<div class="field"><label>У кого заказали</label><select id="of-contr" onchange="document.getElementById(\'of-new-wrap\').style.display=this.value===\'__new__\'?\'block\':\'none\';">'+opts+'<option value="__new__">➕ Новый контрагент…</option></select></div>'+
-        '<div id="of-new-wrap" style="display:'+(contractors&&contractors.length?'none':'block')+';"><div class="field"><label>Название нового контрагента</label><input id="of-new-name" type="text" placeholder="ООО Альфа"></div></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-        '<div class="field"><label>Когда заказали</label><input id="of-ordered" type="date" value="'+today+'"></div>'+
-        '<div class="field"><label>Когда придёт</label><input id="of-expected" type="date" value="'+exp+'"></div></div>'+
-        '<div class="field"><label>Сумма заказа (₽)</label><input id="of-amt" type="number" placeholder="0" inputmode="decimal"></div>'+
-        '<div class="field"><label>Комментарий</label><input id="of-cmt" type="text" placeholder="Например: молочка, 40 позиций"></div>'+
-        '<button class="btn-primary" onclick="App._orderSave()">Записать заказ</button>');
-      if(!(contractors&&contractors.length)){var s=document.getElementById('of-contr');if(s)s.value='__new__';}
-    };
-    if(App._contractors&&App._contractors.length)render(App._contractors);
-    else gs('getContractors',{ssId:App.s.ssId}).then(function(r){App._contractors=r||[];render(App._contractors);});
+    App.openModal('<div class="modal-title">🚚 Новый заказ</div>'+
+      '<div class="field"><label>У кого заказали</label><input id="of-contr" type="text" placeholder="Начни вводить название…" autocomplete="off"><div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Нет в списке? Просто впиши название — добавим в справочник автоматически.</div></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+      '<div class="field"><label>Когда заказали</label><input id="of-ordered" type="date" value="'+today+'"></div>'+
+      '<div class="field"><label>Когда придёт</label><input id="of-expected" type="date" value="'+exp+'"></div></div>'+
+      '<div class="field"><label>Сумма заказа (₽)</label><input id="of-amt" type="number" placeholder="0" inputmode="decimal"></div>'+
+      '<div class="field"><label>Комментарий</label><input id="of-cmt" type="text" placeholder="Например: молочка, 40 позиций"></div>'+
+      '<button class="btn-primary" onclick="App._orderSave()">Записать заказ</button>');
+    App._contrEnsure(function(){App.acAttach('of-contr',App._contrNames);});
   },
   _orderSave:function(){
-    var sel=document.getElementById('of-contr').value;
-    var newName=document.getElementById('of-new-name')?document.getElementById('of-new-name').value.trim():'';
+    var name=document.getElementById('of-contr').value.trim();
     var d={ordered:document.getElementById('of-ordered').value,
       expected:document.getElementById('of-expected').value,
       amount:Math.round(parseFloat(document.getElementById('of-amt').value)||0),
       comment:document.getElementById('of-cmt').value.trim()};
+    if(!name){App.toast('Введите контрагента',true);return;}
     if(d.expected&&d.ordered&&d.expected<d.ordered){App.toast('Дата прихода раньше даты заказа',true);return;}
     if(!d.amount){App.toast('Введите сумму заказа',true);return;}
-    var go=function(name){
-      d.contractor=name;
+    d.contractor=name;
+    var known=App._contrNames().some(function(n){return n.toLowerCase()===name.toLowerCase();});
+    var go=function(){
       gs('saveOrder',{ssId:App.s.ssId,data:d}).then(function(r){
         if(r&&r.__error){App.toast(r.__error,true);return;}
         App.toast('Заказ записан ✓');App.openOrders();
       }).catch(function(e){App.toast(e.message,true);});
     };
-    if(sel==='__new__'){
-      if(!newName){App.toast('Введите название контрагента',true);return;}
-      gs('saveContractor',{ssId:App.s.ssId,data:{name:newName,type:'Поставщик'}}).then(function(r){
-        if(r&&r.__error){App.toast(r.__error,true);return;}
-        App._contractors=null;go(newName);
-      }).catch(function(e){App.toast(e.message,true);});
-    } else go(sel);
+    if(!known){
+      gs('saveContractor',{ssId:App.s.ssId,data:{name:name,type:'Поставщик'}}).then(function(){App._contractors=null;go();}).catch(function(){go();});
+    } else go();
   },
 
   _contractorDel:function(i){
@@ -4758,6 +4800,7 @@ var App={
       '<div class="field"><label>Сумма (₽)</label><input id="iz-amt" type="number" placeholder="0" inputmode="decimal"></div>'+
       '<div class="field"><label>Комментарий</label><input id="iz-cmt" type="text" placeholder="Например: личные нужды"></div>'+
       '<button class="btn-primary" onclick="App._confirmIzyatie()">Записать изъятие</button>');
+    App.acAttach('iz-cmt',function(){return ['Личные нужды','Инкассация в банк','Оплата поставщику наличными','Размен'];});
   },
   _confirmIzyatie:function(){
     var amt=Math.round(parseFloat(document.getElementById('iz-amt').value)||0);
@@ -4831,6 +4874,7 @@ var App={
       '<div class="field"><label>Сумма (₽)</label><input id="wy-amt" type="number" placeholder="0"></div>'+
       '<div class="field"><label>Счёт</label><select id="wy-acc">'+App.s.accounts.map(function(a){return'<option>'+App._e(a.name)+'</option>';}).join('')+'</select></div>'+
       '<button class="btn-primary" onclick="App._confirmWy()">Добавить</button>');
+    App.acAttach('wy-desc',function(){return ['Инкассация','ЗП за смену','Аванс сотруднику','Хознужды','Возврат покупателю','Оплата поставщику'];});
   },
 
   _confirmWy:function(){
@@ -5136,7 +5180,7 @@ var App={
       var defaultRate=typeof existing.rate!=='undefined'?existing.rate:
         (function(){var emp=(App.s.settings.employees||[]).find(function(e){return(typeof e==='object'?e.name:e)===existing.employee;});return emp&&emp.dailySalary?emp.dailySalary:0;})();
       App.openModal('<div class="modal-title">'+day+' '+new Date(App.s.tsYear,App.s.tsMonth,day).toLocaleDateString('ru',{month:'long'})+'</div>'+
-        '<div class="field"><label>Сотрудник</label><select id="ts-emp">'+
+        '<div class="field"><label>Сотрудник</label><select id="ts-emp" onchange="App._tsEmpDefaults(this.value)">'+
           '<option value="">— выходной / не работал —</option>'+
           empList.map(function(c){return'<option value="'+App._e(c)+'"'+(c===existing.employee?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+
         '</select></div>'+
@@ -5157,6 +5201,26 @@ var App={
         '<div class="field"><label>Комментарий</label><input type="text" id="ts-comment" placeholder="…" value="'+App._e(existing.comment||'')+'"></div>'+
         '<button class="btn-primary" onclick="App._saveTsEntry('+day+')">Сохранить</button>');
     });
+  },
+
+  // Выбрали сотрудника — подставляем его график, часы и ставку автоматически
+  _tsEmpDefaults:function(name){
+    if(!name)return;
+    var emp=(App.s.settings.employees||[]).find(function(e){return (typeof e==='object'?e.name:e)===name;});
+    if(!emp||typeof emp!=='object')return;
+    var tIn=emp.schedIn||'',tOut=emp.schedOut||'';
+    if((!tIn||!tOut)&&emp.schedule){
+      var m=String(emp.schedule).match(/(\d{1,2}[:.]\d{2})\s*[-–—]\s*(\d{1,2}[:.]\d{2})/);
+      if(m){tIn=tIn||m[1].replace('.',':');tOut=tOut||m[2].replace('.',':');}
+    }
+    var set=function(id,v){var el=document.getElementById(id);if(el&&v)el.value=v;};
+    set('ts-in',tIn);set('ts-out',tOut);
+    if(tIn&&tOut){
+      var h=(parseInt(tOut)*60+parseInt(tOut.split(':')[1])-(parseInt(tIn)*60+parseInt(tIn.split(':')[1])))/60;
+      if(h>0)set('ts-hours',String(Math.round(h*2)/2));
+    }
+    if(emp.dailySalary)set('ts-rate',String(emp.dailySalary));
+    App.haptic(4);
   },
 
   _saveTsEntry:function(day){
@@ -5384,14 +5448,7 @@ var App={
         '<span class="settings-row-action" onclick="App.s.settings.shifts.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет смен</span></div>';
     // Способы оплаты убраны — счета сами являются способами оплаты
-    // Supplier directory
-    var suppDirEl=document.getElementById('settings-suppliers-list');
-    var suppDir=App.s.settings.suppliers||[];
-    suppDirEl.innerHTML=suppDir.map(function(s,i){
-      return '<div class="settings-row"><span class="settings-row-icon">📦</span>'+
-        '<span class="settings-row-label" style="flex:1;">'+App._e(s)+'</span>'+
-        '<span class="settings-row-action" onclick="App.s.settings.suppliers.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
-    }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет поставщиков</span></div>';
+    // Поставщики объединены в справочник контрагентов (КОНТРАГЕНТЫ)
     // Rep statuses
     var rsEl=document.getElementById('settings-repstatuses-list');
     var rss=App.s.settings.repStatuses||[];
@@ -5455,19 +5512,6 @@ var App={
     App.s.settings.shifts.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast(n+' добавлена');
   },
 
-  openAddSupplier:function(){
-    App.openModal('<div class="modal-title">Добавить поставщика</div>'+
-      '<div class="field"><label>Полное наименование</label><input id="ns-supp" type="text" placeholder="ООО Альфа Трейд"></div>'+
-      '<button class="btn-primary" onclick="App._saveSupplierDir()">Добавить</button>');
-    setTimeout(function(){var el=document.getElementById('ns-supp');if(el)el.focus();},100);
-  },
-  _saveSupplierDir:function(){
-    var n=document.getElementById('ns-supp').value.trim();if(!n){App.toast('Введите название',true);return;}
-    if(!App.s.settings.suppliers)App.s.settings.suppliers=[];
-    if(App.s.settings.suppliers.indexOf(n)!==-1){App.toast('Уже есть в справочнике',true);return;}
-    App.s.settings.suppliers.push(n);App.saveSettings();App.closeModal();App.renderSettingsPage();App.toast('📦 '+n+' добавлен');
-  },
-
   openAddRepStatus:function(){
     App.openModal('<div class="modal-title">Статус накладной</div>'+
       '<div class="field"><label>Название</label><input id="nrs-name" type="text" placeholder="✅ Оплачено"></div>'+
@@ -5483,18 +5527,21 @@ var App={
     App.openModal('<div class="modal-title">Новый сотрудник</div>'+
       '<div class="field"><label>ФИО</label><input id="ne-name" type="text" placeholder="Иванова Анна"></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-        '<div class="field" style="margin:0;"><label>Расписание</label><input id="ne-sched" type="text" placeholder="09:00-18:00"></div>'+
-        '<div class="field" style="margin:0;"><label>Дневная ставка (₽)</label><input id="ne-sal" type="number" placeholder="2500"></div>'+
+        '<div class="field" style="margin:0;"><label>График: приход</label><input id="ne-in" type="time" value="09:00"></div>'+
+        '<div class="field" style="margin:0;"><label>График: уход</label><input id="ne-out" type="time" value="18:00"></div>'+
       '</div>'+
+      '<div class="field"><label>Дневная ставка (₽)</label><input id="ne-sal" type="number" placeholder="2500" inputmode="decimal"></div>'+
       '<div class="field"><label>Частота выплат</label><select id="ne-freq">'+
         '<option value="monthly">Раз в месяц</option><option value="biweekly">2 раза в месяц</option><option value="daily">Ежедневно</option>'+
       '</select></div>'+
+      '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:10px;">График подставится в табель автоматически — не придётся вводить каждый день заново.</div>'+
       '<button class="btn-primary" onclick="App._saveEmployee()">Добавить</button>');
   },
   _saveEmployee:function(){
     var name=document.getElementById('ne-name').value.trim();
     if(!name){App.toast('Введите имя',true);return;}
-    var emp={name:name,schedule:document.getElementById('ne-sched').value.trim(),
+    var tIn=document.getElementById('ne-in').value,tOut=document.getElementById('ne-out').value;
+    var emp={name:name,schedIn:tIn,schedOut:tOut,schedule:(tIn&&tOut?tIn+'-'+tOut:''),
              dailySalary:parseFloat(document.getElementById('ne-sal').value)||0,
              payFreq:document.getElementById('ne-freq').value};
     if(!App.s.settings.employees)App.s.settings.employees=[];
@@ -5817,23 +5864,21 @@ var App={
     var d=null;
     if(initData&&typeof initData==='string'){try{d=JSON.parse(initData);}catch(e){}}
     else if(initData&&typeof initData==='object')d=initData;
-    // Build supplier autocomplete: directory first, then any existing payees
-    var dirList=App.s.settings.suppliers||[];
-    var byPayee={};
-    (App._suppPayables||[]).forEach(function(r){if(r.payee)byPayee[r.payee]=1;});
-    var allSupps=dirList.slice();
-    Object.keys(byPayee).forEach(function(p){if(allSupps.indexOf(p)===-1)allSupps.push(p);});
-    var payeeOpts='<datalist id="pf-payee-list">'+allSupps.map(function(p){return'<option value="'+App._e(p)+'">';}).join('')+'</datalist>';
-    // Description options datalist
-    var descOpts='<datalist id="pf-title-list"><option value="Поставка товара"><option value="Аванс по договору"><option value="Оплата услуг"><option value="За материалы"><option value="Плата за аренду"><option value="Коммунальные платежи"><option value="Логистика и доставка"></datalist>';
     App.openModal('<div class="modal-title">'+(d&&d.id?'Редактировать запись':'Новая запись на выплату')+'</div>'+
-      payeeOpts+descOpts+
-      '<div class="field"><label>Поставщик</label><input id="pf-payee" type="text" list="pf-payee-list" placeholder="Начните вводить название…" value="'+(d?App._e(d.payee||''):'')+'" autocomplete="off"></div>'+
-      '<div class="field"><label>Описание <span style="color:var(--muted);font-size:12px;font-weight:400;">(необязательно)</span></label><input id="pf-title" type="text" list="pf-title-list" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" ></div>'+
+      '<div class="field"><label>Поставщик</label><input id="pf-payee" type="text" placeholder="Начните вводить название…" value="'+(d?App._e(d.payee||''):'')+'" autocomplete="off"></div>'+
+      '<div class="field"><label>Описание <span style="color:var(--muted);font-size:12px;font-weight:400;">(необязательно)</span></label><input id="pf-title" type="text" placeholder="Поставка товара, договор №…" value="'+(d?App._e(d.title||d.name||''):'')+'" autocomplete="off"></div>'+
       '<div class="field"><label>Сумма (₽) <span style="color:var(--muted);font-size:11px;font-weight:400;">можно 1200+350</span></label><input id="pf-amt" class="calc-input" type="text" inputmode="decimal" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
       '<div class="field"><label>Дата платежа</label><input id="pf-due" type="date" value="'+(d&&d.date?d.date:(d&&d.due?d.due:fmtISO(new Date())))+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="pf-comment" type="text" placeholder="…" value="'+(d?App._e(d.comment||d.note||''):'')+'" ></div>'+
       '<button class="btn-primary" onclick="App._savePayment(\''+(d&&d.id?App._e(String(d.id)):'')+'\')">Сохранить</button>');
+    App._contrEnsure(function(){
+      App.acAttach('pf-payee',function(){
+        var names=App._contrNames();
+        (App._suppPayables||[]).forEach(function(r){if(r.payee&&names.indexOf(r.payee)<0)names.push(r.payee);});
+        return names;
+      });
+    });
+    App.acAttach('pf-title',function(){return ['Поставка товара','Аванс по договору','Оплата услуг','За материалы','Плата за аренду','Коммунальные платежи','Логистика и доставка'];});
   },
 
   _savePayment:function(id){
@@ -5843,6 +5888,10 @@ var App={
     var date=document.getElementById('pf-due').value;
     var comment=document.getElementById('pf-comment').value.trim();
     if(!payee||!amt){App.toast('Укажите контрагента и сумму',true);return;}
+    // Новый контрагент — тихо добавляем в единый справочник
+    if(App._contractors&&!App._contrNames().some(function(n){return n.toLowerCase()===payee.toLowerCase();})){
+      gs('saveContractor',{ssId:App.s.ssId,data:{name:payee,type:'Поставщик'}}).then(function(){App._contractors=null;}).catch(function(){});
+    }
     gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,amount:amt,date:date,comment:comment,status:'open'}}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadSuppliers();
     }).catch(function(e){App.toast(e.message,true);});
