@@ -1552,6 +1552,21 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     <!-- HOME -->
     <div id="tab-home" class="panel active" style="padding:0;">
       <div style="height:16px;"></div>
+      <!-- Упрощённый режим для роли «Сотрудник зала»: крупные плитки, без финансов -->
+      <div id="staff-home" style="display:none;padding:0 16px;">
+        <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:14px;" id="staff-hello">Рабочий день</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <button onclick="App.openNumpad()" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--pos) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
+            <div style="font-size:34px;margin-bottom:8px;">✏️</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Новая запись</div></button>
+          <button onclick="App.setTab('kassa',null)" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--brand) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
+            <div style="font-size:34px;margin-bottom:8px;">🧾</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Кассовый день</div></button>
+          <button onclick="App.setTab('journal',null)" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
+            <div style="font-size:34px;margin-bottom:8px;">📒</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Операции</div></button>
+          <button onclick="App.openOrders()" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
+            <div style="font-size:34px;margin-bottom:8px;">🚚</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Заказы</div></button>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-top:16px;">Финансовая сводка доступна владельцу и бухгалтеру.</div>
+      </div>
       <!-- Hero card -->
       <div class="home-hero">
         <div class="home-hero-ring"></div>
@@ -1796,6 +1811,16 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <select id="jf-emp" onchange="App._jEmpFilter=this.value;App._jRender();" style="flex:1;min-width:0;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
             <option value="">👤 Все сотрудники</option>
           </select>
+        </div>
+        <div style="display:flex;gap:7px;margin-top:8px;align-items:center;">
+          <select id="jf-period" onchange="App._jPeriod=this.value;App._jRender();" style="flex:1;min-width:0;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
+            <option value="">📅 За всё время</option>
+            <option value="today">Сегодня</option>
+            <option value="week">7 дней</option>
+            <option value="month">30 дней</option>
+          </select>
+          <input id="jf-min" type="number" placeholder="₽ от" inputmode="decimal" oninput="App._jRenderDeb()" style="width:84px;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
+          <input id="jf-max" type="number" placeholder="₽ до" inputmode="decimal" oninput="App._jRenderDeb()" style="width:84px;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
         </div>
       </div>
       <div id="j-tx-list" style="padding:0 0 8px;"></div>
@@ -2911,6 +2936,20 @@ var App={
   _applyRoleUI:function(){
     var own=App.s.isOwner!==false;
     document.querySelectorAll('.owner-only').forEach(function(el){el.style.display=own?'':'none';});
+    // Сотрудник зала: упрощённая главная без финансов (паттерн кассовых терминалов)
+    var staff=!own&&App.s.myRole==='Сотрудник зала';
+    var sh=document.getElementById('staff-home');
+    if(sh)sh.style.display=staff?'block':'none';
+    var home=document.getElementById('tab-home');
+    if(home){
+      ['.home-hero','.period-bar','#pulse-card','#insight-card','.home-split'].forEach(function(sel){
+        var el=home.querySelector(sel);if(el)el.style.display=staff?'none':'';
+      });
+    }
+    if(staff){
+      var hello=document.getElementById('staff-hello');
+      if(hello&&App.s.userName)hello.textContent='Привет, '+App.s.userName.split(' ')[0]+' 👋';
+    }
   },
 
   // ── Организации: всегда показываем список + приглашения + назад ──
@@ -3043,10 +3082,11 @@ var App={
     if(list.length){
       h+=list.map(function(c,i){
         return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
-          '<div style="flex:1;min-width:0;cursor:pointer;" onclick="App.openContractorForm('+i+')">'+
+          '<div style="flex:1;min-width:0;cursor:pointer;" onclick="App.openContractorCard(\''+App._e(c.name).replace(/'/g,"\\'")+'\')">'+
           '<div style="font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.name)+'</div>'+
           '<div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.type)+(c.phone?' · '+App._e(c.phone):'')+(c.comment?' · '+App._e(c.comment):'')+'</div></div>'+
           (c.phone?'<a href="tel:'+App._e(c.phone.replace(/[^+0-9]/g,''))+'" onclick="event.stopPropagation();" style="flex-shrink:0;text-decoration:none;font-size:18px;">📞</a>':'')+
+          '<button onclick="event.stopPropagation();App.openContractorForm('+i+')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✏️</button>'+
           '<button onclick="App._contractorDel('+i+')" style="background:none;border:none;color:var(--neg);font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
       }).join('');
     } else {
@@ -3076,6 +3116,55 @@ var App={
       App.toast('Сохранено ✓');App.openContractorsDir();
     }).catch(function(e){App.toast(e.message,true);});
   },
+  // ── Карточка контрагента: всё в одном месте (долг, выплаты, заказы) ──
+  openContractorCard:function(name){
+    App.openModal('<div class="modal-title">'+App._e(name)+'</div><div id="cc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getContractorCard',{ssId:App.s.ssId,name:name}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._ccData=r;App._renderContractorCard();
+    }).catch(function(e){var b=document.getElementById('cc-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderContractorCard:function(){
+    var b=document.getElementById('cc-body');if(!b||!App._ccData)return;
+    var r=App._ccData,R=App._repRow,S=App._repSec;
+    var h='';
+    // Шапка: тип, телефон, комментарий
+    if(r.info){
+      h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">'+
+        '<div style="flex:1;min-width:0;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(r.info.type||'Контрагент')+(r.info.comment?' · '+App._e(r.info.comment):'')+'</div>'+
+        (r.info.phone?'<a href="tel:'+App._e(r.info.phone.replace(/[^+0-9]/g,''))+'" style="flex-shrink:0;text-decoration:none;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:700;color:var(--ink);">📞 Позвонить</a>':'')+
+      '</div>';
+    }
+    // Сводка
+    h+='<div style="display:flex;gap:10px;margin-bottom:4px;">'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:14px;padding:12px;text-align:center;"><div class="num" style="font-size:17px;font-weight:800;color:'+(r.debt>0?'var(--neg)':'var(--pos)')+';">₽ '+fmt(Math.max(r.debt,0))+'</div><div style="font-size:11px;color:var(--muted);">долг</div></div>'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:14px;padding:12px;text-align:center;"><div class="num" style="font-size:17px;font-weight:800;">₽ '+fmt(r.openPay)+'</div><div style="font-size:11px;color:var(--muted);">к выплате</div></div>'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:14px;padding:12px;text-align:center;"><div class="num" style="font-size:17px;font-weight:800;color:var(--pos);">₽ '+fmt(r.totalPay)+'</div><div style="font-size:11px;color:var(--muted);">оплачено всего</div></div></div>';
+    // Действия
+    var esc=App._e(r.name).replace(/'/g,"\\'");
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0 4px;">'+
+      '<button onclick="App.closeModal();App.openOrderForm();setTimeout(function(){var e=document.getElementById(\'of-contr\');if(e)e.value=\''+esc+'\';},250);" style="padding:10px;border-radius:12px;border:none;background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🚚 Заказ</button>'+
+      '<button onclick="App.closeModal();App.openPaymentForm({payee:\''+esc+'\'});" style="padding:10px;border-radius:12px;border:none;background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💳 Выплата</button>'+
+      (r.debt>0?'<button onclick="App.closeModal();App.openDebtModal(\''+esc+'\',\''+esc+'\',\'oplata\');" style="padding:10px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💸 Оплатить долг</button>':'')+
+      '<button onclick="App.closeModal();App._suppFilterPayee(\''+esc+'\');" style="padding:10px;border-radius:12px;border:none;background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Записи в графике</button></div>';
+    // Активные заказы
+    var actOrd=(r.orders||[]).filter(function(o){return o.status==='active';});
+    if(actOrd.length)h+=S('Заказы в пути',actOrd.map(function(o){
+      return R('заказан '+App._fmtD(o.ordered)+' · ожид. '+App._fmtD(o.expected),'₽ '+fmt(o.amount));}).join(''));
+    // Открытые выплаты
+    var openP=(r.payments||[]).filter(function(p){return p.status!=='paid'&&p.status!=='cancelled';});
+    if(openP.length)h+=S('Открытые выплаты',openP.map(function(p){
+      var rest=Math.max(p.amount-p.paid,0);
+      return R((p.title?App._e(p.title)+' · ':'')+'до '+App._fmtD(p.due),'₽ '+fmt(rest),'var(--neg)');}).join(''));
+    // История долга
+    if(r.debtHist&&r.debtHist.length)h+=S('История долга',r.debtHist.slice(0,8).map(function(d){
+      var isOp=d.type==='oplata';
+      return R((isOp?'💸 Оплата':'🛒 Закупка')+' · '+App._fmtD(d.date)+(d.invoice?' · №'+App._e(d.invoice):''),(isOp?'−':'+')+'₽ '+fmt(d.amount),isOp?'var(--pos)':'var(--neg)');}).join(''));
+    if(!actOrd.length&&!openP.length&&!(r.debtHist&&r.debtHist.length))
+      h+='<div style="text-align:center;padding:16px;color:var(--muted);">Движений с этим контрагентом пока нет.</div>';
+    b.innerHTML=h;
+  },
+
   // ── Умный поиск: автодополнение по буквам для любого поля ──
   acAttach:function(id,provider){
     var inp=document.getElementById(id);if(!inp)return;
@@ -3398,7 +3487,7 @@ var App={
     grid.innerHTML=contractors.map(function(c){
       var on=App._suppFilter.payee===c.name;
       var nextStr=c.next?(function(){var d=new Date(c.next+'T12:00:00');return'ближ. '+d.getDate()+' '+MON[d.getMonth()];})():c.cnt+' зап.';
-      return '<div class="card" onclick="App._suppFilterPayee(\''+App._e(c.name)+'\')" style="padding:14px;cursor:pointer;'+(on?'border-color:var(--brand);outline:1px solid var(--brand);':'')+'">'+
+      return '<div class="card" onclick="App.openContractorCard(\''+App._e(c.name).replace(/'/g,"\\'")+'\')" style="padding:14px;cursor:pointer;'+(on?'border-color:var(--brand);outline:1px solid var(--brand);':'')+'">'+
         '<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">'+
           '<span class="tx-ico" style="width:34px;height:34px;background:'+(c.debt>0?'color-mix(in oklab,var(--neg) 16%,transparent)':'color-mix(in oklab,var(--pos) 16%,transparent)')+';color:'+(c.debt>0?'var(--neg)':'var(--pos)')+';">📦</span>'+
           '<div style="min-width:0;"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(c.name)+'</div>'+
@@ -5017,9 +5106,22 @@ var App={
       rows.push({account:row.dataset.acc,zAmount:z,factAmount:f});
     });
     if(!hasData&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
+    var zTotal=0,fTotal=0;rows.forEach(function(x){zTotal+=x.zAmount;fTotal+=x.factAmount;});
+    var wySum=App.s.wyplatas.reduce(function(s,w){return s+(w.amount||0);},0);
+    var wyCnt=App.s.wyplatas.length;
     gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,rows:rows,wyplatas:App.s.wyplatas}}).then(function(){
-      App.toast('Кассовое утро сохранено ✓');App.s.wyplatas=[];App.renderWyplatas();
-      App.initKassa();
+      App.s.wyplatas=[];App.renderWyplatas();
+      var R=App._repRow;
+      App.openModal('<div class="modal-title">✅ Кассовое утро записано</div>'+
+        '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
+        R('Кассир',App._e(cashier))+
+        R('Z-отчёт','₽ '+fmt(zTotal))+
+        R('Факт','₽ '+fmt(fTotal))+
+        R('Расхождение',(fTotal-zTotal===0?'✓ 0':((fTotal-zTotal>0?'+':'−')+'₽ '+fmt(Math.abs(fTotal-zTotal)))),fTotal-zTotal===0?'var(--pos)':'var(--neg)',true)+
+        (wyCnt?R('Выплаты с кассы',wyCnt+' шт · −₽ '+fmt(wySum)):'')+
+        '</div>'+
+        '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
+      App.haptic(12);
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -5031,12 +5133,19 @@ var App={
       newDebt:Math.round(parseFloat(document.getElementById('ki-new').value)||0)
     };
     if(!(inv.cashPaid||inv.debtRepaid||inv.newDebt)){App.toast('Введите суммы по накладным',true);return;}
+    var debtBefore=App._kStoreDebt;
     gs('saveKassa',{ssId:App.s.ssId,data:{date:new Date().toISOString().slice(0,10),invoices:inv}}).then(function(r){
-      var msg='Накладные записаны ✓';
-      if(r&&(inv.debtRepaid||inv.newDebt))msg+=' · Долг магазина: ₽ '+fmtFull(r.storeDebt||0);
-      App.toast(msg);
       ['ki-cash','ki-repaid','ki-new'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
-      App.initKassa();
+      var R=App._repRow;
+      App.openModal('<div class="modal-title">✅ Накладные записаны</div>'+
+        '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
+        (inv.cashPaid?R('Оплачено наличными','−₽ '+fmt(inv.cashPaid),'var(--neg)'):'')+
+        (inv.debtRepaid?R('Погашено долгов','−₽ '+fmt(inv.debtRepaid),'var(--pos)'):'')+
+        (inv.newDebt?R('Новые накладные в долг','+₽ '+fmt(inv.newDebt),'var(--warn,#FF9F0A)'):'')+
+        ((inv.debtRepaid||inv.newDebt)?R('Долг магазина',(debtBefore!=null?'₽ '+fmt(debtBefore)+' → ':'')+'₽ '+fmt(r.storeDebt||0),'var(--neg)',true):'')+
+        '</div>'+
+        '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
+      App.haptic(12);
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -5084,8 +5193,22 @@ var App={
       return f==='income'?ti:(t.type==='Расход'||t.type==='expense');
     });
     if(App._jEmpFilter)list=list.filter(function(t){return t.employee===App._jEmpFilter;});
+    // Период
+    if(App._jPeriod){
+      var from=new Date();from.setHours(0,0,0,0);
+      if(App._jPeriod==='week')from.setDate(from.getDate()-6);
+      else if(App._jPeriod==='month')from.setDate(from.getDate()-29);
+      var fms=from.getTime();
+      list=list.filter(function(t){return t.date&&new Date(t.date).getTime()>=fms;});
+    }
+    // Сумма от/до
+    var mn=parseFloat((document.getElementById('jf-min')||{}).value)||0;
+    var mx=parseFloat((document.getElementById('jf-max')||{}).value)||0;
+    if(mn)list=list.filter(function(t){return (t.amount||0)>=mn;});
+    if(mx)list=list.filter(function(t){return (t.amount||0)<=mx;});
     App.renderTxList(list,'j-tx-list');
   },
+  _jRenderDeb:function(){clearTimeout(App._jrT);App._jrT=setTimeout(function(){App._jRender();},350);},
 
   // ── Reps (торговые представители — legacy, used by openDebtModal) ────
   loadReps:function(){

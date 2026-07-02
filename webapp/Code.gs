@@ -3418,3 +3418,64 @@ function updateMyProfile(p) {
 function getAppUrl() {
   try { return {url:ScriptApp.getService().getUrl()}; } catch(e) { return {url:''}; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: CONTRACTOR CARD (досье контрагента — всё в одном месте)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getContractorCard(p) {
+  var ssId=p.ssId, name=_s(p.name);
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var tz=Session.getScriptTimeZone();
+    var fd=function(v){return (v instanceof Date)?Utilities.formatDate(v,tz,'yyyy-MM-dd'):String(v||'');};
+    // Справочник: телефон, тип, комментарий
+    var info=null;
+    var csh=ss.getSheetByName(SH_CONTRACTORS);
+    if (csh&&csh.getLastRow()>=2) {
+      csh.getRange(2,1,csh.getLastRow()-1,6).getValues().some(function(r){
+        if (String(r[1])===name) { info={type:String(r[2]||''),phone:String(r[3]||''),comment:String(r[4]||'')}; return true; }
+        return false;
+      });
+    }
+    // Долг (регистр ДОЛГИ по этому имени)
+    var debt=0,totalBuy=0,totalPay=0,debtHist=[];
+    var dsh=ss.getSheetByName(SH_DEBTS);
+    if (dsh&&dsh.getLastRow()>=2) {
+      dsh.getRange(2,1,dsh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+        if (String(r[D_REP-1])!==name) return;
+        var amt=parseFloat(r[D_AMT-1])||0, type=String(r[D_TYPE-1]);
+        if (type==='oplata') { debt-=amt; totalPay+=amt; }
+        else { debt+=amt; totalBuy+=amt; }
+        debtHist.push({type:type,amount:Math.round(amt),date:fd(r[D_DATE-1]),comment:String(r[D_CMT-1]||''),invoice:String(r[D_INV-1]||'')});
+      });
+    }
+    // Выплаты по графику
+    var payments=[];
+    var psh=ss.getSheetByName(SH_PAYMENTS);
+    if (psh&&psh.getLastRow()>=2) {
+      psh.getRange(2,1,psh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+        if (String(r[PY_NAME-1])!==name) return;
+        payments.push({id:String(r[PY_ID-1]),amount:Math.round(parseFloat(r[PY_AMT-1])||0),
+          paid:Math.round(parseFloat(r[PY_PAID-1])||0),due:fd(r[PY_DUE-1]),
+          status:String(r[PY_STATUS-1]||'open'),title:String(r[PY_CAT-1]||'')});
+      });
+    }
+    // Заказы
+    var orders=[];
+    var osh=ss.getSheetByName(SH_ORDERS);
+    if (osh&&osh.getLastRow()>=2) {
+      osh.getRange(2,1,osh.getLastRow()-1,O_COLS).getValues().forEach(function(r){
+        if (String(r[O_CONTR-1])!==name) return;
+        orders.push({id:String(r[O_ID-1]),amount:Math.round(parseFloat(r[O_AMT-1])||0),
+          ordered:fd(r[O_ORDERED-1]),expected:fd(r[O_EXPECTED-1]),
+          status:String(r[O_STATUS-1]||'active'),factAmount:Math.round(parseFloat(r[O_FACT-1])||0)});
+      });
+    }
+    debtHist.reverse(); payments.reverse(); orders.reverse();
+    var openPay=0;
+    payments.forEach(function(x){ if(x.status!=='paid'&&x.status!=='cancelled') openPay+=Math.max(x.amount-x.paid,0); });
+    return {name:name,info:info,debt:Math.round(debt),totalBuy:Math.round(totalBuy),totalPay:Math.round(totalPay),
+            openPay:Math.round(openPay),payments:payments.slice(0,15),orders:orders.slice(0,15),debtHist:debtHist.slice(0,15)};
+  } catch(e) { return {__error:e.message}; }
+}
