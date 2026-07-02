@@ -19,6 +19,8 @@ var SH_PROFILE   = 'ПРОФИЛЬ';
 var SH_ORGS      = 'ОРГАНИЗАЦИИ';
 var SH_RECURRING = 'РЕКУРРЕНТНЫЕ';
 var SH_PAYMENTS  = 'ВЫПЛАТЫ';
+var SH_ACCESS    = 'ДОСТУП';
+var SH_CONTRACTORS='КОНТРАГЕНТЫ';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_LOG       = 'ЖУРНАЛ';
@@ -230,6 +232,8 @@ function ensureSheets(ss) {
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
+  _mk(ss,SH_ACCESS,   ['Email','Роль','Добавлен']);
+  _mk(ss,SH_CONTRACTORS,['ID','Название','Тип','Телефон','Комментарий','Создано']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -2583,4 +2587,369 @@ function seedDemoData(p) {
     lock.releaseLock();
     return { ok: true, txCount: rows.length };
   } catch(e) { return { __error: e.message }; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: TEAM / ACCESS (сотрудники и доступ к организации)
+// Владелец таблицы = владелец организации. Только он управляет доступом.
+// ═══════════════════════════════════════════════════════════════════════
+
+function _myEmail() {
+  try { return String(Session.getActiveUser().getEmail()||'').toLowerCase(); } catch(e) { return ''; }
+}
+
+function _isOwner(ss) {
+  try {
+    var owner=ss.getOwner();
+    return owner&&String(owner.getEmail()).toLowerCase()===_myEmail();
+  } catch(e) { return false; }
+}
+
+function getTeam(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var me=_myEmail(), isOwner=_isOwner(ss);
+    var ownerEmail=''; try{ownerEmail=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){}
+    var sh=ss.getSheetByName(SH_ACCESS);
+    var members=[];
+    if (sh.getLastRow()>=2) {
+      sh.getRange(2,1,sh.getLastRow()-1,3).getValues().forEach(function(r){
+        if (r[0]) members.push({email:String(r[0]).toLowerCase(),role:String(r[1]||'Сотрудник зала'),
+          added:(r[2] instanceof Date)?r[2].toISOString():''});
+      });
+    }
+    var myRole=isOwner?'Владелец':'Сотрудник зала';
+    members.forEach(function(m){ if(m.email===me) myRole=m.role; });
+    return {isOwner:isOwner, myEmail:me, ownerEmail:ownerEmail, myRole:myRole, members:members};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function inviteMember(p) {
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (!_isOwner(ss)) return {__error:'Только владелец может приглашать сотрудников'};
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return {__error:'Неверный email'};
+    if (email===_myEmail()) return {__error:'Это ваш собственный email'};
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh.getLastRow()>=2) {
+      var ex=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<ex.length;i++) if (String(ex[i][0]).toLowerCase()===email)
+        return {__error:'Этот сотрудник уже приглашён'};
+    }
+    ss.addEditor(email);
+    sh.appendRow([email,role,new Date()]);
+    _log(ss,'Приглашение сотрудника',email+' · '+role);
+    return getTeam({ssId:ssId});
+  } catch(e) { return {__error:e.message}; }
+}
+
+function removeMember(p) {
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase();
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец может удалять доступ'};
+    try { ss.removeEditor(email); } catch(e){}
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=vs.length-1;i>=0;i--)
+        if (String(vs[i][0]).toLowerCase()===email) sh.deleteRow(i+2);
+    }
+    _log(ss,'Удалён доступ',email);
+    return getTeam({ssId:ssId});
+  } catch(e) { return {__error:e.message}; }
+}
+
+function setMemberRole(p) {
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role);
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец может менять роли'};
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++)
+        if (String(vs[i][0]).toLowerCase()===email) {
+          sh.getRange(i+2,2).setValue(role);
+          _log(ss,'Смена роли',email+' → '+role);
+          return getTeam({ssId:ssId});
+        }
+    }
+    return {__error:'Сотрудник не найден'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Приглашения для сотрудника: таблицы Auron, которыми с ним поделились,
+// но которых ещё нет в его списке организаций.
+function findInvites() {
+  try {
+    var myOrgs={};
+    var d=initUserApp();
+    (d.orgs||[]).forEach(function(o){ myOrgs[o.ssId]=true; });
+    var out=[];
+    var files=DriveApp.searchFiles("sharedWithMe and mimeType='application/vnd.google-apps.spreadsheet' and title contains 'Auron'");
+    var n=0;
+    while (files.hasNext()&&n<20) {
+      var f=files.next(); n++;
+      if (myOrgs[f.getId()]) continue;
+      out.push({ssId:f.getId(),name:f.getName().replace(/^Auron\s*[—-]\s*/,''),
+        owner:(function(){try{return f.getOwner().getEmail();}catch(e){return '';}})()});
+    }
+    return {invites:out};
+  } catch(e) { return {invites:[],__error:e.message}; }
+}
+
+function acceptInvite(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); // проверка доступа
+    var name=ss.getName().replace(/^Auron\s*[—-]\s*/,'');
+    var prof=_profileSS();
+    if (!prof) return {__error:'Сначала зарегистрируйтесь'};
+    var orgsSh=prof.getSheetByName(SH_ORGS);
+    if (orgsSh.getLastRow()>=2) {
+      var vs=orgsSh.getRange(2,1,orgsSh.getLastRow()-1,3).getValues();
+      for (var i=0;i<vs.length;i++) if (String(vs[i][2])===ssId)
+        return {ok:true,ssId:ssId,name:String(vs[i][1])};
+    }
+    orgsSh.appendRow([Utilities.getUuid(),name,ssId]);
+    return {ok:true,ssId:ssId,name:name};
+  } catch(e) { return {__error:'Нет доступа к этой организации: '+e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: CONTRACTORS (справочник контрагентов)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getContractors(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_CONTRACTORS);
+    if (sh.getLastRow()<2) return [];
+    return sh.getRange(2,1,sh.getLastRow()-1,6).getValues().filter(function(r){return r[0];})
+      .map(function(r){
+        return {id:String(r[0]),name:String(r[1]),type:String(r[2]||'Поставщик'),
+                phone:String(r[3]||''),comment:String(r[4]||'')};
+      });
+  } catch(e) { return []; }
+}
+
+function saveContractor(p) {
+  var ssId=p.ssId, d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_CONTRACTORS);
+    if (!_s(d.name)) return {__error:'Введите название'};
+    if (d.id&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++)
+        if (String(vs[i][0])===String(d.id)) {
+          sh.getRange(i+2,2,1,4).setValues([[_s(d.name),_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||'')]]);
+          return {ok:true,id:String(d.id)};
+        }
+    }
+    var id=Utilities.getUuid();
+    sh.appendRow([id,_s(d.name),_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||''),new Date()]);
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function deleteContractor(p) {
+  var ssId=p.ssId, id=p.id;
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_CONTRACTORS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=vs.length-1;i>=0;i--)
+      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: PRO REPORTS (развёрнутый дневной и месячный отчёты)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Хелпер: собрать метрики по операциям БАЗЫ за интервал [from,to] (ms).
+function _sliceMetrics(rows, from, to) {
+  var m={income:0,expense:0,txCount:0,byCatInc:{},byCatExp:{},byAcc:{},
+         izyatia:0,zakupka:0,zp:0,dolgTP:0,zRevenue:0,byDay:{}};
+  rows.forEach(function(r){
+    var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+    var ms=dt.getTime(); if(ms<from||ms>to) return;
+    var t=String(r[B_TYPE-1]),cat=String(r[B_CAT-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]);
+    if (cat==='Перевод') return; // переводы между счетами — не доход/расход
+    var dk=Utilities.formatDate(dt,Session.getScriptTimeZone(),'yyyy-MM-dd');
+    if (!m.byDay[dk]) m.byDay[dk]={income:0,expense:0};
+    if (!m.byAcc[acc]) m.byAcc[acc]={income:0,expense:0};
+    if (t==='Доход') {
+      m.income+=amt;m.txCount++;m.byCatInc[cat]=(m.byCatInc[cat]||0)+amt;
+      m.byAcc[acc].income+=amt;m.byDay[dk].income+=amt;
+      if (cat==='Z-отчёт'||cat==='Продажи') m.zRevenue+=amt;
+    } else if (t==='Расход') {
+      m.expense+=amt;m.txCount++;m.byCatExp[cat]=(m.byCatExp[cat]||0)+amt;
+      m.byAcc[acc].expense+=amt;m.byDay[dk].expense+=amt;
+      if (cat==='Изъятие владельца') m.izyatia+=amt;
+      if (cat==='Закупка') m.zakupka+=amt;
+      if (cat==='ЗП') m.zp+=amt;
+      if (cat==='Долг ТП') m.dolgTP+=amt;
+    }
+  });
+  return m;
+}
+
+function _catList(obj) {
+  return Object.keys(obj).map(function(k){return {category:k,total:Math.round(obj[k])};})
+    .sort(function(a,b){return b.total-a.total;});
+}
+
+// Развёрнутый отчёт за день.
+function getDayReport(p) {
+  var ssId=p.ssId, dateStr=p.date; // yyyy-MM-dd
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    var base=ss.getSheetByName(SH_BASE);
+    var rows=base.getLastRow()>=2?base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues():[];
+    var d0=new Date(dateStr+'T00:00:00'), d1=new Date(dateStr+'T23:59:59');
+    var day=_sliceMetrics(rows,d0.getTime(),d1.getTime());
+    // Вчера и средняя за 7 предыдущих дней — для сравнения
+    var y0=new Date(d0.getTime()-86400000), y1=new Date(d1.getTime()-86400000);
+    var prev=_sliceMetrics(rows,y0.getTime(),y1.getTime());
+    var w0=new Date(d0.getTime()-7*86400000);
+    var week=_sliceMetrics(rows,w0.getTime(),d0.getTime()-1);
+    var avg7Inc=week.income/7, avg7Exp=week.expense/7;
+    // Смены за день
+    var shifts=[];
+    var shSh=ss.getSheetByName(SH_SHIFTS);
+    if (shSh&&shSh.getLastRow()>=2) {
+      shSh.getRange(2,1,shSh.getLastRow()-1,8).getValues().forEach(function(r){
+        var dt=r[1]; if(!(dt instanceof Date)) return;
+        if (Utilities.formatDate(dt,tz,'yyyy-MM-dd')!==dateStr) return;
+        var rev=0; try{JSON.parse(String(r[4]||'[]')).forEach(function(x){rev+=parseFloat(x.zAmount||0);});}catch(e){}
+        shifts.push({shift:String(r[2]),cashier:String(r[3]),revenue:Math.round(rev),
+                     discrepancy:Math.round(parseFloat(r[6])||0)});
+      });
+    }
+    // Долг магазина: движение за день
+    var debtSh=ss.getSheetByName(SH_DEBTS);
+    var debtNew=0,debtRepaid=0,storeDebt=0;
+    if (debtSh&&debtSh.getLastRow()>=2) {
+      debtSh.getRange(2,1,debtSh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+        if (String(r[D_REP-1])!==STORE_DEBT_REP) return;
+        var amt=parseFloat(r[D_AMT-1])||0, type=String(r[D_TYPE-1]);
+        if (type==='oplata') storeDebt-=amt; else storeDebt+=amt;
+        var dt=r[D_DATE-1]; if(!(dt instanceof Date)) return;
+        if (Utilities.formatDate(dt,tz,'yyyy-MM-dd')!==dateStr) return;
+        if (type==='oplata') debtRepaid+=amt; else debtNew+=amt;
+      });
+    }
+    var accounts=getAccounts({ssId:ssId});
+    return {
+      date:dateStr,
+      income:Math.round(day.income), expense:Math.round(day.expense),
+      profit:Math.round(day.income-day.expense), txCount:day.txCount,
+      zRevenue:Math.round(day.zRevenue),
+      byCatInc:_catList(day.byCatInc), byCatExp:_catList(day.byCatExp),
+      byAcc:Object.keys(day.byAcc).map(function(k){
+        return {account:k,income:Math.round(day.byAcc[k].income),expense:Math.round(day.byAcc[k].expense)};}),
+      izyatia:Math.round(day.izyatia), zakupka:Math.round(day.zakupka),
+      zp:Math.round(day.zp), dolgTP:Math.round(day.dolgTP),
+      shifts:shifts,
+      debtNew:Math.round(debtNew), debtRepaid:Math.round(debtRepaid),
+      storeDebt:Math.round(storeDebt),
+      prevIncome:Math.round(prev.income), prevExpense:Math.round(prev.expense),
+      avg7Income:Math.round(avg7Inc), avg7Expense:Math.round(avg7Exp),
+      accounts:accounts.map(function(a){return {name:a.name,balance:a.balance};})
+    };
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Развёрнутый отчёт за месяц.
+function getMonthReport(p) {
+  var ssId=p.ssId, year=parseInt(p.year), month=parseInt(p.month); // month: 0-11
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    var base=ss.getSheetByName(SH_BASE);
+    var rows=base.getLastRow()>=2?base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues():[];
+    var m0=new Date(year,month,1), m1=new Date(year,month+1,0,23,59,59);
+    var cur=_sliceMetrics(rows,m0.getTime(),m1.getTime());
+    var p0=new Date(year,month-1,1), p1=new Date(year,month,0,23,59,59);
+    var prev=_sliceMetrics(rows,p0.getTime(),p1.getTime());
+    // По дням: динамика, лучший/худший
+    var daysInMonth=new Date(year,month+1,0).getDate();
+    var days=[],best=null,worst=null,workDays=0;
+    for (var d=1;d<=daysInMonth;d++) {
+      var dk=Utilities.formatDate(new Date(year,month,d),tz,'yyyy-MM-dd');
+      var v=cur.byDay[dk]||{income:0,expense:0};
+      var row={day:d,income:Math.round(v.income),expense:Math.round(v.expense)};
+      days.push(row);
+      if (v.income>0) {
+        workDays++;
+        if (!best||v.income>best.income) best={day:d,income:Math.round(v.income)};
+        if (!worst||v.income<worst.income) worst={day:d,income:Math.round(v.income)};
+      }
+    }
+    // Смены месяца: расхождения касс
+    var shSh=ss.getSheetByName(SH_SHIFTS);
+    var shiftCount=0,discSum=0,discDays=0;
+    if (shSh&&shSh.getLastRow()>=2) {
+      shSh.getRange(2,1,shSh.getLastRow()-1,8).getValues().forEach(function(r){
+        var dt=r[1]; if(!(dt instanceof Date)) return;
+        if (dt<m0||dt>m1) return;
+        shiftCount++;
+        var disc=Math.round(parseFloat(r[6])||0);
+        if (disc!==0){discDays++;discSum+=disc;}
+      });
+    }
+    // Долг магазина: на начало и конец месяца
+    var debtSh=ss.getSheetByName(SH_DEBTS);
+    var debtStart=0,debtEnd=0,debtNew=0,debtRepaid=0;
+    if (debtSh&&debtSh.getLastRow()>=2) {
+      debtSh.getRange(2,1,debtSh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+        if (String(r[D_REP-1])!==STORE_DEBT_REP) return;
+        var amt=parseFloat(r[D_AMT-1])||0;
+        var sign=String(r[D_TYPE-1])==='oplata'?-1:1;
+        var dt=r[D_DATE-1]; if(!(dt instanceof Date)) return;
+        if (dt<m0) debtStart+=sign*amt;
+        if (dt<=m1) debtEnd+=sign*amt;
+        if (dt>=m0&&dt<=m1) { if(sign<0)debtRepaid+=amt; else debtNew+=amt; }
+      });
+    }
+    // Выплаты поставщикам (график) за месяц
+    var paySh=ss.getSheetByName(SH_PAYMENTS);
+    var supPaid=0,supPlanned=0;
+    if (paySh&&paySh.getLastRow()>=2) {
+      paySh.getRange(2,1,paySh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+        var dt=r[PY_DUE-1]; if(!(dt instanceof Date)) return;
+        if (dt<m0||dt>m1) return;
+        supPlanned+=parseFloat(r[PY_AMT-1])||0;
+        supPaid+=parseFloat(r[PY_PAID-1])||0;
+      });
+    }
+    var profit=cur.income-cur.expense;
+    return {
+      year:year, month:month,
+      income:Math.round(cur.income), expense:Math.round(cur.expense),
+      profit:Math.round(profit),
+      margin:cur.income?Math.round(profit/cur.income*100):0,
+      txCount:cur.txCount, zRevenue:Math.round(cur.zRevenue),
+      byCatInc:_catList(cur.byCatInc), byCatExp:_catList(cur.byCatExp),
+      days:days, best:best, worst:worst, workDays:workDays,
+      avgDayIncome:workDays?Math.round(cur.income/workDays):0,
+      prevIncome:Math.round(prev.income), prevExpense:Math.round(prev.expense),
+      prevProfit:Math.round(prev.income-prev.expense),
+      izyatia:Math.round(cur.izyatia), zakupka:Math.round(cur.zakupka),
+      zp:Math.round(cur.zp), dolgTP:Math.round(cur.dolgTP),
+      shiftCount:shiftCount, discSum:discSum, discDays:discDays,
+      debtStart:Math.round(debtStart), debtEnd:Math.round(debtEnd),
+      debtNew:Math.round(debtNew), debtRepaid:Math.round(debtRepaid),
+      supPaid:Math.round(supPaid), supPlanned:Math.round(supPlanned),
+      accounts:getAccounts({ssId:ssId}).map(function(a){return {name:a.name,balance:a.balance};})
+    };
+  } catch(e) { return {__error:e.message}; }
 }

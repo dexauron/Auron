@@ -1377,6 +1377,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   <div class="screen-sub">Выберите или создайте магазин</div>
   <div id="org-list"></div>
   <button class="btn-secondary" onclick="App.showScreen('scr-new-org')">+ Добавить организацию</button>
+  <div id="org-invites"></div>
+  <button id="org-back" class="btn-secondary" style="display:none;margin-top:10px;" onclick="App.showApp()">← Назад в приложение</button>
 </div>
 
 <div id="scr-new-org" class="screen">
@@ -1511,7 +1513,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   <div class="app-body">
   <div class="topbar">
     <div class="topbar-left">
-      <div class="topbar-org" id="topbar-org-name" onclick="App.showScreen('scr-orgs')">Загрузка...</div>
+      <div class="topbar-org" id="topbar-org-name" onclick="App.openOrgs()">Загрузка...</div>
       <div class="topbar-user" id="topbar-user"></div>
     </div>
     <div class="topbar-right">
@@ -1785,6 +1787,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div style="font-size:13px;color:var(--muted);margin-top:2px;">Контрагенты, долги и выплаты</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button onclick="App.openContractorsDir()" title="Справочник контрагентов" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📇</button>
           <button onclick="App.openTimesheetView()" title="Табель" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📋</button>
           <button onclick="App.openPaymentForm(null)" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Запись</button>
         </div>
@@ -1856,7 +1859,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         <div style="background:var(--card);border-radius:16px;padding:16px;margin-bottom:14px;">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
             <button onclick="App.dayReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--brand) 16%,transparent);color:var(--brand);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📅 Дневной отчёт</button>
-            <button onclick="App.monthReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 14%,transparent);color:var(--pos);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📆 Закрыть месяц</button>
+            <button onclick="App.monthReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 14%,transparent);color:var(--pos);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📆 Месячный отчёт</button>
             <button onclick="App.openTaxes()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 16%,transparent);color:var(--warn,#FF9F0A);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🧮 Налоги</button>
             <button onclick="App.openReconcile()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Сверка выручки</button>
           </div>
@@ -1892,27 +1895,27 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
       <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Счета</div>
         <div class="settings-list" id="settings-accounts-list"></div>
         <button class="btn-secondary" onclick="App.openAccountForm(null)" style="margin-top:10px;">+ Добавить счёт</button>
       </div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Кассиры</div>
         <div class="settings-list" id="settings-cashiers-list"></div>
         <button class="btn-secondary" onclick="App.openAddCashier()" style="margin-top:10px;">+ Добавить кассира</button>
       </div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Категории</div>
         <div class="settings-list" id="settings-cats-list"></div>
         <button class="btn-secondary" onclick="App.openAddCat()" style="margin-top:10px;">+ Добавить категорию</button>
       </div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Смены</div>
         <div class="settings-list" id="settings-shifts-list"></div>
         <button class="btn-secondary" onclick="App.openAddShift()" style="margin-top:10px;">+ Добавить смену</button>
       </div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Касса</div>
         <div class="settings-list">
           <div class="settings-row">
@@ -1962,7 +1965,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <div class="settings-sec">
         <div class="settings-sec-title">Импорт из 1С</div>
         <div class="settings-list">
-          <div class="settings-row" onclick="App.openImport()" style="cursor:pointer;">
+          <div class="settings-row owner-only" onclick="App.openImport()" style="cursor:pointer;">
             <span class="settings-row-icon">📥</span>
             <div style="flex:1;">
               <div class="settings-row-label">Импорт из Excel (1С)</div>
@@ -2010,7 +2013,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
-          <div class="settings-row" onclick="App.openDailyReport()" style="cursor:pointer;">
+          <div class="settings-row owner-only" onclick="App.openDailyReport()" style="cursor:pointer;">
             <span class="settings-row-icon">📬</span>
             <div style="flex:1;">
               <div class="settings-row-label">Автоотчёт руководителю</div>
@@ -2018,7 +2021,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
-          <div class="settings-row" onclick="App.backupNow()" style="cursor:pointer;">
+          <div class="settings-row owner-only" onclick="App.backupNow()" style="cursor:pointer;">
             <span class="settings-row-icon">💾</span>
             <div style="flex:1;">
               <div class="settings-row-label">Резервная копия</div>
@@ -2028,17 +2031,25 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Организации</div>
+      <div class="settings-sec owner-only">
+        <div class="settings-sec-title">Организации и команда</div>
         <div class="settings-list">
-          <div class="settings-row" onclick="App.showScreen('scr-orgs')" style="cursor:pointer;">
+          <div class="settings-row" onclick="App.openOrgs()" style="cursor:pointer;">
             <span class="settings-row-icon">🏪</span>
             <span class="settings-row-label">Управление организациями</span>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" onclick="App.openTeam()" style="cursor:pointer;">
+            <span class="settings-row-icon">👥</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Сотрудники и доступ</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Пригласить по email, роли, удаление доступа</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
         </div>
       </div>
-      <div class="settings-sec">
+      <div class="settings-sec owner-only">
         <div class="settings-sec-title">Данные</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.clearAllData()" style="cursor:pointer;">
@@ -2810,7 +2821,168 @@ var App={
 
   selectOrg:function(org){
     App.s.ssId=org.ssId||org.spreadsheet_id;App.s.orgName=org.name;
-    App.loadSettings(function(){App.showApp();App.loadHome();});
+    App.loadSettings(function(){App.showApp();App.loadHome();App._loadRole();});
+  },
+
+  // ── Роли: владелец vs сотрудник ──
+  _loadRole:function(){
+    App.s.isOwner=true;App.s.myRole='Владелец';App._applyRoleUI();
+    gs('getTeam',{ssId:App.s.ssId}).then(function(r){
+      if(r&&!r.__error){App.s.isOwner=!!r.isOwner;App.s.myRole=r.myRole||'Сотрудник зала';App.s._team=r;}
+      App._applyRoleUI();
+    }).catch(function(){});
+  },
+  _applyRoleUI:function(){
+    var own=App.s.isOwner!==false;
+    document.querySelectorAll('.owner-only').forEach(function(el){el.style.display=own?'':'none';});
+  },
+
+  // ── Организации: всегда показываем список + приглашения + назад ──
+  openOrgs:function(){
+    App.showScreen('scr-orgs');
+    var back=document.getElementById('org-back');
+    if(back)back.style.display=App.s.ssId?'block':'none';
+    if(App.s._orgs&&App.s._orgs.length)App.renderOrgList(App.s._orgs);
+    else{var l=document.getElementById('org-list');if(l)l.innerHTML='<div class="skel" style="height:70px;border-radius:16px;"></div>';}
+    gs('initUserApp',{}).then(function(r){App.renderOrgList((r&&r.orgs)||[]);});
+    App._loadInvites();
+  },
+  _loadInvites:function(){
+    var el=document.getElementById('org-invites');if(!el)return;
+    el.innerHTML='';
+    gs('findInvites',{}).then(function(r){
+      var inv=(r&&r.invites)||[];if(!inv.length)return;
+      el.innerHTML='<div style="font-size:13px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 10px;">Приглашения</div>'+
+        inv.map(function(o,i){
+          return '<div class="org-card" style="align-items:center;">'+
+            '<div style="flex:1;min-width:0;"><div class="org-card-name">'+App._e(o.name)+'</div>'+
+            '<div class="org-card-sub" style="overflow:hidden;text-overflow:ellipsis;">от '+App._e(o.owner||'владельца')+'</div></div>'+
+            '<button onclick="App.acceptInvite('+i+')" style="flex-shrink:0;margin-left:10px;padding:8px 14px;border:none;border-radius:10px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;cursor:pointer;">Принять</button></div>';
+        }).join('');
+      App._invites=inv;
+    }).catch(function(){});
+  },
+  acceptInvite:function(i){
+    var inv=(App._invites||[])[i];if(!inv)return;
+    gs('acceptInvite',{ssId:inv.ssId}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Организация добавлена ✓');
+      App.selectOrg({ssId:r.ssId,name:r.name});
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Сотрудники и доступ (только владелец) ──
+  _roles:['Бухгалтер','Администратор','Сотрудник зала'],
+  openTeam:function(){
+    App.openModal('<div class="modal-title">👥 Сотрудники и доступ</div><div id="team-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getTeam',{ssId:App.s.ssId}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App.s._team=r;App._renderTeam(r);
+    }).catch(function(e){var b=document.getElementById('team-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderTeam:function(r){
+    var b=document.getElementById('team-body');if(!b)return;
+    var h='';
+    if(!r.isOwner){
+      b.innerHTML='<div style="padding:14px;background:var(--surface-2);border-radius:12px;line-height:1.6;">Доступом управляет владелец организации'+(r.ownerEmail?' — <b>'+App._e(r.ownerEmail)+'</b>':'')+'.<br>Ваша роль: <b>'+App._e(r.myRole)+'</b>.</div>';
+      return;
+    }
+    h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">Сотрудник получит доступ к этой организации по своему Google-аккаунту. Настройки видит только владелец.</div>';
+    if(r.members.length){
+      h+=r.members.map(function(m,i){
+        var opts=App._roles.map(function(ro){return '<option'+(ro===m.role?' selected':'')+'>'+ro+'</option>';}).join('');
+        return '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line-2);">'+
+          '<div style="flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(m.email)+'</div>'+
+          '<select onchange="App._teamRole('+i+',this.value)" style="padding:7px 8px;border-radius:9px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12px;font-family:var(--font);">'+opts+'</select>'+
+          '<button onclick="App._teamRemove('+i+')" style="background:none;border:none;color:var(--neg);font-size:16px;cursor:pointer;padding:4px;">✕</button></div>';
+      }).join('');
+    } else {
+      h+='<div style="text-align:center;padding:14px;color:var(--muted);">Пока только вы.</div>';
+    }
+    h+='<div class="field" style="margin-top:14px;"><label>Email сотрудника</label><input id="tm-email" type="email" placeholder="user@gmail.com" inputmode="email"></div>'+
+      '<div class="field"><label>Роль</label><select id="tm-role">'+App._roles.map(function(ro){return '<option>'+ro+'</option>';}).join('')+'</select></div>'+
+      '<button class="btn-primary" onclick="App._teamInvite()">Пригласить</button>';
+    b.innerHTML=h;
+  },
+  _teamInvite:function(){
+    var email=document.getElementById('tm-email').value.trim();
+    var role=document.getElementById('tm-role').value;
+    if(!email){App.toast('Введите email',true);return;}
+    gs('inviteMember',{ssId:App.s.ssId,email:email,role:role}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Приглашение отправлено ✓');App.s._team=r;App._renderTeam(r);
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _teamRole:function(i,role){
+    var m=(App.s._team&&App.s._team.members||[])[i];if(!m)return;
+    gs('setMemberRole',{ssId:App.s.ssId,email:m.email,role:role}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Роль обновлена ✓');App.s._team=r;
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _teamRemove:function(i){
+    var m=(App.s._team&&App.s._team.members||[])[i];if(!m)return;
+    if(!confirm('Убрать доступ у '+m.email+'?'))return;
+    gs('removeMember',{ssId:App.s.ssId,email:m.email}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Доступ удалён ✓');App.s._team=r;App._renderTeam(r);
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Справочник контрагентов ──
+  openContractorsDir:function(){
+    App.openModal('<div class="modal-title">📇 Справочник контрагентов</div><div id="cd-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getContractors',{ssId:App.s.ssId}).then(function(r){
+      App._contractors=r||[];App._renderContractorsDir();
+    }).catch(function(e){var b=document.getElementById('cd-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderContractorsDir:function(){
+    var b=document.getElementById('cd-body');if(!b)return;
+    var list=App._contractors||[];
+    var h='';
+    if(list.length){
+      h+=list.map(function(c,i){
+        return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
+          '<div style="flex:1;min-width:0;cursor:pointer;" onclick="App.openContractorForm('+i+')">'+
+          '<div style="font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.name)+'</div>'+
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.type)+(c.phone?' · '+App._e(c.phone):'')+(c.comment?' · '+App._e(c.comment):'')+'</div></div>'+
+          (c.phone?'<a href="tel:'+App._e(c.phone.replace(/[^+0-9]/g,''))+'" onclick="event.stopPropagation();" style="flex-shrink:0;text-decoration:none;font-size:18px;">📞</a>':'')+
+          '<button onclick="App._contractorDel('+i+')" style="background:none;border:none;color:var(--neg);font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
+      }).join('');
+    } else {
+      h+='<div style="text-align:center;padding:18px;color:var(--muted);">Справочник пуст. Добавь поставщиков и торговых представителей.</div>';
+    }
+    h+='<button class="btn-primary" style="margin-top:14px;" onclick="App.openContractorForm(null)">+ Добавить контрагента</button>';
+    b.innerHTML=h;
+  },
+  openContractorForm:function(i){
+    var c=i==null?null:(App._contractors||[])[i];
+    var types=['Поставщик','Торговый представитель','Арендодатель','Услуги','Прочее'];
+    App.openModal('<div class="modal-title">'+(c?'Контрагент':'Новый контрагент')+'</div>'+
+      '<div class="field"><label>Название</label><input id="cf-name" type="text" placeholder="ООО Альфа" value="'+(c?App._e(c.name):'')+'"></div>'+
+      '<div class="field"><label>Тип</label><select id="cf-type">'+types.map(function(t){return '<option'+(c&&c.type===t?' selected':'')+'>'+t+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>Телефон</label><input id="cf-phone" type="tel" placeholder="+7 900 000-00-00" value="'+(c?App._e(c.phone):'')+'"></div>'+
+      '<div class="field"><label>Комментарий</label><input id="cf-cmt" type="text" placeholder="Например: хлеб, по вторникам" value="'+(c?App._e(c.comment):'')+'"></div>'+
+      '<button class="btn-primary" onclick="App._contractorSave('+(c?"'"+App._e(c.id)+"'":'null')+')">Сохранить</button>');
+  },
+  _contractorSave:function(id){
+    var d={id:id,name:document.getElementById('cf-name').value.trim(),
+      type:document.getElementById('cf-type').value,
+      phone:document.getElementById('cf-phone').value.trim(),
+      comment:document.getElementById('cf-cmt').value.trim()};
+    if(!d.name){App.toast('Введите название',true);return;}
+    gs('saveContractor',{ssId:App.s.ssId,data:d}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Сохранено ✓');App.openContractorsDir();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _contractorDel:function(i){
+    var c=(App._contractors||[])[i];if(!c)return;
+    if(!confirm('Удалить «'+c.name+'» из справочника?'))return;
+    gs('deleteContractor',{ssId:App.s.ssId,id:c.id}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App._contractors.splice(i,1);App._renderContractorsDir();App.toast('Удалено ✓');
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   createOrg:function(){
@@ -3202,18 +3374,177 @@ var App={
     if(rTo&&!rTo.value)rTo.value=fmtISO(now);
   },
 
-  dayReport:function(){
-    var t=fmtISO(new Date());
-    document.getElementById('r-from').value=t;
-    document.getElementById('r-to').value=t;
-    App.buildReport();
+  // ── Развёрнутый дневной отчёт ──
+  dayReport:function(date){
+    var d=date||fmtISO(new Date());
+    App.openModal('<div class="modal-title">📅 Отчёт за день</div>'+
+      '<input type="date" id="dr-date" value="'+d+'" onchange="App.dayReport(this.value)" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:12px;font-family:var(--font);">'+
+      '<div id="dr-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getDayReport',{ssId:App.s.ssId,date:d}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._renderDayReport(r);
+    }).catch(function(e){var b=document.getElementById('dr-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _repRow:function(label,val,color,bold){
+    return '<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);font-size:13.5px;'+(bold?'font-weight:800;':'')+'">'+
+      '<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(bold?'':'color:var(--muted);')+'">'+label+'</span>'+
+      '<span class="num" style="white-space:nowrap;font-weight:700;'+(color?'color:'+color+';':'')+'">'+val+'</span></div>';
+  },
+  _repSec:function(title,inner){
+    if(!inner)return'';
+    return '<div style="margin-top:14px;"><div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">'+title+'</div>'+
+      '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;">'+inner+'</div></div>';
+  },
+  _cmpTxt:function(cur,prev,label){
+    if(!prev)return'';
+    var pct=Math.round((cur-prev)/prev*100);
+    var up=pct>=0;
+    return '<span style="color:'+(up?'var(--pos)':'var(--neg)')+';font-weight:700;">'+(up?'▲':'▼')+Math.abs(pct)+'%</span> к '+label;
+  },
+  _renderDayReport:function(r){
+    var b=document.getElementById('dr-body');if(!b)return;
+    var R=App._repRow,S=App._repSec;
+    var profit=r.profit;
+    var h='';
+    // Сводка
+    var cmp=[];
+    var c1=App._cmpTxt(r.income,r.prevIncome,'вчера');if(c1)cmp.push(c1);
+    var c2=App._cmpTxt(r.income,r.avg7Income,'среднему за 7 дней');if(c2)cmp.push(c2);
+    h+=S('Итоги дня',
+      R('Выручка (доходы)','₽ '+fmt(r.income),'var(--pos)')+
+      R('Расходы','₽ '+fmt(r.expense),'var(--neg)')+
+      R('Результат дня',(profit<0?'−':'')+'₽ '+fmt(Math.abs(profit)),profit>=0?'var(--pos)':'var(--neg)',true)+
+      R('Операций',r.txCount));
+    if(cmp.length)h+='<div style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.6;">Выручка: '+cmp.join(' · ')+'</div>';
+    // Смены
+    if(r.shifts&&r.shifts.length){
+      h+=S('Смены и кассы',r.shifts.map(function(s){
+        return R(App._e(s.cashier||('Смена '+s.shift)),'₽ '+fmt(s.revenue)+(s.discrepancy?' <span style="color:var(--neg);">('+(s.discrepancy>0?'+':'')+fmt(s.discrepancy)+')</span>':''));
+      }).join(''));
+    }
+    // Доходы/расходы по категориям
+    if(r.byCatInc.length)h+=S('Доходы по категориям',r.byCatInc.map(function(c){return R(App._e(c.category),'₽ '+fmt(c.total),'var(--pos)');}).join(''));
+    if(r.byCatExp.length)h+=S('Расходы по категориям',r.byCatExp.map(function(c){return R(App._e(c.category),'₽ '+fmt(c.total),'var(--neg)');}).join(''));
+    // Движение по счетам
+    if(r.byAcc&&r.byAcc.length){
+      h+=S('Движение по счетам',r.byAcc.filter(function(a){return a.income||a.expense;}).map(function(a){
+        return R(App._e(a.account),'+'+fmt(a.income)+' / −'+fmt(a.expense));
+      }).join(''));
+    }
+    // Накладные и долг
+    if(r.zakupka||r.debtRepaid||r.debtNew||r.storeDebt){
+      h+=S('Накладные и долг магазина',
+        (r.zakupka?R('Оплачено наличными (закупка)','−₽ '+fmt(r.zakupka),'var(--neg)'):'')+
+        (r.debtRepaid?R('Погашено старых долгов','−₽ '+fmt(r.debtRepaid),'var(--pos)'):'')+
+        (r.debtNew?R('Новые накладные в долг','+₽ '+fmt(r.debtNew),'var(--warn,#FF9F0A)'):'')+
+        R('Долг магазина сейчас','₽ '+fmt(r.storeDebt),'var(--neg)',true));
+    }
+    // Прочее
+    if(r.izyatia||r.zp||r.dolgTP){
+      h+=S('Прочие движения',
+        (r.izyatia?R('Изъятия владельца','−₽ '+fmt(r.izyatia)):'')+
+        (r.zp?R('Зарплаты','−₽ '+fmt(r.zp)):'')+
+        (r.dolgTP?R('Оплаты долгов ТП','−₽ '+fmt(r.dolgTP)):''));
+    }
+    // Остатки
+    if(r.accounts&&r.accounts.length){
+      h+=S('Остатки на счетах (сейчас)',r.accounts.map(function(a){return R(App._e(a.name),'₽ '+fmt(a.balance));}).join(''));
+    }
+    if(!r.txCount)h='<div style="text-align:center;padding:20px;color:var(--muted);">За этот день операций нет.</div>'+h;
+    b.innerHTML=h;
   },
 
-  monthReport:function(){
+  // ── Развёрнутый месячный отчёт ──
+  monthReport:function(ym){
     var now=new Date();
-    document.getElementById('r-from').value=fmtISO(new Date(now.getFullYear(),now.getMonth(),1));
-    document.getElementById('r-to').value=fmtISO(now);
-    App.buildReport();
+    var y,m;
+    if(ym){y=parseInt(ym.split('-')[0]);m=parseInt(ym.split('-')[1])-1;}
+    else{y=now.getFullYear();m=now.getMonth();}
+    var val=y+'-'+String(m+1).padStart(2,'0');
+    App.openModal('<div class="modal-title">📆 Отчёт за месяц</div>'+
+      '<input type="month" id="mr-month" value="'+val+'" onchange="App.monthReport(this.value)" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:12px;font-family:var(--font);">'+
+      '<div id="mr-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getMonthReport',{ssId:App.s.ssId,year:y,month:m}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._renderMonthReport(r);
+    }).catch(function(e){var b=document.getElementById('mr-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderMonthReport:function(r){
+    var b=document.getElementById('mr-body');if(!b)return;
+    var R=App._repRow,S=App._repSec;
+    var h='';
+    // P&L
+    h+=S('P&L — прибыль и убытки',
+      R('Выручка','₽ '+fmt(r.income),'var(--pos)')+
+      R('Расходы','₽ '+fmt(r.expense),'var(--neg)')+
+      R('Прибыль',(r.profit<0?'−':'')+'₽ '+fmt(Math.abs(r.profit)),r.profit>=0?'var(--pos)':'var(--neg)',true)+
+      R('Маржа',r.margin+'%')+
+      R('Операций',r.txCount));
+    var cmp=[];
+    var c1=App._cmpTxt(r.income,r.prevIncome,'прошлому месяцу');if(c1)cmp.push('Выручка: '+c1);
+    var c2=App._cmpTxt(r.expense,r.prevExpense,'прошлому месяцу');if(c2)cmp.push('Расходы: '+c2);
+    if(cmp.length)h+='<div style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.6;">'+cmp.join('<br>')+'</div>';
+    // Рабочие дни
+    h+=S('Торговые дни',
+      R('Дней с выручкой',r.workDays)+
+      R('Средняя выручка в день','₽ '+fmt(r.avgDayIncome))+
+      (r.best?R('Лучший день','' +r.best.day+'-е · ₽ '+fmt(r.best.income),'var(--pos)'):'')+
+      (r.worst?R('Слабый день',''+r.worst.day+'-е · ₽ '+fmt(r.worst.income),'var(--neg)'):''));
+    // Мини-график по дням
+    if(r.days&&r.days.length){
+      var max=Math.max.apply(null,r.days.map(function(d){return d.income;}));
+      if(max>0){
+        h+='<div style="margin-top:14px;"><div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Выручка по дням</div>'+
+          '<div style="display:flex;align-items:flex-end;gap:1.5px;height:56px;background:var(--surface-2);border-radius:12px;padding:8px;">'+
+          r.days.map(function(d){
+            var hh=max?Math.max(d.income/max*100,d.income>0?6:0):0;
+            return '<div title="'+d.day+': '+fmt(d.income)+'" style="flex:1;height:'+hh+'%;background:'+(d.income>0?'var(--brand)':'transparent')+';border-radius:2px;min-width:0;"></div>';
+          }).join('')+'</div></div>';
+      }
+    }
+    // Расходы по категориям с долями
+    if(r.byCatExp.length){
+      h+=S('Расходы по категориям',r.byCatExp.map(function(c){
+        var pct=r.expense?Math.round(c.total/r.expense*100):0;
+        return R(App._e(c.category)+' · '+pct+'%','₽ '+fmt(c.total),'var(--neg)');
+      }).join(''));
+    }
+    if(r.byCatInc.length>1)h+=S('Доходы по категориям',r.byCatInc.map(function(c){return R(App._e(c.category),'₽ '+fmt(c.total),'var(--pos)');}).join(''));
+    // Кассовая дисциплина
+    if(r.shiftCount){
+      h+=S('Кассовая дисциплина',
+        R('Смен закрыто',r.shiftCount)+
+        R('Смен с расхождением',r.discDays,r.discDays?'var(--neg)':'var(--pos)')+
+        (r.discSum?R('Сумма расхождений',(r.discSum>0?'+':'−')+'₽ '+fmt(Math.abs(r.discSum)),'var(--neg)'):''));
+    }
+    // Долг магазина
+    if(r.debtStart||r.debtEnd||r.debtNew||r.debtRepaid){
+      var dd=r.debtEnd-r.debtStart;
+      h+=S('Долг магазина (накладные)',
+        R('На начало месяца','₽ '+fmt(r.debtStart))+
+        R('Новые накладные в долг','+₽ '+fmt(r.debtNew),'var(--warn,#FF9F0A)')+
+        R('Погашено','−₽ '+fmt(r.debtRepaid),'var(--pos)')+
+        R('На конец месяца','₽ '+fmt(r.debtEnd),dd>0?'var(--neg)':'var(--pos)',true));
+    }
+    // Поставщики (график выплат)
+    if(r.supPlanned||r.supPaid){
+      h+=S('Выплаты поставщикам (график)',
+        R('Запланировано на месяц','₽ '+fmt(r.supPlanned))+
+        R('Оплачено','₽ '+fmt(r.supPaid),'var(--pos)'));
+    }
+    // Прочее и остатки
+    if(r.izyatia||r.zp||r.zakupka||r.dolgTP){
+      h+=S('Крупные статьи',
+        (r.zakupka?R('Закупка товара','−₽ '+fmt(r.zakupka)):'')+
+        (r.zp?R('Зарплаты','−₽ '+fmt(r.zp)):'')+
+        (r.dolgTP?R('Оплаты долгов ТП','−₽ '+fmt(r.dolgTP)):'')+
+        (r.izyatia?R('Изъятия владельца','−₽ '+fmt(r.izyatia)):''));
+    }
+    if(r.accounts&&r.accounts.length){
+      h+=S('Остатки на счетах (сейчас)',r.accounts.map(function(a){return R(App._e(a.name),'₽ '+fmt(a.balance));}).join(''));
+    }
+    if(!r.txCount)h='<div style="text-align:center;padding:20px;color:var(--muted);">За этот месяц операций нет.</div>'+h;
+    b.innerHTML=h;
   },
   reportPreset:function(type){
     var now=new Date(),y=now.getFullYear(),m=now.getMonth();
