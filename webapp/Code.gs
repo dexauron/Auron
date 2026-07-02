@@ -3088,3 +3088,61 @@ function deleteOrder(p) {
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: CASH FORECAST (прогноз кассового разрыва)
+// Математика: остаток(t) = деньги_сейчас + t·средний_дневной_поток − выплаты_до_t.
+// Средний поток — по последним 28 дням (без переводов). Горизонт 45 дней.
+// ═══════════════════════════════════════════════════════════════════════
+
+function getCashForecast(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    // Деньги сейчас
+    var cash=0;
+    getAccounts({ssId:ssId}).forEach(function(a){ cash+=a.balance||0; });
+    // Средний дневной поток за 28 дней
+    var base=ss.getSheetByName(SH_BASE);
+    var now=new Date(); var from=now.getTime()-28*86400000;
+    var net=0;
+    if (base.getLastRow()>=2) {
+      base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+        if (dt.getTime()<from||dt.getTime()>now.getTime()) return;
+        if (String(r[B_CAT-1])==='Перевод') return;
+        var amt=parseFloat(r[B_AMT-1])||0;
+        if (String(r[B_TYPE-1])==='Доход') net+=amt;
+        else if (String(r[B_TYPE-1])==='Расход') net-=amt;
+      });
+    }
+    var avgNet=net/28;
+    // Открытые выплаты по датам (план − оплачено)
+    var byDay={}; var payTotal=0;
+    var paySh=ss.getSheetByName(SH_PAYMENTS);
+    if (paySh&&paySh.getLastRow()>=2) {
+      paySh.getRange(2,1,paySh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+        var st=String(r[PY_STATUS-1]||'');
+        if (st==='paid'||st==='cancelled') return;
+        var due=r[PY_DUE-1]; if(!(due instanceof Date)) return;
+        var rest=Math.max((parseFloat(r[PY_AMT-1])||0)-(parseFloat(r[PY_PAID-1])||0),0);
+        if (rest<=0) return;
+        var k=Utilities.formatDate(due,tz,'yyyy-MM-dd');
+        byDay[k]=(byDay[k]||0)+rest; payTotal+=rest;
+      });
+    }
+    // Симуляция на 45 дней вперёд
+    var bal=cash, minBal=cash, minDay=null, firstGap=null;
+    for (var t=1;t<=45;t++) {
+      var d=new Date(now.getTime()+t*86400000);
+      var k=Utilities.formatDate(d,tz,'yyyy-MM-dd');
+      bal+=avgNet;
+      if (byDay[k]) bal-=byDay[k];
+      if (bal<minBal) { minBal=bal; minDay=k; }
+      if (bal<0&&!firstGap) firstGap={date:k,balance:Math.round(bal)};
+    }
+    return {cash:Math.round(cash),avgNet:Math.round(avgNet),payTotal:Math.round(payTotal),
+            firstGap:firstGap,minBalance:Math.round(minBal),minDay:minDay};
+  } catch(e) { return {__error:e.message}; }
+}
