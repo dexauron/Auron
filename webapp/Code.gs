@@ -979,37 +979,6 @@ function getGoodsAnalytics(p) {
 // Изолирован от графика выплат поставщикам (ВЫПЛАТЫ): это отдельный регистр.
 var STORE_DEBT_REP='🏪 Магазин — накладные';
 
-// Утренняя сверка кассы: сравнивает фактический остаток наличных с расчётным.
-// При apply=true создаёт корректировку, чтобы база всегда равнялась факту.
-// Математика: diff = факт − по базе; diff>0 → Доход «Корректировка», diff<0 → Расход.
-function morningCheck(p) {
-  var ssId=p.ssId, fact=Math.round(parseFloat(p.factCash)||0);
-  var accName=_s(p.account||'Наличные');
-  try {
-    var accounts=getAccounts({ssId:ssId});
-    var acc=null;
-    accounts.forEach(function(a){ if(a.name===accName) acc=a; });
-    if (!acc) return {__error:'Счёт «'+accName+'» не найден'};
-    var calc=Math.round(acc.balance||0);
-    var diff=fact-calc;
-    var applied=false;
-    if (p.apply&&diff!==0) {
-      var r=saveQuickEntry({ssId:ssId,data:{
-        date:new Date().toISOString(),
-        type:diff>0?'Доход':'Расход',
-        category:'Корректировка',
-        account:accName,
-        amount:Math.abs(diff),
-        comment:'Сверка кассы (утро): факт '+fact+', по базе '+calc
-      }});
-      if (r&&r.__error) return {__error:r.__error};
-      applied=true;
-      try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    }
-    return {ok:true, calc:calc, fact:fact, diff:diff, applied:applied};
-  } catch(e) { return {__error:e.message}; }
-}
-
 // Текущий долг магазина по накладным (изолирован от долгов ТП и выплат).
 function getStoreDebt(p) {
   var ssId=p.ssId;
