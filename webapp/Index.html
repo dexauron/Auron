@@ -5938,22 +5938,26 @@ var App={
   },
 
   // ── Выйти / сменить аккаунт ──
+  // Google-песочница запрещает менять адрес программно, поэтому даём
+  // настоящую ссылку target="_top" — тап по ней рамка разрешает.
   switchAccount:function(){
-    if(!confirm('Выйти из аккаунта?\n\nОткроется выбор Google-аккаунта. Локальный кэш на этом устройстве будет очищен, данные в таблицах не пострадают.'))return;
-    // Чистим локальный кэш (кроме ничего — всё пользовательское)
+    App.openModal('<div class="modal-title">🚪 Сменить аккаунт</div>'+
+      '<div id="sw-body" style="color:var(--muted);font-size:13px;">Готовим ссылку…</div>');
+    var render=function(appUrl){
+      var b=document.getElementById('sw-body');if(!b)return;
+      var url='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(appUrl);
+      b.innerHTML='<div style="font-size:13.5px;line-height:1.6;margin-bottom:14px;">Откроется выбор Google-аккаунта, потом вернёшься в приложение. Локальный кэш на этом устройстве очистится, данные в таблицах не пострадают.</div>'+
+        '<a href="'+App._e(url)+'" target="_top" class="btn-primary" style="display:block;text-align:center;text-decoration:none;" onclick="App._clearLocalCache()">Выбрать аккаунт →</a>'+
+        '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>';
+    };
+    gs('getAppUrl',{}).then(function(r){render((r&&r.url)||'https://script.google.com/macros/s/AKfycbwlPGKcnKq8ENucLdCLnmIt4iZ8Y4BiNjBaIvyfdtVJphvJTHJ8wSDrgBy2g-yHAqs/exec');})
+      .catch(function(){render('https://script.google.com/macros/s/AKfycbwlPGKcnKq8ENucLdCLnmIt4iZ8Y4BiNjBaIvyfdtVJphvJTHJ8wSDrgBy2g-yHAqs/exec');});
+  },
+  _clearLocalCache:function(){
     try{
       var keys=[];for(var i=0;i<localStorage.length;i++)keys.push(localStorage.key(i));
       keys.forEach(function(k){if(/^(auron_|ac_)/.test(k))localStorage.removeItem(k);});
     }catch(e){}
-    App.toast('Выходим…');
-    gs('getAppUrl',{}).then(function(r){
-      var app=(r&&r.url)||location.href;
-      var url='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(app);
-      try{window.top.location.href=url;}catch(e){location.href=url;}
-    }).catch(function(){
-      var url='https://accounts.google.com/AccountChooser?continue='+encodeURIComponent(location.href);
-      try{window.top.location.href=url;}catch(e){location.href=url;}
-    });
   },
 
   // ── Мой профиль ──
