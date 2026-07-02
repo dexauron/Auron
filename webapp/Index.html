@@ -1787,6 +1787,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div style="font-size:13px;color:var(--muted);margin-top:2px;">Контрагенты, долги и выплаты</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button onclick="App.openOrders()" title="Заказы товара" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">🚚</button>
           <button onclick="App.openContractorsDir()" title="Справочник контрагентов" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📇</button>
           <button onclick="App.openTimesheetView()" title="Табель" style="padding:9px 12px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📋</button>
           <button onclick="App.openPaymentForm(null)" style="padding:9px 16px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">+ Запись</button>
@@ -2976,6 +2977,164 @@ var App={
       App.toast('Сохранено ✓');App.openContractorsDir();
     }).catch(function(e){App.toast(e.message,true);});
   },
+  // ── Заказы товара ──
+  // Заказ — обязательство, не деньги. Касса и долг не трогаются:
+  // оплата/долг учитываются накладными при закрытии дня (нет двойного учёта).
+  _ordersFilter:'active',
+  openOrders:function(){
+    App.openModal('<div class="modal-title">🚚 Заказы товара</div><div id="ord-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getOrders',{ssId:App.s.ssId}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._orders=r;App._renderOrders();
+    }).catch(function(e){var b=document.getElementById('ord-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  ordFilter:function(f){App._ordersFilter=f;App._renderOrders();App.haptic(6);},
+  _ordStatusInfo:{
+    active:{label:'Заказан',color:'var(--brand)'},
+    received:{label:'Пришёл ✓',color:'var(--pos)'},
+    partial:{label:'Частично',color:'var(--warn,#FF9F0A)'},
+    cancelled:{label:'Отменён',color:'var(--muted)'}
+  },
+  _renderOrders:function(){
+    var b=document.getElementById('ord-body');if(!b||!App._orders)return;
+    var r=App._orders,f=App._ordersFilter;
+    var list=(r.orders||[]).filter(function(o){
+      if(f==='active')return o.status==='active';
+      if(f==='done')return o.status!=='active';
+      return true;
+    });
+    var h='';
+    // Сводка
+    h+='<div style="display:flex;gap:10px;margin-bottom:12px;">'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div class="num" style="font-size:16px;font-weight:800;">₽ '+fmt(r.activeSum)+'</div><div style="font-size:11px;color:var(--muted);">в пути ('+r.activeCount+')</div></div>'+
+      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div class="num" style="font-size:16px;font-weight:800;color:'+(r.overdueCount?'var(--neg)':'var(--pos)')+';">'+r.overdueCount+'</div><div style="font-size:11px;color:var(--muted);">просрочено</div></div></div>';
+    // Фильтры
+    var chip=function(id,lbl){return '<button onclick="App.ordFilter(\''+id+'\')" class="rp-chip" style="'+(f===id?'border-color:var(--brand);color:var(--brand);':'')+'">'+lbl+'</button>';};
+    h+='<div style="display:flex;gap:6px;margin-bottom:12px;">'+chip('active','Активные')+chip('done','Завершённые')+chip('all','Все')+'</div>';
+    if(!list.length){
+      h+='<div style="text-align:center;padding:18px;color:var(--muted);">'+(f==='active'?'Нет активных заказов.':'Пока пусто.')+'</div>';
+    } else {
+      h+=list.map(function(o){
+        var st=App._ordStatusInfo[o.status]||App._ordStatusInfo.active;
+        var idx=r.orders.indexOf(o);
+        var dates='заказан '+App._fmtD(o.ordered)+(o.expected?' · ожид. '+App._fmtD(o.expected):'');
+        if(o.status==='received'||o.status==='partial')dates='заказан '+App._fmtD(o.ordered)+' · пришёл '+App._fmtD(o.received);
+        var amtLine='₽ '+fmt(o.amount);
+        if(o.status==='partial'&&o.factAmount)amtLine='₽ '+fmt(o.factAmount)+' из '+fmt(o.amount);
+        return '<div style="padding:12px 0;border-bottom:1px solid var(--line-2);">'+
+          '<div style="display:flex;align-items:center;gap:8px;">'+
+            '<div style="flex:1;min-width:0;font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(o.contractor)+'</div>'+
+            '<span class="num" style="font-weight:800;white-space:nowrap;">'+amtLine+'</span></div>'+
+          '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">'+
+            '<div style="flex:1;min-width:0;font-size:12px;color:'+(o.overdue?'var(--neg)':'var(--muted)')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(o.overdue?'⚠️ просрочен · ':'')+dates+(o.comment?' · '+App._e(o.comment):'')+'</div>'+
+            '<span style="font-size:11px;font-weight:800;color:'+st.color+';white-space:nowrap;">'+st.label+'</span></div>'+
+          (o.status==='active'?
+          '<div style="display:flex;gap:6px;margin-top:9px;">'+
+            '<button onclick="App._ordReceive('+idx+')" style="flex:1;padding:8px;border-radius:10px;border:none;background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">✓ Пришёл</button>'+
+            '<button onclick="App._ordPartial('+idx+')" style="flex:1;padding:8px;border-radius:10px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 15%,transparent);color:var(--warn,#FF9F0A);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">Частично</button>'+
+            '<button onclick="App._ordCancel('+idx+')" style="flex:1;padding:8px;border-radius:10px;border:none;background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">Отменён</button>'+
+          '</div>'
+          :'<div style="display:flex;gap:6px;margin-top:9px;">'+
+            '<button onclick="App._ordReopen('+idx+')" style="padding:7px 12px;border-radius:10px;border:none;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Вернуть в активные</button>'+
+            '<button onclick="App._ordDel('+idx+')" style="padding:7px 12px;border-radius:10px;border:none;background:var(--surface-2);color:var(--neg);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">Удалить</button>'+
+          '</div>')+
+        '</div>';
+      }).join('');
+    }
+    h+='<button class="btn-primary" style="margin-top:14px;" onclick="App.openOrderForm()">+ Новый заказ</button>'+
+      '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">Заказ — это учёт обязательств: деньги и долг он не трогает. Оплату прихода записывай накладными при закрытии дня.</div>';
+    b.innerHTML=h;
+  },
+  _fmtD:function(iso){
+    if(!iso)return'—';
+    var p=iso.split('-');if(p.length<3)return iso;
+    return parseInt(p[2])+'.'+p[1];
+  },
+  _ordReceive:function(i){
+    var o=App._orders.orders[i];if(!o)return;
+    gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'received'}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Заказ отмечен: пришёл ✓');App.openOrders();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _ordPartial:function(i){
+    var o=App._orders.orders[i];if(!o)return;
+    var v=prompt('На какую сумму пришло? (заказ ₽ '+fmt(o.amount)+')',o.amount);
+    if(v==null)return;
+    var fact=Math.round(parseFloat(v)||0);
+    if(fact<=0){App.toast('Введите сумму',true);return;}
+    gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'partial',factAmount:fact}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Отмечено: пришло на ₽ '+fmt(fact)+' ✓');App.openOrders();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _ordCancel:function(i){
+    var o=App._orders.orders[i];if(!o)return;
+    if(!confirm('Отметить заказ у «'+o.contractor+'» как отменённый (не пришёл)?'))return;
+    gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'cancelled'}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Заказ отменён');App.openOrders();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _ordReopen:function(i){
+    var o=App._orders.orders[i];if(!o)return;
+    gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'active'}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.openOrders();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _ordDel:function(i){
+    var o=App._orders.orders[i];if(!o)return;
+    if(!confirm('Удалить заказ у «'+o.contractor+'» из учёта?'))return;
+    gs('deleteOrder',{ssId:App.s.ssId,id:o.id}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Удалено ✓');App.openOrders();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  openOrderForm:function(){
+    var today=fmtISO(new Date());
+    var exp=fmtISO(new Date(Date.now()+3*86400000));
+    var render=function(contractors){
+      var opts=(contractors||[]).map(function(c){return '<option>'+App._e(c.name)+'</option>';}).join('');
+      App.openModal('<div class="modal-title">🚚 Новый заказ</div>'+
+        '<div class="field"><label>У кого заказали</label><select id="of-contr" onchange="document.getElementById(\'of-new-wrap\').style.display=this.value===\'__new__\'?\'block\':\'none\';">'+opts+'<option value="__new__">➕ Новый контрагент…</option></select></div>'+
+        '<div id="of-new-wrap" style="display:'+(contractors&&contractors.length?'none':'block')+';"><div class="field"><label>Название нового контрагента</label><input id="of-new-name" type="text" placeholder="ООО Альфа"></div></div>'+
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field"><label>Когда заказали</label><input id="of-ordered" type="date" value="'+today+'"></div>'+
+        '<div class="field"><label>Когда придёт</label><input id="of-expected" type="date" value="'+exp+'"></div></div>'+
+        '<div class="field"><label>Сумма заказа (₽)</label><input id="of-amt" type="number" placeholder="0" inputmode="decimal"></div>'+
+        '<div class="field"><label>Комментарий</label><input id="of-cmt" type="text" placeholder="Например: молочка, 40 позиций"></div>'+
+        '<button class="btn-primary" onclick="App._orderSave()">Записать заказ</button>');
+      if(!(contractors&&contractors.length)){var s=document.getElementById('of-contr');if(s)s.value='__new__';}
+    };
+    if(App._contractors&&App._contractors.length)render(App._contractors);
+    else gs('getContractors',{ssId:App.s.ssId}).then(function(r){App._contractors=r||[];render(App._contractors);});
+  },
+  _orderSave:function(){
+    var sel=document.getElementById('of-contr').value;
+    var newName=document.getElementById('of-new-name')?document.getElementById('of-new-name').value.trim():'';
+    var d={ordered:document.getElementById('of-ordered').value,
+      expected:document.getElementById('of-expected').value,
+      amount:Math.round(parseFloat(document.getElementById('of-amt').value)||0),
+      comment:document.getElementById('of-cmt').value.trim()};
+    if(d.expected&&d.ordered&&d.expected<d.ordered){App.toast('Дата прихода раньше даты заказа',true);return;}
+    if(!d.amount){App.toast('Введите сумму заказа',true);return;}
+    var go=function(name){
+      d.contractor=name;
+      gs('saveOrder',{ssId:App.s.ssId,data:d}).then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);return;}
+        App.toast('Заказ записан ✓');App.openOrders();
+      }).catch(function(e){App.toast(e.message,true);});
+    };
+    if(sel==='__new__'){
+      if(!newName){App.toast('Введите название контрагента',true);return;}
+      gs('saveContractor',{ssId:App.s.ssId,data:{name:newName,type:'Поставщик'}}).then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);return;}
+        App._contractors=null;go(newName);
+      }).catch(function(e){App.toast(e.message,true);});
+    } else go(sel);
+  },
+
   _contractorDel:function(i){
     var c=(App._contractors||[])[i];if(!c)return;
     if(!confirm('Удалить «'+c.name+'» из справочника?'))return;

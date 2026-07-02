@@ -21,6 +21,7 @@ var SH_RECURRING = 'РЕКУРРЕНТНЫЕ';
 var SH_PAYMENTS  = 'ВЫПЛАТЫ';
 var SH_ACCESS    = 'ДОСТУП';
 var SH_CONTRACTORS='КОНТРАГЕНТЫ';
+var SH_ORDERS    = 'ЗАКАЗЫ';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_LOG       = 'ЖУРНАЛ';
@@ -234,6 +235,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
   _mk(ss,SH_ACCESS,   ['Email','Роль','Добавлен']);
   _mk(ss,SH_CONTRACTORS,['ID','Название','Тип','Телефон','Комментарий','Создано']);
+  _mk(ss,SH_ORDERS,   ['ID','Контрагент','Заказано','Ожидается','Сумма','Статус','Комментарий','Создано','Получено','Факт_Сумма']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -2951,5 +2953,110 @@ function getMonthReport(p) {
       supPaid:Math.round(supPaid), supPlanned:Math.round(supPlanned),
       accounts:getAccounts({ssId:ssId}).map(function(a){return {name:a.name,balance:a.balance};})
     };
+  } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ORDERS (заказы товара у контрагентов)
+// Заказ — обязательство, НЕ движение денег: касса и долг не трогаются.
+// Деньги учитываются накладными при закрытии дня (иначе двойной учёт).
+// ═══════════════════════════════════════════════════════════════════════
+
+// ЗАКАЗЫ columns
+var O_ID=1,O_CONTR=2,O_ORDERED=3,O_EXPECTED=4,O_AMT=5,O_STATUS=6,
+    O_CMT=7,O_CREATED=8,O_RECEIVED=9,O_FACT=10;
+var O_COLS=10;
+
+function getOrders(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_ORDERS);
+    if (sh.getLastRow()<2) return {orders:[],activeSum:0,activeCount:0,overdueCount:0};
+    var tz=Session.getScriptTimeZone();
+    var todayKey=Utilities.formatDate(new Date(),tz,'yyyy-MM-dd');
+    var fd=function(v){return (v instanceof Date)?Utilities.formatDate(v,tz,'yyyy-MM-dd'):String(v||'');};
+    var orders=sh.getRange(2,1,sh.getLastRow()-1,O_COLS).getValues().filter(function(r){return r[0];})
+      .map(function(r){
+        var st=String(r[O_STATUS-1]||'active');
+        var exp=fd(r[O_EXPECTED-1]);
+        return {id:String(r[O_ID-1]),contractor:String(r[O_CONTR-1]),
+          ordered:fd(r[O_ORDERED-1]),expected:exp,
+          amount:Math.round(parseFloat(r[O_AMT-1])||0),status:st,
+          comment:String(r[O_CMT-1]||''),received:fd(r[O_RECEIVED-1]),
+          factAmount:Math.round(parseFloat(r[O_FACT-1])||0),
+          overdue:st==='active'&&exp&&exp<todayKey};
+      }).reverse();
+    var activeSum=0,activeCount=0,overdueCount=0;
+    orders.forEach(function(o){
+      if (o.status==='active'){activeCount++;activeSum+=o.amount;if(o.overdue)overdueCount++;}
+    });
+    return {orders:orders,activeSum:Math.round(activeSum),activeCount:activeCount,overdueCount:overdueCount};
+  } catch(e) { return {orders:[],activeSum:0,activeCount:0,overdueCount:0,__error:e.message}; }
+}
+
+function saveOrder(p) {
+  var ssId=p.ssId, d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_ORDERS);
+    if (!_s(d.contractor)) return {__error:'Выберите контрагента'};
+    var amt=Math.round(parseFloat(d.amount)||0);
+    if (amt<=0) return {__error:'Введите сумму заказа'};
+    if (d.id&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++)
+        if (String(vs[i][0])===String(d.id)) {
+          sh.getRange(i+2,2,1,6).setValues([[_s(d.contractor),_s(d.ordered),_s(d.expected),amt,
+            _s(d.status||'active'),_s(d.comment||'')]]);
+          return {ok:true,id:String(d.id)};
+        }
+      return {__error:'Заказ не найден'};
+    }
+    var id=Utilities.getUuid();
+    sh.appendRow([id,_s(d.contractor),_s(d.ordered),_s(d.expected),amt,'active',
+      _s(d.comment||''),new Date(),'','']);
+    _log(ss,'Новый заказ',_s(d.contractor)+' · '+amt+' ₽ · ожид. '+_s(d.expected));
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Смена статуса: received / partial (факт-сумма) / cancelled / active (вернуть)
+function setOrderStatus(p) {
+  var ssId=p.ssId, id=p.id, status=_s(p.status);
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_ORDERS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=0;i<vs.length;i++)
+      if (String(vs[i][0])===String(id)) {
+        var row=i+2;
+        sh.getRange(row,O_STATUS).setValue(status);
+        if (status==='received'||status==='partial') {
+          sh.getRange(row,O_RECEIVED).setValue(new Date());
+          var fact=Math.round(parseFloat(p.factAmount)||0);
+          if (status==='received'&&!fact) fact=Math.round(parseFloat(sh.getRange(row,O_AMT).getValue())||0);
+          sh.getRange(row,O_FACT).setValue(fact);
+        } else {
+          sh.getRange(row,O_RECEIVED).setValue('');
+          sh.getRange(row,O_FACT).setValue('');
+        }
+        _log(ss,'Статус заказа',String(sh.getRange(row,O_CONTR).getValue())+' → '+status);
+        return {ok:true};
+      }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function deleteOrder(p) {
+  var ssId=p.ssId, id=p.id;
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ORDERS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=vs.length-1;i>=0;i--)
+      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+    return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
 }
