@@ -1072,9 +1072,15 @@ function saveKassa(p) {
       base.getRange(sr,B_DATE,baseRows.length,1).setNumberFormat('dd.mm.yyyy');
       base.getRange(sr,B_AMT,baseRows.length,1).setNumberFormat('#,##0');
     }
-    shiftsSh.appendRow([zRef,dt,_s(d.shift||'1'),_s(d.cashier||''),
-      JSON.stringify(rows),JSON.stringify(wyplatas),Math.round(factTotal-zTotal),new Date()]);
-    shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
+    // Смена пишется только если были данные смены; «только накладные» смену не создают
+    var hasShiftData=wyplatas.length>0||rows.some(function(row){
+      return (parseFloat(row.zAmount)||0)>0||(parseFloat(row.factAmount)||0)>0;
+    });
+    if (hasShiftData) {
+      shiftsSh.appendRow([zRef,dt,_s(d.shift||'1'),_s(d.cashier||''),
+        JSON.stringify(rows),JSON.stringify(wyplatas),Math.round(factTotal-zTotal),new Date()]);
+      shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
+    }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     var storeDebt=0;
