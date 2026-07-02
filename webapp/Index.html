@@ -543,6 +543,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .kassa-diff.neg{color:var(--neg);}
 .kassa-diff.zero{color:var(--muted);}
 .kassa-total-row{padding:14px 18px;display:flex;justify-content:space-between;font-size:15px;font-weight:700;}
+.k-step-dot{flex:1;height:4px;border-radius:2px;background:var(--surface-3);transition:background .2s;}
+.k-step-dot.on{background:var(--brand);}
 .wyplata-item{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);}
 .wyplata-del{background:none;border:none;color:var(--neg);font-size:20px;cursor:pointer;}
 
@@ -1644,12 +1646,37 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     <!-- KASSA (accessible via ActionMenu) -->
     <div id="tab-kassa" class="panel">
       <div style="display:flex;align-items:center;gap:10px;padding:16px 20px 0;">
-        <button onclick="App.setTab('home',null)" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:8px 0;font-family:var(--font);">← Назад</button>
-        <span style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Касса / Смена</span>
+        <button id="k-back-btn" onclick="App.kBack()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:8px 0;font-family:var(--font);">← Назад</button>
+        <span id="k-title" style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Кассовый день</span>
       </div>
-      <div class="kassa-wrap">
+
+      <!-- ХАБ: выбор действия -->
+      <div id="k-hub" class="kassa-wrap">
         <div class="kassa-row">
-          <div class="kassa-row-hdr">🌅 Утро — сверка наличных</div>
+          <div style="padding:14px 16px;display:grid;gap:8px;">
+            <div style="display:flex;justify-content:space-between;font-size:14px;"><span style="color:var(--muted);">Наличные по базе</span><span id="kh-cash" class="num" style="font-weight:800;">—</span></div>
+            <div style="display:flex;justify-content:space-between;font-size:14px;"><span style="color:var(--muted);">Долг магазина (накладные)</span><span id="kh-debt" class="num" style="font-weight:800;color:var(--neg);">—</span></div>
+          </div>
+        </div>
+        <button onclick="App.kShow('morning')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+          <span style="font-size:28px;">🌅</span>
+          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Утро — открыть день</span>
+          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Сверить наличные с базой, записать изъятия</span></span>
+          <span style="color:var(--muted);">›</span>
+        </button>
+        <button onclick="App.kShow('evening')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+          <span style="font-size:28px;">🌙</span>
+          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Вечер — закрыть день</span>
+          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Z-отчёт, выплаты, накладные — по шагам</span></span>
+          <span style="color:var(--muted);">›</span>
+        </button>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.55;padding:0 4px;">Выплаты торговым представителям в течение дня записывай через «+» — каждая как отдельная операция.</div>
+      </div>
+
+      <!-- УТРО -->
+      <div id="k-morning" class="kassa-wrap" style="display:none;">
+        <div class="kassa-row">
+          <div class="kassa-row-hdr">🌅 Сверка наличных</div>
           <div style="padding:12px 16px;">
             <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:14px;margin-bottom:10px;">
               <span style="color:var(--muted);">По базе (расчётный)</span>
@@ -1662,67 +1689,90 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
               <span style="color:var(--muted);">Расхождение</span>
               <span id="km-diff" class="kassa-diff zero">—</span>
             </div>
-            <div style="display:flex;gap:8px;">
-              <button class="btn-primary" style="flex:1;padding:12px;" onclick="App.applyMorning()">Зафиксировать</button>
-              <button onclick="App.openIzyatie()" style="flex:1;padding:12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--neg);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">− Изъятие</button>
-            </div>
+            <button class="btn-primary" style="width:100%;padding:13px;" onclick="App.applyMorning()">Зафиксировать сверку</button>
           </div>
         </div>
         <div class="kassa-row">
-          <div class="kassa-row-hdr">Параметры смены</div>
-          <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-            <div class="field" style="margin:0;"><label>Дата</label><input type="date" id="k-date"></div>
-            <div class="field" style="margin:0;"><label>Смена</label>
-              <select id="k-shift"></select>
-            </div>
-            <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
-              <select id="k-cashier"><option value="">— выбрать —</option></select>
-            </div>
-            <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
-              <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
-            </div>
+          <div class="kassa-row-hdr">Изъятия из кассы</div>
+          <div style="padding:12px 16px;">
+            <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Каждое изъятие — отдельная операция (расход «Изъятие владельца»).</div>
+            <button onclick="App.openIzyatie()" style="width:100%;padding:12px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--neg);font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">− Записать изъятие</button>
           </div>
         </div>
-        <div class="kassa-row">
-          <div class="kassa-row-hdr">Сверка по счетам</div>
-          <div class="kassa-grid" style="background:var(--bg);">
-            <div class="kassa-col-hdr" style="text-align:left;">Счёт</div>
-            <div class="kassa-col-hdr">Z-отчёт</div>
-            <div class="kassa-col-hdr">Факт</div>
-            <div class="kassa-col-hdr">Расх.</div>
-          </div>
-          <div id="kassa-accounts-grid"></div>
-          <div class="kassa-total-row">
-            <span>Итого расхождение</span>
-            <span id="k-total-diff" class="kassa-diff zero">—</span>
-          </div>
+      </div>
+
+      <!-- ВЕЧЕР: пошаговый мастер -->
+      <div id="k-evening" class="kassa-wrap" style="display:none;">
+        <div id="k-steps-bar" style="display:flex;gap:6px;margin-bottom:14px;">
+          <span class="k-step-dot" data-st="1"></span><span class="k-step-dot" data-st="2"></span><span class="k-step-dot" data-st="3"></span>
         </div>
-        <div class="kassa-row">
-          <div class="kassa-row-hdr" style="display:flex;justify-content:space-between;">
-            <span>Выплаты с кассы</span>
-            <button onclick="App.addWyplata()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">+ Добавить</button>
-          </div>
-          <div id="wyplata-list"></div>
-        </div>
-        <div class="kassa-row">
-          <div class="kassa-row-hdr">📦 Накладные за день</div>
-          <div style="padding:12px 16px;display:grid;gap:10px;">
-            <div class="field" style="margin:0;"><label>Оплачено наличными (₽)</label>
-              <input type="number" id="ki-cash" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+
+        <div id="k-step1">
+          <div class="kassa-row">
+            <div class="kassa-row-hdr">Шаг 1 · Смена и Z-отчёт</div>
+            <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div class="field" style="margin:0;"><label>Дата</label><input type="date" id="k-date"></div>
+              <div class="field" style="margin:0;"><label>Смена</label>
+                <select id="k-shift"></select>
+              </div>
+              <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
+                <select id="k-cashier"><option value="">— выбрать —</option></select>
+              </div>
+              <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
+                <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
+              </div>
             </div>
-            <div class="field" style="margin:0;"><label>Погашено старых долгов (₽)</label>
-              <input type="number" id="ki-repaid" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
-            </div>
-            <div class="field" style="margin:0;"><label>Осталось в долг — новые накладные (₽)</label>
-              <input type="number" id="ki-new" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
-            </div>
-            <div id="ki-summary" style="font-size:13px;color:var(--muted);line-height:1.55;"></div>
           </div>
+          <div class="kassa-row">
+            <div class="kassa-row-hdr">Сверка по счетам</div>
+            <div class="kassa-grid" style="background:var(--bg);">
+              <div class="kassa-col-hdr" style="text-align:left;">Счёт</div>
+              <div class="kassa-col-hdr">Z-отчёт</div>
+              <div class="kassa-col-hdr">Факт</div>
+              <div class="kassa-col-hdr">Расх.</div>
+            </div>
+            <div id="kassa-accounts-grid"></div>
+            <div class="kassa-total-row">
+              <span>Итого расхождение</span>
+              <span id="k-total-diff" class="kassa-diff zero">—</span>
+            </div>
+          </div>
+          <div style="padding:0 0 12px;">
+            <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);">📷 Прикрепить Z-отчёт</button>
+          </div>
+          <button class="btn-primary" onclick="App.kStep(2)">Дальше → Выплаты</button>
         </div>
-        <div style="padding:0 0 8px;display:flex;align-items:center;gap:8px;">
-          <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);">📷 Прикрепить Z-отчёт</button>
+
+        <div id="k-step2" style="display:none;">
+          <div class="kassa-row">
+            <div class="kassa-row-hdr" style="display:flex;justify-content:space-between;">
+              <span>Шаг 2 · Выплаты с кассы</span>
+              <button onclick="App.addWyplata()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">+ Добавить</button>
+            </div>
+            <div id="wyplata-list"></div>
+          </div>
+          <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;padding:0 4px;">Инкассация, ЗП за смену и прочее, что забрали из кассы при закрытии. Если ничего не забирали — просто жми дальше.</div>
+          <button class="btn-primary" onclick="App.kStep(3)">Дальше → Накладные</button>
         </div>
-        <button class="btn-primary" onclick="App.saveKassa()">Сохранить смену</button>
+
+        <div id="k-step3" style="display:none;">
+          <div class="kassa-row">
+            <div class="kassa-row-hdr">Шаг 3 · Накладные за день</div>
+            <div style="padding:12px 16px;display:grid;gap:10px;">
+              <div class="field" style="margin:0;"><label>Оплачено наличными (₽)</label>
+                <input type="number" id="ki-cash" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+              </div>
+              <div class="field" style="margin:0;"><label>Погашено старых долгов (₽)</label>
+                <input type="number" id="ki-repaid" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+              </div>
+              <div class="field" style="margin:0;"><label>Осталось в долг — новые накладные (₽)</label>
+                <input type="number" id="ki-new" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+              </div>
+              <div id="ki-summary" style="font-size:13px;color:var(--muted);line-height:1.55;"></div>
+            </div>
+          </div>
+          <button class="btn-primary" onclick="App.saveKassa()">Сохранить и закрыть день</button>
+        </div>
       </div>
     </div>
 
@@ -4186,9 +4236,50 @@ var App={
       sel.innerHTML+='<option value="'+App._e(c)+'">'+App._e(c)+'</option>';
     });
     App.s.wyplatas=[];App.renderWyplatas();
-    if(App.s.accounts&&App.s.accounts.length){App._buildKassaGrid();App._loadMorning();}
-    else{gs('getAccounts',{ssId:App.s.ssId}).then(function(r){App.s.accounts=r||[];App._buildKassaGrid();App._loadMorning();});}
+    if(App.s.accounts&&App.s.accounts.length){App._buildKassaGrid();App._loadKHub();}
+    else{gs('getAccounts',{ssId:App.s.ssId}).then(function(r){App.s.accounts=r||[];App._buildKassaGrid();App._loadKHub();});}
     App._loadStoreDebt();
+    App.kShow('hub');
+  },
+
+  // ── Кассовый день: навигация хаб / утро / вечер ──
+  _kView:'hub',
+  kShow:function(view){
+    App._kView=view;
+    var m={hub:'k-hub',morning:'k-morning',evening:'k-evening'};
+    Object.keys(m).forEach(function(k){var el=document.getElementById(m[k]);if(el)el.style.display=k===view?'block':'none';});
+    var t=document.getElementById('k-title');
+    if(t)t.textContent=view==='morning'?'🌅 Открытие дня':view==='evening'?'🌙 Закрытие дня':'Кассовый день';
+    if(view==='morning')App._loadMorning();
+    if(view==='evening'){App.kStep(1);App.calcInvoices();}
+    if(view==='hub')App._loadKHub();
+    var p=document.getElementById('tab-kassa');if(p)p.scrollTo(0,0);
+    App.haptic(6);
+  },
+  kBack:function(){
+    if(App._kView==='evening'&&App._kStepN>1){App.kStep(App._kStepN-1);return;}
+    if(App._kView!=='hub'){App.kShow('hub');return;}
+    App.setTab('home',null);
+  },
+  _kStepN:1,
+  kStep:function(n){
+    if(n===2){
+      var cashier=document.getElementById('k-cashier').value;
+      if(!cashier){App.toast('Выберите кассира',true);return;}
+    }
+    App._kStepN=n;
+    [1,2,3].forEach(function(i){
+      var el=document.getElementById('k-step'+i);if(el)el.style.display=i===n?'block':'none';
+    });
+    document.querySelectorAll('.k-step-dot').forEach(function(d){d.classList.toggle('on',parseInt(d.dataset.st)<=n);});
+    var p=document.getElementById('tab-kassa');if(p)p.scrollTo(0,0);
+    App.haptic(6);
+  },
+  _loadKHub:function(){
+    var set=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
+    var cash=(App.s.accounts||[]).filter(function(a){return a.name==='Наличные';})[0];
+    set('kh-cash',cash?'₽ '+fmtFull(Math.round(cash.balance||0)):'—');
+    set('kh-debt',App._kStoreDebt==null?'—':'₽ '+fmtFull(App._kStoreDebt));
   },
 
   // ── Утро: сверка наличных ──
@@ -4242,7 +4333,7 @@ var App={
   _kStoreDebt:null,
   _loadStoreDebt:function(){
     gs('getStoreDebt',{ssId:App.s.ssId}).then(function(r){
-      App._kStoreDebt=Math.round((r&&r.debt)||0);App.calcInvoices();
+      App._kStoreDebt=Math.round((r&&r.debt)||0);App.calcInvoices();App._loadKHub();
     }).catch(function(){});
   },
   calcInvoices:function(){
