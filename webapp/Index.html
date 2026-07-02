@@ -1789,10 +1789,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           </button>
         </div>
         <input id="j-search" type="text" placeholder="Поиск по сумме, категории, комментарию…" style="width:100%;padding:11px 16px;border-radius:14px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;font-family:var(--font);" oninput="App.searchHistory(this.value)">
-        <div style="display:flex;gap:7px;margin-top:10px;">
+        <div style="display:flex;gap:7px;margin-top:10px;align-items:center;">
           <button class="rp-chip jf-chip jf-active" data-jf="all" onclick="App.jFilter('all')">Все</button>
           <button class="rp-chip jf-chip" data-jf="income" onclick="App.jFilter('income')">Доходы</button>
           <button class="rp-chip jf-chip" data-jf="expense" onclick="App.jFilter('expense')">Расходы</button>
+          <select id="jf-emp" onchange="App._jEmpFilter=this.value;App._jRender();" style="flex:1;min-width:0;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
+            <option value="">👤 Все сотрудники</option>
+          </select>
         </div>
       </div>
       <div id="j-tx-list" style="padding:0 0 8px;"></div>
@@ -1923,6 +1926,16 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
       <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
+      <div style="padding:0 16px;">
+        <div onclick="App.openProfile()" style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:16px;cursor:pointer;margin-bottom:6px;">
+          <div id="prof-ava" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#9F7AEA);display:grid;place-items:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0;">👤</div>
+          <div style="flex:1;min-width:0;">
+            <div id="prof-name" style="font-size:16px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Мой профиль</div>
+            <div id="prof-sub" style="font-size:12.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Имя, телефон, организации и роли</div>
+          </div>
+          <span style="color:var(--muted);">›</span>
+        </div>
+      </div>
       <div class="settings-sec owner-only">
         <div class="settings-sec-title">Счета</div>
         <div class="settings-list" id="settings-accounts-list"></div>
@@ -5038,10 +5051,20 @@ var App={
   },
   _jRender:function(){
     var f=App._jFilter||'all';var all=App._jTxAll||[];
+    // Наполняем фильтр по сотрудникам из реальных данных
+    var sel=document.getElementById('jf-emp');
+    if(sel){
+      var emps={};all.forEach(function(t){if(t.employee)emps[t.employee]=1;});
+      var names=Object.keys(emps).sort();
+      var cur=App._jEmpFilter||'';
+      sel.innerHTML='<option value="">👤 Все сотрудники</option>'+names.map(function(n){
+        return '<option'+(n===cur?' selected':'')+'>'+App._e(n)+'</option>';}).join('');
+    }
     var list=f==='all'?all:all.filter(function(t){
       var ti=(t.type==='Доход'||t.type==='income');
       return f==='income'?ti:(t.type==='Расход'||t.type==='expense');
     });
+    if(App._jEmpFilter)list=list.filter(function(t){return t.employee===App._jEmpFilter;});
     App.renderTxList(list,'j-tx-list');
   },
 
@@ -5899,6 +5922,60 @@ var App={
       App.toast('Сохранено ✓');App.loadHome();
       if(data.type==='Расход'&&data.category)App._checkBudgetLimit(data.category);
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);App.loadHome();});
+  },
+
+  // ── Мой профиль ──
+  openProfile:function(){
+    App.openModal('<div class="modal-title">👤 Мой профиль</div><div id="prof-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getMyProfile',{}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._profile=r;App._renderProfile();
+      // Обновляем карточку в настройках
+      var n=document.getElementById('prof-name');if(n&&r.name)n.textContent=r.name;
+      var s=document.getElementById('prof-sub');if(s&&r.email)s.textContent=r.email;
+      var a=document.getElementById('prof-ava');if(a&&r.name)a.textContent=r.name.trim().split(/\s+/).slice(0,2).map(function(w){return w[0]||'';}).join('').toUpperCase();
+    }).catch(function(e){var b=document.getElementById('prof-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderProfile:function(){
+    var b=document.getElementById('prof-body');if(!b||!App._profile)return;
+    var r=App._profile;
+    var age='';
+    if(r.birth){
+      var bd=new Date(r.birth+'T12:00:00');
+      if(!isNaN(bd)){var a=Math.floor((Date.now()-bd.getTime())/(365.25*86400000));if(a>0&&a<120)age=' · '+a+' '+App._plural(a,'год','года','лет');}
+    }
+    var R=App._repRow,S=App._repSec;
+    var h=S('Аккаунт',
+      R('ФИО',App._e(r.name||'—'))+
+      R('Google-аккаунт',App._e(r.email||'не определён'))+
+      R('Телефон',App._e(r.phone||'—'))+
+      R('Дата рождения',(r.birth?App._e(r.birth.split('-').reverse().join('.'))+age:'—')));
+    if(r.orgs&&r.orgs.length){
+      h+=S('Мои организации ('+r.orgs.length+')',r.orgs.map(function(o){
+        return R('🏪 '+App._e(o.name),o.isOwner?'<span style="color:var(--brand);">Владелец</span>':App._e(o.role));
+      }).join(''));
+    }
+    h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openProfileEdit()">✏️ Редактировать</button>'+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal();App.openAuditLog();">📜 Журнал действий</button>';
+    b.innerHTML=h;
+  },
+  openProfileEdit:function(){
+    var r=App._profile||{};
+    App.openModal('<div class="modal-title">✏️ Мой профиль</div>'+
+      '<div class="field"><label>ФИО</label><input id="pe-name" type="text" placeholder="Иванов Иван" value="'+App._e(r.name||'')+'"></div>'+
+      '<div class="field"><label>Телефон</label><input id="pe-phone" type="tel" placeholder="+7 900 000-00-00" value="'+App._e(r.phone||'')+'"></div>'+
+      '<div class="field"><label>Дата рождения</label><input id="pe-birth" type="date" value="'+App._e(r.birth||'')+'"></div>'+
+      '<button class="btn-primary" onclick="App._saveProfile()">Сохранить</button>');
+  },
+  _saveProfile:function(){
+    var d={name:document.getElementById('pe-name').value.trim(),
+      phone:document.getElementById('pe-phone').value.trim(),
+      birth:document.getElementById('pe-birth').value};
+    if(!d.name){App.toast('Введите имя',true);return;}
+    gs('updateMyProfile',d).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Сохранено ✓');App.s.userName=d.name;App.openProfile();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   // ── Автоматизация ──
@@ -7085,7 +7162,7 @@ var App={
       var items=(r&&r.items)||[];
       if(!items.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);">Пока пусто. Здесь появятся удаления операций и корректировки балансов.</div>';return;}
       el.innerHTML='<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+items.map(function(it){
-        return'<div style="padding:11px 13px;border-top:1px solid var(--line-2);"><div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-size:13px;font-weight:700;">'+App._e(it.action)+'</span><span style="font-size:12px;color:var(--muted);">'+App._e(it.time)+'</span></div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">'+App._e(it.detail)+'</div></div>';
+        return'<div style="padding:11px 13px;border-top:1px solid var(--line-2);"><div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-size:13px;font-weight:700;">'+App._e(it.action)+'</span><span style="font-size:12px;color:var(--muted);">'+App._e(it.time)+'</span></div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">'+App._e(it.detail)+(it.user?' · <span style="color:var(--brand);">'+App._e(it.user)+'</span>':'')+'</div></div>';
       }).join('')+'</div>';
     }).catch(function(e){var el=document.getElementById('audit-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },

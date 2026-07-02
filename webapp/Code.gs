@@ -2072,7 +2072,8 @@ function _log(ss, action, detail) {
   try {
     var sh = ss.getSheetByName(SH_LOG);
     if (!sh) return;
-    sh.appendRow([new Date(), String(action||''), String(detail||'').slice(0,300)]);
+    var who=''; try{who=String(Session.getActiveUser().getEmail()||'');}catch(e){}
+    sh.appendRow([new Date(), String(action||''), String(detail||'').slice(0,300), who]);
   } catch(e) {}
 }
 function getAuditLog(p) {
@@ -2082,10 +2083,11 @@ function getAuditLog(p) {
     if (!sh || sh.getLastRow()<2) return { items:[] };
     var tz = Session.getScriptTimeZone();
     var n = Math.min(sh.getLastRow()-1, 100);
-    var vals = sh.getRange(sh.getLastRow()-n+1, 1, n, 3).getValues();
+    var ncol = Math.max(sh.getLastColumn(), 3);
+    var vals = sh.getRange(sh.getLastRow()-n+1, 1, n, ncol).getValues();
     var items = vals.map(function(r){
       var t = r[0] instanceof Date ? Utilities.formatDate(r[0],tz,'dd.MM HH:mm') : '';
-      return { time:t, action:String(r[1]||''), detail:String(r[2]||'') };
+      return { time:t, action:String(r[1]||''), detail:String(r[2]||''), user:String(r[3]||'') };
     }).reverse();
     return { items:items };
   } catch(e) { return { __error:e.message, items:[] }; }
@@ -2601,10 +2603,15 @@ function _myEmail() {
 }
 
 function _isOwner(ss) {
+  // Если email определить не удалось (в веб-приложениях бывает) —
+  // НЕ блокируем: организации из профиля пользователь создал сам.
   try {
     var owner=ss.getOwner();
-    return owner&&String(owner.getEmail()).toLowerCase()===_myEmail();
-  } catch(e) { return false; }
+    if (!owner) return true;
+    var me=_myEmail();
+    if (!me) return true;
+    return String(owner.getEmail()).toLowerCase()===me;
+  } catch(e) { return true; }
 }
 
 function getTeam(p) {
@@ -3363,4 +3370,45 @@ function setMemberRoleMulti(p) {
   var r=setMemberRole({ssId:p.ssId,email:p.email,role:p.role});
   if (r&&r.__error) return r;
   return getTeamAll();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: MY PROFILE (аккаунт пользователя)
+// ПРОФИЛЬ: Имя | Телефон | ДатаРождения
+// ═══════════════════════════════════════════════════════════════════════
+
+function getMyProfile() {
+  try {
+    var prof=_profileSS();
+    var name='',phone='',birth='';
+    if (prof) {
+      var sh=prof.getSheetByName(SH_PROFILE);
+      if (sh&&sh.getLastRow()>=2) {
+        var ncol=Math.max(sh.getLastColumn(),2);
+        var r=sh.getRange(2,1,1,ncol).getValues()[0];
+        name=String(r[0]||'');phone=String(r[1]||'');
+        birth=r[2]?(r[2] instanceof Date?Utilities.formatDate(r[2],Session.getScriptTimeZone(),'yyyy-MM-dd'):String(r[2])):'';
+      }
+    }
+    var d=initUserApp();
+    var orgs=(d.orgs||[]).map(function(o){
+      var t=getTeam({ssId:o.ssId});
+      return {ssId:o.ssId,name:o.name,
+        isOwner:!(t&&t.__error)&&t.isOwner,
+        role:(t&&!t.__error)?t.myRole:'—'};
+    });
+    return {name:name,phone:phone,birth:birth,email:_myEmail(),orgs:orgs};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function updateMyProfile(p) {
+  try {
+    var prof=_profileSS();
+    if (!prof) return {__error:'Профиль не найден'};
+    var sh=prof.getSheetByName(SH_PROFILE);
+    if (sh.getLastColumn()<3) sh.getRange(1,3).setValue('ДатаРождения');
+    if (sh.getLastRow()<2) sh.appendRow([_s(p.name),_s(p.phone),_s(p.birth)]);
+    else sh.getRange(2,1,1,3).setValues([[_s(p.name),_s(p.phone),_s(p.birth)]]);
+    return {ok:true};
+  } catch(e) { return {__error:e.message}; }
 }
