@@ -2667,10 +2667,10 @@ var App={
     var text=document.getElementById('notif-text');
     if(banner&&text){
       if(overdueN>0){
-        text.textContent='🔴 Просрочено '+overdueN+(overdueN===1?' выплата':' выплат')+' на ₽ '+fmtFull(overdueAmt);
+        text.textContent='🔴 Просрочено: '+overdueN+' '+App._plural(overdueN,'выплата','выплаты','выплат')+' на ₽ '+fmtFull(overdueAmt);
         banner.style.background='var(--neg)';banner.style.display='flex';
       } else if(upcomingN>0){
-        text.textContent='🟡 Через 3 дня: '+upcomingN+' выплат на ₽ '+fmtFull(upcomingAmt);
+        text.textContent='🟡 Через 3 дня: '+upcomingN+' '+App._plural(upcomingN,'выплата','выплаты','выплат')+' на ₽ '+fmtFull(upcomingAmt);
         banner.style.background='#B45309';banner.style.display='flex';
       } else {
         banner.style.display='none';
@@ -2834,7 +2834,7 @@ var App={
     var paidPct=totalAmt?Math.round(totalPaid/totalAmt*100):0;
     var e=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
     e('supp-today-plan','₽ '+fmt(todayPlan));
-    e('supp-open-count',openCount+' активных записей');
+    e('supp-open-count',openCount+' '+App._plural(openCount,'активная запись','активные записи','активных записей'));
     e('supp-total-debt','₽ '+fmt(totalDebt));
     var bar=document.getElementById('supp-paid-bar');if(bar)bar.style.width=paidPct+'%';
     var row=document.getElementById('supp-paid-row');
@@ -3216,7 +3216,7 @@ var App={
     if(!confirm('Сбросить все данные и заполнить демо-данными?\n\nВсе текущие записи будут удалены.'))return;
     App.toast('Заполняю данные…');
     gs('seedDemoData',{ssId:App.s.ssId}).then(function(r){
-      App.toast('Готово — добавлено '+r.txCount+' операций ✓');
+      App.toast('Готово — '+App._plural(r.txCount,'добавлена','добавлены','добавлено')+' '+r.txCount+' '+App._plural(r.txCount,'операция','операции','операций')+' ✓');
       App.loadSettings(function(){App.loadHome();});
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
@@ -3273,7 +3273,7 @@ var App={
     var an=function(id,v){var e=document.getElementById(id);if(e)animateNumber(e,v,'₽ ',function(){App._fitText(e,13,22);});};
     an('split-revenue',inc);
     an('split-expense',exp);
-    se('split-revenue-sub',(sum.count||0)+' операций');
+    se('split-revenue-sub',(sum.count||0)+' '+App._plural(sum.count||0,'операция','операции','операций'));
     var pE=document.getElementById('split-profit');
     if(pE){pE.style.color=prof>=0?'var(--pos)':'var(--neg)';animateNumber(pE,Math.abs(prof),(prof<0?'−₽ ':'₽ '),function(){App._fitText(pE,13,22);});}
     var sbBal=document.getElementById('sb-total-bal');
@@ -3833,7 +3833,7 @@ var App={
             '<div style="width:40px;height:40px;border-radius:50%;background:'+(c.anomaly?'color-mix(in oklab,var(--neg) 18%,transparent)':'var(--surface-2)')+';display:grid;place-items:center;font-weight:800;flex-shrink:0;color:'+(c.anomaly?'var(--neg)':'var(--ink-2)')+';">'+App._e((c.name||'?').charAt(0))+'</div>'+
             '<div style="flex:1;min-width:0;">'+
               '<div style="font-size:15px;font-weight:700;display:flex;align-items:center;gap:7px;">'+safeName+(c.anomaly?'<span class="badge badge-bad" style="font-size:10.5px;">⚠ АНОМАЛИЯ</span>':'')+'</div>'+
-              '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+c.shifts+' смен · выручка ₽'+fmt(c.revenue)+'</div>'+
+              '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+c.shifts+' '+App._plural(c.shifts,'смена','смены','смен')+' · выручка ₽'+fmt(c.revenue)+'</div>'+
             '</div>'+
             '<div style="text-align:right;flex-shrink:0;">'+
               '<div style="font-size:15px;font-weight:800;color:'+(c.discAbs?'var(--neg)':'var(--muted)')+';">'+(c.discAbs?'₽ '+fmt(c.discAbs):'✓ 0')+'</div>'+
@@ -3955,7 +3955,7 @@ var App={
             '<span style="font-size:20px;width:28px;text-align:center;">'+(medals[i]||'#'+(i+1))+'</span>'+
             '<div style="flex:1;min-width:0;">'+
               '<div style="font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+safeName+'</div>'+
-              '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.txCount+' операций · оплачено '+s.payRatio+'%</div>'+
+              '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.txCount+' '+App._plural(s.txCount,'операция','операции','операций')+' · оплачено '+s.payRatio+'%</div>'+
               '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;">'+
                 '<div style="height:100%;width:'+pct+'%;background:var(--brand);border-radius:2px;"></div>'+
               '</div>'+
@@ -3992,7 +3992,7 @@ var App={
           '</div>'+
           '<div style="flex:1;min-width:0;">'+
             '<div style="font-size:15px;font-weight:700;">'+safeName+'</div>'+
-            '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.count+' смен · ср. ₽'+fmt(s.avgRevenue)+'</div>'+
+            '<div style="font-size:12px;color:var(--muted);margin-top:3px;">'+s.count+' '+App._plural(s.count,'смена','смены','смен')+' · ср. ₽'+fmt(s.avgRevenue)+'</div>'+
             '<div style="margin-top:7px;height:4px;background:rgba(255,255,255,.08);border-radius:2px;">'+
               '<div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px;"></div>'+
             '</div>'+
@@ -4072,7 +4072,7 @@ var App={
             '<div style="display:flex;align-items:center;gap:10px;">'+
               '<div style="width:10px;height:10px;border-radius:3px;background:'+col+';flex-shrink:0;"></div>'+
               '<span style="font-size:16px;font-weight:700;">'+App._e(a.name)+'</span>'+
-              '<span style="font-size:12px;color:var(--muted);">'+a.txCount+' операций</span>'+
+              '<span style="font-size:12px;color:var(--muted);">'+a.txCount+' '+App._plural(a.txCount,'операция','операции','операций')+'</span>'+
             '</div>'+
             '<span style="font-size:16px;font-weight:800;color:'+netColor+';">'+(a.net>=0?'+':'')+'₽ '+fmt(a.net)+'</span>'+
           '</div>'+
@@ -4129,7 +4129,7 @@ var App={
             '<span style="font-size:32px;">🏆</span>'+
             '<div style="flex:1;">'+
               '<div style="font-size:17px;font-weight:800;">'+App._e(r.topCashier.name)+'</div>'+
-              '<div style="font-size:13px;color:var(--muted);margin-top:3px;">'+r.topCashier.shifts+' смен</div>'+
+              '<div style="font-size:13px;color:var(--muted);margin-top:3px;">'+r.topCashier.shifts+' '+App._plural(r.topCashier.shifts,'смена','смены','смен')+'</div>'+
             '</div>'+
             '<div style="font-size:18px;font-weight:800;color:var(--pos);">₽ '+fmt(r.topCashier.revenue)+'</div>'+
           '</div>'+
@@ -5285,7 +5285,7 @@ var App={
   applyRecurring:function(){
     if(!confirm('Создать расходы по всем активным шаблонам за текущий месяц?'))return;
     gs('applyRecurring',{ssId:App.s.ssId}).then(function(r){
-      App.toast('Применено: '+r.applied+' записей');App.loadHome();
+      App.toast('Применено: '+r.applied+' '+App._plural(r.applied,'запись','записи','записей'));App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -5862,7 +5862,7 @@ var App={
         rows3.map(function(x){return'<div style="display:flex;justify-content:space-between;padding:11px 14px;background:var(--surface-2);"><span style="font-size:13px;color:var(--muted);">'+x[0]+'</span><span style="font-size:14px;font-weight:700;">'+x[1]+'</span></div>';}).join('')+'</div>'+
         '<div style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;">Это справочная сводка остатков из 1С. Товарный учёт ведётся в 1С — здесь только финансовая картина.</div>';
     }else if(typ==='Цены'){
-      card='<div style="font-size:14px;font-weight:700;">Цены поставщиков: '+o.позиций+' позиций</div>';
+      card='<div style="font-size:14px;font-weight:700;">Цены поставщиков: '+o.позиций+' '+App._plural(o.позиций,'позиция','позиции','позиций')+'</div>';
       if(o.пример&&o.пример.length){
         card+='<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
           o.пример.map(function(p){return'<div style="padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(p[0])+'</div><div style="display:flex;justify-content:space-between;color:var(--muted);margin-top:2px;"><span>'+App._e(p[1])+'</span><span style="font-weight:700;color:var(--ink);">'+p[2]+' ₽</span></div></div>';}).join('')+'</div>';
@@ -5958,7 +5958,7 @@ var App={
     if(a.abc){var ab=a.abc;var mlbl=ab.metric==='profit'?'прибыли':'выручке';
       var abcRow=function(g,letter,color,desc){return'<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid var(--line-2);">'+
         '<span style="width:26px;height:26px;border-radius:8px;background:'+color+';color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">'+letter+'</span>'+
-        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">'+g.count+' товаров ('+g.pct+'%)</div><div style="font-size:11.5px;color:var(--muted);">'+desc+'</div></div>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:600;">'+g.count+' '+App._plural(g.count,'товар','товара','товаров')+' ('+g.pct+'%)</div><div style="font-size:11.5px;color:var(--muted);">'+desc+'</div></div>'+
         '<span style="font-weight:800;color:'+color+';">'+g.share+'%</span></div>';};
       h+='<div style="margin-top:18px;font-size:14px;font-weight:700;">🔤 ABC-анализ по '+mlbl+'</div>'+
         '<div style="font-size:12px;color:var(--muted);margin-top:2px;margin-bottom:8px;">Какие товары приносят основной результат</div>'+
