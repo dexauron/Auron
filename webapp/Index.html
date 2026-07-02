@@ -151,6 +151,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 }
 .btn-secondary:hover{background:var(--surface-3);}
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
+/* Горизонтальные ленты: мягкое затухание у правого края вместо резкого обреза */
+.hscroll{scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
+.hscroll::after{content:"";flex:0 0 20px;}
 .rp-chip:active{background:var(--surface-3);}
 .jf-chip.jf-active{background:color-mix(in oklab,var(--brand) 16%,transparent);border-color:var(--brand);color:var(--brand);}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -475,8 +478,9 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 .skel-block{height:80px;margin-bottom:10px;border-radius:18px;}
 
 /* ── Analytics ── */
-.an-tabs{display:flex;padding:0 16px 14px;overflow-x:auto;scrollbar-width:none;gap:8px;}
+.an-tabs{display:flex;padding:0 16px 14px;overflow-x:auto;scrollbar-width:none;gap:8px;scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
 .an-tabs::-webkit-scrollbar{display:none;}
+.an-tabs::after{content:"";flex:0 0 12px;}
 .an-tab{
   padding:8px 18px;border:1px solid var(--sep);background:transparent;
   color:var(--text-3);font-size:13px;font-weight:600;cursor:pointer;
@@ -1732,7 +1736,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div style="font-size:12.5px;color:var(--muted);font-weight:650;">Общий долг</div>
           <div class="num" style="font-size:26px;font-weight:800;margin-top:8px;color:var(--neg);letter-spacing:-.03em;" id="supp-total-debt">—</div>
           <div class="bar" style="margin-top:10px;"><span id="supp-paid-bar" style="width:0%;background:var(--pos);"></span></div>
-          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;" id="supp-paid-row"></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-top:6px;font-size:12px;min-width:0;" id="supp-paid-row"></div>
         </div>
       </div>
       <!-- Contractor grid -->
@@ -1791,7 +1795,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             <button onclick="App.openTaxes()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 16%,transparent);color:var(--warn,#FF9F0A);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🧮 Налоги</button>
             <button onclick="App.openReconcile()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Сверка выручки</button>
           </div>
-          <div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;">
+          <div class="hscroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
             <button onclick="App.reportPreset('today')" class="rp-chip">Сегодня</button>
             <button onclick="App.reportPreset('week')" class="rp-chip">Неделя</button>
             <button onclick="App.reportPreset('month')" class="rp-chip">Этот месяц</button>
@@ -2834,8 +2838,8 @@ var App={
     e('supp-total-debt','₽ '+fmt(totalDebt));
     var bar=document.getElementById('supp-paid-bar');if(bar)bar.style.width=paidPct+'%';
     var row=document.getElementById('supp-paid-row');
-    if(row)row.innerHTML='<span style="color:var(--pos);font-weight:650;">Оплачено ₽ '+fmt(totalPaid)+'</span>'+
-      '<span style="color:var(--muted);">'+paidPct+'% закрыто</span>';
+    if(row)row.innerHTML='<span style="color:var(--pos);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">Оплачено ₽ '+fmt(totalPaid)+'</span>'+
+      '<span style="color:var(--muted);white-space:nowrap;flex-shrink:0;">'+paidPct+'%</span>';
   },
 
   _renderContractorGrid:function(pays,reps){
@@ -6032,6 +6036,8 @@ var App={
   _taxRender:function(){
     var b=document.getElementById('tax-body');if(!b||!App._tax)return;
     var t=App._tax;var st=App.s.settings||{};
+    if(!t.quarters||!t.quarters.length)t.quarters=[{income:0,expense:0},{income:0,expense:0},{income:0,expense:0},{income:0,expense:0}];
+    if(t.year==null)t.year=new Date().getFullYear();if(t.yearIncome==null)t.yearIncome=0;
     var mode=st.taxMode||'usn6';
     var fm=function(v){return fmt(Math.round(v));};
     var seg=function(id,lbl){return'<button onclick="App._taxSetMode(\''+id+'\')" style="flex:1;padding:9px;border-radius:10px;border:1.5px solid '+(mode===id?'var(--brand)':'var(--line)')+';background:'+(mode===id?'color-mix(in oklab,var(--brand) 16%,transparent)':'var(--surface-2)')+';color:'+(mode===id?'var(--brand)':'var(--ink)')+';font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">'+lbl+'</button>';};
