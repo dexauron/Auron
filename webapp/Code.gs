@@ -3317,3 +3317,50 @@ function fillTimesheetMonth(p) {
     return {ok:true,added:rows.length};
   } catch(e) { return {__error:e.message}; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: TEAM ACROSS ORGS (доступ сотрудников ко всем организациям владельца)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Все организации владельца + команды каждой (только где он владелец)
+function getTeamAll() {
+  try {
+    var d=initUserApp();
+    var out=[];
+    (d.orgs||[]).forEach(function(o){
+      var t=getTeam({ssId:o.ssId});
+      if (t&&!t.__error&&t.isOwner)
+        out.push({ssId:o.ssId,name:o.name,members:t.members||[]});
+    });
+    return {orgs:out,myEmail:_myEmail()};
+  } catch(e) { return {orgs:[],__error:e.message}; }
+}
+
+// Пригласить сотрудника сразу в несколько организаций
+function inviteMemberMulti(p) {
+  var email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  var ssIds=p.ssIds||[];
+  if (!ssIds.length) return {__error:'Выбери хотя бы одну организацию'};
+  var ok=0, errs=[];
+  ssIds.forEach(function(id){
+    var r=inviteMember({ssId:id,email:email,role:role});
+    if (r&&r.__error) { if(r.__error!=='Этот сотрудник уже приглашён') errs.push(r.__error); }
+    else ok++;
+  });
+  if (!ok&&errs.length) return {__error:errs[0]};
+  return getTeamAll();
+}
+
+// Убрать доступ из одной организации
+function removeMemberMulti(p) {
+  var r=removeMember({ssId:p.ssId,email:p.email});
+  if (r&&r.__error) return r;
+  return getTeamAll();
+}
+
+// Сменить роль в одной организации
+function setMemberRoleMulti(p) {
+  var r=setMemberRole({ssId:p.ssId,email:p.email,role:p.role});
+  if (r&&r.__error) return r;
+  return getTeamAll();
+}

@@ -2919,57 +2919,81 @@ var App={
   _roles:['Бухгалтер','Администратор','Сотрудник зала'],
   openTeam:function(){
     App.openModal('<div class="modal-title">👥 Сотрудники и доступ</div><div id="team-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
-    gs('getTeam',{ssId:App.s.ssId}).then(function(r){
+    gs('getTeamAll',{}).then(function(r){
       if(r&&r.__error)throw new Error(r.__error);
-      App.s._team=r;App._renderTeam(r);
+      App._teamAll=r;App._renderTeamAll();
     }).catch(function(e){var b=document.getElementById('team-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },
-  _renderTeam:function(r){
-    var b=document.getElementById('team-body');if(!b)return;
-    var h='';
-    if(!r.isOwner){
-      b.innerHTML='<div style="padding:14px;background:var(--surface-2);border-radius:12px;line-height:1.6;">Доступом управляет владелец организации'+(r.ownerEmail?' — <b>'+App._e(r.ownerEmail)+'</b>':'')+'.<br>Ваша роль: <b>'+App._e(r.myRole)+'</b>.</div>';
+  _renderTeamAll:function(){
+    var b=document.getElementById('team-body');if(!b||!App._teamAll)return;
+    var orgs=App._teamAll.orgs||[];
+    if(!orgs.length){
+      b.innerHTML='<div style="padding:14px;background:var(--surface-2);border-radius:12px;line-height:1.6;">Доступом управляет владелец организации. Ваша роль назначена владельцем.</div>';
       return;
     }
-    h+='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">Сотрудник получит доступ к этой организации по своему Google-аккаунту. Настройки видит только владелец.</div>';
-    if(r.members.length){
-      h+=r.members.map(function(m,i){
-        var opts=App._roles.map(function(ro){return '<option'+(ro===m.role?' selected':'')+'>'+ro+'</option>';}).join('');
-        return '<div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line-2);">'+
-          '<div style="flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(m.email)+'</div>'+
-          '<select onchange="App._teamRole('+i+',this.value)" style="padding:7px 8px;border-radius:9px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12px;font-family:var(--font);">'+opts+'</select>'+
-          '<button onclick="App._teamRemove('+i+')" style="background:none;border:none;color:var(--neg);font-size:16px;cursor:pointer;padding:4px;">✕</button></div>';
+    // Сводим: сотрудник → в каких организациях и с какой ролью
+    var byEmail={};
+    orgs.forEach(function(o){
+      (o.members||[]).forEach(function(m){
+        if(!byEmail[m.email])byEmail[m.email]=[];
+        byEmail[m.email].push({ssId:o.ssId,org:o.name,role:m.role});
+      });
+    });
+    var emails=Object.keys(byEmail);
+    var h='<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">Один центр для всех твоих организаций ('+orgs.length+'). Сотрудник входит в приложение своим Google-аккаунтом и видит только то, что ты открыл.</div>';
+    if(emails.length){
+      h+=emails.map(function(em){
+        var list=byEmail[em];
+        var chips=list.map(function(x){
+          var roleOpts=App._roles.map(function(ro){return '<option'+(ro===x.role?' selected':'')+'>'+ro+'</option>';}).join('');
+          return '<div style="display:flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:10px;padding:6px 8px;margin:4px 4px 0 0;">'+
+            '<span style="font-size:11.5px;font-weight:700;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏪 '+App._e(x.org)+'</span>'+
+            '<select onchange="App._teamRole(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',this.value)" style="padding:4px 5px;border-radius:7px;border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:10.5px;font-family:var(--font);max-width:110px;">'+roleOpts+'</select>'+
+            '<button onclick="App._teamRemove(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',\''+App._e(x.org)+'\')" style="background:none;border:none;color:var(--neg);font-size:13px;cursor:pointer;padding:2px;">✕</button></div>';
+        }).join('');
+        return '<div style="padding:11px 0;border-bottom:1px solid var(--line-2);">'+
+          '<div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(em)+'</div>'+
+          '<div style="display:flex;flex-wrap:wrap;">'+chips+'</div></div>';
       }).join('');
     } else {
-      h+='<div style="text-align:center;padding:14px;color:var(--muted);">Пока только вы.</div>';
+      h+='<div style="text-align:center;padding:14px;color:var(--muted);">Пока сотрудников нет — пригласи первого 👇</div>';
     }
-    h+='<div class="field" style="margin-top:14px;"><label>Email сотрудника</label><input id="tm-email" type="email" placeholder="user@gmail.com" inputmode="email"></div>'+
+    // Форма приглашения: email + роль + в какие организации
+    var orgChecks=orgs.map(function(o,i){
+      return '<label style="display:flex;align-items:center;gap:9px;padding:8px 0;cursor:pointer;">'+
+        '<input type="checkbox" class="tm-org" data-ssid="'+App._e(o.ssId)+'"'+(o.ssId===App.s.ssId?' checked':'')+' style="width:18px;height:18px;accent-color:var(--brand);">'+
+        '<span style="font-size:13.5px;font-weight:600;">'+App._e(o.name)+'</span></label>';
+    }).join('');
+    h+='<div style="margin-top:16px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Пригласить сотрудника</div>'+
+      '<div class="field" style="margin-top:8px;"><label>Email (Google-аккаунт)</label><input id="tm-email" type="email" placeholder="user@gmail.com" inputmode="email"></div>'+
       '<div class="field"><label>Роль</label><select id="tm-role">'+App._roles.map(function(ro){return '<option>'+ro+'</option>';}).join('')+'</select></div>'+
-      '<button class="btn-primary" onclick="App._teamInvite()">Пригласить</button>';
+      '<div class="field"><label>Доступ к организациям</label>'+orgChecks+'</div>'+
+      '<button class="btn-primary" onclick="App._teamInvite()">Пригласить</button>'+
+      '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">Сотрудник откроет приложение под своим Google-аккаунтом → на экране «Мои организации» появится приглашение → нажмёт «Принять».</div>';
     b.innerHTML=h;
   },
   _teamInvite:function(){
     var email=document.getElementById('tm-email').value.trim();
     var role=document.getElementById('tm-role').value;
+    var ssIds=Array.prototype.slice.call(document.querySelectorAll('.tm-org:checked')).map(function(c){return c.dataset.ssid;});
     if(!email){App.toast('Введите email',true);return;}
-    gs('inviteMember',{ssId:App.s.ssId,email:email,role:role}).then(function(r){
+    if(!ssIds.length){App.toast('Выбери хотя бы одну организацию',true);return;}
+    gs('inviteMemberMulti',{email:email,role:role,ssIds:ssIds}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Приглашение отправлено ✓');App.s._team=r;App._renderTeam(r);
+      App.toast('Приглашение отправлено ✓ ('+ssIds.length+' орг.)');App._teamAll=r;App._renderTeamAll();
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _teamRole:function(i,role){
-    var m=(App.s._team&&App.s._team.members||[])[i];if(!m)return;
-    gs('setMemberRole',{ssId:App.s.ssId,email:m.email,role:role}).then(function(r){
+  _teamRole:function(ssId,email,role){
+    gs('setMemberRoleMulti',{ssId:ssId,email:email,role:role}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Роль обновлена ✓');App.s._team=r;
+      App.toast('Роль обновлена ✓');App._teamAll=r;
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _teamRemove:function(i){
-    var m=(App.s._team&&App.s._team.members||[])[i];if(!m)return;
-    if(!confirm('Убрать доступ у '+m.email+'?'))return;
-    gs('removeMember',{ssId:App.s.ssId,email:m.email}).then(function(r){
+  _teamRemove:function(ssId,email,orgName){
+    if(!confirm('Убрать доступ '+email+' к «'+orgName+'»?'))return;
+    gs('removeMemberMulti',{ssId:ssId,email:email}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Доступ удалён ✓');App.s._team=r;App._renderTeam(r);
+      App.toast('Доступ удалён ✓');App._teamAll=r;App._renderTeamAll();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
