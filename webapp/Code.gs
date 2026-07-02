@@ -3146,3 +3146,174 @@ function getCashForecast(p) {
             firstGap:firstGap,minBalance:Math.round(minBal),minDay:minDay};
   } catch(e) { return {__error:e.message}; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: AUTOMATION (авто-задачи по расписанию)
+// Один почасовой триггер autoCron; каждая задача сама решает, пора ли ей,
+// и ставит маркер в UserProperties, чтобы не выполниться дважды.
+// ═══════════════════════════════════════════════════════════════════════
+
+function getAutomation() {
+  try { var v=_props().getProperty('AUTO_CFG'); return v?JSON.parse(v):{enabled:false}; }
+  catch(e) { return {enabled:false}; }
+}
+
+function setAutomation(p) {
+  var cfg={
+    ssId:_s(p.ssId), orgName:_s(p.orgName||''),
+    email:_s(p.email||''),
+    recurring:!!p.recurring, remind:!!p.remind, backup:!!p.backup,
+    monthly:!!p.monthly, salary:!!p.salary
+  };
+  cfg.enabled=cfg.recurring||cfg.remind||cfg.backup||cfg.monthly||cfg.salary;
+  try {
+    if ((cfg.remind||cfg.monthly)&&(!cfg.email||cfg.email.indexOf('@')<0))
+      return {__error:'Для напоминаний и месячного отчёта укажи email'};
+    ScriptApp.getProjectTriggers().forEach(function(t){
+      if (t.getHandlerFunction()==='autoCron') ScriptApp.deleteTrigger(t);
+    });
+    if (cfg.enabled) ScriptApp.newTrigger('autoCron').timeBased().everyHours(1).create();
+    _props().setProperty('AUTO_CFG',JSON.stringify(cfg));
+    return {ok:true,enabled:cfg.enabled};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function autoCron() {
+  var cfg=getAutomation();
+  if (!cfg||!cfg.enabled||!cfg.ssId) return;
+  var P=_props(), tz=Session.getScriptTimeZone(), now=new Date();
+  var h=now.getHours(), dom=now.getDate();
+  var ym=Utilities.formatDate(now,tz,'yyyy-MM');
+  var today=Utilities.formatDate(now,tz,'yyyy-MM-dd');
+  var digest=[];
+  // 1) Авто-проведение ежемесячных расходов (с 8 утра, в день платежа)
+  if (cfg.recurring&&h>=8) {
+    try {
+      getRecurring({ssId:cfg.ssId}).forEach(function(item){
+        if (!item.active||!item.amount) return;
+        if (dom<item.day) return;
+        var mk='AUTO_RC_'+item.id+'_'+ym;
+        if (P.getProperty(mk)) return;
+        var r=saveQuickEntry({ssId:cfg.ssId,data:{date:now.toISOString(),type:'Расход',
+          category:item.category||'Прочий расход',account:item.account||'Наличные',
+          amount:Math.round(item.amount),comment:'Авто: '+item.name}});
+        if (!(r&&r.__error)) { P.setProperty(mk,'1'); digest.push('✓ Проведён платёж: '+item.name+' — '+Math.round(item.amount).toLocaleString('ru')+' ₽'); }
+      });
+    } catch(e){}
+  }
+  // 2) Напоминание о выплатах на сегодня (с 9 утра, раз в день)
+  if (cfg.remind&&cfg.email&&h>=9&&!P.getProperty('AUTO_REM_'+today)) {
+    try {
+      var ss=SpreadsheetApp.openById(cfg.ssId);
+      var sh=ss.getSheetByName(SH_PAYMENTS);
+      var due=[];
+      if (sh&&sh.getLastRow()>=2) {
+        sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+          var st=String(r[PY_STATUS-1]||'');
+          if (st==='paid'||st==='cancelled') return;
+          var d=r[PY_DUE-1]; if(!(d instanceof Date)) return;
+          if (Utilities.formatDate(d,tz,'yyyy-MM-dd')!==today) return;
+          var rest=Math.max((parseFloat(r[PY_AMT-1])||0)-(parseFloat(r[PY_PAID-1])||0),0);
+          if (rest>0) due.push('• '+String(r[PY_NAME-1])+' — '+Math.round(rest).toLocaleString('ru')+' ₽');
+        });
+      }
+      P.setProperty('AUTO_REM_'+today,'1');
+      if (due.length) {
+        MailApp.sendEmail(cfg.email,'Сегодня к выплате — '+(cfg.orgName||'магазин'),
+          'Выплаты на сегодня:\n\n'+due.join('\n')+'\n\n— Auron Finance');
+        digest.push('📬 Отправлено напоминание: '+due.length+' выплат(ы)');
+      }
+    } catch(e){}
+  }
+  // 3) Еженедельная резервная копия (воскресенье, с 3 ночи)
+  if (cfg.backup&&now.getDay()===0&&h>=3) {
+    var wk=Utilities.formatDate(now,tz,'yyyy-ww');
+    if (!P.getProperty('AUTO_BK_'+wk)) {
+      try {
+        var r=backupNow({ssId:cfg.ssId});
+        if (r&&r.ok) { P.setProperty('AUTO_BK_'+wk,'1'); digest.push('💾 Создана резервная копия: '+r.name); }
+      } catch(e){}
+    }
+  }
+  // 4) Месячный отчёт на email (1-го числа, с 9 утра)
+  if (cfg.monthly&&cfg.email&&dom===1&&h>=9&&!P.getProperty('AUTO_MR_'+ym)) {
+    try {
+      var prev=new Date(now.getFullYear(),now.getMonth()-1,1);
+      var mr=getMonthReport({ssId:cfg.ssId,year:prev.getFullYear(),month:prev.getMonth()});
+      if (mr&&!mr.__error) {
+        var f=function(v){return Math.round(v).toLocaleString('ru');};
+        var L=['📆 '+(cfg.orgName||'Магазин')+' — итоги месяца','',
+          '💰 Выручка: '+f(mr.income)+' ₽','📉 Расходы: '+f(mr.expense)+' ₽',
+          (mr.profit>=0?'📈':'⚠️')+' Прибыль: '+f(mr.profit)+' ₽ (маржа '+mr.margin+'%)',
+          '📅 Торговых дней: '+mr.workDays+' · средняя выручка/день: '+f(mr.avgDayIncome)+' ₽'];
+        if (mr.best) L.push('🏆 Лучший день: '+mr.best.day+'-е — '+f(mr.best.income)+' ₽');
+        L.push('🏪 Долг магазина: '+f(mr.debtStart)+' → '+f(mr.debtEnd)+' ₽');
+        if (mr.discDays) L.push('⚠️ Смен с расхождением кассы: '+mr.discDays+' (на '+f(mr.discSum)+' ₽)');
+        L.push('','Подробный отчёт — в приложении: Касса → Отчёты','— Auron Finance');
+        MailApp.sendEmail(cfg.email,'Итоги месяца — '+(cfg.orgName||'магазин'),L.join('\n'));
+        P.setProperty('AUTO_MR_'+ym,'1');
+        digest.push('📆 Отправлен месячный отчёт');
+      }
+    } catch(e){}
+  }
+  // 5) Начисление ЗП по табелю за прошлый месяц (1-го числа, с 7 утра)
+  if (cfg.salary&&dom===1&&h>=7&&!P.getProperty('AUTO_SAL_'+ym)) {
+    try {
+      var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
+      var ss2=SpreadsheetApp.openById(cfg.ssId);
+      var ts=ss2.getSheetByName(SH_TIMESHEET);
+      var sums={};
+      if (ts&&ts.getLastRow()>=2) {
+        ts.getRange(2,1,ts.getLastRow()-1,T_COLS).getValues().forEach(function(r){
+          if (parseInt(r[T_YEAR-1])!==pm.getFullYear()||parseInt(r[T_MON-1])!==pm.getMonth()+1) return;
+          var st=String(r[T_STATUS-1]||'П');
+          if (st!=='П'&&st!=='О') return; // платим за отработанные дни
+          var emp=String(r[T_EMP-1]||''); if(!emp) return;
+          sums[emp]=(sums[emp]||0)+(parseFloat(r[T_RATE-1])||0);
+        });
+      }
+      var monName=Utilities.formatDate(pm,tz,'MM.yyyy');
+      Object.keys(sums).forEach(function(emp){
+        if (sums[emp]<=0) return;
+        savePayment({ssId:cfg.ssId,data:{payee:emp,title:'ЗП за '+monName,
+          amount:Math.round(sums[emp]),date:new Date(now.getFullYear(),now.getMonth(),5).toISOString(),
+          comment:'Начислено автоматически по табелю',status:'open'}});
+        digest.push('🧑‍💼 ЗП '+emp+': '+Math.round(sums[emp]).toLocaleString('ru')+' ₽ → в график на 5-е');
+      });
+      P.setProperty('AUTO_SAL_'+ym,'1');
+    } catch(e){}
+  }
+  // Итоговое письмо о выполненных действиях
+  if (digest.length&&cfg.email) {
+    try { MailApp.sendEmail(cfg.email,'Auron: автоматизация — '+today,digest.join('\n')+'\n\n— Auron Finance'); } catch(e){}
+  }
+}
+
+// Заполнить табель месяца по графику сотрудника (только пустые дни)
+function fillTimesheetMonth(p) {
+  var ssId=p.ssId,year=parseInt(p.year),month=parseInt(p.month); // month 1-12
+  var emp=_s(p.employee), days=p.days||[1,2,3,4,5,6]; // дни недели: 1=Пн … 7=Вс
+  var timeIn=_s(p.timeIn||''),timeOut=_s(p.timeOut||'');
+  var hours=parseFloat(p.hours)||0,rate=parseFloat(p.rate)||0;
+  if (!emp) return {__error:'Выберите сотрудника'};
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
+    var filled={};
+    if (sh.getLastRow()>=2) {
+      sh.getRange(2,1,sh.getLastRow()-1,3).getValues().forEach(function(r){
+        if (parseInt(r[0])===year&&parseInt(r[1])===month) filled[parseInt(r[2])]=true;
+      });
+    }
+    var dim=new Date(year,month,0).getDate();
+    var rows=[]; var mapDays={};
+    days.forEach(function(d){mapDays[parseInt(d)]=true;});
+    for (var d=1;d<=dim;d++) {
+      if (filled[d]) continue;
+      var dow=new Date(year,month-1,d).getDay(); dow=dow===0?7:dow;
+      if (!mapDays[dow]) continue;
+      rows.push([year,month,d,emp,timeIn,timeOut,'П',hours,rate,'по графику']);
+    }
+    if (rows.length) sh.getRange(sh.getLastRow()+1,1,rows.length,T_COLS).setValues(rows);
+    return {ok:true,added:rows.length};
+  } catch(e) { return {__error:e.message}; }
+}

@@ -1863,7 +1863,10 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <!-- Табель сотрудников -->
       <div id="supp-timesheet" style="display:none;padding:16px;">
         <button onclick="App.closeTimesheetView()" style="background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:8px 14px;font-size:13.5px;font-weight:700;color:var(--ink);cursor:pointer;font-family:var(--font);margin-bottom:14px;">‹ К поставщикам</button>
-        <div style="font-size:20px;font-weight:800;margin-bottom:10px;">Табель сотрудников</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <div style="font-size:20px;font-weight:800;">Табель сотрудников</div>
+          <button onclick="App.openTsFill()" style="padding:8px 13px;background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);border:none;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">⚡ По графику</button>
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 10px;">
           <button onclick="App.tsPrevMonth()" style="background:none;border:none;font-size:26px;cursor:pointer;color:var(--text-2);padding:0 6px;">‹</button>
           <span id="ts-month-label" style="font-size:16px;font-weight:700;"></span>
@@ -2043,6 +2046,14 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             <div style="flex:1;">
               <div class="settings-row-label">Журнал изменений</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Кто удалял операции и менял балансы</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row owner-only" onclick="App.openAutomation()" style="cursor:pointer;">
+            <span class="settings-row-icon">⚡</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Автоматизация</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Авто-платежи, напоминания, бэкап, ЗП по табелю</div>
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
@@ -3123,7 +3134,7 @@ var App={
     var o=App._orders.orders[i];if(!o)return;
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'received'}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Заказ отмечен: пришёл ✓');App.openOrders();
+      App._ordOfferInvoice(o.contractor,o.amount);
     }).catch(function(e){App.toast(e.message,true);});
   },
   _ordPartial:function(i){
@@ -3134,7 +3145,23 @@ var App={
     if(fact<=0){App.toast('Введите сумму',true);return;}
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'partial',factAmount:fact}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Отмечено: пришло на ₽ '+fmt(fact)+' ✓');App.openOrders();
+      App._ordOfferInvoice(o.contractor,fact);
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  // Полуавтомат: приход заказа → сразу предлагаем записать накладную
+  _ordOfferInvoice:function(name,amount){
+    App.openModal('<div class="modal-title">✓ Заказ пришёл</div>'+
+      '<div style="font-size:14px;color:var(--muted);margin-bottom:14px;line-height:1.5;">'+App._e(name)+' · ₽ '+fmt(amount)+'<br>Записать сразу в накладные?</div>'+
+      '<button class="btn-primary" style="margin-bottom:8px;" onclick="App._ordInvoice('+amount+',\'cash\')">💵 Оплачено наличными</button>'+
+      '<button class="btn-primary" style="margin-bottom:8px;background:color-mix(in oklab,var(--warn,#FF9F0A) 80%,#000);" onclick="App._ordInvoice('+amount+',\'debt\')">🧾 В долг магазина</button>'+
+      '<button class="btn-secondary" onclick="App.closeModal();App.openOrders();">Позже, при закрытии дня</button>');
+  },
+  _ordInvoice:function(amount,mode){
+    var inv=mode==='cash'?{cashPaid:amount}:{newDebt:amount};
+    gs('saveKassa',{ssId:App.s.ssId,data:{date:new Date().toISOString().slice(0,10),invoices:inv}}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(mode==='cash'?'Записано: закупка −₽ '+fmt(amount)+' ✓':'Записано в долг: +₽ '+fmt(amount)+' · Долг: ₽ '+fmt(r.storeDebt||0));
+      App.openOrders();
     }).catch(function(e){App.toast(e.message,true);});
   },
   _ordCancel:function(i){
@@ -5061,7 +5088,25 @@ var App={
     if(!amt){App.toast('Введите сумму',true);return;}
     gs('saveDebtEntry',{ssId:App.s.ssId,data:{repId:repId,type:type,amount:amt,account:acc,comment:comment,invoice:invoice,status:status}}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadReps();
+      if(type==='oplata')App._offerClosePayment(repId,amt);
     }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // Полуавтомат: оплатил долг ТП — предлагаем закрыть выплату в графике
+  _offerClosePayment:function(payee,amt){
+    var open=(App._suppPayables||[]).filter(function(r){
+      return r.payee===payee&&r.status!=='paid'&&r.status!=='cancelled'&&
+        Math.max((r.amount||0)-(r.paid||0),0)>0;
+    });
+    if(!open.length)return;
+    var best=open.find(function(r){return Math.abs(((r.amount||0)-(r.paid||0))-amt)<1;})||open[0];
+    setTimeout(function(){
+      if(!confirm('В графике выплат есть запись «'+payee+'» на ₽ '+fmt(Math.max((best.amount||0)-(best.paid||0),0))+'.\nОтметить её оплаченной на ₽ '+fmt(amt)+'?'))return;
+      // Без счёта — деньги уже списаны оплатой долга, второй расход не создаём
+      gs('updatePayment',{ssId:App.s.ssId,data:{id:best.id,action:'pay',amount:amt}}).then(function(){
+        App.toast('Выплата отмечена ✓');App.loadSuppliers();
+      }).catch(function(e){App.toast(e.message,true);});
+    },400);
   },
 
   openRepHistory:function(repId,repName){
@@ -5224,6 +5269,40 @@ var App={
         '<div class="field"><label>Комментарий</label><input type="text" id="ts-comment" placeholder="…" value="'+App._e(existing.comment||'')+'"></div>'+
         '<button class="btn-primary" onclick="App._saveTsEntry('+day+')">Сохранить</button>');
     });
+  },
+
+  // Полуавтомат: заполнить весь месяц по графику сотрудника
+  openTsFill:function(){
+    var emps=(App.s.settings.employees||[]).filter(function(e){return typeof e==='object';});
+    if(!emps.length){App.toast('Сначала добавь сотрудника с графиком в Настройках',true);return;}
+    var opts=emps.map(function(e){return '<option>'+App._e(e.name)+'</option>';}).join('');
+    var dows=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    var chips=dows.map(function(d,i){
+      var on=i<6; // по умолчанию пн–сб
+      return '<button type="button" data-dow="'+(i+1)+'" onclick="this.classList.toggle(\'on\');this.style.background=this.classList.contains(\'on\')?\'var(--brand)\':\'var(--surface-2)\';this.style.color=this.classList.contains(\'on\')?\'#fff\':\'var(--muted)\';" class="'+(on?'on':'')+'" style="flex:1;padding:9px 0;border-radius:10px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);background:'+(on?'var(--brand)':'var(--surface-2)')+';color:'+(on?'#fff':'var(--muted)')+';">'+d+'</button>';
+    }).join('');
+    App.openModal('<div class="modal-title">⚡ Заполнить по графику</div>'+
+      '<div class="field"><label>Сотрудник</label><select id="tf-emp">'+opts+'</select></div>'+
+      '<div class="field"><label>Рабочие дни</label><div id="tf-dows" style="display:flex;gap:5px;">'+chips+'</div></div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Заполнятся только пустые дни месяца — время, часы и ставка возьмутся из карточки сотрудника. Уже заполненные дни не тронем.</div>'+
+      '<button class="btn-primary" onclick="App._tsFillGo()">Заполнить месяц</button>');
+  },
+  _tsFillGo:function(){
+    var name=document.getElementById('tf-emp').value;
+    var emp=(App.s.settings.employees||[]).find(function(e){return typeof e==='object'&&e.name===name;});
+    if(!emp){App.toast('Сотрудник не найден',true);return;}
+    var days=Array.prototype.slice.call(document.querySelectorAll('#tf-dows button.on')).map(function(b){return parseInt(b.dataset.dow);});
+    if(!days.length){App.toast('Выбери рабочие дни',true);return;}
+    var tIn=emp.schedIn||'',tOut=emp.schedOut||'';
+    if((!tIn||!tOut)&&emp.schedule){var m=String(emp.schedule).match(/(\d{1,2}[:.]\d{2})\s*[-–—]\s*(\d{1,2}[:.]\d{2})/);if(m){tIn=m[1].replace('.',':');tOut=m[2].replace('.',':');}}
+    var hours=0;
+    if(tIn&&tOut){hours=(parseInt(tOut)*60+parseInt(tOut.split(':')[1])-(parseInt(tIn)*60+parseInt(tIn.split(':')[1])))/60;hours=Math.max(Math.round(hours*2)/2,0);}
+    gs('fillTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,
+      employee:name,days:days,timeIn:tIn,timeOut:tOut,hours:hours,rate:emp.dailySalary||0}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(r.added?'Заполнено дней: '+r.added+' ✓':'Все дни уже заполнены');
+      App.closeModal();App.loadTimesheet();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   // Выбрали сотрудника — подставляем его график, часы и ставку автоматически
@@ -5796,6 +5875,42 @@ var App={
       App.toast('Сохранено ✓');App.loadHome();
       if(data.type==='Расход'&&data.category)App._checkBudgetLimit(data.category);
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);App.loadHome();});
+  },
+
+  // ── Автоматизация ──
+  openAutomation:function(){
+    App.openModal('<div class="modal-title">⚡ Автоматизация</div><div id="auto-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getAutomation',{}).then(function(c){App._renderAutomation(c||{});})
+      .catch(function(e){var b=document.getElementById('auto-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _renderAutomation:function(c){
+    var b=document.getElementById('auto-body');if(!b)return;
+    var row=function(id,icon,title,sub,on){
+      return '<label style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">'+
+        '<span style="font-size:20px;">'+icon+'</span>'+
+        '<span style="flex:1;min-width:0;"><span style="display:block;font-size:14px;font-weight:700;color:var(--ink);">'+title+'</span>'+
+        '<span style="display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4;">'+sub+'</span></span>'+
+        '<input type="checkbox" id="'+id+'"'+(on?' checked':'')+' style="width:20px;height:20px;accent-color:var(--brand);flex-shrink:0;"></label>';
+    };
+    b.innerHTML=
+      row('au-rec','🔁','Ежемесячные расходы','Аренда, коммуналка и т.п. проводятся сами в свой день (из списка «Ежемесячные расходы»)',c.recurring)+
+      row('au-rem','📬','Напоминания о выплатах','Письмо утром в день выплаты поставщику',c.remind)+
+      row('au-bk','💾','Резервная копия','Автоматически каждое воскресенье ночью',c.backup)+
+      row('au-mr','📆','Итоги месяца на почту','1-го числа — отчёт за прошлый месяц',c.monthly)+
+      row('au-sal','🧑‍💼','ЗП по табелю','1-го числа считает зарплату за месяц и ставит в график выплат на 5-е',c.salary)+
+      '<div class="field" style="margin-top:14px;"><label>Email для писем</label><input id="au-email" type="email" placeholder="you@gmail.com" value="'+App._e(c.email||'')+'"></div>'+
+      '<button class="btn-primary" onclick="App._saveAutomation()">Сохранить</button>'+
+      '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">О каждом автоматическом действии придёт письмо-отчёт. Всё можно выключить здесь в любой момент.</div>';
+  },
+  _saveAutomation:function(){
+    var v=function(id){var el=document.getElementById(id);return el&&el.checked;};
+    gs('setAutomation',{ssId:App.s.ssId,orgName:App.s.orgName,
+      email:document.getElementById('au-email').value.trim(),
+      recurring:v('au-rec'),remind:v('au-rem'),backup:v('au-bk'),monthly:v('au-mr'),salary:v('au-sal')
+    }).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(r.enabled?'⚡ Автоматизация включена ✓':'Автоматизация выключена');App.closeModal();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   // PDF одним тапом: печать содержимого отчёта из модалки
