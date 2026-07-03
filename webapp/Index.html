@@ -3082,9 +3082,16 @@ var App={
   _renderContractorsDir:function(){
     var b=document.getElementById('cd-body');if(!b)return;
     var list=App._contractors||[];
-    var h='';
+    var q=(App._cdQuery||'').toLowerCase();
+    if(q)list=list.filter(function(c){
+      return (c.name+' '+c.type+' '+(c.phone||'')+' '+(c.comment||'')).toLowerCase().indexOf(q)>=0;
+    });
+    var h='<div style="background:var(--surface-2);border-radius:12px;display:flex;align-items:center;padding:0 12px;gap:8px;margin-bottom:10px;">'+
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>'+
+      '<input id="cd-search" type="search" placeholder="Поиск: название, телефон…" value="'+App._e(App._cdQuery||'')+'" oninput="App._cdQuery=this.value;clearTimeout(App._cdT);App._cdT=setTimeout(function(){var p=document.getElementById(\'cd-search\');var pos=p?p.selectionStart:0;App._renderContractorsDir();var n=document.getElementById(\'cd-search\');if(n){n.focus();try{n.setSelectionRange(pos,pos);}catch(e){}}},250);" style="flex:1;background:none;border:none;padding:11px 0;color:var(--ink);font-size:14px;font-family:var(--font);outline:none;" autocomplete="off"></div>';
     if(list.length){
-      h+=list.map(function(c,i){
+      h+=list.map(function(c){
+        var i=(App._contractors||[]).indexOf(c);
         return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
           '<div style="flex:1;min-width:0;cursor:pointer;" onclick="App.openContractorCard(\''+App._e(c.name).replace(/'/g,"\\'")+'\')">'+
           '<div style="font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.name)+'</div>'+
@@ -4051,7 +4058,10 @@ var App={
     App.s.accounts=(allAcc||[]).filter(function(a){return a.status!=='archived';});
     App.renderAccounts(App.s.accounts);
     App.renderTxList(r.transactions||[],'tx-list');
-    var totalBal=(App.s.accounts||[]).reduce(function(s,a){return s+(a.balance||0);},0);
+    // Zenmoney-паттерн: счета можно исключать из общего капитала
+    var excl=App.s.settings.capExclude||[];
+    var totalBal=(App.s.accounts||[]).reduce(function(s,a){
+      return excl.indexOf(a.name)>=0?s:s+(a.balance||0);},0);
     var heroEl=document.getElementById('home-total-bal');
     if(heroEl)animateNumber(heroEl,totalBal,'₽ ');
     var sum=r.summary||{income:0,expense:0,count:0,shiftRevenue:0};
@@ -5852,9 +5862,13 @@ var App={
 
   openAccountForm:function(id){
     var acc=id?(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);}):null;
+    var inCap=!acc||((App.s.settings.capExclude||[]).indexOf(acc.name)<0);
     App.openModal('<div class="modal-title">'+(acc?'Редактировать':'Новый счёт')+'</div>'+
       '<div class="field"><label>Название</label><input id="af-name" type="text" value="'+(acc?App._e(acc.name):'')+'" placeholder="Наличные"></div>'+
       '<div class="field"><label>Начальный баланс (₽)</label><input id="af-bal" type="number" value="'+(acc?acc.startBalance||0:0)+'"></div>'+
+      '<label style="display:flex;align-items:center;gap:10px;padding:4px 0 14px;cursor:pointer;">'+
+        '<input type="checkbox" id="af-cap"'+(inCap?' checked':'')+' style="width:19px;height:19px;accent-color:var(--brand);">'+
+        '<span style="font-size:13.5px;font-weight:600;">Учитывать в общем капитале</span></label>'+
       '<button class="btn-primary" onclick="App._saveAcc(\''+(id||'')+'\')">Сохранить</button>'+
       (acc?'<button class="btn-secondary" style="color:var(--expense);border-color:var(--expense);margin-top:8px;" onclick="App._delAcc(\''+id+'\')">Удалить счёт</button>':''));
   },
@@ -5862,6 +5876,12 @@ var App={
     var name=document.getElementById('af-name').value.trim();
     var bal=parseFloat(document.getElementById('af-bal').value)||0;
     if(!name){App.toast('Введите название',true);return;}
+    // Флаг «учитывать в капитале» — список исключений в настройках
+    var inCap=document.getElementById('af-cap')?document.getElementById('af-cap').checked:true;
+    var ex=App.s.settings.capExclude||[];
+    ex=ex.filter(function(n){return n!==name;});
+    if(!inCap)ex.push(name);
+    App.s.settings.capExclude=ex;App.saveSettings();
     gs('saveAccount',{ssId:App.s.ssId,data:{id:id||null,name:name,startBalance:bal}}).then(function(){
       App.toast('Счёт сохранён ✓');App.closeModal();App.renderSettingsPage();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
@@ -6242,6 +6262,7 @@ var App={
       row('au-bk','💾','Резервная копия','Автоматически каждое воскресенье ночью',c.backup)+
       row('au-mr','📆','Итоги месяца на почту','1-го числа — отчёт за прошлый месяц',c.monthly)+
       row('au-sal','🧑‍💼','ЗП по табелю','1-го числа считает зарплату за месяц и ставит в график выплат на 5-е',c.salary)+
+      row('au-noop','🔔','Напоминать вести учёт','Если за день нет ни одной записи — письмо в 21:00',c.noopRemind)+
       '<div class="field" style="margin-top:14px;"><label>Email для писем</label><input id="au-email" type="email" placeholder="you@gmail.com" value="'+App._e(c.email||'')+'"></div>'+
       '<button class="btn-primary" onclick="App._saveAutomation()">Сохранить</button>'+
       '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">О каждом автоматическом действии придёт письмо-отчёт. Всё можно выключить здесь в любой момент.</div>';
@@ -6250,7 +6271,7 @@ var App={
     var v=function(id){var el=document.getElementById(id);return el&&el.checked;};
     gs('setAutomation',{ssId:App.s.ssId,orgName:App.s.orgName,
       email:document.getElementById('au-email').value.trim(),
-      recurring:v('au-rec'),remind:v('au-rem'),backup:v('au-bk'),monthly:v('au-mr'),salary:v('au-sal')
+      recurring:v('au-rec'),remind:v('au-rem'),backup:v('au-bk'),monthly:v('au-mr'),salary:v('au-sal'),noopRemind:v('au-noop')
     }).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(r.enabled?'⚡ Автоматизация включена ✓':'Автоматизация выключена');App.closeModal();

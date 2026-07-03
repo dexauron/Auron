@@ -377,6 +377,7 @@ function getSettings(p) {
       employees:        gj('EMPLOYEES'),
       shifts:           gj('SHIFTS'),
       suppliers:        gj('SUPPLIERS'),
+      capExclude:       gj('CAP_EXCLUDE'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
@@ -397,6 +398,7 @@ function saveSettings(p) {
       EMPLOYEES:           JSON.stringify(d.employees||[]),
       SHIFTS:              JSON.stringify(d.shifts||[]),
       SUPPLIERS:           JSON.stringify(d.suppliers||[]),
+      CAP_EXCLUDE:         JSON.stringify(d.capExclude||[]),
       SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
@@ -3183,9 +3185,9 @@ function setAutomation(p) {
     ssId:_s(p.ssId), orgName:_s(p.orgName||''),
     email:_s(p.email||''),
     recurring:!!p.recurring, remind:!!p.remind, backup:!!p.backup,
-    monthly:!!p.monthly, salary:!!p.salary
+    monthly:!!p.monthly, salary:!!p.salary, noopRemind:!!p.noopRemind
   };
-  cfg.enabled=cfg.recurring||cfg.remind||cfg.backup||cfg.monthly||cfg.salary;
+  cfg.enabled=cfg.recurring||cfg.remind||cfg.backup||cfg.monthly||cfg.salary||cfg.noopRemind;
   try {
     if ((cfg.remind||cfg.monthly)&&(!cfg.email||cfg.email.indexOf('@')<0))
       return {__error:'Для напоминаний и месячного отчёта укажи email'};
@@ -3301,6 +3303,26 @@ function autoCron() {
         digest.push('🧑‍💼 ЗП '+emp+': '+Math.round(sums[emp]).toLocaleString('ru')+' ₽ → в график на 5-е');
       });
       P.setProperty('AUTO_SAL_'+ym,'1');
+    } catch(e){}
+  }
+  // 6) Напоминание вести учёт: если за день нет ни одной операции (после 21:00)
+  if (cfg.noopRemind&&cfg.email&&h>=21&&!P.getProperty('AUTO_NOOP_'+today)) {
+    try {
+      var ssN=SpreadsheetApp.openById(cfg.ssId);
+      var baseN=ssN.getSheetByName(SH_BASE);
+      var cnt=0;
+      if (baseN&&baseN.getLastRow()>=2) {
+        var lastN=Math.min(baseN.getLastRow()-1,120);
+        baseN.getRange(baseN.getLastRow()-lastN+1,B_DATE,lastN,1).getValues().forEach(function(r){
+          if (r[0] instanceof Date&&Utilities.formatDate(r[0],tz,'yyyy-MM-dd')===today) cnt++;
+        });
+      }
+      P.setProperty('AUTO_NOOP_'+today,'1');
+      if (cnt===0) {
+        MailApp.sendEmail(cfg.email,'Auron: сегодня нет записей — '+(cfg.orgName||'магазин'),
+          'За сегодня не добавлено ни одной операции.\nЕсли день был рабочим — не забудь записать кассовое утро и расходы.\n\n— Auron Finance');
+        digest.push('🔔 Напоминание: за день не было записей');
+      }
     } catch(e){}
   }
   // Итоговое письмо о выполненных действиях
