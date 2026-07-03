@@ -1407,7 +1407,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   <div class="screen-title">Мои организации</div>
   <div class="screen-sub">Выберите или создайте магазин</div>
   <div id="org-list"></div>
-  <button class="btn-secondary" onclick="App.showScreen('scr-new-org')">+ Добавить организацию</button>
+  <button class="btn-secondary" onclick="App.showScreen('scr-new-org');App._fillCloneSrc();">+ Добавить организацию</button>
   <div id="org-invites"></div>
   <button id="org-back" class="btn-secondary" style="display:none;margin-top:10px;" onclick="App.showApp()">← Назад в приложение</button>
 </div>
@@ -1416,6 +1416,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   <div class="screen-title">Новая организация</div>
   <div class="screen-sub">Будет создан отдельный Google Spreadsheet в вашем Drive</div>
   <div class="field"><label>Название магазина</label><input id="new-org-name" type="text" placeholder="Магазин на Ленина"></div>
+  <div class="field" id="clone-wrap" style="display:none;"><label>Скопировать настройки из</label><select id="clone-src"><option value="">— не копировать —</option></select>
+  <div style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4;">Категории, кассиры, смены, сотрудники и справочник контрагентов перенесутся в новый магазин.</div></div>
   <button class="btn-primary" onclick="App.createOrg()">Создать →</button>
   <button class="btn-secondary" onclick="App.showScreen('scr-orgs')">← Назад</button>
 </div>
@@ -1666,13 +1668,18 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
     <!-- ANALYTICS -->
     <div id="tab-analytics" class="panel">
-      <div class="period-bar">
+      <div style="display:flex;align-items:center;gap:8px;margin:0 16px 0;">
+        <button onclick="App._anShift(-1)" style="width:38px;height:38px;flex-shrink:0;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--ink);font-size:16px;cursor:pointer;">‹</button>
+        <div class="period-bar" style="flex:1;margin:0;">
         <button class="pill active" data-ap="month" onclick="App.setAnPeriod('month',this)">Месяц</button>
         <button class="pill" data-ap="week" onclick="App.setAnPeriod('week',this)">Неделя</button>
         <button class="pill" data-ap="year" onclick="App.setAnPeriod('year',this)">Год</button>
         <button class="pill" data-ap="custom" onclick="App.openCustomPeriod('analytics')">⊞ Свой</button>
+        </div>
+        <button onclick="App._anShift(1)" style="width:38px;height:38px;flex-shrink:0;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:var(--ink);font-size:16px;cursor:pointer;">›</button>
       </div>
-      <div class="an-tabs">
+      <div id="an-month-label" style="display:none;text-align:center;font-size:12.5px;font-weight:700;color:var(--brand);margin:8px 0 6px;"></div>
+      <div class="an-tabs" style="margin-top:12px;">
         <button class="an-tab active" onclick="App.setAnTab('pl',this)">P&amp;L</button>
         <button class="an-tab" onclick="App.setAnTab('growth',this)">Динамика</button>
         <button class="an-tab" onclick="App.setAnTab('cats',this)">Категории</button>
@@ -1951,6 +1958,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
             <button onclick="App.monthReport()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--pos) 14%,transparent);color:var(--pos);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📆 Месячный отчёт</button>
             <button onclick="App.openTaxes()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--warn,#FF9F0A) 16%,transparent);color:var(--warn,#FF9F0A);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🧮 Налоги</button>
             <button onclick="App.openReconcile()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--neg) 14%,transparent);color:var(--neg);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🔍 Сверка выручки</button>
+            <button onclick="App.openCompare()" style="padding:11px;border-radius:12px;border:none;background:color-mix(in oklab,var(--transfer,#818CF8) 16%,transparent);color:var(--transfer,#818CF8);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);grid-column:1/-1;">⚖️ Сравнить месяцы</button>
           </div>
           <div class="hscroll" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;">
             <button onclick="App.reportPreset('today')" class="rp-chip">Сегодня</button>
@@ -3045,6 +3053,16 @@ var App={
     }
   },
 
+  _fillCloneSrc:function(){
+    var sel=document.getElementById('clone-src');var wrap=document.getElementById('clone-wrap');
+    if(!sel||!wrap)return;
+    var orgs=App.s._orgs||[];
+    if(!orgs.length){wrap.style.display='none';return;}
+    wrap.style.display='block';
+    sel.innerHTML='<option value="">— не копировать —</option>'+orgs.map(function(o){
+      return '<option value="'+App._e(o.ssId)+'"'+(o.ssId===App.s.ssId?' selected':'')+'>'+App._e(o.name)+'</option>';}).join('');
+  },
+
   // ── Организации: всегда показываем список + приглашения + назад ──
   openOrgs:function(){
     App.showScreen('scr-orgs');
@@ -3162,11 +3180,22 @@ var App={
   },
 
   // ── Справочник контрагентов ──
-  openContractorsDir:function(){
+  openContractorsDir:function(showArch){
+    App._cdArch=!!showArch;
     App.openModal('<div class="modal-title">📇 Справочник контрагентов</div><div id="cd-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
-    gs('getContractors',{ssId:App.s.ssId}).then(function(r){
-      App._contractors=r||[];App._renderContractorsDir();
+    gs('getContractors',{ssId:App.s.ssId,all:true}).then(function(r){
+      App._contractorsAll=r||[];
+      App._contractors=App._contractorsAll.filter(function(c){return App._cdArch?c.archived:!c.archived;});
+      App._renderContractorsDir();
     }).catch(function(e){var b=document.getElementById('cd-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _contractorArch:function(i){
+    var c=(App._contractors||[])[i];if(!c)return;
+    gs('setContractorStatus',{ssId:App.s.ssId,id:c.id,status:c.archived?'':'archived'}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(c.archived?'Возвращён из архива ✓':'В архиве — скрыт из подсказок');
+      App.openContractorsDir(App._cdArch);
+    }).catch(function(e){App.toast(e.message,true);});
   },
   _renderContractorsDir:function(){
     var b=document.getElementById('cd-body');if(!b)return;
@@ -3186,13 +3215,15 @@ var App={
           '<div style="font-size:14.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.name)+'</div>'+
           '<div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.type)+(c.phone?' · '+App._e(c.phone):'')+(c.comment?' · '+App._e(c.comment):'')+'</div></div>'+
           (c.phone?'<a href="tel:'+App._e(c.phone.replace(/[^+0-9]/g,''))+'" onclick="event.stopPropagation();" style="flex-shrink:0;text-decoration:none;font-size:18px;">📞</a>':'')+
+          '<button onclick="event.stopPropagation();App._contractorArch('+i+')" title="'+(c.archived?'Вернуть из архива':'В архив')+'" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">'+(c.archived?'↩':'📦')+'</button>'+
           '<button onclick="event.stopPropagation();App.openContractorForm('+i+')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✏️</button>'+
           '<button onclick="App._contractorDel('+i+')" style="background:none;border:none;color:var(--neg);font-size:15px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
       }).join('');
     } else {
       h+='<div style="text-align:center;padding:18px;color:var(--muted);">Справочник пуст. Добавь поставщиков и торговых представителей.</div>';
     }
-    h+='<button class="btn-primary" style="margin-top:14px;" onclick="App.openContractorForm(null)">+ Добавить контрагента</button>';
+    h+='<button class="btn-primary" style="margin-top:14px;" onclick="App.openContractorForm(null)">+ Добавить контрагента</button>'+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.openContractorsDir('+(App._cdArch?'false':'true')+')">'+(App._cdArch?'← Активные':'📦 Архив')+'</button>';
     b.innerHTML=h;
   },
   openContractorForm:function(i){
@@ -3479,9 +3510,17 @@ var App={
   createOrg:function(){
     var name=document.getElementById('new-org-name').value.trim();
     if(!name){App.toast('Введите название',true);return;}
+    var srcEl=document.getElementById('clone-src');
+    var src=srcEl?srcEl.value:'';
+    App.toast('Создаю…');
     gs('createOrg',{name:name}).then(function(r){
       App.s.ssId=r.ssId;App.s.orgName=r.orgName||name;
-      App.loadSettings(function(){App.showApp();App.loadHome();});
+      var done=function(){App.loadSettings(function(){App.showApp();App.loadHome();});};
+      if(src){
+        gs('cloneOrgSettings',{srcSsId:src,dstSsId:r.ssId}).then(function(){
+          App.toast('Настройки скопированы ✓');done();
+        }).catch(function(){done();});
+      } else done();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -4450,7 +4489,30 @@ var App={
   },
 
   // ── Analytics ─────────────────────────────────────────────────
+  _anShift:function(delta){
+    App.s.anMonthOff=(App.s.anMonthOff||0)+delta;
+    if(App.s.anMonthOff>0)App.s.anMonthOff=0;
+    var now=new Date();
+    var m0=new Date(now.getFullYear(),now.getMonth()+App.s.anMonthOff,1);
+    var m1=new Date(now.getFullYear(),now.getMonth()+App.s.anMonthOff+1,0);
+    var iso=function(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+    var MON=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    var lbl=document.getElementById('an-month-label');
+    if(App.s.anMonthOff===0){
+      App.s.anPeriod='month';
+      if(lbl)lbl.style.display='none';
+      document.querySelectorAll('#tab-analytics .period-bar .pill').forEach(function(b){b.classList.toggle('active',b.dataset.ap==='month');});
+    } else {
+      App.s.anPeriod='custom:'+iso(m0)+':'+iso(m1);
+      if(lbl){lbl.style.display='block';lbl.textContent='📅 '+MON[m0.getMonth()]+' '+m0.getFullYear();}
+      document.querySelectorAll('#tab-analytics .period-bar .pill').forEach(function(b){b.classList.remove('active');});
+    }
+    App.haptic(6);App.loadAnalytics();
+  },
+
   setAnPeriod:function(p,btn){
+    App.s.anMonthOff=0;
+    var lbl0=document.getElementById('an-month-label');if(lbl0)lbl0.style.display='none';
     App.s.anPeriod=p;
     document.querySelectorAll('[data-ap]').forEach(function(b){b.classList.remove('active');});
     if(btn)btn.classList.add('active');
@@ -6264,6 +6326,76 @@ var App={
     if(n)el.textContent='📴 '+n+' '+App._plural(n,'запись ждёт','записи ждут','записей ждут')+' отправки — нажми';
   },
 
+  _tgTest:function(){
+    var t=document.getElementById('au-tg-token').value.trim();
+    var c=document.getElementById('au-tg-chat').value.trim();
+    if(!t||!c){App.toast('Заполни токен и chat id',true);return;}
+    App.toast('Проверяю…');
+    gs('testTelegram',{token:t,chat:c}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('✅ Сообщение отправлено — проверь Telegram');
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _tgHelp:function(){
+    App.openModal('<div class="modal-title">Telegram за 3 минуты</div>'+
+      '<div style="font-size:13.5px;line-height:1.7;color:var(--ink-2);">'+
+      '1. Открой в Telegram бота <b>@BotFather</b> → команда /newbot → придумай имя. Он выдаст <b>токен</b> (длинная строка с двоеточием) — скопируй.<br><br>'+
+      '2. Открой бота <b>@userinfobot</b> → он покажет твой <b>chat id</b> (число).<br><br>'+
+      '3. Напиши своему новому боту любое сообщение (например «привет») — иначе Telegram не разрешит ему писать тебе.<br><br>'+
+      '4. Вставь токен и chat id в Автоматизацию → «Проверить связь» → должно прийти сообщение.<br><br>'+
+      '<span style="color:var(--muted);font-size:12px;">При первом использовании Google попросит подтвердить новое разрешение (отправка запросов) — это нормально, один раз.</span></div>'+
+      '<button class="btn-primary" style="margin-top:12px;" onclick="App.closeModal();App.openAutomation();">Понятно</button>');
+  },
+
+  // ── Сравнение двух месяцев ──
+  openCompare:function(){
+    var now=new Date();
+    var cur=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
+    var prev=pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0');
+    App.openModal('<div class="modal-title">⚖️ Сравнить месяцы</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
+      '<div class="field" style="margin:0;"><label>Месяц А</label><input type="month" id="cmp-a" value="'+prev+'" onchange="App._cmpGo()"></div>'+
+      '<div class="field" style="margin:0;"><label>Месяц Б</label><input type="month" id="cmp-b" value="'+cur+'" onchange="App._cmpGo()"></div></div>'+
+      '<div id="cmp-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App._cmpGo();
+  },
+  _cmpGo:function(){
+    var a=document.getElementById('cmp-a').value,b=document.getElementById('cmp-b').value;
+    if(!a||!b)return;
+    var el=document.getElementById('cmp-body');if(el)el.textContent='Считаю…';
+    var pa=a.split('-'),pb=b.split('-');
+    Promise.all([
+      gs('getMonthReport',{ssId:App.s.ssId,year:parseInt(pa[0]),month:parseInt(pa[1])-1}),
+      gs('getMonthReport',{ssId:App.s.ssId,year:parseInt(pb[0]),month:parseInt(pb[1])-1})
+    ]).then(function(res){
+      var A=res[0],B=res[1];
+      var el2=document.getElementById('cmp-body');if(!el2)return;
+      var row=function(label,va,vb,inv){
+        var d=vb-va;var pct=va?Math.round(d/Math.abs(va)*100):0;
+        var good=inv?d<0:d>=0;
+        return '<div style="display:flex;gap:8px;padding:9px 0;border-bottom:1px solid var(--line-2);font-size:13px;align-items:baseline;">'+
+          '<span style="flex:1;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+label+'</span>'+
+          '<span class="num" style="width:86px;text-align:right;">'+fmt(va)+'</span>'+
+          '<span class="num" style="width:86px;text-align:right;font-weight:700;">'+fmt(vb)+'</span>'+
+          '<span style="width:64px;text-align:right;font-size:11.5px;font-weight:800;color:'+(good?'var(--pos)':'var(--neg)')+';">'+(d>=0?'+':'')+(va?pct+'%':'—')+'</span></div>';
+      };
+      var MON=['янв','фев','мар','апр','май','июн','июл','авг','сен','окт','ноя','дек'];
+      var h='<div style="display:flex;gap:8px;font-size:11px;color:var(--muted);font-weight:800;text-transform:uppercase;padding-bottom:4px;">'+
+        '<span style="flex:1;"></span><span style="width:86px;text-align:right;">'+MON[A.month]+'</span><span style="width:86px;text-align:right;">'+MON[B.month]+'</span><span style="width:64px;text-align:right;">Δ</span></div>'+
+        row('Выручка',A.income,B.income)+
+        row('Расходы',A.expense,B.expense,true)+
+        row('Прибыль',A.profit,B.profit)+
+        row('Средняя/день',A.avgDayIncome,B.avgDayIncome)+
+        row('Торговых дней',A.workDays,B.workDays)+
+        row('Закупка',A.zakupka,B.zakupka,true)+
+        row('Зарплаты',A.zp,B.zp,true)+
+        row('Изъятия',A.izyatia,B.izyatia,true)+
+        row('Долг на конец',A.debtEnd,B.debtEnd,true);
+      el2.innerHTML=h;
+    }).catch(function(e){var el3=document.getElementById('cmp-body');if(el3)el3.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+
   // ── Центр уведомлений ──
   openNotifCenter:function(){
     App.openModal('<div class="modal-title">🔔 Уведомления</div><div id="nc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
@@ -6616,6 +6748,11 @@ var App={
       row('au-sal','🧑‍💼','ЗП по табелю','1-го числа считает зарплату за месяц и ставит в график выплат на 5-е',c.salary)+
       row('au-noop','🔔','Напоминать вести учёт','Если за день нет ни одной записи — письмо в 21:00',c.noopRemind)+
       '<div class="field" style="margin-top:14px;"><label>Email для писем</label><input id="au-email" type="email" placeholder="you@gmail.com" value="'+App._e(c.email||'')+'"></div>'+
+      '<div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:6px 0 8px;">Telegram (уведомления пушем)</div>'+
+      '<div class="field"><label>Токен бота</label><input id="au-tg-token" type="text" placeholder="123456:ABC-DEF…" value="'+App._e(c.tgToken||'')+'" autocomplete="off"></div>'+
+      '<div class="field"><label>Chat ID</label><input id="au-tg-chat" type="text" placeholder="123456789" value="'+App._e(c.tgChat||'')+'" autocomplete="off"></div>'+
+      '<div style="display:flex;gap:8px;margin-bottom:4px;"><button onclick="App._tgTest()" style="flex:1;padding:10px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">Проверить связь</button>'+
+      '<button onclick="App._tgHelp()" style="flex:1;padding:10px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">Как настроить?</button></div>'+
       '<button class="btn-primary" onclick="App._saveAutomation()">Сохранить</button>'+
       '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">О каждом автоматическом действии придёт письмо-отчёт. Всё можно выключить здесь в любой момент.</div>';
   },
@@ -6623,7 +6760,9 @@ var App={
     var v=function(id){var el=document.getElementById(id);return el&&el.checked;};
     gs('setAutomation',{ssId:App.s.ssId,orgName:App.s.orgName,
       email:document.getElementById('au-email').value.trim(),
-      recurring:v('au-rec'),remind:v('au-rem'),backup:v('au-bk'),monthly:v('au-mr'),salary:v('au-sal'),noopRemind:v('au-noop')
+      recurring:v('au-rec'),remind:v('au-rem'),backup:v('au-bk'),monthly:v('au-mr'),salary:v('au-sal'),noopRemind:v('au-noop'),
+      tgToken:document.getElementById('au-tg-token').value.trim(),
+      tgChat:document.getElementById('au-tg-chat').value.trim()
     }).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(r.enabled?'⚡ Автоматизация включена ✓':'Автоматизация выключена');App.closeModal();

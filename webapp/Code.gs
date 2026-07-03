@@ -2785,11 +2785,15 @@ function getContractors(p) {
     var sh=ss.getSheetByName(SH_CONTRACTORS);
     if (sh.getLastRow()<2) { _seedContractors(ss,sh); }
     if (sh.getLastRow()<2) return [];
-    return sh.getRange(2,1,sh.getLastRow()-1,6).getValues().filter(function(r){return r[0];})
+    var ncol=Math.max(sh.getLastColumn(),6);
+    var all=sh.getRange(2,1,sh.getLastRow()-1,ncol).getValues().filter(function(r){return r[0];})
       .map(function(r){
         return {id:String(r[0]),name:String(r[1]),type:String(r[2]||'Поставщик'),
-                phone:String(r[3]||''),comment:String(r[4]||'')};
+                phone:String(r[3]||''),comment:String(r[4]||''),
+                archived:String(r[6]||'')==='archived'};
       });
+    if (p.all) return all;
+    return all.filter(function(c){return !c.archived;});
   } catch(e) { return []; }
 }
 
@@ -3191,7 +3195,8 @@ function setAutomation(p) {
     ssId:_s(p.ssId), orgName:_s(p.orgName||''),
     email:_s(p.email||''),
     recurring:!!p.recurring, remind:!!p.remind, backup:!!p.backup,
-    monthly:!!p.monthly, salary:!!p.salary, noopRemind:!!p.noopRemind
+    monthly:!!p.monthly, salary:!!p.salary, noopRemind:!!p.noopRemind,
+    tgToken:_s(p.tgToken||''), tgChat:_s(p.tgChat||'')
   };
   cfg.enabled=cfg.recurring||cfg.remind||cfg.backup||cfg.monthly||cfg.salary||cfg.noopRemind;
   try {
@@ -3331,9 +3336,11 @@ function autoCron() {
       }
     } catch(e){}
   }
-  // Итоговое письмо о выполненных действиях
-  if (digest.length&&cfg.email) {
-    try { MailApp.sendEmail(cfg.email,'Auron: автоматизация — '+today,digest.join('\n')+'\n\n— Auron Finance'); } catch(e){}
+  // Итоговое письмо о выполненных действиях (почта + Telegram)
+  if (digest.length) {
+    var body=digest.join('\n')+'\n\n— Auron Finance';
+    if (cfg.email) { try { MailApp.sendEmail(cfg.email,'Auron: автоматизация — '+today,body); } catch(e){} }
+    _tgSend(cfg,'🤖 Auron — '+today+'\n'+body);
   }
 }
 
@@ -3665,4 +3672,58 @@ function getNotifications(p) {
     } catch(e){}
     return {items:out,count:out.filter(function(x){return x.level!=='info';}).length};
   } catch(e) { return {items:[],count:0,__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: MISC (клонирование настроек, Telegram, архив контрагентов)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Скопировать настройки и справочник контрагентов в новую организацию
+function cloneOrgSettings(p) {
+  var src=p.srcSsId, dst=p.dstSsId;
+  try {
+    var st=getSettings({ssId:src});
+    saveSettings({ssId:dst,data:st});
+    var contractors=getContractors({ssId:src});
+    if (contractors.length) {
+      var ss=SpreadsheetApp.openById(dst); ensureSheets(ss);
+      var sh=ss.getSheetByName(SH_CONTRACTORS);
+      var rows=contractors.map(function(c){
+        return [Utilities.getUuid(),c.name,c.type,c.phone,c.comment,new Date()];
+      });
+      sh.getRange(sh.getLastRow()+1,1,rows.length,6).setValues(rows);
+    }
+    return {ok:true};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Telegram-уведомления: если настроен бот — шлём и туда
+function _tgSend(cfg, text) {
+  if (!cfg||!cfg.tgToken||!cfg.tgChat) return false;
+  try {
+    UrlFetchApp.fetch('https://api.telegram.org/bot'+cfg.tgToken+'/sendMessage',{
+      method:'post',contentType:'application/json',muteHttpExceptions:true,
+      payload:JSON.stringify({chat_id:cfg.tgChat,text:text})
+    });
+    return true;
+  } catch(e) { return false; }
+}
+
+function testTelegram(p) {
+  var ok=_tgSend({tgToken:_s(p.token),tgChat:_s(p.chat)},'✅ Auron Finance подключён! Уведомления будут приходить сюда.');
+  return ok?{ok:true}:{__error:'Не получилось. Проверь токен и chat id.'};
+}
+
+// Архив контрагента (колонка 7 = Статус)
+function setContractorStatus(p) {
+  var ssId=p.ssId, id=p.id, status=_s(p.status||'');
+  try {
+    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_CONTRACTORS);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    if (sh.getLastColumn()<7) sh.getRange(1,7).setValue('Статус');
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=0;i<vs.length;i++)
+      if (String(vs[i][0])===String(id)) { sh.getRange(i+2,7).setValue(status); return {ok:true}; }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
 }
