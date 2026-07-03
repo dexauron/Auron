@@ -64,8 +64,11 @@ var TR_COLS=14;
 // ─────────────────────────────────────────────────────────────────────
 // doGet
 // ─────────────────────────────────────────────────────────────────────
-function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+function doGet(e) {
+  var invite = (e && e.parameter && e.parameter.invite) ? String(e.parameter.invite) : '';
+  var t = HtmlService.createTemplateFromFile('Index');
+  t.inviteOrg = invite;
+  return t.evaluate()
     .setTitle('Auron Finance')
     .addMetaTag('viewport','width=device-width,initial-scale=1,maximum-scale=1');
 }
@@ -2665,6 +2668,19 @@ function inviteMember(p) {
     }
     sh.appendRow([email,role,new Date()]);
     _log(ss,'Приглашение сотрудника',email+' · '+role);
+    // Письмо со ссылкой прямо в эту организацию
+    try {
+      var appUrl=''; try{appUrl=ScriptApp.getService().getUrl();}catch(eu){}
+      if (appUrl) {
+        var link=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'invite='+encodeURIComponent(ssId);
+        var orgName=''; try{orgName=ss.getName().replace(/^Auron\s*[—-]\s*/,'');}catch(en){orgName='магазин';}
+        var body='Вас пригласили в «'+orgName+'» (роль: '+role+').\n\n'+
+          '1. Откройте ссылку на телефоне (вы должны быть в Google под '+email+'):\n'+link+'\n\n'+
+          '2. При первом входе задайте PIN-код и заполните свой профиль.\n'+
+          'Организация подключится автоматически.\n\n— Auron Finance';
+        MailApp.sendEmail(email,'Приглашение в Auron Finance — '+orgName,body);
+      }
+    } catch(em){}
     return getTeam({ssId:ssId});
   } catch(e) { return {__error:e.message}; }
 }

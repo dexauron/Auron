@@ -2,6 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
+<script>window.__INVITE_ORG__="<?= inviteOrg ?>";</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -2648,9 +2649,19 @@ var App={
       }
       else{
         App.s.userName=r.profile&&r.profile.name||'';
-        if(!r.orgs||!r.orgs.length){App.showScreen('scr-new-org');}
-        else if(r.orgs.length===1){App.selectOrg(r.orgs[0]);}
-        else{App.renderOrgList(r.orgs);App.showScreen('scr-orgs');}
+        // Пришёл по ссылке-приглашению → сразу подключаем эту организацию
+        var inv=(window.__INVITE_ORG__||'').trim();
+        if(inv){
+          window.__INVITE_ORG__='';
+          var known=(r.orgs||[]).find(function(o){return String(o.ssId)===inv;});
+          if(known){App.selectOrg(known);return;}
+          gs('acceptInvite',{ssId:inv}).then(function(a){
+            if(a&&a.ok){App.toast('Организация подключена ✓');App.selectOrg({ssId:a.ssId,name:a.name});}
+            else{App.toast((a&&a.__error)||'Не удалось открыть приглашение',true);App._bootOrgs(r);}
+          }).catch(function(){App._bootOrgs(r);});
+          return;
+        }
+        App._bootOrgs(r);
       }
     }).catch(function(e){
       document.getElementById('loader').classList.add('hide');
@@ -3140,11 +3151,14 @@ var App={
     } else {
       h+='<div style="text-align:center;padding:14px;color:var(--muted);">Пока сотрудников нет — пригласи первого 👇</div>';
     }
-    // Форма приглашения: email + роль + в какие организации
-    var orgChecks=orgs.map(function(o,i){
-      return '<label style="display:flex;align-items:center;gap:9px;padding:8px 0;cursor:pointer;">'+
-        '<input type="checkbox" class="tm-org" data-ssid="'+App._e(o.ssId)+'"'+(o.ssId===App.s.ssId?' checked':'')+' style="width:18px;height:18px;accent-color:var(--brand);">'+
-        '<span style="font-size:13.5px;font-weight:600;">'+App._e(o.name)+'</span></label>';
+    // Форма приглашения: email + роль + в какие организации (тап-строки)
+    App._invPick={};
+    orgs.forEach(function(o){App._invPick[o.ssId]=(o.ssId===App.s.ssId);});
+    var orgChecks=orgs.map(function(o){
+      var on=App._invPick[o.ssId];
+      return '<div class="inv-org" data-ssid="'+App._e(o.ssId)+'" onclick="App._invToggle(this)" style="display:flex;align-items:center;gap:11px;padding:12px 13px;margin-bottom:7px;border-radius:13px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 12%,transparent)':'var(--surface-2)')+';cursor:pointer;">'+
+        '<span class="inv-box" style="width:22px;height:22px;border-radius:7px;flex-shrink:0;display:grid;place-items:center;font-size:14px;color:#fff;background:'+(on?'var(--brand)':'transparent')+';border:2px solid '+(on?'var(--brand)':'var(--muted)')+';">'+(on?'✓':'')+'</span>'+
+        '<span style="font-size:14px;font-weight:700;">🏪 '+App._e(o.name)+'</span></div>';
     }).join('');
     h+='<div style="margin-top:16px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Пригласить сотрудника</div>'+
       '<div class="field" style="margin-top:8px;"><label>Email (Google-аккаунт)</label><input id="tm-email" type="email" placeholder="user@gmail.com" inputmode="email"></div>'+
@@ -3154,10 +3168,21 @@ var App={
       '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">Сотрудник откроет приложение под своим Google-аккаунтом → на экране «Мои организации» появится приглашение → нажмёт «Принять».</div>';
     b.innerHTML=h;
   },
+  _invToggle:function(el){
+    var id=el.dataset.ssid;
+    var on=!App._invPick[id];App._invPick[id]=on;
+    el.style.borderColor=on?'var(--brand)':'var(--line)';
+    el.style.background=on?'color-mix(in oklab,var(--brand) 12%,transparent)':'var(--surface-2)';
+    var box=el.querySelector('.inv-box');
+    box.style.background=on?'var(--brand)':'transparent';
+    box.style.borderColor=on?'var(--brand)':'var(--muted)';
+    box.textContent=on?'✓':'';
+    App.haptic(6);
+  },
   _teamInvite:function(){
     var email=document.getElementById('tm-email').value.trim();
     var role=document.getElementById('tm-role').value;
-    var ssIds=Array.prototype.slice.call(document.querySelectorAll('.tm-org:checked')).map(function(c){return c.dataset.ssid;});
+    var ssIds=Object.keys(App._invPick||{}).filter(function(id){return App._invPick[id];});
     if(!email){App.toast('Введите email',true);return;}
     if(!ssIds.length){App.toast('Выбери хотя бы одну организацию',true);return;}
     App.toast('Отправляю приглашение…');
@@ -6397,6 +6422,12 @@ var App={
         row('Долг на конец',A.debtEnd,B.debtEnd,true);
       el2.innerHTML=h;
     }).catch(function(e){var el3=document.getElementById('cmp-body');if(el3)el3.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+
+  _bootOrgs:function(r){
+    if(!r.orgs||!r.orgs.length){App.showScreen('scr-new-org');}
+    else if(r.orgs.length===1){App.selectOrg(r.orgs[0]);}
+    else{App.renderOrgList(r.orgs);App.showScreen('scr-orgs');}
   },
 
   // ── Центр уведомлений ──
