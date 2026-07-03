@@ -3160,9 +3160,12 @@ var App={
     var ssIds=Array.prototype.slice.call(document.querySelectorAll('.tm-org:checked')).map(function(c){return c.dataset.ssid;});
     if(!email){App.toast('Введите email',true);return;}
     if(!ssIds.length){App.toast('Выбери хотя бы одну организацию',true);return;}
+    App.toast('Отправляю приглашение…');
     gs('inviteMemberMulti',{email:email,role:role,ssIds:ssIds}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Приглашение отправлено ✓ ('+ssIds.length+' орг.)');App._teamAll=r;App._renderTeamAll();
+      if(r&&r.inviteWarn)App.toast('Частично: '+r.inviteWarn,true);
+      else App.toast('✅ Доступ выдан ('+(r.invitedOk||ssIds.length)+' орг.). Сотруднику придёт письмо от Google');
+      App._teamAll=r;App._renderTeamAll();
     }).catch(function(e){App.toast(e.message,true);});
   },
   _teamRole:function(ssId,email,role){

@@ -2649,7 +2649,20 @@ function inviteMember(p) {
       for (var i=0;i<ex.length;i++) if (String(ex[i][0]).toLowerCase()===email)
         return {__error:'Этот сотрудник уже приглашён'};
     }
-    ss.addEditor(email);
+    // Выдаём доступ к таблице: два способа + понятная ошибка
+    var shared=false, shareErr='';
+    try { ss.addEditor(email); shared=true; }
+    catch(e1) {
+      shareErr=e1.message||'';
+      try { DriveApp.getFileById(ssId).addEditor(email); shared=true; }
+      catch(e2) { shareErr=e2.message||shareErr; }
+    }
+    if (!shared) {
+      var hint='Не удалось выдать доступ для '+email+'. ';
+      if (/invalid|неверн/i.test(shareErr)) hint+='Проверь, что это существующий Google-аккаунт (обычно @gmail.com). ';
+      hint+='Ответ Google: '+shareErr;
+      return {__error:hint};
+    }
     sh.appendRow([email,role,new Date()]);
     _log(ss,'Приглашение сотрудника',email+' · '+role);
     return getTeam({ssId:ssId});
@@ -3379,14 +3392,20 @@ function inviteMemberMulti(p) {
   var email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
   var ssIds=p.ssIds||[];
   if (!ssIds.length) return {__error:'Выбери хотя бы одну организацию'};
-  var ok=0, errs=[];
+  var ok=0, already=0, errs=[];
   ssIds.forEach(function(id){
     var r=inviteMember({ssId:id,email:email,role:role});
-    if (r&&r.__error) { if(r.__error!=='Этот сотрудник уже приглашён') errs.push(r.__error); }
+    if (r&&r.__error) {
+      if (r.__error==='Этот сотрудник уже приглашён') already++;
+      else errs.push(r.__error);
+    }
     else ok++;
   });
   if (!ok&&errs.length) return {__error:errs[0]};
-  return getTeamAll();
+  if (!ok&&already&&!errs.length) return {__error:'Этот сотрудник уже приглашён во все выбранные организации'};
+  var res=getTeamAll();
+  res.invitedOk=ok; res.inviteWarn=errs.length?errs[0]:'';
+  return res;
 }
 
 // Убрать доступ из одной организации
