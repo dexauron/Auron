@@ -2599,7 +2599,19 @@ function seedDemoData(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function _myEmail() {
-  try { return String(Session.getActiveUser().getEmail()||'').toLowerCase(); } catch(e) { return ''; }
+  // 1) стандартный способ
+  try { var e=String(Session.getActiveUser().getEmail()||'').toLowerCase(); if(e) return e; } catch(err){}
+  // 2) effective user (при executeAs USER_ACCESSING совпадает с активным)
+  try { var e2=String(Session.getEffectiveUser().getEmail()||'').toLowerCase(); if(e2) return e2; } catch(err){}
+  // 3) владелец таблицы-профиля — её создал сам пользователь
+  try {
+    var id=_props().getProperty('PROFILE_SS_ID');
+    if (id) {
+      var owner=DriveApp.getFileById(id).getOwner();
+      if (owner) { var e3=String(owner.getEmail()||'').toLowerCase(); if(e3) return e3; }
+    }
+  } catch(err){}
+  return '';
 }
 
 function _isOwner(ss) {
