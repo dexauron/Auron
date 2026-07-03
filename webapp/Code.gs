@@ -3551,3 +3551,22 @@ function restoreTransaction(p) {
     return {__error:'Запись не найдена в корзине'};
   } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
 }
+
+// Содержимое корзины (последние 50 удалённых)
+function getTrash(p) {
+  try {
+    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_TRASH);
+    if (!sh||sh.getLastRow()<2) return {items:[]};
+    var tz=Session.getScriptTimeZone();
+    var n=Math.min(sh.getLastRow()-1,50);
+    var vals=sh.getRange(sh.getLastRow()-n+1,1,n,TR_COLS).getValues();
+    var items=vals.map(function(r){
+      var d=r[B_DATE-1];
+      return {id:String(r[0]),type:String(r[B_TYPE-1]),category:String(r[B_CAT-1]),
+        amount:Math.round(parseFloat(r[B_AMT-1])||0),account:String(r[B_ACC-1]),
+        comment:String(r[B_CMT-1]||''),
+        date:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yyyy'):''};
+    }).reverse();
+    return {items:items};
+  } catch(e) { return {items:[],__error:e.message}; }
+}

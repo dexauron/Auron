@@ -151,6 +151,8 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 }
 .btn-secondary:hover{background:var(--surface-3);}
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
+body.sums-hidden .num{filter:blur(8px);}
+body.sums-hidden #privacy-eye{background:var(--brand);color:#fff;}
 @keyframes slideup{from{transform:translateY(20px);opacity:0;}to{transform:none;opacity:1;}}
 /* ── Светлая тема (переключается в Настройках, хранится на устройстве) ── */
 html[data-theme="light"]{
@@ -1587,6 +1589,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <!-- Hero card -->
       <div class="home-hero">
         <div class="home-hero-ring"></div>
+        <button onclick="event.stopPropagation();App.togglePrivacy()" id="privacy-eye" title="Скрыть суммы" style="position:absolute;top:14px;right:14px;z-index:3;width:36px;height:36px;border:none;border-radius:12px;background:rgba(255,255,255,.08);color:var(--ink-2);font-size:16px;cursor:pointer;">👁</button>
         <div style="position:relative;cursor:pointer;" onclick="App.openCapitalDetail()">
           <div class="home-hero-label">Общий капитал <span style="opacity:.6;">›</span></div>
           <div class="home-hero-bal num" id="home-total-bal">₽ —</div>
@@ -1839,6 +1842,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <input id="jf-min" type="number" placeholder="₽ от" inputmode="decimal" oninput="App._jRenderDeb()" style="width:84px;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
           <input id="jf-max" type="number" placeholder="₽ до" inputmode="decimal" oninput="App._jRenderDeb()" style="width:84px;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
         </div>
+        <div id="jf-summary" style="font-size:12.5px;color:var(--muted);margin-top:8px;font-weight:600;"></div>
       </div>
       <div id="j-tx-list" style="padding:0 0 8px;"></div>
     </div>
@@ -2162,6 +2166,32 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         </div>
       </div>
       <div class="settings-sec">
+        <div class="settings-sec-title">Разное</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openTrash()" style="cursor:pointer;">
+            <span class="settings-row-icon">🗑</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Корзина</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Удалённые операции, хранятся 30 дней</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.openHelp()" style="cursor:pointer;">
+            <span class="settings-row-icon">❓</span>
+            <span class="settings-row-label">Как пользоваться</span>
+            <span class="settings-row-arrow">›</span>
+          </div>
+          <div class="settings-row" onclick="App.openAbout()" style="cursor:pointer;">
+            <span class="settings-row-icon">ℹ️</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">О приложении</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Версия и что нового</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-sec">
         <div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.switchAccount()" style="cursor:pointer;">
@@ -2282,6 +2312,12 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     </div>
     <div class="np-quick" id="np-quick" style="display:flex;gap:7px;overflow-x:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;"></div>
     <div class="np-display" id="np-display">₽ 0</div>
+    <div id="np-chips" style="display:flex;gap:6px;justify-content:center;margin:2px 0 6px;">
+      <button onclick="App._npChip(500)" class="rp-chip" style="padding:6px 12px;">500</button>
+      <button onclick="App._npChip(1000)" class="rp-chip" style="padding:6px 12px;">1 000</button>
+      <button onclick="App._npChip(2000)" class="rp-chip" style="padding:6px 12px;">2 000</button>
+      <button onclick="App._npChip(5000)" class="rp-chip" style="padding:6px 12px;">5 000</button>
+    </div>
     <div class="np-fields">
       <div class="np-field" onclick="App.pickAccount('from')">
         <span class="np-field-label">Счёт</span>
@@ -2390,6 +2426,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
 <script>
 var OB_KEY='auron_ob_v1';
+var APP_VERSION='2.1.0';
+var APP_CHANGELOG=[
+  {v:'2.1.0',t:'Отмена удаления, корзина 30 дней, светлая тема, свайпы, повтор операции, «Поделиться», приватность, версия приложения'},
+  {v:'2.0.0',t:'Карточка контрагента, режим сотрудника, сводки после сохранения, фильтры истории, офлайн-очередь'},
+  {v:'1.9.0',t:'Автоматизация: авто-платежи, напоминания, бэкап, ЗП по табелю. Заказы товара. Единый справочник'},
+  {v:'1.8.0',t:'Кассовый день: утро и накладные. Долг магазина. Команда и доступы. Проф-отчёты'}
+];
 var OB_TYPES=[
   {id:'retail',icon:'store',title:'Розничный магазин',shortName:'розничный магазин',
    desc:'Продукты, бытовая химия, всё для дома. Кассовые смены и инкассация.',
@@ -2597,6 +2640,8 @@ var App={
     document.addEventListener('keydown',function(e){
       if(e.key==='Escape')App.closeSheet();
     });
+    // Приватность с прошлого раза
+    try{if(localStorage.getItem('auron_privacy')==='1')document.body.classList.add('sums-hidden');}catch(e){}
     // Тема с прошлого раза
     try{var th=localStorage.getItem('auron_theme');if(th)App._applyTheme(th);}catch(e){}
     // Офлайн-очередь: пробуем отправить отложенное при старте, при появлении сети и раз в 2 минуты
@@ -3813,7 +3858,7 @@ var App={
   dayReport:function(date){
     var d=date||fmtISO(new Date());
     App.openModal('<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><div class="modal-title" style="margin-bottom:0;">📅 Отчёт за день</div>'+
-      '<button onclick="App.printReport(\'dr-body\',\'Отчёт за день\')" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🖨 PDF</button></div>'+
+      '<div style="display:flex;gap:6px;"><button onclick="App.shareDayReport()" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📤</button><button onclick="App.printReport(\'dr-body\',\'Отчёт за день\')" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🖨 PDF</button></div></div>'+
       '<input type="date" id="dr-date" value="'+d+'" onchange="App.dayReport(this.value)" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:12px 0;font-family:var(--font);">'+
       '<div id="dr-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getDayReport',{ssId:App.s.ssId,date:d}).then(function(r){
@@ -3838,6 +3883,7 @@ var App={
     return '<span style="color:'+(up?'var(--pos)':'var(--neg)')+';font-weight:700;">'+(up?'▲':'▼')+Math.abs(pct)+'%</span> к '+label;
   },
   _renderDayReport:function(r){
+    App._lastDayReport=r;
     var b=document.getElementById('dr-body');if(!b)return;
     var R=App._repRow,S=App._repSec;
     var profit=r.profit;
@@ -3898,7 +3944,7 @@ var App={
     else{y=now.getFullYear();m=now.getMonth();}
     var val=y+'-'+String(m+1).padStart(2,'0');
     App.openModal('<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;"><div class="modal-title" style="margin-bottom:0;">📆 Отчёт за месяц</div>'+
-      '<button onclick="App.printReport(\'mr-body\',\'Отчёт за месяц\')" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🖨 PDF</button></div>'+
+      '<div style="display:flex;gap:6px;"><button onclick="App.shareMonthReport()" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📤</button><button onclick="App.printReport(\'mr-body\',\'Отчёт за месяц\')" style="padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🖨 PDF</button></div></div>'+
       '<input type="month" id="mr-month" value="'+val+'" onchange="App.monthReport(this.value)" style="width:100%;padding:11px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin:12px 0;font-family:var(--font);">'+
       '<div id="mr-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getMonthReport',{ssId:App.s.ssId,year:y,month:m}).then(function(r){
@@ -3907,6 +3953,7 @@ var App={
     }).catch(function(e){var b=document.getElementById('mr-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },
   _renderMonthReport:function(r){
+    App._lastMonthReport=r;
     var b=document.getElementById('mr-body');if(!b)return;
     var R=App._repRow,S=App._repSec;
     var h='';
@@ -4381,6 +4428,7 @@ var App={
         '<div class="tx-amount '+cls+'">'+sign+'₽ '+fmtFull(tx.amount)+'</div>'+
       '</div>'+
       (!locked?'<div class="tx-actions">'+
+        '<button class="tx-act-btn" style="color:var(--brand);" title="Повторить" onclick="App.repeatTx(\''+App._e(String(tx.id||''))+'\')">🔁</button>'+
         '<button class="tx-act-btn tx-act-edit" onclick="App.editTx(\''+App._e(String(tx.id||''))+'\')">✎</button>'+
         '<button class="tx-act-btn tx-act-del" onclick="App.deleteTx(\''+App._e(String(tx.id||''))+'\')">🗑</button>'+
       '</div>':'')+
@@ -5277,6 +5325,14 @@ var App={
     var mx=parseFloat((document.getElementById('jf-max')||{}).value)||0;
     if(mn)list=list.filter(function(t){return (t.amount||0)>=mn;});
     if(mx)list=list.filter(function(t){return (t.amount||0)<=mx;});
+    // Итог по найденному
+    var si=0,se2=0;
+    list.forEach(function(t){
+      if(t.type==='Доход'||t.type==='income')si+=t.amount||0;
+      else if(t.type==='Расход'||t.type==='expense')se2+=t.amount||0;
+    });
+    var sm=document.getElementById('jf-summary');
+    if(sm)sm.innerHTML=list.length?('Найдено: '+list.length+' '+App._plural(list.length,'операция','операции','операций')+' · <span style="color:var(--pos);">+₽ '+fmt(si)+'</span> · <span style="color:var(--neg);">−₽ '+fmt(se2)+'</span>'):'Ничего не найдено';
     App.renderTxList(list,'j-tx-list');
   },
   _jRenderDeb:function(){clearTimeout(App._jrT);App._jrT=setTimeout(function(){App._jRender();},350);},
@@ -6192,6 +6248,113 @@ var App={
     }
     el.style.display=n?'block':'none';
     if(n)el.textContent='📴 '+n+' '+App._plural(n,'запись ждёт','записи ждут','записей ждут')+' отправки — нажми';
+  },
+
+  // ── Приватность: скрыть суммы одним тапом ──
+  togglePrivacy:function(){
+    var on=!document.body.classList.contains('sums-hidden');
+    document.body.classList.toggle('sums-hidden',on);
+    try{localStorage.setItem('auron_privacy',on?'1':'0');}catch(e){}
+    App.haptic(8);
+  },
+
+  // ── Повторить операцию (заполняет нумпад копией) ──
+  repeatTx:function(id){
+    document.querySelectorAll('.tx-actions.show').forEach(function(a){a.classList.remove('show');});
+    var all=(App._jTxAll||[]).concat((App._homeTx||[]));
+    var tx=all.find(function(t){return String(t.id)===String(id);});
+    var go=function(t){
+      if(!t){App.toast('Не найдено',true);return;}
+      var s=App.s;
+      s.npType=t.type==='Доход'?'income':t.type==='Перевод'?'transfer':'expense';
+      s.npCat=t.category;s.npVal=String(Math.round(t.amount||0));s.npDate=new Date();s.npEditId=null;
+      var acc=(s.accounts||[]).find(function(a){return a.name===t.account;});if(acc)s.npAcc=acc;
+      var cEl=document.getElementById('np-comment');if(cEl)cEl.value=t.comment||'';
+      App._npRefresh();App.openSheet('sheet-numpad');App.haptic(8);
+      App.toast('Копия — проверь сумму и сохрани');
+    };
+    if(tx)go(tx);
+    else gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){
+      go((r||[]).find(function(t){return String(t.id)===String(id);}));
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Чипы быстрых сумм ──
+  _npChip:function(v){App.s.npVal=String(v);App._npRefresh();App.haptic(6);},
+
+  // ── О приложении ──
+  openAbout:function(){
+    var ch=APP_CHANGELOG.map(function(x){return '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);font-size:13px;line-height:1.5;"><b>'+x.v+'</b> · '+x.t+'</div>';}).join('');
+    App.openModal('<div class="modal-title">ℹ️ О приложении</div>'+
+      '<div style="text-align:center;padding:6px 0 14px;">'+
+      '<div style="font-size:34px;">🏪</div>'+
+      '<div style="font-size:18px;font-weight:800;margin-top:6px;">Auron Finance</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-top:3px;">Версия <b style="color:var(--brand);">'+APP_VERSION+'</b></div>'+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Если номер совпадает с тем, что назвал помощник — обновление дошло</div></div>'+
+      '<div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Что нового</div>'+
+      '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;">'+ch+'</div>');
+  },
+
+  // ── Помощь ──
+  openHelp:function(){
+    App.openModal('<div class="modal-title">❓ Как пользоваться</div>'+
+      '<div style="font-size:13.5px;line-height:1.7;color:var(--ink-2);">'+
+      '<b style="color:var(--ink);">🌅 Утро</b><br>Открой вкладку «Касса» → «Кассовое утро»: смена, Z-отчёт по счетам, выплаты с кассы. Всё по шагам.<br><br>'+
+      '<b style="color:var(--ink);">☀️ Днём</b><br>Каждый расход и доход — через кнопку «+». Выплата торговому представителю — отдельная запись. Изъятие из кассы — в «Кассе».<br><br>'+
+      '<b style="color:var(--ink);">🌙 Вечер</b><br>«Касса» → «Вечер — накладные»: сколько оплатили наличными, сколько погасили долгов, сколько осталось в долг.<br><br>'+
+      '<b style="color:var(--ink);">📦 Заказы и поставщики</b><br>Вкладка «Поставщики»: 🚚 заказы, 📇 справочник, 📋 табель. Тап по поставщику — вся картина по нему.<br><br>'+
+      '<b style="color:var(--ink);">Мелочи</b><br>Свайп по операции влево — редактировать/удалить/повторить. Удалил случайно — жми «Отменить» или Настройки → Корзина. Глаз на главной прячет суммы.</div>');
+  },
+
+  // ── Корзина ──
+  openTrash:function(){
+    App.openModal('<div class="modal-title">🗑 Корзина</div><div id="trash-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getTrash',{ssId:App.s.ssId}).then(function(r){
+      var el=document.getElementById('trash-body');if(!el)return;
+      var items=(r&&r.items)||[];
+      if(!items.length){el.innerHTML='<div style="text-align:center;padding:22px;color:var(--muted);">Корзина пуста.<br><span style="font-size:12px;">Удалённые операции хранятся здесь 30 дней.</span></div>';return;}
+      el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Хранится 30 дней, потом удаляется навсегда.</div>'+items.map(function(t,i){
+        return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
+          '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.type==='Доход'?'+':'−')+'₽ '+fmt(t.amount)+' · '+App._e(t.category)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(t.account)+' · '+App._e(t.date)+(t.comment?' · '+App._e(t.comment):'')+'</div></div>'+
+          '<button onclick="App._trashRestore('+i+')" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Вернуть</button></div>';
+      }).join('');
+      App._trashItems=items;
+    }).catch(function(e){var el=document.getElementById('trash-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _trashRestore:function(i){
+    var t=(App._trashItems||[])[i];if(!t)return;
+    gs('restoreTransaction',{ssId:App.s.ssId,id:t.id}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Восстановлено ✓');App.openTrash();App.loadHome();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Поделиться отчётом текстом (WhatsApp и т.п.) ──
+  shareDayReport:function(){
+    var r=App._lastDayReport;if(!r){App.toast('Отчёт ещё не загружен',true);return;}
+    var L=['📊 '+(App.s.orgName||'Магазин')+' — отчёт за '+r.date.split('-').reverse().join('.'),'',
+      '💰 Выручка: '+fmt(r.income)+' ₽','📉 Расходы: '+fmt(r.expense)+' ₽',
+      (r.profit>=0?'📈':'⚠️')+' Результат: '+fmt(r.profit)+' ₽','🧾 Операций: '+r.txCount];
+    if(r.storeDebt)L.push('🏪 Долг магазина: '+fmt(r.storeDebt)+' ₽');
+    if(r.izyatia)L.push('💸 Изъятия: '+fmt(r.izyatia)+' ₽');
+    L.push('','— Auron Finance');
+    App._shareText(L.join('\n'));
+  },
+  shareMonthReport:function(){
+    var r=App._lastMonthReport;if(!r){App.toast('Отчёт ещё не загружен',true);return;}
+    var MON=['январь','февраль','март','апрель','май','июнь','июль','август','сентябрь','октябрь','ноябрь','декабрь'];
+    var L=['📆 '+(App.s.orgName||'Магазин')+' — итоги: '+MON[r.month]+' '+r.year,'',
+      '💰 Выручка: '+fmt(r.income)+' ₽','📉 Расходы: '+fmt(r.expense)+' ₽',
+      (r.profit>=0?'📈':'⚠️')+' Прибыль: '+fmt(r.profit)+' ₽ (маржа '+r.margin+'%)',
+      '📅 Торговых дней: '+r.workDays+' · средняя/день: '+fmt(r.avgDayIncome)+' ₽',
+      '🏪 Долг магазина: '+fmt(r.debtStart)+' → '+fmt(r.debtEnd)+' ₽','','— Auron Finance'];
+    App._shareText(L.join('\n'));
+  },
+  _shareText:function(text){
+    if(navigator.share){navigator.share({text:text}).catch(function(){});}
+    else if(navigator.clipboard){navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано — вставь в WhatsApp ✓');});}
+    else App.toast('Не поддерживается',true);
   },
 
   // ── Тема оформления ──
