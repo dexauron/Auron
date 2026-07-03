@@ -3526,3 +3526,28 @@ function getGoodsMeta(p) {
     return {lastUpdate:max?new Date(max).toISOString():null,count:n};
   } catch(e) { return {lastUpdate:null,count:0}; }
 }
+
+// Восстановление операции из корзины (для «Отменить» после удаления)
+function restoreTransaction(p) {
+  var ssId=p.ssId, id=String(p.id||'');
+  try {
+    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    var ss=SpreadsheetApp.openById(ssId);
+    var trash=ss.getSheetByName(SH_TRASH);
+    var base=ss.getSheetByName(SH_BASE);
+    if (!trash||trash.getLastRow()<2) { lock.releaseLock(); return {__error:'Корзина пуста'}; }
+    var vs=trash.getRange(2,1,trash.getLastRow()-1,TR_COLS).getValues();
+    for (var i=vs.length-1;i>=0;i--) {
+      if (String(vs[i][0])===id) {
+        base.appendRow(vs[i].slice(0,B_COLS));
+        trash.deleteRow(i+2);
+        _log(ss,'Восстановление операции',String(vs[i][B_TYPE-1])+' '+Math.round(vs[i][B_AMT-1])+' ₽ · '+String(vs[i][B_CAT-1]));
+        try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+        lock.releaseLock();
+        return {ok:true};
+      }
+    }
+    lock.releaseLock();
+    return {__error:'Запись не найдена в корзине'};
+  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+}

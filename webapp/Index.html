@@ -151,6 +151,23 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 }
 .btn-secondary:hover{background:var(--surface-3);}
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
+@keyframes slideup{from{transform:translateY(20px);opacity:0;}to{transform:none;opacity:1;}}
+/* ── Светлая тема (переключается в Настройках, хранится на устройстве) ── */
+html[data-theme="light"]{
+  --bg:#F2F2F7;--surface:#FFFFFF;--surface-2:#F1F1F4;--surface-3:#E4E4EA;
+  --ink:#0B0B12;--ink-2:#3A3A3C;--muted:#6E6E73;
+  --line:rgba(0,0,0,.12);--line-2:rgba(0,0,0,.06);
+  --shadow:0 1px 2px rgba(0,0,0,.06),0 12px 30px -18px rgba(0,0,0,.18);
+  --shadow-lg:0 1px 2px rgba(0,0,0,.08),0 30px 70px -28px rgba(0,0,0,.25);
+  --shadow-xl:0 2px 4px rgba(0,0,0,.08),0 24px 60px -20px rgba(0,0,0,.25);
+  --inner-light:none;
+}
+html[data-theme="light"] .topbar{background:rgba(255,255,255,.9);border-bottom-color:rgba(0,0,0,.08);}
+html[data-theme="light"] .nav{background:rgba(255,255,255,.92);border-top:1px solid rgba(0,0,0,.08);}
+html[data-theme="light"] .card,html[data-theme="light"] .kassa-row,html[data-theme="light"] .split-tile,
+html[data-theme="light"] .tx-day-card,html[data-theme="light"] .acc-card{border-color:rgba(0,0,0,.07)!important;}
+html[data-theme="light"] .home-hero{background:linear-gradient(160deg,#EDEBFF 0%,#F7F7FB 60%);}
+html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.08);}
 /* Горизонтальные ленты: мягкое затухание у правого края вместо резкого обреза */
 .hscroll{scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
 .hscroll::after{content:"";flex:0 0 20px;}
@@ -2132,6 +2149,19 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         </div>
       </div>
       <div class="settings-sec">
+        <div class="settings-sec-title">Внешний вид</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.toggleTheme()" style="cursor:pointer;">
+            <span class="settings-row-icon" id="theme-icon">🌙</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Тема оформления</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="theme-state">Тёмная</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+      <div class="settings-sec">
         <div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.switchAccount()" style="cursor:pointer;">
@@ -2567,6 +2597,8 @@ var App={
     document.addEventListener('keydown',function(e){
       if(e.key==='Escape')App.closeSheet();
     });
+    // Тема с прошлого раза
+    try{var th=localStorage.getItem('auron_theme');if(th)App._applyTheme(th);}catch(e){}
     // Офлайн-очередь: пробуем отправить отложенное при старте, при появлении сети и раз в 2 минуты
     setTimeout(function(){App._outboxBadge();App._outboxFlush();},3000);
     window.addEventListener('online',function(){App._outboxFlush();});
@@ -4256,6 +4288,30 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
+  // Свайп влево по операции → показать действия (редактировать/удалить)
+  _attachTxSwipe:function(container){
+    if(!container||container._swipeOn)return;
+    container._swipeOn=true;
+    var sx=0,sy=0,row=null;
+    container.addEventListener('touchstart',function(e){
+      var t=e.target.closest('.tx-item');if(!t)return;
+      row=t;sx=e.touches[0].clientX;sy=e.touches[0].clientY;
+    },{passive:true});
+    container.addEventListener('touchend',function(e){
+      if(!row)return;
+      var dx=e.changedTouches[0].clientX-sx,dy=e.changedTouches[0].clientY-sy;
+      if(Math.abs(dx)>52&&Math.abs(dy)<40){
+        var acts=row.parentNode?row.parentNode.querySelector('.tx-actions'):null;
+        if(acts){
+          document.querySelectorAll('.tx-actions.show').forEach(function(a){if(a!==acts)a.classList.remove('show');});
+          acts.classList.toggle('show',dx<0);
+          App.haptic(6);
+        }
+      }
+      row=null;
+    },{passive:true});
+  },
+
   renderTxList:function(txs,cid){
     var el=document.getElementById(cid);
     if(!txs||!txs.length){el.innerHTML=App._empty('📭','Пока нет операций','Нажми «+», чтобы добавить первую запись.');return;}
@@ -4281,6 +4337,7 @@ var App={
       html+='</div></div>';
     });
     el.innerHTML=html;
+    App._attachTxSwipe(el);
     el.querySelectorAll('.tx-row').forEach(function(row){
       var startX=0,startY=0,moved=false;
       row.addEventListener('touchstart',function(e){startX=e.touches[0].clientX;startY=e.touches[0].clientY;moved=false;},{passive:true});
@@ -6137,6 +6194,20 @@ var App={
     if(n)el.textContent='📴 '+n+' '+App._plural(n,'запись ждёт','записи ждут','записей ждут')+' отправки — нажми';
   },
 
+  // ── Тема оформления ──
+  toggleTheme:function(){
+    var cur=document.documentElement.getAttribute('data-theme')==='light'?'dark':'light';
+    App._applyTheme(cur);
+    try{localStorage.setItem('auron_theme',cur);}catch(e){}
+    App.haptic(8);
+  },
+  _applyTheme:function(t){
+    if(t==='light')document.documentElement.setAttribute('data-theme','light');
+    else document.documentElement.removeAttribute('data-theme');
+    var ic=document.getElementById('theme-icon');if(ic)ic.textContent=t==='light'?'☀️':'🌙';
+    var st=document.getElementById('theme-state');if(st)st.textContent=t==='light'?'Светлая':'Тёмная';
+  },
+
   // ── Выйти / сменить аккаунт ──
   // Google-песочница запрещает менять адрес программно, поэтому даём
   // настоящую ссылку target="_top" — тап по ней рамка разрешает.
@@ -6337,13 +6408,34 @@ var App={
     });
   },
 
+  // Снекбар с действием (паттерн «undo window» — стандарт финтеха)
+  _snack:function(text,actionLabel,cb,ms){
+    var old=document.getElementById('app-snack');if(old)old.remove();
+    clearTimeout(App._snackT);
+    var el=document.createElement('div');el.id='app-snack';
+    el.style.cssText='position:fixed;left:16px;right:16px;bottom:calc(var(--safe-bottom,0px) + 84px);z-index:120;background:var(--surface-3);border:1px solid var(--line);border-radius:16px;padding:13px 16px;display:flex;align-items:center;gap:12px;box-shadow:0 14px 40px rgba(0,0,0,.5);animation:slideup .25s;';
+    el.innerHTML='<span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+text+'</span>'+
+      (actionLabel?'<button id="app-snack-act" style="background:none;border:none;color:var(--brand);font-size:13.5px;font-weight:800;cursor:pointer;font-family:var(--font);padding:4px;flex-shrink:0;">'+actionLabel+'</button>':'');
+    document.body.appendChild(el);
+    if(actionLabel&&cb){
+      document.getElementById('app-snack-act').onclick=function(){el.remove();clearTimeout(App._snackT);cb();};
+    }
+    App._snackT=setTimeout(function(){if(el.parentNode)el.remove();},ms||6000);
+  },
+
   deleteTx:function(id){
-    if(!confirm('Переместить в корзину?'))return;
+    // Без confirm: мгновенно удаляем, 6 секунд можно отменить (undo)
     var el=document.querySelector('.tx-item[data-id="'+id+'"]');
-    if(el)el.style.opacity='.3';
+    if(el)el.style.display='none';
     gs('deleteTransaction',{ssId:App.s.ssId,id:id}).then(function(){
-      App.toast('Удалено');App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);if(el)el.style.opacity='1';});
+      App.loadHome();
+      App._snack('Операция удалена','ОТМЕНИТЬ',function(){
+        gs('restoreTransaction',{ssId:App.s.ssId,id:id}).then(function(){
+          App.toast('Восстановлено ✓');App.loadHome();
+          if(App._jTxAll)App.loadHistory();
+        }).catch(function(e){App.toast(e.message,true);});
+      });
+    }).catch(function(e){App.toast(e.message,true);if(el)el.style.display='';});
   },
 
   openSearch:function(){
