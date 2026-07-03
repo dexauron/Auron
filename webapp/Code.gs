@@ -22,6 +22,7 @@ var SH_PAYMENTS  = 'ВЫПЛАТЫ';
 var SH_ACCESS    = 'ДОСТУП';
 var SH_CONTRACTORS='КОНТРАГЕНТЫ';
 var SH_ORDERS    = 'ЗАКАЗЫ';
+var SH_NOTES     = 'ЗАМЕТКИ';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_LOG       = 'ЖУРНАЛ';
@@ -236,6 +237,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_ACCESS,   ['Email','Роль','Добавлен']);
   _mk(ss,SH_CONTRACTORS,['ID','Название','Тип','Телефон','Комментарий','Создано']);
   _mk(ss,SH_ORDERS,   ['ID','Контрагент','Заказано','Ожидается','Сумма','Статус','Комментарий','Создано','Получено','Факт_Сумма']);
+  _mk(ss,SH_NOTES,    ['Дата','Текст','Обновлено']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -378,6 +380,7 @@ function getSettings(p) {
       shifts:           gj('SHIFTS'),
       suppliers:        gj('SUPPLIERS'),
       capExclude:       gj('CAP_EXCLUDE'),
+      monthTarget:      parseFloat(map['MONTH_TARGET'])||0,
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
@@ -399,6 +402,7 @@ function saveSettings(p) {
       SHIFTS:              JSON.stringify(d.shifts||[]),
       SUPPLIERS:           JSON.stringify(d.suppliers||[]),
       CAP_EXCLUDE:         JSON.stringify(d.capExclude||[]),
+      MONTH_TARGET:        String(parseFloat(d.monthTarget)||0),
       SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
@@ -2900,8 +2904,10 @@ function getDayReport(p) {
       });
     }
     var accounts=getAccounts({ssId:ssId});
+    var note='';
+    try { note=getDayNote({ssId:ssId,date:dateStr}).text||''; } catch(e){}
     return {
-      date:dateStr,
+      date:dateStr, note:note,
       income:Math.round(day.income), expense:Math.round(day.expense),
       profit:Math.round(day.income-day.expense), txCount:day.txCount,
       zRevenue:Math.round(day.zRevenue),
@@ -3569,4 +3575,94 @@ function getTrash(p) {
     }).reverse();
     return {items:items};
   } catch(e) { return {items:[],__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: DAY NOTES (заметки к дню — объясняют провалы/пики в отчётах)
+// ═══════════════════════════════════════════════════════════════════════
+
+function saveDayNote(p) {
+  var ssId=p.ssId, date=_s(p.date), text=_s(p.text||'').slice(0,500);
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_NOTES);
+    if (sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) {
+        var d=vs[i][0];
+        var k=(d instanceof Date)?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):String(d);
+        if (k===date) {
+          if (text) { sh.getRange(i+2,2).setValue(text); sh.getRange(i+2,3).setValue(new Date()); }
+          else sh.deleteRow(i+2);
+          return {ok:true};
+        }
+      }
+    }
+    if (text) sh.appendRow([date,text,new Date()]);
+    return {ok:true};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function getDayNote(p) {
+  try {
+    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_NOTES);
+    if (!sh||sh.getLastRow()<2) return {text:''};
+    var tz=Session.getScriptTimeZone();
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
+    for (var i=0;i<vs.length;i++) {
+      var d=vs[i][0];
+      var k=(d instanceof Date)?Utilities.formatDate(d,tz,'yyyy-MM-dd'):String(d);
+      if (k===_s(p.date)) return {text:String(vs[i][1]||'')};
+    }
+    return {text:''};
+  } catch(e) { return {text:''}; }
+}
+
+// Центр уведомлений: все события магазина одним списком
+function getNotifications(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var tz=Session.getScriptTimeZone();
+    var today=Utilities.formatDate(new Date(),tz,'yyyy-MM-dd');
+    var out=[];
+    // Выплаты: просроченные и на сегодня
+    var psh=ss.getSheetByName(SH_PAYMENTS);
+    if (psh&&psh.getLastRow()>=2) {
+      psh.getRange(2,1,psh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+        var st=String(r[PY_STATUS-1]||'');
+        if (st==='paid'||st==='cancelled') return;
+        var due=r[PY_DUE-1]; if(!(due instanceof Date)) return;
+        var k=Utilities.formatDate(due,tz,'yyyy-MM-dd');
+        var rest=Math.max((parseFloat(r[PY_AMT-1])||0)-(parseFloat(r[PY_PAID-1])||0),0);
+        if (rest<=0) return;
+        if (k<today) out.push({icon:'🔴',level:'bad',text:'Просрочена выплата: '+String(r[PY_NAME-1])+' — '+Math.round(rest).toLocaleString('ru')+' ₽ (до '+Utilities.formatDate(due,tz,'dd.MM')+')'});
+        else if (k===today) out.push({icon:'🟡',level:'warn',text:'Сегодня выплата: '+String(r[PY_NAME-1])+' — '+Math.round(rest).toLocaleString('ru')+' ₽'});
+      });
+    }
+    // Заказы: просроченные
+    var osh=ss.getSheetByName(SH_ORDERS);
+    if (osh&&osh.getLastRow()>=2) {
+      osh.getRange(2,1,osh.getLastRow()-1,O_COLS).getValues().forEach(function(r){
+        if (String(r[O_STATUS-1])!=='active') return;
+        var exp=r[O_EXPECTED-1];
+        var k=(exp instanceof Date)?Utilities.formatDate(exp,tz,'yyyy-MM-dd'):String(exp||'');
+        if (k&&k<today) out.push({icon:'🚚',level:'warn',text:'Заказ не пришёл: '+String(r[O_CONTR-1])+' — '+Math.round(parseFloat(r[O_AMT-1])||0).toLocaleString('ru')+' ₽ (ожидался '+k.split('-').reverse().slice(0,2).join('.')+')'});
+      });
+    }
+    // Кассовый разрыв
+    try {
+      var cf=getCashForecast({ssId:ssId});
+      if (cf&&cf.firstGap) out.push({icon:'⚠️',level:'bad',text:'Прогноз: кассовый разрыв '+cf.firstGap.date.split('-').reverse().slice(0,2).join('.')+' — не хватит '+Math.abs(cf.firstGap.balance).toLocaleString('ru')+' ₽'});
+    } catch(e){}
+    // Товары устарели
+    try {
+      var gm=getGoodsMeta({ssId:ssId});
+      if (gm&&gm.lastUpdate) {
+        var days=Math.floor((Date.now()-new Date(gm.lastUpdate).getTime())/86400000);
+        if (days>=7) out.push({icon:'📦',level:'info',text:'Товары не обновлялись '+days+' дн. — загрузи выгрузку из 1С'});
+      }
+    } catch(e){}
+    return {items:out,count:out.filter(function(x){return x.level!=='info';}).length};
+  } catch(e) { return {items:[],count:0,__error:e.message}; }
 }
