@@ -1771,23 +1771,36 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
               <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
                 <select id="k-cashier"><option value="">— выбрать —</option></select>
               </div>
-              <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Баланс на начало смены (₽)</label>
+              <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Размен в кассе (начальный) ₽</label>
                 <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
               </div>
             </div>
           </div>
           <div class="kassa-row">
-            <div class="kassa-row-hdr">Сверка по счетам</div>
-            <div class="kassa-grid" style="background:var(--bg);">
-              <div class="kassa-col-hdr" style="text-align:left;">Счёт</div>
-              <div class="kassa-col-hdr">Z-отчёт</div>
-              <div class="kassa-col-hdr">Факт</div>
-              <div class="kassa-col-hdr">Расх.</div>
+            <div class="kassa-row-hdr">💵 Наличные — сверка кассира по Z-отчёту</div>
+            <div style="padding:12px 16px;display:grid;gap:10px;">
+              <div class="field" style="margin:0;"><label>Выручка наличными (строка «ВЫРУЧКА» в Z-отчёте)</label>
+                <input type="number" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+              <div class="field" style="margin:0;"><label>Оплачено поставщикам наличкой из кассы</label>
+                <input type="number" id="kz-cash-supp" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+              <div class="field" style="margin:0;"><label>Инкассация — сколько наличных забрал</label>
+                <input type="number" id="kz-cash-collect" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+              <div class="field" style="margin:0;"><label>Оставлено в кассе сверх размена</label>
+                <input type="number" id="kz-cash-left" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+              <div style="background:var(--surface-2);border-radius:12px;padding:11px 13px;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span style="color:var(--muted);">Должно быть (выручка):</span><span class="num" id="kz-should">₽ 0</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="color:var(--muted);">Собрано (забрал+оплатил+оставил):</span><span class="num" id="kz-got">₽ 0</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;"><span>Расхождение по кассе:</span><span id="kz-diff" class="kassa-diff zero">—</span></div>
+                <div id="kz-diff-hint" style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4;"></div>
+              </div>
             </div>
-            <div id="kassa-accounts-grid"></div>
-            <div class="kassa-total-row">
-              <span>Итого расхождение</span>
-              <span id="k-total-diff" class="kassa-diff zero">—</span>
+          </div>
+          <div class="kassa-row">
+            <div class="kassa-row-hdr">💳 Безнал — эквайринг</div>
+            <div style="padding:12px 16px;">
+              <div class="field" style="margin:0;"><label>Выручка по картам/эквайрингу (Z-отчёт эквайринга или банк)</label>
+                <input type="number" id="kz-card-rev" placeholder="0" inputmode="decimal"></div>
+              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:7px;">Зачислится на счёт «Карта». Сверять физически не нужно — деньги идут в банк.</div>
             </div>
           </div>
           <div style="padding:0 0 12px;">
@@ -2026,10 +2039,18 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
       <div class="settings-sec owner-only">
         <div class="settings-sec-title">Касса</div>
         <div class="settings-list">
+          <div class="settings-row" onclick="App.openCashFloat()" style="cursor:pointer;">
+            <span class="settings-row-icon">🪙</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Размен в кассе по умолчанию</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="cashfloat-state">Подставляется при закрытии смены</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row">
             <span class="settings-row-icon">💰</span>
             <div style="flex:1;">
-              <div class="settings-row-label">Баланс на начало смены</div>
+              <div class="settings-row-label">Поле размена в смене</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Показывать поле ввода в форме смены</div>
             </div>
             <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer;">
@@ -5256,34 +5277,26 @@ var App={
   },
 
   _buildKassaGrid:function(){
-    var grid=document.getElementById('kassa-accounts-grid');grid.innerHTML='';
-    App.s.accounts.forEach(function(a){
-      var row=document.createElement('div');
-      row.className='kassa-grid';row.dataset.acc=a.name;
-      row.innerHTML=
-        '<div class="kassa-cell" style="text-align:left;font-weight:500;">'+App._e(a.name)+'</div>'+
-        '<div class="kassa-cell"><input type="number" class="k-z-inp" placeholder="0" min="0" oninput="App.calcKassa()"></div>'+
-        '<div class="kassa-cell"><input type="number" class="k-f-inp" placeholder="0" min="0" oninput="App.calcKassa()"></div>'+
-        '<div class="kassa-cell kassa-diff zero" id="kdiff-'+a.name.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_')+'">—</div>';
-      grid.appendChild(row);
-    });
+    // Подставляем размен по умолчанию из настроек
+    var bal=document.getElementById('k-balance');
+    if(bal&&!bal.value&&App.s.settings.cashFloat)bal.value=App.s.settings.cashFloat;
+    App._kReconcile();
   },
 
-  calcKassa:function(){
-    var totalZ=0,totalF=0;
-    document.querySelectorAll('#kassa-accounts-grid .kassa-grid').forEach(function(row){
-      var acc=row.dataset.acc;
-      var z=parseFloat(row.querySelector('.k-z-inp').value)||0;
-      var f=parseFloat(row.querySelector('.k-f-inp').value)||0;
-      var diff=f-z;totalZ+=z;totalF+=f;
-      var id='kdiff-'+acc.replace(/[^a-zA-Zа-яА-Я0-9]/g,'_');
-      var el=document.getElementById(id);if(!el)return;
-      el.className='kassa-cell kassa-diff '+(diff>0?'pos':diff<0?'neg':'zero');
-      el.textContent=diff===0?'✓ 0':(diff>0?'+':'')+fmtFull(diff);
-    });
-    var td=document.getElementById('k-total-diff');var diff=totalF-totalZ;
-    td.className='kassa-diff '+(diff>0?'pos':diff<0?'neg':'zero');
-    td.textContent=diff===0?'✓ 0':(diff>0?'+':'')+fmtFull(diff);
+  // Живая сверка наличных: Выручка = Забрал + Оплатил поставщикам + Оставил
+  _kReconcile:function(){
+    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var rev=g('kz-cash-rev');
+    var got=g('kz-cash-collect')+g('kz-cash-supp')+g('kz-cash-left');
+    var diff=got-rev;
+    var se=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+    se('kz-should','₽ '+fmtFull(rev));
+    se('kz-got','₽ '+fmtFull(got));
+    var d=document.getElementById('kz-diff');
+    if(d){d.className='kassa-diff '+(diff>0?'pos':diff<0?'neg':'zero');
+      d.textContent=diff===0?'✓ сходится':(diff>0?'+':'−')+'₽ '+fmtFull(Math.abs(diff));}
+    var h=document.getElementById('kz-diff-hint');
+    if(h)h.textContent=diff===0?'Касса сошлась — кассир сдал всё верно.':diff<0?'Недостача: собрано меньше выручки — кассир недодал.':'Излишек: собрано больше выручки — проверь, не забыл ли что-то в выручке.';
   },
 
   addWyplata:function(){
@@ -5321,28 +5334,30 @@ var App={
     var shift=document.getElementById('k-shift').value;
     var cashier=document.getElementById('k-cashier').value;
     if(!cashier){App.toast('Выберите кассира',true);return;}
-    var rows=[];var hasData=false;
-    document.querySelectorAll('#kassa-accounts-grid .kassa-grid').forEach(function(row){
-      var z=parseFloat(row.querySelector('.k-z-inp').value)||0;
-      var f=parseFloat(row.querySelector('.k-f-inp').value)||0;
-      if(z||f)hasData=true;
-      rows.push({account:row.dataset.acc,zAmount:z,factAmount:f});
-    });
-    if(!hasData&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
-    var zTotal=0,fTotal=0;rows.forEach(function(x){zTotal+=x.zAmount;fTotal+=x.factAmount;});
+    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var rec={
+      cashRev:g('kz-cash-rev'), cashSupp:g('kz-cash-supp'),
+      cashCollect:g('kz-cash-collect'), cashLeft:g('kz-cash-left'),
+      cardRev:g('kz-card-rev'), float:g('k-balance')
+    };
+    rec.diff=(rec.cashCollect+rec.cashSupp+rec.cashLeft)-rec.cashRev;
+    if(!rec.cashRev&&!rec.cardRev&&!rec.cashSupp&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
     var wySum=App.s.wyplatas.reduce(function(s,w){return s+(w.amount||0);},0);
     var wyCnt=App.s.wyplatas.length;
-    gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,rows:rows,wyplatas:App.s.wyplatas}}).then(function(){
+    gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,recon:rec,wyplatas:App.s.wyplatas}}).then(function(){
       App.s.wyplatas=[];App.renderWyplatas();
       var R=App._repRow;
-      App.openModal('<div class="modal-title">✅ Кассовое утро записано</div>'+
+      App.openModal('<div class="modal-title">✅ Смена записана</div>'+
         '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
         R('Кассир',App._e(cashier))+
-        R('Z-отчёт','₽ '+fmt(zTotal))+
-        R('Факт','₽ '+fmt(fTotal))+
-        R('Расхождение',(fTotal-zTotal===0?'✓ 0':((fTotal-zTotal>0?'+':'−')+'₽ '+fmt(Math.abs(fTotal-zTotal)))),fTotal-zTotal===0?'var(--pos)':'var(--neg)',true)+
+        R('Выручка нал','₽ '+fmt(rec.cashRev))+
+        (rec.cardRev?R('Выручка карта','₽ '+fmt(rec.cardRev)):'')+
+        (rec.cashSupp?R('Оплачено поставщикам','−₽ '+fmt(rec.cashSupp)):'')+
+        (rec.cashCollect?R('Инкассация (забрал)','₽ '+fmt(rec.cashCollect)):'')+
+        R('Расхождение по кассе',(rec.diff===0?'✓ сходится':((rec.diff>0?'+':'−')+'₽ '+fmt(Math.abs(rec.diff)))),rec.diff===0?'var(--pos)':'var(--neg)',true)+
         (wyCnt?R('Выплаты с кассы',wyCnt+' шт · −₽ '+fmt(wySum)):'')+
         '</div>'+
+        (rec.diff!==0?'<div style="font-size:12px;color:'+(rec.diff<0?'var(--neg)':'var(--warn,#FF9F0A)')+';margin-bottom:12px;line-height:1.5;">'+(rec.diff<0?'⚠️ Недостача — записана в историю смен на этого кассира.':'⚠️ Излишек — записан в историю смен.')+'</div>':'')+
         '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
       App.haptic(12);
     }).catch(function(e){App.toast(e.message,true);});
@@ -6507,6 +6522,19 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(text?'Заметка сохранена ✓':'Заметка удалена');App.closeModal();
     }).catch(function(e){App.toast(e.message,true);});
+  },
+
+  // ── Размен по умолчанию ──
+  openCashFloat:function(){
+    var cur=App.s.settings.cashFloat||0;
+    App.openModal('<div class="modal-title">🪙 Размен в кассе</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Сколько денег кассир оставляет в кассе на сдачу. Эта сумма подставится в поле «Размен» при закрытии смены — можно поправить вручную. Размен в сверке выручки не участвует (он был и остаётся).</div>'+
+      '<div class="field"><label>Сумма размена (₽)</label><input id="cf-val" type="number" inputmode="decimal" value="'+(cur||'')+'" placeholder="5000"></div>'+
+      '<button class="btn-primary" onclick="App._cfSave()">Сохранить</button>');
+  },
+  _cfSave:function(){
+    App.s.settings.cashFloat=Math.round(parseFloat(document.getElementById('cf-val').value)||0);
+    App.saveSettings();App.closeModal();App.toast('Размен сохранён ✓');
   },
 
   // ── План выручки на месяц ──

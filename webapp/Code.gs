@@ -384,6 +384,7 @@ function getSettings(p) {
       suppliers:        gj('SUPPLIERS'),
       capExclude:       gj('CAP_EXCLUDE'),
       monthTarget:      parseFloat(map['MONTH_TARGET'])||0,
+      cashFloat:        parseFloat(map['CASH_FLOAT'])||0,
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
@@ -406,6 +407,7 @@ function saveSettings(p) {
       SUPPLIERS:           JSON.stringify(d.suppliers||[]),
       CAP_EXCLUDE:         JSON.stringify(d.capExclude||[]),
       MONTH_TARGET:        String(parseFloat(d.monthTarget)||0),
+      CASH_FLOAT:          String(parseFloat(d.cashFloat)||0),
       SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
@@ -997,12 +999,37 @@ function saveKassa(p) {
     var dt=new Date(d.date); var zRef=Utilities.getUuid();
     var rows=d.rows||[], wyplatas=d.wyplatas||[];
     var zTotal=0, factTotal=0, baseRows=[];
+    // Легаси-путь (старая сетка счетов) — оставлен для совместимости
     rows.forEach(function(row){
       var z=parseFloat(row.zAmount)||0, f=parseFloat(row.factAmount)||0;
       zTotal+=z; factTotal+=f;
       if (z>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Z-отчёт',
         Math.round(z),_s(row.account),_s(d.cashier||''),'','',zRef,true,_s(d.shift||'')]);
     });
+    // Новый путь: сверка кассира по Z-отчёту (recon)
+    var rec=d.recon||null, reconDiff=0, hasRecon=false;
+    if (rec) {
+      var cashRev=Math.round(parseFloat(rec.cashRev)||0);
+      var cardRev=Math.round(parseFloat(rec.cardRev)||0);
+      var cashSupp=Math.round(parseFloat(rec.cashSupp)||0);
+      var cashLeft=Math.round(parseFloat(rec.cashLeft)||0);
+      var cashCollect=Math.round(parseFloat(rec.cashCollect)||0);
+      // Расхождение = собрано − выручка (собрано = забрал + оплатил поставщикам + оставил)
+      reconDiff=(cashCollect+cashSupp+cashLeft)-cashRev;
+      hasRecon=cashRev>0||cardRev>0||cashSupp>0;
+      var cash=_s('Наличные'), card=_s('Карта');
+      if (cashRev>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
+        cashRev,cash,_s(d.cashier||''),'Выручка наличными (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
+      if (cardRev>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
+        cardRev,card,_s(d.cashier||''),'Выручка по эквайрингу (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
+      if (cashSupp>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Закупка',
+        cashSupp,cash,_s(d.cashier||''),'Оплачено поставщикам наличкой из кассы','',zRef,true,_s(d.shift||'')]);
+      // Недостача/излишек — держим счёт «Наличные» в соответствии с фактом
+      if (reconDiff<0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Недостача кассира',
+        -reconDiff,cash,_s(d.cashier||''),'Недостача по смене','',zRef,true,_s(d.shift||'')]);
+      else if (reconDiff>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Излишек кассы',
+        reconDiff,cash,_s(d.cashier||''),'Излишек по смене','',zRef,true,_s(d.shift||'')]);
+    }
     wyplatas.forEach(function(w){
       var amt=parseFloat(w.amount)||0; if (!amt) return;
       baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход',_s(w.category||'Выплата'),
@@ -1040,12 +1067,13 @@ function saveKassa(p) {
       base.getRange(sr,B_AMT,baseRows.length,1).setNumberFormat('#,##0');
     }
     // Смена пишется только если были данные смены; «только накладные» смену не создают
-    var hasShiftData=wyplatas.length>0||rows.some(function(row){
+    var hasShiftData=hasRecon||wyplatas.length>0||rows.some(function(row){
       return (parseFloat(row.zAmount)||0)>0||(parseFloat(row.factAmount)||0)>0;
     });
     if (hasShiftData) {
+      var discrepancy=rec?reconDiff:Math.round(factTotal-zTotal);
       shiftsSh.appendRow([zRef,dt,_s(d.shift||'1'),_s(d.cashier||''),
-        JSON.stringify(rows),JSON.stringify(wyplatas),Math.round(factTotal-zTotal),new Date()]);
+        JSON.stringify(rec||rows),JSON.stringify(wyplatas),discrepancy,new Date()]);
       shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
