@@ -666,23 +666,6 @@ function searchTransactions(p) {
   } catch(e) { return []; }
 }
 
-function getTrash(p) {
-  var ssId=p.ssId;
-  try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TRASH);
-    if (!sh||sh.getLastRow()<2) return [];
-    var tz=Session.getScriptTimeZone();
-    return sh.getRange(2,1,sh.getLastRow()-1,TR_COLS).getValues().map(function(r){
-      var d=r[B_DATE-1]; var del=r[TR_COLS-1];
-      return {id:String(r[B_ID-1]),date:(d instanceof Date)?d.toISOString():'',
-              type:String(r[B_TYPE-1]),category:String(r[B_CAT-1]),
-              amount:parseFloat(r[B_AMT-1])||0,account:String(r[B_ACC-1]),
-              comment:String(r[B_CMT-1]||''),
-              deletedAt:(del instanceof Date)?del.toISOString():''};
-    }).reverse();
-  } catch(e) { return []; }
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // MODULE: IMPORT (из 1С через Excel-вставку)
 // ═══════════════════════════════════════════════════════════════════════
