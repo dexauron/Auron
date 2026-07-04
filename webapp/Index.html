@@ -4863,22 +4863,47 @@ var App={
 
   _renderCats:function(r){
     var el=document.getElementById('an-cats');
-    var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';}).slice(0,8);
+    var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';})
+      .sort(function(a,b){return b.total-a.total;}).slice(0,8);
     if(!cats.length){el.innerHTML=App._empty('📊','Нет расходов за период','Добавь операции или выбери другой период вверху.');return;}
     App._anCatList=cats;
-    el.innerHTML='<div class="chart-wrap"><div class="chart-title">Расходы по категориям</div><canvas id="chart-cats" height="200"></canvas></div>'+
-      '<div style="background:var(--card);border-radius:16px;overflow:hidden;">'+
-      cats.map(function(c,i){var ci=catIcon(c.category);
-        return '<div class="cashier-row" onclick="App._mdCatAn('+i+')" style="padding:12px 16px;cursor:pointer;">'+
-          '<div class="tx-icon" style="background:'+ci.bg+'20;color:'+ci.bg+';">'+ci.icon+'</div>'+
-          '<div class="cashier-info"><div class="cashier-name">'+App._e(c.category)+'</div></div>'+
-          '<div class="cashier-amount">₽ '+fmt(c.total)+'</div><span style="color:var(--muted);margin-left:6px;">›</span></div>';
-      }).join('')+'</div>';
-    var ctx=document.getElementById('chart-cats').getContext('2d');
-    App.s.chart2=new Chart(ctx,{type:'doughnut',data:{
-      labels:cats.map(function(c){return c.category;}),
-      datasets:[{data:cats.map(function(c){return c.total;}),backgroundColor:cats.map(function(c){return catIcon(c.category).bg;}),borderWidth:0}]
-    },options:{responsive:true,plugins:{legend:{position:'bottom'}},cutout:'65%'}});
+    var total=cats.reduce(function(s,c){return s+(c.total||0);},0)||1;
+    // ── Кольцо-донат (SVG) с иконками категорий вокруг ──
+    var size=232,cx=size/2,cy=size/2,R=82,sw=22,C=2*Math.PI*R;
+    var acc=0,segs='',icons='';
+    cats.forEach(function(c){
+      var frac=(c.total||0)/total;var len=frac*C;var ci=catIcon(c.category);
+      // сегмент: старт под углом acc (от 12 часов)
+      segs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+ci.bg+'" stroke-width="'+sw+'" '+
+        'stroke-dasharray="'+(len-2)+' '+(C-len+2)+'" stroke-dashoffset="'+(-acc*C)+'" '+
+        'transform="rotate(-90 '+cx+' '+cy+')" stroke-linecap="round"></circle>';
+      // иконка на середине сегмента (только если сегмент заметный)
+      if(frac>=0.05){
+        var mid=(acc+frac/2)*2*Math.PI-Math.PI/2;
+        var ix=cx+R*Math.cos(mid),iy=cy+R*Math.sin(mid);
+        icons+='<div style="position:absolute;left:'+ix+'px;top:'+iy+'px;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:'+ci.bg+';display:grid;place-items:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">'+ci.icon+'</div>';
+      }
+      acc+=frac;
+    });
+    var h='<div style="position:relative;width:'+size+'px;height:'+size+'px;margin:6px auto 18px;">'+
+      '<svg width="'+size+'" height="'+size+'" style="display:block;">'+segs+'</svg>'+icons+
+      '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;">'+
+        '<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Расходы</div>'+
+        '<div class="num" style="font-size:22px;font-weight:800;letter-spacing:-.02em;">₽ '+fmt(total)+'</div></div>'+
+      '</div>';
+    // ── Строки с полосками доли ──
+    h+='<div style="display:grid;gap:11px;">'+cats.map(function(c,i){
+      var ci=catIcon(c.category);var pct=Math.round((c.total||0)/total*100);
+      return '<div onclick="App._mdCatAn('+i+')" style="cursor:pointer;">'+
+        '<div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">'+
+          '<span style="width:26px;height:26px;border-radius:8px;background:'+ci.bg+'22;color:'+ci.bg+';display:grid;place-items:center;font-size:13px;flex-shrink:0;">'+ci.icon+'</span>'+
+          '<span style="flex:1;min-width:0;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.category)+'</span>'+
+          '<span class="num" style="font-size:14px;font-weight:800;white-space:nowrap;">₽ '+fmt(c.total)+'</span>'+
+          '<span style="font-size:11.5px;color:var(--muted);width:34px;text-align:right;">'+pct+'%</span></div>'+
+        '<div style="height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+ci.bg+';border-radius:4px;"></div></div>'+
+      '</div>';
+    }).join('')+'</div>';
+    el.innerHTML=h;
   },
 
   _mdCatAn:function(i){
