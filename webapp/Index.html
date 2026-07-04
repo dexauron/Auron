@@ -2831,11 +2831,39 @@ var App={
       clearTimeout(b._busyT);
       b._busyT=setTimeout(function(){b._busy=false;b.classList.remove('is-busy');},2500);
     },true);
-    // 1.5) Калькулятор в полях суммы: поле с классом calc-input считает выражение
+    // 1.5) Калькулятор во ВСЕХ полях суммы. Числовые поля превращаем в
+    // текстовые с калькулятором; при выходе из поля выражение считается.
+    App._calcify=function(root){
+      (root||document).querySelectorAll('input[type=number]').forEach(function(inp){
+        inp.type='text';
+        if(!inp.getAttribute('inputmode'))inp.setAttribute('inputmode','decimal');
+        inp.classList.add('calc-input');
+      });
+    };
+    App._calcify(document);
+    // Новые поля в модалках/шторках — конвертируем на лету
+    try{
+      new MutationObserver(function(muts){
+        muts.forEach(function(m){
+          for(var i=0;i<m.addedNodes.length;i++){
+            var n=m.addedNodes[i];
+            if(n.nodeType!==1)continue;
+            if(n.matches&&n.matches('input[type=number]'))App._calcify(n.parentNode||document);
+            else if(n.querySelector&&n.querySelector('input[type=number]'))App._calcify(n);
+          }
+        });
+      }).observe(document.body,{childList:true,subtree:true});
+    }catch(e){}
     document.addEventListener('blur',function(e){
       var el=e.target;if(!el||!el.classList||!el.classList.contains('calc-input'))return;
       var v=el.value||'';
-      if(/[+\-*/×÷]/.test(v.replace(/^-/,''))){var r=App._calcEval(v);if(r||r===0)el.value=r;}
+      if(/[+\-*/×÷]/.test(v.replace(/^-/,''))){
+        var r=App._calcEval(v);
+        if(r||r===0){el.value=r;
+          // обновляем живые итоги (сверка кассы, суммы и т.п.)
+          try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(ev){}
+        }
+      }
     },true);
     // 1.6) Долгое нажатие на «+» → сразу новая запись (минуя меню)
     var fab=document.getElementById('fab');
