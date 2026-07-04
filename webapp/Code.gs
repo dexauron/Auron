@@ -3801,12 +3801,14 @@ function getObligations(p) {
           amount:Math.round(parseFloat(r[3])||0),comment:String(r[4]||'')});
       });
     }
-    var sum={debt:0,credit:0,savings:0};
+    items.forEach(function(x){ if(x.type==='debt')x.type='iowe'; });
+    var sum={iowe:0,owed:0,credit:0,savings:0};
     items.forEach(function(x){ if(sum[x.type]!==undefined)sum[x.type]+=x.amount; });
-    // Долг магазина по накладным — как отдельная строка (только чтение)
     var storeDebt=0; try{storeDebt=getStoreDebt({ssId:p.ssId}).debt;}catch(e){}
-    return {items:items,sum:sum,storeDebt:Math.round(storeDebt)};
-  } catch(e) { return {items:[],sum:{debt:0,credit:0,savings:0},storeDebt:0,__error:e.message}; }
+    // Чистые активы: накопления + мне должны − я должен − кредиты − долг магазина
+    var net=sum.savings+sum.owed-sum.iowe-sum.credit-Math.round(storeDebt);
+    return {items:items,sum:sum,storeDebt:Math.round(storeDebt),net:net};
+  } catch(e) { return {items:[],sum:{iowe:0,owed:0,credit:0,savings:0},storeDebt:0,net:0,__error:e.message}; }
 }
 
 function saveObligation(p) {

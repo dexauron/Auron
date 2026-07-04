@@ -6513,7 +6513,7 @@ var App={
   },
 
   // ── Долги · Накопления · Кредиты ──
-  _oblTypes:{debt:{icon:'📉',label:'Я должен',color:'var(--neg)'},credit:{icon:'🏦',label:'Кредит / рассрочка',color:'var(--warn,#FF9F0A)'},savings:{icon:'💰',label:'Накопления / цель',color:'var(--pos)'}},
+  _oblTypes:{iowe:{icon:'📉',label:'Я должен',color:'var(--neg)'},owed:{icon:'📈',label:'Мне должны',color:'var(--pos)'},credit:{icon:'🏦',label:'Кредит / рассрочка',color:'var(--warn,#FF9F0A)'},savings:{icon:'💰',label:'Накопления / цель',color:'var(--pos)'}},
   openObligations:function(){
     App.openModal('<div class="modal-title">💰 Долги · Накопления · Кредиты</div><div id="obl-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getObligations',{ssId:App.s.ssId}).then(function(r){
@@ -6524,31 +6524,44 @@ var App={
   _renderObligations:function(){
     var b=document.getElementById('obl-body');if(!b||!App._obl)return;
     var r=App._obl,T=App._oblTypes;
+    var net=r.net!==undefined?r.net:(r.sum.savings+r.sum.owed-r.sum.iowe-r.sum.credit-r.storeDebt);
     var h='';
-    // Сводка
-    h+='<div style="display:flex;gap:8px;margin-bottom:14px;">'+
-      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div class="num" style="font-size:15px;font-weight:800;color:var(--neg);">₽ '+fmt(r.sum.debt)+'</div><div style="font-size:10.5px;color:var(--muted);">долги</div></div>'+
-      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div class="num" style="font-size:15px;font-weight:800;color:var(--warn,#FF9F0A);">₽ '+fmt(r.sum.credit)+'</div><div style="font-size:10.5px;color:var(--muted);">кредиты</div></div>'+
-      '<div style="flex:1;background:var(--surface-2);border-radius:12px;padding:11px;text-align:center;"><div class="num" style="font-size:15px;font-weight:800;color:var(--pos);">₽ '+fmt(r.sum.savings)+'</div><div style="font-size:10.5px;color:var(--muted);">накоплено</div></div></div>';
+    // Чистые активы — деловая шапка
+    h+='<div style="background:linear-gradient(135deg,color-mix(in oklab,var(--brand) 22%,var(--surface)),var(--surface));border-radius:18px;padding:16px;margin-bottom:14px;border:1px solid rgba(255,255,255,.07);">'+
+      '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Чистые активы</div>'+
+      '<div class="num" style="font-size:26px;font-weight:800;letter-spacing:-.02em;color:'+(net>=0?'var(--ink)':'var(--neg)')+';margin-top:3px;">'+(net<0?'−':'')+'₽ '+fmt(Math.abs(net))+'</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:2px;">накопления + мне должны − мои долги − кредиты − долг магазина</div></div>';
+    // Мини-сетка по типам
+    var cell=function(v,label,color){return '<div style="flex:1;min-width:0;background:var(--surface-2);border-radius:12px;padding:10px 8px;text-align:center;"><div class="num" style="font-size:14px;font-weight:800;color:'+color+';">₽ '+fmt(v)+'</div><div style="font-size:10px;color:var(--muted);margin-top:1px;">'+label+'</div></div>';};
+    h+='<div style="display:flex;gap:7px;margin-bottom:14px;">'+
+      cell(r.sum.owed+r.sum.savings,'активы','var(--pos)')+
+      cell(r.sum.iowe,'я должен','var(--neg)')+
+      cell(r.sum.credit,'кредиты','var(--warn,#FF9F0A)')+'</div>';
     // Долг магазина (редактируемый)
-    h+='<div onclick="App.editStoreDebt()" style="display:flex;align-items:center;gap:11px;padding:12px 13px;border-radius:12px;background:color-mix(in oklab,var(--neg) 8%,transparent);border:1px solid color-mix(in oklab,var(--neg) 30%,transparent);cursor:pointer;margin-bottom:12px;">'+
+    h+='<div onclick="App.editStoreDebt()" style="display:flex;align-items:center;gap:11px;padding:13px;border-radius:14px;background:color-mix(in oklab,var(--neg) 8%,transparent);border:1px solid color-mix(in oklab,var(--neg) 28%,transparent);cursor:pointer;margin-bottom:14px;">'+
       '<span style="font-size:19px;">🏪</span>'+
-      '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">Долг магазина (накладные)</div>'+
-      '<div style="font-size:11.5px;color:var(--muted);">по регистру накладных · нажми, чтобы поправить</div></div>'+
-      '<span class="num" style="font-weight:800;color:var(--neg);">₽ '+fmt(r.storeDebt)+'</span></div>';
-    // Список обязательств
-    if(r.items.length){
-      h+=r.items.map(function(o){
-        var t=T[o.type]||T.debt;var i=r.items.indexOf(o);
+      '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">Долг магазина</div>'+
+      '<div style="font-size:11px;color:var(--muted);">по накладным · нажми, чтобы поправить ✎</div></div>'+
+      '<span class="num" style="font-weight:800;color:var(--neg);white-space:nowrap;">₽ '+fmt(r.storeDebt)+'</span></div>';
+    // Группировка по типам
+    var groups=[['iowe','Я должен'],['owed','Мне должны'],['credit','Кредиты и рассрочки'],['savings','Накопления и цели']];
+    groups.forEach(function(g){
+      var list=r.items.filter(function(o){return o.type===g[0];});
+      if(!list.length)return;
+      var t=T[g[0]];
+      h+='<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:6px 0 4px;">'+g[1]+'</div>';
+      h+=list.map(function(o){
+        var i=r.items.indexOf(o);
         return '<div style="display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
           '<span style="font-size:18px;">'+t.icon+'</span>'+
           '<div style="flex:1;min-width:0;cursor:pointer;" onclick="App.openObligForm('+i+')"><div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(o.name)+'</div>'+
-          '<div style="font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+t.label+(o.comment?' · '+App._e(o.comment):'')+'</div></div>'+
+          (o.comment?'<div style="font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(o.comment)+'</div>':'')+'</div>'+
           '<span class="num" style="font-weight:800;color:'+t.color+';white-space:nowrap;">₽ '+fmt(o.amount)+'</span>'+
-          '<button onclick="App._oblDel('+i+')" style="background:none;border:none;color:var(--neg);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
+          '<button onclick="App._oblDel('+i+')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
       }).join('');
-    }
-    h+='<button class="btn-primary" style="margin-top:14px;" onclick="App.openObligForm(null)">+ Добавить</button>';
+    });
+    if(!r.items.length)h+='<div style="text-align:center;padding:14px;color:var(--muted);font-size:13px;">Пока пусто. Добавь долг, кредит или цель.</div>';
+    h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openObligForm(null)">+ Добавить</button>';
     b.innerHTML=h;
   },
   openObligForm:function(i){
@@ -6557,7 +6570,7 @@ var App={
     var opts=Object.keys(T).map(function(k){return '<option value="'+k+'"'+(o&&o.type===k?' selected':'')+'>'+T[k].icon+' '+T[k].label+'</option>';}).join('');
     App.openModal('<div class="modal-title">'+(o?'Изменить':'Новое обязательство')+'</div>'+
       '<div class="field"><label>Тип</label><select id="ob-type">'+opts+'</select></div>'+
-      '<div class="field"><label>Название</label><input id="ob-name" type="text" placeholder="Например: Родители, Ипотека, На ремонт" value="'+(o?App._e(o.name):'')+'"></div>'+
+      '<div class="field"><label>Название</label><input id="ob-name" type="text" placeholder="Например: Ипотека, Поставщик, На ремонт" value="'+(o?App._e(o.name):'')+'"></div>'+
       '<div class="field"><label>Сумма (₽)</label><input id="ob-amt" type="number" inputmode="decimal" placeholder="0" value="'+(o?o.amount:'')+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="ob-cmt" type="text" placeholder="…" value="'+(o?App._e(o.comment):'')+'"></div>'+
       '<button class="btn-primary" onclick="App._oblSave('+(o?"'"+App._e(o.id)+"'":'null')+')">Сохранить</button>');
