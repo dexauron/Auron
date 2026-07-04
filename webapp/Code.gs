@@ -23,6 +23,7 @@ var SH_ACCESS    = 'ДОСТУП';
 var SH_CONTRACTORS='КОНТРАГЕНТЫ';
 var SH_ORDERS    = 'ЗАКАЗЫ';
 var SH_NOTES     = 'ЗАМЕТКИ';
+var SH_OBLIG     = 'ОБЯЗАТЕЛЬСТВА';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_LOG       = 'ЖУРНАЛ';
@@ -241,6 +242,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_CONTRACTORS,['ID','Название','Тип','Телефон','Комментарий','Создано']);
   _mk(ss,SH_ORDERS,   ['ID','Контрагент','Заказано','Ожидается','Сумма','Статус','Комментарий','Создано','Получено','Факт_Сумма']);
   _mk(ss,SH_NOTES,    ['Дата','Текст','Обновлено']);
+  _mk(ss,SH_OBLIG,    ['ID','Тип','Название','Сумма','Комментарий','Создано']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
@@ -3780,5 +3782,76 @@ function setContractorStatus(p) {
     for (var i=0;i<vs.length;i++)
       if (String(vs[i][0])===String(id)) { sh.getRange(i+2,7).setValue(status); return {ok:true}; }
     return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: OBLIGATIONS (Долги · Накопления · Кредиты — как в Zenmoney)
+// Тип: debt (я должен) | credit (кредит/рассрочка) | savings (накопления/цель)
+// ═══════════════════════════════════════════════════════════════════════
+
+function getObligations(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_OBLIG);
+    var items=[];
+    if (sh.getLastRow()>=2) {
+      sh.getRange(2,1,sh.getLastRow()-1,6).getValues().forEach(function(r){
+        if (r[0]) items.push({id:String(r[0]),type:String(r[1]||'debt'),name:String(r[2]||''),
+          amount:Math.round(parseFloat(r[3])||0),comment:String(r[4]||'')});
+      });
+    }
+    var sum={debt:0,credit:0,savings:0};
+    items.forEach(function(x){ if(sum[x.type]!==undefined)sum[x.type]+=x.amount; });
+    // Долг магазина по накладным — как отдельная строка (только чтение)
+    var storeDebt=0; try{storeDebt=getStoreDebt({ssId:p.ssId}).debt;}catch(e){}
+    return {items:items,sum:sum,storeDebt:Math.round(storeDebt)};
+  } catch(e) { return {items:[],sum:{debt:0,credit:0,savings:0},storeDebt:0,__error:e.message}; }
+}
+
+function saveObligation(p) {
+  var ssId=p.ssId, d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_OBLIG);
+    if (!_s(d.name)) return {__error:'Введите название'};
+    var type=_s(d.type||'debt'), amt=Math.round(parseFloat(d.amount)||0);
+    if (d.id&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) if (String(vs[i][0])===String(d.id)) {
+        sh.getRange(i+2,2,1,4).setValues([[type,_s(d.name),amt,_s(d.comment||'')]]);
+        return {ok:true,id:String(d.id)};
+      }
+    }
+    var id=Utilities.getUuid();
+    sh.appendRow([id,type,_s(d.name),amt,_s(d.comment||''),new Date()]);
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+}
+
+function deleteObligation(p) {
+  try {
+    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_OBLIG);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    for (var i=vs.length-1;i>=0;i--) if (String(vs[i][0])===String(p.id)) { sh.deleteRow(i+2); return {ok:true}; }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Установить долг магазина в нужную сумму (ручная корректировка регистра)
+function setStoreDebt(p) {
+  var ssId=p.ssId, target=Math.round(parseFloat(p.target)||0);
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var cur=getStoreDebt({ssId:ssId}).debt;
+    var diff=target-cur;
+    if (diff===0) return {ok:true,debt:cur};
+    var sh=ss.getSheetByName(SH_DEBTS);
+    // diff>0 → увеличиваем долг (zakupka), diff<0 → уменьшаем (oplata)
+    sh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,diff>0?'zakupka':'oplata',
+      Math.abs(diff),new Date(),'','Ручная корректировка долга магазина',new Date(),'','']);
+    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    return {ok:true,debt:target};
   } catch(e) { return {__error:e.message}; }
 }
