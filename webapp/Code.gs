@@ -385,6 +385,8 @@ function getSettings(p) {
       capExclude:       gj('CAP_EXCLUDE'),
       monthTarget:      parseFloat(map['MONTH_TARGET'])||0,
       cashFloat:        parseFloat(map['CASH_FLOAT'])||0,
+      beznalAccount:    String(map['BEZNAL_ACCOUNT']||''),
+      savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
     };
   } catch(e) {
@@ -408,6 +410,8 @@ function saveSettings(p) {
       CAP_EXCLUDE:         JSON.stringify(d.capExclude||[]),
       MONTH_TARGET:        String(parseFloat(d.monthTarget)||0),
       CASH_FLOAT:          String(parseFloat(d.cashFloat)||0),
+      BEZNAL_ACCOUNT:      _s(d.beznalAccount||''),
+      SAVINGS_ACCOUNTS:    JSON.stringify(d.savingsAccounts||[]),
       SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
     };
     var keyRow = {};
@@ -1023,8 +1027,9 @@ function saveKassa(p) {
         cashRev,cash,_s(d.cashier||''),'Выручка наличными (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
       cardRevs.forEach(function(c){
         var amt=Math.round(parseFloat(c.amount)||0); if (amt<=0) return;
+        // Все каналы → один безнал-счёт; канал сохраняется в комментарии для аналитики
         baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
-          amt,_s(c.account||'Карта'),_s(d.cashier||''),'Выручка безнал · '+_s(c.account||'')+' (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
+          amt,_s(c.account||'Карта'),_s(d.cashier||''),'Выручка безнал · '+_s(c.channel||c.account||'')+' (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
       });
       if (cashSupp>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Закупка',
         cashSupp,cash,_s(d.cashier||''),'Оплачено поставщикам наличкой из кассы','',zRef,true,_s(d.shift||'')]);

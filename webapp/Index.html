@@ -152,7 +152,10 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 }
 .btn-secondary:hover{background:var(--surface-3);}
 .rp-chip{flex-shrink:0;padding:8px 13px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:650;cursor:pointer;white-space:nowrap;font-family:var(--font);}
-body.sums-hidden .num{filter:blur(8px);}
+body.sums-hidden .num,body.sums-hidden .acct-pill-bal,body.sums-hidden .home-hero-bal,
+body.sums-hidden .split-tile-v,body.sums-hidden .metric-value,body.sums-hidden .sb-capital-val,
+body.sums-hidden .cashier-amount,body.sums-hidden .tx-amount,body.sums-hidden .home-hero-delta,
+body.sums-hidden .tx-day-total,body.sums-hidden .split-tile-x,body.sums-hidden .acct-pill-sub{filter:blur(9px);}
 body.sums-hidden #privacy-eye{background:var(--brand);color:#fff;}
 @keyframes slideup{from{transform:translateY(20px);opacity:0;}to{transform:none;opacity:1;}}
 /* ── Светлая тема (переключается в Настройках, хранится на устройстве) ── */
@@ -1756,9 +1759,6 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
       <!-- КАССОВОЕ УТРО: пошаговый мастер (смена/Z → выплаты) -->
       <div id="k-morning" class="kassa-wrap" style="display:none;">
-        <div id="k-steps-bar" style="display:flex;gap:6px;margin-bottom:14px;">
-          <span class="k-step-dot" data-st="1"></span><span class="k-step-dot" data-st="2"></span>
-        </div>
 
         <div id="k-step1">
           <div class="kassa-row">
@@ -1798,26 +1798,19 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           </div>
           <div class="kassa-row">
             <div class="kassa-row-hdr">💳 Безнал — эквайринг</div>
-            <div style="padding:12px 16px;">
-              <div id="kz-card-list" style="display:grid;gap:10px;"></div>
-              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:9px;">Разнеси безнал по каналам: карта → «Карта», QR/СБП → «СБП» и т.д. Зачислится на эти счета. Физически сверять не нужно — деньги идут в банк.</div>
+            <div style="padding:12px 16px;display:grid;gap:10px;">
+              <div class="field" style="margin:0;"><label>Картой (₽)</label>
+                <input type="number" class="kz-ch" data-ch="Карта" placeholder="0" inputmode="decimal"></div>
+              <div class="field" style="margin:0;"><label>СБП / QR (₽)</label>
+                <input type="number" class="kz-ch" data-ch="СБП" placeholder="0" inputmode="decimal"></div>
+              <div class="field" style="margin:0;"><label>Прочее / переводы (₽)</label>
+                <input type="number" class="kz-ch" data-ch="Прочее" placeholder="0" inputmode="decimal"></div>
+              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;">Всё зачислится на один безналичный счёт. Каналы записываются отдельно — в будущем покажем, чем клиенты платят чаще.</div>
             </div>
           </div>
           <div style="padding:0 0 12px;">
             <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);">📷 Прикрепить Z-отчёт</button>
           </div>
-          <button class="btn-primary" onclick="App.kStep(2)">Дальше → Выплаты</button>
-        </div>
-
-        <div id="k-step2" style="display:none;">
-          <div class="kassa-row">
-            <div class="kassa-row-hdr" style="display:flex;justify-content:space-between;">
-              <span>Шаг 2 · Выплаты с кассы</span>
-              <button onclick="App.addWyplata()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">+ Добавить</button>
-            </div>
-            <div id="wyplata-list"></div>
-          </div>
-          <div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;padding:0 4px;">Инкассация, ЗП за смену и прочее, что забрали из кассы. Если ничего не забирали — просто сохраняй.</div>
           <button class="btn-primary" onclick="App.saveKassa()">Сохранить кассовое утро</button>
         </div>
       </div>
@@ -5236,23 +5229,13 @@ var App={
     App.haptic(6);
   },
   kBack:function(){
-    if(App._kView==='morning'&&App._kStepN>1){App.kStep(App._kStepN-1);return;}
     if(App._kView!=='hub'){App.kShow('hub');return;}
     App.setTab('home',null);
   },
   _kStepN:1,
   kStep:function(n){
-    if(n===2){
-      var cashier=document.getElementById('k-cashier').value;
-      if(!cashier){App.toast('Выберите кассира',true);return;}
-    }
-    App._kStepN=n;
-    [1,2].forEach(function(i){
-      var el=document.getElementById('k-step'+i);if(el)el.style.display=i===n?'block':'none';
-    });
-    document.querySelectorAll('.k-step-dot').forEach(function(d){d.classList.toggle('on',parseInt(d.dataset.st)<=n);});
+    var el=document.getElementById('k-step1');if(el)el.style.display='block';
     var p=document.getElementById('tab-kassa');if(p)p.scrollTo(0,0);
-    App.haptic(6);
   },
   _loadKHub:function(){
     var set=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
@@ -5308,16 +5291,13 @@ var App={
     // Подставляем размен по умолчанию из настроек
     var bal=document.getElementById('k-balance');
     if(bal&&!bal.value&&App.s.settings.cashFloat)bal.value=App.s.settings.cashFloat;
-    // Поля безнала — по каждому счёту, кроме «Наличные»
-    var box=document.getElementById('kz-card-list');
-    if(box){
-      var accs=(App.s.accounts||[]).filter(function(a){return a.name!=='Наличные';});
-      box.innerHTML=accs.length?accs.map(function(a,i){
-        return '<div class="field" style="margin:0;"><label>Выручка · '+App._e(a.name)+' (₽)</label>'+
-          '<input type="number" class="kz-card-inp" data-acc="'+App._e(a.name)+'" placeholder="0" inputmode="decimal"></div>';
-      }).join(''):'<div style="font-size:12px;color:var(--muted);">Нет безналичных счетов. Добавь «Карта», «СБП» в Настройках → Счета.</div>';
-    }
     App._kReconcile();
+  },
+  // Единый безналичный счёт: настройка или первый счёт-не-наличные
+  _beznalAccount:function(){
+    if(App.s.settings.beznalAccount)return App.s.settings.beznalAccount;
+    var a=(App.s.accounts||[]).filter(function(x){return x.name!=='Наличные';})[0];
+    return a?a.name:'Карта';
   },
 
   // Живая сверка наличных: Выручка = Забрал + Оплатил поставщикам + Оставил
@@ -5356,6 +5336,7 @@ var App={
 
   renderWyplatas:function(){
     var el=document.getElementById('wyplata-list');
+    if(!el)return;
     if(!App.s.wyplatas.length){el.innerHTML='<div style="padding:12px 16px;color:var(--text-2);font-size:14px;">Нет выплат</div>';return;}
     el.innerHTML=App.s.wyplatas.map(function(w,i){
       return '<div class="wyplata-item">'+
@@ -5372,15 +5353,17 @@ var App={
     var cashier=document.getElementById('k-cashier').value;
     if(!cashier){App.toast('Выберите кассира',true);return;}
     var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
-    var cardRevs=[];var cardTotal=0;
-    document.querySelectorAll('.kz-card-inp').forEach(function(inp){
+    // Безнал: каналы (для аналитики) → один счёт
+    var beznalAcc=App._beznalAccount();
+    var channels=[];var cardTotal=0;
+    document.querySelectorAll('.kz-ch').forEach(function(inp){
       var amt=Math.round(parseFloat(inp.value)||0);
-      if(amt>0){cardRevs.push({account:inp.dataset.acc,amount:amt});cardTotal+=amt;}
+      if(amt>0){channels.push({channel:inp.dataset.ch,account:beznalAcc,amount:amt});cardTotal+=amt;}
     });
     var rec={
       cashRev:g('kz-cash-rev'), cashSupp:g('kz-cash-supp'),
       cashCollect:g('kz-cash-collect'), cashLeft:g('kz-cash-left'),
-      cardRevs:cardRevs, cardTotal:cardTotal, float:g('k-balance')
+      cardRevs:channels, cardTotal:cardTotal, float:g('k-balance')
     };
     rec.diff=(rec.cashCollect+rec.cashSupp+rec.cashLeft)-rec.cashRev;
     if(!rec.cashRev&&!cardTotal&&!rec.cashSupp&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
@@ -6137,14 +6120,30 @@ var App={
   openAccountForm:function(id){
     var acc=id?(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);}):null;
     var inCap=!acc||((App.s.settings.capExclude||[]).indexOf(acc.name)<0);
+    var isSav=acc&&(App.s.settings.savingsAccounts||[]).indexOf(acc.name)>=0;
     App.openModal('<div class="modal-title">'+(acc?'Редактировать':'Новый счёт')+'</div>'+
+      (!acc?'<div style="display:flex;gap:8px;margin-bottom:14px;">'+
+        '<button type="button" onclick="App._afPreset(this,\'wallet\')" class="af-preset" style="flex:1;padding:11px;border-radius:12px;border:1.5px solid var(--brand);background:color-mix(in oklab,var(--brand) 12%,transparent);color:var(--brand);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💳 Обычный</button>'+
+        '<button type="button" onclick="App._afPreset(this,\'savings\')" class="af-preset" style="flex:1;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">🐷 Накопительный</button>'+
+      '</div>':'')+
       '<div class="field"><label>Название</label><input id="af-name" type="text" value="'+(acc?App._e(acc.name):'')+'" placeholder="Наличные"></div>'+
       '<div class="field"><label>Начальный баланс (₽)</label><input id="af-bal" type="number" value="'+(acc?acc.startBalance||0:0)+'"></div>'+
+      '<label style="display:flex;align-items:center;gap:10px;padding:4px 0 8px;cursor:pointer;">'+
+        '<input type="checkbox" id="af-sav"'+(isSav?' checked':'')+' style="width:19px;height:19px;accent-color:var(--brand);">'+
+        '<span style="font-size:13.5px;font-weight:600;">🐷 Накопительный (отложки)</span></label>'+
+      '<div style="font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:12px;">Деньги «на потом». В операциях к нему пиши в комментарии, на что откладываешь.</div>'+
       '<label style="display:flex;align-items:center;gap:10px;padding:4px 0 14px;cursor:pointer;">'+
         '<input type="checkbox" id="af-cap"'+(inCap?' checked':'')+' style="width:19px;height:19px;accent-color:var(--brand);">'+
         '<span style="font-size:13.5px;font-weight:600;">Учитывать в общем капитале</span></label>'+
       '<button class="btn-primary" onclick="App._saveAcc(\''+(id||'')+'\')">Сохранить</button>'+
       (acc?'<button class="btn-secondary" style="color:var(--expense);border-color:var(--expense);margin-top:8px;" onclick="App._delAcc(\''+id+'\')">Удалить счёт</button>':''));
+  },
+  _afPreset:function(btn,type){
+    document.querySelectorAll('.af-preset').forEach(function(b){b.style.borderColor='var(--line)';b.style.background='var(--surface-2)';b.style.color='var(--ink)';});
+    btn.style.borderColor='var(--brand)';btn.style.background='color-mix(in oklab,var(--brand) 12%,transparent)';btn.style.color='var(--brand)';
+    var sav=document.getElementById('af-sav');if(sav)sav.checked=(type==='savings');
+    var nm=document.getElementById('af-name');
+    if(nm&&!nm.value&&type==='savings')nm.value='Накопления';
   },
   _saveAcc:function(id){
     var name=document.getElementById('af-name').value.trim();
@@ -6155,7 +6154,13 @@ var App={
     var ex=App.s.settings.capExclude||[];
     ex=ex.filter(function(n){return n!==name;});
     if(!inCap)ex.push(name);
-    App.s.settings.capExclude=ex;App.saveSettings();
+    App.s.settings.capExclude=ex;
+    // Накопительный
+    var isSav=document.getElementById('af-sav')&&document.getElementById('af-sav').checked;
+    var sav=(App.s.settings.savingsAccounts||[]).filter(function(n){return n!==name;});
+    if(isSav)sav.push(name);
+    App.s.settings.savingsAccounts=sav;
+    App.saveSettings();
     gs('saveAccount',{ssId:App.s.ssId,data:{id:id||null,name:name,startBalance:bal}}).then(function(){
       App.toast('Счёт сохранён ✓');App.closeModal();App.renderSettingsPage();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
