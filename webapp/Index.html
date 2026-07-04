@@ -62,6 +62,8 @@
   --font-num:"Space Grotesk","Plus Jakarta Sans",system-ui,sans-serif;
   /* Radius */
   --radius:20px;--radius-sm:14px;
+  /* 8px-сетка отступов — единый ритм по всем экранам */
+  --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:20px;--sp-6:24px;--gutter:16px;
   /* Layout */
   --nav-h:68px;--pad:1;
   --safe-top:env(safe-area-inset-top,0px);
@@ -501,7 +503,7 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 .skel-block{height:80px;margin-bottom:10px;border-radius:18px;}
 
 /* ── Analytics ── */
-.an-tabs{display:flex;padding:0 16px 14px;overflow-x:auto;scrollbar-width:none;gap:8px;scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
+.an-tabs{display:flex;padding:0 16px 16px;overflow-x:auto;scrollbar-width:none;gap:8px;scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
 .an-tabs::-webkit-scrollbar{display:none;}
 .an-tabs::after{content:"";flex:0 0 12px;}
 .an-tab{
@@ -986,7 +988,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
 /* ── New utility classes (v5 design) ── */
 .wrap{padding:0 0 40px;}
-.grid{display:grid;gap:12px;padding:0 16px;margin-bottom:14px;}
+.grid{display:grid;gap:12px;padding:0 16px;margin-bottom:16px;}
 .card{
   background:var(--surface);border-radius:var(--radius);
   padding:20px;border:1px solid var(--line);box-shadow:var(--shadow);
@@ -1005,7 +1007,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 .card-head h3{font-size:15px;font-weight:700;letter-spacing:-.01em;}
 .more{background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);}
 .empty{text-align:center;padding:32px 16px;color:var(--muted);font-size:14px;font-weight:500;}
-.grp-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:0 16px;margin-bottom:10px;}
+.grp-label{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;padding:0 16px;margin-bottom:12px;}
 .bar{height:6px;background:var(--surface-2);border-radius:4px;overflow:hidden;margin-top:10px;}
 .bar span{display:block;height:100%;border-radius:4px;background:var(--pos);min-width:2px;transition:width .4s;}
 .mini3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
@@ -1619,7 +1621,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
         <button class="pill" data-p="custom" id="home-pill-custom" onclick="App.openCustomPeriod('home')">⊞ Свой</button>
       </div>
       <!-- План выручки на месяц -->
-      <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:14px;"></div>
+      <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:16px;"></div>
       <!-- Пульс магазина -->
       <div id="pulse-card"></div>
       <!-- Наблюдение (машина времени / слабый день) -->
@@ -4733,8 +4735,12 @@ var App={
         '<div class="metric-row" style="margin-bottom:16px;">'+
           '<div class="metric-card"><div class="metric-label">Бюджет (план)</div><div class="metric-value">₽ '+fmtFull(totalPlan)+'</div></div>'+
           '<div class="metric-card"><div class="metric-label">Фактически потрачено</div><div class="metric-value '+(totalActual>totalPlan&&totalPlan>0?'red':'green')+'">₽ '+fmtFull(totalActual)+'</div></div>'+
-        '</div>'+
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
+        '</div>';
+      // Премиальное кольцо факта по категориям
+      var donutItems=items.filter(function(x){return (x.actual||0)>0;}).sort(function(a,b){return b.actual-a.actual;}).slice(0,8)
+        .map(function(x){return {name:x.category,total:x.actual};});
+      if(donutItems.length)html+=App._donutRing(donutItems,totalActual,'Факт');
+      html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'+
           '<span style="font-size:15px;font-weight:700;">План vs Факт по категориям</span>'+
           '<button onclick="App.openBudgetEdit()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;">✎ Изменить</button>'+
         '</div>';
@@ -4864,55 +4870,76 @@ var App={
     }
   },
 
-  _renderCats:function(r){
-    var el=document.getElementById('an-cats');
-    var cats=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';})
-      .sort(function(a,b){return b.total-a.total;}).slice(0,8);
-    if(!cats.length){el.innerHTML=App._empty('📊','Нет расходов за период','Добавь операции или выбери другой период вверху.');return;}
-    App._anCatList=cats;
-    var total=cats.reduce(function(s,c){return s+(c.total||0);},0)||1;
-    // ── Кольцо-донат (SVG) с иконками категорий вокруг ──
+  // Универсальное премиальное кольцо: SVG-сегменты + иконки на кольце + центр.
+  // items: [{name,total,icon?,color?}], centerLabel — подпись в центре.
+  _donutRing:function(items,total,centerLabel){
+    total=total||items.reduce(function(s,c){return s+(c.total||0);},0)||1;
     var size=232,cx=size/2,cy=size/2,R=82,sw=22,C=2*Math.PI*R;
     var acc=0,segs='',icons='';
-    cats.forEach(function(c){
-      var frac=(c.total||0)/total;var len=frac*C;var ci=catIcon(c.category);
-      // сегмент: старт под углом acc (от 12 часов)
-      segs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+ci.bg+'" stroke-width="'+sw+'" '+
-        'stroke-dasharray="'+(len-2)+' '+(C-len+2)+'" stroke-dashoffset="'+(-acc*C)+'" '+
+    items.forEach(function(c){
+      var col=c.color||catIcon(c.name).bg, ic=c.icon||catIcon(c.name).icon;
+      var frac=(c.total||0)/total;var len=frac*C;
+      segs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+R+'" fill="none" stroke="'+col+'" stroke-width="'+sw+'" '+
+        'stroke-dasharray="'+(Math.max(len-2,0))+' '+(C-Math.max(len-2,0))+'" stroke-dashoffset="'+(-acc*C)+'" '+
         'transform="rotate(-90 '+cx+' '+cy+')" stroke-linecap="round"></circle>';
-      // иконка на середине сегмента (только если сегмент заметный)
       if(frac>=0.05){
         var mid=(acc+frac/2)*2*Math.PI-Math.PI/2;
         var ix=cx+R*Math.cos(mid),iy=cy+R*Math.sin(mid);
-        icons+='<div style="position:absolute;left:'+ix+'px;top:'+iy+'px;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:'+ci.bg+';display:grid;place-items:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">'+ci.icon+'</div>';
+        icons+='<div style="position:absolute;left:'+ix+'px;top:'+iy+'px;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:'+col+';display:grid;place-items:center;font-size:14px;box-shadow:0 2px 8px rgba(0,0,0,.4);">'+ic+'</div>';
       }
       acc+=frac;
     });
-    var h='<div style="position:relative;width:'+size+'px;height:'+size+'px;margin:6px auto 18px;">'+
+    return '<div style="position:relative;width:'+size+'px;height:'+size+'px;margin:6px auto 18px;">'+
       '<svg width="'+size+'" height="'+size+'" style="display:block;">'+segs+'</svg>'+icons+
       '<div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;">'+
-        '<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Расходы</div>'+
-        '<div class="num" style="font-size:22px;font-weight:800;letter-spacing:-.02em;">₽ '+fmt(total)+'</div></div>'+
-      '</div>';
-    // ── Строки с полосками доли ──
-    h+='<div style="display:grid;gap:11px;">'+cats.map(function(c,i){
-      var ci=catIcon(c.category);var pct=Math.round((c.total||0)/total*100);
-      return '<div onclick="App._mdCatAn('+i+')" style="cursor:pointer;">'+
+        '<div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">'+App._e(centerLabel||'')+'</div>'+
+        '<div class="num" style="font-size:22px;font-weight:800;letter-spacing:-.02em;">₽ '+fmt(total)+'</div></div></div>';
+  },
+  // Строки-доли с полоской
+  _shareRows:function(items,total,onclick){
+    total=total||items.reduce(function(s,c){return s+(c.total||0);},0)||1;
+    return '<div style="display:grid;gap:11px;">'+items.map(function(c,i){
+      var col=c.color||catIcon(c.name).bg, ic=c.icon||catIcon(c.name).icon;
+      var pct=Math.round((c.total||0)/total*100);
+      return '<div '+(onclick?'onclick="'+onclick+'('+i+')" style="cursor:pointer;"':'')+'>'+
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:5px;">'+
-          '<span style="width:26px;height:26px;border-radius:8px;background:'+ci.bg+'22;color:'+ci.bg+';display:grid;place-items:center;font-size:13px;flex-shrink:0;">'+ci.icon+'</span>'+
-          '<span style="flex:1;min-width:0;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.category)+'</span>'+
+          '<span style="width:26px;height:26px;border-radius:8px;background:'+col+'22;color:'+col+';display:grid;place-items:center;font-size:13px;flex-shrink:0;">'+ic+'</span>'+
+          '<span style="flex:1;min-width:0;font-size:14px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(c.name)+'</span>'+
           '<span class="num" style="font-size:14px;font-weight:800;white-space:nowrap;">₽ '+fmt(c.total)+'</span>'+
           '<span style="font-size:11.5px;color:var(--muted);width:34px;text-align:right;">'+pct+'%</span></div>'+
-        '<div style="height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+ci.bg+';border-radius:4px;"></div></div>'+
-      '</div>';
+        '<div style="height:7px;border-radius:4px;background:var(--surface-2);overflow:hidden;"><div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:4px;"></div></div></div>';
     }).join('')+'</div>';
+  },
+  _renderCats:function(r){
+    var el=document.getElementById('an-cats');
+    var exp=(r.byCategory||[]).filter(function(c){return c.type==='Расход'||c.type==='expense';})
+      .sort(function(a,b){return b.total-a.total;}).slice(0,8)
+      .map(function(c){return {name:c.category,total:c.total};});
+    var inc=(r.byCategory||[]).filter(function(c){return c.type==='Доход'||c.type==='income';})
+      .sort(function(a,b){return b.total-a.total;}).slice(0,8)
+      .map(function(c){return {name:c.category,total:c.total};});
+    if(!exp.length&&!inc.length){el.innerHTML=App._empty('📊','Нет операций за период','Добавь операции или выбери другой период вверху.');return;}
+    App._anCatList=exp;App._anIncList=inc;
+    var mode=App._anCatMode||'exp';
+    var seg=function(id,lbl){return '<button onclick="App._anCatMode=\''+id+'\';App._renderCats(App._anR);" class="rp-chip" style="'+(mode===id?'border-color:var(--brand);color:var(--brand);':'')+'">'+lbl+'</button>';};
+    App._anR=r;
+    var list=mode==='exp'?exp:inc;
+    var h='<div style="display:flex;gap:7px;margin-bottom:10px;">'+seg('exp','Расходы')+seg('inc','Доходы')+'</div>';
+    if(!list.length){h+=App._empty('📊',mode==='exp'?'Нет расходов':'Нет доходов','За период пусто.');el.innerHTML=h;return;}
+    h+=App._donutRing(list,0,mode==='exp'?'Расходы':'Доходы');
+    h+=App._shareRows(list,0,mode==='exp'?'App._mdCatAn':'App._mdCatInc');
     el.innerHTML=h;
+  },
+  _mdCatInc:function(i){
+    var c=App._anIncList&&App._anIncList[i];if(!c)return;
+    var btn=document.querySelector('.nav-item[data-tab="journal"]');App.setTab('journal',btn);
+    setTimeout(function(){var s=document.getElementById('j-search');if(s){s.value=c.name;if(App.searchHistory)App.searchHistory(c.name);}},250);
   },
 
   _mdCatAn:function(i){
     var c=App._anCatList&&App._anCatList[i];if(!c)return;
     var btn=document.querySelector('.nav-item[data-tab="journal"]');App.setTab('journal',btn);
-    setTimeout(function(){var s=document.getElementById('j-search');if(s){s.value=c.category;if(App.searchHistory)App.searchHistory(c.category);}},250);
+    setTimeout(function(){var s=document.getElementById('j-search');if(s){s.value=c.name;if(App.searchHistory)App.searchHistory(c.name);}},250);
   },
   _renderCashiers:function(r){
     var el=document.getElementById('an-cashiers');
