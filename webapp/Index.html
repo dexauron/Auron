@@ -256,7 +256,7 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 /* ── Panels ── */
 .panels{flex:1;overflow:hidden;position:relative;}
 .panel{
-  display:none;height:100%;overflow-y:auto;
+  display:none;height:100%;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   padding-bottom:calc(var(--nav-h) + var(--safe-bot) + 24px);
 }
@@ -2488,7 +2488,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.1.0';
+var APP_VERSION='2.1.1';
 var APP_CHANGELOG=[
   {v:'2.1.0',t:'Отмена удаления, корзина 30 дней, светлая тема, свайпы, повтор операции, «Поделиться», приватность, версия приложения'},
   {v:'2.0.0',t:'Карточка контрагента, режим сотрудника, сводки после сохранения, фильтры истории, офлайн-очередь'},
@@ -2864,10 +2864,18 @@ var App={
     // 1.5) Своя клавиатура-калькулятор для всех полей суммы.
     // Числовые поля делаем readonly (без системной клавиатуры) и по тапу
     // открываем калькулятор с + − × ÷ и денежным форматом.
+    // Сенсорное устройство (телефон/планшет) → своя клавиатура-калькулятор.
+    // Компьютер с мышью и физической клавиатурой → печатаем сами, знаки + − * /
+    // работают напрямую, результат считается при уходе с поля или по Enter.
+    App._isTouch=(function(){try{return (window.matchMedia&&window.matchMedia('(pointer:coarse)').matches)||('ontouchstart' in window)||navigator.maxTouchPoints>0;}catch(e){return false;}})();
     App._calcify=function(root){
       (root||document).querySelectorAll('input[type=number]').forEach(function(inp){
-        inp.type='text';inp.setAttribute('inputmode','none');
-        inp.setAttribute('readonly','readonly');inp.classList.add('calc-input');
+        inp.type='text';inp.classList.add('calc-input');
+        if(App._isTouch){
+          inp.setAttribute('inputmode','none');inp.setAttribute('readonly','readonly');
+        }else{
+          inp.setAttribute('inputmode','decimal');inp.removeAttribute('readonly');
+        }
       });
     };
     App._calcify(document);
@@ -2883,11 +2891,28 @@ var App={
         });
       }).observe(document.body,{childList:true,subtree:true});
     }catch(e){}
-    // Тап по полю суммы → калькулятор
+    // Тап по полю суммы → калькулятор (только на сенсорных устройствах)
     document.addEventListener('click',function(e){
+      if(!App._isTouch)return;
       var el=e.target;if(!el||!el.classList||!el.classList.contains('calc-input'))return;
       App.calcOpen(el);
     });
+    // Компьютер: посчитать выражение в поле по Enter или при уходе с поля
+    App._calcField=function(el){
+      if(!el||!el.classList||!el.classList.contains('calc-input'))return;
+      var raw=String(el.value||'').trim();if(!raw)return;
+      if(/[+\-*/×÷]/.test(raw.replace(/^-/,''))){
+        var v=App._calcEval(raw);el.value=String(v);
+        try{el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));}catch(x){}
+      }
+    };
+    document.addEventListener('keydown',function(e){
+      if(App._isTouch||e.key!=='Enter')return;
+      App._calcField(e.target);
+    });
+    document.addEventListener('blur',function(e){
+      if(App._isTouch)return;App._calcField(e.target);
+    },true);
     // 1.6) Долгое нажатие на «+» → сразу новая запись (минуя меню)
     var fab=document.getElementById('fab');
     if(fab){
