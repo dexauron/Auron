@@ -1799,9 +1799,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <div class="kassa-row">
             <div class="kassa-row-hdr">💳 Безнал — эквайринг</div>
             <div style="padding:12px 16px;">
-              <div class="field" style="margin:0;"><label>Выручка по картам/эквайрингу (Z-отчёт эквайринга или банк)</label>
-                <input type="number" id="kz-card-rev" placeholder="0" inputmode="decimal"></div>
-              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:7px;">Зачислится на счёт «Карта». Сверять физически не нужно — деньги идут в банк.</div>
+              <div id="kz-card-list" style="display:grid;gap:10px;"></div>
+              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:9px;">Разнеси безнал по каналам: карта → «Карта», QR/СБП → «СБП» и т.д. Зачислится на эти счета. Физически сверять не нужно — деньги идут в банк.</div>
             </div>
           </div>
           <div style="padding:0 0 12px;">
@@ -5281,6 +5280,15 @@ var App={
     // Подставляем размен по умолчанию из настроек
     var bal=document.getElementById('k-balance');
     if(bal&&!bal.value&&App.s.settings.cashFloat)bal.value=App.s.settings.cashFloat;
+    // Поля безнала — по каждому счёту, кроме «Наличные»
+    var box=document.getElementById('kz-card-list');
+    if(box){
+      var accs=(App.s.accounts||[]).filter(function(a){return a.name!=='Наличные';});
+      box.innerHTML=accs.length?accs.map(function(a,i){
+        return '<div class="field" style="margin:0;"><label>Выручка · '+App._e(a.name)+' (₽)</label>'+
+          '<input type="number" class="kz-card-inp" data-acc="'+App._e(a.name)+'" placeholder="0" inputmode="decimal"></div>';
+      }).join(''):'<div style="font-size:12px;color:var(--muted);">Нет безналичных счетов. Добавь «Карта», «СБП» в Настройках → Счета.</div>';
+    }
     App._kReconcile();
   },
 
@@ -5336,13 +5344,18 @@ var App={
     var cashier=document.getElementById('k-cashier').value;
     if(!cashier){App.toast('Выберите кассира',true);return;}
     var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var cardRevs=[];var cardTotal=0;
+    document.querySelectorAll('.kz-card-inp').forEach(function(inp){
+      var amt=Math.round(parseFloat(inp.value)||0);
+      if(amt>0){cardRevs.push({account:inp.dataset.acc,amount:amt});cardTotal+=amt;}
+    });
     var rec={
       cashRev:g('kz-cash-rev'), cashSupp:g('kz-cash-supp'),
       cashCollect:g('kz-cash-collect'), cashLeft:g('kz-cash-left'),
-      cardRev:g('kz-card-rev'), float:g('k-balance')
+      cardRevs:cardRevs, cardTotal:cardTotal, float:g('k-balance')
     };
     rec.diff=(rec.cashCollect+rec.cashSupp+rec.cashLeft)-rec.cashRev;
-    if(!rec.cashRev&&!rec.cardRev&&!rec.cashSupp&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
+    if(!rec.cashRev&&!cardTotal&&!rec.cashSupp&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
     var wySum=App.s.wyplatas.reduce(function(s,w){return s+(w.amount||0);},0);
     var wyCnt=App.s.wyplatas.length;
     gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,recon:rec,wyplatas:App.s.wyplatas}}).then(function(){
@@ -5352,7 +5365,7 @@ var App={
         '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
         R('Кассир',App._e(cashier))+
         R('Выручка нал','₽ '+fmt(rec.cashRev))+
-        (rec.cardRev?R('Выручка карта','₽ '+fmt(rec.cardRev)):'')+
+        (rec.cardTotal?R('Выручка безнал','₽ '+fmt(rec.cardTotal)):'')+
         (rec.cashSupp?R('Оплачено поставщикам','−₽ '+fmt(rec.cashSupp)):'')+
         (rec.cashCollect?R('Инкассация (забрал)','₽ '+fmt(rec.cashCollect)):'')+
         R('Расхождение по кассе',(rec.diff===0?'✓ сходится':((rec.diff>0?'+':'−')+'₽ '+fmt(Math.abs(rec.diff)))),rec.diff===0?'var(--pos)':'var(--neg)',true)+

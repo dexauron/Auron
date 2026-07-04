@@ -1010,18 +1010,22 @@ function saveKassa(p) {
     var rec=d.recon||null, reconDiff=0, hasRecon=false;
     if (rec) {
       var cashRev=Math.round(parseFloat(rec.cashRev)||0);
-      var cardRev=Math.round(parseFloat(rec.cardRev)||0);
+      var cardRevs=rec.cardRevs||[];
+      var cardTotal=0; cardRevs.forEach(function(c){cardTotal+=Math.round(parseFloat(c.amount)||0);});
       var cashSupp=Math.round(parseFloat(rec.cashSupp)||0);
       var cashLeft=Math.round(parseFloat(rec.cashLeft)||0);
       var cashCollect=Math.round(parseFloat(rec.cashCollect)||0);
       // Расхождение = собрано − выручка (собрано = забрал + оплатил поставщикам + оставил)
       reconDiff=(cashCollect+cashSupp+cashLeft)-cashRev;
-      hasRecon=cashRev>0||cardRev>0||cashSupp>0;
-      var cash=_s('Наличные'), card=_s('Карта');
+      hasRecon=cashRev>0||cardTotal>0||cashSupp>0;
+      var cash=_s('Наличные');
       if (cashRev>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
         cashRev,cash,_s(d.cashier||''),'Выручка наличными (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
-      if (cardRev>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
-        cardRev,card,_s(d.cashier||''),'Выручка по эквайрингу (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
+      cardRevs.forEach(function(c){
+        var amt=Math.round(parseFloat(c.amount)||0); if (amt<=0) return;
+        baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
+          amt,_s(c.account||'Карта'),_s(d.cashier||''),'Выручка безнал · '+_s(c.account||'')+' (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
+      });
       if (cashSupp>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Закупка',
         cashSupp,cash,_s(d.cashier||''),'Оплачено поставщикам наличкой из кассы','',zRef,true,_s(d.shift||'')]);
       // Недостача/излишек — держим счёт «Наличные» в соответствии с фактом
