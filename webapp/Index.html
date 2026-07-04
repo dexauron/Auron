@@ -576,6 +576,18 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 .ac-item:last-child{border-bottom:none;}
 .ac-item:active,.ac-item:hover{background:var(--surface-2);}
 .ac-item b{color:var(--brand);font-weight:800;}
+/* Клавиатура-калькулятор для полей суммы */
+#calc-kb{position:fixed;left:0;right:0;bottom:0;z-index:2000;background:var(--surface);border-top:1px solid var(--line);border-radius:22px 22px 0 0;box-shadow:0 -12px 40px rgba(0,0,0,.5);transform:translateY(110%);transition:transform .22s cubic-bezier(.32,.72,0,1);padding:10px 12px calc(12px + var(--safe-bot,0px));}
+#calc-kb.show{transform:none;}
+#calc-kb-disp{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:6px 8px 10px;}
+#calc-kb-expr{font-size:14px;color:var(--muted);font-family:var(--font-num);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+#calc-kb-val{font-size:24px;font-weight:800;font-family:var(--font-num);letter-spacing:-.02em;white-space:nowrap;}
+.ckb-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.ckb-key{height:52px;border:none;border-radius:14px;background:var(--surface-2);color:var(--ink);font-size:20px;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;transition:background .1s;}
+.ckb-key:active{background:var(--surface-3);}
+.ckb-op{background:color-mix(in oklab,var(--brand) 16%,var(--surface-2));color:var(--brand);}
+.ckb-fn{background:var(--surface-3);color:var(--ink-2);font-size:17px;}
+.ckb-done{grid-column:span 1;background:var(--brand);color:#fff;font-size:16px;}
 .wyplata-item{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line-2);}
 .wyplata-del{background:none;border:none;color:var(--neg);font-size:20px;cursor:pointer;}
 
@@ -2849,17 +2861,16 @@ var App={
       clearTimeout(b._busyT);
       b._busyT=setTimeout(function(){b._busy=false;b.classList.remove('is-busy');},2500);
     },true);
-    // 1.5) Калькулятор во ВСЕХ полях суммы. Числовые поля превращаем в
-    // текстовые с калькулятором; при выходе из поля выражение считается.
+    // 1.5) Своя клавиатура-калькулятор для всех полей суммы.
+    // Числовые поля делаем readonly (без системной клавиатуры) и по тапу
+    // открываем калькулятор с + − × ÷ и денежным форматом.
     App._calcify=function(root){
       (root||document).querySelectorAll('input[type=number]').forEach(function(inp){
-        inp.type='text';
-        if(!inp.getAttribute('inputmode'))inp.setAttribute('inputmode','decimal');
-        inp.classList.add('calc-input');
+        inp.type='text';inp.setAttribute('inputmode','none');
+        inp.setAttribute('readonly','readonly');inp.classList.add('calc-input');
       });
     };
     App._calcify(document);
-    // Новые поля в модалках/шторках — конвертируем на лету
     try{
       new MutationObserver(function(muts){
         muts.forEach(function(m){
@@ -2872,17 +2883,11 @@ var App={
         });
       }).observe(document.body,{childList:true,subtree:true});
     }catch(e){}
-    document.addEventListener('blur',function(e){
+    // Тап по полю суммы → калькулятор
+    document.addEventListener('click',function(e){
       var el=e.target;if(!el||!el.classList||!el.classList.contains('calc-input'))return;
-      var v=el.value||'';
-      if(/[+\-*/×÷]/.test(v.replace(/^-/,''))){
-        var r=App._calcEval(v);
-        if(r||r===0){el.value=r;
-          // обновляем живые итоги (сверка кассы, суммы и т.п.)
-          try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(ev){}
-        }
-      }
-    },true);
+      App.calcOpen(el);
+    });
     // 1.6) Долгое нажатие на «+» → сразу новая запись (минуя меню)
     var fab=document.getElementById('fab');
     if(fab){
@@ -6333,6 +6338,76 @@ var App={
   },
   npDel:function(){App.s.npVal=(App.s.npVal||'').slice(0,-1);App.npUpdateDisplay();},
   // Безопасный вычислитель с приоритетом × ÷ над + − (без eval)
+  // ── Клавиатура-калькулятор ──
+  _calcTarget:null,_calcExpr:'',
+  calcOpen:function(inp){
+    App._calcTarget=inp;
+    // гарантируем, что системная клавиатура не всплывёт
+    inp.setAttribute('readonly','readonly');inp.setAttribute('inputmode','none');try{inp.blur();}catch(e){}
+    var v=String(inp.value||'').trim();
+    App._calcExpr=(v&&v!=='0')?v:'';
+    App._calcBuild();
+    var kb=document.getElementById('calc-kb');
+    kb.classList.add('show');
+    App._calcRefresh();
+    App.haptic(6);
+  },
+  calcClose:function(){
+    var kb=document.getElementById('calc-kb');if(kb)kb.classList.remove('show');
+    App._calcTarget=null;
+  },
+  _calcBuild:function(){
+    if(document.getElementById('calc-kb'))return;
+    var kb=document.createElement('div');kb.id='calc-kb';
+    var K=function(label,cls,arg){return '<button class="ckb-key '+(cls||'')+'" onclick="App.calcKey(\''+arg+'\')">'+label+'</button>';};
+    kb.innerHTML='<div id="calc-kb-disp"><span id="calc-kb-expr"></span><span id="calc-kb-val" class="num">₽ 0</span></div>'+
+      '<div class="ckb-grid">'+
+        K('C','ckb-fn','C')+K('⌫','ckb-fn','back')+K('%','ckb-fn','%')+K('÷','ckb-op','/')+
+        K('7','','7')+K('8','','8')+K('9','','9')+K('×','ckb-op','*')+
+        K('4','','4')+K('5','','5')+K('6','','6')+K('−','ckb-op','-')+
+        K('1','','1')+K('2','','2')+K('3','','3')+K('+','ckb-op','+')+
+        K('0','','0')+K('00','','00')+K('.','','.')+
+        '<button class="ckb-key ckb-done" onclick="App.calcDone()">Готово</button>'+
+      '</div>';
+    document.body.appendChild(kb);
+  },
+  calcKey:function(k){
+    var e=App._calcExpr||'';
+    if(k==='C'){e='';}
+    else if(k==='back'){e=e.slice(0,-1);}
+    else if(k==='%'){var v=App._calcEval(e);e=String(v/100);}
+    else if(k==='+'||k==='-'||k==='*'||k==='/'){
+      if(!e){e=(k==='-'?'-':'');}
+      else if(/[+\-*/]$/.test(e))e=e.slice(0,-1)+k;
+      else e+=k;
+    }
+    else if(k==='.'){var last=e.split(/[+\-*/]/).pop();if(last.indexOf('.')<0)e+=(e===''||/[+\-*/]$/.test(e)?'0.':'.');}
+    else e+=k; // цифры
+    App._calcExpr=e;
+    App._calcRefresh();
+    App.haptic(3);
+  },
+  _calcRefresh:function(){
+    var ex=document.getElementById('calc-kb-expr');
+    var vl=document.getElementById('calc-kb-val');
+    var e=App._calcExpr||'';
+    var disp=e.replace(/\*/g,'×').replace(/\//g,'÷').replace(/-/g,'−');
+    if(ex)ex.textContent=disp;
+    var val=App._calcEval(e);
+    if(vl)vl.textContent=(val<0?'−':'')+'₽ '+fmt(Math.abs(val));
+    // Пишем ЧИСЛО в поле (для parseFloat в логике) + живой пересчёт
+    if(App._calcTarget){App._calcTarget.value=String(val);
+      try{App._calcTarget.dispatchEvent(new Event('input',{bubbles:true}));}catch(x){}}
+  },
+  calcDone:function(){
+    if(App._calcTarget){
+      var val=App._calcEval(App._calcExpr||'');
+      App._calcTarget.value=String(val);
+      try{App._calcTarget.dispatchEvent(new Event('input',{bubbles:true}));App._calcTarget.dispatchEvent(new Event('change',{bubbles:true}));}catch(x){}
+    }
+    App.calcClose();App.haptic(8);
+  },
+
   _calcEval:function(expr){
     var t=String(expr||'').replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/,/g,'.');
     var tokens=t.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
@@ -7152,6 +7227,7 @@ var App={
     document.getElementById(id).classList.add('show');
   },
   closeSheet:function(){
+    App.calcClose&&App.calcClose();
     document.getElementById('sheet-overlay').classList.remove('show');
     document.querySelectorAll('.sheet').forEach(function(s){s.classList.remove('show');});
   },
@@ -7164,6 +7240,7 @@ var App={
     App.haptic(8);
   },
   closeModal:function(){
+    App.calcClose&&App.calcClose();
     var m=document.getElementById('modal-body');if(m)m.style.transform='';
     document.getElementById('modal-overlay').classList.remove('show');
   },
