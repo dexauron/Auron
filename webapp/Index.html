@@ -1602,7 +1602,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <button onclick="App.openNumpad()" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--pos) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
             <div style="font-size:34px;margin-bottom:8px;">✏️</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Новая запись</div></button>
           <button onclick="App.setTab('kassa',null)" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--brand) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
-            <div style="font-size:34px;margin-bottom:8px;">🧾</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Кассовый день</div></button>
+            <div style="font-size:34px;margin-bottom:8px;">🧾</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Касса</div></button>
           <button onclick="App.setTab('journal',null)" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
             <div style="font-size:34px;margin-bottom:8px;">📒</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Операции</div></button>
           <button onclick="App.openOrders()" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
@@ -1728,7 +1728,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     <div id="tab-kassa" class="panel">
       <div style="display:flex;align-items:center;gap:10px;padding:16px 20px 0;">
         <button id="k-back-btn" onclick="App.kBack()" style="background:none;border:none;color:var(--brand);font-size:14px;font-weight:700;cursor:pointer;padding:8px 0;font-family:var(--font);">← Назад</button>
-        <span id="k-title" style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Кассовый день</span>
+        <span id="k-title" style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Касса</span>
       </div>
 
       <!-- ХАБ: выбор действия -->
@@ -2339,7 +2339,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     </button>
     <button class="am-item" onclick="App.closeActionMenu();App.setTab('kassa',null)">
       <div class="am-icon" style="background:var(--brand-dim);">🧾</div>
-      <div class="am-name">Кассовый день</div>
+      <div class="am-name">Касса</div>
       <div class="am-sub">Утро · накладные · смены</div>
     </button>
     <button class="am-item" onclick="App.closeActionMenu();App.goToPayments()">
@@ -5324,7 +5324,7 @@ var App={
     var m={hub:'k-hub',morning:'k-morning',evening:'k-evening'};
     Object.keys(m).forEach(function(k){var el=document.getElementById(m[k]);if(el)el.style.display=k===view?'block':'none';});
     var t=document.getElementById('k-title');
-    if(t)t.textContent=view==='morning'?'🌅 Кассовое утро':view==='evening'?'🌙 Накладные':'Кассовый день';
+    if(t)t.textContent=view==='morning'?'🌅 Кассовое утро':view==='evening'?'🌙 Накладные':'Касса';
     var bb=document.getElementById('k-back-btn');
     if(bb)bb.style.display=view==='hub'?'none':'';
     if(view==='morning')App.kStep(1);
