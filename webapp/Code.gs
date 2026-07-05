@@ -846,7 +846,9 @@ function importRows(p) {
     var out = [], added = 0, skipped = 0;
     rows.forEach(function(r){
       var dt = _parseDate(r.date); if (!dt) { skipped++; return; }
-      var amt = Math.round(parseFloat(r.amount)||0); if (!amt) { skipped++; return; }
+      // _gnum устойчив к русскому формату («1 234,56», неразрывный пробел),
+      // в отличие от голого parseFloat, который на них ломается.
+      var amt = Math.round(_gnum(r.amount)); if (!amt) { skipped++; return; }
       var type = (r.type==='Доход'||r.type==='income') ? 'Доход' : 'Расход';
       var cat = _s(r.category||''), acc = _s(r.account||''), cmt = _s(r.comment||'');
       var dk = Utilities.formatDate(dt,tz,'yyyy-MM-dd');
