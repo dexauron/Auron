@@ -3048,10 +3048,14 @@ function saveContractor(p) {
     var sh=ss.getSheetByName(SH_CONTRACTORS);
     if (!_s(d.name)) return {__error:'Введите название'};
     if (d.id&&sh.getLastRow()>=2) {
-      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
       for (var i=0;i<vs.length;i++)
         if (String(vs[i][0])===String(d.id)) {
-          sh.getRange(i+2,2,1,4).setValues([[_s(d.name),_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||'')]]);
+          var oldName=String(vs[i][1]), newName=_s(d.name);
+          sh.getRange(i+2,2,1,4).setValues([[newName,_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||'')]]);
+          // Контрагент связан с долгами/выплатами/заказами по ИМЕНИ → при
+          // переименовании переносим все ссылки, иначе история «потеряется».
+          if (oldName && newName && oldName!==newName) _renameContractorRefs(ss, oldName, newName);
           return {ok:true,id:String(d.id)};
         }
     }
@@ -3062,15 +3066,46 @@ function saveContractor(p) {
 });
 }
 
+// Переносит все ссылки на контрагента по имени при переименовании:
+// ДОЛГИ (D_REP), ВЫПЛАТЫ (PY_NAME), ЗАКАЗЫ (O_CONTR) — все в колонке 2.
+function _renameContractorRefs(ss, oldName, newName) {
+  [[SH_DEBTS,D_REP],[SH_PAYMENTS,PY_NAME],[SH_ORDERS,O_CONTR]].forEach(function(pair){
+    try {
+      var sh=ss.getSheetByName(pair[0]); if(!sh||sh.getLastRow()<2) return;
+      var col=pair[1];
+      var vals=sh.getRange(2,col,sh.getLastRow()-1,1).getValues();
+      var changed=false;
+      for (var k=0;k<vals.length;k++){ if(String(vals[k][0])===oldName){vals[k][0]=newName;changed=true;} }
+      if (changed) sh.getRange(2,col,vals.length,1).setValues(vals);
+    } catch(e){}
+  });
+}
+
 function deleteContractor(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_CONTRACTORS);
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_CONTRACTORS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
-    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
     for (var i=vs.length-1;i>=0;i--)
-      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+      if (String(vs[i][0])===String(id)) {
+        // Не удаляем контрагента с непогашенным долгом — иначе долг «повиснет»
+        // в книге, но пропадёт из списка поставщиков.
+        var name=String(vs[i][1]);
+        var debt=0, dsh=ss.getSheetByName(SH_DEBTS);
+        if (dsh&&dsh.getLastRow()>=2) {
+          dsh.getRange(2,1,dsh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+            if (String(r[D_REP-1])!==name) return;
+            debt+=(String(r[D_TYPE-1])==='oplata'?-1:1)*(parseFloat(r[D_AMT-1])||0);
+          });
+        }
+        if (Math.abs(Math.round(debt))>=1 && !p.force)
+          return {__error:'У «'+name+'» непогашенный долг '+Math.round(debt)+' ₽. Сначала закройте долг.'};
+        sh.deleteRow(i+2);
+        return {ok:true};
+      }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
 });
