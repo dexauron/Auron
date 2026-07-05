@@ -2021,8 +2021,10 @@ function suggestCategory(p) {
 function getTrendData(p) {
   var ssId=p.ssId;
   try {
+    // Сравниваем с тем же отрезком прошлого месяца (месяц-к-дате), а не с
+    // полным прошлым месяцем — иначе в начале месяца ложное «падение».
     var cur=getAnalytics({ssId:ssId,period:'month'});
-    var prev=getAnalytics({ssId:ssId,period:'prev_month'});
+    var prev=getAnalytics({ssId:ssId,period:'prev_month_mtd'});
     function pct(a,b){ if(!b) return a>0?100:0; return Math.round((a-b)/b*100); }
     return {
       income:cur.income,prevIncome:prev.income,incomeChange:pct(cur.income,prev.income),
@@ -2210,10 +2212,13 @@ function getAccountFlow(p) {
 function getGrowthData(p) {
   var ssId=p.ssId;
   try {
+    // Для «динамики» сравниваем с ТЕМ ЖE отрезком прошлого месяца/недели
+    // (месяц-к-дате vs прошлый-месяц-к-той-же-дате), иначе в начале периода
+    // всегда видно ложное «падение» (5 дней против полного месяца).
     var cur=getAnalytics({ssId:ssId,period:'month'});
-    var prev=getAnalytics({ssId:ssId,period:'prev_month'});
+    var prev=getAnalytics({ssId:ssId,period:'prev_month_mtd'});
     var curW=getAnalytics({ssId:ssId,period:'week'});
-    var prevW=getAnalytics({ssId:ssId,period:'prev_week'});
+    var prevW=getAnalytics({ssId:ssId,period:'prev_week_mtd'});
     var curC=getCashierAnalytics({ssId:ssId,period:'month'});
     function pct(a,b){if(!b)return a>0?100:0;return Math.round((a-b)/Math.abs(b)*100);}
     return {
@@ -2256,6 +2261,20 @@ function _period(period, tz) {
     var prevMon=new Date(thisMon); prevMon.setDate(thisMon.getDate()-7);
     var prevSun=new Date(thisMon); prevSun.setDate(thisMon.getDate()-1);
     from=prevMon.getTime(); to=prevSun.getTime()+86399999;
+  }
+  // Честное сравнение «динамики»: тот же отрезок прошлого месяца/недели,
+  // а не весь прошлый период (иначе в начале месяца всегда «падение»).
+  else if (period==='prev_month_mtd') {
+    var pmS=new Date(today.getFullYear(),today.getMonth()-1,1);
+    var pmLast=new Date(today.getFullYear(),today.getMonth(),0).getDate();
+    var endDay=Math.min(today.getDate(),pmLast);
+    from=pmS.getTime();
+    to=new Date(pmS.getFullYear(),pmS.getMonth(),endDay,23,59,59,999).getTime();
+  }
+  else if (period==='prev_week_mtd') {
+    var tMon=new Date(today); tMon.setDate(today.getDate()-((today.getDay()+6)%7));
+    var pMon=new Date(tMon); pMon.setDate(tMon.getDate()-7);
+    from=pMon.getTime(); to=pMon.getTime()+(now.getTime()-tMon.getTime());
   }
   return {from:from,to:to};
 }
