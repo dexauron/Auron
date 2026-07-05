@@ -2665,6 +2665,9 @@ function clearAllData(p) {
   try {
     
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    // Очистка ВСЕХ данных — только владелец. Иначе любой приглашённый
+    // сотрудник мог бы стереть всю базу магазина.
+    if (!_isOwner(ss)) return {__error:'Очистить все данные может только владелец'};
     var wipe=[SH_BASE,SH_DEBTS,SH_SHIFTS,SH_PAYMENTS,SH_TIMESHEET,SH_RECURRING,
               SH_GOODS,SH_PRICEHIST,SH_LOG,SH_TRASH];
     var removed=0;
