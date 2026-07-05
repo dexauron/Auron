@@ -81,6 +81,17 @@ function _withLock(fn){
   finally{ _LOCK_DEPTH--; try{ lock.releaseLock(); }catch(e){} }
 }
 
+// Сброс кэша дашборда. getHomeSummary кэширует по ключу dash_<ssId>_<period>,
+// поэтому чистить нужно ВСЕ периоды, а не только 'dash_'+ssId (иначе главная
+// показывает старые суммы до 60 сек после изменения).
+function _bustDash(ssId){
+  try{
+    var ks=['today','week','month','prev_month','year','prev_week'].map(function(pp){return 'dash_'+ssId+'_'+pp;});
+    ks.push('dash_'+ssId);
+    CacheService.getScriptCache().removeAll(ks);
+  }catch(e){}
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // doGet
 // ─────────────────────────────────────────────────────────────────────
@@ -378,7 +389,7 @@ function restoreFromTrash(p) {
     // Удаляем из корзины снизу вверх, чтобы не сползали номера строк
     restore.map(function(x){return x.rn;}).sort(function(a,b){return b-a;})
       .forEach(function(rn){ trash.deleteRow(rn); });
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return { ok:true, restored:restore.length };
   } catch(e) { return { __error: e.message }; }
@@ -536,7 +547,7 @@ function saveAccount(p) {
             // Перенос ссылок на счёт в настройках (безнал, накопления, размен и т.п.)
             _renameAccountInSettings(ss, oldName, newName);
           }
-          try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e3){}
+          try { _bustDash(ssId); } catch(e3){}
           
           return {ok:true};
         }
@@ -588,7 +599,7 @@ function deleteAccount(p) {
           return {__error:'На счёте «'+name+'» есть остаток '+bal+' ₽. Сначала переведите деньги на другой счёт или обнулите баланс.'};
         }
         sh.getRange(i+2,4).setValue('archived');
-        try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e3){}
+        try { _bustDash(ssId); } catch(e3){}
         return {ok:true};
       }
     }
@@ -649,7 +660,7 @@ function saveQuickEntry(p) {
     var nr=base.getLastRow();
     base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
     base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return {ok:true,id:id};
   } catch(e) {  return {__error:e.message}; }
@@ -716,7 +727,7 @@ function deleteTransaction(p) {
       base.deleteRow(rn);
     });
     _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return {ok:true, deleted:targets.length};
   } catch(e) {  return {__error:e.message}; }
@@ -757,10 +768,13 @@ function getHomeSummary(p) {
       var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
       var ms=dt.getTime();
       if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
-      var t=String(r[B_TYPE-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]);
+      var t=String(r[B_TYPE-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]),cat=String(r[B_CAT-1]);
       if(!totals[acc]) totals[acc]={income:0,expense:0};
-      if(t==='Доход'){totals[acc].income+=amt;sumInc+=amt;txCnt++;}
-      else if(t==='Расход'){totals[acc].expense+=amt;sumExp+=amt;txCnt++;}
+      // Перевод между своими счетами — не выручка и не расход, только движение.
+      // В итоги «Выручка»/«Расход» не считаем, но по счетам поток показываем.
+      var isTransfer=(cat==='Перевод');
+      if(t==='Доход'){totals[acc].income+=amt;if(!isTransfer){sumInc+=amt;txCnt++;}}
+      else if(t==='Расход'){totals[acc].expense+=amt;if(!isTransfer){sumExp+=amt;txCnt++;}}
     });
     // Also compute Z-report (shift) revenue for the period
     var shiftRev=0;
@@ -848,7 +862,7 @@ function importRows(p) {
       base.getRange(sr,B_DATE,out.length,1).setNumberFormat('dd.mm.yyyy');
       base.getRange(sr,B_AMT,out.length,1).setNumberFormat('#,##0');
     }
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return { ok:true, added:added, skipped:skipped };
   } catch(e) {  return { __error:e.message }; }
@@ -1221,7 +1235,7 @@ function saveKassa(p) {
         JSON.stringify(rec||rows),JSON.stringify(wyplatas),discrepancy,new Date()]);
       shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
     }
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     var storeDebt=0;
     if (invDebtRepaid>0||invNewDebt>0) storeDebt=getStoreDebt({ssId:ssId}).debt;
@@ -1281,7 +1295,7 @@ function cancelShift(p) {
         if (String(dVals[j][D_STATUS-1])===String(shiftId)) debtsSh.deleteRow(j+2);
       }
     }
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
   } catch(e) {  return {__error:e.message}; }
@@ -1460,9 +1474,11 @@ function saveTimesheetEntry(p) {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
     var rowNum=-1;
     if (sh.getLastRow()>=2) {
-      var vs=sh.getRange(2,1,sh.getLastRow()-1,3).getValues();
+      // Ключ строки — день И СОТРУДНИК: в один день работают несколько человек,
+      // без сравнения по сотруднику мы бы перезаписывали чужую запись за этот день.
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,4).getValues();
       for (var i=0;i<vs.length;i++) {
-        if (parseInt(vs[i][0])===year&&parseInt(vs[i][1])===month&&parseInt(vs[i][2])===day) {rowNum=i+2;break;}
+        if (parseInt(vs[i][0])===year&&parseInt(vs[i][1])===month&&parseInt(vs[i][2])===day&&String(vs[i][3])===emp) {rowNum=i+2;break;}
       }
     }
     if (!emp) { if (rowNum>0) sh.deleteRow(rowNum); return {ok:true}; }
@@ -1496,13 +1512,14 @@ function getAnalytics(p) {
       var t=String(r[B_TYPE-1]),cat=String(r[B_CAT-1]),amt=parseFloat(r[B_AMT-1])||0;
       var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
       if(!dayMap[dk]) dayMap[dk]={income:0,expense:0};
+      if (cat==='Перевод') return; // перевод между своими счетами — не доход/расход
       if (t==='Доход') {
         income+=amt; dayMap[dk].income+=amt;
         var dow=dt.getDay(); hm[dow===0?6:dow-1]+=amt;
-        if(cat!=='Перевод'){if(!catMap[cat])catMap[cat]={total:0,type:'income'};catMap[cat].total+=amt;}
+        if(!catMap[cat])catMap[cat]={total:0,type:'income'};catMap[cat].total+=amt;
       } else if (t==='Расход') {
         expense+=amt; dayMap[dk].expense+=amt;
-        if(cat!=='Перевод'){if(!catMap[cat])catMap[cat]={total:0,type:'expense'};catMap[cat].total+=amt;}
+        if(!catMap[cat])catMap[cat]={total:0,type:'expense'};catMap[cat].total+=amt;
       }
     });
     var byCategory=Object.keys(catMap).map(function(k){
@@ -2511,7 +2528,7 @@ function updatePayment(p) {
     } else if (d.action==='restore') {
       sh.getRange(rowNum,PY_STATUS).setValue('open');
     }
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
   } catch(e) {  return {__error:e.message}; }
@@ -2543,7 +2560,7 @@ function markPaymentPaid(p) {
           type:'Расход',category:cat,account:account,amount:amt,comment:name}});
       }
     }
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
   } catch(e) {  return {__error:e.message}; }
@@ -2634,7 +2651,7 @@ function clearAllData(p) {
       var sh=ss.getSheetByName(n);
       if(sh&&sh.getLastRow()>1){ var cnt=sh.getLastRow()-1; sh.deleteRows(2,cnt); removed+=cnt; }
     });
-    try{CacheService.getScriptCache().remove('dash_'+ssId);}catch(e){}
+    try{_bustDash(ssId);}catch(e){}
     
     return {ok:true, removed:removed};
   } catch(e){  return {__error:e.message}; }
@@ -3592,8 +3609,10 @@ function fillTimesheetMonth(p) {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
     var filled={};
     if (sh.getLastRow()>=2) {
-      sh.getRange(2,1,sh.getLastRow()-1,3).getValues().forEach(function(r){
-        if (parseInt(r[0])===year&&parseInt(r[1])===month) filled[parseInt(r[2])]=true;
+      // «Занятые» дни считаем ТОЛЬКО для этого сотрудника, иначе заполнение
+      // графика одного пропускает дни, где уже работает другой сотрудник.
+      sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
+        if (parseInt(r[0])===year&&parseInt(r[1])===month&&String(r[3])===emp) filled[parseInt(r[2])]=true;
       });
     }
     var dim=new Date(year,month,0).getDate();
@@ -3802,7 +3821,7 @@ function restoreTransaction(p) {
         base.appendRow(vs[i].slice(0,B_COLS));
         trash.deleteRow(i+2);
         _log(ss,'Восстановление операции',String(vs[i][B_TYPE-1])+' '+Math.round(vs[i][B_AMT-1])+' ₽ · '+String(vs[i][B_CAT-1]));
-        try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+        try { _bustDash(ssId); } catch(e){}
         
         return {ok:true};
       }
@@ -4055,7 +4074,7 @@ function setStoreDebt(p) {
     // diff>0 → увеличиваем долг (zakupka), diff<0 → уменьшаем (oplata)
     sh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,diff>0?'zakupka':'oplata',
       Math.abs(diff),new Date(),'','Ручная корректировка долга магазина',new Date(),'','']);
-    try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
+    try { _bustDash(ssId); } catch(e){}
     return {ok:true,debt:target};
   } catch(e) { return {__error:e.message}; }
 });
