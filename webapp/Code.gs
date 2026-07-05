@@ -332,14 +332,29 @@ function restoreFromTrash(p) {
       if (String(vals[i][0])===String(id)) { rowNum=i+2; rowData=vals[i].slice(0,B_COLS); break; }
     }
     if (rowNum===-1) { lock.releaseLock(); return { __error:'not found' }; }
-    base.appendRow(rowData);
-    var nr=base.getLastRow();
-    base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
-    base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
-    trash.deleteRow(rowNum);
+    // Собираем все строки к восстановлению: сама операция + вторая половина
+    // перевода (общий zRef), чтобы баланс не «поехал» после отмены удаления.
+    var restore=[{rn:rowNum,data:rowData}];
+    var zref=String(rowData[B_ZREF-1]||'');
+    if (zref && String(rowData[B_CAT-1])==='Перевод') {
+      for (var j=0;j<vals.length;j++) {
+        if (j===rowNum-2) continue;
+        if (String(vals[j][B_ZREF-1]||'')===zref && String(vals[j][B_CAT-1])==='Перевод')
+          restore.push({rn:j+2,data:vals[j].slice(0,B_COLS)});
+      }
+    }
+    restore.forEach(function(x){
+      base.appendRow(x.data);
+      var nr=base.getLastRow();
+      base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
+      base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
+    });
+    // Удаляем из корзины снизу вверх, чтобы не сползали номера строк
+    restore.map(function(x){return x.rn;}).sort(function(a,b){return b-a;})
+      .forEach(function(rn){ trash.deleteRow(rn); });
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
-    return { ok:true };
+    return { ok:true, restored:restore.length };
   } catch(e) { return { __error: e.message }; }
 }
 
@@ -464,29 +479,86 @@ function getAccounts(p) {
 function saveAccount(p) {
   var ssId=p.ssId, d=p.data||{};
   try {
+    var lock=LockService.getScriptLock(); lock.waitLock(10000);
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_ACCOUNTS);
     var id=d.id||Utilities.getUuid();
-    var row=[id,_s(d.name),parseFloat(d.startBalance)||0,'active',d.icon||'💰',d.color||'#6366F1'];
+    var newName=_s(d.name);
+    var row=[id,newName,parseFloat(d.startBalance)||0,'active',d.icon||'💰',d.color||'#6366F1'];
     if (d.id&&sh.getLastRow()>=2) {
-      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,6).getValues();
       for (var i=0;i<vs.length;i++) {
-        if (String(vs[i][0])===String(d.id)) { sh.getRange(i+2,1,1,6).setValues([row]); return {ok:true}; }
+        if (String(vs[i][0])===String(d.id)) {
+          var oldName=String(vs[i][1]);
+          sh.getRange(i+2,1,1,6).setValues([row]);
+          // Счёт хранится в операциях по ИМЕНИ → при переименовании
+          // переносим всю историю на новое имя, иначе баланс «раздвоится».
+          if (oldName && newName && oldName!==newName) {
+            var base=ss.getSheetByName(SH_BASE);
+            if (base && base.getLastRow()>=2) {
+              var accCol=base.getRange(2,B_ACC,base.getLastRow()-1,1).getValues();
+              var changed=false;
+              for (var k=0;k<accCol.length;k++) {
+                if (String(accCol[k][0])===oldName) { accCol[k][0]=newName; changed=true; }
+              }
+              if (changed) base.getRange(2,B_ACC,accCol.length,1).setValues(accCol);
+            }
+            // Перенос ссылок на счёт в настройках (безнал, накопления, размен и т.п.)
+            _renameAccountInSettings(ss, oldName, newName);
+          }
+          try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e3){}
+          lock.releaseLock();
+          return {ok:true};
+        }
       }
     }
     sh.appendRow(row);
+    lock.releaseLock();
     return {ok:true};
-  } catch(e) { return {__error:e.message}; }
+  } catch(e) { try{lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+}
+
+// Обновляет ссылки на счёт по имени в настройках при переименовании
+function _renameAccountInSettings(ss, oldName, newName) {
+  try {
+    var s=ss.getSheetByName(SH_SETTINGS); if(!s||s.getLastRow()<2) return;
+    var vals=s.getRange(2,1,s.getLastRow()-1,2).getValues();
+    for (var i=0;i<vals.length;i++) {
+      var key=String(vals[i][0]); var raw=String(vals[i][1]||'');
+      if (raw.indexOf(oldName)<0) continue;
+      if (key==='BEZNAL_ACCOUNT') {
+        if (raw===oldName) s.getRange(i+2,2).setValue(newName);
+      } else if (key==='SAVINGS_ACCOUNTS'||key==='CAP_EXCLUDE') {
+        var arr; try{arr=JSON.parse(raw);}catch(e2){continue;}
+        if (!Array.isArray(arr)) continue;
+        var hit=false;
+        arr=arr.map(function(x){ if(String(x)===oldName){hit=true;return newName;} return x; });
+        if (hit) s.getRange(i+2,2).setValue(JSON.stringify(arr));
+      }
+    }
+  } catch(e) {}
 }
 
 function deleteAccount(p) {
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ACCOUNTS);
+    var ss=SpreadsheetApp.openById(ssId);
+    var sh=ss.getSheetByName(SH_ACCOUNTS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
-    var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+    var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
     for (var i=0;i<vs.length;i++) {
-      if (String(vs[i][0])===String(id)) { sh.getRange(i+2,4).setValue('archived'); return {ok:true}; }
+      if (String(vs[i][0])===String(id)) {
+        // Нельзя прятать счёт с деньгами — иначе остаток «пропадёт» из капитала.
+        var name=String(vs[i][1]);
+        var accs=getAccounts({ssId:ssId});
+        var bal=0; for (var k=0;k<accs.length;k++){ if(accs[k].name===name){bal=accs[k].balance;break;} }
+        if (Math.abs(bal)>=1 && !p.force) {
+          return {__error:'На счёте «'+name+'» есть остаток '+bal+' ₽. Сначала переведите деньги на другой счёт или обнулите баланс.'};
+        }
+        sh.getRange(i+2,4).setValue('archived');
+        try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e3){}
+        return {ok:true};
+      }
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
@@ -546,7 +618,7 @@ function saveQuickEntry(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return {ok:true,id:id};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function saveTransfer(p) {
@@ -585,13 +657,29 @@ function deleteTransaction(p) {
     if (row[B_LOCK-1]===true||row[B_LOCK-1]==='true') {
       lock.releaseLock(); return {__error:'Запись заблокирована Z-отчётом'};
     }
-    trash.appendRow(row.concat([new Date()]));
-    base.deleteRow(rowNum);
-    _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1]));
+    // Перевод — это ДВЕ строки (расход+приход) с общим zRef. Удаляем обе,
+    // иначе баланс счетов «поедет» (деньги появятся/исчезнут из воздуха).
+    var targets=[rowNum];
+    var zref=String(row[B_ZREF-1]||'');
+    if (zref && String(row[B_CAT-1])==='Перевод') {
+      for (var j=0;j<vals.length;j++) {
+        if (j===rowNum-2) continue;
+        if (String(vals[j][B_ZREF-1]||'')===zref && String(vals[j][B_CAT-1])==='Перевод'
+            && !(vals[j][B_LOCK-1]===true||vals[j][B_LOCK-1]==='true')) targets.push(j+2);
+      }
+    }
+    // Удаляем снизу вверх, чтобы номера строк не сползали
+    targets.sort(function(a,b){return b-a;});
+    targets.forEach(function(rn){
+      var rr=vals[rn-2];
+      trash.appendRow(rr.concat([new Date()]));
+      base.deleteRow(rn);
+    });
+    _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
-    return {ok:true};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+    return {ok:true, deleted:targets.length};
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function _txObj(r) {
@@ -721,7 +809,7 @@ function importRows(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return { ok:true, added:added, skipped:skipped };
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return { __error:e.message }; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return { __error:e.message }; }
 }
 
 // Разбор даты: dd.mm.yyyy, dd.mm.yy, yyyy-mm-dd, либо Date
@@ -811,7 +899,7 @@ function saveGoods(p) {
     }
     lock.releaseLock();
     return { ok:true, saved:saved, updated:updated, total:data.length };
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return { __error:e.message }; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return { __error:e.message }; }
 }
 
 function getGoods(p) {
@@ -1092,7 +1180,7 @@ function saveKassa(p) {
     var storeDebt=0;
     if (invDebtRepaid>0||invNewDebt>0) storeDebt=getStoreDebt({ssId:ssId}).debt;
     return {ok:true, zRef:zRef, storeDebt:storeDebt};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function getShifts(p) {
@@ -1148,7 +1236,7 @@ function cancelShift(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return {ok:true};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1518,7 +1606,7 @@ function brainLearn(p) {
     _brainSet(ss, brain);
     lock.releaseLock();
     return { ok:true, sensitivity:brain.sensitivity };
-  } catch(e){ try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e){ try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2358,7 +2446,7 @@ function updatePayment(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return {ok:true};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function markPaymentPaid(p) {
@@ -2388,7 +2476,7 @@ function markPaymentPaid(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     lock.releaseLock();
     return {ok:true};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function deletePayment(p) {
@@ -2473,7 +2561,7 @@ function clearAllData(p) {
     try{CacheService.getScriptCache().remove('dash_'+ssId);}catch(e){}
     lock.releaseLock();
     return {ok:true, removed:removed};
-  } catch(e){ try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e){ try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 function seedDemoData(p) {
@@ -3619,7 +3707,7 @@ function restoreTransaction(p) {
     }
     lock.releaseLock();
     return {__error:'Запись не найдена в корзине'};
-  } catch(e) { try{LockService.getScriptLock().releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
 }
 
 // Содержимое корзины (последние 50 удалённых)
