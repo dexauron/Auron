@@ -63,6 +63,25 @@ var T_COLS=10;
 var TR_COLS=14;
 
 // ─────────────────────────────────────────────────────────────────────
+// Единая блокировка на запись (защита при одновременной работе команды).
+// getScriptLock() общий для всех пользователей скрипта → сериализует записи
+// в общую таблицу организации. _LOCK_DEPTH делает блокировку реентерабельной
+// в рамках одного запуска: вложенный вызов (напр. updatePayment→saveQuickEntry)
+// не берёт замок повторно и не отпускает его раньше времени.
+// ─────────────────────────────────────────────────────────────────────
+var _LOCK_DEPTH=0;
+function _withLock(fn){
+  if(_LOCK_DEPTH>0) return fn();
+  var lock=LockService.getScriptLock();
+  var got=false;
+  try{ got=lock.tryLock(20000); }catch(e){ got=false; }
+  if(!got) return {__error:'Система занята — другой сотрудник сейчас сохраняет. Повторите через пару секунд.'};
+  _LOCK_DEPTH++;
+  try{ return fn(); }
+  finally{ _LOCK_DEPTH--; try{ lock.releaseLock(); }catch(e){} }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // doGet
 // ─────────────────────────────────────────────────────────────────────
 function doGet(e) {
@@ -108,12 +127,14 @@ function initUserApp() {
 }
 
 function registerUser(p) {
+  // Регистрация создаёт ЛИЧНЫЙ профиль пользователя (не общую таблицу),
+  // поэтому берём per-user замок, а не глобальный на запись.
   var name=_s(p.name), phone=_s(p.phone), orgName0=_s(p.orgName||'')||'Мой магазин';
   try {
     var lock = LockService.getUserLock(); lock.waitLock(10000);
     var ex = _profileSS();
     if (ex) {
-      lock.releaseLock();
+      
       var d = initUserApp();
       return { ssId:(d.orgs&&d.orgs[0])?d.orgs[0].ssId:'', orgName:(d.orgs&&d.orgs[0])?d.orgs[0].name:'' };
     }
@@ -125,7 +146,7 @@ function registerUser(p) {
     orgsSh.getRange(1,1,1,3).setValues([['ID','Название','SS_ID']]);
     _props().setProperty('PROFILE_SS_ID', ss.getId());
     var res = _mkOrg(orgName0, ss);
-    lock.releaseLock();
+    
     if (REG_WEBHOOK) {
       try { UrlFetchApp.fetch(REG_WEBHOOK,{method:'post',contentType:'application/json',
         muteHttpExceptions:true,payload:JSON.stringify({name:name,phone:phone,ts:new Date().toISOString()})}); } catch(e){}
@@ -145,6 +166,7 @@ function createOrg(p) {
 }
 
 function deleteOrg(p) {
+  return _withLock(function(){
   var ssId = _s(p.ssId);
   if (!ssId) return { __error: 'ssId обязателен' };
   try {
@@ -164,6 +186,7 @@ function deleteOrg(p) {
     }
     return { __error: 'Организация не найдена в профиле' };
   } catch(e) { return { __error: e.message }; }
+});
 }
 
 function logoutUser() {
@@ -301,6 +324,7 @@ function _grow(ss, name, need) {
 
 // Removes КОРЗИНА entries older than 30 days
 function cleanTrash(p) {
+  return _withLock(function(){
   var ssId = p.ssId;
   try {
     var ss = SpreadsheetApp.openById(ssId);
@@ -315,23 +339,25 @@ function cleanTrash(p) {
     }
     return { ok:true, removed:removed };
   } catch(e) { return { __error: e.message }; }
+});
 }
 
 // Restores one entry from trash back to БАЗА
 function restoreFromTrash(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var lock = LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss = SpreadsheetApp.openById(ssId);
     var trash = ss.getSheetByName(SH_TRASH);
     var base  = ss.getSheetByName(SH_BASE);
-    if (!trash||trash.getLastRow()<2) { lock.releaseLock(); return { __error:'not found' }; }
+    if (!trash||trash.getLastRow()<2) {  return { __error:'not found' }; }
     var vals = trash.getRange(2,1,trash.getLastRow()-1,TR_COLS).getValues();
     var rowNum=-1, rowData=null;
     for (var i=0;i<vals.length;i++) {
       if (String(vals[i][0])===String(id)) { rowNum=i+2; rowData=vals[i].slice(0,B_COLS); break; }
     }
-    if (rowNum===-1) { lock.releaseLock(); return { __error:'not found' }; }
+    if (rowNum===-1) {  return { __error:'not found' }; }
     // Собираем все строки к восстановлению: сама операция + вторая половина
     // перевода (общий zRef), чтобы баланс не «поехал» после отмены удаления.
     var restore=[{rn:rowNum,data:rowData}];
@@ -353,9 +379,10 @@ function restoreFromTrash(p) {
     restore.map(function(x){return x.rn;}).sort(function(a,b){return b-a;})
       .forEach(function(rn){ trash.deleteRow(rn); });
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return { ok:true, restored:restore.length };
   } catch(e) { return { __error: e.message }; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -412,6 +439,7 @@ function getSettings(p) {
 }
 
 function saveSettings(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss = SpreadsheetApp.openById(ssId);
@@ -443,6 +471,7 @@ function saveSettings(p) {
     });
     return { ok:true };
   } catch(e) { return { __error: e.message }; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -477,9 +506,10 @@ function getAccounts(p) {
 }
 
 function saveAccount(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_ACCOUNTS);
     var id=d.id||Utilities.getUuid();
@@ -507,15 +537,16 @@ function saveAccount(p) {
             _renameAccountInSettings(ss, oldName, newName);
           }
           try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e3){}
-          lock.releaseLock();
+          
           return {ok:true};
         }
       }
     }
     sh.appendRow(row);
-    lock.releaseLock();
+    
     return {ok:true};
-  } catch(e) { try{lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 // Обновляет ссылки на счёт по имени в настройках при переименовании
@@ -540,6 +571,7 @@ function _renameAccountInSettings(ss, oldName, newName) {
 }
 
 function deleteAccount(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -562,6 +594,7 @@ function deleteAccount(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Manual balance correction — writes a Корректировка entry
@@ -582,9 +615,10 @@ function adjustBalance(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function saveQuickEntry(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var uid=d.uuid||Utilities.getUuid();
@@ -598,13 +632,13 @@ function saveQuickEntry(p) {
       var scan=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
       for (var i=scan.length-1;i>=0 && i>=scan.length-60;i--) {
         var r=scan[i];
-        if (d.uuid && String(r[B_UUID-1])===String(d.uuid)) { lock.releaseLock(); return {ok:true,duplicate:true}; }
+        if (d.uuid && String(r[B_UUID-1])===String(d.uuid)) {  return {ok:true,duplicate:true}; }
         var rDt=r[B_DATE-1]; var rMs=(rDt instanceof Date)?rDt.getTime():0;
         if (String(r[B_TYPE-1])===nType && String(r[B_CAT-1])===nCat &&
             (Math.round(parseFloat(r[B_AMT-1])||0))===nAmt && String(r[B_ACC-1])===nAcc &&
             String(r[B_CMT-1])===nCmt && String(r[B_EMP-1])===nEmp &&
             Math.abs(rMs-nMs) < 120000) {
-          lock.releaseLock(); return {ok:true,duplicate:true}; // идентичная запись только что уже есть
+           return {ok:true,duplicate:true}; // идентичная запись только что уже есть
         }
       }
     }
@@ -616,12 +650,16 @@ function saveQuickEntry(p) {
     base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
     base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return {ok:true,id:id};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 function saveTransfer(p) {
+  // Обе стороны перевода — под одним замком (реентерабельно), чтобы между
+  // ними не вклинилась чужая запись и перевод был атомарным.
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   var ref=Utilities.getUuid();
   var r1=saveQuickEntry({ssId:ssId,data:{uuid:d.uuid+'_out',date:d.date,type:'Расход',
@@ -637,25 +675,27 @@ function saveTransfer(p) {
     return r2;
   }
   return r2;
+  });
 }
 
 function deleteTransaction(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var trash=ss.getSheetByName(SH_TRASH);
-    if (!base||base.getLastRow()<2) { lock.releaseLock(); return {__error:'not found'}; }
+    if (!base||base.getLastRow()<2) {  return {__error:'not found'}; }
     var vals=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
     var rowNum=-1;
     for (var i=0;i<vals.length;i++) {
       if (String(vals[i][B_ID-1])===String(id)) { rowNum=i+2; break; }
     }
-    if (rowNum===-1) { lock.releaseLock(); return {__error:'not found'}; }
+    if (rowNum===-1) {  return {__error:'not found'}; }
     var row=vals[rowNum-2];
     if (row[B_LOCK-1]===true||row[B_LOCK-1]==='true') {
-      lock.releaseLock(); return {__error:'Запись заблокирована Z-отчётом'};
+       return {__error:'Запись заблокирована Z-отчётом'};
     }
     // Перевод — это ДВЕ строки (расход+приход) с общим zRef. Удаляем обе,
     // иначе баланс счетов «поедет» (деньги появятся/исчезнут из воздуха).
@@ -677,9 +717,10 @@ function deleteTransaction(p) {
     });
     _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return {ok:true, deleted:targets.length};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 function _txObj(r) {
@@ -772,10 +813,11 @@ function searchTransactions(p) {
 // p.rows = [{date, type:'Доход'|'Расход', category, amount, account, comment}]
 // Дедуп по ключу дата|тип|сумма|счёт|комментарий, чтобы повторный импорт не задваивал.
 function importRows(p) {
+  return _withLock(function(){
   var ssId = p.ssId, rows = p.rows || [];
   if (!rows.length) return { ok:true, added:0, skipped:0 };
   try {
-    var lock = LockService.getScriptLock(); lock.waitLock(25000);
+    
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var base = ss.getSheetByName(SH_BASE);
     var tz = Session.getScriptTimeZone();
@@ -807,9 +849,10 @@ function importRows(p) {
       base.getRange(sr,B_AMT,out.length,1).setNumberFormat('#,##0');
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return { ok:true, added:added, skipped:skipped };
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return { __error:e.message }; }
+  } catch(e) {  return { __error:e.message }; }
+});
 }
 
 // Разбор даты: dd.mm.yyyy, dd.mm.yy, yyyy-mm-dd, либо Date
@@ -843,10 +886,11 @@ function _gnum(v) {
 // p.rows = [{barcode,name,group,unit,supplier,buy,retail,qty,revenue,profit,stockQty,stockSum}]
 // Снимок: для каждого вида обновляем соответствующие поля по ключу товара (upsert).
 function saveGoods(p) {
+  return _withLock(function(){
   var ssId = p.ssId, kind = p.kind || '', rows = p.rows || [];
   if (!rows.length) return { ok:true, saved:0, updated:0 };
   try {
-    var lock = LockService.getScriptLock(); lock.waitLock(25000);
+    
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_GOODS);
     var tz = Session.getScriptTimeZone();
@@ -897,9 +941,10 @@ function saveGoods(p) {
       ph.getRange(pr,1,hist.length,PH_COLS).setValues(hist);
       ph.getRange(pr,PH_DATE,hist.length,1).setNumberFormat('dd.mm.yyyy');
     }
-    lock.releaseLock();
+    
     return { ok:true, saved:saved, updated:updated, total:data.length };
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return { __error:e.message }; }
+  } catch(e) {  return { __error:e.message }; }
+});
 }
 
 function getGoods(p) {
@@ -1084,9 +1129,10 @@ function getStoreDebt(p) {
 }
 
 function saveKassa(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
@@ -1176,11 +1222,12 @@ function saveKassa(p) {
       shiftsSh.getRange(shiftsSh.getLastRow(),2,1,1).setNumberFormat('dd.mm.yyyy');
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     var storeDebt=0;
     if (invDebtRepaid>0||invNewDebt>0) storeDebt=getStoreDebt({ssId:ssId}).debt;
     return {ok:true, zRef:zRef, storeDebt:storeDebt};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 function getShifts(p) {
@@ -1203,9 +1250,10 @@ function getShifts(p) {
 
 // Cancel a shift: unlocks all related BASE entries, deletes shift row
 function cancelShift(p) {
+  return _withLock(function(){
   var ssId=p.ssId, shiftId=p.shiftId;
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
@@ -1234,9 +1282,10 @@ function cancelShift(p) {
       }
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return {ok:true};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1267,6 +1316,7 @@ function getDebts(p) {
 }
 
 function saveRep(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -1277,9 +1327,11 @@ function saveRep(p) {
     }
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function saveDebtEntry(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -1296,9 +1348,11 @@ function saveDebtEntry(p) {
     }
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function updateDebtEntry(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_DEBTS);
@@ -1316,9 +1370,11 @@ function updateDebtEntry(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteDebtEntry(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_DEBTS);
@@ -1329,6 +1385,7 @@ function deleteDebtEntry(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function getRepDebt(p) {
@@ -1395,6 +1452,7 @@ function getTimesheetMonth(p) {
 }
 
 function saveTimesheetEntry(p) {
+  return _withLock(function(){
   var ssId=p.ssId,year=parseInt(p.year),month=parseInt(p.month),day=parseInt(p.day);
   var emp=_s(p.employee||''),timeIn=_s(p.timeIn||''),timeOut=_s(p.timeOut||'');
   var status=_s(p.status||'П'),hours=parseFloat(p.hours)||0,rate=parseFloat(p.rate)||0,cmt=_s(p.comment||'');
@@ -1413,6 +1471,7 @@ function saveTimesheetEntry(p) {
     else sh.appendRow(row);
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1591,8 +1650,8 @@ function getAnomalies(p) {
 // Самообучение: реакция владельца «ok» (норма) / «issue» (проблема).
 function brainLearn(p) {
   var ssId=p.ssId, action=p.action, key=p.key, cat=p.category||'';
+  return _withLock(function(){
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
     var ss=SpreadsheetApp.openById(ssId);
     var brain=_brainGet(ss);
     if (action==='ok') {
@@ -1604,9 +1663,9 @@ function brainLearn(p) {
       brain.sensitivity=Math.max(0.5, Math.min(parseFloat(p.value)||1.0, 1.8));
     }
     _brainSet(ss, brain);
-    lock.releaseLock();
     return { ok:true, sensitivity:brain.sensitivity };
-  } catch(e){ try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e){ return {__error:e.message}; }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2233,6 +2292,7 @@ function getRecurring(p) {
 }
 
 function saveRecurring(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -2251,9 +2311,11 @@ function saveRecurring(p) {
     sh.appendRow(row);
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteRecurring(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_RECURRING);
@@ -2264,6 +2326,7 @@ function deleteRecurring(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Creates expense transactions for all active recurring templates for current month
@@ -2325,6 +2388,7 @@ function getBudget(p) {
 }
 
 function saveBudget(p) {
+  return _withLock(function(){
   var ssId=p.ssId, budgetMap=p.budgetMap||{};
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -2339,6 +2403,7 @@ function saveBudget(p) {
     sh.appendRow(['BUDGET',val]);
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2377,6 +2442,7 @@ function getPayments(p) {
 }
 
 function savePayment(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -2403,24 +2469,26 @@ function savePayment(p) {
     sh.getRange(sh.getLastRow(),PY_AMT,1,1).setNumberFormat('#,##0');
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Update payment status: pay / postpone / cancel / restore
 function updatePayment(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   var id=String(d.id||'');
   if (!id) return {__error:'no id'};
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var sh=ss.getSheetByName(SH_PAYMENTS);
-    if (!sh||sh.getLastRow()<2) { lock.releaseLock(); return {__error:'not found'}; }
+    if (!sh||sh.getLastRow()<2) {  return {__error:'not found'}; }
     var vs=sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
     var rowNum=-1, rowData=null;
     for (var i=0;i<vs.length;i++) {
       if (String(vs[i][PY_ID-1])===id) { rowNum=i+2; rowData=vs[i]; break; }
     }
-    if (rowNum===-1) { lock.releaseLock(); return {__error:'not found'}; }
+    if (rowNum===-1) {  return {__error:'not found'}; }
     if (d.action==='pay') {
       var paidBefore=parseFloat(rowData[PY_PAID-1])||0;
       var payAmt=parseFloat(d.amount)||0;
@@ -2444,24 +2512,26 @@ function updatePayment(p) {
       sh.getRange(rowNum,PY_STATUS).setValue('open');
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return {ok:true};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 function markPaymentPaid(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id, account=_s(p.account||'');
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var sh=ss.getSheetByName(SH_PAYMENTS);
-    if (!sh||sh.getLastRow()<2) { lock.releaseLock(); return {__error:'not found'}; }
+    if (!sh||sh.getLastRow()<2) {  return {__error:'not found'}; }
     var vs=sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
     var rowNum=-1,rowData=null;
     for (var i=0;i<vs.length;i++) {
       if (String(vs[i][PY_ID-1])===String(id)) { rowNum=i+2; rowData=vs[i]; break; }
     }
-    if (rowNum===-1) { lock.releaseLock(); return {__error:'not found'}; }
+    if (rowNum===-1) {  return {__error:'not found'}; }
     sh.getRange(rowNum,PY_STATUS).setValue('paid');
     sh.getRange(rowNum,PY_PAID).setValue(parseFloat(rowData[PY_AMT-1])||0);
     if (account&&rowData) {
@@ -2474,12 +2544,14 @@ function markPaymentPaid(p) {
       }
     }
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-    lock.releaseLock();
+    
     return {ok:true};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 function deletePayment(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
@@ -2490,10 +2562,12 @@ function deletePayment(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Toggle account visibility: active ↔ hidden
 function toggleAccountVisibility(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ACCOUNTS);
@@ -2509,6 +2583,7 @@ function toggleAccountVisibility(p) {
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Returns all accounts including hidden ones
@@ -2546,10 +2621,11 @@ function getAccountsAll(p) {
 
 // Удалить все операции/данные (демо и реальные). Счета и настройки остаются.
 function clearAllData(p) {
+  return _withLock(function(){
   var ssId=_s(p.ssId);
   if(!ssId) return {__error:'ssId required'};
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(20000);
+    
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var wipe=[SH_BASE,SH_DEBTS,SH_SHIFTS,SH_PAYMENTS,SH_TIMESHEET,SH_RECURRING,
               SH_GOODS,SH_PRICEHIST,SH_LOG,SH_TRASH];
@@ -2559,16 +2635,18 @@ function clearAllData(p) {
       if(sh&&sh.getLastRow()>1){ var cnt=sh.getLastRow()-1; sh.deleteRows(2,cnt); removed+=cnt; }
     });
     try{CacheService.getScriptCache().remove('dash_'+ssId);}catch(e){}
-    lock.releaseLock();
+    
     return {ok:true, removed:removed};
-  } catch(e){ try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e){  return {__error:e.message}; }
+});
 }
 
 function seedDemoData(p) {
+  return _withLock(function(){
   var ssId = _s(p.ssId);
   if (!ssId) return { __error: 'ssId required' };
   try {
-    var lock = LockService.getScriptLock(); lock.waitLock(20000);
+    
     var ss = SpreadsheetApp.openById(ssId);
     ensureSheets(ss);
 
@@ -2707,9 +2785,10 @@ function seedDemoData(p) {
     paysSh.getRange(2, 1, pays.length, PY_COLS).setValues(pays);
 
     try { CacheService.getScriptCache().remove('dash_' + ssId); } catch(e) {}
-    lock.releaseLock();
+    
     return { ok: true, txCount: rows.length };
   } catch(e) { return { __error: e.message }; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2767,6 +2846,7 @@ function getTeam(p) {
 }
 
 function inviteMember(p) {
+  return _withLock(function(){
   var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -2810,9 +2890,11 @@ function inviteMember(p) {
     } catch(em){}
     return getTeam({ssId:ssId});
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function removeMember(p) {
+  return _withLock(function(){
   var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase();
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -2827,9 +2909,11 @@ function removeMember(p) {
     _log(ss,'Удалён доступ',email);
     return getTeam({ssId:ssId});
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function setMemberRole(p) {
+  return _withLock(function(){
   var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role);
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -2846,6 +2930,7 @@ function setMemberRole(p) {
     }
     return {__error:'Сотрудник не найден'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Приглашения для сотрудника: таблицы Auron, которыми с ним поделились,
@@ -2869,6 +2954,7 @@ function findInvites() {
 }
 
 function acceptInvite(p) {
+  return _withLock(function(){
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId); // проверка доступа
@@ -2884,6 +2970,7 @@ function acceptInvite(p) {
     orgsSh.appendRow([Utilities.getUuid(),name,ssId]);
     return {ok:true,ssId:ssId,name:name};
   } catch(e) { return {__error:'Нет доступа к этой организации: '+e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -2937,6 +3024,7 @@ function getContractors(p) {
 }
 
 function saveContractor(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -2954,9 +3042,11 @@ function saveContractor(p) {
     sh.appendRow([id,_s(d.name),_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||''),new Date()]);
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteContractor(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_CONTRACTORS);
@@ -2966,6 +3056,7 @@ function deleteContractor(p) {
       if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3195,6 +3286,7 @@ function getOrders(p) {
 }
 
 function saveOrder(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -3218,10 +3310,12 @@ function saveOrder(p) {
     _log(ss,'Новый заказ',_s(d.contractor)+' · '+amt+' ₽ · ожид. '+_s(d.expected));
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Смена статуса: received / partial (факт-сумма) / cancelled / active (вернуть)
 function setOrderStatus(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id, status=_s(p.status);
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -3246,9 +3340,11 @@ function setOrderStatus(p) {
       }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteOrder(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ORDERS);
@@ -3258,6 +3354,7 @@ function deleteOrder(p) {
       if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3485,6 +3582,7 @@ function autoCron() {
 
 // Заполнить табель месяца по графику сотрудника (только пустые дни)
 function fillTimesheetMonth(p) {
+  return _withLock(function(){
   var ssId=p.ssId,year=parseInt(p.year),month=parseInt(p.month); // month 1-12
   var emp=_s(p.employee), days=p.days||[1,2,3,4,5,6]; // дни недели: 1=Пн … 7=Вс
   var timeIn=_s(p.timeIn||''),timeOut=_s(p.timeOut||'');
@@ -3510,6 +3608,7 @@ function fillTimesheetMonth(p) {
     if (rows.length) sh.getRange(sh.getLastRow()+1,1,rows.length,T_COLS).setValues(rows);
     return {ok:true,added:rows.length};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3595,6 +3694,7 @@ function getMyProfile() {
 }
 
 function updateMyProfile(p) {
+  return _withLock(function(){
   try {
     var prof=_profileSS();
     if (!prof) return {__error:'Профиль не найден'};
@@ -3604,6 +3704,7 @@ function updateMyProfile(p) {
     else sh.getRange(2,1,1,3).setValues([[_s(p.name),_s(p.phone),_s(p.birth)]]);
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // URL приложения — для кнопки «Сменить аккаунт»
@@ -3687,13 +3788,14 @@ function getGoodsMeta(p) {
 
 // Восстановление операции из корзины (для «Отменить» после удаления)
 function restoreTransaction(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=String(p.id||'');
   try {
-    var lock=LockService.getScriptLock(); lock.waitLock(10000);
+    
     var ss=SpreadsheetApp.openById(ssId);
     var trash=ss.getSheetByName(SH_TRASH);
     var base=ss.getSheetByName(SH_BASE);
-    if (!trash||trash.getLastRow()<2) { lock.releaseLock(); return {__error:'Корзина пуста'}; }
+    if (!trash||trash.getLastRow()<2) {  return {__error:'Корзина пуста'}; }
     var vs=trash.getRange(2,1,trash.getLastRow()-1,TR_COLS).getValues();
     for (var i=vs.length-1;i>=0;i--) {
       if (String(vs[i][0])===id) {
@@ -3701,13 +3803,14 @@ function restoreTransaction(p) {
         trash.deleteRow(i+2);
         _log(ss,'Восстановление операции',String(vs[i][B_TYPE-1])+' '+Math.round(vs[i][B_AMT-1])+' ₽ · '+String(vs[i][B_CAT-1]));
         try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
-        lock.releaseLock();
+        
         return {ok:true};
       }
     }
-    lock.releaseLock();
+    
     return {__error:'Запись не найдена в корзине'};
-  } catch(e) { try{lock&&lock.releaseLock();}catch(e2){} return {__error:e.message}; }
+  } catch(e) {  return {__error:e.message}; }
+});
 }
 
 // Содержимое корзины (последние 50 удалённых)
@@ -3734,6 +3837,7 @@ function getTrash(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function saveDayNote(p) {
+  return _withLock(function(){
   var ssId=p.ssId, date=_s(p.date), text=_s(p.text||'').slice(0,500);
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -3753,6 +3857,7 @@ function saveDayNote(p) {
     if (text) sh.appendRow([date,text,new Date()]);
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function getDayNote(p) {
@@ -3825,6 +3930,7 @@ function getNotifications(p) {
 
 // Скопировать настройки и справочник контрагентов в новую организацию
 function cloneOrgSettings(p) {
+  return _withLock(function(){
   var src=p.srcSsId, dst=p.dstSsId;
   try {
     var st=getSettings({ssId:src});
@@ -3840,6 +3946,7 @@ function cloneOrgSettings(p) {
     }
     return {ok:true};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Telegram-уведомления: если настроен бот — шлём и туда
@@ -3861,6 +3968,7 @@ function testTelegram(p) {
 
 // Архив контрагента (колонка 7 = Статус)
 function setContractorStatus(p) {
+  return _withLock(function(){
   var ssId=p.ssId, id=p.id, status=_s(p.status||'');
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_CONTRACTORS);
@@ -3871,6 +3979,7 @@ function setContractorStatus(p) {
       if (String(vs[i][0])===String(id)) { sh.getRange(i+2,7).setValue(status); return {ok:true}; }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -3900,6 +4009,7 @@ function getObligations(p) {
 }
 
 function saveObligation(p) {
+  return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -3917,9 +4027,11 @@ function saveObligation(p) {
     sh.appendRow([id,type,_s(d.name),amt,_s(d.comment||''),new Date()]);
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteObligation(p) {
+  return _withLock(function(){
   try {
     var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_OBLIG);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
@@ -3927,10 +4039,12 @@ function deleteObligation(p) {
     for (var i=vs.length-1;i>=0;i--) if (String(vs[i][0])===String(p.id)) { sh.deleteRow(i+2); return {ok:true}; }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
+});
 }
 
 // Установить долг магазина в нужную сумму (ручная корректировка регистра)
 function setStoreDebt(p) {
+  return _withLock(function(){
   var ssId=p.ssId, target=Math.round(parseFloat(p.target)||0);
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -3944,4 +4058,5 @@ function setStoreDebt(p) {
     try { CacheService.getScriptCache().remove('dash_'+ssId); } catch(e){}
     return {ok:true,debt:target};
   } catch(e) { return {__error:e.message}; }
+});
 }
