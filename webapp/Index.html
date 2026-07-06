@@ -1463,6 +1463,9 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 /* Иконка-чип в плитках быстрых действий (единый SVG-стиль вместо эмодзи) */
 .qa-ic{width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;
   margin:0 auto 10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
+/* Иконка-бейдж в строках хаба Кассы (утро/вечер) */
+.k-hub-ic{width:46px;height:46px;border-radius:15px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
 
 /* Пустые экраны красивее: иконка в мягком кружке + аккуратная типографика */
 .empty,.empty-state{animation:cardUp .4s cubic-bezier(.22,.8,.28,1) both;}
@@ -1848,13 +1851,13 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
         <button onclick="App.kShow('morning')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span style="font-size:28px;">🌅</span>
+          <span class="k-hub-ic" style="background:rgba(255,159,10,.14);color:#FF9F0A;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="4"/><path d="M12 3v3M4 14H2M22 14h-2M5.6 7.6L4.2 6.2M18.4 7.6l1.4-1.4M2 20h20"/></svg></span>
           <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Кассовое утро</span>
           <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Смена, Z-отчёт и все доходы и расходы с кассы</span></span>
           <span style="color:var(--muted);">›</span>
         </button>
         <button onclick="App.kShow('evening')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span style="font-size:28px;">🌙</span>
+          <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
           <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Вечер — накладные</span>
           <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплачено наличными, погашенные и новые долги</span></span>
           <span style="color:var(--muted);">›</span>
