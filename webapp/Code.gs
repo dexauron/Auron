@@ -446,6 +446,7 @@ function getSettings(p) {
       monthTarget:      parseFloat(map['MONTH_TARGET'])||0,
       cashFloat:        parseFloat(map['CASH_FLOAT'])||0,
       beznalAccount:    String(map['BEZNAL_ACCOUNT']||''),
+      cashAccount:      String(map['CASH_ACCOUNT']||'Наличные'),
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
       taxRate:          parseFloat(map['TAX_RATE'])||6,
@@ -583,6 +584,8 @@ function _renameAccountInSettings(ss, oldName, newName) {
       if (raw.indexOf(oldName)<0) continue;
       if (key==='BEZNAL_ACCOUNT') {
         if (raw===oldName) s.getRange(i+2,2).setValue(newName);
+      } else if (key==='CASH_ACCOUNT') {
+        if (raw===oldName) s.getRange(i+2,2).setValue(newName);
       } else if (key==='SAVINGS_ACCOUNTS'||key==='CAP_EXCLUDE') {
         var arr; try{arr=JSON.parse(raw);}catch(e2){continue;}
         if (!Array.isArray(arr)) continue;
@@ -591,7 +594,33 @@ function _renameAccountInSettings(ss, oldName, newName) {
         if (hit) s.getRange(i+2,2).setValue(JSON.stringify(arr));
       }
     }
+    // Если переименовали кассовый счёт, а настройки CASH_ACCOUNT ещё нет
+    // (значение по умолчанию) — заводим её, чтобы проводки Кассы не сломались.
+    if (_cashAcc(ss)===oldName) _setSetting(ss,'CASH_ACCOUNT',newName);
   } catch(e) {}
+}
+
+// Имя кассового счёта: из настройки CASH_ACCOUNT, иначе «Наличные».
+function _cashAcc(ss) {
+  try {
+    var s=ss.getSheetByName(SH_SETTINGS);
+    if (s&&s.getLastRow()>=2) {
+      var v=s.getRange(2,1,s.getLastRow()-1,2).getValues();
+      for (var i=0;i<v.length;i++) if (String(v[i][0])==='CASH_ACCOUNT'&&v[i][1]) return String(v[i][1]);
+    }
+  } catch(e){}
+  return 'Наличные';
+}
+// Upsert одной настройки (ключ/значение).
+function _setSetting(ss, key, val) {
+  try {
+    var s=ss.getSheetByName(SH_SETTINGS); if(!s) return;
+    if (s.getLastRow()>=2) {
+      var v=s.getRange(2,1,s.getLastRow()-1,1).getValues();
+      for (var i=0;i<v.length;i++) if (String(v[i][0])===key) { s.getRange(i+2,2).setValue(val); return; }
+    }
+    s.appendRow([key, val]);
+  } catch(e){}
 }
 
 function deleteAccount(p) {
@@ -1180,6 +1209,7 @@ function saveKassa(p) {
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
+    var cashAcc=_s(_cashAcc(ss)); // имя кассового счёта (настраиваемое)
     var dt=new Date(d.date); var zRef=Utilities.getUuid();
     var rows=d.rows||[], wyplatas=d.wyplatas||[];
     var zTotal=0, factTotal=0, baseRows=[];
@@ -1202,7 +1232,7 @@ function saveKassa(p) {
       // Расхождение = собрано − выручка (собрано = забрал + оплатил поставщикам + оставил)
       reconDiff=(cashCollect+cashSupp+cashLeft)-cashRev;
       hasRecon=cashRev>0||cardTotal>0||cashSupp>0;
-      var cash=_s('Наличные');
+      var cash=cashAcc;
       if (cashRev>0) baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Доход','Продажи',
         cashRev,cash,_s(d.cashier||''),'Выручка наличными (Z-отчёт)','',zRef,true,_s(d.shift||'')]);
       cardRevs.forEach(function(c){
@@ -1235,13 +1265,13 @@ function saveKassa(p) {
     var debtsSh=null;
     if (invCashPaid>0) {
       baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Закупка',
-        invCashPaid,'Наличные',_s(d.cashier||''),'Накладные за смену (оплачено наличными)','',zRef,true,_s(d.shift||'')]);
+        invCashPaid,cash,_s(d.cashier||''),'Накладные за смену (оплачено наличными)','',zRef,true,_s(d.shift||'')]);
     }
     if (invDebtRepaid>0) {
       baseRows.push([Utilities.getUuid(),Utilities.getUuid(),dt,'Расход','Долг ТП',
-        invDebtRepaid,'Наличные',_s(d.cashier||''),'Погашение долга по накладным','',zRef,true,_s(d.shift||'')]);
+        invDebtRepaid,cash,_s(d.cashier||''),'Погашение долга по накладным','',zRef,true,_s(d.shift||'')]);
       debtsSh=debtsSh||ss.getSheetByName(SH_DEBTS);
-      debtsSh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,'oplata',invDebtRepaid,dt,'Наличные',
+      debtsSh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,'oplata',invDebtRepaid,dt,cash,
         'Погашение при закрытии смены',new Date(),'',_s(zRef)]);
     }
     if (invNewDebt>0) {
@@ -1401,7 +1431,7 @@ function saveDebtEntry(p) {
 // пересчитанный долг представителя.
 function receiveRep(p) {
   return _withLock(function(){
-  var ssId=p.ssId, rep=_s(p.rep), account=_s(p.account||'Наличные');
+  var ssId=p.ssId, rep=_s(p.rep), account=_s(p.account||'');
   var cashPaid=Math.round(parseFloat(p.cashPaid)||0);
   var debtRepaid=Math.round(parseFloat(p.debtRepaid)||0);
   var newDebt=Math.round(parseFloat(p.newDebt)||0);
@@ -1410,6 +1440,7 @@ function receiveRep(p) {
   if (cashPaid<=0&&debtRepaid<=0&&newDebt<=0) return {__error:'Заполните хотя бы одно поле'};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (!account) account=_s(_cashAcc(ss));
     if (cashPaid>0) saveQuickEntry({ssId:ssId,data:{date:new Date().toISOString(),type:'Расход',
       category:'Закупка',account:account,amount:cashPaid,comment:'Оплата наличкой: '+rep+(comment?' · '+comment:'')}});
     if (debtRepaid>0) saveDebtEntry({ssId:ssId,data:{repId:rep,type:'oplata',amount:debtRepaid,
