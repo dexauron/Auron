@@ -2608,6 +2608,18 @@ function getMorningBriefing(p) {
     var today=Utilities.formatDate(new Date(),tz,'yyyy-MM-dd');
     // Деньги в кассе (наличные + все счета)
     var cash=0; getAccounts({ssId:ssId}).forEach(function(a){cash+=a.balance||0;});
+    // Темп дня: выручка сегодня vs средняя дневная
+    var todayRev=0;
+    var base2=ss.getSheetByName(SH_BASE);
+    if (base2&&base2.getLastRow()>=2) {
+      base2.getRange(2,1,base2.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        if (String(r[B_TYPE-1])!=='Доход') return;
+        var cat=String(r[B_CAT-1]); if(cat==='Перевод'||cat==='Корректировка') return;
+        var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+        if (Utilities.formatDate(dt,tz,'yyyy-MM-dd')===today) todayRev+=parseFloat(r[B_AMT-1])||0;
+      });
+    }
+    var bl=getRevenueBaseline({ssId:ssId});
     // Выплаты: сегодня и просроченные (неоплаченные)
     var todayPays=[], overdueTotal=0, todayTotal=0;
     var psh=ss.getSheetByName(SH_PAYMENTS);
@@ -2638,6 +2650,7 @@ function getMorningBriefing(p) {
     }
     var need=Math.round(overdueTotal+todayTotal);
     return {cash:Math.round(cash), need:need, enough:cash>=need, shortfall:Math.max(need-cash,0),
+      todayRev:Math.round(todayRev), avgDay:bl.avgDay||0, avgDays:bl.days||0,
       todayTotal:Math.round(todayTotal), overdueTotal:Math.round(overdueTotal),
       payments:todayPays.slice(0,8), payCount:todayPays.length,
       orders:todayOrders.slice(0,6), orderCount:todayOrders.length};

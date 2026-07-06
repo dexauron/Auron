@@ -1557,6 +1557,10 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .brf-ordlbl{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:14px;}
 .brf-btn{width:100%;margin-top:14px;padding:11px;border-radius:13px;border:none;background:var(--brand-dim);color:var(--brand);
   font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);}
+.brf-tempo{display:flex;flex-direction:column;gap:2px;padding:11px 14px;margin:-4px -2px 12px;border-radius:14px;
+  background:var(--surface-2);border:1px solid var(--line-2);}
+.brf-tempo>span:first-child{font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.brf-tempo>span:last-child{font-size:13px;color:var(--ink-2);}
 
 </style>
 </head>
@@ -2660,8 +2664,9 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.4.0';
+var APP_VERSION='2.5.0';
 var APP_CHANGELOG=[
+  {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
   {v:'2.4.0',t:'Подробности и история: тап по операции открывает полную карточку (точные суммы до рубля) и историю «кто создал, кто изменил, когда». Красивые окна подтверждения вместо системных. Ещё дизайна: иконки настроек и кассы'},
   {v:'2.3.0',t:'Обновление дизайна: единые SVG-иконки вместо эмодзи, мягкие тени и «стекло» у окон, плавное появление карточек, ровные цифры, красивые пустые экраны, чипы статусов, права по ролям'},
   {v:'2.2.0',t:'Надёжность денег: калькулятор-клавиатура для сумм, безопасная работа команды, точный учёт переводов и табеля, переименование счёта/поставщика без потери истории, мгновенное обновление главной'},
@@ -5566,7 +5571,17 @@ var App={
     var box=document.getElementById('k-briefing');if(!box)return;
     gs('getMorningBriefing',{ssId:App.s.ssId}).then(function(r){
       var box=document.getElementById('k-briefing');if(!box||!r||r.__error){if(box)box.innerHTML='';return;}
-      if(!r.payCount&&!r.orderCount){box.innerHTML='';return;}
+      // Темп дня — отдельная тонкая плашка (если есть выручка сегодня и история)
+      var tempo='';
+      if(r.todayRev>0&&r.avgDay>0&&r.avgDays>=5){
+        var dp=Math.round((r.todayRev-r.avgDay)/r.avgDay*100);
+        var up=dp>=0;var c=up?'var(--pos)':'var(--neg)';
+        tempo='<div class="brf-tempo"><span>Темп дня</span>'+
+          '<span>Сегодня <b class="num">'+fmtFull(r.todayRev)+' ₽</b> · обычно <b class="num">'+fmtFull(r.avgDay)+'</b> '+
+          '<b style="color:'+c+'">'+(up?'▲ +':'▼ ')+Math.abs(dp)+'%</b></span></div>';
+      }
+      if(!r.payCount&&!r.orderCount&&!tempo){box.innerHTML='';return;}
+      if(!r.payCount&&!r.orderCount){box.innerHTML='<div class="brf-card" style="padding:0;">'+tempo+'</div>';return;}
       var ok=r.enough;
       var head='<div class="brf-head '+(ok?'ok':'warn')+'">'+
         '<div class="brf-ic">'+(ok?SVG.check:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>')+'</div>'+
@@ -5581,7 +5596,7 @@ var App={
       var orders=(r.orders||[]).length?('<div class="brf-ordlbl">Ждём поставки:</div>'+(r.orders).map(function(o){
         return '<div class="brf-row"><span class="brf-dot brand"></span><span class="brf-name">'+App._e(o.contractor)+'</span><span class="brf-amt num" style="color:var(--muted)">'+fmtFull(o.amount)+' ₽</span></div>';
       }).join('')):'';
-      box.innerHTML='<div class="brf-card">'+head+status+
+      box.innerHTML='<div class="brf-card">'+tempo+head+status+
         (pays?'<div class="brf-list">'+pays+'</div>':'')+orders+
         (r.need>0?'<button class="brf-btn" onclick="App.goToPayments()">Открыть график выплат →</button>':'')+'</div>';
     }).catch(function(){var box=document.getElementById('k-briefing');if(box)box.innerHTML='';});
