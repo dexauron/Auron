@@ -1169,6 +1169,63 @@ function getProductDetail(p) {
   } catch(e) { return { __error:e.message }; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// АВРОН-СОВЕТНИК · Охотник за экономией
+// Сравнивает цены поставщиков по каждому товару и считает, сколько можно
+// сэкономить в месяц, покупая у самого дешёвого. Всё — на своих данных.
+// ═══════════════════════════════════════════════════════════════════════
+function getSavingsHunter(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
+    // объём продаж и текущая закупочная цена по товару
+    var soldByKey={}, nameByKey={};
+    var gsh = ss.getSheetByName(SH_GOODS);
+    if (gsh && gsh.getLastRow()>=2) {
+      gsh.getRange(2,1,gsh.getLastRow()-1,G_COLS).getValues().forEach(function(r){
+        var key=_goodsKey(r[G_BARCODE-1],r[G_NAME-1]);
+        soldByKey[key]=_gnum(r[G_SOLDQTY-1]); nameByKey[key]=String(r[G_NAME-1]||'');
+      });
+    }
+    var ph = ss.getSheetByName(SH_PRICEHIST);
+    if (!ph || ph.getLastRow()<2) return { empty:true, totalMonthly:0, count:0, items:[] };
+    // по товару: последняя цена каждого поставщика + текущий (самый свежий) поставщик
+    var byKey={};
+    ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+      var key=_goodsKey(r[PH_BARCODE-1],r[PH_NAME-1]);
+      var sup=String(r[PH_SUPPLIER-1]||''), price=_gnum(r[PH_PRICE-1]);
+      if(!sup||!price) return;
+      var d=r[PH_DATE-1], t=(d instanceof Date)?d.getTime():0;
+      if(!byKey[key]) byKey[key]={name:String(r[PH_NAME-1]||''), sup:{}, latest:null};
+      var K=byKey[key];
+      if(!K.sup[sup]||K.sup[sup].t<=t) K.sup[sup]={price:price,t:t};
+      if(!K.latest||K.latest.t<=t) K.latest={sup:sup,price:price,t:t};
+    });
+    var items=[], totalMonthly=0;
+    Object.keys(byKey).forEach(function(key){
+      var K=byKey[key]; var names=Object.keys(K.sup);
+      if(names.length<2) return; // сравнивать не с чем
+      var lo=null; names.forEach(function(s){var pr=K.sup[s].price; if(lo===null||pr<lo.price)lo={sup:s,price:pr};});
+      var cur=K.latest;
+      if(!cur||cur.sup===lo.sup||cur.price<=lo.price) return; // уже берём у самого дешёвого
+      var perUnit=cur.price-lo.price;
+      var sold=soldByKey[key]||0;
+      var monthlyQty=sold>0?sold/salesDays*30:0;
+      var monthlySave=Math.round(perUnit*monthlyQty);
+      totalMonthly+=monthlySave;
+      items.push({name:(K.name||nameByKey[key]||'').slice(0,44),
+        curSup:cur.sup, curPrice:Math.round(cur.price*100)/100,
+        cheapSup:lo.sup, cheapPrice:Math.round(lo.price*100)/100,
+        perUnit:Math.round(perUnit*100)/100, monthlyQty:Math.round(monthlyQty),
+        monthlySave:monthlySave, pct:cur.price>0?Math.round(perUnit/cur.price*100):0});
+    });
+    // сначала с реальной денежной экономией в месяц, потом по разнице цены
+    items.sort(function(a,b){return b.monthlySave-a.monthlySave || b.perUnit-a.perUnit;});
+    return { empty:items.length===0, totalMonthly:Math.round(totalMonthly),
+             count:items.length, salesDays:salesDays, items:items.slice(0,100) };
+  } catch(e) { return { __error:e.message }; }
+}
+
 function getGoodsAnalytics(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);

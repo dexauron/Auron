@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -218,6 +218,24 @@ A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
 const pc2=A.getProductDetail({ssId:'ss1',barcode:'333',name:'Масло'});
 eq('карточка: поступление датировано периодом', pc2.priceHist[0].label, '15.05.26');
 eq('карточка: поставщик с датой поступления', pc2.suppliers[0].date, '15.05.26');
+
+// ── Аврон-советник: охотник за экономией ────────────────────────────
+// Сок: сейчас берём у «Дорогой» (60, свежая дата), но «Дешёвый» даёт 40.
+A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
+  {barcode:'444',name:'Сок',supplier:'Дешёвый',buy:40,date:'01.01.2026'}]});
+A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
+  {barcode:'444',name:'Сок',supplier:'Дорогой',buy:60,date:'01.06.2026'}]});
+A.saveGoods({ssId:'ss1',kind:'Продажи',salesDays:30,rows:[
+  {barcode:'444',name:'Сок',qty:30,revenue:3000,profit:900,retail:100}]});
+const sav=A.getSavingsHunter({ssId:'ss1'});
+const sok=(sav.items||[]).find(x=>x.name==='Сок');
+eq('экономия: Сок найден', !!sok, true);
+eq('экономия: дешевле у «Дешёвый»', sok&&sok.cheapSup, 'Дешёвый');
+eq('экономия: разница 20 ₽/шт', sok&&sok.perUnit, 20);
+// продаём 30 шт за 30 дн → 30 шт/мес × 20 ₽ = 600 ₽/мес
+eq('экономия: 600 ₽/мес по Соку', sok&&sok.monthlySave, 600);
+// Молоко: текущий поставщик уже самый дешёвый (Альфа 75) → в список не попадает
+eq('экономия: Молоко не предлагается (уже дёшево)', !(sav.items||[]).some(x=>x.name==='Молоко'), true);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');
