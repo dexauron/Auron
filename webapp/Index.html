@@ -4129,20 +4129,51 @@ var App={
   },
 
   shareReport:function(){
-    var s=App.s,accs=s.accounts||[];
-    var pLabel=App._periodLabel(s.period||'today');
-    var lines=['📊 Auron Finance — '+pLabel,''];
-    accs.forEach(function(a){lines.push('💳 '+a.name+': ₽ '+fmtFull(a.balance));});
-    lines.push('');lines.push('📅 '+new Date().toLocaleDateString('ru'));
-    var text=lines.join('\n');
-    if(navigator.share){
-      navigator.share({title:'Auron Finance',text:text}).catch(function(){});
-    } else if(navigator.clipboard){
-      navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано в буфер ✓');})
-        .catch(function(){App.toast('Не удалось скопировать',true);});
-    } else {
-      App.toast('Поделиться не поддерживается',true);
-    }
+    App.toast('Готовлю отчёт…');
+    var today=new Date().toISOString().slice(0,10);
+    gs('getDayReport',{ssId:App.s.ssId,date:today}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      var org=App.s.orgName||'Магазин';
+      var dstr=new Date().toLocaleDateString('ru',{day:'numeric',month:'long'});
+      var excl=App.s.settings&&App.s.settings.capExclude||[];
+      var cap=(App.s.accounts||[]).reduce(function(sm,a){return excl.indexOf(a.name)>=0?sm:sm+(a.balance||0);},0);
+      var mark=function(v){return (v<0?'−':'')+fmtFull(Math.abs(v))+' ₽';};
+      var L=[];
+      L.push('🏪 '+org);
+      L.push('Итоги за '+dstr);
+      L.push('━━━━━━━━━━━━━');
+      L.push('📈 Выручка:  '+fmtFull(r.income));
+      L.push('📉 Расход:   '+fmtFull(r.expense));
+      L.push((r.profit>=0?'✅ Прибыль:  ':'⚠️ Убыток:   ')+mark(r.profit));
+      if(r.zRevenue)L.push('🧾 По кассе:  '+fmtFull(r.zRevenue));
+      L.push('');
+      L.push('💰 Капитал:  '+fmtFull(cap));
+      (App.s.accounts||[]).forEach(function(a){L.push('   • '+a.name+': '+fmtFull(a.balance));});
+      if(r.storeDebt)L.push('🏪 Долг магазина: '+fmtFull(r.storeDebt));
+      if(r.debtRepaid||r.debtNew)L.push('   (погашено '+fmtFull(r.debtRepaid)+' · новый '+fmtFull(r.debtNew)+')');
+      L.push('━━━━━━━━━━━━━');
+      L.push('Auron Finance');
+      App._shareModal('Отчёт за день',L.join('\n'));
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _shareModal:function(title,text){
+    App._shareText=text;
+    App.openModal('<div class="modal-title">'+SVG.doc+' '+App._e(title)+'</div>'+
+      '<div style="background:var(--surface-2);border:1px solid var(--line-2);border-radius:14px;padding:14px 16px;font-size:13px;line-height:1.65;white-space:pre-wrap;font-family:var(--font-num);max-height:44vh;overflow:auto;">'+App._e(text)+'</div>'+
+      '<div style="display:flex;gap:10px;margin-top:16px;">'+
+        '<button onclick="App._shareVia(\'copy\')" style="flex:1;padding:13px;border-radius:13px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:750;cursor:pointer;font-family:var(--font);">Копировать</button>'+
+        '<button onclick="App._shareVia(\'wa\')" style="flex:1;padding:13px;border-radius:13px;border:none;background:#25D366;color:#fff;font-size:13.5px;font-weight:750;cursor:pointer;font-family:var(--font);">WhatsApp</button>'+
+        '<button onclick="App._shareVia(\'tg\')" style="flex:1;padding:13px;border-radius:13px;border:none;background:#2AABEE;color:#fff;font-size:13.5px;font-weight:750;cursor:pointer;font-family:var(--font);">Telegram</button>'+
+      '</div>'+
+      (navigator.share?'<button onclick="App._shareVia(\'native\')" class="btn-secondary" style="margin-top:10px;">Ещё…</button>':''));
+  },
+  _shareVia:function(how){
+    var text=App._shareText||'';
+    if(how==='copy'){ if(navigator.clipboard)navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано ✓');}); else App.toast('Не поддерживается',true); return; }
+    if(how==='native'){ if(navigator.share)navigator.share({text:text}).catch(function(){}); return; }
+    var url=how==='wa'?('https://wa.me/?text='+encodeURIComponent(text))
+      :('https://t.me/share/url?url='+encodeURIComponent('Auron Finance')+'&text='+encodeURIComponent(text));
+    window.open(url,'_blank');
   },
 
 
