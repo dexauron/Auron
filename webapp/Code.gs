@@ -454,6 +454,7 @@ function saveSettings(p) {
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss = SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
     var sh = ss.getSheetByName(SH_SETTINGS);
     var save = {
       CATS:                JSON.stringify(d.cats||[]),
@@ -586,6 +587,7 @@ function deleteAccount(p) {
   var ssId=p.ssId, id=p.id;
   try {
     var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
     var sh=ss.getSheetByName(SH_ACCOUNTS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
@@ -695,6 +697,7 @@ function deleteTransaction(p) {
   try {
     
     var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
     var base=ss.getSheetByName(SH_BASE);
     var trash=ss.getSheetByName(SH_TRASH);
     if (!base||base.getLastRow()<2) {  return {__error:'not found'}; }
@@ -1271,6 +1274,7 @@ function cancelShift(p) {
   try {
     
     var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
     var base=ss.getSheetByName(SH_BASE);
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
     // Unlock base entries
@@ -1393,7 +1397,9 @@ function deleteDebtEntry(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_DEBTS);
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_DEBTS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) {
@@ -2356,7 +2362,9 @@ function deleteRecurring(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_RECURRING);
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_RECURRING);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,RC_ID,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) {
@@ -2592,7 +2600,9 @@ function deletePayment(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_PAYMENTS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) {
@@ -2865,6 +2875,26 @@ function _isOwner(ss) {
   } catch(e) { return true; }
 }
 
+// Роль текущего пользователя в организации. Fail-open (как _isOwner):
+// если email не определить — не блокируем (иначе владелец рискует запереть себя).
+function _myRole(ss) {
+  try {
+    if (_isOwner(ss)) return 'Владелец';
+    var me=_myEmail(); if (!me) return 'Владелец';
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
+      for (var i=0;i<vs.length;i++)
+        if (String(vs[i][0]).toLowerCase()===me) return String(vs[i][1]||'Сотрудник зала');
+    }
+    return 'Сотрудник зала';
+  } catch(e) { return 'Владелец'; }
+}
+// Удаление данных и смена настроек — владелец и бухгалтер. Остальные роли
+// (Администратор, Сотрудник зала) могут добавлять записи, но не удалять/менять.
+function _canManage(ss) { var r=_myRole(ss); return r==='Владелец'||r==='Бухгалтер'; }
+var MANAGE_DENIED={__error:'Недостаточно прав: удаление и настройки доступны владельцу и бухгалтеру'};
+
 function getTeam(p) {
   var ssId=p.ssId;
   try {
@@ -3110,6 +3140,7 @@ function deleteContractor(p) {
   var ssId=p.ssId, id=p.id;
   try {
     var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
     var sh=ss.getSheetByName(SH_CONTRACTORS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,2).getValues();
@@ -3423,7 +3454,9 @@ function deleteOrder(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_ORDERS);
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_ORDERS);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--)
@@ -4111,7 +4144,9 @@ function saveObligation(p) {
 function deleteObligation(p) {
   return _withLock(function(){
   try {
-    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_OBLIG);
+    var ss=SpreadsheetApp.openById(p.ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_OBLIG);
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) if (String(vs[i][0])===String(p.id)) { sh.deleteRow(i+2); return {ok:true}; }
