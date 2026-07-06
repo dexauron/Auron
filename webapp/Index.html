@@ -1457,6 +1457,10 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .empty2-title{font-size:15.5px;font-weight:800;color:var(--ink);letter-spacing:-.01em;}
 .empty2-sub{font-size:13px;color:var(--muted);max-width:34ch;line-height:1.5;}
 
+/* Иконка-чип в плитках быстрых действий (единый SVG-стиль вместо эмодзи) */
+.qa-ic{width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;
+  margin:0 auto 10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
+
 </style>
 </head>
 <body>
@@ -1662,13 +1666,13 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;margin-bottom:14px;" id="staff-hello">Рабочий день</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <button onclick="App.openNumpad()" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--pos) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
-            <div style="font-size:34px;margin-bottom:8px;">✏️</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Новая запись</div></button>
+            <div class="qa-ic" style="background:var(--income-dim);color:var(--pos);"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div><div style="font-size:15px;font-weight:800;color:var(--ink);">Новая запись</div></button>
           <button onclick="App.setTab('kassa',null)" style="padding:26px 14px;border-radius:22px;border:none;background:color-mix(in oklab,var(--brand) 16%,var(--surface));cursor:pointer;font-family:var(--font);text-align:center;">
-            <div style="font-size:34px;margin-bottom:8px;">🧾</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Касса</div></button>
+            <div class="qa-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div><div style="font-size:15px;font-weight:800;color:var(--ink);">Касса</div></button>
           <button onclick="App.setTab('journal',null)" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
-            <div style="font-size:34px;margin-bottom:8px;">📒</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Операции</div></button>
+            <div class="qa-ic" style="background:var(--surface-2);color:var(--ink-2);"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></div><div style="font-size:15px;font-weight:800;color:var(--ink);">Операции</div></button>
           <button onclick="App.openOrders()" style="padding:26px 14px;border-radius:22px;border:none;background:var(--surface);cursor:pointer;font-family:var(--font);text-align:center;border:1px solid rgba(255,255,255,.07);">
-            <div style="font-size:34px;margin-bottom:8px;">🚚</div><div style="font-size:15px;font-weight:800;color:var(--ink);">Заказы</div></button>
+            <div class="qa-ic" style="background:var(--surface-2);color:var(--ink-2);"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg></div><div style="font-size:15px;font-weight:800;color:var(--ink);">Заказы</div></button>
         </div>
         <div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-top:16px;">Финансовая сводка доступна владельцу и бухгалтеру.</div>
       </div>
