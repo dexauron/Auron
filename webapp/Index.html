@@ -386,6 +386,8 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 }
 .split-tile-v{font-size:24px;font-weight:800;letter-spacing:-.03em;font-family:var(--font-num);}
 .split-tile-x{font-size:12px;font-weight:600;margin-top:5px;color:var(--muted);}
+.spark{height:26px;margin:8px 0 2px;display:block;}
+.spark svg{display:block;}
 .split-tile-x.brand{color:var(--brand);cursor:pointer;}
 
 /* ── Period pills ── */
@@ -1813,6 +1815,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             Выручка
           </div>
           <div class="split-tile-v num" id="split-revenue">—</div>
+          <div class="spark" id="spark-revenue"></div>
           <div class="split-tile-x brand" id="split-revenue-sub">подробнее →</div>
         </div>
         <div class="split-tile" onclick="App.setTab('suppliers',null)" style="cursor:pointer;">
@@ -1837,6 +1840,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             Расход
           </div>
           <div class="split-tile-v num" id="split-expense">—</div>
+          <div class="spark" id="spark-expense"></div>
           <div class="split-tile-x brand">подробнее →</div>
         </div>
       </div>
@@ -4529,6 +4533,20 @@ var App={
       if(e)animateNumber(e,total,'₽ ',function(){App._fitText(e,13,22);});
     }).catch(function(){});
   },
+  // Мини-график (спарклайн) за 7 дней в плитке
+  _drawSpark:function(id,vals,color){
+    var el=document.getElementById(id);if(!el)return;
+    vals=(vals||[]).map(function(v){return +v||0;});
+    if(!vals.length||vals.every(function(v){return v===0;})){el.innerHTML='';return;}
+    var w=100,h=26,mx=Math.max.apply(null,vals),mn=Math.min.apply(null,vals);
+    var rng=(mx-mn)||1,n=vals.length;
+    var xy=vals.map(function(v,i){var x=n>1?i/(n-1)*w:0;var y=h-2-((v-mn)/rng)*(h-4);return x.toFixed(1)+','+y.toFixed(1);});
+    var last=(h-2-((vals[n-1]-mn)/rng)*(h-4)).toFixed(1);
+    el.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none" width="100%" height="26">'+
+      '<path d="M0,'+h+' L'+xy.join(' L')+' L'+w+','+h+' Z" fill="'+color+'" opacity="0.10"/>'+
+      '<path d="M'+xy.join(' L')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'+
+      '<circle cx="'+(n>1?w:0)+'" cy="'+last+'" r="1.9" fill="'+color+'"/></svg>';
+  },
   _applyHome:function(r,allAcc){
     App.s.accounts=(allAcc||[]).filter(function(a){return a.status!=='archived';});
     App.renderAccounts(App.s.accounts);
@@ -4553,6 +4571,9 @@ var App={
     an('split-revenue',inc);
     App._renderTarget(inc);
     an('split-expense',exp);
+    var sp=r.spark||{};
+    App._drawSpark('spark-revenue',sp.inc,'var(--pos)');
+    App._drawSpark('spark-expense',sp.exp,'var(--neg)');
     se('split-revenue-sub',(sum.count||0)+' '+App._plural(sum.count||0,'операция','операции','операций'));
     var pE=document.getElementById('split-profit');
     if(pE){pE.style.color=prof>=0?'var(--pos)':'var(--neg)';animateNumber(pE,Math.abs(prof),(prof<0?'−₽ ':'₽ '),function(){App._fitText(pE,13,22);});}

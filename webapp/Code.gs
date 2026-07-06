@@ -796,7 +796,19 @@ function getHomeSummary(p) {
       }
     } catch(e2){}
     var txs=allRows.slice().reverse().slice(0,60).map(_txObj);
+    // Спарклайн: доход/расход по последним 7 дням (без переводов)
+    var spInc=[0,0,0,0,0,0,0], spExp=[0,0,0,0,0,0,0];
+    var d0=new Date(); d0.setHours(0,0,0,0); var base0=d0.getTime()-6*86400000;
+    allRows.forEach(function(r){
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
+      if (String(r[B_CAT-1])==='Перевод') return;
+      var idx=Math.floor((dt.getTime()-base0)/86400000);
+      if (idx<0||idx>6) return;
+      var amt=parseFloat(r[B_AMT-1])||0, t=String(r[B_TYPE-1]);
+      if (t==='Доход') spInc[idx]+=amt; else if (t==='Расход') spExp[idx]+=amt;
+    });
     var res={accounts:accounts,totals:totals,transactions:txs,
+             spark:{inc:spInc.map(Math.round),exp:spExp.map(Math.round)},
              summary:{income:sumInc,expense:sumExp,count:txCnt,shiftRevenue:shiftRev}};
     try { CacheService.getScriptCache().put(cKey,JSON.stringify(res),60); } catch(e){}
     return res;
