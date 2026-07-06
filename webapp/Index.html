@@ -772,6 +772,8 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 @keyframes sheetUp{from{transform:translateY(100%);opacity:.6;}to{transform:translateY(0);opacity:1;}}
 .modal-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:-8px auto 14px;cursor:grab;}
 body.view-only #fab,body.view-only .tx-actions,body.view-only .np-receipt-btn{display:none!important;}
+/* Роль без прав на удаление/настройки: прячем кнопки удаления и опасные строки настроек */
+body.no-manage .tx-act-del,body.no-manage .dt-act-del,body.no-manage .no-manage-hide{display:none!important;}
 .view-badge{display:none;}
 body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--warn,#FF9F0A);background:color-mix(in oklab,var(--warn,#FF9F0A) 15%,transparent);padding:3px 9px;border-radius:20px;}
 
@@ -3383,6 +3385,10 @@ var App={
   _applyRoleUI:function(){
     var own=App.s.isOwner!==false;
     document.querySelectorAll('.owner-only').forEach(function(el){el.style.display=own?'':'none';});
+    // Кто может удалять/менять настройки: Владелец, Бухгалтер, Администратор.
+    // Сотрудник зала — нет: прячем кнопки удаления в UI (сервер тоже запрещает).
+    var canManage=own||['Владелец','Бухгалтер','Администратор'].indexOf(App.s.myRole)>=0;
+    document.body.classList.toggle('no-manage',!canManage);
     // Сотрудник зала: упрощённая главная без финансов (паттерн кассовых терминалов)
     var staff=!own&&App.s.myRole==='Сотрудник зала';
     var sh=document.getElementById('staff-home');
