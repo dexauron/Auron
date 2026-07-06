@@ -57,7 +57,7 @@ const SS = new MemSS();
 function pad(n){return (n<10?'0':'')+n;}
 const noop=()=>{};
 const Utilities={ getUuid(){return 'u'+(Utilities._i=(Utilities._i||0)+1)+'-'+Math.random().toString(36).slice(2,7);},
-  formatDate(d,tz,fmt){return fmt.replace('yyyy',d.getFullYear()).replace('MM',pad(d.getMonth()+1)).replace('dd',pad(d.getDate())).replace('HH',pad(d.getHours())).replace('mm',pad(d.getMinutes())).replace('MM',pad(d.getMonth()+1)).replace('dd',pad(d.getDate()));} };
+  formatDate(d,tz,fmt){return fmt.replace('yyyy',d.getFullYear()).replace('yy',String(d.getFullYear()).slice(-2)).replace('MM',pad(d.getMonth()+1)).replace('dd',pad(d.getDate())).replace('HH',pad(d.getHours())).replace('mm',pad(d.getMinutes())).replace('MM',pad(d.getMonth()+1)).replace('dd',pad(d.getDate()));} };
 const Session={ getScriptTimeZone:()=>'Europe/Moscow', getActiveUser:()=>({getEmail:()=>'owner@x'}), getEffectiveUser:()=>({getEmail:()=>'owner@x'}) };
 const sandbox={
   Utilities, Session,
@@ -210,6 +210,14 @@ const pc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
 eq('карточка: история цены (2 точки)', pc.priceHist.length, 2);
 eq('карточка: поставщиков', pc.suppliers.length, 2);
 eq('карточка: дешевле у Альфы (75)', pc.suppliers[0].price, 75);
+eq('карточка: у поставщика есть дата поступления', !!pc.suppliers[0].date, true);
+
+// Дата поступления из колонки «период» попадает в историю поступлений
+A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
+  {barcode:'333',name:'Масло',supplier:'ОптТорг',buy:200,date:'15.05.2026'}]});
+const pc2=A.getProductDetail({ssId:'ss1',barcode:'333',name:'Масло'});
+eq('карточка: поступление датировано периодом', pc2.priceHist[0].label, '15.05.26');
+eq('карточка: поставщик с датой поступления', pc2.suppliers[0].date, '15.05.26');
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');

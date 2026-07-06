@@ -8558,7 +8558,7 @@ var App={
       }
     }
     var goodsRows=App._imp1cGoodsRows(typ);App._imp1cGoods=goodsRows;
-    var saveLbl=typ==='Продажи'?'Сохранить продажи: товары + выручка в журнал':'Сохранить в справочник товаров ('+goodsRows.length+')';
+    var saveLbl='Сохранить в справочник товаров ('+goodsRows.length+')';
     var saveBtn=goodsRows.length?'<button class="btn-primary" onclick="App._impSaveGoods()">'+saveLbl+'</button>':'';
     var html='<div style="margin-top:16px;display:flex;align-items:center;justify-content:space-between;">'+
         '<div style="font-size:15px;font-weight:800;">Отчёт 1С: '+typ+'</div>'+
@@ -8577,11 +8577,14 @@ var App={
     var out=[];
     if(typ==='Цены'){
       var cN=col(rows,'Номенклатура'),cK=col(rows,'Контрагент'),cP=col(rows,'Цена'),
-          cB=col(rows,'штрихкод'),cU=col(rows,'Единица'),cG=col(rows,'Группа');
+          cB=col(rows,'штрихкод'),cU=col(rows,'Единица'),cG=col(rows,'Группа'),
+          cDt=col(rows,'Период');if(cDt==null)cDt=col(rows,'Дата');if(cDt==null)cDt=col(rows,'Поступлени');
       for(var r=hdr+1;r<rows.length;r++){var row=rows[r];var nm=String(row[cN!=null?cN:0]||'').trim();
         if(!nm||nm.toLowerCase()==='итого')continue;
+        // «период» = дата последнего поступления товара от контрагента
         out.push({name:nm,supplier:cK!=null?String(row[cK]||''):'',buy:cP!=null?n(row[cP]):0,
-          barcode:cB!=null?String(row[cB]||''):'',unit:cU!=null?String(row[cU]||''):'',group:cG!=null?String(row[cG]||''):''});}
+          barcode:cB!=null?String(row[cB]||''):'',unit:cU!=null?String(row[cU]||''):'',group:cG!=null?String(row[cG]||''):'',
+          date:cDt!=null?String(row[cDt]||'').trim():''});}
     }else if(typ==='Продажи'){
       var cQ=col(rows,'Количество',true),cR=col(rows,'Сумма продажи',true),
           cPr=col(rows,'Прибыль',true),cC=col(rows,'Себестоимость продажи');
@@ -8609,18 +8612,8 @@ var App={
       if(mm){var pd=function(s){var x=s.split('.');return new Date(+x[2],+x[1]-1,+x[0]);};
         var dd=Math.round((pd(mm[2])-pd(mm[1]))/86400000)+1; if(dd>0&&dd<400)salesDays=dd;}
     }
+    // Отчёты 1С — это ТОЛЬКО аналитика товара и цен. Выручку в журнал НЕ пишем.
     gs('saveGoods',{ssId:App.s.ssId,kind:typ,rows:rows,salesDays:salesDays}).then(function(r){
-      // Для продаж — сразу пишем выручку в журнал, чтобы цифры были в Главной/Аналитике/Отчёте
-      if(typ==='Продажи'&&o.выручка){
-        var d=String(o.период||'').split('–')[0].trim().split(' ')[0];
-        if(!/^\d{2}\.\d{2}\.\d{4}$/.test(d)){var t=new Date();d=('0'+t.getDate()).slice(-2)+'.'+('0'+(t.getMonth()+1)).slice(-2)+'.'+t.getFullYear();}
-        var acc=(App.s.accounts&&App.s.accounts[0])?App.s.accounts[0].name:'';
-        return gs('importRows',{ssId:App.s.ssId,rows:[{date:d,amount:o.выручка,type:'Доход',category:'Выручка',account:acc,comment:'Продажи 1С · '+o.период}]}).then(function(ir){
-          App.toast('Сохранено: товаров '+(r.saved+r.updated)+' · выручка '+(ir.added?'записана':'уже была'));
-          App.closeModal();App.setTab('analytics');
-          var gt=document.querySelector('.an-tab[onclick*="goods"]');App.setAnTab('goods',gt);
-        });
-      }
       App.toast('Сохранено: новых '+r.saved+' · обновлено '+r.updated);
       App.closeModal();App.openGoods();
     }).catch(function(e){App.toast(e.message,true);});
@@ -8666,6 +8659,9 @@ var App={
         rows.map(fmtRow).join('')+'</div>';};
     var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
     var h='';
+    // Умный поиск товара — заметная строка сверху
+    h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1.4px solid var(--line);border-radius:13px;padding:11px 14px;cursor:pointer;margin-bottom:10px;">'+
+       '<span style="font-size:15px;">🔍</span><span style="color:var(--muted);font-size:13px;">Найти товар по названию или штрихкоду…</span></div>';
     h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽',delta(a.momRevenue,true))+metric('прибыль',fm(a.totProfit)+' ₽',delta(a.momProfit,true))+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
@@ -8728,6 +8724,7 @@ var App={
       '<div id="goods-controls"></div>'+
       '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     App._goodsSearch();
+    setTimeout(function(){var q=document.getElementById('goods-q');if(q)q.focus();},120);
   },
   _goodsFilterSet:function(k,v){ if(!App._goodsFilter)App._goodsFilter={sort:'profit'}; App._goodsFilter[k]=v; App._goodsSearch(); },
   _goodsSearch:function(){
@@ -8803,8 +8800,16 @@ var App={
     }
     if(d&&d.suppliers&&d.suppliers.length){
       h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">🏭 Цены по поставщикам</div>'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Последняя цена каждого поставщика · у кого дешевле</div>'+
         '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
-        d.suppliers.map(function(s,ix){return rowHtml(s.supplier+(ix===0&&d.suppliers.length>1?' · дешевле':''),fm(s.price)+' ₽',ix===0&&d.suppliers.length>1?'var(--pos)':'var(--ink)');}).join('')+'</div>';
+        d.suppliers.map(function(s,ix){var cheap=ix===0&&d.suppliers.length>1;
+          return rowHtml((cheap?'✅ ':'')+s.supplier+(s.date?' · '+s.date:''),fm(s.price)+' ₽',cheap?'var(--pos)':'var(--ink)');}).join('')+'</div>';
+    }
+    if(d&&d.priceHist&&d.priceHist.length){
+      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">📥 История поступлений</div>'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Когда и по какой цене поступал товар</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
+        d.priceHist.slice().reverse().map(function(x){return rowHtml((x.label||'—')+(x.supplier?' · '+x.supplier:''),fm(x.price)+' ₽');}).join('')+'</div>';
     }
     b.innerHTML=h;
     if(d&&d.priceHist&&d.priceHist.length>=2)App._drawSpark('pc-spark',d.priceHist.map(function(x){return x.price;}),'var(--brand)');

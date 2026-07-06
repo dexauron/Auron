@@ -1009,7 +1009,10 @@ function saveGoods(p) {
         var price = _gnum(r.buy);
         if (price) {
           row[G_BUY-1] = price;
-          hist.push([now, String(r.barcode||''), name, _s(r.supplier||''), price]);
+          // Дата поступления берётся из колонки «период» (дата последнего
+          // поступления от контрагента), иначе — момент загрузки.
+          var pdt = r.date ? (_parseDate(r.date)||now) : now;
+          hist.push([pdt, String(r.barcode||''), name, _s(r.supplier||''), price]);
         }
       } else if (kind === 'Продажи') {
         row[G_SOLDQTY-1] = _gnum(r.qty);
@@ -1095,7 +1098,10 @@ function getGoods(p) {
       if (fGroup && it.group!==fGroup) return false;
       if (fSupplier && it.supplier!==fSupplier) return false;
       if (!q) return true;
-      return it.name.toLowerCase().indexOf(q)>=0 || it.barcode.indexOf(q)>=0 || it.supplier.toLowerCase().indexOf(q)>=0;
+      // Умный поиск: все слова запроса должны встретиться (в названии,
+      // штрихкоде или поставщике) — «молоко альфа», «450 крупа» и т.п.
+      var hay=(it.name+' '+it.barcode+' '+it.supplier+' '+it.group).toLowerCase();
+      return q.split(/\s+/).every(function(tok){ return !tok || hay.indexOf(tok)>=0; });
     });
     var sorters={
       profit:function(a,b){return b.profit-a.profit;},
@@ -1136,21 +1142,25 @@ function getProductDetail(p) {
       }
     }
     if (!it) return { __error:'Товар не найден' };
-    // История цены закупки + цены разных поставщиков
+    // История поступлений (цена + дата + поставщик) + цены по поставщикам
+    var tz=Session.getScriptTimeZone();
     var priceHist=[], supPrices={};
     var ph=ss.getSheetByName(SH_PRICEHIST);
     if (ph && ph.getLastRow()>=2) {
-      var tz=Session.getScriptTimeZone();
       ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
         if (_goodsKey(r[PH_BARCODE-1],r[PH_NAME-1])!==key) return;
         var d=r[PH_DATE-1], price=_gnum(r[PH_PRICE-1]), sup=String(r[PH_SUPPLIER-1]||'');
-        priceHist.push({label:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'', t:(d instanceof Date)?d.getTime():0, price:price, supplier:sup});
-        if (sup&&price){ if(!supPrices[sup]||supPrices[sup].t<= ((d instanceof Date)?d.getTime():0)) supPrices[sup]={price:price,t:(d instanceof Date)?d.getTime():0}; }
+        var t=(d instanceof Date)?d.getTime():0;
+        priceHist.push({label:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'', t:t, price:price, supplier:sup});
+        // последняя цена каждого поставщика (по дате поступления)
+        if (sup&&price){ if(!supPrices[sup]||supPrices[sup].t<=t) supPrices[sup]={price:price,t:t}; }
       });
       priceHist.sort(function(a,b){return a.t-b.t;});
     }
-    var suppliers=Object.keys(supPrices).map(function(s){return {supplier:s,price:supPrices[s].price};})
-      .sort(function(a,b){return a.price-b.price;});
+    var suppliers=Object.keys(supPrices).map(function(s){
+      var sp=supPrices[s];
+      return {supplier:s, price:sp.price, date: sp.t?Utilities.formatDate(new Date(sp.t),tz,'dd.MM.yy'):''};
+    }).sort(function(a,b){return a.price-b.price;});
     return { item:it, priceHist:priceHist, suppliers:suppliers, salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
 }
