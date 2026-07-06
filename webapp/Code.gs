@@ -445,7 +445,8 @@ function getSettings(p) {
       beznalAccount:    String(map['BEZNAL_ACCOUNT']||''),
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
-      taxRate:          parseFloat(map['TAX_RATE'])||6
+      taxRate:          parseFloat(map['TAX_RATE'])||6,
+      savePct:          parseFloat(map['SAVE_PCT'])||10
     };
   } catch(e) {
     return { cats:[], cashiers:[], payTypes:['Наличные','Карта','СБП'], repStatuses:[], employees:[], shifts:[] };
@@ -2662,7 +2663,16 @@ function getMorningBriefing(p) {
       });
     }
     var need=Math.round(overdueTotal+todayTotal);
+    // Финансовый автопилот: предложить отложить % выручки дня в накопления
+    var save=null;
+    try {
+      var st=getSettings({ssId:ssId});
+      var sav=(st.savingsAccounts||[])[0];
+      var pct=st.savePct||10;
+      if (sav&&todayRev>0) save={account:sav, pct:pct, amount:Math.round(todayRev*pct/100)};
+    } catch(e){}
     return {cash:Math.round(cash), need:need, enough:cash>=need, shortfall:Math.max(need-cash,0),
+      save:save,
       todayRev:Math.round(todayRev), avgDay:bl.avgDay||0, avgDays:bl.days||0,
       todayTotal:Math.round(todayTotal), overdueTotal:Math.round(overdueTotal),
       payments:todayPays.slice(0,8), payCount:todayPays.length,

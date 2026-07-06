@@ -1563,6 +1563,10 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
   background:var(--surface-2);border:1px solid var(--line-2);}
 .brf-tempo>span:first-child{font-size:10.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
 .brf-tempo>span:last-child{font-size:13px;color:var(--ink-2);}
+.brf-auto{display:flex;align-items:center;gap:12px;margin-top:12px;padding:11px 14px;border-radius:14px;
+  background:var(--income-dim);border:1px solid color-mix(in oklab,var(--pos) 22%,transparent);}
+.brf-auto-btn{flex-shrink:0;padding:9px 16px;border-radius:11px;border:none;background:var(--pos);color:#062;
+  font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);}
 
 </style>
 </head>
@@ -5601,8 +5605,15 @@ var App={
           '<span>Сегодня <b class="num">'+fmtFull(r.todayRev)+' ₽</b> · обычно <b class="num">'+fmtFull(r.avgDay)+'</b> '+
           '<b style="color:'+c+'">'+(up?'▲ +':'▼ ')+Math.abs(dp)+'%</b></span></div>';
       }
-      if(!r.payCount&&!r.orderCount&&!tempo){box.innerHTML='';return;}
-      if(!r.payCount&&!r.orderCount){box.innerHTML='<div class="brf-card" style="padding:0;">'+tempo+'</div>';return;}
+      // Финансовый автопилот — отложить из выручки дня
+      var auto='';
+      if(r.save&&r.save.amount>0){
+        auto='<div class="brf-auto"><div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">💰 Автопилот</div>'+
+          '<div style="font-size:12.5px;color:var(--ink-2);margin-top:2px;">Отложить <b class="num">'+fmtFull(r.save.amount)+' ₽</b> ('+r.save.pct+'% выручки) в «'+App._e(r.save.account)+'»</div></div>'+
+          '<button class="brf-auto-btn" onclick="App._autoSave('+r.save.amount+',\''+App._e(r.save.account)+'\')">Отложить</button></div>';
+      }
+      if(!r.payCount&&!r.orderCount&&!tempo&&!auto){box.innerHTML='';return;}
+      if(!r.payCount&&!r.orderCount){box.innerHTML='<div class="brf-card" style="padding:0;">'+tempo+auto+'</div>';return;}
       var ok=r.enough;
       var head='<div class="brf-head '+(ok?'ok':'warn')+'">'+
         '<div class="brf-ic">'+(ok?SVG.check:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>')+'</div>'+
@@ -5618,7 +5629,7 @@ var App={
         return '<div class="brf-row"><span class="brf-dot brand"></span><span class="brf-name">'+App._e(o.contractor)+'</span><span class="brf-amt num" style="color:var(--muted)">'+fmtFull(o.amount)+' ₽</span></div>';
       }).join('')):'';
       box.innerHTML='<div class="brf-card">'+tempo+head+status+
-        (pays?'<div class="brf-list">'+pays+'</div>':'')+orders+
+        (pays?'<div class="brf-list">'+pays+'</div>':'')+orders+auto+
         (r.need>0?'<button class="brf-btn" onclick="App.goToPayments()">Открыть график выплат →</button>':'')+'</div>';
     }).catch(function(){var box=document.getElementById('k-briefing');if(box)box.innerHTML='';});
   },
@@ -5766,6 +5777,19 @@ var App={
   _loadRevBaseline:function(){
     if(App._revBaseline)return;
     gs('getRevenueBaseline',{ssId:App.s.ssId}).then(function(r){App._revBaseline=r||{avgDay:0,days:0};}).catch(function(){});
+  },
+  _autoSave:function(amount,account){
+    var from=(App.s.accounts||[]).filter(function(a){return a.name==='Наличные';})[0];
+    from=from?from.name:((App.s.accounts||[])[0]||{}).name;
+    if(!from){App.toast('Нет счёта-источника',true);return;}
+    App._confirm('Отложить '+fmtFull(amount)+' ₽ из «'+from+'» в «'+account+'»?',{title:'Автопилот',ok:'Отложить',danger:false}).then(function(ok){
+      if(!ok)return;
+      var uid='as'+Date.now()+Math.random().toString(36).slice(2,7);
+      gs('saveTransfer',{ssId:App.s.ssId,data:{uuid:uid,date:new Date().toISOString(),account:from,toAccount:account,amount:amount,comment:'Автопилот: накопления из выручки'}}).then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);return;}
+        App.toast('Отложено '+fmtFull(amount)+' ₽ ✓');App._loadKHub&&App._loadKHub();App.loadHome&&App.loadHome();
+      }).catch(function(e){App.toast(e.message,true);});
+    });
   },
 
   addWyplata:function(){
