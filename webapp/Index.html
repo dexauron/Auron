@@ -1506,6 +1506,34 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .cfm-danger{background:var(--neg);color:#fff;}
 .cfm-ok:active,.cfm-danger:active{filter:brightness(1.1);}
 
+/* Окно «Подробно» — карточка записи + история */
+.dt-head{display:flex;align-items:center;gap:13px;margin-bottom:18px;}
+.dt-ic{width:50px;height:50px;border-radius:15px;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.dt-ic svg{width:24px;height:24px;}
+.dt-title{font-size:19px;font-weight:800;letter-spacing:-.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dt-sub{font-size:12.5px;color:var(--muted);margin-top:2px;}
+.dt-rows{background:var(--surface-2);border-radius:16px;padding:4px 14px;border:1px solid var(--line-2);}
+.dt-row{display:flex;align-items:baseline;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid var(--line-2);}
+.dt-row:last-child{border-bottom:none;}
+.dt-k{font-size:13px;color:var(--muted);flex-shrink:0;}
+.dt-v{font-size:14px;font-weight:650;text-align:right;min-width:0;word-break:break-word;}
+.dt-big{font-size:22px;font-weight:800;letter-spacing:-.01em;font-variant-numeric:tabular-nums;}
+.dt-actions{display:flex;gap:8px;margin-top:14px;}
+.dt-act{flex:1;padding:11px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);}
+.dt-act:active{background:var(--surface-3);}
+.dt-act-del{color:var(--neg);}
+.dt-locked{margin-top:14px;padding:12px;border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:12.5px;text-align:center;}
+.dt-hist-wrap{margin-top:22px;}
+.dt-hist-lbl{font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;}
+.dt-hist{display:flex;flex-direction:column;gap:2px;}
+.dt-hist-item{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line-2);}
+.dt-hist-item:last-child{border-bottom:none;}
+.dt-hist-dot{width:24px;height:24px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;}
+.dt-hist-act{font-size:13.5px;font-weight:700;}
+.dt-hist-meta{font-size:11.5px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dt-hist-load,.dt-hist-empty{font-size:12.5px;color:var(--muted);padding:6px 0;line-height:1.5;}
+
 </style>
 </head>
 <body>
@@ -4653,6 +4681,7 @@ var App={
 
   renderTxList:function(txs,cid){
     var el=document.getElementById(cid);
+    App._txMap=App._txMap||{};(txs||[]).forEach(function(t){if(t&&t.id!=null)App._txMap[String(t.id)]=t;});
     if(!txs||!txs.length){el.innerHTML=App._empty('📭','Пока нет операций','Нажми «+», чтобы добавить первую запись.');return;}
     var groups={},order=[];
     txs.forEach(function(tx){
@@ -4689,17 +4718,14 @@ var App={
       row.addEventListener('touchend',function(){
         if(moved)return;
         var item=row.closest('.tx-item');if(!item)return;
-        var acts=item.querySelector('.tx-actions');if(!acts)return;
-        var isOpen=acts.classList.contains('show');
+        if(item.querySelector('.tx-actions.show')){item.querySelector('.tx-actions.show').classList.remove('show');return;}
         el.querySelectorAll('.tx-actions.show').forEach(function(a){a.classList.remove('show');});
-        if(!isOpen)acts.classList.add('show');
+        App.txDetail(item.dataset.id);
       },{passive:true});
       row.addEventListener('click',function(){
         var item=row.closest('.tx-item');if(!item)return;
-        var acts=item.querySelector('.tx-actions');if(!acts)return;
-        var isOpen=acts.classList.contains('show');
         el.querySelectorAll('.tx-actions.show').forEach(function(a){a.classList.remove('show');});
-        if(!isOpen)acts.classList.add('show');
+        App.txDetail(item.dataset.id);
       });
     });
   },
@@ -7382,6 +7408,76 @@ var App={
     App.calcClose&&App.calcClose();
     var m=document.getElementById('modal-body');if(m)m.style.transform='';
     document.getElementById('modal-overlay').classList.remove('show');
+  },
+
+  // ── Подробная карточка записи + история «кто/когда/что» ──────────
+  _detailRow:function(label,value,big){
+    if(value==null||value==='')return '';
+    return '<div class="dt-row"><span class="dt-k">'+App._e(label)+'</span>'+
+      '<span class="dt-v'+(big?' num dt-big':'')+'">'+value+'</span></div>';
+  },
+  _histAction:function(a){
+    var m={'создал':{c:'var(--pos)',i:'＋'},'изменил':{c:'var(--brand)',i:'✎'},'удалил':{c:'var(--neg)',i:'✕'},
+      'оплатил':{c:'var(--pos)',i:'₽'},'перенёс':{c:'#FF9F0A',i:'→'},'отменил':{c:'var(--neg)',i:'✕'},'вернул':{c:'var(--brand)',i:'↩'}};
+    return m[a]||{c:'var(--muted)',i:'•'};
+  },
+  // Показывает окно подробностей: заголовок, строки (точные суммы) и историю
+  _showDetail:function(opts){
+    var rows=(opts.rows||[]).map(function(r){return App._detailRow(r.k,r.v,r.big);}).join('');
+    var html='<div class="dt-head"><div class="dt-ic" style="background:'+(opts.iconBg||'var(--brand-dim)')+';color:'+(opts.iconColor||'var(--brand)')+';">'+(opts.icon||'')+'</div>'+
+      '<div style="flex:1;min-width:0;"><div class="dt-title">'+App._e(opts.title||'Подробно')+'</div>'+
+      (opts.sub?'<div class="dt-sub">'+App._e(opts.sub)+'</div>':'')+'</div></div>'+
+      '<div class="dt-rows">'+rows+'</div>'+
+      (opts.actions||'')+
+      '<div class="dt-hist-wrap"><div class="dt-hist-lbl">История изменений</div><div id="dt-hist" class="dt-hist"><div class="dt-hist-load">Загрузка…</div></div></div>';
+    App.openModal(html);
+    if(opts.entity&&opts.id){
+      gs('getEntityHistory',{ssId:App.s.ssId,entity:opts.entity,id:String(opts.id)}).then(function(r){
+        var box=document.getElementById('dt-hist');if(!box)return;
+        var items=(r&&r.items)||[];
+        if(!items.length){box.innerHTML='<div class="dt-hist-empty">Пока нет записей. История ведётся с момента обновления приложения.</div>';return;}
+        box.innerHTML=items.map(function(h){var a=App._histAction(h.action);
+          return '<div class="dt-hist-item"><span class="dt-hist-dot" style="background:'+a.c+';">'+a.i+'</span>'+
+            '<div style="flex:1;min-width:0;"><div class="dt-hist-act">'+App._e(h.action)+(h.detail?' · '+App._e(h.detail):'')+'</div>'+
+            '<div class="dt-hist-meta">'+App._e(h.who||'—')+' · '+App._e(h.time)+'</div></div></div>';
+        }).join('');
+      }).catch(function(){var box=document.getElementById('dt-hist');if(box)box.innerHTML='<div class="dt-hist-empty">Не удалось загрузить историю.</div>';});
+    }
+  },
+  txDetail:function(id){
+    if(!id)return;
+    var now=Date.now();if(App._lastDetail&&now-App._lastDetail<500)return;App._lastDetail=now;
+    var tx=(App._txMap||{})[String(id)];if(!tx){App.toast('Запись не найдена',true);return;}
+    var ci=catIcon(tx.category);
+    var cls=tx.type==='Доход'||tx.type==='income'?'income':tx.type==='Перевод'||tx.type==='transfer'?'transfer':'expense';
+    var sign=cls==='income'?'+':cls==='expense'?'−':'';
+    var col=cls==='income'?'var(--pos)':cls==='expense'?'var(--neg)':'var(--transfer)';
+    var d=tx.date?new Date(tx.date):null;
+    var dstr=d?(('0'+d.getDate()).slice(-2)+'.'+('0'+(d.getMonth()+1)).slice(-2)+'.'+d.getFullYear()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)):'';
+    var rows=[
+      {k:'Сумма',v:'<span style="color:'+col+'">'+sign+'₽ '+fmtFull(tx.amount)+'</span>',big:true},
+      {k:'Тип',v:App._e(tx.type||'')},
+      {k:'Категория',v:App._e(tx.category||'')},
+      {k:'Счёт',v:App._e(tx.account||'')},
+      {k:tx.toAccount?'Куда':'',v:tx.toAccount?App._e(tx.toAccount):''},
+      {k:'Дата и время',v:dstr},
+      {k:'Кассир',v:tx.employee?App._e(tx.employee):''},
+      {k:'Смена',v:tx.shift?App._e(tx.shift):''},
+      {k:'Комментарий',v:tx.comment?App._e(tx.comment):''},
+      {k:'Чек',v:tx.receipt?'<a href="'+App._e(tx.receipt)+'" target="_blank" style="color:var(--brand)">открыть</a>':''}
+    ];
+    var acts='';
+    if(!(tx.locked||tx.Locked)){
+      acts='<div class="dt-actions">'+
+        '<button class="dt-act" onclick="App.closeModal();App.repeatTx(\''+App._e(String(id))+'\')">🔁 Повторить</button>'+
+        '<button class="dt-act" onclick="App.closeModal();App.editTx(\''+App._e(String(id))+'\')">✎ Изменить</button>'+
+        '<button class="dt-act dt-act-del" onclick="App.closeModal();App.deleteTx(\''+App._e(String(id))+'\')">🗑 Удалить</button>'+
+      '</div>';
+    } else {
+      acts='<div class="dt-locked">🔒 Запись закрыта Z-отчётом — изменить нельзя</div>';
+    }
+    App._showDetail({icon:ci.icon,iconBg:ci.bg+'22',iconColor:ci.bg,title:tx.category||'Операция',
+      sub:(tx.type||'')+' · '+(tx.account||''),rows:rows,actions:acts,entity:'tx',id:id});
   },
 
   // Своё окно подтверждения (вместо системного confirm). Промис → true/false.
