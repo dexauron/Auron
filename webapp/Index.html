@@ -658,7 +658,10 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 }
 .settings-row{display:flex;align-items:center;padding:15px 18px;border-bottom:1px solid var(--sep);}
 .settings-row:last-child{border-bottom:none;}
-.settings-row-icon{font-size:20px;margin-right:14px;}
+.settings-row-icon{width:34px;height:34px;border-radius:11px;margin-right:13px;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;font-size:18px;
+  background:var(--surface-2);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line-2);}
+.settings-row-icon svg{width:19px;height:19px;}
 .settings-row-label{flex:1;font-size:15px;font-weight:600;}
 .settings-row-arrow{color:var(--text-2);}
 .settings-row-action{font-size:14px;color:var(--brand);cursor:pointer;font-weight:700;}
@@ -2145,7 +2148,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Касса</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openCashFloat()" style="cursor:pointer;">
-            <span class="settings-row-icon">🪙</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8h3a2 2 0 0 1 0 4h-3V7v9M8 12h5"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Размен в кассе по умолчанию</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="cashfloat-state">Подставляется при закрытии смены</div>
@@ -2153,7 +2156,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row">
-            <span class="settings-row-icon">💰</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Поле размена в смене</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Показывать поле ввода в форме смены</div>
@@ -2172,7 +2175,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Финансы</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openObligations()" style="cursor:pointer;">
-            <span class="settings-row-icon">💰</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Долги · Накопления · Кредиты</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Личные обязательства и цели, с редактированием</div>
@@ -2185,7 +2188,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Контрагенты</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openContractorsDir()" style="cursor:pointer;">
-            <span class="settings-row-icon">📇</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Справочник контрагентов</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Поставщики, представители — единый список</div>
@@ -2221,7 +2224,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Импорт из 1С</div>
         <div class="settings-list">
           <div class="settings-row owner-only" onclick="App.openImport()" style="cursor:pointer;">
-            <span class="settings-row-icon">📥</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Импорт из Excel (1С)</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Вставь таблицу из выгрузки 1С</div>
@@ -2229,7 +2232,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openGoods()" style="cursor:pointer;">
-            <span class="settings-row-icon">📦</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5zM3 8v8l9 5 9-5V8M12 13v8"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Товары и аналитика</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Справочник из 1С: цены, прибыль, ходовой, неликвид</div>
@@ -2237,7 +2240,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openBrain()" style="cursor:pointer;">
-            <span class="settings-row-icon">🧠</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10z"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Контроль операций</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Авто-поиск аномалий: завышенные расходы, дубли — с обучением</div>
@@ -2245,7 +2248,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openSecurity()" style="cursor:pointer;">
-            <span class="settings-row-icon">🔒</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Защита PIN-кодом</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Блокировка входа и по бездействию</div>
@@ -2253,7 +2256,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.toggleViewOnly()" style="cursor:pointer;">
-            <span class="settings-row-icon">👁</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Режим «только просмотр»</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="view-only-sub">Скрыть кнопки ввода и удаления</div>
@@ -2261,7 +2264,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow" id="view-only-state">Выкл</span>
           </div>
           <div class="settings-row" onclick="App.openAuditLog()" style="cursor:pointer;">
-            <span class="settings-row-icon">📜</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Журнал изменений</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Кто удалял операции и менял балансы</div>
@@ -2269,7 +2272,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row owner-only" onclick="App.openAutomation()" style="cursor:pointer;">
-            <span class="settings-row-icon">⚡</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Автоматизация</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Авто-платежи, напоминания, бэкап, ЗП по табелю</div>
@@ -2277,7 +2280,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row owner-only" onclick="App.openDailyReport()" style="cursor:pointer;">
-            <span class="settings-row-icon">📬</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Автоотчёт руководителю</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Отправлять итог дня на email каждый вечер</div>
@@ -2285,7 +2288,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row owner-only" onclick="App.backupNow()" style="cursor:pointer;">
-            <span class="settings-row-icon">💾</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 19a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.5-1.5A3.5 3.5 0 0 1 18 19H6z"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Резервная копия</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Сохранить копию всех данных на свой Google-Диск</div>
@@ -2298,12 +2301,12 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Организации и команда</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openOrgs()" style="cursor:pointer;">
-            <span class="settings-row-icon">🏪</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/></svg></span>
             <span class="settings-row-label">Управление организациями</span>
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openTeam()" style="cursor:pointer;">
-            <span class="settings-row-icon">👥</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a4 4 0 0 0-3-3.85"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Сотрудники и доступ</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Пригласить по email, роли, удаление доступа</div>
@@ -2329,7 +2332,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Разное</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openTrash()" style="cursor:pointer;">
-            <span class="settings-row-icon">🗑</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Корзина</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Удалённые операции, хранятся 30 дней</div>
@@ -2337,12 +2340,12 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openHelp()" style="cursor:pointer;">
-            <span class="settings-row-icon">❓</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 4 2c0 1.5-2 2-2 3.5M12 17h.01"/></svg></span>
             <span class="settings-row-label">Как пользоваться</span>
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row" onclick="App.openAbout()" style="cursor:pointer;">
-            <span class="settings-row-icon">ℹ️</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">О приложении</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Версия и что нового</div>
@@ -2355,7 +2358,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.switchAccount()" style="cursor:pointer;">
-            <span class="settings-row-icon">🚪</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label">Выйти / сменить аккаунт</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Вход через выбор Google-аккаунта</div>
@@ -2368,7 +2371,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div class="settings-sec-title">Данные</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.clearAllData()" style="cursor:pointer;">
-            <span class="settings-row-icon">🗑</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
             <div style="flex:1;">
               <div class="settings-row-label" style="color:var(--neg);">Удалить все данные</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px;">Демо и реальные операции. Счета и категории останутся</div>
@@ -2376,7 +2379,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <span class="settings-row-arrow">›</span>
           </div>
           <div class="settings-row">
-            <span class="settings-row-icon">🧪</span>
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg></span>
             <span class="settings-row-label" style="flex:1;">Заполнить тестовыми данными</span>
             <button onclick="App.seedDemo()" style="background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);border:none;border-radius:10px;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Заполнить</button>
           </div>
@@ -6203,7 +6206,7 @@ var App={
     var cel=document.getElementById('settings-cashiers-list');
     var cashiers=App.s.settings.cashiers||[];
     cel.innerHTML=cashiers.map(function(c,i){
-      return '<div class="settings-row"><span class="settings-row-icon">👤</span>'+
+      return '<div class="settings-row"><span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/></svg></span>'+
         '<span class="settings-row-label">'+App._e(c)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.cashiers.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет кассиров</span></div>';
@@ -6219,7 +6222,7 @@ var App={
     var sEl=document.getElementById('settings-shifts-list');
     var shifts=App.s.settings.shifts||[];
     sEl.innerHTML=shifts.map(function(s,i){
-      return '<div class="settings-row"><span class="settings-row-icon">🕐</span>'+
+      return '<div class="settings-row"><span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>'+
         '<span class="settings-row-label">'+App._e(s)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.shifts.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет смен</span></div>';
@@ -6229,7 +6232,7 @@ var App={
     var rsEl=document.getElementById('settings-repstatuses-list');
     var rss=App.s.settings.repStatuses||[];
     rsEl.innerHTML=rss.map(function(rs,i){
-      return '<div class="settings-row"><span class="settings-row-icon">🏷</span>'+
+      return '<div class="settings-row"><span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-9-9V3h8l9 9zM7.5 7.5h.01"/></svg></span>'+
         '<span class="settings-row-label">'+App._e(rs)+'</span>'+
         '<span class="settings-row-action" onclick="App.s.settings.repStatuses.splice('+i+',1);App.saveSettings();App.renderSettingsPage();">✕</span></div>';
     }).join('')||'<div class="settings-row"><span class="settings-row-label" style="color:var(--text-2);">Нет статусов</span></div>';
@@ -6240,7 +6243,7 @@ var App={
       var n=typeof e==='object'?e.name:e;
       var sub=typeof e==='object'?(e.schedule?e.schedule+' ':'')+( e.dailySalary?'₽'+e.dailySalary+'/день':''):'';
       return '<div class="settings-row">'+
-        '<span class="settings-row-icon">🧑‍💼</span>'+
+        '<span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/></svg></span>'+
         '<div style="flex:1;"><div class="settings-row-label">'+App._e(n)+'</div>'+
           (sub?'<div style="font-size:12px;color:var(--text-2);">'+App._e(sub)+'</div>':'')+
         '</div>'+
