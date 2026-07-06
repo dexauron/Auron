@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -242,6 +242,17 @@ const adv=A.getAdvisor({ssId:'ss1'});
 eq('советник: есть подсказки', adv.count>=1, true);
 eq('советник: предлагает экономию', (adv.alerts||[]).some(a=>a.action==='savings'), true);
 eq('советник: видит неликвид (Крупа)', (adv.alerts||[]).some(a=>a.icon==='🧊'), true);
+
+// ── Аврон-помощник: локальные ответы по данным (без ключа ИИ) ────────
+const q1=A.askAuron({ssId:'ss1',q:'где дешевле?'});
+eq('помощник: локальный режим', q1.source, 'local');
+eq('помощник: про экономию отвечает', /экономи/i.test(q1.answer), true);
+const q2=A.askAuron({ssId:'ss1',q:'сколько заработал за месяц'});
+eq('помощник: считает прибыль', /Прибыль/.test(q2.answer), true);
+const q3=A.askAuron({ssId:'ss1',q:'что не продаётся'});
+eq('помощник: показывает неликвид', q3.answer.length>0, true);
+const q4=A.askAuron({ssId:'ss1',q:'сколько в кассе'});
+eq('помощник: показывает счета', /₽/.test(q4.answer), true);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');

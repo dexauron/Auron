@@ -453,6 +453,9 @@ function getSettings(p) {
       cashFloat:        parseFloat(map['CASH_FLOAT'])||0,
       beznalAccount:    String(map['BEZNAL_ACCOUNT']||''),
       cashAccount:      String(map['CASH_ACCOUNT']||'Наличные'),
+      storeLocation:    String(map['STORE_LOCATION']||''),
+      aiModel:          String(map['AI_MODEL']||''),
+      aiEnabled:        !!(map['AI_KEY']),
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
       taxRate:          parseFloat(map['TAX_RATE'])||6,
@@ -483,8 +486,13 @@ function saveSettings(p) {
       CASH_FLOAT:          String(parseFloat(d.cashFloat)||0),
       BEZNAL_ACCOUNT:      _s(d.beznalAccount||''),
       SAVINGS_ACCOUNTS:    JSON.stringify(d.savingsAccounts||[]),
-      SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true'
+      SHOW_KASSA_BALANCE:  d.showKassaBalance===false?'false':'true',
+      STORE_LOCATION:      _s(d.storeLocation||''),
+      AI_MODEL:            _s(d.aiModel||'')
     };
+    // Ключ ИИ сохраняем только если прислали непустой (не затираем).
+    if (d.aiKey!==undefined && String(d.aiKey).length) save.AI_KEY=_s(d.aiKey);
+    if (d.aiClearKey) save.AI_KEY='';
     var keyRow = {};
     if (sh.getLastRow()>=2) {
       sh.getRange(2,1,sh.getLastRow()-1,1).getValues().forEach(function(r,i){
@@ -632,6 +640,17 @@ function _getSettingNum(ss, key, def) {
     if (s&&s.getLastRow()>=2) {
       var v=s.getRange(2,1,s.getLastRow()-1,2).getValues();
       for (var i=0;i<v.length;i++) if (String(v[i][0])===key){ var n=parseFloat(v[i][1]); return isNaN(n)?def:n; }
+    }
+  } catch(e){}
+  return def;
+}
+// Строка из настройки (ключ/значение), иначе значение по умолчанию.
+function _getSettingStr(ss, key, def) {
+  try {
+    var s=ss.getSheetByName(SH_SETTINGS);
+    if (s&&s.getLastRow()>=2) {
+      var v=s.getRange(2,1,s.getLastRow()-1,2).getValues();
+      for (var i=0;i<v.length;i++) if (String(v[i][0])===key) return String(v[i][1]||def);
     }
   } catch(e){}
   return def;
@@ -1321,6 +1340,118 @@ function getAdvisor(p) {
     alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
     return { count:alerts.length, alerts:alerts };
   } catch(e) { return { __error:e.message }; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// АВРОН-СОВЕТНИК · Помощник (вопрос-ответ)
+// Два режима: локальный (правила по своим данным, офлайн, бесплатно) и
+// «живой разум» (настоящая нейросеть, если задан ключ ИИ в настройках).
+// ═══════════════════════════════════════════════════════════════════════
+
+// Группировка тысяч пробелом: 1234567 → «1 234 567»
+function _fmtR(n){ n=Math.round(n||0); var s=String(Math.abs(n)); var out='';
+  for(var i=0;i<s.length;i++){ if(i>0&&(s.length-i)%3===0)out+=' '; out+=s[i]; }
+  return (n<0?'-':'')+out; }
+
+// Локальный разбор вопроса → ответ по данным магазина.
+function _askLocal(ssId, q) {
+  var t = String(q||'').toLowerCase();
+  var has = function(){ for(var i=0;i<arguments.length;i++) if(t.indexOf(arguments[i])>=0) return true; return false; };
+  // период из вопроса
+  var period = has('год','года')?'year':has('недел')?'week':has('сегодня','день')?'today':'month';
+  var periodW = period==='year'?'за год':period==='week'?'за неделю':period==='today'?'сегодня':'за месяц';
+
+  if (has('дешевл','экономи','переплач','поставщик дешев')) {
+    var s=getSavingsHunter({ssId:ssId});
+    if(!s||s.empty||!s.count) return {answer:'Пока не с чем сравнивать — загрузи отчёт «Цены» с разными поставщиками, и я найду, где дешевле.'};
+    var top=s.items.slice(0,3).map(function(x){return '• '+x.name+': '+x.curSup+' '+_fmtR(x.curPrice)+'₽ → '+x.cheapSup+' '+_fmtR(x.cheapPrice)+'₽';}).join('\n');
+    return {answer:'Можно экономить ≈ '+_fmtR(s.totalMonthly)+' ₽/мес по '+s.count+' товарам. Например:\n'+top, action:'savings'};
+  }
+  if (has('не продаёт','не продает','неликвид','залежал','лежит')) {
+    var g=getGoodsAnalytics({ssId:ssId});
+    if(!g||g.empty) return {answer:'Загрузи отчёты из 1С — и я покажу, что не продаётся.'};
+    var dl=(g.deadStock||[]).slice(0,5).map(function(x){return '• '+x.name+' — '+_fmtR(x.stockSum)+' ₽';}).join('\n');
+    return {answer:(g.frozen?'В неликвиде заморожено ≈ '+_fmtR(g.frozen)+' ₽.\n':'')+(dl||'Неликвида не вижу — молодец.'), action:'goods'};
+  }
+  if (has('заканчива','кончит','закупить','заказать','надо купить')) {
+    var a=getAdvisor({ssId:ssId});
+    var ro=(a.alerts||[]).filter(function(x){return x.icon==='🛒';})[0];
+    return {answer: ro? (ro.title+': '+ro.detail) : 'Срочно заканчивающихся товаров не вижу.', action:'goods'};
+  }
+  if (has('должен','долг','задолжен','кому я')) {
+    var deb=getDebts({ssId:ssId})||[]; var tot=0,lines=[];
+    deb.forEach(function(d){ if(d.debt>0){ tot+=d.debt; lines.push('• '+d.name+' — '+_fmtR(d.debt)+' ₽'); } });
+    if(!tot) return {answer:'Долгов нет — всё оплачено.'};
+    return {answer:'Всего долгов: '+_fmtR(tot)+' ₽\n'+lines.slice(0,8).join('\n')};
+  }
+  if (has('касс','наличн','на счету','баланс','сколько денег','остаток на')) {
+    var accs=getAccounts({ssId:ssId})||[]; var tot=0,lines=[];
+    accs.forEach(function(a){ if(a.status!=='archived'){ tot+=(a.balance||0); lines.push('• '+a.name+': '+_fmtR(a.balance||0)+' ₽'); } });
+    return {answer:'На счетах всего: '+_fmtR(tot)+' ₽\n'+lines.join('\n')};
+  }
+  if (has('топ','лучше всего','больше всего прибыл','что приносит','заработок на')) {
+    var g2=getGoodsAnalytics({ssId:ssId});
+    var tp=(g2.topProfit||[]).slice(0,5).map(function(x){return '• '+x.name+' — '+_fmtR(x.profit)+' ₽';}).join('\n');
+    return {answer: tp?('Больше всего прибыли приносят:\n'+tp):'Загрузи отчёт «Продажи» — покажу топ по прибыли.', action:'goods'};
+  }
+  if (has('заработал','выручк','прибыл','доход','сколько денег сделал','оборот')) {
+    var an=getAnalytics({ssId:ssId,period:period});
+    var prof=(an.income||0)-(an.expense||0);
+    return {answer:'Итог '+periodW+':\nВыручка '+_fmtR(an.income)+' ₽\nРасход '+_fmtR(an.expense)+' ₽\nПрибыль '+_fmtR(prof)+' ₽'};
+  }
+  if (has('совет','что делать','что важно','подскажи','на что обратить')) {
+    var a2=getAdvisor({ssId:ssId});
+    if(!a2.count) return {answer:'Сейчас всё спокойно — ничего срочного не вижу.'};
+    var top3=a2.alerts.slice(0,3).map(function(x){return '• '+x.icon+' '+(x.num!=null?_fmtR(x.num)+' '+(x.unit||'')+' — ':'')+x.title;}).join('\n');
+    return {answer:'Вот что важно сейчас:\n'+top3, action:'advisor'};
+  }
+  return {answer:'Я могу ответить про деньги и товары. Спроси, например:\n• «сколько заработал за месяц»\n• «что не продаётся»\n• «где дешевле»\n• «что заканчивается»\n• «сколько в кассе»\n• «кому я должен»\n• «дай совет»'};
+}
+
+// Сводка магазина для ИИ-режима (компактный контекст).
+function _aiContext(ssId) {
+  var parts=[];
+  try{ var an=getAnalytics({ssId:ssId,period:'month'}); parts.push('За месяц: выручка '+_fmtR(an.income)+'₽, расход '+_fmtR(an.expense)+'₽, прибыль '+_fmtR((an.income||0)-(an.expense||0))+'₽.'); }catch(e){}
+  try{ var s=getSavingsHunter({ssId:ssId}); if(s&&s.totalMonthly>0) parts.push('Потенциал экономии на поставщиках: '+_fmtR(s.totalMonthly)+'₽/мес по '+s.count+' товарам.'); }catch(e){}
+  try{ var g=getGoodsAnalytics({ssId:ssId}); if(g&&!g.empty){ parts.push('Товаров '+g.count+', ср.наценка '+g.avgMarkup+'%, оборот '+g.turnoverDays+' дн, заморожено в неликвиде '+_fmtR(g.frozen)+'₽.');
+    if(g.topProfit&&g.topProfit.length) parts.push('Топ прибыли: '+g.topProfit.slice(0,3).map(function(x){return x.name;}).join(', ')+'.'); } }catch(e){}
+  return parts.join(' ');
+}
+
+// Главная точка: вопрос → ответ (ИИ, если задан ключ; иначе локально).
+function askAuron(p) {
+  var ssId=p.ssId, q=String(p.q||'').trim();
+  if(!q) return {answer:'Задай вопрос — например «где дешевле» или «сколько заработал за месяц».', source:'local'};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var key=_getSettingStr(ss,'AI_KEY','');
+    if(key){
+      try{
+        var model=_getSettingStr(ss,'AI_MODEL','claude-sonnet-5');
+        var loc=_getSettingStr(ss,'STORE_LOCATION','');
+        var ctx=_aiContext(ssId);
+        var sysP='Ты — Аврон, финансовый советник владельца продуктового магазина в России. '+
+          'Отвечай по-человечески, коротко, простым языком, конкретными действиями и цифрами в рублях. '+
+          'Учитывай сезон, спрос и особенности района, если это уместно.'+
+          (loc?(' Магазин расположен: '+loc+'.'):'')+
+          (ctx?(' Данные магазина: '+ctx):'');
+        var payload={ model:model, max_tokens:600,
+          system:sysP, messages:[{role:'user', content:q}] };
+        var resp=UrlFetchApp.fetch('https://api.anthropic.com/v1/messages',{
+          method:'post', contentType:'application/json', muteHttpExceptions:true,
+          headers:{ 'x-api-key':key, 'anthropic-version':'2023-06-01' },
+          payload:JSON.stringify(payload) });
+        var code=resp.getResponseCode();
+        if(code>=200&&code<300){
+          var data=JSON.parse(resp.getContentText());
+          var txt=(data&&data.content&&data.content[0]&&data.content[0].text)||'';
+          if(txt) return {answer:txt, source:'ai'};
+        }
+        // не вышло — тихо падаем в локальный режим
+      }catch(e){}
+    }
+    var r=_askLocal(ssId,q); r.source='local'; return r;
+  } catch(e) { return {answer:'Не смог ответить: '+e.message, source:'local'}; }
 }
 
 function getGoodsAnalytics(p) {

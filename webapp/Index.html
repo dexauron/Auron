@@ -1819,6 +1819,10 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <div id="pulse-card"></div>
       <!-- Аврон-советник: проактивные подсказки -->
       <div id="advisor-card"></div>
+      <!-- Спросить Аврон (чат-помощник) -->
+      <div style="padding:0 16px;margin-bottom:14px;">
+        <button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button>
+      </div>
       <!-- Наблюдение (машина времени / слабый день) -->
       <div id="insight-card"></div>
       <!-- 2×2 stat tiles -->
@@ -2682,7 +2686,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.7.0';
+var APP_VERSION='2.8.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9158,6 +9162,95 @@ var App={
         '</div>';
     }).join('');
     b.innerHTML=h;
+  },
+  // ── Аврон-помощник: чат вопрос-ответ (+ голос) ─────────────────
+  openAssistant:function(preset){
+    App._chat=App._chat||[];
+    App.openModal('<div class="modal-title">💬 Спросить Аврон</div>'+
+      '<div id="chat-log" style="max-height:52vh;overflow:auto;margin-bottom:10px;"></div>'+
+      '<div id="chat-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>'+
+      '<div style="display:flex;gap:8px;align-items:center;">'+
+        '<input id="chat-q" placeholder="Спроси своими словами…" onkeydown="if(event.key===\'Enter\')App._chatSend()" style="flex:1;min-width:0;padding:12px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:14px;">'+
+        '<button onclick="App._chatVoice()" id="chat-mic" title="Голос" style="flex-shrink:0;width:44px;height:44px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:18px;cursor:pointer;">🎙️</button>'+
+        '<button onclick="App._chatSend()" style="flex-shrink:0;width:44px;height:44px;border-radius:13px;border:none;background:var(--brand);color:#fff;font-size:18px;cursor:pointer;">➤</button>'+
+      '</div>');
+    App._chatRender();
+    var st=App.s.settings||{};
+    var aiLink=document.getElementById('chat-log');
+    // строка статуса ИИ + настройка
+    var head=document.querySelector('.modal-title');
+    if(head&&!document.getElementById('chat-ai-status')){
+      head.insertAdjacentHTML('afterend','<div id="chat-ai-status" onclick="App.openAiSettings()" style="cursor:pointer;font-size:11.5px;color:var(--muted);margin:-4px 0 10px;">'+(st.aiEnabled?'🟢 Живой разум (ИИ) включён · настроить':'⚙️ Включить живой разум (ИИ) — отвечать по-человечески')+'</div>');
+    }
+    var chips=['сколько заработал за месяц','что не продаётся','где дешевле','что заканчивается','сколько в кассе','дай совет'];
+    var cc=document.getElementById('chat-chips');
+    if(cc)cc.innerHTML=chips.map(function(c){return'<button onclick="App._chatAsk(\''+c+'\')" style="padding:6px 11px;border-radius:9px;border:1.2px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12px;cursor:pointer;font-family:var(--font);">'+c+'</button>';}).join('');
+    if(preset)App._chatAsk(preset);
+    else setTimeout(function(){var q=document.getElementById('chat-q');if(q)q.focus();},120);
+  },
+  _chatRender:function(){
+    var el=document.getElementById('chat-log');if(!el)return;
+    if(!App._chat.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12.5px;padding:14px 8px;line-height:1.5;">Привет! Я Аврон. Спроси про деньги или товары —<br>отвечу по данным твоего магазина.</div>';return;}
+    el.innerHTML=App._chat.map(function(m){
+      if(m.role==='user')return'<div style="text-align:right;margin:6px 0;"><span style="display:inline-block;max-width:85%;text-align:left;background:var(--brand);color:#fff;padding:9px 13px;border-radius:14px 14px 4px 14px;font-size:13px;white-space:pre-wrap;">'+App._e(m.text)+'</span></div>';
+      return'<div style="margin:6px 0;"><span style="display:inline-block;max-width:90%;background:var(--surface-2);color:var(--ink);padding:10px 13px;border-radius:14px 14px 14px 4px;font-size:13px;white-space:pre-wrap;line-height:1.5;">'+(m.loading?'<span style="color:var(--muted);">Аврон думает…</span>':App._e(m.text)+(m.ai?' <span style="font-size:10px;color:var(--muted);">· ИИ</span>':''))+'</span>'+
+        (m.action?'<div><button onclick="App.closeModal();App.'+({savings:'openSavings',goods:'openGoods',advisor:'openAdvisor'}[m.action]||'closeModal')+'()" style="margin-top:6px;padding:6px 12px;border-radius:9px;border:none;background:var(--pos);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">Показать →</button></div>':'')+'</div>';
+    }).join('');
+    el.scrollTop=el.scrollHeight;
+  },
+  openAiSettings:function(){
+    var st=App.s.settings||{};
+    App.openModal('<div class="modal-title">🤖 Живой разум (ИИ)</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:14px;">Без ключа Аврон отвечает по правилам на твоих данных — бесплатно и офлайн. С ключом ИИ он отвечает по-человечески и учитывает район магазина и сезон. Ключ хранится в твоей таблице и никуда больше не уходит.</div>'+
+      '<div class="field"><label>Адрес / район магазина</label><input id="ai-loc" placeholder="напр. Грозный, спальный район, рядом школа" value="'+App._e(st.storeLocation||'')+'"></div>'+
+      '<div class="field"><label>Ключ ИИ (Anthropic API key)</label><input id="ai-key" type="password" autocomplete="off" placeholder="'+(st.aiEnabled?'•••• уже задан — пусто = не менять':'sk-ant-…')+'"></div>'+
+      '<div class="field"><label>Модель (необязательно)</label><input id="ai-model" placeholder="claude-sonnet-5" value="'+App._e(st.aiModel||'')+'"></div>'+
+      '<button class="btn-primary" onclick="App._saveAiSettings()">Сохранить</button>'+
+      (st.aiEnabled?'<button class="btn-secondary" style="margin-top:10px;" onclick="App._disableAi()">Отключить ИИ</button>':''));
+  },
+  _saveAiSettings:function(){
+    var loc=(document.getElementById('ai-loc')||{}).value||'';
+    var key=(document.getElementById('ai-key')||{}).value||'';
+    var model=(document.getElementById('ai-model')||{}).value||'';
+    App.s.settings.storeLocation=loc.trim();App.s.settings.aiModel=model.trim();
+    var data={};for(var k in App.s.settings)data[k]=App.s.settings[k];
+    data.storeLocation=loc.trim();data.aiModel=model.trim();
+    if(key.trim())data.aiKey=key.trim();
+    gs('saveSettings',{ssId:App.s.ssId,data:data}).then(function(){
+      if(key.trim())App.s.settings.aiEnabled=true;
+      App.toast('Сохранено ✓');App.closeModal();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _disableAi:function(){
+    var data={};for(var k in App.s.settings)data[k]=App.s.settings[k];
+    data.aiClearKey=true;
+    gs('saveSettings',{ssId:App.s.ssId,data:data}).then(function(){
+      App.s.settings.aiEnabled=false;App.toast('ИИ отключён');App.closeModal();
+    }).catch(function(e){App.toast(e.message,true);});
+  },
+  _chatAsk:function(q){var inp=document.getElementById('chat-q');if(inp)inp.value=q;App._chatSend();},
+  _chatSend:function(){
+    var inp=document.getElementById('chat-q');var q=inp?inp.value.trim():'';if(!q)return;
+    if(inp)inp.value='';
+    App._chat.push({role:'user',text:q});
+    App._chat.push({role:'bot',loading:true});
+    App._chatRender();
+    gs('askAuron',{ssId:App.s.ssId,q:q}).then(function(r){
+      App._chat.pop();
+      App._chat.push({role:'bot',text:(r&&r.answer)||'Не понял вопрос.',action:r&&r.action,ai:r&&r.source==='ai'});
+      App._chatRender();
+    }).catch(function(e){App._chat.pop();App._chat.push({role:'bot',text:'Ошибка: '+e.message});App._chatRender();});
+  },
+  _chatVoice:function(){
+    var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){App.toast('Голосовой ввод не поддерживается в этом браузере',true);return;}
+    var mic=document.getElementById('chat-mic');
+    var rec=new SR();rec.lang='ru-RU';rec.interimResults=false;rec.maxAlternatives=1;
+    if(mic)mic.style.background='var(--neg)';
+    rec.onresult=function(ev){var t=ev.results[0][0].transcript;var q=document.getElementById('chat-q');if(q)q.value=t;App._chatSend();};
+    rec.onerror=function(){App.toast('Не расслышал, попробуй ещё раз',true);};
+    rec.onend=function(){if(mic)mic.style.background='var(--surface-2)';};
+    try{rec.start();}catch(e){if(mic)mic.style.background='var(--surface-2)';}
   },
   _pulseColor:function(s){return s>=80?'var(--pos)':s>=60?'var(--brand)':s>=40?'var(--warn,#FF9F0A)':'var(--neg)';},
   _renderPulse:function(r){
