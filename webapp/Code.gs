@@ -2575,6 +2575,29 @@ function getPayments(p) {
   } catch(e) { return []; }
 }
 
+// Базовая (средняя) дневная выручка за последние ~28 дней с выручкой —
+// для проверки аномалии при вводе Z-отчёта («сумма вдвое ниже — верно?»).
+function getRevenueBaseline(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    if (!base||base.getLastRow()<2) return {avgDay:0,days:0};
+    var tz=Session.getScriptTimeZone();
+    var from=new Date().getTime()-35*86400000;
+    var byDay={};
+    base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+      if (String(r[B_TYPE-1])!=='Доход') return;
+      var cat=String(r[B_CAT-1]); if(cat==='Перевод'||cat==='Корректировка') return;
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)||dt.getTime()<from) return;
+      var k=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      byDay[k]=(byDay[k]||0)+(parseFloat(r[B_AMT-1])||0);
+    });
+    var days=Object.keys(byDay), sum=0;
+    days.forEach(function(k){sum+=byDay[k];});
+    return {avgDay:days.length?Math.round(sum/days.length):0, days:days.length};
+  } catch(e) { return {avgDay:0,days:0}; }
+}
+
 // Утренний брифинг «Ожидаем сегодня»: выплаты на сегодня (и просроченные),
 // заказы, которые ждём сегодня, деньги в кассе и хватает ли на выплаты.
 function getMorningBriefing(p) {

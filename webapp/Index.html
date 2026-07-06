@@ -1957,7 +1957,8 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <div class="kassa-row-hdr">💵 Наличные — сверка кассира по Z-отчёту</div>
             <div style="padding:12px 16px;display:grid;gap:10px;">
               <div class="field" style="margin:0;"><label>Выручка наличными (строка «ВЫРУЧКА» в Z-отчёте)</label>
-                <input type="number" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+                <input type="number" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
+                <div id="kz-anomaly" style="display:none;font-size:12px;font-weight:700;margin-top:6px;padding:8px 11px;border-radius:10px;background:rgba(255,159,10,.13);color:#FF9F0A;"></div></div>
               <div class="field" style="margin:0;"><label>Оплачено поставщикам наличкой <span style="color:var(--muted);font-weight:400;font-size:11px;">— и по чеку, и по заметкам</span></label>
                 <input type="number" id="kz-cash-supp" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
                 <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4;">Вся наличка, что ушла поставщикам за смену: пробитая через кассу (строка ВЫПЛАТ) + взятая физически по заметке. Неважно как оформили — важна общая сумма.</div></div>
@@ -5507,7 +5508,7 @@ var App={
     if(t)t.textContent=view==='morning'?'🌅 Кассовое утро':view==='evening'?'🌙 Накладные':'Касса';
     var bb=document.getElementById('k-back-btn');
     if(bb)bb.style.display=view==='hub'?'none':'';
-    if(view==='morning')App.kStep(1);
+    if(view==='morning'){App.kStep(1);App._loadRevBaseline();}
     if(view==='evening')App.calcInvoices();
     if(view==='hub')App._loadKHub();
     var p=document.getElementById('tab-kassa');if(p)p.scrollTo(0,0);
@@ -5679,6 +5680,25 @@ var App={
       d.textContent=diff===0?'✓ сходится':(diff>0?'+':'−')+'₽ '+fmtFull(Math.abs(diff));}
     var h=document.getElementById('kz-diff-hint');
     if(h)h.textContent=diff===0?'Касса сошлась — кассир сдал всё верно.':diff<0?'Недостача: собрано меньше выручки — кассир недодал.':'Излишек: собрано больше выручки — проверь, не забыл ли что-то в выручке.';
+    // Проверка аномалии: общая выручка (нал + безнал) сильно ниже/выше средней
+    var an=document.getElementById('kz-anomaly');
+    if(an){
+      var cards=0;document.querySelectorAll('.kz-ch').forEach(function(inp){cards+=Math.round(parseFloat(inp.value)||0);});
+      var totalRev=rev+cards;
+      var base=App._revBaseline;
+      if(base&&base.avgDay>0&&base.days>=5&&totalRev>0){
+        var ratio=totalRev/base.avgDay;
+        if(ratio<=0.5){an.style.display='block';an.style.background='rgba(255,159,10,.13)';an.style.color='#FF9F0A';
+          an.textContent='⚠ Выручка ₽'+fmtFull(totalRev)+' — вдвое ниже обычной (~₽'+fmtFull(base.avgDay)+'/день). Всё верно?';}
+        else if(ratio>=2){an.style.display='block';an.style.background='var(--brand-dim)';an.style.color='var(--brand)';
+          an.textContent='Выручка ₽'+fmtFull(totalRev)+' — вдвое выше обычной (~₽'+fmtFull(base.avgDay)+'/день). Проверь, не задвоил ли.';}
+        else an.style.display='none';
+      } else an.style.display='none';
+    }
+  },
+  _loadRevBaseline:function(){
+    if(App._revBaseline)return;
+    gs('getRevenueBaseline',{ssId:App.s.ssId}).then(function(r){App._revBaseline=r||{avgDay:0,days:0};}).catch(function(){});
   },
 
   addWyplata:function(){
