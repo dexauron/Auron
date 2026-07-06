@@ -1395,6 +1395,68 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   border:1px solid rgba(255,255,255,.07);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ОГРАНКА ДИЗАЙНА v2.3 — чипы статусов, тени, стекло, анимация,
+   пустые экраны. Слой поверх базовой системы, без ломки существующего.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Все цифры — табличные (ровные колонки) */
+.tx-amount,.hero-balance,.home-hero-bal,.split-tile-val,.metric-val,.sb-capital-val,.acct-pill-bal{
+  font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;
+}
+
+/* Цвет-чипы статусов: бледная подложка + цветной текст */
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11.5px;font-weight:700;line-height:1.35;letter-spacing:-.01em;white-space:nowrap;
+  border:1px solid transparent;}
+.chip .chip-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.chip-pos{color:var(--pos);background:var(--income-dim);border-color:color-mix(in oklab,var(--pos) 22%,transparent);}
+.chip-neg{color:var(--neg);background:var(--expense-dim);border-color:color-mix(in oklab,var(--neg) 22%,transparent);}
+.chip-debt{color:#FF9F0A;background:rgba(255,159,10,.13);border-color:rgba(255,159,10,.24);}
+.chip-save{color:var(--pos);background:var(--income-dim);border-color:color-mix(in oklab,var(--pos) 22%,transparent);}
+.chip-brand{color:var(--brand);background:var(--brand-dim);border-color:color-mix(in oklab,var(--brand) 26%,transparent);}
+.chip-muted{color:var(--muted);background:var(--surface-2);border-color:var(--line);}
+
+/* Карточки: мягкая многослойная тень + тонкая световая кромка сверху */
+.card,.tx-day-card,.rep-card,.metric-card,.acc-card,.chart-wrap{
+  box-shadow:0 1px 2px rgba(0,0,0,.28),0 10px 26px -16px rgba(0,0,0,.65);
+  position:relative;
+}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:0 1px 0 rgba(255,255,255,.05) inset;}
+:root[data-theme="light"] .card::before,
+html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,.7) inset;}
+
+/* Модалки и шторки: усиленное «стекло» + едва заметная градиентная кромка */
+.modal-overlay,.sheet-overlay{backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);}
+.modal,.sheet{box-shadow:0 -2px 0 rgba(255,255,255,.05) inset,0 -24px 60px -20px rgba(0,0,0,.7);}
+.modal::after,.sheet::after{content:"";position:absolute;left:22px;right:22px;top:0;height:1px;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent);}
+.modal,.sheet{position:relative;}
+
+/* Плавное появление карточек при открытии экрана (мягкий стаггер) */
+@keyframes cardUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+.panel.active>.card,.panel.active>.grid,.panel.active>.tx-day-card,
+.panel.active>.grp-label,.panel.active>.rep-card{
+  animation:cardUp .42s cubic-bezier(.22,.8,.28,1) both;
+}
+.panel.active>*:nth-child(1){animation-delay:.02s;}
+.panel.active>*:nth-child(2){animation-delay:.06s;}
+.panel.active>*:nth-child(3){animation-delay:.10s;}
+.panel.active>*:nth-child(4){animation-delay:.14s;}
+.panel.active>*:nth-child(5){animation-delay:.18s;}
+.panel.active>*:nth-child(n+6){animation-delay:.20s;}
+@media(prefers-reduced-motion:reduce){.panel.active>*{animation:none!important;}}
+
+/* Пустые экраны: кружок-иконка + заголовок + подсказка */
+.empty2{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 24px;gap:6px;}
+.empty2-ic{width:60px;height:60px;border-radius:20px;display:flex;align-items:center;justify-content:center;
+  margin-bottom:8px;background:var(--brand-dim);color:var(--brand);
+  box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--brand) 24%,transparent);}
+.empty2-ic svg{width:28px;height:28px;}
+.empty2-title{font-size:15.5px;font-weight:800;color:var(--ink);letter-spacing:-.01em;}
+.empty2-sub{font-size:13px;color:var(--muted);max-width:34ch;line-height:1.5;}
+
 </style>
 </head>
 <body>
