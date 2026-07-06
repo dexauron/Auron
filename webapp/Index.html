@@ -1473,6 +1473,33 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .empty-text{font-size:15.5px;font-weight:800;color:var(--ink);letter-spacing:-.01em;}
 .empty-state{color:var(--muted);}
 
+/* Своё окно подтверждения / ввода — вместо системного confirm/prompt */
+.cfm-overlay{position:fixed;inset:0;z-index:4000;display:flex;align-items:center;justify-content:center;
+  padding:24px;background:rgba(0,0,10,.62);backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%);
+  opacity:0;transition:opacity .2s;}
+.cfm-overlay.show{opacity:1;}
+.cfm{width:100%;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:24px;
+  padding:26px 22px 20px;text-align:center;box-shadow:0 30px 80px -24px rgba(0,0,0,.85);
+  transform:scale(.92) translateY(10px);transition:transform .26s cubic-bezier(.2,.9,.3,1.1);}
+.cfm-overlay.show .cfm{transform:none;}
+.cfm-ic{width:58px;height:58px;border-radius:19px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;}
+.cfm-ic svg{width:26px;height:26px;}
+.cfm-ic.danger{background:var(--expense-dim);color:var(--neg);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--neg) 26%,transparent);}
+.cfm-ic.brand{background:var(--brand-dim);color:var(--brand);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--brand) 26%,transparent);}
+.cfm-title{font-size:18px;font-weight:800;letter-spacing:-.02em;color:var(--ink);}
+.cfm-msg{font-size:13.5px;color:var(--muted);line-height:1.55;margin-top:8px;}
+.cfm-input{width:100%;margin-top:16px;padding:13px 14px;border-radius:14px;border:1.5px solid var(--line);
+  background:var(--surface-2);color:var(--ink);font-size:16px;font-family:var(--font);outline:none;text-align:center;}
+.cfm-input:focus{border-color:var(--brand);}
+.cfm-btns{display:flex;gap:10px;margin-top:20px;}
+.cfm-btn{flex:1;padding:13px;border-radius:14px;border:none;font-size:14.5px;font-weight:750;cursor:pointer;font-family:var(--font);
+  transition:filter .15s,background .15s;}
+.cfm-cancel{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line);}
+.cfm-cancel:active{background:var(--surface-3);}
+.cfm-ok{background:var(--brand);color:#fff;}
+.cfm-danger{background:var(--neg);color:#fff;}
+.cfm-ok:active,.cfm-danger:active{filter:brightness(1.1);}
+
 </style>
 </head>
 <body>
@@ -3072,8 +3099,8 @@ var App={
     document.getElementById('fab').style.display='none';
   },
 
-  logout:function(){
-    if(!confirm('Выйти из аккаунта?\n\nВаши данные останутся в Google Drive. При следующем входе всё восстановится.'))return;
+  logout:async function(){
+    if(!(await App._confirm('Выйти из аккаунта?\n\nВаши данные останутся в Google Drive. При следующем входе всё восстановится.')))return;
     try{localStorage.removeItem('auron_ob');localStorage.removeItem('auron_ssid');}catch(e){}
     App.s.ssId='';App.s.userName='';App.s.orgName='';App.s.settings={};
     gs('logoutUser',{}).then(function(){}).catch(function(){});
@@ -3191,8 +3218,8 @@ var App={
     });
   },
 
-  deleteOrg:function(ssId,name){
-    if(!confirm('Удалить организацию «'+name+'»?\n\nТаблица в Google Drive останется, только уберём её из списка.'))return;
+  deleteOrg:async function(ssId,name){
+    if(!(await App._confirm('Удалить организацию «'+name+'»?\n\nТаблица в Google Drive останется, только уберём её из списка.')))return;
     gs('deleteOrg',{ssId:ssId}).then(function(r){
       App.toast('Удалено ✓');
       // reload orgs list
@@ -3377,8 +3404,8 @@ var App={
       App.toast('Роль обновлена ✓');App._teamAll=r;
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _teamRemove:function(ssId,email,orgName){
-    if(!confirm('Убрать доступ '+email+' к «'+orgName+'»?'))return;
+  _teamRemove:async function(ssId,email,orgName){
+    if(!(await App._confirm('Убрать доступ '+email+' к «'+orgName+'»?')))return;
     gs('removeMemberMulti',{ssId:ssId,email:email}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Доступ удалён ✓');App._teamAll=r;App._renderTeamAll();
@@ -3619,9 +3646,9 @@ var App={
       App._ordOfferInvoice(o.contractor,o.amount);
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _ordPartial:function(i){
+  _ordPartial:async function(i){
     var o=App._orders.orders[i];if(!o)return;
-    var v=prompt('На какую сумму пришло? (заказ ₽ '+fmt(o.amount)+')',o.amount);
+    var v=await App._prompt('На какую сумму пришло? (заказ ₽ '+fmt(o.amount)+')', o.amount, {type:'number', inputmode:'decimal', ok:'Готово'});
     if(v==null)return;
     var fact=Math.round(parseFloat(v)||0);
     if(fact<=0){App.toast('Введите сумму',true);return;}
@@ -3646,9 +3673,9 @@ var App={
       App.openOrders();
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _ordCancel:function(i){
+  _ordCancel:async function(i){
     var o=App._orders.orders[i];if(!o)return;
-    if(!confirm('Отметить заказ у «'+o.contractor+'» как отменённый (не пришёл)?'))return;
+    if(!(await App._confirm('Отметить заказ у «'+o.contractor+'» как отменённый (не пришёл)?')))return;
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'cancelled'}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Заказ отменён');App.openOrders();
@@ -3661,9 +3688,9 @@ var App={
       App.openOrders();
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _ordDel:function(i){
+  _ordDel:async function(i){
     var o=App._orders.orders[i];if(!o)return;
-    if(!confirm('Удалить заказ у «'+o.contractor+'» из учёта?'))return;
+    if(!(await App._confirm('Удалить заказ у «'+o.contractor+'» из учёта?')))return;
     gs('deleteOrder',{ssId:App.s.ssId,id:o.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Удалено ✓');App.openOrders();
@@ -3704,9 +3731,9 @@ var App={
     } else go();
   },
 
-  _contractorDel:function(i){
+  _contractorDel:async function(i){
     var c=(App._contractors||[])[i];if(!c)return;
-    if(!confirm('Удалить «'+c.name+'» из справочника?'))return;
+    if(!(await App._confirm('Удалить «'+c.name+'» из справочника?')))return;
     gs('deleteContractor',{ssId:App.s.ssId,id:c.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._contractors.splice(i,1);App._renderContractorsDir();App.toast('Удалено ✓');
@@ -4089,8 +4116,8 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  _payCancel:function(id){
-    if(!confirm('Отменить запись?'))return;
+  _payCancel:async function(id){
+    if(!(await App._confirm('Отменить запись?')))return;
     gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'cancel'}}).then(function(){
       App.toast('Отменено');App.loadSuppliers();
     }).catch(function(e){App.toast(e.message,true);});
@@ -4339,8 +4366,8 @@ var App={
     gs('saveSettings',{ssId:App.s.ssId,data:App.s.settings}).catch(function(){});
   },
 
-  clearAllData:function(){
-    if(!confirm('Удалить ВСЕ данные?\n\nБудут удалены операции, смены, долги, выплаты, табель, товары и журнал (демо и реальные). Счета и категории останутся.\n\nОтменить нельзя.'))return;
+  clearAllData:async function(){
+    if(!(await App._confirm('Удалить ВСЕ данные?\n\nБудут удалены операции, смены, долги, выплаты, табель, товары и журнал (демо и реальные). Счета и категории останутся.\n\nОтменить нельзя.')))return;
     App.toast('Удаляю…');
     gs('clearAllData',{ssId:App.s.ssId}).then(function(r){
       // сбросить локальный кэш, чтобы не показывались старые цифры
@@ -4350,8 +4377,8 @@ var App={
     }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
   },
 
-  seedDemo:function(){
-    if(!confirm('Сбросить все данные и заполнить демо-данными?\n\nВсе текущие записи будут удалены.'))return;
+  seedDemo:async function(){
+    if(!(await App._confirm('Сбросить все данные и заполнить демо-данными?\n\nВсе текущие записи будут удалены.')))return;
     App.toast('Заполняю данные…');
     gs('seedDemoData',{ssId:App.s.ssId}).then(function(r){
       App.toast('Готово — '+App._plural(r.txCount,'добавлена','добавлены','добавлено')+' '+r.txCount+' '+App._plural(r.txCount,'операция','операции','операций')+' ✓');
@@ -4541,7 +4568,7 @@ var App={
     App.openSheet('sheet-acc-detail');
   },
 
-  accAction:function(action){
+  accAction:async function(action){
     var id=App.s._detailAccId;
     var acc=(App.s.accounts||[]).find(function(a){return String(a.id)===String(id);});
     if(!acc)return;
@@ -4565,12 +4592,12 @@ var App={
         App.closeSheet();App.toast(r.status==='hidden'?'Счёт скрыт':'Счёт отображается');App.loadHome();
       });
     } else if(action==='archive'){
-      if(!confirm('Архивировать счёт? Операции сохранятся.'))return;
+      if(!(await App._confirm('Архивировать счёт? Операции сохранятся.')))return;
       gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
         App.closeSheet();App.toast('Счёт архивирован');App.loadHome();
       });
     } else if(action==='delete'){
-      if(!confirm('Удалить счёт? Все операции по нему останутся в базе.'))return;
+      if(!(await App._confirm('Удалить счёт? Все операции по нему останутся в базе.')))return;
       gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
         App.closeSheet();App.toast('Удалён');App.loadHome();
       });
@@ -5739,15 +5766,15 @@ var App={
   },
 
   // Полуавтомат: оплатил долг ТП — предлагаем закрыть выплату в графике
-  _offerClosePayment:function(payee,amt){
+  _offerClosePayment:async function(payee,amt){
     var open=(App._suppPayables||[]).filter(function(r){
       return r.payee===payee&&r.status!=='paid'&&r.status!=='cancelled'&&
         Math.max((r.amount||0)-(r.paid||0),0)>0;
     });
     if(!open.length)return;
     var best=open.find(function(r){return Math.abs(((r.amount||0)-(r.paid||0))-amt)<1;})||open[0];
-    setTimeout(function(){
-      if(!confirm('В графике выплат есть запись «'+payee+'» на ₽ '+fmt(Math.max((best.amount||0)-(best.paid||0),0))+'.\nОтметить её оплаченной на ₽ '+fmt(amt)+'?'))return;
+    setTimeout(async function(){
+      if(!(await App._confirm('В графике выплат есть запись «'+payee+'» на ₽ '+fmt(Math.max((best.amount||0)-(best.paid||0),0))+'.\nОтметить её оплаченной на ₽ '+fmt(amt)+'?')))return;
       // Без счёта — деньги уже списаны оплатой долга, второй расход не создаём
       gs('updatePayment',{ssId:App.s.ssId,data:{id:best.id,action:'pay',amount:amt}}).then(function(){
         App.toast('Выплата отмечена ✓');App.loadSuppliers();
@@ -5819,8 +5846,8 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  deleteDebtEntry:function(id,repId,repName){
-    if(!confirm('Удалить запись?'))return;
+  deleteDebtEntry:async function(id,repId,repName){
+    if(!(await App._confirm('Удалить запись?')))return;
     gs('deleteDebtEntry',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалено');App.closeModal();App.openRepHistory(repId,repName);
     }).catch(function(e){App.toast(e.message,true);});
@@ -6351,8 +6378,8 @@ var App={
       App.toast('Счёт сохранён ✓');App.closeModal();App.renderSettingsPage();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _delAcc:function(id){
-    if(!confirm('Удалить счёт? История сохранится.'))return;
+  _delAcc:async function(id){
+    if(!(await App._confirm('Удалить счёт? История сохранится.')))return;
     gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалён');App.closeModal();App.renderSettingsPage();App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
@@ -6822,9 +6849,9 @@ var App={
       App.toast('Сохранено ✓');App.openObligations();
     }).catch(function(e){App.toast(e.message,true);});
   },
-  _oblDel:function(i){
+  _oblDel:async function(i){
     var o=(App._obl.items||[])[i];if(!o)return;
-    if(!confirm('Удалить «'+o.name+'»?'))return;
+    if(!(await App._confirm('Удалить «'+o.name+'»?')))return;
     gs('deleteObligation',{ssId:App.s.ssId,id:o.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Удалено ✓');App.openObligations();
@@ -7351,6 +7378,57 @@ var App={
     document.getElementById('modal-overlay').classList.remove('show');
   },
 
+  // Своё окно подтверждения (вместо системного confirm). Промис → true/false.
+  _confirm:function(message,opts){
+    opts=opts||{};
+    return new Promise(function(resolve){
+      var ov=document.createElement('div');ov.className='cfm-overlay';
+      var danger=opts.danger!==false; // по умолчанию «опасное» действие (красная кнопка)
+      var okLbl=App._e(opts.ok||'Подтвердить'),cancelLbl=App._e(opts.cancel||'Отмена');
+      var title=App._e(opts.title||'Подтверждение');
+      var msg=App._e(String(message||'')).replace(/\n/g,'<br>');
+      ov.innerHTML='<div class="cfm">'+
+        '<div class="cfm-ic '+(danger?'danger':'brand')+'">'+(danger?SVG.trash:SVG.check)+'</div>'+
+        '<div class="cfm-title">'+title+'</div>'+
+        '<div class="cfm-msg">'+msg+'</div>'+
+        '<div class="cfm-btns">'+
+          '<button class="cfm-btn cfm-cancel">'+cancelLbl+'</button>'+
+          '<button class="cfm-btn '+(danger?'cfm-danger':'cfm-ok')+'">'+okLbl+'</button>'+
+        '</div></div>';
+      document.body.appendChild(ov);
+      requestAnimationFrame(function(){ov.classList.add('show');});
+      App.haptic(10);
+      var done=function(v){ov.classList.remove('show');setTimeout(function(){ov.remove();},220);resolve(v);};
+      ov.querySelector('.cfm-cancel').onclick=function(){done(false);};
+      ov.querySelector('.cfm-btn:last-child').onclick=function(){App.haptic(12);done(true);};
+      ov.onclick=function(e){if(e.target===ov)done(false);};
+    });
+  },
+  // Своё окно ввода (вместо системного prompt). Промис → строка | null.
+  _prompt:function(label,value,opts){
+    opts=opts||{};
+    return new Promise(function(resolve){
+      var ov=document.createElement('div');ov.className='cfm-overlay';
+      ov.innerHTML='<div class="cfm">'+
+        '<div class="cfm-title">'+App._e(opts.title||label||'Введите значение')+'</div>'+
+        (opts.hint?'<div class="cfm-msg">'+App._e(opts.hint)+'</div>':'')+
+        '<input class="cfm-input" type="'+(opts.type||'text')+'" '+(opts.inputmode?'inputmode="'+opts.inputmode+'" ':'')+'value="'+App._e(value==null?'':String(value))+'">'+
+        '<div class="cfm-btns">'+
+          '<button class="cfm-btn cfm-cancel">Отмена</button>'+
+          '<button class="cfm-btn cfm-ok">'+App._e(opts.ok||'Готово')+'</button>'+
+        '</div></div>';
+      document.body.appendChild(ov);
+      var inp=ov.querySelector('.cfm-input');
+      requestAnimationFrame(function(){ov.classList.add('show');setTimeout(function(){try{inp.focus();inp.select();}catch(e){}},60);});
+      App.haptic(8);
+      var done=function(v){ov.classList.remove('show');setTimeout(function(){ov.remove();},220);resolve(v);};
+      ov.querySelector('.cfm-cancel').onclick=function(){done(null);};
+      ov.querySelector('.cfm-ok').onclick=function(){done(inp.value);};
+      inp.addEventListener('keydown',function(e){if(e.key==='Enter')done(inp.value);});
+      ov.onclick=function(e){if(e.target===ov)done(null);};
+    });
+  },
+
   // Смахивание шторки вниз для закрытия (работает только когда прокрутка вверху)
   _attachSwipeClose:function(el,closeFn){
     if(el._swipeBound)return;el._swipeBound=true;
@@ -7440,8 +7518,8 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  deletePayment:function(id){
-    if(!confirm('Удалить запись?'))return;
+  deletePayment:async function(id){
+    if(!(await App._confirm('Удалить запись?')))return;
     gs('deletePayment',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалено');App.loadPayments();
     }).catch(function(e){App.toast(e.message,true);});
@@ -7504,16 +7582,16 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  deleteRecurring:function(id){
-    if(!confirm('Удалить шаблон?'))return;
+  deleteRecurring:async function(id){
+    if(!(await App._confirm('Удалить шаблон?')))return;
     gs('deleteRecurring',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалено');App.loadRecurring();
       if(App.s.anTab==='budget')App.loadBudget();
     });
   },
 
-  applyRecurring:function(){
-    if(!confirm('Создать расходы по всем активным шаблонам за текущий месяц?'))return;
+  applyRecurring:async function(){
+    if(!(await App._confirm('Создать расходы по всем активным шаблонам за текущий месяц?')))return;
     gs('applyRecurring',{ssId:App.s.ssId}).then(function(r){
       App.toast('Применено: '+r.applied+' '+App._plural(r.applied,'запись','записи','записей'));App.loadHome();
     }).catch(function(e){App.toast(e.message,true);});
