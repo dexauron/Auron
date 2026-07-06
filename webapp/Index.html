@@ -1751,14 +1751,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
           <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплачено наличными, погашенные и новые долги</span></span>
           <span style="color:var(--muted);">›</span>
         </button>
-        <button onclick="App.openIzyatie()" style="width:100%;text-align:left;padding:14px 18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span style="font-size:22px;">💸</span>
-          <span style="flex:1;font-size:15px;font-weight:700;color:var(--neg);">Изъятие из кассы</span>
-          <span style="color:var(--muted);">›</span>
-        </button>
         <div style="display:flex;gap:10px;margin-bottom:12px;">
-          <button onclick="App.openRevision()" style="flex:1;text-align:center;padding:13px;border-radius:18px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);">
-            <span style="font-size:20px;">🧮</span><span style="display:block;font-size:12.5px;font-weight:700;color:var(--ink);margin-top:4px;">Ревизия кассы</span></button>
           <button onclick="App.openDayNote()" style="flex:1;text-align:center;padding:13px;border-radius:18px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);">
             <span style="font-size:20px;">📝</span><span style="display:block;font-size:12.5px;font-weight:700;color:var(--ink);margin-top:4px;">Заметка дня</span></button>
         </div>
@@ -6933,7 +6926,7 @@ var App={
     App.openModal('<div class="modal-title">❓ Как пользоваться</div>'+
       '<div style="font-size:13.5px;line-height:1.7;color:var(--ink-2);">'+
       '<b style="color:var(--ink);">🌅 Утро</b><br>Открой вкладку «Касса» → «Кассовое утро»: смена, Z-отчёт по счетам, выплаты с кассы. Всё по шагам.<br><br>'+
-      '<b style="color:var(--ink);">☀️ Днём</b><br>Каждый расход и доход — через кнопку «+». Выплата торговому представителю — отдельная запись. Изъятие из кассы — в «Кассе».<br><br>'+
+      '<b style="color:var(--ink);">☀️ Днём</b><br>Каждый расход и доход — через кнопку «+». Выплата торговому представителю — отдельная запись.<br><br>'+
       '<b style="color:var(--ink);">🌙 Вечер</b><br>«Касса» → «Вечер — накладные»: сколько оплатили наличными, сколько погасили долгов, сколько осталось в долг.<br><br>'+
       '<b style="color:var(--ink);">📦 Заказы и поставщики</b><br>Вкладка «Поставщики»: 🚚 заказы, 📇 справочник, 📋 табель. Тап по поставщику — вся картина по нему.<br><br>'+
       '<b style="color:var(--ink);">Мелочи</b><br>Свайп по операции влево — редактировать/удалить/повторить. Удалил случайно — жми «Отменить» или Настройки → Корзина. Глаз на главной прячет суммы.</div>');
