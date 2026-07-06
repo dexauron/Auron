@@ -2329,6 +2329,29 @@ function getEntityHistory(p) {
   } catch(e) { return { __error:e.message, items:[] }; }
 }
 
+// Лента активности команды: последние действия всех сотрудников по всем
+// записям (создал/изменил/удалил операцию/заказ/платёж/контрагента).
+function getActivityFeed(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_AUDIT);
+    if (!sh || sh.getLastRow()<2) return { items:[] };
+    var tz = Session.getScriptTimeZone();
+    var n = Math.min(sh.getLastRow()-1, 120);
+    var vals = sh.getRange(sh.getLastRow()-n+1, 1, n, 6).getValues();
+    var entMap={tx:'операцию',order:'заказ',payment:'выплату',contractor:'контрагента',debt:'долг'};
+    var items = vals.map(function(r){
+      return {
+        time:(r[0] instanceof Date)?Utilities.formatDate(r[0],tz,'dd.MM HH:mm'):'',
+        ts:(r[0] instanceof Date)?r[0].getTime():0,
+        entity:String(r[1]||''), entityLabel:entMap[String(r[1])]||String(r[1]||''),
+        action:String(r[3]||''), who:String(r[4]||''), detail:String(r[5]||'')
+      };
+    }).reverse();
+    return { items:items };
+  } catch(e) { return { __error:e.message, items:[] }; }
+}
+
 function getAuditLog(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);

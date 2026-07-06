@@ -2294,6 +2294,14 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             </div>
             <span class="settings-row-arrow" id="view-only-state">Выкл</span>
           </div>
+          <div class="settings-row" onclick="App.openActivity()" style="cursor:pointer;">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a4 4 0 0 0-3-3.85"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Активность команды</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Кто из сотрудников что создал, изменил, удалил</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row" onclick="App.openAuditLog()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></span>
             <div style="flex:1;">
@@ -8590,6 +8598,27 @@ var App={
     gs('sendDailyReportNow',{ssId:App.s.ssId,email:email,orgName:App.s.orgName||''}).then(function(){
       App.toast('Отчёт отправлен на '+email+' ✓');
     }).catch(function(e){App.toast(e.message,true);});
+  },
+  openActivity:function(){
+    App.openModal('<div class="modal-title">'+SVG.users+' Активность команды</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Кто из сотрудников что создал, изменил или удалил. Ведётся с обновления приложения.</div>'+
+      '<div id="act-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getActivityFeed',{ssId:App.s.ssId}).then(function(r){
+      var el=document.getElementById('act-body');if(!el)return;
+      var items=(r&&r.items)||[];
+      if(!items.length){el.innerHTML=App._empty('👥','Пока нет активности','Действия сотрудников появятся здесь по мере работы.');return;}
+      // группировка по дню
+      var groups={},order=[];
+      items.forEach(function(it){var d=(it.time||'').slice(0,5)||'—';if(!groups[d]){groups[d]=[];order.push(d);}groups[d].push(it);});
+      el.innerHTML=order.map(function(day){
+        return '<div class="grp-label" style="padding:0;margin:14px 0 8px;">'+App._e(day)+'</div>'+
+          '<div class="dt-hist">'+groups[day].map(function(h){var a=App._histAction(h.action);
+            return '<div class="dt-hist-item"><span class="dt-hist-dot" style="background:'+a.c+';">'+a.i+'</span>'+
+              '<div style="flex:1;min-width:0;"><div class="dt-hist-act">'+App._e(h.who||'—')+' · '+App._e(h.action)+' '+App._e(h.entityLabel)+(h.detail?' <span style="color:var(--muted);font-weight:500;">('+App._e(h.detail)+')</span>':'')+'</div>'+
+              '<div class="dt-hist-meta">'+App._e(h.time.slice(6)||h.time)+'</div></div></div>';
+          }).join('')+'</div>';
+      }).join('');
+    }).catch(function(e){var el=document.getElementById('act-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },
   openAuditLog:function(){
     App.openModal('<div class="modal-title">📜 Журнал изменений</div><div id="audit-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
