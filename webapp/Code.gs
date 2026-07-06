@@ -2541,6 +2541,52 @@ function getPayments(p) {
   } catch(e) { return []; }
 }
 
+// Утренний брифинг «Ожидаем сегодня»: выплаты на сегодня (и просроченные),
+// заказы, которые ждём сегодня, деньги в кассе и хватает ли на выплаты.
+function getMorningBriefing(p) {
+  var ssId=p.ssId;
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    var today=Utilities.formatDate(new Date(),tz,'yyyy-MM-dd');
+    // Деньги в кассе (наличные + все счета)
+    var cash=0; getAccounts({ssId:ssId}).forEach(function(a){cash+=a.balance||0;});
+    // Выплаты: сегодня и просроченные (неоплаченные)
+    var todayPays=[], overdueTotal=0, todayTotal=0;
+    var psh=ss.getSheetByName(SH_PAYMENTS);
+    if (psh&&psh.getLastRow()>=2) {
+      psh.getRange(2,1,psh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+        var st=String(r[PY_STATUS-1]||''); if(st==='paid'||st==='cancelled')return;
+        var due=r[PY_DUE-1]; if(!(due instanceof Date))return;
+        var k=Utilities.formatDate(due,tz,'yyyy-MM-dd');
+        var rest=Math.max((parseFloat(r[PY_AMT-1])||0)-(parseFloat(r[PY_PAID-1])||0),0);
+        if (rest<=0) return;
+        if (k<=today) {
+          todayPays.push({id:String(r[PY_ID-1]),payee:String(r[PY_NAME-1]),amount:Math.round(rest),
+            overdue:k<today,due:k.split('-').reverse().slice(0,2).join('.')});
+          if (k<today) overdueTotal+=rest; else todayTotal+=rest;
+        }
+      });
+    }
+    todayPays.sort(function(a,b){return (b.overdue?1:0)-(a.overdue?1:0);});
+    // Заказы, которые ждём сегодня
+    var todayOrders=[];
+    var osh=ss.getSheetByName(SH_ORDERS);
+    if (osh&&osh.getLastRow()>=2) {
+      osh.getRange(2,1,osh.getLastRow()-1,O_COLS).getValues().forEach(function(r){
+        if (String(r[O_STATUS-1])!=='active') return;
+        var exp=r[O_EXPECTED-1]; var k=(exp instanceof Date)?Utilities.formatDate(exp,tz,'yyyy-MM-dd'):'';
+        if (k===today) todayOrders.push({contractor:String(r[O_CONTR-1]),amount:Math.round(parseFloat(r[O_AMT-1])||0)});
+      });
+    }
+    var need=Math.round(overdueTotal+todayTotal);
+    return {cash:Math.round(cash), need:need, enough:cash>=need, shortfall:Math.max(need-cash,0),
+      todayTotal:Math.round(todayTotal), overdueTotal:Math.round(overdueTotal),
+      payments:todayPays.slice(0,8), payCount:todayPays.length,
+      orders:todayOrders.slice(0,6), orderCount:todayOrders.length};
+  } catch(e) { return {__error:e.message, cash:0, need:0, enough:true, payments:[], orders:[]}; }
+}
+
 function savePayment(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
