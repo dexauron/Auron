@@ -27,6 +27,7 @@ var SH_OBLIG     = 'ОБЯЗАТЕЛЬСТВА';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_LOG       = 'ЖУРНАЛ';
+var SH_AUDIT     = 'АУДИТ'; // история по каждой записи: кто создал/изменил/удалил
 
 // ТОВАРЫ columns (1-based)
 var G_BARCODE=1,G_NAME=2,G_GROUP=3,G_UNIT=4,G_SUPPLIER=5,G_BUY=6,G_RETAIL=7,
@@ -272,6 +273,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
+  _mk(ss,SH_AUDIT,    ['Время','Сущность','ID','Действие','Кто','Детали']);
   _mk(ss,SH_ACCESS,   ['Email','Роль','Добавлен']);
   _mk(ss,SH_CONTRACTORS,['ID','Название','Тип','Телефон','Комментарий','Создано']);
   _mk(ss,SH_ORDERS,   ['ID','Контрагент','Заказано','Ожидается','Сумма','Статус','Комментарий','Создано','Получено','Факт_Сумма']);
@@ -663,7 +665,7 @@ function saveQuickEntry(p) {
     base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
     base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
     try { _bustDash(ssId); } catch(e){}
-    
+    _audit(ss,'tx',id,'создал',_s(d.type)+' · '+(Math.round(parseFloat(d.amount)||0))+' ₽ · '+_s(d.category||''));
     return {ok:true,id:id};
   } catch(e) {  return {__error:e.message}; }
 });
@@ -730,6 +732,7 @@ function deleteTransaction(p) {
       base.deleteRow(rn);
     });
     _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
+    _audit(ss,'tx',String(id),'удалил',String(row[B_TYPE-1])+' · '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1]));
     try { _bustDash(ssId); } catch(e){}
     
     return {ok:true, deleted:targets.length};
@@ -2298,6 +2301,34 @@ function _log(ss, action, detail) {
     sh.appendRow([new Date(), String(action||''), String(detail||'').slice(0,300), who]);
   } catch(e) {}
 }
+// История по конкретной записи: кто создал/изменил/удалил и когда.
+// entity: 'tx'|'order'|'payment'|'contractor'|'debt'|... , id — ID записи.
+function _audit(ss, entity, id, action, detail) {
+  try {
+    var sh = ss.getSheetByName(SH_AUDIT);
+    if (!sh) { ensureSheets(ss); sh = ss.getSheetByName(SH_AUDIT); if(!sh) return; }
+    sh.appendRow([new Date(), String(entity||''), String(id||''), String(action||''),
+                  _myEmail(), String(detail||'').slice(0,300)]);
+  } catch(e) {}
+}
+function getEntityHistory(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId);
+    var sh = ss.getSheetByName(SH_AUDIT);
+    if (!sh || sh.getLastRow()<2) return { items:[] };
+    var tz = Session.getScriptTimeZone();
+    var ent=String(p.entity||''), id=String(p.id||'');
+    var vals = sh.getRange(2,1,sh.getLastRow()-1,6).getValues();
+    var items=[];
+    vals.forEach(function(r){
+      if (String(r[1])!==ent || String(r[2])!==id) return;
+      items.push({ time:(r[0] instanceof Date)?Utilities.formatDate(r[0],tz,'dd.MM.yyyy HH:mm'):'',
+                   action:String(r[3]||''), who:String(r[4]||''), detail:String(r[5]||'') });
+    });
+    return { items:items.reverse() };
+  } catch(e) { return { __error:e.message, items:[] }; }
+}
+
 function getAuditLog(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
@@ -2506,6 +2537,7 @@ function savePayment(p) {
         if (String(vs[i][0])===String(d.id)) {
           sh.getRange(i+2,1,1,PY_COLS).setValues([row]);
           sh.getRange(i+2,PY_DUE,1,1).setNumberFormat('dd.mm.yyyy');
+          _audit(ss,'payment',id,'изменил',_s(d.payee||d.name||'')+' · '+Math.round(parseFloat(d.amount)||0)+' ₽');
           return {ok:true,id:id};
         }
       }
@@ -2513,6 +2545,7 @@ function savePayment(p) {
     sh.appendRow(row);
     sh.getRange(sh.getLastRow(),PY_DUE,1,1).setNumberFormat('dd.mm.yyyy');
     sh.getRange(sh.getLastRow(),PY_AMT,1,1).setNumberFormat('#,##0');
+    _audit(ss,'payment',id,'создал',_s(d.payee||d.name||'')+' · '+Math.round(parseFloat(d.amount)||0)+' ₽');
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
 });
@@ -2557,6 +2590,8 @@ function updatePayment(p) {
     } else if (d.action==='restore') {
       sh.getRange(rowNum,PY_STATUS).setValue('open');
     }
+    var _actMap={pay:'оплатил',postpone:'перенёс',cancel:'отменил',restore:'вернул'};
+    _audit(ss,'payment',id,_actMap[d.action]||'изменил',String(rowData[PY_NAME-1]||''));
     try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
@@ -2606,7 +2641,7 @@ function deletePayment(p) {
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) {
-      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+      if (String(vs[i][0])===String(id)) { _audit(ss,'payment',String(id),'удалил',''); sh.deleteRow(i+2); return {ok:true}; }
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
@@ -3111,11 +3146,13 @@ function saveContractor(p) {
           // Контрагент связан с долгами/выплатами/заказами по ИМЕНИ → при
           // переименовании переносим все ссылки, иначе история «потеряется».
           if (oldName && newName && oldName!==newName) _renameContractorRefs(ss, oldName, newName);
+          _audit(ss,'contractor',String(d.id),'изменил',newName);
           return {ok:true,id:String(d.id)};
         }
     }
     var id=Utilities.getUuid();
     sh.appendRow([id,_s(d.name),_s(d.type||'Поставщик'),_s(d.phone||''),_s(d.comment||''),new Date()]);
+    _audit(ss,'contractor',id,'создал',_s(d.name));
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
 });
@@ -3159,6 +3196,7 @@ function deleteContractor(p) {
         }
         if (Math.abs(Math.round(debt))>=1 && !p.force)
           return {__error:'У «'+name+'» непогашенный долг '+Math.round(debt)+' ₽. Сначала закройте долг.'};
+        _audit(ss,'contractor',String(id),'удалил',name);
         sh.deleteRow(i+2);
         return {ok:true};
       }
@@ -3408,6 +3446,7 @@ function saveOrder(p) {
         if (String(vs[i][0])===String(d.id)) {
           sh.getRange(i+2,2,1,6).setValues([[_s(d.contractor),_s(d.ordered),_s(d.expected),amt,
             _s(d.status||'active'),_s(d.comment||'')]]);
+          _audit(ss,'order',String(d.id),'изменил',_s(d.contractor)+' · '+amt+' ₽');
           return {ok:true,id:String(d.id)};
         }
       return {__error:'Заказ не найден'};
@@ -3416,6 +3455,7 @@ function saveOrder(p) {
     sh.appendRow([id,_s(d.contractor),_s(d.ordered),_s(d.expected),amt,'active',
       _s(d.comment||''),new Date(),'','']);
     _log(ss,'Новый заказ',_s(d.contractor)+' · '+amt+' ₽ · ожид. '+_s(d.expected));
+    _audit(ss,'order',id,'создал',_s(d.contractor)+' · '+amt+' ₽');
     return {ok:true,id:id};
   } catch(e) { return {__error:e.message}; }
 });
@@ -3444,6 +3484,7 @@ function setOrderStatus(p) {
           sh.getRange(row,O_FACT).setValue('');
         }
         _log(ss,'Статус заказа',String(sh.getRange(row,O_CONTR).getValue())+' → '+status);
+        _audit(ss,'order',String(id),'изменил','статус → '+status);
         return {ok:true};
       }
     return {__error:'not found'};
@@ -3461,7 +3502,7 @@ function deleteOrder(p) {
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--)
-      if (String(vs[i][0])===String(id)) { sh.deleteRow(i+2); return {ok:true}; }
+      if (String(vs[i][0])===String(id)) { _audit(ss,'order',String(id),'удалил',''); sh.deleteRow(i+2); return {ok:true}; }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
 });
