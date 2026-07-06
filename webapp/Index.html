@@ -1817,6 +1817,8 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:16px;"></div>
       <!-- Пульс магазина -->
       <div id="pulse-card"></div>
+      <!-- Аврон-советник: проактивные подсказки -->
+      <div id="advisor-card"></div>
       <!-- Наблюдение (машина времени / слабый день) -->
       <div id="insight-card"></div>
       <!-- 2×2 stat tiles -->
@@ -4561,6 +4563,7 @@ var App={
   loadHome:function(){
     if(!App.s.ssId)return;
     App.loadPulse();
+    App.loadAdvisor();
     App.loadInsights();
     var period=App._getPeriod();
     // 1) мгновенно из кэша (если есть)
@@ -9114,6 +9117,47 @@ var App={
     if(!el.innerHTML)el.innerHTML='<div class="skel" style="height:96px;border-radius:18px;margin-bottom:14px;"></div>';
     gs('getPulse',{ssId:App.s.ssId}).then(function(r){App._pulse=r;App._renderPulse(r);})
       .catch(function(){el.innerHTML='';});
+  },
+  // ── Аврон-советник: проактивные подсказки ──────────────────────
+  loadAdvisor:function(){
+    var el=document.getElementById('advisor-card');if(!el)return;
+    gs('getAdvisor',{ssId:App.s.ssId}).then(function(r){
+      App._advisor=r;var el=document.getElementById('advisor-card');if(!el)return;
+      if(!r||r.__error||!r.count){el.innerHTML='';return;}
+      var top=r.alerts[0];
+      var more=r.count>1?' · и ещё '+(r.count-1):'';
+      el.innerHTML='<div onclick="App.openAdvisor()" style="cursor:pointer;background:var(--surface-2);border:1.4px solid var(--line);border-radius:16px;padding:13px 15px;margin:0 16px 14px;display:flex;align-items:center;gap:11px;">'+
+        '<div style="font-size:22px;flex-shrink:0;">🤖</div>'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Аврон-советник</div>'+
+          '<div style="font-size:13px;font-weight:650;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+top.icon+' '+App._advTitle(top)+more+'</div>'+
+        '</div><span style="color:var(--muted);">›</span></div>';
+    }).catch(function(){var el=document.getElementById('advisor-card');if(el)el.innerHTML='';});
+  },
+  _advTitle:function(a){var fmn=function(v){return fmt(Math.round(v));};
+    return (a.num!=null?fmn(a.num)+' '+(a.unit||'')+' — ':'')+App._e(a.title);},
+  openAdvisor:function(){
+    App.openModal('<div class="modal-title">🤖 Аврон-советник</div><div id="adv-body" style="color:var(--muted);font-size:13px;">Смотрю, что важно…</div>');
+    var render=function(r){App._advisorRender(r);};
+    if(App._advisor&&!App._advisor.__error)render(App._advisor);
+    else gs('getAdvisor',{ssId:App.s.ssId}).then(render).catch(function(e){var b=document.getElementById('adv-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _advisorRender:function(r){
+    var b=document.getElementById('adv-body');if(!b)return;
+    if(r&&r.__error){b.innerHTML='<div style="color:var(--neg);">'+App._e(r.__error)+'</div>';return;}
+    if(!r||!r.count){b.innerHTML='<div style="text-align:center;padding:24px 8px;line-height:1.6;color:var(--muted);">✅ Всё спокойно.<br>Аврон не нашёл ничего срочного — касса, товары и цены в порядке.</div>';return;}
+    var fmn=function(v){return fmt(Math.round(v));};
+    var col=function(s){return s==='high'?'var(--neg)':s==='mid'?'var(--warn,#FF9F0A)':'var(--brand)';};
+    var acts={savings:['openSavings','Показать экономию'],goods:['openGoods','Открыть товары'],payments:['goToPayments','К выплатам']};
+    var h='<div style="font-size:12.5px;color:var(--muted);margin-bottom:10px;">Что важно прямо сейчас — по данным магазина:</div>';
+    h+=r.alerts.map(function(a){var ac=acts[a.action]||['closeModal',''];
+      return'<div style="background:var(--surface-2);border-left:3px solid '+col(a.sev)+';border-radius:12px;padding:12px 14px;margin-bottom:10px;">'+
+        '<div style="font-size:14px;font-weight:750;">'+a.icon+' '+App._advTitle(a)+'</div>'+
+        '<div style="font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45;">'+App._e(a.detail||'')+'</div>'+
+        (ac[1]?'<button onclick="App.closeModal();App.'+ac[0]+'()" style="margin-top:9px;padding:7px 13px;border-radius:10px;border:none;background:'+col(a.sev)+';color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">'+ac[1]+' →</button>':'')+
+        '</div>';
+    }).join('');
+    b.innerHTML=h;
   },
   _pulseColor:function(s){return s>=80?'var(--pos)':s>=60?'var(--brand)':s>=40?'var(--warn,#FF9F0A)':'var(--neg)';},
   _renderPulse:function(r){

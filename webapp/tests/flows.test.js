@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -236,6 +236,12 @@ eq('экономия: разница 20 ₽/шт', sok&&sok.perUnit, 20);
 eq('экономия: 600 ₽/мес по Соку', sok&&sok.monthlySave, 600);
 // Молоко: текущий поставщик уже самый дешёвый (Альфа 75) → в список не попадает
 eq('экономия: Молоко не предлагается (уже дёшево)', !(sav.items||[]).some(x=>x.name==='Молоко'), true);
+
+// ── Аврон-советник: проактивные подсказки ───────────────────────────
+const adv=A.getAdvisor({ssId:'ss1'});
+eq('советник: есть подсказки', adv.count>=1, true);
+eq('советник: предлагает экономию', (adv.alerts||[]).some(a=>a.action==='savings'), true);
+eq('советник: видит неликвид (Крупа)', (adv.alerts||[]).some(a=>a.icon==='🧊'), true);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');

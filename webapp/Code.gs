@@ -617,6 +617,14 @@ function _cashAcc(ss) {
   } catch(e){}
   return 'Наличные';
 }
+// Русское склонение: _plural(2,'товар','товара','товаров') → 'товара'
+function _plural(n, one, few, many) {
+  n=Math.abs(n)%100; var n1=n%10;
+  if(n>10&&n<20) return many;
+  if(n1>1&&n1<5) return few;
+  if(n1===1) return one;
+  return many;
+}
 // Число из настройки (ключ/значение), иначе значение по умолчанию.
 function _getSettingNum(ss, key, def) {
   try {
@@ -1223,6 +1231,95 @@ function getSavingsHunter(p) {
     items.sort(function(a,b){return b.monthlySave-a.monthlySave || b.perUnit-a.perUnit;});
     return { empty:items.length===0, totalMonthly:Math.round(totalMonthly),
              count:items.length, salesDays:salesDays, items:items.slice(0,100) };
+  } catch(e) { return { __error:e.message }; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// АВРОН-СОВЕТНИК · Проактивные подсказки
+// Собирает всё важное в одну ленту: что заканчивается, где выросли цены,
+// где заморожены деньги, сколько можно сэкономить, кассовые предупреждения.
+// Каждая подсказка — с действием. Числа сырые, формат — на фронте.
+// ═══════════════════════════════════════════════════════════════════════
+function getAdvisor(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
+    var alerts = [];
+
+    // 1) Товары заканчиваются + замороженные деньги в неликвиде
+    var gsh = ss.getSheetByName(SH_GOODS);
+    var runningOut=[], frozen=0, frozenCnt=0;
+    if (gsh && gsh.getLastRow()>=2) {
+      gsh.getRange(2,1,gsh.getLastRow()-1,G_COLS).getValues().forEach(function(r){
+        var name=String(r[G_NAME-1]||''), sold=_gnum(r[G_SOLDQTY-1]),
+            stock=_gnum(r[G_STOCKQTY-1]), stockSum=_gnum(r[G_STOCKSUM-1]);
+        if (sold>0 && stock>0) { var dos=Math.round(stock/(sold/salesDays)); if(dos<=7) runningOut.push({name:name.slice(0,40),dos:dos}); }
+        if (sold===0 && stock>0) { frozen+=stockSum; frozenCnt++; }
+      });
+      runningOut.sort(function(a,b){return a.dos-b.dos;});
+    }
+    if (runningOut.length) alerts.push({ sev:'high', icon:'🛒', action:'goods',
+      title:runningOut.length+' '+_plural(runningOut.length,'товар заканчивается','товара заканчиваются','товаров заканчиваются'),
+      detail:runningOut.slice(0,3).map(function(x){return x.name+' ('+x.dos+' дн)';}).join(', ') });
+    if (frozen>0) alerts.push({ sev:'mid', icon:'🧊', action:'goods', num:Math.round(frozen), unit:'₽',
+      title:'заморожено в неликвиде', detail:frozenCnt+' '+_plural(frozenCnt,'товар лежит','товара лежат','товаров лежат')+' без продаж' });
+
+    // 2) Экономия на поставщиках
+    try {
+      var sv = getSavingsHunter({ssId:p.ssId});
+      if (sv && !sv.__error && sv.totalMonthly>0) alerts.push({ sev:'high', icon:'💰', action:'savings',
+        num:sv.totalMonthly, unit:'₽/мес', title:'можно сэкономить',
+        detail:sv.count+' '+_plural(sv.count,'товар дешевле','товара дешевле','товаров дешевле')+' у другого поставщика' });
+    } catch(e){}
+
+    // 3) Рост закупочных цен (по истории)
+    var ph = ss.getSheetByName(SH_PRICEHIST);
+    if (ph && ph.getLastRow()>=2) {
+      var byKey={};
+      ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+        var key=_goodsKey(r[PH_BARCODE-1],r[PH_NAME-1]);
+        var d=r[PH_DATE-1], t=(d instanceof Date)?d.getTime():0;
+        if(!byKey[key]) byKey[key]=[];
+        byKey[key].push({t:t, price:_gnum(r[PH_PRICE-1]), sup:String(r[PH_SUPPLIER-1]||'')});
+      });
+      var upCount=0, supUp={};
+      Object.keys(byKey).forEach(function(k){
+        var arr=byKey[k].sort(function(a,b){return a.t-b.t;});
+        if(arr.length<2) return;
+        var f=arr[0], l=arr[arr.length-1];
+        if(l.price>f.price*1.02 && f.price>0){ upCount++; if(l.sup) supUp[l.sup]=(supUp[l.sup]||0)+1; }
+      });
+      if (upCount>0) {
+        var topSup='', topN=0; Object.keys(supUp).forEach(function(s){ if(supUp[s]>topN){topN=supUp[s];topSup=s;} });
+        alerts.push({ sev:'mid', icon:'🔺', action:'goods',
+          title:'выросли закупочные цены', detail:'по '+upCount+' '+_plural(upCount,'товару','товарам','товарам')+(topSup?' · чаще всего у «'+topSup+'»':'') });
+      }
+    }
+
+    // 4) Кассовое предупреждение: наличных мало под ближайшие выплаты
+    try {
+      var cashName=_cashAcc(ss);
+      var accs=getAccounts({ssId:p.ssId})||[];
+      var cash=0; accs.forEach(function(a){ if(a.name===cashName) cash=a.balance||0; });
+      var due=0, cnt=0;
+      var paysh=ss.getSheetByName(SH_PAYMENTS);
+      if (paysh && paysh.getLastRow()>=2) {
+        var now=new Date(); var soon=new Date(now.getTime()+3*86400000);
+        paysh.getRange(2,1,paysh.getLastRow()-1,paysh.getLastColumn()).getValues().forEach(function(r){
+          var st=String(r[PY_STATUS-1]||''), amt=_gnum(r[PY_AMT-1]), dd=r[PY_DUE-1];
+          if(st==='paid'||st==='cancelled') return;
+          if(dd instanceof Date && dd.getTime()<=soon.getTime()){ due+=amt; cnt++; }
+        });
+      }
+      if (due>0 && cash<due) alerts.push({ sev:'high', icon:'⚠️', action:'payments',
+        num:Math.round(due-cash), unit:'₽', title:'не хватит на ближайшие выплаты',
+        detail:'к выплате '+Math.round(due)+' ₽ ('+cnt+' шт), в кассе '+Math.round(cash)+' ₽' });
+    } catch(e){}
+
+    // порядок: сначала важное
+    var rank={high:0, mid:1, low:2};
+    alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
+    return { count:alerts.length, alerts:alerts };
   } catch(e) { return { __error:e.message }; }
 }
 
