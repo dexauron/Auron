@@ -89,6 +89,7 @@ function _bustDash(ssId){
   try{
     var ks=['today','week','month','prev_month','year','prev_week'].map(function(pp){return 'dash_'+ssId+'_'+pp;});
     ks.push('dash_'+ssId);
+    ks.push('acc_'+ssId); // кэш балансов счетов (getAccounts)
     CacheService.getScriptCache().removeAll(ks);
   }catch(e){}
 }
@@ -497,6 +498,10 @@ function saveSettings(p) {
 function getAccounts(p) {
   var ssId = p&&p.ssId?p.ssId:p;
   try {
+    // Кэш балансов: авторитетный расчёт (полный перебор БАЗЫ) кэшируется и
+    // сбрасывается при любой записи через _bustDash → скорость без риска
+    // рассинхрона (баланс всегда пересчитывается заново после изменения).
+    try { var _c=CacheService.getScriptCache().get('acc_'+ssId); if(_c) return JSON.parse(_c); } catch(_e){}
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var accSh = ss.getSheetByName(SH_ACCOUNTS);
     var baseSh = ss.getSheetByName(SH_BASE);
@@ -517,6 +522,7 @@ function getAccounts(p) {
       });
     }
     accounts.forEach(function(a){ a.balance=Math.round(bals[a.name]||0); });
+    try { CacheService.getScriptCache().put('acc_'+ssId, JSON.stringify(accounts), 120); } catch(_e){}
     return accounts;
   } catch(e) { return []; }
 }
@@ -559,7 +565,7 @@ function saveAccount(p) {
       }
     }
     sh.appendRow(row);
-    
+    try { _bustDash(ssId); } catch(e3){}
     return {ok:true};
   } catch(e) {  return {__error:e.message}; }
 });

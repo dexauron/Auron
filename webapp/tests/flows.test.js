@@ -63,7 +63,11 @@ const sandbox={
   Utilities, Session,
   SpreadsheetApp:{ openById:()=>SS, create:()=>SS, getActiveSpreadsheet:()=>SS },
   LockService:{ getScriptLock:()=>({tryLock:()=>true,waitLock:noop,releaseLock:noop}), getUserLock:()=>({tryLock:()=>true,waitLock:noop,releaseLock:noop}) },
-  CacheService:{ getScriptCache:()=>({get:()=>null,put:noop,remove:noop,removeAll:noop}) },
+  // РЕАЛЬНЫЙ кэш в памяти — чтобы тесты проверяли, что каждая запись
+  // корректно сбрасывает кэш балансов (устаревший баланс завалит проверки).
+  CacheService:(()=>{ const store={}; const c={get:k=>store[k]!==undefined?store[k]:null,
+    put:(k,v)=>{store[k]=v;}, remove:k=>{delete store[k];}, removeAll:ks=>ks.forEach(k=>delete store[k])};
+    return { getScriptCache:()=>c }; })(),
   PropertiesService:{ getScriptProperties:()=>({getProperty:()=>null,setProperty:noop,deleteAllProperties:noop}) },
   DriveApp:{ getFileById:()=>({getOwner:()=>({getEmail:()=>'owner@x'}),addEditor:noop,setTrashed:noop}) },
   MailApp:{ sendEmail:noop }, ScriptApp:{ getService:()=>({getUrl:()=>''}), getProjectTriggers:()=>[] },
