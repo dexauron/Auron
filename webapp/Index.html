@@ -8568,6 +8568,13 @@ var App={
       '<button class="btn-secondary" style="margin-top:10px;" onclick="App._impForceMap()">Это не отчёт — сопоставить столбцы вручную</button>';
     document.getElementById('imp-map').innerHTML=html;
   },
+  // Является ли строка реальным товаром (а не заголовком/подытогом)
+  _impGoodName:function(nm){
+    if(!nm)return false;var l=String(nm).toLowerCase().trim();
+    if(l==='итого'||l==='номенклатура')return false;
+    if(l.indexOf('номенклатура.')===0)return false;
+    return true;
+  },
   // Достаёт товарные строки из вставленного отчёта 1С (для справочника товаров)
   _imp1cGoodsRows:function(typ){
     var rows=App._imp.rows,col=App._imp1cCol,n=App._imp1cNum;
@@ -8580,24 +8587,32 @@ var App={
           cB=col(rows,'штрихкод'),cU=col(rows,'Единица'),cG=col(rows,'Группа'),
           cDt=col(rows,'Период');if(cDt==null)cDt=col(rows,'Дата');if(cDt==null)cDt=col(rows,'Поступлени');
       for(var r=hdr+1;r<rows.length;r++){var row=rows[r];var nm=String(row[cN!=null?cN:0]||'').trim();
-        if(!nm||nm.toLowerCase()==='итого')continue;
-        // «период» = дата последнего поступления товара от контрагента
+        if(!App._impGoodName(nm))continue;
+        // «период» = дата последнего поступления от контрагента (со временем — берём только дату)
+        var dstr=cDt!=null?String(row[cDt]||''):'';var dm=dstr.match(/\d{2}\.\d{2}\.\d{4}/);
         out.push({name:nm,supplier:cK!=null?String(row[cK]||''):'',buy:cP!=null?n(row[cP]):0,
           barcode:cB!=null?String(row[cB]||''):'',unit:cU!=null?String(row[cU]||''):'',group:cG!=null?String(row[cG]||''):'',
-          date:cDt!=null?String(row[cDt]||'').trim():''});}
+          date:dm?dm[0]:''});}
     }else if(typ==='Продажи'){
       var cQ=col(rows,'Количество',true),cR=col(rows,'Сумма продажи',true),
           cPr=col(rows,'Прибыль',true),cC=col(rows,'Себестоимость продажи');
       for(var r2=hdr+1;r2<rows.length;r2++){var row2=rows[r2];var nm2=String(row2[0]||'').trim();
-        if(!nm2||nm2.toLowerCase()==='итого')continue;
+        if(!App._impGoodName(nm2))continue;
         var q=cQ!=null?n(row2[cQ]):0,rev=cR!=null?n(row2[cR]):0,cost=cC!=null?n(row2[cC]):0;
         out.push({name:nm2,qty:q,revenue:rev,profit:cPr!=null?n(row2[cPr]):rev-cost,
           retail:q?Math.round(rev/q*100)/100:0});}
     }else if(typ==='Остатки'){
-      var cQ2=col(rows,'Количество',true),cZ=col(rows,'Приходная сумма'),cRoz=col(rows,'Розничная сумма');
+      var cQ2=col(rows,'Количество',true),cZ=col(rows,'Приходная сумма'),cRoz=col(rows,'Розничная сумма'),
+          cB2=col(rows,'штрихкод'),cG2=col(rows,'Группа');
       for(var r3=hdr+1;r3<rows.length;r3++){var row3=rows[r3];var nm3=String(row3[0]||'').trim();
-        if(!nm3||nm3.toLowerCase()==='итого')continue;
-        out.push({name:nm3,stockQty:cQ2!=null?n(row3[cQ2]):0,stockSum:cZ!=null?n(row3[cZ]):(cRoz!=null?n(row3[cRoz]):0)});}
+        if(!App._impGoodName(nm3))continue;
+        // Отчёт остатков иерархический (склад → товар). Складские итоги
+        // (напр. «Основной склад») штрихкода не имеют — пропускаем их,
+        // иначе сумма склада попадёт в остатки как «товар» и раздует цифры.
+        var bc3=cB2!=null?String(row3[cB2]||'').trim():'';
+        if(cB2!=null && !bc3)continue;
+        out.push({name:nm3,stockQty:cQ2!=null?n(row3[cQ2]):0,stockSum:cZ!=null?n(row3[cZ]):(cRoz!=null?n(row3[cRoz]):0),
+          barcode:bc3,group:cG2!=null?String(row3[cG2]||''):''});}
     }
     return out;
   },
