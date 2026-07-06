@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════
 //  AURON FINANCE v3.0 — Production-Ready Backend
 //  Google Apps Script · Execute as: USER_ACCESSING · Access: ANYONE
+//  (тесты в webapp/tests/ не деплоятся — см. .claspignore)
 // ═══════════════════════════════════════════════════════════════════════
 
 var PROFILE_NAME  = 'Auron_Profile';
