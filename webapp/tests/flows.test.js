@@ -72,7 +72,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,SH_ACCOUNTS,SH_BASE};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -127,6 +127,43 @@ let cashId=null; accSh.data.slice(1).forEach(r=>{ if(String(r[1])==='Налич�
 A.saveAccount({ssId:'ss1',data:{id:cashId,name:'Касса магазина',startBalance:100000}});
 eq('переименование: старого имени нет', bal('Наличные'), undefined);
 eq('переименование: баланс перешёл на новое имя', bal('Касса магазина'), naличBefore);
+
+// ── Сверка кассы (saveKassa): сбалансированная смена ────────────────
+// saveKassa проводит наличные на счёт с именем «Наличные»; выше мы его
+// переименовали, поэтому создаём заново (это и показывает хрупкость #5:
+// переименование кассового счёта ломает проводки Кассы).
+A.saveAccount({ssId:'ss1',data:{name:'Наличные',startBalance:0}});
+const gcash=()=>(A.getAccounts({ssId:'ss1'}).find(a=>a.name==='Наличные')||{}).balance;
+const kBefore=gcash()||0;
+// баланс: собрано(80000)+поставщикам(15000)+оставлено(5000) = выручка(100000) → recon 0
+A.saveKassa({ssId:'ss1',data:{date:new Date().toISOString(),shift:'Смена 1',cashier:'Аня',
+  recon:{cashRev:100000,cashSupp:15000,cashCollect:80000,cashLeft:5000,cardRevs:[]}}});
+// Наличные: +выручка100000 −поставщикам15000 = +85000 (инкассация не проводится)
+eq('касса(баланс): Наличные +85000', gcash(), kBefore+85000);
+
+// ── Сверка кассы: недостача создаёт расход «Недостача кассира» ───────
+const kBefore2=gcash()||0;
+// собрано(70000)+15000+5000 = 90000 < выручка 100000 → недостача 10000
+A.saveKassa({ssId:'ss1',data:{date:new Date().toISOString(),shift:'Смена 2',cashier:'Аня',
+  recon:{cashRev:100000,cashSupp:15000,cashCollect:70000,cashLeft:5000,cardRevs:[]}}});
+// Наличные: +100000 −15000 −10000(недостача) = +75000
+eq('касса(недостача): Наличные +75000', gcash(), kBefore2+75000);
+let hasShortage=false;
+SS.getSheetByName(A.SH_BASE).data.slice(1).forEach(r=>{ if(String(r[4])==='Недостача кассира')hasShortage=true; });
+eq('касса(недостача): проводка «Недостача кассира» есть', hasShortage, true);
+
+// ── Долг магазина: накладные в долг увеличивают, погашение уменьшает ─
+const debt0=A.getStoreDebt({ssId:'ss1'}).debt;
+A.saveKassa({ssId:'ss1',data:{date:new Date().toISOString(),shift:'Смена 3',cashier:'Аня',
+  invoices:{cashPaid:0,debtRepaid:0,newDebt:40000}}});
+eq('долг магазина: +40000 новый долг', A.getStoreDebt({ssId:'ss1'}).debt, debt0+40000);
+A.saveKassa({ssId:'ss1',data:{date:new Date().toISOString(),shift:'Смена 4',cashier:'Аня',
+  invoices:{cashPaid:0,debtRepaid:15000,newDebt:0}}});
+eq('долг магазина: −15000 погашение', A.getStoreDebt({ssId:'ss1'}).debt, debt0+40000-15000);
+
+// ── setStoreDebt выставляет долг в целевое значение ─────────────────
+A.setStoreDebt({ssId:'ss1',target:100000});
+eq('setStoreDebt: долг = 100000', A.getStoreDebt({ssId:'ss1'}).debt, 100000);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');
