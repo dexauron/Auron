@@ -87,7 +87,9 @@ function _withLock(fn){
 // показывает старые суммы до 60 сек после изменения).
 function _bustDash(ssId){
   try{
-    var ks=['today','week','month','prev_month','year','prev_week'].map(function(pp){return 'dash_'+ssId+'_'+pp;});
+    var periods=['today','week','month','prev_month','year','prev_week','prev_month_mtd','prev_week_mtd'];
+    var ks=periods.map(function(pp){return 'dash_'+ssId+'_'+pp;})
+      .concat(periods.map(function(pp){return 'an_'+ssId+'_'+pp;})); // кэш аналитики
     ks.push('dash_'+ssId);
     ks.push('acc_'+ssId); // кэш балансов счетов (getAccounts)
     CacheService.getScriptCache().removeAll(ks);
@@ -1562,6 +1564,8 @@ function saveTimesheetEntry(p) {
 function getAnalytics(p) {
   var ssId=p.ssId, period=p.period;
   try {
+    var _ak='an_'+ssId+'_'+period;
+    try { var _c=CacheService.getScriptCache().get(_ak); if(_c) return JSON.parse(_c); } catch(_e){}
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
     var tz=Session.getScriptTimeZone();
@@ -1597,8 +1601,10 @@ function getAnalytics(p) {
     var heatmap=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(d,i){return{dow:i+1,label:d,amount:Math.round(hm[i])};});
     var totalDebt=0;
     try{getDebts({ssId:ssId}).forEach(function(d){if(d.debt>0)totalDebt+=d.debt;});}catch(e){}
-    return {income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
+    var _res={income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
             timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt)};
+    try { CacheService.getScriptCache().put(_ak, JSON.stringify(_res), 90); } catch(_e){}
+    return _res;
   } catch(e) { return {income:0,expense:0,byCategory:[],timeline:[],heatmap:_emptyHm(),totalDebt:0}; }
 }
 
