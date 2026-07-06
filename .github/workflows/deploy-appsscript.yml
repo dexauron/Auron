@@ -14,10 +14,29 @@ on:
       - 'webapp/**.gs'
       - 'webapp/**.html'
       - 'webapp/**.json'
+      - 'webapp/**.js'
   workflow_dispatch:
 
 jobs:
+  # Тесты денежной математики — гоняются всегда; деплой без них не пойдёт.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Проверка синтаксиса Code.gs
+        run: cp webapp/Code.gs /tmp/Code.js && node --check /tmp/Code.js
+      - name: Тесты денежной математики
+        run: node webapp/tests/money.test.js
+      - name: Тесты денежных потоков
+        run: node webapp/tests/flows.test.js
+
   push:
+    needs: test
     runs-on: ubuntu-latest
     env:
       CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
