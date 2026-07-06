@@ -1461,6 +1461,18 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .qa-ic{width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;
   margin:0 auto 10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
 
+/* Пустые экраны красивее: иконка в мягком кружке + аккуратная типографика */
+.empty,.empty-state{animation:cardUp .4s cubic-bezier(.22,.8,.28,1) both;}
+.empty-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:76px;height:76px;border-radius:26px;margin:0 auto 16px;
+  font-size:38px;line-height:1;opacity:1;
+  background:radial-gradient(120% 120% at 50% 0%,var(--brand-dim),var(--surface-2));
+  box-shadow:inset 0 0 0 1px var(--line),0 10px 26px -16px rgba(0,0,0,.6);
+}
+.empty-text{font-size:15.5px;font-weight:800;color:var(--ink);letter-spacing:-.01em;}
+.empty-state{color:var(--muted);}
+
 </style>
 </head>
 <body>
@@ -2547,8 +2559,9 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.2.0';
+var APP_VERSION='2.3.0';
 var APP_CHANGELOG=[
+  {v:'2.3.0',t:'Обновление дизайна: единые SVG-иконки вместо эмодзи, мягкие тени и «стекло» у окон, плавное появление карточек, ровные цифры, красивые пустые экраны, чипы статусов, права по ролям'},
   {v:'2.2.0',t:'Надёжность денег: калькулятор-клавиатура для сумм, безопасная работа команды, точный учёт переводов и табеля, переименование счёта/поставщика без потери истории, мгновенное обновление главной'},
   {v:'2.1.0',t:'Отмена удаления, корзина 30 дней, светлая тема, свайпы, повтор операции, «Поделиться», приватность, версия приложения'},
   {v:'2.0.0',t:'Карточка контрагента, режим сотрудника, сводки после сохранения, фильтры истории, офлайн-очередь'},
