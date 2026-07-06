@@ -2663,7 +2663,15 @@ var SVG={
   trash:_sv('<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>'),
   bag:_sv('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"/>'),
   gem:_sv('<path d="M12 3l3 5 5 1.5-5 3.5-3 6-3-6-5-3.5L9 8z"/>'),
-  money:_sv('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/>')
+  money:_sv('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/>'),
+  bell:_sv('<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.5 21a1.5 1.5 0 0 1-3 0"/>'),
+  store:_sv('<path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/>'),
+  scales:_sv('<path d="M12 3v18M7 21h10M12 6l-7 2 3 5a3 3 0 0 1-6 0l3-5M12 6l7 2-3 5a3 3 0 0 0 6 0l-3-5"/>'),
+  folder:_sv('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  lock:_sv('<rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'),
+  truck:_sv('<path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/>'),
+  check:_sv('<path d="M20 6L9 17l-5-5"/>'),
+  bolt2:_sv('<path d="M13 2L4 14h6l-1 8 9-12h-6z"/>')
 };
 var CAT_ICONS={
   'ЗП':{icon:SVG.users,bg:'#8B5CF6'},'Аренда':{icon:SVG.home,bg:'#F59E0B'},
@@ -2885,7 +2893,7 @@ var App={
   openSecurity:function(){
     var has=!!(App.sec&&App.sec.hash);var min=(App.sec&&App.sec.min!==undefined)?App.sec.min:1;
     var opts=[[0,'Никогда'],[0.5,'30 секунд'],[1,'1 минута'],[2,'2 минуты'],[5,'5 минут']];
-    App.openModal('<div class="modal-title">🔒 Защита PIN-кодом</div>'+
+    App.openModal('<div class="modal-title">'+SVG.lock+' Защита PIN-кодом</div>'+
       '<div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5;">PIN хранится только на этом устройстве. После бездействия приложение блокируется.</div>'+
       (has?'<div style="display:flex;gap:8px;margin-bottom:14px;">'+
           '<button class="btn-secondary" style="margin:0;" onclick="App._secReturn=function(){App.openSecurity();};App.showLock(\'set\');">Сменить PIN</button>'+
@@ -3281,7 +3289,7 @@ var App={
   // ── Сотрудники и доступ (только владелец) ──
   _roles:['Бухгалтер','Администратор','Сотрудник зала'],
   openTeam:function(){
-    App.openModal('<div class="modal-title">👥 Сотрудники и доступ</div><div id="team-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">'+SVG.users+' Сотрудники идоступ</div><div id="team-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getTeamAll',{}).then(function(r){
       if(r&&r.__error)throw new Error(r.__error);
       App._teamAll=r;App._renderTeamAll();
@@ -3380,7 +3388,7 @@ var App={
   // ── Справочник контрагентов ──
   openContractorsDir:function(showArch){
     App._cdArch=!!showArch;
-    App.openModal('<div class="modal-title">📇 Справочник контрагентов</div><div id="cd-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">'+SVG.folder+' Справочник контрагентов</div><div id="cd-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getContractors',{ssId:App.s.ssId,all:true}).then(function(r){
       App._contractorsAll=r||[];
       App._contractors=App._contractorsAll.filter(function(c){return App._cdArch?c.archived:!c.archived;});
@@ -3536,7 +3544,7 @@ var App={
   // оплата/долг учитываются накладными при закрытии дня (нет двойного учёта).
   _ordersFilter:'active',
   openOrders:function(){
-    App.openModal('<div class="modal-title">🚚 Заказы товара</div><div id="ord-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">'+SVG.truck+' Заказы товара</div><div id="ord-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getOrders',{ssId:App.s.ssId}).then(function(r){
       if(r&&r.__error)throw new Error(r.__error);
       App._orders=r;App._renderOrders();
@@ -3664,7 +3672,7 @@ var App={
   openOrderForm:function(){
     var today=fmtISO(new Date());
     var exp=fmtISO(new Date(Date.now()+3*86400000));
-    App.openModal('<div class="modal-title">🚚 Новый заказ</div>'+
+    App.openModal('<div class="modal-title">'+SVG.truck+' Новый заказ</div>'+
       '<div class="field"><label>У кого заказали</label><input id="of-contr" type="text" placeholder="Начни вводить название…" autocomplete="off"><div style="font-size:11.5px;color:var(--muted);margin-top:4px;">Нет в списке? Просто впиши название — добавим в справочник автоматически.</div></div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
       '<div class="field"><label>Когда заказали</label><input id="of-ordered" type="date" value="'+today+'"></div>'+
@@ -5919,7 +5927,7 @@ var App={
       var on=i<6; // по умолчанию пн–сб
       return '<button type="button" data-dow="'+(i+1)+'" onclick="this.classList.toggle(\'on\');this.style.background=this.classList.contains(\'on\')?\'var(--brand)\':\'var(--surface-2)\';this.style.color=this.classList.contains(\'on\')?\'#fff\':\'var(--muted)\';" class="'+(on?'on':'')+'" style="flex:1;padding:9px 0;border-radius:10px;border:none;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);background:'+(on?'var(--brand)':'var(--surface-2)')+';color:'+(on?'#fff':'var(--muted)')+';">'+d+'</button>';
     }).join('');
-    App.openModal('<div class="modal-title">⚡ Заполнить по графику</div>'+
+    App.openModal('<div class="modal-title">'+SVG.bolt2+' Заполнить пографику</div>'+
       '<div class="field"><label>Сотрудник</label><select id="tf-emp">'+opts+'</select></div>'+
       '<div class="field"><label>Рабочие дни</label><div id="tf-dows" style="display:flex;gap:5px;">'+chips+'</div></div>'+
       '<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Заполнятся только пустые дни месяца — время, часы и ставка возьмутся из карточки сотрудника. Уже заполненные дни не тронем.</div>'+
@@ -6691,7 +6699,7 @@ var App={
     var cur=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
     var pm=new Date(now.getFullYear(),now.getMonth()-1,1);
     var prev=pm.getFullYear()+'-'+String(pm.getMonth()+1).padStart(2,'0');
-    App.openModal('<div class="modal-title">⚖️ Сравнить месяцы</div>'+
+    App.openModal('<div class="modal-title">'+SVG.scales+' Сравнить месяцы</div>'+
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'+
       '<div class="field" style="margin:0;"><label>Месяц А</label><input type="month" id="cmp-a" value="'+prev+'" onchange="App._cmpGo()"></div>'+
       '<div class="field" style="margin:0;"><label>Месяц Б</label><input type="month" id="cmp-b" value="'+cur+'" onchange="App._cmpGo()"></div></div>'+
@@ -6743,7 +6751,7 @@ var App={
   // ── Долги · Накопления · Кредиты ──
   _oblTypes:{iowe:{icon:'📉',label:'Я должен',color:'var(--neg)'},owed:{icon:'📈',label:'Мне должны',color:'var(--pos)'},credit:{icon:'🏦',label:'Кредит / рассрочка',color:'var(--warn,#FF9F0A)'},savings:{icon:'💰',label:'Накопления / цель',color:'var(--pos)'}},
   openObligations:function(){
-    App.openModal('<div class="modal-title">💰 Долги · Накопления · Кредиты</div><div id="obl-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">'+SVG.money+' Долги · Накопления · Кредиты</div><div id="obl-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getObligations',{ssId:App.s.ssId}).then(function(r){
       if(r&&r.__error)throw new Error(r.__error);
       App._obl=r;App._renderObligations();
@@ -6824,7 +6832,7 @@ var App={
   },
   editStoreDebt:function(){
     var cur=(App._obl&&App._obl.storeDebt)||App._kStoreDebt||0;
-    App.openModal('<div class="modal-title">🏪 Долг магазина</div>'+
+    App.openModal('<div class="modal-title">'+SVG.store+' Долг магазина</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Долг по накладным считается автоматически. Здесь можно задать точную сумму — приложение запишет корректировку в регистр.</div>'+
       '<div class="field"><label>Долг магазина сейчас (₽)</label><input id="sd-val" type="number" inputmode="decimal" value="'+cur+'"></div>'+
       '<button class="btn-primary" onclick="App._storeDebtSave()">Установить</button>');
@@ -6840,7 +6848,7 @@ var App={
 
   // ── Центр уведомлений ──
   openNotifCenter:function(){
-    App.openModal('<div class="modal-title">🔔 Уведомления</div><div id="nc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">'+SVG.bell+' Уведомления</div><div id="nc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getNotifications',{ssId:App.s.ssId}).then(function(r){
       var el=document.getElementById('nc-body');if(!el)return;
       var items=(r&&r.items)||[];
