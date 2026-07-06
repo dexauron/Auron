@@ -444,7 +444,8 @@ function getSettings(p) {
       cashFloat:        parseFloat(map['CASH_FLOAT'])||0,
       beznalAccount:    String(map['BEZNAL_ACCOUNT']||''),
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
-      showKassaBalance: gb('SHOW_KASSA_BALANCE', true)
+      showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
+      taxRate:          parseFloat(map['TAX_RATE'])||6
     };
   } catch(e) {
     return { cats:[], cashiers:[], payTypes:['Наличные','Карта','СБП'], repStatuses:[], employees:[], shifts:[] };
@@ -4180,6 +4181,37 @@ function getDayNote(p) {
 }
 
 // Центр уведомлений: все события магазина одним списком
+// Напоминание о налоге УСН: ближайший срок аванса и его оценка.
+// Оценка = выручка завершившегося квартала × ставка (по умолч. 6% УСН «доходы»).
+function getTaxReminder(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var st=getSettings({ssId:p.ssId});
+    var rate=parseFloat(st.taxRate)||6; // % (УСН «доходы» по умолчанию 6)
+    var now=new Date(), y=now.getFullYear();
+    // Сроки авансов УСН: 28 мар (год), 28 апр (Q1), 28 июл (Q2), 28 окт (Q3)
+    var cand=[
+      {date:new Date(y,2,28),   q:3, yearFor:y-1, label:'налог УСН за '+(y-1)+' год'},
+      {date:new Date(y,3,28),   q:0, yearFor:y,   label:'аванс УСН за 1 кв.'},
+      {date:new Date(y,6,28),   q:1, yearFor:y,   label:'аванс УСН за 2 кв.'},
+      {date:new Date(y,9,28),   q:2, yearFor:y,   label:'аванс УСН за 3 кв.'},
+      {date:new Date(y+1,2,28), q:3, yearFor:y,   label:'налог УСН за '+y+' год'}
+    ];
+    var todayMid=new Date(y,now.getMonth(),now.getDate());
+    var next=null;
+    for (var i=0;i<cand.length;i++){ if(cand[i].date.getTime()>=todayMid.getTime()){next=cand[i];break;} }
+    if (!next) return {daysLeft:null};
+    var tx=getTaxSummary({ssId:p.ssId, year:next.yearFor});
+    var qInc=(next.q===3)?((tx&&tx.yearIncome)||0):(((tx&&tx.quarters&&tx.quarters[next.q])||{}).income||0);
+    var estimate=Math.round(qInc*rate/100);
+    var daysLeft=Math.round((next.date.getTime()-todayMid.getTime())/86400000);
+    var tz=Session.getScriptTimeZone();
+    return {daysLeft:daysLeft, date:Utilities.formatDate(next.date,tz,'yyyy-MM-dd'),
+      dateLabel:Utilities.formatDate(next.date,tz,'dd.MM'), label:next.label,
+      estimate:estimate, rate:rate, quarterIncome:Math.round(qInc)};
+  } catch(e) { return {daysLeft:null,__error:e.message}; }
+}
+
 function getNotifications(p) {
   var ssId=p.ssId;
   try {
@@ -4222,6 +4254,14 @@ function getNotifications(p) {
       if (gm&&gm.lastUpdate) {
         var days=Math.floor((Date.now()-new Date(gm.lastUpdate).getTime())/86400000);
         if (days>=7) out.push({icon:'📦',level:'info',text:'Товары не обновлялись '+days+' дн. — загрузи выгрузку из 1С'});
+      }
+    } catch(e){}
+    // Налоговая дата (аванс УСН) — если близко
+    try {
+      var tr=getTaxReminder({ssId:ssId});
+      if (tr&&tr.daysLeft!=null&&tr.daysLeft<=21) {
+        out.push({icon:'🏛',level:tr.daysLeft<=5?'bad':'warn',
+          text:'До '+tr.dateLabel+' — '+tr.label+' ≈ '+tr.estimate.toLocaleString('ru')+' ₽ ('+tr.daysLeft+' дн.)'});
       }
     } catch(e){}
     return {items:out,count:out.filter(function(x){return x.level!=='info';}).length};
