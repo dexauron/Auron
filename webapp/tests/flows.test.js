@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -169,6 +169,47 @@ eq('долг магазина: −15000 погашение', A.getStoreDebt({ssI
 // ── setStoreDebt выставляет долг в целевое значение ─────────────────
 A.setStoreDebt({ssId:'ss1',target:100000});
 eq('setStoreDebt: долг = 100000', A.getStoreDebt({ssId:'ss1'}).debt, 100000);
+
+// ── Аналитика товаров: проф-метрики, сортировка, карточка ───────────
+// Загружаем цены (2 поставщика на товар A), продажи и остатки.
+A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
+  {barcode:'111',name:'Молоко',group:'Молочка',supplier:'ОптТорг',buy:80},
+  {barcode:'222',name:'Крупа',  group:'Бакалея', supplier:'Меркурий',buy:50}]});
+A.saveGoods({ssId:'ss1',kind:'Цены',rows:[
+  {barcode:'111',name:'Молоко',group:'Молочка',supplier:'Альфа',buy:75}]}); // 2-й поставщик дешевле
+A.saveGoods({ssId:'ss1',kind:'Продажи',salesDays:30,rows:[
+  {barcode:'111',name:'Молоко',qty:10,revenue:1000,profit:200,retail:100},
+  {barcode:'222',name:'Крупа',  qty:0, revenue:0,   profit:0,  retail:60}]});
+A.saveGoods({ssId:'ss1',kind:'Остатки',rows:[
+  {barcode:'111',name:'Молоко',stockQty:5,stockSum:400},
+  {barcode:'222',name:'Крупа',  stockQty:4,stockSum:200}]});
+
+const ga=A.getGoodsAnalytics({ssId:'ss1'});
+eq('товары: количество', ga.count, 2);
+// Молоко: закуп обновлён 2-м прайсом до 75 → наценка (100−75)/75=33.3%; Крупа 20%
+eq('товары: ср. наценка (33.3+20)/2', ga.avgMarkup, 26.7);
+eq('товары: GMROI = прибыль/остаток (200/600)', ga.gmroi, 0.33);
+eq('товары: заморожено в неликвиде (Крупа)', ga.frozen, 200);
+eq('товары: оборачиваемость в днях', ga.turnoverDays, 27);
+eq('товары: снимок продаж создан', ga.snapshots.length>=1, true);
+
+// getGoods: сортировка по прибыли + вычисленная наценка/дни остатка
+const gl=A.getGoods({ssId:'ss1',sort:'profit'});
+eq('список: первый по прибыли — Молоко', gl.items[0].name, 'Молоко');
+eq('список: наценка Молока (закуп 75)', gl.items[0].markup, 33.3);
+eq('список: фильтр-фасеты (группы)', gl.groups.length, 2);
+// Молоко: остаток 5, продано 10 за 30 дн → хватит на 5/(10/30)=15 дн
+eq('список: дней остатка Молока', gl.items[0].daysOfStock, 15);
+
+// Фильтр по поставщику
+const glf=A.getGoods({ssId:'ss1',supplier:'Меркурий'});
+eq('список: фильтр по поставщику', glf.items.length, 1);
+
+// Карточка товара: история цены + сравнение поставщиков
+const pc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
+eq('карточка: история цены (2 точки)', pc.priceHist.length, 2);
+eq('карточка: поставщиков', pc.suppliers.length, 2);
+eq('карточка: дешевле у Альфы (75)', pc.suppliers[0].price, 75);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');

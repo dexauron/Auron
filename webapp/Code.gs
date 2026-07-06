@@ -27,6 +27,7 @@ var SH_NOTES     = 'ЗАМЕТКИ';
 var SH_OBLIG     = 'ОБЯЗАТЕЛЬСТВА';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
+var SH_GOODSSNAP = 'ТОВАРЫ_ИСТ'; // дневные снимки продаж (для динамики/трендов)
 var SH_LOG       = 'ЖУРНАЛ';
 var SH_AUDIT     = 'АУДИТ'; // история по каждой записи: кто создал/изменил/удалил
 
@@ -37,6 +38,9 @@ var G_COLS=13;
 // ЦЕНЫ_ИСТ columns
 var PH_DATE=1,PH_BARCODE=2,PH_NAME=3,PH_SUPPLIER=4,PH_PRICE=5;
 var PH_COLS=5;
+// ТОВАРЫ_ИСТ columns (агрегатный снимок продаж по дате загрузки)
+var GS_DATE=1,GS_REVENUE=2,GS_PROFIT=3,GS_SOLDQTY=4,GS_ITEMS=5,GS_MARKUP=6;
+var GS_COLS=6;
 
 // РЕКУРРЕНТНЫЕ columns
 var RC_ID=1,RC_NAME=2,RC_CAT=3,RC_AMT=4,RC_ACC=5,RC_DAY=6,RC_ACTIVE=7,RC_CREATED=8;
@@ -276,6 +280,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
+  _mk(ss,SH_GOODSSNAP,['Дата','Выручка','Прибыль','Продано_Кол','Товаров','Ср_Наценка']);
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
   _mk(ss,SH_AUDIT,    ['Время','Сущность','ID','Действие','Кто','Детали']);
   _mk(ss,SH_ACCESS,   ['Email','Роль','Добавлен']);
@@ -611,6 +616,17 @@ function _cashAcc(ss) {
     }
   } catch(e){}
   return 'Наличные';
+}
+// Число из настройки (ключ/значение), иначе значение по умолчанию.
+function _getSettingNum(ss, key, def) {
+  try {
+    var s=ss.getSheetByName(SH_SETTINGS);
+    if (s&&s.getLastRow()>=2) {
+      var v=s.getRange(2,1,s.getLastRow()-1,2).getValues();
+      for (var i=0;i<v.length;i++) if (String(v[i][0])===key){ var n=parseFloat(v[i][1]); return isNaN(n)?def:n; }
+    }
+  } catch(e){}
+  return def;
 }
 // Upsert одной настройки (ключ/значение).
 function _setSetting(ss, key, val) {
@@ -962,6 +978,7 @@ function _gnum(v) {
 function saveGoods(p) {
   return _withLock(function(){
   var ssId = p.ssId, kind = p.kind || '', rows = p.rows || [];
+  var salesDays = parseInt(p.salesDays)||0; // сколько дней покрывает отчёт «Продажи»
   if (!rows.length) return { ok:true, saved:0, updated:0 };
   try {
     
@@ -1015,7 +1032,32 @@ function saveGoods(p) {
       ph.getRange(pr,1,hist.length,PH_COLS).setValues(hist);
       ph.getRange(pr,PH_DATE,hist.length,1).setNumberFormat('dd.mm.yyyy');
     }
-    
+    // При загрузке «Продажи» — сохраняем период и дневной снимок для динамики.
+    if (kind === 'Продажи') {
+      if (salesDays>0) _setSetting(ss,'GOODS_SALES_DAYS',salesDays);
+      var snapRev=0, snapProfit=0, snapQty=0, mSum=0, mN=0;
+      data.forEach(function(r){
+        snapRev+=_gnum(r[G_REVENUE-1]); snapProfit+=_gnum(r[G_PROFIT-1]); snapQty+=_gnum(r[G_SOLDQTY-1]);
+        var b=_gnum(r[G_BUY-1]), rt=_gnum(r[G_RETAIL-1]);
+        if (b>0&&rt>0){ mSum+=(rt-b)/b*100; mN++; }
+      });
+      var snapMarkup = mN>0 ? Math.round(mSum/mN*10)/10 : 0;
+      // Один снимок в день: если сегодня уже есть — перезаписываем, иначе добавляем.
+      var gsSh = ss.getSheetByName(SH_GOODSSNAP);
+      var today = Utilities.formatDate(now,tz,'yyyy-MM-dd');
+      var snapRow = [now, Math.round(snapRev), Math.round(snapProfit), Math.round(snapQty), data.length, snapMarkup];
+      var found = -1;
+      if (gsSh.getLastRow()>=2) {
+        var gv = gsSh.getRange(2,GS_DATE,gsSh.getLastRow()-1,1).getValues();
+        for (var gi=0; gi<gv.length; gi++) {
+          var gd=gv[gi][0]; if (gd instanceof Date && Utilities.formatDate(gd,tz,'yyyy-MM-dd')===today){ found=gi+2; break; }
+        }
+      }
+      if (found>0) gsSh.getRange(found,1,1,GS_COLS).setValues([snapRow]);
+      else gsSh.appendRow(snapRow);
+      gsSh.getRange(found>0?found:gsSh.getLastRow(),GS_DATE,1,1).setNumberFormat('dd.mm.yyyy');
+    }
+
     return { ok:true, saved:saved, updated:updated, total:data.length };
   } catch(e) {  return { __error:e.message }; }
 });
@@ -1025,23 +1067,91 @@ function getGoods(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_GOODS);
-    if (sh.getLastRow() < 2) return { items:[] };
+    if (sh.getLastRow() < 2) return { items:[], groups:[], suppliers:[] };
     var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+    var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
     var q = String(p.q||'').toLowerCase().trim();
+    var fGroup = String(p.group||'').trim();
+    var fSupplier = String(p.supplier||'').trim();
+    var sort = String(p.sort||'').trim(); // profit|revenue|markup|sold|stock|dead|name
+    var grpSet={}, supSet={};
     var items = data.map(function(r){
-      return {
+      var buy=_gnum(r[G_BUY-1]), retail=_gnum(r[G_RETAIL-1]);
+      var soldQty=_gnum(r[G_SOLDQTY-1]), stockQty=_gnum(r[G_STOCKQTY-1]);
+      var markup = (buy>0&&retail>0)?Math.round((retail-buy)/buy*1000)/10 : null;
+      var margin = (retail>0&&buy>0)?Math.round((retail-buy)/retail*1000)/10 : null;
+      var daysOfStock = (soldQty>0)?Math.round(stockQty/(soldQty/salesDays)) : null;
+      var it = {
         barcode:String(r[G_BARCODE-1]||''), name:String(r[G_NAME-1]||''),
         group:String(r[G_GROUP-1]||''), unit:String(r[G_UNIT-1]||''),
         supplier:String(r[G_SUPPLIER-1]||''),
-        buy:_gnum(r[G_BUY-1]), retail:_gnum(r[G_RETAIL-1]),
-        soldQty:_gnum(r[G_SOLDQTY-1]), revenue:_gnum(r[G_REVENUE-1]), profit:_gnum(r[G_PROFIT-1]),
-        stockQty:_gnum(r[G_STOCKQTY-1]), stockSum:_gnum(r[G_STOCKSUM-1])
+        buy:buy, retail:retail, markup:markup, margin:margin, daysOfStock:daysOfStock,
+        soldQty:soldQty, revenue:_gnum(r[G_REVENUE-1]), profit:_gnum(r[G_PROFIT-1]),
+        stockQty:stockQty, stockSum:_gnum(r[G_STOCKSUM-1])
       };
+      if(it.group)grpSet[it.group]=1; if(it.supplier)supSet[it.supplier]=1;
+      return it;
     }).filter(function(it){
+      if (fGroup && it.group!==fGroup) return false;
+      if (fSupplier && it.supplier!==fSupplier) return false;
       if (!q) return true;
       return it.name.toLowerCase().indexOf(q)>=0 || it.barcode.indexOf(q)>=0 || it.supplier.toLowerCase().indexOf(q)>=0;
     });
-    return { items:items.slice(0,500), total:data.length };
+    var sorters={
+      profit:function(a,b){return b.profit-a.profit;},
+      revenue:function(a,b){return b.revenue-a.revenue;},
+      markup:function(a,b){return (a.markup==null?1e9:a.markup)-(b.markup==null?1e9:b.markup);},
+      sold:function(a,b){return b.soldQty-a.soldQty;},
+      stock:function(a,b){return b.stockSum-a.stockSum;},
+      dead:function(a,b){return (b.soldQty===0?b.stockSum:-1)-(a.soldQty===0?a.stockSum:-1);},
+      name:function(a,b){return a.name.localeCompare(b.name);}
+    };
+    if (sorters[sort]) items.sort(sorters[sort]);
+    return { items:items.slice(0,500), total:items.length, allTotal:data.length,
+             groups:Object.keys(grpSet).sort(), suppliers:Object.keys(supSet).sort(), salesDays:salesDays };
+  } catch(e) { return { __error:e.message }; }
+}
+
+// Подробности по одному товару: метрики + история цены + цены по поставщикам.
+function getProductDetail(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh = ss.getSheetByName(SH_GOODS);
+    if (sh.getLastRow() < 2) return { __error:'Нет данных' };
+    var key = _goodsKey(p.barcode, p.name);
+    var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+    var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
+    var it=null;
+    for (var i=0;i<data.length;i++){
+      if (_goodsKey(data[i][G_BARCODE-1],data[i][G_NAME-1])===key){ var r=data[i];
+        var buy=_gnum(r[G_BUY-1]),retail=_gnum(r[G_RETAIL-1]),soldQty=_gnum(r[G_SOLDQTY-1]),stockQty=_gnum(r[G_STOCKQTY-1]);
+        it={ barcode:String(r[G_BARCODE-1]||''),name:String(r[G_NAME-1]||''),group:String(r[G_GROUP-1]||''),
+          unit:String(r[G_UNIT-1]||''),supplier:String(r[G_SUPPLIER-1]||''),buy:buy,retail:retail,
+          markup:(buy>0&&retail>0)?Math.round((retail-buy)/buy*1000)/10:null,
+          margin:(buy>0&&retail>0)?Math.round((retail-buy)/retail*1000)/10:null,
+          daysOfStock:(soldQty>0)?Math.round(stockQty/(soldQty/salesDays)):null,
+          soldQty:soldQty,revenue:_gnum(r[G_REVENUE-1]),profit:_gnum(r[G_PROFIT-1]),
+          stockQty:stockQty,stockSum:_gnum(r[G_STOCKSUM-1]) };
+        break;
+      }
+    }
+    if (!it) return { __error:'Товар не найден' };
+    // История цены закупки + цены разных поставщиков
+    var priceHist=[], supPrices={};
+    var ph=ss.getSheetByName(SH_PRICEHIST);
+    if (ph && ph.getLastRow()>=2) {
+      var tz=Session.getScriptTimeZone();
+      ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+        if (_goodsKey(r[PH_BARCODE-1],r[PH_NAME-1])!==key) return;
+        var d=r[PH_DATE-1], price=_gnum(r[PH_PRICE-1]), sup=String(r[PH_SUPPLIER-1]||'');
+        priceHist.push({label:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'', t:(d instanceof Date)?d.getTime():0, price:price, supplier:sup});
+        if (sup&&price){ if(!supPrices[sup]||supPrices[sup].t<= ((d instanceof Date)?d.getTime():0)) supPrices[sup]={price:price,t:(d instanceof Date)?d.getTime():0}; }
+      });
+      priceHist.sort(function(a,b){return a.t-b.t;});
+    }
+    var suppliers=Object.keys(supPrices).map(function(s){return {supplier:s,price:supPrices[s].price};})
+      .sort(function(a,b){return a.price-b.price;});
+    return { item:it, priceHist:priceHist, suppliers:suppliers, salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
 }
 
@@ -1158,6 +1268,38 @@ function getGoodsAnalytics(p) {
     // Оборачиваемость: доля проданного к остатку (по количеству) — где деньги «спят»
     var soldQ=0,stockQ=0; items.forEach(function(it){soldQ+=it.soldQty; stockQ+=it.stockQty;});
     var turnover = stockQ>0 ? Math.round(soldQ/stockQ*100)/100 : 0;
+    // ── Профессиональные метрики ─────────────────────────────────────
+    var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30);
+    if (!salesDays||salesDays<1) salesDays=30;
+    // Средняя наценка (взвешенная простая) и «замороженные» деньги (неликвид)
+    var mkSum=0,mkN=0,frozen=0,deadCnt=0;
+    items.forEach(function(it){
+      if(it.buy>0&&it.retail>0){ mkSum+=(it.retail-it.buy)/it.buy*100; mkN++; }
+      if(it.stockQty>0&&it.soldQty===0){ frozen+=it.stockSum; deadCnt++; }
+    });
+    var avgMarkup = mkN>0?Math.round(mkSum/mkN*10)/10:0;
+    var frozenShare = totStock>0?Math.round(frozen/totStock*100):0;
+    // GMROI — сколько прибыли на 1 ₽, вложенный в запас (>1 хорошо)
+    var gmroi = totStock>0?Math.round(totProfit/totStock*100)/100:0;
+    // Оборачиваемость в днях: за сколько дней распродаётся текущий остаток
+    var turnoverDays = soldQ>0?Math.round(stockQ/(soldQ/salesDays)):0;
+    // Динамика продаж по снимкам загрузок
+    var snapshots=[], momRevenue=null, momProfit=null;
+    var gsSh=ss.getSheetByName(SH_GOODSSNAP);
+    if (gsSh && gsSh.getLastRow()>=2) {
+      var gv=gsSh.getRange(2,1,gsSh.getLastRow()-1,GS_COLS).getValues();
+      var tz2=Session.getScriptTimeZone();
+      snapshots=gv.map(function(r){var d=r[GS_DATE-1];
+        return {label:(d instanceof Date)?Utilities.formatDate(d,tz2,'dd.MM'):'',
+          revenue:_gnum(r[GS_REVENUE-1]), profit:_gnum(r[GS_PROFIT-1]),
+          soldQty:_gnum(r[GS_SOLDQTY-1]), markup:_gnum(r[GS_MARKUP-1])};
+      }).slice(-12);
+      if (snapshots.length>=2) {
+        var pv=snapshots[snapshots.length-2], cu=snapshots[snapshots.length-1];
+        if(pv.revenue>0) momRevenue=Math.round((cu.revenue-pv.revenue)/pv.revenue*1000)/10;
+        if(pv.profit>0) momProfit=Math.round((cu.profit-pv.profit)/pv.profit*1000)/10;
+      }
+    }
     // ABC-анализ по прибыли (или выручке): A=вклад до 80%, B=до 95%, C=остальное
     var abc=null;
     var metric=totProfit>0?'profit':'revenue';
@@ -1179,7 +1321,12 @@ function getGoodsAnalytics(p) {
       suppliers:suppliers, topProfit:topProfit, lowMargin:lowMargin,
       movers:movers, deadStock:deadStock, priceUps:priceUps, abc:abc,
       groups:groups, turnover:turnover, restock:restock,
-      supplierCompare:supplierCompare, supplierRating:supplierRating
+      supplierCompare:supplierCompare, supplierRating:supplierRating,
+      // проф-метрики и динамика
+      salesDays:salesDays, avgMarkup:avgMarkup, gmroi:gmroi,
+      frozen:Math.round(frozen), frozenShare:frozenShare, deadCount:deadCnt,
+      turnoverDays:turnoverDays, snapshots:snapshots,
+      momRevenue:momRevenue, momProfit:momProfit
     };
   } catch(e) { return { __error:e.message }; }
 }
@@ -2924,7 +3071,7 @@ function clearAllData(p) {
     // сотрудник мог бы стереть всю базу магазина.
     if (!_isOwner(ss)) return {__error:'Очистить все данные может только владелец'};
     var wipe=[SH_BASE,SH_DEBTS,SH_SHIFTS,SH_PAYMENTS,SH_TIMESHEET,SH_RECURRING,
-              SH_GOODS,SH_PRICEHIST,SH_LOG,SH_TRASH];
+              SH_GOODS,SH_PRICEHIST,SH_GOODSSNAP,SH_LOG,SH_TRASH];
     var removed=0;
     wipe.forEach(function(n){
       var sh=ss.getSheetByName(n);

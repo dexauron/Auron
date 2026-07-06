@@ -2680,7 +2680,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.6.0';
+var APP_VERSION='2.7.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -8602,7 +8602,14 @@ var App={
     var rows=App._imp1cGoods||[];var o=App._imp1c||{};var typ=o.тип||'';
     if(!rows.length){App.toast('Нет товарных строк',true);return;}
     App.toast('Сохраняю…');
-    gs('saveGoods',{ssId:App.s.ssId,kind:typ,rows:rows}).then(function(r){
+    // Сколько дней покрывает отчёт «Продажи» — из строки периода (для оборачиваемости)
+    var salesDays=0;
+    if(typ==='Продажи'){
+      var mm=String(o.период||'').match(/(\d{2}\.\d{2}\.\d{4})\D+(\d{2}\.\d{2}\.\d{4})/);
+      if(mm){var pd=function(s){var x=s.split('.');return new Date(+x[2],+x[1]-1,+x[0]);};
+        var dd=Math.round((pd(mm[2])-pd(mm[1]))/86400000)+1; if(dd>0&&dd<400)salesDays=dd;}
+    }
+    gs('saveGoods',{ssId:App.s.ssId,kind:typ,rows:rows,salesDays:salesDays}).then(function(r){
       // Для продаж — сразу пишем выручку в журнал, чтобы цифры были в Главной/Аналитике/Отчёте
       if(typ==='Продажи'&&o.выручка){
         var d=String(o.период||'').split('–')[0].trim().split(' ')[0];
@@ -8647,16 +8654,39 @@ var App={
         '<button class="btn-primary" onclick="App.openImport()">Загрузить отчёт из 1С</button>';return;
     }
     var fm=function(v){return fmt(Math.abs(Math.round(v)));};
-    var metric=function(lab,val){return'<div style="flex:1;background:var(--surface-2);border-radius:13px;padding:12px;text-align:center;"><div style="font-size:17px;font-weight:800;">'+val+'</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+lab+'</div></div>';};
-    var list=function(title,rows,fmtRow){if(!rows||!rows.length)return'';
-      return'<div style="margin-top:18px;font-size:14px;font-weight:700;">'+title+'</div>'+
-        '<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+    var delta=function(v,goodUp){if(v==null)return'';var up=v>=0;var good=goodUp?up:!up;
+      return'<div style="font-size:10.5px;font-weight:700;margin-top:1px;color:'+(good?'var(--pos)':'var(--neg)')+';">'+(up?'▲ ':'▼ ')+Math.abs(v)+'%</div>';};
+    var metric=function(lab,val,dl){return'<div style="flex:1;background:var(--surface-2);border-radius:13px;padding:12px;text-align:center;"><div style="font-size:17px;font-weight:800;">'+val+'</div>'+(dl||'')+'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+lab+'</div></div>';};
+    var mini=function(lab,val,col){return'<div style="flex:1;min-width:0;background:var(--surface-2);border-radius:11px;padding:10px 8px;text-align:center;"><div style="font-size:14.5px;font-weight:800;'+(col?'color:'+col+';':'')+'">'+val+'</div><div style="font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.2;">'+lab+'</div></div>';};
+    // Заголовок блока — кликабельный «→ все» при указании drill-сортировки
+    var list=function(title,rows,fmtRow,drill){if(!rows||!rows.length)return'';
+      var head=drill?'<div onclick="App.openGoodsList(\''+drill+'\')" style="margin-top:18px;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;cursor:pointer;">'+title+'<span style="font-size:12px;color:var(--brand);font-weight:600;">все ›</span></div>'
+                    :'<div style="margin-top:18px;font-size:14px;font-weight:700;">'+title+'</div>';
+      return head+'<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
         rows.map(fmtRow).join('')+'</div>';};
     var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
     var h='';
     h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
-    h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽')+metric('прибыль',fm(a.totProfit)+' ₽')+'</div>';
+    h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽',delta(a.momRevenue,true))+metric('прибыль',fm(a.totProfit)+' ₽',delta(a.momProfit,true))+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
+    // ── Профессиональные метрики ────────────────────────────────────
+    h+='<div style="display:flex;gap:6px;margin-top:8px;">'+
+       mini('ср. наценка',(a.avgMarkup||0)+'%',a.avgMarkup&&a.avgMarkup<15?'var(--neg)':'var(--pos)')+
+       mini('GMROI',(a.gmroi!=null?a.gmroi:'—'),a.gmroi>=1?'var(--pos)':a.gmroi>0?'var(--warn,#FF9F0A)':'var(--muted)')+
+       mini('оборот, дней',(a.turnoverDays||'—'),a.turnoverDays&&a.turnoverDays>60?'var(--neg)':'var(--ink)')+
+       '</div>';
+    if(a.frozen>0)h+='<div style="display:flex;gap:6px;margin-top:6px;">'+
+       mini('заморожено в неликвиде',fm(a.frozen)+' ₽ ('+a.frozenShare+'%)','var(--muted)')+'</div>';
+    // Подсказки к метрикам
+    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">GMROI — сколько ₽ прибыли приносит 1 ₽, вложенный в товар (больше 1 — хорошо). Оборот — за сколько дней распродаётся текущий остаток (данные о продажах за '+(a.salesDays||30)+' дн).</div>';
+    // ── Динамика продаж по загрузкам ────────────────────────────────
+    if(a.snapshots&&a.snapshots.length>=2){
+      h+='<div style="margin-top:18px;font-size:14px;font-weight:700;">📈 Динамика продаж</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;padding:12px;margin-top:8px;">'+
+        '<div id="goods-trend-rev" style="height:26px;"></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;"><span>'+App._e(a.snapshots[0].label)+'</span><span>выручка · '+a.snapshots.length+' загр.</span><span>'+App._e(a.snapshots[a.snapshots.length-1].label)+'</span></div>'+
+        '</div>';
+    }
     // ABC-анализ
     if(a.abc){var ab=a.abc;var mlbl=ab.metric==='profit'?'прибыли':'выручке';
       var abcRow=function(g,letter,color,desc){return'<div style="display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid var(--line-2);">'+
@@ -8672,61 +8702,128 @@ var App={
         '</div>';
     }
     h+=list('🔺 Рост цен поставщиков',a.priceUps,function(t){return rowHtml(t.name+(t.supplier?' · '+t.supplier:''),'+'+t.pct+'% ('+fm(t.from)+'→'+fm(t.to)+')','var(--neg)');});
-    h+=list('💰 Топ по прибыли',a.topProfit,function(t){return rowHtml(t.name,fm(t.profit)+' ₽','var(--pos)');});
-    h+=list('⚠️ Низкая наценка',a.lowMargin,function(t){return rowHtml(t.name,t.markup+'%',t.markup<10?'var(--neg)':'var(--ink)');});
+    h+=list('💰 Топ по прибыли',a.topProfit,function(t){return rowHtml(t.name,fm(t.profit)+' ₽','var(--pos)');},'profit');
+    h+=list('⚠️ Низкая наценка',a.lowMargin,function(t){return rowHtml(t.name,t.markup+'%',t.markup<10?'var(--neg)':'var(--ink)');},'markup');
     h+=list('🛒 План закупки (заканчивается)',a.restock,function(t){return rowHtml((t.urgent?'⛔ ':'')+t.name+(t.supplier?' · '+t.supplier:''),(t.urgent?'нет в наличии':'остаток '+t.stockQty+' · продано '+t.soldQty),t.urgent?'var(--neg)':'var(--warn,#FF9F0A)');});
-    h+=list('🔥 Ходовой товар',a.movers,function(t){return rowHtml(t.name,(t.qty).toLocaleString('ru-RU')+' шт');});
-    h+=list('🧊 Неликвид (лежит, не продаётся)',a.deadStock,function(t){return rowHtml(t.name,fm(t.stockSum)+' ₽','var(--muted)');});
+    h+=list('🔥 Ходовой товар',a.movers,function(t){return rowHtml(t.name,(t.qty).toLocaleString('ru-RU')+' шт');},'sold');
+    h+=list('🧊 Неликвид (лежит, не продаётся)',a.deadStock,function(t){return rowHtml(t.name,fm(t.stockSum)+' ₽','var(--muted)');},'dead');
     h+=list('📁 Маржа по группам',a.groups,function(t){return rowHtml(t.name+' · '+t.count+' тов',(t.markup?t.markup+'%':fm(t.profit)+' ₽'),t.markup&&t.markup<10?'var(--neg)':'var(--pos)');});
     h+=list('💸 Где дешевле (сравнение поставщиков)',a.supplierCompare,function(t){return rowHtml(t.name+' · дешевле у '+t.cheap,'−'+t.save+'% ('+fm(t.cheapPrice)+' vs '+fm(t.dearPrice)+')','var(--pos)');});
     h+=list('⭐ Рейтинг поставщиков',a.supplierRating,function(t){return rowHtml(t.name+' · '+t.products+' тов',(t.priceUps?t.priceUps+' повыш. цен':'цены стабильны'),t.score>=80?'var(--pos)':t.score>=60?'var(--ink)':'var(--neg)');});
     h+=list('🏭 Поставщики',a.suppliers,function(t){return rowHtml(t.name,t.count+' тов · '+fm(t.stockSum)+' ₽');});
     h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openImport()">Загрузить ещё отчёт из 1С</button>';
     h+='<button class="btn-secondary" style="margin-top:10px;" onclick="App.openGoodsList()">Весь список товаров</button>';
+    h+='<button class="btn-secondary" style="margin-top:10px;" onclick="App.shareGoodsReport()">📤 Отчёт по товарам</button>';
     b.innerHTML=h;
+    // Спарклайн динамики продаж (после вставки в DOM)
+    if(a.snapshots&&a.snapshots.length>=2)
+      App._drawSpark('goods-trend-rev',a.snapshots.map(function(s){return s.revenue;}),'var(--pos)');
+    App._goodsLast=a;
   },
-  openGoodsList:function(){
-    App.openModal('<div class="modal-title">Справочник товаров</div>'+
-      '<input id="goods-q" placeholder="Поиск по названию / штрихкоду / поставщику" oninput="App._goodsSearch()" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:10px;">'+
+  openGoodsList:function(sort){
+    var titles={profit:'по прибыли',markup:'низкая наценка',sold:'по продажам',stock:'по остаткам',dead:'неликвид',revenue:'по выручке',name:'А–Я'};
+    App._goodsFilter={sort:sort||'profit',group:'',supplier:'',q:''};
+    App.openModal('<div class="modal-title">Товары · '+(titles[App._goodsFilter.sort]||'')+'</div>'+
+      '<input id="goods-q" placeholder="Поиск по названию / штрихкоду / поставщику" oninput="App._goodsFilterSet(\'q\',this.value)" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:8px;">'+
+      '<div id="goods-controls"></div>'+
       '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     App._goodsSearch();
   },
+  _goodsFilterSet:function(k,v){ if(!App._goodsFilter)App._goodsFilter={sort:'profit'}; App._goodsFilter[k]=v; App._goodsSearch(); },
   _goodsSearch:function(){
-    var q=document.getElementById('goods-q')?document.getElementById('goods-q').value:'';
+    var f=App._goodsFilter||(App._goodsFilter={sort:'profit',group:'',supplier:'',q:''});
     clearTimeout(App._gqt);App._gqt=setTimeout(function(){
-      gs('getGoods',{ssId:App.s.ssId,q:q}).then(function(r){
+      gs('getGoods',{ssId:App.s.ssId,q:f.q||'',sort:f.sort||'profit',group:f.group||'',supplier:f.supplier||''}).then(function(r){
         var el=document.getElementById('goods-list');if(!el)return;
-        if(!r.items.length){el.innerHTML='<div style="padding:16px 4px;">Ничего не найдено.</div>';return;}
         var fm=function(v){return fmt(Math.abs(Math.round(v)));};
+        // Панель сортировки и фильтров
+        var cc=document.getElementById('goods-controls');
+        if(cc){
+          var sorts=[['profit','прибыль'],['markup','наценка'],['sold','продано'],['stock','остаток'],['dead','неликвид'],['name','А–Я']];
+          var chips=sorts.map(function(s){var on=f.sort===s[0];
+            return'<button onclick="App._goodsFilterSet(\'sort\',\''+s[0]+'\')" style="padding:6px 11px;border-radius:9px;border:1.2px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 15%,transparent)':'var(--surface-2)')+';color:'+(on?'var(--brand)':'var(--ink)')+';font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">'+s[1]+'</button>';}).join('');
+          var opt=function(v,sel){return'<option'+(sel?' selected':'')+'>'+App._e(v)+'</option>';};
+          var selStyle='flex:1;min-width:0;padding:9px;border-radius:10px;border:1.2px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12px;font-family:var(--font);';
+          var gsel='<select onchange="App._goodsFilterSet(\'group\',this.value)" style="'+selStyle+'"><option value="">Все группы</option>'+(r.groups||[]).map(function(g){return opt(g,f.group===g);}).join('')+'</select>';
+          var ssel='<select onchange="App._goodsFilterSet(\'supplier\',this.value)" style="'+selStyle+'"><option value="">Все поставщики</option>'+(r.suppliers||[]).map(function(s){return opt(s,f.supplier===s);}).join('')+'</select>';
+          cc.innerHTML='<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:7px;">'+chips+'</div><div style="display:flex;gap:6px;margin-bottom:10px;">'+gsel+ssel+'</div>';
+        }
+        if(!r.items||!r.items.length){el.innerHTML='<div style="padding:16px 4px;">Ничего не найдено.</div>';return;}
         App._goodsItems=r.items;
-        el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Найдено: '+r.items.length+(r.total>r.items.length?' из '+r.total:'')+'</div>'+
+        var valFor=function(it){
+          if(f.sort==='markup')return it.markup!=null?it.markup+'%':'—';
+          if(f.sort==='sold')return it.soldQty?it.soldQty+' шт':'—';
+          if(f.sort==='stock'||f.sort==='dead')return it.stockSum?fm(it.stockSum)+' ₽':'—';
+          if(f.sort==='revenue')return it.revenue?fm(it.revenue)+' ₽':'—';
+          if(f.sort==='name')return '';
+          return it.profit?fm(it.profit)+' ₽':'—';
+        };
+        el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Найдено: '+r.items.length+(r.allTotal>r.items.length?' из '+r.allTotal:'')+'</div>'+
           r.items.map(function(it,gi){
-            var sub=[];if(it.supplier)sub.push(it.supplier);if(it.buy)sub.push('закуп '+fm(it.buy)+'₽');if(it.soldQty)sub.push('продано '+it.soldQty);if(it.stockQty)sub.push('ост '+it.stockQty);
+            var sub=[];if(it.supplier)sub.push(it.supplier);if(it.markup!=null)sub.push('нац '+it.markup+'%');if(it.daysOfStock!=null)sub.push('хватит '+it.daysOfStock+'дн');if(it.stockQty)sub.push('ост '+it.stockQty);
             return'<div onclick="App.openProductCard('+gi+')" style="padding:10px 13px;border-top:1px solid var(--line-2);cursor:pointer;display:flex;align-items:center;gap:8px;"><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
-              '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div><span style="color:var(--muted);">›</span></div>';
+              '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div>'+
+              '<span style="font-weight:700;font-size:12.5px;white-space:nowrap;">'+valFor(it)+'</span><span style="color:var(--muted);">›</span></div>';
           }).join('');
       }).catch(function(e){var el=document.getElementById('goods-list');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
-    },250);
+    },200);
   },
 
   openProductCard:function(i){
     var it=App._goodsItems&&App._goodsItems[i];if(!it)return;
-    var fm=function(v){return fmt(Math.round(v||0));};
-    var markup=(it.buy>0&&it.retail>0)?Math.round((it.retail-it.buy)/it.buy*1000)/10:null;
+    App.openModal('<div class="modal-title" style="font-size:17px;line-height:1.3;">'+App._e(it.name)+'</div><div id="pc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    gs('getProductDetail',{ssId:App.s.ssId,barcode:it.barcode,name:it.name}).then(function(d){App._productRender(d,it);})
+      .catch(function(e){var b=document.getElementById('pc-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  _productRender:function(d,it){
+    var b=document.getElementById('pc-body');if(!b)return;
+    if(d&&d.__error){b.innerHTML='<div style="color:var(--neg);">'+App._e(d.__error)+'</div>';return;}
+    var p=(d&&d.item)||it;var fm=function(v){return fmt(Math.round(v||0));};
     var row=function(lbl,val,col){return val==null||val===''||val===0?'':'<div style="display:flex;justify-content:space-between;padding:10px 13px;border-top:1px solid var(--line-2);font-size:13px;"><span style="color:var(--muted);">'+lbl+'</span><span style="font-weight:700;'+(col?'color:'+col+';':'')+'">'+val+'</span></div>';};
-    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+(it.barcode?'Штрихкод: '+App._e(it.barcode):'')+(it.group?(it.barcode?' · ':'')+App._e(it.group):'')+'</div>'+
+    var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+(p.barcode?'Штрихкод: '+App._e(p.barcode):'')+(p.group?(p.barcode?' · ':'')+App._e(p.group):'')+'</div>'+
       '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
-      row('Поставщик',it.supplier?App._e(it.supplier):null)+
-      row('Цена закупки',it.buy?fm(it.buy)+' ₽':null)+
-      row('Цена продажи',it.retail?fm(it.retail)+' ₽':null)+
-      row('Наценка',markup!=null?markup+'%':null,markup!=null&&markup<10?'var(--neg)':'var(--pos)')+
-      row('Продано',it.soldQty?it.soldQty+' шт':null)+
-      row('Выручка',it.revenue?fm(it.revenue)+' ₽':null)+
-      row('Прибыль',it.profit?fm(it.profit)+' ₽':null,it.profit>=0?'var(--pos)':'var(--neg)')+
-      row('Остаток',it.stockQty?it.stockQty+' шт':null)+
-      row('Сумма остатка',it.stockSum?fm(it.stockSum)+' ₽':null)+
+      row('Поставщик',p.supplier?App._e(p.supplier):null)+
+      row('Цена закупки',p.buy?fm(p.buy)+' ₽':null)+
+      row('Цена продажи',p.retail?fm(p.retail)+' ₽':null)+
+      row('Наценка',p.markup!=null?p.markup+'%':null,p.markup!=null&&p.markup<10?'var(--neg)':'var(--pos)')+
+      row('Маржа',p.margin!=null?p.margin+'%':null,p.margin!=null&&p.margin<10?'var(--neg)':'var(--ink)')+
+      row('Продано',p.soldQty?p.soldQty+' шт':null)+
+      row('Выручка',p.revenue?fm(p.revenue)+' ₽':null)+
+      row('Прибыль',p.profit?fm(p.profit)+' ₽':null,p.profit>=0?'var(--pos)':'var(--neg)')+
+      row('Остаток',p.stockQty?p.stockQty+' шт':null)+
+      row('Хватит на',p.daysOfStock!=null?p.daysOfStock+' дн':null,p.daysOfStock!=null&&p.daysOfStock<=7?'var(--neg)':'var(--ink)')+
+      row('Сумма остатка',p.stockSum?fm(p.stockSum)+' ₽':null)+
       '</div>';
-    App.openModal('<div class="modal-title" style="font-size:17px;line-height:1.3;">'+App._e(it.name)+'</div>'+h);
+    if(d&&d.priceHist&&d.priceHist.length>=2){
+      var f0=d.priceHist[0],fL=d.priceHist[d.priceHist.length-1];
+      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">📉 История цены закупки</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;padding:12px;margin-top:6px;"><div id="pc-spark" style="height:26px;"></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;"><span>'+App._e(f0.label)+' · '+fm(f0.price)+'₽</span><span>'+App._e(fL.label)+' · '+fm(fL.price)+'₽</span></div></div>';
+    }
+    if(d&&d.suppliers&&d.suppliers.length){
+      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">🏭 Цены по поставщикам</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
+        d.suppliers.map(function(s,ix){return rowHtml(s.supplier+(ix===0&&d.suppliers.length>1?' · дешевле':''),fm(s.price)+' ₽',ix===0&&d.suppliers.length>1?'var(--pos)':'var(--ink)');}).join('')+'</div>';
+    }
+    b.innerHTML=h;
+    if(d&&d.priceHist&&d.priceHist.length>=2)App._drawSpark('pc-spark',d.priceHist.map(function(x){return x.price;}),'var(--brand)');
+  },
+  shareGoodsReport:function(){
+    var a=App._goodsLast;if(!a){App.toast('Сначала откройте аналитику товаров',true);return;}
+    var fm=function(v){return fmt(Math.abs(Math.round(v)));};
+    var L=['📦 ОТЧЁТ ПО ТОВАРАМ · '+(App.s.orgName||'магазин'),
+      new Date().toLocaleDateString('ru-RU'),'',
+      'Товаров: '+a.count+' · поставщиков: '+a.suppliersCount,
+      'Выручка: '+fm(a.totRevenue)+' ₽'+(a.momRevenue!=null?' ('+(a.momRevenue>=0?'+':'')+a.momRevenue+'%)':''),
+      'Прибыль: '+fm(a.totProfit)+' ₽'+(a.momProfit!=null?' ('+(a.momProfit>=0?'+':'')+a.momProfit+'%)':''),
+      'Ср. наценка: '+(a.avgMarkup||0)+'% · GMROI: '+(a.gmroi!=null?a.gmroi:'—'),
+      'Оборот: '+(a.turnoverDays||'—')+' дн · заморожено в неликвиде: '+fm(a.frozen)+' ₽',''];
+    if(a.abc)L.push('ABC: A='+a.abc.a.count+' тов ('+a.abc.a.share+'% результата), B='+a.abc.b.count+', C='+a.abc.c.count,'');
+    if(a.topProfit&&a.topProfit.length){L.push('💰 Топ по прибыли:');a.topProfit.slice(0,5).forEach(function(t){L.push('  • '+t.name+' — '+fm(t.profit)+' ₽');});L.push('');}
+    if(a.restock&&a.restock.length){L.push('🛒 Заканчивается (закупить):');a.restock.slice(0,6).forEach(function(t){L.push('  • '+t.name+(t.urgent?' — НЕТ в наличии':' — ост '+t.stockQty));});L.push('');}
+    if(a.priceUps&&a.priceUps.length){L.push('🔺 Выросли цены:');a.priceUps.slice(0,5).forEach(function(t){L.push('  • '+t.name+' +'+t.pct+'%');});}
+    App._shareModal('Отчёт по товарам',L.join('\n'));
   },
 
   // ── Налоги (УСН 6% / УСН 15% / Патент) + календарь ─────────────
