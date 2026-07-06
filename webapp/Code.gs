@@ -1374,6 +1374,40 @@ function saveDebtEntry(p) {
 });
 }
 
+// Приём торгового одним действием: наличная оплата + погашение долга + новый
+// долг за один заход. Всё под одним замком (реентерабельно). Возвращает
+// пересчитанный долг представителя.
+function receiveRep(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, rep=_s(p.rep), account=_s(p.account||'Наличные');
+  var cashPaid=Math.round(parseFloat(p.cashPaid)||0);
+  var debtRepaid=Math.round(parseFloat(p.debtRepaid)||0);
+  var newDebt=Math.round(parseFloat(p.newDebt)||0);
+  var comment=_s(p.comment||'');
+  if (!rep) return {__error:'Выберите представителя'};
+  if (cashPaid<=0&&debtRepaid<=0&&newDebt<=0) return {__error:'Заполните хотя бы одно поле'};
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (cashPaid>0) saveQuickEntry({ssId:ssId,data:{date:new Date().toISOString(),type:'Расход',
+      category:'Закупка',account:account,amount:cashPaid,comment:'Оплата наличкой: '+rep+(comment?' · '+comment:'')}});
+    if (debtRepaid>0) saveDebtEntry({ssId:ssId,data:{repId:rep,type:'oplata',amount:debtRepaid,
+      account:account,comment:comment||'Погашение долга'}});
+    if (newDebt>0) saveDebtEntry({ssId:ssId,data:{repId:rep,type:'zakupka',amount:newDebt,
+      comment:comment||'Новый долг за поставку'}});
+    // Пересчёт долга представителя
+    var debt=0, dsh=ss.getSheetByName(SH_DEBTS);
+    if (dsh&&dsh.getLastRow()>=2) {
+      dsh.getRange(2,1,dsh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+        if (String(r[D_REP-1])!==rep) return;
+        debt+=(String(r[D_TYPE-1])==='oplata'?-1:1)*(parseFloat(r[D_AMT-1])||0);
+      });
+    }
+    try { _bustDash(ssId); } catch(e){}
+    return {ok:true, debt:Math.round(debt)};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
 function updateDebtEntry(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};

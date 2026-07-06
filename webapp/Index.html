@@ -1897,6 +1897,12 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <!-- ХАБ: выбор действия -->
       <div id="k-hub" class="kassa-wrap">
         <div id="k-briefing"></div>
+        <button onclick="App.openReceiveRep()" style="width:100%;text-align:left;padding:16px 18px;border-radius:20px;border:none;background:color-mix(in oklab,var(--brand) 14%,var(--surface));cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+          <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
+          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Приём торгового</span>
+          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплата · погашение долга · новый долг — за раз</span></span>
+          <span style="color:var(--muted);">›</span>
+        </button>
         <div class="kassa-row">
           <div style="padding:14px 16px;display:grid;gap:8px;">
             <div style="display:flex;justify-content:space-between;font-size:14px;"><span style="color:var(--muted);">Наличные по базе</span><span id="kh-cash" class="num" style="font-weight:800;">—</span></div>
@@ -5547,6 +5553,60 @@ var App={
         (pays?'<div class="brf-list">'+pays+'</div>':'')+orders+
         (r.need>0?'<button class="brf-btn" onclick="App.goToPayments()">Открыть график выплат →</button>':'')+'</div>';
     }).catch(function(){var box=document.getElementById('k-briefing');if(box)box.innerHTML='';});
+  },
+
+  // ── Приём торгового: оплата наличкой + погашение долга + новый долг ──
+  openReceiveRep:function(){
+    App._recDebt=null;
+    App.openModal('<div class="modal-title">'+SVG.truck+' Приём торгового</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Всё по одному представителю за раз. Долг пересчитается сам.</div>'+
+      '<div class="field"><label>Представитель / поставщик</label><input id="rec-rep" type="text" placeholder="Начните вводить…" autocomplete="off"></div>'+
+      '<div id="rec-debt" style="display:none;font-size:12.5px;margin:-6px 0 12px;padding:9px 12px;border-radius:11px;background:var(--surface-2);"></div>'+
+      '<div class="field"><label>💵 Оплатил наличкой (закупка)</label><input id="rec-cash" type="number" inputmode="decimal" placeholder="0"></div>'+
+      '<div class="field"><label>✓ Погасил долг</label><input id="rec-repay" type="number" inputmode="decimal" placeholder="0" oninput="App._recPreview()"></div>'+
+      '<div class="field"><label>＋ Новый долг за поставку</label><input id="rec-new" type="number" inputmode="decimal" placeholder="0" oninput="App._recPreview()"></div>'+
+      '<div class="field"><label>Счёт (для оплат)</label><select id="rec-acc">'+(App.s.accounts||[]).map(function(a){return '<option>'+App._e(a.name)+'</option>';}).join('')+'</select></div>'+
+      '<div id="rec-result" style="display:none;font-size:14px;font-weight:800;text-align:center;margin-bottom:12px;"></div>'+
+      '<button class="btn-primary" onclick="App._recSave()">Записать приём</button>');
+    // Автоподсказка представителей + подгрузка их долга
+    gs('getContractors',{ssId:App.s.ssId}).then(function(list){
+      App._recList=(list||[]);
+      App.acAttach('rec-rep',function(){return App._recList.map(function(c){return c.name;});});
+    }).catch(function(){});
+    var inp=document.getElementById('rec-rep');
+    if(inp)inp.addEventListener('change',function(){App._recLoadDebt(inp.value.trim());});
+    if(inp)inp.addEventListener('blur',function(){App._recLoadDebt(inp.value.trim());});
+  },
+  _recLoadDebt:function(name){
+    if(!name){App._recDebt=null;var b=document.getElementById('rec-debt');if(b)b.style.display='none';return;}
+    gs('getContractorCard',{ssId:App.s.ssId,name:name}).then(function(r){
+      App._recDebt=(r&&typeof r.debt==='number')?r.debt:0;
+      var b=document.getElementById('rec-debt');if(b){b.style.display='block';
+        b.innerHTML='Текущий долг «'+App._e(name)+'»: <b class="num" style="color:'+(App._recDebt>0?'var(--neg)':'var(--pos)')+'">'+fmtFull(App._recDebt)+' ₽</b>';}
+      App._recPreview();
+    }).catch(function(){});
+  },
+  _recPreview:function(){
+    if(App._recDebt==null)return;
+    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var nd=App._recDebt-g('rec-repay')+g('rec-new');
+    var el=document.getElementById('rec-result');if(!el)return;
+    el.style.display='block';
+    el.innerHTML='Долг после приёма: <span class="num" style="color:'+(nd>0?'var(--neg)':'var(--pos)')+'">'+fmtFull(nd)+' ₽</span>';
+  },
+  _recSave:function(){
+    var rep=document.getElementById('rec-rep').value.trim();
+    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var cash=g('rec-cash'),repay=g('rec-repay'),nd=g('rec-new');
+    var acc=document.getElementById('rec-acc').value;
+    if(!rep){App.toast('Выберите представителя',true);return;}
+    if(cash<=0&&repay<=0&&nd<=0){App.toast('Заполните хотя бы одно поле',true);return;}
+    App.toast('Записываю…');
+    gs('receiveRep',{ssId:App.s.ssId,rep:rep,account:acc,cashPaid:cash,debtRepaid:repay,newDebt:nd}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Приём записан ✓ Долг «'+rep+'»: '+fmtFull(r.debt)+' ₽');
+      App.closeModal();App.loadHome();App._loadKHub&&App._loadKHub();
+    }).catch(function(e){App.toast(e.message,true);});
   },
 
   // ── Изъятия из кассы ──
