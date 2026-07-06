@@ -1507,6 +1507,12 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .cfm-ok{background:var(--brand);color:#fff;}
 .cfm-danger{background:var(--neg);color:#fff;}
 .cfm-ok:active,.cfm-danger:active{filter:brightness(1.1);}
+/* Онбординг-тур */
+.tour-ic{width:66px;height:66px;border-radius:21px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;
+  background:var(--brand-dim);color:var(--brand);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--brand) 24%,transparent);}
+.tour-dots{display:flex;justify-content:center;gap:6px;margin:16px 0 4px;}
+.tour-dot{width:7px;height:7px;border-radius:50%;background:var(--line);transition:all .2s;}
+.tour-dot.on{background:var(--brand);width:20px;border-radius:4px;}
 
 /* Окно «Подробно» — карточка записи + история */
 .dt-head{display:flex;align-items:center;gap:13px;margin-bottom:18px;}
@@ -2672,8 +2678,9 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.5.0';
+var APP_VERSION='2.6.0';
 var APP_CHANGELOG=[
+  {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
   {v:'2.4.0',t:'Подробности и история: тап по операции открывает полную карточку (точные суммы до рубля) и историю «кто создал, кто изменил, когда». Красивые окна подтверждения вместо системных. Ещё дизайна: иконки настроек и кассы'},
   {v:'2.3.0',t:'Обновление дизайна: единые SVG-иконки вместо эмодзи, мягкие тени и «стекло» у окон, плавное появление карточек, ровные цифры, красивые пустые экраны, чипы статусов, права по ролям'},
@@ -3273,6 +3280,41 @@ var App={
     if(sbName)sbName.textContent=App.s.userName||'Пользователь';
     var sbAv=document.getElementById('sb-avatar');
     if(sbAv)sbAv.textContent=(App.s.userName||'А').charAt(0).toUpperCase();
+    // Онбординг-тур — один раз при первом входе
+    try{ if(!localStorage.getItem('auron_tour_v1')) setTimeout(function(){App.showTour();},900); }catch(e){}
+  },
+
+  // ── Онбординг-тур (показывается один раз) ──────────────────────
+  _tourSlides:[
+    {ic:'<path d="M3 10l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',t:'Главная',d:'Капитал, выручка и прибыль — сразу при входе. Тапни любую операцию — откроется полная карточка с историей «кто и когда».'},
+    {ic:'<path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/>',t:'Касса',d:'Утренний брифинг «Ожидаем сегодня», приём торгового одним экраном, сверка Z-отчёта с проверкой аномалий.'},
+    {ic:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',t:'Аналитика',d:'Куда уходят деньги, ABC-анализ товаров, «Пульс магазина» и прогноз кассового разрыва.'},
+    {ic:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a4 4 0 0 0-3-3.85"/>',t:'Команда',d:'Пригласи сотрудников, раздай роли и следи за активностью — кто что сделал. Отчёт владельцу — одной кнопкой в WhatsApp.'}
+  ],
+  _tourI:0,
+  showTour:function(){
+    App._tourI=0;
+    var ov=document.getElementById('tour-ov');
+    if(!ov){ov=document.createElement('div');ov.id='tour-ov';ov.className='cfm-overlay';document.body.appendChild(ov);}
+    App._tourRender();
+    requestAnimationFrame(function(){ov.classList.add('show');});
+  },
+  _tourRender:function(){
+    var ov=document.getElementById('tour-ov');if(!ov)return;
+    var s=App._tourSlides[App._tourI],n=App._tourSlides.length,last=App._tourI===n-1;
+    var dots=App._tourSlides.map(function(x,i){return '<span class="tour-dot'+(i===App._tourI?' on':'')+'"></span>';}).join('');
+    ov.innerHTML='<div class="cfm" style="max-width:360px;text-align:center;">'+
+      '<div class="tour-ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+s.ic+'</svg></div>'+
+      '<div class="cfm-title">'+App._e(s.t)+'</div>'+
+      '<div class="cfm-msg" style="min-height:66px;">'+App._e(s.d)+'</div>'+
+      '<div class="tour-dots">'+dots+'</div>'+
+      '<div class="cfm-btns"><button class="cfm-btn cfm-cancel" onclick="App._tourEnd()">'+(last?'Закрыть':'Пропустить')+'</button>'+
+      '<button class="cfm-btn cfm-ok" onclick="App._tourNext()">'+(last?'Начать':'Далее')+'</button></div></div>';
+  },
+  _tourNext:function(){ App.haptic(6); if(App._tourI>=App._tourSlides.length-1){App._tourEnd();return;} App._tourI++; App._tourRender(); },
+  _tourEnd:function(){
+    try{localStorage.setItem('auron_tour_v1','1');}catch(e){}
+    var ov=document.getElementById('tour-ov');if(ov){ov.classList.remove('show');setTimeout(function(){ov.remove();},220);}
   },
 
   register:function(){
