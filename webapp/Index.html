@@ -8610,7 +8610,7 @@ var App={
           retail:q?Math.round(rev/q*100)/100:0});}
     }else if(typ==='Остатки'){
       var cQ2=col(rows,'Количество',true),cZ=col(rows,'Приходная сумма'),cRoz=col(rows,'Розничная сумма'),
-          cB2=col(rows,'штрихкод'),cG2=col(rows,'Группа');
+          cB2=col(rows,'штрихкод'),cG2=col(rows,'Группа'),cA2=col(rows,'Артикул'),cCode=col(rows,'код товара');
       for(var r3=hdr+1;r3<rows.length;r3++){var row3=rows[r3];var nm3=String(row3[0]||'').trim();
         if(!App._impGoodName(nm3))continue;
         // Отчёт остатков иерархический (склад → товар). Складские итоги
@@ -8618,8 +8618,10 @@ var App={
         // иначе сумма склада попадёт в остатки как «товар» и раздует цифры.
         var bc3=cB2!=null?String(row3[cB2]||'').trim():'';
         if(cB2!=null && !bc3)continue;
+        var codeVal=cCode!=null?String(row3[cCode]||'').replace(/\.0+$/,'').trim():'';
         out.push({name:nm3,stockQty:cQ2!=null?n(row3[cQ2]):0,stockSum:cZ!=null?n(row3[cZ]):(cRoz!=null?n(row3[cRoz]):0),
-          barcode:bc3,group:cG2!=null?String(row3[cG2]||''):''});}
+          barcode:bc3,group:cG2!=null?String(row3[cG2]||''):'',
+          article:cA2!=null?String(row3[cA2]||'').trim():'',code:codeVal});}
     }
     return out;
   },
@@ -8685,7 +8687,7 @@ var App={
     h+='<div id="goods-savings-card"></div>';
     // Умный поиск товара — заметная строка сверху
     h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1.4px solid var(--line);border-radius:13px;padding:11px 14px;cursor:pointer;margin-bottom:10px;">'+
-       '<span style="font-size:15px;">🔍</span><span style="color:var(--muted);font-size:13px;">Найти товар по названию или штрихкоду…</span></div>';
+       '<span style="font-size:15px;">🔍</span><span style="color:var(--muted);font-size:13px;">Найти товар: код, артикул, штрихкод, название…</span></div>';
     h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽',delta(a.momRevenue,true))+metric('прибыль',fm(a.totProfit)+' ₽',delta(a.momProfit,true))+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
@@ -8800,7 +8802,7 @@ var App={
     var titles={profit:'по прибыли',markup:'низкая наценка',sold:'по продажам',stock:'по остаткам',dead:'неликвид',revenue:'по выручке',name:'А–Я'};
     App._goodsFilter={sort:sort||'profit',group:'',supplier:'',q:''};
     App.openModal('<div class="modal-title">Товары · '+(titles[App._goodsFilter.sort]||'')+'</div>'+
-      '<input id="goods-q" placeholder="Поиск по названию / штрихкоду / поставщику" oninput="App._goodsFilterSet(\'q\',this.value)" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:8px;">'+
+      '<input id="goods-q" placeholder="Код / артикул / штрихкод / название" oninput="App._goodsFilterSet(\'q\',this.value)" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:8px;">'+
       '<div id="goods-controls"></div>'+
       '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     App._goodsSearch();
@@ -8837,7 +8839,7 @@ var App={
         };
         el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Найдено: '+r.items.length+(r.allTotal>r.items.length?' из '+r.allTotal:'')+'</div>'+
           r.items.map(function(it,gi){
-            var sub=[];if(it.supplier)sub.push(it.supplier);if(it.markup!=null)sub.push('нац '+it.markup+'%');if(it.daysOfStock!=null)sub.push('хватит '+it.daysOfStock+'дн');if(it.stockQty)sub.push('ост '+it.stockQty);
+            var sub=[];if(it.code)sub.push('код '+it.code);if(it.article)sub.push('арт '+it.article);if(it.supplier)sub.push(it.supplier);if(it.markup!=null)sub.push('нац '+it.markup+'%');if(it.daysOfStock!=null)sub.push('хватит '+it.daysOfStock+'дн');if(it.stockQty)sub.push('ост '+it.stockQty);
             return'<div onclick="App.openProductCard('+gi+')" style="padding:10px 13px;border-top:1px solid var(--line-2);cursor:pointer;display:flex;align-items:center;gap:8px;"><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
               '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div>'+
               '<span style="font-weight:700;font-size:12.5px;white-space:nowrap;">'+valFor(it)+'</span><span style="color:var(--muted);">›</span></div>';
@@ -8858,8 +8860,12 @@ var App={
     var p=(d&&d.item)||it;var fm=function(v){return fmt(Math.round(v||0));};
     var row=function(lbl,val,col){return val==null||val===''||val===0?'':'<div style="display:flex;justify-content:space-between;padding:10px 13px;border-top:1px solid var(--line-2);font-size:13px;"><span style="color:var(--muted);">'+lbl+'</span><span style="font-weight:700;'+(col?'color:'+col+';':'')+'">'+val+'</span></div>';};
     var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
-    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+(p.barcode?'Штрихкод: '+App._e(p.barcode):'')+(p.group?(p.barcode?' · ':'')+App._e(p.group):'')+'</div>'+
+    var meta=[];if(p.code)meta.push('Код: '+App._e(p.code));if(p.article)meta.push('Арт: '+App._e(p.article));if(p.barcode)meta.push('ШК: '+App._e(p.barcode));if(p.group)meta.push(App._e(p.group));
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+meta.join(' · ')+'</div>'+
       '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+      row('Код товара',p.code?App._e(p.code):null)+
+      row('Артикул',p.article?App._e(p.article):null)+
+      row('Штрихкод',p.barcode?App._e(p.barcode):null)+
       row('Поставщик',p.supplier?App._e(p.supplier):null)+
       row('Цена закупки',p.buy?fm(p.buy)+' ₽':null)+
       row('Цена продажи',p.retail?fm(p.retail)+' ₽':null)+

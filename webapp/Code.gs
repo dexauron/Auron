@@ -33,8 +33,9 @@ var SH_AUDIT     = 'АУДИТ'; // история по каждой запис�
 
 // ТОВАРЫ columns (1-based)
 var G_BARCODE=1,G_NAME=2,G_GROUP=3,G_UNIT=4,G_SUPPLIER=5,G_BUY=6,G_RETAIL=7,
-    G_SOLDQTY=8,G_REVENUE=9,G_PROFIT=10,G_STOCKQTY=11,G_STOCKSUM=12,G_UPDATED=13;
-var G_COLS=13;
+    G_SOLDQTY=8,G_REVENUE=9,G_PROFIT=10,G_STOCKQTY=11,G_STOCKSUM=12,G_UPDATED=13,
+    G_ARTICLE=14,G_CODE=15;
+var G_COLS=15;
 // ЦЕНЫ_ИСТ columns
 var PH_DATE=1,PH_BARCODE=2,PH_NAME=3,PH_SUPPLIER=4,PH_PRICE=5;
 var PH_COLS=5;
@@ -278,7 +279,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
   _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
-  _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено']);
+  _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено','Артикул','Код']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
   _mk(ss,SH_GOODSSNAP,['Дата','Выручка','Прибыль','Продано_Кол','Товаров','Ср_Наценка']);
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
@@ -1036,6 +1037,8 @@ function saveGoods(p) {
       if (r.group) row[G_GROUP-1] = _s(r.group);
       if (r.unit) row[G_UNIT-1] = _s(r.unit);
       if (r.supplier) row[G_SUPPLIER-1] = _s(r.supplier);
+      if (r.article) row[G_ARTICLE-1] = _s(String(r.article));
+      if (r.code) row[G_CODE-1] = _s(String(r.code));
       if (kind === 'Цены' || kind === 'Закупки') {
         var price = _gnum(r.buy);
         if (price) {
@@ -1119,6 +1122,7 @@ function getGoods(p) {
         barcode:String(r[G_BARCODE-1]||''), name:String(r[G_NAME-1]||''),
         group:String(r[G_GROUP-1]||''), unit:String(r[G_UNIT-1]||''),
         supplier:String(r[G_SUPPLIER-1]||''),
+        article:String(r[G_ARTICLE-1]||''), code:String(r[G_CODE-1]||''),
         buy:buy, retail:retail, markup:markup, margin:margin, daysOfStock:daysOfStock,
         soldQty:soldQty, revenue:_gnum(r[G_REVENUE-1]), profit:_gnum(r[G_PROFIT-1]),
         stockQty:stockQty, stockSum:_gnum(r[G_STOCKSUM-1])
@@ -1130,8 +1134,8 @@ function getGoods(p) {
       if (fSupplier && it.supplier!==fSupplier) return false;
       if (!q) return true;
       // Умный поиск: все слова запроса должны встретиться (в названии,
-      // штрихкоде или поставщике) — «молоко альфа», «450 крупа» и т.п.
-      var hay=(it.name+' '+it.barcode+' '+it.supplier+' '+it.group).toLowerCase();
+      // штрихкоде, коде, артикуле, поставщике, группе).
+      var hay=(it.name+' '+it.barcode+' '+it.code+' '+it.article+' '+it.supplier+' '+it.group).toLowerCase();
       return q.split(/\s+/).every(function(tok){ return !tok || hay.indexOf(tok)>=0; });
     });
     var sorters={
@@ -1163,7 +1167,8 @@ function getProductDetail(p) {
       if (_goodsKey(data[i][G_BARCODE-1],data[i][G_NAME-1])===key){ var r=data[i];
         var buy=_gnum(r[G_BUY-1]),retail=_gnum(r[G_RETAIL-1]),soldQty=_gnum(r[G_SOLDQTY-1]),stockQty=_gnum(r[G_STOCKQTY-1]);
         it={ barcode:String(r[G_BARCODE-1]||''),name:String(r[G_NAME-1]||''),group:String(r[G_GROUP-1]||''),
-          unit:String(r[G_UNIT-1]||''),supplier:String(r[G_SUPPLIER-1]||''),buy:buy,retail:retail,
+          unit:String(r[G_UNIT-1]||''),supplier:String(r[G_SUPPLIER-1]||''),
+          article:String(r[G_ARTICLE-1]||''),code:String(r[G_CODE-1]||''),buy:buy,retail:retail,
           markup:(buy>0&&retail>0)?Math.round((retail-buy)/buy*1000)/10:null,
           margin:(buy>0&&retail>0)?Math.round((retail-buy)/retail*1000)/10:null,
           daysOfStock:(soldQty>0)?Math.round(stockQty/(soldQty/salesDays)):null,

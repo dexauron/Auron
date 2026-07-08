@@ -205,6 +205,16 @@ eq('список: дней остатка Молока', gl.items[0].daysOfStock
 const glf=A.getGoods({ssId:'ss1',supplier:'Меркурий'});
 eq('список: фильтр по поставщику', glf.items.length, 1);
 
+// Поиск по коду/артикулу (сотрудники ищут товар по коду из 1С)
+A.saveGoods({ssId:'ss1',kind:'Остатки',rows:[
+  {barcode:'111',name:'Молоко',stockQty:5,stockSum:400,code:'340',article:'ML-1'}]});
+const byCode=A.getGoods({ssId:'ss1',q:'340'});
+eq('поиск по коду товара', byCode.items.some(x=>x.name==='Молоко'), true);
+const byArt=A.getGoods({ssId:'ss1',q:'ML-1'});
+eq('поиск по артикулу', byArt.items.some(x=>x.name==='Молоко'), true);
+const pcc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
+eq('карточка: код товара виден', pcc.item.code, '340');
+
 // Карточка товара: история цены + сравнение поставщиков
 const pc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
 eq('карточка: история цены (2 точки)', pc.priceHist.length, 2);
