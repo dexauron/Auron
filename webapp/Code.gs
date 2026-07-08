@@ -841,6 +841,7 @@ function _txObj(r) {
 }
 
 function getHomeSummary(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, period=p.period;
   try {
     var cKey='dash_'+ssId+'_'+period;
@@ -1010,6 +1011,7 @@ function _gnum(v) {
 function saveGoods(p) {
   return _withLock(function(){
   var ssId = p.ssId, kind = p.kind || '', rows = p.rows || [];
+  if(!_permGuard(ssId,'goods')) return {__error:'Нет доступа к загрузке товаров'};
   var salesDays = parseInt(p.salesDays)||0; // сколько дней покрывает отчёт «Продажи»
   if (!rows.length) return { ok:true, saved:0, updated:0 };
   try {
@@ -1207,6 +1209,7 @@ function getProductDetail(p) {
 // сэкономить в месяц, покупая у самого дешёвого. Всё — на своих данных.
 // ═══════════════════════════════════════════════════════════════════════
 function getSavingsHunter(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
@@ -1276,6 +1279,7 @@ function getSavingsHunter(p) {
 // Каждая подсказка — с действием. Числа сырые, формат — на фронте.
 // ═══════════════════════════════════════════════════════════════════════
 function getAdvisor(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
@@ -1562,6 +1566,7 @@ function askAuron(p) {
 }
 
 function getGoodsAnalytics(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_GOODS);
@@ -1747,6 +1752,7 @@ var STORE_DEBT_REP='🏪 Магазин — накладные';
 
 // Текущий долг магазина по накладным (изолирован от долгов ТП и выплат).
 function getStoreDebt(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId;
   try {
     var debt=0;
@@ -1758,6 +1764,7 @@ function getStoreDebt(p) {
 function saveKassa(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
+  if(!_permGuard(ssId,'kassa')) return {__error:'Нет доступа к кассе'};
   try {
     
     var ss=SpreadsheetApp.openById(ssId);
@@ -1922,6 +1929,7 @@ function cancelShift(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getDebts(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -1986,6 +1994,7 @@ function saveDebtEntry(p) {
 function receiveRep(p) {
   return _withLock(function(){
   var ssId=p.ssId, rep=_s(p.rep), account=_s(p.account||'');
+  if(!_permGuard(ssId,'receive')) return {__error:'Нет доступа к приёму товара'};
   var cashPaid=Math.round(parseFloat(p.cashPaid)||0);
   var debtRepaid=Math.round(parseFloat(p.debtRepaid)||0);
   var newDebt=Math.round(parseFloat(p.newDebt)||0);
@@ -2147,6 +2156,7 @@ function saveTimesheetEntry(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getAnalytics(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, period=p.period;
   try {
     var _ak='an_'+ssId+'_'+period;
@@ -2201,6 +2211,7 @@ function _emptyHm() {
 // Доход = выручка (Доход, кроме Перевод). Расход = деловые расходы (Расход,
 // кроме Перевод и «Изъятие владельца» — это не расход бизнеса).
 function getTaxSummary(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, year=parseInt(p.year)||(new Date()).getFullYear();
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -2771,6 +2782,7 @@ function payEmployeeSalary(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getSupplierAnalytics(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -3691,8 +3703,51 @@ function _myRole(ss) {
 // Удаление данных и смена настроек — Владелец, Бухгалтер и Администратор.
 // Ограничение только для роли «Сотрудник зала»: он добавляет записи (касса,
 // смены), но не удаляет данные и не меняет настройки.
-function _canManage(ss) { var r=_myRole(ss); return r==='Владелец'||r==='Бухгалтер'||r==='Администратор'; }
+function _canManage(ss) { return _hasPerm(ss,'manage'); }
 var MANAGE_DENIED={__error:'Недостаточно прав: удаление и настройки доступны владельцу, бухгалтеру и администратору'};
+
+// ── Гибкие права доступа ────────────────────────────────────────────
+// Каталог прав (ключ → человекочитаемое название) — для экрана управления.
+var PERM_CATALOG=[
+  ['finance','Финансы и аналитика'],
+  ['kassa','Касса и смены'],
+  ['receive','Приём товара'],
+  ['goods','Товары и загрузка из 1С'],
+  ['payments','Выплаты поставщикам'],
+  ['manage','Удаление и настройки']
+];
+// Права по умолчанию для роли.
+function _rolePerms(role) {
+  if (role==='Владелец'||role==='Администратор') return ['finance','kassa','receive','goods','payments','manage'];
+  if (role==='Бухгалтер') return ['finance','payments','manage','goods'];
+  return ['kassa','receive']; // Сотрудник зала
+}
+// Эффективные права участника: явный список из НАСТРОЕК (если задан), иначе по роли.
+function _memberPerms(ss, email, role) {
+  try {
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,4).getValues();
+      for (var i=0;i<vs.length;i++) if (String(vs[i][0]).toLowerCase()===email) {
+        var raw=String(vs[i][3]||'');
+        if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)) return arr; }catch(e){} }
+        return _rolePerms(String(vs[i][1]||role||'Сотрудник зала'));
+      }
+    }
+  } catch(e){}
+  return _rolePerms(role||'Сотрудник зала');
+}
+// Права текущего пользователя. Владелец/неопознанный email — все права (fail-open).
+function _myPerms(ss) {
+  if (_isOwner(ss)) return _rolePerms('Владелец');
+  var me=_myEmail(); if (!me) return _rolePerms('Владелец');
+  return _memberPerms(ss, me, _myRole(ss));
+}
+function _hasPerm(ss, key) { return _myPerms(ss).indexOf(key)>=0; }
+// Быстрая проверка доступа к финансам по ssId (для гардов в начале функций).
+function _finGuard(ssId) { try{ return _hasPerm(SpreadsheetApp.openById(ssId),'finance'); }catch(e){ return true; } }
+function _permGuard(ssId, key) { try{ return _hasPerm(SpreadsheetApp.openById(ssId),key); }catch(e){ return true; } }
+var FIN_DENIED={__error:'Нет доступа к финансовым данным (обратитесь к владельцу)'};
 
 function getTeam(p) {
   var ssId=p.ssId;
@@ -3704,15 +3759,69 @@ function getTeam(p) {
     var sh=ss.getSheetByName(SH_ACCESS);
     var members=[];
     if (sh&&sh.getLastRow()>=2) {
-      sh.getRange(2,1,sh.getLastRow()-1,3).getValues().forEach(function(r){
-        if (r[0]) members.push({email:String(r[0]).toLowerCase(),role:String(r[1]||'Сотрудник зала'),
-          added:(r[2] instanceof Date)?r[2].toISOString():''});
+      sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
+        if (!r[0]) return;
+        var role=String(r[1]||'Сотрудник зала');
+        var custom=false, perms=_rolePerms(role);
+        var raw=String(r[3]||'');
+        if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)){perms=arr;custom=true;} }catch(e){} }
+        members.push({email:String(r[0]).toLowerCase(),role:role,
+          added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom});
       });
     }
     var myRole=isOwner?'Владелец':'Сотрудник зала';
     members.forEach(function(m){ if(m.email===me) myRole=m.role; });
-    return {isOwner:isOwner, myEmail:me, ownerEmail:ownerEmail, myRole:myRole, members:members};
+    return {isOwner:isOwner, myEmail:me, ownerEmail:ownerEmail, myRole:myRole,
+            members:members, permCatalog:PERM_CATALOG, roles:['Владелец','Бухгалтер','Администратор','Сотрудник зала'],
+            myPerms:_myPerms(ss)};
   } catch(e) { return {__error:e.message}; }
+}
+
+// Владелец меняет роль сотрудника (сбрасывает индивидуальные права на роль).
+function setMemberRole(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец может менять роли'};
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) if (String(vs[i][0]).toLowerCase()===email) {
+        sh.getRange(i+2,2).setValue(role);
+        sh.getRange(i+2,4).setValue(''); // сброс индивидуальных прав → по роли
+        _log(ss,'Смена роли',email+' → '+role);
+        return getTeam({ssId:ssId});
+      }
+    }
+    return {__error:'Сотрудник не найден'};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
+// Владелец задаёт индивидуальные права сотруднику (массив ключей).
+function setMemberPerms(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), perms=p.perms||[];
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец может менять права'};
+    if (!Array.isArray(perms)) perms=[];
+    // оставляем только известные ключи
+    var valid=PERM_CATALOG.map(function(x){return x[0];});
+    perms=perms.filter(function(k){return valid.indexOf(k)>=0;});
+    var sh=ss.getSheetByName(SH_ACCESS);
+    if (sh&&sh.getLastRow()>=2) {
+      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<vs.length;i++) if (String(vs[i][0]).toLowerCase()===email) {
+        sh.getRange(i+2,4).setValue(JSON.stringify(perms));
+        _log(ss,'Изменены права',email+' · '+perms.join(','));
+        return getTeam({ssId:ssId});
+      }
+    }
+    return {__error:'Сотрудник не найден'};
+  } catch(e) { return {__error:e.message}; }
+});
 }
 
 function inviteMember(p) {
@@ -4541,8 +4650,15 @@ function getTeamAll() {
       if (t&&!t.__error&&t.isOwner)
         out.push({ssId:o.ssId,name:o.name,members:t.members||[]});
     });
-    return {orgs:out,myEmail:_myEmail()};
+    return {orgs:out,myEmail:_myEmail(),permCatalog:PERM_CATALOG};
   } catch(e) { return {orgs:[],__error:e.message}; }
+}
+
+// Сменить индивидуальные права сотрудника в одной организации
+function setMemberPermsMulti(p) {
+  var r=setMemberPerms({ssId:p.ssId,email:p.email,perms:p.perms});
+  if (r&&r.__error) return r;
+  return getTeamAll();
 }
 
 // Пригласить сотрудника сразу в несколько организаций
@@ -4633,6 +4749,7 @@ function getAppUrl() {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getContractorCard(p) {
+  if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, name=_s(p.name);
   try {
     var ss=SpreadsheetApp.openById(ssId);

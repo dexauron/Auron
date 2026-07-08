@@ -2712,7 +2712,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='3.0.0';
+var APP_VERSION='3.1.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3504,7 +3504,7 @@ var App={
     orgs.forEach(function(o){
       (o.members||[]).forEach(function(m){
         if(!byEmail[m.email])byEmail[m.email]=[];
-        byEmail[m.email].push({ssId:o.ssId,org:o.name,role:m.role});
+        byEmail[m.email].push({ssId:o.ssId,org:o.name,role:m.role,perms:m.perms||[],custom:m.custom});
       });
     });
     var emails=Object.keys(byEmail);
@@ -3517,6 +3517,7 @@ var App={
           return '<div style="display:flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:10px;padding:6px 8px;margin:4px 4px 0 0;">'+
             '<span style="font-size:11.5px;font-weight:700;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏪 '+App._e(x.org)+'</span>'+
             '<select onchange="App._teamRole(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',this.value)" style="padding:4px 5px;border-radius:7px;border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:10.5px;font-family:var(--font);max-width:110px;">'+roleOpts+'</select>'+
+            '<button onclick="App.openMemberPerms(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Права" style="background:none;border:none;color:'+(x.custom?'var(--brand)':'var(--muted)')+';font-size:14px;cursor:pointer;padding:2px;">⚙</button>'+
             '<button onclick="App._teamRemove(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',\''+App._e(x.org)+'\')" style="background:none;border:none;color:var(--neg);font-size:13px;cursor:pointer;padding:2px;">✕</button></div>';
         }).join('');
         return '<div style="padding:11px 0;border-bottom:1px solid var(--line-2);">'+
@@ -3571,9 +3572,36 @@ var App={
   _teamRole:function(ssId,email,role){
     gs('setMemberRoleMulti',{ssId:ssId,email:email,role:role}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Роль обновлена ✓');App._teamAll=r;
+      App.toast('Роль обновлена ✓');App._teamAll=r;App._renderTeamAll();
     }).catch(function(e){App.toast(e.message,true);});
   },
+  _memberInfo:function(ssId,email){var out={perms:[],role:'Сотрудник зала'};
+    ((App._teamAll&&App._teamAll.orgs)||[]).forEach(function(o){if(o.ssId===ssId)(o.members||[]).forEach(function(m){if(m.email===email){out.perms=(m.perms||[]).slice();out.role=m.role;}});});
+    return out;},
+  openMemberPerms:function(ssId,email){
+    var cat=(App._teamAll&&App._teamAll.permCatalog)||[];
+    var info=App._memberInfo(ssId,email);
+    App._mp={ssId:ssId,email:email,perms:info.perms,role:info.role};
+    var rows=cat.map(function(c){var on=App._mp.perms.indexOf(c[0])>=0;
+      return '<label style="display:flex;align-items:center;gap:11px;padding:12px 13px;background:var(--surface-2);border-radius:12px;margin-bottom:8px;cursor:pointer;"><input type="checkbox" '+(on?'checked':'')+' onchange="App._mpToggle(\''+c[0]+'\',this.checked)" style="width:20px;height:20px;accent-color:var(--brand);flex-shrink:0;"><span style="font-size:13.5px;font-weight:600;">'+App._e(c[1])+'</span></label>';
+    }).join('');
+    App.openModal('<div class="modal-title">Права сотрудника</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">'+App._e(email)+'<br>Роль: <b>'+App._e(info.role)+'</b>. Отметьте, что разрешено — это переопределит права роли.</div>'+
+      rows+
+      '<button class="btn-primary" onclick="App._mpSave()">Сохранить права</button>'+
+      '<button class="btn-secondary" style="margin-top:10px;" onclick="App._mpReset()">Сбросить по умолчанию (по роли)</button>');
+  },
+  _mpToggle:function(k,on){var s=App._mp;if(!s)return;var i=s.perms.indexOf(k);if(on&&i<0)s.perms.push(k);if(!on&&i>=0)s.perms.splice(i,1);},
+  _mpSave:function(){var s=App._mp;if(!s)return;
+    gs('setMemberPermsMulti',{ssId:s.ssId,email:s.email,perms:s.perms}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Права сохранены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
+    }).catch(function(e){App.toast(e.message,true);});},
+  _mpReset:function(){var s=App._mp;if(!s)return;
+    gs('setMemberRoleMulti',{ssId:s.ssId,email:s.email,role:s.role}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Права сброшены по роли ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
+    }).catch(function(e){App.toast(e.message,true);});},
   _teamRemove:async function(ssId,email,orgName){
     if(!(await App._confirm('Убрать доступ '+email+' к «'+orgName+'»?')))return;
     gs('removeMemberMulti',{ssId:ssId,email:email}).then(function(r){
