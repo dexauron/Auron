@@ -1875,13 +1875,15 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         </div>
       </div>
       <!-- Recent transactions -->
-      <div style="padding:4px 20px 10px;display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-size:16px;font-weight:700;letter-spacing:-.3px;">Последние операции</span>
-        <button onclick="App.setTab('journal',null)" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Все →</button>
-      </div>
-      <div id="tx-list">
-        <div class="tx-group"><div class="tx-day-card skel" style="height:68px;"></div></div>
-        <div class="tx-group"><div class="tx-day-card skel" style="height:68px;"></div></div>
+      <div class="home-tx">
+        <div style="padding:4px 20px 10px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:16px;font-weight:700;letter-spacing:-.3px;">Последние операции</span>
+          <button onclick="App.setTab('journal',null)" style="background:none;border:none;color:var(--brand);font-size:13px;font-weight:700;cursor:pointer;padding:0;font-family:var(--font);">Все →</button>
+        </div>
+        <div id="tx-list">
+          <div class="tx-group"><div class="tx-day-card skel" style="height:68px;"></div></div>
+          <div class="tx-group"><div class="tx-day-card skel" style="height:68px;"></div></div>
+        </div>
       </div>
     </div>
 
@@ -3421,20 +3423,20 @@ var App={
     // Сотрудник зала — нет: прячем кнопки удаления в UI (сервер тоже запрещает).
     var canManage=own||['Владелец','Бухгалтер','Администратор'].indexOf(App.s.myRole)>=0;
     document.body.classList.toggle('no-manage',!canManage);
-    // Сотрудник зала: упрощённая главная без финансов (паттерн кассовых терминалов)
+    // Сотрудник зала: без финансов. Показываем настраиваемую доску виджетов
+    // (с разрешённым набором), прячем финансовые фиксированные блоки.
     var staff=!own&&App.s.myRole==='Сотрудник зала';
     var sh=document.getElementById('staff-home');
-    if(sh)sh.style.display=staff?'block':'none';
+    if(sh)sh.style.display='none'; // заменено доской виджетов
     var home=document.getElementById('tab-home');
     if(home){
-      ['.home-hero','.period-bar','#pulse-card','#insight-card','.home-split'].forEach(function(sel){
+      // Капитал, период, плитки выручки и операции — только тем, кто видит финансы
+      ['.home-hero','.period-bar','.home-split','.home-tx'].forEach(function(sel){
         var el=home.querySelector(sel);if(el)el.style.display=staff?'none':'';
       });
     }
-    if(staff){
-      var hello=document.getElementById('staff-hello');
-      if(hello&&App.s.userName)hello.textContent='Привет, '+App.s.userName.split(' ')[0]+' 👋';
-    }
+    // перерисовать доску под роль (у каждого свой набор)
+    if(App.s.ssId)App._renderHomeBoard();
   },
 
   _fillCloneSrc:function(){
@@ -9196,25 +9198,36 @@ var App={
   _homeWidgets:[
     {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками', c:'Действия'},
     {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом', c:'Действия'},
-    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается', c:'Аврон'},
-    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках', c:'Аврон'},
-    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100', c:'Аврон'},
-    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни', c:'Аврон'},
-    {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
-    {id:'money',   t:'Деньги за месяц',   d:'Выручка · расход · прибыль', c:'Финансы'},
-    {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы'},
-    {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы'},
-    {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары'},
     {id:'restock', t:'Что заканчивается', d:'План закупки — что скоро кончится', c:'Товары'},
-    {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары'},
-    {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары'},
-    {id:'metrics', t:'Проф-метрики',      d:'Наценка · GMROI · оборачиваемость', c:'Товары'},
-    {id:'trend',   t:'Динамика продаж',   d:'График выручки по загрузкам', c:'Товары'},
-    {id:'suppliers',t:'Рейтинг поставщиков',d:'Кто надёжнее по ценам', c:'Товары'}
+    {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
+    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни', c:'Аврон'},
+    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается', c:'Аврон', fin:true},
+    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках', c:'Аврон', fin:true},
+    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100', c:'Аврон', fin:true},
+    {id:'money',   t:'Деньги за месяц',   d:'Выручка · расход · прибыль', c:'Финансы', fin:true},
+    {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы', fin:true},
+    {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы', fin:true},
+    {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары', fin:true},
+    {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары', fin:true},
+    {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары', fin:true},
+    {id:'metrics', t:'Проф-метрики',      d:'Наценка · GMROI · оборачиваемость', c:'Товары', fin:true},
+    {id:'trend',   t:'Динамика продаж',   d:'График выручки по загрузкам', c:'Товары', fin:true},
+    {id:'suppliers',t:'Рейтинг поставщиков',d:'Кто надёжнее по ценам', c:'Товары', fin:true}
   ],
-  _homeDefault:['quick','advisor','ask','pulse','insight'],
-  _homeCfg:function(){ try{var c=JSON.parse(localStorage.getItem('auron_home'));if(Array.isArray(c)&&c.length)return c;}catch(e){} return App._homeDefault.slice(); },
-  _homeCfgSave:function(arr){ try{localStorage.setItem('auron_home',JSON.stringify(arr));}catch(e){} },
+  // Может ли роль видеть финансовые виджеты
+  _canFin:function(){ return App.s.isOwner!==false || ['Владелец','Бухгалтер','Администратор'].indexOf(App.s.myRole)>=0; },
+  // Разрешённые виджеты для текущей роли
+  _homeAllowed:function(){ var fin=App._canFin(); return App._homeWidgets.filter(function(w){return fin||!w.fin;}); },
+  _homeDefaultFor:function(){ return App._canFin()?['quick','advisor','ask','pulse','insight']:['quick','restock','ask','season']; },
+  // Ключ настройки — свой на каждую роль (у каждого сотрудника свой набор)
+  _homeKey:function(){ return 'auron_home_'+(App.s.myRole||'user'); },
+  _homeCfg:function(){
+    var allowed=App._homeAllowed().map(function(w){return w.id;});
+    var cfg;try{cfg=JSON.parse(localStorage.getItem(App._homeKey()));}catch(e){}
+    if(!Array.isArray(cfg)||!cfg.length)cfg=App._homeDefaultFor();
+    return cfg.filter(function(id){return allowed.indexOf(id)>=0;}); // отсечь запрещённые роли
+  },
+  _homeCfgSave:function(arr){ try{localStorage.setItem(App._homeKey(),JSON.stringify(arr));}catch(e){} },
   _renderHomeBoard:function(){
     var board=document.getElementById('home-board');if(!board)return;
     var cfg=App._homeCfg();
@@ -9336,8 +9349,8 @@ var App={
   _hcRender:function(){
     var wrap=document.getElementById('hc-list');if(!wrap)return;
     var cfg=App._homeCfg();
-    // сначала включённые (в порядке), потом выключенные
-    var off=App._homeWidgets.filter(function(w){return cfg.indexOf(w.id)<0;});
+    // сначала включённые (в порядке), потом выключенные (только разрешённые роли)
+    var off=App._homeAllowed().filter(function(w){return cfg.indexOf(w.id)<0;});
     var meta=function(id){for(var i=0;i<App._homeWidgets.length;i++)if(App._homeWidgets[i].id===id)return App._homeWidgets[i];return null;};
     var rowOn=function(id,i){var w=meta(id);if(!w)return '';
       return '<div style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--surface-2);border-radius:12px;margin-bottom:8px;">'+
