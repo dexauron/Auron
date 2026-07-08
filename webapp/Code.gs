@@ -1335,6 +1335,17 @@ function getAdvisor(p) {
         detail:'к выплате '+Math.round(due)+' ₽ ('+cnt+' шт), в кассе '+Math.round(cash)+' ₽' });
     } catch(e){}
 
+    // 5) Сезон и ближайшие праздники — влияют на спрос
+    try {
+      var sc=_seasonContext(new Date());
+      if (sc.upcoming.length) {
+        var ev=sc.upcoming[0];
+        alerts.push({ sev:'low', icon:'📅', action:'',
+          title:(ev.daysUntil===0?ev.name+' сегодня':'через '+ev.daysUntil+' '+_plural(ev.daysUntil,'день','дня','дней')+' — '+ev.name),
+          detail:ev.hint });
+      }
+    } catch(e){}
+
     // порядок: сначала важное
     var rank={high:0, mid:1, low:2};
     alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
@@ -1352,6 +1363,37 @@ function getAdvisor(p) {
 function _fmtR(n){ n=Math.round(n||0); var s=String(Math.abs(n)); var out='';
   for(var i=0;i<s.length;i++){ if(i>0&&(s.length-i)%3===0)out+=' '; out+=s[i]; }
   return (n<0?'-':'')+out; }
+
+// Сезон + ближайшие события с подсказкой по спросу (локально, без интернета).
+// Помогает «думать как человек»: что скоро и как это влияет на продажи.
+function _seasonContext(now) {
+  now = now || new Date();
+  var m=now.getMonth()+1, d=now.getDate(), Y=now.getFullYear();
+  var season = (m===12||m<=2)?'зима':(m<=5)?'весна':(m<=8)?'лето':'осень';
+  var seasonHint = {
+    'зима':'холодно — растёт спрос на горячие напитки, консервы, долгие продукты',
+    'весна':'теплеет — вода, напитки, начало сезона свежих овощей',
+    'лето':'жара — пик воды, напитков, мороженого, кваса; хлеб и молочка портятся быстрее',
+    'осень':'сезон заготовок, школа — крупы, консервация, снеки, канцелярия'
+  }[season];
+  // Календарь спроса (фиксированные даты + важные для региона).
+  var events=[
+    {m:12,d:31,name:'Новый год',hint:'пик продаж: мандарины, шампанское, салаты, сладкое — закупай заранее'},
+    {m:2, d:23,name:'23 февраля',hint:'подарочные наборы, снеки, напитки'},
+    {m:3, d:8, name:'8 марта',hint:'цветы, сладкое, шампанское'},
+    {m:5, d:1, name:'Майские праздники',hint:'шашлык, мангал, напитки, одноразовая посуда'},
+    {m:5, d:9, name:'9 мая',hint:'рост спроса на продукты для застолий'},
+    {m:9, d:1, name:'1 сентября',hint:'школа — вода, снеки, канцелярия, соки'}
+  ];
+  var upcoming=[];
+  events.forEach(function(e){
+    var dt=new Date(Y,e.m-1,e.d); if(dt.getTime()<now.getTime()) dt=new Date(Y+1,e.m-1,e.d);
+    var days=Math.round((dt.getTime()-now.getTime())/86400000);
+    if(days>=0&&days<=45) upcoming.push({name:e.name, daysUntil:days, hint:e.hint});
+  });
+  upcoming.sort(function(a,b){return a.daysUntil-b.daysUntil;});
+  return { season:season, seasonHint:seasonHint, upcoming:upcoming };
+}
 
 // Локальный разбор вопроса → ответ по данным магазина.
 function _askLocal(ssId, q) {
@@ -1372,6 +1414,11 @@ function _askLocal(ssId, q) {
     if(!g||g.empty) return {answer:'Загрузи отчёты из 1С — и я покажу, что не продаётся.'};
     var dl=(g.deadStock||[]).slice(0,5).map(function(x){return '• '+x.name+' — '+_fmtR(x.stockSum)+' ₽';}).join('\n');
     return {answer:(g.frozen?'В неликвиде заморожено ≈ '+_fmtR(g.frozen)+' ₽.\n':'')+(dl||'Неликвида не вижу — молодец.'), action:'goods'};
+  }
+  if (has('сезон','праздник','к празднику','спрос','что покупают','что будет продав')) {
+    var scc=_seasonContext(new Date());
+    var upp=scc.upcoming.length?('\nСкоро:\n'+scc.upcoming.map(function(e){return '• '+e.name+' (через '+e.daysUntil+' дн) — '+e.hint;}).join('\n')):'';
+    return {answer:'Сейчас '+scc.season+': '+scc.seasonHint+'.'+upp};
   }
   if (has('заканчива','кончит','закупить','заказать','надо купить')) {
     var a=getAdvisor({ssId:ssId});
@@ -1408,6 +1455,24 @@ function _askLocal(ssId, q) {
   return {answer:'Я могу ответить про деньги и товары. Спроси, например:\n• «сколько заработал за месяц»\n• «что не продаётся»\n• «где дешевле»\n• «что заканчивается»\n• «сколько в кассе»\n• «кому я должен»\n• «дай совет»'};
 }
 
+// Экономический контекст (курс валют) — из открытого источника, с кэшем и
+// защитой: если не вышло, тихо пропускаем. Не роняет ответ помощника.
+function _econContext() {
+  try {
+    var c=CacheService.getScriptCache();
+    var cached=c.get('econ_ctx'); if(cached!==null) return cached;
+    var resp=UrlFetchApp.fetch('https://www.cbr-xml-daily.ru/daily_json.js',{muteHttpExceptions:true});
+    if(resp.getResponseCode()===200){
+      var d=JSON.parse(resp.getContentText());
+      var usd=d&&d.Valute&&d.Valute.USD&&d.Valute.USD.Value;
+      var txt=usd?('Курс ЦБ: 1$ ≈ '+Math.round(usd)+'₽.'):'';
+      c.put('econ_ctx', txt, 6*3600); // кэш 6 часов
+      return txt;
+    }
+  } catch(e){}
+  return '';
+}
+
 // Сводка магазина для ИИ-режима (компактный контекст).
 function _aiContext(ssId) {
   var parts=[];
@@ -1415,6 +1480,9 @@ function _aiContext(ssId) {
   try{ var s=getSavingsHunter({ssId:ssId}); if(s&&s.totalMonthly>0) parts.push('Потенциал экономии на поставщиках: '+_fmtR(s.totalMonthly)+'₽/мес по '+s.count+' товарам.'); }catch(e){}
   try{ var g=getGoodsAnalytics({ssId:ssId}); if(g&&!g.empty){ parts.push('Товаров '+g.count+', ср.наценка '+g.avgMarkup+'%, оборот '+g.turnoverDays+' дн, заморожено в неликвиде '+_fmtR(g.frozen)+'₽.');
     if(g.topProfit&&g.topProfit.length) parts.push('Топ прибыли: '+g.topProfit.slice(0,3).map(function(x){return x.name;}).join(', ')+'.'); } }catch(e){}
+  try{ var sc=_seasonContext(new Date()); parts.push('Сейчас '+sc.season+' ('+sc.seasonHint+').');
+    if(sc.upcoming.length){ var e=sc.upcoming[0]; parts.push('Скоро: '+e.name+' через '+e.daysUntil+' дн — '+e.hint+'.'); } }catch(e){}
+  try{ var ec=_econContext(); if(ec) parts.push(ec); }catch(e){}
   return parts.join(' ');
 }
 

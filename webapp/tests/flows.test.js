@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,_seasonContext,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -253,6 +253,16 @@ const q3=A.askAuron({ssId:'ss1',q:'что не продаётся'});
 eq('помощник: показывает неликвид', q3.answer.length>0, true);
 const q4=A.askAuron({ssId:'ss1',q:'сколько в кассе'});
 eq('помощник: показывает счета', /₽/.test(q4.answer), true);
+
+// ── Сезонный контекст (думать как человек: спрос по сезону/праздникам) ─
+const sc1=A._seasonContext(new Date(2026,11,20)); // 20 декабря
+eq('сезон: декабрь = зима', sc1.season, 'зима');
+eq('сезон: скоро Новый год', sc1.upcoming[0].name, 'Новый год');
+eq('сезон: до НГ 11 дней', sc1.upcoming[0].daysUntil, 11);
+const sc2=A._seasonContext(new Date(2026,6,15)); // 15 июля
+eq('сезон: июль = лето', sc2.season, 'лето');
+const q5=A.askAuron({ssId:'ss1',q:'что закупить к празднику?'});
+eq('помощник: отвечает про сезон/спрос', /сезон|зима|весна|лето|осень|Скоро/i.test(q5.answer), true);
 
 // ── Итог ────────────────────────────────────────────────────────────
 console.log('\nПотоки денег: '+pass+' passed, '+fail+' failed');

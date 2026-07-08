@@ -9182,7 +9182,7 @@ var App={
     if(head&&!document.getElementById('chat-ai-status')){
       head.insertAdjacentHTML('afterend','<div id="chat-ai-status" onclick="App.openAiSettings()" style="cursor:pointer;font-size:11.5px;color:var(--muted);margin:-4px 0 10px;">'+(st.aiEnabled?'🟢 Живой разум (ИИ) включён · настроить':'⚙️ Включить живой разум (ИИ) — отвечать по-человечески')+'</div>');
     }
-    var chips=['сколько заработал за месяц','что не продаётся','где дешевле','что заканчивается','сколько в кассе','дай совет'];
+    var chips=['сколько заработал за месяц','что не продаётся','где дешевле','что заканчивается','что по сезону','сколько в кассе','дай совет'];
     var cc=document.getElementById('chat-chips');
     if(cc)cc.innerHTML=chips.map(function(c){return'<button onclick="App._chatAsk(\''+c+'\')" style="padding:6px 11px;border-radius:9px;border:1.2px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12px;cursor:pointer;font-family:var(--font);">'+c+'</button>';}).join('');
     if(preset)App._chatAsk(preset);
