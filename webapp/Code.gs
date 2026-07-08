@@ -4665,11 +4665,27 @@ function getContractorCard(p) {
           status:String(r[O_STATUS-1]||'active'),factAmount:Math.round(parseFloat(r[O_FACT-1])||0)});
       });
     }
+    // Товары этого поставщика (из истории цен): последняя цена и дата поступления
+    var goods=[];
+    var ph=ss.getSheetByName(SH_PRICEHIST);
+    if (ph&&ph.getLastRow()>=2) {
+      var gmap={};
+      ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+        if (String(r[PH_SUPPLIER-1])!==name) return;
+        var nm=String(r[PH_NAME-1]||''), price=parseFloat(r[PH_PRICE-1])||0;
+        if (!nm) return;
+        var d=r[PH_DATE-1], t=(d instanceof Date)?d.getTime():0;
+        if (!gmap[nm]||gmap[nm].t<=t) gmap[nm]={price:price,t:t,date:fd(d)};
+      });
+      goods=Object.keys(gmap).map(function(k){return {name:k,price:Math.round(gmap[k].price*100)/100,date:gmap[k].date,t:gmap[k].t};})
+        .sort(function(a,b){return b.t-a.t;});
+    }
     debtHist.reverse(); payments.reverse(); orders.reverse();
     var openPay=0;
     payments.forEach(function(x){ if(x.status!=='paid'&&x.status!=='cancelled') openPay+=Math.max(x.amount-x.paid,0); });
     return {name:name,info:info,debt:Math.round(debt),totalBuy:Math.round(totalBuy),totalPay:Math.round(totalPay),
-            openPay:Math.round(openPay),payments:payments.slice(0,15),orders:orders.slice(0,15),debtHist:debtHist.slice(0,15)};
+            openPay:Math.round(openPay),payments:payments.slice(0,15),orders:orders.slice(0,15),
+            debtHist:debtHist.slice(0,40),goods:goods.slice(0,60),goodsCount:goods.length};
   } catch(e) { return {__error:e.message}; }
 }
 

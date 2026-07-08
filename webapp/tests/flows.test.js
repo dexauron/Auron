@@ -215,6 +215,11 @@ eq('поиск по артикулу', byArt.items.some(x=>x.name==='Молок�
 const pcc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
 eq('карточка: код товара виден', pcc.item.code, '340');
 
+// Карточка поставщика: какие товары возит (из истории цен)
+const scard=A.getContractorCard({ssId:'ss1',name:'Альфа'});
+eq('поставщик: список товаров есть', (scard.goods||[]).some(g=>g.name==='Молоко'), true);
+eq('поставщик: цена товара', (scard.goods.find(g=>g.name==='Молоко')||{}).price, 75);
+
 // Карточка товара: история цены + сравнение поставщиков
 const pc=A.getProductDetail({ssId:'ss1',barcode:'111',name:'Молоко'});
 eq('карточка: история цены (2 точки)', pc.priceHist.length, 2);
