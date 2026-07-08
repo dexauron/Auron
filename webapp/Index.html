@@ -2736,7 +2736,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='3.4.1';
+var APP_VERSION='3.5.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9331,12 +9331,30 @@ var App={
   _renderHomeBoard:function(){
     var board=document.getElementById('home-board');if(!board)return;
     var cfg=App._homeCfg();
-    App._homeGoods=null;App._homeGoodsQ=null; // сброс кэша на новый рендер
+    App._homeGoods=null;App._homeGoodsQ=null;
     board.innerHTML=cfg.map(function(id){return App._widgetHTML(id);}).join('');
+    var has=function(id){return cfg.indexOf(id)>=0;};
+    if(has('insight'))App.loadInsights();
+    var pick=function(d,k){return d[k]!==undefined?d[k]:null;};
+    // Один агрегатный запрос вместо десятка — быстрее и меньше нагрузка.
+    gs('getDashboard',{ssId:App.s.ssId,widgets:cfg,period:(App._getPeriod?App._getPeriod():'month')}).then(function(d){
+      if(!d||d.__error){App._renderBoardIndividually(cfg);return;}
+      if(has('pulse'))App._renderPulse(d.pulse);
+      if(has('advisor'))App.loadAdvisor(pick(d,'advisor'));
+      if(has('savings'))App._loadHomeSavings(pick(d,'savings'));
+      if(has('money'))App._wMoney(pick(d,'money'));
+      if(has('debts'))App._wDebts(pick(d,'debts'));
+      if(has('tax'))App._wTax(pick(d,'tax'));
+      if(has('season'))App._wSeason(pick(d,'season'));
+      if(has('restock'))App._wRestock(d.restock!==undefined?d.restock:{items:[]});
+      var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
+      if(gw.length){var g=d.goods||{empty:true};gw.forEach(function(id){App._wGoods(id,g);});}
+    }).catch(function(){App._renderBoardIndividually(cfg);});
+  },
+  _renderBoardIndividually:function(cfg){
     var has=function(id){return cfg.indexOf(id)>=0;};
     if(has('pulse'))App.loadPulse();
     if(has('advisor'))App.loadAdvisor();
-    if(has('insight'))App.loadInsights();
     if(has('savings'))App._loadHomeSavings();
     if(has('money'))App._wMoney();
     if(has('debts'))App._wDebts();
@@ -9346,38 +9364,44 @@ var App={
     var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
     if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
   },
-  _wRestock:function(){
-    gs('getRestock',{ssId:App.s.ssId}).then(function(r){
-      var items=(r&&r.items)||[];
+  _wRestock:function(pre){
+    var go=function(r){var items=(r&&r.items)||[];
       if(!items.length){App._wBox('restock','Что заканчивается','<div style="font-size:12.5px;color:var(--muted);">Всё в наличии 👍</div>',"App.openGoodsList('sold')");return;}
       var inner=items.slice(0,5).map(function(t){return App._wRow((t.urgent?'⛔ ':'')+t.name,t.urgent?'нет в наличии':'хватит '+t.daysOfStock+' дн',t.urgent?'var(--neg)':'var(--warn,#FF9F0A)');}).join('');
-      App._wBox('restock','Что заканчивается',inner,"App.openGoodsList('sold')");
-    }).catch(function(){App._wBox('restock','Что заканчивается',null);});
+      App._wBox('restock','Что заканчивается',inner,"App.openGoodsList('sold')");};
+    if(pre!==undefined){go(pre);return;}
+    gs('getRestock',{ssId:App.s.ssId}).then(go).catch(function(){App._wBox('restock','Что заканчивается',null);});
   },
-  _wMoney:function(){gs('getAnalytics',{ssId:App.s.ssId,period:'month'}).then(function(a){
+  _wMoney:function(pre){var go=function(a){
+    if(!a||a.__error){App._wBox('money','Деньги',null);return;}
     var prof=(a.income||0)-(a.expense||0);
-    var inner='<div style="font-size:23px;font-weight:800;color:'+(prof>=0?'var(--pos)':'var(--neg)')+';">₽ '+fmt(Math.round(prof))+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">прибыль за месяц</div>'+
+    var inner='<div style="font-size:23px;font-weight:800;color:'+(prof>=0?'var(--pos)':'var(--neg)')+';">₽ '+fmt(Math.round(prof))+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">прибыль за период</div>'+
       App._wRow('Выручка','₽ '+fmt(Math.round(a.income||0)),'var(--pos)')+App._wRow('Расход','₽ '+fmt(Math.round(a.expense||0)),'var(--neg)');
-    App._wBox('money','Деньги · месяц',inner,"App.setTab('analytics',null)");
-  }).catch(function(){App._wBox('money','Деньги · месяц',null);});},
-  _wDebts:function(){gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(function(r){
+    App._wBox('money','Деньги',inner,"App.setTab('analytics',null)");};
+    if(pre!==undefined){go(pre);return;}
+    gs('getAnalytics',{ssId:App.s.ssId,period:'month'}).then(go).catch(function(){App._wBox('money','Деньги',null);});},
+  _wDebts:function(pre){var go=function(r){
+    if(!r||r.__error){App._wBox('debts','Долги',null);return;}
     var inner='<div style="font-size:23px;font-weight:800;color:var(--neg);">₽ '+fmt(r.totalDebt||0)+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">общий долг поставщикам</div>'+
       App._wRow('Оплачено всего','₽ '+fmt(r.totalPay||0),'var(--pos)');
-    App._wBox('debts','Долги',inner,"App.setTab('suppliers',null)");
-  }).catch(function(){App._wBox('debts','Долги',null);});},
-  _wTax:function(){gs('getTaxSummary',{ssId:App.s.ssId,year:new Date().getFullYear()}).then(function(r){
-    if(r&&r.__error){App._wBox('tax','Налоги',null);return;}
+    App._wBox('debts','Долги',inner,"App.setTab('suppliers',null)");};
+    if(pre!==undefined){go(pre);return;}
+    gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(go).catch(function(){App._wBox('debts','Долги',null);});},
+  _wTax:function(pre){var go=function(r){
+    if(!r||r.__error){App._wBox('tax','Налоги',null);return;}
     var inner='<div style="font-size:20px;font-weight:800;">₽ '+fmt(r.yearIncome||0)+'</div><div style="font-size:11px;color:var(--muted);">доход за '+r.year+' (для налога)</div>';
-    App._wBox('tax','Налоги',inner,"App.openTaxes()");
-  }).catch(function(){App._wBox('tax','Налоги',null);});},
-  _wSeason:function(){gs('getSeason',{ssId:App.s.ssId}).then(function(s){
+    App._wBox('tax','Налоги',inner,"App.openTaxes()");};
+    if(pre!==undefined){go(pre);return;}
+    gs('getTaxSummary',{ssId:App.s.ssId,year:new Date().getFullYear()}).then(go).catch(function(){App._wBox('tax','Налоги',null);});},
+  _wSeason:function(pre){var go=function(s){
     if(!s||s.__error){App._wBox('season','Сезон',null);return;}
     var up=(s.upcoming&&s.upcoming[0]);
     var inner='<div style="font-size:14px;font-weight:750;text-transform:capitalize;">'+App._e(s.season)+'</div>'+
       '<div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45;">'+App._e(s.seasonHint||'')+'</div>'+
       (up?'<div style="margin-top:10px;padding:9px 11px;background:var(--brand-dim);border-radius:11px;font-size:12px;line-height:1.4;"><b>📅 через '+up.daysUntil+' дн — '+App._e(up.name)+'</b><br><span style="color:var(--ink-2);">'+App._e(up.hint)+'</span></div>':'');
-    App._wBox('season','Сезон и спрос',inner);
-  }).catch(function(){App._wBox('season','Сезон',null);});},
+    App._wBox('season','Сезон и спрос',inner);};
+    if(pre!==undefined){go(pre);return;}
+    gs('getSeason',{ssId:App.s.ssId}).then(go).catch(function(){App._wBox('season','Сезон',null);});},
   _wGoods:function(id,a){
     if(!a||a.empty){
       App._wBox(id,{topGoods:'Топ по прибыли',restock:'Что заканчивается',dead:'Неликвид',abc:'ABC-анализ',metrics:'Проф-метрики',trend:'Динамика продаж',suppliers:'Рейтинг поставщиков'}[id]||'Товары',
@@ -9409,10 +9433,16 @@ var App={
     App._wBox(id,'Товары',null);
   },
   _widgetHTML:function(id){
-    if(id==='quick') return '<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
-      '<button onclick="App.setTab(\'kassa\',null)" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">Касса</div><div style="font-size:11.5px;color:var(--muted);">закрыть смену</div></div></button>'+
-      '<button onclick="App.openGoods()" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">Товары</div><div style="font-size:11.5px;color:var(--muted);">поиск · цены</div></div></button>'+
-      '</div></div>';
+    if(id==='quick'){
+      var qb=function(oc,svg,t,sub){return '<button onclick="'+oc+'" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width=\'21\' height=\'21\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.9\' stroke-linecap=\'round\' stroke-linejoin=\'round\'>'+svg+'</svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">'+t+'</div><div style="font-size:11.5px;color:var(--muted);">'+sub+'</div></div></button>';};
+      var K="<path d='M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z'/><path d='M9 8h6M9 12h6'/>";
+      var G="<path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/><polyline points='3.27 6.96 12 12.01 20.73 6.96'/><line x1='12' y1='22.08' x2='12' y2='12'/>";
+      var R="<circle cx='9' cy='20' r='1.3'/><circle cx='18' cy='20' r='1.3'/><path d='M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6'/>";
+      var btns=[qb("App.setTab('kassa',null)",K,'Касса','закрыть смену')];
+      if(App.s.myRole==='Сотрудник зала')btns.push(qb("App.openReceiveRep()",R,'Приём товара','поставка от ТП'));
+      btns.push(qb("App.openGoods()",G,'Товары','поиск · цены'));
+      return '<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
+    }
     if(id==='advisor') return '<div id="advisor-card"></div>';
     if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button></div>';
     if(id==='pulse') return '<div id="pulse-card"></div>';
@@ -9437,18 +9467,18 @@ var App={
     gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._homeGoods=a;var q=App._homeGoodsQ||[];App._homeGoodsQ=null;q.forEach(function(f){f(a);});})
       .catch(function(){var q=App._homeGoodsQ||[];App._homeGoodsQ=null;q.forEach(function(f){f({empty:true});});});
   },
-  _loadHomeSavings:function(){
+  _loadHomeSavings:function(pre){
     var el=document.getElementById('home-savings');if(!el)return;
-    gs('getSavingsHunter',{ssId:App.s.ssId}).then(function(s){
-      App._savings=s;var el=document.getElementById('home-savings');if(!el)return;
+    var go=function(s){App._savings=s;var el=document.getElementById('home-savings');if(!el)return;
       if(!s||s.__error||s.empty||!s.count){el.innerHTML='';return;}
       var v=s.totalMonthly>0?fmt(Math.round(s.totalMonthly))+' ₽/мес':s.count+' товаров';
       el.innerHTML='<div onclick="App.openSavings()" style="cursor:pointer;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:16px;padding:15px 17px;color:#fff;box-shadow:var(--shadow-card);">'+
         '<svg class="girih-bg on-brand" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih)"/></svg>'+
         '<div style="position:relative;font-size:12px;opacity:.92;">🤖 Аврон нашёл экономию</div>'+
         '<div style="position:relative;font-size:24px;font-weight:800;margin:3px 0;">'+v+'</div>'+
-        '<div style="position:relative;font-size:12px;opacity:.92;">'+s.count+' товаров дешевле у другого поставщика ›</div></div>';
-    }).catch(function(){var el=document.getElementById('home-savings');if(el)el.innerHTML='';});
+        '<div style="position:relative;font-size:12px;opacity:.92;">'+s.count+' товаров дешевле у другого поставщика ›</div></div>';};
+    if(pre!==undefined){go(pre);return;}
+    gs('getSavingsHunter',{ssId:App.s.ssId}).then(go).catch(function(){var el=document.getElementById('home-savings');if(el)el.innerHTML='';});
   },
   openHomeCustomize:function(){
     App.openModal('<div class="modal-title">Настройка виджетов</div>'+
@@ -9495,10 +9525,9 @@ var App={
     App._homeCfgSave(cfg);App._hcRender();App._renderHomeBoard();App.haptic(6);},
 
   // ── Аврон-советник: проактивные подсказки ──────────────────────
-  loadAdvisor:function(){
+  loadAdvisor:function(pre){
     var el=document.getElementById('advisor-card');if(!el)return;
-    gs('getAdvisor',{ssId:App.s.ssId}).then(function(r){
-      App._advisor=r;var el=document.getElementById('advisor-card');if(!el)return;
+    var go=function(r){App._advisor=r;var el=document.getElementById('advisor-card');if(!el)return;
       if(!r||r.__error||!r.count){el.innerHTML='';return;}
       var top=r.alerts[0];
       var more=r.count>1?' · и ещё '+(r.count-1):'';
@@ -9507,8 +9536,9 @@ var App={
         '<div style="flex:1;min-width:0;">'+
           '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Аврон-советник</div>'+
           '<div style="font-size:13px;font-weight:650;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+top.icon+' '+App._advTitle(top)+more+'</div>'+
-        '</div><span style="color:var(--muted);">›</span></div>';
-    }).catch(function(){var el=document.getElementById('advisor-card');if(el)el.innerHTML='';});
+        '</div><span style="color:var(--muted);">›</span></div>';};
+    if(pre!==undefined){go(pre);return;}
+    gs('getAdvisor',{ssId:App.s.ssId}).then(go).catch(function(){var el=document.getElementById('advisor-card');if(el)el.innerHTML='';});
   },
   _advTitle:function(a){var fmn=function(v){return fmt(Math.round(v));};
     return (a.num!=null?fmn(a.num)+' '+(a.unit||'')+' — ':'')+App._e(a.title);},

@@ -1298,6 +1298,26 @@ function getSavingsHunter(p) {
 // где заморожены деньги, сколько можно сэкономить, кассовые предупреждения.
 // Каждая подсказка — с действием. Числа сырые, формат — на фронте.
 // ═══════════════════════════════════════════════════════════════════════
+// Один запрос для всех виджетов главной — вместо 10 отдельных вызовов.
+// Каждый блок в своём try: если недоступен (права) — просто отсутствует.
+function getDashboard(p) {
+  var ssId=p.ssId, w=p.widgets||[], period=p.period||'month';
+  var need=function(id){return w.indexOf(id)>=0;};
+  var out={};
+  if(need('pulse'))   { try{ out.pulse=getPulse({ssId:ssId}); }catch(e){} }
+  if(need('advisor')) { try{ out.advisor=getAdvisor({ssId:ssId}); }catch(e){} }
+  if(need('insight')) { try{ out.insight=getInsights({ssId:ssId}); }catch(e){} }
+  if(need('savings')) { try{ out.savings=getSavingsHunter({ssId:ssId}); }catch(e){} }
+  if(need('money'))   { try{ out.money=getAnalytics({ssId:ssId,period:period}); }catch(e){} }
+  if(need('debts'))   { try{ out.debts=getSupplierAnalytics({ssId:ssId}); }catch(e){} }
+  if(need('tax'))     { try{ out.tax=getTaxSummary({ssId:ssId,year:(new Date()).getFullYear()}); }catch(e){} }
+  if(need('season'))  { try{ out.season=getSeason({ssId:ssId}); }catch(e){} }
+  if(need('restock')) { try{ out.restock=getRestock({ssId:ssId}); }catch(e){} }
+  if(['topGoods','dead','abc','metrics','trend','suppliers'].some(need)) { try{ out.goods=getGoodsAnalytics({ssId:ssId}); }catch(e){} }
+  out.period=period;
+  return out;
+}
+
 function getAdvisor(p) {
   if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {

@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,_seasonContext,getDebts,_rolePerms,PERM_CATALOG,getRestock,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,_seasonContext,getDebts,_rolePerms,PERM_CATALOG,getRestock,getDashboard,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -301,6 +301,13 @@ eq('помощник: отвечает про сезон/спрос', /сезо�
 const rs=A.getRestock({ssId:'ss1'});
 eq('заканчивается: возвращает список', Array.isArray(rs.items), true);
 eq('заканчивается: без денежных полей', rs.items.every(x=>x.stockQty!==undefined&&x.buy===undefined&&x.profit===undefined), true);
+
+// ── Агрегатный запрос главной (один вызов вместо десятка) ──────────
+const dash=A.getDashboard({ssId:'ss1',widgets:['money','restock','season','topGoods'],period:'month'});
+eq('дашборд: есть деньги', dash.money!==undefined, true);
+eq('дашборд: есть что заканчивается', Array.isArray(dash.restock.items), true);
+eq('дашборд: есть сезон', dash.season&&!!dash.season.season, true);
+eq('дашборд: есть товарная аналитика', dash.goods!==undefined, true);
 
 // ── Права доступа по ролям ──────────────────────────────────────────
 eq('права: сотрудник зала без финансов', A._rolePerms('Сотрудник зала').indexOf('finance'), -1);
