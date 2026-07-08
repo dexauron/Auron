@@ -9194,12 +9194,23 @@ var App={
   },
   // ── Виджеты главного экрана (пользователь настраивает сам) ─────
   _homeWidgets:[
-    {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками'},
-    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается'},
-    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках'},
-    {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом'},
-    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100'},
-    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни'}
+    {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками', c:'Действия'},
+    {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом', c:'Действия'},
+    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается', c:'Аврон'},
+    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках', c:'Аврон'},
+    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100', c:'Аврон'},
+    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни', c:'Аврон'},
+    {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
+    {id:'money',   t:'Деньги за месяц',   d:'Выручка · расход · прибыль', c:'Финансы'},
+    {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы'},
+    {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы'},
+    {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары'},
+    {id:'restock', t:'Что заканчивается', d:'План закупки — что скоро кончится', c:'Товары'},
+    {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары'},
+    {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары'},
+    {id:'metrics', t:'Проф-метрики',      d:'Наценка · GMROI · оборачиваемость', c:'Товары'},
+    {id:'trend',   t:'Динамика продаж',   d:'График выручки по загрузкам', c:'Товары'},
+    {id:'suppliers',t:'Рейтинг поставщиков',d:'Кто надёжнее по ценам', c:'Товары'}
   ],
   _homeDefault:['quick','advisor','ask','pulse','insight'],
   _homeCfg:function(){ try{var c=JSON.parse(localStorage.getItem('auron_home'));if(Array.isArray(c)&&c.length)return c;}catch(e){} return App._homeDefault.slice(); },
@@ -9207,11 +9218,73 @@ var App={
   _renderHomeBoard:function(){
     var board=document.getElementById('home-board');if(!board)return;
     var cfg=App._homeCfg();
+    App._homeGoods=null;App._homeGoodsQ=null; // сброс кэша на новый рендер
     board.innerHTML=cfg.map(function(id){return App._widgetHTML(id);}).join('');
-    if(cfg.indexOf('pulse')>=0)App.loadPulse();
-    if(cfg.indexOf('advisor')>=0)App.loadAdvisor();
-    if(cfg.indexOf('insight')>=0)App.loadInsights();
-    if(cfg.indexOf('savings')>=0)App._loadHomeSavings();
+    var has=function(id){return cfg.indexOf(id)>=0;};
+    if(has('pulse'))App.loadPulse();
+    if(has('advisor'))App.loadAdvisor();
+    if(has('insight'))App.loadInsights();
+    if(has('savings'))App._loadHomeSavings();
+    if(has('money'))App._wMoney();
+    if(has('debts'))App._wDebts();
+    if(has('tax'))App._wTax();
+    if(has('season'))App._wSeason();
+    var gw=['topGoods','restock','dead','abc','metrics','trend','suppliers'].filter(has);
+    if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
+  },
+  _wMoney:function(){gs('getAnalytics',{ssId:App.s.ssId,period:'month'}).then(function(a){
+    var prof=(a.income||0)-(a.expense||0);
+    var inner='<div style="font-size:23px;font-weight:800;color:'+(prof>=0?'var(--pos)':'var(--neg)')+';">₽ '+fmt(Math.round(prof))+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">прибыль за месяц</div>'+
+      App._wRow('Выручка','₽ '+fmt(Math.round(a.income||0)),'var(--pos)')+App._wRow('Расход','₽ '+fmt(Math.round(a.expense||0)),'var(--neg)');
+    App._wBox('money','Деньги · месяц',inner,"App.setTab('analytics',null)");
+  }).catch(function(){App._wBox('money','Деньги · месяц',null);});},
+  _wDebts:function(){gs('getSupplierAnalytics',{ssId:App.s.ssId}).then(function(r){
+    var inner='<div style="font-size:23px;font-weight:800;color:var(--neg);">₽ '+fmt(r.totalDebt||0)+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">общий долг поставщикам</div>'+
+      App._wRow('Оплачено всего','₽ '+fmt(r.totalPay||0),'var(--pos)');
+    App._wBox('debts','Долги',inner,"App.setTab('suppliers',null)");
+  }).catch(function(){App._wBox('debts','Долги',null);});},
+  _wTax:function(){gs('getTaxSummary',{ssId:App.s.ssId,year:new Date().getFullYear()}).then(function(r){
+    if(r&&r.__error){App._wBox('tax','Налоги',null);return;}
+    var inner='<div style="font-size:20px;font-weight:800;">₽ '+fmt(r.yearIncome||0)+'</div><div style="font-size:11px;color:var(--muted);">доход за '+r.year+' (для налога)</div>';
+    App._wBox('tax','Налоги',inner,"App.openTaxes()");
+  }).catch(function(){App._wBox('tax','Налоги',null);});},
+  _wSeason:function(){gs('getSeason',{ssId:App.s.ssId}).then(function(s){
+    if(!s||s.__error){App._wBox('season','Сезон',null);return;}
+    var up=(s.upcoming&&s.upcoming[0]);
+    var inner='<div style="font-size:14px;font-weight:750;text-transform:capitalize;">'+App._e(s.season)+'</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45;">'+App._e(s.seasonHint||'')+'</div>'+
+      (up?'<div style="margin-top:10px;padding:9px 11px;background:var(--brand-dim);border-radius:11px;font-size:12px;line-height:1.4;"><b>📅 через '+up.daysUntil+' дн — '+App._e(up.name)+'</b><br><span style="color:var(--ink-2);">'+App._e(up.hint)+'</span></div>':'');
+    App._wBox('season','Сезон и спрос',inner);
+  }).catch(function(){App._wBox('season','Сезон',null);});},
+  _wGoods:function(id,a){
+    if(!a||a.empty){
+      App._wBox(id,{topGoods:'Топ по прибыли',restock:'Что заканчивается',dead:'Неликвид',abc:'ABC-анализ',metrics:'Проф-метрики',trend:'Динамика продаж',suppliers:'Рейтинг поставщиков'}[id]||'Товары',
+        '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;">Загрузите отчёты из 1С — здесь появятся данные.</div>',"App.openGoods()");
+      return;
+    }
+    var fm=function(v){return fmt(Math.round(v));};
+    if(id==='topGoods'){var inner=(a.topProfit||[]).slice(0,4).map(function(t){return App._wRow(t.name,'₽ '+fm(t.profit),'var(--pos)');}).join('')||'—';
+      App._wBox('topGoods','Топ по прибыли',inner,"App.openGoods()");return;}
+    if(id==='restock'){var r=(a.restock||[]).slice(0,4).map(function(t){return App._wRow((t.urgent?'⛔ ':'')+t.name,t.urgent?'нет':'ост '+t.stockQty,t.urgent?'var(--neg)':'var(--warn,#FF9F0A)');}).join('')||'<div style="font-size:12.5px;color:var(--muted);">Всё в наличии 👍</div>';
+      App._wBox('restock','Что заканчивается',r,"App.openGoods()");return;}
+    if(id==='dead'){var inner='<div style="font-size:20px;font-weight:800;color:var(--muted);">₽ '+fm(a.frozen||0)+'</div><div style="font-size:11px;color:var(--muted);margin-bottom:8px;">заморожено в неликвиде</div>'+
+      (a.deadStock||[]).slice(0,3).map(function(t){return App._wRow(t.name,'₽ '+fm(t.stockSum),'var(--muted)');}).join('');
+      App._wBox('dead','Неликвид',inner,"App.openGoods()");return;}
+    if(id==='abc'&&a.abc){var ab=a.abc;var inner=
+      App._wRow('A — главные','+'+ab.a.count+' тов · '+ab.a.share+'%','var(--pos)')+
+      App._wRow('B — средние',ab.b.count+' тов · '+ab.b.share+'%')+
+      App._wRow('C — балласт',ab.c.count+' тов · '+ab.c.share+'%','var(--muted)');
+      App._wBox('abc','ABC-анализ',inner,"App.openGoods()");return;}
+    if(id==='metrics'){var inner=App._wRow('Средняя наценка',(a.avgMarkup||0)+'%')+App._wRow('GMROI',(a.gmroi!=null?a.gmroi:'—'))+App._wRow('Оборот',(a.turnoverDays||'—')+' дн');
+      App._wBox('metrics','Проф-метрики',inner,"App.openGoods()");return;}
+    if(id==='suppliers'){var inner=(a.supplierRating||[]).slice(0,4).map(function(t){return App._wRow(t.name,t.priceUps?t.priceUps+' повыш.':'стабильно',t.score>=80?'var(--pos)':t.score>=60?'var(--ink)':'var(--neg)');}).join('')||'—';
+      App._wBox('suppliers','Рейтинг поставщиков',inner,"App.openGoods()");return;}
+    if(id==='trend'){
+      if(a.snapshots&&a.snapshots.length>=2){App._wBox('trend','Динамика продаж','<div id="w-trend-spark" style="height:30px;"></div><div style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center;">выручка по '+a.snapshots.length+' загрузкам</div>',"App.openGoods()");
+        App._drawSpark('w-trend-spark',a.snapshots.map(function(s){return s.revenue;}),'var(--pos)');}
+      else App._wBox('trend','Динамика продаж','<div style="font-size:12.5px;color:var(--muted);line-height:1.5;">Нужно ≥2 загрузок «Продажи» — тренд появится со временем.</div>',"App.openGoods()");
+      return;}
+    App._wBox(id,'Товары',null);
   },
   _widgetHTML:function(id){
     if(id==='quick') return '<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
@@ -9223,7 +9296,24 @@ var App={
     if(id==='pulse') return '<div id="pulse-card"></div>';
     if(id==='insight') return '<div id="insight-card"></div>';
     if(id==='savings') return '<div id="home-savings" style="padding:0 16px;margin-bottom:14px;"></div>';
-    return '';
+    // остальные — асинхронные виджеты-карточки
+    return '<div id="w-'+id+'"></div>';
+  },
+  // Оболочка карточки-виджета
+  _wBox:function(id,title,inner,tap){
+    var el=document.getElementById('w-'+id);if(!el)return;
+    if(inner==null){el.innerHTML='';return;}
+    el.innerHTML='<div style="padding:0 16px;margin-bottom:14px;"><div '+(tap?'onclick="'+tap+'" style="cursor:pointer;':'style="')+'background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:var(--shadow-card);">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">'+title+'</span>'+(tap?'<span style="color:var(--brand);font-size:13px;font-weight:700;">›</span>':'')+'</div>'+inner+'</div></div>';
+  },
+  _wRow:function(l,r,c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);">'+App._e(l)+'</span><span style="font-weight:700;white-space:nowrap;'+(c?'color:'+c+';':'')+'">'+r+'</span></div>';},
+  // Один запрос аналитики товаров на все товарные виджеты за рендер
+  _ensureGoods:function(cb){
+    if(App._homeGoods){cb(App._homeGoods);return;}
+    if(App._homeGoodsQ){App._homeGoodsQ.push(cb);return;}
+    App._homeGoodsQ=[cb];
+    gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._homeGoods=a;var q=App._homeGoodsQ||[];App._homeGoodsQ=null;q.forEach(function(f){f(a);});})
+      .catch(function(){var q=App._homeGoodsQ||[];App._homeGoodsQ=null;q.forEach(function(f){f({empty:true});});});
   },
   _loadHomeSavings:function(){
     var el=document.getElementById('home-savings');if(!el)return;
@@ -9264,8 +9354,14 @@ var App={
     var h='';
     h+='<div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:2px 0 8px;">На экране</div>';
     h+=cfg.map(function(id,i){return rowOn(id,i);}).join('')||'<div style="color:var(--muted);font-size:12.5px;margin-bottom:10px;">Пусто — добавьте виджеты ниже.</div>';
-    if(off.length){h+='<div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px;">Доступные</div>';
-      h+=off.map(rowOff).join('');}
+    if(off.length){
+      h+='<div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px;">Добавить виджет</div>';
+      var cats=[];off.forEach(function(w){if(cats.indexOf(w.c||'Прочее')<0)cats.push(w.c||'Прочее');});
+      cats.forEach(function(cat){
+        h+='<div style="font-size:11.5px;font-weight:700;color:var(--brand);margin:10px 0 6px;">'+App._e(cat)+'</div>';
+        h+=off.filter(function(w){return (w.c||'Прочее')===cat;}).map(rowOff).join('');
+      });
+    }
     wrap.innerHTML=h;
   },
   _hcToggle:function(id){var cfg=App._homeCfg();var i=cfg.indexOf(id);

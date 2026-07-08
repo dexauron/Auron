@@ -1520,6 +1520,11 @@ function _aiContext(ssId) {
   return parts.join(' ');
 }
 
+// Сезон + ближайшие праздники (для виджета на главной).
+function getSeason(p) {
+  try { return _seasonContext(new Date()); } catch(e) { return {__error:e.message}; }
+}
+
 // Главная точка: вопрос → ответ (ИИ, если задан ключ; иначе локально).
 function askAuron(p) {
   var ssId=p.ssId, q=String(p.q||'').trim();
