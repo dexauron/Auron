@@ -1832,16 +1832,11 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       </div>
       <!-- План выручки на месяц -->
       <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:16px;"></div>
-      <!-- Пульс магазина -->
-      <div id="pulse-card"></div>
-      <!-- Аврон-советник: проактивные подсказки -->
-      <div id="advisor-card"></div>
-      <!-- Спросить Аврон (чат-помощник) -->
+      <!-- Настраиваемая доска виджетов (пользователь сам добавляет/двигает) -->
+      <div id="home-board"></div>
       <div style="padding:0 16px;margin-bottom:14px;">
-        <button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button>
+        <button onclick="App.openHomeCustomize()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:14px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);">⚙ Настроить виджеты</button>
       </div>
-      <!-- Наблюдение (машина времени / слабый день) -->
-      <div id="insight-card"></div>
       <!-- 2×2 stat tiles -->
       <div class="home-split">
         <div class="split-tile" onclick="App.openMetricDetail('income')" style="cursor:pointer;">
@@ -4610,9 +4605,7 @@ var App={
 
   loadHome:function(){
     if(!App.s.ssId)return;
-    App.loadPulse();
-    App.loadAdvisor();
-    App.loadInsights();
+    App._renderHomeBoard();
     var period=App._getPeriod();
     // 1) мгновенно из кэша (если есть)
     var cached=App._cacheGet('home_'+period);
@@ -9199,6 +9192,89 @@ var App={
     gs('getPulse',{ssId:App.s.ssId}).then(function(r){App._pulse=r;App._renderPulse(r);})
       .catch(function(){el.innerHTML='';});
   },
+  // ── Виджеты главного экрана (пользователь настраивает сам) ─────
+  _homeWidgets:[
+    {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками'},
+    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается'},
+    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках'},
+    {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом'},
+    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100'},
+    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни'}
+  ],
+  _homeDefault:['quick','advisor','ask','pulse','insight'],
+  _homeCfg:function(){ try{var c=JSON.parse(localStorage.getItem('auron_home'));if(Array.isArray(c)&&c.length)return c;}catch(e){} return App._homeDefault.slice(); },
+  _homeCfgSave:function(arr){ try{localStorage.setItem('auron_home',JSON.stringify(arr));}catch(e){} },
+  _renderHomeBoard:function(){
+    var board=document.getElementById('home-board');if(!board)return;
+    var cfg=App._homeCfg();
+    board.innerHTML=cfg.map(function(id){return App._widgetHTML(id);}).join('');
+    if(cfg.indexOf('pulse')>=0)App.loadPulse();
+    if(cfg.indexOf('advisor')>=0)App.loadAdvisor();
+    if(cfg.indexOf('insight')>=0)App.loadInsights();
+    if(cfg.indexOf('savings')>=0)App._loadHomeSavings();
+  },
+  _widgetHTML:function(id){
+    if(id==='quick') return '<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      '<button onclick="App.setTab(\'kassa\',null)" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">Касса</div><div style="font-size:11.5px;color:var(--muted);">закрыть смену</div></div></button>'+
+      '<button onclick="App.openGoods()" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">Товары</div><div style="font-size:11.5px;color:var(--muted);">поиск · цены</div></div></button>'+
+      '</div></div>';
+    if(id==='advisor') return '<div id="advisor-card"></div>';
+    if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button></div>';
+    if(id==='pulse') return '<div id="pulse-card"></div>';
+    if(id==='insight') return '<div id="insight-card"></div>';
+    if(id==='savings') return '<div id="home-savings" style="padding:0 16px;margin-bottom:14px;"></div>';
+    return '';
+  },
+  _loadHomeSavings:function(){
+    var el=document.getElementById('home-savings');if(!el)return;
+    gs('getSavingsHunter',{ssId:App.s.ssId}).then(function(s){
+      App._savings=s;var el=document.getElementById('home-savings');if(!el)return;
+      if(!s||s.__error||s.empty||!s.count){el.innerHTML='';return;}
+      var v=s.totalMonthly>0?fmt(Math.round(s.totalMonthly))+' ₽/мес':s.count+' товаров';
+      el.innerHTML='<div onclick="App.openSavings()" style="cursor:pointer;background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:16px;padding:15px 17px;color:#fff;box-shadow:var(--shadow-card);">'+
+        '<div style="font-size:12px;opacity:.92;">🤖 Аврон нашёл экономию</div>'+
+        '<div style="font-size:24px;font-weight:800;margin:3px 0;">'+v+'</div>'+
+        '<div style="font-size:12px;opacity:.92;">'+s.count+' товаров дешевле у другого поставщика ›</div></div>';
+    }).catch(function(){var el=document.getElementById('home-savings');if(el)el.innerHTML='';});
+  },
+  openHomeCustomize:function(){
+    App.openModal('<div class="modal-title">Настройка виджетов</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:14px;">Включайте нужные карточки и меняйте порядок стрелками. Главный экран — под вас.</div>'+
+      '<div id="hc-list"></div>');
+    App._hcRender();
+  },
+  _hcRender:function(){
+    var wrap=document.getElementById('hc-list');if(!wrap)return;
+    var cfg=App._homeCfg();
+    // сначала включённые (в порядке), потом выключенные
+    var off=App._homeWidgets.filter(function(w){return cfg.indexOf(w.id)<0;});
+    var meta=function(id){for(var i=0;i<App._homeWidgets.length;i++)if(App._homeWidgets[i].id===id)return App._homeWidgets[i];return null;};
+    var rowOn=function(id,i){var w=meta(id);if(!w)return '';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:var(--surface-2);border-radius:12px;margin-bottom:8px;">'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">'+App._e(w.t)+'</div><div style="font-size:11.5px;color:var(--muted);">'+App._e(w.d)+'</div></div>'+
+        '<button onclick="App._hcMove(\''+id+'\',-1)" '+(i===0?'disabled style="opacity:.3;':'style="')+'width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:15px;cursor:pointer;">↑</button>'+
+        '<button onclick="App._hcMove(\''+id+'\',1)" '+(i===cfg.length-1?'disabled style="opacity:.3;':'style="')+'width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:15px;cursor:pointer;">↓</button>'+
+        '<button onclick="App._hcToggle(\''+id+'\')" style="width:32px;height:32px;border-radius:9px;border:none;background:var(--brand-dim);color:var(--brand);font-size:16px;cursor:pointer;">✓</button>'+
+      '</div>';};
+    var rowOff=function(w){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:11px 13px;background:transparent;border:1px dashed var(--line);border-radius:12px;margin-bottom:8px;opacity:.8;">'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">'+App._e(w.t)+'</div><div style="font-size:11.5px;color:var(--muted);">'+App._e(w.d)+'</div></div>'+
+        '<button onclick="App._hcToggle(\''+w.id+'\')" style="padding:7px 13px;border-radius:9px;border:none;background:var(--brand);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">＋ Добавить</button>'+
+      '</div>';};
+    var h='';
+    h+='<div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:2px 0 8px;">На экране</div>';
+    h+=cfg.map(function(id,i){return rowOn(id,i);}).join('')||'<div style="color:var(--muted);font-size:12.5px;margin-bottom:10px;">Пусто — добавьте виджеты ниже.</div>';
+    if(off.length){h+='<div style="font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:14px 0 8px;">Доступные</div>';
+      h+=off.map(rowOff).join('');}
+    wrap.innerHTML=h;
+  },
+  _hcToggle:function(id){var cfg=App._homeCfg();var i=cfg.indexOf(id);
+    if(i>=0)cfg.splice(i,1); else cfg.push(id);
+    App._homeCfgSave(cfg);App._hcRender();App._renderHomeBoard();App.haptic(6);},
+  _hcMove:function(id,dir){var cfg=App._homeCfg();var i=cfg.indexOf(id);if(i<0)return;
+    var j=i+dir;if(j<0||j>=cfg.length)return;var t=cfg[i];cfg[i]=cfg[j];cfg[j]=t;
+    App._homeCfgSave(cfg);App._hcRender();App._renderHomeBoard();App.haptic(6);},
+
   // ── Аврон-советник: проактивные подсказки ──────────────────────
   loadAdvisor:function(){
     var el=document.getElementById('advisor-card');if(!el)return;
