@@ -8793,16 +8793,18 @@ var App={
     var h='<div style="background:linear-gradient(135deg,#10B981,#0F9D8F);border-radius:16px;padding:18px;color:#fff;text-align:center;margin-bottom:14px;box-shadow:0 6px 18px rgba(16,185,129,.28);">'+
       '<div style="font-size:12.5px;opacity:.92;">Можно экономить</div>'+
       '<div style="font-size:32px;font-weight:800;margin:2px 0;">'+fm(s.totalMonthly)+' ₽/мес</div>'+
-      '<div style="font-size:12px;opacity:.92;">по '+s.count+' '+App._plural(s.count,'товару','товарам','товарам')+' · сравнил поставщиков по твоим ценам</div></div>';
+      '<div style="font-size:12px;opacity:.92;">по '+s.count+' '+App._plural(s.count,'товару','товарам','товарам')+' · сравнил поставщиков по твоим ценам</div>'+
+      (s.freshMonthly<s.totalMonthly?'<div style="font-size:11.5px;opacity:.85;margin-top:4px;">≈ '+fm(s.freshMonthly)+' ₽/мес на свежих ценах · остальное — по старым, проверьте</div>':'')+'</div>';
     h+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Где ты сейчас покупаешь дороже, чем можно. Экономия в месяц = разница в цене × сколько продаёшь.</div>';
     h+='<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
       s.items.map(function(t){
         var right=t.monthlySave>0?'−'+fm(t.monthlySave)+' ₽/мес':'−'+fm(t.perUnit)+' ₽/шт';
-        return'<div style="padding:11px 13px;border-top:1px solid var(--line-2);">'+
+        return'<div style="padding:11px 13px;border-top:1px solid var(--line-2);'+(t.stale?'opacity:.72;':'')+'">'+
           '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">'+
             '<span style="font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(t.name)+'</span>'+
             '<span style="color:var(--pos);font-weight:800;font-size:13px;white-space:nowrap;">'+right+'</span></div>'+
-          '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4;">сейчас <b>'+App._e(t.curSup)+'</b> '+fm(t.curPrice)+'₽ → <b style="color:var(--pos);">'+App._e(t.cheapSup)+'</b> '+fm(t.cheapPrice)+'₽ (−'+t.pct+'%)'+(t.monthlyQty?' · продаёшь ~'+t.monthlyQty+' шт/мес':'')+'</div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.4;">сейчас <b>'+App._e(t.curSup)+'</b> '+fm(t.curPrice)+'₽ → <b style="color:var(--pos);">'+App._e(t.cheapSup)+'</b> '+fm(t.cheapPrice)+'₽ (−'+t.pct+'%)'+(t.cheapDate?' · цена от '+App._e(t.cheapDate):'')+(t.monthlyQty?' · ~'+t.monthlyQty+' шт/мес':'')+'</div>'+
+          (t.stale?'<div style="font-size:11px;color:var(--warn,#FF9F0A);margin-top:3px;">⚠️ цене больше '+s.staleDays+' дн — уточните, могла измениться</div>':'')+
           '</div>';
       }).join('')+'</div>';
     h+='<button class="btn-secondary" style="margin-top:12px;" onclick="App.shareSavings()">📤 Отправить список закупщику</button>';

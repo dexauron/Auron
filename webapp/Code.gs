@@ -1233,27 +1233,38 @@ function getSavingsHunter(p) {
       if(!K.sup[sup]||K.sup[sup].t<=t) K.sup[sup]={price:price,t:t};
       if(!K.latest||K.latest.t<=t) K.latest={sup:sup,price:price,t:t};
     });
-    var items=[], totalMonthly=0;
+    var tz=Session.getScriptTimeZone();
+    var nowMs=(new Date()).getTime(), DAY=86400000, STALE_DAYS=45;
+    var items=[], totalMonthly=0, freshMonthly=0;
     Object.keys(byKey).forEach(function(key){
       var K=byKey[key]; var names=Object.keys(K.sup);
       if(names.length<2) return; // сравнивать не с чем
-      var lo=null; names.forEach(function(s){var pr=K.sup[s].price; if(lo===null||pr<lo.price)lo={sup:s,price:pr};});
+      var lo=null; names.forEach(function(s){var e=K.sup[s]; if(lo===null||e.price<lo.price)lo={sup:s,price:e.price,t:e.t};});
       var cur=K.latest;
       if(!cur||cur.sup===lo.sup||cur.price<=lo.price) return; // уже берём у самого дешёвого
       var perUnit=cur.price-lo.price;
       var sold=soldByKey[key]||0;
       var monthlyQty=sold>0?sold/salesDays*30:0;
       var monthlySave=Math.round(perUnit*monthlyQty);
+      // Свежесть цены дешёвого поставщика: цена месячной давности могла измениться
+      var ageDays=lo.t?Math.round((nowMs-lo.t)/DAY):9999;
+      var stale=ageDays>STALE_DAYS;
       totalMonthly+=monthlySave;
+      if(!stale) freshMonthly+=monthlySave;
       items.push({name:(K.name||nameByKey[key]||'').slice(0,44),
         curSup:cur.sup, curPrice:Math.round(cur.price*100)/100,
         cheapSup:lo.sup, cheapPrice:Math.round(lo.price*100)/100,
+        cheapDate:lo.t?Utilities.formatDate(new Date(lo.t),tz,'dd.MM.yy'):'', ageDays:ageDays, stale:stale,
         perUnit:Math.round(perUnit*100)/100, monthlyQty:Math.round(monthlyQty),
         monthlySave:monthlySave, pct:cur.price>0?Math.round(perUnit/cur.price*100):0});
     });
-    // сначала с реальной денежной экономией в месяц, потом по разнице цены
-    items.sort(function(a,b){return b.monthlySave-a.monthlySave || b.perUnit-a.perUnit;});
+    // Сначала свежие и с реальной экономией, устаревшие цены — в конец
+    items.sort(function(a,b){
+      if(a.stale!==b.stale) return a.stale?1:-1;
+      return b.monthlySave-a.monthlySave || b.perUnit-a.perUnit;
+    });
     return { empty:items.length===0, totalMonthly:Math.round(totalMonthly),
+             freshMonthly:Math.round(freshMonthly), staleDays:STALE_DAYS,
              count:items.length, salesDays:salesDays, items:items.slice(0,100) };
   } catch(e) { return { __error:e.message }; }
 }
