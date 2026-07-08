@@ -47,6 +47,7 @@
   --line-2:rgba(255,255,255,.06);
   /* Brand & semantic */
   --brand:#5E5CE6;
+  --brand2:color-mix(in oklab,var(--brand) 68%, #000 32%);
   --pos:#30D158;
   --neg:#FF453A;
   --transfer:#818CF8;
@@ -78,7 +79,7 @@
   --border:var(--line);
   --income:var(--pos);
   --expense:var(--neg);
-  --brand-dim:rgba(94,92,230,.14);
+  --brand-dim:color-mix(in oklab,var(--brand) 15%,transparent);
   --income-dim:rgba(48,209,88,.12);
   --expense-dim:rgba(255,69,58,.12);
   --transfer-dim:rgba(129,140,248,.12);
@@ -102,7 +103,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 #loader.hide{opacity:0;pointer-events:none;}
 #loader-icon{
   width:96px;height:96px;
-  background:linear-gradient(135deg,var(--brand) 0%,#8f5cff 100%);
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   border-radius:28px;display:flex;align-items:center;justify-content:center;
   font-size:46px;margin-bottom:24px;
   box-shadow:0 12px 40px -6px rgba(94,92,230,.6),0 0 0 1px rgba(94,92,230,.25);
@@ -176,6 +177,19 @@ html[data-theme="light"] .card,html[data-theme="light"] .kassa-row,html[data-the
 html[data-theme="light"] .tx-day-card,html[data-theme="light"] .acc-card{border-color:rgba(0,0,0,.07)!important;}
 html[data-theme="light"] .home-hero{background:linear-gradient(160deg,#EDEBFF 0%,#F7F7FB 60%);}
 html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.08);}
+/* ── Акцентные палитры (выбираются пользователем в Настройках) ──
+   Базовое значение подобрано под тёмный фон; для светлой темы — своё. */
+html[data-accent="green"]  {--brand:#2FC898;}
+html[data-accent="blue"]   {--brand:#4F8BFF;}
+html[data-accent="amber"]  {--brand:#F0A93C;}
+html[data-accent="coral"]  {--brand:#FF7A5C;}
+html[data-accent="teal"]   {--brand:#22B8C8;}
+html[data-theme="light"][data-accent="green"] {--brand:#0E7A5F;}
+html[data-theme="light"][data-accent="blue"]  {--brand:#2563EB;}
+html[data-theme="light"][data-accent="amber"] {--brand:#C9761A;}
+html[data-theme="light"][data-accent="coral"] {--brand:#E14E2A;}
+html[data-theme="light"][data-accent="teal"]  {--brand:#0E8F9E;}
+html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 /* Горизонтальные ленты: мягкое затухание у правого края вместо резкого обреза */
 .hscroll{scroll-padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 26px),transparent);}
 .hscroll::after{content:"";flex:0 0 20px;}
@@ -289,7 +303,7 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
 .nav-center{display:grid;place-items:center;}
 .nav-center-btn{
   width:58px;height:58px;border-radius:19px;
-  background:linear-gradient(135deg,#6e6bff 0%,var(--brand) 45%,#8f5cff 100%);
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   border:none;color:#fff;
   display:grid;place-items:center;
   box-shadow:0 16px 40px -8px rgba(94,92,230,.85),0 4px 16px -4px rgba(94,92,230,.5),0 0 0 1px rgba(255,255,255,.1) inset;
@@ -311,7 +325,7 @@ html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba
   display:none;
   position:fixed;right:18px;bottom:calc(var(--nav-h) + var(--safe-bot) + 18px);
   width:60px;height:60px;
-  background:linear-gradient(135deg,#6e6bff 0%,var(--brand) 45%,#8f5cff 100%);
+  background:linear-gradient(135deg,var(--brand),var(--brand2));
   border-radius:20px;border:none;color:#fff;
   align-items:center;justify-content:center;overflow:hidden;
   box-shadow:0 16px 40px -8px rgba(94,92,230,.85),0 4px 16px -4px rgba(94,92,230,.5),0 0 0 1px rgba(255,255,255,.1) inset;
@@ -2426,6 +2440,14 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row" style="align-items:flex-start;">
+            <span class="settings-row-icon">🎨</span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Цвет приложения</div>
+              <div style="font-size:12px;color:var(--muted);margin:2px 0 12px;">Выберите свою палитру</div>
+              <div id="accent-row" style="display:flex;gap:10px;flex-wrap:wrap;"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="settings-sec">
@@ -2693,7 +2715,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='2.9.1';
+var APP_VERSION='3.0.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -2944,6 +2966,8 @@ var App={
     try{if(localStorage.getItem('auron_privacy')==='1')document.body.classList.add('sums-hidden');}catch(e){}
     // Тема с прошлого раза
     try{var th=localStorage.getItem('auron_theme');if(th)App._applyTheme(th);}catch(e){}
+    // Акцентная палитра с прошлого раза
+    try{var ac=localStorage.getItem('auron_accent');if(ac)App._applyAccent(ac);}catch(e){}
     // Офлайн-очередь: пробуем отправить отложенное при старте, при появлении сети и раз в 2 минуты
     setTimeout(function(){App._outboxBadge();App._outboxFlush();},3000);
     window.addEventListener('online',function(){App._outboxFlush();});
@@ -6504,6 +6528,7 @@ var App={
     App.loadRecurring();
     App._applyViewOnly();
     App._loadProfileCard();
+    App._renderAccentRow();
     // Budget summary
     gs('getBudget',{ssId:App.s.ssId,period:'month'}).then(function(r){
       App.s._budgetMap=r.budgetMap||{};
@@ -7447,6 +7472,27 @@ var App={
     else document.documentElement.removeAttribute('data-theme');
     var ic=document.getElementById('theme-icon');if(ic)ic.textContent=t==='light'?'☀️':'🌙';
     var st=document.getElementById('theme-state');if(st)st.textContent=t==='light'?'Светлая':'Тёмная';
+  },
+  // ── Акцентная палитра (цвет приложения) ──
+  _accents:[['purple','Сирень','#5E5CE6'],['green','Свежий','#12946E'],['blue','Доверие','#2F73E8'],['amber','Янтарь','#D98A1E'],['coral','Коралл','#F2603C'],['teal','Океан','#12A0B0']],
+  setAccent:function(a){
+    App._applyAccent(a);
+    try{localStorage.setItem('auron_accent',a);}catch(e){}
+    App.haptic(8);
+    if(document.getElementById('accent-row'))App._renderAccentRow();
+  },
+  _applyAccent:function(a){
+    if(a&&a!=='purple')document.documentElement.setAttribute('data-accent',a);
+    else document.documentElement.removeAttribute('data-accent');
+  },
+  _curAccent:function(){return document.documentElement.getAttribute('data-accent')||'purple';},
+  _renderAccentRow:function(){
+    var el=document.getElementById('accent-row');if(!el)return;
+    var cur=App._curAccent();
+    el.innerHTML=App._accents.map(function(a){
+      var on=a[0]===cur;
+      return '<button onclick="App.setAccent(\''+a[0]+'\')" title="'+a[1]+'" style="width:40px;height:40px;border-radius:13px;border:2.5px solid '+(on?'var(--ink)':'transparent')+';background:'+a[2]+';cursor:pointer;box-shadow:0 3px 8px -2px '+a[2]+'88;position:relative;">'+(on?'<span style="position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:17px;">✓</span>':'')+'</button>';
+    }).join('');
   },
 
   // ── Выйти / сменить аккаунт ──
