@@ -8793,7 +8793,11 @@ var App={
   openGoods:function(){
     App.openModal('<div class="modal-title">Товары</div><div id="goods-fresh"></div><div id="goods-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._goodsRender(a);})
-      .catch(function(e){var b=document.getElementById('goods-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+      .catch(function(e){var b=document.getElementById('goods-body');if(!b)return;
+        // Нет доступа к аналитике (напр. сотрудник зала) — даём поиск товара
+        b.innerHTML='<div style="text-align:center;padding:8px 0 4px;line-height:1.6;">'+
+          '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Найдите товар по названию, коду, артикулу или штрихкоду.</div>'+
+          '<button class="btn-primary" onclick="App.openGoodsList(\'name\')">🔍 Найти товар</button></div>';});
     // Свежесть данных: если выгрузка старше 7 дней — предупреждаем
     gs('getGoodsMeta',{ssId:App.s.ssId}).then(function(m){
       var el=document.getElementById('goods-fresh');if(!el||!m)return;
