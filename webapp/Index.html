@@ -9338,8 +9338,17 @@ var App={
     if(has('debts'))App._wDebts();
     if(has('tax'))App._wTax();
     if(has('season'))App._wSeason();
-    var gw=['topGoods','restock','dead','abc','metrics','trend','suppliers'].filter(has);
+    if(has('restock'))App._wRestock();
+    var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
     if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
+  },
+  _wRestock:function(){
+    gs('getRestock',{ssId:App.s.ssId}).then(function(r){
+      var items=(r&&r.items)||[];
+      if(!items.length){App._wBox('restock','Что заканчивается','<div style="font-size:12.5px;color:var(--muted);">Всё в наличии 👍</div>',"App.openGoodsList('sold')");return;}
+      var inner=items.slice(0,5).map(function(t){return App._wRow((t.urgent?'⛔ ':'')+t.name,t.urgent?'нет в наличии':'хватит '+t.daysOfStock+' дн',t.urgent?'var(--neg)':'var(--warn,#FF9F0A)');}).join('');
+      App._wBox('restock','Что заканчивается',inner,"App.openGoodsList('sold')");
+    }).catch(function(){App._wBox('restock','Что заканчивается',null);});
   },
   _wMoney:function(){gs('getAnalytics',{ssId:App.s.ssId,period:'month'}).then(function(a){
     var prof=(a.income||0)-(a.expense||0);

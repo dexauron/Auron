@@ -1208,6 +1208,26 @@ function getProductDetail(p) {
 // Сравнивает цены поставщиков по каждому товару и считает, сколько можно
 // сэкономить в месяц, покупая у самого дешёвого. Всё — на своих данных.
 // ═══════════════════════════════════════════════════════════════════════
+
+// Что заканчивается — только остатки (без денег), доступно и сотруднику зала.
+function getRestock(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var salesDays=_getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
+    var gsh=ss.getSheetByName(SH_GOODS); if(!gsh||gsh.getLastRow()<2) return {items:[]};
+    var out=[];
+    gsh.getRange(2,1,gsh.getLastRow()-1,G_COLS).getValues().forEach(function(r){
+      var sold=_gnum(r[G_SOLDQTY-1]), stock=_gnum(r[G_STOCKQTY-1]);
+      if (sold>0 && stock<=sold*0.5) {
+        out.push({name:String(r[G_NAME-1]||'').slice(0,40), stockQty:stock,
+          daysOfStock:Math.round(stock/(sold/salesDays)), urgent:stock<=0});
+      }
+    });
+    out.sort(function(a,b){return (a.urgent===b.urgent)?a.daysOfStock-b.daysOfStock:(a.urgent?-1:1);});
+    return {items:out.slice(0,40)};
+  } catch(e) { return {items:[],__error:e.message}; }
+}
+
 function getSavingsHunter(p) {
   if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
