@@ -2712,7 +2712,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='3.1.0';
+var APP_VERSION='3.2.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3518,6 +3518,7 @@ var App={
             '<span style="font-size:11.5px;font-weight:700;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏪 '+App._e(x.org)+'</span>'+
             '<select onchange="App._teamRole(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',this.value)" style="padding:4px 5px;border-radius:7px;border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:10.5px;font-family:var(--font);max-width:110px;">'+roleOpts+'</select>'+
             '<button onclick="App.openMemberPerms(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Права" style="background:none;border:none;color:'+(x.custom?'var(--brand)':'var(--muted)')+';font-size:14px;cursor:pointer;padding:2px;">⚙</button>'+
+            '<button onclick="App.openMemberWidgets(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Виджеты" style="background:none;border:none;color:'+(x.widgets?'var(--brand)':'var(--muted)')+';font-size:14px;cursor:pointer;padding:2px;">▦</button>'+
             '<button onclick="App._teamRemove(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',\''+App._e(x.org)+'\')" style="background:none;border:none;color:var(--neg);font-size:13px;cursor:pointer;padding:2px;">✕</button></div>';
         }).join('');
         return '<div style="padding:11px 0;border-bottom:1px solid var(--line-2);">'+
@@ -3601,6 +3602,37 @@ var App={
     gs('setMemberRoleMulti',{ssId:s.ssId,email:s.email,role:s.role}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Права сброшены по роли ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
+    }).catch(function(e){App.toast(e.message,true);});},
+  // Владелец назначает набор виджетов сотруднику
+  openMemberWidgets:function(ssId,email){
+    var info=App._memberInfo(ssId,email);
+    // текущий назначенный набор (или по умолчанию для роли)
+    var cur=null;((App._teamAll&&App._teamAll.orgs)||[]).forEach(function(o){if(o.ssId===ssId)(o.members||[]).forEach(function(m){if(m.email===email)cur=m.widgets;});});
+    var fin=info.perms.indexOf('finance')>=0;
+    // разрешённые сотруднику виджеты (финансовые — только если есть доступ к финансам)
+    var allowed=App._homeWidgets.filter(function(w){return fin||!w.fin;});
+    var def=fin?['quick','advisor','ask','pulse','insight']:['quick','restock','ask','season'];
+    var sel=Array.isArray(cur)?cur.slice():def.slice();
+    App._mw={ssId:ssId,email:email,sel:sel};
+    var rows=allowed.map(function(w){var on=sel.indexOf(w.id)>=0;
+      return '<label style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--surface-2);border-radius:12px;margin-bottom:8px;cursor:pointer;"><input type="checkbox" '+(on?'checked':'')+' onchange="App._mwToggle(\''+w.id+'\',this.checked)" style="width:19px;height:19px;accent-color:var(--brand);flex-shrink:0;"><div style="flex:1;min-width:0;"><div style="font-size:13px;font-weight:650;">'+App._e(w.t)+'</div><div style="font-size:11px;color:var(--muted);">'+App._e(w.d)+'</div></div></label>';
+    }).join('');
+    App.openModal('<div class="modal-title">Виджеты сотрудника</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">'+App._e(email)+'<br>Отметьте, какие виджеты будут на его главном экране. Синхронизируется на его устройство.</div>'+
+      rows+
+      '<button class="btn-primary" onclick="App._mwSave()">Назначить виджеты</button>'+
+      '<button class="btn-secondary" style="margin-top:10px;" onclick="App._mwClear()">Сбросить (пусть настроит сам)</button>');
+  },
+  _mwToggle:function(k,on){var s=App._mw;if(!s)return;var i=s.sel.indexOf(k);if(on&&i<0)s.sel.push(k);if(!on&&i>=0)s.sel.splice(i,1);},
+  _mwSave:function(){var s=App._mw;if(!s)return;
+    gs('setMemberWidgetsMulti',{ssId:s.ssId,email:s.email,widgets:s.sel}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Виджеты назначены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
+    }).catch(function(e){App.toast(e.message,true);});},
+  _mwClear:function(){var s=App._mw;if(!s)return;
+    gs('setMemberWidgetsMulti',{ssId:s.ssId,email:s.email,widgets:[]}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Сброшено — сотрудник настроит сам ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
     }).catch(function(e){App.toast(e.message,true);});},
   _teamRemove:async function(ssId,email,orgName){
     if(!(await App._confirm('Убрать доступ '+email+' к «'+orgName+'»?')))return;
@@ -4636,6 +4668,7 @@ var App={
   loadHome:function(){
     if(!App.s.ssId)return;
     App._renderHomeBoard();
+    App._syncWidgets();
     var period=App._getPeriod();
     // 1) мгновенно из кэша (если есть)
     var cached=App._cacheGet('home_'+period);
@@ -9255,7 +9288,17 @@ var App={
     if(!Array.isArray(cfg)||!cfg.length)cfg=App._homeDefaultFor();
     return cfg.filter(function(id){return allowed.indexOf(id)>=0;}); // отсечь запрещённые роли
   },
-  _homeCfgSave:function(arr){ try{localStorage.setItem(App._homeKey(),JSON.stringify(arr));}catch(e){} },
+  _homeCfgSave:function(arr){ try{localStorage.setItem(App._homeKey(),JSON.stringify(arr));}catch(e){}
+    if(App.s.ssId)gs('setMyWidgets',{ssId:App.s.ssId,widgets:arr}).catch(function(){}); },
+  _syncWidgets:function(){
+    if(!App.s.ssId)return;
+    gs('getMyWidgets',{ssId:App.s.ssId}).then(function(r){
+      if(!r||!Array.isArray(r.widgets))return;
+      var before=JSON.stringify(App._homeCfg());
+      try{localStorage.setItem(App._homeKey(),JSON.stringify(r.widgets));}catch(e){}
+      if(JSON.stringify(App._homeCfg())!==before)App._renderHomeBoard();
+    }).catch(function(){});
+  },
   _renderHomeBoard:function(){
     var board=document.getElementById('home-board');if(!board)return;
     var cfg=App._homeCfg();

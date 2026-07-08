@@ -3757,16 +3757,19 @@ function getTeam(p) {
     var me=_myEmail(), isOwner=_isOwner(ss);
     var ownerEmail=''; try{ownerEmail=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){}
     var sh=ss.getSheetByName(SH_ACCESS);
+    var wmap=_widgetsMap(ss);
     var members=[];
     if (sh&&sh.getLastRow()>=2) {
       sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
         if (!r[0]) return;
+        var em=String(r[0]).toLowerCase();
         var role=String(r[1]||'Сотрудник зала');
         var custom=false, perms=_rolePerms(role);
         var raw=String(r[3]||'');
         if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)){perms=arr;custom=true;} }catch(e){} }
-        members.push({email:String(r[0]).toLowerCase(),role:role,
-          added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom});
+        members.push({email:em,role:role,
+          added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom,
+          widgets: Array.isArray(wmap[em])?wmap[em]:null});
       });
     }
     var myRole=isOwner?'Владелец':'Сотрудник зала';
@@ -3821,6 +3824,51 @@ function setMemberPerms(p) {
     }
     return {__error:'Сотрудник не найден'};
   } catch(e) { return {__error:e.message}; }
+});
+}
+
+// ── Раскладка виджетов главного экрана (синхрон между устройствами) ──
+// Хранится в НАСТРОЙКАХ ключом WIDGETS: карта { email: [id,...] }.
+function _widgetsMap(ss) {
+  try { var raw=_getSettingStr(ss,'WIDGETS',''); if(raw){ var m=JSON.parse(raw); if(m&&typeof m==='object') return m; } }catch(e){}
+  return {};
+}
+// Виджеты текущего пользователя (или null — тогда фронт берёт набор по роли).
+function getMyWidgets(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var me=_myEmail()||'owner';
+    var m=_widgetsMap(ss);
+    var w=m[me]; if(!Array.isArray(w)) { var own=''; try{own=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){} if(_isOwner(ss)&&Array.isArray(m[own]))w=m[own]; }
+    return { widgets: Array.isArray(w)?w:null };
+  } catch(e) { return { widgets:null }; }
+}
+// Пользователь сохраняет СВОЮ раскладку (синхронизируется на другие устройства).
+function setMyWidgets(p) {
+  return _withLock(function(){
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var me=_myEmail(); if(!me){ try{me=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){me='owner';} }
+    var w=Array.isArray(p.widgets)?p.widgets:[];
+    var m=_widgetsMap(ss); m[me]=w; _setSetting(ss,'WIDGETS',JSON.stringify(m));
+    return {ok:true};
+  } catch(e){ return {__error:e.message}; }
+});
+}
+// Владелец назначает раскладку виджетов конкретному сотруднику.
+function setMemberWidgets(p) {
+  return _withLock(function(){
+  var email=String(p.email||'').trim().toLowerCase();
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (!_isOwner(ss)) return {__error:'Только владелец может назначать виджеты'};
+    var w=Array.isArray(p.widgets)?p.widgets:[];
+    var m=_widgetsMap(ss);
+    if (w.length) m[email]=w; else delete m[email]; // пусто = снять назначение (сам настроит)
+    _setSetting(ss,'WIDGETS',JSON.stringify(m));
+    _log(ss,'Назначены виджеты',email+' · '+w.join(','));
+    return {ok:true};
+  } catch(e){ return {__error:e.message}; }
 });
 }
 
@@ -4657,6 +4705,13 @@ function getTeamAll() {
 // Сменить индивидуальные права сотрудника в одной организации
 function setMemberPermsMulti(p) {
   var r=setMemberPerms({ssId:p.ssId,email:p.email,perms:p.perms});
+  if (r&&r.__error) return r;
+  return getTeamAll();
+}
+
+// Назначить виджеты сотруднику в одной организации
+function setMemberWidgetsMulti(p) {
+  var r=setMemberWidgets({ssId:p.ssId,email:p.email,widgets:p.widgets});
   if (r&&r.__error) return r;
   return getTeamAll();
 }
