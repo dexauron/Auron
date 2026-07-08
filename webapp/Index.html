@@ -3960,7 +3960,7 @@ var App={
       var reps=res[1]||[];
       App._suppReps=reps;
       App._suppFilter={payee:null,day:null};
-      App._renderSuppSummary(App._suppPayables);
+      App._renderSuppSummary(App._suppPayables,reps);
       App._renderContractorGrid(App._suppPayables,reps);
       App._renderSuppCalendar(App._suppPayables);
       App._renderPayList(App._suppPayables);
@@ -3968,24 +3968,34 @@ var App={
     }).catch(function(e){App.toast(e.message,true);});
   },
 
-  _renderSuppSummary:function(pays){
+  _renderSuppSummary:function(pays,debts){
+    debts=debts||[];
     var todayKey=App._dayKey(new Date());
-    var todayPlan=0,totalDebt=0,totalPaid=0,totalAmt=0,openCount=0;
+    var todayPlan=0,recPaid=0,recAmt=0,openCount=0;
     pays.forEach(function(r){
       var plan=r.status==='paid'||r.status==='cancelled'?0:Math.max((r.amount||0)-(r.paid||0),0);
-      if(plan>0){openCount++;totalDebt+=plan;}
-      totalPaid+=(r.paid||0);totalAmt+=(r.amount||0);
+      if(plan>0)openCount++;
+      recPaid+=(r.paid||0);recAmt+=(r.amount||0);
       if(plan>0&&App._dayKey(new Date(r.date+'T12:00:00'))===todayKey)todayPlan+=plan;
     });
-    var paidPct=totalAmt?Math.round(totalPaid/totalAmt*100):0;
+    // Общий долг — из регистра ДОЛГИ: долги поставщикам + накладные магазина.
+    // Записи на выплату (график) в общий долг НЕ включаем — показываем отдельно.
+    var realDebt=0,storeDebt=0;
+    debts.forEach(function(d){
+      var dv=Math.max(d.debt||0,0);realDebt+=dv;
+      if(String(d.name||'').indexOf('🏪')===0)storeDebt+=dv;
+    });
+    var paidPct=recAmt?Math.round(recPaid/recAmt*100):0;
     var e=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
     e('supp-today-plan','₽ '+fmt(todayPlan));
     e('supp-open-count',openCount+' '+App._plural(openCount,'активная запись','активные записи','активных записей'));
-    e('supp-total-debt','₽ '+fmt(totalDebt));
+    e('supp-total-debt','₽ '+fmt(realDebt));
     var bar=document.getElementById('supp-paid-bar');if(bar)bar.style.width=paidPct+'%';
     var row=document.getElementById('supp-paid-row');
-    if(row)row.innerHTML='<span style="color:var(--pos);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;">Оплачено ₽ '+fmt(totalPaid)+'</span>'+
-      '<span style="color:var(--muted);white-space:nowrap;flex-shrink:0;">'+paidPct+'%</span>';
+    if(row)row.innerHTML='<div style="width:100%;">'+
+      (storeDebt>0?'<div style="font-size:11.5px;color:var(--muted);">в т.ч. накладные магазина ₽ '+fmt(storeDebt)+'</div>':'')+
+      '<div style="font-size:11.5px;color:var(--muted);margin-top:'+(storeDebt>0?'3px':'0')+';">Записи на выплату: ₽ '+fmt(recAmt)+' · оплачено ₽ '+fmt(recPaid)+' ('+paidPct+'%)</div>'+
+      '</div>';
   },
 
   _renderContractorGrid:function(pays,reps){

@@ -76,7 +76,7 @@ const sandbox={
 };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8')+
-  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,_seasonContext,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
+  '\n;this.__api={ensureSheets,getAccounts,saveQuickEntry,saveTransfer,deleteTransaction,saveAccount,receiveRep,getContractorCard,saveKassa,getStoreDebt,setStoreDebt,saveGoods,getGoods,getGoodsAnalytics,getProductDetail,getSavingsHunter,getAdvisor,askAuron,_seasonContext,getDebts,SH_ACCOUNTS,SH_BASE,STORE_DEBT_REP};', sandbox);
 const A=sandbox.__api;
 
 // ── Мини-фреймворк ──────────────────────────────────────────────────
@@ -268,6 +268,15 @@ const q3=A.askAuron({ssId:'ss1',q:'что не продаётся'});
 eq('помощник: показывает неликвид', q3.answer.length>0, true);
 const q4=A.askAuron({ssId:'ss1',q:'сколько в кассе'});
 eq('помощник: показывает счета', /₽/.test(q4.answer), true);
+
+// ── Общий долг включает долг магазина по накладным ──────────────────
+const alldebts=A.getDebts({ssId:'ss1'});
+const storeRow=alldebts.find(d=>String(d.name).indexOf('🏪')===0);
+eq('долг магазина по накладным есть в getDebts', !!storeRow, true);
+eq('долг магазина = 100000 (setStoreDebt)', storeRow&&storeRow.debt, 100000);
+// «общий долг» = сумма положительных долгов ВКЛЮЧАЕТ магазин
+const realTotal=alldebts.reduce((s,d)=>s+Math.max(d.debt||0,0),0);
+eq('общий долг включает накладные магазина', realTotal>=100000, true);
 
 // ── Сезонный контекст (думать как человек: спрос по сезону/праздникам) ─
 const sc1=A._seasonContext(new Date(2026,11,20)); // 20 декабря
