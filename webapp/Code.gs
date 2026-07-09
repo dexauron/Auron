@@ -1591,6 +1591,43 @@ function getAdvisor(p) {
         detail:payToday.slice(0,3).map(function(x){return x.name+' — '+x.amt+' ₽';}).join(', ') });
     } catch(e){}
 
+    // 8) Самообучение по выручке: приложение выучивает обычную выручку для
+    // каждого дня недели (по данным магазина) и мягко подсказывает, если
+    // последний день заметно ниже нормы. Только когда «созрело».
+    if (mature) {
+      try {
+        var baseR=ss.getSheetByName(SH_BASE);
+        if (baseR && baseR.getLastRow()>=2) {
+          var tzr=Session.getScriptTimeZone();
+          var from90=Date.now()-90*86400000, byDay={};
+          baseR.getRange(2,1,baseR.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+            if (String(r[B_TYPE-1])!=='Доход') return;
+            var c=String(r[B_CAT-1]); if(c==='Перевод'||c==='Корректировка') return;
+            var dt=r[B_DATE-1]; if(!(dt instanceof Date)||dt.getTime()<from90) return;
+            var k=Utilities.formatDate(dt,tzr,'yyyy-MM-dd');
+            byDay[k]=(byDay[k]||0)+Math.round(parseFloat(r[B_AMT-1])||0);
+          });
+          var todayK=Utilities.formatDate(new Date(),tzr,'yyyy-MM-dd');
+          var wd={}, lastDay=null, lastRev=0, lastDow=0;
+          Object.keys(byDay).forEach(function(k){
+            if (k===todayK) return; // сегодня может быть неполным
+            var dow=new Date(k+'T12:00:00').getDay();
+            if(!wd[dow]) wd[dow]={s:0,n:0}; wd[dow].s+=byDay[k]; wd[dow].n++;
+            if(!lastDay||k>lastDay){ lastDay=k; lastRev=byDay[k]; lastDow=dow; }
+          });
+          if (lastDay && wd[lastDow] && wd[lastDow].n>=3) {
+            var norm=wd[lastDow].s/wd[lastDow].n;
+            if (norm>0 && lastRev>0 && lastRev < norm*0.6) {
+              var dn=['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+              alerts.push({ sev:'mid', icon:'📉', action:'',
+                title:'выручка ниже обычной',
+                detail:dn[lastDow]+' — '+Math.round(lastRev).toLocaleString('ru')+' ₽ против обычных ~'+Math.round(norm).toLocaleString('ru')+' ₽. Проверь Z-отчёт и смену.' });
+            }
+          }
+        }
+      } catch(e){}
+    }
+
     // Пока учится — НИЧЕГО не показываем про обучение (по просьбе владельца:
     // скрыто, пока собирает данные). Оценочные советы просто отсутствуют,
     // остаются только факты. Прогресс доступен в результате (mature/dataAge).
