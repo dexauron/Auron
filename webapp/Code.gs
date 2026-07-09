@@ -27,6 +27,7 @@ var SH_NOTES     = 'ЗАМЕТКИ';
 var SH_OBLIG     = 'ОБЯЗАТЕЛЬСТВА';
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
+var SH_RETAILHIST= 'РОЗНИЦА_ИСТ'; // история розничных цен (старые цены товара)
 var SH_GOODSSNAP = 'ТОВАРЫ_ИСТ'; // дневные снимки продаж (для динамики/трендов)
 var SH_LOG       = 'ЖУРНАЛ';
 var SH_AUDIT     = 'АУДИТ'; // история по каждой записи: кто создал/изменил/удалил
@@ -39,6 +40,9 @@ var G_COLS=15;
 // ЦЕНЫ_ИСТ columns
 var PH_DATE=1,PH_BARCODE=2,PH_NAME=3,PH_SUPPLIER=4,PH_PRICE=5;
 var PH_COLS=5;
+// РОЗНИЦА_ИСТ columns
+var RH_DATE=1,RH_BARCODE=2,RH_NAME=3,RH_PRICE=4;
+var RH_COLS=4;
 // ТОВАРЫ_ИСТ columns (агрегатный снимок продаж по дате загрузки)
 var GS_DATE=1,GS_REVENUE=2,GS_PROFIT=3,GS_SOLDQTY=4,GS_ITEMS=5,GS_MARKUP=6;
 var GS_COLS=6;
@@ -283,6 +287,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено','Артикул','Код']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
+  _mk(ss,SH_RETAILHIST,['Дата','Штрихкод','Наименование','Розничная цена']);
   _mk(ss,SH_GOODSSNAP,['Дата','Выручка','Прибыль','Продано_Кол','Товаров','Ср_Наценка']);
   _mk(ss,SH_LOG,      ['Время','Действие','Детали']);
   _mk(ss,SH_AUDIT,    ['Время','Сущность','ID','Действие','Кто','Детали']);
@@ -1025,7 +1030,7 @@ function saveGoods(p) {
     var data = sh.getLastRow() >= 2 ? sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues() : [];
     var idx = {};
     data.forEach(function(r,i){ idx[_goodsKey(r[G_BARCODE-1], r[G_NAME-1])] = i; });
-    var saved = 0, updated = 0, hist = [];
+    var saved = 0, updated = 0, hist = [], rhist = [];
     rows.forEach(function(r){
       var name = _s(r.name||''); if (!name && !r.barcode) return;
       var key = _goodsKey(r.barcode, name);
@@ -1056,7 +1061,13 @@ function saveGoods(p) {
         row[G_SOLDQTY-1] = _gnum(r.qty);
         row[G_REVENUE-1] = Math.round(_gnum(r.revenue));
         row[G_PROFIT-1]  = Math.round(_gnum(r.profit));
-        if (r.retail) row[G_RETAIL-1] = _gnum(r.retail);
+        if (r.retail) {
+          var newRt = _gnum(r.retail), oldRt = _gnum(row[G_RETAIL-1]);
+          // Новая розничная цена отличается от прошлой — запоминаем старую в историю.
+          if (newRt>0 && oldRt>0 && Math.round(newRt) !== Math.round(oldRt))
+            rhist.push([now, String(r.barcode||''), name, Math.round(oldRt)]);
+          row[G_RETAIL-1] = newRt;
+        }
       } else if (kind === 'Остатки') {
         row[G_STOCKQTY-1] = _gnum(r.stockQty);
         row[G_STOCKSUM-1] = Math.round(_gnum(r.stockSum));
@@ -1072,6 +1083,12 @@ function saveGoods(p) {
       var pr = ph.getLastRow()+1;
       ph.getRange(pr,1,hist.length,PH_COLS).setValues(hist);
       ph.getRange(pr,PH_DATE,hist.length,1).setNumberFormat('dd.mm.yyyy');
+    }
+    if (rhist.length) {
+      var rh = ss.getSheetByName(SH_RETAILHIST);
+      var rr = rh.getLastRow()+1;
+      rh.getRange(rr,1,rhist.length,RH_COLS).setValues(rhist);
+      rh.getRange(rr,RH_DATE,rhist.length,1).setNumberFormat('dd.mm.yyyy');
     }
     // При загрузке «Продажи» — сохраняем период и дневной снимок для динамики.
     if (kind === 'Продажи') {
@@ -1210,7 +1227,19 @@ function getProductDetail(p) {
       return {supplier:s, price:sp.price, phone:phones[s]||'',
         date: sp.t?Utilities.formatDate(new Date(sp.t),tz,'dd.MM.yy'):''};
     }).sort(function(a,b){return a.price-b.price;});
-    return { item:it, priceHist:priceHist, suppliers:suppliers, salesDays:salesDays };
+    // История старых розничных цен
+    var retailHist=[];
+    var rh=ss.getSheetByName(SH_RETAILHIST);
+    if (rh && rh.getLastRow()>=2) {
+      rh.getRange(2,1,rh.getLastRow()-1,RH_COLS).getValues().forEach(function(r){
+        if (_goodsKey(r[RH_BARCODE-1],r[RH_NAME-1])!==key) return;
+        var d=r[RH_DATE-1], price=_gnum(r[RH_PRICE-1]);
+        var t=(d instanceof Date)?d.getTime():0;
+        retailHist.push({label:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'', t:t, price:price});
+      });
+      retailHist.sort(function(a,b){return b.t-a.t;}); // новые старые цены сверху
+    }
+    return { item:it, priceHist:priceHist, suppliers:suppliers, retailHist:retailHist, salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
 }
 
@@ -3553,7 +3582,7 @@ function clearAllData(p) {
     // сотрудник мог бы стереть всю базу магазина.
     if (!_isOwner(ss)) return {__error:'Очистить все данные может только владелец'};
     var wipe=[SH_BASE,SH_DEBTS,SH_SHIFTS,SH_PAYMENTS,SH_TIMESHEET,SH_RECURRING,
-              SH_GOODS,SH_PRICEHIST,SH_GOODSSNAP,SH_LOG,SH_TRASH];
+              SH_GOODS,SH_PRICEHIST,SH_RETAILHIST,SH_GOODSSNAP,SH_LOG,SH_TRASH];
     var removed=0;
     wipe.forEach(function(n){
       var sh=ss.getSheetByName(n);

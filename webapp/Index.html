@@ -2709,7 +2709,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='3.7.0';
+var APP_VERSION='3.8.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9113,6 +9113,12 @@ var App={
         '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Когда и по какой цене поступал товар</div>'+
         '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
         d.priceHist.slice().reverse().map(function(x){return rowHtml((x.label||'—')+(x.supplier?' · '+x.supplier:''),fm(x.price)+' ₽');}).join('')+'</div>';
+    }
+    if(d&&d.retailHist&&d.retailHist.length){
+      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">🏷️ Прошлые розничные цены</div>'+
+        '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Как менялась цена на полке (новые изменения сверху)</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
+        d.retailHist.map(function(x){return rowHtml('было с '+(x.label||'—'),fm(x.price)+' ₽');}).join('')+'</div>';
     }
     b.innerHTML=h;
     if(d&&d.priceHist&&d.priceHist.length>=2)App._drawSpark('pc-spark',d.priceHist.map(function(x){return x.price;}),'var(--brand)');
