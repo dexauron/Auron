@@ -1451,12 +1451,30 @@ function getDashboard(p) {
   return out;
 }
 
+// Сколько дней у магазина накоплено данных (от самой ранней операции).
+// Нужно, чтобы советник не давал «умных» советов, пока не понял, что норма.
+function _advisorAgeDays(ss) {
+  try {
+    var base=ss.getSheetByName(SH_BASE);
+    if (!base||base.getLastRow()<2) return 0;
+    var dates=base.getRange(2,B_DATE,base.getLastRow()-1,1).getValues();
+    var min=0;
+    for (var i=0;i<dates.length;i++){ var d=dates[i][0]; if(d instanceof Date){ var t=d.getTime(); if(!min||t<min)min=t; } }
+    return min?Math.floor((Date.now()-min)/86400000):0;
+  } catch(e){ return 0; }
+}
+
 function getAdvisor(p) {
   if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
     var alerts = [];
+    // Режим обучения: «умные» (оценочные) советы включаются, когда набралось
+    // достаточно истории (по умолчанию ~полгода). Настраивается ADVISOR_WARMUP_DAYS.
+    var warmupDays = _getSettingNum(ss,'ADVISOR_WARMUP_DAYS',180); if(warmupDays<0)warmupDays=0;
+    var dataAge = _advisorAgeDays(ss);
+    var mature = dataAge >= warmupDays;
 
     // 1) Товары заканчиваются + замороженные деньги в неликвиде
     var gsh = ss.getSheetByName(SH_GOODS);
@@ -1501,7 +1519,7 @@ function getAdvisor(p) {
         var f=arr[0], l=arr[arr.length-1];
         if(l.price>f.price*1.02 && f.price>0){ upCount++; if(l.sup) supUp[l.sup]=(supUp[l.sup]||0)+1; }
       });
-      if (upCount>0) {
+      if (mature && upCount>0) {
         var topSup='', topN=0; Object.keys(supUp).forEach(function(s){ if(supUp[s]>topN){topN=supUp[s];topSup=s;} });
         alerts.push({ sev:'mid', icon:'🔺', action:'goods',
           title:'выросли закупочные цены', detail:'по '+upCount+' '+_plural(upCount,'товару','товарам','товарам')+(topSup?' · чаще всего у «'+topSup+'»':'') });
@@ -1549,7 +1567,7 @@ function getAdvisor(p) {
         });
         lowMk.sort(function(a,b){return a.mk-b.mk;});
       }
-      if (lowMk.length) alerts.push({ sev:'mid', icon:'🏷️', action:'goods',
+      if (mature && lowMk.length) alerts.push({ sev:'mid', icon:'🏷️', action:'goods',
         title:lowMk.length+' '+_plural(lowMk.length,'ходовой товар с низкой наценкой','ходовых товара с низкой наценкой','ходовых товаров с низкой наценкой'),
         detail:'подними цену: '+lowMk.slice(0,3).map(function(x){return x.name+' ('+x.mk+'%)';}).join(', ') });
     } catch(e){}
@@ -1573,10 +1591,17 @@ function getAdvisor(p) {
         detail:payToday.slice(0,3).map(function(x){return x.name+' — '+x.amt+' ₽';}).join(', ') });
     } catch(e){}
 
+    // Пока учится — честно показываем прогресс (внизу, не мешает фактам).
+    if (!mature) {
+      var monthsLeft=Math.max(1,Math.ceil((warmupDays-dataAge)/30));
+      alerts.push({ sev:'low', icon:'🎓', action:'',
+        title:'Аврон учится вашему магазину',
+        detail:'собрано '+dataAge+' из '+warmupDays+' дней. Советы по ценам и «что норма» включатся, когда наберётся статистика (~ещё '+monthsLeft+' '+_plural(monthsLeft,'месяц','месяца','месяцев')+')' });
+    }
     // порядок: сначала важное
     var rank={high:0, mid:1, low:2};
     alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
-    return { count:alerts.length, alerts:alerts };
+    return { count:alerts.length, alerts:alerts, mature:mature, dataAge:dataAge, warmupDays:warmupDays };
   } catch(e) { return { __error:e.message }; }
 }
 
@@ -2492,6 +2517,11 @@ function getAnomalies(p) {
     var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var base = ss.getSheetByName(SH_BASE);
     if (!base || base.getLastRow()<2) return { items:[], sensitivity:1.0 };
+    // Режим обучения: пока не набралось истории (~полгода), не судим об
+    // аномалиях — иначе ложные срабатывания на сырых данных.
+    var warmupDays = _getSettingNum(ss,'ADVISOR_WARMUP_DAYS',180); if(warmupDays<0)warmupDays=0;
+    var dataAge = _advisorAgeDays(ss);
+    if (dataAge < warmupDays) return { items:[], sensitivity:1.0, learning:true, dataAge:dataAge, warmupDays:warmupDays };
     var brain = _brainGet(ss);
     var sens = brain.sensitivity||1.0;
     var tz = Session.getScriptTimeZone();
