@@ -1628,6 +1628,40 @@ function getAdvisor(p) {
       } catch(e){}
     }
 
+    // 9) Самообучение по поставщикам: приложение выучивает обычный размер
+    // закупки у каждого поставщика и мягко подсказывает, если последняя
+    // закупка необычно большая (возможна ошибка или скачок цен).
+    if (mature) {
+      try {
+        var dsh=ss.getSheetByName(SH_DEBTS);
+        if (dsh && dsh.getLastRow()>=2) {
+          var bySup={}; // поставщик -> {list:[amt], last:{amt,t}}
+          dsh.getRange(2,1,dsh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+            if (String(r[D_TYPE-1])!=='zakupka') return;
+            var sup=String(r[D_REP-1]||''); if(!sup||sup.indexOf('🏪')===0) return;
+            var amt=Math.round(parseFloat(r[D_AMT-1])||0); if(amt<=0) return;
+            var dt=r[D_DATE-1], t=(dt instanceof Date)?dt.getTime():0;
+            if(!bySup[sup]) bySup[sup]={list:[],last:{amt:0,t:-1}};
+            bySup[sup].list.push(amt);
+            if(t>=bySup[sup].last.t){ bySup[sup].last={amt:amt,t:t}; }
+          });
+          var flagged=null;
+          Object.keys(bySup).forEach(function(sup){
+            var o=bySup[sup]; if(o.list.length<4) return; // нужна история
+            var prev=o.list.filter(function(a){return a!==o.last.amt;});
+            if(prev.length<3) return;
+            var avg=prev.reduce(function(s,x){return s+x;},0)/prev.length;
+            if(avg>0 && o.last.amt >= avg*2 && (!flagged||o.last.amt>flagged.amt)){
+              flagged={sup:sup, amt:o.last.amt, avg:Math.round(avg)};
+            }
+          });
+          if (flagged) alerts.push({ sev:'mid', icon:'📦', action:'suppliers',
+            title:'необычно крупная закупка',
+            detail:'у «'+flagged.sup+'» — '+flagged.amt.toLocaleString('ru')+' ₽ против обычных ~'+flagged.avg.toLocaleString('ru')+' ₽. Проверь накладную.' });
+        }
+      } catch(e){}
+    }
+
     // Пока учится — НИЧЕГО не показываем про обучение (по просьбе владельца:
     // скрыто, пока собирает данные). Оценочные советы просто отсутствуют,
     // остаются только факты. Прогресс доступен в результате (mature/dataAge).
