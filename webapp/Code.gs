@@ -1539,6 +1539,40 @@ function getAdvisor(p) {
       }
     } catch(e){}
 
+    // 6) Низкая наценка на ходовых товарах — конкретный совет «подними цену»
+    try {
+      var lowMk=[];
+      if (gsh && gsh.getLastRow()>=2) {
+        gsh.getRange(2,1,gsh.getLastRow()-1,G_COLS).getValues().forEach(function(r){
+          var name=String(r[G_NAME-1]||''), buy=_gnum(r[G_BUY-1]), retail=_gnum(r[G_RETAIL-1]), sold=_gnum(r[G_SOLDQTY-1]);
+          if (buy>0 && retail>0 && sold>0) { var mk=(retail-buy)/buy*100; if (mk<10) lowMk.push({name:name.slice(0,40),mk:Math.round(mk)}); }
+        });
+        lowMk.sort(function(a,b){return a.mk-b.mk;});
+      }
+      if (lowMk.length) alerts.push({ sev:'mid', icon:'🏷️', action:'goods',
+        title:lowMk.length+' '+_plural(lowMk.length,'ходовой товар с низкой наценкой','ходовых товара с низкой наценкой','ходовых товаров с низкой наценкой'),
+        detail:'подними цену: '+lowMk.slice(0,3).map(function(x){return x.name+' ('+x.mk+'%)';}).join(', ') });
+    } catch(e){}
+
+    // 7) Кому платить сегодня — конкретные поставщики (не просто «не хватит»)
+    try {
+      var payToday=[];
+      var psh2=ss.getSheetByName(SH_PAYMENTS);
+      if (psh2 && psh2.getLastRow()>=2) {
+        var t0=new Date(Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd')+'T00:00:00').getTime();
+        var t1=t0+86400000;
+        psh2.getRange(2,1,psh2.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+          var st=String(r[PY_STATUS-1]||'open'); if(st==='paid'||st==='cancelled')return;
+          var left=(_gnum(r[PY_AMT-1]))-(_gnum(r[PY_PAID-1])); if(left<=0)return;
+          var dd=r[PY_DUE-1]; if(!(dd instanceof Date))return; var dm=dd.getTime();
+          if(dm<t1) payToday.push({name:String(r[PY_NAME-1]||''), amt:Math.round(left), overdue:dm<t0});
+        });
+      }
+      if (payToday.length) alerts.push({ sev:'high', icon:'💸', action:'payments',
+        title:'оплатить '+(payToday.some(function(x){return x.overdue;})?'(есть просроченные)':'сегодня')+': '+payToday.length+' '+_plural(payToday.length,'платёж','платежа','платежей'),
+        detail:payToday.slice(0,3).map(function(x){return x.name+' — '+x.amt+' ₽';}).join(', ') });
+    } catch(e){}
+
     // порядок: сначала важное
     var rank={high:0, mid:1, low:2};
     alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
