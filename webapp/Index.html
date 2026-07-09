@@ -678,6 +678,14 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 /* Дерево настроек: секции с группой скрыты, показываются только в своей группе.
    owner-only управляется инлайн-стилем (_applyRoleUI) и корректно перекрывает эти правила. */
 #tab-settings .settings-sec[data-sgrp]{display:none;}
+/* Права по ролям: элемент с data-need="X" скрыт, если у пользователя нет права X.
+   По умолчанию элемент виден; !important перекрывает инлайн-стили. */
+body:not(.perm-finance)  [data-need~="finance"],
+body:not(.perm-kassa)    [data-need~="kassa"],
+body:not(.perm-receive)  [data-need~="receive"],
+body:not(.perm-goods)    [data-need~="goods"],
+body:not(.perm-payments) [data-need~="payments"],
+body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 #tab-settings.sv-finance .settings-sec[data-sgrp="finance"],
 #tab-settings.sv-shop .settings-sec[data-sgrp="shop"],
 #tab-settings.sv-control .settings-sec[data-sgrp="control"],
@@ -2555,27 +2563,37 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 <!-- Action Menu Overlay -->
 <div class="am-overlay" id="am-overlay" onclick="App.closeActionMenu()">
   <div class="am-grid" onclick="event.stopPropagation()">
-    <button class="am-item" onclick="App.closeActionMenu();App.openNumpad()">
+    <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.openNumpad()">
       <div class="am-icon" style="background:var(--income-dim);color:var(--pos);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
       <div class="am-name">Новая запись</div>
       <div class="am-sub">Доход, расход, перевод</div>
     </button>
-    <button class="am-item" onclick="App.closeActionMenu();App.setTab('kassa',null)">
+    <button class="am-item" data-need="kassa" onclick="App.closeActionMenu();App.setTab('kassa',null)">
       <div class="am-icon" style="background:var(--brand-dim);color:var(--brand);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div>
       <div class="am-name">Касса</div>
       <div class="am-sub">Утро · накладные · смены</div>
     </button>
-    <button class="am-item" onclick="App.closeActionMenu();App.setTab('journal',null)">
+    <button class="am-item" data-need="receive" onclick="App.closeActionMenu();App.openReceiveRep()">
+      <div class="am-icon" style="background:var(--brand-dim);color:var(--brand);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg></div>
+      <div class="am-name">Приём товара</div>
+      <div class="am-sub">Накладная от поставщика</div>
+    </button>
+    <button class="am-item" onclick="App.closeActionMenu();App.openOrderForm()">
+      <div class="am-icon" style="background:var(--surface-2);color:var(--ink-2);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg></div>
+      <div class="am-name">Заказ поставщику</div>
+      <div class="am-sub">Что и на сколько заказать</div>
+    </button>
+    <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.setTab('journal',null)">
       <div class="am-icon" style="background:var(--surface-2);color:var(--ink-2);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10M7 12h10M7 17h6"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></div>
       <div class="am-name">Операции</div>
       <div class="am-sub">Журнал всех записей</div>
     </button>
-    <button class="am-item" onclick="App.closeActionMenu();App.goToPayments()">
+    <button class="am-item" data-need="payments" onclick="App.closeActionMenu();App.goToPayments()">
       <div class="am-icon" style="background:var(--transfer-dim);color:var(--transfer);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg></div>
       <div class="am-name">Запись на выплату</div>
       <div class="am-sub">График платежей</div>
     </button>
-    <button class="am-item" onclick="App.closeActionMenu();App.setTab('report',null)">
+    <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.setTab('report',null)">
       <div class="am-icon" style="background:var(--expense-dim);color:var(--neg);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
       <div class="am-name">Отчёт</div>
       <div class="am-sub">Финансовый отчёт</div>
@@ -2716,7 +2734,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.1.0';
+var APP_VERSION='4.2.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3459,15 +3477,37 @@ var App={
     App.loadSettings(function(){App.showApp();App.loadHome();App._loadRole();});
   },
 
-  // ── Роли: владелец vs сотрудник ──
+  // ── Роли и права: владелец vs сотрудник ──
+  // Права по роли (зеркало сервера _rolePerms) — на случай, пока getTeam грузится.
+  _rolePermsClient:function(role){
+    if(role==='Владелец'||role==='Администратор')return ['finance','kassa','receive','goods','payments','manage'];
+    if(role==='Бухгалтер')return ['finance','payments','manage','goods'];
+    return ['kassa','receive']; // Сотрудник зала
+  },
+  can:function(key){
+    var p=App.s.perms;
+    if(!p||!p.length)return App.s.isOwner!==false; // до загрузки: владельцу можно
+    return p.indexOf(key)>=0;
+  },
   _loadRole:function(){
-    App.s.isOwner=true;App.s.myRole='Владелец';App._applyRoleUI();
+    App.s.isOwner=true;App.s.myRole='Владелец';App.s.perms=App._rolePermsClient('Владелец');App._applyRoleUI();
     gs('getTeam',{ssId:App.s.ssId}).then(function(r){
-      if(r&&!r.__error){App.s.isOwner=!!r.isOwner;App.s.myRole=r.myRole||'Сотрудник зала';App.s._team=r;}
+      if(r&&!r.__error){
+        App.s.isOwner=!!r.isOwner;App.s.myRole=r.myRole||'Сотрудник зала';App.s._team=r;
+        App.s.perms=(r.myPerms&&r.myPerms.length)?r.myPerms:App._rolePermsClient(App.s.myRole);
+        if(App.s.isOwner)App.s.perms=App._rolePermsClient('Владелец');
+      }
       App._applyRoleUI();
     }).catch(function(){});
   },
+  // Ставит на body классы perm-<право> для тех прав, что есть у пользователя.
+  // CSS прячет элементы с data-need, если соответствующего класса нет.
+  _applyPermsBody:function(){
+    var all=['finance','kassa','receive','goods','payments','manage'];
+    all.forEach(function(k){document.body.classList.toggle('perm-'+k,App.can(k));});
+  },
   _applyRoleUI:function(){
+    App._applyPermsBody();
     var own=App.s.isOwner!==false;
     document.querySelectorAll('.owner-only').forEach(function(el){el.style.display=own?'':'none';});
     // Кто может удалять/менять настройки: Владелец, Бухгалтер, Администратор.
@@ -4062,14 +4102,14 @@ var App={
     {id:'home',      t:'Главная',    svg:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>', act:"App.setTab('home',this)", tab:'home'},
     {id:'goods',     t:'Товары',     svg:'<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>', act:"App.openGoods()"},
     {id:'orders',    t:'Заказы',     svg:'<circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/>', act:"App.openOrders()"},
-    {id:'kassa',     t:'Касса',      svg:'<rect x="2" y="9" width="20" height="12" rx="2"/><path d="M6 9V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/><line x1="12" y1="13" x2="12" y2="17"/>', act:"App.setTab('kassa',this)", tab:'kassa'},
-    {id:'suppliers', t:'Поставщики', svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', act:"App.setTab('suppliers',this)", tab:'suppliers', fin:true},
-    {id:'analytics', t:'Аналитика',  svg:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', act:"App.setTab('analytics',this)", tab:'analytics', fin:true},
-    {id:'journal',   t:'Операции',   svg:'<path d="M7 7h10M7 12h10M7 17h6"/><rect x="3" y="3" width="18" height="18" rx="3"/>', act:"App.setTab('journal',this)", tab:'journal', fin:true},
-    {id:'report',    t:'Отчёт',      svg:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', act:"App.setTab('report',this)", tab:'report', fin:true}
+    {id:'kassa',     t:'Касса',      svg:'<rect x="2" y="9" width="20" height="12" rx="2"/><path d="M6 9V6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v3"/><line x1="12" y1="13" x2="12" y2="17"/>', act:"App.setTab('kassa',this)", tab:'kassa', need:'kassa'},
+    {id:'suppliers', t:'Поставщики', svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', act:"App.setTab('suppliers',this)", tab:'suppliers', fin:true, need:'finance'},
+    {id:'analytics', t:'Аналитика',  svg:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', act:"App.setTab('analytics',this)", tab:'analytics', fin:true, need:'finance'},
+    {id:'journal',   t:'Операции',   svg:'<path d="M7 7h10M7 12h10M7 17h6"/><rect x="3" y="3" width="18" height="18" rx="3"/>', act:"App.setTab('journal',this)", tab:'journal', fin:true, need:'finance'},
+    {id:'report',    t:'Отчёт',      svg:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', act:"App.setTab('report',this)", tab:'report', fin:true, need:'finance'}
   ],
   _navMeta:function(id){for(var i=0;i<App._navCatalog.length;i++)if(App._navCatalog[i].id===id)return App._navCatalog[i];return null;},
-  _navAllowed:function(){var fin=App._canFin();return App._navCatalog.filter(function(m){return fin||!m.fin;});},
+  _navAllowed:function(){return App._navCatalog.filter(function(m){return !m.need||App.can(m.need);});},
   _navDefaultFor:function(){
     var r=App.s.myRole;
     if(!App._canFin()) return ['home','goods','orders','kassa'];       // сотрудник зала
@@ -6708,18 +6748,17 @@ var App={
   // ── Settings ──────────────────────────────────────────────────
   // ── Древовидные настройки: корень → группа → назад ─────────────
   _settingsGroups:[
-    {id:'finance', t:'Финансы',    d:'Счета, бюджет, долги, контрагенты', ic:'<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', fin:true},
-    {id:'shop',    t:'Магазин',    d:'Кассиры, категории, смены, статусы', ic:'<path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M9 20v-6h6v6"/>'},
-    {id:'control', t:'Контроль и данные', d:'Импорт 1С, товары, защита, журнал', ic:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>'},
-    {id:'team',    t:'Команда и организации', d:'Сотрудники, роли, доступ, приглашения', ic:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>', fin:true},
+    {id:'finance', t:'Финансы',    d:'Счета, бюджет, долги, контрагенты', ic:'<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', need:'finance'},
+    {id:'shop',    t:'Магазин',    d:'Кассиры, категории, смены, статусы', ic:'<path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M9 20v-6h6v6"/>', need:'manage'},
+    {id:'control', t:'Контроль и данные', d:'Импорт 1С, товары, защита, журнал', ic:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>', need:'manage'},
+    {id:'team',    t:'Команда и организации', d:'Сотрудники, роли, доступ, приглашения', ic:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>', need:'manage'},
     {id:'app',     t:'Приложение', d:'Тема, цвет, вкладки, корзина, помощь', ic:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>'},
     {id:'account', t:'Аккаунт',    d:'Выход, смена аккаунта, данные', ic:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/>'}
   ],
   _settingsGrpTitle:{finance:'Финансы',shop:'Магазин',control:'Контроль и данные',team:'Команда и организации',app:'Приложение',account:'Аккаунт'},
   _settingsRenderMenu:function(){
-    var fin=App._canFin&&App._canFin();
     var el=document.getElementById('settings-menu');if(!el)return;
-    el.innerHTML=App._settingsGroups.filter(function(g){return fin||!g.fin;}).map(function(g){
+    el.innerHTML=App._settingsGroups.filter(function(g){return !g.need||App.can(g.need);}).map(function(g){
       return '<div onclick="App.settingsOpenGroup(\''+g.id+'\')" style="display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:15px 16px;cursor:pointer;margin-bottom:10px;">'+
         '<span style="width:38px;height:38px;border-radius:11px;background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+g.ic+'</svg></span>'+
         '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;">'+g.t+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+g.d+'</div></div>'+
