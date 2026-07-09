@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.11.0';
+var APP_VERSION='4.12.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9597,6 +9597,7 @@ var App={
     {id:'money',   t:'Деньги за месяц',   d:'Выручка · расход · прибыль', c:'Финансы', fin:true},
     {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы', fin:true},
     {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы', fin:true},
+    {id:'growth',  t:'Динамика месяца',   d:'Этот месяц к прошлому — рост или падение', c:'Финансы', fin:true},
     {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары', fin:true},
     {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары', fin:true},
     {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары', fin:true},
@@ -9644,6 +9645,7 @@ var App={
     var has=function(id){return cfg.indexOf(id)>=0;};
     if(has('insight'))App.loadInsights();
     if(has('reminders'))App._wReminders();
+    if(has('growth'))App._wGrowth();
     var pick=function(d,k){return d[k]!==undefined?d[k]:null;};
     // Один агрегатный запрос вместо десятка — быстрее и меньше нагрузка.
     gs('getDashboard',{ssId:App.s.ssId,widgets:cfg,period:(App._getPeriod?App._getPeriod():'month')}).then(function(d){
@@ -9672,6 +9674,21 @@ var App={
     if(has('restock'))App._wRestock();
     var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
     if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
+  },
+  _wGrowth:function(){
+    gs('getGrowthData',{ssId:App.s.ssId}).then(function(d){
+      if(!d||d.__error||!d.month){App._wBox('growth','Динамика месяца',null);return;}
+      var m=d.month, up=(m.incomeChange||0)>=0;
+      var arrow=up?"<path d='M7 17L17 7M17 7H8M17 7V16'/>":"<path d='M7 7l10 10M17 17H8M17 17V8'/>";
+      var col=up?'var(--pos)':'var(--neg)';
+      var inner='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
+        '<span style="width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in oklab,'+col+' 14%,transparent);color:'+col+';"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'+arrow+'</svg></span>'+
+        '<div><div style="font-size:20px;font-weight:800;color:'+col+';">'+(up?'+':'')+(m.incomeChange||0)+'%</div>'+
+        '<div style="font-size:11px;color:var(--muted);">выручка к прошлому месяцу</div></div></div>'+
+        App._wRow('Выручка',fmt(Math.round(m.income||0))+' ₽ (было '+fmt(Math.round(m.prevIncome||0))+')')+
+        App._wRow('Прибыль',fmt(Math.round(m.profit||0))+' ₽',(m.profit||0)>=0?'var(--pos)':'var(--neg)');
+      App._wBox('growth','Динамика месяца',inner,"App.setTab('analytics',null)");
+    }).catch(function(){App._wBox('growth','Динамика месяца',null);});
   },
   _wReminders:function(){
     gs('getReminders',{ssId:App.s.ssId}).then(function(r){
