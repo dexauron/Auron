@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.13.0';
+var APP_VERSION='4.14.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9587,6 +9587,7 @@ var App={
   _homeWidgets:[
     {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками', c:'Действия'},
     {id:'reminders',t:'Напоминания',     d:'Оплаты, приход, что заканчивается', c:'Действия'},
+    {id:'checklist',t:'Чек-лист смены',  d:'Открытие и закрытие по галочкам', c:'Действия'},
     {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом', c:'Действия'},
     {id:'restock', t:'Что заканчивается', d:'План закупки — что скоро кончится', c:'Товары'},
     {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
@@ -9646,6 +9647,7 @@ var App={
     var has=function(id){return cfg.indexOf(id)>=0;};
     if(has('insight'))App.loadInsights();
     if(has('reminders'))App._wReminders();
+    if(has('checklist'))App._wChecklist();
     if(has('growth'))App._wGrowth();
     if(has('peaks'))App._wPeaks();
     var pick=function(d,k){return d[k]!==undefined?d[k]:null;};
@@ -9705,6 +9707,21 @@ var App={
         App._wRow('Прибыль',fmt(Math.round(m.profit||0))+' ₽',(m.profit||0)>=0?'var(--pos)':'var(--neg)');
       App._wBox('growth','Динамика месяца',inner,"App.setTab('analytics',null)");
     }).catch(function(){App._wBox('growth','Динамика месяца',null);});
+  },
+  _checkItems:['Пересчитал кассу утром','Проверил размен','Снял Z-отчёт вечером','Пересчитал кассу вечером','Сделал инкассацию'],
+  _checkKey:function(){return 'auron_check_'+fmtISO(new Date());},
+  _checkState:function(){try{return JSON.parse(localStorage.getItem(App._checkKey()))||{};}catch(e){return {};}},
+  _checkToggle:function(i){var s=App._checkState();s[i]=!s[i];try{localStorage.setItem(App._checkKey(),JSON.stringify(s));}catch(e){}App.haptic&&App.haptic(5);App._wChecklist();},
+  _wChecklist:function(){
+    var s=App._checkState();
+    var chk="<svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='#fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6L9 17l-5-5'/></svg>";
+    var inner=App._checkItems.map(function(t,i){var on=!!s[i];
+      return '<div onclick="App._checkToggle('+i+')" style="display:flex;align-items:center;gap:11px;padding:8px 0;cursor:pointer;">'+
+        '<span style="width:24px;height:24px;border-radius:7px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'var(--brand)':'transparent')+';display:grid;place-items:center;flex-shrink:0;">'+(on?chk:'')+'</span>'+
+        '<span style="font-size:13px;'+(on?'color:var(--muted);text-decoration:line-through;':'color:var(--ink);')+'">'+t+'</span></div>';
+    }).join('');
+    var done=App._checkItems.filter(function(_,i){return s[i];}).length;
+    App._wBox('checklist','Чек-лист смены · '+done+'/'+App._checkItems.length,inner);
   },
   _wReminders:function(){
     gs('getReminders',{ssId:App.s.ssId}).then(function(r){
