@@ -235,6 +235,38 @@ function logoutUser() {
   return { ok: true };
 }
 
+// Полный сброс аккаунта: «начать заново».
+// Профиль пользователя убирается (в корзину Google), связь с приложением
+// стирается → следующий вход = новый пользователь (сможет зайти по приглашению).
+// trashOwned=true — дополнительно кладёт в корзину магазины, где ТЫ владелец
+// (чужие/общие магазины не трогаем никогда).
+function deleteMyAccount(p) {
+  var trashOwned = p && p.trashOwned;
+  var ownedTrashed = 0;
+  try {
+    var prof = _profileSS();
+    if (prof) {
+      if (trashOwned) {
+        try {
+          var osh = prof.getSheetByName(SH_ORGS);
+          if (osh && osh.getLastRow() >= 2) {
+            osh.getRange(2,1,osh.getLastRow()-1,3).getValues().forEach(function(r){
+              var sid = String(r[2]||''); if (!sid) return;
+              try {
+                var oss = SpreadsheetApp.openById(sid);
+                if (_isOwner(oss)) { DriveApp.getFileById(sid).setTrashed(true); ownedTrashed++; }
+              } catch(e2) {}
+            });
+          }
+        } catch(e1) {}
+      }
+      try { DriveApp.getFileById(prof.getId()).setTrashed(true); } catch(e3) {}
+    }
+  } catch(e) {}
+  try { _props().deleteAllProperties(); } catch(e) {}
+  return { ok:true, ownedTrashed:ownedTrashed };
+}
+
 function uploadReceipt(p) {
   var ssId=p.ssId, base64=p.base64, fileName=p.name||'photo.jpg', mime=p.mimeType||'image/jpeg';
   try {
