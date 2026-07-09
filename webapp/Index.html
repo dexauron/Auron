@@ -810,7 +810,8 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
   width:100%;max-height:87dvh;overflow-y:auto;
   border:1px solid var(--border);border-bottom:none;
 }
-.modal-title{font-size:20px;font-weight:800;margin-bottom:20px;letter-spacing:-.4px;}
+.modal-title{font-size:20px;font-weight:800;margin-bottom:20px;letter-spacing:-.4px;display:flex;align-items:center;gap:9px;}
+.modal-title svg{flex-shrink:0;color:var(--brand);}
 .modal-overlay.show .modal{animation:sheetUp .3s cubic-bezier(.2,.8,.2,1);}
 @keyframes sheetUp{from{transform:translateY(100%);opacity:.6;}to{transform:translateY(0);opacity:1;}}
 .modal-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:-8px auto 14px;cursor:grab;}
@@ -2737,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.7.0';
+var APP_VERSION='4.7.1';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
