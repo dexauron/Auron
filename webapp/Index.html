@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.8.1';
+var APP_VERSION='4.9.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9679,16 +9679,36 @@ var App={
       return;}
     App._wBox(id,'Товары',null);
   },
+  // Умная подсказка по времени суток: утром — открыть смену, вечером — закрыть.
+  // Днём/ночью баннера нет (не мозолим глаза — принцип «не анимируй/не показывай частое»).
+  _smartHint:function(){
+    var h=new Date().getHours();
+    var sun="<circle cx='12' cy='12' r='4'/><path d='M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19'/>";
+    var moon="<path d='M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'/>";
+    var cfg=null;
+    if(h>=5&&h<12) cfg={ic:sun,t:'Доброе утро! Пора открыть смену',a:'Открыть кассу'};
+    else if(h>=17||h<3) cfg={ic:moon,t:'Вечер. Не забудьте закрыть кассу и инкассацию',a:'Закрыть кассу'};
+    if(!cfg) return '';
+    return '<div style="padding:0 16px;margin-bottom:14px;">'+
+      '<button onclick="App.setTab(\'kassa\',null)" style="width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:color-mix(in oklab,var(--brand) 12%,var(--surface));border:1px solid color-mix(in oklab,var(--brand) 25%,var(--line));border-radius:18px;padding:14px 15px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);">'+
+        '<div style="width:38px;height:38px;border-radius:12px;background:var(--brand);color:#fff;display:grid;place-items:center;flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+cfg.ic+'</svg></div>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:750;color:var(--ink);line-height:1.3;">'+cfg.t+'</div></div>'+
+        '<span style="flex-shrink:0;font-size:12.5px;font-weight:750;color:var(--brand);white-space:nowrap;">'+cfg.a+' ›</span>'+
+      '</button></div>';
+  },
   _widgetHTML:function(id){
     if(id==='quick'){
       var qb=function(oc,svg,t,sub){return '<button onclick="'+oc+'" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width=\'21\' height=\'21\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.9\' stroke-linecap=\'round\' stroke-linejoin=\'round\'>'+svg+'</svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">'+t+'</div><div style="font-size:11.5px;color:var(--muted);">'+sub+'</div></div></button>';};
       var K="<path d='M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z'/><path d='M9 8h6M9 12h6'/>";
       var G="<path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/><polyline points='3.27 6.96 12 12.01 20.73 6.96'/><line x1='12' y1='22.08' x2='12' y2='12'/>";
       var R="<circle cx='9' cy='20' r='1.3'/><circle cx='18' cy='20' r='1.3'/><path d='M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6'/>";
-      var btns=[qb("App.setTab('kassa',null)",K,'Касса','закрыть смену')];
+      var h=new Date().getHours();
+      // Подпись кассы зависит от времени: утром — открыть смену, вечером — закрыть.
+      var kSub=(h>=5&&h<12)?'открыть смену':(h>=17||h<3)?'закрыть смену':'смены';
+      var btns=[qb("App.setTab('kassa',null)",K,'Касса',kSub)];
       if(App.s.myRole==='Сотрудник зала')btns.push(qb("App.openReceiveRep()",R,'Приём товара','поставка от ТП'));
       btns.push(qb("App.openGoods()",G,'Товары','поиск · цены'));
-      return '<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
+      return App._smartHint()+'<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
     }
     if(id==='advisor') return '<div id="advisor-card"></div>';
     if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button></div>';
