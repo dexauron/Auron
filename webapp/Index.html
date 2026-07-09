@@ -675,6 +675,15 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 
 /* ── Settings ── */
 .settings-sec{padding:0 16px;margin-bottom:24px;}
+/* Дерево настроек: секции с группой скрыты, показываются только в своей группе.
+   owner-only управляется инлайн-стилем (_applyRoleUI) и корректно перекрывает эти правила. */
+#tab-settings .settings-sec[data-sgrp]{display:none;}
+#tab-settings.sv-finance .settings-sec[data-sgrp="finance"],
+#tab-settings.sv-shop .settings-sec[data-sgrp="shop"],
+#tab-settings.sv-control .settings-sec[data-sgrp="control"],
+#tab-settings.sv-team .settings-sec[data-sgrp="team"],
+#tab-settings.sv-app .settings-sec[data-sgrp="app"],
+#tab-settings.sv-account .settings-sec[data-sgrp="account"]{display:block;}
 .settings-sec-title{
   font-size:11px;color:var(--text-3);font-weight:700;
   text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;
@@ -2241,9 +2250,15 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
     <!-- SETTINGS -->
     <div id="tab-settings" class="panel">
-      <div style="padding:20px 16px 8px;font-size:24px;font-weight:700;">Настройки</div>
-      <div style="padding:0 16px;">
-        <div onclick="App.openProfile()" style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:16px;cursor:pointer;margin-bottom:6px;">
+      <div style="position:sticky;top:0;z-index:6;background:var(--bg);display:flex;align-items:center;gap:11px;padding:18px 16px 10px;">
+        <button id="settings-back" onclick="App.settingsBack()" style="display:none;width:38px;height:38px;border-radius:12px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <div id="settings-title" style="font-size:24px;font-weight:700;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Настройки</div>
+      </div>
+      <div id="settings-crumb" style="padding:0 16px 4px;font-size:12px;color:var(--muted);min-height:0;"></div>
+      <div id="settings-root" style="padding:0 16px;">
+        <div onclick="App.openProfile()" style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:16px;cursor:pointer;margin-bottom:14px;">
           <div id="prof-ava" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#9F7AEA);display:grid;place-items:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0;">👤</div>
           <div style="flex:1;min-width:0;">
             <div id="prof-name" style="font-size:16px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Мой профиль</div>
@@ -2251,29 +2266,25 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
           <span style="color:var(--muted);">›</span>
         </div>
+        <div id="settings-menu"></div>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Счета</div>
+      <div class="settings-sec owner-only" data-sgrp="finance"<div class="settings-sec-title">Счета</div>
         <div class="settings-list" id="settings-accounts-list"></div>
         <button class="btn-secondary" onclick="App.openAccountForm(null)" style="margin-top:10px;">+ Добавить счёт</button>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Кассиры</div>
+      <div class="settings-sec owner-only" data-sgrp="shop"<div class="settings-sec-title">Кассиры</div>
         <div class="settings-list" id="settings-cashiers-list"></div>
         <button class="btn-secondary" onclick="App.openAddCashier()" style="margin-top:10px;">+ Добавить кассира</button>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Категории</div>
+      <div class="settings-sec owner-only" data-sgrp="shop"<div class="settings-sec-title">Категории</div>
         <div class="settings-list" id="settings-cats-list"></div>
         <button class="btn-secondary" onclick="App.openAddCat()" style="margin-top:10px;">+ Добавить категорию</button>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Смены</div>
+      <div class="settings-sec owner-only" data-sgrp="shop"<div class="settings-sec-title">Смены</div>
         <div class="settings-list" id="settings-shifts-list"></div>
         <button class="btn-secondary" onclick="App.openAddShift()" style="margin-top:10px;">+ Добавить смену</button>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Касса</div>
+      <div class="settings-sec owner-only" data-sgrp="shop"<div class="settings-sec-title">Касса</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openCashFloat()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M10 8h3a2 2 0 0 1 0 4h-3V7v9M8 12h5"/></svg></span>
@@ -2299,8 +2310,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Финансы</div>
+      <div class="settings-sec" data-sgrp="finance"<div class="settings-sec-title">Финансы</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openObligations()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.2"/></svg></span>
@@ -2312,8 +2322,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Контрагенты</div>
+      <div class="settings-sec" data-sgrp="finance"<div class="settings-sec-title">Контрагенты</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openContractorsDir()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
@@ -2325,31 +2334,26 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Статусы накладных</div>
+      <div class="settings-sec" data-sgrp="shop"<div class="settings-sec-title">Статусы накладных</div>
         <div class="settings-list" id="settings-repstatuses-list"></div>
         <button class="btn-secondary" onclick="App.openAddRepStatus()" style="margin-top:10px;">+ Добавить статус</button>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Сотрудники</div>
+      <div class="settings-sec" data-sgrp="shop"<div class="settings-sec-title">Сотрудники</div>
         <div class="settings-list" id="settings-employees-list"></div>
         <button class="btn-secondary" onclick="App.openAddEmployee()" style="margin-top:10px;">+ Добавить сотрудника</button>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Ежемесячные расходы</div>
+      <div class="settings-sec" data-sgrp="finance"<div class="settings-sec-title">Ежемесячные расходы</div>
         <div class="settings-list" id="settings-recurring-list"></div>
         <div style="display:flex;gap:8px;margin-top:10px;">
           <button class="btn-secondary" onclick="App.openRecurringForm(null)" style="flex:1;margin:0;">+ Добавить шаблон</button>
           <button class="btn-secondary" onclick="App.applyRecurring()" style="flex:1;margin:0;color:var(--income);border-color:var(--income);">▶ Применить сейчас</button>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Бюджет по категориям</div>
+      <div class="settings-sec" data-sgrp="finance"<div class="settings-sec-title">Бюджет по категориям</div>
         <div class="settings-list" id="settings-budget-list"></div>
         <button class="btn-secondary" onclick="App.openBudgetEdit()" style="margin-top:10px;">✎ Редактировать бюджет</button>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Импорт из 1С</div>
+      <div class="settings-sec" data-sgrp="control"<div class="settings-sec-title">Импорт из 1С</div>
         <div class="settings-list">
           <div class="settings-row owner-only" onclick="App.openImport()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4M4 21h16"/></svg></span>
@@ -2433,8 +2437,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Организации и команда</div>
+      <div class="settings-sec owner-only" data-sgrp="team"<div class="settings-sec-title">Организации и команда</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openOrgs()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M4 9h16M9 20v-6h6v6"/></svg></span>
@@ -2451,8 +2454,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Внешний вид</div>
+      <div class="settings-sec" data-sgrp="app"<div class="settings-sec-title">Внешний вид</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.toggleTheme()" style="cursor:pointer;">
             <span class="settings-row-icon" id="theme-icon">🌙</span>
@@ -2480,8 +2482,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Разное</div>
+      <div class="settings-sec" data-sgrp="app"<div class="settings-sec-title">Разное</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openTrash()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
@@ -2506,8 +2507,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec">
-        <div class="settings-sec-title">Аккаунт</div>
+      <div class="settings-sec" data-sgrp="account"<div class="settings-sec-title">Аккаунт</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.switchAccount()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4M16 17l5-5-5-5M21 12H9"/></svg></span>
@@ -2519,8 +2519,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
-      <div class="settings-sec owner-only">
-        <div class="settings-sec-title">Данные</div>
+      <div class="settings-sec owner-only" data-sgrp="account"<div class="settings-sec-title">Данные</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.clearAllData()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
@@ -2709,7 +2708,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='3.9.0';
+var APP_VERSION='4.0.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6699,7 +6698,55 @@ var App={
   },
 
   // ── Settings ──────────────────────────────────────────────────
+  // ── Древовидные настройки: корень → группа → назад ─────────────
+  _settingsGroups:[
+    {id:'finance', t:'Финансы',    d:'Счета, бюджет, долги, контрагенты', ic:'<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>', fin:true},
+    {id:'shop',    t:'Магазин',    d:'Кассиры, категории, смены, статусы', ic:'<path d="M3 9l1.5-5h15L21 9M4 9v11h16V9M9 20v-6h6v6"/>'},
+    {id:'control', t:'Контроль и данные', d:'Импорт 1С, товары, защита, журнал', ic:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>'},
+    {id:'team',    t:'Команда и организации', d:'Сотрудники, роли, доступ, приглашения', ic:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>', fin:true},
+    {id:'app',     t:'Приложение', d:'Тема, цвет, вкладки, корзина, помощь', ic:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/>'},
+    {id:'account', t:'Аккаунт',    d:'Выход, смена аккаунта, данные', ic:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/>'}
+  ],
+  _settingsGrpTitle:{finance:'Финансы',shop:'Магазин',control:'Контроль и данные',team:'Команда и организации',app:'Приложение',account:'Аккаунт'},
+  _settingsRenderMenu:function(){
+    var fin=App._canFin&&App._canFin();
+    var el=document.getElementById('settings-menu');if(!el)return;
+    el.innerHTML=App._settingsGroups.filter(function(g){return fin||!g.fin;}).map(function(g){
+      return '<div onclick="App.settingsOpenGroup(\''+g.id+'\')" style="display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:15px 16px;cursor:pointer;margin-bottom:10px;">'+
+        '<span style="width:38px;height:38px;border-radius:11px;background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+g.ic+'</svg></span>'+
+        '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:700;">'+g.t+'</div><div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+g.d+'</div></div>'+
+        '<span style="color:var(--muted);font-size:19px;">›</span></div>';
+    }).join('');
+  },
+  _svClass:function(cls){
+    var host=document.getElementById('tab-settings');if(!host)return;
+    host.className=host.className.replace(/\bsv-\S+/g,'').trim();
+    if(cls)host.classList.add(cls);
+  },
+  settingsOpenGroup:function(grp){
+    App._settingsCur=grp;
+    var r=document.getElementById('settings-root');if(r)r.style.display='none';
+    App._svClass('sv-'+grp);
+    var t=document.getElementById('settings-title');if(t)t.textContent=App._settingsGrpTitle[grp]||'Настройки';
+    var c=document.getElementById('settings-crumb');if(c)c.textContent='Настройки · '+(App._settingsGrpTitle[grp]||'');
+    var b=document.getElementById('settings-back');if(b)b.style.display='flex';
+    try{document.getElementById('tab-settings').scrollTop=0;window.scrollTo(0,0);}catch(e){}
+  },
+  settingsBack:function(){
+    App._settingsResetRoot();
+    try{window.scrollTo(0,0);}catch(e){}
+  },
+  _settingsResetRoot:function(){
+    App._settingsCur=null;
+    App._svClass('sv-root');
+    var r=document.getElementById('settings-root');if(r)r.style.display='';
+    var t=document.getElementById('settings-title');if(t)t.textContent='Настройки';
+    var c=document.getElementById('settings-crumb');if(c)c.textContent='';
+    var b=document.getElementById('settings-back');if(b)b.style.display='none';
+    App._settingsRenderMenu();
+  },
   renderSettingsPage:function(){
+    App._settingsResetRoot();
     App.loadRecurring();
     App._applyViewOnly();
     App._loadProfileCard();
