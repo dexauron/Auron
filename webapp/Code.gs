@@ -154,12 +154,16 @@ function initUserApp() {
 function registerUser(p) {
   // Регистрация создаёт ЛИЧНЫЙ профиль пользователя (не общую таблицу),
   // поэтому берём per-user замок, а не глобальный на запись.
+  // Если передан inviteOrg — пользователь ПРИСОЕДИНЯЕТСЯ к чужому магазину
+  // (сотрудник), а НЕ создаёт свой. Тогда своя организация не создаётся.
   var name=_s(p.name), phone=_s(p.phone), orgName0=_s(p.orgName||'')||'Мой магазин';
+  var inviteOrg=_s(p.inviteOrg||'');
   try {
     var lock = LockService.getUserLock(); lock.waitLock(10000);
     var ex = _profileSS();
     if (ex) {
-      
+      // Профиль уже есть. Если пришёл по приглашению — просто подключаем магазин.
+      if (inviteOrg) { var a=acceptInvite({ssId:inviteOrg}); if(a&&a.ok) return {ssId:a.ssId,orgName:a.name,invited:true}; }
       var d = initUserApp();
       return { ssId:(d.orgs&&d.orgs[0])?d.orgs[0].ssId:'', orgName:(d.orgs&&d.orgs[0])?d.orgs[0].name:'' };
     }
@@ -170,8 +174,20 @@ function registerUser(p) {
     var orgsSh = ss.insertSheet(SH_ORGS);
     orgsSh.getRange(1,1,1,3).setValues([['ID','Название','SS_ID']]);
     _props().setProperty('PROFILE_SS_ID', ss.getId());
+    // Сотрудник по приглашению: НЕ создаём свой магазин — подключаем чужой.
+    if (inviteOrg) {
+      try {
+        var oss=SpreadsheetApp.openById(inviteOrg); // проверка доступа
+        var onm=oss.getName().replace(/^Auron\s*[—-]\s*/,'');
+        orgsSh.appendRow([Utilities.getUuid(), onm, inviteOrg]);
+        return { ssId:inviteOrg, orgName:onm, invited:true };
+      } catch(ei) {
+        // Нет доступа к приглашённому магазину — не создаём свой, честно сообщаем.
+        return { __error:'Нет доступа к приглашённому магазину. Попроси владельца выслать ссылку заново.' };
+      }
+    }
     var res = _mkOrg(orgName0, ss);
-    
+
     if (REG_WEBHOOK) {
       try { UrlFetchApp.fetch(REG_WEBHOOK,{method:'post',contentType:'application/json',
         muteHttpExceptions:true,payload:JSON.stringify({name:name,phone:phone,ts:new Date().toISOString()})}); } catch(e){}
