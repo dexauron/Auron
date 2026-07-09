@@ -1195,9 +1195,18 @@ function getProductDetail(p) {
       });
       priceHist.sort(function(a,b){return a.t-b.t;});
     }
+    // Телефоны поставщиков из справочника контрагентов
+    var phones={};
+    var csh=ss.getSheetByName(SH_CONTRACTORS);
+    if (csh && csh.getLastRow()>=2) {
+      csh.getRange(2,1,csh.getLastRow()-1,6).getValues().forEach(function(r){
+        var nm=String(r[1]||''); if(nm) phones[nm]=String(r[3]||'');
+      });
+    }
     var suppliers=Object.keys(supPrices).map(function(s){
       var sp=supPrices[s];
-      return {supplier:s, price:sp.price, date: sp.t?Utilities.formatDate(new Date(sp.t),tz,'dd.MM.yy'):''};
+      return {supplier:s, price:sp.price, phone:phones[s]||'',
+        date: sp.t?Utilities.formatDate(new Date(sp.t),tz,'dd.MM.yy'):''};
     }).sort(function(a,b){return a.price-b.price;});
     return { item:it, priceHist:priceHist, suppliers:suppliers, salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
