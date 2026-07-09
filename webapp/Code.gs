@@ -2952,15 +2952,44 @@ function getDebtAnalytics(p) {
   } catch(e) { return {totalDebt:0,totalBuy:0,totalPay:0,count:0,topReps:[]}; }
 }
 
-// Pay employee salary — creates expense entry and optionally logs to timesheet
+// Выплата ЗП или аванса сотруднику — создаёт расход (категория ЗП/Аванс).
 function payEmployeeSalary(p) {
   var ssId=p.ssId, d=p.data||{};
+  var cat=(d.kind==='advance')?'Аванс':'ЗП';
   return saveQuickEntry({ssId:ssId, data:{
     uuid:Utilities.getUuid(), date:d.date||new Date().toISOString(),
-    type:'Расход', category:'ЗП', account:_s(d.account),
+    type:'Расход', category:cat, account:_s(d.account),
     amount:Math.round(parseFloat(d.amount)||0),
-    employee:_s(d.employee), comment:_s(d.comment||('ЗП: '+d.employee))
+    employee:_s(d.employee), comment:_s(d.comment||(cat+': '+d.employee))
   }});
+}
+
+// Сводка ЗП/авансов за текущий месяц по сотрудникам + сотрудники без выплат.
+function getSalaries(p) {
+  if(!_finGuard(p.ssId)) return FIN_DENIED;
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    var tz=Session.getScriptTimeZone(), now=new Date();
+    var mStart=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+    var map={};
+    if (base&&base.getLastRow()>=2) {
+      base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        if (String(r[B_TYPE-1])!=='Расход') return;
+        var cat=String(r[B_CAT-1]); if (cat!=='ЗП'&&cat!=='Аванс') return;
+        var dt=r[B_DATE-1]; if (!(dt instanceof Date)||dt.getTime()<mStart) return;
+        var emp=String(r[B_EMP-1]||'—'), amt=Math.round(parseFloat(r[B_AMT-1])||0);
+        if (!map[emp]) map[emp]={employee:emp,salary:0,advance:0};
+        if (cat==='Аванс') map[emp].advance+=amt; else map[emp].salary+=amt;
+      });
+    }
+    try { var st=getSettings({ssId:p.ssId}); (st.employees||[]).forEach(function(e){
+      e=String(e||'').trim(); if(e&&!map[e]) map[e]={employee:e,salary:0,advance:0}; }); } catch(e){}
+    var list=Object.keys(map).map(function(k){var m=map[k];m.total=m.salary+m.advance;return m;})
+      .sort(function(a,b){return b.total-a.total;});
+    var totalMonth=list.reduce(function(s,m){return s+m.total;},0);
+    return {items:list, totalMonth:Math.round(totalMonth), month:Utilities.formatDate(now,tz,'MM.yyyy')};
+  } catch(e) { return {items:[],__error:e.message}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
