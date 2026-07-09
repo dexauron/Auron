@@ -4048,27 +4048,6 @@ function removeMember(p) {
 });
 }
 
-function setMemberRole(p) {
-  return _withLock(function(){
-  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role);
-  try {
-    var ss=SpreadsheetApp.openById(ssId);
-    if (!_isOwner(ss)) return {__error:'Только владелец может менять роли'};
-    var sh=ss.getSheetByName(SH_ACCESS);
-    if (sh&&sh.getLastRow()>=2) {
-      var vs=sh.getRange(2,1,sh.getLastRow()-1,1).getValues();
-      for (var i=0;i<vs.length;i++)
-        if (String(vs[i][0]).toLowerCase()===email) {
-          sh.getRange(i+2,2).setValue(role);
-          _log(ss,'Смена роли',email+' → '+role);
-          return getTeam({ssId:ssId});
-        }
-    }
-    return {__error:'Сотрудник не найден'};
-  } catch(e) { return {__error:e.message}; }
-});
-}
-
 // Приглашения для сотрудника: таблицы Auron, которыми с ним поделились,
 // но которых ещё нет в его списке организаций.
 function findInvites() {
