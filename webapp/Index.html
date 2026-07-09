@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.10.0';
+var APP_VERSION='4.11.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9183,13 +9183,73 @@ var App={
     var titles={profit:'по прибыли',markup:'низкая наценка',sold:'по продажам',stock:'по остаткам',dead:'неликвид',revenue:'по выручке',name:'А–Я'};
     App._goodsFilter={sort:sort||'profit',group:'',supplier:'',q:''};
     App.openModal('<div class="modal-title">Товары · '+(titles[App._goodsFilter.sort]||'')+'</div>'+
-      '<input id="goods-q" placeholder="Код / артикул / штрихкод / название" oninput="App._goodsFilterSet(\'q\',this.value)" style="width:100%;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);margin-bottom:8px;">'+
+      '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
+      '<input id="goods-q" placeholder="Код / артикул / штрихкод / название" oninput="App._goodsFilterSet(\'q\',this.value)" style="flex:1;min-width:0;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);">'+
+      '<button onclick="App.openScanner(function(c){var q=document.getElementById(\'goods-q\');if(q){q.value=c;App._goodsFilterSet(\'q\',c);}})" title="Сканировать штрихкод" style="flex-shrink:0;width:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--brand);color:#fff;cursor:pointer;display:grid;place-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8"/></svg></button>'+
+      '</div>'+
       '<div id="goods-controls"></div>'+
       '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
     App._goodsSearch();
     setTimeout(function(){var q=document.getElementById('goods-q');if(q)q.focus();},120);
   },
   _goodsFilterSet:function(k,v){ if(!App._goodsFilter)App._goodsFilter={sort:'profit'}; App._goodsFilter[k]=v; App._goodsSearch(); },
+
+  // ── Универсальный сканер штрихкода ──────────────────────────────
+  // 3 уровня: (1) нативный мост будущего приложения → (2) веб-камера
+  // BarcodeDetector (Android/Chrome) → (3) ручной ввод (iPhone/Safari).
+  // cb(code) — что делать с распознанным кодом.
+  openScanner:function(cb){
+    App._scanCb=cb||null;
+    // (1) Будущее нативное/установочное приложение подставит свой сканер.
+    if(window.AuronNative&&typeof window.AuronNative.scanBarcode==='function'){
+      try{ window.AuronNative.scanBarcode(); return; }catch(e){}
+    }
+    // (2) Веб-камера + распознавание в браузере.
+    var hasBD=('BarcodeDetector' in window);
+    var hasCam=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
+    if(hasBD&&hasCam){ App._scanCamera(); return; }
+    // (3) Ручной ввод.
+    App._scanManual();
+  },
+  // Нативное приложение вызовет это с результатом (готово на будущее).
+  onNativeScan:function(code){ App._scanDeliver(code); },
+  _scanDeliver:function(code){
+    var cb=App._scanCb; App._scanCb=null; App._scanStop();
+    if(cb&&code) cb(String(code).trim());
+  },
+  // Ручной ввод: поле поиска само и есть ручной ввод — фокусируем его.
+  // (Не открываем модалку, чтобы не закрыть уже открытый экран товаров.)
+  _scanManual:function(){
+    App.toast('Сканер камеры недоступен — введите код в поле поиска');
+    var q=document.getElementById('goods-q'); if(q){ q.focus(); }
+  },
+  _scanCamera:function(){
+    var ov=document.createElement('div'); ov.id='scan-ov';
+    ov.style.cssText='position:fixed;inset:0;z-index:9000;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    ov.innerHTML='<video id="scan-vid" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>'+
+      '<div style="position:relative;width:74%;max-width:320px;height:150px;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);"></div>'+
+      '<div style="position:absolute;bottom:100px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-family:var(--font);">Наведите камеру на штрихкод</div>'+
+      '<button onclick="App._scanStop()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:20px;cursor:pointer;">✕</button>'+
+      '<button onclick="App._scanStop();App._scanManual();" style="position:absolute;bottom:40px;left:0;right:0;margin:auto;width:200px;padding:11px;border-radius:12px;border:1px solid rgba(255,255,255,.4);background:rgba(0,0,0,.4);color:#fff;font-size:13px;cursor:pointer;font-family:var(--font);">Ввести код вручную</button>';
+    document.body.appendChild(ov);
+    var vid=document.getElementById('scan-vid');
+    var det; try{ det=new window.BarcodeDetector(); }catch(e){ App._scanStop(); App._scanManual(); return; }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}).then(function(stream){
+      App._scanStream=stream; vid.srcObject=stream; vid.play();
+      var tick=function(){
+        if(!App._scanStream)return;
+        det.detect(vid).then(function(codes){
+          if(codes&&codes.length&&codes[0].rawValue){ App.haptic&&App.haptic(10); App._scanDeliver(codes[0].rawValue); return; }
+          if(App._scanStream) requestAnimationFrame(tick);
+        }).catch(function(){ if(App._scanStream) setTimeout(tick,300); });
+      };
+      setTimeout(tick,400);
+    }).catch(function(){ App._scanStop(); App.toast('Нет доступа к камере — введите код',true); App._scanManual(); });
+  },
+  _scanStop:function(){
+    try{ if(App._scanStream){ App._scanStream.getTracks().forEach(function(t){t.stop();}); App._scanStream=null; } }catch(e){}
+    var ov=document.getElementById('scan-ov'); if(ov)ov.remove();
+  },
   _goodsSearch:function(){
     var f=App._goodsFilter||(App._goodsFilter={sort:'profit',group:'',supplier:'',q:''});
     clearTimeout(App._gqt);App._gqt=setTimeout(function(){
