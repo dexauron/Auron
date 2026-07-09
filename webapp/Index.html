@@ -428,7 +428,7 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 .pill{
   padding:7px 4px;border-radius:9px;font-size:12.5px;font-weight:650;
   border:none;cursor:pointer;white-space:nowrap;
-  background:transparent;color:var(--muted);transition:all .15s;font-family:var(--font);
+  background:transparent;color:var(--muted);transition:background-color .15s,color .15s,border-color .15s,box-shadow .15s,transform .15s;font-family:var(--font);
   flex:1 1 0;min-width:0;text-align:center;overflow:hidden;text-overflow:ellipsis;
 }
 .pill.active{background:var(--surface-3);color:var(--ink);box-shadow:var(--inner-light);}
@@ -536,7 +536,7 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 .an-tab{
   padding:8px 18px;border:1px solid var(--sep);background:transparent;
   color:var(--text-3);font-size:13px;font-weight:600;cursor:pointer;
-  border-radius:24px;white-space:nowrap;transition:all .15s;font-family:var(--font);
+  border-radius:24px;white-space:nowrap;transition:background-color .15s,color .15s,border-color .15s,box-shadow .15s,transform .15s;font-family:var(--font);
 }
 .an-tab.active{background:var(--surface-3);color:var(--ink);}
 .an-panel{display:none;padding:0 16px;}
@@ -746,7 +746,7 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 .np-type-btn{
   padding:12px 6px;border:1.5px solid var(--line);background:var(--surface-2);border-radius:14px;
   font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer;
-  transition:all .15s;font-family:var(--font);
+  transition:background-color .15s,color .15s,border-color .15s,box-shadow .15s,transform .15s;font-family:var(--font);
 }
 .np-type-btn.active.expense{border-color:var(--neg);color:var(--neg);background:color-mix(in oklab,var(--neg) 12%,transparent);}
 .np-type-btn.active.income{border-color:var(--pos);color:var(--pos);background:color-mix(in oklab,var(--pos) 12%,transparent);}
@@ -827,7 +827,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   left:50%;transform:translateX(-50%) translateY(16px);
   background:rgba(15,15,34,.98);color:#fff;
   padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;
-  z-index:500;opacity:0;transition:all .25s;white-space:nowrap;
+  z-index:500;opacity:0;transition:opacity .25s,transform .25s;white-space:nowrap;
   backdrop-filter:blur(20px);border:1px solid var(--border);
   box-shadow:0 8px 32px rgba(0,0,0,.5);
 }
@@ -1096,7 +1096,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 .stat-tile .trend{font-size:12px;color:var(--muted);margin-top:4px;font-weight:600;}
 .sw{display:inline-block;border-radius:3px;flex-shrink:0;}
 .seg{display:inline-flex;background:var(--surface-2);border-radius:11px;padding:3px;gap:2px;}
-.seg button{padding:7px 14px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:13px;font-weight:650;cursor:pointer;font-family:var(--font);transition:all .15s;}
+.seg button{padding:7px 14px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:13px;font-weight:650;cursor:pointer;font-family:var(--font);transition:background-color .15s,color .15s,border-color .15s,box-shadow .15s,transform .15s;}
 .seg button.on{background:var(--surface-3);color:var(--ink);}
 .note{display:flex;align-items:flex-start;gap:10px;padding:14px 16px;background:var(--surface-2);border-radius:14px;border:1px solid var(--line);margin:0 16px 20px;font-size:13px;color:var(--muted);line-height:1.6;}
 .note .ni{flex-shrink:0;opacity:.6;margin-top:1px;}
@@ -1559,7 +1559,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .tour-ic{width:66px;height:66px;border-radius:21px;margin:0 auto 14px;display:flex;align-items:center;justify-content:center;
   background:var(--brand-dim);color:var(--brand);box-shadow:inset 0 0 0 1px color-mix(in oklab,var(--brand) 24%,transparent);}
 .tour-dots{display:flex;justify-content:center;gap:6px;margin:16px 0 4px;}
-.tour-dot{width:7px;height:7px;border-radius:50%;background:var(--line);transition:all .2s;}
+.tour-dot{width:7px;height:7px;border-radius:50%;background:var(--line);transition:background-color .2s,transform .2s;}
 .tour-dot.on{background:var(--brand);width:20px;border-radius:4px;}
 
 /* Окно «Подробно» — карточка записи + история */
@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.7.1';
+var APP_VERSION='4.8.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
