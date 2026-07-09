@@ -704,13 +704,14 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
   position:fixed;bottom:0;left:0;right:0;
   background:var(--surface);
   border-radius:28px 28px 0 0;z-index:201;
-  transform:translateY(100%);
-  transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  transform:translateY(110%);
+  visibility:hidden;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),visibility 0s linear .28s;
   max-height:94dvh;overflow:hidden;display:flex;flex-direction:column;
   border:1px solid var(--line);border-bottom:none;
   box-shadow:var(--shadow-lg);
 }
-.sheet.show{transform:translateY(0);}
+.sheet.show{transform:translateY(0);visibility:visible;transition:transform .28s cubic-bezier(.2,.8,.2,1);}
 .sheet-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:14px auto 0;}
 .sheet-title{font-size:19px;font-weight:800;text-align:center;padding:14px 16px 0;letter-spacing:-.02em;}
 .sheet-body{flex:1;overflow-y:auto;padding:14px 20px calc(var(--safe-bot) + 24px);}
@@ -3340,8 +3341,15 @@ var App={
     if(sbName)sbName.textContent=App.s.userName||'Пользователь';
     var sbAv=document.getElementById('sb-avatar');
     if(sbAv)sbAv.textContent=(App.s.userName||'А').charAt(0).toUpperCase();
-    // Онбординг-тур — один раз при первом входе
-    try{ if(!localStorage.getItem('auron_tour_v1')) setTimeout(function(){App.showTour();},900); }catch(e){}
+    // Онбординг-тур — один раз. Флаг «пройдено» проверяем на СЕРВЕРЕ,
+    // т.к. localStorage в iframe Google на iPhone не сохраняется между заходами.
+    try{
+      if(localStorage.getItem('auron_tour_v1'))return;
+      gs('getUserFlags',{}).then(function(fl){
+        if(fl&&fl.tourSeen){try{localStorage.setItem('auron_tour_v1','1');}catch(e){}return;}
+        setTimeout(function(){App.showTour();},700);
+      }).catch(function(){/* сервер не ответил — не навязываем тур */});
+    }catch(e){}
   },
 
   // ── Онбординг-тур (показывается один раз) ──────────────────────
@@ -3374,6 +3382,7 @@ var App={
   _tourNext:function(){ App.haptic(6); if(App._tourI>=App._tourSlides.length-1){App._tourEnd();return;} App._tourI++; App._tourRender(); },
   _tourEnd:function(){
     try{localStorage.setItem('auron_tour_v1','1');}catch(e){}
+    try{gs('setUserFlag',{key:'tourSeen',val:1}).catch(function(){});}catch(e){}
     var ov=document.getElementById('tour-ov');if(ov){ov.classList.remove('show');setTimeout(function(){ov.remove();},220);}
   },
 

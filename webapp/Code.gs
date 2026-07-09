@@ -4729,6 +4729,18 @@ function fillTimesheetMonth(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 // Все организации владельца + команды каждой (только где он владелец)
+// Флаги пользователя (переживают перезаход — в отличие от localStorage в
+// iframe Google на iOS). Например «онбординг пройден».
+function getUserFlags() {
+  try { var p=PropertiesService.getUserProperties();
+    return { tourSeen: p.getProperty('tourSeen')==='1' }; }
+  catch(e){ return {}; }
+}
+function setUserFlag(p) {
+  try { PropertiesService.getUserProperties().setProperty(String(p.key), String(p.val)); } catch(e){}
+  return { ok:true };
+}
+
 function getTeamAll() {
   try {
     var d=initUserApp();
