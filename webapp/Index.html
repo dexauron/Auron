@@ -2738,7 +2738,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.9.0';
+var APP_VERSION='4.10.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9526,6 +9526,7 @@ var App={
   // ── Виджеты главного экрана (пользователь настраивает сам) ─────
   _homeWidgets:[
     {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками', c:'Действия'},
+    {id:'reminders',t:'Напоминания',     d:'Оплаты, приход, что заканчивается', c:'Действия'},
     {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом', c:'Действия'},
     {id:'restock', t:'Что заканчивается', d:'План закупки — что скоро кончится', c:'Товары'},
     {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
@@ -9550,10 +9551,10 @@ var App={
   // Стартовый набор виджетов под конкретную роль (одна точка правды —
   // используется и для своей главной, и когда владелец назначает сотруднику).
   _roleWidgetDefaults:function(role,fin){
-    if(!fin) return ['quick','restock','ask','season'];              // Сотрудник зала
-    if(role==='Бухгалтер') return ['money','debts','tax','advisor','savings'];
-    if(role==='Администратор') return ['quick','advisor','restock','insight','topGoods'];
-    return ['quick','advisor','pulse','money','savings','restock'];   // Владелец
+    if(!fin) return ['quick','reminders','restock','ask'];           // Сотрудник зала
+    if(role==='Бухгалтер') return ['reminders','money','debts','tax','advisor'];
+    if(role==='Администратор') return ['quick','reminders','advisor','restock','topGoods'];
+    return ['quick','reminders','advisor','money','savings','restock']; // Владелец
   },
   _homeDefaultFor:function(){ return App._roleWidgetDefaults(App.s.myRole,App._canFin()); },
   // Ключ настройки — свой на каждую роль (у каждого сотрудника свой набор)
@@ -9582,6 +9583,7 @@ var App={
     board.innerHTML=cfg.map(function(id){return App._widgetHTML(id);}).join('');
     var has=function(id){return cfg.indexOf(id)>=0;};
     if(has('insight'))App.loadInsights();
+    if(has('reminders'))App._wReminders();
     var pick=function(d,k){return d[k]!==undefined?d[k]:null;};
     // Один агрегатный запрос вместо десятка — быстрее и меньше нагрузка.
     gs('getDashboard',{ssId:App.s.ssId,widgets:cfg,period:(App._getPeriod?App._getPeriod():'month')}).then(function(d){
@@ -9610,6 +9612,23 @@ var App={
     if(has('restock'))App._wRestock();
     var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
     if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
+  },
+  _wReminders:function(){
+    gs('getReminders',{ssId:App.s.ssId}).then(function(r){
+      var items=(r&&r.items)||[];
+      if(!items.length){App._wBox('reminders','Напоминания','<div style="font-size:12.5px;color:var(--muted);">Срочных дел нет 👍</div>');return;}
+      var ic={pay:"<rect x='2' y='5' width='20' height='14' rx='2'/><path d='M2 10h20'/>",
+        order:"<circle cx='9' cy='20' r='1.3'/><circle cx='18' cy='20' r='1.3'/><path d='M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6'/>",
+        stock:"<path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/>"};
+      var inner=items.map(function(t){
+        var col=t.urgent?'var(--neg)':'var(--brand)';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">'+
+          '<span style="width:30px;height:30px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;background:color-mix(in oklab,'+col+' 14%,transparent);color:'+col+';"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+(ic[t.type]||ic.stock)+'</svg></span>'+
+          '<div style="flex:1;min-width:0;"><div style="font-size:12.5px;font-weight:650;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(t.text)+'</div>'+
+          '<div style="font-size:11px;color:'+(t.urgent?'var(--neg)':'var(--muted)')+';">'+App._e(t.sub||'')+'</div></div></div>';
+      }).join('');
+      App._wBox('reminders','Напоминания',inner);
+    }).catch(function(){App._wBox('reminders','Напоминания',null);});
   },
   _wRestock:function(pre){
     var go=function(r){var items=(r&&r.items)||[];

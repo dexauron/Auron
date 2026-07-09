@@ -1298,6 +1298,51 @@ function getProductDetail(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 // Что заканчивается — только остатки (без денег), доступно и сотруднику зала.
+// Напоминания на главную: оплаты (только с доступом к финансам),
+// ожидается приход по заказам, товар заканчивается. Не финансово-гардим —
+// сотрудник зала видит приход/остатки, но НЕ суммы оплат.
+function getReminders(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    var todayMs=new Date(Utilities.formatDate(new Date(),tz,'yyyy-MM-dd')+'T00:00:00').getTime();
+    var soon=todayMs+2*86400000; // сегодня … +2 дня
+    var fin=false; try{ fin=_hasPerm(ss,'finance'); }catch(e){}
+    var out=[];
+    if (fin) {
+      var psh=ss.getSheetByName(SH_PAYMENTS);
+      if (psh&&psh.getLastRow()>=2) {
+        psh.getRange(2,1,psh.getLastRow()-1,PY_COLS).getValues().forEach(function(r){
+          var st=String(r[PY_STATUS-1]||'open'); if(st==='paid'||st==='cancelled')return;
+          var left=(parseFloat(r[PY_AMT-1])||0)-(parseFloat(r[PY_PAID-1])||0); if(left<=0)return;
+          var due=r[PY_DUE-1]; if(!(due instanceof Date))return; var dm=due.getTime();
+          if(dm<=soon){ var overdue=dm<todayMs;
+            out.push({type:'pay',urgent:overdue,text:'Оплата: '+String(r[PY_NAME-1]||''),
+              sub:(overdue?'просрочено · ':'')+Utilities.formatDate(due,tz,'dd.MM')+' · '+Math.round(left)+' ₽'});
+          }
+        });
+      }
+    }
+    var osh=ss.getSheetByName(SH_ORDERS);
+    if (osh&&osh.getLastRow()>=2) {
+      osh.getRange(2,1,osh.getLastRow()-1,O_COLS).getValues().forEach(function(r){
+        if(String(r[O_STATUS-1])!=='active')return;
+        var exp=r[O_EXPECTED-1]; if(!(exp instanceof Date))return; var em=exp.getTime();
+        if(em<=soon){ var late=em<todayMs;
+          out.push({type:'order',urgent:late,text:'Приход: '+String(r[O_CONTR-1]||''),
+            sub:(late?'задерживается · ':'ожидается ')+Utilities.formatDate(exp,tz,'dd.MM')});
+        }
+      });
+    }
+    try { var rs=getRestock({ssId:p.ssId}); (rs.items||[]).slice(0,3).forEach(function(it){
+      out.push({type:'stock',urgent:it.urgent,text:'Заканчивается: '+it.name,
+        sub:it.urgent?'нет в остатке':('хватит на '+it.daysOfStock+' дн.')});
+    }); } catch(e){}
+    out.sort(function(a,b){return (a.urgent===b.urgent)?0:(a.urgent?-1:1);});
+    return {items:out.slice(0,6)};
+  } catch(e) { return {items:[],__error:e.message}; }
+}
+
 function getRestock(p) {
   try {
     var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
