@@ -1591,13 +1591,9 @@ function getAdvisor(p) {
         detail:payToday.slice(0,3).map(function(x){return x.name+' — '+x.amt+' ₽';}).join(', ') });
     } catch(e){}
 
-    // Пока учится — честно показываем прогресс (внизу, не мешает фактам).
-    if (!mature) {
-      var monthsLeft=Math.max(1,Math.ceil((warmupDays-dataAge)/30));
-      alerts.push({ sev:'low', icon:'🎓', action:'',
-        title:'Аврон учится вашему магазину',
-        detail:'собрано '+dataAge+' из '+warmupDays+' дней. Советы по ценам и «что норма» включатся, когда наберётся статистика (~ещё '+monthsLeft+' '+_plural(monthsLeft,'месяц','месяца','месяцев')+')' });
-    }
+    // Пока учится — НИЧЕГО не показываем про обучение (по просьбе владельца:
+    // скрыто, пока собирает данные). Оценочные советы просто отсутствуют,
+    // остаются только факты. Прогресс доступен в результате (mature/dataAge).
     // порядок: сначала важное
     var rank={high:0, mid:1, low:2};
     alerts.sort(function(a,b){return (rank[a.sev]||9)-(rank[b.sev]||9);});
