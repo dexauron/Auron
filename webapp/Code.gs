@@ -3063,6 +3063,29 @@ function getAccountFlow(p) {
   } catch(e) { return {accounts:[]}; }
 }
 
+// Пики выручки по дням недели за последние ~90 дней — когда завозить/ставить людей.
+function getWeekdayPeaks(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    if (!base||base.getLastRow()<2) return {days:[],best:''};
+    var from=new Date().getTime()-90*86400000;
+    var sums=[0,0,0,0,0,0,0]; // getDay(): 0=Вс..6=Сб
+    base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+      if (String(r[B_TYPE-1])!=='Доход') return;
+      var cat=String(r[B_CAT-1]); if(cat==='Перевод'||cat==='Корректировка') return;
+      var dt=r[B_DATE-1]; if(!(dt instanceof Date)||dt.getTime()<from) return;
+      sums[dt.getDay()] += Math.round(parseFloat(r[B_AMT-1])||0);
+    });
+    // Переставляем в Пн..Вс
+    var order=[1,2,3,4,5,6,0];
+    var names=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+    var days=order.map(function(d,i){return {name:names[i], total:sums[d]};});
+    var max=0,best=''; days.forEach(function(x){if(x.total>max){max=x.total;best=x.name;}});
+    return {days:days, best:best, max:max};
+  } catch(e) { return {days:[],best:'',__error:e.message}; }
+}
+
 function getGrowthData(p) {
   var ssId=p.ssId;
   try {

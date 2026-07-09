@@ -9598,6 +9598,7 @@ var App={
     {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы', fin:true},
     {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы', fin:true},
     {id:'growth',  t:'Динамика месяца',   d:'Этот месяц к прошлому — рост или падение', c:'Финансы', fin:true},
+    {id:'peaks',   t:'Пики по дням недели', d:'Когда выручка выше — когда завозить', c:'Финансы', fin:true},
     {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары', fin:true},
     {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары', fin:true},
     {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары', fin:true},
@@ -9646,6 +9647,7 @@ var App={
     if(has('insight'))App.loadInsights();
     if(has('reminders'))App._wReminders();
     if(has('growth'))App._wGrowth();
+    if(has('peaks'))App._wPeaks();
     var pick=function(d,k){return d[k]!==undefined?d[k]:null;};
     // Один агрегатный запрос вместо десятка — быстрее и меньше нагрузка.
     gs('getDashboard',{ssId:App.s.ssId,widgets:cfg,period:(App._getPeriod?App._getPeriod():'month')}).then(function(d){
@@ -9674,6 +9676,20 @@ var App={
     if(has('restock'))App._wRestock();
     var gw=['topGoods','dead','abc','metrics','trend','suppliers'].filter(has);
     if(gw.length)App._ensureGoods(function(a){gw.forEach(function(id){App._wGoods(id,a);});});
+  },
+  _wPeaks:function(){
+    gs('getWeekdayPeaks',{ssId:App.s.ssId}).then(function(d){
+      var days=(d&&d.days)||[];var max=d&&d.max||0;
+      if(!days.length||!max){App._wBox('peaks','Пики по дням недели',null);return;}
+      var bars='<div style="display:flex;align-items:flex-end;gap:6px;height:70px;margin:6px 0 4px;">'+
+        days.map(function(x){var h=Math.max(Math.round(x.total/max*100),4);var top=x.name===d.best;
+          return '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;justify-content:flex-end;height:100%;">'+
+            '<div style="width:100%;height:'+h+'%;border-radius:6px 6px 3px 3px;background:'+(top?'var(--brand)':'color-mix(in oklab,var(--brand) 30%,transparent)')+';"></div>'+
+            '<div style="font-size:10px;color:'+(top?'var(--brand)':'var(--muted)')+';font-weight:'+(top?'800':'600')+';">'+x.name+'</div></div>';
+        }).join('')+'</div>';
+      var inner=bars+'<div style="font-size:12px;color:var(--muted);text-align:center;">Лучший день: <b style="color:var(--brand)">'+App._e(d.best)+'</b> · данные за 90 дней</div>';
+      App._wBox('peaks','Пики по дням недели',inner,"App.setTab('analytics',null)");
+    }).catch(function(){App._wBox('peaks','Пики по дням недели',null);});
   },
   _wGrowth:function(){
     gs('getGrowthData',{ssId:App.s.ssId}).then(function(d){
