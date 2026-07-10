@@ -72,7 +72,14 @@ jobs:
         working-directory: webapp
         run: clasp push -f
 
-      - name: Deploy new version (optional)
+      # Обновление ЖИВОЙ версии /exec — необязательное и «best-effort».
+      # Apps Script ограничивает проект 200 версиями; при достижении лимита
+      # clasp deploy падает. Это НЕ должно валить весь пайплайн — код уже
+      # залит выше (clasp push). Поэтому continue-on-error.
+      # Чтобы живой /exec снова обновлялся: разово удалить старые версии в
+      # редакторе Apps Script (История проекта) — см. webapp/DEPLOY.md.
+      - name: Deploy new version (optional, best-effort)
         if: steps.cfg.outputs.ready == 'true' && vars.APPSSCRIPT_DEPLOYMENT_ID != ''
+        continue-on-error: true
         working-directory: webapp
         run: clasp deploy -i "${{ vars.APPSSCRIPT_DEPLOYMENT_ID }}" -d "Auto-deploy ${{ github.sha }}"
