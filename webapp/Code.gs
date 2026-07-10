@@ -349,6 +349,26 @@ function ensureSheets(ss) {
   _grow(ss,SH_DEBTS,  D_COLS);
   _grow(ss,SH_TIMESHEET,T_COLS);
   _migrateSchema(ss);
+  _protectAccessSheet(ss);
+}
+
+// Защита листа ДОСТУП (роли/права) от прямого редактирования сотрудниками.
+// При модели addEditor сотрудник — редактор всей таблицы; но роли/права он
+// менять напрямую НЕ должен. Пишет этот лист только владелец (все функции
+// ролей проверяют _isOwner), поэтому защита не ломает легитимную запись.
+// Ставится, когда приложение открывает владелец (у него есть право защиты).
+function _protectAccessSheet(ss) {
+  try {
+    if (_getSettingStr(ss,'ACL_PROTECTED','')==='1') return;
+    var sh=ss.getSheetByName(SH_ACCESS); if(!sh) return;
+    var existing=sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    if (existing && existing.length){ _setSetting(ss,'ACL_PROTECTED','1'); return; }
+    var p=sh.protect().setDescription('Auron: роли и права — только владелец');
+    var eds=p.getEditors();
+    if (eds && eds.length) eds.forEach(function(u){ try{ p.removeEditor(u); }catch(e){} });
+    if (p.canDomainEdit && p.canDomainEdit()) p.setDomainEdit(false);
+    _setSetting(ss,'ACL_PROTECTED','1');
+  } catch(e){} // не владелец / нет прав защиты — тихо, поставится при входе владельца
 }
 
 // Версионирование схемы: новые листы/колонки добавляются выше идемпотентно.
@@ -4118,8 +4138,9 @@ function _myPerms(ss) {
 }
 function _hasPerm(ss, key) { return _myPerms(ss).indexOf(key)>=0; }
 // Быстрая проверка доступа к финансам по ssId (для гардов в начале функций).
-function _finGuard(ssId) { try{ return _hasPerm(SpreadsheetApp.openById(ssId),'finance'); }catch(e){ return true; } }
-function _permGuard(ssId, key) { try{ return _hasPerm(SpreadsheetApp.openById(ssId),key); }catch(e){ return true; } }
+function _logDenied(ss, key) { try{ _log(ss,'Отказ доступа',(_myEmail()||'?')+' → '+key); }catch(e){} }
+function _finGuard(ssId) { try{ var ss=SpreadsheetApp.openById(ssId); var ok=_hasPerm(ss,'finance'); if(!ok)_logDenied(ss,'finance'); return ok; }catch(e){ return true; } }
+function _permGuard(ssId, key) { try{ var ss=SpreadsheetApp.openById(ssId); var ok=_hasPerm(ss,key); if(!ok)_logDenied(ss,key); return ok; }catch(e){ return true; } }
 var FIN_DENIED={__error:'Нет доступа к финансовым данным (обратитесь к владельцу)'};
 
 function getTeam(p) {
