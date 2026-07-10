@@ -69,6 +69,7 @@
         <h2 class="sheet-title" id="sheetName"></h2>
         <div class="badge-row" id="sheetBadges"></div>
         <div class="fields" id="sheetFields"></div>
+        <div id="sheetSupplier"></div>
         <div class="admin-actions" id="sheetAdminActions" hidden>
           <button class="btn btn-secondary" id="btnEditProduct">✏️ Изменить</button>
           <button class="btn btn-danger" id="btnDeleteProduct">🗑 Удалить</button>
@@ -107,6 +108,7 @@
         <p class="muted" id="adminEmail"></p>
         <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
         <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
+        <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
         <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
         <button class="btn btn-ghost sheet-close" data-close="adminMenuSheet">Закрыть</button>
       </div>
@@ -129,6 +131,9 @@
 
           <label class="field-label">Группа</label>
           <select id="fGroup" class="input"></select>
+
+          <label class="field-label">Поставщик <span class="hint">— от кого приходит товар</span></label>
+          <select id="fSupplier" class="input"></select>
 
           <div class="input-pair">
             <div>
@@ -159,6 +164,35 @@
           <button type="submit" class="btn btn-primary btn-block" id="formSubmit">Сохранить</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="formSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Выбор поставщика (фильтр, доступен всем) -->
+  <div class="sheet-backdrop" id="supplierSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Поставщики</h2>
+        <p class="muted">Выбери поставщика — покажем все его товары</p>
+        <div id="supplierList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="supplierSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Поставщики (управление, только админ) -->
+  <div class="sheet-backdrop" id="suppliersManageSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Поставщики (редактирование)</h2>
+        <div id="suppliersManageList"></div>
+        <div class="input-row">
+          <input type="text" id="newSupplierName" class="input" placeholder="Новый поставщик…">
+          <button class="btn btn-primary" id="btnAddSupplier">＋</button>
+        </div>
+        <button class="btn btn-ghost sheet-close" data-close="suppliersManageSheet">Закрыть</button>
       </div>
     </div>
   </div>

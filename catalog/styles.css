@@ -367,6 +367,9 @@ select.input { appearance: none; }
 .scan-box { width: 100%; border-radius: 14px; background: #000; min-height: 260px; overflow: hidden; }
 .scan-box video { width: 100%; display: block; border-radius: 14px; }
 
+/* Список поставщиков (фильтр) */
+#supplierList .btn-block { margin-top: 8px; justify-content: space-between; }
+
 /* Чекбокс */
 .check-row {
   display: flex; align-items: center; gap: 10px;

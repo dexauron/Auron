@@ -10,10 +10,17 @@ create table if not exists catalog_groups (
   created_at timestamptz not null default now()
 );
 
+create table if not exists catalog_suppliers (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists catalog_products (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
   group_id   uuid references catalog_groups(id) on delete set null,
+  supplier_id uuid references catalog_suppliers(id) on delete set null, -- от какого поставщика приходит
   code       text,          -- код кассы
   article    text,          -- артикул
   barcode    text,          -- штрихкод (пусто = штрихкода нет)
@@ -25,17 +32,21 @@ create table if not exists catalog_products (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_products_group on catalog_products(group_id);
+create index if not exists idx_products_group    on catalog_products(group_id);
+create index if not exists idx_products_supplier on catalog_products(supplier_id);
 
 -- ── Права доступа: читать могут все, менять — только вошедший админ ──
 
-alter table catalog_groups   enable row level security;
-alter table catalog_products enable row level security;
+alter table catalog_groups    enable row level security;
+alter table catalog_suppliers enable row level security;
+alter table catalog_products  enable row level security;
 
-create policy "groups: читать всем"      on catalog_groups   for select using (true);
-create policy "groups: менять админу"    on catalog_groups   for all    to authenticated using (true) with check (true);
-create policy "products: читать всем"    on catalog_products for select using (true);
-create policy "products: менять админу"  on catalog_products for all    to authenticated using (true) with check (true);
+create policy "groups: читать всем"        on catalog_groups    for select using (true);
+create policy "groups: менять админу"      on catalog_groups    for all    to authenticated using (true) with check (true);
+create policy "suppliers: читать всем"     on catalog_suppliers for select using (true);
+create policy "suppliers: менять админу"   on catalog_suppliers for all    to authenticated using (true) with check (true);
+create policy "products: читать всем"      on catalog_products  for select using (true);
+create policy "products: менять админу"    on catalog_products  for all    to authenticated using (true) with check (true);
 
 -- ── Хранилище фотографий ────────────────────────────────
 

@@ -12,9 +12,11 @@
 
   const state = {
     groups: [],
+    suppliers: [],
     products: [],
     query: '',
     groupId: 'all',
+    supplierId: null, // null = все поставщики
     session: null,
     lastFetch: 0,
   };
@@ -64,6 +66,7 @@
   }
 
   function groupById(id) { return state.groups.find((g) => g.id === id) || null; }
+  function supplierById(id) { return state.suppliers.find((s) => s.id === id) || null; }
 
   /* ── Умный поиск ──────────────────────────────── */
 
@@ -135,6 +138,10 @@
 
     s = Math.max(s, matchText(norm(p.name), qVars, [100, 90, 80]));
 
+    // поиск по поставщику: «иванов» покажет все его товары
+    const supName = norm(supplierById(p.supplier_id)?.name);
+    if (supName) s = Math.max(s, matchText(supName, qVars, [60, 57, 55]));
+
     const gName = norm(groupById(p.group_id)?.name);
     if (gName) s = Math.max(s, matchText(gName, qVars, [45, 42, 40]));
     if (p.note) s = Math.max(s, matchText(norm(p.note), qVars, [38, 36, 35]));
@@ -152,6 +159,7 @@
     if (state.groupId === 'none') list = list.filter((p) => !p.group_id);
     else if (state.groupId === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.groupId !== 'all') list = list.filter((p) => p.group_id === state.groupId);
+    if (state.supplierId) list = list.filter((p) => p.supplier_id === state.supplierId);
 
     const q = norm(state.query);
     if (!q) return list;
@@ -174,6 +182,15 @@
       if (p.is_weighted) weighted++;
     }
     let html = chipHtml('all', 'Все', state.products.length);
+    // чип поставщика: не выбран — открывает список; выбран — показывает имя
+    if (state.suppliers.length) {
+      const sup = supplierById(state.supplierId);
+      const label = sup ? `🚚 ${sup.name}` : '🚚 Поставщики';
+      const cnt = sup
+        ? state.products.filter((p) => p.supplier_id === sup.id).length
+        : state.suppliers.length;
+      html += `<button class="chip${sup ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
+    }
     if (weighted > 0) html += chipHtml('weighted', '⚖ Весовые', weighted);
     for (const g of state.groups) html += chipHtml(g.id, g.name, counts[g.id] || 0);
     if (noGroup > 0) html += chipHtml('none', 'Без группы', noGroup);
@@ -217,6 +234,8 @@
       const tags = [];
       if (p.code) tags.push(`<span class="tag tag-code">Код ${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖ весовой</span>');
+      const sup = supplierById(p.supplier_id);
+      if (sup) tags.push(`<span class="tag">🚚 ${esc(sup.name)}</span>`);
       if (p.department) tags.push(`<span class="tag">Отдел ${esc(p.department)}</span>`);
       if (!p.barcode) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
       return `<article class="card" data-id="${esc(p.id)}">
@@ -253,6 +272,11 @@
     if (!p.barcode) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
 
+    const sup = supplierById(p.supplier_id);
+    $('sheetSupplier').innerHTML = sup
+      ? `<button class="btn btn-secondary btn-block" data-supplier-all="${esc(sup.id)}">🚚 ${esc(sup.name)} — все товары поставщика</button>`
+      : '';
+
     const rows = [];
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
     if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
@@ -281,6 +305,7 @@
       const c = JSON.parse(localStorage.getItem(CACHE_KEY));
       if (c && Array.isArray(c.products)) {
         state.groups = c.groups || [];
+        state.suppliers = c.suppliers || [];
         state.products = c.products;
         state.lastFetch = c.ts || 0;
         return true;
@@ -292,19 +317,23 @@
   function saveCache() {
     try {
       localStorage.setItem(CACHE_KEY, JSON.stringify({
-        groups: state.groups, products: state.products, ts: Date.now(),
+        groups: state.groups, suppliers: state.suppliers,
+        products: state.products, ts: Date.now(),
       }));
     } catch (e) { /* нет места — не страшно, кэш вспомогательный */ }
   }
 
   async function fetchData() {
-    const [g, p] = await Promise.all([
+    const [g, sup, p] = await Promise.all([
       sb.from('catalog_groups').select('*').order('sort_order').order('name'),
+      sb.from('catalog_suppliers').select('*').order('name'),
       sb.from('catalog_products').select('*').order('name'),
     ]);
     if (g.error) throw g.error;
+    if (sup.error) throw sup.error;
     if (p.error) throw p.error;
     state.groups = g.data;
+    state.suppliers = sup.data;
     state.products = p.data;
     state.lastFetch = Date.now();
     saveCache();
@@ -399,6 +428,8 @@
     $('fNote').value = product?.note || '';
     $('fGroup').innerHTML = '<option value="">Без группы</option>' +
       state.groups.map((g) => `<option value="${esc(g.id)}"${g.id === product?.group_id ? ' selected' : ''}>${esc(g.name)}</option>`).join('');
+    $('fSupplier').innerHTML = '<option value="">Не указан</option>' +
+      state.suppliers.map((s) => `<option value="${esc(s.id)}"${s.id === product?.supplier_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
     formPhotos = (product?.photos || []).map((url) => ({ url }));
     renderPhotoManager();
     $('formError').hidden = true;
@@ -421,6 +452,7 @@
       const record = {
         name: $('fName').value.trim(),
         group_id: $('fGroup').value || null,
+        supplier_id: $('fSupplier').value || null,
         code: $('fCode').value.trim() || null,
         article: $('fArticle').value.trim() || null,
         barcode: $('fBarcode').value.trim() || null,
@@ -511,6 +543,66 @@
     renderAll();
     renderGroupsManager();
     toast('Группа удалена');
+  }
+
+  /* ── Поставщики ───────────────────────────────── */
+
+  // список для фильтра (доступен всем)
+  function renderSupplierList() {
+    const counts = {};
+    for (const p of state.products) {
+      if (p.supplier_id) counts[p.supplier_id] = (counts[p.supplier_id] || 0) + 1;
+    }
+    let html = '';
+    if (state.supplierId) {
+      html += '<button class="btn btn-secondary btn-block" data-pick-supplier="">← Показать всех</button>';
+    }
+    html += state.suppliers.map((s) => `
+      <button class="btn btn-secondary btn-block" data-pick-supplier="${esc(s.id)}">
+        🚚 ${esc(s.name)} <span class="chip-count">${counts[s.id] || 0}</span>
+      </button>`).join('') || '<p class="muted">Поставщиков пока нет</p>';
+    $('supplierList').innerHTML = html;
+  }
+
+  // управление (только админ)
+  function renderSuppliersManager() {
+    $('suppliersManageList').innerHTML = state.suppliers.map((s) => `
+      <div class="group-row" data-id="${esc(s.id)}">
+        <input class="input supplier-name" value="${esc(s.name)}">
+        <button class="group-del" title="Удалить поставщика">🗑</button>
+      </div>`).join('') || '<p class="muted">Поставщиков пока нет — добавь первого ниже</p>';
+  }
+
+  async function addSupplier() {
+    const name = $('newSupplierName').value.trim();
+    if (!name) return;
+    const { error } = await sb.from('catalog_suppliers').insert({ name });
+    if (error) { toast('Ошибка: ' + error.message); return; }
+    $('newSupplierName').value = '';
+    await refresh({ silent: true });
+    renderAll();
+    renderSuppliersManager();
+    toast('Поставщик добавлен ✓');
+  }
+
+  async function renameSupplier(id, name) {
+    if (!name.trim()) return;
+    const { error } = await sb.from('catalog_suppliers').update({ name: name.trim() }).eq('id', id);
+    if (error) { toast('Ошибка: ' + error.message); return; }
+    await refresh({ silent: true });
+    renderAll();
+  }
+
+  async function deleteSupplier(id) {
+    const s = supplierById(id);
+    if (!confirm(`Удалить поставщика «${s?.name}»? Товары останутся — без поставщика.`)) return;
+    const { error } = await sb.from('catalog_suppliers').delete().eq('id', id);
+    if (error) { toast('Ошибка: ' + error.message); return; }
+    if (state.supplierId === id) state.supplierId = null;
+    await refresh({ silent: true });
+    renderAll();
+    renderSuppliersManager();
+    toast('Поставщик удалён');
   }
 
   /* ── Сканер штрихкода ─────────────────────────────
@@ -632,11 +724,35 @@
       input.focus();
     });
 
-    // Группы-фильтры
+    // Группы-фильтры + чип поставщика
     $('groupChips').addEventListener('click', (e) => {
       const chip = e.target.closest('.chip');
       if (!chip) return;
+      if (chip.hasAttribute('data-supplier-chip')) {
+        renderSupplierList();
+        openSheet('supplierSheet');
+        return;
+      }
       state.groupId = chip.dataset.group;
+      renderAll();
+    });
+
+    // выбор поставщика в списке
+    $('supplierList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pick-supplier]');
+      if (!btn) return;
+      state.supplierId = btn.dataset.pickSupplier || null;
+      closeSheet('supplierSheet');
+      renderAll();
+    });
+
+    // «все товары поставщика» из карточки товара
+    $('sheetSupplier').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-supplier-all]');
+      if (!btn) return;
+      state.supplierId = btn.dataset.supplierAll;
+      state.groupId = 'all';
+      closeSheet('productSheet');
       renderAll();
     });
 
@@ -759,6 +875,23 @@
     $('groupsList').addEventListener('click', (e) => {
       const del = e.target.closest('.group-del');
       if (del) deleteGroup(del.closest('.group-row').dataset.id);
+    });
+
+    // Поставщики (управление, только админ)
+    $('menuSuppliers').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      renderSuppliersManager();
+      openSheet('suppliersManageSheet');
+    });
+    $('btnAddSupplier').addEventListener('click', addSupplier);
+    $('newSupplierName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSupplier(); } });
+    $('suppliersManageList').addEventListener('change', (e) => {
+      const row = e.target.closest('.group-row');
+      if (row && e.target.classList.contains('supplier-name')) renameSupplier(row.dataset.id, e.target.value);
+    });
+    $('suppliersManageList').addEventListener('click', (e) => {
+      const del = e.target.closest('.group-del');
+      if (del) deleteSupplier(del.closest('.group-row').dataset.id);
     });
 
     // Возврат на вкладку — обновляем каталог, если данные старше 5 минут
