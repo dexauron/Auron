@@ -12,13 +12,26 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      # Сайт всегда собирается из двух независимых источников:
+      #   приложение Auron  — ветка claude/optimistic-einstein-Afzmv (папка app/)
+      #   каталог товаров   — ветка claude/store-product-catalog-60wer4 (папка catalog/)
+      # Пуш в любую из веток пересобирает сайт целиком, не затрагивая вторую часть.
+      - name: Checkout Auron app
         uses: actions/checkout@v4
+        with:
+          ref: claude/optimistic-einstein-Afzmv
+
+      - name: Checkout catalog
+        uses: actions/checkout@v4
+        with:
+          ref: claude/store-product-catalog-60wer4
+          path: catalog-src
 
       - name: Add catalog app
         run: |
+          rm -rf app/catalog
           mkdir -p app/catalog
-          cp -r catalog/. app/catalog/
+          cp -r catalog-src/catalog/. app/catalog/
           rm -rf app/catalog/setup
 
       - name: Deploy to gh-pages branch
