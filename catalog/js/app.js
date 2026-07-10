@@ -10,6 +10,8 @@
   const BUCKET = 'product-photos';
   const SEARCH_THRESHOLD = 25;
 
+  const PAGE_SIZE = 80; // карточек на экране до кнопки «Показать ещё»
+
   const state = {
     groups: [],
     suppliers: [],
@@ -19,12 +21,14 @@
     supplierId: null, // null = все поставщики
     session: null,
     lastFetch: 0,
+    renderLimit: PAGE_SIZE,
   };
 
   let sb = null;
   let currentProduct = null;   // товар, открытый в карточке
   let editingProduct = null;   // товар в форме редактирования (null = новый)
   let formPhotos = [];         // [{url}] сохранённые + [{blob, preview}] новые
+  let formSupplierIds = [];    // поставщики, выбранные в форме товара
 
   /* ── Утилиты ──────────────────────────────────── */
 
@@ -88,24 +92,43 @@
     return (2 * hits) / (a.length + b.length);
   }
 
+  // Поисковый индекс считается один раз при загрузке данных, а не на каждую букву —
+  // иначе на 15 000+ товаров поиск будет тормозить на телефоне
+  function buildIndex() {
+    for (const p of state.products) {
+      const name = norm(p.name);
+      p._name = name;
+      p._nameT = translit(name);
+      p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
+      const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
+      p._sup = norm(sup);
+      p._supT = translit(p._sup);
+      p._grp = norm(groupById(p.group_id)?.name || '');
+      p._grpT = translit(p._grp);
+      p._note = norm(p.note || '');
+    }
+  }
+
   // сравнение текста с запросом с учётом транслитерации (рус ↔ англ)
-  function matchText(text, qVars, weights) {
+  function matchPre(text, textT, qVars, w) {
+    if (!text) return 0;
     let s = 0;
-    for (const tv of variants(text)) {
-      const words = tv.split(/\s+/).filter(Boolean);
+    const tvs = text === textT ? [text] : [text, textT];
+    for (const tv of tvs) {
       for (const qv of qVars) {
-        if (tv.startsWith(qv)) s = Math.max(s, weights[0]);
-        else if (words.some((w) => w.startsWith(qv))) s = Math.max(s, weights[1]);
-        else if (tv.includes(qv)) s = Math.max(s, weights[2]);
+        if (tv.startsWith(qv)) s = Math.max(s, w[0]);
+        else if (tv.includes(' ' + qv)) s = Math.max(s, w[1]);
+        else if (tv.includes(qv)) s = Math.max(s, w[2]);
       }
     }
     return s;
   }
 
   // нечёткое совпадение — прощает опечатки («хатдок» найдёт «хот-дог», «сникерс» — Snickers)
-  function fuzzyScore(name, qVars) {
+  function fuzzyScore(name, nameT, qVars) {
     let best = 0;
-    for (const nv of variants(name)) {
+    const nvs = name === nameT ? [name] : [name, nameT];
+    for (const nv of nvs) {
       const clean = nv.replace(/[^a-zа-я0-9 ]/g, '');
       const words = clean.split(/\s+/).filter(Boolean);
       for (const qv of qVars) {
@@ -124,33 +147,27 @@
     return best;
   }
 
-  function scoreProduct(p, q) {
-    if (!q) return 1;
-    const qVars = variants(q);
-    const codes = [p.code, p.article, p.barcode, p.department].map(norm).filter(Boolean);
+  function scoreProduct(p, q, qVars) {
     let s = 0;
-
-    for (const c of codes) {
+    for (const c of p._codes) {
       if (c === q) return 120;
       if (c.startsWith(q)) s = Math.max(s, 95);
       else if (c.includes(q)) s = Math.max(s, 70);
     }
 
-    s = Math.max(s, matchText(norm(p.name), qVars, [100, 90, 80]));
-
-    // поиск по поставщику: «иванов» покажет все его товары
-    const supName = norm(supplierById(p.supplier_id)?.name);
-    if (supName) s = Math.max(s, matchText(supName, qVars, [60, 57, 55]));
-
-    const gName = norm(groupById(p.group_id)?.name);
-    if (gName) s = Math.max(s, matchText(gName, qVars, [45, 42, 40]));
-    if (p.note) s = Math.max(s, matchText(norm(p.note), qVars, [38, 36, 35]));
+    s = Math.max(s, matchPre(p._name, p._nameT, qVars, [100, 90, 80]));
+    if (p._sup) s = Math.max(s, matchPre(p._sup, p._supT, qVars, [60, 57, 55]));
+    if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 40]));
+    if (p._note) s = Math.max(s, matchPre(p._note, p._note, qVars, [38, 36, 35]));
     if (p.is_weighted && ('весовой'.startsWith(q) || 'весовые'.startsWith(q) || q === 'вес')) {
       s = Math.max(s, 45);
     }
 
-    const fuzzy = fuzzyScore(norm(p.name), qVars);
-    if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
+    // нечёткий поиск — только если точного совпадения не нашлось (экономит время на больших каталогах)
+    if (s < 60 && q.length >= 3) {
+      const fuzzy = fuzzyScore(p._name, p._nameT, qVars);
+      if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
+    }
     return s;
   }
 
@@ -159,18 +176,22 @@
     if (state.groupId === 'none') list = list.filter((p) => !p.group_id);
     else if (state.groupId === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.groupId !== 'all') list = list.filter((p) => p.group_id === state.groupId);
-    if (state.supplierId) list = list.filter((p) => p.supplier_id === state.supplierId);
+    if (state.supplierId) list = list.filter((p) => (p.supplier_ids || []).includes(state.supplierId));
 
     const q = norm(state.query);
     if (!q) return list;
+    const qT = translit(q);
+    const qVars = q === qT ? [q] : [q, qT];
     return list
-      .map((p) => ({ p, s: scoreProduct(p, q) }))
+      .map((p) => ({ p, s: scoreProduct(p, q, qVars) }))
       .filter((x) => x.s >= SEARCH_THRESHOLD)
       .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
       .map((x) => x.p);
   }
 
   /* ── Отрисовка ────────────────────────────────── */
+
+  const TOP_GROUPS = 12; // сколько групп показывать чипами, остальные — в «Ещё группы»
 
   function renderChips() {
     const counts = {};
@@ -187,12 +208,21 @@
       const sup = supplierById(state.supplierId);
       const label = sup ? `🚚 ${sup.name}` : '🚚 Поставщики';
       const cnt = sup
-        ? state.products.filter((p) => p.supplier_id === sup.id).length
+        ? state.products.filter((p) => (p.supplier_ids || []).includes(sup.id)).length
         : state.suppliers.length;
       html += `<button class="chip${sup ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
     if (weighted > 0) html += chipHtml('weighted', '⚖ Весовые', weighted);
-    for (const g of state.groups) html += chipHtml(g.id, g.name, counts[g.id] || 0);
+
+    // групп может быть 200 — чипами показываем самые крупные, остальные в списке «Ещё»
+    const sorted = [...state.groups].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
+    const top = sorted.slice(0, TOP_GROUPS);
+    const selected = groupById(state.groupId);
+    if (selected && !top.includes(selected)) top.unshift(selected);
+    for (const g of top) html += chipHtml(g.id, g.name, counts[g.id] || 0);
+    if (state.groups.length > TOP_GROUPS) {
+      html += `<button class="chip" data-groups-more>📁 Ещё группы<span class="chip-count">${state.groups.length - top.length}</span></button>`;
+    }
     if (noGroup > 0) html += chipHtml('none', 'Без группы', noGroup);
     $('groupChips').innerHTML = html;
   }
@@ -226,7 +256,9 @@
     }
 
     $('emptyState').hidden = true;
-    grid.innerHTML = list.map((p) => {
+    // на больших каталогах рисуем страницами — телефон не потянет 15 000 карточек разом
+    const shown = list.slice(0, state.renderLimit);
+    let html = shown.map((p) => {
       const photo = (p.photos || [])[0];
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy">`
@@ -234,10 +266,10 @@
       const tags = [];
       if (p.code) tags.push(`<span class="tag tag-code">Код ${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖ весовой</span>');
-      const sup = supplierById(p.supplier_id);
+      const sup = supplierById((p.supplier_ids || [])[0]);
       if (sup) tags.push(`<span class="tag">🚚 ${esc(sup.name)}</span>`);
       if (p.department) tags.push(`<span class="tag">Отдел ${esc(p.department)}</span>`);
-      if (!p.barcode) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
+      if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
       return `<article class="card" data-id="${esc(p.id)}">
         <div class="card-photo">${img}</div>
         <div class="card-body">
@@ -246,6 +278,18 @@
         </div>
       </article>`;
     }).join('');
+    grid.innerHTML = html;
+    document.querySelectorAll('.load-more').forEach((b) => b.remove());
+    if (list.length > shown.length) {
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-secondary load-more';
+      btn.textContent = `Показать ещё (осталось ${list.length - shown.length})`;
+      btn.addEventListener('click', () => {
+        state.renderLimit += 200;
+        renderGrid();
+      });
+      grid.after(btn);
+    }
   }
 
   function renderAll() { renderChips(); renderGrid(); }
@@ -269,18 +313,18 @@
     const g = groupById(p.group_id);
     if (g) badges.push(`<span class="tag">${esc(g.name)}</span>`);
     if (p.is_weighted) badges.push('<span class="tag">⚖ Весовой товар</span>');
-    if (!p.barcode) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
+    const barcodes = p.barcodes || [];
+    if (!barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
 
-    const sup = supplierById(p.supplier_id);
-    $('sheetSupplier').innerHTML = sup
-      ? `<button class="btn btn-secondary btn-block" data-supplier-all="${esc(sup.id)}">🚚 ${esc(sup.name)} — все товары поставщика</button>`
-      : '';
+    const sups = (p.supplier_ids || []).map(supplierById).filter(Boolean);
+    $('sheetSupplier').innerHTML = sups.map((s) =>
+      `<button class="btn btn-secondary btn-block" data-supplier-all="${esc(s.id)}">🚚 ${esc(s.name)} — все товары поставщика</button>`).join('');
 
     const rows = [];
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
     if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
-    if (p.barcode) rows.push(fieldRow('Штрихкод', p.barcode, false, true));
+    barcodes.forEach((b, i) => rows.push(fieldRow(barcodes.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод', b, false, true)));
     if (p.department) rows.push(fieldRow('Отдел', p.department));
     if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
     if (!rows.length) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
@@ -307,6 +351,7 @@
         state.groups = c.groups || [];
         state.suppliers = c.suppliers || [];
         state.products = c.products;
+        buildIndex();
         state.lastFetch = c.ts || 0;
         return true;
       }
@@ -316,25 +361,41 @@
 
   function saveCache() {
     try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        groups: state.groups, suppliers: state.suppliers,
-        products: state.products, ts: Date.now(),
-      }));
+      // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
+      localStorage.setItem(CACHE_KEY, JSON.stringify(
+        {
+          groups: state.groups, suppliers: state.suppliers,
+          products: state.products, ts: Date.now(),
+        },
+        (key, value) => (key.startsWith('_') ? undefined : value),
+      ));
     } catch (e) { /* нет места — не страшно, кэш вспомогательный */ }
+  }
+
+  // база отдаёт максимум 1000 строк за раз — большие каталоги забираем страницами
+  async function fetchAllRows(table, orderCol) {
+    const all = [];
+    const page = 1000;
+    for (let from = 0; ; from += page) {
+      const { data, error } = await sb.from(table).select('*')
+        .order(orderCol).order('id').range(from, from + page - 1);
+      if (error) throw error;
+      all.push(...data);
+      if (data.length < page) return all;
+    }
   }
 
   async function fetchData() {
     const [g, sup, p] = await Promise.all([
       sb.from('catalog_groups').select('*').order('sort_order').order('name'),
-      sb.from('catalog_suppliers').select('*').order('name'),
-      sb.from('catalog_products').select('*').order('name'),
+      fetchAllRows('catalog_suppliers', 'name'),
+      fetchAllRows('catalog_products', 'name'),
     ]);
     if (g.error) throw g.error;
-    if (sup.error) throw sup.error;
-    if (p.error) throw p.error;
     state.groups = g.data;
-    state.suppliers = sup.data;
-    state.products = p.data;
+    state.suppliers = sup;
+    state.products = p;
+    buildIndex();
     state.lastFetch = Date.now();
     saveCache();
     $('offlineBanner').hidden = true;
@@ -422,14 +483,16 @@
     $('fName').value = product?.name || '';
     $('fCode').value = product?.code || '';
     $('fArticle').value = product?.article || '';
-    $('fBarcode').value = product?.barcode || '';
+    $('fBarcodes').value = (product?.barcodes || []).join('\n');
     $('fWeighted').checked = !!product?.is_weighted;
     $('fDepartment').value = product?.department || '';
     $('fNote').value = product?.note || '';
     $('fGroup').innerHTML = '<option value="">Без группы</option>' +
       state.groups.map((g) => `<option value="${esc(g.id)}"${g.id === product?.group_id ? ' selected' : ''}>${esc(g.name)}</option>`).join('');
-    $('fSupplier').innerHTML = '<option value="">Не указан</option>' +
-      state.suppliers.map((s) => `<option value="${esc(s.id)}"${s.id === product?.supplier_id ? ' selected' : ''}>${esc(s.name)}</option>`).join('');
+    $('fSupplier').innerHTML = '<option value="">Выбрать поставщика…</option>' +
+      state.suppliers.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+    formSupplierIds = [...(product?.supplier_ids || [])];
+    renderFormSupplierTags();
     formPhotos = (product?.photos || []).map((url) => ({ url }));
     renderPhotoManager();
     $('formError').hidden = true;
@@ -452,10 +515,10 @@
       const record = {
         name: $('fName').value.trim(),
         group_id: $('fGroup').value || null,
-        supplier_id: $('fSupplier').value || null,
+        supplier_ids: formSupplierIds,
         code: $('fCode').value.trim() || null,
         article: $('fArticle').value.trim() || null,
-        barcode: $('fBarcode').value.trim() || null,
+        barcodes: $('fBarcodes').value.split('\n').map((s) => s.trim()).filter(Boolean),
         is_weighted: $('fWeighted').checked,
         department: $('fDepartment').value.trim() || null,
         note: $('fNote').value.trim() || null,
@@ -547,21 +610,55 @@
 
   /* ── Поставщики ───────────────────────────────── */
 
-  // список для фильтра (доступен всем)
+  // выбранные поставщики в форме товара
+  function renderFormSupplierTags() {
+    $('fSupplierTags').innerHTML = formSupplierIds.map((id) => {
+      const s = supplierById(id);
+      if (!s) return '';
+      return `<span class="tag">🚚 ${esc(s.name)} <button type="button" data-untag="${esc(id)}">✕</button></span>`;
+    }).join('') || '<span class="muted" style="margin:0">Не указаны</span>';
+  }
+
+  // список для фильтра (доступен всем; с поиском — поставщиков может быть много)
   function renderSupplierList() {
     const counts = {};
     for (const p of state.products) {
-      if (p.supplier_id) counts[p.supplier_id] = (counts[p.supplier_id] || 0) + 1;
+      for (const id of (p.supplier_ids || [])) counts[id] = (counts[id] || 0) + 1;
     }
+    const q = norm($('supplierSearch').value);
+    const filtered = q
+      ? state.suppliers.filter((s) => norm(s.name).includes(q) || translit(norm(s.name)).includes(translit(q)))
+      : state.suppliers;
     let html = '';
     if (state.supplierId) {
       html += '<button class="btn btn-secondary btn-block" data-pick-supplier="">← Показать всех</button>';
     }
-    html += state.suppliers.map((s) => `
+    html += filtered.slice(0, 100).map((s) => `
       <button class="btn btn-secondary btn-block" data-pick-supplier="${esc(s.id)}">
         🚚 ${esc(s.name)} <span class="chip-count">${counts[s.id] || 0}</span>
-      </button>`).join('') || '<p class="muted">Поставщиков пока нет</p>';
+      </button>`).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
+    if (filtered.length > 100) html += `<p class="muted">Показаны первые 100 из ${filtered.length} — уточни поиск</p>`;
     $('supplierList').innerHTML = html;
+  }
+
+  /* ── Все группы (список с поиском) ────────────── */
+
+  function renderGroupsPick() {
+    const counts = {};
+    for (const p of state.products) {
+      if (p.group_id) counts[p.group_id] = (counts[p.group_id] || 0) + 1;
+    }
+    const q = norm($('groupsPickSearch').value);
+    const filtered = q ? state.groups.filter((g) => norm(g.name).includes(q)) : state.groups;
+    let html = '';
+    if (state.groupId !== 'all') {
+      html += '<button class="btn btn-secondary btn-block" data-pick-group="all">← Показать все товары</button>';
+    }
+    html += filtered.map((g) => `
+      <button class="btn btn-secondary btn-block" data-pick-group="${esc(g.id)}">
+        📁 ${esc(g.name)} <span class="chip-count">${counts[g.id] || 0}</span>
+      </button>`).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
+    $('groupsPickList').innerHTML = html;
   }
 
   // управление (только админ)
@@ -603,6 +700,208 @@
     renderAll();
     renderSuppliersManager();
     toast('Поставщик удалён');
+  }
+
+  /* ── Импорт из 1С (Excel) ─────────────────────────
+   * Файл 1 — отчёт «Цены поставщиков»: товары, коды, группы, поставщики, ед.изм.
+   * Файл 2 (не обязателен) — отчёт «Штрихкоды номенклатуры»: все штрихкоды.
+   * Товары объединяются по «Код товара»; существующие обновляются, фото сохраняются. */
+
+  let impParsed = null; // результат разбора файлов, ждёт подтверждения
+
+  function loadXlsxLib() {
+    if (window.XLSX) return Promise.resolve();
+    return loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  }
+
+  function cellStr(v) {
+    if (v == null) return '';
+    if (typeof v === 'number') return String(Math.round(v));
+    return String(v).trim();
+  }
+
+  async function readSheet(file) {
+    const buf = await file.arrayBuffer();
+    const wb = window.XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
+  }
+
+  // ищем строку заголовков и определяем, в какой колонке что лежит
+  function detectColumns(rows) {
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const labels = rows[r].map((v) => cellStr(v).toLowerCase());
+      const next = (rows[r + 1] || []).map((v) => cellStr(v).toLowerCase());
+      if (!labels.some((l) => l.includes('номенклатура') || l.includes('наименование'))) continue;
+
+      const cols = {};
+      const width = Math.max(labels.length, next.length);
+      for (let c = 0; c < width; c++) {
+        const l = (labels[c] || '') + ' ' + (next[c] || '');
+        if (!l.trim()) continue;
+        if (l.includes('артикул')) cols.article ??= c;
+        else if (l.includes('штрих')) cols.barcode ??= c;
+        else if (l.includes('код товара') || l.includes('номенклатура.код')) cols.code = c;
+        else if (l.includes('код') && cols.code === undefined) cols.code = c;
+        else if (l.includes('контрагент') || l.includes('поставщик')) cols.supplier ??= c;
+        else if (l.includes('единиц')) cols.unit ??= c;
+        else if (l.includes('групп')) cols.group ??= c;
+        else if ((l.includes('номенклатура') || l.includes('наименование')) && cols.name === undefined) cols.name = c;
+      }
+      if (cols.name === undefined) continue;
+      // если следующая строка — подзаголовки («Номенклатура.Код»), данные начинаются через одну
+      const hasSubheader = next.some((l) => l.includes('номенклатура.'));
+      return { cols, dataStart: r + (hasSubheader ? 2 : 1) };
+    }
+    return null;
+  }
+
+  function parsePriceReport(rows) {
+    const det = detectColumns(rows);
+    if (!det) throw new Error('Не нашёл строку заголовков (Номенклатура, Код товара…) в файле 1');
+    const { cols, dataStart } = det;
+    const byKey = new Map();
+    for (let r = dataStart; r < rows.length; r++) {
+      const row = rows[r];
+      const name = cellStr(row[cols.name]);
+      if (!name) continue;
+      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      const key = code || norm(name);
+      let item = byKey.get(key);
+      if (!item) {
+        item = { name, code: code || null, article: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false };
+        byKey.set(key, item);
+      }
+      const art = cols.article !== undefined ? cellStr(row[cols.article]) : '';
+      const grp = cols.group !== undefined ? cellStr(row[cols.group]) : '';
+      const sup = cols.supplier !== undefined ? cellStr(row[cols.supplier]) : '';
+      const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
+      const unit = cols.unit !== undefined ? cellStr(row[cols.unit]).toLowerCase() : '';
+      if (art && !item.article) item.article = art;
+      if (grp && !item.group) item.group = grp;
+      if (sup) item.suppliers.add(sup);
+      if (bc) item.barcodes.add(bc);
+      if (unit === 'кг') item.weighted = true;
+    }
+    return byKey;
+  }
+
+  // второй файл: пары «товар — штрихкод», добавляем штрихкоды к товарам из первого
+  function mergeBarcodesReport(rows, byKey) {
+    const det = detectColumns(rows);
+    if (!det) throw new Error('Не нашёл строку заголовков в файле 2');
+    const { cols, dataStart } = det;
+    const byName = new Map();
+    for (const item of byKey.values()) byName.set(norm(item.name), item);
+    let added = 0;
+    for (let r = dataStart; r < rows.length; r++) {
+      const row = rows[r];
+      const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
+      if (!bc) continue;
+      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      const name = cellStr(row[cols.name]);
+      const item = (code && byKey.get(code)) || byName.get(norm(name));
+      if (item && !item.barcodes.has(bc)) { item.barcodes.add(bc); added++; }
+    }
+    return added;
+  }
+
+  function impStatus(msg) {
+    const el = $('impStatus');
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  async function impParse() {
+    const f1 = $('impFile1').files[0];
+    if (!f1) { impStatus('Сначала выбери файл 1 — отчёт «Цены поставщиков»'); return; }
+    impStatus('Читаем файлы…');
+    await loadXlsxLib();
+    const byKey = parsePriceReport(await readSheet(f1));
+    let extra = 0;
+    const f2 = $('impFile2').files[0];
+    if (f2) extra = mergeBarcodesReport(await readSheet(f2), byKey);
+    const items = [...byKey.values()];
+    const groups = new Set(items.map((i) => i.group).filter(Boolean));
+    const sups = new Set();
+    items.forEach((i) => i.suppliers.forEach((s) => sups.add(s)));
+    const withBc = items.filter((i) => i.barcodes.size).length;
+    impParsed = items;
+    impStatus(`Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков. `
+      + `Со штрихкодами: ${withBc}${extra ? ` (+${extra} штрихкодов из файла 2)` : ''}. `
+      + 'Проверь цифры и нажми кнопку ещё раз — начнётся загрузка.');
+    $('impRun').textContent = `⬆ Загрузить ${items.length} товаров в каталог`;
+  }
+
+  async function getOrCreateByName(table, names, existing) {
+    const map = new Map(existing.map((x) => [norm(x.name), x.id]));
+    const missing = [...new Set(names.filter((n) => !map.has(norm(n))))];
+    for (let i = 0; i < missing.length; i += 500) {
+      const chunk = missing.slice(i, i + 500).map((name) => ({ name }));
+      const { data, error } = await sb.from(table).insert(chunk).select();
+      if (error) throw error;
+      data.forEach((x) => map.set(norm(x.name), x.id));
+    }
+    return map;
+  }
+
+  async function impUpload() {
+    const items = impParsed;
+    const btn = $('impRun');
+    btn.disabled = true;
+    try {
+      impStatus('Создаём группы и поставщиков…');
+      const groupMap = await getOrCreateByName('catalog_groups',
+        items.map((i) => i.group).filter(Boolean), state.groups);
+      const supMap = await getOrCreateByName('catalog_suppliers',
+        items.flatMap((i) => [...i.suppliers]), state.suppliers);
+
+      const withCode = [];
+      const noCode = [];
+      for (const i of items) {
+        const rec = {
+          name: i.name,
+          code: i.code,
+          article: i.article,
+          group_id: i.group ? groupMap.get(norm(i.group)) : null,
+          supplier_ids: [...i.suppliers].map((s) => supMap.get(norm(s))).filter(Boolean),
+          barcodes: [...i.barcodes],
+          is_weighted: i.weighted,
+          updated_at: new Date().toISOString(),
+        };
+        (i.code ? withCode : noCode).push(rec);
+      }
+
+      let done = 0;
+      const total = withCode.length + noCode.length;
+      for (let i = 0; i < withCode.length; i += 400) {
+        const { error } = await sb.from('catalog_products')
+          .upsert(withCode.slice(i, i + 400), { onConflict: 'code' });
+        if (error) throw error;
+        done += Math.min(400, withCode.length - i);
+        impStatus(`Загружаем товары… ${done} из ${total}`);
+      }
+      for (let i = 0; i < noCode.length; i += 400) {
+        const { error } = await sb.from('catalog_products').insert(noCode.slice(i, i + 400));
+        if (error) throw error;
+        done += Math.min(400, noCode.length - i);
+        impStatus(`Загружаем товары… ${done} из ${total}`);
+      }
+
+      impStatus('Обновляем каталог…');
+      await refresh({ silent: true });
+      renderAll();
+      impStatus(`Готово! Загружено ${total} товаров ✓ Можно закрыть окно.`);
+      toast('Импорт завершён ✓');
+      impParsed = null;
+      btn.textContent = 'Проверить файлы';
+    } catch (err) {
+      impStatus('Ошибка: ' + (err.message || err) + '. Если база ещё старой версии — выполни setup/ОБНОВЛЕНИЕ-1.sql в SQL Editor и повтори.');
+      impParsed = null;
+      btn.textContent = 'Проверить файлы';
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   /* ── Сканер штрихкода ─────────────────────────────
@@ -697,7 +996,7 @@
     state.query = text;
     $('searchClear').hidden = false;
     renderGrid();
-    const p = state.products.find((x) => norm(x.barcode) === norm(text));
+    const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
     if (p) openProduct(p);
     else toast('Товар с таким штрихкодом в каталоге не найден');
   }
@@ -712,39 +1011,62 @@
       clearTimeout(debounce);
       debounce = setTimeout(() => {
         state.query = input.value;
+        state.renderLimit = PAGE_SIZE;
         $('searchClear').hidden = !input.value;
         renderGrid();
-      }, 120);
+      }, 150);
     });
     $('searchClear').addEventListener('click', () => {
       input.value = '';
       state.query = '';
+      state.renderLimit = PAGE_SIZE;
       $('searchClear').hidden = true;
       renderGrid();
       input.focus();
     });
 
-    // Группы-фильтры + чип поставщика
+    // Группы-фильтры + чипы поставщика и «Ещё группы»
     $('groupChips').addEventListener('click', (e) => {
       const chip = e.target.closest('.chip');
       if (!chip) return;
       if (chip.hasAttribute('data-supplier-chip')) {
+        $('supplierSearch').value = '';
         renderSupplierList();
         openSheet('supplierSheet');
         return;
       }
+      if (chip.hasAttribute('data-groups-more')) {
+        $('groupsPickSearch').value = '';
+        renderGroupsPick();
+        openSheet('groupsPickSheet');
+        return;
+      }
       state.groupId = chip.dataset.group;
+      state.renderLimit = PAGE_SIZE;
       renderAll();
     });
 
-    // выбор поставщика в списке
+    // выбор поставщика в списке (+ живой поиск по списку)
     $('supplierList').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-pick-supplier]');
       if (!btn) return;
       state.supplierId = btn.dataset.pickSupplier || null;
+      state.renderLimit = PAGE_SIZE;
       closeSheet('supplierSheet');
       renderAll();
     });
+    $('supplierSearch').addEventListener('input', renderSupplierList);
+
+    // выбор группы в полном списке (+ живой поиск)
+    $('groupsPickList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pick-group]');
+      if (!btn) return;
+      state.groupId = btn.dataset.pickGroup;
+      state.renderLimit = PAGE_SIZE;
+      closeSheet('groupsPickSheet');
+      renderAll();
+    });
+    $('groupsPickSearch').addEventListener('input', renderGroupsPick);
 
     // «все товары поставщика» из карточки товара
     $('sheetSupplier').addEventListener('click', (e) => {
@@ -752,6 +1074,7 @@
       if (!btn) return;
       state.supplierId = btn.dataset.supplierAll;
       state.groupId = 'all';
+      state.renderLimit = PAGE_SIZE;
       closeSheet('productSheet');
       renderAll();
     });
@@ -834,12 +1157,31 @@
     $('btnDeleteProduct').addEventListener('click', deleteProduct);
     $('productForm').addEventListener('submit', submitForm);
 
-    // Сканер: для всех — поиск товара; в форме админа — заполнение штрихкода
+    // Сканер: для всех — поиск товара; в форме админа — добавляет штрихкод в список
     $('scanSearchBtn').addEventListener('click', () => startScan(scanToSearch));
     $('btnScan').addEventListener('click', () => startScan((text) => {
-      $('fBarcode').value = text;
+      const ta = $('fBarcodes');
+      const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
+      if (!lines.includes(text)) lines.push(text);
+      ta.value = lines.join('\n');
       toast('Штрихкод считан ✓');
     }));
+
+    // Поставщики в форме товара: добавить из списка / убрать тапом по ✕
+    $('btnAddSupplierToProduct').addEventListener('click', () => {
+      const id = $('fSupplier').value;
+      if (id && !formSupplierIds.includes(id)) {
+        formSupplierIds.push(id);
+        renderFormSupplierTags();
+      }
+      $('fSupplier').value = '';
+    });
+    $('fSupplierTags').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-untag]');
+      if (!btn) return;
+      formSupplierIds = formSupplierIds.filter((id) => id !== btn.dataset.untag);
+      renderFormSupplierTags();
+    });
 
     // Фото в форме
     $('photoManager').addEventListener('click', (e) => {
@@ -875,6 +1217,37 @@
     $('groupsList').addEventListener('click', (e) => {
       const del = e.target.closest('.group-del');
       if (del) deleteGroup(del.closest('.group-row').dataset.id);
+    });
+
+    // Импорт из 1С (только админ)
+    $('menuImport').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      impParsed = null;
+      $('impRun').textContent = 'Проверить файлы';
+      $('impStatus').hidden = true;
+      openSheet('importSheet');
+    });
+    $('impFile1').addEventListener('change', () => {
+      $('impFile1Name').textContent = $('impFile1').files[0]?.name || '';
+      impParsed = null;
+      $('impRun').textContent = 'Проверить файлы';
+    });
+    $('impFile2').addEventListener('change', () => {
+      $('impFile2Name').textContent = $('impFile2').files[0]?.name || '';
+      impParsed = null;
+      $('impRun').textContent = 'Проверить файлы';
+    });
+    $('impRun').addEventListener('click', async () => {
+      const btn = $('impRun');
+      if (impParsed) { impUpload(); return; }
+      btn.disabled = true;
+      try {
+        await impParse();
+      } catch (err) {
+        impStatus('Ошибка чтения: ' + (err.message || err));
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     // Поставщики (управление, только админ)
@@ -936,4 +1309,7 @@
   }
 
   init();
+
+  // для автотестов разбора 1С-файлов (не влияет на работу приложения)
+  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport };
 })();

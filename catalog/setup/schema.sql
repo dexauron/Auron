@@ -20,10 +20,10 @@ create table if not exists catalog_products (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
   group_id   uuid references catalog_groups(id) on delete set null,
-  supplier_id uuid references catalog_suppliers(id) on delete set null, -- от какого поставщика приходит
+  supplier_ids jsonb not null default '[]', -- поставщики товара (может быть несколько)
   code       text,          -- код кассы
   article    text,          -- артикул
-  barcode    text,          -- штрихкод (пусто = штрихкода нет)
+  barcodes   jsonb not null default '[]', -- штрихкоды (может быть несколько; пусто = нет)
   is_weighted boolean not null default false, -- весовой товар
   department text,          -- отдел / секция кассы
   note       text,          -- примечание
@@ -32,8 +32,8 @@ create table if not exists catalog_products (
   updated_at timestamptz not null default now()
 );
 
-create index if not exists idx_products_group    on catalog_products(group_id);
-create index if not exists idx_products_supplier on catalog_products(supplier_id);
+create index if not exists idx_products_group on catalog_products(group_id);
+create unique index if not exists uq_products_code on catalog_products(code); -- для импорта из 1С
 
 -- ── Права доступа: читать могут все, менять — только вошедший админ ──
 

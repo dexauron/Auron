@@ -107,6 +107,7 @@
         <h2 class="sheet-title">Администратор</h2>
         <p class="muted" id="adminEmail"></p>
         <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
+        <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
         <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
         <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
         <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
@@ -132,8 +133,12 @@
           <label class="field-label">Группа</label>
           <select id="fGroup" class="input"></select>
 
-          <label class="field-label">Поставщик <span class="hint">— от кого приходит товар</span></label>
-          <select id="fSupplier" class="input"></select>
+          <label class="field-label">Поставщики <span class="hint">— можно несколько</span></label>
+          <div id="fSupplierTags" class="tag-picker"></div>
+          <div class="input-row">
+            <select id="fSupplier" class="input"></select>
+            <button type="button" class="btn btn-secondary" id="btnAddSupplierToProduct">＋</button>
+          </div>
 
           <div class="input-pair">
             <div>
@@ -146,9 +151,9 @@
             </div>
           </div>
 
-          <label class="field-label">Штрихкод <span class="hint">— пусто, если штрихкода нет</span></label>
+          <label class="field-label">Штрихкоды <span class="hint">— каждый с новой строки; пусто, если нет</span></label>
           <div class="input-row">
-            <input type="text" id="fBarcode" class="input" inputmode="numeric" placeholder="4600000000000">
+            <textarea id="fBarcodes" class="input" rows="2" placeholder="4600000000000"></textarea>
             <button type="button" class="btn btn-secondary btn-scan" id="btnScan">📷</button>
           </div>
 
@@ -175,8 +180,46 @@
       <div class="sheet-body">
         <h2 class="sheet-title">Поставщики</h2>
         <p class="muted">Выбери поставщика — покажем все его товары</p>
+        <input type="search" id="supplierSearch" class="input" placeholder="Найти поставщика…" autocomplete="off">
         <div id="supplierList"></div>
         <button class="btn btn-ghost sheet-close" data-close="supplierSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Выбор группы (все группы, доступен всем) -->
+  <div class="sheet-backdrop" id="groupsPickSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Все группы</h2>
+        <input type="search" id="groupsPickSearch" class="input" placeholder="Найти группу…" autocomplete="off">
+        <div id="groupsPickList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="groupsPickSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт из 1С (только админ) -->
+  <div class="sheet-backdrop" id="importSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Импорт из 1С</h2>
+        <p class="muted">Файл 1 — отчёт «Цены поставщиков» (обязательный). Файл 2 — отчёт
+        «Штрихкоды номенклатуры», если нужны все штрихкоды (необязательный).
+        Товары объединяются по коду: существующие обновятся, фото не тронутся.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл 1 — цены и товары
+          <input type="file" id="impFile1" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="impFile1Name"></div>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл 2 — штрихкоды (не обязательно)
+          <input type="file" id="impFile2" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="impFile2Name"></div>
+        <button class="btn btn-primary btn-block" id="impRun">Проверить файлы</button>
+        <div class="banner banner-info" id="impStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="importSheet">Закрыть</button>
       </div>
     </div>
   </div>
