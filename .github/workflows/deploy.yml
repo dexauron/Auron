@@ -15,6 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Add catalog app
+        run: |
+          mkdir -p app/catalog
+          cp -r catalog/. app/catalog/
+          rm -rf app/catalog/setup
+
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         with:
