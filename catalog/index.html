@@ -7,6 +7,8 @@
   <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
   <title>Way Market · Каталог</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -117,6 +119,7 @@
           <button class="btn btn-secondary btn-block" id="menuSalesImport">📈 Импорт продаж (Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+          <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
         </div>
         <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
         <button class="btn btn-ghost sheet-close" data-close="adminMenuSheet">Закрыть</button>
@@ -297,6 +300,27 @@
         <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
         <div class="banner banner-info" id="salesStatus" hidden></div>
         <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Пароль магазина (только админ) -->
+  <div class="sheet-backdrop" id="staffPassSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🔑 Пароль магазина</h2>
+        <p class="muted">Общий пароль, по которому входят сотрудники. После смены
+        <b>все их устройства выйдут из системы</b> — скажи новый пароль смене.
+        Меняй его при увольнении сотрудника.</p>
+        <form id="staffPassForm">
+          <label class="field-label">Новый пароль магазина <span class="hint">— от 6 символов</span></label>
+          <input type="text" id="newStaffPass" class="input" required minlength="6" autocomplete="off">
+          <div class="form-error" id="staffPassError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="staffPassSubmit">Сменить пароль и выгнать устройства</button>
+        </form>
+        <button class="btn btn-secondary btn-block" id="btnLogoutStaff">🚪 Только выгнать все устройства сотрудников</button>
+        <button class="btn btn-ghost sheet-close" data-close="staffPassSheet">Закрыть</button>
       </div>
     </div>
   </div>

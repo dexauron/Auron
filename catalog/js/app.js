@@ -366,15 +366,28 @@
       if (error) throw error;
       rows = data;
     } catch (e) {
-      box.innerHTML = ''; // база старой версии или нет связи — блок просто не показываем
+      if (currentProduct !== p) return;
+      // нет связи — показываем цены, сохранённые на телефоне (если карточку уже открывали)
+      const cached = readPriceCache()[p.id];
+      if (cached && cached.rows.length) {
+        renderPriceRows(p, cached.rows,
+          `⚠ Нет связи — показаны цены, сохранённые ${fmtDate(new Date(cached.ts).toISOString())}`);
+      } else {
+        box.innerHTML = ''; // база старой версии или кэша нет — блок не показываем
+      }
       return;
     }
     if (currentProduct !== p) return; // пока грузили, открыли другой товар
+    cachePrices(p.id, rows);
     if (!rows.length) {
       box.innerHTML = '<p class="muted">Цен поставщиков пока нет — появятся после импорта из 1С</p>';
       return;
     }
+    renderPriceRows(p, rows);
+  }
 
+  function renderPriceRows(p, rows, staleNote) {
+    const box = $('sheetPrices');
     // по каждому поставщику: свежая цена + история (строки уже от новых к старым)
     const bySup = new Map();
     for (const r of rows) {
@@ -421,6 +434,7 @@
     }).join('');
 
     box.innerHTML = `<div class="price-block"><div class="price-title">Цены поставщиков</div>${rowsHtml}`
+      + (staleNote ? `<p class="muted price-hint">${esc(staleNote)}</p>` : '')
       + (entries.some((e) => e.hist.length > 1) ? '<p class="muted price-hint">Нажми на строку — покажем историю цены</p>' : '')
       + '</div>';
   }
@@ -528,6 +542,11 @@
       loadContacts();
     } else {
       state.contacts = {};
+      // при выходе стираем сохранённые цены и контакты — они только для вошедших
+      try {
+        localStorage.removeItem(PRICE_CACHE_KEY);
+        localStorage.removeItem(CONTACTS_CACHE_KEY);
+      } catch (e) { /* некритично */ }
     }
     $('fabAdd').hidden = !state.isAdmin;
     $('adminBtn').classList.toggle('is-admin', !!session);
@@ -543,10 +562,41 @@
       const { data, error } = await sb.from('catalog_supplier_contacts').select('*');
       if (error) throw error;
       state.contacts = Object.fromEntries(data.map((c) => [c.supplier_id, c]));
+      try { localStorage.setItem(CONTACTS_CACHE_KEY, JSON.stringify(state.contacts)); } catch (e) { /* нет места */ }
     } catch (e) {
-      state.contacts = {}; // база старой версии — работаем без контактов
+      // нет связи — берём сохранённые контакты; база старой версии — работаем без них
+      try { state.contacts = JSON.parse(localStorage.getItem(CONTACTS_CACHE_KEY)) || {}; }
+      catch (e2) { state.contacts = {}; }
     }
     if (!$('productSheet').hidden && currentProduct) renderProductPrices(currentProduct);
+  }
+
+  /* ── Кэш цен на телефоне: карточки открываются и без связи ── */
+
+  const PRICE_CACHE_KEY = 'wm_price_cache_v1';
+  const CONTACTS_CACHE_KEY = 'wm_contacts_cache_v1';
+  const PRICE_CACHE_MAX = 400; // товаров в кэше; старые вытесняются
+
+  function readPriceCache() {
+    try { return JSON.parse(localStorage.getItem(PRICE_CACHE_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+
+  function cachePrices(productId, rows) {
+    try {
+      const all = readPriceCache();
+      all[productId] = {
+        rows: rows.map(({ supplier_id, price, price_date }) => ({ supplier_id, price, price_date })),
+        ts: Date.now(),
+      };
+      const keys = Object.keys(all);
+      if (keys.length > PRICE_CACHE_MAX) {
+        keys.sort((a, b) => all[a].ts - all[b].ts)
+          .slice(0, keys.length - PRICE_CACHE_MAX)
+          .forEach((k) => delete all[k]);
+      }
+      localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(all));
+    } catch (e) { /* нет места — кэш вспомогательный */ }
   }
 
   /* ── Админ: фото в форме ──────────────────────── */
@@ -1097,13 +1147,29 @@
           if (sid) priceRows.push({ product_id: pid, supplier_id: sid, price, price_date: today });
         }
       }
+      // база пишет только новые и изменившиеся цены — одинаковые не плодят строк
       let pricesSaved = 0;
+      let pricesChanged = 0;
       let pricesError = null;
+      let smartSave = true;
       for (let i = 0; i < priceRows.length; i += 500) {
-        const { error } = await sb.from('catalog_prices')
-          .upsert(priceRows.slice(i, i + 500), { onConflict: 'product_id,supplier_id,price_date' });
-        if (error) { pricesError = error; break; }
-        pricesSaved += Math.min(500, priceRows.length - i);
+        const chunk = priceRows.slice(i, i + 500);
+        if (smartSave) {
+          const { data, error } = await sb.rpc('catalog_save_prices', { p_rows: chunk });
+          if (error && /catalog_save_prices/.test(error.message || '')) {
+            smartSave = false; // база без ОБНОВЛЕНИЯ-4 — пишем по-старому
+            i -= 500;
+            continue;
+          }
+          if (error) { pricesError = error; break; }
+          pricesChanged += data || 0;
+        } else {
+          const { error } = await sb.from('catalog_prices')
+            .upsert(chunk, { onConflict: 'product_id,supplier_id,price_date' });
+          if (error) { pricesError = error; break; }
+          pricesChanged += chunk.length;
+        }
+        pricesSaved += chunk.length;
         impStatus(`Сохраняем цены… ${pricesSaved} из ${priceRows.length}`);
       }
 
@@ -1114,7 +1180,10 @@
         impStatus(`Товары загружены (${total} ✓), но цены сохранить не удалось: ${pricesError.message}. `
           + 'Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-2.sql в SQL Editor и повтори импорт.');
       } else {
-        impStatus(`Готово! Загружено ${total} товаров${pricesSaved ? ` и ${pricesSaved} цен` : ''} ✓ Можно закрыть окно.`);
+        const priceNote = priceRows.length
+          ? ` Цены: изменилось ${pricesChanged} из ${priceRows.length} (одинаковые не записываются — база не растёт зря).`
+          : '';
+        impStatus(`Готово! Загружено ${total} товаров ✓${priceNote} Можно закрыть окно.`);
       }
       toast('Импорт завершён ✓');
       impParsed = null;
@@ -1554,6 +1623,47 @@
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
+    // Пароль магазина (только админ): смена выкидывает все устройства сотрудников
+    $('menuStaffPass').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      $('newStaffPass').value = '';
+      $('staffPassError').hidden = true;
+      openSheet('staffPassSheet');
+    });
+
+    $('staffPassForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!confirm('Сменить пароль магазина? Все устройства сотрудников выйдут из системы.')) return;
+      const btn = $('staffPassSubmit');
+      btn.disabled = true;
+      $('staffPassError').hidden = true;
+      const { error } = await sb.rpc('catalog_set_staff_password', {
+        p_password: $('newStaffPass').value.trim(),
+      });
+      btn.disabled = false;
+      if (error) {
+        $('staffPassError').textContent = 'Не получилось: ' + (error.message || error)
+          + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-4.sql в SQL Editor.';
+        $('staffPassError').hidden = false;
+        return;
+      }
+      closeSheet('staffPassSheet');
+      toast('Пароль магазина изменён ✓ Устройства сотрудников выйдут в течение часа');
+    });
+
+    $('btnLogoutStaff').addEventListener('click', async () => {
+      if (!confirm('Выгнать все устройства сотрудников? Им придётся войти заново с текущим паролем.')) return;
+      const { error } = await sb.rpc('catalog_logout_staff');
+      if (error) {
+        $('staffPassError').textContent = 'Не получилось: ' + (error.message || error)
+          + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-4.sql в SQL Editor.';
+        $('staffPassError').hidden = false;
+        return;
+      }
+      closeSheet('staffPassSheet');
+      toast('Готово ✓ Устройства сотрудников выйдут в течение часа');
+    });
+
     $('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = $('loginSubmit');
@@ -1783,6 +1893,11 @@
 
   async function init() {
     bindEvents();
+
+    // офлайн-копия приложения + установка на главный экран телефона
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* например, локальный запуск с file:// */ });
+    }
 
     if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
       $('setupBanner').hidden = false;
