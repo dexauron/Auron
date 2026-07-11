@@ -223,6 +223,7 @@
         : state.suppliers.length;
       html += `<button class="chip${sup ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
+    if (state.session) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
     if (weighted > 0) html += chipHtml('weighted', '⚖ Весовые', weighted);
 
     // групп может быть 200 — чипами показываем самые крупные, остальные в списке «Ещё»
@@ -534,7 +535,7 @@
       $('sheetAdminActions').hidden = !state.isAdmin;
       if (currentProduct) renderProductPrices(currentProduct);
     }
-    renderGrid();
+    renderAll(); // и сетка, и чипы — после входа появляется «🔥 Ходовые»
   }
 
   async function loadContacts() {
@@ -919,6 +920,9 @@
         else if (l.includes('контрагент') || l.includes('поставщик')) cols.supplier ??= c;
         else if (l.includes('единиц') || /(^|\s)ед\.?(\s|$)/.test(l)) cols.unit ??= c; // «Единица измерения» или «Ед.»
         else if (l.includes('цена')) cols.price ??= c;
+        else if (l.includes('количество') || /(^|\s)кол-?во(\s|$)/.test(l)) cols.qty ??= c;
+        else if (l.includes('сумма') || l.includes('выручка')) cols.amount ??= c;
+        else if (l.includes('дата') || l.includes('период')) cols.date ??= c;
         else if (l.includes('групп')) cols.group ??= c;
         else if ((l.includes('номенклатура') || l.includes('наименование')) && cols.name === undefined) cols.name = c;
       }
@@ -1124,6 +1128,184 @@
     }
   }
 
+  /* ── Импорт продаж из 1С ──────────────────────────
+   * Отчёт «Продажи»: товар + количество (+ сумма, + дата/период, если есть).
+   * Есть колонка даты — продажи раскладываются по дням из файла;
+   * нет — все строки записываются на дату, выбранную админом. */
+
+  let salesParsed = null;
+
+  // дата из ячейки Excel: число-«серийник» или строка «01.07.2026»
+  function parseDateCell(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number' && v > 20000 && v < 80000) {
+      return new Date(Date.UTC(1899, 11, 30) + v * 86400000).toISOString().slice(0, 10);
+    }
+    const s = String(v);
+    let m = s.match(/(\d{1,2})\.(\d{1,2})\.(\d{2,4})/);
+    if (m) {
+      const y = m[3].length === 2 ? '20' + m[3] : m[3];
+      return `${y}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
+    m = s.match(/\d{4}-\d{2}-\d{2}/);
+    return m ? m[0] : null;
+  }
+
+  function parseSalesReport(rows) {
+    const det = detectColumns(rows);
+    if (!det) throw new Error('Не нашёл строку заголовков (Номенклатура…) в отчёте');
+    const { cols, dataStart } = det;
+    if (cols.qty === undefined) throw new Error('Не нашёл колонку «Количество» — выгрузи отчёт «Продажи» с количеством');
+    const recs = new Map(); // товар × дата → количество и сумма
+    const dates = new Set();
+    for (let r = dataStart; r < rows.length; r++) {
+      const row = rows[r];
+      const name = cellStr(row[cols.name]);
+      if (!name) continue;
+      const qty = parsePriceNum(row[cols.qty]);
+      if (qty == null) continue; // итоговые и пустые строки
+      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      const date = cols.date !== undefined ? parseDateCell(row[cols.date]) : null;
+      const amount = cols.amount !== undefined ? parsePriceNum(row[cols.amount]) : null;
+      const key = (code || norm(name)) + '::' + (date || '');
+      let rec = recs.get(key);
+      if (!rec) {
+        rec = { code: code || null, name, date, qty: 0, amount: 0, hasAmount: false };
+        recs.set(key, rec);
+      }
+      rec.qty += qty;
+      if (amount != null) { rec.amount += amount; rec.hasAmount = true; }
+      if (date) dates.add(date);
+    }
+    return { recs: [...recs.values()], dates: [...dates].sort(), hasDateCol: cols.date !== undefined };
+  }
+
+  function salesStatus(msg) {
+    const el = $('salesStatus');
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  async function salesParse() {
+    const f = $('salesFile').files[0];
+    if (!f) { salesStatus('Сначала выбери файл — отчёт «Продажи» из 1С'); return; }
+    salesStatus('Читаем файл…');
+    await loadXlsxLib();
+    salesParsed = parseSalesReport(await readSheet(f));
+    const { recs, dates, hasDateCol } = salesParsed;
+    if (!recs.length) { salesParsed = null; salesStatus('В файле не нашлось строк с продажами'); return; }
+    const when = hasDateCol && dates.length
+      ? `Даты в файле: ${fmtDate(dates[0])} — ${fmtDate(dates[dates.length - 1])}.`
+      : `Колонки с датой в файле нет — все продажи запишутся на ${fmtDate($('salesDate').value || new Date().toISOString().slice(0, 10))}.`;
+    salesStatus(`Найдено строк продаж: ${recs.length}. ${when} `
+      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка.');
+    $('salesRun').textContent = `⬆ Загрузить продажи (${recs.length})`;
+  }
+
+  async function salesUpload() {
+    const { recs } = salesParsed;
+    const btn = $('salesRun');
+    btn.disabled = true;
+    try {
+      const fallbackDate = $('salesDate').value || new Date().toISOString().slice(0, 10);
+      const byCode = new Map();
+      const byName = new Map();
+      for (const p of state.products) {
+        if (p.code) byCode.set(p.code, p.id);
+        byName.set(norm(p.name), p.id);
+      }
+      const out = new Map(); // товар в базе × дата → строка для сохранения
+      let unmatched = 0;
+      for (const r of recs) {
+        const pid = (r.code && byCode.get(r.code)) || byName.get(norm(r.name));
+        if (!pid) { unmatched++; continue; }
+        const date = r.date || fallbackDate;
+        const k = pid + '::' + date;
+        let row = out.get(k);
+        if (!row) { row = { product_id: pid, sale_date: date, qty: 0, amount: null }; out.set(k, row); }
+        row.qty += r.qty;
+        if (r.hasAmount) row.amount = (row.amount || 0) + r.amount;
+      }
+      const list = [...out.values()];
+      if (!list.length) throw new Error('Ни один товар из отчёта не найден в каталоге — сначала сделай импорт товаров');
+      let done = 0;
+      for (let i = 0; i < list.length; i += 500) {
+        const { error } = await sb.from('catalog_sales')
+          .upsert(list.slice(i, i + 500), { onConflict: 'product_id,sale_date' });
+        if (error) throw error;
+        done += Math.min(500, list.length - i);
+        salesStatus(`Сохраняем продажи… ${done} из ${list.length}`);
+      }
+      salesStatus(`Готово! Продажи сохранены: ${list.length} ✓`
+        + (unmatched ? ` Не найдено в каталоге: ${unmatched} товаров (обнови импорт товаров и повтори).` : '')
+        + ' Смотри «🔥 Ходовые товары» в меню.');
+      toast('Продажи загружены ✓');
+      salesParsed = null;
+      btn.textContent = 'Проверить файл';
+    } catch (err) {
+      salesStatus('Ошибка: ' + (err.message || err)
+        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-3.sql в SQL Editor и повтори.');
+      salesParsed = null;
+      btn.textContent = 'Проверить файл';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Ходовые товары (после входа) ─────────────── */
+
+  const isoDay = (d) => d.toISOString().slice(0, 10);
+
+  function topPeriodDates(kind) {
+    const now = new Date();
+    const to = isoDay(now);
+    if (kind === 'day') return [to, to];
+    if (kind === 'week') return [isoDay(new Date(now - 6 * 86400000)), to];
+    if (kind === 'month') return [isoDay(new Date(now - 29 * 86400000)), to];
+    return [$('topFrom').value, $('topTo').value]; // свой период
+  }
+
+  async function loadTopProducts() {
+    const kind = document.querySelector('#topChips .chip.active')?.dataset.topPeriod || 'week';
+    const [from, to] = topPeriodDates(kind);
+    const box = $('topList');
+    if (!from || !to) { box.innerHTML = '<p class="muted">Выбери обе даты</p>'; return; }
+    box.innerHTML = '<p class="muted">Считаем…</p>';
+    const { data, error } = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 200 });
+    if (error) {
+      box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(error.message || '')
+        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-3.sql</p>';
+      return;
+    }
+    if (!data || !data.length) {
+      box.innerHTML = '<p class="muted">Продаж за этот период нет. Админ загружает их через «📈 Импорт продаж» в меню</p>';
+      return;
+    }
+    const byId = new Map(state.products.map((p) => [p.id, p]));
+    box.innerHTML = data.map((row, i) => {
+      const p = byId.get(row.product_id);
+      if (!p) return '';
+      const photo = (p.photos || [])[0];
+      const qty = Number(row.total_qty);
+      const qtyStr = (qty % 1 ? qty.toFixed(1) : qty) + ' ' + (p.unit || 'шт');
+      const amt = row.total_amount != null ? `<span class="top-amt">${fmtPrice(row.total_amount)}</span>` : '';
+      return `<div class="top-row" data-id="${esc(p.id)}">
+        <span class="top-rank">${i + 1}</span>
+        <span class="top-photo">${photo ? `<img src="${esc(photo)}" loading="lazy" alt="">` : '📦'}</span>
+        <span class="top-name">${esc(p.name)}</span>
+        <span class="top-qty">${esc(qtyStr)}${amt}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function openTopSheet() {
+    const now = new Date();
+    if (!$('topTo').value) $('topTo').value = isoDay(now);
+    if (!$('topFrom').value) $('topFrom').value = isoDay(new Date(now - 29 * 86400000));
+    openSheet('topSheet');
+    loadTopProducts();
+  }
+
   /* ── Сканер штрихкода ─────────────────────────────
    * Android/Chrome — встроенный распознаватель (BarcodeDetector).
    * iPhone/Safari и остальные — библиотека html5-qrcode (грузится один раз при
@@ -1261,6 +1443,7 @@
         openSheet('groupsPickSheet');
         return;
       }
+      if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
       state.groupId = chip.dataset.group;
       state.renderLimit = PAGE_SIZE;
       renderAll();
@@ -1525,6 +1708,52 @@
       }
     });
 
+    // Ходовые товары (после входа)
+    $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
+    $('topChips').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-top-period]');
+      if (!chip) return;
+      document.querySelectorAll('#topChips .chip').forEach((c) => c.classList.toggle('active', c === chip));
+      $('topCustom').hidden = chip.dataset.topPeriod !== 'custom';
+      loadTopProducts();
+    });
+    $('topFrom').addEventListener('change', loadTopProducts);
+    $('topTo').addEventListener('change', loadTopProducts);
+    $('topList').addEventListener('click', (e) => {
+      const row = e.target.closest('.top-row');
+      if (!row) return;
+      const p = state.products.find((x) => x.id === row.dataset.id);
+      if (p) { closeSheet('topSheet'); openProduct(p); }
+    });
+
+    // Импорт продаж (только админ)
+    $('menuSalesImport').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      salesParsed = null;
+      $('salesRun').textContent = 'Проверить файл';
+      $('salesStatus').hidden = true;
+      if (!$('salesDate').value) $('salesDate').value = new Date().toISOString().slice(0, 10);
+      openSheet('salesImportSheet');
+    });
+    $('salesFile').addEventListener('change', () => {
+      $('salesFileName').textContent = $('salesFile').files[0]?.name || '';
+      salesParsed = null;
+      $('salesRun').textContent = 'Проверить файл';
+    });
+    $('salesRun').addEventListener('click', async () => {
+      const btn = $('salesRun');
+      if (salesParsed) { salesUpload(); return; }
+      btn.disabled = true;
+      try {
+        await salesParse();
+      } catch (err) {
+        salesStatus('Ошибка чтения: ' + (err.message || err));
+        salesParsed = null;
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
     // Поставщики (управление, только админ)
     $('menuSuppliers').addEventListener('click', () => {
       closeSheet('adminMenuSheet');
@@ -1574,7 +1803,10 @@
       return;
     }
 
-    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+    // вход хранится на устройстве и продлевается сам — до нажатия «Выйти из аккаунта»
+    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true },
+    });
 
     // мгновенно показываем кэш, затем обновляем из базы
     if (loadCache()) renderAll();
@@ -1589,5 +1821,5 @@
   init();
 
   // для автотестов разбора 1С-файлов (не влияет на работу приложения)
-  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport };
+  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport, parseSalesReport, parseDateCell };
 })();

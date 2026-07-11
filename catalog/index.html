@@ -121,9 +121,11 @@
       <div class="sheet-body">
         <h2 class="sheet-title" id="menuTitle">Администратор</h2>
         <p class="muted" id="adminEmail"></p>
+        <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
         <div id="menuAdminOnly">
           <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
           <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
+          <button class="btn btn-secondary btn-block" id="menuSalesImport">📈 Импорт продаж (Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
         </div>
@@ -256,6 +258,56 @@
           <button class="btn btn-primary" id="btnAddSupplier">＋</button>
         </div>
         <button class="btn btn-ghost sheet-close" data-close="suppliersManageSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ходовые товары (после входа) -->
+  <div class="sheet-backdrop" id="topSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🔥 Ходовые товары</h2>
+        <div class="chips chips-wrap" id="topChips">
+          <button class="chip" data-top-period="day">Сегодня</button>
+          <button class="chip active" data-top-period="week">7 дней</button>
+          <button class="chip" data-top-period="month">30 дней</button>
+          <button class="chip" data-top-period="custom">Свой период</button>
+        </div>
+        <div class="input-pair" id="topCustom" hidden>
+          <div>
+            <label class="field-label">С</label>
+            <input type="date" id="topFrom" class="input">
+          </div>
+          <div>
+            <label class="field-label">По</label>
+            <input type="date" id="topTo" class="input">
+          </div>
+        </div>
+        <div id="topList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="topSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт продаж из 1С (только админ) -->
+  <div class="sheet-backdrop" id="salesImportSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Импорт продаж из 1С</h2>
+        <p class="muted">Отчёт «Продажи» (Excel): товары и количество. Если в отчёте есть
+        колонка с датой — история разложится по дням сама. Если нет — укажи ниже,
+        за какой день этот отчёт, и загружай его, например, раз в день.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл — отчёт «Продажи»
+          <input type="file" id="salesFile" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="salesFileName"></div>
+        <label class="field-label">Дата продаж <span class="hint">— если в файле нет колонки даты</span></label>
+        <input type="date" id="salesDate" class="input">
+        <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
+        <div class="banner banner-info" id="salesStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
       </div>
     </div>
   </div>

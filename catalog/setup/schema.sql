@@ -64,6 +64,33 @@ create table if not exists catalog_prices (
 );
 create index if not exists idx_prices_product on catalog_prices(product_id);
 
+-- Продажи по дням из импорта 1С — для аналитики «Ходовые товары»
+create table if not exists catalog_sales (
+  id         uuid primary key default gen_random_uuid(),
+  product_id uuid not null references catalog_products(id) on delete cascade,
+  sale_date  date not null,
+  qty        numeric not null default 0,
+  amount     numeric,
+  created_at timestamptz not null default now(),
+  unique (product_id, sale_date)
+);
+create index if not exists idx_sales_date    on catalog_sales(sale_date);
+create index if not exists idx_sales_product on catalog_sales(product_id);
+
+-- топ продаж за период — считает база, телефону не нужно качать все строки
+create or replace function catalog_top_products(p_from date, p_to date, p_limit int default 200)
+returns table (product_id uuid, total_qty numeric, total_amount numeric)
+language sql stable as $$
+  select product_id, sum(qty) as total_qty, sum(amount) as total_amount
+  from catalog_sales
+  where sale_date between p_from and p_to
+  group by product_id
+  order by sum(qty) desc
+  limit p_limit;
+$$;
+revoke all on function catalog_top_products(date, date, int) from public, anon;
+grant execute on function catalog_top_products(date, date, int) to authenticated;
+
 -- проверка «этот пользователь — админ?» для прав доступа
 create or replace function catalog_is_admin() returns boolean
 language sql stable security definer set search_path = public as $$
@@ -78,6 +105,7 @@ alter table catalog_products          enable row level security;
 alter table catalog_admins            enable row level security;
 alter table catalog_supplier_contacts enable row level security;
 alter table catalog_prices            enable row level security;
+alter table catalog_sales             enable row level security;
 
 create policy "groups: читать всем"        on catalog_groups    for select using (true);
 create policy "groups: менять админу"      on catalog_groups    for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
@@ -90,6 +118,8 @@ create policy "contacts: читать вошедшим"  on catalog_supplier_con
 create policy "contacts: менять админу"    on catalog_supplier_contacts for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
 create policy "prices: читать вошедшим"    on catalog_prices            for select to authenticated using (true);
 create policy "prices: менять админу"      on catalog_prices            for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
+create policy "sales: читать вошедшим"     on catalog_sales             for select to authenticated using (true);
+create policy "sales: менять админу"       on catalog_sales             for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
 
 -- ── Хранилище фотографий ────────────────────────────────
 
