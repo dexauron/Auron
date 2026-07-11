@@ -1516,13 +1516,15 @@
     document.querySelectorAll('.sheet-backdrop').forEach((bd) =>
       bd.addEventListener('click', (e) => { if (e.target === bd) closeSheet(bd.id); }));
 
-    // Вход: сотрудник (пароль магазина) или админ (email + пароль)
+    // Вход: одна форма для всех, права определяются по аккаунту.
+    // Сотрудник вводит только пароль магазина. Админ — свой пароль: email
+    // спрашивается один раз, дальше хранится на устройстве и подставляется сам.
+    const ADMIN_EMAIL_KEY = 'wm_admin_email';
+
     function openLogin() {
-      const hasStaff = !!CFG.STAFF_EMAIL;
-      $('staffLoginBlock').hidden = !hasStaff;
-      $('adminLoginBlock').hidden = hasStaff;
+      // email виден сразу, только если вход сотрудников не настроен в config.js
+      $('loginEmailWrap').hidden = !!CFG.STAFF_EMAIL;
       $('loginError').hidden = true;
-      $('staffLoginError').hidden = true;
       openSheet('loginSheet');
     }
 
@@ -1537,36 +1539,6 @@
       } else {
         openLogin();
       }
-    });
-
-    $('showAdminLogin').addEventListener('click', () => {
-      $('staffLoginBlock').hidden = true;
-      $('adminLoginBlock').hidden = false;
-    });
-    $('showStaffLogin').addEventListener('click', () => {
-      $('adminLoginBlock').hidden = true;
-      $('staffLoginBlock').hidden = false;
-    });
-
-    $('staffLoginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = $('staffLoginSubmit');
-      btn.disabled = true;
-      btn.textContent = 'Входим…';
-      const { error } = await sb.auth.signInWithPassword({
-        email: CFG.STAFF_EMAIL,
-        password: $('staffPassword').value,
-      });
-      btn.disabled = false;
-      btn.textContent = 'Войти';
-      if (error) {
-        $('staffLoginError').textContent = 'Неверный пароль магазина. Если пароль точно верный — спроси у администратора, включён ли вход для сотрудников';
-        $('staffLoginError').hidden = false;
-        return;
-      }
-      $('staffPassword').value = '';
-      closeSheet('loginSheet');
-      toast('Вход выполнен ✓ Цены и контакты открыты');
     });
 
     // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
@@ -1585,20 +1557,46 @@
     $('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const btn = $('loginSubmit');
+      const password = $('loginPassword').value;
       btn.disabled = true;
       btn.textContent = 'Входим…';
-      const { error } = await sb.auth.signInWithPassword({
-        email: $('loginEmail').value.trim(),
-        password: $('loginPassword').value,
-      });
+
+      // к каким аккаунтам подходит этот пароль: явный email из поля,
+      // иначе аккаунт сотрудников + запомненный email админа
+      const typed = $('loginEmail').value.trim();
+      const emails = [];
+      if (!$('loginEmailWrap').hidden && typed) emails.push(typed);
+      else {
+        if (CFG.STAFF_EMAIL) emails.push(CFG.STAFF_EMAIL);
+        const savedAdmin = localStorage.getItem(ADMIN_EMAIL_KEY);
+        if (savedAdmin && savedAdmin !== CFG.STAFF_EMAIL) emails.push(savedAdmin);
+      }
+
+      let ok = null;
+      for (const email of emails) {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (!error) { ok = email; break; }
+      }
       btn.disabled = false;
       btn.textContent = 'Войти';
-      if (error) {
-        $('loginError').textContent = 'Неверный email или пароль';
+
+      if (!ok) {
+        if ($('loginEmailWrap').hidden) {
+          // пароль не подошёл сотрудникам — возможно, это админ: спросим email
+          $('loginEmailWrap').hidden = false;
+          $('loginError').textContent = 'Пароль не подошёл. Сотрудник — проверь пароль магазина. Администратор — укажи свой email выше';
+        } else {
+          $('loginError').textContent = 'Неверный email или пароль';
+        }
         $('loginError').hidden = false;
         return;
       }
+
+      if (ok !== CFG.STAFF_EMAIL) {
+        try { localStorage.setItem(ADMIN_EMAIL_KEY, ok); } catch (err) { /* некритично */ }
+      }
       $('loginPassword').value = '';
+      $('loginEmail').value = '';
       closeSheet('loginSheet');
       toast('Вход выполнен ✓');
     });
