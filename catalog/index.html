@@ -6,7 +6,9 @@
   <meta name="theme-color" content="#0d0f12" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f4f5f7" media="(prefers-color-scheme: light)">
   <title>Way Market · Каталог</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -15,14 +17,15 @@
   <header class="header">
     <div class="header-row">
       <div class="brand">
-        <span class="brand-logo">🛒</span>
+        <img class="brand-logo-img" src="icons/logo-round.png" alt="Way Market">
         <div class="brand-text">
           <div class="brand-name">Way Market</div>
           <div class="brand-sub">Каталог товаров</div>
         </div>
       </div>
-      <button class="icon-btn" id="adminBtn" title="Для администратора">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+      <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+        <span id="adminBtnLabel">Войти</span>
       </button>
     </div>
     <div class="search-row">
@@ -37,6 +40,7 @@
       </button>
     </div>
     <nav class="chips" id="groupChips"></nav>
+    <nav class="chips chips-sub" id="subChips" hidden></nav>
   </header>
 
   <!-- Плашки состояния -->
@@ -69,8 +73,11 @@
         <h2 class="sheet-title" id="sheetName"></h2>
         <div class="badge-row" id="sheetBadges"></div>
         <div class="fields" id="sheetFields"></div>
+        <div id="sheetSales"></div>
+        <div id="sheetPrices"></div>
         <div id="sheetSupplier"></div>
         <div class="admin-actions" id="sheetAdminActions" hidden>
+          <button class="btn btn-secondary btn-find-photo" id="btnFindPhoto" hidden>🖼 Найти фото в интернете</button>
           <button class="btn btn-secondary" id="btnEditProduct">✏️ Изменить</button>
           <button class="btn btn-danger" id="btnDeleteProduct">🗑 Удалить</button>
         </div>
@@ -79,16 +86,20 @@
     </div>
   </div>
 
-  <!-- Вход администратора -->
+  <!-- Вход: одна форма для всех — права определяются по аккаунту -->
   <div class="sheet-backdrop" id="loginSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Вход администратора</h2>
-        <p class="muted">Только для владельца. Сотрудникам вход не нужен — каталог уже открыт.</p>
+        <img class="login-logo" src="icons/logo-round.png" alt="">
+        <h2 class="sheet-title login-title">Вход</h2>
+        <p class="muted login-sub">Введи пароль — сотруднику откроются цены и контакты,
+        администратору — редактирование каталога</p>
         <form id="loginForm">
-          <label class="field-label">Email</label>
-          <input type="email" id="loginEmail" class="input" required autocomplete="username">
+          <div id="loginEmailWrap" hidden>
+            <label class="field-label">Email администратора <span class="hint">— спрашивается один раз</span></label>
+            <input type="email" id="loginEmail" class="input" autocomplete="username">
+          </div>
           <label class="field-label">Пароль</label>
           <input type="password" id="loginPassword" class="input" required autocomplete="current-password">
           <div class="form-error" id="loginError" hidden></div>
@@ -104,12 +115,19 @@
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Администратор</h2>
+        <h2 class="sheet-title" id="menuTitle">Администратор</h2>
         <p class="muted" id="adminEmail"></p>
-        <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
-        <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
-        <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
-        <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+        <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
+        <div id="menuAdminOnly">
+          <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
+          <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
+          <button class="btn btn-secondary btn-block" id="menuSalesImport">📈 Импорт продаж (Excel)</button>
+          <button class="btn btn-secondary btn-block" id="menuPhotoExcel">🖼 Фото из Excel (ссылки)</button>
+          <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🌐 Фото по штрихкодам (интернет)</button>
+          <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
+          <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+          <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
+        </div>
         <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
         <button class="btn btn-ghost sheet-close" data-close="adminMenuSheet">Закрыть</button>
       </div>
@@ -158,6 +176,9 @@
           </div>
 
           <label class="check-row"><input type="checkbox" id="fWeighted"> ⚖ Весовой товар</label>
+
+          <label class="field-label">Единица продажи <span class="hint">— шт, кг, упак… (заполняется импортом из 1С)</span></label>
+          <input type="text" id="fUnit" class="input" placeholder="шт">
 
           <label class="field-label">Отдел / секция кассы <span class="hint">— если есть</span></label>
           <input type="text" id="fDepartment" class="input" inputmode="numeric" placeholder="2">
@@ -240,6 +261,151 @@
     </div>
   </div>
 
+  <!-- Ходовые товары (после входа) -->
+  <div class="sheet-backdrop" id="topSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🔥 Ходовые товары</h2>
+        <div class="chips chips-wrap" id="topChips">
+          <button class="chip" data-top-period="day">Сегодня</button>
+          <button class="chip active" data-top-period="week">7 дней</button>
+          <button class="chip" data-top-period="month">30 дней</button>
+          <button class="chip" data-top-period="custom">Свой период</button>
+        </div>
+        <div class="input-pair" id="topCustom" hidden>
+          <div>
+            <label class="field-label">С</label>
+            <input type="date" id="topFrom" class="input">
+          </div>
+          <div>
+            <label class="field-label">По</label>
+            <input type="date" id="topTo" class="input">
+          </div>
+        </div>
+        <div id="topList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="topSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт продаж из 1С (только админ) -->
+  <div class="sheet-backdrop" id="salesImportSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Импорт продаж из 1С</h2>
+        <p class="muted">Отчёт «Продажи» (Excel): товары и количество. Если в отчёте есть
+        колонка с датой — история разложится по дням сама. Если нет — укажи ниже,
+        за какой день этот отчёт, и загружай его, например, раз в день.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл — отчёт «Продажи»
+          <input type="file" id="salesFile" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="salesFileName"></div>
+        <label class="field-label">Дата продаж <span class="hint">— если в файле нет колонки даты</span></label>
+        <input type="date" id="salesDate" class="input">
+        <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
+        <div class="banner banner-info" id="salesStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Фото из Excel по ссылкам (только админ) -->
+  <div class="sheet-backdrop" id="photoExcelSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🖼 Фото из Excel</h2>
+        <p class="muted">Excel-файл, где в одной колонке — <b>ссылка на фото</b> (скопированная
+        с любого сайта), а в другой — <b>штрихкод</b>, <b>код</b> или <b>название</b> товара.
+        Программа найдёт товары (сначала по штрихкоду, потом по коду, потом по точному
+        названию) и покажет у них это фото. Само фото никуда не загружается — показывается
+        по ссылке.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл Excel
+          <input type="file" id="photoExcelFile" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="photoExcelName"></div>
+        <button class="btn btn-primary btn-block" id="photoExcelRun">Проверить файл</button>
+        <div class="banner banner-info" id="photoExcelStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="photoExcelSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Поиск фото по штрихкодам (только админ) -->
+  <div class="sheet-backdrop" id="photoSearchSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🖼 Фото по штрихкодам</h2>
+        <p class="muted">Ищем фотографии товаров по штрихкоду в открытой всемирной базе
+        Open Food Facts. Находятся в основном известные бренды — примерно каждый пятый
+        товар. Найденное фото сохраняется в каталог и становится видно всем.</p>
+        <div class="banner banner-info" id="photoSearchStatus" hidden></div>
+        <button class="btn btn-primary btn-block" id="photoSearchRun">▶ Начать поиск</button>
+        <p class="muted" style="margin-top:12px">Держи это окно открытым, пока идёт поиск.
+        Останавливать и продолжать можно в любой день — прогресс сохраняется.</p>
+        <button class="btn btn-ghost sheet-close" data-close="photoSearchSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Пароль магазина (только админ) -->
+  <div class="sheet-backdrop" id="staffPassSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🔑 Пароль магазина</h2>
+        <p class="muted">Общий пароль, по которому входят сотрудники. После смены
+        <b>все их устройства выйдут из системы</b> — скажи новый пароль смене.
+        Меняй его при увольнении сотрудника.</p>
+        <form id="staffPassForm">
+          <label class="field-label">Новый пароль магазина <span class="hint">— от 6 символов</span></label>
+          <input type="text" id="newStaffPass" class="input" required minlength="6" autocomplete="off">
+          <div class="form-error" id="staffPassError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="staffPassSubmit">Сменить пароль и выгнать устройства</button>
+        </form>
+        <button class="btn btn-secondary btn-block" id="btnLogoutStaff">🚪 Только выгнать все устройства сотрудников</button>
+        <button class="btn btn-ghost sheet-close" data-close="staffPassSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Карточка поставщика: контакты, звонок, WhatsApp (открывается по тапу) -->
+  <div class="sheet-backdrop" id="supplierViewSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="supViewName"></h2>
+        <div id="supViewBody"></div>
+        <button class="btn btn-ghost sheet-close" data-close="supplierViewSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Контакты поставщика (редактирует админ) -->
+  <div class="sheet-backdrop" id="supplierContactSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="contactTitle">Контакты поставщика</h2>
+        <p class="muted">Видны сотрудникам после входа — для связи с поставщиком</p>
+        <form id="supplierContactForm">
+          <label class="field-label">Телефон <span class="hint">— с +7, по нему звонок и WhatsApp</span></label>
+          <input type="tel" id="cPhone" class="input" placeholder="+7 900 000-00-00" autocomplete="off">
+          <label class="field-label">Контактное лицо</label>
+          <input type="text" id="cName" class="input" placeholder="Иван, торговый представитель" autocomplete="off">
+          <label class="field-label">Примечание</label>
+          <textarea id="cNote" class="input" rows="2" placeholder="Заказы принимает до 14:00, привоз по вторникам"></textarea>
+          <div class="form-error" id="contactError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="contactSubmit">Сохранить</button>
+        </form>
+        <button class="btn btn-ghost sheet-close" data-close="supplierContactSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Группы товаров (управление) -->
   <div class="sheet-backdrop" id="groupsSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
@@ -271,7 +437,8 @@
 
   <div class="toast" id="toast" hidden></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <!-- Библиотека базы лежит рядом (не с чужого CDN) — быстрее старт и работает офлайн -->
+  <script src="vendor/supabase.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
