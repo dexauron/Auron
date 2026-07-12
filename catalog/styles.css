@@ -500,3 +500,20 @@ select.input { appearance: none; }
 
 /* Кнопка поиска фото в карточке — на всю ширину над «Изменить/Удалить» */
 .btn-find-photo { grid-column: 1 / -1; }
+
+/* ── Подгруппы выбранной категории (второй ряд чипов) ── */
+.chips-sub { padding-top: 0; }
+.chips-sub .chip { font-size: 14px; padding: 7px 13px; background: var(--surface-2); }
+.chips-sub .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ── Поставщик в карточке товара: контакты + связь ── */
+.sup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
+.sup-head { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.sup-person { font-size: 14px; color: var(--text-2); }
+.sup-contact-card { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+.sup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sup-actions .btn { margin: 0; text-decoration: none; }
+.sup-call { justify-content: center; }
+.sup-wa { background: #25d366; color: #fff; justify-content: center; }
+.sup-nocontact { margin: 4px 0 8px; }
+.sup-allbtn { width: 100%; margin-top: 4px; justify-content: center; }

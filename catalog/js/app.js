@@ -18,6 +18,7 @@
     products: [],
     query: '',
     groupId: 'all',
+    category: null,   // выбранная категория (раздел) — null = показаны все категории
     supplierId: null, // null = все поставщики
     session: null,
     isAdmin: false,   // админ может менять каталог; сотрудник — только смотреть цены и контакты
@@ -73,6 +74,37 @@
 
   function groupById(id) { return state.groups.find((g) => g.id === id) || null; }
   function supplierById(id) { return state.suppliers.find((s) => s.id === id) || null; }
+
+  /* ── Категории: 200+ групп 1С → ~12 понятных разделов ──
+   * Раскладываем автоматически по названию группы. Первое совпадение выигрывает.
+   * Порядок правил важен: сначала точные (детское, гигиена), потом общие. */
+  const CATEGORIES = [
+    { name: 'Детское',           icon: '👶', re: /детск|подгуз|пластилин|игрушечные яйц/ },
+    { name: 'Красота и гигиена', icon: '🧴', re: /шампун|бальзам|кондиционер для волос|краск[аи] для волос|мыл|зубн|дезодор|женская гигиен|влажные салфет|ватные|крем|космет|станки|для обуви|прокладк/ },
+    { name: 'Дом и химия',       icon: '🧽', re: /стир|порошок|ополаск|мытья посуд|чистящ|для стекол|освежит|ароматизат|мешки|пакет|полотенц|салфет|туалетная бумага|мочалк|губк|тряпк|швабр|ведр|щетк|уборк|перчатк|насиком|для кошек|для собак|бель|батарейк|лампочк|удлинител|свеч|зажигалк|спичк|скотч|изолент|клей|канц|тетрад|ручк|карандаш|маркер|фломастер|ластик|точилк|линейк|ножниц|кист|краск|альбом|блокнот|фольг|пленк|запекан|пластиков|деревянн|стакан|тарелк|товары для дома|товары для|подарочн|подставк|аксесуар|носки|колготк|инструмент|хими/ },
+    { name: 'Напитки',           icon: '🥤', re: /вода|сок|лимонад|напит|энергет|кофе|чай|какао|коктел|квас|сироп/ },
+    { name: 'Молочное',          icon: '🥛', re: /молок|молоч|кефир|йогурт|творог|сметан|сливк|сыр|масло сливоч|сгущ|яйц/ },
+    { name: 'Мясо и рыба',       icon: '🥩', re: /колбас|мясн|курин|фарш|полуфабрикат|рыба|морепродукт|икра|сосиск|паштет|суш[её]ное мясо|сущ[её]ное мясо/ },
+    { name: 'Заморозка',         icon: '❄️', re: /заморож|мороженн/ },
+    { name: 'Хлеб и выпечка',    icon: '🍞', re: /хлеб|булоч|булк|выпечк|лаваш|кекс|рулет|пирожн|торт|фаст[\s-]?фуд|фастфуд/ },
+    { name: 'Сладости',          icon: '🍬', re: /конфет|шоколад|драже|карамел|мармелад|зефир|пастил|печен|пряник|вафл|халв|козинак|леденц|чупа|рахат|батончик|жеват|мед|варень|джем|повидл|кондитер|сладост|десерт|яшкино|ulker/ },
+    { name: 'Снеки',             icon: '🍟', re: /чипс|снэк|снек|попкорн|кукурузн|семечк|арахис|фисташк|сухофрукт|орех|хлопья|готовый завтрак|сухар|хлебц|мюсли/ },
+    { name: 'Овощи и фрукты',    icon: '🥦', re: /овощ|фрукт|зелень|гриб/ },
+    { name: 'Бакалея',           icon: '🛒', re: /бакале|греч|рис|пшено|перловк|манк|булгур|каша|овсянк|круп|мука|сахар|соль|сода|дрожж|макарон|лапша|масло|фасол|специ|приправ|соус|томат|майонез|кетчуп|уксус|консерв|маринован|кулинар|безглютен|европейские|готовый|диетическ/ },
+  ];
+  const OTHER_CAT = { name: 'Прочее', icon: '📦' };
+  const catCache = {};
+  function categoryOf(groupName) {
+    const key = groupName || '';
+    if (key in catCache) return catCache[key];
+    const n = norm(key);
+    let cat = OTHER_CAT.name;
+    for (const c of CATEGORIES) if (c.re.test(n)) { cat = c.name; break; }
+    catCache[key] = cat;
+    return cat;
+  }
+  const catIcon = (name) => (CATEGORIES.find((c) => c.name === name) || OTHER_CAT).icon;
+  const productCategory = (p) => { const g = groupById(p.group_id); return g ? categoryOf(g.name) : null; };
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   const fmtDate = (d) => { const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}.${m}.${y.slice(2)}`; };
@@ -187,6 +219,7 @@
     if (state.groupId === 'none') list = list.filter((p) => !p.group_id);
     else if (state.groupId === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.groupId !== 'all') list = list.filter((p) => p.group_id === state.groupId);
+    else if (state.category) list = list.filter((p) => productCategory(p) === state.category);
     if (state.supplierId) list = list.filter((p) => (p.supplier_ids || []).includes(state.supplierId));
 
     const q = norm(state.query);
@@ -202,19 +235,23 @@
 
   /* ── Отрисовка ────────────────────────────────── */
 
-  const TOP_GROUPS = 12; // сколько групп показывать чипами, остальные — в «Ещё группы»
-
   function renderChips() {
-    const counts = {};
+    const groupCounts = {};   // товаров в каждой группе
+    const catCounts = {};     // товаров в каждой категории
     let noGroup = 0;
     let weighted = 0;
     for (const p of state.products) {
-      if (p.group_id) counts[p.group_id] = (counts[p.group_id] || 0) + 1;
-      else noGroup++;
+      if (p.group_id) {
+        groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
+        const cat = productCategory(p);
+        if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
+      } else noGroup++;
       if (p.is_weighted) weighted++;
     }
-    let html = chipHtml('all', 'Все', state.products.length);
-    // чип поставщика: не выбран — открывает список; выбран — показывает имя
+
+    // ── Верхний ряд: Все · Поставщики · Ходовые · Весовые · категории ──
+    const allActive = state.category === null && state.groupId === 'all';
+    let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
     if (state.suppliers.length) {
       const sup = supplierById(state.supplierId);
       const label = sup ? `🚚 ${sup.name}` : '🚚 Поставщики';
@@ -224,19 +261,29 @@
       html += `<button class="chip${sup ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
     if (state.session) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
-    if (weighted > 0) html += chipHtml('weighted', '⚖ Весовые', weighted);
+    if (weighted > 0) html += `<button class="chip${state.groupId === 'weighted' ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
 
-    // групп может быть 200 — чипами показываем самые крупные, остальные в списке «Ещё»
-    const sorted = [...state.groups].sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0));
-    const top = sorted.slice(0, TOP_GROUPS);
-    const selected = groupById(state.groupId);
-    if (selected && !top.includes(selected)) top.unshift(selected);
-    for (const g of top) html += chipHtml(g.id, g.name, counts[g.id] || 0);
-    if (state.groups.length > TOP_GROUPS) {
-      html += `<button class="chip" data-groups-more>📁 Ещё группы<span class="chip-count">${state.groups.length - top.length}</span></button>`;
+    // категории — по убыванию числа товаров; порядок стабильный
+    const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
+      .filter((c) => catCounts[c])
+      .sort((a, b) => catCounts[b] - catCounts[a]);
+    for (const c of cats) {
+      const active = state.category === c ? ' active' : '';
+      html += `<button class="chip${active}" data-category="${esc(c)}">${catIcon(c)} ${esc(c)}<span class="chip-count">${catCounts[c]}</span></button>`;
     }
-    if (noGroup > 0) html += chipHtml('none', 'Без группы', noGroup);
+    if (noGroup > 0) html += `<button class="chip${state.groupId === 'none' ? ' active' : ''}" data-group="none">Без группы<span class="chip-count">${noGroup}</span></button>`;
     $('groupChips').innerHTML = html;
+
+    // ── Нижний ряд: подгруппы выбранной категории ──
+    const sub = $('subChips');
+    if (!state.category) { sub.hidden = true; sub.innerHTML = ''; return; }
+    const subGroups = state.groups
+      .filter((g) => categoryOf(g.name) === state.category && groupCounts[g.id])
+      .sort((a, b) => (groupCounts[b.id] || 0) - (groupCounts[a.id] || 0));
+    let subHtml = `<button class="chip${state.groupId === 'all' ? ' active' : ''}" data-group="all">Все · ${esc(state.category)}<span class="chip-count">${catCounts[state.category] || 0}</span></button>`;
+    for (const g of subGroups) subHtml += chipHtml(g.id, g.name, groupCounts[g.id] || 0);
+    sub.innerHTML = subHtml;
+    sub.hidden = false;
   }
 
   function chipHtml(id, name, count) {
@@ -333,8 +380,20 @@
     $('sheetBadges').innerHTML = badges.join('');
 
     const sups = (p.supplier_ids || []).map(supplierById).filter(Boolean);
-    $('sheetSupplier').innerHTML = sups.map((s) =>
-      `<button class="btn btn-secondary btn-block" data-supplier-all="${esc(s.id)}">🚚 ${esc(s.name)} — все товары поставщика</button>`).join('');
+    $('sheetSupplier').innerHTML = sups.map((s) => {
+      // после входа — контакты поставщика прямо в карточке: позвонить / WhatsApp
+      const c = state.contacts[s.id];
+      const contact = (state.session && c && (c.phone || c.contact_name))
+        ? `<div class="sup-contact-card">${c.contact_name ? `<span class="sup-person">${esc(c.contact_name)}</span>` : ''}${
+          c.phone ? `<div class="sup-actions"><a class="btn btn-secondary sup-call" href="${esc(telHref(c.phone))}">📞 ${esc(c.phone)}</a><a class="btn sup-wa" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a></div>` : ''}${
+          c.note ? `<div class="sup-note">${esc(c.note)}</div>` : ''}</div>`
+        : (state.session ? '<div class="sup-nocontact muted">Контакты не заполнены — добавь в 🚚 Поставщики</div>' : '');
+      return `<div class="sup-card">
+        <div class="sup-head">🚚 ${esc(s.name)}</div>
+        ${contact}
+        <button class="btn btn-ghost sup-allbtn" data-supplier-all="${esc(s.id)}">Показать все товары поставщика →</button>
+      </div>`;
+    }).join('');
 
     const rows = [];
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
@@ -1280,6 +1339,120 @@
     }
   }
 
+  /* ── Фото из Excel по ссылкам ─────────────────────
+   * Excel: колонка со ссылкой на фото + колонка со штрихкодом / кодом / названием.
+   * Находим товар (штрихкод → код → точное название) и ставим ему это фото по
+   * ссылке (внешний адрес, ничего не перезаливаем). */
+
+  let photoExcelParsed = null;
+
+  // ищем колонки в любом Excel: фото/ссылка + штрихкод/код/название
+  function parsePhotoSheet(rows) {
+    let header = -1;
+    let cols = {};
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const labels = rows[r].map((v) => cellStr(v).toLowerCase());
+      const c = {};
+      labels.forEach((l, i) => {
+        if (!l) return;
+        if (/фото|ссылк|url|изображ|картинк|photo|image|link/.test(l)) c.url ??= i;
+        else if (/штрих|barcode|ean/.test(l)) c.barcode ??= i;
+        else if (/код товара|код кассы|номенклатура\.код/.test(l)) c.code = i;
+        else if (/^код$|\bкод\b/.test(l) && c.code === undefined) c.code = i;
+        else if (/наимен|номенклатур|товар|название|name/.test(l)) c.name ??= i;
+      });
+      if (c.url !== undefined && (c.barcode !== undefined || c.code !== undefined || c.name !== undefined)) {
+        header = r; cols = c; break;
+      }
+    }
+    if (header < 0) throw new Error('Не нашёл в файле колонку со ссылкой на фото и колонку со штрихкодом/кодом/названием');
+    const out = [];
+    for (let r = header + 1; r < rows.length; r++) {
+      const row = rows[r];
+      const url = cols.url !== undefined ? cellStr(row[cols.url]) : '';
+      if (!/^https?:\/\//i.test(url)) continue; // только настоящие ссылки
+      out.push({
+        url,
+        barcode: cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '',
+        code: cols.code !== undefined ? cellStr(row[cols.code]) : '',
+        name: cols.name !== undefined ? cellStr(row[cols.name]) : '',
+      });
+    }
+    return out;
+  }
+
+  // сопоставляем строки с товарами: штрихкод → код → точное название
+  function matchPhotoRows(recs) {
+    const byBarcode = new Map();
+    const byCode = new Map();
+    const byName = new Map();
+    for (const p of state.products) {
+      for (const b of (p.barcodes || [])) byBarcode.set(String(b).trim(), p);
+      if (p.code) byCode.set(String(p.code).trim(), p);
+      byName.set(norm(p.name), p);
+    }
+    const updates = new Map(); // product.id → url (последняя ссылка выигрывает)
+    let unmatched = 0;
+    for (const r of recs) {
+      const p = (r.barcode && byBarcode.get(r.barcode.trim()))
+        || (r.code && byCode.get(r.code.trim()))
+        || (r.name && byName.get(norm(r.name)));
+      if (p) updates.set(p.id, r.url);
+      else unmatched++;
+    }
+    return { updates, unmatched };
+  }
+
+  function photoExcelStatus(msg) { const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
+
+  async function photoExcelParse() {
+    const f = $('photoExcelFile').files[0];
+    if (!f) { photoExcelStatus('Сначала выбери файл Excel'); return; }
+    photoExcelStatus('Читаем файл…');
+    await loadXlsxLib();
+    const recs = parsePhotoSheet(await readSheet(f));
+    if (!recs.length) { photoExcelParsed = null; photoExcelStatus('В файле не нашлось строк со ссылками на фото (ссылка должна начинаться с http)'); return; }
+    const { updates, unmatched } = matchPhotoRows(recs);
+    photoExcelParsed = updates;
+    photoExcelStatus(`Ссылок в файле: ${recs.length}. Совпало с товарами: ${updates.size}`
+      + (unmatched ? `, не нашлось: ${unmatched}` : '')
+      + '. Нажми кнопку ещё раз — покажем фото у этих товаров.');
+    $('photoExcelRun').textContent = `🖼 Показать фото у ${updates.size} товаров`;
+  }
+
+  async function photoExcelApply() {
+    const updates = photoExcelParsed;
+    const btn = $('photoExcelRun');
+    btn.disabled = true;
+    try {
+      const entries = [...updates.entries()];
+      let done = 0;
+      for (let i = 0; i < entries.length; i += 200) {
+        const chunk = entries.slice(i, i + 200);
+        // по одному апдейту — у каждого товара свой url; шлём параллельно пачкой
+        await Promise.all(chunk.map(([id, url]) =>
+          sb.from('catalog_products').update({ photos: [url], updated_at: new Date().toISOString() }).eq('id', id)
+            .then(({ error }) => {
+              if (error) throw error;
+              const p = state.products.find((x) => x.id === id);
+              if (p) p.photos = [url];
+            })));
+        done += chunk.length;
+        photoExcelStatus(`Сохраняем… ${done} из ${entries.length}`);
+      }
+      saveCache();
+      renderGrid();
+      photoExcelStatus(`Готово! Фото показаны у ${entries.length} товаров ✓`);
+      toast('Фото из Excel добавлены ✓');
+      photoExcelParsed = null;
+      btn.textContent = 'Проверить файл';
+    } catch (err) {
+      photoExcelStatus('Ошибка: ' + (err.message || err));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   /* ── Импорт продаж из 1С ──────────────────────────
    * Отчёт «Продажи»: товар + количество (+ сумма, + дата/период, если есть).
    * Есть колонка даты — продажи раскладываются по дням из файла;
@@ -1589,14 +1762,19 @@
         openSheet('supplierSheet');
         return;
       }
-      if (chip.hasAttribute('data-groups-more')) {
-        $('groupsPickSearch').value = '';
-        renderGroupsPick();
-        openSheet('groupsPickSheet');
-        return;
-      }
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
-      state.groupId = chip.dataset.group;
+      if (chip.hasAttribute('data-all')) { state.category = null; state.groupId = 'all'; }
+      else if (chip.hasAttribute('data-category')) { state.category = chip.dataset.category; state.groupId = 'all'; }
+      else { state.groupId = chip.dataset.group; if (state.groupId !== 'all') state.category = null; }
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+
+    // подгруппы выбранной категории
+    $('subChips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      state.groupId = chip.dataset.group; // 'all' = вся категория
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
@@ -1705,6 +1883,29 @@
     });
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
+
+    // Фото из Excel по ссылкам (только админ)
+    $('menuPhotoExcel').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      photoExcelParsed = null;
+      $('photoExcelRun').textContent = 'Проверить файл';
+      $('photoExcelStatus').hidden = true;
+      $('photoExcelName').textContent = '';
+      openSheet('photoExcelSheet');
+    });
+    $('photoExcelFile').addEventListener('change', () => {
+      $('photoExcelName').textContent = $('photoExcelFile').files[0]?.name || '';
+      photoExcelParsed = null;
+      $('photoExcelRun').textContent = 'Проверить файл';
+    });
+    $('photoExcelRun').addEventListener('click', async () => {
+      const btn = $('photoExcelRun');
+      if (photoExcelParsed) { photoExcelApply(); return; }
+      btn.disabled = true;
+      try { await photoExcelParse(); }
+      catch (err) { photoExcelStatus('Ошибка чтения: ' + (err.message || err)); photoExcelParsed = null; }
+      finally { btn.disabled = false; }
+    });
 
     // Поиск фото по штрихкодам (только админ)
     $('menuPhotoSearch').addEventListener('click', () => {
@@ -2055,5 +2256,5 @@
   init();
 
   // для автотестов разбора 1С-файлов (не влияет на работу приложения)
-  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport, parseSalesReport, parseDateCell };
+  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport, parseSalesReport, parseDateCell, parsePhotoSheet, categoryOf };
 })();

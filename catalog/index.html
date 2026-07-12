@@ -40,6 +40,7 @@
       </button>
     </div>
     <nav class="chips" id="groupChips"></nav>
+    <nav class="chips chips-sub" id="subChips" hidden></nav>
   </header>
 
   <!-- Плашки состояния -->
@@ -120,7 +121,8 @@
           <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
           <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuSalesImport">📈 Импорт продаж (Excel)</button>
-          <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🖼 Фото по штрихкодам</button>
+          <button class="btn btn-secondary btn-block" id="menuPhotoExcel">🖼 Фото из Excel (ссылки)</button>
+          <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🌐 Фото по штрихкодам (интернет)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
           <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
@@ -304,6 +306,28 @@
         <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
         <div class="banner banner-info" id="salesStatus" hidden></div>
         <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Фото из Excel по ссылкам (только админ) -->
+  <div class="sheet-backdrop" id="photoExcelSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🖼 Фото из Excel</h2>
+        <p class="muted">Excel-файл, где в одной колонке — <b>ссылка на фото</b> (скопированная
+        с любого сайта), а в другой — <b>штрихкод</b>, <b>код</b> или <b>название</b> товара.
+        Программа найдёт товары (сначала по штрихкоду, потом по коду, потом по точному
+        названию) и покажет у них это фото. Само фото никуда не загружается — показывается
+        по ссылке.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл Excel
+          <input type="file" id="photoExcelFile" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="photoExcelName"></div>
+        <button class="btn btn-primary btn-block" id="photoExcelRun">Проверить файл</button>
+        <div class="banner banner-info" id="photoExcelStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="photoExcelSheet">Закрыть</button>
       </div>
     </div>
   </div>
