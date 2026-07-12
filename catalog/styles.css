@@ -526,3 +526,31 @@ select.input { appearance: none; }
 .sales-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .sales-n { font-size: 22px; font-weight: 800; color: var(--accent); }
 .sales-l { font-size: 12px; color: var(--text-2); text-align: center; }
+
+/* ── Поставщики и цены: кликабельные строки (переопределяет старый .price-row) ── */
+.price-row {
+  display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap;
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px 12px; min-height: 56px; margin-bottom: 8px; font-family: inherit; color: var(--text);
+}
+.price-row .price-sup { flex: 1 1 46%; font-size: 15px; font-weight: 600; }
+.price-row .price-val { font-size: 17px; font-weight: 800; white-space: nowrap; margin-left: auto; }
+.price-row .price-meta { flex-basis: 100%; justify-content: flex-start; }
+.price-row .price-noprice { margin-left: auto; font-size: 13px; color: var(--text-2); }
+.sup-hasphone { font-size: 12px; opacity: .7; }
+.sup-chevron { font-size: 22px; color: var(--text-2); line-height: 1; align-self: center; }
+.price-row.price-best { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.45); }
+
+/* ── Карточка поставщика (тап по строке) ───────── */
+#supViewBody > * { margin-bottom: 12px; }
+.supview-person { font-size: 15px; font-weight: 600; }
+.supview-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.supview-actions .btn { margin: 0; text-decoration: none; font-size: 16px; padding: 15px 12px; }
+.supview-call { justify-content: center; }
+.supview-wa { background: #25d366; color: #fff; justify-content: center; }
+.supview-phone { text-align: center; font-size: 15px; color: var(--text-2); }
+.supview-note { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--text-2); }
+.supview-price { background: rgba(48,209,88,.08); border: 1px solid rgba(48,209,88,.3); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+.supview-hist-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+#supViewBody .price-history { position: static; margin: 0; }

@@ -372,6 +372,18 @@
     </div>
   </div>
 
+  <!-- Карточка поставщика: контакты, звонок, WhatsApp (открывается по тапу) -->
+  <div class="sheet-backdrop" id="supplierViewSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="supViewName"></h2>
+        <div id="supViewBody"></div>
+        <button class="btn btn-ghost sheet-close" data-close="supplierViewSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Контакты поставщика (редактирует админ) -->
   <div class="sheet-backdrop" id="supplierContactSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">

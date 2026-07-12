@@ -415,21 +415,8 @@
     if (!barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
 
-    const sups = (p.supplier_ids || []).map(supplierById).filter(Boolean);
-    $('sheetSupplier').innerHTML = sups.map((s) => {
-      // после входа — контакты поставщика прямо в карточке: позвонить / WhatsApp
-      const c = state.contacts[s.id];
-      const contact = (state.session && c && (c.phone || c.contact_name))
-        ? `<div class="sup-contact-card">${c.contact_name ? `<span class="sup-person">${esc(c.contact_name)}</span>` : ''}${
-          c.phone ? `<div class="sup-actions"><a class="btn btn-secondary sup-call" href="${esc(telHref(c.phone))}">📞 ${esc(c.phone)}</a><a class="btn sup-wa" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a></div>` : ''}${
-          c.note ? `<div class="sup-note">${esc(c.note)}</div>` : ''}</div>`
-        : (state.session ? '<div class="sup-nocontact muted">Контакты не заполнены — добавь в 🚚 Поставщики</div>' : '');
-      return `<div class="sup-card">
-        <div class="sup-head">🚚 ${esc(s.name)}</div>
-        ${contact}
-        <button class="btn btn-ghost sup-allbtn" data-supplier-all="${esc(s.id)}">Показать все товары поставщика →</button>
-      </div>`;
-    }).join('');
+    // поставщики и цены — единым списком ниже (renderProductPrices); отдельный блок не нужен
+    $('sheetSupplier').innerHTML = '';
 
     const rows = [];
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
@@ -512,15 +499,19 @@
     } catch (e) { /* нет места */ }
   }
 
-  /* ── Цены поставщиков в карточке (видны после входа) ── */
+  /* ── Поставщики и цены в карточке ──────────────────
+   * Единый список: все поставщики товара, у каждого — цена и дата последнего
+   * поступления по этой цене. Строка кликабельна → открывается карточка
+   * поставщика с контактами и кнопками «Позвонить» / «WhatsApp». Цены и
+   * контакты — только после входа (доступ закрыт правами базы). */
+
+  let cardSuppliers = {}; // supplier_id → {sup, last, hist, prev} для открытия карточки поставщика
 
   async function renderProductPrices(p) {
     const box = $('sheetPrices');
     if (!sb) { box.innerHTML = ''; return; }
-    if (!state.session) {
-      box.innerHTML = '<button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены поставщиков — вход для сотрудников</button>';
-      return;
-    }
+    const baseSupIds = [...new Set(p.supplier_ids || [])];
+    if (!state.session) { renderCardSuppliers(p, [], baseSupIds, { locked: true }); return; }
     box.innerHTML = '<p class="muted">Загружаем цены…</p>';
     let rows;
     try {
@@ -530,76 +521,121 @@
       rows = data;
     } catch (e) {
       if (currentProduct !== p) return;
-      // нет связи — показываем цены, сохранённые на телефоне (если карточку уже открывали)
       const cached = readPriceCache()[p.id];
-      if (cached && cached.rows.length) {
-        renderPriceRows(p, cached.rows,
-          `⚠ Нет связи — показаны цены, сохранённые ${fmtDate(new Date(cached.ts).toISOString())}`);
-      } else {
-        box.innerHTML = ''; // база старой версии или кэша нет — блок не показываем
-      }
+      renderCardSuppliers(p, (cached && cached.rows) || [], baseSupIds,
+        { stale: cached ? `⚠ Нет связи — данные от ${fmtDate(new Date(cached.ts).toISOString())}` : '⚠ Нет связи с базой' });
       return;
     }
     if (currentProduct !== p) return; // пока грузили, открыли другой товар
     cachePrices(p.id, rows);
-    if (!rows.length) {
-      box.innerHTML = '<p class="muted">Цен поставщиков пока нет — появятся после импорта из 1С</p>';
-      return;
-    }
-    renderPriceRows(p, rows);
+    renderCardSuppliers(p, rows, baseSupIds, {});
   }
 
-  function renderPriceRows(p, rows, staleNote) {
+  // строит единый список поставщиков товара (с ценами, если есть) и запоминает
+  // данные для карточки поставщика
+  function renderCardSuppliers(p, priceRows, baseSupIds, opt) {
     const box = $('sheetPrices');
-    // по каждому поставщику: свежая цена + история (строки уже от новых к старым)
+    // группируем историю цен по поставщику (строки уже от новых к старым)
     const bySup = new Map();
-    for (const r of rows) {
+    for (const r of priceRows) {
       if (!bySup.has(r.supplier_id)) bySup.set(r.supplier_id, []);
       bySup.get(r.supplier_id).push(r);
     }
-    const entries = [...bySup.entries()]
-      .map(([id, hist]) => ({
-        sup: supplierById(id),
-        hist,
-        last: hist[0],
-        prev: hist.find((h) => Number(h.price) !== Number(hist[0].price)),
-      }))
-      .filter((e) => e.sup)
-      .sort((a, b) => Number(a.last.price) - Number(b.last.price));
-    if (!entries.length) { box.innerHTML = ''; return; }
-    const best = Number(entries[0].last.price);
+    // объединяем поставщиков товара и тех, у кого есть цена
+    const ids = [...new Set([...baseSupIds, ...bySup.keys()])];
+    cardSuppliers = {};
+    const entries = ids.map((id) => {
+      const sup = supplierById(id);
+      if (!sup) return null;
+      const hist = bySup.get(id) || [];
+      const e = { sup, hist, last: hist[0] || null, prev: hist.find((h) => hist[0] && Number(h.price) !== Number(hist[0].price)) || null };
+      cardSuppliers[id] = e;
+      return e;
+    }).filter(Boolean);
 
+    if (!entries.length) { box.innerHTML = ''; return; }
+
+    // сортировка: сначала с ценой (по возрастанию), потом без цены (по имени)
+    entries.sort((a, b) => {
+      if (a.last && b.last) return Number(a.last.price) - Number(b.last.price);
+      if (a.last) return -1;
+      if (b.last) return 1;
+      return a.sup.name.localeCompare(b.sup.name, 'ru');
+    });
+    const priced = entries.filter((e) => e.last);
+    const best = priced.length ? Number(priced[0].last.price) : null;
+
+    const chevron = '<span class="sup-chevron">›</span>';
     const rowsHtml = entries.map((e) => {
-      const isBest = entries.length > 1 && Number(e.last.price) === best;
-      let trend = '';
-      if (e.prev) {
-        const diff = ((Number(e.last.price) - Number(e.prev.price)) / Number(e.prev.price)) * 100;
-        const pct = Math.abs(diff) >= 10 ? Math.round(Math.abs(diff)) : Math.round(Math.abs(diff) * 10) / 10;
-        trend = diff > 0
-          ? `<span class="price-up" title="Цена выросла">↑ ${pct}%</span>`
-          : `<span class="price-down" title="Цена снизилась">↓ ${pct}%</span>`;
-      }
       const c = state.contacts[e.sup.id];
-      const call = c?.phone
-        ? `<span class="price-call"><a class="mini-btn" href="${esc(telHref(c.phone))}" title="Позвонить">📞</a><a class="mini-btn" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener" title="WhatsApp">💬</a></span>`
-        : '';
-      const hist = e.hist.length > 1
-        ? `<div class="price-history" hidden>${e.hist.slice(0, 12).map((h) =>
-          `<div class="price-hist-row"><span>${fmtDate(h.price_date)}</span><span>${fmtPrice(h.price)}</span></div>`).join('')}</div>`
-        : '';
-      return `<div class="price-row-wrap">
-        <div class="price-row${isBest ? ' price-best' : ''}"${e.hist.length > 1 ? ' data-hist-toggle' : ''}>
-          <span class="price-sup">🚚 ${esc(e.sup.name)}${c?.contact_name ? ` <span class="price-contact">· ${esc(c.contact_name)}</span>` : ''}</span>
-          <span class="price-val">${fmtPrice(e.last.price)}</span>
-          <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}<span class="price-date">от ${fmtDate(e.last.price_date)}</span></span>
-          ${call}
-        </div>${hist}</div>`;
+      const hasContact = state.session && c && c.phone;
+      let right = '';
+      if (e.last) {
+        const isBest = priced.length > 1 && Number(e.last.price) === best;
+        let trend = '';
+        if (e.prev) {
+          const diff = ((Number(e.last.price) - Number(e.prev.price)) / Number(e.prev.price)) * 100;
+          const pct = Math.abs(diff) >= 10 ? Math.round(Math.abs(diff)) : Math.round(Math.abs(diff) * 10) / 10;
+          trend = diff > 0 ? `<span class="price-up">↑ ${pct}%</span>` : `<span class="price-down">↓ ${pct}%</span>`;
+        }
+        right = `<span class="price-val">${fmtPrice(e.last.price)}</span>
+          <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}<span class="price-date">поступление ${fmtDate(e.last.price_date)}</span></span>`;
+      } else {
+        right = `<span class="price-noprice">${state.session ? 'цена не указана' : ''}</span>`;
+      }
+      return `<button class="price-row${e.last && priced.length > 1 && Number(e.last.price) === best ? ' price-best' : ''}" data-supplier-view="${esc(e.sup.id)}">
+        <span class="price-sup">🚚 ${esc(e.sup.name)}${hasContact ? ' <span class="sup-hasphone">📞</span>' : ''}</span>
+        ${right}
+        ${chevron}
+      </button>`;
     }).join('');
 
-    box.innerHTML = `<div class="price-block"><div class="price-title">Цены поставщиков</div>${rowsHtml}`
-      + (staleNote ? `<p class="muted price-hint">${esc(staleNote)}</p>` : '')
-      + (entries.some((e) => e.hist.length > 1) ? '<p class="muted price-hint">Нажми на строку — покажем историю цены</p>' : '')
-      + '</div>';
+    let footer = '';
+    if (opt.locked) footer = '<button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены и контакты — вход для сотрудников</button>';
+    else if (opt.stale) footer = `<p class="muted price-hint">${esc(opt.stale)}</p>`;
+    else footer = '<p class="muted price-hint">Нажми на поставщика — контакты, звонок и WhatsApp</p>';
+
+    box.innerHTML = `<div class="price-block"><div class="price-title">Поставщики и цены</div>${rowsHtml}${footer}</div>`;
+  }
+
+  /* ── Карточка поставщика (контакты, звонок, WhatsApp) ── */
+
+  function openSupplierView(id) {
+    const sup = supplierById(id);
+    if (!sup) return;
+    const e = cardSuppliers[id];
+    const c = state.contacts[id];
+    $('supViewName').textContent = '🚚 ' + sup.name;
+
+    const parts = [];
+    if (!state.session) {
+      parts.push('<button class="btn btn-secondary btn-block" id="supViewLogin">🔒 Цены и контакты — вход для сотрудников</button>');
+    } else if (c && c.phone) {
+      if (c.contact_name) parts.push(`<div class="supview-person">${esc(c.contact_name)}</div>`);
+      parts.push(`<div class="supview-actions">
+        <a class="btn btn-primary supview-call" href="${esc(telHref(c.phone))}">📞 Позвонить</a>
+        <a class="btn supview-wa" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a></div>`);
+      parts.push(`<div class="supview-phone">${esc(c.phone)}</div>`);
+      if (c.note) parts.push(`<div class="supview-note">${esc(c.note)}</div>`);
+    } else if (state.session) {
+      parts.push('<div class="muted">Контакты поставщика ещё не заполнены.</div>');
+    }
+
+    // цена этого товара у поставщика + история
+    if (state.session && e && e.last) {
+      parts.push(`<div class="supview-price">Цена: <b>${fmtPrice(e.last.price)}</b> · поступление ${fmtDate(e.last.price_date)}</div>`);
+      if (e.hist.length > 1) {
+        parts.push('<div class="supview-hist-title">История цены</div><div class="price-history">'
+          + e.hist.slice(0, 12).map((h) => `<div class="price-hist-row"><span>${fmtDate(h.price_date)}</span><span>${fmtPrice(h.price)}</span></div>`).join('')
+          + '</div>');
+      }
+    }
+
+    parts.push(`<button class="btn btn-secondary btn-block" data-supplier-all="${esc(id)}">Показать все товары поставщика →</button>`);
+    if (state.isAdmin) parts.push(`<button class="btn btn-ghost btn-block" id="supViewEdit" data-edit="${esc(id)}">✏️ Изменить контакты</button>`);
+
+    $('supViewBody').innerHTML = parts.join('');
+    openSheet('supplierViewSheet');
   }
 
   function fieldRow(key, val, main = false, copy = false) {
@@ -2014,14 +2050,30 @@
     });
 
     // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
+    // тап по поставщику в карточке товара → его контакты и цена
     $('sheetPrices').addEventListener('click', (e) => {
-      if (e.target.closest('a')) return; // позвонить / WhatsApp — обычные ссылки
       if (e.target.closest('#pricesLoginBtn')) { openLogin(); return; }
-      const row = e.target.closest('[data-hist-toggle]');
-      if (row) {
-        const hist = row.parentElement.querySelector('.price-history');
-        if (hist) hist.hidden = !hist.hidden;
+      const row = e.target.closest('[data-supplier-view]');
+      if (row) openSupplierView(row.dataset.supplierView);
+    });
+
+    // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
+    $('supViewBody').addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;
+      const all = e.target.closest('[data-supplier-all]');
+      if (all) {
+        state.supplierId = all.dataset.supplierAll;
+        state.groupId = 'all';
+        state.category = null;
+        state.renderLimit = PAGE_SIZE;
+        closeSheet('supplierViewSheet');
+        closeSheet('productSheet');
+        renderAll();
+        return;
       }
+      if (e.target.closest('#supViewLogin')) { openLogin(); return; }
+      const edit = e.target.closest('[data-edit]');
+      if (edit) { closeSheet('supplierViewSheet'); openContactForm(edit.dataset.edit); }
     });
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
