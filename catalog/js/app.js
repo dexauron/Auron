@@ -99,13 +99,83 @@
     toast._t = setTimeout(() => { el.hidden = true; }, 2400);
   }
 
-  function openSheet(id) { $(id).hidden = false; document.body.style.overflow = 'hidden'; }
-  function closeSheet(id) {
-    $(id).hidden = true;
-    if (![...document.querySelectorAll('.sheet-backdrop')].some((s) => !s.hidden)) {
-      document.body.style.overflow = '';
-    }
+  // ── Окна (шторки): стек + кнопка «назад» телефона + смахивание вниз ──
+  const sheetStack = [];
+  let expectPop = 0; // сколько наших history.back() ещё «переварить» без действия
+
+  function openSheet(id) {
+    const el = $(id);
+    if (!el || !el.hidden) return; // нет элемента или уже открыт
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    sheetStack.push(id);
+    // history-запись: кнопка «назад» на телефоне закроет это окно, а не выйдет из приложения
+    try { history.pushState({ wmSheet: id }, ''); } catch (e) { /* некритично */ }
+  }
+
+  function hideSheet(id) { // фактическое скрытие, без истории
+    const el = $(id);
+    if (!el) return;
+    el.hidden = true;
+    const i = sheetStack.lastIndexOf(id);
+    if (i >= 0) sheetStack.splice(i, 1);
+    if (!sheetStack.length) document.body.style.overflow = '';
     if (id === 'scanSheet') stopScan();
+  }
+
+  function closeSheet(id) {
+    const el = $(id);
+    if (!el || el.hidden) return;
+    hideSheet(id);
+    // «съедаем» нашу history-запись, чтобы счётчик «назад» не сбился
+    if (window.history.state && window.history.state.wmSheet) { expectPop++; try { history.back(); } catch (e) { expectPop--; } }
+  }
+
+  window.addEventListener('popstate', () => {
+    if (expectPop > 0) { expectPop--; return; } // это наш собственный закрывающий back — окно уже скрыто
+    if (sheetStack.length) hideSheet(sheetStack[sheetStack.length - 1]); // «назад» на телефоне → закрыть верхнее окно
+  });
+
+  // Стрелка «назад» в левом верхнем углу каждого окна
+  function addBackButtons() {
+    document.querySelectorAll('.sheet').forEach((sheet) => {
+      const bd = sheet.closest('.sheet-backdrop');
+      if (!bd || sheet.querySelector('.sheet-back')) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sheet-back';
+      b.setAttribute('aria-label', 'Назад');
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+      b.addEventListener('click', () => closeSheet(bd.id));
+      sheet.insertBefore(b, sheet.firstChild);
+    });
+  }
+
+  // Смахивание шторки вниз, чтобы закрыть (как в приложениях)
+  function enableSwipeToClose() {
+    const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box';
+    document.querySelectorAll('.sheet').forEach((sheet) => {
+      let startY = 0; let cur = 0; let drag = false;
+      sheet.addEventListener('touchstart', (e) => {
+        if (sheet.scrollTop > 3) return;            // контент прокручен — не мешаем скроллу
+        if (e.target.closest(NO_DRAG)) return;      // не перехватываем кнопки/поля/листание фото
+        startY = e.touches[0].clientY; cur = 0; drag = true;
+        sheet.style.transition = 'none';
+      }, { passive: true });
+      sheet.addEventListener('touchmove', (e) => {
+        if (!drag) return;
+        cur = Math.max(0, e.touches[0].clientY - startY);
+        sheet.style.transform = `translateY(${cur}px)`;
+      }, { passive: true });
+      sheet.addEventListener('touchend', () => {
+        if (!drag) return;
+        drag = false;
+        sheet.style.transition = '';
+        sheet.style.transform = '';
+        const bd = sheet.closest('.sheet-backdrop');
+        if (cur > 90 && bd) closeSheet(bd.id); // смахнул вниз достаточно — закрыть
+      });
+    });
   }
 
   function groupById(id) { return state.groups.find((g) => g.id === id) || null; }
@@ -2017,12 +2087,14 @@
       }
     });
 
-    // Закрытие шторок: крестики, кнопки, тап по фону
+    // Закрытие шторок: крестики, кнопки, тап по фону, стрелка «назад», смахивание вниз
     document.querySelectorAll('[data-close]').forEach((b) =>
       b.addEventListener('click', () => closeSheet(b.dataset.close)));
     $('sheetClose').addEventListener('click', () => closeSheet('productSheet'));
     document.querySelectorAll('.sheet-backdrop').forEach((bd) =>
       bd.addEventListener('click', (e) => { if (e.target === bd) closeSheet(bd.id); }));
+    addBackButtons();
+    enableSwipeToClose();
 
     // Вход: одна форма для всех, права определяются по аккаунту.
     // Сотрудник вводит только пароль магазина. Админ — свой пароль: email

@@ -554,3 +554,16 @@ select.input { appearance: none; }
 .supview-price { background: rgba(48,209,88,.08); border: 1px solid rgba(48,209,88,.3); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
 .supview-hist-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
 #supViewBody .price-history { position: static; margin: 0; }
+
+/* ── Стрелка «назад» в окне + область для смахивания ── */
+.sheet { position: relative; }
+.sheet-back {
+  position: absolute; top: 10px; left: 10px; z-index: 5;
+  width: 40px; height: 40px; border-radius: 50%;
+  border: none; background: rgba(127,127,127,.16); color: var(--text);
+  display: grid; place-items: center; cursor: pointer;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+}
+.sheet-back:active { transform: scale(.92); }
+/* крупнее «хваталка» — понятно, что окно можно тянуть вниз */
+.sheet-handle { width: 44px; height: 5px; }
