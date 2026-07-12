@@ -346,6 +346,7 @@
     $('sheetFields').innerHTML = rows.join('');
 
     $('sheetAdminActions').hidden = !state.isAdmin;
+    $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
     renderProductPrices(p);
     openSheet('productSheet');
   }
@@ -1204,6 +1205,81 @@
     }
   }
 
+  /* ── Поиск фото по штрихкодам ─────────────────────
+   * Открытая всемирная база Open Food Facts (+ Open Beauty Facts для химии
+   * и косметики): по штрихкоду отдаёт фото товара. Находятся в основном
+   * известные бренды. Найденное фото сжимается и сохраняется в НАШЕ
+   * хранилище — дальше работает как обычное фото товара, в т.ч. офлайн. */
+
+  const PHOTO_CHECKED_KEY = 'wm_photo_checked_v1'; // штрихкоды, по которым фото уже искали и не нашли
+  let photoSearchRunning = false;
+
+  const photoCandidates = () =>
+    state.products.filter((p) => (p.barcodes || []).length && !(p.photos || []).length);
+
+  async function offLookup(bc) {
+    for (const host of ['world.openfoodfacts.org', 'world.openbeautyfacts.org']) {
+      try {
+        const r = await fetch(`https://${host}/api/v2/product/${encodeURIComponent(bc)}.json?fields=image_front_url`);
+        if (r.ok) {
+          const d = await r.json();
+          const url = d.product && d.product.image_front_url;
+          if (url) return url;
+        }
+      } catch (e) { /* сеть моргнула — товар проверим в следующий раз */ }
+      await new Promise((res) => setTimeout(res, 500)); // вежливый темп к бесплатной базе
+    }
+    return null;
+  }
+
+  async function attachFoundPhoto(p, url) {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('фото недоступно');
+    const small = await compressImage(await resp.blob(), 800, 0.8);
+    const photos = [await uploadPhoto(small)];
+    const { error } = await sb.from('catalog_products')
+      .update({ photos, updated_at: new Date().toISOString() }).eq('id', p.id);
+    if (error) throw error;
+    p.photos = photos;
+  }
+
+  async function runPhotoSearch() {
+    const btn = $('photoSearchRun');
+    if (photoSearchRunning) { photoSearchRunning = false; return; }
+    photoSearchRunning = true;
+    btn.textContent = '⏸ Остановить';
+    let checked = {};
+    try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
+    const saveChecked = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
+    const todo = photoCandidates().filter((p) => !checked[(p.barcodes || [])[0]]);
+    const status = (msg) => { const el = $('photoSearchStatus'); el.hidden = false; el.textContent = msg; };
+    let done = 0;
+    let found = 0;
+    status(`Будем проверять: ${todo.length} товаров со штрихкодом и без фото`);
+    for (const p of todo) {
+      if (!photoSearchRunning || $('photoSearchSheet').hidden) break;
+      const bc = p.barcodes[0];
+      try {
+        const url = await offLookup(bc);
+        if (url) { await attachFoundPhoto(p, url); found++; }
+        else checked[bc] = 1;
+      } catch (e) { /* пропускаем товар, идём дальше */ }
+      done++;
+      if (done % 10 === 0) saveChecked();
+      status(`Проверено ${done} из ${todo.length} · найдено фото: ${found}`);
+    }
+    saveChecked();
+    photoSearchRunning = false;
+    const finished = done >= todo.length;
+    btn.textContent = finished ? '▶ Проверить снова' : '▶ Продолжить поиск';
+    status(`${finished ? 'Готово!' : 'Пауза.'} Проверено ${done} из ${todo.length} · найдено фото: ${found}`);
+    if (found) {
+      saveCache();
+      renderGrid();
+      toast(`Фото найдены и сохранены: ${found} ✓`);
+    }
+  }
+
   /* ── Импорт продаж из 1С ──────────────────────────
    * Отчёт «Продажи»: товар + количество (+ сумма, + дата/период, если есть).
    * Есть колонка даты — продажи раскладываются по дням из файла;
@@ -1629,6 +1705,41 @@
     });
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
+
+    // Поиск фото по штрихкодам (только админ)
+    $('menuPhotoSearch').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      $('photoSearchStatus').hidden = true;
+      $('photoSearchRun').textContent = '▶ Начать поиск';
+      openSheet('photoSearchSheet');
+    });
+    $('photoSearchRun').addEventListener('click', runPhotoSearch);
+
+    // «Найти фото в интернете» в карточке товара (только админ)
+    $('btnFindPhoto').addEventListener('click', async () => {
+      const p = currentProduct;
+      if (!p) return;
+      const btn = $('btnFindPhoto');
+      btn.disabled = true;
+      btn.textContent = 'Ищем фото…';
+      try {
+        const url = await offLookup(p.barcodes[0]);
+        if (!url) {
+          toast('В открытой базе фото этого товара нет — добавь своё через ✏️ Изменить');
+        } else {
+          await attachFoundPhoto(p, url);
+          saveCache();
+          renderGrid();
+          openProduct(p); // перерисуем карточку уже с фото
+          toast('Фото найдено и сохранено ✓');
+        }
+      } catch (e) {
+        toast('Не получилось: ' + (e.message || e));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🖼 Найти фото в интернете';
+      }
+    });
 
     // Пароль магазина (только админ): смена выкидывает все устройства сотрудников
     $('menuStaffPass').addEventListener('click', () => {

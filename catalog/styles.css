@@ -497,3 +497,6 @@ select.input { appearance: none; }
   .content { max-width: 1200px; margin: 0 auto; }
   .banner { max-width: 1172px; margin-left: auto; margin-right: auto; }
 }
+
+/* Кнопка поиска фото в карточке — на всю ширину над «Изменить/Удалить» */
+.btn-find-photo { grid-column: 1 / -1; }
