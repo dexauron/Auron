@@ -125,6 +125,9 @@ body {
 .chip .chip-count { color: var(--text-2); font-size: 12px; margin-left: 4px; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.active .chip-count { color: rgba(255, 255, 255, .8); }
+.chip.chip-reset { background: transparent; border-color: var(--border); color: var(--text-2); }
+/* отмеченный поставщик/группа в списке-шторке */
+.btn-secondary.picked { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 /* ── Плашки ────────────────────────────────────── */
 .banner { margin: 10px 14px 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
@@ -567,3 +570,56 @@ select.input { appearance: none; }
 .sheet-back:active { transform: scale(.92); }
 /* крупнее «хваталка» — понятно, что окно можно тянуть вниз */
 .sheet-handle { width: 44px; height: 5px; }
+
+/* ═══════════════════════════════════════════════════
+   Стиль iPhone (iOS): стекло, плавные пружины, отклик на нажатие
+   ═══════════════════════════════════════════════════ */
+
+/* Плавная инерция прокрутки и «резинка» как на iPhone */
+html { -webkit-text-size-adjust: 100%; }
+body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; overscroll-behavior-y: none; }
+.chips, .photo-strip, .sheet, #supplierList, #groupsPickList { -webkit-overflow-scrolling: touch; }
+
+/* Полупрозрачная «матовая» шапка — фирменный приём iOS */
+.header {
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+/* Отклик на касание — лёгкое «вдавливание» с пружиной, как в iOS */
+.chip, .icon-btn, .copy-btn, .scan-btn, .fab, .btn, .card,
+.price-row, .field-row, .sup-row .btn, .tag, .menu-item {
+  transition: transform .18s cubic-bezier(.2, .9, .3, 1.3), opacity .18s ease, background-color .18s ease;
+  touch-action: manipulation;
+}
+.chip:active { transform: scale(.93); }
+.icon-btn:active, .copy-btn:active { transform: scale(.9); opacity: .85; }
+.fab:active { transform: scale(.9); }
+.price-row:active, .field-row:active, .sup-row .btn:active { transform: scale(.985); opacity: .92; }
+
+/* Матовое затемнение фона под окном — размытие как на iPhone */
+.sheet-backdrop {
+  background: rgba(0, 0, 0, .32);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+/* Окна выезжают снизу с «пружиной» iOS вместо простого сдвига */
+.sheet {
+  animation: iosSheetUp .42s cubic-bezier(.32, .72, 0, 1);
+  box-shadow: 0 -1px 0 var(--border), 0 -24px 60px rgba(0, 0, 0, .28);
+}
+@keyframes iosSheetUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@media (min-width: 700px) {
+  .sheet { animation: iosSheetPop .34s cubic-bezier(.32, .72, 0, 1); }
+  @keyframes iosSheetPop { from { transform: scale(.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+}
+.sheet-handle { background: color-mix(in srgb, var(--text-2) 45%, transparent); }
+
+/* Тёмная тема: шапка/окна стекло, чуть глубже тени */
+@media (prefers-color-scheme: dark) {
+  .header { background: color-mix(in srgb, var(--bg) 62%, transparent); }
+  .sheet-backdrop { background: rgba(0, 0, 0, .5); }
+}
