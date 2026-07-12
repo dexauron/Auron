@@ -153,30 +153,45 @@
     });
   }
 
-  // Смахивание шторки вниз, чтобы закрыть (как в приложениях)
+  // Смахивание шторки вниз, чтобы закрыть — в стиле iPhone: окно тянется за
+  // пальцем, фон плавно светлеет, при отпускании — мягкая «пружина» назад,
+  // а быстрый флик закрывает даже с небольшого расстояния.
   function enableSwipeToClose() {
     const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box';
+    const SPRING = 'transform .38s cubic-bezier(.32,.72,0,1)';
     document.querySelectorAll('.sheet').forEach((sheet) => {
-      let startY = 0; let cur = 0; let drag = false;
+      const bd = sheet.closest('.sheet-backdrop');
+      let startY = 0; let cur = 0; let drag = false; let lastY = 0; let lastT = 0; let vel = 0;
       sheet.addEventListener('touchstart', (e) => {
         if (sheet.scrollTop > 3) return;            // контент прокручен — не мешаем скроллу
         if (e.target.closest(NO_DRAG)) return;      // не перехватываем кнопки/поля/листание фото
         startY = e.touches[0].clientY; cur = 0; drag = true;
+        lastY = startY; lastT = e.timeStamp || Date.now(); vel = 0;
         sheet.style.transition = 'none';
       }, { passive: true });
       sheet.addEventListener('touchmove', (e) => {
         if (!drag) return;
-        cur = Math.max(0, e.touches[0].clientY - startY);
+        const y = e.touches[0].clientY;
+        let d = y - startY;
+        // тянешь вверх — сопротивление «резинки», как в iOS
+        cur = d >= 0 ? d : -Math.pow(-d, 0.75);
+        const now = e.timeStamp || Date.now();
+        if (now > lastT) { vel = (y - lastY) / (now - lastT); lastY = y; lastT = now; }
         sheet.style.transform = `translateY(${cur}px)`;
+        if (bd) bd.style.opacity = String(Math.max(0.25, 1 - Math.max(0, cur) / (sheet.offsetHeight || 600)));
       }, { passive: true });
-      sheet.addEventListener('touchend', () => {
+      const finish = () => {
         if (!drag) return;
         drag = false;
-        sheet.style.transition = '';
+        sheet.style.transition = SPRING;
         sheet.style.transform = '';
-        const bd = sheet.closest('.sheet-backdrop');
-        if (cur > 90 && bd) closeSheet(bd.id); // смахнул вниз достаточно — закрыть
-      });
+        if (bd) { bd.style.transition = 'opacity .3s ease'; bd.style.opacity = ''; }
+        // закрыть, если утянул далеко ИЛИ быстро фликнул вниз
+        if ((cur > 110 || (vel > 0.6 && cur > 40)) && bd) closeSheet(bd.id);
+        setTimeout(() => { sheet.style.transition = ''; if (bd) bd.style.transition = ''; }, 400);
+      };
+      sheet.addEventListener('touchend', finish);
+      sheet.addEventListener('touchcancel', finish);
     });
   }
 
