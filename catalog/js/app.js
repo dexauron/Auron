@@ -52,9 +52,11 @@
     suppliers: [],
     products: [],
     query: '',
-    groupId: 'all',
-    category: null,   // выбранная категория (раздел) — null = показаны все категории
-    supplierId: null, // null = все поставщики
+    // Множественный выбор фильтров (объединение: показываем товары, подходящие
+    // под любой отмеченный фильтр). Повторный тап снимает отметку.
+    selCats: [],      // выбранные категории (разделы) по названию
+    selGroups: [],    // выбранные группы: id групп + служебные 'none'/'weighted'
+    selSuppliers: [], // выбранные поставщики (id); пусто = все поставщики
     session: null,
     isAdmin: false,   // админ может менять каталог; сотрудник — только смотреть цены и контакты
     contacts: {},     // supplier_id → контакты (загружаются после входа)
@@ -322,11 +324,21 @@
 
   function visibleProducts() {
     let list = state.products;
-    if (state.groupId === 'none') list = list.filter((p) => !p.group_id);
-    else if (state.groupId === 'weighted') list = list.filter((p) => p.is_weighted);
-    else if (state.groupId !== 'all') list = list.filter((p) => p.group_id === state.groupId);
-    else if (state.category) list = list.filter((p) => productCategory(p) === state.category);
-    if (state.supplierId) list = list.filter((p) => (p.supplier_ids || []).includes(state.supplierId));
+    const { selCats, selGroups, selSuppliers } = state;
+    // фильтр по группам/категориям — объединение всех отметок
+    if (selCats.length || selGroups.length) {
+      list = list.filter((p) => {
+        if (selGroups.includes('none') && !p.group_id) return true;
+        if (selGroups.includes('weighted') && p.is_weighted) return true;
+        if (p.group_id && selGroups.includes(p.group_id)) return true;
+        if (selCats.length && selCats.includes(productCategory(p))) return true;
+        return false;
+      });
+    }
+    // фильтр по поставщикам — объединение (товар от любого отмеченного)
+    if (selSuppliers.length) {
+      list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
+    }
 
     const q = norm(state.query);
     if (!q) return list;
@@ -355,45 +367,49 @@
       if (p.is_weighted) weighted++;
     }
 
-    // ── Верхний ряд: Все · Поставщики · Ходовые · Весовые · категории ──
-    const allActive = state.category === null && state.groupId === 'all';
+    // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
+    const { selCats, selGroups, selSuppliers } = state;
+    const anyFilter = selCats.length || selGroups.length || selSuppliers.length;
+    const allActive = !selCats.length && !selGroups.length;
     let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
+    if (anyFilter) html += '<button class="chip chip-reset" data-reset>✕ Сбросить</button>';
     if (state.suppliers.length) {
-      const sup = supplierById(state.supplierId);
-      const label = sup ? `🚚 ${sup.name}` : '🚚 Поставщики';
-      const cnt = sup
-        ? state.products.filter((p) => (p.supplier_ids || []).includes(sup.id)).length
+      const label = !selSuppliers.length ? '🚚 Поставщики'
+        : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
+          : `🚚 Поставщиков: ${selSuppliers.length}`;
+      const cnt = selSuppliers.length
+        ? state.products.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id))).length
         : state.suppliers.length;
-      html += `<button class="chip${sup ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
+      html += `<button class="chip${selSuppliers.length ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
     if (state.session) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
-    if (weighted > 0) html += `<button class="chip${state.groupId === 'weighted' ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
+    if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
 
     // категории — по убыванию числа товаров; порядок стабильный
     const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
       .filter((c) => catCounts[c])
       .sort((a, b) => catCounts[b] - catCounts[a]);
     for (const c of cats) {
-      const active = state.category === c ? ' active' : '';
+      const active = selCats.includes(c) ? ' active' : '';
       html += `<button class="chip${active}" data-category="${esc(c)}">${catIcon(c)} ${esc(c)}<span class="chip-count">${catCounts[c]}</span></button>`;
     }
-    if (noGroup > 0) html += `<button class="chip${state.groupId === 'none' ? ' active' : ''}" data-group="none">Без группы<span class="chip-count">${noGroup}</span></button>`;
+    if (noGroup > 0) html += `<button class="chip${selGroups.includes('none') ? ' active' : ''}" data-group="none">Без группы<span class="chip-count">${noGroup}</span></button>`;
     $('groupChips').innerHTML = html;
 
-    // ── Нижний ряд: подгруппы выбранной категории ──
+    // ── Нижний ряд: подгруппы выбранных категорий (можно отметить несколько) ──
     const sub = $('subChips');
-    if (!state.category) { sub.hidden = true; sub.innerHTML = ''; return; }
+    if (!selCats.length) { sub.hidden = true; sub.innerHTML = ''; return; }
     const subGroups = state.groups
-      .filter((g) => categoryOf(g.name) === state.category && groupCounts[g.id])
+      .filter((g) => selCats.includes(categoryOf(g.name)) && groupCounts[g.id])
       .sort((a, b) => (groupCounts[b.id] || 0) - (groupCounts[a.id] || 0));
-    let subHtml = `<button class="chip${state.groupId === 'all' ? ' active' : ''}" data-group="all">Все · ${esc(state.category)}<span class="chip-count">${catCounts[state.category] || 0}</span></button>`;
+    let subHtml = '';
     for (const g of subGroups) subHtml += chipHtml(g.id, g.name, groupCounts[g.id] || 0);
     sub.innerHTML = subHtml;
-    sub.hidden = false;
+    sub.hidden = !subHtml;
   }
 
   function chipHtml(id, name, count) {
-    const active = state.groupId === id ? ' active' : '';
+    const active = state.selGroups.includes(id) ? ' active' : '';
     return `<button class="chip${active}" data-group="${esc(id)}">${esc(name)}<span class="chip-count">${count}</span></button>`;
   }
 
@@ -613,7 +629,19 @@
       return e;
     }).filter(Boolean);
 
-    if (!entries.length) { box.innerHTML = ''; return; }
+    if (!entries.length) {
+      // ничего не показать молча — плохо: пользователь думает, что «сломалось».
+      // Объясняем словами, что делать.
+      if (opt.locked) {
+        box.innerHTML = '<div class="price-block"><button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены и контакты — вход для сотрудников</button></div>';
+      } else if (opt.stale) {
+        box.innerHTML = `<div class="price-block"><p class="muted price-hint">${esc(opt.stale)}</p></div>`;
+      } else {
+        box.innerHTML = '<div class="price-block"><div class="price-title">Поставщики и цены</div>'
+          + '<p class="muted price-hint">У этого товара пока нет цен. Загрузи прайс поставщиков через «Импорт из 1С» — цены появятся здесь.</p></div>';
+      }
+      return;
+    }
 
     // сортировка: сначала с ценой (по возрастанию), потом без цены (по имени)
     entries.sort((a, b) => {
@@ -1073,7 +1101,7 @@
     if (!confirm(`Удалить группу «${g?.name}»? Товары останутся — без группы.`)) return;
     const { error } = await sb.from('catalog_groups').delete().eq('id', id);
     if (error) { toast('Ошибка: ' + error.message); return; }
-    if (state.groupId === id) state.groupId = 'all';
+    state.selGroups = state.selGroups.filter((x) => x !== id);
     await refresh({ silent: true });
     renderAll();
     renderGroupsManager();
@@ -1102,10 +1130,11 @@
       ? state.suppliers.filter((s) => norm(s.name).includes(q) || translit(norm(s.name)).includes(translit(q)))
       : state.suppliers;
     let html = '';
-    if (state.supplierId) {
-      html += '<button class="btn btn-secondary btn-block" data-pick-supplier="">← Показать всех</button>';
+    if (state.selSuppliers.length) {
+      html += `<button class="btn btn-ghost btn-block" data-pick-supplier="" style="margin-bottom:6px">✕ Снять выбор (${state.selSuppliers.length})</button>`;
     }
     html += filtered.slice(0, 100).map((s) => {
+      const on = state.selSuppliers.includes(s.id);
       // после входа под поставщиком видны контакты: позвонить или написать в WhatsApp
       const c = state.contacts[s.id];
       const contact = c && (c.phone || c.contact_name || c.note)
@@ -1114,8 +1143,8 @@
           c.note ? `<div class="sup-note">${esc(c.note)}</div>` : ''}</div>`
         : '';
       return `<div class="sup-row">
-        <button class="btn btn-secondary btn-block" data-pick-supplier="${esc(s.id)}">
-          🚚 ${esc(s.name)} <span class="chip-count">${counts[s.id] || 0}</span>
+        <button class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-pick-supplier="${esc(s.id)}">
+          <span>${on ? '✓ ' : ''}🚚 ${esc(s.name)}</span> <span class="chip-count">${counts[s.id] || 0}</span>
         </button>${contact}</div>`;
     }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
     if (filtered.length > 100) html += `<p class="muted">Показаны первые 100 из ${filtered.length} — уточни поиск</p>`;
@@ -1131,14 +1160,18 @@
     }
     const q = norm($('groupsPickSearch').value);
     const filtered = q ? state.groups.filter((g) => norm(g.name).includes(q)) : state.groups;
+    const picked = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted');
     let html = '';
-    if (state.groupId !== 'all') {
-      html += '<button class="btn btn-secondary btn-block" data-pick-group="all">← Показать все товары</button>';
+    if (picked.length) {
+      html += `<button class="btn btn-ghost btn-block" data-pick-group="" style="margin-bottom:6px">✕ Снять выбор (${picked.length})</button>`;
     }
-    html += filtered.map((g) => `
-      <button class="btn btn-secondary btn-block" data-pick-group="${esc(g.id)}">
-        📁 ${esc(g.name)} <span class="chip-count">${counts[g.id] || 0}</span>
-      </button>`).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
+    html += filtered.map((g) => {
+      const on = state.selGroups.includes(g.id);
+      return `
+      <button class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-pick-group="${esc(g.id)}">
+        <span>${on ? '✓ ' : ''}📁 ${esc(g.name)}</span> <span class="chip-count">${counts[g.id] || 0}</span>
+      </button>`;
+    }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
     $('groupsPickList').innerHTML = html;
   }
 
@@ -1221,7 +1254,7 @@
     if (!confirm(`Удалить поставщика «${s?.name}»? Товары останутся — без поставщика.`)) return;
     const { error } = await sb.from('catalog_suppliers').delete().eq('id', id);
     if (error) { toast('Ошибка: ' + error.message); return; }
-    if (state.supplierId === id) state.supplierId = null;
+    state.selSuppliers = state.selSuppliers.filter((x) => x !== id);
     await refresh({ silent: true });
     renderAll();
     renderSuppliersManager();
@@ -1376,7 +1409,12 @@
     const withBc = items.filter((i) => i.barcodes.size).length;
     const priceCnt = items.reduce((n, i) => n + i.prices.size, 0);
     impParsed = items;
-    impStatus(`Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков, ${priceCnt} цен. `
+    // предупреждаем, если в файле не нашлось ни одной цены — иначе в карточках
+    // товара не будет цен, и это выглядит как «поломка»
+    const priceWarn = priceCnt === 0
+      ? '⚠ ЦЕНЫ НЕ НАЙДЕНЫ. В карточках товара цены не появятся. Проверь, что в файле есть колонки «Поставщик/Контрагент» и «Цена» в одной строке с товаром. '
+      : '';
+    impStatus(`${priceWarn}Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков, ${priceCnt} цен. `
       + `Со штрихкодами: ${withBc}${extra ? ` (+${extra} штрихкодов из файла 2)` : ''}. `
       + 'Проверь цифры и нажми кнопку ещё раз — начнётся загрузка.');
     $('impRun').textContent = `⬆ Загрузить ${items.length} товаров в каталог`;
@@ -2153,40 +2191,66 @@
         return;
       }
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
-      if (chip.hasAttribute('data-all')) { state.category = null; state.groupId = 'all'; }
-      else if (chip.hasAttribute('data-category')) { state.category = chip.dataset.category; state.groupId = 'all'; }
-      else { state.groupId = chip.dataset.group; if (state.groupId !== 'all') state.category = null; }
+      // повторный тап снимает отметку; можно отметить несколько
+      if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; }
+      else if (chip.hasAttribute('data-reset')) { state.selCats = []; state.selGroups = []; state.selSuppliers = []; }
+      else if (chip.hasAttribute('data-category')) {
+        const c = chip.dataset.category;
+        if (state.selCats.includes(c)) {
+          // снимаем категорию — и её подгруппы из выбора тоже
+          state.selCats = state.selCats.filter((x) => x !== c);
+          const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
+          state.selGroups = state.selGroups.filter((x) => !ids.has(x));
+        } else state.selCats = [...state.selCats, c];
+      } else {
+        const g = chip.dataset.group; // 'none' | 'weighted'
+        state.selGroups = state.selGroups.includes(g)
+          ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
+      }
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
 
-    // подгруппы выбранной категории
+    // подгруппы выбранных категорий — тап отмечает/снимает
     $('subChips').addEventListener('click', (e) => {
       const chip = e.target.closest('.chip');
       if (!chip) return;
-      state.groupId = chip.dataset.group; // 'all' = вся категория
+      const g = chip.dataset.group;
+      state.selGroups = state.selGroups.includes(g)
+        ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
 
-    // выбор поставщика в списке (+ живой поиск по списку)
+    // выбор поставщиков — тап отмечает/снимает, шторка остаётся открытой
     $('supplierList').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-pick-supplier]');
       if (!btn) return;
-      state.supplierId = btn.dataset.pickSupplier || null;
+      const id = btn.dataset.pickSupplier;
+      if (!id) state.selSuppliers = []; // «снять выбор»
+      else {
+        state.selSuppliers = state.selSuppliers.includes(id)
+          ? state.selSuppliers.filter((x) => x !== id) : [...state.selSuppliers, id];
+      }
       state.renderLimit = PAGE_SIZE;
-      closeSheet('supplierSheet');
+      renderSupplierList();
       renderAll();
     });
     $('supplierSearch').addEventListener('input', renderSupplierList);
 
-    // выбор группы в полном списке (+ живой поиск)
+    // выбор групп в полном списке — тап отмечает/снимает, шторка остаётся открытой
     $('groupsPickList').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-pick-group]');
       if (!btn) return;
-      state.groupId = btn.dataset.pickGroup;
+      const id = btn.dataset.pickGroup;
+      if (!id) { // «снять выбор» — убираем только конкретные группы
+        state.selGroups = state.selGroups.filter((x) => x === 'none' || x === 'weighted');
+      } else {
+        state.selGroups = state.selGroups.includes(id)
+          ? state.selGroups.filter((x) => x !== id) : [...state.selGroups, id];
+      }
       state.renderLimit = PAGE_SIZE;
-      closeSheet('groupsPickSheet');
+      renderGroupsPick();
       renderAll();
     });
     $('groupsPickSearch').addEventListener('input', renderGroupsPick);
@@ -2195,8 +2259,9 @@
     $('sheetSupplier').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-supplier-all]');
       if (!btn) return;
-      state.supplierId = btn.dataset.supplierAll;
-      state.groupId = 'all';
+      state.selSuppliers = [btn.dataset.supplierAll];
+      state.selCats = [];
+      state.selGroups = [];
       state.renderLimit = PAGE_SIZE;
       closeSheet('productSheet');
       renderAll();
@@ -2276,9 +2341,9 @@
       if (e.target.closest('a')) return;
       const all = e.target.closest('[data-supplier-all]');
       if (all) {
-        state.supplierId = all.dataset.supplierAll;
-        state.groupId = 'all';
-        state.category = null;
+        state.selSuppliers = [all.dataset.supplierAll];
+        state.selCats = [];
+        state.selGroups = [];
         state.renderLimit = PAGE_SIZE;
         closeSheet('supplierViewSheet');
         closeSheet('productSheet');

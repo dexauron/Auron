@@ -125,6 +125,9 @@ body {
 .chip .chip-count { color: var(--text-2); font-size: 12px; margin-left: 4px; }
 .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .chip.active .chip-count { color: rgba(255, 255, 255, .8); }
+.chip.chip-reset { background: transparent; border-color: var(--border); color: var(--text-2); }
+/* отмеченный поставщик/группа в списке-шторке */
+.btn-secondary.picked { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
 /* ── Плашки ────────────────────────────────────── */
 .banner { margin: 10px 14px 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
