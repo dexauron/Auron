@@ -6,9 +6,44 @@
 
   const $ = (id) => document.getElementById(id);
   const CFG = window.CATALOG_CONFIG || {};
-  const CACHE_KEY = 'wm_catalog_cache_v1';
+  const CACHE_KEY = 'wm_catalog';       // ключ в IndexedDB
   const BUCKET = 'product-photos';
   const SEARCH_THRESHOLD = 25;
+
+  /* ── Хранилище кэша (IndexedDB) ────────────────────
+   * Каталог на 16 тыс. товаров — это ~8 МБ, больше лимита localStorage (~5 МБ),
+   * поэтому localStorage тихо не сохранял его и каждый заход грузился заново.
+   * IndexedDB держит сотни МБ — кэш реально сохраняется, заход мгновенный. */
+  const IDB_STORE = 'kv';
+  let _idb = null;
+  function openIdb() {
+    if (_idb) return _idb;
+    _idb = new Promise((resolve, reject) => {
+      if (!('indexedDB' in window)) { reject(new Error('no indexeddb')); return; }
+      const req = indexedDB.open('wm_catalog_db', 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return _idb;
+  }
+  async function idbGet(key) {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const r = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+  }
+  async function idbSet(key, value) {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
 
   const PAGE_SIZE = 80; // карточек на экране до кнопки «Показать ещё»
 
@@ -24,6 +59,7 @@
     isAdmin: false,   // админ может менять каталог; сотрудник — только смотреть цены и контакты
     contacts: {},     // supplier_id → контакты (загружаются после входа)
     lastFetch: 0,
+    syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
   };
 
@@ -576,66 +612,105 @@
 
   /* ── Данные ───────────────────────────────────── */
 
-  function loadCache() {
+  async function loadCache() {
     try {
-      const c = JSON.parse(localStorage.getItem(CACHE_KEY));
+      const c = await idbGet(CACHE_KEY);
       if (c && Array.isArray(c.products)) {
         state.groups = c.groups || [];
         state.suppliers = c.suppliers || [];
         state.products = c.products;
+        state.syncMax = c.syncMax || '';
         buildIndex();
         state.lastFetch = c.ts || 0;
         return true;
       }
-    } catch (e) { /* повреждённый кэш игнорируем */ }
+    } catch (e) { /* нет кэша или IndexedDB недоступен — работаем от сети */ }
     return false;
   }
 
   function saveCache() {
-    try {
-      // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
-      localStorage.setItem(CACHE_KEY, JSON.stringify(
-        {
-          groups: state.groups, suppliers: state.suppliers,
-          products: state.products, ts: Date.now(),
-        },
-        (key, value) => (key.startsWith('_') ? undefined : value),
-      ));
-    } catch (e) { /* нет места — не страшно, кэш вспомогательный */ }
+    // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
+    const clean = state.products.map((p) => {
+      const o = {};
+      for (const k in p) if (k[0] !== '_') o[k] = p[k];
+      return o;
+    });
+    idbSet(CACHE_KEY, {
+      groups: state.groups, suppliers: state.suppliers,
+      products: clean, ts: Date.now(), syncMax: state.syncMax,
+    }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
   }
 
-  // база отдаёт максимум 1000 строк за раз — большие каталоги забираем страницами
-  async function fetchAllRows(table, orderCol) {
-    const all = [];
-    const page = 1000;
-    for (let from = 0; ; from += page) {
-      const { data, error } = await sb.from(table).select('*')
-        .order(orderCol).order('id').range(from, from + page - 1);
-      if (error) throw error;
-      all.push(...data);
-      if (data.length < page) return all;
-    }
-  }
+  const PAGE = 1000; // база отдаёт максимум 1000 строк за раз
+  const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+  const trackMax = (rows) => { for (const r of rows) if (r.updated_at && r.updated_at > state.syncMax) state.syncMax = r.updated_at; };
 
-  async function fetchData() {
-    const [g, sup, p] = await Promise.all([
+  // маленькие таблицы (группы, поставщики) — всегда целиком, это быстро
+  async function fetchSmall() {
+    const [g, sup] = await Promise.all([
       sb.from('catalog_groups').select('*').order('sort_order').order('name'),
-      fetchAllRows('catalog_suppliers', 'name'),
-      fetchAllRows('catalog_products', 'name'),
+      sb.from('catalog_suppliers').select('*').order('name').order('id').range(0, 4999),
     ]);
     if (g.error) throw g.error;
+    if (sup.error) throw sup.error;
     state.groups = g.data;
-    state.suppliers = sup;
-    state.products = p;
+    state.suppliers = sup.data;
+  }
+
+  // Полная загрузка товаров страницами по id (быстро — id проиндексирован).
+  // Первую страницу показываем сразу, остальное дозагружаем в фоне — экран не пустует.
+  async function fullLoadProducts() {
+    const all = [];
+    state.syncMax = '';
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await sb.from('catalog_products').select('*')
+        .order('id').range(from, from + PAGE - 1);
+      if (error) throw error;
+      all.push(...data);
+      trackMax(data);
+      if (from === 0 && data.length) {
+        // мгновенно показываем первую тысячу, пока грузится остальное
+        state.products = all.slice().sort(byName);
+        buildIndex();
+        $('loader').hidden = true;
+        renderAll();
+      }
+      if (data.length < PAGE) break;
+    }
+    state.products = all.sort(byName);
     buildIndex();
-    state.lastFetch = Date.now();
-    saveCache();
-    $('offlineBanner').hidden = true;
+  }
+
+  // Докачка: берём только товары, изменившиеся с прошлого раза, и вливаем в кэш.
+  // Обычно это 0–несколько строк → мгновенно. Удаления ловим сверкой количества.
+  async function deltaSyncProducts() {
+    const { data, error } = await sb.from('catalog_products').select('*')
+      .gt('updated_at', state.syncMax).order('updated_at').range(0, 4999);
+    if (error) throw error;
+    if (data.length >= 5000) { await fullLoadProducts(); return; } // много изменений (импорт) → проще перезабрать
+    if (data.length) {
+      const map = new Map(state.products.map((p) => [p.id, p]));
+      for (const r of data) map.set(r.id, r);
+      trackMax(data);
+      state.products = [...map.values()].sort(byName);
+      buildIndex();
+    }
+    // сверка количества — поймать удалённые товары
+    const { count, error: cErr } = await sb.from('catalog_products')
+      .select('id', { count: 'exact', head: true });
+    if (!cErr && count != null && count !== state.products.length) {
+      await fullLoadProducts();
+    }
   }
 
   async function refresh({ silent = false } = {}) {
     try {
-      await fetchData();
+      await fetchSmall();
+      if (!state.products.length || !state.syncMax) await fullLoadProducts();
+      else await deltaSyncProducts();
+      state.lastFetch = Date.now();
+      saveCache();
+      $('offlineBanner').hidden = true;
       renderAll();
     } catch (e) {
       if (!silent) {
@@ -2288,7 +2363,7 @@
     if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
       $('setupBanner').hidden = false;
       $('loader').hidden = true;
-      loadCache();
+      await loadCache();
       renderAll(); // даже с пустым кэшем — покажется понятное пустое состояние
       return;
     }
@@ -2297,7 +2372,7 @@
       // библиотека базы не загрузилась (нет интернета) — показываем сохранённый каталог
       $('loader').hidden = true;
       const banner = $('offlineBanner');
-      banner.textContent = loadCache()
+      banner.textContent = (await loadCache())
         ? '📶 Нет связи. Показан сохранённый каталог'
         : '📶 Нет интернета. Подключись к сети и обнови страницу';
       banner.hidden = false;
@@ -2310,8 +2385,8 @@
       auth: { persistSession: true, autoRefreshToken: true },
     });
 
-    // мгновенно показываем кэш, затем обновляем из базы
-    if (loadCache()) renderAll();
+    // мгновенно показываем сохранённый каталог, затем тихо обновляем из базы
+    if (await loadCache()) renderAll();
 
     sb.auth.getSession().then(({ data }) => applySession(data.session));
     // setTimeout — запросы к базе нельзя делать прямо внутри колбэка onAuthStateChange

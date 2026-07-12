@@ -1,8 +1,10 @@
 /* Way Market · Каталог — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v1';
-const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/config.js', 'manifest.webmanifest'];
+const CACHE = 'wm-catalog-v2';
+const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/config.js',
+  'vendor/supabase.min.js', 'manifest.webmanifest',
+  'icons/icon-192.png', 'icons/logo-round.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -35,6 +35,7 @@ create table if not exists catalog_products (
 
 create index if not exists idx_products_group on catalog_products(group_id);
 create unique index if not exists uq_products_code on catalog_products(code); -- для импорта из 1С
+create index if not exists idx_products_updated on catalog_products(updated_at); -- быстрая докачка изменившихся
 
 -- Администраторы: только они могут менять каталог. Первого админа впиши сам:
 --   insert into catalog_admins (email) values ('ТВОЙ-EMAIL');
