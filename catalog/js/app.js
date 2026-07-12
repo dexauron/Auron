@@ -1014,13 +1014,18 @@
       const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
       const unit = cols.unit !== undefined ? cellStr(row[cols.unit]).toLowerCase() : '';
       const price = cols.price !== undefined ? parsePriceNum(row[cols.price]) : null;
+      const rowDate = cols.date !== undefined ? parseDateCell(row[cols.date]) : null; // дата последнего поступления
       if (art && !item.article) item.article = art;
       if (grp && !item.group) item.group = grp;
       if (sup) item.suppliers.add(sup);
       if (bc) item.barcodes.add(bc);
       if (unit && !item.unit) item.unit = unit;
       if (unit === 'кг') item.weighted = true;
-      if (sup && price != null) item.prices.set(sup, price); // цена поставщика из этой строки
+      if (sup && price != null) {
+        // несколько строк по поставщику — оставляем самое свежее поступление
+        const prev = item.prices.get(sup);
+        if (!prev || (rowDate || '') >= (prev.date || '')) item.prices.set(sup, { price, date: rowDate });
+      }
     }
     return byKey;
   }
@@ -1136,15 +1141,15 @@
         impStatus(`Загружаем товары… ${done} из ${total}`);
       }
 
-      // цены поставщиков: строка на товар × поставщика × сегодняшнюю дату — так копится история
+      // цены поставщиков: дата = последнее поступление из файла (нет колонки даты — день импорта)
       const today = new Date().toISOString().slice(0, 10);
       const priceRows = [];
       for (const i of items) {
         const pid = i.code ? idByCode.get(i.code) : i._id;
         if (!pid) continue;
-        for (const [supName, price] of i.prices) {
+        for (const [supName, pr] of i.prices) {
           const sid = supMap.get(norm(supName));
-          if (sid) priceRows.push({ product_id: pid, supplier_id: sid, price, price_date: today });
+          if (sid) priceRows.push({ product_id: pid, supplier_id: sid, price: pr.price, price_date: pr.date || today });
         }
       }
       // база пишет только новые и изменившиеся цены — одинаковые не плодят строк

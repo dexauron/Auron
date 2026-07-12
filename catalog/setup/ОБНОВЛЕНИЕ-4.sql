@@ -7,13 +7,38 @@
 
 -- ── 1. Запись цен только при изменении ──────────────────
 -- Иначе ежедневный импорт плодит миллионы одинаковых строк и раздувает базу.
--- Принимает пачку цен, сравнивает каждую с последней сохранённой и пишет
--- только новые и изменившиеся. Возвращает, сколько строк записано.
+-- Дата у цены = последнее поступление товара у поставщика с этой ценой (из файла 1С).
+-- Цена изменилась → новая строка истории; цена та же, поступление свежее → обновляется
+-- только дата. Возвращает, сколько строк записано или обновлено.
 create or replace function catalog_save_prices(p_rows jsonb)
 returns integer
 language plpgsql as $$
-declare n integer := 0;
+declare ins integer := 0; upd integer := 0;
 begin
+  -- цена не изменилась, но поступление свежее → обновляем дату у последней записи
+  with incoming as (
+    select (r->>'product_id')::uuid   as pid,
+           (r->>'supplier_id')::uuid  as sid,
+           (r->>'price')::numeric     as price,
+           coalesce(nullif(r->>'price_date','')::date, current_date) as d
+    from jsonb_array_elements(p_rows) as r
+  ),
+  latest as (
+    select distinct on (cp.product_id, cp.supplier_id)
+           cp.id, cp.product_id, cp.supplier_id, cp.price, cp.price_date
+    from catalog_prices cp
+    join (select distinct pid, sid from incoming) i
+      on i.pid = cp.product_id and i.sid = cp.supplier_id
+    order by cp.product_id, cp.supplier_id, cp.price_date desc
+  )
+  update catalog_prices cp
+     set price_date = i.d
+    from incoming i
+    join latest l on l.product_id = i.pid and l.supplier_id = i.sid
+   where cp.id = l.id and l.price = i.price and i.d > l.price_date;
+  get diagnostics upd = row_count;
+
+  -- новая или изменившаяся цена → новая строка истории
   with incoming as (
     select (r->>'product_id')::uuid   as pid,
            (r->>'supplier_id')::uuid  as sid,
@@ -35,8 +60,9 @@ begin
   left join latest l on l.product_id = i.pid and l.supplier_id = i.sid
   where l.product_id is null or l.price is distinct from i.price
   on conflict (product_id, supplier_id, price_date) do update set price = excluded.price;
-  get diagnostics n = row_count;
-  return n;
+  get diagnostics ins = row_count;
+
+  return ins + upd;
 end $$;
 revoke all on function catalog_save_prices(jsonb) from public, anon;
 grant execute on function catalog_save_prices(jsonb) to authenticated;
