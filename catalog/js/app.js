@@ -275,6 +275,7 @@
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy">`
         : '📦';
+      const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
       const tags = [];
       if (p.code) tags.push(`<span class="tag tag-code">Код ${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖ весовой</span>');
@@ -284,7 +285,7 @@
       if (p.department) tags.push(`<span class="tag">Отдел ${esc(p.department)}</span>`);
       if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
       return `<article class="card" data-id="${esc(p.id)}">
-        <div class="card-photo">${img}</div>
+        <div class="${photoCls}">${img}</div>
         <div class="card-body">
           <div class="card-name">${esc(p.name)}</div>
           <div class="card-tags">${tags.join('')}</div>
@@ -550,6 +551,7 @@
     }
     $('fabAdd').hidden = !state.isAdmin;
     $('adminBtn').classList.toggle('is-admin', !!session);
+    $('adminBtnLabel').hidden = !!session; // после входа — только значок, без «Войти»
     if (!$('productSheet').hidden) {
       $('sheetAdminActions').hidden = !state.isAdmin;
       if (currentProduct) renderProductPrices(currentProduct);
@@ -1907,7 +1909,8 @@
     if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
       $('setupBanner').hidden = false;
       $('loader').hidden = true;
-      if (loadCache()) renderAll();
+      loadCache();
+      renderAll(); // даже с пустым кэшем — покажется понятное пустое состояние
       return;
     }
 
@@ -1915,9 +1918,11 @@
       // библиотека базы не загрузилась (нет интернета) — показываем сохранённый каталог
       $('loader').hidden = true;
       const banner = $('offlineBanner');
-      banner.textContent = '📶 Нет связи. Показан сохранённый каталог';
+      banner.textContent = loadCache()
+        ? '📶 Нет связи. Показан сохранённый каталог'
+        : '📶 Нет интернета. Подключись к сети и обнови страницу';
       banner.hidden = false;
-      if (loadCache()) renderAll();
+      renderAll();
       return;
     }
 

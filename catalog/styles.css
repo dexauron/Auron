@@ -57,15 +57,17 @@ body {
 .brand-sub { font-size: 12px; color: var(--text-2); }
 
 .icon-btn {
-  width: 40px; height: 40px;
-  border-radius: 50%;
+  min-width: 40px; height: 40px;
+  padding: 0 14px;
+  border-radius: 100px;
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text-2);
-  display: grid; place-items: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 14px; font-weight: 600; font-family: inherit;
   cursor: pointer;
 }
-.icon-btn.is-admin { color: var(--accent); border-color: var(--accent); }
+.icon-btn.is-admin { color: var(--accent); border-color: var(--accent); padding: 0; width: 40px; border-radius: 50%; }
 
 .search-row { display: flex; gap: 8px; }
 .search-wrap { position: relative; flex: 1; }
@@ -155,6 +157,7 @@ body {
   font-size: 40px;
   overflow: hidden;
 }
+.card-photo.no-photo { aspect-ratio: auto; height: 92px; font-size: 30px; }
 .card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card-body { padding: 9px 11px 11px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .card-name {
@@ -253,7 +256,7 @@ body {
   object-fit: contain;
   scroll-snap-align: center;
 }
-.photo-placeholder { display: grid; place-items: center; font-size: 64px; }
+.photo-placeholder { display: grid; place-items: center; font-size: 44px; aspect-ratio: auto !important; height: 140px; }
 .photo-dots { display: flex; justify-content: center; gap: 6px; padding: 8px 0 0; }
 .photo-dots .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); }
 .photo-dots .dot.active { background: var(--accent); }
@@ -292,6 +295,8 @@ body {
 .btn-ghost { background: none; color: var(--text-2); width: 100%; margin-top: 6px; }
 .btn-block { width: 100%; margin-top: 12px; }
 .btn:disabled { opacity: .55; cursor: default; }
+.btn:active:not(:disabled) { transform: scale(.98); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .admin-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
@@ -420,8 +425,8 @@ select.input { appearance: none; }
   border-radius: 12px;
   padding: 10px 12px;
   min-height: 48px; /* крупная цель для пальца */
-  cursor: pointer;
 }
+.price-row[data-hist-toggle] { cursor: pointer; }
 .price-row.price-best { background: rgba(48, 209, 88, .12); border-color: rgba(48, 209, 88, .45); }
 .price-sup { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .price-contact { font-weight: 400; color: var(--text-2); }
@@ -479,3 +484,16 @@ select.input { appearance: none; }
 
 /* ── Логотип Way Market в шапке ────────────────── */
 .brand-logo-img { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 1px solid var(--border); }
+
+/* ── Экран входа ───────────────────────────────── */
+.login-logo { display: block; width: 68px; height: 68px; margin: 6px auto 10px; border-radius: 50%; border: 1px solid var(--border); }
+.login-title { text-align: center; }
+.login-sub { text-align: center; }
+
+/* ── Широкие экраны (компьютер) ────────────────── */
+@media (min-width: 900px) {
+  .header-row, .search-row, .chips { max-width: 1160px; margin-left: auto; margin-right: auto; }
+  .header-row { margin-bottom: 10px; }
+  .content { max-width: 1200px; margin: 0 auto; }
+  .banner { max-width: 1172px; margin-left: auto; margin-right: auto; }
+}
