@@ -6,6 +6,18 @@
 -- ⚠ Сначала должно быть выполнено ОБНОВЛЕНИЕ-2.sql (там список админов и права).
 -- (Для новых установок не нужно — schema.sql уже содержит эти изменения.)
 
+-- если таблица осталась от старой версии (по дням, колонка sale_date) —
+-- пересоздаём её под периоды (продажи всегда можно загрузить заново из 1С)
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'catalog_sales' and column_name = 'sale_date'
+  ) then
+    drop table catalog_sales cascade;
+  end if;
+end $$;
+
 -- продажи по периодам: строка на товар × период отчёта
 create table if not exists catalog_sales (
   id          uuid primary key default gen_random_uuid(),
