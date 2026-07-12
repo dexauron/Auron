@@ -126,6 +126,7 @@
           <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🌐 Фото по штрихкодам (интернет)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+          <button class="btn btn-secondary btn-block" id="menuDedup">🧹 Убрать дубли товаров</button>
           <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
         </div>
         <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
@@ -267,22 +268,8 @@
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title">🔥 Ходовые товары</h2>
-        <div class="chips chips-wrap" id="topChips">
-          <button class="chip" data-top-period="day">Сегодня</button>
-          <button class="chip active" data-top-period="week">7 дней</button>
-          <button class="chip" data-top-period="month">30 дней</button>
-          <button class="chip" data-top-period="custom">Свой период</button>
-        </div>
-        <div class="input-pair" id="topCustom" hidden>
-          <div>
-            <label class="field-label">С</label>
-            <input type="date" id="topFrom" class="input">
-          </div>
-          <div>
-            <label class="field-label">По</label>
-            <input type="date" id="topTo" class="input">
-          </div>
-        </div>
+        <p class="muted">Выбери период загруженного отчёта продаж:</p>
+        <div class="chips chips-wrap" id="topChips"></div>
         <div id="topList"></div>
         <button class="btn btn-ghost sheet-close" data-close="topSheet">Закрыть</button>
       </div>
@@ -295,15 +282,18 @@
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title">Импорт продаж из 1С</h2>
-        <p class="muted">Отчёт «Продажи» (Excel): товары и количество. Если в отчёте есть
-        колонка с датой — история разложится по дням сама. Если нет — укажи ниже,
-        за какой день этот отчёт, и загружай его, например, раз в день.</p>
+        <p class="muted">Отчёт «Продажи» (Excel) из 1С: товары и количество за период.
+        Период программа берёт из шапки файла сама. Товары находятся по названию.
+        Повторная загрузка того же периода просто обновит данные.</p>
         <label class="btn btn-secondary btn-block">📄 Выбрать файл — отчёт «Продажи»
           <input type="file" id="salesFile" hidden accept=".xls,.xlsx">
         </label>
         <div class="muted" id="salesFileName"></div>
-        <label class="field-label">Дата продаж <span class="hint">— если в файле нет колонки даты</span></label>
-        <input type="date" id="salesDate" class="input">
+        <label class="field-label">Период <span class="hint">— заполнять только если в файле его нет</span></label>
+        <div class="input-pair">
+          <input type="date" id="salesFrom" class="input" aria-label="с">
+          <input type="date" id="salesTo" class="input" aria-label="по">
+        </div>
         <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
         <div class="banner banner-info" id="salesStatus" hidden></div>
         <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>

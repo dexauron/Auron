@@ -510,16 +510,17 @@
 
   const SALES_CACHE_KEY = 'wm_sales_cache_v1';
 
-  function renderSalesBox(p, d7, d30, unit, stale) {
-    const perDay = d30 / 30;
-    const per = perDay >= 10 ? Math.round(perDay) : Math.round(perDay * 10) / 10;
-    const u = unit || 'шт';
+  function renderSalesBox(p, s, stale) {
+    const u = p.unit || 'шт';
+    const round = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
+    const days = daysBetween(s.period_from, s.period_to);
+    const perDay = round(Number(s.qty) / days);
     $('sheetSales').innerHTML = `<div class="sales-box">
       <div class="sales-title">Продажи${stale ? ' <span class="sales-stale">· без связи</span>' : ''}</div>
       <div class="sales-nums">
-        <div class="sales-cell"><span class="sales-n">${d7}</span><span class="sales-l">за 7 дней</span></div>
-        <div class="sales-cell"><span class="sales-n">${d30}</span><span class="sales-l">за 30 дней</span></div>
-        <div class="sales-cell"><span class="sales-n">${per}</span><span class="sales-l">${esc(u)}/день</span></div>
+        <div class="sales-cell"><span class="sales-n">${round(Number(s.qty))}</span><span class="sales-l">${esc(u)} за период</span></div>
+        <div class="sales-cell"><span class="sales-n">${perDay}</span><span class="sales-l">${esc(u)}/день</span></div>
+        <div class="sales-cell"><span class="sales-n" style="font-size:15px">${fmtDate(s.period_from)}<br>${fmtDate(s.period_to)}</span><span class="sales-l">период</span></div>
       </div>
     </div>`;
   }
@@ -528,33 +529,22 @@
     const box = $('sheetSales');
     box.innerHTML = '';
     if (!sb || !state.session) return; // продажи — только после входа
-    const today = new Date();
-    const from30 = isoDay(new Date(today - 29 * 86400000));
-    const from7 = isoDay(new Date(today - 6 * 86400000));
-    let rows;
+    let s;
     try {
       const { data, error } = await sb.from('catalog_sales')
-        .select('sale_date,qty').eq('product_id', p.id).gte('sale_date', from30);
+        .select('period_from,period_to,qty').eq('product_id', p.id)
+        .order('period_to', { ascending: false }).limit(1);
       if (error) throw error;
-      rows = data;
+      s = data[0];
     } catch (e) {
       const cached = readCache(SALES_CACHE_KEY)[p.id];
-      if (cached && currentProduct === p) renderSalesBox(p, cached.d7, cached.d30, p.unit, true);
+      if (cached && currentProduct === p) renderSalesBox(p, cached, true);
       return;
     }
     if (currentProduct !== p) return;
-    let d7 = 0;
-    let d30 = 0;
-    for (const r of rows) {
-      const q = Number(r.qty) || 0;
-      d30 += q;
-      if (r.sale_date >= from7) d7 += q;
-    }
-    const round = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
-    d7 = round(d7); d30 = round(d30);
-    writeCache(SALES_CACHE_KEY, p.id, { d7, d30 }, 400);
-    if (!d30) { box.innerHTML = ''; return; } // не продавался за месяц — не мозолим глаза
-    renderSalesBox(p, d7, d30, p.unit, false);
+    if (!s) { box.innerHTML = ''; return; } // продаж нет — не показываем
+    writeCache(SALES_CACHE_KEY, p.id, s, 400);
+    renderSalesBox(p, s, false);
   }
 
   // общий кэш карточек (цены/продажи) на телефоне
@@ -865,8 +855,8 @@
       if (currentProduct) renderProductPrices(currentProduct);
     }
     renderAll(); // и сетка, и чипы — после входа появляется «🔥 Ходовые»
-    // владелец вошёл → через пару секунд запускаем тихий автопоиск фото
-    if (isOwner()) setTimeout(autoPhotoSearch, 3000);
+    // владелец вошёл → тихо убираем дубли (если есть) и запускаем автопоиск фото
+    if (isOwner()) { setTimeout(autoDedup, 2000); setTimeout(autoPhotoSearch, 4000); }
   }
 
   async function loadContacts() {
@@ -1283,7 +1273,9 @@
         else if (l.includes('единиц') || /(^|\s)ед\.?(\s|$)/.test(l)) cols.unit ??= c; // «Единица измерения» или «Ед.»
         else if (l.includes('цена')) cols.price ??= c;
         else if (l.includes('количество') || /(^|\s)кол-?во(\s|$)/.test(l)) cols.qty ??= c;
-        else if (l.includes('сумма') || l.includes('выручка')) cols.amount ??= c;
+        // выручка: «Сумма продажи»/«Выручка» — приоритетнее «приходной суммы»/себестоимости/НДС
+        else if ((l.includes('сумма продаж') || l.includes('выручка')) && !/приход|ндс|скидк|закуп|себестоим/.test(l)) cols.amount = c;
+        else if (l.includes('сумма') && cols.amount === undefined && !/приход|ндс|скидк|закуп|себестоим|дополнит/.test(l)) cols.amount = c;
         else if (l.includes('дата') || l.includes('период')) cols.date ??= c;
         else if (l.includes('групп')) cols.group ??= c;
         else if ((l.includes('номенклатура') || l.includes('наименование')) && cols.name === undefined) cols.name = c;
@@ -1527,6 +1519,7 @@
         impStatus(`Готово! Загружено ${total} товаров ✓${priceNote} Можно закрыть окно.`);
       }
       toast('Импорт завершён ✓');
+      await autoDedup(); // тихо убрать дубли, если вдруг появились
       setTimeout(autoPhotoSearch, 1500); // сразу дотянуть фото для новых товаров
       impParsed = null;
       btn.textContent = 'Проверить файлы';
@@ -1609,6 +1602,69 @@
     save();
     photoSearchRunning = false;
     if (found) { saveCache(); renderGrid(); toast(`Добавлено фото: ${found} ✓`); }
+  }
+
+  /* Дубли товаров: оставляем один на «имя + штрихкоды», приоритет строке с кодом
+   * кассы, затем самой ранней. Работает и как ручная кнопка, и автоматически
+   * (после импорта, при входе владельца) — тогда без вопросов. */
+  let dedupRunning = false;
+
+  function findDuplicateIds() {
+    const groups = new Map();
+    for (const p of state.products) {
+      const key = norm(p.name) + '|' + JSON.stringify(p.barcodes || []);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(p);
+    }
+    const toDelete = [];
+    for (const arr of groups.values()) {
+      if (arr.length < 2) continue;
+      arr.sort((a, b) => {
+        if (!!a.code !== !!b.code) return a.code ? -1 : 1;
+        return String(a.created_at || '').localeCompare(String(b.created_at || ''));
+      });
+      for (let i = 1; i < arr.length; i++) toDelete.push(arr[i].id);
+    }
+    return toDelete;
+  }
+
+  async function runDedup(toDelete, { silent } = {}) {
+    if (dedupRunning || !toDelete.length || !sb || !isOwner()) return;
+    dedupRunning = true;
+    const btn = $('menuDedup');
+    if (btn) btn.disabled = true;
+    if (!silent) toast(`Убираю дубли: ${toDelete.length}…`);
+    try {
+      let done = 0;
+      for (let i = 0; i < toDelete.length; i += 200) {
+        const batch = toDelete.slice(i, i + 200);
+        const { error } = await sb.from('catalog_products').delete().in('id', batch);
+        if (error) throw error;
+        done += batch.length;
+        if (btn) btn.textContent = `Убираю дубли… ${done} из ${toDelete.length}`;
+      }
+      const del = new Set(toDelete);
+      state.products = state.products.filter((p) => !del.has(p.id));
+      buildIndex(); saveCache(); renderAll();
+      toast(`Убрано дублей: ${toDelete.length} ✓`);
+    } catch (e) {
+      if (!silent) toast('Ошибка: ' + (e.message || e));
+    } finally {
+      dedupRunning = false;
+      if (btn) { btn.disabled = false; btn.textContent = '🧹 Убрать дубли товаров'; }
+    }
+  }
+
+  function dedupProducts() { // ручная кнопка
+    const ids = findDuplicateIds();
+    if (!ids.length) { toast('Дублей не найдено ✓'); return; }
+    if (confirm(`Найдено дублей: ${ids.length}. Убрать их? Останется по одному товару.`)) runDedup(ids, { silent: false });
+  }
+
+  async function autoDedup() { // тихо, само (после импорта, при входе владельца)
+    if (!isOwner()) return;
+    const ids = findDuplicateIds();
+    if (ids.length) await runDedup(ids, { silent: true });
   }
 
   async function runPhotoSearch() {
@@ -1785,33 +1841,46 @@
     return m ? m[0] : null;
   }
 
+  // период отчёта: ищем в верхних строках текст «Период: 01.06.2026 - 12.07.2026»
+  function parseReportPeriod(rows) {
+    for (let r = 0; r < Math.min(rows.length, 14); r++) {
+      for (const cell of (rows[r] || [])) {
+        const s = String(cell ?? '');
+        if (/период/i.test(s)) {
+          const ds = s.match(/\d{1,2}\.\d{1,2}\.\d{2,4}/g);
+          if (ds && ds.length >= 2) return [parseDateCell(ds[0]), parseDateCell(ds[1])];
+          if (ds && ds.length === 1) return [parseDateCell(ds[0]), parseDateCell(ds[0])];
+        }
+      }
+    }
+    return [null, null];
+  }
+
+  // Отчёт «Продажи» из 1С обычно агрегирован ЗА ПЕРИОД (в шапке «Период: …»),
+  // без разбивки по дням, и товары в нём — по названию (кода/штрихкода нет).
   function parseSalesReport(rows) {
     const det = detectColumns(rows);
     if (!det) throw new Error('Не нашёл строку заголовков (Номенклатура…) в отчёте');
     const { cols, dataStart } = det;
     if (cols.qty === undefined) throw new Error('Не нашёл колонку «Количество» — выгрузи отчёт «Продажи» с количеством');
-    const recs = new Map(); // товар × дата → количество и сумма
-    const dates = new Set();
+    const [periodFrom, periodTo] = parseReportPeriod(rows);
+    const recs = new Map(); // товар (по коду или названию) → количество и сумма за период
     for (let r = dataStart; r < rows.length; r++) {
       const row = rows[r];
       const name = cellStr(row[cols.name]);
       if (!name) continue;
+      if (/^\s*(итого|всего|total)/i.test(name)) continue; // строки-итоги пропускаем
       const qty = parsePriceNum(row[cols.qty]);
       if (qty == null) continue; // итоговые и пустые строки
       const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
-      const date = cols.date !== undefined ? parseDateCell(row[cols.date]) : null;
       const amount = cols.amount !== undefined ? parsePriceNum(row[cols.amount]) : null;
-      const key = (code || norm(name)) + '::' + (date || '');
+      const key = code || norm(name);
       let rec = recs.get(key);
-      if (!rec) {
-        rec = { code: code || null, name, date, qty: 0, amount: 0, hasAmount: false };
-        recs.set(key, rec);
-      }
+      if (!rec) { rec = { code: code || null, name, qty: 0, amount: 0, hasAmount: false }; recs.set(key, rec); }
       rec.qty += qty;
       if (amount != null) { rec.amount += amount; rec.hasAmount = true; }
-      if (date) dates.add(date);
     }
-    return { recs: [...recs.values()], dates: [...dates].sort(), hasDateCol: cols.date !== undefined };
+    return { recs: [...recs.values()], periodFrom, periodTo, hasPeriod: !!(periodFrom && periodTo) };
   }
 
   function salesStatus(msg) {
@@ -1826,53 +1895,54 @@
     salesStatus('Читаем файл…');
     await loadXlsxLib();
     salesParsed = parseSalesReport(await readSheet(f));
-    const { recs, dates, hasDateCol } = salesParsed;
+    const { recs, periodFrom, periodTo, hasPeriod } = salesParsed;
     if (!recs.length) { salesParsed = null; salesStatus('В файле не нашлось строк с продажами'); return; }
-    const when = hasDateCol && dates.length
-      ? `Даты в файле: ${fmtDate(dates[0])} — ${fmtDate(dates[dates.length - 1])}.`
-      : `Колонки с датой в файле нет — все продажи запишутся на ${fmtDate($('salesDate').value || new Date().toISOString().slice(0, 10))}.`;
-    salesStatus(`Найдено строк продаж: ${recs.length}. ${when} `
+    const when = hasPeriod
+      ? `Период из файла: ${fmtDate(periodFrom)} — ${fmtDate(periodTo)}.`
+      : `Периода в файле не нашёл — укажи даты периода ниже (с / по).`;
+    salesStatus(`Найдено товаров с продажами: ${recs.length}. ${when} `
       + 'Проверь и нажми кнопку ещё раз — начнётся загрузка.');
     $('salesRun').textContent = `⬆ Загрузить продажи (${recs.length})`;
   }
 
   async function salesUpload() {
-    const { recs } = salesParsed;
+    const { recs, hasPeriod } = salesParsed;
     const btn = $('salesRun');
     btn.disabled = true;
     try {
-      const fallbackDate = $('salesDate').value || new Date().toISOString().slice(0, 10);
+      // период: из файла, иначе из полей «с»/«по» (или сегодня)
+      const today = new Date().toISOString().slice(0, 10);
+      const periodFrom = hasPeriod ? salesParsed.periodFrom : ($('salesFrom').value || today);
+      const periodTo = hasPeriod ? salesParsed.periodTo : ($('salesTo').value || $('salesFrom').value || today);
       const byCode = new Map();
       const byName = new Map();
       for (const p of state.products) {
         if (p.code) byCode.set(p.code, p.id);
         byName.set(norm(p.name), p.id);
       }
-      const out = new Map(); // товар в базе × дата → строка для сохранения
+      const out = new Map(); // товар в базе → продажи за период
       let unmatched = 0;
       for (const r of recs) {
         const pid = (r.code && byCode.get(r.code)) || byName.get(norm(r.name));
         if (!pid) { unmatched++; continue; }
-        const date = r.date || fallbackDate;
-        const k = pid + '::' + date;
-        let row = out.get(k);
-        if (!row) { row = { product_id: pid, sale_date: date, qty: 0, amount: null }; out.set(k, row); }
+        let row = out.get(pid);
+        if (!row) { row = { product_id: pid, period_from: periodFrom, period_to: periodTo, qty: 0, amount: null }; out.set(pid, row); }
         row.qty += r.qty;
         if (r.hasAmount) row.amount = (row.amount || 0) + r.amount;
       }
       const list = [...out.values()];
-      if (!list.length) throw new Error('Ни один товар из отчёта не найден в каталоге — сначала сделай импорт товаров');
+      if (!list.length) throw new Error('Ни один товар из отчёта не найден в каталоге по названию. Сначала сделай импорт товаров тем же файлом «Цены поставщиков».');
       let done = 0;
       for (let i = 0; i < list.length; i += 500) {
         const { error } = await sb.from('catalog_sales')
-          .upsert(list.slice(i, i + 500), { onConflict: 'product_id,sale_date' });
+          .upsert(list.slice(i, i + 500), { onConflict: 'product_id,period_from,period_to' });
         if (error) throw error;
         done += Math.min(500, list.length - i);
         salesStatus(`Сохраняем продажи… ${done} из ${list.length}`);
       }
-      salesStatus(`Готово! Продажи сохранены: ${list.length} ✓`
-        + (unmatched ? ` Не найдено в каталоге: ${unmatched} товаров (обнови импорт товаров и повтори).` : '')
-        + ' Смотри «🔥 Ходовые товары» в меню.');
+      salesStatus(`Готово! Продажи за ${fmtDate(periodFrom)}–${fmtDate(periodTo)} сохранены: ${list.length} товаров ✓`
+        + (unmatched ? ` Не нашлось по названию: ${unmatched}.` : '')
+        + ' Смотри «🔥 Ходовые товары».');
       toast('Продажи загружены ✓');
       salesParsed = null;
       btn.textContent = 'Проверить файл';
@@ -1890,54 +1960,65 @@
 
   const isoDay = (d) => d.toISOString().slice(0, 10);
 
-  function topPeriodDates(kind) {
-    const now = new Date();
-    const to = isoDay(now);
-    if (kind === 'day') return [to, to];
-    if (kind === 'week') return [isoDay(new Date(now - 6 * 86400000)), to];
-    if (kind === 'month') return [isoDay(new Date(now - 29 * 86400000)), to];
-    return [$('topFrom').value, $('topTo').value]; // свой период
+  const daysBetween = (from, to) => Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
+
+  // загруженные периоды продаж — чипами, по ним и смотрим топ
+  async function renderTopPeriods() {
+    const box = $('topChips');
+    let periods = [];
+    try {
+      const { data, error } = await sb.rpc('catalog_sales_periods');
+      if (error) throw error;
+      periods = data || [];
+    } catch (e) {
+      box.innerHTML = '';
+      $('topList').innerHTML = '<p class="muted">Не получилось прочитать продажи. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql</p>';
+      return;
+    }
+    if (!periods.length) {
+      box.innerHTML = '';
+      $('topList').innerHTML = '<p class="muted">Продажи ещё не загружены. Меню админа → «📈 Импорт продаж» — загрузи отчёт «Продажи» из 1С.</p>';
+      return;
+    }
+    box.innerHTML = periods.map((p, i) =>
+      `<button class="chip${i === 0 ? ' active' : ''}" data-from="${esc(p.period_from)}" data-to="${esc(p.period_to)}">${fmtDate(p.period_from)}–${fmtDate(p.period_to)}</button>`).join('');
+    loadTopProducts();
   }
 
   async function loadTopProducts() {
-    const kind = document.querySelector('#topChips .chip.active')?.dataset.topPeriod || 'week';
-    const [from, to] = topPeriodDates(kind);
+    const chip = document.querySelector('#topChips .chip.active');
+    if (!chip) return;
+    const from = chip.dataset.from;
+    const to = chip.dataset.to;
+    const days = daysBetween(from, to);
     const box = $('topList');
-    if (!from || !to) { box.innerHTML = '<p class="muted">Выбери обе даты</p>'; return; }
     box.innerHTML = '<p class="muted">Считаем…</p>';
-    const { data, error } = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 200 });
-    if (error) {
-      box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(error.message || '')
-        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-3.sql</p>';
-      return;
-    }
-    if (!data || !data.length) {
-      box.innerHTML = '<p class="muted">Продаж за этот период нет. Админ загружает их через «📈 Импорт продаж» в меню</p>';
-      return;
-    }
+    const { data, error } = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 300 });
+    if (error) { box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(error.message || '') + '</p>'; return; }
+    if (!data || !data.length) { box.innerHTML = '<p class="muted">За этот период продаж нет</p>'; return; }
     const byId = new Map(state.products.map((p) => [p.id, p]));
-    box.innerHTML = data.map((row, i) => {
+    const rnd = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
+    box.innerHTML = `<p class="muted top-period-note">За ${fmtDate(from)}–${fmtDate(to)} · ${days} дн.</p>` + data.map((row, i) => {
       const p = byId.get(row.product_id);
       if (!p) return '';
       const photo = (p.photos || [])[0];
       const qty = Number(row.total_qty);
-      const qtyStr = (qty % 1 ? qty.toFixed(1) : qty) + ' ' + (p.unit || 'шт');
+      const perDay = rnd(qty / days);
+      const u = p.unit || 'шт';
       const amt = row.total_amount != null ? `<span class="top-amt">${fmtPrice(row.total_amount)}</span>` : '';
       return `<div class="top-row" data-id="${esc(p.id)}">
         <span class="top-rank">${i + 1}</span>
         <span class="top-photo">${photo ? `<img src="${esc(photo)}" loading="lazy" alt="">` : '📦'}</span>
         <span class="top-name">${esc(p.name)}</span>
-        <span class="top-qty">${esc(qtyStr)}${amt}</span>
+        <span class="top-qty">${rnd(qty)} ${esc(u)}<span class="top-amt">≈${perDay}/день</span>${amt}</span>
       </div>`;
     }).join('');
   }
 
   function openTopSheet() {
-    const now = new Date();
-    if (!$('topTo').value) $('topTo').value = isoDay(now);
-    if (!$('topFrom').value) $('topFrom').value = isoDay(new Date(now - 29 * 86400000));
     openSheet('topSheet');
-    loadTopProducts();
+    $('topList').innerHTML = '<p class="muted">Загружаем…</p>';
+    renderTopPeriods();
   }
 
   /* ── Сканер штрихкода ─────────────────────────────
@@ -2462,17 +2543,17 @@
       }
     });
 
+    // Убрать дубли товаров (только админ)
+    $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });
+
     // Ходовые товары (после входа)
     $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
     $('topChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('[data-top-period]');
+      const chip = e.target.closest('.chip');
       if (!chip) return;
       document.querySelectorAll('#topChips .chip').forEach((c) => c.classList.toggle('active', c === chip));
-      $('topCustom').hidden = chip.dataset.topPeriod !== 'custom';
       loadTopProducts();
     });
-    $('topFrom').addEventListener('change', loadTopProducts);
-    $('topTo').addEventListener('change', loadTopProducts);
     $('topList').addEventListener('click', (e) => {
       const row = e.target.closest('.top-row');
       if (!row) return;
@@ -2486,7 +2567,6 @@
       salesParsed = null;
       $('salesRun').textContent = 'Проверить файл';
       $('salesStatus').hidden = true;
-      if (!$('salesDate').value) $('salesDate').value = new Date().toISOString().slice(0, 10);
       openSheet('salesImportSheet');
     });
     $('salesFile').addEventListener('change', () => {

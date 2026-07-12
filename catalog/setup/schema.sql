@@ -65,138 +65,41 @@ create table if not exists catalog_prices (
 );
 create index if not exists idx_prices_product on catalog_prices(product_id);
 
--- Продажи по дням из импорта 1С — для аналитики «Ходовые товары»
+-- Продажи из 1С по периодам — для аналитики «Ходовые товары»
 create table if not exists catalog_sales (
-  id         uuid primary key default gen_random_uuid(),
-  product_id uuid not null references catalog_products(id) on delete cascade,
-  sale_date  date not null,
-  qty        numeric not null default 0,
-  amount     numeric,
-  created_at timestamptz not null default now(),
-  unique (product_id, sale_date)
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references catalog_products(id) on delete cascade,
+  period_from date not null,
+  period_to   date not null,
+  qty         numeric not null default 0,
+  amount      numeric,
+  created_at  timestamptz not null default now(),
+  unique (product_id, period_from, period_to)
 );
-create index if not exists idx_sales_date    on catalog_sales(sale_date);
+create index if not exists idx_sales_period  on catalog_sales(period_from, period_to);
 create index if not exists idx_sales_product on catalog_sales(product_id);
 
--- топ продаж за период — считает база, телефону не нужно качать все строки
-create or replace function catalog_top_products(p_from date, p_to date, p_limit int default 200)
+-- топ товаров за период — считает база
+create or replace function catalog_top_products(p_from date, p_to date, p_limit int default 300)
 returns table (product_id uuid, total_qty numeric, total_amount numeric)
 language sql stable as $$
-  select product_id, sum(qty) as total_qty, sum(amount) as total_amount
+  select product_id, sum(qty), sum(amount)
   from catalog_sales
-  where sale_date between p_from and p_to
-  group by product_id
-  order by sum(qty) desc
-  limit p_limit;
+  where period_from >= p_from and period_to <= p_to
+  group by product_id order by sum(qty) desc limit p_limit;
 $$;
 revoke all on function catalog_top_products(date, date, int) from public, anon;
 grant execute on function catalog_top_products(date, date, int) to authenticated;
 
--- ── 1. Запись цен только при изменении ──────────────────
--- Иначе ежедневный импорт плодит миллионы одинаковых строк и раздувает базу.
--- Дата у цены = последнее поступление товара у поставщика с этой ценой (из файла 1С).
--- Цена изменилась → новая строка истории; цена та же, поступление свежее → обновляется
--- только дата. Возвращает, сколько строк записано или обновлено.
-create or replace function catalog_save_prices(p_rows jsonb)
-returns integer
-language plpgsql as $$
-declare ins integer := 0; upd integer := 0;
-begin
-  -- цена не изменилась, но поступление свежее → обновляем дату у последней записи
-  with incoming as (
-    select (r->>'product_id')::uuid   as pid,
-           (r->>'supplier_id')::uuid  as sid,
-           (r->>'price')::numeric     as price,
-           coalesce(nullif(r->>'price_date','')::date, current_date) as d
-    from jsonb_array_elements(p_rows) as r
-  ),
-  latest as (
-    select distinct on (cp.product_id, cp.supplier_id)
-           cp.id, cp.product_id, cp.supplier_id, cp.price, cp.price_date
-    from catalog_prices cp
-    join (select distinct pid, sid from incoming) i
-      on i.pid = cp.product_id and i.sid = cp.supplier_id
-    order by cp.product_id, cp.supplier_id, cp.price_date desc
-  )
-  update catalog_prices cp
-     set price_date = i.d
-    from incoming i
-    join latest l on l.product_id = i.pid and l.supplier_id = i.sid
-   where cp.id = l.id and l.price = i.price and i.d > l.price_date;
-  get diagnostics upd = row_count;
-
-  -- новая или изменившаяся цена → новая строка истории
-  with incoming as (
-    select (r->>'product_id')::uuid   as pid,
-           (r->>'supplier_id')::uuid  as sid,
-           (r->>'price')::numeric     as price,
-           coalesce(nullif(r->>'price_date','')::date, current_date) as d
-    from jsonb_array_elements(p_rows) as r
-  ),
-  latest as (
-    select distinct on (cp.product_id, cp.supplier_id)
-           cp.product_id, cp.supplier_id, cp.price
-    from catalog_prices cp
-    join (select distinct pid, sid from incoming) i
-      on i.pid = cp.product_id and i.sid = cp.supplier_id
-    order by cp.product_id, cp.supplier_id, cp.price_date desc
-  )
-  insert into catalog_prices (product_id, supplier_id, price, price_date)
-  select i.pid, i.sid, i.price, i.d
-  from incoming i
-  left join latest l on l.product_id = i.pid and l.supplier_id = i.sid
-  where l.product_id is null or l.price is distinct from i.price
-  on conflict (product_id, supplier_id, price_date) do update set price = excluded.price;
-  get diagnostics ins = row_count;
-
-  return ins + upd;
-end $$;
-revoke all on function catalog_save_prices(jsonb) from public, anon;
-grant execute on function catalog_save_prices(jsonb) to authenticated;
-
--- ── 2. Пароль магазина и выход устройств ────────────────
--- Уволился сотрудник → админ прямо в приложении ставит новый пароль магазина,
--- и все телефоны со старым входом выходят из системы.
-create or replace function catalog_set_staff_password(p_password text)
-returns void
-language plpgsql security definer set search_path = public, auth, extensions as $$
-declare uid uuid;
-begin
-  if not catalog_is_admin() then
-    raise exception 'Менять пароль магазина может только администратор';
-  end if;
-  if length(coalesce(p_password, '')) < 6 then
-    raise exception 'Пароль должен быть не короче 6 символов';
-  end if;
-  select id into uid from auth.users where email = 'staff@waymarket.ru';
-  if uid is null then
-    raise exception 'Аккаунт сотрудников staff@waymarket.ru ещё не создан';
-  end if;
-  update auth.users
-     set encrypted_password = extensions.crypt(p_password, extensions.gen_salt('bf', 10)),
-         updated_at = now()
-   where id = uid;
-  delete from auth.sessions where user_id = uid; -- все устройства сотрудников выходят
-end $$;
-revoke all on function catalog_set_staff_password(text) from public, anon;
-grant execute on function catalog_set_staff_password(text) to authenticated;
-
--- Просто выгнать все устройства сотрудников, не меняя пароль
-create or replace function catalog_logout_staff()
-returns void
-language plpgsql security definer set search_path = public, auth as $$
-declare uid uuid;
-begin
-  if not catalog_is_admin() then
-    raise exception 'Только администратор';
-  end if;
-  select id into uid from auth.users where email = 'staff@waymarket.ru';
-  if uid is not null then
-    delete from auth.sessions where user_id = uid;
-  end if;
-end $$;
-revoke all on function catalog_logout_staff() from public, anon;
-grant execute on function catalog_logout_staff() to authenticated;
+-- список загруженных периодов продаж
+create or replace function catalog_sales_periods()
+returns table (period_from date, period_to date, positions bigint)
+language sql stable as $$
+  select period_from, period_to, count(*) from catalog_sales
+  group by period_from, period_to order by period_to desc, period_from desc;
+$$;
+revoke all on function catalog_sales_periods() from public, anon;
+grant execute on function catalog_sales_periods() to authenticated;
 
 -- проверка «этот пользователь — админ?» для прав доступа
 create or replace function catalog_is_admin() returns boolean
