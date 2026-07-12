@@ -517,3 +517,12 @@ select.input { appearance: none; }
 .sup-wa { background: #25d366; color: #fff; justify-content: center; }
 .sup-nocontact { margin: 4px 0 8px; }
 .sup-allbtn { width: 100%; margin-top: 4px; justify-content: center; }
+
+/* ── Продажи товара в карточке ─────────────────── */
+.sales-box { background: rgba(48,209,88,.08); border: 1px solid rgba(48,209,88,.35); border-radius: 14px; padding: 12px 14px; margin: 4px 0 12px; }
+.sales-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+.sales-stale { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--warn); }
+.sales-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sales-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.sales-n { font-size: 22px; font-weight: 800; color: var(--accent); }
+.sales-l { font-size: 12px; color: var(--text-2); text-align: center; }

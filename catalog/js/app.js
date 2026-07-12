@@ -406,8 +406,74 @@
 
     $('sheetAdminActions').hidden = !state.isAdmin;
     $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
+    renderProductSales(p);
     renderProductPrices(p);
     openSheet('productSheet');
+  }
+
+  /* ── Продажи товара в карточке (для заказа) ────────
+   * После входа: сколько штук продано за 7 и 30 дней и в среднем в день —
+   * помогает решить, сколько заказывать. Деньги не показываем — только штуки. */
+
+  const SALES_CACHE_KEY = 'wm_sales_cache_v1';
+
+  function renderSalesBox(p, d7, d30, unit, stale) {
+    const perDay = d30 / 30;
+    const per = perDay >= 10 ? Math.round(perDay) : Math.round(perDay * 10) / 10;
+    const u = unit || 'шт';
+    $('sheetSales').innerHTML = `<div class="sales-box">
+      <div class="sales-title">Продажи${stale ? ' <span class="sales-stale">· без связи</span>' : ''}</div>
+      <div class="sales-nums">
+        <div class="sales-cell"><span class="sales-n">${d7}</span><span class="sales-l">за 7 дней</span></div>
+        <div class="sales-cell"><span class="sales-n">${d30}</span><span class="sales-l">за 30 дней</span></div>
+        <div class="sales-cell"><span class="sales-n">${per}</span><span class="sales-l">${esc(u)}/день</span></div>
+      </div>
+    </div>`;
+  }
+
+  async function renderProductSales(p) {
+    const box = $('sheetSales');
+    box.innerHTML = '';
+    if (!sb || !state.session) return; // продажи — только после входа
+    const today = new Date();
+    const from30 = isoDay(new Date(today - 29 * 86400000));
+    const from7 = isoDay(new Date(today - 6 * 86400000));
+    let rows;
+    try {
+      const { data, error } = await sb.from('catalog_sales')
+        .select('sale_date,qty').eq('product_id', p.id).gte('sale_date', from30);
+      if (error) throw error;
+      rows = data;
+    } catch (e) {
+      const cached = readCache(SALES_CACHE_KEY)[p.id];
+      if (cached && currentProduct === p) renderSalesBox(p, cached.d7, cached.d30, p.unit, true);
+      return;
+    }
+    if (currentProduct !== p) return;
+    let d7 = 0;
+    let d30 = 0;
+    for (const r of rows) {
+      const q = Number(r.qty) || 0;
+      d30 += q;
+      if (r.sale_date >= from7) d7 += q;
+    }
+    const round = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
+    d7 = round(d7); d30 = round(d30);
+    writeCache(SALES_CACHE_KEY, p.id, { d7, d30 }, 400);
+    if (!d30) { box.innerHTML = ''; return; } // не продавался за месяц — не мозолим глаза
+    renderSalesBox(p, d7, d30, p.unit, false);
+  }
+
+  // общий кэш карточек (цены/продажи) на телефоне
+  function readCache(key) { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; } }
+  function writeCache(key, id, val, max) {
+    try {
+      const all = readCache(key);
+      all[id] = { ...val, ts: Date.now() };
+      const keys = Object.keys(all);
+      if (keys.length > max) keys.sort((a, b) => all[a].ts - all[b].ts).slice(0, keys.length - max).forEach((k) => delete all[k]);
+      localStorage.setItem(key, JSON.stringify(all));
+    } catch (e) { /* нет места */ }
   }
 
   /* ── Цены поставщиков в карточке (видны после входа) ── */
@@ -607,6 +673,7 @@
       try {
         localStorage.removeItem(PRICE_CACHE_KEY);
         localStorage.removeItem(CONTACTS_CACHE_KEY);
+        localStorage.removeItem(SALES_CACHE_KEY);
       } catch (e) { /* некритично */ }
     }
     $('fabAdd').hidden = !state.isAdmin;
