@@ -865,6 +865,8 @@
       if (currentProduct) renderProductPrices(currentProduct);
     }
     renderAll(); // и сетка, и чипы — после входа появляется «🔥 Ходовые»
+    // владелец вошёл → через пару секунд запускаем тихий автопоиск фото
+    if (isOwner()) setTimeout(autoPhotoSearch, 3000);
   }
 
   async function loadContacts() {
@@ -1411,13 +1413,26 @@
       const supMap = await getOrCreateByName('catalog_suppliers',
         items.flatMap((i) => [...i.suppliers]), state.suppliers);
 
+      // существующие товары — чтобы товары БЕЗ кода находить по штрихкоду/названию
+      // и ОБНОВЛЯТЬ, а не вставлять заново (иначе повторный импорт двоит каталог)
+      const exByBarcode = new Map();
+      const exByName = new Map();
+      for (const p of state.products) {
+        for (const b of (p.barcodes || [])) if (b) exByBarcode.set(String(b).trim(), p.id);
+        if (p.name) exByName.set(norm(p.name), p.id);
+      }
+      const findExisting = (i) => {
+        for (const b of i.barcodes) { const id = exByBarcode.get(String(b).trim()); if (id) return id; }
+        return exByName.get(norm(i.name)) || null;
+      };
+
       const withCode = [];
-      const noCode = [];
-      const noCodeItems = []; // параллельно записям — чтобы связать цены с товарами без кода
+      const noCodeUpdate = []; // товары без кода, найденные в базе → обновляем по id
+      const noCodeInsert = [];
+      const noCodeInsertItems = [];
       for (const i of items) {
-        const rec = {
+        const base = {
           name: i.name,
-          code: i.code,
           article: i.article,
           group_id: i.group ? groupMap.get(norm(i.group)) : null,
           supplier_ids: [...i.suppliers].map((s) => supMap.get(norm(s))).filter(Boolean),
@@ -1426,13 +1441,15 @@
           unit: i.unit,
           updated_at: new Date().toISOString(),
         };
-        if (i.code) withCode.push(rec);
-        else { noCode.push(rec); noCodeItems.push(i); }
+        if (i.code) { withCode.push({ ...base, code: i.code }); continue; }
+        const exId = findExisting(i);
+        if (exId) { noCodeUpdate.push({ ...base, id: exId }); i._id = exId; } // код НЕ трогаем — вдруг товар уже с кодом
+        else { noCodeInsert.push(base); noCodeInsertItems.push(i); }
       }
 
       const idByCode = new Map(); // код товара → id в базе (для загрузки цен)
       let done = 0;
-      const total = withCode.length + noCode.length;
+      const total = withCode.length + noCodeUpdate.length + noCodeInsert.length;
       for (let i = 0; i < withCode.length; i += 400) {
         const { data, error } = await sb.from('catalog_products')
           .upsert(withCode.slice(i, i + 400), { onConflict: 'code' })
@@ -1442,12 +1459,21 @@
         done += Math.min(400, withCode.length - i);
         impStatus(`Загружаем товары… ${done} из ${total}`);
       }
-      for (let i = 0; i < noCode.length; i += 400) {
-        const chunk = noCode.slice(i, i + 400);
+      // найденные без кода — обновляем по id (не плодим дубли)
+      for (let i = 0; i < noCodeUpdate.length; i += 400) {
+        const { error } = await sb.from('catalog_products')
+          .upsert(noCodeUpdate.slice(i, i + 400), { onConflict: 'id' });
+        if (error) throw error;
+        done += Math.min(400, noCodeUpdate.length - i);
+        impStatus(`Загружаем товары… ${done} из ${total}`);
+      }
+      // действительно новые без кода — вставляем
+      for (let i = 0; i < noCodeInsert.length; i += 400) {
+        const chunk = noCodeInsert.slice(i, i + 400);
         const { data, error } = await sb.from('catalog_products').insert(chunk).select('id');
         if (error) throw error;
-        data.forEach((row, j) => { noCodeItems[i + j]._id = row.id; });
-        done += Math.min(400, noCode.length - i);
+        data.forEach((row, j) => { noCodeInsertItems[i + j]._id = row.id; });
+        done += Math.min(400, noCodeInsert.length - i);
         impStatus(`Загружаем товары… ${done} из ${total}`);
       }
 
@@ -1501,6 +1527,7 @@
         impStatus(`Готово! Загружено ${total} товаров ✓${priceNote} Можно закрыть окно.`);
       }
       toast('Импорт завершён ✓');
+      setTimeout(autoPhotoSearch, 1500); // сразу дотянуть фото для новых товаров
       impParsed = null;
       btn.textContent = 'Проверить файлы';
     } catch (err) {
@@ -1548,6 +1575,40 @@
       .update({ photos, updated_at: new Date().toISOString() }).eq('id', p.id);
     if (error) throw error;
     p.photos = photos;
+  }
+
+  // владелец (личный аккаунт), а не общий аккаунт сотрудников — только он тянет фото автоматически
+  const isOwner = () => !!(state.session && state.session.user
+    && state.session.user.email && state.session.user.email !== CFG.STAFF_EMAIL);
+
+  /* Автопоиск фото: приложение САМО ищет фото товаров без картинок в фоне,
+   * пока владелец в приложении. Продолжается после каждого импорта и между
+   * заходами (проверенные штрихкоды запоминаются). Тихо, без кнопок. */
+  async function autoPhotoSearch() {
+    if (!sb || !isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
+    let checked = {};
+    try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
+    const todo = photoCandidates().filter((p) => !checked[(p.barcodes || [])[0]]);
+    if (!todo.length) return;
+    photoSearchRunning = true;
+    const save = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
+    toast(`🔎 Ищу фото товаров в фоне (${todo.length})…`);
+    let done = 0;
+    let found = 0;
+    for (const p of todo) {
+      if (!isOwner() || document.hidden || !navigator.onLine) break; // тихо приостановиться
+      const bc = p.barcodes[0];
+      try {
+        const url = await offLookup(bc);
+        if (url) { await attachFoundPhoto(p, url); found++; if (found % 6 === 0) { saveCache(); renderGrid(); } }
+        else checked[bc] = 1;
+      } catch (e) { /* пропускаем товар */ }
+      done++;
+      if (done % 15 === 0) save();
+    }
+    save();
+    photoSearchRunning = false;
+    if (found) { saveCache(); renderGrid(); toast(`Добавлено фото: ${found} ✓`); }
   }
 
   async function runPhotoSearch() {
@@ -2466,12 +2527,13 @@
       if (del) deleteSupplier(del.closest('.group-row').dataset.id);
     });
 
-    // Возврат на вкладку — обновляем каталог, если данные старше 5 минут
+    // Возврат на вкладку — обновляем каталог, если данные старше 5 минут; и продолжаем автопоиск фото
     document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && sb && Date.now() - state.lastFetch > 5 * 60 * 1000) {
-        refresh({ silent: true }).then(renderAll);
-      }
+      if (document.hidden) return;
+      if (sb && Date.now() - state.lastFetch > 5 * 60 * 1000) refresh({ silent: true }).then(renderAll);
+      if (isOwner()) setTimeout(autoPhotoSearch, 2000);
     });
+    window.addEventListener('online', () => { if (isOwner()) setTimeout(autoPhotoSearch, 2000); });
   }
 
   /* ── Старт ────────────────────────────────────── */
