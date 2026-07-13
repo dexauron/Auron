@@ -545,6 +545,10 @@ select.input { appearance: none; }
 .sup-hasphone { font-size: 12px; opacity: .7; }
 .sup-chevron { font-size: 22px; color: var(--text-2); line-height: 1; align-self: center; }
 .price-row.price-best { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.45); }
+/* устаревшая цена: поступления давно не было — приглушаем, не «выгодная» */
+.price-row.price-row-old { opacity: .72; }
+.price-row .price-val-old { color: var(--text-2); }
+.price-old { color: var(--warn); font-weight: 600; }
 
 /* ── Карточка поставщика (тап по строке) ───────── */
 #supViewBody > * { margin-bottom: 12px; }
