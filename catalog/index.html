@@ -75,6 +75,7 @@
         <div class="fields" id="sheetFields"></div>
         <div id="sheetSales"></div>
         <div id="sheetPrices"></div>
+        <div id="sheetCompetitors"></div>
         <div id="sheetSupplier"></div>
         <div class="admin-actions" id="sheetAdminActions" hidden>
           <button class="btn btn-secondary btn-find-photo" id="btnFindPhoto" hidden>🖼 Найти фото в интернете</button>
@@ -93,8 +94,8 @@
       <div class="sheet-body">
         <img class="login-logo" src="icons/logo-round.png" alt="">
         <h2 class="sheet-title login-title">Вход</h2>
-        <p class="muted login-sub">Введи пароль — сотруднику откроются цены и контакты,
-        администратору — редактирование каталога</p>
+        <p class="muted login-sub">Введи пароль своего аккаунта — программа сама
+        определит доступ: кассир, аналитик или администратор</p>
         <form id="loginForm">
           <div id="loginEmailWrap" hidden>
             <label class="field-label">Email администратора <span class="hint">— спрашивается один раз</span></label>
@@ -219,6 +220,30 @@
         <input type="search" id="groupsPickSearch" class="input" placeholder="Найти группу…" autocomplete="off">
         <div id="groupsPickList"></div>
         <button class="btn btn-ghost sheet-close" data-close="groupsPickSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Разведка цен: добавить цену другого магазина -->
+  <div class="sheet-backdrop" id="competitorAddSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Цена в другом магазине</h2>
+        <p class="muted" id="compProductName"></p>
+        <form id="competitorForm">
+          <label class="field-label">Магазин</label>
+          <input type="search" id="compStoreSearch" class="input" placeholder="Найти или создать магазин…" autocomplete="off">
+          <div id="compStoreList" class="comp-store-list"></div>
+          <div id="compChosen" class="comp-chosen" hidden></div>
+
+          <label class="field-label">Их розничная цена, ₽</label>
+          <input type="number" id="compPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="149.90" required>
+
+          <div class="form-error" id="compError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
+        </form>
+        <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
       </div>
     </div>
   </div>

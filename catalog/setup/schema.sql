@@ -26,6 +26,7 @@ create table if not exists catalog_products (
   barcodes   jsonb not null default '[]', -- штрихкоды (может быть несколько; пусто = нет)
   is_weighted boolean not null default false, -- весовой товар
   unit       text,          -- единица продажи из 1С: шт / кг / упак…
+  retail_price numeric,     -- розничная цена (цена на полке) — видна всем
   department text,          -- отдел / секция кассы
   note       text,          -- примечание
   photos     jsonb not null default '[]',
@@ -41,6 +42,16 @@ create index if not exists idx_products_updated on catalog_products(updated_at);
 --   insert into catalog_admins (email) values ('ТВОЙ-EMAIL');
 create table if not exists catalog_admins (
   email      text primary key,
+  created_at timestamptz not null default now()
+);
+
+-- Роли аккаунтов: admin (всё) / manager (аналитик, зал — закупочные цены,
+-- контакты, аналитика) / cashier (только товар и розничная цена). Аккаунт без
+-- записи здесь, но вошедший — cashier. Пример:
+--   insert into catalog_roles (email, role) values ('manager@waymarket.ru','manager');
+create table if not exists catalog_roles (
+  email      text primary key,
+  role       text not null check (role in ('admin','manager','cashier')),
   created_at timestamptz not null default now()
 );
 
@@ -79,15 +90,38 @@ create table if not exists catalog_sales (
 create index if not exists idx_sales_period  on catalog_sales(period_from, period_to);
 create index if not exists idx_sales_product on catalog_sales(product_id);
 
--- топ товаров за период — считает база
+-- «Разведка цен»: магазины-конкуренты и их розничные цены
+create table if not exists catalog_competitors (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  note       text,
+  created_at timestamptz not null default now()
+);
+create table if not exists catalog_competitor_prices (
+  id            uuid primary key default gen_random_uuid(),
+  product_id    uuid not null references catalog_products(id) on delete cascade,
+  competitor_id uuid not null references catalog_competitors(id) on delete cascade,
+  price         numeric not null,
+  observed_at   date not null default current_date,
+  created_at    timestamptz not null default now(),
+  unique (product_id, competitor_id)
+);
+create index if not exists idx_comp_prices_product on catalog_competitor_prices(product_id);
+
+-- топ товаров за период — считает база (только админ и аналитик)
 create or replace function catalog_top_products(p_from date, p_to date, p_limit int default 300)
 returns table (product_id uuid, total_qty numeric, total_amount numeric)
-language sql stable as $$
-  select product_id, sum(qty), sum(amount)
-  from catalog_sales
-  where period_from >= p_from and period_to <= p_to
-  group by product_id order by sum(qty) desc limit p_limit;
-$$;
+language plpgsql stable security definer set search_path = public, auth as $$
+begin
+  if not catalog_can_purchase() then
+    raise exception 'Аналитика доступна только администратору и аналитику';
+  end if;
+  return query
+    select s.product_id, sum(s.qty), sum(s.amount)
+    from catalog_sales s
+    where s.period_from >= p_from and s.period_to <= p_to
+    group by s.product_id order by sum(s.qty) desc limit p_limit;
+end $$;
 revoke all on function catalog_top_products(date, date, int) from public, anon;
 grant execute on function catalog_top_products(date, date, int) to authenticated;
 
@@ -101,11 +135,31 @@ $$;
 revoke all on function catalog_sales_periods() from public, anon;
 grant execute on function catalog_sales_periods() to authenticated;
 
--- проверка «этот пользователь — админ?» для прав доступа
-create or replace function catalog_is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from catalog_admins where email = auth.jwt()->>'email');
+-- роль текущего пользователя: из catalog_roles, иначе вошедший = cashier
+create or replace function catalog_my_role() returns text
+language sql stable security definer set search_path = public, auth as $$
+  select coalesce(
+    (select role from catalog_roles where email = auth.jwt()->>'email'),
+    case when (auth.jwt()->>'email') is not null then 'cashier' end
+  );
 $$;
+revoke all on function catalog_my_role() from public, anon;
+grant execute on function catalog_my_role() to authenticated;
+
+-- проверка «этот пользователь — админ?» (роль admin или старый список catalog_admins)
+create or replace function catalog_is_admin() returns boolean
+language sql stable security definer set search_path = public, auth as $$
+  select coalesce((select role from catalog_roles where email = auth.jwt()->>'email') = 'admin', false)
+      or exists (select 1 from catalog_admins where email = auth.jwt()->>'email');
+$$;
+
+-- кто видит закупочные цены и контакты поставщиков: админ и аналитик
+create or replace function catalog_can_purchase() returns boolean
+language sql stable security definer set search_path = public, auth as $$
+  select catalog_my_role() in ('admin','manager');
+$$;
+revoke all on function catalog_can_purchase() from public, anon;
+grant execute on function catalog_can_purchase() to authenticated;
 
 -- ── Права доступа: каталог читают все; цены и контакты — вошедшие; менять — только админ ──
 
@@ -113,9 +167,12 @@ alter table catalog_groups            enable row level security;
 alter table catalog_suppliers         enable row level security;
 alter table catalog_products          enable row level security;
 alter table catalog_admins            enable row level security;
+alter table catalog_roles             enable row level security;
 alter table catalog_supplier_contacts enable row level security;
 alter table catalog_prices            enable row level security;
 alter table catalog_sales             enable row level security;
+alter table catalog_competitors       enable row level security;
+alter table catalog_competitor_prices enable row level security;
 
 create policy "groups: читать всем"        on catalog_groups    for select using (true);
 create policy "groups: менять админу"      on catalog_groups    for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
@@ -124,12 +181,23 @@ create policy "suppliers: менять админу"   on catalog_suppliers for 
 create policy "products: читать всем"      on catalog_products  for select using (true);
 create policy "products: менять админу"    on catalog_products  for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
 create policy "admins: читать вошедшим"    on catalog_admins            for select to authenticated using (true);
-create policy "contacts: читать вошедшим"  on catalog_supplier_contacts for select to authenticated using (true);
+create policy "roles: читать вошедшим"     on catalog_roles             for select to authenticated using (true);
+create policy "roles: менять админу"       on catalog_roles             for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
+create policy "contacts: читать закупки"   on catalog_supplier_contacts for select to authenticated using (catalog_can_purchase());
 create policy "contacts: менять админу"    on catalog_supplier_contacts for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
-create policy "prices: читать вошедшим"    on catalog_prices            for select to authenticated using (true);
+create policy "prices: читать закупки"     on catalog_prices            for select to authenticated using (catalog_can_purchase());
 create policy "prices: менять админу"      on catalog_prices            for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
 create policy "sales: читать вошедшим"     on catalog_sales             for select to authenticated using (true);
 create policy "sales: менять админу"       on catalog_sales             for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
+-- разведка цен: читают и ведут все вошедшие; удаляет — админ
+create policy "competitors: читать"        on catalog_competitors        for select to authenticated using (true);
+create policy "competitors: добавлять"     on catalog_competitors        for insert to authenticated with check (true);
+create policy "competitors: править"       on catalog_competitors        for update to authenticated using (true) with check (true);
+create policy "competitors: удалять админу" on catalog_competitors       for delete to authenticated using (catalog_is_admin());
+create policy "comp_prices: читать"        on catalog_competitor_prices  for select to authenticated using (true);
+create policy "comp_prices: добавлять"     on catalog_competitor_prices  for insert to authenticated with check (true);
+create policy "comp_prices: править"       on catalog_competitor_prices  for update to authenticated using (true) with check (true);
+create policy "comp_prices: удалять админу" on catalog_competitor_prices for delete to authenticated using (catalog_is_admin());
 
 -- ── Хранилище фотографий ────────────────────────────────
 

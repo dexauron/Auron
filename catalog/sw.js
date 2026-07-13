@@ -23,8 +23,11 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// фото товара? (картинка из Storage Supabase — другой домен)
+// фото товара? (картинка из Storage Supabase — всегда другой домен).
+// Иконки самого приложения (свой домен) сюда не попадают — они в оболочке
+// с «сначала сеть», чтобы обновлялись при выходе новой версии.
 function isPhoto(url, req) {
+  if (url.origin === self.location.origin) return false;
   return url.pathname.includes('/storage/v1/object/') || req.destination === 'image';
 }
 
