@@ -58,7 +58,9 @@
     selGroups: [],    // выбранные группы: id групп + служебные 'none'/'weighted'
     selSuppliers: [], // выбранные поставщики (id); пусто = все поставщики
     session: null,
-    isAdmin: false,   // админ может менять каталог; сотрудник — только смотреть цены и контакты
+    role: null,       // 'admin' | 'manager' | 'cashier' — определяется после входа
+    isAdmin: false,   // admin: загрузка и правка каталога
+    canPurchase: false, // admin+manager: видят закупочные цены и контакты; кассир — нет
     contacts: {},     // supplier_id → контакты (загружаются после входа)
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
@@ -397,7 +399,7 @@
         : state.suppliers.length;
       html += `<button class="chip${selSuppliers.length ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
-    if (state.session) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
+    if (state.canPurchase) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
     if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
 
     // категории — по убыванию числа товаров; порядок стабильный
@@ -468,10 +470,13 @@
       if (sup) tags.push(`<span class="tag">🚚 ${esc(sup.name)}</span>`);
       if (p.department) tags.push(`<span class="tag">Отдел ${esc(p.department)}</span>`);
       if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
+      const price = (p.retail_price != null && p.retail_price !== '')
+        ? `<div class="card-price">${esc(fmtPrice(p.retail_price))}</div>` : '';
       return `<article class="card" data-id="${esc(p.id)}">
         <div class="${photoCls}">${img}</div>
         <div class="card-body">
           <div class="card-name">${esc(p.name)}</div>
+          ${price}
           <div class="card-tags">${tags.join('')}</div>
         </div>
       </article>`;
@@ -520,6 +525,10 @@
     $('sheetSupplier').innerHTML = '';
 
     const rows = [];
+    // розничная цена (цена на полке) — видна всем, крупно вверху
+    if (p.retail_price != null && p.retail_price !== '') {
+      rows.push(`<div class="field-row field-main"><span class="field-key">Розничная цена</span><span class="field-val">${esc(fmtPrice(p.retail_price))}</span></div>`);
+    }
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
     if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
     barcodes.forEach((b, i) => rows.push(fieldRow(barcodes.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод', b, false, true)));
@@ -603,6 +612,8 @@
     if (!sb) { box.innerHTML = ''; return; }
     const baseSupIds = [...new Set(p.supplier_ids || [])];
     if (!state.session) { renderCardSuppliers(p, [], baseSupIds, { locked: true }); return; }
+    // кассир видит только розничную цену — закупочные цены поставщиков ему не показываем
+    if (!state.canPurchase) { box.innerHTML = ''; return; }
     box.innerHTML = '<p class="muted">Загружаем цены…</p>';
     let rows;
     try {
@@ -872,15 +883,27 @@
   async function applySession(session) {
     state.session = session;
     state.isAdmin = false;
+    state.role = null;
+    state.canPurchase = false;
     if (session) {
       try {
-        const { data, error } = await sb.from('catalog_admins').select('email');
+        // роль аккаунта: admin / manager / cashier
+        const { data, error } = await sb.rpc('catalog_my_role');
         if (error) throw error;
-        state.isAdmin = data.some((a) => a.email === session.user?.email);
+        state.role = data || 'cashier';
+        state.isAdmin = state.role === 'admin';
+        state.canPurchase = state.role === 'admin' || state.role === 'manager';
       } catch (e) {
-        state.isAdmin = true; // база старой версии (списка админов ещё нет) — прежнее поведение
+        // база без ролей (ОБНОВЛЕНИЕ-7 ещё не выполнено) — прежнее поведение:
+        // вошедший видит цены; админ определяется по старому списку catalog_admins
+        try {
+          const { data } = await sb.from('catalog_admins').select('email');
+          state.isAdmin = (data || []).some((a) => a.email === session.user?.email);
+        } catch (e2) { state.isAdmin = true; }
+        state.role = state.isAdmin ? 'admin' : 'manager';
+        state.canPurchase = true;
       }
-      loadContacts();
+      if (state.canPurchase) loadContacts(); else state.contacts = {};
     } else {
       state.contacts = {};
       // при выходе стираем сохранённые цены и контакты — они только для вошедших
@@ -1319,6 +1342,8 @@
         else if (l.includes('код') && cols.code === undefined) cols.code = c;
         else if (l.includes('контрагент') || l.includes('поставщик')) cols.supplier ??= c;
         else if (l.includes('единиц') || /(^|\s)ед\.?(\s|$)/.test(l)) cols.unit ??= c; // «Единица измерения» или «Ед.»
+        // розничная цена (цена продажи в магазине) — отдельно от закупочной
+        else if (l.includes('розничн') || l.includes('продажн') || l.includes('цена продаж')) cols.retail ??= c;
         else if (l.includes('цена')) cols.price ??= c;
         else if (l.includes('количество') || /(^|\s)кол-?во(\s|$)/.test(l)) cols.qty ??= c;
         // выручка: «Сумма продажи»/«Выручка» — приоритетнее «приходной суммы»/себестоимости/НДС
@@ -1357,7 +1382,7 @@
       const key = code || norm(name);
       let item = byKey.get(key);
       if (!item) {
-        item = { name, code: code || null, article: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, prices: new Map() };
+        item = { name, code: code || null, article: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, retail: null, prices: new Map() };
         byKey.set(key, item);
       }
       const art = cols.article !== undefined ? cellStr(row[cols.article]) : '';
@@ -1366,9 +1391,11 @@
       const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
       const unit = cols.unit !== undefined ? cellStr(row[cols.unit]).toLowerCase() : '';
       const price = cols.price !== undefined ? parsePriceNum(row[cols.price]) : null;
+      const retail = cols.retail !== undefined ? parsePriceNum(row[cols.retail]) : null;
       const rowDate = cols.date !== undefined ? parseDateCell(row[cols.date]) : null; // дата последнего поступления
       if (art && !item.article) item.article = art;
       if (grp && !item.group) item.group = grp;
+      if (retail != null && item.retail == null) item.retail = retail; // розничная цена товара
       if (sup) item.suppliers.add(sup);
       if (bc) item.barcodes.add(bc);
       if (unit && !item.unit) item.unit = unit;
@@ -1423,13 +1450,14 @@
     items.forEach((i) => i.suppliers.forEach((s) => sups.add(s)));
     const withBc = items.filter((i) => i.barcodes.size).length;
     const priceCnt = items.reduce((n, i) => n + i.prices.size, 0);
+    const retailCnt = items.filter((i) => i.retail != null).length;
     impParsed = items;
     // предупреждаем, если в файле не нашлось ни одной цены — иначе в карточках
     // товара не будет цен, и это выглядит как «поломка»
     const priceWarn = priceCnt === 0
       ? '⚠ ЦЕНЫ НЕ НАЙДЕНЫ. В карточках товара цены не появятся. Проверь, что в файле есть колонки «Поставщик/Контрагент» и «Цена» в одной строке с товаром. '
       : '';
-    impStatus(`${priceWarn}Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков, ${priceCnt} цен. `
+    impStatus(`${priceWarn}Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков, ${priceCnt} закупочных цен, ${retailCnt} розничных цен. `
       + `Со штрихкодами: ${withBc}${extra ? ` (+${extra} штрихкодов из файла 2)` : ''}. `
       + 'Проверь цифры и нажми кнопку ещё раз — начнётся загрузка.');
     $('impRun').textContent = `⬆ Загрузить ${items.length} товаров в каталог`;
@@ -1485,6 +1513,8 @@
           is_weighted: i.weighted,
           unit: i.unit,
           updated_at: new Date().toISOString(),
+          // розничную цену пишем только если она есть в файле — иначе не затираем прежнюю
+          ...(i.retail != null ? { retail_price: i.retail } : {}),
         };
         if (i.code) { withCode.push({ ...base, code: i.code }); continue; }
         const exId = findExisting(i);
@@ -2324,18 +2354,22 @@
     const ADMIN_EMAIL_KEY = 'wm_admin_email';
 
     function openLogin() {
-      // email виден сразу, только если вход сотрудников не настроен в config.js
-      $('loginEmailWrap').hidden = !!CFG.STAFF_EMAIL;
+      // email виден сразу, только если служебные аккаунты не настроены в config.js
+      $('loginEmailWrap').hidden = !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
       $('loginError').hidden = true;
       openSheet('loginSheet');
     }
 
     $('adminBtn').addEventListener('click', () => {
       if (state.session) {
-        $('menuTitle').textContent = state.isAdmin ? 'Администратор' : 'Сотрудник';
-        $('adminEmail').textContent = state.isAdmin
-          ? (state.session.user?.email || '')
-          : 'Вход выполнен — цены и контакты поставщиков открыты';
+        const roleName = { admin: 'Главный администратор', manager: 'Аналитик / зал', cashier: 'Кассир' }[state.role] || 'Сотрудник';
+        const roleHint = {
+          admin: state.session.user?.email || '',
+          manager: 'Вход выполнен — цены, контакты и аналитика открыты',
+          cashier: 'Вход выполнен — товары и розничные цены',
+        }[state.role] || 'Вход выполнен';
+        $('menuTitle').textContent = roleName;
+        $('adminEmail').textContent = roleHint;
         $('menuAdminOnly').hidden = !state.isAdmin;
         openSheet('adminMenuSheet');
       } else {
@@ -2484,9 +2518,12 @@
       const emails = [];
       if (!$('loginEmailWrap').hidden && typed) emails.push(typed);
       else {
-        if (CFG.STAFF_EMAIL) emails.push(CFG.STAFF_EMAIL);
+        // служебные аккаунты (кассир, аналитик/зал) — подбираем по паролю
+        const svc = CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length
+          ? CFG.SERVICE_EMAILS.slice() : (CFG.STAFF_EMAIL ? [CFG.STAFF_EMAIL] : []);
+        for (const e of svc) if (!emails.includes(e)) emails.push(e);
         const savedAdmin = localStorage.getItem(ADMIN_EMAIL_KEY);
-        if (savedAdmin && savedAdmin !== CFG.STAFF_EMAIL) emails.push(savedAdmin);
+        if (savedAdmin && !emails.includes(savedAdmin)) emails.push(savedAdmin);
       }
 
       let ok = null;
