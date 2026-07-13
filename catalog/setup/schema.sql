@@ -90,6 +90,24 @@ create table if not exists catalog_sales (
 create index if not exists idx_sales_period  on catalog_sales(period_from, period_to);
 create index if not exists idx_sales_product on catalog_sales(product_id);
 
+-- «Разведка цен»: магазины-конкуренты и их розничные цены
+create table if not exists catalog_competitors (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  note       text,
+  created_at timestamptz not null default now()
+);
+create table if not exists catalog_competitor_prices (
+  id            uuid primary key default gen_random_uuid(),
+  product_id    uuid not null references catalog_products(id) on delete cascade,
+  competitor_id uuid not null references catalog_competitors(id) on delete cascade,
+  price         numeric not null,
+  observed_at   date not null default current_date,
+  created_at    timestamptz not null default now(),
+  unique (product_id, competitor_id)
+);
+create index if not exists idx_comp_prices_product on catalog_competitor_prices(product_id);
+
 -- топ товаров за период — считает база (только админ и аналитик)
 create or replace function catalog_top_products(p_from date, p_to date, p_limit int default 300)
 returns table (product_id uuid, total_qty numeric, total_amount numeric)
@@ -153,6 +171,8 @@ alter table catalog_roles             enable row level security;
 alter table catalog_supplier_contacts enable row level security;
 alter table catalog_prices            enable row level security;
 alter table catalog_sales             enable row level security;
+alter table catalog_competitors       enable row level security;
+alter table catalog_competitor_prices enable row level security;
 
 create policy "groups: читать всем"        on catalog_groups    for select using (true);
 create policy "groups: менять админу"      on catalog_groups    for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
@@ -169,6 +189,15 @@ create policy "prices: читать закупки"     on catalog_prices       
 create policy "prices: менять админу"      on catalog_prices            for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
 create policy "sales: читать вошедшим"     on catalog_sales             for select to authenticated using (true);
 create policy "sales: менять админу"       on catalog_sales             for all    to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
+-- разведка цен: читают и ведут все вошедшие; удаляет — админ
+create policy "competitors: читать"        on catalog_competitors        for select to authenticated using (true);
+create policy "competitors: добавлять"     on catalog_competitors        for insert to authenticated with check (true);
+create policy "competitors: править"       on catalog_competitors        for update to authenticated using (true) with check (true);
+create policy "competitors: удалять админу" on catalog_competitors       for delete to authenticated using (catalog_is_admin());
+create policy "comp_prices: читать"        on catalog_competitor_prices  for select to authenticated using (true);
+create policy "comp_prices: добавлять"     on catalog_competitor_prices  for insert to authenticated with check (true);
+create policy "comp_prices: править"       on catalog_competitor_prices  for update to authenticated using (true) with check (true);
+create policy "comp_prices: удалять админу" on catalog_competitor_prices for delete to authenticated using (catalog_is_admin());
 
 -- ── Хранилище фотографий ────────────────────────────────
 

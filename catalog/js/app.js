@@ -62,6 +62,7 @@
     isAdmin: false,   // admin: загрузка и правка каталога
     canPurchase: false, // admin+manager: видят закупочные цены и контакты; кассир — нет
     contacts: {},     // supplier_id → контакты (загружаются после входа)
+    competitors: [],  // магазины-конкуренты для «разведки цен» (после входа)
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
@@ -541,6 +542,7 @@
     $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
     renderProductSales(p);
     renderProductPrices(p);
+    renderCompetitors(p);
     openSheet('productSheet');
   }
 
@@ -904,7 +906,9 @@
         state.canPurchase = true;
       }
       if (state.canPurchase) loadContacts(); else state.contacts = {};
+      loadCompetitors(); // разведку цен ведёт любой вошедший сотрудник
     } else {
+      state.competitors = [];
       state.contacts = {};
       // при выходе стираем сохранённые цены и контакты — они только для вошедших
       try {
@@ -918,7 +922,7 @@
     $('adminBtnLabel').hidden = !!session; // после входа — только значок, без «Войти»
     if (!$('productSheet').hidden) {
       $('sheetAdminActions').hidden = !state.isAdmin;
-      if (currentProduct) renderProductPrices(currentProduct);
+      if (currentProduct) { renderProductPrices(currentProduct); renderCompetitors(currentProduct); }
     }
     renderAll(); // и сетка, и чипы — после входа появляется «🔥 Ходовые»
     // владелец вошёл → тихо убираем дубли (если есть) и запускаем автопоиск фото
@@ -937,6 +941,141 @@
       catch (e2) { state.contacts = {}; }
     }
     if (!$('productSheet').hidden && currentProduct) renderProductPrices(currentProduct);
+  }
+
+  /* ── Разведка цен: сравнение с другими магазинами ──────
+   * Любой вошедший сотрудник может внести розничную цену товара в чужом
+   * магазине. В карточке видно нашу цену и цены конкурентов с датой. */
+
+  function loadCompetitors() {
+    return sb.from('catalog_competitors').select('*').order('name')
+      .then(({ data, error }) => {
+        if (!error) state.competitors = data || [];
+        if (!$('productSheet').hidden && currentProduct) renderCompetitors(currentProduct);
+      })
+      .catch(() => { /* нет связи — работаем без списка магазинов */ });
+  }
+
+  function competitorById(id) { return state.competitors.find((c) => c.id === id) || null; }
+
+  async function renderCompetitors(p) {
+    const box = $('sheetCompetitors');
+    if (!box) return;
+    if (!state.session) { box.innerHTML = ''; return; } // разведка — только после входа
+    const our = (p.retail_price != null && p.retail_price !== '') ? Number(p.retail_price) : null;
+    let rows = [];
+    try {
+      const { data, error } = await sb.from('catalog_competitor_prices')
+        .select('*, catalog_competitors(name)').eq('product_id', p.id);
+      if (error) throw error;
+      rows = data || [];
+    } catch (e) { rows = []; }
+    if (currentProduct !== p) return;
+
+    rows.sort((a, b) => Number(a.price) - Number(b.price));
+    const ourRow = `<div class="comp-row comp-ours">
+      <span class="comp-store">🏪 Наш магазин</span>
+      <span class="comp-price">${our != null ? esc(fmtPrice(our)) : '<span class="muted" style="margin:0">цена не указана</span>'}</span>
+    </div>`;
+    const list = rows.map((r) => {
+      const price = Number(r.price);
+      let diff = '';
+      if (our != null) {
+        if (price < our) diff = `<span class="comp-diff comp-cheaper">у них дешевле на ${esc(fmtPrice(our - price))}</span>`;
+        else if (price > our) diff = `<span class="comp-diff comp-dearer">у них дороже на ${esc(fmtPrice(price - our))}</span>`;
+        else diff = '<span class="comp-diff">такая же цена</span>';
+      }
+      const name = (r.catalog_competitors && r.catalog_competitors.name) || competitorById(r.competitor_id)?.name || 'Магазин';
+      return `<div class="comp-row">
+        <span class="comp-store">🏬 ${esc(name)}<span class="comp-date">внесено ${esc(fmtDate(r.observed_at))}</span></span>
+        <span class="comp-price">${esc(fmtPrice(price))}${diff}</span>
+      </div>`;
+    }).join('');
+
+    box.innerHTML = `<div class="comp-block">
+      <div class="comp-title">Цены в других магазинах</div>
+      ${ourRow}${list}
+      <button class="btn btn-secondary btn-block" id="compAddBtn">＋ Добавить цену магазина</button>
+    </div>`;
+  }
+
+  let compChosenId = null;   // выбранный существующий магазин
+  let compProduct = null;    // товар, для которого вносим цену
+
+  function openCompetitorAdd(p) {
+    compProduct = p;
+    compChosenId = null;
+    $('compProductName').textContent = p.name;
+    $('compStoreSearch').value = '';
+    $('compPrice').value = '';
+    $('compError').hidden = true;
+    $('compChosen').hidden = true;
+    renderCompStoreList();
+    openSheet('competitorAddSheet');
+  }
+
+  function showCompChosen() {
+    const c = competitorById(compChosenId);
+    const box = $('compChosen');
+    if (c) { box.textContent = 'Магазин: ' + c.name; box.hidden = false; }
+    else box.hidden = true;
+    renderCompStoreList();
+    $('compPrice').focus();
+  }
+
+  function renderCompStoreList() {
+    const q = norm($('compStoreSearch').value);
+    const typed = $('compStoreSearch').value.trim();
+    const filtered = q ? state.competitors.filter((c) => norm(c.name).includes(q)) : state.competitors;
+    let html = filtered.slice(0, 30).map((c) => {
+      const on = compChosenId === c.id;
+      return `<button type="button" class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-comp-store="${esc(c.id)}">
+        ${on ? '✓ ' : ''}🏬 ${esc(c.name)}</button>`;
+    }).join('');
+    // предложить создать новый магазин из введённого текста
+    const exists = filtered.some((c) => norm(c.name) === q);
+    if (typed && !exists) {
+      html += `<button type="button" class="btn btn-secondary btn-block comp-new" data-comp-new="${esc(typed)}">＋ Создать магазин «${esc(typed)}»</button>`;
+    }
+    if (!html) html = '<p class="muted">Начни вводить название магазина</p>';
+    $('compStoreList').innerHTML = html;
+  }
+
+  async function submitCompetitorPrice(e) {
+    e.preventDefault();
+    const btn = $('compSubmit');
+    const price = parsePriceNum($('compPrice').value);
+    if (price == null) { $('compError').textContent = 'Впиши цену числом'; $('compError').hidden = false; return; }
+    if (!compChosenId) { $('compError').textContent = 'Выбери или создай магазин'; $('compError').hidden = false; return; }
+    btn.disabled = true;
+    try {
+      const record = {
+        product_id: compProduct.id,
+        competitor_id: compChosenId,
+        price,
+        observed_at: new Date().toISOString().slice(0, 10),
+      };
+      const { error } = await sb.from('catalog_competitor_prices')
+        .upsert(record, { onConflict: 'product_id,competitor_id' });
+      if (error) throw error;
+      closeSheet('competitorAddSheet');
+      toast('Цена магазина сохранена ✓');
+      if (currentProduct === compProduct) renderCompetitors(compProduct);
+    } catch (err) {
+      $('compError').textContent = 'Не удалось сохранить: ' + (err.message || err)
+        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-8.sql в SQL Editor.';
+      $('compError').hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function createCompetitor(name) {
+    const { data, error } = await sb.from('catalog_competitors').insert({ name }).select().single();
+    if (error) { toast('Ошибка: ' + error.message); return null; }
+    state.competitors.push(data);
+    state.competitors.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    return data.id;
   }
 
   /* ── Кэш цен на телефоне: карточки открываются и без связи ── */
@@ -2384,6 +2523,24 @@
       const row = e.target.closest('[data-supplier-view]');
       if (row) openSupplierView(row.dataset.supplierView);
     });
+
+    // разведка цен: «＋ Добавить цену магазина» в карточке товара
+    $('sheetCompetitors').addEventListener('click', (e) => {
+      if (e.target.closest('#compAddBtn') && currentProduct) openCompetitorAdd(currentProduct);
+    });
+    // выбор/создание магазина в форме разведки
+    $('compStoreSearch').addEventListener('input', renderCompStoreList);
+    $('compStoreList').addEventListener('click', async (e) => {
+      const pick = e.target.closest('[data-comp-store]');
+      if (pick) { compChosenId = pick.dataset.compStore; showCompChosen(); return; }
+      const make = e.target.closest('[data-comp-new]');
+      if (make) {
+        make.disabled = true;
+        const id = await createCompetitor(make.dataset.compNew);
+        if (id) { compChosenId = id; showCompChosen(); }
+      }
+    });
+    $('competitorForm').addEventListener('submit', submitCompetitorPrice);
 
     // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
     $('supViewBody').addEventListener('click', (e) => {
