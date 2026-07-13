@@ -234,6 +234,11 @@
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   const fmtDate = (d) => { const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}.${m}.${y.slice(2)}`; };
+  // цена старше этого срока считается устаревшей: нового поступления давно не было,
+  // цена у поставщика могла измениться — не помечаем такую как «выгодную»
+  const STALE_PRICE_DAYS = 30;
+  const priceAgeDays = (d) => Math.floor((Date.now() - new Date(String(d).slice(0, 10) + 'T00:00:00').getTime()) / 86400000);
+  const isFreshPrice = (row) => row && priceAgeDays(row.price_date) <= STALE_PRICE_DAYS;
   const telHref = (phone) => 'tel:' + String(phone).replace(/[^+\d]/g, '');
   const waHref = (phone) => {
     let d = String(phone).replace(/\D/g, '');
@@ -671,35 +676,44 @@
       return;
     }
 
-    // сортировка: сначала с ценой (по возрастанию), потом без цены (по имени)
+    // свежесть цены: старше STALE_PRICE_DAYS — поступления давно не было
+    for (const e of entries) e.fresh = isFreshPrice(e.last);
+    // сортировка: свежие с ценой (дешёвые выше), потом устаревшие с ценой, потом без цены
     entries.sort((a, b) => {
+      const rank = (e) => (e.last ? (e.fresh ? 0 : 1) : 2);
+      const ra = rank(a); const rb = rank(b);
+      if (ra !== rb) return ra - rb;
       if (a.last && b.last) return Number(a.last.price) - Number(b.last.price);
-      if (a.last) return -1;
-      if (b.last) return 1;
       return a.sup.name.localeCompare(b.sup.name, 'ru');
     });
-    const priced = entries.filter((e) => e.last);
-    const best = priced.length ? Number(priced[0].last.price) : null;
+    // «выгоднее» считаем ТОЛЬКО среди свежих цен — старую цену без нового
+    // поступления нельзя считать актуальной
+    const freshPriced = entries.filter((e) => e.fresh);
+    const best = freshPriced.length ? Math.min(...freshPriced.map((e) => Number(e.last.price))) : null;
 
     const chevron = '<span class="sup-chevron">›</span>';
     const rowsHtml = entries.map((e) => {
       const c = state.contacts[e.sup.id];
       const hasContact = state.session && c && c.phone;
+      const isBest = e.fresh && freshPriced.length > 1 && Number(e.last.price) === best;
       let right = '';
       if (e.last) {
-        const isBest = priced.length > 1 && Number(e.last.price) === best;
         let trend = '';
         if (e.prev) {
           const diff = ((Number(e.last.price) - Number(e.prev.price)) / Number(e.prev.price)) * 100;
           const pct = Math.abs(diff) >= 10 ? Math.round(Math.abs(diff)) : Math.round(Math.abs(diff) * 10) / 10;
           trend = diff > 0 ? `<span class="price-up">↑ ${pct}%</span>` : `<span class="price-down">↓ ${pct}%</span>`;
         }
-        right = `<span class="price-val">${fmtPrice(e.last.price)}</span>
-          <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}<span class="price-date">поступление ${fmtDate(e.last.price_date)}</span></span>`;
+        // устаревшая цена: помечаем и НЕ даём как выгодную
+        const dateLabel = e.fresh
+          ? `<span class="price-date">поступление ${fmtDate(e.last.price_date)}</span>`
+          : `<span class="price-date price-old">⚠ цена от ${fmtDate(e.last.price_date)} · поступления не было</span>`;
+        right = `<span class="price-val${e.fresh ? '' : ' price-val-old'}">${fmtPrice(e.last.price)}</span>
+          <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}${dateLabel}</span>`;
       } else {
         right = `<span class="price-noprice">${state.session ? 'цена не указана' : ''}</span>`;
       }
-      return `<button class="price-row${e.last && priced.length > 1 && Number(e.last.price) === best ? ' price-best' : ''}" data-supplier-view="${esc(e.sup.id)}">
+      return `<button class="price-row${isBest ? ' price-best' : ''}${e.last && !e.fresh ? ' price-row-old' : ''}" data-supplier-view="${esc(e.sup.id)}">
         <span class="price-sup">🚚 ${esc(e.sup.name)}${hasContact ? ' <span class="sup-hasphone">📞</span>' : ''}</span>
         ${right}
         ${chevron}
@@ -709,6 +723,7 @@
     let footer = '';
     if (opt.locked) footer = '<button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены и контакты — вход для сотрудников</button>';
     else if (opt.stale) footer = `<p class="muted price-hint">${esc(opt.stale)}</p>`;
+    else if (!freshPriced.length && entries.some((e) => e.last)) footer = `<p class="muted price-hint">⚠ Все цены старше ${STALE_PRICE_DAYS} дней — поступлений давно не было, цены могли измениться. «Выгоднее» не показываем.</p>`;
     else footer = '<p class="muted price-hint">Нажми на поставщика — контакты, звонок и WhatsApp</p>';
 
     box.innerHTML = `<div class="price-block"><div class="price-title">Поставщики и цены</div>${rowsHtml}${footer}</div>`;
@@ -739,7 +754,9 @@
 
     // цена этого товара у поставщика + история
     if (state.session && e && e.last) {
-      parts.push(`<div class="supview-price">Цена: <b>${fmtPrice(e.last.price)}</b> · поступление ${fmtDate(e.last.price_date)}</div>`);
+      parts.push(isFreshPrice(e.last)
+        ? `<div class="supview-price">Цена: <b>${fmtPrice(e.last.price)}</b> · поступление ${fmtDate(e.last.price_date)}</div>`
+        : `<div class="supview-price supview-price-old">Цена: <b>${fmtPrice(e.last.price)}</b><br><span class="price-old">⚠ от ${fmtDate(e.last.price_date)} · нового поступления не было, цена могла измениться</span></div>`);
       if (e.hist.length > 1) {
         parts.push('<div class="supview-hist-title">История цены</div><div class="price-history">'
           + e.hist.slice(0, 12).map((h) => `<div class="price-hist-row"><span>${fmtDate(h.price_date)}</span><span>${fmtPrice(h.price)}</span></div>`).join('')

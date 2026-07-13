@@ -116,10 +116,12 @@ begin
   if not catalog_can_purchase() then
     raise exception 'Аналитика доступна только администратору и аналитику';
   end if;
+  -- ровно выбранный период (а не «все вложенные») — иначе при вложенных
+  -- периодах продажи посчитались бы дважды
   return query
     select s.product_id, sum(s.qty), sum(s.amount)
     from catalog_sales s
-    where s.period_from >= p_from and s.period_to <= p_to
+    where s.period_from = p_from and s.period_to = p_to
     group by s.product_id order by sum(s.qty) desc limit p_limit;
 end $$;
 revoke all on function catalog_top_products(date, date, int) from public, anon;
