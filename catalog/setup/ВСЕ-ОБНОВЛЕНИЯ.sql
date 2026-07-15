@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
--- Way Market · Каталог — ВСЕ ОБНОВЛЕНИЯ БАЗЫ (2..10) одним файлом
+-- Way Market · Каталог — ВСЕ ОБНОВЛЕНИЯ БАЗЫ (2..11) одним файлом
 -- ───────────────────────────────────────────────────────────────
 -- Как применить: Supabase → SQL Editor → вставить ВЕСЬ текст → Run.
 -- Безопасно запускать, даже если часть уже выполнена (идемпотентно).
@@ -576,4 +576,14 @@ begin
 end $$;
 revoke all on function catalog_add_photo(uuid, text) from public, anon;
 grant execute on function catalog_add_photo(uuid, text) to authenticated;
+
+
+-- ═══════════════ ОБНОВЛЕНИЕ-11 ═══════════════
+-- Обновление базы каталога №11 (2026-07-13)
+-- Зачем: показывать остатки (количество на складе) из отчёта 1С «Остатки
+-- номенклатуры». Плюс дата, на которую актуальны остатки.
+-- Как применить: Supabase → SQL Editor → вставить весь текст → Run.
+
+alter table catalog_products add column if not exists stock_qty numeric;   -- остаток на складе
+alter table catalog_products add column if not exists stock_at  date;      -- на какую дату остаток
 

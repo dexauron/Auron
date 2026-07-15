@@ -27,6 +27,8 @@ create table if not exists catalog_products (
   is_weighted boolean not null default false, -- весовой товар
   unit       text,          -- единица продажи из 1С: шт / кг / упак…
   retail_price numeric,     -- розничная цена (цена на полке) — видна всем
+  stock_qty  numeric,       -- остаток на складе (из отчёта 1С «Остатки»)
+  stock_at   date,          -- на какую дату актуален остаток
   department text,          -- отдел / секция кассы
   note       text,          -- примечание
   photos     jsonb not null default '[]',
