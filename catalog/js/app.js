@@ -470,11 +470,6 @@
       const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
       const tags = [];
       if (p.code) tags.push(`<span class="tag tag-code">Код ${esc(p.code)}</span>`);
-      if (p.stock_qty != null && p.stock_qty !== '') {
-        const s = Number(p.stock_qty);
-        const sv = s % 1 ? Math.round(s * 10) / 10 : s;
-        tags.push(`<span class="tag${s <= 0 ? ' tag-nobarcode' : ''}">Ост. ${esc(String(sv))}</span>`);
-      }
       if (p.is_weighted) tags.push('<span class="tag">⚖ весовой</span>');
       else if (p.unit && norm(p.unit) !== 'шт') tags.push(`<span class="tag">📏 ${esc(p.unit)}</span>`);
       const sup = supplierById((p.supplier_ids || [])[0]);
@@ -539,13 +534,6 @@
     // розничная цена (цена на полке) — видна всем, крупно вверху
     if (p.retail_price != null && p.retail_price !== '') {
       rows.push(`<div class="field-row field-main"><span class="field-key">Розничная цена</span><span class="field-val">${esc(fmtPrice(p.retail_price))}</span></div>`);
-    }
-    // остаток на складе
-    if (p.stock_qty != null && p.stock_qty !== '') {
-      const s = Number(p.stock_qty);
-      const sv = s % 1 ? Math.round(s * 10) / 10 : s;
-      const low = s <= 0;
-      rows.push(`<div class="field-row"><span class="field-key">Остаток${p.stock_at ? ' · ' + fmtDate(p.stock_at) : ''}</span><span class="field-val"${low ? ' style="color:var(--danger)"' : ''}>${esc(String(sv))} ${esc(p.unit || 'шт')}</span></div>`);
     }
     if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
     if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
