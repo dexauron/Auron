@@ -163,6 +163,22 @@ $$;
 revoke all on function catalog_can_purchase() from public, anon;
 grant execute on function catalog_can_purchase() to authenticated;
 
+-- добавить фото к товару может любой вошедший (сам товар правит только админ)
+create or replace function catalog_add_photo(p_product_id uuid, p_url text)
+returns void
+language plpgsql security definer set search_path = public, auth as $$
+begin
+  if (auth.jwt()->>'email') is null then
+    raise exception 'Только для вошедших';
+  end if;
+  update catalog_products
+     set photos = coalesce(photos, '[]'::jsonb) || to_jsonb(p_url),
+         updated_at = now()
+   where id = p_product_id;
+end $$;
+revoke all on function catalog_add_photo(uuid, text) from public, anon;
+grant execute on function catalog_add_photo(uuid, text) to authenticated;
+
 -- ── Права доступа: каталог читают все; цены и контакты — вошедшие; менять — только админ ──
 
 alter table catalog_groups            enable row level security;
@@ -208,7 +224,8 @@ values ('product-photos', 'product-photos', true)
 on conflict (id) do nothing;
 
 create policy "фото: смотреть всем"     on storage.objects for select using (bucket_id = 'product-photos');
-create policy "фото: загружать админу"  on storage.objects for insert to authenticated with check (bucket_id = 'product-photos' and catalog_is_admin());
+-- загружать фото может любой вошедший сотрудник (добавить фото товара)
+create policy "фото: загружать вошедшим" on storage.objects for insert to authenticated with check (bucket_id = 'product-photos');
 create policy "фото: менять админу"     on storage.objects for update to authenticated using (bucket_id = 'product-photos' and catalog_is_admin());
 create policy "фото: удалять админу"    on storage.objects for delete to authenticated using (bucket_id = 'product-photos' and catalog_is_admin());
 

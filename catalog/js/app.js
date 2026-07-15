@@ -545,6 +545,7 @@
 
     $('sheetAdminActions').hidden = !state.isAdmin;
     $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
+    $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
     renderProductSales(p);
     renderProductPrices(p);
     renderCompetitors(p);
@@ -1084,6 +1085,30 @@
       $('compError').hidden = false;
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  // добавить фото товара — доступно любому вошедшему сотруднику
+  async function addPhotoToProduct(file, p) {
+    if (!file || !p || !sb) return;
+    const label = $('btnAddPhotoLabel');
+    const prev = label.firstChild ? label.textContent : '';
+    try {
+      label.style.pointerEvents = 'none';
+      toast('Загружаем фото…');
+      const blob = await compressImage(file);
+      const url = await uploadPhoto(blob);
+      const { error } = await sb.rpc('catalog_add_photo', { p_product_id: p.id, p_url: url });
+      if (error) throw error;
+      p.photos = [...(p.photos || []), url]; // сразу показываем
+      if (currentProduct === p) openProduct(p);
+      renderGrid();
+      toast('Фото добавлено ✓');
+    } catch (err) {
+      toast('Не удалось добавить фото: ' + (err.message || err));
+    } finally {
+      label.style.pointerEvents = '';
+      $('addPhotoInput').value = '';
     }
   }
 
@@ -2643,6 +2668,12 @@
       }
     });
     $('competitorForm').addEventListener('submit', submitCompetitorPrice);
+
+    // добавить фото товара — любой вошедший сотрудник (камера на телефоне)
+    $('addPhotoInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && currentProduct) addPhotoToProduct(file, currentProduct);
+    });
 
     // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
     $('supViewBody').addEventListener('click', (e) => {
