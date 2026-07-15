@@ -545,6 +545,7 @@
 
     $('sheetAdminActions').hidden = !state.isAdmin;
     $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
+    $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
     renderProductSales(p);
     renderProductPrices(p);
     renderCompetitors(p);
@@ -1084,6 +1085,29 @@
       $('compError').hidden = false;
     } finally {
       btn.disabled = false;
+    }
+  }
+
+  // добавить фото товара — доступно любому вошедшему сотруднику
+  async function addPhotoToProduct(file, p) {
+    if (!file || !p || !sb) return;
+    const label = $('btnAddPhotoLabel');
+    try {
+      label.style.pointerEvents = 'none';
+      toast('Загружаем фото…');
+      const blob = await compressImage(file);
+      const url = await uploadPhoto(blob);
+      const { error } = await sb.rpc('catalog_add_photo', { p_product_id: p.id, p_url: url });
+      if (error) throw error;
+      p.photos = [...(p.photos || []), url]; // сразу показываем
+      if (currentProduct === p) openProduct(p);
+      renderGrid();
+      toast('Фото добавлено ✓');
+    } catch (err) {
+      toast('Не удалось добавить фото: ' + (err.message || err));
+    } finally {
+      label.style.pointerEvents = '';
+      $('addPhotoInput').value = '';
     }
   }
 
@@ -2280,6 +2304,146 @@
     }
   }
 
+  /* ── Импорт остатков из 1С (отчёт «Остатки номенклатуры») ──
+   * Многострочная шапка. Берём: название, код, штрихкод, группа, ед.,
+   * количество (остаток), розничная цена. Товар находится по коду/штрихкоду/
+   * названию — обновляется остаток и розничная цена; нет — создаётся. */
+
+  let stockParsed = null;
+
+  // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
+  function stockNum(v) {
+    const s = cellStr(v).replace(/[\s ,]/g, '');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function parseStockReport(rows) {
+    const cols = {};
+    let stockAt = null;
+    for (let r = 0; r < Math.min(rows.length, 16); r++) {
+      const row = rows[r] || [];
+      for (let c = 0; c < row.length; c++) {
+        const l = cellStr(row[c]).toLowerCase();
+        if (!l) continue;
+        if (cols.name === undefined && (l === 'номенклатура' || l === 'наименование' || l === 'название')) cols.name = c;
+        else if (cols.code === undefined && (l.includes('код товара') || l === 'номенклатура.код')) cols.code = c;
+        else if (cols.barcode === undefined && (l.includes('штрихкод') || l.includes('штрих-код'))) cols.barcode = c;
+        else if (cols.group === undefined && (l.includes('группа товара') || l.includes('входит в группу'))) cols.group = c;
+        else if (cols.unit === undefined && l.includes('базовая единица')) cols.unit = c;
+        else if (cols.stock === undefined && l === 'количество') cols.stock = c;
+        else if (cols.retail === undefined && l.includes('розничная цена')) cols.retail = c;
+      }
+      const line = row.map((v) => cellStr(v)).join(' ');
+      const m = line.match(/на конец дня:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i) || line.match(/на дату:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i);
+      if (m && !stockAt) stockAt = parseDateCell(m[1]);
+    }
+    if (cols.name === undefined) throw new Error('Не нашёл колонку «Номенклатура» в отчёте «Остатки»');
+    if (cols.stock === undefined) throw new Error('Не нашёл колонку «Количество» — нужен отчёт «Остатки номенклатуры»');
+    const codeStr = (v) => cellStr(v).replace(/[\s ,]/g, ''); // код: убрать разделители тысяч
+    const recs = [];
+    for (let r = 0; r < rows.length; r++) {
+      const name = cellStr(rows[r][cols.name]);
+      if (!name) continue;
+      const code = cols.code !== undefined ? codeStr(rows[r][cols.code]) : '';
+      const barcode = cols.barcode !== undefined ? cellStr(rows[r][cols.barcode]).replace(/\s/g, '') : '';
+      if (!code && !barcode) continue; // строки склада/итогов — пропускаем
+      const retail = cols.retail !== undefined ? stockNum(rows[r][cols.retail]) : null;
+      recs.push({
+        name, code: code || null, barcode: barcode || null,
+        group: cols.group !== undefined ? cellStr(rows[r][cols.group]) : '',
+        unit: cols.unit !== undefined ? cellStr(rows[r][cols.unit]).toLowerCase() : '',
+        stock: stockNum(rows[r][cols.stock]) || 0,
+        retail: retail != null && retail > 0 ? retail : null,
+      });
+    }
+    return { recs, stockAt };
+  }
+
+  function stockStatus(msg) { const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
+
+  async function stockParse() {
+    const f = $('stockFile').files[0];
+    if (!f) { stockStatus('Сначала выбери файл — отчёт «Остатки номенклатуры»'); return; }
+    stockStatus('Читаем файл…');
+    await loadXlsxLib();
+    stockParsed = parseStockReport(await readSheet(f));
+    const { recs, stockAt } = stockParsed;
+    if (!recs.length) { stockParsed = null; stockStatus('В файле не нашлось товаров с остатками'); return; }
+    const withRetail = recs.filter((r) => r.retail != null).length;
+    stockStatus(`Найдено товаров: ${recs.length}${stockAt ? `, остатки на ${fmtDate(stockAt)}` : ''}, розничных цен: ${withRetail}. `
+      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка (остаток обновится, новые товары создадутся).');
+    $('stockRun').textContent = `⬆ Загрузить остатки (${recs.length})`;
+  }
+
+  async function stockUpload() {
+    const { recs, stockAt } = stockParsed;
+    const btn = $('stockRun');
+    btn.disabled = true;
+    try {
+      stockStatus('Создаём группы…');
+      const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
+      const byCode = new Map(); const byBarcode = new Map(); const byName = new Map();
+      for (const p of state.products) {
+        if (p.code) byCode.set(p.code, p.id);
+        for (const b of (p.barcodes || [])) if (b) byBarcode.set(String(b).trim(), p.id);
+        if (p.name) byName.set(norm(p.name), p.id);
+      }
+      const at = stockAt || new Date().toISOString().slice(0, 10);
+      const updates = []; const inserts = [];
+      for (const r of recs) {
+        const pid = (r.code && byCode.get(r.code))
+          || (r.barcode && byBarcode.get(String(r.barcode).trim()))
+          || byName.get(norm(r.name));
+        if (pid) {
+          const u = { id: pid, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
+          if (r.retail != null) u.retail_price = r.retail; // не затираем, если цены нет
+          updates.push(u);
+        } else {
+          inserts.push({
+            name: r.name, code: r.code,
+            group_id: r.group ? groupMap.get(norm(r.group)) : null,
+            barcodes: r.barcode ? [r.barcode] : [],
+            unit: r.unit || null,
+            is_weighted: r.unit === 'кг',
+            stock_qty: r.stock, stock_at: at,
+            ...(r.retail != null ? { retail_price: r.retail } : {}),
+          });
+        }
+      }
+      let done = 0; const total = updates.length + inserts.length;
+      for (let i = 0; i < updates.length; i += 500) {
+        const { error } = await sb.from('catalog_products')
+          .upsert(updates.slice(i, i + 500), { onConflict: 'id' });
+        if (error) throw error;
+        done += Math.min(500, updates.length - i);
+        stockStatus(`Обновляем остатки… ${done} из ${total}`);
+      }
+      for (let i = 0; i < inserts.length; i += 400) {
+        // upsert по коду: если товар с таким кодом уже есть (а в состоянии его не
+        // было), обновим его, а не упадём на уникальном индексе кода
+        const { error } = await sb.from('catalog_products')
+          .upsert(inserts.slice(i, i + 400), { onConflict: 'code' });
+        if (error) throw error;
+        done += Math.min(400, inserts.length - i);
+        stockStatus(`Добавляем новые товары… ${done} из ${total}`);
+      }
+      stockStatus('Обновляем каталог…');
+      await refresh({ silent: true });
+      renderAll();
+      await autoDedup(); // тихо убрать дубли, если появились при сопоставлении по названию
+      stockStatus(`Готово! Остатки на ${fmtDate(at)} сохранены. Обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
+      toast('Остатки загружены ✓');
+      stockParsed = null;
+      btn.textContent = 'Проверить файл';
+    } catch (err) {
+      stockStatus('Ошибка: ' + (err.message || err)
+        + '. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql в SQL Editor.');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   /* ── Ходовые товары (после входа) ─────────────── */
 
   const isoDay = (d) => d.toISOString().slice(0, 10);
@@ -2644,6 +2808,12 @@
     });
     $('competitorForm').addEventListener('submit', submitCompetitorPrice);
 
+    // добавить фото товара — любой вошедший сотрудник (камера на телефоне)
+    $('addPhotoInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && currentProduct) addPhotoToProduct(file, currentProduct);
+    });
+
     // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
     $('supViewBody').addEventListener('click', (e) => {
       if (e.target.closest('a')) return;
@@ -2962,6 +3132,29 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    // Импорт остатков (только админ)
+    $('menuStockImport').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      stockParsed = null;
+      $('stockRun').textContent = 'Проверить файл';
+      $('stockStatus').hidden = true;
+      $('stockFileName').textContent = '';
+      openSheet('stockImportSheet');
+    });
+    $('stockFile').addEventListener('change', () => {
+      $('stockFileName').textContent = $('stockFile').files[0]?.name || '';
+      stockParsed = null;
+      $('stockRun').textContent = 'Проверить файл';
+    });
+    $('stockRun').addEventListener('click', async () => {
+      const btn = $('stockRun');
+      if (stockParsed) { stockUpload(); return; }
+      btn.disabled = true;
+      try { await stockParse(); }
+      catch (err) { stockStatus('Ошибка чтения: ' + (err.message || err)); stockParsed = null; }
+      finally { btn.disabled = false; }
     });
 
     // Импорт контактов поставщиков (только админ)
