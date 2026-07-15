@@ -1092,7 +1092,6 @@
   async function addPhotoToProduct(file, p) {
     if (!file || !p || !sb) return;
     const label = $('btnAddPhotoLabel');
-    const prev = label.firstChild ? label.textContent : '';
     try {
       label.style.pointerEvents = 'none';
       toast('Загружаем фото…');
@@ -2421,7 +2420,10 @@
         stockStatus(`Обновляем остатки… ${done} из ${total}`);
       }
       for (let i = 0; i < inserts.length; i += 400) {
-        const { error } = await sb.from('catalog_products').insert(inserts.slice(i, i + 400));
+        // upsert по коду: если товар с таким кодом уже есть (а в состоянии его не
+        // было), обновим его, а не упадём на уникальном индексе кода
+        const { error } = await sb.from('catalog_products')
+          .upsert(inserts.slice(i, i + 400), { onConflict: 'code' });
         if (error) throw error;
         done += Math.min(400, inserts.length - i);
         stockStatus(`Добавляем новые товары… ${done} из ${total}`);
@@ -2429,6 +2431,7 @@
       stockStatus('Обновляем каталог…');
       await refresh({ silent: true });
       renderAll();
+      await autoDedup(); // тихо убрать дубли, если появились при сопоставлении по названию
       stockStatus(`Готово! Остатки на ${fmtDate(at)} сохранены. Обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
       toast('Остатки загружены ✓');
       stockParsed = null;
