@@ -127,6 +127,7 @@
           <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🌐 Фото по штрихкодам (интернет)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+          <button class="btn btn-secondary btn-block" id="menuContactsImport">📇 Импорт контактов (Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuDedup">🧹 Убрать дубли товаров</button>
           <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
         </div>
@@ -323,6 +324,26 @@
         <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
         <div class="banner banner-info" id="salesStatus" hidden></div>
         <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт контактов поставщиков (только админ) -->
+  <div class="sheet-backdrop" id="contactsImportSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Импорт контактов поставщиков</h2>
+        <p class="muted">Excel из 1С: справочник «Контрагенты» с колонками
+        «Контрагент» (название) и «Номер телефона». Поставщик находится по
+        названию; если его нет — создаётся. Телефон обновляется, если изменился.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файл — контакты
+          <input type="file" id="contactsFile" hidden accept=".xls,.xlsx">
+        </label>
+        <div class="muted" id="contactsFileName"></div>
+        <button class="btn btn-primary btn-block" id="contactsRun">Проверить файл</button>
+        <div class="banner banner-info" id="contactsStatus" hidden></div>
+        <button class="btn btn-ghost sheet-close" data-close="contactsImportSheet">Закрыть</button>
       </div>
     </div>
   </div>

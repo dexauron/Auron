@@ -2197,6 +2197,89 @@
     }
   }
 
+  /* ── Импорт контактов поставщиков из 1С ───────────
+   * Справочник «Контрагенты»: колонка «Контрагент» (название) + колонка с
+   * телефоном. Поставщик находится по названию (нет — создаётся), телефон
+   * обновляется. Так контакты накапливаются: повторная загрузка обновит. */
+
+  let contactsParsed = null;
+
+  function parseContactsReport(rows) {
+    let nameCol = -1; let phoneCol = -1; let dataStart = -1;
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const cells = (rows[r] || []).map((v) => cellStr(v).toLowerCase());
+      let nc = -1; let pc = -1;
+      cells.forEach((l, c) => {
+        if (nc < 0 && l === 'контрагент') nc = c;
+        if (pc < 0 && l.includes('телефон')) pc = c;
+      });
+      if (nc >= 0 && pc >= 0) { nameCol = nc; phoneCol = pc; dataStart = r + 1; break; }
+    }
+    if (dataStart < 0) throw new Error('Не нашёл колонки «Контрагент» и «Номер телефона» в файле');
+    const byName = new Map();
+    for (let r = dataStart; r < rows.length; r++) {
+      const name = cellStr(rows[r][nameCol]).trim();
+      if (!name) continue;
+      const phone = cellStr(rows[r][phoneCol]).replace(/[^\d+]/g, '');
+      const prev = byName.get(norm(name));
+      // при повторах оставляем запись с телефоном
+      if (!prev || (!prev.phone && phone)) byName.set(norm(name), { name, phone });
+    }
+    return [...byName.values()];
+  }
+
+  async function contactsParse() {
+    const f = $('contactsFile').files[0];
+    if (!f) { contactsStatus('Сначала выбери файл — контакты из 1С'); return; }
+    contactsStatus('Читаем файл…');
+    await loadXlsxLib();
+    contactsParsed = parseContactsReport(await readSheet(f));
+    const withPhone = contactsParsed.filter((c) => c.phone).length;
+    if (!contactsParsed.length) { contactsParsed = null; contactsStatus('В файле не нашлось контрагентов'); return; }
+    contactsStatus(`Найдено контрагентов: ${contactsParsed.length}, из них с телефоном: ${withPhone}. `
+      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка (новые поставщики создадутся, телефоны обновятся).');
+    $('contactsRun').textContent = `⬆ Загрузить контакты (${withPhone})`;
+  }
+
+  function contactsStatus(msg) { const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
+
+  async function contactsUpload() {
+    const list = contactsParsed;
+    const btn = $('contactsRun');
+    btn.disabled = true;
+    try {
+      contactsStatus('Создаём поставщиков…');
+      // создаём/находим всех поставщиков из файла (новые появятся в каталоге)
+      const supMap = await getOrCreateByName('catalog_suppliers', list.map((c) => c.name), state.suppliers);
+      const records = [];
+      for (const c of list) {
+        if (!c.phone) continue;
+        const sid = supMap.get(norm(c.name));
+        if (sid) records.push({ supplier_id: sid, phone: c.phone, updated_at: new Date().toISOString() });
+      }
+      let saved = 0;
+      for (let i = 0; i < records.length; i += 500) {
+        const { error } = await sb.from('catalog_supplier_contacts')
+          .upsert(records.slice(i, i + 500), { onConflict: 'supplier_id' });
+        if (error) throw error;
+        saved += Math.min(500, records.length - i);
+        contactsStatus(`Сохраняем контакты… ${saved} из ${records.length}`);
+      }
+      await refresh({ silent: true });
+      if (state.canPurchase) await loadContacts();
+      renderAll();
+      contactsStatus(`Готово! Поставщиков в файле: ${list.length}, телефонов сохранено: ${records.length} ✓`);
+      toast('Контакты загружены ✓');
+      contactsParsed = null;
+      btn.textContent = 'Проверить файл';
+    } catch (err) {
+      contactsStatus('Ошибка: ' + (err.message || err)
+        + '. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql в SQL Editor.');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   /* ── Ходовые товары (после входа) ─────────────── */
 
   const isoDay = (d) => d.toISOString().slice(0, 10);
@@ -2879,6 +2962,29 @@
       } finally {
         btn.disabled = false;
       }
+    });
+
+    // Импорт контактов поставщиков (только админ)
+    $('menuContactsImport').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      contactsParsed = null;
+      $('contactsRun').textContent = 'Проверить файл';
+      $('contactsStatus').hidden = true;
+      $('contactsFileName').textContent = '';
+      openSheet('contactsImportSheet');
+    });
+    $('contactsFile').addEventListener('change', () => {
+      $('contactsFileName').textContent = $('contactsFile').files[0]?.name || '';
+      contactsParsed = null;
+      $('contactsRun').textContent = 'Проверить файл';
+    });
+    $('contactsRun').addEventListener('click', async () => {
+      const btn = $('contactsRun');
+      if (contactsParsed) { contactsUpload(); return; }
+      btn.disabled = true;
+      try { await contactsParse(); }
+      catch (err) { contactsStatus('Ошибка чтения: ' + (err.message || err)); contactsParsed = null; }
+      finally { btn.disabled = false; }
     });
 
     // Поставщики (управление, только админ)
