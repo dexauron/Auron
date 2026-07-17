@@ -321,14 +321,14 @@
     return best;
   }
 
-  function scoreProduct(p, q, qVars) {
+  // счёт одного слова запроса по товару (имя, коды/штрихкоды, поставщик, группа)
+  function scoreToken(p, q, qVars) {
     let s = 0;
     for (const c of p._codes) {
       if (c === q) return 120;
       if (c.startsWith(q)) s = Math.max(s, 95);
       else if (c.includes(q)) s = Math.max(s, 70);
     }
-
     s = Math.max(s, matchPre(p._name, p._nameT, qVars, [100, 90, 80]));
     if (p._sup) s = Math.max(s, matchPre(p._sup, p._supT, qVars, [60, 57, 55]));
     if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 40]));
@@ -336,13 +336,28 @@
     if (p.is_weighted && ('весовой'.startsWith(q) || 'весовые'.startsWith(q) || q === 'вес')) {
       s = Math.max(s, 45);
     }
-
-    // нечёткий поиск — только если точного совпадения не нашлось (экономит время на больших каталогах)
+    // нечёткий поиск — только если точного совпадения не нашлось (прощает опечатки)
     if (s < 60 && q.length >= 3) {
       const fuzzy = fuzzyScore(p._name, p._nameT, qVars);
       if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
     }
     return s;
+  }
+
+  // умный поиск: либо вся фраза подряд (как раньше), либо КАЖДОЕ слово в любом
+  // порядке (напр. «печенье яшкино» найдёт «Яшкино Печенье…»). Берём лучшее —
+  // ничего из прежнего поведения не теряем.
+  function scoreProduct(p, q, qVars, tokens) {
+    const whole = scoreToken(p, q, qVars);
+    if (!tokens || tokens.length <= 1) return whole;
+    let total = 0;
+    for (const tok of tokens) {
+      const s = scoreToken(p, tok.q, tok.qVars);
+      if (s <= 0) { total = 0; break; } // слово не найдено → товар не подходит
+      total += s;
+    }
+    const multi = total ? Math.round(total / tokens.length) : 0;
+    return Math.max(whole, multi);
   }
 
   function visibleProducts() {
@@ -367,8 +382,13 @@
     if (!q) return list;
     const qT = translit(q);
     const qVars = q === qT ? [q] : [q, qT];
+    // слова запроса — каждое ищется отдельно (в любом порядке)
+    const tokens = q.split(/\s+/).filter(Boolean).map((w) => {
+      const wt = translit(w);
+      return { q: w, qVars: w === wt ? [w] : [w, wt] };
+    });
     return list
-      .map((p) => ({ p, s: scoreProduct(p, q, qVars) }))
+      .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
       .filter((x) => x.s >= SEARCH_THRESHOLD)
       .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
       .map((x) => x.p);
