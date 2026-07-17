@@ -96,6 +96,9 @@
         <label class="btn btn-secondary btn-block" id="btnAddPhotoLabel" hidden>📷 Добавить фото товара
           <input type="file" id="addPhotoInput" accept="image/*" capture="environment" hidden>
         </label>
+        <label class="btn btn-secondary btn-block" id="btnSuggestPhotoLabel" hidden>📷 Предложить фото товара
+          <input type="file" id="suggestPhotoInput" accept="image/*" capture="environment" hidden>
+        </label>
         <div class="admin-actions" id="sheetAdminActions" hidden>
           <button class="btn btn-secondary btn-find-photo" id="btnFindPhoto" hidden>🖼 Найти фото в интернете</button>
           <button class="btn btn-secondary" id="btnEditProduct">✏️ Изменить</button>
@@ -139,6 +142,7 @@
         <p class="muted" id="adminEmail"></p>
         <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
         <button class="btn btn-secondary btn-block" id="menuPhotoFill">📷 Дозаполнить фото</button>
+        <button class="btn btn-secondary btn-block" id="menuSuggestions" hidden>🖼 Фото на проверке</button>
         <div id="menuAdminOnly">
           <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
           <button class="btn btn-secondary btn-block" id="menuImportHub">⬆ Импорт данных (1С / Excel)</button>
@@ -528,6 +532,20 @@
         <div id="scanContainer" class="scan-box"></div>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>🔦 Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Предложенные покупателями фото: проверка сотрудником -->
+  <div class="sheet-backdrop" id="suggestionsSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🖼 Фото на проверке</h2>
+        <p class="muted">Фото, предложенные покупателями. Одобри — станет видно всем;
+        отклони — удалится. Так витрина остаётся аккуратной.</p>
+        <div id="suggestionsList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="suggestionsSheet">Закрыть</button>
       </div>
     </div>
   </div>

@@ -73,6 +73,7 @@
     priceMax: null,
     selType: '',         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
     arrival: '',         // '' | 'today' | 'yesterday' — поступление сегодня/вчера (сотрудникам)
+    suggCount: 0,        // сколько фото от покупателей ждёт проверки
   };
 
   let sb = null;
@@ -965,7 +966,8 @@
 
     $('sheetAdminActions').hidden = !state.isAdmin;
     $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p)); // ищем по штрихкоду ИЛИ названию
-    $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
+    $('btnAddPhotoLabel').hidden = !state.session; // сотрудник добавляет фото сразу
+    $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
     renderProductSales(p);
@@ -1577,6 +1579,101 @@
     }
   }
 
+  // Покупатель без аккаунта предлагает фото — попадает в очередь на проверку,
+  // видно всем станет после одобрения сотрудником (защита витрины от плохих фото)
+  async function suggestPhotoToProduct(file, p) {
+    if (!file || !p || !sb) return;
+    const label = $('btnSuggestPhotoLabel');
+    try {
+      label.style.pointerEvents = 'none';
+      toast('Отправляем фото…');
+      const blob = await compressImage(file);
+      const url = await uploadPhoto(blob, 'suggestions');
+      const { error } = await sb.rpc('catalog_suggest_photo', { p_product_id: p.id, p_url: url });
+      if (error) throw error;
+      toast('Спасибо! Фото отправлено на проверку ✓');
+    } catch (err) {
+      toast('Не удалось отправить фото: ' + (err.message || err));
+    } finally {
+      label.style.pointerEvents = '';
+      $('suggestPhotoInput').value = '';
+    }
+  }
+
+  /* ── Предложенные фото: сотрудник одобряет/отклоняет ── */
+  let suggestions = [];
+
+  async function loadSuggestionsCount() {
+    if (!sb || !state.session) { state.suggCount = 0; return; }
+    try {
+      const { count } = await sb.from('catalog_photo_suggestions').select('id', { count: 'exact', head: true });
+      state.suggCount = count || 0;
+    } catch (e) { state.suggCount = 0; }
+  }
+
+  async function openSuggestions() {
+    openSheet('suggestionsSheet');
+    $('suggestionsList').innerHTML = '<p class="muted">Загружаем…</p>';
+    try {
+      const { data, error } = await sb.from('catalog_photo_suggestions')
+        .select('*').order('created_at', { ascending: false }).limit(200);
+      if (error) throw error;
+      suggestions = data || [];
+    } catch (e) {
+      $('suggestionsList').innerHTML = '<p class="muted">Не удалось загрузить. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-13.sql</p>';
+      return;
+    }
+    renderSuggestions();
+  }
+
+  function renderSuggestions() {
+    const box = $('suggestionsList');
+    if (!suggestions.length) { box.innerHTML = '<p class="muted">🎉 Очередь пуста — новых предложений нет.</p>'; return; }
+    const byId = new Map(state.products.map((p) => [p.id, p]));
+    box.innerHTML = suggestions.map((s) => {
+      const p = byId.get(s.product_id);
+      return `<div class="sugg-row" data-sugg="${esc(s.id)}">
+        <img class="sugg-img" src="${esc(s.url)}" alt="" loading="lazy">
+        <div class="sugg-info">
+          <div class="sugg-name">${esc(p ? p.name : 'Товар удалён')}</div>
+          <div class="sugg-actions">
+            <button class="btn btn-primary sugg-ok" data-approve="${esc(s.id)}">✓ Одобрить</button>
+            <button class="btn btn-danger sugg-no" data-reject="${esc(s.id)}">✕ Отклонить</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function approveSuggestion(id) {
+    const s = suggestions.find((x) => x.id === id);
+    try {
+      const { error } = await sb.rpc('catalog_approve_suggestion', { p_id: id });
+      if (error) throw error;
+      // сразу показываем фото у товара локально
+      const p = state.products.find((x) => x.id === s.product_id);
+      if (p) { p.photos = [...(p.photos || []), s.url]; }
+      suggestions = suggestions.filter((x) => x.id !== id);
+      renderSuggestions();
+      saveCache(); renderGrid();
+      state.suggCount = Math.max(0, (state.suggCount || 1) - 1);
+      toast('Фото одобрено ✓');
+    } catch (e) { toast('Не получилось: ' + (e.message || e)); }
+  }
+
+  async function rejectSuggestion(id) {
+    const s = suggestions.find((x) => x.id === id);
+    try {
+      const { error } = await sb.from('catalog_photo_suggestions').delete().eq('id', id);
+      if (error) throw error;
+      if (s) await removePhotosFromStorage([s.url]);
+      suggestions = suggestions.filter((x) => x.id !== id);
+      renderSuggestions();
+      state.suggCount = Math.max(0, (state.suggCount || 1) - 1);
+      toast('Отклонено');
+    } catch (e) { toast('Не получилось: ' + (e.message || e)); }
+  }
+
   /* ── «Дозаполни витрину»: сотрудник быстро фотографирует товары без фото ── */
   let photoFillTarget = null;
   const PHOTO_FILL_LIMIT = 60;
@@ -1685,8 +1782,8 @@
     }
   }
 
-  async function uploadPhoto(blob) {
-    const path = `products/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  async function uploadPhoto(blob, folder = 'products') {
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
       contentType: 'image/jpeg', cacheControl: '31536000',
     });
@@ -3780,10 +3877,18 @@
         $('menuTitle').textContent = roleName;
         $('adminEmail').textContent = roleHint;
         $('menuAdminOnly').hidden = !state.isAdmin;
+        $('menuTop').hidden = !state.canPurchase; // аналитика продаж — админ/аналитик; кассиру не показываем
         // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
         const noPhoto = photoCandidates().length;
         $('menuPhotoFill').textContent = noPhoto ? `📷 Дозаполнить фото (${noPhoto})` : '📷 Дозаполнить фото — всё есть ✓';
+        // «Фото на проверке» — показываем, если в очереди что-то есть
+        $('menuSuggestions').hidden = !(state.suggCount > 0);
+        $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
         openSheet('adminMenuSheet');
+        loadSuggestionsCount().then(() => {
+          $('menuSuggestions').hidden = !(state.suggCount > 0);
+          $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+        });
       } else {
         openLogin();
       }
@@ -3819,6 +3924,20 @@
     $('addPhotoInput').addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file && currentProduct) addPhotoToProduct(file, currentProduct);
+    });
+
+    // Покупатель без аккаунта предлагает фото (на проверку)
+    $('suggestPhotoInput').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && currentProduct) suggestPhotoToProduct(file, currentProduct);
+    });
+    // Сотрудник разбирает очередь предложенных фото
+    $('menuSuggestions').addEventListener('click', () => { closeSheet('adminMenuSheet'); openSuggestions(); });
+    $('suggestionsList').addEventListener('click', (e) => {
+      const ok = e.target.closest('[data-approve]');
+      if (ok) { ok.disabled = true; approveSuggestion(ok.dataset.approve); return; }
+      const no = e.target.closest('[data-reject]');
+      if (no) { no.disabled = true; rejectSuggestion(no.dataset.reject); }
     });
 
     // «Дозаполнить фото» — режим для сотрудника: снять камерой товары без фото
