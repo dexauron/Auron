@@ -1542,10 +1542,24 @@
   }
 
   // цена из ячейки: число или строка вида «1 234,50»
+  // Число из ячейки 1С. Универсально понимает разделители:
+  //   «1 234,56» и «1,234.56» и «1 234.56» -> 1234.56; «96,76» -> 96.76; «45.00» -> 45.
+  // Запятая = тысячи, если и точка есть, или если после неё ровно 3 цифры.
   function parsePriceNum(v) {
     if (v == null || v === '') return null;
     if (typeof v === 'number') return v > 0 ? v : null;
-    const n = parseFloat(String(v).replace(/[\s ]/g, '').replace(',', '.'));
+    let s = String(v).replace(/\s/g, '');
+    if (s.includes(',') && s.includes('.')) {
+      s = s.lastIndexOf(',') > s.lastIndexOf('.')
+        ? s.replace(/\./g, '').replace(',', '.')
+        : s.replace(/,/g, '');
+    } else if (s.includes(',')) {
+      const p = s.split(',');
+      s = (p.length === 2 && p[1].length === 3 && /^\d+$/.test(p[0]) && Number(p[0]) !== 0)
+        ? s.replace(',', '')
+        : s.replace(',', '.');
+    }
+    const n = parseFloat(s);
     return Number.isFinite(n) && n > 0 ? n : null;
   }
 
@@ -2312,10 +2326,23 @@
   let stockParsed = null;
 
   // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
+  // как parsePriceNum, но допускает 0 и отрицательные (остаток бывает минусовым)
   function stockNum(v) {
-    const s = cellStr(v).replace(/[\s ,]/g, '');
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return v;
+    let s = String(v).replace(/\s/g, '');
+    const neg = s.startsWith('-');
+    s = s.replace(/^-/, '');
+    if (s.includes(',') && s.includes('.')) {
+      s = s.lastIndexOf(',') > s.lastIndexOf('.')
+        ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    } else if (s.includes(',')) {
+      const p = s.split(',');
+      s = (p.length === 2 && p[1].length === 3 && /^\d+$/.test(p[0]) && Number(p[0]) !== 0)
+        ? s.replace(',', '') : s.replace(',', '.');
+    }
     const n = parseFloat(s);
-    return Number.isFinite(n) ? n : null;
+    return Number.isFinite(n) ? (neg ? -n : n) : null;
   }
 
   function parseStockReport(rows) {
