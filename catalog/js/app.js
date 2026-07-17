@@ -71,6 +71,8 @@
     quick: [],           // быстрые фильтры: 'withprice'|'barcode'|'nophoto'|'noprice'|'nobarcode'
     priceMin: null,      // диапазон розничной цены (₽)
     priceMax: null,
+    selType: '',         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
+    arrival: '',         // '' | 'today' | 'yesterday' — поступление сегодня/вчера (сотрудникам)
   };
 
   let sb = null;
@@ -410,6 +412,13 @@
 
   const hasRetail = (p) => p.retail_price != null && p.retail_price !== '';
 
+  // «дата поступления» товара: когда его последний раз обновляли завозом —
+  // остатки (stock_at), иначе дата последнего изменения записи
+  const arrivalDate = (p) => (p.stock_at ? String(p.stock_at).slice(0, 10)
+    : String(p.updated_at || p.created_at || '').slice(0, 10));
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+  const yesterdayISO = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
   // предикаты быстрых фильтров
   const QUICK = {
     withprice: (p) => hasRetail(p),
@@ -465,6 +474,12 @@
     if (quick.length) {
       list = list.filter((p) => quick.every((k) => (QUICK[k] ? QUICK[k](p) : true)));
     }
+    // тип товара: весовой / штучный (сотрудникам)
+    if (state.selType === 'weighted') list = list.filter((p) => p.is_weighted);
+    else if (state.selType === 'piece') list = list.filter((p) => !p.is_weighted);
+    // поступление: сегодня / вчера
+    if (state.arrival === 'today') { const t = todayISO(); list = list.filter((p) => arrivalDate(p) === t); }
+    else if (state.arrival === 'yesterday') { const y = yesterdayISO(); list = list.filter((p) => arrivalDate(p) === y); }
     // диапазон цены
     if (state.priceMin != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) >= state.priceMin);
     if (state.priceMax != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) <= state.priceMax);
@@ -673,7 +688,8 @@
   // сколько «фильтров» активно (для значка на кнопке «Фильтры»)
   function countActiveFilters() {
     return state.quick.length + state.selCats.length + state.selGroups.length
-      + state.selSuppliers.length + ((state.priceMin != null || state.priceMax != null) ? 1 : 0);
+      + state.selSuppliers.length + ((state.priceMin != null || state.priceMax != null) ? 1 : 0)
+      + (state.selType ? 1 : 0) + (state.arrival ? 1 : 0);
   }
 
   function updateResultsCount(n) {
@@ -685,9 +701,26 @@
   function syncControls() {
     document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
     document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+    document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
+    document.querySelectorAll('#arrivalSeg button').forEach((b) => b.classList.toggle('active', b.dataset.arrival === state.arrival));
     const pmin = $('priceMin'); const pmax = $('priceMax');
     if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? state.priceMin : '';
     if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? state.priceMax : '';
+    // разделы для сотрудников/закупок показываем по роли
+    document.querySelectorAll('.emp-only').forEach((el) => { el.hidden = !state.session; });
+    document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
+    // подписи кнопок «Группы» и «Поставщики» — со счётчиком выбранного
+    const gBtn = $('filterGroupsBtn');
+    if (gBtn) {
+      const gn = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted').length + state.selCats.length;
+      gBtn.textContent = gn ? `📁 Группы: выбрано ${gn}` : '📁 Выбрать группы…';
+      gBtn.classList.toggle('picked', gn > 0);
+    }
+    const sBtn = $('filterSuppliersBtn');
+    if (sBtn) {
+      sBtn.textContent = state.selSuppliers.length ? `🚚 Поставщики: ${state.selSuppliers.length}` : '🚚 Выбрать поставщиков…';
+      sBtn.classList.toggle('picked', state.selSuppliers.length > 0);
+    }
     const n = countActiveFilters();
     const badge = $('filterBadge');
     if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
@@ -700,13 +733,15 @@
   function anyFilterActive() {
     return !!(state.query || state.quick.length || state.selCats.length
       || state.selGroups.length || state.selSuppliers.length
-      || state.priceMin != null || state.priceMax != null);
+      || state.priceMin != null || state.priceMax != null
+      || state.selType || state.arrival);
   }
 
   // полный сброс всех фильтров и поиска (сортировку и вид не трогаем — это привычка)
   function clearAllFilters() {
     state.selCats = []; state.selGroups = []; state.selSuppliers = [];
     state.quick = []; state.priceMin = null; state.priceMax = null;
+    state.selType = ''; state.arrival = '';
     state.query = '';
     state.renderLimit = PAGE_SIZE;
     const inp = $('searchInput'); if (inp) inp.value = '';
@@ -727,6 +762,7 @@
         selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
         quick: state.quick, sort: state.sort, view: state.view,
         priceMin: state.priceMin, priceMax: state.priceMax,
+        selType: state.selType, arrival: state.arrival,
       }));
     } catch (e) { /* нет места — не критично */ }
   }
@@ -742,6 +778,8 @@
       if (f.view === 'compact' || f.view === 'normal') state.view = f.view;
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
+      if (f.selType === 'weighted' || f.selType === 'piece') state.selType = f.selType;
+      if (f.arrival === 'today' || f.arrival === 'yesterday') state.arrival = f.arrival;
     } catch (e) { /* игнорируем битые данные */ }
   }
 
@@ -3309,6 +3347,32 @@
       const b = e.target.closest('button'); if (!b) return;
       state.view = b.dataset.view;
       renderAll();
+    });
+    // Тип товара: весовой / штучный (сотрудникам)
+    $('typeSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      state.selType = b.dataset.type;
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+    // Поступление: сегодня / вчера (сотрудникам)
+    $('arrivalSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      state.arrival = b.dataset.arrival;
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+    // Группы — открыть полный список для выбора (можно несколько)
+    $('filterGroupsBtn').addEventListener('click', () => {
+      $('groupsPickSearch').value = '';
+      renderGroupsPick();
+      openSheet('groupsPickSheet');
+    });
+    // Поставщики — открыть список поставщиков (только админ/аналитик)
+    $('filterSuppliersBtn').addEventListener('click', () => {
+      $('supplierSearch').value = '';
+      renderSupplierList();
+      openSheet('supplierSheet');
     });
     // Диапазон цены — применяется на лету по мере ввода
     let priceDeb;
