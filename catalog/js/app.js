@@ -964,7 +964,7 @@
     $('sheetFields').innerHTML = rows.join('');
 
     $('sheetAdminActions').hidden = !state.isAdmin;
-    $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p) && (p.barcodes || []).length);
+    $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p)); // ищем по штрихкоду ИЛИ названию
     $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
@@ -2478,14 +2478,26 @@
    * известные бренды. Найденное фото сжимается и сохраняется в НАШЕ
    * хранилище — дальше работает как обычное фото товара, в т.ч. офлайн. */
 
-  const PHOTO_CHECKED_KEY = 'wm_photo_checked_v1'; // штрихкоды, по которым фото уже искали и не нашли
+  const PHOTO_CHECKED_KEY = 'wm_photo_checked_v2'; // товары (id), по которым фото уже искали и не нашли
   let photoSearchRunning = false;
 
+  // товары без фото: ищем и тем, у кого есть штрихкод, и тем, у кого только название
   const photoCandidates = () =>
-    state.products.filter((p) => (p.barcodes || []).length && !(p.photos || []).length);
+    state.products.filter((p) => !hasPhoto(p) && (p.name || (p.barcodes || []).length));
 
-  async function offLookup(bc) {
-    for (const host of ['world.openfoodfacts.org', 'world.openbeautyfacts.org']) {
+  // Открытые бесплатные базы с фото товаров (еда, косметика/бытовая химия,
+  // корма, прочие товары). Легально, фото под открытой лицензией.
+  const PHOTO_HOSTS = [
+    'world.openfoodfacts.org',
+    'world.openbeautyfacts.org',
+    'world.openproductsfacts.org',
+    'world.openpetfoodfacts.org',
+  ];
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  // поиск фото по штрихкоду
+  async function offByBarcode(bc) {
+    for (const host of PHOTO_HOSTS) {
       try {
         const r = await fetch(`https://${host}/api/v2/product/${encodeURIComponent(bc)}.json?fields=image_front_url`);
         if (r.ok) {
@@ -2494,10 +2506,59 @@
           if (url) return url;
         }
       } catch (e) { /* сеть моргнула — товар проверим в следующий раз */ }
-      await new Promise((res) => setTimeout(res, 500)); // вежливый темп к бесплатной базе
+      await sleep(350); // вежливый темп к бесплатной базе
     }
     return null;
   }
+
+  // фото похоже на наш товар? (защита от чужой картинки — лучше без фото, чем не то)
+  function photoNameMatches(ours, theirs) {
+    if (!theirs) return false;
+    const a = norm(ours).replace(/[^0-9a-zа-я ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const b = norm(theirs).replace(/[^0-9a-zа-я ]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!a || !b) return false;
+    const sim = dice(bigrams(a.replace(/\s+/g, '')), bigrams(b.replace(/\s+/g, '')));
+    if (sim >= 0.5) return true;
+    // либо совпало значимое слово (бренд/название) длиной от 4 букв
+    const bw = new Set(b.split(' ').filter((w) => w.length >= 4));
+    return a.split(' ').some((w) => w.length >= 4 && bw.has(w));
+  }
+
+  // поиск фото по названию (для товаров без штрихкода или если по штрихкоду не нашли).
+  // Берём фото, только если найденное название реально похоже на наше.
+  async function offByName(name) {
+    const q = norm(name).replace(/[^0-9a-zа-я ]/gi, ' ').replace(/\s+/g, ' ').trim();
+    if (q.length < 3) return null;
+    for (const host of PHOTO_HOSTS) {
+      try {
+        const url = `https://${host}/cgi/search.pl?search_terms=${encodeURIComponent(q)}`
+          + '&search_simple=1&action=process&json=1&page_size=5&fields=product_name,image_front_url';
+        const r = await fetch(url);
+        if (r.ok) {
+          const d = await r.json();
+          for (const prod of (d.products || [])) {
+            if (prod.image_front_url && photoNameMatches(name, prod.product_name)) return prod.image_front_url;
+          }
+        }
+      } catch (e) { /* пропускаем источник */ }
+      await sleep(500);
+    }
+    return null;
+  }
+
+  // фото товара: сперва по штрихкодам, потом по названию
+  async function findProductPhoto(p) {
+    for (const bc of (p.barcodes || [])) {
+      if (!bc) continue;
+      const u = await offByBarcode(bc);
+      if (u) return u;
+    }
+    if (p.name) return offByName(p.name);
+    return null;
+  }
+
+  // совместимость со старым вызовом (в карточке «Найти фото»): по штрихкоду
+  async function offLookup(bc) { return offByBarcode(bc); }
 
   async function attachFoundPhoto(p, url) {
     const resp = await fetch(url);
@@ -2523,7 +2584,7 @@
     if (!sb || !isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
     let checked = {};
     try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
-    const todo = photoCandidates().filter((p) => !checked[(p.barcodes || [])[0]]);
+    const todo = photoCandidates().filter((p) => !checked[p.id]);
     if (!todo.length) return;
     photoSearchRunning = true;
     const save = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
@@ -2532,11 +2593,10 @@
     let found = 0;
     for (const p of todo) {
       if (!isOwner() || document.hidden || !navigator.onLine) break; // тихо приостановиться
-      const bc = p.barcodes[0];
       try {
-        const url = await offLookup(bc);
+        const url = await findProductPhoto(p);
         if (url) { await attachFoundPhoto(p, url); found++; if (found % 6 === 0) { saveCache(); renderGrid(); } }
-        else checked[bc] = 1;
+        else checked[p.id] = 1;
       } catch (e) { /* пропускаем товар */ }
       done++;
       if (done % 15 === 0) save();
@@ -2617,18 +2677,17 @@
     let checked = {};
     try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
     const saveChecked = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
-    const todo = photoCandidates().filter((p) => !checked[(p.barcodes || [])[0]]);
+    const todo = photoCandidates().filter((p) => !checked[p.id]);
     const status = (msg) => { const el = $('photoSearchStatus'); el.hidden = false; el.textContent = msg; };
     let done = 0;
     let found = 0;
-    status(`Будем проверять: ${todo.length} товаров со штрихкодом и без фото`);
+    status(`Будем проверять: ${todo.length} товаров без фото (по штрихкоду и названию)`);
     for (const p of todo) {
       if (!photoSearchRunning || $('photoSearchSheet').hidden) break;
-      const bc = p.barcodes[0];
       try {
-        const url = await offLookup(bc);
+        const url = await findProductPhoto(p);
         if (url) { await attachFoundPhoto(p, url); found++; }
-        else checked[bc] = 1;
+        else checked[p.id] = 1;
       } catch (e) { /* пропускаем товар, идём дальше */ }
       done++;
       if (done % 10 === 0) saveChecked();
@@ -3779,9 +3838,9 @@
       btn.disabled = true;
       btn.textContent = 'Ищем фото…';
       try {
-        const url = await offLookup(p.barcodes[0]);
+        const url = await findProductPhoto(p);
         if (!url) {
-          toast('В открытой базе фото этого товара нет — добавь своё через ✏️ Изменить');
+          toast('В открытых базах фото этого товара нет — сфотографируй его через 📷 в карточке');
         } else {
           await attachFoundPhoto(p, url);
           saveCache();
