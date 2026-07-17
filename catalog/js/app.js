@@ -1930,7 +1930,204 @@
     return added;
   }
 
+  // Прайс-лист розничных цен из 1С: колонка «Номенклатура» + «Розничный тип
+  // цен» (розничная цена). Товары сгруппированы строками-заголовками (у них нет
+  // цены). Артикул часто внутри названия («Арт.st-917»). Кода нет — товар ищем
+  // по артикулу и названию.
+  function parseRetailList(rows) {
+    const det = detectColumns(rows);
+    if (!det || det.cols.name === undefined || det.cols.retail === undefined) {
+      throw new Error('Не нашёл колонки «Номенклатура» и «Розничный тип цен» в прайс-листе');
+    }
+    const { cols, dataStart } = det;
+    const recs = []; let group = null;
+    for (let r = dataStart; r < rows.length; r++) {
+      const name = cellStr(rows[r][cols.name]);
+      if (!name) continue;
+      if (/^\s*(итого|всего|номенклатура|наименование)\b/i.test(name)) continue;
+      const retail = parsePriceNum(rows[r][cols.retail]);
+      if (retail == null) { group = name; continue; } // строка без цены — заголовок группы
+      const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
+      recs.push({ name, article: art, group, retail });
+    }
+    return { recs };
+  }
+
+  // Каталог сам определяет, что за файл 1С загрузили, по его шапке.
+  // Возвращает: 'prices'|'stock'|'sales'|'contacts'|'retail'|'photo'|'barcodes'|null
+  function detectReportType(rows) {
+    const scan = rows.slice(0, 32);
+    const head = scan.map((r) => (r || []).map((c) => cellStr(c)).join('\t')).join('\n').toLowerCase();
+    const has = (s) => head.includes(s);
+    const cellExact = (val) => scan.some((r) => (r || []).some((c) => cellStr(c).toLowerCase() === val));
+    const hasPrice = /цена/.test(head);
+    const hasQty = has('количество') || /кол-?во/.test(head);
+    const hasStock = has('остаток') || has('остатк') || has('на конец дня');
+    const hasContragent = cellExact('контрагент');
+    const hasPhone = has('телефон');
+    const hasSupplier = has('поставщик') || hasContragent;
+
+    if (/https?:\/\//.test(head)) return 'photo';
+    // «Контрагент» + «телефон» — однозначно справочник контактов (в отчётах цен
+    // телефона нет). Слово «количество» в служебной шапке не должно мешать.
+    if (hasContragent && hasPhone) return 'contacts';
+    if (has('период') && hasQty && !hasStock) return 'sales';
+    if (hasStock || (has('розничная цена') && hasQty)) return 'stock';
+    if (has('прайс-лист') || has('прайслист') || has('тип цен')) return 'retail';
+    if (hasSupplier && hasPrice) return 'prices';
+    if (has('штрих') && !hasPrice && !hasQty) return 'barcodes';
+    if ((has('номенклатура') || has('наименование')) && hasPrice) return 'retail';
+    return null;
+  }
+
+  const REPORT_LABEL = {
+    prices: 'Цены поставщиков и товары',
+    stock: 'Остатки и розничные цены',
+    sales: 'Продажи за период',
+    contacts: 'Контакты поставщиков',
+    retail: 'Прайс-лист (розничные цены)',
+    photo: 'Фото по ссылкам',
+    barcodes: 'Штрихкоды',
+  };
+
+  // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
+  // обновляет розничную цену (+ история), новый — создаёт с группой.
+  async function coreUploadRetail(parsed, status) {
+    const { recs } = parsed;
+    status('Создаём группы…');
+    const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
+    const byName = new Map(); const byArticle = new Map(); const byId = new Map();
+    for (const p of state.products) {
+      if (p.name) byName.set(norm(p.name), p.id);
+      if (p.article) byArticle.set(norm(p.article), p.id);
+      byId.set(p.id, p);
+    }
+    const at = new Date().toISOString().slice(0, 10);
+    const updates = []; const inserts = []; const hist = []; const seen = new Set();
+    for (const r of recs) {
+      const pid = (r.article && byArticle.get(norm(r.article))) || byName.get(norm(r.name));
+      if (pid) {
+        if (seen.has(pid)) continue; // один товар — одна цена за загрузку
+        seen.add(pid);
+        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString() });
+        const cur = byId.get(pid);
+        const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
+        if (old == null || old !== Number(r.retail)) hist.push({ product_id: pid, retail_price: r.retail, changed_at: at });
+      } else {
+        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail });
+      }
+    }
+    let done = 0; const total = updates.length + inserts.length;
+    for (let i = 0; i < updates.length; i += 500) {
+      const { error } = await sb.from('catalog_products').upsert(updates.slice(i, i + 500), { onConflict: 'id' });
+      if (error) throw error;
+      done += Math.min(500, updates.length - i); status(`Обновляем цены… ${done} из ${total}`);
+    }
+    for (let i = 0; i < inserts.length; i += 400) {
+      const { error } = await sb.from('catalog_products').insert(inserts.slice(i, i + 400));
+      if (error) throw error;
+      done += Math.min(400, inserts.length - i); status(`Добавляем новые товары… ${done} из ${total}`);
+    }
+    if (hist.length) {
+      for (let i = 0; i < hist.length; i += 500) {
+        try { await sb.from('catalog_retail_history').upsert(hist.slice(i, i + 500), { onConflict: 'product_id,changed_at' }); }
+        catch (e) { break; }
+      }
+    }
+    await refresh({ silent: true });
+    renderAll();
+    status(`Готово! Розничных цен обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
+  }
+
+  /* ── Умный импорт: одна вкладка, каталог сам распознаёт файлы ──
+   * Пользователь выбирает любые файлы 1С — программа определяет тип каждого и
+   * загружает по очереди (сначала товары/цены, потом продажи/контакты). */
+  let smartEntries = [];
+  let smartSink = null; // куда перенаправляются сообщения о ходе загрузки
+
+  function smartLog(msg) { const el = $('smartStatus'); if (el) { el.hidden = false; el.textContent = msg; } }
+
+  async function smartPick(files) {
+    smartEntries = [];
+    $('smartRun').hidden = true;
+    if (!files || !files.length) { $('smartList').innerHTML = ''; return; }
+    smartLog('Читаем файлы…');
+    await loadXlsxLib();
+    for (const f of files) {
+      const entry = { file: f, name: f.name, type: null, count: 0, error: null, parsed: null, rows: null };
+      try {
+        const rows = await readSheet(f);
+        entry.rows = rows;
+        entry.type = detectReportType(rows);
+        if (!entry.type) throw new Error('не понял, что это за файл');
+        // разбираем сразу — чтобы показать, сколько строк распознано
+        if (entry.type === 'prices') { entry.byKey = parsePriceReport(rows); entry.count = entry.byKey.size; }
+        else if (entry.type === 'retail') { entry.parsed = parseRetailList(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'stock') { entry.parsed = parseStockReport(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'sales') { entry.parsed = parseSalesReport(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'contacts') { entry.parsed = parseContactsReport(rows); entry.count = entry.parsed.length; }
+        else if (entry.type === 'photo') { entry.parsed = parsePhotoSheet(rows); entry.count = entry.parsed.length; }
+        else if (entry.type === 'barcodes') { entry.count = 0; }
+      } catch (e) { entry.error = e.message || String(e); }
+      smartEntries.push(entry);
+    }
+    // штрихкоды приклеиваем к файлу цен, если он есть
+    const priceEntry = smartEntries.find((e) => e.type === 'prices' && e.byKey);
+    for (const e of smartEntries) {
+      if (e.type === 'barcodes' && priceEntry && e.rows) {
+        try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
+      }
+    }
+    renderSmartList();
+    smartLog('');
+    $('smartStatus').hidden = true;
+    if (smartEntries.some((e) => e.type && !e.error && !(e.type === 'barcodes' && !e.mergedInto))) $('smartRun').hidden = false;
+  }
+
+  function renderSmartList() {
+    $('smartList').innerHTML = smartEntries.map((e) => {
+      if (e.error) return `<div class="smart-row smart-bad"><b>${esc(e.name)}</b><span>⚠ ${esc(e.error)}</span></div>`;
+      const label = REPORT_LABEL[e.type] || e.type;
+      const extra = e.mergedInto ? ` → добавятся к «${esc(e.mergedInto)}»` : '';
+      return `<div class="smart-row"><b>${esc(e.name)}</b><span>✓ ${esc(label)}: ${e.count} ${extra}<span class="smart-st" data-st="${esc(e.name)}"></span></span></div>`;
+    }).join('');
+  }
+
+  function setSmartRowStatus(entry, msg) {
+    const el = $('smartList').querySelector(`[data-st="${(window.CSS && CSS.escape) ? CSS.escape(entry.name) : entry.name}"]`);
+    if (el) el.textContent = ' · ' + msg;
+    smartLog(`${entry.name}: ${msg}`);
+  }
+
+  async function smartRun() {
+    const btn = $('smartRun');
+    btn.disabled = true;
+    // порядок: сначала товары/цены/остатки/прайс, потом продажи/контакты/фото
+    const order = { prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+    const todo = smartEntries.filter((e) => e.type && !e.error && !(e.type === 'barcodes'))
+      .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
+    let okCount = 0;
+    for (const e of todo) {
+      smartSink = (msg) => setSmartRowStatus(e, msg);
+      try {
+        if (e.type === 'prices') { impParsed = [...e.byKey.values()]; await impUpload(); }
+        else if (e.type === 'retail') { await coreUploadRetail(e.parsed, smartSink); }
+        else if (e.type === 'stock') { stockParsed = e.parsed; await stockUpload(); }
+        else if (e.type === 'sales') { salesParsed = e.parsed; await salesUpload(); }
+        else if (e.type === 'contacts') { contactsParsed = e.parsed; await contactsUpload(); }
+        else if (e.type === 'photo') { photoExcelParsed = e.parsed; await photoExcelApply(); }
+        okCount++;
+      } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
+      smartSink = null;
+    }
+    btn.disabled = false;
+    btn.hidden = true;
+    smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён ✓`);
+    toast('Импорт завершён ✓');
+  }
+
   function impStatus(msg) {
+    if (smartSink) { smartSink(msg); return; }
     const el = $('impStatus');
     el.hidden = false;
     el.textContent = msg;
@@ -2354,7 +2551,7 @@
     return { updates, unmatched };
   }
 
-  function photoExcelStatus(msg) { const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
+  function photoExcelStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
 
   async function photoExcelParse() {
     const f = $('photoExcelFile').files[0];
@@ -2470,6 +2667,7 @@
   }
 
   function salesStatus(msg) {
+    if (smartSink) { smartSink(msg); return; }
     const el = $('salesStatus');
     el.hidden = false;
     el.textContent = msg;
@@ -2586,7 +2784,7 @@
     $('contactsRun').textContent = `⬆ Загрузить контакты (${withPhone})`;
   }
 
-  function contactsStatus(msg) { const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
+  function contactsStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
 
   async function contactsUpload() {
     const list = contactsParsed;
@@ -2694,7 +2892,7 @@
     return { recs, stockAt };
   }
 
-  function stockStatus(msg) { const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
+  function stockStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
 
   async function stockParse() {
     const f = $('stockFile').files[0];
@@ -3252,18 +3450,18 @@
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
-    // Единый экран импорта: меню админа → выбор, что загрузить
-    $('menuImportHub').addEventListener('click', () => { closeSheet('adminMenuSheet'); openSheet('importHubSheet'); });
-
-    // Фото из Excel по ссылкам (только админ)
-    $('hubPhotoExcel').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      photoExcelParsed = null;
-      $('photoExcelRun').textContent = 'Проверить файл';
-      $('photoExcelStatus').hidden = true;
-      $('photoExcelName').textContent = '';
-      openSheet('photoExcelSheet');
+    // Умный импорт: меню админа → одна вкладка, каталог сам распознаёт файлы
+    $('menuImportHub').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      smartEntries = [];
+      $('smartList').innerHTML = '';
+      $('smartRun').hidden = true;
+      $('smartStatus').hidden = true;
+      $('smartFiles').value = '';
+      openSheet('importHubSheet');
     });
+    $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
+    $('smartRun').addEventListener('click', smartRun);
     $('photoExcelFile').addEventListener('change', () => {
       $('photoExcelName').textContent = $('photoExcelFile').files[0]?.name || '';
       photoExcelParsed = null;
@@ -3478,14 +3676,8 @@
       if (del) deleteGroup(del.closest('.group-row').dataset.id);
     });
 
-    // Импорт из 1С (только админ)
-    $('hubPrices').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      impParsed = null;
-      $('impRun').textContent = 'Проверить файлы';
-      $('impStatus').hidden = true;
-      openSheet('importSheet');
-    });
+    // Старые отдельные экраны импорта скрыты — вход теперь через «умный импорт».
+    // Их обработчики файлов/загрузки оставлены (элементы существуют, вреда нет).
     $('impFile1').addEventListener('change', () => {
       $('impFile1Name').textContent = $('impFile1').files[0]?.name || '';
       impParsed = null;
@@ -3527,14 +3719,6 @@
       if (p) { closeSheet('topSheet'); openProduct(p); }
     });
 
-    // Импорт продаж (только админ)
-    $('hubSales').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      salesParsed = null;
-      $('salesRun').textContent = 'Проверить файл';
-      $('salesStatus').hidden = true;
-      openSheet('salesImportSheet');
-    });
     $('salesFile').addEventListener('change', () => {
       $('salesFileName').textContent = $('salesFile').files[0]?.name || '';
       salesParsed = null;
@@ -3554,15 +3738,6 @@
       }
     });
 
-    // Импорт остатков (только админ)
-    $('hubStock').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      stockParsed = null;
-      $('stockRun').textContent = 'Проверить файл';
-      $('stockStatus').hidden = true;
-      $('stockFileName').textContent = '';
-      openSheet('stockImportSheet');
-    });
     $('stockFile').addEventListener('change', () => {
       $('stockFileName').textContent = $('stockFile').files[0]?.name || '';
       stockParsed = null;
@@ -3577,15 +3752,6 @@
       finally { btn.disabled = false; }
     });
 
-    // Импорт контактов поставщиков (только админ)
-    $('hubContacts').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      contactsParsed = null;
-      $('contactsRun').textContent = 'Проверить файл';
-      $('contactsStatus').hidden = true;
-      $('contactsFileName').textContent = '';
-      openSheet('contactsImportSheet');
-    });
     $('contactsFile').addEventListener('change', () => {
       $('contactsFileName').textContent = $('contactsFile').files[0]?.name || '';
       contactsParsed = null;
