@@ -142,12 +142,25 @@
   const sheetStack = [];
   let expectPop = 0; // сколько наших history.back() ещё «переварить» без действия
 
+  // z-index задаём по порядку ОТКРЫТИЯ, а не по порядку в HTML — иначе окно,
+  // открытое позже, могло оказаться ЗА уже открытым (баг «окошки сзади»)
+  function restackSheets() {
+    sheetStack.forEach((id, i) => {
+      const el = $(id);
+      if (!el) return;
+      el.style.zIndex = String(40 + i * 2);
+      // затемняем фон только у верхнего окна — стопка не темнеет вдвое
+      el.classList.toggle('backdrop-top', i === sheetStack.length - 1);
+    });
+  }
+
   function openSheet(id) {
     const el = $(id);
     if (!el || !el.hidden) return; // нет элемента или уже открыт
     el.hidden = false;
     document.body.style.overflow = 'hidden';
     sheetStack.push(id);
+    restackSheets();
     // history-запись: кнопка «назад» на телефоне закроет это окно, а не выйдет из приложения
     try { history.pushState({ wmSheet: id }, ''); } catch (e) { /* некритично */ }
   }
@@ -156,9 +169,12 @@
     const el = $(id);
     if (!el) return;
     el.hidden = true;
+    el.style.zIndex = '';
+    el.classList.remove('backdrop-top');
     const i = sheetStack.lastIndexOf(id);
     if (i >= 0) sheetStack.splice(i, 1);
     if (!sheetStack.length) document.body.style.overflow = '';
+    else restackSheets();
     if (id === 'scanSheet') stopScan();
   }
 
