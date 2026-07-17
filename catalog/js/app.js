@@ -2423,7 +2423,9 @@
           || (r.barcode && byBarcode.get(String(r.barcode).trim()))
           || byName.get(norm(r.name));
         if (pid) {
-          const u = { id: pid, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
+          // name обязательно (NOT NULL): если id вдруг устарел и строка вставится,
+          // а не обновится — не упадём на пустом имени
+          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
           if (r.retail != null) u.retail_price = r.retail; // не затираем, если цены нет
           updates.push(u);
         } else {
