@@ -1577,6 +1577,50 @@
     }
   }
 
+  /* ── «Дозаполни витрину»: сотрудник быстро фотографирует товары без фото ── */
+  let photoFillTarget = null;
+  const PHOTO_FILL_LIMIT = 60;
+
+  function openPhotoFill() {
+    $('photoFillSearch').value = '';
+    renderPhotoFillList();
+    openSheet('photoFillSheet');
+  }
+
+  function renderPhotoFillList() {
+    const q = norm($('photoFillSearch').value);
+    const all = photoCandidates();
+    const total = all.length;
+    let list = all;
+    if (q) list = all.filter((p) => (p._name || norm(p.name)).includes(q) || (p._codes || []).some((c) => c.includes(q)));
+    $('photoFillCount').textContent = q ? `Без фото: ${total} · найдено: ${list.length}` : `Осталось без фото: ${total}`;
+    const box = $('photoFillList');
+    if (!list.length) {
+      box.innerHTML = total
+        ? '<p class="muted">Ничего не нашлось. Измени запрос.</p>'
+        : '<p class="muted">🎉 У всех товаров есть фото — витрина заполнена!</p>';
+      return;
+    }
+    const shown = list.slice(0, PHOTO_FILL_LIMIT);
+    box.innerHTML = shown.map((p) => {
+      const sub = [p.code ? 'Код ' + esc(p.code) : '', (p.barcodes || [])[0] ? 'ШК ' + esc(p.barcodes[0]) : ''].filter(Boolean).join(' · ');
+      return `<div class="fill-row">
+        <div class="fill-info"><div class="fill-name">${esc(p.name)}</div>${sub ? `<div class="fill-sub">${sub}</div>` : ''}</div>
+        <button class="btn btn-primary fill-cam" data-fill-cam="${esc(p.id)}">📷</button>
+      </div>`;
+    }).join('') + (list.length > shown.length
+      ? `<p class="muted" style="text-align:center;margin-top:10px">…и ещё ${list.length - shown.length}. Уточни поиском.</p>` : '');
+  }
+
+  async function photoFillPick(file) {
+    const p = photoFillTarget;
+    photoFillTarget = null;
+    $('photoFillInput').value = '';
+    if (!file || !p) return;
+    await addPhotoToProduct(file, p);
+    renderPhotoFillList(); // товар с фото уходит из списка
+  }
+
   async function createCompetitor(name) {
     const { data, error } = await sb.from('catalog_competitors').insert({ name }).select().single();
     if (error) { toast('Ошибка: ' + error.message); return null; }
@@ -3736,6 +3780,9 @@
         $('menuTitle').textContent = roleName;
         $('adminEmail').textContent = roleHint;
         $('menuAdminOnly').hidden = !state.isAdmin;
+        // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
+        const noPhoto = photoCandidates().length;
+        $('menuPhotoFill').textContent = noPhoto ? `📷 Дозаполнить фото (${noPhoto})` : '📷 Дозаполнить фото — всё есть ✓';
         openSheet('adminMenuSheet');
       } else {
         openLogin();
@@ -3773,6 +3820,17 @@
       const file = e.target.files[0];
       if (file && currentProduct) addPhotoToProduct(file, currentProduct);
     });
+
+    // «Дозаполнить фото» — режим для сотрудника: снять камерой товары без фото
+    $('menuPhotoFill').addEventListener('click', () => { closeSheet('adminMenuSheet'); openPhotoFill(); });
+    $('photoFillSearch').addEventListener('input', renderPhotoFillList);
+    $('photoFillList').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-fill-cam]');
+      if (!btn) return;
+      photoFillTarget = state.products.find((x) => x.id === btn.dataset.fillCam) || null;
+      if (photoFillTarget) $('photoFillInput').click();
+    });
+    $('photoFillInput').addEventListener('change', (e) => { photoFillPick(e.target.files[0]); });
 
     // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
     $('supViewBody').addEventListener('click', (e) => {
