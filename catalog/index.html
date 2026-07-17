@@ -69,6 +69,7 @@
       <div class="empty-icon">🔍</div>
       <div class="empty-title">Ничего не нашлось</div>
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
+      <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>✕ Сбросить фильтры</button>
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
@@ -555,7 +556,7 @@
             <button data-type="piece">Штучные</button>
           </div>
 
-          <div class="filter-label">Поступление</div>
+          <div class="filter-label">Новинки <span class="filter-hint">— когда добавлен в каталог</span></div>
           <div class="seg" id="arrivalSeg">
             <button data-arrival="">Все</button>
             <button data-arrival="today">Сегодня</button>

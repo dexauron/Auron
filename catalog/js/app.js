@@ -428,18 +428,20 @@
 
   const hasRetail = (p) => p.retail_price != null && p.retail_price !== '';
 
-  // «дата поступления» товара: когда его последний раз обновляли завозом —
-  // остатки (stock_at), иначе дата последнего изменения записи
-  const arrivalDate = (p) => (p.stock_at ? String(p.stock_at).slice(0, 10)
-    : String(p.updated_at || p.created_at || '').slice(0, 10));
+  // «новый товар» = когда он ВПЕРВЫЕ появился в каталоге (created_at).
+  // updated_at не годится: при импорте он становится «сегодня» у всех товаров,
+  // и тогда «новые/сегодня» показывали бы весь каталог — это и был баг.
+  const addedDate = (p) => String(p.created_at || '').slice(0, 10);
   const todayISO = () => new Date().toISOString().slice(0, 10);
   const yesterdayISO = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  // есть ли у товара хотя бы одно НЕПУСТОЕ фото (пустые строки не считаются)
+  const hasPhoto = (p) => (p.photos || []).some((u) => u && String(u).trim());
 
   // предикаты быстрых фильтров
   const QUICK = {
     withprice: (p) => hasRetail(p),
     barcode: (p) => (p.barcodes || []).length > 0,
-    nophoto: (p) => !(p.photos || []).length,
+    nophoto: (p) => !hasPhoto(p),
     noprice: (p) => !hasRetail(p),
     nobarcode: (p) => !(p.barcodes || []).length,
   };
@@ -448,7 +450,8 @@
   function sortList(list, scored) {
     const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
     const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
-    const when = (p) => p.updated_at || p.created_at || '';
+    // «новые» = позже добавленные в каталог (created_at), а не изменённые импортом
+    const when = (p) => p.created_at || '';
     switch (state.sort) {
       case 'name': return list.slice().sort(byName);
       case 'cheap': return list.slice().sort((a, b) => {
@@ -493,13 +496,13 @@
     // тип товара: весовой / штучный (сотрудникам)
     if (state.selType === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.selType === 'piece') list = list.filter((p) => !p.is_weighted);
-    // поступление: сегодня / вчера / за N дней
-    if (state.arrival === 'today') { const t = todayISO(); list = list.filter((p) => arrivalDate(p) === t); }
-    else if (state.arrival === 'yesterday') { const y = yesterdayISO(); list = list.filter((p) => arrivalDate(p) === y); }
+    // новинки: добавлены сегодня / вчера / за N дней (по дате появления в каталоге)
+    if (state.arrival === 'today') { const t = todayISO(); list = list.filter((p) => addedDate(p) === t); }
+    else if (state.arrival === 'yesterday') { const y = yesterdayISO(); list = list.filter((p) => addedDate(p) === y); }
     else if (state.arrival === '7d' || state.arrival === '30d') {
       const days = state.arrival === '7d' ? 7 : 30;
       const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
-      list = list.filter((p) => { const d = arrivalDate(p); return d && d >= since; });
+      list = list.filter((p) => { const d = addedDate(p); return d && d >= since; });
     }
     // диапазон цены
     if (state.priceMin != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) >= state.priceMin);
@@ -603,6 +606,7 @@
       grid.innerHTML = '';
       const empty = $('emptyState');
       empty.hidden = false;
+      const filtered = anyFilterActive();
       if (!state.products.length) {
         empty.querySelector('.empty-icon').textContent = '📦';
         empty.querySelector('.empty-title').textContent = 'Каталог пока пустой';
@@ -612,8 +616,12 @@
       } else {
         empty.querySelector('.empty-icon').textContent = '🔍';
         empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
-        empty.querySelector('.empty-text').textContent = 'Попробуй написать по-другому или выбери группу';
+        empty.querySelector('.empty-text').textContent = filtered
+          ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
+          : 'Попробуй написать по-другому или выбери группу';
       }
+      // когда пусто из-за фильтров — предлагаем сбросить одним касанием
+      $('emptyReset').hidden = !(filtered && state.products.length);
       return;
     }
 
@@ -622,7 +630,7 @@
     const shown = list.slice(0, state.renderLimit);
     const hlTokens = queryHlTokens();
     let html = shown.map((p) => {
-      const photo = (p.photos || [])[0];
+      const photo = (p.photos || []).find((u) => u && String(u).trim());
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy">`
         : '📦';
@@ -754,7 +762,7 @@
   }
 
   const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };
-  const ARRIVAL_LABEL = { today: 'Сегодня', yesterday: 'Вчера', '7d': 'За 7 дней', '30d': 'За 30 дней' };
+  const ARRIVAL_LABEL = { today: 'Новые сегодня', yesterday: 'Новые вчера', '7d': 'Новые за 7 дней', '30d': 'Новые за 30 дней' };
 
   // Плашки активных фильтров на главном экране: видно, что включено, и каждый
   // можно снять по ✕ — не открывая окно фильтров. Универсально и удобно.
@@ -915,7 +923,7 @@
     currentProduct = p;
     $('sheetName').textContent = p.name;
 
-    const photos = p.photos || [];
+    const photos = (p.photos || []).filter((u) => u && String(u).trim());
     $('sheetPhotos').innerHTML = photos.length
       ? photos.map((u) => `<img src="${esc(u)}" alt="">`).join('')
       : '<div class="photo-placeholder">📦</div>';
@@ -956,7 +964,7 @@
     $('sheetFields').innerHTML = rows.join('');
 
     $('sheetAdminActions').hidden = !state.isAdmin;
-    $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
+    $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p) && (p.barcodes || []).length);
     $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
@@ -3497,6 +3505,9 @@
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
+
+    // Сброс фильтров из пустого экрана
+    $('emptyReset').addEventListener('click', clearAllFilters);
 
     // Переключение темы
     $('themeBtn').addEventListener('click', toggleTheme);
