@@ -11,5 +11,5 @@ window.CATALOG_CONFIG = {
   // аккаунта задаётся в базе (setup/ОБНОВЛЕНИЕ-7.sql, таблица catalog_roles).
   // Главный админ входит по своему email. Аккаунты создаёт владелец в
   // Supabase: Authentication → Users.
-  SERVICE_EMAILS: ['manager@waymarket.ru', 'staff@waymarket.ru'],
+  SERVICE_EMAILS: ['dexauron@gmail.com', 'manager@waymarket.ru', 'staff@waymarket.ru'],
 };
