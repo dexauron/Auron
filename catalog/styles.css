@@ -172,20 +172,43 @@ body {
 .chip.chip-quick.warn.active { background: var(--warn); border-color: var(--warn); color: #fff; }
 
 /* ── Окно фильтров: заголовки секций, сегменты, цена ── */
-.filter-label { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 16px 0 8px; }
-.seg { display: flex; flex-wrap: wrap; gap: 8px; }
-.seg button {
-  flex: 1 1 auto; min-width: 72px;
-  padding: 10px 12px; border-radius: 12px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  font-size: 14px; cursor: pointer;
+.filter-label { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 18px 0 8px; letter-spacing: .01em; }
+/* iOS-сегменты: единый трек, выбранный сегмент — «приподнятая» карточка */
+.seg {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  background: var(--surface-2); border-radius: 13px; padding: 4px;
 }
-.seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.price-range { display: flex; align-items: center; gap: 10px; }
+.seg button {
+  flex: 1 1 auto; min-width: 66px;
+  padding: 9px 10px; border-radius: 9px;
+  border: none; background: transparent; color: var(--text);
+  font-size: 14px; cursor: pointer; white-space: nowrap;
+  transition: background .15s ease, box-shadow .15s ease;
+}
+.seg button.active {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .14);
+}
+:root[data-theme="dark"] .seg button.active, :root:not([data-theme="light"]) .seg button.active { background: #3a3d44; }
+.price-range { display: flex; align-items: center; gap: 12px; }
 .price-inp { flex: 1; min-width: 0; text-align: center; }
 .price-dash { color: var(--text-2); }
-#filterApply { margin-top: 22px; }
-#filterReset { margin-top: 6px; }
+/* строки-переходы (Группы, Поставщики) — как пункты списка iOS со стрелкой */
+#filterGroupsBtn, #filterSuppliersBtn { position: relative; text-align: left; padding-right: 34px; }
+#filterGroupsBtn::after, #filterSuppliersBtn::after {
+  content: '›'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+  color: var(--text-2); font-size: 20px; line-height: 1;
+}
+/* нижняя панель действий прилипает к краю окна — удобно достать большим пальцем */
+.filter-actions {
+  position: sticky; bottom: 0; z-index: 1;
+  background: var(--bg);
+  margin: 20px calc(-1 * var(--sheet-px, 18px)) calc(-18px - env(safe-area-inset-bottom));
+  padding: 10px var(--sheet-px, 18px) calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+}
+.filter-actions #filterApply { margin: 0; }
+.filter-actions #filterReset { margin-top: 6px; }
 
 /* совпавшие слова в результатах поиска */
 mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
@@ -238,7 +261,7 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
   .filter-btn { padding: 8px 11px; font-size: 14px; }
   .card-name { font-size: 14px; }
   .card-price { font-size: 16px; }
-  .sheet-body { padding-left: 14px; padding-right: 14px; }
+  .sheet-body { --sheet-px: 14px; }
   .seg button { min-width: 58px; font-size: 13px; padding: 9px 6px; }
 }
 
@@ -347,14 +370,16 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
   z-index: 25;
 }
 
-/* ── Шторки (модальные окна) ───────────────────── */
+/* ── Шторки (модальные окна) в стиле iOS ───────────────────── */
 .sheet-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0, 0, 0, .5);
+  background: transparent;              /* затемняет только верхнее окно (.backdrop-top) */
   z-index: 30;
   display: flex; align-items: flex-end; justify-content: center;
-  animation: fadeIn .15s ease;
+  animation: fadeIn .2s ease;
 }
+/* верхнее окно в стопке — матовое затемнение фона (frosted glass, как в iOS) */
+.sheet-backdrop.backdrop-top { background: rgba(0, 0, 0, .38); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
 @keyframes fadeIn { from { opacity: 0; } }
 @media (min-width: 700px) { .sheet-backdrop { align-items: center; } }
 
@@ -364,21 +389,24 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
   max-width: 560px;
   max-height: 92vh;
   overflow-y: auto;
-  border-radius: 22px 22px 0 0;
-  animation: slideUp .2s ease;
+  border-radius: 20px 20px 0 0;
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, .22);
+  animation: slideUp .34s cubic-bezier(.32, .72, 0, 1);
   overscroll-behavior: contain;
 }
-@media (min-width: 700px) { .sheet { border-radius: 22px; max-height: 86vh; } }
-@keyframes slideUp { from { transform: translateY(40px); opacity: .6; } }
+@media (min-width: 700px) { .sheet { border-radius: 20px; max-height: 86vh; } }
+@keyframes slideUp { from { transform: translateY(100%); } }
 
 .sheet-handle {
-  width: 40px; height: 4px;
-  border-radius: 2px;
-  background: var(--border);
-  margin: 10px auto 2px;
+  width: 38px; height: 5px;
+  border-radius: 3px;
+  background: var(--text-2);
+  opacity: .35;
+  margin: 8px auto 2px;
 }
-.sheet-body { padding: 12px 18px calc(18px + env(safe-area-inset-bottom)); }
-.sheet-title { font-size: 19px; font-weight: 700; margin-bottom: 10px; }
+.sheet-body { --sheet-px: 18px; padding: 12px var(--sheet-px) calc(18px + env(safe-area-inset-bottom)); }
+/* заголовок не наезжает на круглую кнопку «назад» слева */
+.sheet-title { font-size: 19px; font-weight: 700; margin-bottom: 10px; padding-left: 42px; min-height: 34px; display: flex; align-items: center; }
 .muted { font-size: 13px; color: var(--text-2); margin-bottom: 14px; }
 
 /* Фото в карточке товара */
