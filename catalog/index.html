@@ -138,6 +138,7 @@
         <h2 class="sheet-title" id="menuTitle">Администратор</h2>
         <p class="muted" id="adminEmail"></p>
         <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
+        <button class="btn btn-secondary btn-block" id="menuPhotoFill">📷 Дозаполнить фото</button>
         <div id="menuAdminOnly">
           <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
           <button class="btn btn-secondary btn-block" id="menuImportHub">⬆ Импорт данных (1С / Excel)</button>
@@ -527,6 +528,23 @@
         <div id="scanContainer" class="scan-box"></div>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>🔦 Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Дозаполнить витрину: товары без фото → снять камерой (для сотрудников) -->
+  <div class="sheet-backdrop" id="photoFillSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">📷 Дозаполнить фото</h2>
+        <p class="muted">Товары без фото. Сфотографируй те, что перед тобой на полке —
+        фото сразу появится у всех и в витрине.</p>
+        <div class="banner banner-info" id="photoFillCount"></div>
+        <input type="search" id="photoFillSearch" class="input" placeholder="Найти товар по названию или коду…" autocomplete="off">
+        <div id="photoFillList"></div>
+        <input type="file" id="photoFillInput" accept="image/*" capture="environment" hidden>
+        <button class="btn btn-ghost sheet-close" data-close="photoFillSheet">Закрыть</button>
       </div>
     </div>
   </div>
