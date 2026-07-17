@@ -170,6 +170,8 @@
 
   window.addEventListener('popstate', () => {
     if (expectPop > 0) { expectPop--; return; } // это наш собственный закрывающий back — окно уже скрыто
+    const lb = $('lightbox');
+    if (lb && !lb.hidden) { lb.hidden = true; lb.querySelector('img') && (lb.querySelector('img').src = ''); return; } // «назад» закрывает фото на весь экран
     if (sheetStack.length) hideSheet(sheetStack[sheetStack.length - 1]); // «назад» на телефоне → закрыть верхнее окно
   });
 
@@ -507,10 +509,10 @@
 
     // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
     const { selCats, selGroups, selSuppliers } = state;
-    const anyFilter = selCats.length || selGroups.length || selSuppliers.length;
     const allActive = !selCats.length && !selGroups.length;
     let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
-    if (anyFilter) html += '<button class="chip chip-reset" data-reset>✕ Сбросить</button>';
+    // «Сбросить» показываем, как только активен ЛЮБОЙ фильтр или поиск
+    if (anyFilterActive()) html += '<button class="chip chip-reset" data-reset>✕ Сбросить фильтры</button>';
     if (state.suppliers.length) {
       const label = !selSuppliers.length ? '🚚 Поставщики'
         : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
@@ -695,6 +697,25 @@
 
   function renderAll() { renderChips(); renderQuick(); syncControls(); renderGrid(); saveFilters(); }
 
+  // есть ли хоть один активный фильтр/поиск
+  function anyFilterActive() {
+    return !!(state.query || state.quick.length || state.selCats.length
+      || state.selGroups.length || state.selSuppliers.length
+      || state.priceMin != null || state.priceMax != null);
+  }
+
+  // полный сброс всех фильтров и поиска (сортировку и вид не трогаем — это привычка)
+  function clearAllFilters() {
+    state.selCats = []; state.selGroups = []; state.selSuppliers = [];
+    state.quick = []; state.priceMin = null; state.priceMax = null;
+    state.query = '';
+    state.renderLimit = PAGE_SIZE;
+    const inp = $('searchInput'); if (inp) inp.value = '';
+    const sc = $('searchClear'); if (sc) sc.hidden = true;
+    const pr = $('priceRange'); if (pr) pr.hidden = true;
+    renderAll();
+  }
+
   /* ── Память фильтров, недавних запросов и темы ──── */
   const FILTERS_KEY = 'wm_filters_v1';
   const RECENT_KEY = 'wm_recent_q_v1';
@@ -756,13 +777,20 @@
     applyTheme(next);
   }
 
-  // Фото на весь экран (зум по тапу)
+  // Фото на весь экран (зум по тапу). Кнопка «назад» телефона его закрывает.
   function openLightbox(url) {
     if (!url) return;
     $('lightboxImg').src = url;
     $('lightbox').hidden = false;
+    try { history.pushState({ wmLightbox: true }, ''); } catch (e) { /* некритично */ }
   }
-  function closeLightbox() { $('lightbox').hidden = true; $('lightboxImg').src = ''; }
+  function closeLightbox() {
+    const lb = $('lightbox');
+    if (!lb || lb.hidden) return;
+    lb.hidden = true; $('lightboxImg').src = '';
+    // «съедаем» нашу history-запись, чтобы счётчик «назад» не сбился
+    if (window.history.state && window.history.state.wmLightbox) { expectPop++; try { history.back(); } catch (e) { expectPop--; } }
+  }
 
   /* ── Карточка товара ──────────────────────────── */
 
@@ -3089,6 +3117,9 @@
     }
   }
 
+  // штрихкоды магазина: EAN/UPC/Code128/39/ITF — сужаем список, чтобы распознавалось точнее
+  const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar'];
+
   async function scanNative(done) {
     const box = $('scanContainer');
     box.innerHTML = '';
@@ -3096,27 +3127,86 @@
     video.setAttribute('playsinline', '');
     video.muted = true;
     box.appendChild(video);
+    // просим камеру повыше разрешением и с постоянной фокусировкой — резче мелкие
+    // и некачественные штрихкоды
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 }, height: { ideal: 1080 },
+        focusMode: 'continuous', advanced: [{ focusMode: 'continuous' }],
+      },
+      audio: false,
     });
+    const track = stream.getVideoTracks()[0];
     let active = true;
     scanStopFn = () => {
       active = false;
+      try { track && track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) { /* */ }
       stream.getTracks().forEach((t) => t.stop());
       box.innerHTML = '';
+      $('scanTorch').hidden = true;
     };
     video.srcObject = stream;
     await video.play();
-    const detector = new window.BarcodeDetector();
+
+    // кнопка «Подсветка» — если камера умеет включать вспышку (тёмное помещение)
+    setupTorch(track);
+
+    // поддерживаемые форматы (не все браузеры умеют getSupportedFormats)
+    let formats = BARCODE_FORMATS;
+    try {
+      if (window.BarcodeDetector.getSupportedFormats) {
+        const sup = await window.BarcodeDetector.getSupportedFormats();
+        formats = BARCODE_FORMATS.filter((f) => sup.includes(f));
+        if (!formats.length) formats = undefined;
+      }
+    } catch (e) { formats = undefined; }
+    const detector = formats ? new window.BarcodeDetector({ formats }) : new window.BarcodeDetector();
+
+    // распознаём и обычный кадр, и инвертированный — так читаются и светлые
+    // коды на тёмном фоне, и тёмные на светлом даже при плохом свете
+    const canvas = document.createElement('canvas');
+    const cx = canvas.getContext('2d', { willReadFrequently: true });
+    let frame = 0;
     const tick = async () => {
       if (!active) return;
       try {
         const codes = await detector.detect(video);
         if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); return; }
+        // каждый второй кадр пробуем инверсию (для тёмных/светлых штрихкодов)
+        if (video.videoWidth && (frame++ % 2 === 0)) {
+          const w = Math.min(960, video.videoWidth); const h = Math.round(video.videoHeight * (w / video.videoWidth));
+          canvas.width = w; canvas.height = h;
+          cx.drawImage(video, 0, 0, w, h);
+          const img = cx.getImageData(0, 0, w, h);
+          const d = img.data;
+          for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
+          cx.putImageData(img, 0, 0);
+          const inv = await detector.detect(canvas);
+          if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); return; }
+        }
       } catch (e) { /* кадр не считался — пробуем дальше */ }
-      setTimeout(tick, 250);
+      setTimeout(tick, 160);
     };
     tick();
+  }
+
+  // Подсветка (вспышка) камеры — помогает в тёмном помещении
+  function setupTorch(track) {
+    const btn = $('scanTorch');
+    btn.hidden = true;
+    let on = false;
+    try {
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (!caps || !caps.torch) return; // камера не умеет — прячем кнопку
+    } catch (e) { return; }
+    btn.hidden = false;
+    btn.textContent = '🔦 Подсветка';
+    btn.onclick = async () => {
+      on = !on;
+      try { await track.applyConstraints({ advanced: [{ torch: on }] }); btn.textContent = on ? '🔦 Выключить подсветку' : '🔦 Подсветка'; }
+      catch (e) { toast('Подсветка недоступна на этом телефоне'); }
+    };
   }
 
   function loadScript(src) {
@@ -3135,13 +3225,27 @@
       await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
     }
     $('scanContainer').innerHTML = '';
-    const scanner = new window.Html5Qrcode('scanContainer');
-    scanStopFn = () => { scanner.stop().then(() => scanner.clear()).catch(() => {}); };
+    // сузим до магазинных штрихкодов — точнее и быстрее распознаёт
+    let formats;
+    try {
+      const F = window.Html5QrcodeSupportedFormats;
+      formats = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.CODABAR].filter((x) => x != null);
+    } catch (e) { formats = undefined; }
+    const scanner = new window.Html5Qrcode('scanContainer', formats ? { formatsToSupport: formats } : undefined);
+    scanStopFn = () => { scanner.stop().then(() => scanner.clear()).catch(() => {}); $('scanTorch').hidden = true; };
     await scanner.start(
       { facingMode: 'environment' },
-      { fps: 10 },
+      { fps: 15, qrbox: { width: 260, height: 170 }, aspectRatio: 1.4 },
       (text) => done(text),
+      () => {},
     );
+    // подсветка через трек камеры библиотеки, если доступна
+    try {
+      const track = scanner.getRunningTrackCameraCapabilities && scanner.getRunningTrackCameraCapabilities();
+      const rt = (scanner._localMediaStream || (scanner.getState && document.querySelector('#scanContainer video')?.srcObject));
+      const vt = rt && rt.getVideoTracks && rt.getVideoTracks()[0];
+      if (vt) setupTorch(vt);
+    } catch (e) { /* необязательно */ }
   }
 
   // сотрудник отсканировал штрихкод → ищем товар
@@ -3235,9 +3339,17 @@
     // Переключение темы
     $('themeBtn').addEventListener('click', toggleTheme);
 
-    // Фото на весь экран
+    // Фото на весь экран: тап или смахивание вниз закрывает
     $('lightbox').addEventListener('click', closeLightbox);
     $('lightboxClose').addEventListener('click', closeLightbox);
+    (() => {
+      const lb = $('lightbox'); const img = $('lightboxImg');
+      let sy = 0; let drag = false;
+      lb.addEventListener('touchstart', (e) => { sy = e.touches[0].clientY; drag = true; img.style.transition = 'none'; }, { passive: true });
+      lb.addEventListener('touchmove', (e) => { if (!drag) return; const d = e.touches[0].clientY - sy; img.style.transform = `translateY(${d}px)`; lb.style.opacity = String(Math.max(0.2, 1 - Math.abs(d) / 500)); }, { passive: true });
+      const end = () => { if (!drag) return; drag = false; const m = img.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/); const d = m ? Math.abs(parseFloat(m[1])) : 0; img.style.transition = 'transform .25s'; img.style.transform = ''; lb.style.opacity = ''; if (d > 90) closeLightbox(); };
+      lb.addEventListener('touchend', end); lb.addEventListener('touchcancel', end);
+    })();
 
     // Группы-фильтры + чипы поставщика и «Ещё группы»
     $('groupChips').addEventListener('click', (e) => {
@@ -3250,9 +3362,10 @@
         return;
       }
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
+      // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
+      if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
       // повторный тап снимает отметку; можно отметить несколько
       if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; }
-      else if (chip.hasAttribute('data-reset')) { state.selCats = []; state.selGroups = []; state.selSuppliers = []; }
       else if (chip.hasAttribute('data-category')) {
         const c = chip.dataset.category;
         if (state.selCats.includes(c)) {
