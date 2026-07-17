@@ -276,19 +276,21 @@
     </div>
   </div>
 
-  <!-- Импорт данных: единый экран выбора (только админ) -->
+  <!-- Умный импорт: одна вкладка, каталог сам распознаёт файлы (только админ) -->
   <div class="sheet-backdrop" id="importHubSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+    <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title">⬆ Импорт данных</h2>
-        <p class="muted">Загрузка из 1С и Excel. Выбери, что загрузить:</p>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubPrices">💰 Цены поставщиков и товары<span class="hub-sub">отчёт «Цены поставщиков» из 1С</span></button>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubStock">📦 Остатки и розничные цены<span class="hub-sub">отчёт «Остатки номенклатуры»</span></button>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubSales">📈 Продажи<span class="hub-sub">отчёт «Продажи» за период</span></button>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubContacts">📇 Контакты поставщиков<span class="hub-sub">справочник «Контрагенты»</span></button>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubPhotoExcel">🖼 Фото из Excel (ссылки)<span class="hub-sub">штрихкод/код + ссылка на фото</span></button>
-        <button class="btn btn-secondary btn-block hub-btn" id="hubPhotoSearch">🌐 Фото по штрихкодам (интернет)<span class="hub-sub">поиск в Open Food Facts</span></button>
+        <p class="muted">Выбери любые файлы из 1С или Excel — каталог сам поймёт, что это:
+        цены поставщиков, остатки, продажи, контакты или прайс-лист розничных цен — и загрузит.</p>
+        <label class="btn btn-secondary btn-block">📄 Выбрать файлы (можно несколько)
+          <input type="file" id="smartFiles" hidden accept=".xls,.xlsx" multiple>
+        </label>
+        <div id="smartList" class="smart-list"></div>
+        <button class="btn btn-primary btn-block" id="smartRun" hidden>⬆ Загрузить всё</button>
+        <div class="banner banner-info" id="smartStatus" hidden></div>
+        <button class="btn btn-secondary btn-block" id="hubPhotoSearch" style="margin-top:14px">🌐 Найти фото по штрихкодам (интернет)</button>
         <button class="btn btn-ghost sheet-close" data-close="importHubSheet">Закрыть</button>
       </div>
     </div>
@@ -531,8 +533,9 @@
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title">Наведи камеру на штрихкод</h2>
-        <p class="muted">Держи телефон ровно, штрихкод — по центру</p>
+        <p class="muted">Держи телефон ровно, штрихкод — по центру. Читает светлые и тёмные коды.</p>
         <div id="scanContainer" class="scan-box"></div>
+        <button class="btn btn-secondary btn-block" id="scanTorch" hidden>🔦 Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
       </div>
     </div>

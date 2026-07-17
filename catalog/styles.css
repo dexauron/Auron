@@ -179,9 +179,14 @@ body {
 mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
 :root[data-theme="dark"] mark, :root:not([data-theme="light"]) mark { background: rgba(48, 209, 88, .3); }
 
-/* ── Кнопки единого экрана импорта ── */
-.hub-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 16px; }
-.hub-sub { font-size: 12px; font-weight: 400; color: var(--text-2); }
+/* ── Умный импорт: список распознанных файлов ── */
+.smart-list { margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.smart-row { padding: 11px 14px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); font-size: 14px; display: flex; flex-direction: column; gap: 3px; }
+.smart-row b { font-size: 14px; }
+.smart-row span { color: var(--text-2); font-size: 13px; }
+.smart-row.smart-bad { border-color: rgba(255, 159, 10, .5); }
+.smart-row.smart-bad span { color: var(--warn); }
+.smart-st { color: var(--accent); }
 
 /* ── Кнопки шапки ── */
 .header-btns { display: flex; align-items: center; gap: 8px; }

@@ -170,6 +170,8 @@
 
   window.addEventListener('popstate', () => {
     if (expectPop > 0) { expectPop--; return; } // это наш собственный закрывающий back — окно уже скрыто
+    const lb = $('lightbox');
+    if (lb && !lb.hidden) { lb.hidden = true; lb.querySelector('img') && (lb.querySelector('img').src = ''); return; } // «назад» закрывает фото на весь экран
     if (sheetStack.length) hideSheet(sheetStack[sheetStack.length - 1]); // «назад» на телефоне → закрыть верхнее окно
   });
 
@@ -507,10 +509,10 @@
 
     // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
     const { selCats, selGroups, selSuppliers } = state;
-    const anyFilter = selCats.length || selGroups.length || selSuppliers.length;
     const allActive = !selCats.length && !selGroups.length;
     let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
-    if (anyFilter) html += '<button class="chip chip-reset" data-reset>✕ Сбросить</button>';
+    // «Сбросить» показываем, как только активен ЛЮБОЙ фильтр или поиск
+    if (anyFilterActive()) html += '<button class="chip chip-reset" data-reset>✕ Сбросить фильтры</button>';
     if (state.suppliers.length) {
       const label = !selSuppliers.length ? '🚚 Поставщики'
         : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
@@ -695,6 +697,25 @@
 
   function renderAll() { renderChips(); renderQuick(); syncControls(); renderGrid(); saveFilters(); }
 
+  // есть ли хоть один активный фильтр/поиск
+  function anyFilterActive() {
+    return !!(state.query || state.quick.length || state.selCats.length
+      || state.selGroups.length || state.selSuppliers.length
+      || state.priceMin != null || state.priceMax != null);
+  }
+
+  // полный сброс всех фильтров и поиска (сортировку и вид не трогаем — это привычка)
+  function clearAllFilters() {
+    state.selCats = []; state.selGroups = []; state.selSuppliers = [];
+    state.quick = []; state.priceMin = null; state.priceMax = null;
+    state.query = '';
+    state.renderLimit = PAGE_SIZE;
+    const inp = $('searchInput'); if (inp) inp.value = '';
+    const sc = $('searchClear'); if (sc) sc.hidden = true;
+    const pr = $('priceRange'); if (pr) pr.hidden = true;
+    renderAll();
+  }
+
   /* ── Память фильтров, недавних запросов и темы ──── */
   const FILTERS_KEY = 'wm_filters_v1';
   const RECENT_KEY = 'wm_recent_q_v1';
@@ -756,13 +777,20 @@
     applyTheme(next);
   }
 
-  // Фото на весь экран (зум по тапу)
+  // Фото на весь экран (зум по тапу). Кнопка «назад» телефона его закрывает.
   function openLightbox(url) {
     if (!url) return;
     $('lightboxImg').src = url;
     $('lightbox').hidden = false;
+    try { history.pushState({ wmLightbox: true }, ''); } catch (e) { /* некритично */ }
   }
-  function closeLightbox() { $('lightbox').hidden = true; $('lightboxImg').src = ''; }
+  function closeLightbox() {
+    const lb = $('lightbox');
+    if (!lb || lb.hidden) return;
+    lb.hidden = true; $('lightboxImg').src = '';
+    // «съедаем» нашу history-запись, чтобы счётчик «назад» не сбился
+    if (window.history.state && window.history.state.wmLightbox) { expectPop++; try { history.back(); } catch (e) { expectPop--; } }
+  }
 
   /* ── Карточка товара ──────────────────────────── */
 
@@ -1930,7 +1958,204 @@
     return added;
   }
 
+  // Прайс-лист розничных цен из 1С: колонка «Номенклатура» + «Розничный тип
+  // цен» (розничная цена). Товары сгруппированы строками-заголовками (у них нет
+  // цены). Артикул часто внутри названия («Арт.st-917»). Кода нет — товар ищем
+  // по артикулу и названию.
+  function parseRetailList(rows) {
+    const det = detectColumns(rows);
+    if (!det || det.cols.name === undefined || det.cols.retail === undefined) {
+      throw new Error('Не нашёл колонки «Номенклатура» и «Розничный тип цен» в прайс-листе');
+    }
+    const { cols, dataStart } = det;
+    const recs = []; let group = null;
+    for (let r = dataStart; r < rows.length; r++) {
+      const name = cellStr(rows[r][cols.name]);
+      if (!name) continue;
+      if (/^\s*(итого|всего|номенклатура|наименование)\b/i.test(name)) continue;
+      const retail = parsePriceNum(rows[r][cols.retail]);
+      if (retail == null) { group = name; continue; } // строка без цены — заголовок группы
+      const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
+      recs.push({ name, article: art, group, retail });
+    }
+    return { recs };
+  }
+
+  // Каталог сам определяет, что за файл 1С загрузили, по его шапке.
+  // Возвращает: 'prices'|'stock'|'sales'|'contacts'|'retail'|'photo'|'barcodes'|null
+  function detectReportType(rows) {
+    const scan = rows.slice(0, 32);
+    const head = scan.map((r) => (r || []).map((c) => cellStr(c)).join('\t')).join('\n').toLowerCase();
+    const has = (s) => head.includes(s);
+    const cellExact = (val) => scan.some((r) => (r || []).some((c) => cellStr(c).toLowerCase() === val));
+    const hasPrice = /цена/.test(head);
+    const hasQty = has('количество') || /кол-?во/.test(head);
+    const hasStock = has('остаток') || has('остатк') || has('на конец дня');
+    const hasContragent = cellExact('контрагент');
+    const hasPhone = has('телефон');
+    const hasSupplier = has('поставщик') || hasContragent;
+
+    if (/https?:\/\//.test(head)) return 'photo';
+    // «Контрагент» + «телефон» — однозначно справочник контактов (в отчётах цен
+    // телефона нет). Слово «количество» в служебной шапке не должно мешать.
+    if (hasContragent && hasPhone) return 'contacts';
+    if (has('период') && hasQty && !hasStock) return 'sales';
+    if (hasStock || (has('розничная цена') && hasQty)) return 'stock';
+    if (has('прайс-лист') || has('прайслист') || has('тип цен')) return 'retail';
+    if (hasSupplier && hasPrice) return 'prices';
+    if (has('штрих') && !hasPrice && !hasQty) return 'barcodes';
+    if ((has('номенклатура') || has('наименование')) && hasPrice) return 'retail';
+    return null;
+  }
+
+  const REPORT_LABEL = {
+    prices: 'Цены поставщиков и товары',
+    stock: 'Остатки и розничные цены',
+    sales: 'Продажи за период',
+    contacts: 'Контакты поставщиков',
+    retail: 'Прайс-лист (розничные цены)',
+    photo: 'Фото по ссылкам',
+    barcodes: 'Штрихкоды',
+  };
+
+  // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
+  // обновляет розничную цену (+ история), новый — создаёт с группой.
+  async function coreUploadRetail(parsed, status) {
+    const { recs } = parsed;
+    status('Создаём группы…');
+    const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
+    const byName = new Map(); const byArticle = new Map(); const byId = new Map();
+    for (const p of state.products) {
+      if (p.name) byName.set(norm(p.name), p.id);
+      if (p.article) byArticle.set(norm(p.article), p.id);
+      byId.set(p.id, p);
+    }
+    const at = new Date().toISOString().slice(0, 10);
+    const updates = []; const inserts = []; const hist = []; const seen = new Set();
+    for (const r of recs) {
+      const pid = (r.article && byArticle.get(norm(r.article))) || byName.get(norm(r.name));
+      if (pid) {
+        if (seen.has(pid)) continue; // один товар — одна цена за загрузку
+        seen.add(pid);
+        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString() });
+        const cur = byId.get(pid);
+        const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
+        if (old == null || old !== Number(r.retail)) hist.push({ product_id: pid, retail_price: r.retail, changed_at: at });
+      } else {
+        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail });
+      }
+    }
+    let done = 0; const total = updates.length + inserts.length;
+    for (let i = 0; i < updates.length; i += 500) {
+      const { error } = await sb.from('catalog_products').upsert(updates.slice(i, i + 500), { onConflict: 'id' });
+      if (error) throw error;
+      done += Math.min(500, updates.length - i); status(`Обновляем цены… ${done} из ${total}`);
+    }
+    for (let i = 0; i < inserts.length; i += 400) {
+      const { error } = await sb.from('catalog_products').insert(inserts.slice(i, i + 400));
+      if (error) throw error;
+      done += Math.min(400, inserts.length - i); status(`Добавляем новые товары… ${done} из ${total}`);
+    }
+    if (hist.length) {
+      for (let i = 0; i < hist.length; i += 500) {
+        try { await sb.from('catalog_retail_history').upsert(hist.slice(i, i + 500), { onConflict: 'product_id,changed_at' }); }
+        catch (e) { break; }
+      }
+    }
+    await refresh({ silent: true });
+    renderAll();
+    status(`Готово! Розничных цен обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
+  }
+
+  /* ── Умный импорт: одна вкладка, каталог сам распознаёт файлы ──
+   * Пользователь выбирает любые файлы 1С — программа определяет тип каждого и
+   * загружает по очереди (сначала товары/цены, потом продажи/контакты). */
+  let smartEntries = [];
+  let smartSink = null; // куда перенаправляются сообщения о ходе загрузки
+
+  function smartLog(msg) { const el = $('smartStatus'); if (el) { el.hidden = false; el.textContent = msg; } }
+
+  async function smartPick(files) {
+    smartEntries = [];
+    $('smartRun').hidden = true;
+    if (!files || !files.length) { $('smartList').innerHTML = ''; return; }
+    smartLog('Читаем файлы…');
+    await loadXlsxLib();
+    for (const f of files) {
+      const entry = { file: f, name: f.name, type: null, count: 0, error: null, parsed: null, rows: null };
+      try {
+        const rows = await readSheet(f);
+        entry.rows = rows;
+        entry.type = detectReportType(rows);
+        if (!entry.type) throw new Error('не понял, что это за файл');
+        // разбираем сразу — чтобы показать, сколько строк распознано
+        if (entry.type === 'prices') { entry.byKey = parsePriceReport(rows); entry.count = entry.byKey.size; }
+        else if (entry.type === 'retail') { entry.parsed = parseRetailList(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'stock') { entry.parsed = parseStockReport(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'sales') { entry.parsed = parseSalesReport(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'contacts') { entry.parsed = parseContactsReport(rows); entry.count = entry.parsed.length; }
+        else if (entry.type === 'photo') { entry.parsed = parsePhotoSheet(rows); entry.count = entry.parsed.length; }
+        else if (entry.type === 'barcodes') { entry.count = 0; }
+      } catch (e) { entry.error = e.message || String(e); }
+      smartEntries.push(entry);
+    }
+    // штрихкоды приклеиваем к файлу цен, если он есть
+    const priceEntry = smartEntries.find((e) => e.type === 'prices' && e.byKey);
+    for (const e of smartEntries) {
+      if (e.type === 'barcodes' && priceEntry && e.rows) {
+        try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
+      }
+    }
+    renderSmartList();
+    smartLog('');
+    $('smartStatus').hidden = true;
+    if (smartEntries.some((e) => e.type && !e.error && !(e.type === 'barcodes' && !e.mergedInto))) $('smartRun').hidden = false;
+  }
+
+  function renderSmartList() {
+    $('smartList').innerHTML = smartEntries.map((e) => {
+      if (e.error) return `<div class="smart-row smart-bad"><b>${esc(e.name)}</b><span>⚠ ${esc(e.error)}</span></div>`;
+      const label = REPORT_LABEL[e.type] || e.type;
+      const extra = e.mergedInto ? ` → добавятся к «${esc(e.mergedInto)}»` : '';
+      return `<div class="smart-row"><b>${esc(e.name)}</b><span>✓ ${esc(label)}: ${e.count} ${extra}<span class="smart-st" data-st="${esc(e.name)}"></span></span></div>`;
+    }).join('');
+  }
+
+  function setSmartRowStatus(entry, msg) {
+    const el = $('smartList').querySelector(`[data-st="${(window.CSS && CSS.escape) ? CSS.escape(entry.name) : entry.name}"]`);
+    if (el) el.textContent = ' · ' + msg;
+    smartLog(`${entry.name}: ${msg}`);
+  }
+
+  async function smartRun() {
+    const btn = $('smartRun');
+    btn.disabled = true;
+    // порядок: сначала товары/цены/остатки/прайс, потом продажи/контакты/фото
+    const order = { prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+    const todo = smartEntries.filter((e) => e.type && !e.error && !(e.type === 'barcodes'))
+      .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
+    let okCount = 0;
+    for (const e of todo) {
+      smartSink = (msg) => setSmartRowStatus(e, msg);
+      try {
+        if (e.type === 'prices') { impParsed = [...e.byKey.values()]; await impUpload(); }
+        else if (e.type === 'retail') { await coreUploadRetail(e.parsed, smartSink); }
+        else if (e.type === 'stock') { stockParsed = e.parsed; await stockUpload(); }
+        else if (e.type === 'sales') { salesParsed = e.parsed; await salesUpload(); }
+        else if (e.type === 'contacts') { contactsParsed = e.parsed; await contactsUpload(); }
+        else if (e.type === 'photo') { photoExcelParsed = e.parsed; await photoExcelApply(); }
+        okCount++;
+      } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
+      smartSink = null;
+    }
+    btn.disabled = false;
+    btn.hidden = true;
+    smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён ✓`);
+    toast('Импорт завершён ✓');
+  }
+
   function impStatus(msg) {
+    if (smartSink) { smartSink(msg); return; }
     const el = $('impStatus');
     el.hidden = false;
     el.textContent = msg;
@@ -2354,7 +2579,7 @@
     return { updates, unmatched };
   }
 
-  function photoExcelStatus(msg) { const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
+  function photoExcelStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
 
   async function photoExcelParse() {
     const f = $('photoExcelFile').files[0];
@@ -2470,6 +2695,7 @@
   }
 
   function salesStatus(msg) {
+    if (smartSink) { smartSink(msg); return; }
     const el = $('salesStatus');
     el.hidden = false;
     el.textContent = msg;
@@ -2586,7 +2812,7 @@
     $('contactsRun').textContent = `⬆ Загрузить контакты (${withPhone})`;
   }
 
-  function contactsStatus(msg) { const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
+  function contactsStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
 
   async function contactsUpload() {
     const list = contactsParsed;
@@ -2694,7 +2920,7 @@
     return { recs, stockAt };
   }
 
-  function stockStatus(msg) { const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
+  function stockStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
 
   async function stockParse() {
     const f = $('stockFile').files[0];
@@ -2891,6 +3117,9 @@
     }
   }
 
+  // штрихкоды магазина: EAN/UPC/Code128/39/ITF — сужаем список, чтобы распознавалось точнее
+  const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar'];
+
   async function scanNative(done) {
     const box = $('scanContainer');
     box.innerHTML = '';
@@ -2898,27 +3127,86 @@
     video.setAttribute('playsinline', '');
     video.muted = true;
     box.appendChild(video);
+    // просим камеру повыше разрешением и с постоянной фокусировкой — резче мелкие
+    // и некачественные штрихкоды
     const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 }, height: { ideal: 1080 },
+        focusMode: 'continuous', advanced: [{ focusMode: 'continuous' }],
+      },
+      audio: false,
     });
+    const track = stream.getVideoTracks()[0];
     let active = true;
     scanStopFn = () => {
       active = false;
+      try { track && track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) { /* */ }
       stream.getTracks().forEach((t) => t.stop());
       box.innerHTML = '';
+      $('scanTorch').hidden = true;
     };
     video.srcObject = stream;
     await video.play();
-    const detector = new window.BarcodeDetector();
+
+    // кнопка «Подсветка» — если камера умеет включать вспышку (тёмное помещение)
+    setupTorch(track);
+
+    // поддерживаемые форматы (не все браузеры умеют getSupportedFormats)
+    let formats = BARCODE_FORMATS;
+    try {
+      if (window.BarcodeDetector.getSupportedFormats) {
+        const sup = await window.BarcodeDetector.getSupportedFormats();
+        formats = BARCODE_FORMATS.filter((f) => sup.includes(f));
+        if (!formats.length) formats = undefined;
+      }
+    } catch (e) { formats = undefined; }
+    const detector = formats ? new window.BarcodeDetector({ formats }) : new window.BarcodeDetector();
+
+    // распознаём и обычный кадр, и инвертированный — так читаются и светлые
+    // коды на тёмном фоне, и тёмные на светлом даже при плохом свете
+    const canvas = document.createElement('canvas');
+    const cx = canvas.getContext('2d', { willReadFrequently: true });
+    let frame = 0;
     const tick = async () => {
       if (!active) return;
       try {
         const codes = await detector.detect(video);
         if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); return; }
+        // каждый второй кадр пробуем инверсию (для тёмных/светлых штрихкодов)
+        if (video.videoWidth && (frame++ % 2 === 0)) {
+          const w = Math.min(960, video.videoWidth); const h = Math.round(video.videoHeight * (w / video.videoWidth));
+          canvas.width = w; canvas.height = h;
+          cx.drawImage(video, 0, 0, w, h);
+          const img = cx.getImageData(0, 0, w, h);
+          const d = img.data;
+          for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
+          cx.putImageData(img, 0, 0);
+          const inv = await detector.detect(canvas);
+          if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); return; }
+        }
       } catch (e) { /* кадр не считался — пробуем дальше */ }
-      setTimeout(tick, 250);
+      setTimeout(tick, 160);
     };
     tick();
+  }
+
+  // Подсветка (вспышка) камеры — помогает в тёмном помещении
+  function setupTorch(track) {
+    const btn = $('scanTorch');
+    btn.hidden = true;
+    let on = false;
+    try {
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (!caps || !caps.torch) return; // камера не умеет — прячем кнопку
+    } catch (e) { return; }
+    btn.hidden = false;
+    btn.textContent = '🔦 Подсветка';
+    btn.onclick = async () => {
+      on = !on;
+      try { await track.applyConstraints({ advanced: [{ torch: on }] }); btn.textContent = on ? '🔦 Выключить подсветку' : '🔦 Подсветка'; }
+      catch (e) { toast('Подсветка недоступна на этом телефоне'); }
+    };
   }
 
   function loadScript(src) {
@@ -2937,13 +3225,27 @@
       await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
     }
     $('scanContainer').innerHTML = '';
-    const scanner = new window.Html5Qrcode('scanContainer');
-    scanStopFn = () => { scanner.stop().then(() => scanner.clear()).catch(() => {}); };
+    // сузим до магазинных штрихкодов — точнее и быстрее распознаёт
+    let formats;
+    try {
+      const F = window.Html5QrcodeSupportedFormats;
+      formats = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.CODABAR].filter((x) => x != null);
+    } catch (e) { formats = undefined; }
+    const scanner = new window.Html5Qrcode('scanContainer', formats ? { formatsToSupport: formats } : undefined);
+    scanStopFn = () => { scanner.stop().then(() => scanner.clear()).catch(() => {}); $('scanTorch').hidden = true; };
     await scanner.start(
       { facingMode: 'environment' },
-      { fps: 10 },
+      { fps: 15, qrbox: { width: 260, height: 170 }, aspectRatio: 1.4 },
       (text) => done(text),
+      () => {},
     );
+    // подсветка через трек камеры библиотеки, если доступна
+    try {
+      const track = scanner.getRunningTrackCameraCapabilities && scanner.getRunningTrackCameraCapabilities();
+      const rt = (scanner._localMediaStream || (scanner.getState && document.querySelector('#scanContainer video')?.srcObject));
+      const vt = rt && rt.getVideoTracks && rt.getVideoTracks()[0];
+      if (vt) setupTorch(vt);
+    } catch (e) { /* необязательно */ }
   }
 
   // сотрудник отсканировал штрихкод → ищем товар
@@ -3037,9 +3339,17 @@
     // Переключение темы
     $('themeBtn').addEventListener('click', toggleTheme);
 
-    // Фото на весь экран
+    // Фото на весь экран: тап или смахивание вниз закрывает
     $('lightbox').addEventListener('click', closeLightbox);
     $('lightboxClose').addEventListener('click', closeLightbox);
+    (() => {
+      const lb = $('lightbox'); const img = $('lightboxImg');
+      let sy = 0; let drag = false;
+      lb.addEventListener('touchstart', (e) => { sy = e.touches[0].clientY; drag = true; img.style.transition = 'none'; }, { passive: true });
+      lb.addEventListener('touchmove', (e) => { if (!drag) return; const d = e.touches[0].clientY - sy; img.style.transform = `translateY(${d}px)`; lb.style.opacity = String(Math.max(0.2, 1 - Math.abs(d) / 500)); }, { passive: true });
+      const end = () => { if (!drag) return; drag = false; const m = img.style.transform.match(/translateY\((-?\d+(?:\.\d+)?)px\)/); const d = m ? Math.abs(parseFloat(m[1])) : 0; img.style.transition = 'transform .25s'; img.style.transform = ''; lb.style.opacity = ''; if (d > 90) closeLightbox(); };
+      lb.addEventListener('touchend', end); lb.addEventListener('touchcancel', end);
+    })();
 
     // Группы-фильтры + чипы поставщика и «Ещё группы»
     $('groupChips').addEventListener('click', (e) => {
@@ -3052,9 +3362,10 @@
         return;
       }
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
+      // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
+      if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
       // повторный тап снимает отметку; можно отметить несколько
       if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; }
-      else if (chip.hasAttribute('data-reset')) { state.selCats = []; state.selGroups = []; state.selSuppliers = []; }
       else if (chip.hasAttribute('data-category')) {
         const c = chip.dataset.category;
         if (state.selCats.includes(c)) {
@@ -3252,18 +3563,18 @@
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
-    // Единый экран импорта: меню админа → выбор, что загрузить
-    $('menuImportHub').addEventListener('click', () => { closeSheet('adminMenuSheet'); openSheet('importHubSheet'); });
-
-    // Фото из Excel по ссылкам (только админ)
-    $('hubPhotoExcel').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      photoExcelParsed = null;
-      $('photoExcelRun').textContent = 'Проверить файл';
-      $('photoExcelStatus').hidden = true;
-      $('photoExcelName').textContent = '';
-      openSheet('photoExcelSheet');
+    // Умный импорт: меню админа → одна вкладка, каталог сам распознаёт файлы
+    $('menuImportHub').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      smartEntries = [];
+      $('smartList').innerHTML = '';
+      $('smartRun').hidden = true;
+      $('smartStatus').hidden = true;
+      $('smartFiles').value = '';
+      openSheet('importHubSheet');
     });
+    $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
+    $('smartRun').addEventListener('click', smartRun);
     $('photoExcelFile').addEventListener('change', () => {
       $('photoExcelName').textContent = $('photoExcelFile').files[0]?.name || '';
       photoExcelParsed = null;
@@ -3478,14 +3789,8 @@
       if (del) deleteGroup(del.closest('.group-row').dataset.id);
     });
 
-    // Импорт из 1С (только админ)
-    $('hubPrices').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      impParsed = null;
-      $('impRun').textContent = 'Проверить файлы';
-      $('impStatus').hidden = true;
-      openSheet('importSheet');
-    });
+    // Старые отдельные экраны импорта скрыты — вход теперь через «умный импорт».
+    // Их обработчики файлов/загрузки оставлены (элементы существуют, вреда нет).
     $('impFile1').addEventListener('change', () => {
       $('impFile1Name').textContent = $('impFile1').files[0]?.name || '';
       impParsed = null;
@@ -3527,14 +3832,6 @@
       if (p) { closeSheet('topSheet'); openProduct(p); }
     });
 
-    // Импорт продаж (только админ)
-    $('hubSales').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      salesParsed = null;
-      $('salesRun').textContent = 'Проверить файл';
-      $('salesStatus').hidden = true;
-      openSheet('salesImportSheet');
-    });
     $('salesFile').addEventListener('change', () => {
       $('salesFileName').textContent = $('salesFile').files[0]?.name || '';
       salesParsed = null;
@@ -3554,15 +3851,6 @@
       }
     });
 
-    // Импорт остатков (только админ)
-    $('hubStock').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      stockParsed = null;
-      $('stockRun').textContent = 'Проверить файл';
-      $('stockStatus').hidden = true;
-      $('stockFileName').textContent = '';
-      openSheet('stockImportSheet');
-    });
     $('stockFile').addEventListener('change', () => {
       $('stockFileName').textContent = $('stockFile').files[0]?.name || '';
       stockParsed = null;
@@ -3577,15 +3865,6 @@
       finally { btn.disabled = false; }
     });
 
-    // Импорт контактов поставщиков (только админ)
-    $('hubContacts').addEventListener('click', () => {
-      closeSheet('importHubSheet');
-      contactsParsed = null;
-      $('contactsRun').textContent = 'Проверить файл';
-      $('contactsStatus').hidden = true;
-      $('contactsFileName').textContent = '';
-      openSheet('contactsImportSheet');
-    });
     $('contactsFile').addEventListener('change', () => {
       $('contactsFileName').textContent = $('contactsFile').files[0]?.name || '';
       contactsParsed = null;
