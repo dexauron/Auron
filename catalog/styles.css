@@ -66,7 +66,7 @@ body {
   top: 0;
   z-index: 20;
   background: var(--bg);
-  padding: calc(10px + env(safe-area-inset-top)) 14px 8px;
+  padding: calc(10px + env(safe-area-inset-top)) calc(14px + env(safe-area-inset-right)) 8px calc(14px + env(safe-area-inset-left));
   border-bottom: 1px solid var(--border);
 }
 
@@ -149,31 +149,43 @@ body {
 /* отмеченный поставщик/группа в списке-шторке */
 .btn-secondary.picked { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
-/* ── Быстрые фильтры (чипы «без фото», «без цены» …) ── */
-.chips-quick { padding-top: 0; }
+/* ── Полоса фильтров: одна кнопка + категории ── */
+.filterbar { display: flex; align-items: center; gap: 8px; padding-top: 10px; }
+.filterbar .chips { padding-top: 0; padding-bottom: 0; flex: 1; min-width: 0; }
+.filter-btn {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px;
+  padding: 9px 15px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 15px; cursor: pointer; white-space: nowrap;
+}
+.filter-btn.active { border-color: var(--accent); color: var(--accent); }
+.filter-badge {
+  min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px;
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+/* ── Быстрые фильтры (чипы «без фото», «без цены» …) в окне фильтров ── */
 .chips-quick:empty { display: none; }
-.chip.chip-quick { font-size: 13.5px; padding: 7px 13px; }
+.chip.chip-quick { font-size: 14px; padding: 8px 14px; }
 .chip.chip-quick.warn { border-color: rgba(255, 159, 10, .5); color: var(--warn); }
 .chip.chip-quick.warn.active { background: var(--warn); border-color: var(--warn); color: #fff; }
 
-/* ── Панель управления: сортировка, цена, размер плиток ── */
-.controls {
-  display: flex; align-items: center; gap: 8px;
-  padding: 4px 0 8px; overflow-x: auto; scrollbar-width: none;
-}
-.controls::-webkit-scrollbar { display: none; }
-.ctl-select, .ctl-btn {
-  flex: 0 0 auto;
-  padding: 8px 13px; border-radius: 100px;
+/* ── Окно фильтров: заголовки секций, сегменты, цена ── */
+.filter-label { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 16px 0 8px; }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button {
+  flex: 1 1 auto; min-width: 72px;
+  padding: 10px 12px; border-radius: 12px;
   border: 1px solid var(--border); background: var(--surface); color: var(--text);
-  font-size: 14px; cursor: pointer; white-space: nowrap;
+  font-size: 14px; cursor: pointer;
 }
-.ctl-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.results-count { flex: 0 0 auto; margin-left: auto; padding-left: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
-.price-range { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }
-.price-inp { flex: 1; min-width: 0; }
+.seg button.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.price-range { display: flex; align-items: center; gap: 10px; }
+.price-inp { flex: 1; min-width: 0; text-align: center; }
 .price-dash { color: var(--text-2); }
-.price-ok, .price-clear { flex: 0 0 auto; width: auto; padding: 10px 16px; }
+#filterApply { margin-top: 22px; }
+#filterReset { margin-top: 6px; }
 
 /* совпавшие слова в результатах поиска */
 mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
@@ -198,19 +210,48 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
 .banner-info { background: rgba(94, 92, 230, .12); color: #7d7bff; }
 
 /* ── Сетка товаров ─────────────────────────────── */
-.content { padding: 12px 14px; }
+/* padding учитывает «чёлки» в альбомной ориентации (safe-area слева/справа) */
+.content { padding: 12px calc(14px + env(safe-area-inset-right)) 12px calc(14px + env(safe-area-inset-left)); }
+/* min(150px,47%) гарантирует минимум 2 колонки даже на узких экранах (320px) */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 47%), 1fr));
   gap: 10px;
 }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; } }
-/* компактный вид: больше плиток в ряд, без тегов */
-.grid.compact { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+/* компактный вид: больше плиток в ряд, без тегов (минимум 3 колонки) */
+.grid.compact { grid-template-columns: repeat(auto-fill, minmax(min(108px, 31%), 1fr)); gap: 8px; }
 .grid.compact .card-tags { display: none; }
 .grid.compact .card-name { font-size: 13px; min-height: 2.4em; }
 .grid.compact .card-price { font-size: 15px; }
 .grid.compact .card-body { padding: 7px 8px 9px; gap: 4px; }
+
+/* Очень узкие телефоны (iPhone SE, старые Android ≤360px): плотнее и мельче */
+@media (max-width: 360px) {
+  .header { padding-left: calc(10px + env(safe-area-inset-left)); padding-right: calc(10px + env(safe-area-inset-right)); }
+  .content { padding-left: calc(10px + env(safe-area-inset-left)); padding-right: calc(10px + env(safe-area-inset-right)); }
+  .brand-sub { display: none; }
+  .brand-name { font-size: 15px; }
+  .brand-logo-img { width: 34px; height: 34px; }
+  #adminBtnLabel { display: none; }               /* остаётся иконка входа */
+  .chip { padding: 8px 12px; font-size: 14px; }
+  .filter-btn { padding: 8px 11px; font-size: 14px; }
+  .card-name { font-size: 14px; }
+  .card-price { font-size: 16px; }
+  .sheet-body { padding-left: 14px; padding-right: 14px; }
+  .seg button { min-width: 58px; font-size: 13px; padding: 9px 6px; }
+}
+
+/* Большие телефоны (Plus/Max/Ultra ≥430px): чуть крупнее плитки */
+@media (min-width: 430px) and (max-width: 699px) {
+  .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
+/* Альбомная ориентация с низким экраном: окна не должны упираться в края */
+@media (max-height: 480px) {
+  .sheet { max-height: 96vh; }
+  .scan-box { min-height: 180px; }
+}
 
 /* ── Скелет загрузки (мерцающие плитки вместо пустоты) ── */
 .skeleton { pointer-events: none; }

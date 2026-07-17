@@ -45,28 +45,14 @@
         <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/><path d="M18 8v8"/></svg>
       </button>
     </div>
-    <nav class="chips" id="groupChips"></nav>
+    <div class="filterbar">
+      <button class="filter-btn" id="filterBtn">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        Фильтры<span class="filter-badge" id="filterBadge" hidden></span>
+      </button>
+      <nav class="chips" id="groupChips"></nav>
+    </div>
     <nav class="chips chips-sub" id="subChips" hidden></nav>
-    <nav class="chips chips-quick" id="quickChips"></nav>
-    <div class="controls">
-      <select id="sortSel" class="ctl-select" title="Порядок">
-        <option value="relevance">↕ По совпадению</option>
-        <option value="name">А-Я по названию</option>
-        <option value="cheap">Сначала дешёвые</option>
-        <option value="expensive">Сначала дорогие</option>
-        <option value="new">Сначала новые</option>
-      </select>
-      <button class="ctl-btn" id="priceBtn" title="Диапазон цены">₽ Цена</button>
-      <button class="ctl-btn" id="viewBtn" title="Размер плиток">▦</button>
-      <span class="results-count" id="resultsCount"></span>
-    </div>
-    <div class="price-range" id="priceRange" hidden>
-      <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от, ₽" min="0">
-      <span class="price-dash">—</span>
-      <input type="number" id="priceMax" class="input price-inp" inputmode="decimal" placeholder="до, ₽" min="0">
-      <button class="btn btn-primary price-ok" id="priceApply">OK</button>
-      <button class="btn btn-ghost price-clear" id="priceClear">Сброс</button>
-    </div>
   </header>
 
   <!-- Плашки состояния -->
@@ -537,6 +523,44 @@
         <div id="scanContainer" class="scan-box"></div>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>🔦 Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
+  <div class="sheet-backdrop" id="filterSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Фильтры и сортировка</h2>
+
+        <div class="filter-label">Сортировка</div>
+        <div class="seg" id="sortSeg">
+          <button data-sort="relevance">По совпадению</button>
+          <button data-sort="name">А-Я</button>
+          <button data-sort="cheap">Дешевле</button>
+          <button data-sort="expensive">Дороже</button>
+          <button data-sort="new">Новее</button>
+        </div>
+
+        <div class="filter-label">Показывать</div>
+        <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
+
+        <div class="filter-label">Цена, ₽</div>
+        <div class="price-range">
+          <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от" min="0">
+          <span class="price-dash">—</span>
+          <input type="number" id="priceMax" class="input price-inp" inputmode="decimal" placeholder="до" min="0">
+        </div>
+
+        <div class="filter-label">Вид</div>
+        <div class="seg" id="viewSeg">
+          <button data-view="normal">Крупные</button>
+          <button data-view="compact">Компактные</button>
+        </div>
+
+        <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
+        <button class="btn btn-ghost btn-block" id="filterReset">Сбросить всё</button>
       </div>
     </div>
   </div>

@@ -513,7 +513,9 @@
     let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
     // «Сбросить» показываем, как только активен ЛЮБОЙ фильтр или поиск
     if (anyFilterActive()) html += '<button class="chip chip-reset" data-reset>✕ Сбросить фильтры</button>';
-    if (state.suppliers.length) {
+    // Поставщики — внутренние данные магазина: показываем только тем, кто видит
+    // закупки (админ/аналитик). Покупателям без входа и кассиру их не показываем.
+    if (state.canPurchase && state.suppliers.length) {
       const label = !selSuppliers.length ? '🚚 Поставщики'
         : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
           : `🚚 Поставщиков: ${selSuppliers.length}`;
@@ -589,14 +591,10 @@
         ? `<img src="${esc(photo)}" alt="" loading="lazy">`
         : '📦';
       const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
+      // минимализм: на плитке только код и, если весовой, значок ⚖ — остальное в карточке
       const tags = [];
-      if (p.code) tags.push(`<span class="tag tag-code">Код ${esc(p.code)}</span>`);
-      if (p.is_weighted) tags.push('<span class="tag">⚖ весовой</span>');
-      else if (p.unit && norm(p.unit) !== 'шт') tags.push(`<span class="tag">📏 ${esc(p.unit)}</span>`);
-      const sup = supplierById((p.supplier_ids || [])[0]);
-      if (sup) tags.push(`<span class="tag">🚚 ${esc(sup.name)}</span>`);
-      if (p.department) tags.push(`<span class="tag">Отдел ${esc(p.department)}</span>`);
-      if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без штрихкода</span>');
+      if (p.code) tags.push(`<span class="tag tag-code">${esc(p.code)}</span>`);
+      if (p.is_weighted) tags.push('<span class="tag">⚖</span>');
       const price = (p.retail_price != null && p.retail_price !== '')
         ? `<div class="card-price">${esc(fmtPrice(p.retail_price))}</div>` : '';
       return `<article class="card" data-id="${esc(p.id)}">
@@ -672,27 +670,28 @@
     $('quickChips').innerHTML = html;
   }
 
-  function updateResultsCount(n) {
-    const el = $('resultsCount');
-    if (!el) return;
-    const filtered = state.query || state.quick.length || state.selCats.length
-      || state.selGroups.length || state.selSuppliers.length || state.priceMin != null || state.priceMax != null;
-    el.textContent = filtered ? `Найдено: ${n}` : `Всего: ${n}`;
+  // сколько «фильтров» активно (для значка на кнопке «Фильтры»)
+  function countActiveFilters() {
+    return state.quick.length + state.selCats.length + state.selGroups.length
+      + state.selSuppliers.length + ((state.priceMin != null || state.priceMax != null) ? 1 : 0);
   }
 
-  // синхронизирует вид кнопок управления с состоянием
+  function updateResultsCount(n) {
+    const ap = $('filterApply');
+    if (ap) ap.textContent = `Показать ${n}`;
+  }
+
+  // синхронизирует окно фильтров и значок с состоянием
   function syncControls() {
-    const sortSel = $('sortSel'); if (sortSel) sortSel.value = state.sort;
-    const viewBtn = $('viewBtn');
-    if (viewBtn) { viewBtn.textContent = state.view === 'compact' ? '▤' : '▦'; viewBtn.classList.toggle('active', state.view === 'compact'); }
-    const priceBtn = $('priceBtn');
-    if (priceBtn) {
-      const on = state.priceMin != null || state.priceMax != null;
-      priceBtn.classList.toggle('active', on);
-      priceBtn.textContent = on
-        ? `₽ ${state.priceMin != null ? state.priceMin : '0'}–${state.priceMax != null ? state.priceMax : '∞'}`
-        : '₽ Цена';
-    }
+    document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
+    document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
+    const pmin = $('priceMin'); const pmax = $('priceMax');
+    if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? state.priceMin : '';
+    if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? state.priceMax : '';
+    const n = countActiveFilters();
+    const badge = $('filterBadge');
+    if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
+    const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
   }
 
   function renderAll() { renderChips(); renderQuick(); syncControls(); renderGrid(); saveFilters(); }
@@ -712,7 +711,8 @@
     state.renderLimit = PAGE_SIZE;
     const inp = $('searchInput'); if (inp) inp.value = '';
     const sc = $('searchClear'); if (sc) sc.hidden = true;
-    const pr = $('priceRange'); if (pr) pr.hidden = true;
+    const pmin = $('priceMin'); if (pmin) pmin.value = '';
+    const pmax = $('priceMax'); if (pmax) pmax.value = '';
     renderAll();
   }
 
@@ -807,13 +807,15 @@
       : '';
     $('sheetPhotos').scrollLeft = 0;
 
+    // без входа (обычный покупатель) — показываем только «магазинные» метки:
+    // категорию и «весовой/продаётся». Внутренние (штрихкода нет и т.п.) — сотрудникам.
     const badges = [];
     const g = groupById(p.group_id);
     if (g) badges.push(`<span class="tag">${esc(g.name)}</span>`);
     if (p.is_weighted) badges.push('<span class="tag">⚖ Весовой товар</span>');
     if (p.unit) badges.push(`<span class="tag">📏 Продаётся: ${esc(p.unit)}</span>`);
     const barcodes = p.barcodes || [];
-    if (!barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
+    if (state.session && !barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
 
     // поставщики и цены — единым списком ниже (renderProductPrices); отдельный блок не нужен
@@ -822,14 +824,18 @@
     const rows = [];
     // розничная цена (цена на полке) — видна всем, крупно вверху
     if (p.retail_price != null && p.retail_price !== '') {
-      rows.push(`<div class="field-row field-main"><span class="field-key">Розничная цена</span><span class="field-val">${esc(fmtPrice(p.retail_price))}</span></div>`);
+      rows.push(`<div class="field-row field-main"><span class="field-key">Цена</span><span class="field-val">${esc(fmtPrice(p.retail_price))}</span></div>`);
     }
-    if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
-    if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
-    barcodes.forEach((b, i) => rows.push(fieldRow(barcodes.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод', b, false, true)));
-    if (p.department) rows.push(fieldRow('Отдел', p.department));
-    if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
-    if (!rows.length) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
+    // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
+    // покупателям без входа их не показываем
+    if (state.session) {
+      if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
+      if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
+      barcodes.forEach((b, i) => rows.push(fieldRow(barcodes.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод', b, false, true)));
+      if (p.department) rows.push(fieldRow('Отдел', p.department));
+      if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
+    }
+    if (!rows.length && state.session) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
     $('sheetFields').innerHTML = rows.join('');
 
     $('sheetAdminActions').hidden = !state.isAdmin;
@@ -911,9 +917,9 @@
     const box = $('sheetPrices');
     if (!sb) { box.innerHTML = ''; return; }
     const baseSupIds = [...new Set(p.supplier_ids || [])];
-    if (!state.session) { renderCardSuppliers(p, [], baseSupIds, { locked: true }); return; }
-    // кассир видит только розничную цену — закупочные цены поставщиков ему не показываем
-    if (!state.canPurchase) { box.innerHTML = ''; return; }
+    // покупатель без входа не видит поставщиков вовсе (никаких намёков на «вход
+    // для сотрудников»); кассир видит только розничную цену
+    if (!state.session || !state.canPurchase) { box.innerHTML = ''; return; }
     box.innerHTML = '<p class="muted">Загружаем цены…</p>';
     let rows;
     try {
@@ -3286,45 +3292,35 @@
       input.focus();
     });
 
-    // Сортировка
-    $('sortSel').addEventListener('change', (e) => {
-      state.sort = e.target.value;
+    // Окно фильтров (одна кнопка — всё внутри: сортировка, фильтры, цена, вид)
+    $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
+    $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
+    $('filterReset').addEventListener('click', clearAllFilters);
+
+    // Сортировка (сегменты)
+    $('sortSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      state.sort = b.dataset.sort;
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
-
-    // Размер плиток (обычный / компактный)
-    $('viewBtn').addEventListener('click', () => {
-      state.view = state.view === 'compact' ? 'normal' : 'compact';
+    // Вид плиток (сегменты)
+    $('viewSeg').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      state.view = b.dataset.view;
       renderAll();
     });
-
-    // Диапазон цены
-    $('priceBtn').addEventListener('click', () => {
-      const box = $('priceRange');
-      box.hidden = !box.hidden;
-      if (!box.hidden) {
-        $('priceMin').value = state.priceMin != null ? state.priceMin : '';
-        $('priceMax').value = state.priceMax != null ? state.priceMax : '';
-        $('priceMin').focus();
-      }
-    });
-    $('priceApply').addEventListener('click', () => {
-      const mn = parseFloat($('priceMin').value);
-      const mx = parseFloat($('priceMax').value);
+    // Диапазон цены — применяется на лету по мере ввода
+    let priceDeb;
+    const applyPrice = () => {
+      const mn = parseFloat($('priceMin').value); const mx = parseFloat($('priceMax').value);
       state.priceMin = Number.isFinite(mn) ? mn : null;
       state.priceMax = Number.isFinite(mx) ? mx : null;
       state.renderLimit = PAGE_SIZE;
-      $('priceRange').hidden = true;
       renderAll();
-    });
-    $('priceClear').addEventListener('click', () => {
-      state.priceMin = null; state.priceMax = null;
-      $('priceMin').value = ''; $('priceMax').value = '';
-      state.renderLimit = PAGE_SIZE;
-      $('priceRange').hidden = true;
-      renderAll();
-    });
+    };
+    $('priceMin').addEventListener('input', () => { clearTimeout(priceDeb); priceDeb = setTimeout(applyPrice, 300); });
+    $('priceMax').addEventListener('input', () => { clearTimeout(priceDeb); priceDeb = setTimeout(applyPrice, 300); });
 
     // Быстрые фильтры
     $('quickChips').addEventListener('click', (e) => {
