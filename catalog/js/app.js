@@ -3252,9 +3252,12 @@
 
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
+    // Единый экран импорта: меню админа → выбор, что загрузить
+    $('menuImportHub').addEventListener('click', () => { closeSheet('adminMenuSheet'); openSheet('importHubSheet'); });
+
     // Фото из Excel по ссылкам (только админ)
-    $('menuPhotoExcel').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubPhotoExcel').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       photoExcelParsed = null;
       $('photoExcelRun').textContent = 'Проверить файл';
       $('photoExcelStatus').hidden = true;
@@ -3276,8 +3279,8 @@
     });
 
     // Поиск фото по штрихкодам (только админ)
-    $('menuPhotoSearch').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubPhotoSearch').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       $('photoSearchStatus').hidden = true;
       $('photoSearchRun').textContent = '▶ Начать поиск';
       openSheet('photoSearchSheet');
@@ -3476,8 +3479,8 @@
     });
 
     // Импорт из 1С (только админ)
-    $('menuImport').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubPrices').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       impParsed = null;
       $('impRun').textContent = 'Проверить файлы';
       $('impStatus').hidden = true;
@@ -3525,8 +3528,8 @@
     });
 
     // Импорт продаж (только админ)
-    $('menuSalesImport').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubSales').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       salesParsed = null;
       $('salesRun').textContent = 'Проверить файл';
       $('salesStatus').hidden = true;
@@ -3552,8 +3555,8 @@
     });
 
     // Импорт остатков (только админ)
-    $('menuStockImport').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubStock').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       stockParsed = null;
       $('stockRun').textContent = 'Проверить файл';
       $('stockStatus').hidden = true;
@@ -3575,8 +3578,8 @@
     });
 
     // Импорт контактов поставщиков (только админ)
-    $('menuContactsImport').addEventListener('click', () => {
-      closeSheet('adminMenuSheet');
+    $('hubContacts').addEventListener('click', () => {
+      closeSheet('importHubSheet');
       contactsParsed = null;
       $('contactsRun').textContent = 'Проверить файл';
       $('contactsStatus').hidden = true;

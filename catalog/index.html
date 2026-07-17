@@ -152,14 +152,9 @@
         <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
         <div id="menuAdminOnly">
           <button class="btn btn-primary btn-block" id="menuAddProduct">＋ Добавить товар</button>
-          <button class="btn btn-secondary btn-block" id="menuImport">⬆ Импорт из 1С (Excel)</button>
-          <button class="btn btn-secondary btn-block" id="menuSalesImport">📈 Импорт продаж (Excel)</button>
-          <button class="btn btn-secondary btn-block" id="menuStockImport">📦 Импорт остатков (Excel)</button>
-          <button class="btn btn-secondary btn-block" id="menuPhotoExcel">🖼 Фото из Excel (ссылки)</button>
-          <button class="btn btn-secondary btn-block" id="menuPhotoSearch">🌐 Фото по штрихкодам (интернет)</button>
+          <button class="btn btn-secondary btn-block" id="menuImportHub">⬆ Импорт данных (1С / Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
-          <button class="btn btn-secondary btn-block" id="menuContactsImport">📇 Импорт контактов (Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuDedup">🧹 Убрать дубли товаров</button>
           <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
         </div>
@@ -277,6 +272,24 @@
           <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Импорт данных: единый экран выбора (только админ) -->
+  <div class="sheet-backdrop" id="importHubSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">⬆ Импорт данных</h2>
+        <p class="muted">Загрузка из 1С и Excel. Выбери, что загрузить:</p>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubPrices">💰 Цены поставщиков и товары<span class="hub-sub">отчёт «Цены поставщиков» из 1С</span></button>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubStock">📦 Остатки и розничные цены<span class="hub-sub">отчёт «Остатки номенклатуры»</span></button>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubSales">📈 Продажи<span class="hub-sub">отчёт «Продажи» за период</span></button>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubContacts">📇 Контакты поставщиков<span class="hub-sub">справочник «Контрагенты»</span></button>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubPhotoExcel">🖼 Фото из Excel (ссылки)<span class="hub-sub">штрихкод/код + ссылка на фото</span></button>
+        <button class="btn btn-secondary btn-block hub-btn" id="hubPhotoSearch">🌐 Фото по штрихкодам (интернет)<span class="hub-sub">поиск в Open Food Facts</span></button>
+        <button class="btn btn-ghost sheet-close" data-close="importHubSheet">Закрыть</button>
       </div>
     </div>
   </div>
