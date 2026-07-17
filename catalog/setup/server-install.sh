@@ -20,7 +20,14 @@ echo "▶ [1/6] Пакеты и Docker…"
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl git python3 openssl gnupg debian-keyring debian-archive-keyring apt-transport-https >/dev/null
 command -v docker >/dev/null || curl -fsSL https://get.docker.com | sh >/dev/null 2>&1
-systemctl enable --now docker >/dev/null 2>&1 || true
+# зеркала Docker Hub (в РФ прямой Hub часто отдаёт 429) — docker сам откатится на Hub, если зеркало недоступно
+mkdir -p /etc/docker
+cat > /etc/docker/daemon.json <<'DJ'
+{ "registry-mirrors": ["https://dockerhub.timeweb.cloud", "https://huecker.io", "https://mirror.gcr.io"] }
+DJ
+systemctl enable docker >/dev/null 2>&1 || true
+systemctl restart docker || true
+sleep 3
 
 echo "▶ [2/6] Caddy (для HTTPS)…"
 if ! command -v caddy >/dev/null; then
@@ -36,6 +43,16 @@ cd supabase/docker
 cp -n .env.example .env
 
 echo "▶ [4/6] Секреты и ключи…"
+# при повторном запуске переиспользуем уже созданные ключи (стабильный адрес/ключи)
+CUR_JWT="$(grep -E '^JWT_SECRET=' .env | cut -d= -f2- || true)"
+if [ -f /root/waymarket-keys.txt ] && [[ "$CUR_JWT" != your-super-secret* ]] && [ -n "$CUR_JWT" ]; then
+  echo "  переиспользую существующие ключи из .env"
+  JWT_SECRET="$CUR_JWT"
+  ANON_KEY="$(grep -E '^ANON_KEY=' .env | cut -d= -f2-)"
+  SERVICE_KEY="$(grep -E '^SERVICE_ROLE_KEY=' .env | cut -d= -f2-)"
+  PG_PASS="$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d= -f2-)"
+  DASH_PASS="$(grep -E '^DASHBOARD_PASSWORD=' .env | cut -d= -f2-)"
+else
 JWT_SECRET="$(openssl rand -hex 40)"
 PG_PASS="$(openssl rand -hex 16)"
 DASH_PASS="$(openssl rand -hex 10)"
@@ -54,6 +71,7 @@ PY
 )"
 ANON_KEY="$(echo "$KEYS" | sed -n 1p)"
 SERVICE_KEY="$(echo "$KEYS" | sed -n 2p)"
+fi
 setenv(){ grep -q "^$1=" .env && sed -i "s|^$1=.*|$1=$2|" .env || echo "$1=$2" >> .env; }
 setenv POSTGRES_PASSWORD "$PG_PASS"
 setenv JWT_SECRET "$JWT_SECRET"
@@ -68,7 +86,14 @@ setenv ADDITIONAL_REDIRECT_URLS "https://dexauron.github.io/Auron/catalog/"
 setenv ENABLE_EMAIL_AUTOCONFIRM "true"
 
 echo "▶ [5/6] Запускаем Supabase (пара минут)…"
-docker compose pull -q 2>/dev/null || docker compose pull
+# качаем образы с повторами (Docker Hub может отдавать 429)
+pulled=0
+for try in 1 2 3 4 5 6; do
+  if docker compose pull; then pulled=1; break; fi
+  echo "  попытка $try не удалась (Docker Hub лимит?) — ждём и пробуем ещё…"
+  sleep $((try*15))
+done
+[ "$pulled" = 1 ] || echo "⚠ Не все образы скачались — docker compose up всё равно попробует докачать."
 docker compose up -d
 for i in $(seq 1 80); do docker compose exec -T db pg_isready -U postgres >/dev/null 2>&1 && break; sleep 3; done
 
