@@ -165,6 +165,15 @@ body {
   display: inline-flex; align-items: center; justify-content: center;
 }
 
+/* ── Плашки активных фильтров на главном (снять по ✕) ── */
+.active-filters { padding-top: 2px; padding-bottom: 8px; }
+.active-filters:empty { display: none; }
+.chip-active-filter { display: inline-flex; align-items: center; gap: 7px; background: rgba(48, 209, 88, .12); border-color: rgba(48, 209, 88, .4); color: var(--text); font-size: 14px; }
+.chip-active-filter .rm-x { font-size: 11px; color: var(--text-2); background: var(--surface); width: 17px; height: 17px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ── Пресеты цены ── */
+.price-presets { margin-bottom: 10px; }
+
 /* ── Быстрые фильтры (чипы «без фото», «без цены» …) в окне фильтров ── */
 .chips-quick:empty { display: none; }
 .chip.chip-quick { font-size: 14px; padding: 8px 14px; }

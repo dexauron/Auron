@@ -53,6 +53,7 @@
       <nav class="chips" id="groupChips"></nav>
     </div>
     <nav class="chips chips-sub" id="subChips" hidden></nav>
+    <nav class="chips active-filters" id="activeFilters" hidden></nav>
   </header>
 
   <!-- Плашки состояния -->
@@ -559,6 +560,8 @@
             <button data-arrival="">Все</button>
             <button data-arrival="today">Сегодня</button>
             <button data-arrival="yesterday">Вчера</button>
+            <button data-arrival="7d">7 дней</button>
+            <button data-arrival="30d">30 дней</button>
           </div>
         </div>
 
@@ -573,6 +576,12 @@
         </div>
 
         <div class="filter-label">Цена, ₽</div>
+        <div class="chips chips-wrap price-presets" id="pricePresets">
+          <button class="chip" data-pmin="" data-pmax="100">до 100</button>
+          <button class="chip" data-pmin="100" data-pmax="300">100–300</button>
+          <button class="chip" data-pmin="300" data-pmax="1000">300–1000</button>
+          <button class="chip" data-pmin="1000" data-pmax="">от 1000</button>
+        </div>
         <div class="price-range">
           <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от" min="0">
           <span class="price-dash">—</span>

@@ -493,9 +493,14 @@
     // тип товара: весовой / штучный (сотрудникам)
     if (state.selType === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.selType === 'piece') list = list.filter((p) => !p.is_weighted);
-    // поступление: сегодня / вчера
+    // поступление: сегодня / вчера / за N дней
     if (state.arrival === 'today') { const t = todayISO(); list = list.filter((p) => arrivalDate(p) === t); }
     else if (state.arrival === 'yesterday') { const y = yesterdayISO(); list = list.filter((p) => arrivalDate(p) === y); }
+    else if (state.arrival === '7d' || state.arrival === '30d') {
+      const days = state.arrival === '7d' ? 7 : 30;
+      const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
+      list = list.filter((p) => { const d = arrivalDate(p); return d && d >= since; });
+    }
     // диапазон цены
     if (state.priceMin != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) >= state.priceMin);
     if (state.priceMax != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) <= state.priceMax);
@@ -541,9 +546,9 @@
     // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
     const { selCats, selGroups, selSuppliers } = state;
     const allActive = !selCats.length && !selGroups.length;
+    // «Сбросить всё» теперь живёт в строке активных фильтров (renderActiveFilters),
+    // поэтому здесь дублирующую кнопку не показываем — чище
     let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
-    // «Сбросить» показываем, как только активен ЛЮБОЙ фильтр или поиск
-    if (anyFilterActive()) html += '<button class="chip chip-reset" data-reset>✕ Сбросить фильтры</button>';
     // Поставщики — внутренние данные магазина: показываем только тем, кто видит
     // закупки (админ/аналитик). Покупателям без входа и кассиру их не показываем.
     if (state.canPurchase && state.suppliers.length) {
@@ -722,6 +727,11 @@
     const pmin = $('priceMin'); const pmax = $('priceMax');
     if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? state.priceMin : '';
     if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? state.priceMax : '';
+    document.querySelectorAll('#pricePresets [data-pmin]').forEach((b) => {
+      const mn = b.dataset.pmin === '' ? null : Number(b.dataset.pmin);
+      const mx = b.dataset.pmax === '' ? null : Number(b.dataset.pmax);
+      b.classList.toggle('active', state.priceMin === mn && state.priceMax === mx);
+    });
     // разделы для сотрудников/закупок показываем по роли
     document.querySelectorAll('.emp-only').forEach((el) => { el.hidden = !state.session; });
     document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
@@ -743,7 +753,60 @@
     const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
   }
 
-  function renderAll() { renderChips(); renderQuick(); syncControls(); renderGrid(); saveFilters(); }
+  const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };
+  const ARRIVAL_LABEL = { today: 'Сегодня', yesterday: 'Вчера', '7d': 'За 7 дней', '30d': 'За 30 дней' };
+
+  // Плашки активных фильтров на главном экране: видно, что включено, и каждый
+  // можно снять по ✕ — не открывая окно фильтров. Универсально и удобно.
+  function renderActiveFilters() {
+    const box = $('activeFilters');
+    if (!box) return;
+    const items = [];
+    if (state.query) items.push(['q', '', `«${state.query}»`]);
+    for (const c of state.selCats) items.push(['cat', c, c]);
+    for (const gid of state.selGroups) {
+      const label = gid === 'none' ? 'Без группы' : gid === 'weighted' ? 'Весовые' : (groupById(gid)?.name || 'Группа');
+      items.push(['group', gid, label]);
+    }
+    for (const sid of state.selSuppliers) items.push(['sup', sid, '🚚 ' + (supplierById(sid)?.name || 'Поставщик')]);
+    if (state.selType) items.push(['type', '', state.selType === 'weighted' ? '⚖ Весовые' : 'Штучные']);
+    if (state.arrival) items.push(['arrival', '', ARRIVAL_LABEL[state.arrival] || 'Поступление']);
+    if (state.priceMin != null || state.priceMax != null) {
+      const lbl = state.priceMin != null && state.priceMax != null ? `${state.priceMin}–${state.priceMax} ₽`
+        : state.priceMin != null ? `от ${state.priceMin} ₽` : `до ${state.priceMax} ₽`;
+      items.push(['price', '', lbl]);
+    }
+    for (const k of state.quick) items.push(['quick', k, QUICK_LABEL[k] || k]);
+
+    if (!items.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    let html = items.map(([t, v, label]) =>
+      `<button class="chip chip-active-filter" data-rm="${esc(t)}" data-val="${esc(v)}">${esc(label)}<span class="rm-x">✕</span></button>`).join('');
+    html += '<button class="chip chip-reset" data-rm="all" data-val="">Сбросить всё</button>';
+    box.innerHTML = html;
+  }
+
+  // снять один активный фильтр
+  function removeFilter(type, val) {
+    switch (type) {
+      case 'q': state.query = ''; { const i = $('searchInput'); if (i) i.value = ''; } $('searchClear').hidden = true; break;
+      case 'cat':
+        state.selCats = state.selCats.filter((x) => x !== val);
+        { const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === val).map((g) => g.id)); state.selGroups = state.selGroups.filter((x) => !ids.has(x)); }
+        break;
+      case 'group': state.selGroups = state.selGroups.filter((x) => x !== val); break;
+      case 'sup': state.selSuppliers = state.selSuppliers.filter((x) => x !== val); break;
+      case 'type': state.selType = ''; break;
+      case 'arrival': state.arrival = ''; break;
+      case 'price': state.priceMin = null; state.priceMax = null; { const a = $('priceMin'); const b = $('priceMax'); if (a) a.value = ''; if (b) b.value = ''; } break;
+      case 'quick': state.quick = state.quick.filter((x) => x !== val); break;
+      case 'all': clearAllFilters(); return;
+    }
+    state.renderLimit = PAGE_SIZE;
+    renderAll();
+  }
+
+  function renderAll() { renderChips(); renderQuick(); renderActiveFilters(); syncControls(); renderGrid(); saveFilters(); }
 
   // есть ли хоть один активный фильтр/поиск
   function anyFilterActive() {
@@ -795,7 +858,7 @@
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
       if (f.selType === 'weighted' || f.selType === 'piece') state.selType = f.selType;
-      if (f.arrival === 'today' || f.arrival === 'yesterday') state.arrival = f.arrival;
+      if (['today', 'yesterday', '7d', '30d'].includes(f.arrival)) state.arrival = f.arrival;
     } catch (e) { /* игнорируем битые данные */ }
   }
 
@@ -3314,6 +3377,7 @@
     input.value = text;
     state.query = text;
     $('searchClear').hidden = false;
+    renderActiveFilters();
     renderGrid();
     const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
     if (p) openProduct(p);
@@ -3332,6 +3396,7 @@
         state.query = input.value;
         state.renderLimit = PAGE_SIZE;
         $('searchClear').hidden = !input.value;
+        renderActiveFilters();
         renderGrid();
       }, 150);
     });
@@ -3342,6 +3407,7 @@
       state.query = '';
       state.renderLimit = PAGE_SIZE;
       $('searchClear').hidden = true;
+      renderActiveFilters();
       renderGrid();
       input.focus();
     });
@@ -3408,6 +3474,26 @@
       if (!chip) return;
       const k = chip.dataset.quick;
       state.quick = state.quick.includes(k) ? state.quick.filter((x) => x !== k) : [...state.quick, k];
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+
+    // Плашки активных фильтров на главном — тап по ✕ снимает конкретный фильтр
+    $('activeFilters').addEventListener('click', (e) => {
+      const chip = e.target.closest('[data-rm]');
+      if (!chip) return;
+      removeFilter(chip.dataset.rm, chip.dataset.val);
+    });
+
+    // Быстрый выбор диапазона цены (пресеты)
+    $('pricePresets').addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-pmin]');
+      if (!btn) return;
+      const mn = btn.dataset.pmin === '' ? null : Number(btn.dataset.pmin);
+      const mx = btn.dataset.pmax === '' ? null : Number(btn.dataset.pmax);
+      // повторный тап по активному пресету — снять
+      if (state.priceMin === mn && state.priceMax === mx) { state.priceMin = null; state.priceMax = null; }
+      else { state.priceMin = mn; state.priceMax = mx; }
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
