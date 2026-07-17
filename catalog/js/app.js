@@ -66,6 +66,11 @@
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
+    sort: 'relevance',   // relevance | name | cheap | expensive | new
+    view: 'normal',      // normal | compact — размер плиток
+    quick: [],           // быстрые фильтры: 'withprice'|'barcode'|'nophoto'|'noprice'|'nobarcode'
+    priceMin: null,      // диапазон розничной цены (₽)
+    priceMax: null,
   };
 
   let sb = null;
@@ -81,6 +86,33 @@
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   const norm = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е').trim();
+
+  // «свободная» нормализация: убирает всё, кроме букв и цифр —
+  // «арт. 8816» == «арт8816», «0,5» == «0.5» == «05»
+  const stripPunct = (s) => norm(s).replace(/[^0-9a-zа-я]+/g, '');
+  // как norm, но без trim и без изменения длины (для подсветки — позиции символов сохраняются)
+  const hlNorm = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е');
+
+  // подсветка совпавших слов запроса в тексте (безопасно экранирует HTML)
+  function highlight(text, tokens) {
+    text = String(text ?? '');
+    if (!tokens || !tokens.length) return esc(text);
+    const low = hlNorm(text);
+    const marks = new Array(text.length).fill(false);
+    for (const t of tokens) {
+      if (!t || t.length < 2) continue;
+      let i = low.indexOf(t);
+      while (i !== -1) { for (let j = i; j < i + t.length; j++) marks[j] = true; i = low.indexOf(t, i + t.length); }
+    }
+    let out = ''; let open = false;
+    for (let i = 0; i < text.length; i++) {
+      if (marks[i] && !open) { out += '<mark>'; open = true; }
+      else if (!marks[i] && open) { out += '</mark>'; open = false; }
+      out += esc(text[i]);
+    }
+    if (open) out += '</mark>';
+    return out;
+  }
 
   // Транслитерация: «сникерс» найдёт Snickers, snickers найдёт «Сникерс»
   const TR = {
@@ -274,6 +306,8 @@
       p._name = name;
       p._nameT = translit(name);
       p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
+      p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
+      p._nameLoose = stripPunct(name);
       const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
       p._sup = norm(sup);
       p._supT = translit(p._sup);
@@ -329,6 +363,18 @@
       if (c.startsWith(q)) s = Math.max(s, 95);
       else if (c.includes(q)) s = Math.max(s, 70);
     }
+    // поиск без учёта знаков/пробелов: «арт8816» найдёт «арт. 8816», «0.5» → «0,5»
+    if (s < 95) {
+      const qL = stripPunct(q);
+      if (qL) {
+        for (const c of (p._codesLoose || [])) {
+          if (c === qL) return 118;
+          if (c.startsWith(qL)) s = Math.max(s, 92);
+          else if (c.includes(qL)) s = Math.max(s, 68);
+        }
+        if (qL.length >= 3 && (p._nameLoose || '').includes(qL)) s = Math.max(s, 78);
+      }
+    }
     s = Math.max(s, matchPre(p._name, p._nameT, qVars, [100, 90, 80]));
     if (p._sup) s = Math.max(s, matchPre(p._sup, p._supT, qVars, [60, 57, 55]));
     if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 40]));
@@ -360,9 +406,45 @@
     return Math.max(whole, multi);
   }
 
+  const hasRetail = (p) => p.retail_price != null && p.retail_price !== '';
+
+  // предикаты быстрых фильтров
+  const QUICK = {
+    withprice: (p) => hasRetail(p),
+    barcode: (p) => (p.barcodes || []).length > 0,
+    nophoto: (p) => !(p.photos || []).length,
+    noprice: (p) => !hasRetail(p),
+    nobarcode: (p) => !(p.barcodes || []).length,
+  };
+
+  // сортировка готового списка по выбранному порядку
+  function sortList(list, scored) {
+    const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
+    const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+    const when = (p) => p.updated_at || p.created_at || '';
+    switch (state.sort) {
+      case 'name': return list.slice().sort(byName);
+      case 'cheap': return list.slice().sort((a, b) => {
+        const x = price(a); const y = price(b);
+        if (x == null && y == null) return byName(a, b);
+        if (x == null) return 1; if (y == null) return -1;
+        return x - y || byName(a, b);
+      });
+      case 'expensive': return list.slice().sort((a, b) => {
+        const x = price(a); const y = price(b);
+        if (x == null && y == null) return byName(a, b);
+        if (x == null) return 1; if (y == null) return -1;
+        return y - x || byName(a, b);
+      });
+      case 'new': return list.slice().sort((a, b) => String(when(b)).localeCompare(String(when(a))) || byName(a, b));
+      default: // relevance: при поиске порядок уже по совпадению; без поиска — по названию
+        return scored ? list : list.slice().sort(byName);
+    }
+  }
+
   function visibleProducts() {
     let list = state.products;
-    const { selCats, selGroups, selSuppliers } = state;
+    const { selCats, selGroups, selSuppliers, quick } = state;
     // фильтр по группам/категориям — объединение всех отметок
     if (selCats.length || selGroups.length) {
       list = list.filter((p) => {
@@ -377,9 +459,16 @@
     if (selSuppliers.length) {
       list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
     }
+    // быстрые фильтры — каждый отмеченный обязателен (И)
+    if (quick.length) {
+      list = list.filter((p) => quick.every((k) => (QUICK[k] ? QUICK[k](p) : true)));
+    }
+    // диапазон цены
+    if (state.priceMin != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) >= state.priceMin);
+    if (state.priceMax != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) <= state.priceMax);
 
     const q = norm(state.query);
-    if (!q) return list;
+    if (!q) return sortList(list, false);
     const qT = translit(q);
     const qVars = q === qT ? [q] : [q, qT];
     // слова запроса — каждое ищется отдельно (в любом порядке)
@@ -387,11 +476,17 @@
       const wt = translit(w);
       return { q: w, qVars: w === wt ? [w] : [w, wt] };
     });
-    return list
+    const scored = list
       .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
       .filter((x) => x.s >= SEARCH_THRESHOLD)
       .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
       .map((x) => x.p);
+    return sortList(scored, true);
+  }
+
+  // слова запроса для подсветки (только буквенно-цифровые, длиннее 1 символа)
+  function queryHlTokens() {
+    return norm(state.query).split(/\s+/).map((w) => w.replace(/[^0-9a-zа-я]/g, '')).filter((w) => w.length >= 2);
   }
 
   /* ── Отрисовка ────────────────────────────────── */
@@ -460,6 +555,9 @@
     const list = visibleProducts();
     const grid = $('productGrid');
     $('loader').hidden = true;
+    grid.classList.toggle('compact', state.view === 'compact');
+    grid.classList.remove('skeleton');
+    updateResultsCount(list.length);
 
     if (!list.length) {
       grid.innerHTML = '';
@@ -482,6 +580,7 @@
     $('emptyState').hidden = true;
     // на больших каталогах рисуем страницами — телефон не потянет 15 000 карточек разом
     const shown = list.slice(0, state.renderLimit);
+    const hlTokens = queryHlTokens();
     let html = shown.map((p) => {
       const photo = (p.photos || [])[0];
       const img = photo
@@ -501,7 +600,7 @@
       return `<article class="card" data-id="${esc(p.id)}">
         <div class="${photoCls}">${img}</div>
         <div class="card-body">
-          <div class="card-name">${esc(p.name)}</div>
+          <div class="card-name">${highlight(p.name, hlTokens)}</div>
           ${price}
           <div class="card-tags">${tags.join('')}</div>
         </div>
@@ -521,7 +620,149 @@
     }
   }
 
-  function renderAll() { renderChips(); renderGrid(); }
+  // мерцающие плитки-заглушки, пока каталог грузится (вместо пустого экрана)
+  function showSkeleton() {
+    const grid = $('productGrid');
+    if (grid.children.length) return; // уже что-то показано (кэш)
+    $('loader').hidden = true;
+    grid.classList.remove('compact');
+    grid.classList.add('skeleton');
+    grid.innerHTML = Array.from({ length: 12 }, () =>
+      '<div class="card"><div class="sk-photo"></div><div class="sk-line"></div><div class="sk-line short"></div></div>').join('');
+  }
+
+  // товары после фильтров по категориям/группам/поставщикам (без быстрых фильтров,
+  // цены и поиска) — основа для подсчёта в быстрых фильтрах
+  function baseFiltered() {
+    const { selCats, selGroups, selSuppliers } = state;
+    let list = state.products;
+    if (selCats.length || selGroups.length) {
+      list = list.filter((p) => {
+        if (selGroups.includes('none') && !p.group_id) return true;
+        if (selGroups.includes('weighted') && p.is_weighted) return true;
+        if (p.group_id && selGroups.includes(p.group_id)) return true;
+        if (selCats.length && selCats.includes(productCategory(p))) return true;
+        return false;
+      });
+    }
+    if (selSuppliers.length) list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
+    return list;
+  }
+
+  const QUICK_CHIPS = [
+    { k: 'withprice', label: '✅ С ценой' },
+    { k: 'barcode', label: '🏷 Штрихкод' },
+    { k: 'nophoto', label: '📷 Без фото', warn: true },
+    { k: 'noprice', label: '💰 Без цены', warn: true },
+    { k: 'nobarcode', label: '⬜ Без ШК', warn: true },
+  ];
+
+  function renderQuick() {
+    const base = baseFiltered();
+    let html = '';
+    for (const c of QUICK_CHIPS) {
+      const cnt = base.reduce((n, p) => n + (QUICK[c.k](p) ? 1 : 0), 0);
+      if (!cnt && !state.quick.includes(c.k)) continue; // нечего показывать
+      const active = state.quick.includes(c.k) ? ' active' : '';
+      const warn = c.warn ? ' warn' : '';
+      html += `<button class="chip chip-quick${warn}${active}" data-quick="${c.k}">${c.label}<span class="chip-count">${cnt}</span></button>`;
+    }
+    $('quickChips').innerHTML = html;
+  }
+
+  function updateResultsCount(n) {
+    const el = $('resultsCount');
+    if (!el) return;
+    const filtered = state.query || state.quick.length || state.selCats.length
+      || state.selGroups.length || state.selSuppliers.length || state.priceMin != null || state.priceMax != null;
+    el.textContent = filtered ? `Найдено: ${n}` : `Всего: ${n}`;
+  }
+
+  // синхронизирует вид кнопок управления с состоянием
+  function syncControls() {
+    const sortSel = $('sortSel'); if (sortSel) sortSel.value = state.sort;
+    const viewBtn = $('viewBtn');
+    if (viewBtn) { viewBtn.textContent = state.view === 'compact' ? '▤' : '▦'; viewBtn.classList.toggle('active', state.view === 'compact'); }
+    const priceBtn = $('priceBtn');
+    if (priceBtn) {
+      const on = state.priceMin != null || state.priceMax != null;
+      priceBtn.classList.toggle('active', on);
+      priceBtn.textContent = on
+        ? `₽ ${state.priceMin != null ? state.priceMin : '0'}–${state.priceMax != null ? state.priceMax : '∞'}`
+        : '₽ Цена';
+    }
+  }
+
+  function renderAll() { renderChips(); renderQuick(); syncControls(); renderGrid(); saveFilters(); }
+
+  /* ── Память фильтров, недавних запросов и темы ──── */
+  const FILTERS_KEY = 'wm_filters_v1';
+  const RECENT_KEY = 'wm_recent_q_v1';
+  const THEME_KEY = 'wm_theme';
+
+  function saveFilters() {
+    try {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({
+        selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
+        quick: state.quick, sort: state.sort, view: state.view,
+        priceMin: state.priceMin, priceMax: state.priceMax,
+      }));
+    } catch (e) { /* нет места — не критично */ }
+  }
+  function loadFilters() {
+    try {
+      const f = JSON.parse(localStorage.getItem(FILTERS_KEY));
+      if (!f) return;
+      state.selCats = Array.isArray(f.selCats) ? f.selCats : [];
+      state.selGroups = Array.isArray(f.selGroups) ? f.selGroups : [];
+      state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
+      state.quick = Array.isArray(f.quick) ? f.quick : [];
+      if (['relevance', 'name', 'cheap', 'expensive', 'new'].includes(f.sort)) state.sort = f.sort;
+      if (f.view === 'compact' || f.view === 'normal') state.view = f.view;
+      state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
+      state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
+    } catch (e) { /* игнорируем битые данные */ }
+  }
+
+  function recentQueries() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; } }
+  function addRecentQuery(q) {
+    q = q.trim();
+    if (q.length < 2) return;
+    let list = recentQueries().filter((x) => x.toLowerCase() !== q.toLowerCase());
+    list.unshift(q);
+    list = list.slice(0, 8);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
+    renderRecent();
+  }
+  function renderRecent() {
+    const dl = $('recentQ');
+    if (dl) dl.innerHTML = recentQueries().map((q) => `<option value="${esc(q)}"></option>`).join('');
+  }
+
+  function applyTheme(t) {
+    // t: 'dark' | 'light' | null (авто — по системе)
+    const root = document.documentElement;
+    if (t === 'dark' || t === 'light') root.setAttribute('data-theme', t);
+    else root.removeAttribute('data-theme');
+    const icon = $('themeIcon');
+    if (icon) icon.textContent = t === 'dark' ? '☀️' : t === 'light' ? '🌙' : '🌗';
+  }
+  function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
+  function toggleTheme() {
+    let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }
+    // цикл: авто → тёмная → светлая → авто
+    const next = cur == null ? 'dark' : cur === 'dark' ? 'light' : null;
+    try { next ? localStorage.setItem(THEME_KEY, next) : localStorage.removeItem(THEME_KEY); } catch (e) { /* */ }
+    applyTheme(next);
+  }
+
+  // Фото на весь экран (зум по тапу)
+  function openLightbox(url) {
+    if (!url) return;
+    $('lightboxImg').src = url;
+    $('lightbox').hidden = false;
+  }
+  function closeLightbox() { $('lightbox').hidden = true; $('lightboxImg').src = ''; }
 
   /* ── Карточка товара ──────────────────────────── */
 
@@ -566,8 +807,11 @@
     $('sheetAdminActions').hidden = !state.isAdmin;
     $('btnFindPhoto').hidden = !(state.isAdmin && !(p.photos || []).length && (p.barcodes || []).length);
     $('btnAddPhotoLabel').hidden = !state.session; // фото может добавить любой вошедший
+    $('sheetMarkup').innerHTML = '';
+    $('sheetRetailHist').innerHTML = '';
     renderProductSales(p);
     renderProductPrices(p);
+    renderRetailHistory(p);
     renderCompetitors(p);
     openSheet('productSheet');
   }
@@ -712,6 +956,9 @@
     const freshPriced = entries.filter((e) => e.fresh);
     const best = freshPriced.length ? Math.min(...freshPriced.map((e) => Number(e.last.price))) : null;
 
+    // Наценка (только админ/аналитик): розничная − лучшая свежая закупочная и %
+    renderMarkup(p, best);
+
     const chevron = '<span class="sup-chevron">›</span>';
     const rowsHtml = entries.map((e) => {
       const c = state.contacts[e.sup.id];
@@ -748,6 +995,46 @@
     else footer = '<p class="muted price-hint">Нажми на поставщика — контакты, звонок и WhatsApp</p>';
 
     box.innerHTML = `<div class="price-block"><div class="price-title">Поставщики и цены</div>${rowsHtml}${footer}</div>`;
+  }
+
+  // Наценка в карточке: розничная цена − лучшая свежая закупочная, в ₽ и %
+  function renderMarkup(p, bestCost) {
+    const box = $('sheetMarkup');
+    if (!box) return;
+    if (!state.canPurchase || bestCost == null || !(p.retail_price != null && p.retail_price !== '')) { box.innerHTML = ''; return; }
+    const retail = Number(p.retail_price);
+    const cost = Number(bestCost);
+    if (!Number.isFinite(retail) || !Number.isFinite(cost) || cost <= 0) { box.innerHTML = ''; return; }
+    const abs = retail - cost;
+    const pct = Math.round((abs / cost) * 100);
+    const loss = abs < 0;
+    const cls = loss ? 'markup-loss' : 'markup-ok';
+    const sign = abs > 0 ? '+' : '';
+    box.innerHTML = `<div class="markup-box ${cls}">
+      <span class="markup-label">${loss ? '⚠ Наценка' : 'Наценка'}</span>
+      <span class="markup-val">${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
+      <span class="markup-sub">розница ${esc(fmtPrice(retail))} − закупка ${esc(fmtPrice(cost))}</span>
+    </div>`;
+  }
+
+  /* ── История розничной цены в карточке (item 16) ──── */
+  async function renderRetailHistory(p) {
+    const box = $('sheetRetailHist');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!sb || !state.session) return; // история — после входа
+    let rows;
+    try {
+      const { data, error } = await sb.from('catalog_retail_history')
+        .select('retail_price,changed_at').eq('product_id', p.id)
+        .order('changed_at', { ascending: false }).limit(12);
+      if (error) throw error;
+      rows = data;
+    } catch (e) { return; } // таблицы может не быть на старой базе — просто не показываем
+    if (currentProduct !== p || !rows || rows.length < 2) return; // одна запись — не история
+    const items = rows.map((r) =>
+      `<div class="price-hist-row"><span>${fmtDate(r.changed_at)}</span><span>${fmtPrice(r.retail_price)}</span></div>`).join('');
+    box.innerHTML = `<details class="retail-hist"><summary>История розничной цены (${rows.length})</summary>${items}</details>`;
   }
 
   /* ── Карточка поставщика (контакты, звонок, WhatsApp) ── */
@@ -2437,7 +2724,8 @@
         if (p.name) byName.set(norm(p.name), p.id);
       }
       const at = stockAt || new Date().toISOString().slice(0, 10);
-      const updates = []; const inserts = [];
+      const byId = new Map(state.products.map((p) => [p.id, p]));
+      const updates = []; const inserts = []; const histInserts = [];
       for (const r of recs) {
         const pid = (r.code && byCode.get(r.code))
           || (r.barcode && byBarcode.get(String(r.barcode).trim()))
@@ -2446,7 +2734,13 @@
           // name обязательно (NOT NULL): если id вдруг устарел и строка вставится,
           // а не обновится — не упадём на пустом имени
           const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
-          if (r.retail != null) u.retail_price = r.retail; // не затираем, если цены нет
+          if (r.retail != null) {
+            u.retail_price = r.retail; // не затираем, если цены нет
+            // записываем в историю розничной цены, если цена изменилась
+            const cur = byId.get(pid);
+            const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
+            if (old == null || old !== Number(r.retail)) histInserts.push({ product_id: pid, retail_price: r.retail, changed_at: at });
+          }
           updates.push(u);
         } else {
           inserts.push({
@@ -2476,6 +2770,15 @@
         if (error) throw error;
         done += Math.min(400, inserts.length - i);
         stockStatus(`Добавляем новые товары… ${done} из ${total}`);
+      }
+      // история розничной цены (не критично — если таблицы нет, тихо пропускаем)
+      if (histInserts.length) {
+        for (let i = 0; i < histInserts.length; i += 500) {
+          try {
+            await sb.from('catalog_retail_history')
+              .upsert(histInserts.slice(i, i + 500), { onConflict: 'product_id,changed_at' });
+          } catch (e) { break; } // старая база без таблицы истории
+        }
       }
       stockStatus('Обновляем каталог…');
       await refresh({ silent: true });
@@ -2670,6 +2973,8 @@
         renderGrid();
       }, 150);
     });
+    // запомнить запрос в «недавние» при подтверждении (Enter / потеря фокуса)
+    input.addEventListener('change', () => { if (input.value.trim()) addRecentQuery(input.value); });
     $('searchClear').addEventListener('click', () => {
       input.value = '';
       state.query = '';
@@ -2678,6 +2983,63 @@
       renderGrid();
       input.focus();
     });
+
+    // Сортировка
+    $('sortSel').addEventListener('change', (e) => {
+      state.sort = e.target.value;
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+
+    // Размер плиток (обычный / компактный)
+    $('viewBtn').addEventListener('click', () => {
+      state.view = state.view === 'compact' ? 'normal' : 'compact';
+      renderAll();
+    });
+
+    // Диапазон цены
+    $('priceBtn').addEventListener('click', () => {
+      const box = $('priceRange');
+      box.hidden = !box.hidden;
+      if (!box.hidden) {
+        $('priceMin').value = state.priceMin != null ? state.priceMin : '';
+        $('priceMax').value = state.priceMax != null ? state.priceMax : '';
+        $('priceMin').focus();
+      }
+    });
+    $('priceApply').addEventListener('click', () => {
+      const mn = parseFloat($('priceMin').value);
+      const mx = parseFloat($('priceMax').value);
+      state.priceMin = Number.isFinite(mn) ? mn : null;
+      state.priceMax = Number.isFinite(mx) ? mx : null;
+      state.renderLimit = PAGE_SIZE;
+      $('priceRange').hidden = true;
+      renderAll();
+    });
+    $('priceClear').addEventListener('click', () => {
+      state.priceMin = null; state.priceMax = null;
+      $('priceMin').value = ''; $('priceMax').value = '';
+      state.renderLimit = PAGE_SIZE;
+      $('priceRange').hidden = true;
+      renderAll();
+    });
+
+    // Быстрые фильтры
+    $('quickChips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      const k = chip.dataset.quick;
+      state.quick = state.quick.includes(k) ? state.quick.filter((x) => x !== k) : [...state.quick, k];
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
+
+    // Переключение темы
+    $('themeBtn').addEventListener('click', toggleTheme);
+
+    // Фото на весь экран
+    $('lightbox').addEventListener('click', closeLightbox);
+    $('lightboxClose').addEventListener('click', closeLightbox);
 
     // Группы-фильтры + чипы поставщика и «Ещё группы»
     $('groupChips').addEventListener('click', (e) => {
@@ -2772,6 +3134,12 @@
       if (!card) return;
       const p = state.products.find((x) => x.id === card.dataset.id);
       if (p) openProduct(p);
+    });
+
+    // Тап по фото в карточке — открыть на весь экран
+    $('sheetPhotos').addEventListener('click', (e) => {
+      const img = e.target.closest('img');
+      if (img && img.src) openLightbox(img.src);
     });
 
     // Точки под фото
@@ -3260,7 +3628,11 @@
   /* ── Старт ────────────────────────────────────── */
 
   async function init() {
+    initTheme();
+    loadFilters();
+    renderRecent();
     bindEvents();
+    showSkeleton();
 
     // офлайн-копия приложения + установка на главный экран телефона
     if ('serviceWorker' in navigator) {

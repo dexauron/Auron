@@ -23,16 +23,22 @@
           <div class="brand-sub">Каталог товаров</div>
         </div>
       </div>
-      <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
-        <span id="adminBtnLabel">Войти</span>
-      </button>
+      <div class="header-btns">
+        <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
+          <span id="themeIcon">🌗</span>
+        </button>
+        <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+          <span id="adminBtnLabel">Войти</span>
+        </button>
+      </div>
     </div>
     <div class="search-row">
       <div class="search-wrap">
         <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
         <input type="search" id="searchInput" class="search-input" placeholder="Название, код, штрихкод…"
-               autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+               autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search" list="recentQ">
+        <datalist id="recentQ"></datalist>
         <button class="search-clear" id="searchClear" hidden>✕</button>
       </div>
       <button class="scan-btn" id="scanSearchBtn" title="Сканировать штрихкод камерой">
@@ -41,6 +47,26 @@
     </div>
     <nav class="chips" id="groupChips"></nav>
     <nav class="chips chips-sub" id="subChips" hidden></nav>
+    <nav class="chips chips-quick" id="quickChips"></nav>
+    <div class="controls">
+      <select id="sortSel" class="ctl-select" title="Порядок">
+        <option value="relevance">↕ По совпадению</option>
+        <option value="name">А-Я по названию</option>
+        <option value="cheap">Сначала дешёвые</option>
+        <option value="expensive">Сначала дорогие</option>
+        <option value="new">Сначала новые</option>
+      </select>
+      <button class="ctl-btn" id="priceBtn" title="Диапазон цены">₽ Цена</button>
+      <button class="ctl-btn" id="viewBtn" title="Размер плиток">▦</button>
+      <span class="results-count" id="resultsCount"></span>
+    </div>
+    <div class="price-range" id="priceRange" hidden>
+      <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от, ₽" min="0">
+      <span class="price-dash">—</span>
+      <input type="number" id="priceMax" class="input price-inp" inputmode="decimal" placeholder="до, ₽" min="0">
+      <button class="btn btn-primary price-ok" id="priceApply">OK</button>
+      <button class="btn btn-ghost price-clear" id="priceClear">Сброс</button>
+    </div>
   </header>
 
   <!-- Плашки состояния -->
@@ -73,6 +99,8 @@
         <h2 class="sheet-title" id="sheetName"></h2>
         <div class="badge-row" id="sheetBadges"></div>
         <div class="fields" id="sheetFields"></div>
+        <div id="sheetMarkup"></div>
+        <div id="sheetRetailHist"></div>
         <div id="sheetSales"></div>
         <div id="sheetPrices"></div>
         <div id="sheetCompetitors"></div>
@@ -495,6 +523,12 @@
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
       </div>
     </div>
+  </div>
+
+  <!-- Просмотр фото на весь экран -->
+  <div class="lightbox" id="lightbox" hidden>
+    <img id="lightboxImg" src="" alt="">
+    <button class="lightbox-close" id="lightboxClose">✕</button>
   </div>
 
   <div class="toast" id="toast" hidden></div>

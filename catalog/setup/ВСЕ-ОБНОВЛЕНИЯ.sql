@@ -587,3 +587,31 @@ grant execute on function catalog_add_photo(uuid, text) to authenticated;
 alter table catalog_products add column if not exists stock_qty numeric;   -- остаток на складе
 alter table catalog_products add column if not exists stock_at  date;      -- на какую дату остаток
 
+
+
+-- ═══════════════ ОБНОВЛЕНИЕ-12 ═══════════════
+-- История розничной цены + индексы для быстрого поиска.
+
+create table if not exists catalog_retail_history (
+  id          uuid primary key default gen_random_uuid(),
+  product_id  uuid not null references catalog_products(id) on delete cascade,
+  retail_price numeric not null,
+  changed_at  date not null default current_date,
+  created_at  timestamptz not null default now(),
+  unique (product_id, changed_at)
+);
+create index if not exists idx_retail_hist_product on catalog_retail_history(product_id, changed_at desc);
+
+alter table catalog_retail_history enable row level security;
+drop policy if exists "retail_hist: читать вошедшим" on catalog_retail_history;
+create policy "retail_hist: читать вошедшим" on catalog_retail_history
+  for select to authenticated using (true);
+drop policy if exists "retail_hist: менять админу" on catalog_retail_history;
+create policy "retail_hist: менять админу" on catalog_retail_history
+  for all to authenticated using (catalog_is_admin()) with check (catalog_is_admin());
+
+create extension if not exists pg_trgm;
+create index if not exists idx_products_name_trgm on catalog_products using gin (lower(name) gin_trgm_ops);
+create index if not exists idx_products_barcodes on catalog_products using gin (barcodes);
+create index if not exists idx_products_retail on catalog_products(retail_price) where retail_price is not null;
+create index if not exists idx_products_article on catalog_products(article) where article is not null;
