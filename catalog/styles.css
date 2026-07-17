@@ -26,6 +26,26 @@
   }
 }
 
+/* Ручное переключение темы кнопкой — перекрывает системную */
+:root[data-theme="dark"] {
+  --bg: #0d0f12;
+  --surface: #191c21;
+  --surface-2: #23262d;
+  --text: #f2f3f5;
+  --text-2: #9aa1ab;
+  --border: rgba(255, 255, 255, .09);
+  --shadow: 0 4px 20px rgba(0, 0, 0, .4);
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eceef1;
+  --text: #17181c;
+  --text-2: #6b7280;
+  --border: rgba(0, 0, 0, .08);
+  --shadow: 0 4px 20px rgba(0, 0, 0, .08);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 [hidden] { display: none !important; }
@@ -129,6 +149,44 @@ body {
 /* отмеченный поставщик/группа в списке-шторке */
 .btn-secondary.picked { border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
+/* ── Быстрые фильтры (чипы «без фото», «без цены» …) ── */
+.chips-quick { padding-top: 0; }
+.chips-quick:empty { display: none; }
+.chip.chip-quick { font-size: 13.5px; padding: 7px 13px; }
+.chip.chip-quick.warn { border-color: rgba(255, 159, 10, .5); color: var(--warn); }
+.chip.chip-quick.warn.active { background: var(--warn); border-color: var(--warn); color: #fff; }
+
+/* ── Панель управления: сортировка, цена, размер плиток ── */
+.controls {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0 8px; overflow-x: auto; scrollbar-width: none;
+}
+.controls::-webkit-scrollbar { display: none; }
+.ctl-select, .ctl-btn {
+  flex: 0 0 auto;
+  padding: 8px 13px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.ctl-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.results-count { flex: 0 0 auto; margin-left: auto; padding-left: 8px; font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.price-range { display: flex; align-items: center; gap: 8px; padding: 0 0 10px; }
+.price-inp { flex: 1; min-width: 0; }
+.price-dash { color: var(--text-2); }
+.price-ok, .price-clear { flex: 0 0 auto; width: auto; padding: 10px 16px; }
+
+/* совпавшие слова в результатах поиска */
+mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
+:root[data-theme="dark"] mark, :root:not([data-theme="light"]) mark { background: rgba(48, 209, 88, .3); }
+
+/* ── Кнопки единого экрана импорта ── */
+.hub-btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 16px; }
+.hub-sub { font-size: 12px; font-weight: 400; color: var(--text-2); }
+
+/* ── Кнопки шапки ── */
+.header-btns { display: flex; align-items: center; gap: 8px; }
+.icon-btn-round { padding: 0; width: 40px; justify-content: center; border-radius: 50%; font-size: 18px; }
+
 /* ── Плашки ────────────────────────────────────── */
 .banner { margin: 10px 14px 0; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.4; }
 .banner-warn { background: rgba(255, 159, 10, .14); color: var(--warn); }
@@ -142,6 +200,39 @@ body {
   gap: 10px;
 }
 @media (min-width: 700px) { .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; } }
+/* компактный вид: больше плиток в ряд, без тегов */
+.grid.compact { grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 8px; }
+.grid.compact .card-tags { display: none; }
+.grid.compact .card-name { font-size: 13px; min-height: 2.4em; }
+.grid.compact .card-price { font-size: 15px; }
+.grid.compact .card-body { padding: 7px 8px 9px; gap: 4px; }
+
+/* ── Скелет загрузки (мерцающие плитки вместо пустоты) ── */
+.skeleton { pointer-events: none; }
+.skeleton .sk-photo { aspect-ratio: 1/1; background: var(--surface-2); border-radius: 0; }
+.skeleton .sk-line { height: 12px; margin: 8px 10px; border-radius: 6px; background: var(--surface-2); }
+.skeleton .sk-line.short { width: 55%; }
+.skeleton .sk-photo, .skeleton .sk-line {
+  background: linear-gradient(100deg, var(--surface-2) 30%, var(--surface) 50%, var(--surface-2) 70%);
+  background-size: 200% 100%; animation: shimmer 1.3s infinite linear;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* ── Фото на весь экран ── */
+.lightbox {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, .94);
+  display: grid; place-items: center;
+  animation: fade .15s ease;
+}
+.lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.lightbox-close {
+  position: absolute; top: calc(env(safe-area-inset-top, 0) + 12px); right: 16px;
+  width: 42px; height: 42px; border-radius: 50%; border: none;
+  background: rgba(255, 255, 255, .18); color: #fff; font-size: 20px; cursor: pointer;
+}
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.card-photo, .photo-strip img { cursor: zoom-in; }
 
 .card {
   background: var(--surface);
@@ -416,6 +507,26 @@ select.input { appearance: none; }
 @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 8px); } }
 
 /* ── Цены поставщиков (видны после входа) ──────── */
+/* ── Наценка в карточке ── */
+.markup-box {
+  display: grid; grid-template-columns: auto 1fr; gap: 2px 10px;
+  align-items: baseline; margin: 2px 0 12px; padding: 10px 14px;
+  border-radius: 12px; border: 1px solid var(--border);
+}
+.markup-ok { background: rgba(48, 209, 88, .1); }
+.markup-loss { background: rgba(255, 69, 58, .1); }
+.markup-label { font-size: 13px; color: var(--text-2); font-weight: 600; }
+.markup-val { font-size: 18px; font-weight: 700; text-align: right; }
+.markup-ok .markup-val { color: var(--accent); }
+.markup-loss .markup-val { color: var(--danger); }
+.markup-pct { font-size: 14px; font-weight: 600; }
+.markup-sub { grid-column: 1 / -1; font-size: 12px; color: var(--text-2); }
+
+/* ── История розничной цены ── */
+.retail-hist { margin: 0 0 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px; }
+.retail-hist summary { font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; padding: 8px 0; }
+.retail-hist .price-hist-row { border-top: 1px solid var(--border); }
+
 .price-block { margin: 4px 0 14px; }
 .price-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
 .price-row-wrap { margin-bottom: 8px; }
