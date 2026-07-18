@@ -431,15 +431,18 @@
 
   const hasRetail = (p) => p.retail_price != null && p.retail_price !== '';
 
-  // дата поступления (завоза): её ставят импорты (остатки/цены/прайс). Если её
-  // нет (старые данные) — берём дату добавления в каталог, чтобы товар не пропал.
-  const arrivalDate = (p) => String(p.arrival_at || p.created_at || '').slice(0, 10);
+  // дата поступления берётся СТРОГО из файла «Цены поставщиков» (колонка «Период» —
+  // дата последнего обновления цены). Нет даты — товар не попадает в фильтр по
+  // поступлению (не подменяем датой добавления, иначе результат врёт).
+  const arrivalDate = (p) => String(p.arrival_at || '').slice(0, 10);
   // есть ли в базе колонка (по загруженным товарам). Если новой колонки ещё нет —
   // не пишем её, чтобы импорт/сохранение не падали; после SQL заполнится.
   const hasProductCol = (c) => (state.products.length ? (c in state.products[0]) : true);
   const arrivalColExists = () => hasProductCol('arrival_at');
-  const todayISO = () => new Date().toISOString().slice(0, 10);
-  const daysAgoISO = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  // местная календарная дата (не UTC) — чтобы «сегодня» совпадало с датами из файла
+  const localISO = (d) => { const x = new Date(d); return new Date(x.getTime() - x.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+  const todayISO = () => localISO(new Date());
+  const daysAgoISO = (n) => localISO(new Date(Date.now() - n * 86400000));
   // есть ли у товара хотя бы одно НЕПУСТОЕ фото (пустые строки не считаются)
   const hasPhoto = (p) => (p.photos || []).some((u) => u && String(u).trim());
 
@@ -456,8 +459,8 @@
   function sortList(list, scored) {
     const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
     const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
-    // «новые» = позже поступившие (дата завоза; если нет — дата добавления)
-    const when = (p) => arrivalDate(p);
+    // «новые» = позже поступившие (дата из файла цен; если её нет — дата добавления)
+    const when = (p) => p.arrival_at || p.created_at || '';
     switch (state.sort) {
       case 'name': return list.slice().sort(byName);
       case 'cheap': return list.slice().sort((a, b) => {
@@ -2418,20 +2421,19 @@
       byId.set(p.id, p);
     }
     const at = new Date().toISOString().slice(0, 10);
-    const arrival = fileDate || at; // дата поступления = дата из шапки прайс-листа
-    const AC = arrivalColExists();
+    // прайс-лист НЕ трогает дату поступления: она только из файла «Цены поставщиков»
     const updates = []; const inserts = []; const hist = []; const seen = new Set();
     for (const r of recs) {
       const pid = (r.article && byArticle.get(norm(r.article))) || byName.get(norm(r.name));
       if (pid) {
         if (seen.has(pid)) continue; // один товар — одна цена за загрузку
         seen.add(pid);
-        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString(), ...(AC ? { arrival_at: arrival } : {}) });
+        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString() });
         const cur = byId.get(pid);
         const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
         if (old == null || old !== Number(r.retail)) hist.push({ product_id: pid, retail_price: r.retail, changed_at: at });
       } else {
-        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail, ...(AC ? { arrival_at: arrival } : {}) });
+        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail });
       }
     }
     let done = 0; const total = updates.length + inserts.length;
@@ -3403,7 +3405,6 @@
         if (p.name) byName.set(norm(p.name), p.id);
       }
       const at = stockAt || new Date().toISOString().slice(0, 10);
-      const AC = arrivalColExists();
       const byId = new Map(state.products.map((p) => [p.id, p]));
       const updates = []; const inserts = []; const histInserts = [];
       for (const r of recs) {
@@ -3413,7 +3414,7 @@
         if (pid) {
           // name обязательно (NOT NULL): если id вдруг устарел и строка вставится,
           // а не обновится — не упадём на пустом имени
-          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString(), ...(AC ? { arrival_at: at } : {}) };
+          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
           if (r.retail != null) {
             u.retail_price = r.retail; // не затираем, если цены нет
             // записываем в историю розничной цены, если цена изменилась
@@ -3430,7 +3431,6 @@
             unit: r.unit || null,
             is_weighted: r.unit === 'кг',
             stock_qty: r.stock, stock_at: at,
-            ...(AC ? { arrival_at: at } : {}),
             ...(r.retail != null ? { retail_price: r.retail } : {}),
           });
         }
