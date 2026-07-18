@@ -594,13 +594,17 @@
             <button data-type="piece">Штучные</button>
           </div>
 
-          <div class="filter-label">Новинки <span class="filter-hint">— когда добавлен в каталог</span></div>
-          <div class="seg" id="arrivalSeg">
-            <button data-arrival="">Все</button>
-            <button data-arrival="today">Сегодня</button>
-            <button data-arrival="yesterday">Вчера</button>
-            <button data-arrival="7d">7 дней</button>
-            <button data-arrival="30d">30 дней</button>
+          <div class="filter-label">Поступление <span class="filter-hint">— по дате завоза, любой диапазон</span></div>
+          <div class="chips chips-wrap" id="arrivalPresets">
+            <button class="chip" data-days="0">Сегодня</button>
+            <button class="chip" data-days="7">7 дней</button>
+            <button class="chip" data-days="30">30 дней</button>
+            <button class="chip" data-days="90">3 месяца</button>
+          </div>
+          <div class="price-range" style="margin-top:8px">
+            <input type="date" id="arrivalFrom" class="input price-inp" aria-label="Поступление с">
+            <span class="price-dash">—</span>
+            <input type="date" id="arrivalTo" class="input price-inp" aria-label="Поступление по">
           </div>
         </div>
 

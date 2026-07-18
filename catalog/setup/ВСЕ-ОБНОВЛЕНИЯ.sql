@@ -671,3 +671,9 @@ drop policy if exists "фото: покупатель предлагает" on s
 create policy "фото: покупатель предлагает" on storage.objects
   for insert to anon
   with check (bucket_id = 'product-photos' and (storage.foldername(name))[1] = 'suggestions');
+
+
+-- ═══════════════ ОБНОВЛЕНИЕ-14 ═══════════════
+-- Дата поступления (завоза) товара — для фильтра по произвольному диапазону дат.
+alter table catalog_products add column if not exists arrival_at date;
+create index if not exists idx_products_arrival on catalog_products(arrival_at) where arrival_at is not null;

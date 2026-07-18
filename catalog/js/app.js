@@ -72,7 +72,8 @@
     priceMin: null,      // диапазон розничной цены (₽)
     priceMax: null,
     selType: '',         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
-    arrival: '',         // '' | 'today' | 'yesterday' — поступление сегодня/вчера (сотрудникам)
+    arrivalFrom: '',     // диапазон дат поступления (завоза), ISO YYYY-MM-DD; пусто = без границы
+    arrivalTo: '',
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
   };
 
@@ -429,12 +430,11 @@
 
   const hasRetail = (p) => p.retail_price != null && p.retail_price !== '';
 
-  // «новый товар» = когда он ВПЕРВЫЕ появился в каталоге (created_at).
-  // updated_at не годится: при импорте он становится «сегодня» у всех товаров,
-  // и тогда «новые/сегодня» показывали бы весь каталог — это и был баг.
-  const addedDate = (p) => String(p.created_at || '').slice(0, 10);
+  // дата поступления (завоза): её ставят импорты (остатки/цены/прайс). Если её
+  // нет (старые данные) — берём дату добавления в каталог, чтобы товар не пропал.
+  const arrivalDate = (p) => String(p.arrival_at || p.created_at || '').slice(0, 10);
   const todayISO = () => new Date().toISOString().slice(0, 10);
-  const yesterdayISO = () => new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const daysAgoISO = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
   // есть ли у товара хотя бы одно НЕПУСТОЕ фото (пустые строки не считаются)
   const hasPhoto = (p) => (p.photos || []).some((u) => u && String(u).trim());
 
@@ -451,8 +451,8 @@
   function sortList(list, scored) {
     const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
     const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
-    // «новые» = позже добавленные в каталог (created_at), а не изменённые импортом
-    const when = (p) => p.created_at || '';
+    // «новые» = позже поступившие (дата завоза; если нет — дата добавления)
+    const when = (p) => arrivalDate(p);
     switch (state.sort) {
       case 'name': return list.slice().sort(byName);
       case 'cheap': return list.slice().sort((a, b) => {
@@ -497,14 +497,9 @@
     // тип товара: весовой / штучный (сотрудникам)
     if (state.selType === 'weighted') list = list.filter((p) => p.is_weighted);
     else if (state.selType === 'piece') list = list.filter((p) => !p.is_weighted);
-    // новинки: добавлены сегодня / вчера / за N дней (по дате появления в каталоге)
-    if (state.arrival === 'today') { const t = todayISO(); list = list.filter((p) => addedDate(p) === t); }
-    else if (state.arrival === 'yesterday') { const y = yesterdayISO(); list = list.filter((p) => addedDate(p) === y); }
-    else if (state.arrival === '7d' || state.arrival === '30d') {
-      const days = state.arrival === '7d' ? 7 : 30;
-      const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
-      list = list.filter((p) => { const d = addedDate(p); return d && d >= since; });
-    }
+    // поступление: произвольный диапазон дат «с … по …» (по дате завоза)
+    if (state.arrivalFrom) list = list.filter((p) => { const d = arrivalDate(p); return d && d >= state.arrivalFrom; });
+    if (state.arrivalTo) list = list.filter((p) => { const d = arrivalDate(p); return d && d <= state.arrivalTo; });
     // диапазон цены
     if (state.priceMin != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) >= state.priceMin);
     if (state.priceMax != null) list = list.filter((p) => hasRetail(p) && Number(p.retail_price) <= state.priceMax);
@@ -719,7 +714,7 @@
   function countActiveFilters() {
     return state.quick.length + state.selCats.length + state.selGroups.length
       + state.selSuppliers.length + ((state.priceMin != null || state.priceMax != null) ? 1 : 0)
-      + (state.selType ? 1 : 0) + (state.arrival ? 1 : 0);
+      + (state.selType ? 1 : 0) + ((state.arrivalFrom || state.arrivalTo) ? 1 : 0);
   }
 
   function updateResultsCount(n) {
@@ -732,7 +727,14 @@
     document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
     document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
     document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
-    document.querySelectorAll('#arrivalSeg button').forEach((b) => b.classList.toggle('active', b.dataset.arrival === state.arrival));
+    // даты поступления в поля + подсветка активного пресета
+    const af = $('arrivalFrom'); const at = $('arrivalTo');
+    if (af && document.activeElement !== af) af.value = state.arrivalFrom || '';
+    if (at && document.activeElement !== at) at.value = state.arrivalTo || '';
+    document.querySelectorAll('#arrivalPresets [data-days]').forEach((b) => {
+      const from = daysAgoISO(Number(b.dataset.days));
+      b.classList.toggle('active', state.arrivalTo === todayISO() && state.arrivalFrom === from);
+    });
     const pmin = $('priceMin'); const pmax = $('priceMax');
     if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? state.priceMin : '';
     if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? state.priceMax : '';
@@ -763,7 +765,6 @@
   }
 
   const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };
-  const ARRIVAL_LABEL = { today: 'Новые сегодня', yesterday: 'Новые вчера', '7d': 'Новые за 7 дней', '30d': 'Новые за 30 дней' };
 
   // Плашки активных фильтров на главном экране: видно, что включено, и каждый
   // можно снять по ✕ — не открывая окно фильтров. Универсально и удобно.
@@ -779,7 +780,11 @@
     }
     for (const sid of state.selSuppliers) items.push(['sup', sid, '🚚 ' + (supplierById(sid)?.name || 'Поставщик')]);
     if (state.selType) items.push(['type', '', state.selType === 'weighted' ? '⚖ Весовые' : 'Штучные']);
-    if (state.arrival) items.push(['arrival', '', ARRIVAL_LABEL[state.arrival] || 'Поступление']);
+    if (state.arrivalFrom || state.arrivalTo) {
+      const f = state.arrivalFrom ? fmtDate(state.arrivalFrom) : '…';
+      const t = state.arrivalTo ? fmtDate(state.arrivalTo) : '…';
+      items.push(['arrival', '', `📦 ${f}–${t}`]);
+    }
     if (state.priceMin != null || state.priceMax != null) {
       const lbl = state.priceMin != null && state.priceMax != null ? `${state.priceMin}–${state.priceMax} ₽`
         : state.priceMin != null ? `от ${state.priceMin} ₽` : `до ${state.priceMax} ₽`;
@@ -806,7 +811,7 @@
       case 'group': state.selGroups = state.selGroups.filter((x) => x !== val); break;
       case 'sup': state.selSuppliers = state.selSuppliers.filter((x) => x !== val); break;
       case 'type': state.selType = ''; break;
-      case 'arrival': state.arrival = ''; break;
+      case 'arrival': state.arrivalFrom = ''; state.arrivalTo = ''; { const af = $('arrivalFrom'); const at = $('arrivalTo'); if (af) af.value = ''; if (at) at.value = ''; } break;
       case 'price': state.priceMin = null; state.priceMax = null; { const a = $('priceMin'); const b = $('priceMax'); if (a) a.value = ''; if (b) b.value = ''; } break;
       case 'quick': state.quick = state.quick.filter((x) => x !== val); break;
       case 'all': clearAllFilters(); return;
@@ -822,14 +827,15 @@
     return !!(state.query || state.quick.length || state.selCats.length
       || state.selGroups.length || state.selSuppliers.length
       || state.priceMin != null || state.priceMax != null
-      || state.selType || state.arrival);
+      || state.selType || state.arrivalFrom || state.arrivalTo);
   }
 
   // полный сброс всех фильтров и поиска (сортировку и вид не трогаем — это привычка)
   function clearAllFilters() {
     state.selCats = []; state.selGroups = []; state.selSuppliers = [];
     state.quick = []; state.priceMin = null; state.priceMax = null;
-    state.selType = ''; state.arrival = '';
+    state.selType = ''; state.arrivalFrom = ''; state.arrivalTo = '';
+    const af = $('arrivalFrom'); const at = $('arrivalTo'); if (af) af.value = ''; if (at) at.value = '';
     state.query = '';
     state.renderLimit = PAGE_SIZE;
     const inp = $('searchInput'); if (inp) inp.value = '';
@@ -850,7 +856,7 @@
         selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
         quick: state.quick, sort: state.sort, view: state.view,
         priceMin: state.priceMin, priceMax: state.priceMax,
-        selType: state.selType, arrival: state.arrival,
+        selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
       }));
     } catch (e) { /* нет места — не критично */ }
   }
@@ -867,7 +873,9 @@
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
       if (f.selType === 'weighted' || f.selType === 'piece') state.selType = f.selType;
-      if (['today', 'yesterday', '7d', '30d'].includes(f.arrival)) state.arrival = f.arrival;
+      const isDate = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+      if (isDate(f.arrivalFrom)) state.arrivalFrom = f.arrivalFrom;
+      if (isDate(f.arrivalTo)) state.arrivalTo = f.arrivalTo;
     } catch (e) { /* игнорируем битые данные */ }
   }
 
@@ -2234,12 +2242,29 @@
   // цен» (розничная цена). Товары сгруппированы строками-заголовками (у них нет
   // цены). Артикул часто внутри названия («Арт.st-917»). Кода нет — товар ищем
   // по артикулу и названию.
+  // дата из шапки прайс-листа: «17.07.2026» или «17 июля 2026 г.»
+  function parseHeaderDate(rows) {
+    const RU_MON = ['январ', 'феврал', 'март', 'апрел', 'мая', 'июн', 'июл', 'август', 'сентябр', 'октябр', 'ноябр', 'декабр'];
+    for (let r = 0; r < Math.min(rows.length, 8); r++) {
+      const line = (rows[r] || []).map((v) => cellStr(v)).join(' ');
+      const iso = parseDateCell(line);
+      if (iso) return iso;
+      const m = line.toLowerCase().match(/(\d{1,2})\s+([а-яё]+)\s+(\d{4})/);
+      if (m) {
+        const mi = RU_MON.findIndex((w) => m[2].startsWith(w));
+        if (mi >= 0) return `${m[3]}-${String(mi + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      }
+    }
+    return null;
+  }
+
   function parseRetailList(rows) {
     const det = detectColumns(rows);
     if (!det || det.cols.name === undefined || det.cols.retail === undefined) {
       throw new Error('Не нашёл колонки «Номенклатура» и «Розничный тип цен» в прайс-листе');
     }
     const { cols, dataStart } = det;
+    const fileDate = parseHeaderDate(rows);
     const recs = []; let group = null;
     for (let r = dataStart; r < rows.length; r++) {
       const name = cellStr(rows[r][cols.name]);
@@ -2250,7 +2275,7 @@
       const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
       recs.push({ name, article: art, group, retail });
     }
-    return { recs };
+    return { recs, fileDate };
   }
 
   // Каталог сам определяет, что за файл 1С загрузили, по его шапке.
@@ -2293,7 +2318,7 @@
   // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
   // обновляет розничную цену (+ история), новый — создаёт с группой.
   async function coreUploadRetail(parsed, status) {
-    const { recs } = parsed;
+    const { recs, fileDate } = parsed;
     status('Создаём группы…');
     const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
     const byName = new Map(); const byArticle = new Map(); const byId = new Map();
@@ -2303,18 +2328,19 @@
       byId.set(p.id, p);
     }
     const at = new Date().toISOString().slice(0, 10);
+    const arrival = fileDate || at; // дата поступления = дата из шапки прайс-листа
     const updates = []; const inserts = []; const hist = []; const seen = new Set();
     for (const r of recs) {
       const pid = (r.article && byArticle.get(norm(r.article))) || byName.get(norm(r.name));
       if (pid) {
         if (seen.has(pid)) continue; // один товар — одна цена за загрузку
         seen.add(pid);
-        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString() });
+        updates.push({ id: pid, name: r.name, retail_price: r.retail, arrival_at: arrival, updated_at: new Date().toISOString() });
         const cur = byId.get(pid);
         const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
         if (old == null || old !== Number(r.retail)) hist.push({ product_id: pid, retail_price: r.retail, changed_at: at });
       } else {
-        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail });
+        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail, arrival_at: arrival });
       }
     }
     let done = 0; const total = updates.length + inserts.length;
@@ -2497,11 +2523,15 @@
         return exByName.get(norm(i.name)) || null;
       };
 
+      const today = new Date().toISOString().slice(0, 10);
       const withCode = [];
       const noCodeUpdate = []; // товары без кода, найденные в базе → обновляем по id
       const noCodeInsert = [];
       const noCodeInsertItems = [];
       for (const i of items) {
+        // дата поступления = самая свежая дата из цен поставщиков (иначе — день импорта)
+        let arrival = null;
+        for (const [, pr] of i.prices) if (pr.date && (!arrival || pr.date > arrival)) arrival = pr.date;
         const base = {
           name: i.name,
           article: i.article,
@@ -2510,6 +2540,7 @@
           barcodes: [...i.barcodes],
           is_weighted: i.weighted,
           unit: i.unit,
+          arrival_at: arrival || today,
           updated_at: new Date().toISOString(),
           // розничную цену пишем только если она есть в файле — иначе не затираем прежнюю
           ...(i.retail != null ? { retail_price: i.retail } : {}),
@@ -2551,7 +2582,6 @@
       }
 
       // цены поставщиков: дата = последнее поступление из файла (нет колонки даты — день импорта)
-      const today = new Date().toISOString().slice(0, 10);
       const priceRows = [];
       for (const i of items) {
         const pid = i.code ? idByCode.get(i.code) : i._id;
@@ -3290,7 +3320,7 @@
         if (pid) {
           // name обязательно (NOT NULL): если id вдруг устарел и строка вставится,
           // а не обновится — не упадём на пустом имени
-          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
+          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, arrival_at: at, updated_at: new Date().toISOString() };
           if (r.retail != null) {
             u.retail_price = r.retail; // не затираем, если цены нет
             // записываем в историю розничной цены, если цена изменилась
@@ -3306,7 +3336,7 @@
             barcodes: r.barcode ? [r.barcode] : [],
             unit: r.unit || null,
             is_weighted: r.unit === 'кг',
-            stock_qty: r.stock, stock_at: at,
+            stock_qty: r.stock, stock_at: at, arrival_at: at,
             ...(r.retail != null ? { retail_price: r.retail } : {}),
           });
         }
@@ -3645,13 +3675,26 @@
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
-    // Поступление: сегодня / вчера (сотрудникам)
-    $('arrivalSeg').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      state.arrival = b.dataset.arrival;
+    // Поступление: пресеты (за N дней) — заполняют диапазон дат
+    $('arrivalPresets').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-days]'); if (!b) return;
+      const from = daysAgoISO(Number(b.dataset.days));
+      const to = todayISO();
+      // повторный тап по активному пресету — снять
+      if (state.arrivalFrom === from && state.arrivalTo === to) { state.arrivalFrom = ''; state.arrivalTo = ''; }
+      else { state.arrivalFrom = from; state.arrivalTo = to; }
       state.renderLimit = PAGE_SIZE;
       renderAll();
     });
+    // Поступление: произвольные даты «с … по …»
+    const onArrivalDate = () => {
+      state.arrivalFrom = $('arrivalFrom').value || '';
+      state.arrivalTo = $('arrivalTo').value || '';
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    };
+    $('arrivalFrom').addEventListener('change', onArrivalDate);
+    $('arrivalTo').addEventListener('change', onArrivalDate);
     // Группы — открыть полный список для выбора (можно несколько)
     $('filterGroupsBtn').addEventListener('click', () => {
       $('groupsPickSearch').value = '';
