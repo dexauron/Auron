@@ -865,10 +865,10 @@
     for (const p of state.products) { const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1; }
     const cats = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]).sort((a, b) => counts[b.name] - counts[a.name]);
     if (!cats.length) { box.innerHTML = '<p class="muted" style="text-align:center;padding:30px">Категорий пока нет — загрузите товары</p>'; return; }
-    box.innerHTML = cats.map((c, i) => `<button class="cat-tile cat-tile-${i % 6}" data-cat-tile="${esc(c.name)}">
+    box.innerHTML = cats.map((c) => `<button class="cat-tile" data-cat-tile="${esc(c.name)}">
       <span class="cat-tile-icon">${c.icon}</span>
       <span class="cat-tile-name">${esc(c.name)}</span>
-      <span class="cat-tile-count">${counts[c.name]} товаров</span>
+      <span class="cat-tile-count">${counts[c.name]}</span>
     </button>`).join('');
   }
 
