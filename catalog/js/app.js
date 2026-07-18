@@ -3680,6 +3680,8 @@
     $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
     $('filterReset').addEventListener('click', clearAllFilters);
     $('filterResetTop').addEventListener('click', clearAllFilters);
+    // Круглая иконка «вид» в шапке — переключает размер плиток
+    $('viewToggleBtn').addEventListener('click', () => { state.view = state.view === 'compact' ? 'normal' : 'compact'; renderAll(); });
     // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
     $('filterCats').addEventListener('change', (e) => {
       const cb = e.target.closest('[data-fcat]');
