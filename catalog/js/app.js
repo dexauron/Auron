@@ -75,6 +75,7 @@
     arrivalFrom: '',     // диапазон дат поступления (завоза), ISO YYYY-MM-DD; пусто = без границы
     arrivalTo: '',
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
+    tab: 'catalog',      // 'catalog' (сетка товаров) | 'cats' (плитки категорий)
   };
 
   let sb = null;
@@ -840,7 +841,41 @@
     renderAll();
   }
 
-  function renderAll() { renderChips(); renderQuick(); renderActiveFilters(); syncControls(); renderGrid(); saveFilters(); }
+  // Вкладки «Каталог / Категории»: каталог — сетка товаров; категории — крупные
+  // плитки разделов (наши иконки + название + число), тап открывает раздел.
+  function switchTab(t) {
+    state.tab = t;
+    document.querySelectorAll('#mainTabs .main-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
+    const cats = t === 'cats';
+    $('catGrid').hidden = !cats;
+    $('productGrid').hidden = cats;
+    $('hero').hidden = cats;
+    $('groupChips').hidden = cats;
+    $('subChips').hidden = cats || !$('subChips').innerHTML;
+    $('activeFilters').hidden = cats || !anyFilterActive();
+    $('emptyState').hidden = true;
+    document.querySelectorAll('.load-more').forEach((b) => b.remove());
+    if (cats) renderCatGrid(); else renderGrid();
+  }
+
+  function renderCatGrid() {
+    const box = $('catGrid');
+    if (!box) return;
+    const counts = {};
+    for (const p of state.products) { const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1; }
+    const cats = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]).sort((a, b) => counts[b.name] - counts[a.name]);
+    if (!cats.length) { box.innerHTML = '<p class="muted" style="text-align:center;padding:30px">Категорий пока нет — загрузите товары</p>'; return; }
+    box.innerHTML = cats.map((c, i) => `<button class="cat-tile cat-tile-${i % 6}" data-cat-tile="${esc(c.name)}">
+      <span class="cat-tile-icon">${c.icon}</span>
+      <span class="cat-tile-name">${esc(c.name)}</span>
+      <span class="cat-tile-count">${counts[c.name]} товаров</span>
+    </button>`).join('');
+  }
+
+  function renderAll() {
+    renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
+    if (state.tab === 'cats') renderCatGrid(); else renderGrid();
+  }
 
   // есть ли хоть один активный фильтр/поиск
   function anyFilterActive() {
@@ -3659,6 +3694,7 @@
         state.query = input.value;
         state.renderLimit = PAGE_SIZE;
         $('searchClear').hidden = !input.value;
+        if (state.tab === 'cats' && input.value) { switchTab('catalog'); return; }
         renderActiveFilters();
         renderGrid();
       }, 150);
@@ -3682,6 +3718,18 @@
     $('filterResetTop').addEventListener('click', clearAllFilters);
     // Круглая иконка «вид» в шапке — переключает размер плиток
     $('viewToggleBtn').addEventListener('click', () => { state.view = state.view === 'compact' ? 'normal' : 'compact'; renderAll(); });
+
+    // Вкладки «Каталог / Категории»
+    $('mainTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
+    // Плитка категории → открыть её товары в «Каталоге»
+    $('catGrid').addEventListener('click', (e) => {
+      const t = e.target.closest('[data-cat-tile]');
+      if (!t) return;
+      state.selCats = [t.dataset.catTile]; state.selGroups = [];
+      state.renderLimit = PAGE_SIZE;
+      switchTab('catalog');
+      renderAll();
+    });
     // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
     $('filterCats').addEventListener('change', (e) => {
       const cb = e.target.closest('[data-fcat]');
