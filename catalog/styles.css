@@ -173,33 +173,29 @@ body {
 .main-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
 :root[data-theme="dark"] .main-tab.active, :root:not([data-theme="light"]) .main-tab.active { background: #3a3d44; }
 
-/* ── Баннер-обложка магазина ── */
+/* ── Баннер-обложка магазина: спокойный, в стиле iOS ── */
 .hero {
-  margin-bottom: 14px; padding: 18px 18px; border-radius: var(--radius);
-  background: linear-gradient(120deg, var(--accent), #1fb350);
-  color: #fff; box-shadow: 0 6px 22px rgba(48, 209, 88, .28);
+  margin-bottom: 16px; padding: 16px 18px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--border);
 }
-.hero-name { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
-.hero-sub { font-size: 13.5px; opacity: .92; margin-top: 3px; }
+.hero-name { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
+.hero-sub { font-size: 13.5px; color: var(--text-2); margin-top: 2px; }
 
-/* ── Плитки категорий (вкладка «Категории») ── */
+/* ── Плитки категорий: чистые светлые карточки (iOS), иконка в мягком кружке ── */
 .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cat-tile {
-  position: relative; border: none; cursor: pointer; text-align: left;
-  min-height: 128px; padding: 16px; border-radius: var(--radius);
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 2px;
-  color: #fff; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface); cursor: pointer; text-align: left;
+  padding: 16px; border-radius: 18px;
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+  color: var(--text); transition: transform .08s ease;
 }
 .cat-tile:active { transform: scale(.97); }
-.cat-tile-icon { position: absolute; top: 10px; right: 12px; font-size: 40px; opacity: .9; }
-.cat-tile-name { font-size: 18px; font-weight: 800; line-height: 1.15; }
-.cat-tile-count { font-size: 12.5px; opacity: .9; }
-.cat-tile-0 { background: linear-gradient(140deg, #ff7a59, #ff5277); }
-.cat-tile-1 { background: linear-gradient(140deg, #4a6cf7, #7c4dff); }
-.cat-tile-2 { background: linear-gradient(140deg, #2bc9b4, #17a2b8); }
-.cat-tile-3 { background: linear-gradient(140deg, #ffa63d, #ff7a00); }
-.cat-tile-4 { background: linear-gradient(140deg, #46c26a, #2a9d5c); }
-.cat-tile-5 { background: linear-gradient(140deg, #8e7bff, #b06cff); }
+.cat-tile-icon {
+  width: 48px; height: 48px; border-radius: 14px;
+  background: var(--surface-2); display: grid; place-items: center; font-size: 26px;
+}
+.cat-tile-name { font-size: 15.5px; font-weight: 700; line-height: 1.2; }
+.cat-tile-count { font-size: 13px; color: var(--text-2); margin-top: -4px; }
 
 /* ── Плашки активных фильтров на главном (снять по ✕) ── */
 .active-filters { padding-top: 2px; padding-bottom: 8px; }
