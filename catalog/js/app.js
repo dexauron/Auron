@@ -77,6 +77,8 @@
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
     tab: 'catalog',      // 'catalog' (сетка товаров) | 'cats' (плитки категорий)
     favOnly: false,      // показывать только избранные товары (сердечко)
+    popularity: {},      // id товара → сколько раз открывали (для «Популярное»)
+    popularTerms: [],    // частые запросы (обезличенно) — подсказки поиска
   };
 
   let sb = null;
@@ -479,6 +481,7 @@
         return y - x || byName(a, b);
       });
       case 'new': return list.slice().sort((a, b) => String(when(b)).localeCompare(String(when(a))) || byName(a, b));
+      case 'popular': return list.slice().sort((a, b) => (popViews(b.id) - popViews(a.id)) || byName(a, b));
       default: // relevance: при поиске порядок уже по совпадению; без поиска — по названию
         return scored ? list : list.slice().sort(byName);
     }
@@ -890,7 +893,7 @@
 
   function renderAll() {
     renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
-    renderRecentProducts();
+    renderPopularProducts(); renderRecentProducts();
     if (state.tab === 'cats') renderCatGrid(); else renderGrid();
   }
 
@@ -940,7 +943,7 @@
       state.selGroups = Array.isArray(f.selGroups) ? f.selGroups : [];
       state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
       state.quick = Array.isArray(f.quick) ? f.quick : [];
-      if (['relevance', 'name', 'cheap', 'expensive', 'new'].includes(f.sort)) state.sort = f.sort;
+      if (['relevance', 'name', 'cheap', 'expensive', 'new', 'popular'].includes(f.sort)) state.sort = f.sort;
       if (f.view === 'compact' || f.view === 'normal') state.view = f.view;
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
@@ -959,11 +962,18 @@
     list.unshift(q);
     list = list.slice(0, 8);
     try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
+    trackSearch(q); // анонимный учёт запроса — для подсказок частых запросов
     renderRecent();
   }
   function renderRecent() {
     const dl = $('recentQ');
-    if (dl) dl.innerHTML = recentQueries().map((q) => `<option value="${esc(q)}"></option>`).join('');
+    if (!dl) return;
+    // сначала личные недавние запросы, затем частые запросы других (без повторов)
+    const personal = recentQueries();
+    const seen = new Set(personal.map((x) => x.toLowerCase()));
+    const popular = (state.popularTerms || []).filter((t) => !seen.has(String(t).toLowerCase()));
+    dl.innerHTML = [...personal, ...popular].slice(0, 14)
+      .map((q) => `<option value="${esc(q)}"></option>`).join('');
   }
 
   /* ── Избранное (♥) и «Недавно смотрели» — у покупателя на телефоне ──
@@ -986,6 +996,93 @@
     const list = recentProducts().filter((x) => x !== id);
     list.unshift(id);
     try { localStorage.setItem(RECENT_PROD_KEY, JSON.stringify(list.slice(0, 24))); } catch (e) { /* нет места */ }
+  }
+
+  /* ── Популярность: анонимный учёт (без личности) ──
+   * Считаем на сервере, сколько раз открывали товар и что искали. Из этого —
+   * раздел «Популярное» и подсказки частых запросов. Личность не сохраняется. */
+
+  // стабильный анонимный номер устройства — «якорь» памяти (избранное/просмотры
+  // и так живут в localStorage; номер даёт единый идентификатор на будущее)
+  function deviceId() {
+    let id = null;
+    try { id = localStorage.getItem('wm_device_id'); } catch (e) { /* */ }
+    if (!id) {
+      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+        : String(Date.now()) + Math.random().toString(16).slice(2);
+      try { localStorage.setItem('wm_device_id', id); } catch (e) { /* */ }
+    }
+    return id;
+  }
+
+  const popViews = (id) => state.popularity[id] || 0;
+
+  // защита от накрутки: один просмотр/запрос за товар (запрос) в день с устройства
+  const TRACK_KEY = 'wm_tracked_v1';
+  function trackedToday() {
+    try {
+      const o = JSON.parse(localStorage.getItem(TRACK_KEY));
+      if (o && o.d === todayISO()) return o;
+    } catch (e) { /* */ }
+    return { d: todayISO(), v: {}, s: {} };
+  }
+  function saveTracked(o) { try { localStorage.setItem(TRACK_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
+
+  function trackView(p) {
+    if (!sb || !p) return;
+    const o = trackedToday();
+    if (o.v[p.id]) return;      // сегодня уже считали — не накручиваем
+    o.v[p.id] = 1; saveTracked(o);
+    state.popularity[p.id] = popViews(p.id) + 1; // оптимистично — «Популярное» живое сразу
+    sb.rpc('catalog_track_view', { p_product_id: p.id }).then(() => {}, () => {});
+  }
+  function trackSearch(q) {
+    if (!sb) return;
+    q = String(q || '').trim().toLowerCase();
+    if (q.length < 2) return;
+    const o = trackedToday();
+    if (o.s[q]) return;
+    o.s[q] = 1; saveTracked(o);
+    sb.rpc('catalog_track_search', { p_term: q }).then(() => {}, () => {});
+  }
+
+  // загрузка счётчиков популярности (не критично: если ОБНОВЛЕНИЕ-16 не выполнено —
+  // просто нет «Популярного», приложение работает как обычно)
+  async function loadPopularity() {
+    if (!sb) return;
+    try {
+      const [pop, terms] = await Promise.all([
+        sb.from('catalog_popularity').select('product_id,views').order('views', { ascending: false }).range(0, 199),
+        sb.from('catalog_search_terms').select('term,hits').order('hits', { ascending: false }).range(0, 19),
+      ]);
+      if (!pop.error && Array.isArray(pop.data)) {
+        const m = {};
+        for (const r of pop.data) m[r.product_id] = Number(r.views) || 0;
+        // не затираем оптимистично начисленные локально просмотры за эту сессию
+        state.popularity = Object.assign(m, state.popularity);
+      }
+      if (!terms.error && Array.isArray(terms.data)) state.popularTerms = terms.data.map((r) => r.term);
+      renderRecent();
+    } catch (e) { /* база старой версии — «Популярное» просто не показываем */ }
+  }
+
+  // «Популярное» — горизонтальная лента самых просматриваемых товаров (главная)
+  function renderPopularProducts() {
+    const box = $('popularStrip');
+    if (!box) return;
+    const show = state.tab === 'catalog' && !state.query && !state.favOnly && !anyFilterActive();
+    const top = state.products.filter((p) => popViews(p.id) > 0)
+      .sort((a, b) => popViews(b.id) - popViews(a.id)).slice(0, 12);
+    if (!show || top.length < 3) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="similar-title">🔥 Популярное</div><div class="similar-row">'
+      + top.map((x) => {
+        const ph = (x.photos || []).find((u) => u && String(u).trim());
+        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
+        return `<button class="similar-card" data-similar="${esc(x.id)}">
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
+      }).join('') + '</div>';
   }
 
   // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
@@ -1054,7 +1151,8 @@
   function openProduct(p) {
     currentProduct = p;
     pushRecentProduct(p.id);
-    renderRecentProducts(); // обновляем ленту «Недавно смотрели» под шторкой
+    trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
+    renderPopularProducts(); renderRecentProducts(); // обновляем ленты под шторкой
     updateFavButton(p);
     $('sheetName').textContent = p.name;
 
@@ -1482,6 +1580,7 @@
     if (sup.error) throw sup.error;
     state.groups = g.data;
     state.suppliers = sup.data;
+    loadPopularity(); // счётчики популярности — в фоне, загрузку каталога не задерживают
   }
 
   // Полная загрузка товаров страницами по id (быстро — id проиндексирован).
@@ -4125,6 +4224,7 @@
     };
     $('sheetSimilar').addEventListener('click', openSimilar);
     $('recentStrip').addEventListener('click', openSimilar);
+    $('popularStrip').addEventListener('click', openSimilar);
 
     // Точки под фото
     $('sheetPhotos').addEventListener('scroll', () => {
@@ -4623,6 +4723,7 @@
   /* ── Старт ────────────────────────────────────── */
 
   async function init() {
+    deviceId(); // закрепляем анонимный номер устройства (память избранного/просмотров)
     initTheme();
     loadFilters();
     renderRecent();
