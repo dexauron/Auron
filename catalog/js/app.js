@@ -288,6 +288,8 @@
   const productCategory = (p) => { const g = groupById(p.group_id); return g ? categoryOf(g.name) : null; };
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+  // цена с единицей: у весовых показываем «/кг», чтобы было понятно
+  const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
   const fmtDate = (d) => { const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}.${m}.${y.slice(2)}`; };
   // цена старше этого срока считается устаревшей: нового поступления давно не было,
   // цена у поставщика могла измениться — не помечаем такую как «выгодную»
@@ -644,7 +646,7 @@
       if (p.code) tags.push(`<span class="tag tag-code">${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖</span>');
       const price = (p.retail_price != null && p.retail_price !== '')
-        ? `<div class="card-price">${esc(fmtPrice(p.retail_price))}</div>` : '';
+        ? `<div class="card-price">${esc(fmtRetail(p))}</div>` : '';
       return `<article class="card" data-id="${esc(p.id)}">
         <div class="${photoCls}">${img}</div>
         <div class="card-body">
@@ -1020,7 +1022,7 @@
     const rows = [];
     // розничная цена (цена на полке) — видна всем, крупно вверху
     if (p.retail_price != null && p.retail_price !== '') {
-      rows.push(`<div class="field-row field-main"><span class="field-key">Цена</span><span class="field-val">${esc(fmtPrice(p.retail_price))}</span></div>`);
+      rows.push(`<div class="field-row field-main"><span class="field-key">Цена</span><span class="field-val">${esc(fmtRetail(p))}</span></div>`);
     }
     // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
     // покупателям без входа их не показываем
@@ -1045,8 +1047,57 @@
     renderProductPrices(p);
     renderRetailHistory(p);
     renderCompetitors(p);
+    renderSimilar(p);
     openSheet('productSheet');
   }
+
+  /* ── Поделиться товаром + похожие + ссылка на товар ── */
+  const productLink = (p) => `${location.origin}${location.pathname}#p=${encodeURIComponent(p.id)}`;
+
+  async function shareProduct(p) {
+    const url = productLink(p);
+    const priceTxt = (p.retail_price != null && p.retail_price !== '') ? `\n${fmtRetail(p)}` : '';
+    try {
+      if (navigator.share) { await navigator.share({ title: p.name, text: `${p.name}${priceTxt}`, url }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; /* пользователь закрыл — не ошибка */ }
+    try { await navigator.clipboard.writeText(url); toast('Ссылка на товар скопирована'); }
+    catch (e) { toast('Ссылка: ' + url); }
+  }
+
+  // Похожие товары — из того же раздела (для покупателя: листать дольше)
+  function renderSimilar(p) {
+    const box = $('sheetSimilar');
+    if (!box) return;
+    const cat = productCategory(p);
+    let list = state.products.filter((x) => x.id !== p.id && (
+      (p.group_id && x.group_id === p.group_id) || (cat && productCategory(x) === cat)));
+    // сначала с фото, максимум 12
+    list.sort((a, b) => (hasPhoto(b) ? 1 : 0) - (hasPhoto(a) ? 1 : 0));
+    list = list.slice(0, 12);
+    if (!list.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="similar-title">Похожие товары</div><div class="similar-row">'
+      + list.map((x) => {
+        const ph = (x.photos || []).find((u) => u && String(u).trim());
+        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
+        return `<button class="similar-card" data-similar="${esc(x.id)}">
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
+      }).join('') + '</div>';
+  }
+
+  // открыть товар по ссылке вида …/#p=<id> (после загрузки каталога)
+  function openFromHash() {
+    const m = String(location.hash || '').match(/[#&]p=([^&]+)/);
+    if (!m) return;
+    const id = decodeURIComponent(m[1]);
+    // уже открыт нужный товар — ничего не делаем (защита от повторов)
+    if (currentProduct && currentProduct.id === id && !$('productSheet').hidden) return;
+    const p = state.products.find((x) => x.id === id);
+    if (p) openProduct(p);
+  }
+  // если ссылку открыли, уже находясь в каталоге (меняется только #hash, без
+  // перезагрузки страницы) — тоже показываем товар
+  window.addEventListener('hashchange', openFromHash);
 
   /* ── Продажи товара в карточке (для заказа) ────────
    * После входа: сколько штук продано за 7 и 30 дней и в среднем в день —
@@ -3986,6 +4037,16 @@
       if (img && img.src) openLightbox(img.src);
     });
 
+    // Поделиться товаром
+    $('btnShareProduct').addEventListener('click', () => { if (currentProduct) shareProduct(currentProduct); });
+    // Похожие товары — тап открывает другой товар
+    $('sheetSimilar').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-similar]');
+      if (!b) return;
+      const p = state.products.find((x) => x.id === b.dataset.similar);
+      if (p) openProduct(p);
+    });
+
     // Точки под фото
     $('sheetPhotos').addEventListener('scroll', () => {
       const strip = $('sheetPhotos');
@@ -4527,6 +4588,7 @@
     sb.auth.onAuthStateChange((_e, session) => { setTimeout(() => applySession(session), 0); });
 
     await refresh();
+    openFromHash(); // если открыли по ссылке на товар — показываем его
   }
 
   init();
