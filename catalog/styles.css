@@ -480,6 +480,7 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
 /* заголовок не наезжает на круглую кнопку «назад» слева */
 .sheet-title { font-size: 19px; font-weight: 700; margin-bottom: 10px; padding-left: 42px; min-height: 34px; display: flex; align-items: center; }
 .muted { font-size: 13px; color: var(--text-2); margin-bottom: 14px; }
+.sheet-desc { font-size: 14.5px; line-height: 1.5; color: var(--text); margin: 4px 0 14px; white-space: pre-line; }
 
 /* Фото в карточке товара */
 .photo-strip {

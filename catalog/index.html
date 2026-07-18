@@ -98,6 +98,7 @@
       <div class="sheet-body">
         <h2 class="sheet-title" id="sheetName"></h2>
         <div class="badge-row" id="sheetBadges"></div>
+        <p class="sheet-desc" id="sheetDescription" hidden></p>
         <div class="fields" id="sheetFields"></div>
         <div id="sheetMarkup"></div>
         <div id="sheetRetailHist"></div>
@@ -182,6 +183,9 @@
 
           <label class="field-label">Название * <span class="hint">— как в кассе</span></label>
           <input type="text" id="fName" class="input" required placeholder="Хот-дог датский">
+
+          <label class="field-label">Описание <span class="hint">— текст в карточке товара</span></label>
+          <textarea id="fDescription" class="input" rows="3" placeholder="Краткое описание товара для покупателей"></textarea>
 
           <label class="field-label">Группа</label>
           <select id="fGroup" class="input"></select>
@@ -570,6 +574,10 @@
         <h2 class="sheet-title">📷 Дозаполнить фото</h2>
         <p class="muted">Товары без фото. Сфотографируй те, что перед тобой на полке —
         фото сразу появится у всех и в витрине.</p>
+        <label class="check-row" style="border:none;padding:6px 2px 12px">
+          <input type="checkbox" class="check-cb" id="cleanPhotosToggle">
+          <span class="check-text">🎨 Чистый белый фон <span class="hint">— вырезать фон (пробно; первый раз грузится дольше)</span></span>
+        </label>
         <div class="banner banner-info" id="photoFillCount"></div>
         <input type="search" id="photoFillSearch" class="input" placeholder="Найти товар по названию или коду…" autocomplete="off">
         <div id="photoFillList"></div>
