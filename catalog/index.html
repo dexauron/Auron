@@ -69,12 +69,6 @@
 
   <!-- Сетка товаров -->
   <main class="content">
-    <div class="hero" id="hero">
-      <div class="hero-text">
-        <div class="hero-name">Way Market</div>
-        <div class="hero-sub">Оптовый каталог · свежий завоз · честные цены</div>
-      </div>
-    </div>
     <div class="cat-grid" id="catGrid" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
@@ -592,9 +586,6 @@
     <div class="sheet" role="dialog" aria-modal="true" data-no-back>
       <div class="sheet-handle"></div>
       <div class="filter-head">
-        <button class="filter-head-btn" id="filterResetTop" title="Сбросить всё" aria-label="Сбросить">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
-        </button>
         <h2 class="filter-head-title">Фильтр</h2>
         <button class="filter-head-btn" data-close="filterSheet" title="Закрыть" aria-label="Закрыть">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -658,12 +649,6 @@
           <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от" min="0">
           <span class="price-dash">—</span>
           <input type="number" id="priceMax" class="input price-inp" inputmode="decimal" placeholder="до" min="0">
-        </div>
-
-        <div class="filter-label">Вид</div>
-        <div class="seg" id="viewSeg">
-          <button data-view="normal">Крупные</button>
-          <button data-view="compact">Компактные</button>
         </div>
 
         <div class="filter-actions">

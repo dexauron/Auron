@@ -747,7 +747,6 @@
   function syncControls() {
     renderFilterCats();
     document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
-    document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
     document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
     // даты поступления в поля + подсветка активного пресета
     const af = $('arrivalFrom'); const at = $('arrivalTo');
@@ -850,7 +849,6 @@
     const cats = t === 'cats';
     $('catGrid').hidden = !cats;
     $('productGrid').hidden = cats;
-    $('hero').hidden = cats;
     $('groupChips').hidden = cats;
     $('subChips').hidden = cats || !$('subChips').innerHTML;
     $('activeFilters').hidden = cats || !anyFilterActive();
@@ -3751,7 +3749,6 @@
     $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
     $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
     $('filterReset').addEventListener('click', clearAllFilters);
-    $('filterResetTop').addEventListener('click', clearAllFilters);
     // Круглая иконка «вид» в шапке — переключает размер плиток
     $('viewToggleBtn').addEventListener('click', () => { state.view = state.view === 'compact' ? 'normal' : 'compact'; renderAll(); });
 
@@ -3786,12 +3783,6 @@
       const b = e.target.closest('button'); if (!b) return;
       state.sort = b.dataset.sort;
       state.renderLimit = PAGE_SIZE;
-      renderAll();
-    });
-    // Вид плиток (сегменты)
-    $('viewSeg').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      state.view = b.dataset.view;
       renderAll();
     });
     // Тип товара: весовой / штучный (сотрудникам)
