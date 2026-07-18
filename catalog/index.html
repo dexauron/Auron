@@ -52,6 +52,10 @@
         <span class="filter-badge" id="filterBadge" hidden></span>
       </button>
     </div>
+    <div class="main-tabs" id="mainTabs">
+      <button class="main-tab active" data-tab="catalog">Каталог</button>
+      <button class="main-tab" data-tab="cats">Категории</button>
+    </div>
     <nav class="chips" id="groupChips"></nav>
     <nav class="chips chips-sub" id="subChips" hidden></nav>
     <nav class="chips active-filters" id="activeFilters" hidden></nav>
@@ -65,6 +69,13 @@
 
   <!-- Сетка товаров -->
   <main class="content">
+    <div class="hero" id="hero">
+      <div class="hero-text">
+        <div class="hero-name">Way Market</div>
+        <div class="hero-sub">Оптовый каталог · свежий завоз · честные цены</div>
+      </div>
+    </div>
+    <div class="cat-grid" id="catGrid" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
       <div class="empty-icon">🔍</div>
