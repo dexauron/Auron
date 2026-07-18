@@ -326,3 +326,8 @@ create policy "фото: покупатель предлагает" on storage.o
 -- Дата поступления (завоза) товара — для фильтра по произвольному диапазону дат.
 alter table catalog_products add column if not exists arrival_at date;
 create index if not exists idx_products_arrival on catalog_products(arrival_at) where arrival_at is not null;
+
+
+-- ═══════════════ ОБНОВЛЕНИЕ-15 ═══════════════
+-- Описание товара.
+alter table catalog_products add column if not exists description text;

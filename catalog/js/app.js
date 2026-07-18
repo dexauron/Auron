@@ -434,9 +434,10 @@
   // дата поступления (завоза): её ставят импорты (остатки/цены/прайс). Если её
   // нет (старые данные) — берём дату добавления в каталог, чтобы товар не пропал.
   const arrivalDate = (p) => String(p.arrival_at || p.created_at || '').slice(0, 10);
-  // есть ли в базе колонка arrival_at (ОБНОВЛЕНИЕ-14). Если её ещё не добавили —
-  // импорт не пишет это поле, чтобы не падать; после SQL и переимпорта заполнится.
-  const arrivalColExists = () => (state.products.length ? ('arrival_at' in state.products[0]) : true);
+  // есть ли в базе колонка (по загруженным товарам). Если новой колонки ещё нет —
+  // не пишем её, чтобы импорт/сохранение не падали; после SQL заполнится.
+  const hasProductCol = (c) => (state.products.length ? (c in state.products[0]) : true);
+  const arrivalColExists = () => hasProductCol('arrival_at');
   const todayISO = () => new Date().toISOString().slice(0, 10);
   const daysAgoISO = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
   // есть ли у товара хотя бы одно НЕПУСТОЕ фото (пустые строки не считаются)
@@ -1006,6 +1007,11 @@
     const barcodes = p.barcodes || [];
     if (state.session && !barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
+
+    // описание товара (под названием, видно всем — как в витрине магазина)
+    const desc = $('sheetDescription');
+    if (p.description && String(p.description).trim()) { desc.textContent = p.description; desc.hidden = false; }
+    else { desc.textContent = ''; desc.hidden = true; }
 
     // поставщики и цены — единым списком ниже (renderProductPrices); отдельный блок не нужен
     $('sheetSupplier').innerHTML = '';
@@ -1627,7 +1633,8 @@
     try {
       label.style.pointerEvents = 'none';
       toast('Загружаем фото…');
-      const blob = await compressImage(file);
+      let blob = await compressImage(file);
+      if (cleanPhotosOn()) blob = await whitenBackground(blob, toast);
       const url = await uploadPhoto(blob);
       const { error } = await sb.rpc('catalog_add_photo', { p_product_id: p.id, p_url: url });
       if (error) throw error;
@@ -1651,7 +1658,8 @@
     try {
       label.style.pointerEvents = 'none';
       toast('Отправляем фото…');
-      const blob = await compressImage(file);
+      let blob = await compressImage(file);
+      if (cleanPhotosOn()) blob = await whitenBackground(blob, toast);
       const url = await uploadPhoto(blob, 'suggestions');
       const { error } = await sb.rpc('catalog_suggest_photo', { p_product_id: p.id, p_url: url });
       if (error) throw error;
@@ -1744,6 +1752,7 @@
 
   function openPhotoFill() {
     $('photoFillSearch').value = '';
+    $('cleanPhotosToggle').checked = cleanPhotosOn();
     renderPhotoFillList();
     openSheet('photoFillSheet');
   }
@@ -1846,6 +1855,30 @@
     }
   }
 
+  // «Чистый белый фон»: вырезаем товар из фона и ставим на белый — фото
+  // становятся ровными, как в витрине. Работает на телефоне, «мозг» для обрезки
+  // подгружается один раз. Если не вышло (нет сети/не потянул) — берём обычное фото.
+  let _bgr = null;
+  async function loadBgRemoval() {
+    if (_bgr) return _bgr;
+    _bgr = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm');
+    return _bgr;
+  }
+  const cleanPhotosOn = () => { try { return localStorage.getItem('wm_clean_photos') === '1'; } catch (e) { return false; } };
+  async function whitenBackground(blob, onStep) {
+    try {
+      if (onStep) onStep('Делаю чистый белый фон…');
+      const mod = await loadBgRemoval();
+      const cut = await mod.removeBackground(blob, { publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/dist/' });
+      const img = await createImageBitmap(cut);
+      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+      const cx = c.getContext('2d');
+      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0);
+      const out = await new Promise((res) => c.toBlob((b) => res(b), 'image/jpeg', 0.9));
+      return out || blob;
+    } catch (e) { return blob; }
+  }
+
   async function uploadPhoto(blob, folder = 'products') {
     const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
     const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
@@ -1875,6 +1908,7 @@
     $('fUnit').value = product?.unit || '';
     $('fDepartment').value = product?.department || '';
     $('fNote').value = product?.note || '';
+    $('fDescription').value = product?.description || '';
     $('fGroup').innerHTML = '<option value="">Без группы</option>' +
       state.groups.map((g) => `<option value="${esc(g.id)}"${g.id === product?.group_id ? ' selected' : ''}>${esc(g.name)}</option>`).join('');
     $('fSupplier').innerHTML = '<option value="">Выбрать поставщика…</option>' +
@@ -1913,6 +1947,8 @@
         note: $('fNote').value.trim() || null,
         photos: photoUrls,
         updated_at: new Date().toISOString(),
+        // описание пишем, только если колонка добавлена (ОБНОВЛЕНИЕ-15)
+        ...(hasProductCol('description') ? { description: $('fDescription').value.trim() || null } : {}),
       };
       if (editingProduct) {
         const removed = (editingProduct.photos || []).filter((u) => !photoUrls.includes(u));
@@ -4076,6 +4112,10 @@
     // «Дозаполнить фото» — режим для сотрудника: снять камерой товары без фото
     $('menuPhotoFill').addEventListener('click', () => { closeSheet('adminMenuSheet'); openPhotoFill(); });
     $('photoFillSearch').addEventListener('input', renderPhotoFillList);
+    $('cleanPhotosToggle').addEventListener('change', (e) => {
+      try { localStorage.setItem('wm_clean_photos', e.target.checked ? '1' : '0'); } catch (err) { /* */ }
+      if (e.target.checked) toast('Фото будут с белым фоном. Первое обработается дольше — грузится обрезка.');
+    });
     $('photoFillList').addEventListener('click', (e) => {
       const btn = e.target.closest('[data-fill-cam]');
       if (!btn) return;
