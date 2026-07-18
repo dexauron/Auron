@@ -76,6 +76,7 @@
     arrivalTo: '',
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
     tab: 'catalog',      // 'catalog' (сетка товаров) | 'cats' (плитки категорий)
+    favOnly: false,      // показывать только избранные товары (сердечко)
   };
 
   let sb = null;
@@ -500,6 +501,8 @@
     if (selSuppliers.length) {
       list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
     }
+    // только избранное (сердечко) — по локальному списку устройства
+    if (state.favOnly) { const f = new Set(favorites()); list = list.filter((p) => f.has(p.id)); }
     // быстрые фильтры — каждый отмеченный обязателен (И)
     if (quick.length) {
       list = list.filter((p) => quick.every((k) => (QUICK[k] ? QUICK[k](p) : true)));
@@ -557,7 +560,12 @@
     const allActive = !selCats.length && !selGroups.length;
     // «Сбросить всё» теперь живёт в строке активных фильтров (renderActiveFilters),
     // поэтому здесь дублирующую кнопку не показываем — чище
-    let html = `<button class="chip${allActive ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
+    let html = `<button class="chip${allActive && !state.favOnly ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
+    // «Избранное» — показываем, если что-то добавлено в избранное или режим включён
+    const favs = favorites();
+    if (favs.length || state.favOnly) {
+      html += `<button class="chip chip-fav${state.favOnly ? ' active' : ''}" data-fav-chip>♥ Избранное<span class="chip-count">${favs.length}</span></button>`;
+    }
     // Поставщики — внутренние данные магазина: показываем только тем, кто видит
     // закупки (админ/аналитик). Покупателям без входа и кассиру их не показываем.
     if (state.canPurchase && state.suppliers.length) {
@@ -612,8 +620,12 @@
       grid.innerHTML = '';
       const empty = $('emptyState');
       empty.hidden = false;
-      const filtered = anyFilterActive();
-      if (!state.products.length) {
+      const filtered = anyFilterActive() || state.favOnly;
+      if (state.favOnly && !favorites().length) {
+        empty.querySelector('.empty-icon').textContent = '♡';
+        empty.querySelector('.empty-title').textContent = 'В избранном пусто';
+        empty.querySelector('.empty-text').textContent = 'Открой товар и нажми ♥ — он появится здесь';
+      } else if (!state.products.length) {
         empty.querySelector('.empty-icon').textContent = '📦';
         empty.querySelector('.empty-title').textContent = 'Каталог пока пустой';
         empty.querySelector('.empty-text').textContent = state.session
@@ -878,6 +890,7 @@
 
   function renderAll() {
     renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
+    renderRecentProducts();
     if (state.tab === 'cats') renderCatGrid(); else renderGrid();
   }
 
@@ -893,7 +906,7 @@
   function clearAllFilters() {
     state.selCats = []; state.selGroups = []; state.selSuppliers = [];
     state.quick = []; state.priceMin = null; state.priceMax = null;
-    state.selType = ''; state.arrivalFrom = ''; state.arrivalTo = '';
+    state.selType = ''; state.arrivalFrom = ''; state.arrivalTo = ''; state.favOnly = false;
     const af = $('arrivalFrom'); const at = $('arrivalTo'); if (af) af.value = ''; if (at) at.value = '';
     state.query = '';
     state.renderLimit = PAGE_SIZE;
@@ -953,6 +966,48 @@
     if (dl) dl.innerHTML = recentQueries().map((q) => `<option value="${esc(q)}"></option>`).join('');
   }
 
+  /* ── Избранное (♥) и «Недавно смотрели» — у покупателя на телефоне ──
+   * Хранятся только на устройстве (localStorage), в базу не уходят. */
+  const FAV_KEY = 'wm_favorites_v1';
+  const RECENT_PROD_KEY = 'wm_recent_products_v1';
+
+  function favorites() { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } }
+  const isFav = (id) => favorites().includes(id);
+  function toggleFav(id) {
+    const list = favorites();
+    const i = list.indexOf(id);
+    if (i >= 0) list.splice(i, 1); else list.unshift(id);
+    try { localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, 500))); } catch (e) { /* нет места */ }
+    return i < 0; // true = товар стал избранным
+  }
+
+  function recentProducts() { try { return JSON.parse(localStorage.getItem(RECENT_PROD_KEY)) || []; } catch (e) { return []; } }
+  function pushRecentProduct(id) {
+    const list = recentProducts().filter((x) => x !== id);
+    list.unshift(id);
+    try { localStorage.setItem(RECENT_PROD_KEY, JSON.stringify(list.slice(0, 24))); } catch (e) { /* нет места */ }
+  }
+
+  // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
+  function renderRecentProducts() {
+    const box = $('recentStrip');
+    if (!box) return;
+    const show = state.tab === 'catalog' && !state.query && !state.favOnly && !anyFilterActive();
+    if (!show) { box.hidden = true; box.innerHTML = ''; return; }
+    const byId = new Map(state.products.map((p) => [p.id, p]));
+    const list = recentProducts().map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
+    if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="similar-title">Недавно смотрели</div><div class="similar-row">'
+      + list.map((x) => {
+        const ph = (x.photos || []).find((u) => u && String(u).trim());
+        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
+        return `<button class="similar-card" data-similar="${esc(x.id)}">
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
+      }).join('') + '</div>';
+  }
+
   function applyTheme(t) {
     // t: 'dark' | 'light' | null (авто — по системе)
     const root = document.documentElement;
@@ -987,8 +1042,20 @@
 
   /* ── Карточка товара ──────────────────────────── */
 
+  function updateFavButton(p) {
+    const b = $('btnFav');
+    if (!b) return;
+    const on = isFav(p.id);
+    b.classList.toggle('is-fav', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.title = on ? 'Убрать из избранного' : 'В избранное';
+  }
+
   function openProduct(p) {
     currentProduct = p;
+    pushRecentProduct(p.id);
+    renderRecentProducts(); // обновляем ленту «Недавно смотрели» под шторкой
+    updateFavButton(p);
     $('sheetName').textContent = p.name;
 
     const photos = (p.photos || []).filter((u) => u && String(u).trim());
@@ -3946,10 +4013,12 @@
         return;
       }
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
+      // «Избранное» — переключаем режим показа только избранных товаров
+      if (chip.hasAttribute('data-fav-chip')) { state.favOnly = !state.favOnly; state.renderLimit = PAGE_SIZE; renderAll(); return; }
       // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
       if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
       // повторный тап снимает отметку; можно отметить несколько
-      if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; }
+      if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; state.favOnly = false; }
       else if (chip.hasAttribute('data-category')) {
         const c = chip.dataset.category;
         if (state.selCats.includes(c)) {
@@ -4039,13 +4108,23 @@
 
     // Поделиться товаром
     $('btnShareProduct').addEventListener('click', () => { if (currentProduct) shareProduct(currentProduct); });
-    // Похожие товары — тап открывает другой товар
-    $('sheetSimilar').addEventListener('click', (e) => {
+    // ♥ в карточке — добавить/убрать из избранного
+    $('btnFav').addEventListener('click', () => {
+      if (!currentProduct) return;
+      const nowFav = toggleFav(currentProduct.id);
+      updateFavButton(currentProduct);
+      toast(nowFav ? 'Добавлено в избранное' : 'Убрано из избранного');
+      renderAll(); // обновляем чип «Избранное» и, если он включён, — сетку
+    });
+    // Похожие товары и «Недавно смотрели» — тап открывает другой товар
+    const openSimilar = (e) => {
       const b = e.target.closest('[data-similar]');
       if (!b) return;
       const p = state.products.find((x) => x.id === b.dataset.similar);
       if (p) openProduct(p);
-    });
+    };
+    $('sheetSimilar').addEventListener('click', openSimilar);
+    $('recentStrip').addEventListener('click', openSimilar);
 
     // Точки под фото
     $('sheetPhotos').addEventListener('scroll', () => {
