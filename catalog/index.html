@@ -569,12 +569,22 @@
 
   <!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
   <div class="sheet-backdrop" id="filterSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet" role="dialog" aria-modal="true" data-no-back>
       <div class="sheet-handle"></div>
+      <div class="filter-head">
+        <button class="filter-head-btn" id="filterResetTop" title="Сбросить всё" aria-label="Сбросить">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <h2 class="filter-head-title">Фильтр</h2>
+        <button class="filter-head-btn" data-close="filterSheet" title="Закрыть" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Фильтры и сортировка</h2>
+        <div class="filter-section-title">Категории</div>
+        <div class="check-list" id="filterCats"></div>
 
-        <div class="filter-label">Сортировка</div>
+        <div class="filter-section-title">Сортировка</div>
         <div class="seg" id="sortSeg">
           <button data-sort="relevance">Совпадение</button>
           <button data-sort="name">А-Я</button>
@@ -583,8 +593,7 @@
           <button data-sort="new">Новее</button>
         </div>
 
-        <div class="filter-label">Группы</div>
-        <button class="btn btn-secondary btn-block" id="filterGroupsBtn">📁 Выбрать группы…</button>
+        <button class="btn btn-secondary btn-block" id="filterGroupsBtn" style="margin-top:14px">📁 Подгруппы…</button>
 
         <div class="emp-only">
           <div class="filter-label">Тип товара</div>
