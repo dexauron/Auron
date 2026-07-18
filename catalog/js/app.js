@@ -199,7 +199,7 @@
   function addBackButtons() {
     document.querySelectorAll('.sheet').forEach((sheet) => {
       const bd = sheet.closest('.sheet-backdrop');
-      if (!bd || sheet.querySelector('.sheet-back')) return;
+      if (!bd || sheet.hasAttribute('data-no-back') || sheet.querySelector('.sheet-back')) return;
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'sheet-back';
@@ -700,6 +700,22 @@
     { k: 'nobarcode', label: '⬜ Без ШК', warn: true },
   ];
 
+  // Категории списком-чекбоксами в окне фильтра (как в референсе)
+  function renderFilterCats() {
+    const box = $('filterCats');
+    if (!box) return;
+    const counts = {};
+    for (const p of state.products) { const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1; }
+    const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
+      .filter((c) => counts[c]).sort((a, b) => counts[b] - counts[a]);
+    if (!cats.length) { box.innerHTML = '<p class="muted" style="margin:0">Категорий пока нет</p>'; return; }
+    box.innerHTML = cats.map((c) => {
+      const on = state.selCats.includes(c);
+      return `<label class="check-row"><input type="checkbox" class="check-cb" data-fcat="${esc(c)}"${on ? ' checked' : ''}>`
+        + `<span class="check-text">${catIcon(c)} ${esc(c)}</span><span class="check-count">${counts[c]}</span></label>`;
+    }).join('');
+  }
+
   function renderQuick() {
     const base = baseFiltered();
     let html = '';
@@ -727,6 +743,7 @@
 
   // синхронизирует окно фильтров и значок с состоянием
   function syncControls() {
+    renderFilterCats();
     document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
     document.querySelectorAll('#viewSeg button').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
     document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
@@ -3658,10 +3675,25 @@
       input.focus();
     });
 
-    // Окно фильтров (одна кнопка — всё внутри: сортировка, фильтры, цена, вид)
+    // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
     $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
     $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
     $('filterReset').addEventListener('click', clearAllFilters);
+    $('filterResetTop').addEventListener('click', clearAllFilters);
+    // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
+    $('filterCats').addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-fcat]');
+      if (!cb) return;
+      const c = cb.dataset.fcat;
+      if (cb.checked) { if (!state.selCats.includes(c)) state.selCats = [...state.selCats, c]; }
+      else {
+        state.selCats = state.selCats.filter((x) => x !== c);
+        const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
+        state.selGroups = state.selGroups.filter((x) => !ids.has(x));
+      }
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
 
     // Сортировка (сегменты)
     $('sortSeg').addEventListener('click', (e) => {

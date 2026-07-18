@@ -180,9 +180,22 @@ body {
 .chip.chip-quick.warn { border-color: rgba(255, 159, 10, .5); color: var(--warn); }
 .chip.chip-quick.warn.active { background: var(--warn); border-color: var(--warn); color: #fff; }
 
-/* ── Окно фильтров: заголовки секций, сегменты, цена ── */
-.filter-label { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 18px 0 8px; letter-spacing: .01em; }
-.filter-hint { font-weight: 400; opacity: .8; }
+/* ── Окно фильтров в стиле магазина: шапка, секции, чекбоксы ── */
+.filter-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 14px 12px; background: var(--bg); }
+.filter-head-title { font-size: 22px; font-weight: 800; }
+.filter-head-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.filter-head-btn:active { background: var(--surface-2); }
+/* крупные жирные заголовки секций (Категории, Сортировка, Цена…) */
+.filter-section-title, .filter-label { font-size: 18px; font-weight: 800; color: var(--text); margin: 22px 0 12px; letter-spacing: -.01em; }
+.filter-label { font-size: 18px; }
+.filter-hint { font-weight: 400; font-size: 13px; color: var(--text-2); }
+/* список-чекбоксы */
+.check-list { display: flex; flex-direction: column; }
+.check-list .check-row { display: flex; align-items: center; gap: 14px; padding: 12px 2px; border-bottom: 1px solid var(--border); cursor: pointer; margin: 0; }
+.check-list .check-row:last-child { border-bottom: none; }
+.check-cb { width: 24px; height: 24px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
+.check-text { flex: 1; font-size: 16px; }
+.check-count { font-size: 14px; color: var(--text-2); }
 /* iOS-сегменты: единый трек, выбранный сегмент — «приподнятая» карточка */
 .seg {
   display: flex; flex-wrap: wrap; gap: 4px;
