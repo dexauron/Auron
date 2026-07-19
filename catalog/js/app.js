@@ -3723,6 +3723,11 @@
     loadTopProducts();
   }
 
+  // как считаем «ходовость»: по выручке (деньгам) — профессиональный вариант по
+  // умолчанию — или по количеству. Деньги сравнимы для весовых и штучных, поэтому
+  // выручка честнее: топ не путает кг и шт и не прячет дорогие позиции.
+  let topMode = 'amount'; // 'amount' | 'qty'
+
   async function loadTopProducts() {
     const chip = document.querySelector('#topChips .chip.active');
     if (!chip) return;
@@ -3731,24 +3736,61 @@
     const days = daysBetween(from, to);
     const box = $('topList');
     box.innerHTML = '<p class="muted">Считаем…</p>';
-    const { data, error } = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 300 });
-    if (error) { box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(error.message || '') + '</p>'; return; }
+
+    let data; let total = null;
+    try {
+      const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 200, p_order: topMode });
+      if (res.error) throw res.error;
+      data = res.data;
+      const tot = await sb.rpc('catalog_period_total', { p_from: from, p_to: to });
+      if (!tot.error && tot.data && tot.data[0]) total = tot.data[0];
+    } catch (e) {
+      // старая база (функция без p_order / без catalog_period_total): берём как
+      // раньше и сортируем на клиенте — фича продолжает работать до ОБНОВЛЕНИЯ-17
+      const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 300 });
+      if (res.error) { box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(res.error.message || '') + '</p>'; return; }
+      data = res.data;
+    }
     if (!data || !data.length) { box.innerHTML = '<p class="muted">За этот период продаж нет</p>'; return; }
+
     const byId = new Map(state.products.map((p) => [p.id, p]));
     const rnd = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
-    box.innerHTML = `<p class="muted top-period-note">За ${fmtDate(from)}–${fmtDate(to)} · ${days} дн.</p>` + data.map((row, i) => {
+    const num = (v) => Number(v) || 0;
+    const metric = (r) => (topMode === 'qty' ? num(r.total_qty) : num(r.total_amount));
+    // на всякий случай (и для старой базы) сортируем сами по выбранной мере
+    data = data.slice().sort((a, b) => metric(b) - metric(a));
+
+    const totAmount = total ? num(total.total_amount) : data.reduce((s, r) => s + num(r.total_amount), 0);
+    const maxMetric = metric(data[0]) || 1;
+    const modeLabel = topMode === 'qty' ? 'по количеству' : 'по выручке';
+    const head = `<div class="top-summary">За ${fmtDate(from)}–${fmtDate(to)} · ${days} дн. · ${modeLabel}`
+      + (totAmount ? ` · оборот ${fmtPrice(totAmount)}` : '') + `</div>`;
+
+    box.innerHTML = head + data.map((row, i) => {
       const p = byId.get(row.product_id);
       if (!p) return '';
       const photo = (p.photos || [])[0];
-      const qty = Number(row.total_qty);
+      const qty = num(row.total_qty);
+      const amt = num(row.total_amount);
+      const u = p.unit || (p.is_weighted ? 'кг' : 'шт');
       const perDay = rnd(qty / days);
-      const u = p.unit || 'шт';
-      const amt = row.total_amount != null ? `<span class="top-amt">${fmtPrice(row.total_amount)}</span>` : '';
-      return `<div class="top-row" data-id="${esc(p.id)}">
+      const primary = topMode === 'qty' ? `${rnd(qty)} ${esc(u)}` : fmtPrice(amt);
+      const secondary = topMode === 'qty' ? (amt ? fmtPrice(amt) : '') : `${rnd(qty)} ${esc(u)}`;
+      const share = totAmount ? (amt / totAmount) * 100 : 0;
+      const shareTxt = share ? ` · ${share >= 10 ? Math.round(share) : share.toFixed(1)}% оборота` : '';
+      const barW = Math.max(4, Math.round((metric(row) / maxMetric) * 100));
+      return `<div class="top-row${i < 3 ? ' top-row-lead' : ''}" data-id="${esc(p.id)}">
         <span class="top-rank">${i + 1}</span>
         <span class="top-photo">${photo ? `<img src="${esc(photo)}" loading="lazy" alt="">` : '📦'}</span>
-        <span class="top-name">${esc(p.name)}</span>
-        <span class="top-qty">${rnd(qty)} ${esc(u)}<span class="top-amt">≈${perDay}/день</span>${amt}</span>
+        <div class="top-main">
+          <div class="top-name">${esc(p.name)}</div>
+          <div class="top-bar"><span style="width:${barW}%"></span></div>
+          <div class="top-sub">≈${perDay} ${esc(u)}/день${shareTxt}</div>
+        </div>
+        <div class="top-val">
+          <span class="top-primary">${primary}</span>
+          ${secondary ? `<span class="top-secondary">${secondary}</span>` : ''}
+        </div>
       </div>`;
     }).join('');
   }
@@ -4636,6 +4678,14 @@
       const chip = e.target.closest('.chip');
       if (!chip) return;
       document.querySelectorAll('#topChips .chip').forEach((c) => c.classList.toggle('active', c === chip));
+      loadTopProducts();
+    });
+    // переключатель «По выручке / По количеству»
+    $('topModeSeg').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if (!btn || btn.dataset.mode === topMode) return;
+      topMode = btn.dataset.mode;
+      document.querySelectorAll('#topModeSeg button').forEach((b) => b.classList.toggle('active', b === btn));
       loadTopProducts();
     });
     $('topList').addEventListener('click', (e) => {
