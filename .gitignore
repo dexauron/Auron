@@ -1,5 +1,7 @@
 __pycache__/
-.claude/
+# локальные настройки Claude Code игнорируем, но общие скилы проекта — храним в репозитории
+.claude/*
+!.claude/skills/
 node_modules/
 package-lock.json
 package.json
