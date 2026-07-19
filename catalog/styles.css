@@ -484,12 +484,14 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
 
 /* ── Похожие товары в карточке ── */
 .similar-title { font-size: 15px; font-weight: 700; margin: 16px 0 10px; }
-.similar-row { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
+.similar-row { display: flex; align-items: flex-start; gap: 10px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; margin: 0 -18px; padding-left: 18px; padding-right: 18px; }
 .similar-row::-webkit-scrollbar { display: none; }
 .similar-card { flex: 0 0 118px; width: 118px; border: 1px solid var(--border); background: var(--surface); border-radius: 14px; padding: 0 0 9px; cursor: pointer; text-align: left; overflow: hidden; display: flex; flex-direction: column; gap: 6px; }
 .similar-card:active { transform: scale(.97); }
-.similar-photo { width: 100%; aspect-ratio: 1/1; background: var(--surface-2); display: grid; place-items: center; font-size: 30px; }
-.similar-photo img { width: 100%; height: 100%; object-fit: cover; }
+/* overflow:hidden обязателен — иначе высокое (портретное) фото растягивает
+   квадрат и ломает высоту всей ленты (карточки становятся разной высоты) */
+.similar-photo { width: 100%; aspect-ratio: 1/1; background: var(--surface-2); display: grid; place-items: center; font-size: 30px; overflow: hidden; }
+.similar-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .similar-name { font-size: 12.5px; font-weight: 600; line-height: 1.2; padding: 0 9px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.4em; }
 .similar-price { font-size: 14px; font-weight: 800; color: var(--accent); padding: 0 9px; }
 
@@ -785,7 +787,7 @@ select.input { appearance: none; }
 
 /* ── Широкие экраны (компьютер) ────────────────── */
 @media (min-width: 900px) {
-  .header-row, .search-row, .chips { max-width: 1160px; margin-left: auto; margin-right: auto; }
+  .header-row, .search-row, .chips, .main-tabs { max-width: 1160px; margin-left: auto; margin-right: auto; }
   .header-row { margin-bottom: 10px; }
   .content { max-width: 1200px; margin: 0 auto; }
   .banner { max-width: 1172px; margin-left: auto; margin-right: auto; }
