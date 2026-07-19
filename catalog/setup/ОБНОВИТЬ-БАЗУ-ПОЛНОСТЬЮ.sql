@@ -1,6 +1,6 @@
 -- Way Market · Каталог — ПОЛНОЕ обновление базы одним файлом.
 -- Приводит базу к самой свежей версии: все таблицы, функции, права и обновления
--- (включая 12–16). БЕЗОПАСНО: НИЧЕГО НЕ УДАЛЯЕТ — товары, цены, продажи, фото,
+-- (включая 12–18). БЕЗОПАСНО: НИЧЕГО НЕ УДАЛЯЕТ — товары, цены, продажи, фото,
 -- контакты остаются на месте. Можно запускать хоть каждый день, ничего не
 -- задвоится и не сломается.
 -- Как применить: Supabase Studio → SQL Editor → вставить ВЕСЬ этот текст → Run.
@@ -378,3 +378,17 @@ select v.name, v.sort_order from (values
   ('Молочные продукты', 5), ('Бакалея', 6), ('Химия', 7), ('Прочее', 8)
 ) as v(name, sort_order)
 where not exists (select 1 from catalog_groups);
+
+
+-- ═══════════════ ОБНОВЛЕНИЕ-18 ═══════════════
+-- Админ может удалить загруженный отчёт продаж (один период). Товары не трогаются.
+create or replace function catalog_delete_sales_period(p_from date, p_to date)
+returns void language plpgsql security definer set search_path = public, auth as $$
+begin
+  if not catalog_is_admin() then
+    raise exception 'Удалять отчёты продаж может только администратор';
+  end if;
+  delete from catalog_sales where period_from = p_from and period_to = p_to;
+end $$;
+revoke all on function catalog_delete_sales_period(date, date) from public, anon;
+grant execute on function catalog_delete_sales_period(date, date) to authenticated;

@@ -75,7 +75,6 @@
     arrivalFrom: '',     // диапазон дат поступления (завоза), ISO YYYY-MM-DD; пусто = без границы
     arrivalTo: '',
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
-    tab: 'catalog',      // 'catalog' (сетка товаров) | 'cats' (плитки категорий)
     favOnly: false,      // показывать только избранные товары (сердечко)
     popularity: {},      // id товара → сколько раз открывали (для «Популярное»)
     popularTerms: [],    // частые запросы (обезличенно) — подсказки поиска
@@ -487,18 +486,38 @@
     }
   }
 
+  // Предикат «товар подходит под выбранные категории/подгруппы».
+  // Ключевая логика: если внутри выбранной категории отмечены КОНКРЕТНЫЕ подгруппы —
+  // показываем только их (сужение), а не всю категорию. Так подкатегории реально
+  // работают вместе с категорией, а не «тонут» в объединении.
+  function catGroupPredicate() {
+    const { selCats, selGroups } = state;
+    const active = selCats.length > 0 || selGroups.length > 0;
+    const realGroups = new Set(selGroups.filter((g) => g !== 'none' && g !== 'weighted'));
+    const noneSel = selGroups.includes('none');
+    const weightedSel = selGroups.includes('weighted');
+    const catSet = new Set(selCats);
+    // категории, у которых выбрана хотя бы одна своя подгруппа → показываем только подгруппы
+    const catsWithSub = new Set();
+    realGroups.forEach((gid) => { const g = groupById(gid); if (g) { const c = categoryOf(g.name); if (c) catsWithSub.add(c); } });
+    return (p) => {
+      if (!active) return true;
+      if (noneSel && !p.group_id) return true;
+      if (weightedSel && p.is_weighted) return true;
+      if (p.group_id && realGroups.has(p.group_id)) return true; // прямое совпадение по подгруппе
+      const pc = productCategory(p);
+      // вся категория — только если у неё НЕ выбраны отдельные подгруппы
+      if (pc && catSet.has(pc) && !catsWithSub.has(pc)) return true;
+      return false;
+    };
+  }
+
   function visibleProducts() {
     let list = state.products;
     const { selCats, selGroups, selSuppliers, quick } = state;
-    // фильтр по группам/категориям — объединение всех отметок
+    // фильтр по группам/категориям (с сужением до подгрупп — см. catGroupPredicate)
     if (selCats.length || selGroups.length) {
-      list = list.filter((p) => {
-        if (selGroups.includes('none') && !p.group_id) return true;
-        if (selGroups.includes('weighted') && p.is_weighted) return true;
-        if (p.group_id && selGroups.includes(p.group_id)) return true;
-        if (selCats.length && selCats.includes(productCategory(p))) return true;
-        return false;
-      });
+      list = list.filter(catGroupPredicate());
     }
     // фильтр по поставщикам — объединение (товар от любого отмеченного)
     if (selSuppliers.length) {
@@ -702,13 +721,7 @@
     const { selCats, selGroups, selSuppliers } = state;
     let list = state.products;
     if (selCats.length || selGroups.length) {
-      list = list.filter((p) => {
-        if (selGroups.includes('none') && !p.group_id) return true;
-        if (selGroups.includes('weighted') && p.is_weighted) return true;
-        if (p.group_id && selGroups.includes(p.group_id)) return true;
-        if (selCats.length && selCats.includes(productCategory(p))) return true;
-        return false;
-      });
+      list = list.filter(catGroupPredicate());
     }
     if (selSuppliers.length) list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
     return list;
@@ -861,40 +874,10 @@
     renderAll();
   }
 
-  // Вкладки «Каталог / Категории»: каталог — сетка товаров; категории — крупные
-  // плитки разделов (наши иконки + название + число), тап открывает раздел.
-  function switchTab(t) {
-    state.tab = t;
-    document.querySelectorAll('#mainTabs .main-tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === t));
-    const cats = t === 'cats';
-    $('catGrid').hidden = !cats;
-    $('productGrid').hidden = cats;
-    $('groupChips').hidden = cats;
-    $('subChips').hidden = cats || !$('subChips').innerHTML;
-    $('activeFilters').hidden = cats || !anyFilterActive();
-    $('emptyState').hidden = true;
-    document.querySelectorAll('.load-more').forEach((b) => b.remove());
-    if (cats) renderCatGrid(); else renderGrid();
-  }
-
-  function renderCatGrid() {
-    const box = $('catGrid');
-    if (!box) return;
-    const counts = {};
-    for (const p of state.products) { const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1; }
-    const cats = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]).sort((a, b) => counts[b.name] - counts[a.name]);
-    if (!cats.length) { box.innerHTML = '<p class="muted" style="text-align:center;padding:30px">Категорий пока нет — загрузите товары</p>'; return; }
-    box.innerHTML = cats.map((c) => `<button class="cat-tile" data-cat-tile="${esc(c.name)}">
-      <span class="cat-tile-icon">${c.icon}</span>
-      <span class="cat-tile-name">${esc(c.name)}</span>
-      <span class="cat-tile-count">${counts[c.name]}</span>
-    </button>`).join('');
-  }
-
   function renderAll() {
     renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
     renderPopularProducts(); renderRecentProducts();
-    if (state.tab === 'cats') renderCatGrid(); else renderGrid();
+    renderGrid();
   }
 
   // есть ли хоть один активный фильтр/поиск
@@ -1070,7 +1053,7 @@
   function renderPopularProducts() {
     const box = $('popularStrip');
     if (!box) return;
-    const show = state.tab === 'catalog' && !state.query && !state.favOnly && !anyFilterActive();
+    const show = !state.query && !state.favOnly && !anyFilterActive();
     const top = state.products.filter((p) => popViews(p.id) > 0)
       .sort((a, b) => popViews(b.id) - popViews(a.id)).slice(0, 12);
     if (!show || top.length < 3) { box.hidden = true; box.innerHTML = ''; return; }
@@ -1089,7 +1072,7 @@
   function renderRecentProducts() {
     const box = $('recentStrip');
     if (!box) return;
-    const show = state.tab === 'catalog' && !state.query && !state.favOnly && !anyFilterActive();
+    const show = !state.query && !state.favOnly && !anyFilterActive();
     if (!show) { box.hidden = true; box.innerHTML = ''; return; }
     const byId = new Map(state.products.map((p) => [p.id, p]));
     const list = recentProducts().map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
@@ -3727,14 +3710,18 @@
       periods = data || [];
     } catch (e) {
       box.innerHTML = '';
+      $('topDeletePeriod').hidden = true;
       $('topList').innerHTML = '<p class="muted">Не получилось прочитать продажи. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql</p>';
       return;
     }
     if (!periods.length) {
       box.innerHTML = '';
+      $('topDeletePeriod').hidden = true;
       $('topList').innerHTML = '<p class="muted">Продажи ещё не загружены. Меню админа → «📈 Импорт продаж» — загрузи отчёт «Продажи» из 1С.</p>';
       return;
     }
+    // удалить отчёт может только администратор
+    $('topDeletePeriod').hidden = !state.isAdmin;
     // по умолчанию — самый свежий отчёт (список приходит от новых к старым)
     topPeriod = { from: periods[0].period_from, to: periods[0].period_to };
     if (periods.length === 1) {
@@ -4011,7 +3998,6 @@
         state.query = input.value;
         state.renderLimit = PAGE_SIZE;
         $('searchClear').hidden = !input.value;
-        if (state.tab === 'cats' && input.value) { switchTab('catalog'); return; }
         renderActiveFilters();
         renderGrid();
       }, 150);
@@ -4035,17 +4021,6 @@
     // Круглая иконка «вид» в шапке — переключает размер плиток
     $('viewToggleBtn').addEventListener('click', () => { state.view = state.view === 'compact' ? 'normal' : 'compact'; renderAll(); });
 
-    // Вкладки «Каталог / Категории»
-    $('mainTabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (b) switchTab(b.dataset.tab); });
-    // Плитка категории → открыть её товары в «Каталоге»
-    $('catGrid').addEventListener('click', (e) => {
-      const t = e.target.closest('[data-cat-tile]');
-      if (!t) return;
-      state.selCats = [t.dataset.catTile]; state.selGroups = [];
-      state.renderLimit = PAGE_SIZE;
-      switchTab('catalog');
-      renderAll();
-    });
     // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
     $('filterCats').addEventListener('change', (e) => {
       const cb = e.target.closest('[data-fcat]');
@@ -4705,6 +4680,24 @@
       const [from, to] = sel.value.split('|');
       topPeriod = { from, to };
       loadTopProducts();
+    });
+    // админ удаляет выбранный отчёт продаж (товары и цены не трогаются)
+    $('topDeletePeriod').addEventListener('click', async () => {
+      if (!state.isAdmin || !topPeriod) return;
+      const label = periodLabel(topPeriod.from, topPeriod.to);
+      if (!confirm(`Удалить отчёт продаж за «${label}»?\nТовары, цены и остальное не тронутся — удалится только этот загруженный отчёт продаж.`)) return;
+      const btn = $('topDeletePeriod');
+      btn.disabled = true;
+      try {
+        const { error } = await sb.rpc('catalog_delete_sales_period', { p_from: topPeriod.from, p_to: topPeriod.to });
+        if (error) throw error;
+        toast('Отчёт продаж удалён');
+        await renderTopPeriods(); // обновляем список периодов и топ
+      } catch (e) {
+        toast('Не удалось удалить: ' + (e.message || ''));
+      } finally {
+        btn.disabled = false;
+      }
     });
     // переключатель «По выручке / По количеству»
     $('topModeSeg').addEventListener('click', (e) => {

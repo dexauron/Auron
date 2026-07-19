@@ -167,36 +167,6 @@ body {
   border: 2px solid var(--bg);
 }
 
-/* ── Вкладки «Каталог / Категории» ── */
-.main-tabs { display: flex; gap: 4px; background: var(--surface-2); border-radius: 100px; padding: 4px; margin-top: 10px; }
-.main-tab { flex: 1; padding: 10px; border: none; background: transparent; color: var(--text-2); font-size: 15px; font-weight: 600; border-radius: 100px; cursor: pointer; }
-.main-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 4px rgba(0, 0, 0, .12); }
-:root[data-theme="dark"] .main-tab.active, :root:not([data-theme="light"]) .main-tab.active { background: #3a3d44; }
-
-/* ── Баннер-обложка магазина: спокойный, в стиле iOS ── */
-.hero {
-  margin-bottom: 16px; padding: 16px 18px; border-radius: var(--radius);
-  background: var(--surface); border: 1px solid var(--border);
-}
-.hero-name { font-size: 19px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
-.hero-sub { font-size: 13.5px; color: var(--text-2); margin-top: 2px; }
-
-/* ── Плитки категорий: чистые светлые карточки (iOS), иконка в мягком кружке ── */
-.cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.cat-tile {
-  border: 1px solid var(--border); background: var(--surface); cursor: pointer; text-align: left;
-  padding: 16px; border-radius: 18px;
-  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
-  color: var(--text); transition: transform .08s ease;
-}
-.cat-tile:active { transform: scale(.97); }
-.cat-tile-icon {
-  width: 48px; height: 48px; border-radius: 14px;
-  background: var(--surface-2); display: grid; place-items: center; font-size: 26px;
-}
-.cat-tile-name { font-size: 15.5px; font-weight: 700; line-height: 1.2; }
-.cat-tile-count { font-size: 13px; color: var(--text-2); margin-top: -4px; }
-
 /* ── Плашки активных фильтров на главном (снять по ✕) ── */
 .active-filters { padding-top: 2px; padding-bottom: 8px; }
 .active-filters:empty { display: none; }
@@ -770,6 +740,7 @@ select.input { appearance: none; }
   background-repeat: no-repeat; background-position: right 12px center;
 }
 .top-summary { font-size: 12.5px; color: var(--text-2); margin: 2px 0 12px; }
+.top-del { color: #e5484d; margin-top: 4px; }
 .top-row {
   display: grid;
   grid-template-columns: 26px 40px 1fr auto;
@@ -812,7 +783,7 @@ select.input { appearance: none; }
 
 /* ── Широкие экраны (компьютер) ────────────────── */
 @media (min-width: 900px) {
-  .header-row, .search-row, .chips, .main-tabs { max-width: 1160px; margin-left: auto; margin-right: auto; }
+  .header-row, .search-row, .chips { max-width: 1160px; margin-left: auto; margin-right: auto; }
   .header-row { margin-bottom: 10px; }
   .content { max-width: 1200px; margin: 0 auto; }
   .banner { max-width: 1172px; margin-left: auto; margin-right: auto; }
