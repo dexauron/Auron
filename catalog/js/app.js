@@ -3700,7 +3700,24 @@
 
   const daysBetween = (from, to) => Math.max(1, Math.round((new Date(to) - new Date(from)) / 86400000) + 1);
 
-  // загруженные периоды продаж — чипами, по ним и смотрим топ
+  const MONTHS_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+  const MONTHS_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+  // Человеческое название периода: «Июль 2026» (полный месяц) · «17 июля 2026»
+  // (один день) · «1 июля – 15 августа 2026» (произвольный диапазон).
+  function periodLabel(from, to) {
+    const [fy, fm, fd] = String(from).split('-').map(Number);
+    const [ty, tm, td] = String(to).split('-').map(Number);
+    if (!fy || !ty) return `${fmtDate(from)}–${fmtDate(to)}`;
+    if (from === to) return `${fd} ${MONTHS_GEN[fm - 1]} ${fy}`;
+    const lastDay = new Date(fy, fm, 0).getDate(); // последний день месяца fm
+    if (fd === 1 && fy === ty && fm === tm && td === lastDay) return `${MONTHS_NOM[fm - 1]} ${fy}`;
+    const yr = ty === fy ? '' : ` ${fy}`;
+    return `${fd} ${MONTHS_GEN[fm - 1]}${yr} – ${td} ${MONTHS_GEN[tm - 1]} ${ty}`;
+  }
+
+  let topPeriod = null; // {from, to} — выбранный период
+
+  // загруженные периоды продаж: один — просто подпись, несколько — простой список
   async function renderTopPeriods() {
     const box = $('topChips');
     let periods = [];
@@ -3718,8 +3735,16 @@
       $('topList').innerHTML = '<p class="muted">Продажи ещё не загружены. Меню админа → «📈 Импорт продаж» — загрузи отчёт «Продажи» из 1С.</p>';
       return;
     }
-    box.innerHTML = periods.map((p, i) =>
-      `<button class="chip${i === 0 ? ' active' : ''}" data-from="${esc(p.period_from)}" data-to="${esc(p.period_to)}">${fmtDate(p.period_from)}–${fmtDate(p.period_to)}</button>`).join('');
+    // по умолчанию — самый свежий отчёт (список приходит от новых к старым)
+    topPeriod = { from: periods[0].period_from, to: periods[0].period_to };
+    if (periods.length === 1) {
+      box.innerHTML = `<div class="top-period-one">${esc(periodLabel(topPeriod.from, topPeriod.to))}</div>`;
+    } else {
+      box.innerHTML = '<label class="top-period-field"><span class="top-period-cap">Период</span>'
+        + '<select id="topPeriodSel">'
+        + periods.map((p) => `<option value="${esc(p.period_from)}|${esc(p.period_to)}">${esc(periodLabel(p.period_from, p.period_to))}</option>`).join('')
+        + '</select></label>';
+    }
     loadTopProducts();
   }
 
@@ -3729,10 +3754,9 @@
   let topMode = 'amount'; // 'amount' | 'qty'
 
   async function loadTopProducts() {
-    const chip = document.querySelector('#topChips .chip.active');
-    if (!chip) return;
-    const from = chip.dataset.from;
-    const to = chip.dataset.to;
+    if (!topPeriod) return;
+    const from = topPeriod.from;
+    const to = topPeriod.to;
     const days = daysBetween(from, to);
     const box = $('topList');
     box.innerHTML = '<p class="muted">Считаем…</p>';
@@ -3763,7 +3787,7 @@
     const totAmount = total ? num(total.total_amount) : data.reduce((s, r) => s + num(r.total_amount), 0);
     const maxMetric = metric(data[0]) || 1;
     const modeLabel = topMode === 'qty' ? 'по количеству' : 'по выручке';
-    const head = `<div class="top-summary">За ${fmtDate(from)}–${fmtDate(to)} · ${days} дн. · ${modeLabel}`
+    const head = `<div class="top-summary">${esc(periodLabel(from, to))} · ${days} дн. · ${modeLabel}`
       + (totAmount ? ` · оборот ${fmtPrice(totAmount)}` : '') + `</div>`;
 
     box.innerHTML = head + data.map((row, i) => {
@@ -4674,10 +4698,12 @@
 
     // Ходовые товары (после входа)
     $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
-    $('topChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      document.querySelectorAll('#topChips .chip').forEach((c) => c.classList.toggle('active', c === chip));
+    // выбор периода из выпадающего списка
+    $('topChips').addEventListener('change', (e) => {
+      const sel = e.target.closest('#topPeriodSel');
+      if (!sel) return;
+      const [from, to] = sel.value.split('|');
+      topPeriod = { from, to };
       loadTopProducts();
     });
     // переключатель «По выручке / По количеству»
