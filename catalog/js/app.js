@@ -601,6 +601,12 @@
     }
     if (state.canPurchase) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
     if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
+    // сотруднику — быстрый «пришло сегодня» одним тапом (по дате из файла «Цены
+    // поставщиков», столбец «Период»). Совмещается с «Весовые»/категорией.
+    if (state.session) {
+      const todayOn = state.arrivalFrom === daysAgoISO(0) && state.arrivalTo === todayISO();
+      html += `<button class="chip${todayOn ? ' active' : ''}" data-arrival-today>🆕 Пришло сегодня</button>`;
+    }
 
     // категории — по убыванию числа товаров; порядок стабильный
     const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
@@ -4155,6 +4161,13 @@
       if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
       // «Избранное» — переключаем режим показа только избранных товаров
       if (chip.hasAttribute('data-fav-chip')) { state.favOnly = !state.favOnly; state.renderLimit = PAGE_SIZE; renderAll(); return; }
+      // «Пришло сегодня» — быстрый фильтр поступления за сегодня (повторный тап снимает)
+      if (chip.hasAttribute('data-arrival-today')) {
+        const from = daysAgoISO(0); const to = todayISO();
+        if (state.arrivalFrom === from && state.arrivalTo === to) { state.arrivalFrom = ''; state.arrivalTo = ''; }
+        else { state.arrivalFrom = from; state.arrivalTo = to; }
+        state.renderLimit = PAGE_SIZE; renderAll(); return;
+      }
       // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
       if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
       // повторный тап снимает отметку; можно отметить несколько
