@@ -1618,6 +1618,86 @@
     }
   }
 
+  /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
+     Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
+     устройстве (localStorage), в репозиторий/код не попадает. Через него
+     приложение сохраняет файлы каталога прямо на GitHub одним коммитом (атомарно,
+     чтобы деплой срабатывал один раз). Витрина — публично; секретное (закупка,
+     «Ходовые») позже уедет в зашифрованный файл. */
+  const GH_TOKEN_KEY = 'wm_gh_token';
+  function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+  function ghSetToken(t) { try { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); } catch (e) { /* приватный режим */ } }
+  function ghConfigured() { return !!(ghToken() && CFG.GITHUB_OWNER && CFG.GITHUB_REPO); }
+  const ghRepo = () => `/repos/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}`;
+  const ghBranch = () => CFG.GITHUB_BRANCH || 'main';
+
+  async function ghApi(path, opts = {}) {
+    return fetch('https://api.github.com' + path, {
+      ...opts,
+      headers: {
+        Authorization: 'Bearer ' + ghToken(),
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(opts.headers || {}),
+      },
+    });
+  }
+  async function ghJson(path, opts) {
+    const r = await ghApi(path, opts);
+    if (!r.ok) throw new Error('GitHub ' + ((opts && opts.method) || 'GET') + ' ' + path + ' → ' + r.status + ' ' + (await r.text()).slice(0, 200));
+    return r.json();
+  }
+
+  // Один коммит с несколькими файлами (текстовыми). files: [{path, content}],
+  // path — от корня репозитория. При параллельной правке (ветка ушла вперёд)
+  // один раз перечитываем вершину ветки и повторяем.
+  async function ghCommit(files, message, _retry = true) {
+    const b = ghBranch();
+    const ref = await ghJson(`${ghRepo()}/git/ref/heads/${b}`);
+    const baseCommit = ref.object.sha;
+    const baseInfo = await ghJson(`${ghRepo()}/git/commits/${baseCommit}`);
+    const tree = await ghJson(`${ghRepo()}/git/trees`, {
+      method: 'POST',
+      body: JSON.stringify({ base_tree: baseInfo.tree.sha, tree: files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.content })) }),
+    });
+    const commit = await ghJson(`${ghRepo()}/git/commits`, {
+      method: 'POST',
+      body: JSON.stringify({ message: message || 'обновление каталога', tree: tree.sha, parents: [baseCommit] }),
+    });
+    const upd = await ghApi(`${ghRepo()}/git/refs/heads/${b}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+    if (!upd.ok) {
+      if ((upd.status === 409 || upd.status === 422) && _retry) return ghCommit(files, message, false);
+      throw new Error('GitHub PATCH ref → ' + upd.status + ' ' + (await upd.text()).slice(0, 200));
+    }
+    return commit.sha;
+  }
+
+  // Витринные поля — что можно показывать покупателю (тот же белый список, что и
+  // в скрипте выгрузки). Секретное сюда не попадает.
+  const PUBLIC_FIELDS = ['id', 'name', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos'];
+  function buildPublicProducts() {
+    return state.products
+      .map((p) => { const o = {}; for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k]; return o; })
+      .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
+  }
+  function buildPublicGroups() {
+    return state.groups.map((g) => ({ id: g.id, name: g.name, sort_order: g.sort_order }));
+  }
+
+  // Опубликовать витрину (товары + категории) одним коммитом на GitHub.
+  async function publishShowcase(message) {
+    const files = [
+      { path: `${CFG.DATA_PATH}/products.json`, content: JSON.stringify(buildPublicProducts()) },
+      { path: `${CFG.DATA_PATH}/groups.json`, content: JSON.stringify(buildPublicGroups()) },
+    ];
+    return ghCommit(files, message || 'Каталог: обновлена витрина');
+  }
+
+  // Тестовый доступ к публикации — только на localhost (в проде не открываем).
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken };
+  }
+
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
   // покупателя БЕЗ входа. Бесплатно, без сервера, работает офлайн. В файл попадает
   // только витрина (товары, розничная цена, фото, описание, категория); секретное
