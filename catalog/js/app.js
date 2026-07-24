@@ -81,6 +81,7 @@
   };
 
   let sb = null;
+  let secretPw = null; // пароль серверлес-каталога (в памяти, для публикации после правок)
   let currentProduct = null;   // товар, открытый в карточке
   let editingProduct = null;   // товар в форме редактирования (null = новый)
   let formPhotos = [];         // [{url}] сохранённые + [{blob, preview}] новые
@@ -1277,7 +1278,15 @@
   async function renderProductSales(p) {
     const box = $('sheetSales');
     box.innerHTML = '';
-    if (!sb || !state.session) return; // продажи — только после входа
+    if (!state.session) return; // продажи — только после входа
+    // серверлес: продажи берём из памяти (по коду/названию — как в отчёте 1С)
+    if (state.serverless) {
+      const mine = (state.sales || []).filter((r) => (p.code && r.code === p.code) || norm(r.name || '') === norm(p.name));
+      const s = mine.sort((a, b) => String(b.period_to || '').localeCompare(String(a.period_to || '')))[0];
+      if (s && currentProduct === p) renderSalesBox(p, { period_from: s.period_from, period_to: s.period_to, qty: s.qty }, false);
+      return;
+    }
+    if (!sb) return;
     let s;
     try {
       const { data, error } = await sb.from('catalog_sales')
@@ -1323,6 +1332,13 @@
     // покупатель без входа не видит поставщиков вовсе (никаких намёков на «вход
     // для сотрудников»); кассир видит только розничную цену
     if (!state.session || !state.canPurchase) { box.innerHTML = ''; return; }
+    // серверлес: цены поставщиков берём из памяти (расшифрованный каталог)
+    if (state.serverless) {
+      const rows = (state.prices || []).filter((r) => r.product_id === p.id)
+        .sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
+      renderCardSuppliers(p, rows, baseSupIds, {});
+      return;
+    }
     box.innerHTML = '<p class="muted">Загружаем цены…</p>';
     let rows;
     try {
@@ -1764,12 +1780,13 @@
   function secretRawUrl() {
     return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${SECRET_FILE}`;
   }
+  // null ТОЛЬКО если файла ещё нет (404). Сбой сети — исключение (чтобы не
+  // спутать обрыв связи с «каталога нет» и случайно не затереть его первой настройкой).
   async function fetchSecretRaw() {
-    try {
-      const r = await fetch(secretRawUrl() + '?t=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) return null; // 404 — файла ещё нет
-      return await r.text();
-    } catch (e) { return null; }
+    const r = await fetch(secretRawUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('Не удалось скачать каталог (' + r.status + ')');
+    return r.text();
   }
   // полный товар без служебных полей индекса (начинаются с "_")
   function cleanProductsFull() {
@@ -1812,6 +1829,22 @@
     state.serverless = true;
     state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
     return true;
+  }
+
+  // Включить режим «вошёл владелец без сервера»: обновить интерфейс как после
+  // обычного входа (кнопки админа, внутренние разделы), запомнить пароль для
+  // последующих публикаций. Псевдо-сессия нужна, чтобы renderAll показал
+  // «сотруднические» разделы (они проверяют state.session).
+  function applyServerless(pw) {
+    secretPw = pw;
+    state.serverless = true;
+    state.session = { user: { email: 'owner' }, serverless: true };
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    $('fabAdd').hidden = false;
+    $('adminBtn').classList.toggle('is-admin', true);
+    $('adminBtnLabel').hidden = true;
+    saveCache();
+    renderAll();
   }
 
   /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
@@ -1965,6 +1998,8 @@
   }
 
   async function refresh({ silent = false } = {}) {
+    // серверлес: данные уже в памяти (расшифрованный каталог), сервера нет
+    if (state.serverless) { renderAll(); return; }
     // Покупатель без входа и включённый STATIC_URL → читаем витрину из файла.
     // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
     // Сотрудник после входа всегда грузится с сервера (полные данные).
@@ -3085,6 +3120,29 @@
     const todo = smartEntries.filter((e) => e.type && !e.error && !(e.type === 'barcodes'))
       .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
     let okCount = 0;
+
+    // ── Серверлес: те же файлы, но в зашифрованный каталог на GitHub ──
+    if (state.serverless) {
+      for (const e of todo) {
+        try {
+          if (e.type === 'prices') svUploadPrices(e.byKey);
+          else if (e.type === 'retail') svUploadRetail(e.parsed);
+          else if (e.type === 'stock') svUploadStock(e.parsed);
+          else if (e.type === 'sales') svUploadSales(e.parsed);
+          else if (e.type === 'contacts') svUploadContacts(e.parsed);
+          else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
+          setSmartRowStatus(e, 'загружено ✓'); okCount++;
+        } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
+      }
+      state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      buildIndex(); renderAll();
+      smartLog('Сохраняем на GitHub…');
+      try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован ✓`); toast('Каталог обновлён ✓'); }
+      catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('⚠ Не удалось опубликовать'); }
+      btn.disabled = false; btn.hidden = true;
+      return;
+    }
+
     for (const e of todo) {
       smartSink = (msg) => setSmartRowStatus(e, msg);
       try {
@@ -4784,7 +4842,7 @@
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
     // Умный импорт: меню админа → одна вкладка, каталог сам распознаёт файлы
-    $('menuImportHub').addEventListener('click', () => {
+    function openImportHub() {
       closeSheet('adminMenuSheet');
       smartEntries = [];
       $('smartList').innerHTML = '';
@@ -4792,7 +4850,8 @@
       $('smartStatus').hidden = true;
       $('smartFiles').value = '';
       openSheet('importHubSheet');
-    });
+    }
+    $('menuImportHub').addEventListener('click', openImportHub);
     $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
     $('smartRun').addEventListener('click', smartRun);
     $('photoExcelFile').addEventListener('change', () => {
@@ -4953,6 +5012,43 @@
       const password = $('loginPassword').value;
       btn.disabled = true;
       btn.textContent = 'Входим…';
+      $('loginError').hidden = true;
+
+      // Серверлес-вход по паролю (сервера нет): пароль открывает зашифрованный
+      // каталог на GitHub. Нет файла (404) — первая настройка: этот пароль станет
+      // паролём каталога, дальше грузим Excel. Пробуем всегда, когда включён
+      // бесплатный режим (STATIC_URL) или есть GitHub-ключ.
+      if (CFG.STATIC_URL || ghConfigured()) {
+        try {
+          await unlockSecret(password);
+          applyServerless(password);
+          $('loginPassword').value = ''; $('loginEmail').value = '';
+          closeSheet('loginSheet');
+          btn.disabled = false; btn.textContent = 'Войти';
+          toast('Вход выполнен ✓');
+          return;
+        } catch (err) {
+          btn.disabled = false; btn.textContent = 'Войти';
+          if (err && err.message === 'NO_SECRET') {
+            // каталога на GitHub ещё нет — первая настройка
+            if (!ghConfigured()) {
+              $('loginError').textContent = 'Первый вход: сначала вставь GitHub-ключ в меню «Публикация на GitHub», потом вернись и задай пароль.';
+              $('loginError').hidden = false;
+              return;
+            }
+            applyServerless(password);
+            $('loginPassword').value = ''; $('loginEmail').value = '';
+            closeSheet('loginSheet');
+            toast('Первый вход. Загрузи Excel — соберём каталог ✓');
+            openImportHub();
+            return;
+          }
+          // файл есть, но пароль не подошёл (или сбой сети)
+          $('loginError').textContent = 'Пароль не подошёл (или нет связи с GitHub). Проверь пароль каталога.';
+          $('loginError').hidden = false;
+          return;
+        }
+      }
 
       // к каким аккаунтам подходит этот пароль: явный email из поля,
       // иначе аккаунт сотрудников + запомненный email админа
@@ -4998,8 +5094,16 @@
     });
 
     $('menuLogout').addEventListener('click', async () => {
-      await sb.auth.signOut();
       closeSheet('adminMenuSheet');
+      if (state.serverless) {
+        // серверлес: просто забываем пароль и данные, перезагружаем витрину
+        secretPw = null;
+        state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.role = null;
+        toast('Вы вышли из аккаунта');
+        location.reload();
+        return;
+      }
+      await sb.auth.signOut();
       toast('Вы вышли из аккаунта');
     });
 
