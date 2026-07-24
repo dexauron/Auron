@@ -15,6 +15,11 @@ cd "$REPO_ROOT"
 # свежая деплой-ветка (с ретраями на сетевые сбои)
 for i in 1 2 3; do git fetch origin "$DEPLOY_BRANCH" && break || sleep $((2**i)); done
 
+# ВАЖНО: приложение само пишет в деплой-ветку (публикация витрины), поэтому
+# локальная ветка легко отстаёт. Всегда отталкиваемся от СВЕЖЕЙ удалённой версии,
+# иначе пуш отклонят (non-fast-forward) и данные разъедутся.
+git branch -f "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
+
 git worktree add -q "$WT" "$DEPLOY_BRANCH"
 trap 'git worktree remove --force "$WT" 2>/dev/null || true' EXIT
 
