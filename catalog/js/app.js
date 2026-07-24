@@ -1814,9 +1814,123 @@
     return true;
   }
 
+  /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
+     памяти (сопоставление по коду → штрихкоду → названию, id и фото сохраняются)
+     и публикуется в зашифрованный файл. Парсеры не трогаем — переиспользуем. ── */
+  function svUuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'p' + Date.now() + Math.random().toString(36).slice(2)); }
+  function svIndex() {
+    const byCode = new Map(), byBc = new Map(), byName = new Map();
+    for (const p of state.products) {
+      if (p.code) byCode.set(String(p.code), p);
+      for (const b of (p.barcodes || [])) byBc.set(String(b), p);
+      byName.set(norm(p.name), p);
+    }
+    return { byCode, byBc, byName };
+  }
+  function svMatch(idx, code, barcodes, name) {
+    if (code && idx.byCode.has(String(code))) return idx.byCode.get(String(code));
+    for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
+    if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
+    return null;
+  }
+  function svGroupId(name) {
+    if (!name) return null;
+    let g = state.groups.find((x) => norm(x.name) === norm(name));
+    if (!g) { g = { id: svUuid(), name: String(name).trim(), sort_order: state.groups.length + 1 }; state.groups.push(g); }
+    return g.id;
+  }
+  function svSupplierId(name) {
+    if (!name) return null;
+    let s = state.suppliers.find((x) => norm(x.name) === norm(name));
+    if (!s) { s = { id: svUuid(), name: String(name).trim() }; state.suppliers.push(s); }
+    return s.id;
+  }
+  function svNewProduct(idx, name) {
+    const p = { id: svUuid(), name, group_id: null, supplier_ids: [], barcodes: [], photos: [], is_weighted: false, unit: null, retail_price: null };
+    state.products.push(p); idx.byName.set(norm(name), p);
+    return p;
+  }
+  function svAddBarcodes(idx, p, barcodes) {
+    if (!barcodes || !barcodes.length) return;
+    const set = new Set([...(p.barcodes || []), ...barcodes].filter(Boolean));
+    p.barcodes = [...set];
+    for (const b of barcodes) if (b) idx.byBc.set(String(b), p);
+  }
+  // «Цены поставщиков» (parsePriceReport): товары + штрихкоды + поставщики + закупка + иногда розница
+  function svUploadPrices(byKey) {
+    const idx = svIndex(); state.prices = state.prices || [];
+    for (const item of byKey.values()) {
+      const barcodes = [...item.barcodes];
+      let p = svMatch(idx, item.code, barcodes, item.name);
+      if (!p) p = svNewProduct(idx, item.name);
+      if (item.code && !p.code) { p.code = item.code; idx.byCode.set(String(item.code), p); }
+      if (item.article && !p.article) p.article = item.article;
+      if (item.group) p.group_id = svGroupId(item.group);
+      if (item.unit && !p.unit) p.unit = item.unit;
+      if (item.weighted) p.is_weighted = true;
+      if (item.retail != null) p.retail_price = item.retail;
+      svAddBarcodes(idx, p, barcodes);
+      for (const supName of item.suppliers) { const sid = svSupplierId(supName); if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid); }
+      for (const [supName, info] of item.prices) {
+        const sid = svSupplierId(supName);
+        if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
+        const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
+        if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; } }
+        else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null });
+      }
+    }
+  }
+  function svUploadRetail(parsed) {
+    const idx = svIndex();
+    for (const rec of parsed.recs) {
+      let p = svMatch(idx, null, [], rec.name);
+      if (!p && rec.article) p = state.products.find((x) => x.article && norm(x.article) === norm(rec.article)) || null;
+      if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) p.article = rec.article; }
+      if (rec.retail != null) p.retail_price = rec.retail;
+      if (rec.group) p.group_id = svGroupId(rec.group);
+    }
+  }
+  function svUploadStock(parsed) {
+    const idx = svIndex();
+    for (const rec of parsed.recs) {
+      const barcodes = rec.barcode ? [rec.barcode] : [];
+      let p = svMatch(idx, rec.code, barcodes, rec.name);
+      if (!p) p = svNewProduct(idx, rec.name);
+      if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(String(rec.code), p); }
+      svAddBarcodes(idx, p, barcodes);
+      if (rec.group) p.group_id = svGroupId(rec.group);
+      if (rec.unit && !p.unit) p.unit = rec.unit;
+      if (rec.unit === 'кг') p.is_weighted = true;
+      if (rec.retail != null) p.retail_price = rec.retail;
+      p.stock = rec.stock;
+    }
+  }
+  function svUploadSales(parsed) {
+    state.sales = (state.sales || []).filter((s) => !(s.period_from === (parsed.periodFrom || null) && s.period_to === (parsed.periodTo || null)));
+    for (const rec of parsed.recs) {
+      state.sales.push({ period_from: parsed.periodFrom || null, period_to: parsed.periodTo || null, code: rec.code || null, name: rec.name, qty: rec.qty, amount: rec.hasAmount ? rec.amount : null });
+    }
+  }
+  function svUploadContacts(list) {
+    state.contacts = state.contacts || {};
+    for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
+  }
+  // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
+  function svImportRows(rows) {
+    const type = detectReportType(rows);
+    if (!type) throw new Error('не понял, что это за файл');
+    if (type === 'prices') svUploadPrices(parsePriceReport(rows));
+    else if (type === 'retail') svUploadRetail(parseRetailList(rows));
+    else if (type === 'stock') svUploadStock(parseStockReport(rows));
+    else if (type === 'sales') svUploadSales(parseSalesReport(rows));
+    else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
+    else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
+    return type;
+  }
+
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, ghCommit, buildPublicProducts, buildFullSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, _state: () => state };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, ghCommit, buildPublicProducts, buildFullSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
