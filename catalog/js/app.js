@@ -81,6 +81,7 @@
   };
 
   let sb = null;
+  let secretPw = null; // пароль серверлес-каталога (в памяти, для публикации после правок)
   let currentProduct = null;   // товар, открытый в карточке
   let editingProduct = null;   // товар в форме редактирования (null = новый)
   let formPhotos = [];         // [{url}] сохранённые + [{blob, preview}] новые
@@ -1277,7 +1278,15 @@
   async function renderProductSales(p) {
     const box = $('sheetSales');
     box.innerHTML = '';
-    if (!sb || !state.session) return; // продажи — только после входа
+    if (!state.session) return; // продажи — только после входа
+    // серверлес: продажи берём из памяти (по коду/названию — как в отчёте 1С)
+    if (state.serverless) {
+      const mine = (state.sales || []).filter((r) => (p.code && r.code === p.code) || norm(r.name || '') === norm(p.name));
+      const s = mine.sort((a, b) => String(b.period_to || '').localeCompare(String(a.period_to || '')))[0];
+      if (s && currentProduct === p) renderSalesBox(p, { period_from: s.period_from, period_to: s.period_to, qty: s.qty }, false);
+      return;
+    }
+    if (!sb) return;
     let s;
     try {
       const { data, error } = await sb.from('catalog_sales')
@@ -1323,6 +1332,13 @@
     // покупатель без входа не видит поставщиков вовсе (никаких намёков на «вход
     // для сотрудников»); кассир видит только розничную цену
     if (!state.session || !state.canPurchase) { box.innerHTML = ''; return; }
+    // серверлес: цены поставщиков берём из памяти (расшифрованный каталог)
+    if (state.serverless) {
+      const rows = (state.prices || []).filter((r) => r.product_id === p.id)
+        .sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
+      renderCardSuppliers(p, rows, baseSupIds, {});
+      return;
+    }
     box.innerHTML = '<p class="muted">Загружаем цены…</p>';
     let rows;
     try {
@@ -1726,9 +1742,228 @@
     }
   }
 
-  // Тестовый доступ к публикации — только на localhost (в проде не открываем).
+  /* ── Шифрование секретного (закупка, «Ходовые») для хранения на GitHub ──────
+     Сервера больше нет, поэтому секретные данные будут лежать на GitHub, но в
+     ЗАШИФРОВАННОМ виде. Шифруем паролем на устройстве (Web Crypto: AES-GCM, ключ
+     из пароля через PBKDF2). На GitHub — только шифртекст, без пароля бесполезен.
+     Разные пароли → разный доступ (владелец видит всё, сотрудник — только своё). */
+  const ENC_ITER = 150000;
+  async function deriveKey(password, salt) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: ENC_ITER, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  function b64(bytes) { let s = ''; const CH = 0x8000; for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
+  function unb64(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  async function encryptJSON(obj, password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
+    return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, salt: b64(salt), iv: b64(iv), data: b64(ct) });
+  }
+  async function decryptJSON(blob, password) {
+    const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
+    const key = await deriveKey(password, unb64(env.salt));
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  /* ── Серверлес-каталог: полный каталог в зашифрованном файле на GitHub ──────
+     Сервера нет. Источник правды для владельца — зашифрованный файл
+     secret-catalog.enc (полный каталог: товары со всеми полями + закупочные цены
+     + продажи + контакты). Из него делается ОТКРЫТАЯ витрина products.json для
+     покупателей. Читать шифрофайл может кто угодно (он публичный), но открыть —
+     только по паролю. Писать (публиковать) — по GitHub-ключу владельца. */
+  const SECRET_FILE = 'secret-catalog.enc';
+  function secretRawUrl() {
+    return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${SECRET_FILE}`;
+  }
+  // null ТОЛЬКО если файла ещё нет (404). Сбой сети — исключение (чтобы не
+  // спутать обрыв связи с «каталога нет» и случайно не затереть его первой настройкой).
+  async function fetchSecretRaw() {
+    const r = await fetch(secretRawUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('Не удалось скачать каталог (' + r.status + ')');
+    return r.text();
+  }
+  // полный товар без служебных полей индекса (начинаются с "_")
+  function cleanProductsFull() {
+    return state.products.map((p) => { const o = {}; for (const k in p) if (k[0] !== '_') o[k] = p[k]; return o; });
+  }
+  function buildFullSnapshot() {
+    return {
+      v: 1, savedAt: new Date().toISOString(),
+      products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
+      prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {}, competitors: state.competitors || [],
+    };
+  }
+  // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный каталог.
+  async function publishFull(password) {
+    const enc = await encryptJSON(buildFullSnapshot(), password);
+    const pJson = JSON.stringify(buildPublicProducts());
+    const gJson = JSON.stringify(buildPublicGroups());
+    const sha = await ghCommit([
+      { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
+      { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
+      { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: enc },
+    ], 'Каталог: обновлены витрина и защищённые данные');
+    try { localStorage.setItem(GH_SIG_KEY, strHash(pJson) + '.' + strHash(gJson)); } catch (e) { /* приватный режим */ }
+    return sha;
+  }
+  // Вход по паролю без сервера: скачать зашифрованный каталог и открыть паролем.
+  // Бросает NO_SECRET, если файла ещё нет; бросает при неверном пароле.
+  async function unlockSecret(password) {
+    const raw = await fetchSecretRaw();
+    if (raw == null) throw new Error('NO_SECRET');
+    const data = await decryptJSON(raw, password); // неверный пароль → исключение
+    state.groups = data.groups || [];
+    state.suppliers = data.suppliers || [];
+    state.products = (data.products || []).slice().sort(byName);
+    state.prices = data.prices || [];
+    state.sales = data.sales || [];
+    state.contacts = data.contacts || {};
+    state.competitors = data.competitors || [];
+    buildIndex();
+    state.serverless = true;
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    return true;
+  }
+
+  // Включить режим «вошёл владелец без сервера»: обновить интерфейс как после
+  // обычного входа (кнопки админа, внутренние разделы), запомнить пароль для
+  // последующих публикаций. Псевдо-сессия нужна, чтобы renderAll показал
+  // «сотруднические» разделы (они проверяют state.session).
+  function applyServerless(pw) {
+    secretPw = pw;
+    state.serverless = true;
+    state.session = { user: { email: 'owner' }, serverless: true };
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    $('fabAdd').hidden = false;
+    $('adminBtn').classList.toggle('is-admin', true);
+    $('adminBtnLabel').hidden = true;
+    saveCache();
+    renderAll();
+  }
+
+  /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
+     памяти (сопоставление по коду → штрихкоду → названию, id и фото сохраняются)
+     и публикуется в зашифрованный файл. Парсеры не трогаем — переиспользуем. ── */
+  function svUuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'p' + Date.now() + Math.random().toString(36).slice(2)); }
+  function svIndex() {
+    const byCode = new Map(), byBc = new Map(), byName = new Map();
+    for (const p of state.products) {
+      if (p.code) byCode.set(String(p.code), p);
+      for (const b of (p.barcodes || [])) byBc.set(String(b), p);
+      byName.set(norm(p.name), p);
+    }
+    return { byCode, byBc, byName };
+  }
+  function svMatch(idx, code, barcodes, name) {
+    if (code && idx.byCode.has(String(code))) return idx.byCode.get(String(code));
+    for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
+    if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
+    return null;
+  }
+  function svGroupId(name) {
+    if (!name) return null;
+    let g = state.groups.find((x) => norm(x.name) === norm(name));
+    if (!g) { g = { id: svUuid(), name: String(name).trim(), sort_order: state.groups.length + 1 }; state.groups.push(g); }
+    return g.id;
+  }
+  function svSupplierId(name) {
+    if (!name) return null;
+    let s = state.suppliers.find((x) => norm(x.name) === norm(name));
+    if (!s) { s = { id: svUuid(), name: String(name).trim() }; state.suppliers.push(s); }
+    return s.id;
+  }
+  function svNewProduct(idx, name) {
+    const p = { id: svUuid(), name, group_id: null, supplier_ids: [], barcodes: [], photos: [], is_weighted: false, unit: null, retail_price: null };
+    state.products.push(p); idx.byName.set(norm(name), p);
+    return p;
+  }
+  function svAddBarcodes(idx, p, barcodes) {
+    if (!barcodes || !barcodes.length) return;
+    const set = new Set([...(p.barcodes || []), ...barcodes].filter(Boolean));
+    p.barcodes = [...set];
+    for (const b of barcodes) if (b) idx.byBc.set(String(b), p);
+  }
+  // «Цены поставщиков» (parsePriceReport): товары + штрихкоды + поставщики + закупка + иногда розница
+  function svUploadPrices(byKey) {
+    const idx = svIndex(); state.prices = state.prices || [];
+    for (const item of byKey.values()) {
+      const barcodes = [...item.barcodes];
+      let p = svMatch(idx, item.code, barcodes, item.name);
+      if (!p) p = svNewProduct(idx, item.name);
+      if (item.code && !p.code) { p.code = item.code; idx.byCode.set(String(item.code), p); }
+      if (item.article && !p.article) p.article = item.article;
+      if (item.group) p.group_id = svGroupId(item.group);
+      if (item.unit && !p.unit) p.unit = item.unit;
+      if (item.weighted) p.is_weighted = true;
+      if (item.retail != null) p.retail_price = item.retail;
+      svAddBarcodes(idx, p, barcodes);
+      for (const supName of item.suppliers) { const sid = svSupplierId(supName); if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid); }
+      for (const [supName, info] of item.prices) {
+        const sid = svSupplierId(supName);
+        if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
+        const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
+        if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; } }
+        else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null });
+      }
+    }
+  }
+  function svUploadRetail(parsed) {
+    const idx = svIndex();
+    for (const rec of parsed.recs) {
+      let p = svMatch(idx, null, [], rec.name);
+      if (!p && rec.article) p = state.products.find((x) => x.article && norm(x.article) === norm(rec.article)) || null;
+      if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) p.article = rec.article; }
+      if (rec.retail != null) p.retail_price = rec.retail;
+      if (rec.group) p.group_id = svGroupId(rec.group);
+    }
+  }
+  function svUploadStock(parsed) {
+    const idx = svIndex();
+    for (const rec of parsed.recs) {
+      const barcodes = rec.barcode ? [rec.barcode] : [];
+      let p = svMatch(idx, rec.code, barcodes, rec.name);
+      if (!p) p = svNewProduct(idx, rec.name);
+      if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(String(rec.code), p); }
+      svAddBarcodes(idx, p, barcodes);
+      if (rec.group) p.group_id = svGroupId(rec.group);
+      if (rec.unit && !p.unit) p.unit = rec.unit;
+      if (rec.unit === 'кг') p.is_weighted = true;
+      if (rec.retail != null) p.retail_price = rec.retail;
+      p.stock = rec.stock;
+    }
+  }
+  function svUploadSales(parsed) {
+    state.sales = (state.sales || []).filter((s) => !(s.period_from === (parsed.periodFrom || null) && s.period_to === (parsed.periodTo || null)));
+    for (const rec of parsed.recs) {
+      state.sales.push({ period_from: parsed.periodFrom || null, period_to: parsed.periodTo || null, code: rec.code || null, name: rec.name, qty: rec.qty, amount: rec.hasAmount ? rec.amount : null });
+    }
+  }
+  function svUploadContacts(list) {
+    state.contacts = state.contacts || {};
+    for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
+  }
+  // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
+  function svImportRows(rows) {
+    const type = detectReportType(rows);
+    if (!type) throw new Error('не понял, что это за файл');
+    if (type === 'prices') svUploadPrices(parsePriceReport(rows));
+    else if (type === 'retail') svUploadRetail(parseRetailList(rows));
+    else if (type === 'stock') svUploadStock(parseStockReport(rows));
+    else if (type === 'sales') svUploadSales(parseSalesReport(rows));
+    else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
+    else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
+    return type;
+  }
+
+  // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken, autoPublish };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, ghCommit, buildPublicProducts, buildFullSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
@@ -1763,6 +1998,8 @@
   }
 
   async function refresh({ silent = false } = {}) {
+    // серверлес: данные уже в памяти (расшифрованный каталог), сервера нет
+    if (state.serverless) { renderAll(); return; }
     // Покупатель без входа и включённый STATIC_URL → читаем витрину из файла.
     // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
     // Сотрудник после входа всегда грузится с сервера (полные данные).
@@ -2883,6 +3120,29 @@
     const todo = smartEntries.filter((e) => e.type && !e.error && !(e.type === 'barcodes'))
       .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
     let okCount = 0;
+
+    // ── Серверлес: те же файлы, но в зашифрованный каталог на GitHub ──
+    if (state.serverless) {
+      for (const e of todo) {
+        try {
+          if (e.type === 'prices') svUploadPrices(e.byKey);
+          else if (e.type === 'retail') svUploadRetail(e.parsed);
+          else if (e.type === 'stock') svUploadStock(e.parsed);
+          else if (e.type === 'sales') svUploadSales(e.parsed);
+          else if (e.type === 'contacts') svUploadContacts(e.parsed);
+          else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
+          setSmartRowStatus(e, 'загружено ✓'); okCount++;
+        } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
+      }
+      state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      buildIndex(); renderAll();
+      smartLog('Сохраняем на GitHub…');
+      try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован ✓`); toast('Каталог обновлён ✓'); }
+      catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('⚠ Не удалось опубликовать'); }
+      btn.disabled = false; btn.hidden = true;
+      return;
+    }
+
     for (const e of todo) {
       smartSink = (msg) => setSmartRowStatus(e, msg);
       try {
@@ -4582,7 +4842,7 @@
     $('supplierContactForm').addEventListener('submit', submitContactForm);
 
     // Умный импорт: меню админа → одна вкладка, каталог сам распознаёт файлы
-    $('menuImportHub').addEventListener('click', () => {
+    function openImportHub() {
       closeSheet('adminMenuSheet');
       smartEntries = [];
       $('smartList').innerHTML = '';
@@ -4590,7 +4850,8 @@
       $('smartStatus').hidden = true;
       $('smartFiles').value = '';
       openSheet('importHubSheet');
-    });
+    }
+    $('menuImportHub').addEventListener('click', openImportHub);
     $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
     $('smartRun').addEventListener('click', smartRun);
     $('photoExcelFile').addEventListener('change', () => {
@@ -4751,6 +5012,43 @@
       const password = $('loginPassword').value;
       btn.disabled = true;
       btn.textContent = 'Входим…';
+      $('loginError').hidden = true;
+
+      // Серверлес-вход по паролю (сервера нет): пароль открывает зашифрованный
+      // каталог на GitHub. Нет файла (404) — первая настройка: этот пароль станет
+      // паролём каталога, дальше грузим Excel. Пробуем всегда, когда включён
+      // бесплатный режим (STATIC_URL) или есть GitHub-ключ.
+      if (CFG.STATIC_URL || ghConfigured()) {
+        try {
+          await unlockSecret(password);
+          applyServerless(password);
+          $('loginPassword').value = ''; $('loginEmail').value = '';
+          closeSheet('loginSheet');
+          btn.disabled = false; btn.textContent = 'Войти';
+          toast('Вход выполнен ✓');
+          return;
+        } catch (err) {
+          btn.disabled = false; btn.textContent = 'Войти';
+          if (err && err.message === 'NO_SECRET') {
+            // каталога на GitHub ещё нет — первая настройка
+            if (!ghConfigured()) {
+              $('loginError').textContent = 'Первый вход: сначала вставь GitHub-ключ в меню «Публикация на GitHub», потом вернись и задай пароль.';
+              $('loginError').hidden = false;
+              return;
+            }
+            applyServerless(password);
+            $('loginPassword').value = ''; $('loginEmail').value = '';
+            closeSheet('loginSheet');
+            toast('Первый вход. Загрузи Excel — соберём каталог ✓');
+            openImportHub();
+            return;
+          }
+          // файл есть, но пароль не подошёл (или сбой сети)
+          $('loginError').textContent = 'Пароль не подошёл (или нет связи с GitHub). Проверь пароль каталога.';
+          $('loginError').hidden = false;
+          return;
+        }
+      }
 
       // к каким аккаунтам подходит этот пароль: явный email из поля,
       // иначе аккаунт сотрудников + запомненный email админа
@@ -4796,8 +5094,16 @@
     });
 
     $('menuLogout').addEventListener('click', async () => {
-      await sb.auth.signOut();
       closeSheet('adminMenuSheet');
+      if (state.serverless) {
+        // серверлес: просто забываем пароль и данные, перезагружаем витрину
+        secretPw = null;
+        state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.role = null;
+        toast('Вы вышли из аккаунта');
+        location.reload();
+        return;
+      }
+      await sb.auth.signOut();
       toast('Вы вышли из аккаунта');
     });
 
