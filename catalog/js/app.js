@@ -1726,9 +1726,37 @@
     }
   }
 
-  // Тестовый доступ к публикации — только на localhost (в проде не открываем).
+  /* ── Шифрование секретного (закупка, «Ходовые») для хранения на GitHub ──────
+     Сервера больше нет, поэтому секретные данные будут лежать на GitHub, но в
+     ЗАШИФРОВАННОМ виде. Шифруем паролем на устройстве (Web Crypto: AES-GCM, ключ
+     из пароля через PBKDF2). На GitHub — только шифртекст, без пароля бесполезен.
+     Разные пароли → разный доступ (владелец видит всё, сотрудник — только своё). */
+  const ENC_ITER = 150000;
+  async function deriveKey(password, salt) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt, iterations: ENC_ITER, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  function b64(bytes) { let s = ''; const CH = 0x8000; for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
+  function unb64(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  async function encryptJSON(obj, password) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const key = await deriveKey(password, salt);
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
+    return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, salt: b64(salt), iv: b64(iv), data: b64(ct) });
+  }
+  async function decryptJSON(blob, password) {
+    const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
+    const key = await deriveKey(password, unb64(env.salt));
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data));
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken, autoPublish };
+    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
