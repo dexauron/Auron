@@ -1618,7 +1618,44 @@
     }
   }
 
+  // Витрина из статического файла (data/products.json на GitHub Pages) — для
+  // покупателя БЕЗ входа. Бесплатно, без сервера, работает офлайн. В файл попадает
+  // только витрина (товары, розничная цена, фото, описание, категория); секретное
+  // (закупка, поставщики, поступления, штрихкоды) — нет. Если файла нет или он не
+  // читается, тихо возвращаем false — приложение грузится с сервера, как раньше.
+  async function refreshStatic() {
+    try {
+      const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
+      const [pr, gr] = await Promise.all([
+        fetch(base + 'products.json', { cache: 'no-cache' }),
+        fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
+      ]);
+      if (!pr || !pr.ok) return false;
+      const products = await pr.json();
+      if (!Array.isArray(products)) return false;
+      state.groups = (gr && gr.ok) ? await gr.json() : [];
+      state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
+      state.products = products.sort(byName);
+      buildIndex();
+      state.syncMax = '';
+      state.lastFetch = Date.now();
+      saveCache();
+      $('offlineBanner').hidden = true;
+      $('loader').hidden = true;
+      renderAll();
+      return true;
+    } catch (e) {
+      return false; // любой сбой — откат на загрузку с сервера
+    }
+  }
+
   async function refresh({ silent = false } = {}) {
+    // Покупатель без входа и включённый STATIC_URL → читаем витрину из файла.
+    // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
+    // Сотрудник после входа всегда грузится с сервера (полные данные).
+    if (CFG.STATIC_URL && !state.session) {
+      if (await refreshStatic()) return;
+    }
     try {
       await fetchSmall();
       if (!state.products.length || !state.syncMax) await fullLoadProducts();
