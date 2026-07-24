@@ -1223,16 +1223,31 @@
     catch (e) { toast('Ссылка: ' + url); }
   }
 
-  // Похожие товары — из того же раздела (для покупателя: листать дольше)
+  // Похожие товары — ПО НАЗВАНИЮ: совпадают слова в наименовании, особенно
+  // первое слово (обычно бренд): «Агуша …» → другие «Агуша …».
+  const nameWords = (n) => norm(n || '').split(/[^0-9a-zа-яё]+/i).filter((w) => w.length >= 3);
   function renderSimilar(p) {
     const box = $('sheetSimilar');
     if (!box) return;
-    const cat = productCategory(p);
-    let list = state.products.filter((x) => x.id !== p.id && (
-      (p.group_id && x.group_id === p.group_id) || (cat && productCategory(x) === cat)));
-    // сначала с фото, максимум 12
-    list.sort((a, b) => (hasPhoto(b) ? 1 : 0) - (hasPhoto(a) ? 1 : 0));
-    list = list.slice(0, 12);
+    const pw = nameWords(p.name);
+    if (!pw.length) { box.innerHTML = ''; return; }
+    const pset = new Set(pw);
+    const first = pw[0];
+    const scored = [];
+    for (const x of state.products) {
+      if (x.id === p.id) continue;
+      const xw = nameWords(x.name);
+      if (!xw.length) continue;
+      let shared = 0;
+      for (const w of xw) if (pset.has(w)) shared++;
+      if (!shared) continue; // нет общих слов названия — не похож
+      let score = shared;
+      if (xw[0] === first) score += 5; // совпал бренд/первое слово — сильно ближе
+      scored.push({ x, score });
+    }
+    // по близости названия, затем сначала с фото
+    scored.sort((a, b) => (b.score - a.score) || ((hasPhoto(b.x) ? 1 : 0) - (hasPhoto(a.x) ? 1 : 0)));
+    const list = scored.slice(0, 12).map((s) => s.x);
     if (!list.length) { box.innerHTML = ''; return; }
     box.innerHTML = '<div class="similar-title">Похожие товары</div><div class="similar-row">'
       + list.map((x) => {
