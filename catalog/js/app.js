@@ -60,7 +60,10 @@
     session: null,
     role: null,       // 'admin' | 'manager' | 'cashier' — определяется после входа
     isAdmin: false,   // admin: загрузка и правка каталога
-    canPurchase: false, // admin+manager: видят закупочные цены и контакты; кассир — нет
+    canPurchase: false, // видят закупочные цены и контакты
+    canSales: false,  // видят «Ходовые товары» (продажи/выручка) — только владелец
+    serverless: false, // режим без сервера (каталог на GitHub)
+    staffPassword: null, // пароль сотрудника (задаёт владелец; хранится в его каталоге)
     contacts: {},     // supplier_id → контакты (загружаются после входа)
     competitors: [],  // магазины-конкуренты для «разведки цен» (после входа)
     lastFetch: 0,
@@ -600,7 +603,7 @@
         : state.suppliers.length;
       html += `<button class="chip${selSuppliers.length ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
     }
-    if (state.canPurchase) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
+    if (state.canSales) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
     if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
     // сотруднику — быстрый «пришло сегодня» одним тапом (по дате из файла «Цены
     // поставщиков», столбец «Период»). Совмещается с «Весовые»/категорией.
@@ -948,6 +951,7 @@
   function addRecentQuery(q) {
     q = q.trim();
     if (q.length < 2) return;
+    if (q.includes('@')) return; // email в подсказки поиска не пускаем (автозаполнение браузера)
     let list = recentQueries().filter((x) => x.toLowerCase() !== q.toLowerCase());
     list.unshift(q);
     list = list.slice(0, 8);
@@ -959,7 +963,7 @@
     const dl = $('recentQ');
     if (!dl) return;
     // сначала личные недавние запросы, затем частые запросы других (без повторов)
-    const personal = recentQueries();
+    const personal = recentQueries().filter((x) => !String(x).includes('@')); // без email
     const seen = new Set(personal.map((x) => x.toLowerCase()));
     const popular = (state.popularTerms || []).filter((t) => !seen.has(String(t).toLowerCase()));
     dl.innerHTML = [...personal, ...popular].slice(0, 14)
@@ -1278,7 +1282,7 @@
   async function renderProductSales(p) {
     const box = $('sheetSales');
     box.innerHTML = '';
-    if (!state.session) return; // продажи — только после входа
+    if (!state.session || !state.canSales) return; // продажи/«Ходовые» — только владелец
     // серверлес: продажи берём из памяти (по коду/названию — как в отчёте 1С)
     if (state.serverless) {
       const mine = (state.sales || []).filter((r) => (p.code && r.code === p.code) || norm(r.name || '') === norm(p.name));
@@ -1776,16 +1780,18 @@
      + продажи + контакты). Из него делается ОТКРЫТАЯ витрина products.json для
      покупателей. Читать шифрофайл может кто угодно (он публичный), но открыть —
      только по паролю. Писать (публиковать) — по GitHub-ключу владельца. */
-  const SECRET_FILE = 'secret-catalog.enc';
-  function secretRawUrl() {
-    return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${SECRET_FILE}`;
+  const SECRET_FILE = 'secret-catalog.enc'; // полный каталог владельца
+  const STAFF_FILE = 'secret-staff.enc';    // урезанный каталог сотрудника (без продаж/«Ходовых»)
+  const SV_AUTH_KEY = 'wm_sv_auth';         // запомненный вход на устройстве (роль + пароль)
+  function rawUrl(file) {
+    return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${file}`;
   }
   // null ТОЛЬКО если файла ещё нет (404). Сбой сети — исключение (чтобы не
-  // спутать обрыв связи с «каталога нет» и случайно не затереть его первой настройкой).
-  async function fetchSecretRaw() {
-    const r = await fetch(secretRawUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+  // спутать обрыв связи с «файла нет» и случайно не затереть каталог первой настройкой).
+  async function fetchRaw(file) {
+    const r = await fetch(rawUrl(file) + '?t=' + Date.now(), { cache: 'no-store' });
     if (r.status === 404) return null;
-    if (!r.ok) throw new Error('Не удалось скачать каталог (' + r.status + ')');
+    if (!r.ok) throw new Error('Не удалось скачать данные (' + r.status + ')');
     return r.text();
   }
   // полный товар без служебных полей индекса (начинаются с "_")
@@ -1797,25 +1803,37 @@
       v: 1, savedAt: new Date().toISOString(),
       products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {}, competitors: state.competitors || [],
+      staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
     };
   }
-  // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный каталог.
+  // Каталог для сотрудника: полный ПРОСМОТР (товары + закупка + продажи +
+  // контакты), но без прав на правку/загрузку — это остаётся только у владельца.
+  function buildStaffSnapshot() {
+    return {
+      v: 1, savedAt: new Date().toISOString(), staff: true,
+      products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
+      prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
+    };
+  }
+  // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный
+  // каталог владельца (+ отдельный файл сотрудника, если задан его пароль).
   async function publishFull(password) {
-    const enc = await encryptJSON(buildFullSnapshot(), password);
     const pJson = JSON.stringify(buildPublicProducts());
     const gJson = JSON.stringify(buildPublicGroups());
-    const sha = await ghCommit([
+    const files = [
       { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
       { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
-      { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: enc },
-    ], 'Каталог: обновлены витрина и защищённые данные');
+      { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: await encryptJSON(buildFullSnapshot(), password) },
+    ];
+    if (state.staffPassword) files.push({ path: `${CFG.DATA_PATH}/${STAFF_FILE}`, content: await encryptJSON(buildStaffSnapshot(), state.staffPassword) });
+    const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные');
     try { localStorage.setItem(GH_SIG_KEY, strHash(pJson) + '.' + strHash(gJson)); } catch (e) { /* приватный режим */ }
     return sha;
   }
-  // Вход по паролю без сервера: скачать зашифрованный каталог и открыть паролем.
+  // Вход владельца по паролю: скачать полный каталог и открыть паролем.
   // Бросает NO_SECRET, если файла ещё нет; бросает при неверном пароле.
   async function unlockSecret(password) {
-    const raw = await fetchSecretRaw();
+    const raw = await fetchRaw(SECRET_FILE);
     if (raw == null) throw new Error('NO_SECRET');
     const data = await decryptJSON(raw, password); // неверный пароль → исключение
     state.groups = data.groups || [];
@@ -1825,22 +1843,57 @@
     state.sales = data.sales || [];
     state.contacts = data.contacts || {};
     state.competitors = data.competitors || [];
+    state.staffPassword = data.staffPassword || null;
     buildIndex();
     state.serverless = true;
-    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
+    return true;
+  }
+  // Вход сотрудника по паролю: скачать файл сотрудника (без продаж) и открыть.
+  async function unlockStaff(password) {
+    const raw = await fetchRaw(STAFF_FILE);
+    if (raw == null) throw new Error('NO_STAFF');
+    const data = await decryptJSON(raw, password);
+    state.groups = data.groups || [];
+    state.suppliers = data.suppliers || [];
+    state.products = (data.products || []).slice().sort(byName);
+    state.prices = data.prices || [];
+    state.sales = data.sales || []; // сотрудник видит всё, включая продажи
+    state.contacts = data.contacts || {};
+    state.competitors = [];
+    buildIndex();
+    state.serverless = true;
+    state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
     return true;
   }
 
-  // Включить режим «вошёл владелец без сервера»: обновить интерфейс как после
-  // обычного входа (кнопки админа, внутренние разделы), запомнить пароль для
-  // последующих публикаций. Псевдо-сессия нужна, чтобы renderAll показал
-  // «сотруднические» разделы (они проверяют state.session).
+  // запомнить вход на устройстве (по просьбе владельца — не выходить до явного выхода)
+  function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
+  function clearSvAuth() { try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* некритично */ } }
+
+  // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
+  // разделы, запомнить пароль для публикаций и вход на устройстве.
   function applyServerless(pw) {
     secretPw = pw;
     state.serverless = true;
     state.session = { user: { email: 'owner' }, serverless: true };
-    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
+    saveSvAuth('owner', pw);
     $('fabAdd').hidden = false;
+    $('adminBtn').classList.toggle('is-admin', true);
+    $('adminBtnLabel').hidden = true;
+    saveCache();
+    renderAll();
+  }
+  // Включить режим «вошёл сотрудник»: видит закупку/контакты, но не «Ходовые» и
+  // не правит каталог. Тоже запоминается на устройстве.
+  function applyStaff(pw) {
+    secretPw = null; // сотрудник не публикует
+    state.serverless = true;
+    state.session = { user: { email: 'staff' }, serverless: true, staff: true };
+    state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
+    saveSvAuth('staff', pw);
+    $('fabAdd').hidden = true;
     $('adminBtn').classList.toggle('is-admin', true);
     $('adminBtnLabel').hidden = true;
     saveCache();
@@ -1896,6 +1949,7 @@
       const barcodes = [...item.barcodes];
       let p = svMatch(idx, item.code, barcodes, item.name);
       if (!p) p = svNewProduct(idx, item.name);
+      else { p.supplier_ids = p.supplier_ids || []; p.barcodes = p.barcodes || []; p.photos = p.photos || []; } // товар из витрины мог прийти без этих полей
       if (item.code && !p.code) { p.code = item.code; idx.byCode.set(String(item.code), p); }
       if (item.article && !p.article) p.article = item.article;
       if (item.group) p.group_id = svGroupId(item.group);
@@ -1929,6 +1983,7 @@
       const barcodes = rec.barcode ? [rec.barcode] : [];
       let p = svMatch(idx, rec.code, barcodes, rec.name);
       if (!p) p = svNewProduct(idx, rec.name);
+      else { p.supplier_ids = p.supplier_ids || []; p.barcodes = p.barcodes || []; p.photos = p.photos || []; }
       if (rec.code && !p.code) { p.code = rec.code; idx.byCode.set(String(rec.code), p); }
       svAddBarcodes(idx, p, barcodes);
       if (rec.group) p.group_id = svGroupId(rec.group);
@@ -1963,7 +2018,7 @@
 
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, ghCommit, buildPublicProducts, buildFullSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, _state: () => state };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
@@ -2038,6 +2093,7 @@
     state.isAdmin = false;
     state.role = null;
     state.canPurchase = false;
+    state.canSales = false;
     if (session) {
       try {
         // роль аккаунта: admin / manager / cashier
@@ -2046,6 +2102,7 @@
         state.role = data || 'cashier';
         state.isAdmin = state.role === 'admin';
         state.canPurchase = state.role === 'admin' || state.role === 'manager';
+        state.canSales = state.canPurchase; // «Ходовые» — кому доступна закупка
       } catch (e) {
         // база без ролей (ОБНОВЛЕНИЕ-7 ещё не выполнено) — прежнее поведение:
         // вошедший видит цены; админ определяется по старому списку catalog_admins
@@ -2055,6 +2112,7 @@
         } catch (e2) { state.isAdmin = true; }
         state.role = state.isAdmin ? 'admin' : 'manager';
         state.canPurchase = true;
+        state.canSales = true;
       }
       if (state.canPurchase) loadContacts(); else state.contacts = {};
       loadCompetitors(); // разведку цен ведёт любой вошедший сотрудник
@@ -4742,7 +4800,7 @@
         $('menuTitle').textContent = roleName;
         $('adminEmail').textContent = roleHint;
         $('menuAdminOnly').hidden = !state.isAdmin;
-        $('menuTop').hidden = !state.canPurchase; // аналитика продаж — админ/аналитик; кассиру не показываем
+        $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
         // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
         const noPhoto = photoCandidates().length;
         $('menuPhotoFill').textContent = noPhoto ? `📷 Дозаполнить фото (${noPhoto})` : '📷 Дозаполнить фото — всё есть ✓';
@@ -4908,18 +4966,35 @@
       closeSheet('adminMenuSheet');
       $('newStaffPass').value = '';
       $('staffPassError').hidden = true;
+      if (state.serverless) $('btnLogoutStaff').hidden = true; // серверная кнопка не нужна
       openSheet('staffPassSheet');
     });
 
     $('staffPassForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!confirm('Сменить пароль магазина? Все устройства сотрудников выйдут из системы.')) return;
+      const pass = $('newStaffPass').value.trim();
       const btn = $('staffPassSubmit');
-      btn.disabled = true;
       $('staffPassError').hidden = true;
-      const { error } = await sb.rpc('catalog_set_staff_password', {
-        p_password: $('newStaffPass').value.trim(),
-      });
+      // Серверлес: пароль сотрудника задаёт владелец. Сохраняем в его каталог и
+      // публикуем отдельный файл сотрудника (закупка/контакты, без «Ходовых»).
+      if (state.serverless) {
+        if (!pass || pass.length < 4) { $('staffPassError').textContent = 'Пароль сотрудника — минимум 4 символа.'; $('staffPassError').hidden = false; return; }
+        if (!secretPw) { $('staffPassError').textContent = 'Задать пароль сотрудника может только владелец.'; $('staffPassError').hidden = false; return; }
+        btn.disabled = true; btn.textContent = 'Сохраняем…';
+        state.staffPassword = pass;
+        try {
+          await publishFull(secretPw);
+          closeSheet('staffPassSheet');
+          toast('Пароль сотрудника сохранён ✓ Теперь сотрудник входит этим паролем');
+        } catch (err) {
+          $('staffPassError').textContent = 'Не удалось опубликовать: ' + (err.message || err) + '. Проверь GitHub-ключ.';
+          $('staffPassError').hidden = false;
+        } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
+        return;
+      }
+      if (!confirm('Сменить пароль магазина? Все устройства сотрудников выйдут из системы.')) return;
+      btn.disabled = true;
+      const { error } = await sb.rpc('catalog_set_staff_password', { p_password: pass });
       btn.disabled = false;
       if (error) {
         $('staffPassError').textContent = 'Не получилось: ' + (error.message || error)
@@ -5043,10 +5118,19 @@
             openImportHub();
             return;
           }
-          // файл есть, но пароль не подошёл (или сбой сети)
-          $('loginError').textContent = 'Пароль не подошёл (или нет связи с GitHub). Проверь пароль каталога.';
-          $('loginError').hidden = false;
-          return;
+          // не пароль владельца — пробуем аккаунт сотрудника (свой файл, без «Ходовых»)
+          try {
+            await unlockStaff(password);
+            applyStaff(password);
+            $('loginPassword').value = ''; $('loginEmail').value = '';
+            closeSheet('loginSheet');
+            toast('Вход сотрудника ✓');
+            return;
+          } catch (e2) {
+            $('loginError').textContent = 'Пароль не подошёл. Проверь пароль каталога или пароль сотрудника.';
+            $('loginError').hidden = false;
+            return;
+          }
         }
       }
 
@@ -5096,9 +5180,9 @@
     $('menuLogout').addEventListener('click', async () => {
       closeSheet('adminMenuSheet');
       if (state.serverless) {
-        // серверлес: просто забываем пароль и данные, перезагружаем витрину
-        secretPw = null;
-        state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.role = null;
+        // серверлес: забываем пароль, запомненный вход и данные, перезагружаем витрину
+        secretPw = null; clearSvAuth();
+        state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.canSales = false; state.role = null;
         toast('Вы вышли из аккаунта');
         location.reload();
         return;
@@ -5364,9 +5448,24 @@
     // мгновенно показываем сохранённый каталог, затем тихо обновляем из базы
     if (await loadCache()) renderAll();
 
-    sb.auth.getSession().then(({ data }) => applySession(data.session));
-    // setTimeout — запросы к базе нельзя делать прямо внутри колбэка onAuthStateChange
-    sb.auth.onAuthStateChange((_e, session) => { setTimeout(() => applySession(session), 0); });
+    // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
+    // «Выйти», даже после обновления страницы. Роль поднимаем сразу (данные —
+    // из кэша), а полный каталог (закупка/продажи) дотягиваем из GitHub в фоне.
+    let svRestored = false;
+    try {
+      const saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null');
+      if (saved && saved.pw) {
+        svRestored = true;
+        if (saved.role === 'staff') { applyStaff(saved.pw); unlockStaff(saved.pw).then(renderAll).catch(() => {}); }
+        else { applyServerless(saved.pw); unlockSecret(saved.pw).then(renderAll).catch(() => {}); }
+      }
+    } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
+
+    if (!svRestored) {
+      // обычный путь через сервер — только если серверлес-вход не восстановлен
+      sb.auth.getSession().then(({ data }) => { if (!state.serverless) applySession(data.session); });
+      sb.auth.onAuthStateChange((_e, session) => { if (!state.serverless) setTimeout(() => applySession(session), 0); });
+    }
 
     await refresh();
     openFromHash(); // если открыли по ссылке на товар — показываем его
