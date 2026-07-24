@@ -4692,13 +4692,21 @@
       $('ghTokenClear').hidden = !ghToken();
       $('ghPublishNow').hidden = !has;
     }
-    $('menuPublish').addEventListener('click', () => {
+    function openPublishSheet() {
       closeSheet('adminMenuSheet');
       $('ghTokenInput').value = '';
       $('publishError').hidden = true;
       renderPublishStatus();
       openSheet('publishSheet');
-    });
+    }
+    $('menuPublish').addEventListener('click', openPublishSheet);
+    // Запасной вход в публикацию БЕЗ входа на сервер (напр. если сервер недоступен):
+    // адрес …/catalog/#publish. Публикация всё равно требует GitHub-ключ, поэтому
+    // открывать окно безопасно — без ключа ничего не выложится. Витрину берём из
+    // сохранённой копии каталога (state.products), сервер не нужен.
+    function maybeOpenPublishByHash() { if (location.hash === '#publish' || location.hash === '#gh') openPublishSheet(); }
+    window.addEventListener('hashchange', maybeOpenPublishByHash);
+    setTimeout(maybeOpenPublishByHash, 400);
     $('ghTokenSave').addEventListener('click', async () => {
       const t = $('ghTokenInput').value.trim();
       $('publishError').hidden = true;
