@@ -18,9 +18,22 @@ for i in 1 2 3; do git fetch origin "$DEPLOY_BRANCH" && break || sleep $((2**i))
 git worktree add -q "$WT" "$DEPLOY_BRANCH"
 trap 'git worktree remove --force "$WT" 2>/dev/null || true' EXIT
 
+# Данные витрины (catalog/data/) публикует САМО приложение прямо в деплой-ветку
+# по ключу владельца — в рабочей ветке их нет. Поэтому при зеркалировании кода
+# их надо сохранить, иначе выложенный каталог затрётся.
+TMP_DATA="$(mktemp -d)"
+[ -d "$WT/catalog/data" ] && cp -a "$WT/catalog/data" "$TMP_DATA/data"
+
 # полностью заменяем catalog/ содержимым рабочей ветки
 rm -rf "$WT/catalog"
 cp -a "$REPO_ROOT/catalog" "$WT/catalog"
+
+# возвращаем данные витрины, опубликованные приложением
+if [ -d "$TMP_DATA/data" ]; then
+  rm -rf "$WT/catalog/data"
+  cp -a "$TMP_DATA/data" "$WT/catalog/data"
+fi
+rm -rf "$TMP_DATA"
 
 cd "$WT"
 git add -A catalog

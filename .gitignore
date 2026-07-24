@@ -5,3 +5,7 @@ __pycache__/
 node_modules/
 package-lock.json
 package.json
+
+# Витрину каталога (catalog/data/) публикует само приложение в деплой-ветку —
+# в рабочей ветке её не храним.
+catalog/data/

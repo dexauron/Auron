@@ -935,3 +935,12 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .comp-store-list .btn-block { margin-top: 0; }
 .comp-new { color: var(--accent); border-style: dashed; }
 .comp-chosen { font-size: 14px; font-weight: 600; color: var(--accent); margin: 4px 0 2px; }
+
+/* Публикация на GitHub */
+.publish-status { margin: 8px 0 12px; font-size: 14px; }
+.publish-status .pub-ok { color: var(--success, #2e9e5b); font-weight: 600; }
+.publish-status .pub-warn { color: var(--accent); font-weight: 600; }
+.publish-help { margin: 12px 0; font-size: 13px; }
+.publish-help summary { cursor: pointer; color: var(--accent); font-weight: 600; }
+.publish-help-list { margin: 8px 0 0; padding-left: 20px; line-height: 1.6; color: var(--muted, #666); }
+.publish-help-list li { margin-bottom: 4px; }

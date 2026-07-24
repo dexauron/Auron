@@ -1685,17 +1685,50 @@
   }
 
   // Опубликовать витрину (товары + категории) одним коммитом на GitHub.
-  async function publishShowcase(message) {
+  // По умолчанию публикуем ТОЛЬКО если витрина изменилась (сравниваем подпись
+  // содержимого), чтобы не плодить пустые коммиты и лишние деплои. force=true —
+  // опубликовать в любом случае (кнопка «Опубликовать сейчас», первый перенос).
+  const GH_SIG_KEY = 'wm_gh_lastsig';
+  function strHash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+  async function publishShowcase({ force = false } = {}) {
+    const pJson = JSON.stringify(buildPublicProducts());
+    const gJson = JSON.stringify(buildPublicGroups());
+    const sig = strHash(pJson) + '.' + strHash(gJson);
+    if (!force) { try { if (localStorage.getItem(GH_SIG_KEY) === sig) return null; } catch (e) { /* приватный режим */ } }
     const files = [
-      { path: `${CFG.DATA_PATH}/products.json`, content: JSON.stringify(buildPublicProducts()) },
-      { path: `${CFG.DATA_PATH}/groups.json`, content: JSON.stringify(buildPublicGroups()) },
+      { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
+      { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
     ];
-    return ghCommit(files, message || 'Каталог: обновлена витрина');
+    const sha = await ghCommit(files, 'Каталог: обновлена витрина');
+    try { localStorage.setItem(GH_SIG_KEY, sig); } catch (e) { /* приватный режим */ }
+    return sha;
+  }
+
+  // Авто-публикация после правок каталога. Гейт: только вошедший админ с ключом.
+  // «Схлопывание»: частые правки (импорт) дают один коммит, а не десятки.
+  let _pubBusy = false, _pubAgain = false, _pubTimer = null;
+  function autoPublish() {
+    if (!state.isAdmin || !ghConfigured()) return;
+    clearTimeout(_pubTimer);
+    _pubTimer = setTimeout(doAutoPublish, 1200);
+  }
+  async function doAutoPublish() {
+    if (_pubBusy) { _pubAgain = true; return; }
+    _pubBusy = true;
+    try {
+      const sha = await publishShowcase();
+      if (sha) toast('☁️ Витрина обновлена на GitHub');
+    } catch (e) {
+      toast('⚠ Витрину не удалось опубликовать — проверь ключ в «Публикация на GitHub»');
+    } finally {
+      _pubBusy = false;
+      if (_pubAgain) { _pubAgain = false; autoPublish(); }
+    }
   }
 
   // Тестовый доступ к публикации — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken };
+    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken, autoPublish };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
@@ -1744,6 +1777,7 @@
       saveCache();
       $('offlineBanner').hidden = true;
       renderAll();
+      autoPublish(); // админ поправил каталог → тихо обновим витрину на GitHub
     } catch (e) {
       if (!silent) {
         const banner = $('offlineBanner');
@@ -4647,6 +4681,60 @@
       }
       closeSheet('staffPassSheet');
       toast('Готово ✓ Устройства сотрудников выйдут в течение часа');
+    });
+
+    // ── Публикация на GitHub: окошко ключа ──
+    function renderPublishStatus() {
+      const has = ghConfigured();
+      $('publishStatus').innerHTML = has
+        ? '<span class="pub-ok">✓ Ключ на месте. Витрина публикуется автоматически после правок.</span>'
+        : '<span class="pub-warn">Ключ ещё не вставлен — витрина на GitHub не обновляется.</span>';
+      $('ghTokenClear').hidden = !ghToken();
+      $('ghPublishNow').hidden = !has;
+    }
+    $('menuPublish').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      $('ghTokenInput').value = '';
+      $('publishError').hidden = true;
+      renderPublishStatus();
+      openSheet('publishSheet');
+    });
+    $('ghTokenSave').addEventListener('click', async () => {
+      const t = $('ghTokenInput').value.trim();
+      $('publishError').hidden = true;
+      if (!t) { $('publishError').textContent = 'Вставь ключ в поле выше.'; $('publishError').hidden = false; return; }
+      const btn = $('ghTokenSave'); btn.disabled = true; btn.textContent = 'Проверяю…';
+      ghSetToken(t);
+      try {
+        // проверяем: ключ действителен и видит нашу ветку деплоя
+        const r = await ghApi(`${ghRepo()}/git/ref/heads/${ghBranch()}`);
+        if (!r.ok) throw new Error(r.status === 404 ? 'нет доступа к репозиторию Auron — проверь, что выбрал его при создании ключа' : 'ключ не подошёл (' + r.status + ')');
+        toast('Ключ сохранён ✓');
+        $('ghTokenInput').value = '';
+        renderPublishStatus();
+      } catch (e) {
+        ghSetToken('');
+        $('publishError').textContent = 'Не получилось: ' + (e.message || e);
+        $('publishError').hidden = false;
+        renderPublishStatus();
+      } finally { btn.disabled = false; btn.textContent = 'Сохранить и проверить'; }
+    });
+    $('ghPublishNow').addEventListener('click', async () => {
+      const btn = $('ghPublishNow'); btn.disabled = true; btn.textContent = 'Публикую…';
+      $('publishError').hidden = true;
+      try {
+        await publishShowcase({ force: true });
+        toast('☁️ Витрина опубликована ✓');
+      } catch (e) {
+        $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
+        $('publishError').hidden = false;
+      } finally { btn.disabled = false; btn.textContent = 'Опубликовать витрину сейчас'; }
+    });
+    $('ghTokenClear').addEventListener('click', () => {
+      if (!confirm('Удалить ключ с этого устройства? Витрина перестанет обновляться автоматически, пока не вставишь ключ снова.')) return;
+      ghSetToken('');
+      renderPublishStatus();
+      toast('Ключ удалён с устройства');
     });
 
     $('loginForm').addEventListener('submit', async (e) => {
