@@ -1754,9 +1754,69 @@
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
+  /* ── Серверлес-каталог: полный каталог в зашифрованном файле на GitHub ──────
+     Сервера нет. Источник правды для владельца — зашифрованный файл
+     secret-catalog.enc (полный каталог: товары со всеми полями + закупочные цены
+     + продажи + контакты). Из него делается ОТКРЫТАЯ витрина products.json для
+     покупателей. Читать шифрофайл может кто угодно (он публичный), но открыть —
+     только по паролю. Писать (публиковать) — по GitHub-ключу владельца. */
+  const SECRET_FILE = 'secret-catalog.enc';
+  function secretRawUrl() {
+    return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${SECRET_FILE}`;
+  }
+  async function fetchSecretRaw() {
+    try {
+      const r = await fetch(secretRawUrl() + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return null; // 404 — файла ещё нет
+      return await r.text();
+    } catch (e) { return null; }
+  }
+  // полный товар без служебных полей индекса (начинаются с "_")
+  function cleanProductsFull() {
+    return state.products.map((p) => { const o = {}; for (const k in p) if (k[0] !== '_') o[k] = p[k]; return o; });
+  }
+  function buildFullSnapshot() {
+    return {
+      v: 1, savedAt: new Date().toISOString(),
+      products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
+      prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {}, competitors: state.competitors || [],
+    };
+  }
+  // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный каталог.
+  async function publishFull(password) {
+    const enc = await encryptJSON(buildFullSnapshot(), password);
+    const pJson = JSON.stringify(buildPublicProducts());
+    const gJson = JSON.stringify(buildPublicGroups());
+    const sha = await ghCommit([
+      { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
+      { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
+      { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: enc },
+    ], 'Каталог: обновлены витрина и защищённые данные');
+    try { localStorage.setItem(GH_SIG_KEY, strHash(pJson) + '.' + strHash(gJson)); } catch (e) { /* приватный режим */ }
+    return sha;
+  }
+  // Вход по паролю без сервера: скачать зашифрованный каталог и открыть паролем.
+  // Бросает NO_SECRET, если файла ещё нет; бросает при неверном пароле.
+  async function unlockSecret(password) {
+    const raw = await fetchSecretRaw();
+    if (raw == null) throw new Error('NO_SECRET');
+    const data = await decryptJSON(raw, password); // неверный пароль → исключение
+    state.groups = data.groups || [];
+    state.suppliers = data.suppliers || [];
+    state.products = (data.products || []).slice().sort(byName);
+    state.prices = data.prices || [];
+    state.sales = data.sales || [];
+    state.contacts = data.contacts || {};
+    state.competitors = data.competitors || [];
+    buildIndex();
+    state.serverless = true;
+    state.isAdmin = true; state.role = 'admin'; state.canPurchase = true;
+    return true;
+  }
+
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, ghCommit, buildPublicProducts, buildPublicGroups, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, ghCommit, buildPublicProducts, buildFullSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
