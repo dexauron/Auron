@@ -45,3 +45,30 @@
 - Существующий `app/index.html` (~7000 строк) — переписываем полностью согласно утверждённым документам
 - `catalog/` — **отдельное приложение** «Каталог товаров для сотрудников» (см. `docs/08-CATALOG.md`): своя база (отдельный проект Supabase Cloud, ключи в `catalog/js/config.js`), живёт на `…/Auron/catalog/`. С кодом и базой Auron НЕ смешивать
 - **Разделение веток и деплоя:** приложение Auron разрабатывается в ветке `claude/optimistic-einstein-Afzmv`, каталог — в ветке `claude/store-product-catalog-60wer4`. Деплой (`.github/workflows/deploy.yml`, одинаковый в обеих ветках) всегда собирает сайт из ДВУХ источников: `app/` из ветки Auron + `catalog/` из ветки каталога — пуш в одну ветку не затрагивает второе приложение. Меняешь workflow — синхронизируй его в обе ветки
+
+## gstack — рабочий процесс AI (самоустановка)
+
+Проект использует [gstack](https://github.com/garrytan/gstack) — набор AI-навыков,
+превращающих Claude Code в «виртуальную команду инженеров» (планирование, ревью
+кода, безопасность, тесты, релиз, документация).
+
+**Устанавливается автоматически.** Окружение Claude Code на web/облаке временное:
+глобальная установка в `~/.claude/skills/gstack` стирается между сессиями. Поэтому
+в репозитории есть SessionStart-хук `.claude/hooks/ensure-gstack.sh`, который сам
+ставит gstack в начале каждой сессии. Владельцу ничего делать не нужно.
+
+Проверить вручную (если хук не сработал):
+
+```bash
+test -d ~/.claude/skills/gstack/bin && echo "GSTACK_OK" || bash .claude/hooks/ensure-gstack.sh
+```
+
+После установки доступны навыки-команды: `/office-hours`, `/spec`, `/autoplan`,
+`/plan-ceo-review`, `/plan-eng-review`, `/design-consultation`, `/review`,
+`/investigate`, `/cso` (аудит безопасности), `/ship`, `/land-and-deploy`,
+`/document-release`, `/learn`, `/retro` и др. Пути к файлам gstack —
+`~/.claude/skills/gstack/...` (глобальная установка).
+
+Примечание: браузерные навыки (`/browse`, `/qa`, `/benchmark`, `/canary`) в этом
+окружении не работают — прокси блокирует загрузку Chromium для Playwright. Для
+браузера в этом окружении есть отдельный предустановленный Chromium.
