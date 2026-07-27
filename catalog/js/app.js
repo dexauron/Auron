@@ -202,6 +202,22 @@
     if (sheetStack.length) hideSheet(sheetStack[sheetStack.length - 1]); // «назад» на телефоне → закрыть верхнее окно
   });
 
+  // Клавиша Esc закрывает верхнее окно (компьютер и планшет с клавиатурой).
+  // Через closeSheet — чтобы счётчик истории «назад» не сбивался.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' && e.key !== 'Esc') return;
+    const lb = $('lightbox');
+    if (lb && !lb.hidden) { // сначала закрываем фото на весь экран
+      e.preventDefault();
+      lb.hidden = true;
+      const img = lb.querySelector('img'); if (img) img.src = '';
+      return;
+    }
+    if (!sheetStack.length) return;
+    e.preventDefault();
+    closeSheet(sheetStack[sheetStack.length - 1]);
+  });
+
   // Стрелка «назад» в левом верхнем углу каждого окна
   function addBackButtons() {
     document.querySelectorAll('.sheet').forEach((sheet) => {
@@ -4991,12 +5007,21 @@
 
     $('adminBtn').addEventListener('click', () => {
       if (state.session) {
-        const roleName = { admin: 'Главный администратор', manager: 'Аналитик / зал', cashier: 'Кассир' }[state.role] || 'Сотрудник';
-        const roleHint = {
-          admin: state.session.user?.email || '',
-          manager: 'Вход выполнен — цены, контакты и аналитика открыты',
-          cashier: 'Вход выполнен — товары и розничные цены',
-        }[state.role] || 'Вход выполнен';
+        // Бесплатный режим: две роли — владелец и сотрудник. Подпись человеческая,
+        // без служебных слов вроде «owner» (раньше они попадали на экран).
+        let roleName, roleHint;
+        if (state.serverless) {
+          roleName = state.isAdmin ? 'Владелец' : 'Сотрудник магазина';
+          roleHint = state.isAdmin
+            ? 'Полный доступ: правка, загрузка файлов, публикация'
+            : 'Виден весь каталог, цены и продажи — без правки';
+        } else {
+          roleName = { admin: 'Главный администратор', manager: 'Аналитик / зал' }[state.role] || 'Сотрудник';
+          roleHint = {
+            admin: state.session.user?.email || '',
+            manager: 'Вход выполнен — цены, контакты и аналитика открыты',
+          }[state.role] || 'Вход выполнен';
+        }
         $('menuTitle').textContent = roleName;
         $('adminEmail').textContent = roleHint;
         $('menuAdminOnly').hidden = !state.isAdmin;
