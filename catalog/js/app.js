@@ -389,7 +389,7 @@
   // счёт одного слова запроса по товару (имя, коды/штрихкоды, поставщик, группа)
   function scoreToken(p, q, qVars) {
     let s = 0;
-    for (const c of p._codes) {
+    for (const c of (p._codes || [])) {
       if (c === q) return 120;
       if (c.startsWith(q)) s = Math.max(s, 95);
       else if (c.includes(q)) s = Math.max(s, 70);
@@ -1025,7 +1025,7 @@
   function saveTracked(o) { try { localStorage.setItem(TRACK_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
 
   function trackView(p) {
-    if (!sb || !p) return;
+    if (!sb || !p || state.serverless || CFG.STATIC_URL) return; // без сервера «Популярное» считается по продажам
     const o = trackedToday();
     if (o.v[p.id]) return;      // сегодня уже считали — не накручиваем
     o.v[p.id] = 1; saveTracked(o);
@@ -1033,7 +1033,7 @@
     sb.rpc('catalog_track_view', { p_product_id: p.id }).then(() => {}, () => {});
   }
   function trackSearch(q) {
-    if (!sb) return;
+    if (!sb || state.serverless || CFG.STATIC_URL) return;
     q = String(q || '').trim().toLowerCase();
     if (q.length < 2) return;
     const o = trackedToday();
@@ -1508,7 +1508,7 @@
     const box = $('sheetRetailHist');
     if (!box) return;
     box.innerHTML = '';
-    if (!sb || !state.session) return; // история — после входа
+    if (!sb || !state.session || state.serverless) return; // история — после входа (в бесплатном режиме не ведётся)
     let rows;
     try {
       const { data, error } = await sb.from('catalog_retail_history')
