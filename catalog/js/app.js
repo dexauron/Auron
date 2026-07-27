@@ -65,7 +65,8 @@
     serverless: false, // режим без сервера (каталог на GitHub)
     staffPassword: null, // пароль сотрудника (задаёт владелец; хранится в его каталоге)
     contacts: {},     // supplier_id → контакты (загружаются после входа)
-    competitors: [],  // магазины-конкуренты для «разведки цен» (после входа)
+    competitors: [],  // магазины конкурентов (список названий)
+    compPrices: [],   // записанные цены магазинов: {product_id, competitor_id, price, observed_at}
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
@@ -1276,6 +1277,7 @@
     renderProductSales(p);
     renderProductPrices(p);
     renderRetailHistory(p);
+    compFilter = { store: '', from: '', to: '' };
     renderCompetitors(p);
     renderSimilar(p);
     openSheet('productSheet');
@@ -1883,6 +1885,9 @@
      только по паролю. Писать (публиковать) — по GitHub-ключу владельца. */
   const SECRET_FILE = 'secret-catalog.enc'; // полный каталог владельца
   const STAFF_FILE = 'secret-staff.enc';    // урезанный каталог сотрудника (без продаж/«Ходовых»)
+  // Цены других магазинов лежат ОТКРЫТО (не шифруются): это чужие ценники из
+  // торгового зала, не наша тайна, а видеть их должны все — даже покупатель без входа.
+  const COMP_FILE = 'competitors.json';
   const SV_AUTH_KEY = 'wm_sv_auth';         // запомненный вход на устройстве (роль + пароль)
   function rawUrl(file) {
     return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${file}`;
@@ -1903,7 +1908,8 @@
     return {
       v: 1, savedAt: new Date().toISOString(),
       products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
-      prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {}, competitors: state.competitors || [],
+      prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
+      competitors: state.competitors || [], compPrices: state.compPrices || [],
       staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
     };
   }
@@ -1914,8 +1920,22 @@
       v: 1, savedAt: new Date().toISOString(), staff: true,
       products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
+      competitors: state.competitors || [], compPrices: state.compPrices || [],
     };
   }
+  // Открытый файл цен других магазинов: {магазины, записанные цены}
+  function buildCompetitorsPublic() {
+    return { stores: state.competitors || [], prices: state.compPrices || [] };
+  }
+  // Публикация ТОЛЬКО цен магазинов — отдельным маленьким коммитом. Так цену
+  // может записать и сотрудник: файл открытый, пароль владельца не требуется.
+  async function publishCompetitors() {
+    return ghCommit(
+      [{ path: `${CFG.DATA_PATH}/${COMP_FILE}`, content: JSON.stringify(buildCompetitorsPublic()) }],
+      'Каталог: цены других магазинов',
+    );
+  }
+
   // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный
   // каталог владельца (+ отдельный файл сотрудника, если задан его пароль).
   async function publishFull(password) {
@@ -1925,6 +1945,7 @@
       { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
       { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
       { path: `${CFG.DATA_PATH}/popular.json`, content: JSON.stringify(buildPopularIds()) },
+      { path: `${CFG.DATA_PATH}/${COMP_FILE}`, content: JSON.stringify(buildCompetitorsPublic()) },
       { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: await encryptJSON(buildFullSnapshot(), password) },
     ];
     if (state.staffPassword) files.push({ path: `${CFG.DATA_PATH}/${STAFF_FILE}`, content: await encryptJSON(buildStaffSnapshot(), state.staffPassword) });
@@ -1945,6 +1966,7 @@
     state.sales = data.sales || [];
     state.contacts = data.contacts || {};
     state.competitors = data.competitors || [];
+    state.compPrices = data.compPrices || [];
     state.staffPassword = data.staffPassword || null;
     buildIndex();
     state.popularIds = buildPopularIds();
@@ -1963,7 +1985,8 @@
     state.prices = data.prices || [];
     state.sales = data.sales || []; // сотрудник видит всё, включая продажи
     state.contacts = data.contacts || {};
-    state.competitors = [];
+    state.competitors = data.competitors || [];   // цены магазинов сотрудник и видит, и вносит
+    state.compPrices = data.compPrices || [];
     buildIndex();
     state.popularIds = buildPopularIds();
     state.serverless = true;
@@ -2147,16 +2170,23 @@
   async function refreshStatic() {
     try {
       const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
-      const [pr, gr, pop] = await Promise.all([
+      const [pr, gr, pop, cmp] = await Promise.all([
         fetch(base + 'products.json', { cache: 'no-cache' }),
         fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
         fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
+        fetch(base + COMP_FILE, { cache: 'no-cache' }).catch(() => null),
       ]);
       if (!pr || !pr.ok) return false;
       const products = await pr.json();
       if (!Array.isArray(products)) return false;
       state.groups = (gr && gr.ok) ? await gr.json() : [];
       try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
+      // цены других магазинов — открытые: их видит и покупатель без входа
+      try {
+        const cj = (cmp && cmp.ok) ? await cmp.json() : null;
+        state.competitors = (cj && cj.stores) || [];
+        state.compPrices = (cj && cj.prices) || [];
+      } catch (e) { state.competitors = []; state.compPrices = []; }
       state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
       state.products = products.sort(byName);
       buildIndex();
@@ -2235,7 +2265,7 @@
         state.canSales = true;
       }
       if (state.canPurchase) loadContacts(); else state.contacts = {};
-      loadCompetitors(); // разведку цен ведёт любой вошедший сотрудник
+      if (!state.serverless && !CFG.STATIC_URL) loadCompetitors(); // список магазинов с сервера (старый режим)
     } else {
       state.competitors = [];
       state.contacts = {};
@@ -2286,27 +2316,118 @@
   }
 
   function competitorById(id) { return state.competitors.find((c) => c.id === id) || null; }
+  function competitorName(id) { const c = competitorById(id); return c ? c.name : 'Магазин'; }
+  // «1 цена / 2 цены / 5 цен» — по-русски
+  function plural(n, one, few, many) {
+    const a = Math.abs(n) % 100, b = a % 10;
+    if (a > 10 && a < 20) return many;
+    if (b > 1 && b < 5) return few;
+    if (b === 1) return one;
+    return many;
+  }
 
-  async function renderCompetitors(p) {
+  // Фильтр цен магазинов внутри карточки товара (свой для каждого открытия)
+  let compFilter = { store: '', from: '', to: '' };
+
+  // Все записанные цены по товару, с учётом фильтра «магазин» и «когда записано»
+  function compRowsFor(pid) {
+    return (state.compPrices || [])
+      .filter((r) => r.product_id === pid)
+      .filter((r) => !compFilter.store || r.competitor_id === compFilter.store)
+      .filter((r) => !compFilter.from || String(r.observed_at || '') >= compFilter.from)
+      .filter((r) => !compFilter.to || String(r.observed_at || '') <= compFilter.to)
+      .slice()
+      .sort((a, b) => Number(a.price) - Number(b.price));
+  }
+
+  // Цены в других магазинах. Видят ВСЕ (в том числе покупатель без входа),
+  // вносит любой вошедший — владелец или сотрудник.
+  function renderCompetitors(p) {
     const box = $('sheetCompetitors');
     if (!box) return;
-    if (!state.session || state.serverless) { box.innerHTML = ''; return; } // разведка цен — серверная функция
     const our = (p.retail_price != null && p.retail_price !== '') ? Number(p.retail_price) : null;
-    let rows = [];
-    try {
-      const { data, error } = await sb.from('catalog_competitor_prices')
-        .select('*, catalog_competitors(name)').eq('product_id', p.id);
-      if (error) throw error;
-      rows = data || [];
-    } catch (e) { rows = []; }
-    if (currentProduct !== p) return;
+    const all = (state.compPrices || []).filter((r) => r.product_id === p.id);
+    const rows = compRowsFor(p.id);
+    const canAdd = !!state.session; // вошедший сотрудник или владелец
 
-    rows.sort((a, b) => Number(a.price) - Number(b.price));
     const ourRow = `<div class="comp-row comp-ours">
       <span class="comp-store">🏪 Наш магазин</span>
       <span class="comp-price">${our != null ? esc(fmtPrice(our)) : '<span class="muted" style="margin:0">цена не указана</span>'}</span>
     </div>`;
-    const list = rows.map((r) => {
+
+    // выпадающий список магазинов — только те, по которым есть записи об этом товаре
+    const storeIds = [...new Set(all.map((r) => r.competitor_id))];
+    const filterBar = storeIds.length > 1 || all.length > 1 ? `<div class="comp-filter">
+      <select class="input comp-f-store" id="compFStore" aria-label="Магазин">
+        <option value="">Все магазины</option>
+        ${storeIds.map((id) => `<option value="${esc(id)}"${compFilter.store === id ? ' selected' : ''}>${esc(competitorName(id))}</option>`).join('')}
+      </select>
+      <div class="comp-filter-dates">
+        <input type="date" class="input" id="compFFrom" value="${esc(compFilter.from)}" aria-label="Записано с">
+        <span class="price-dash">—</span>
+        <input type="date" class="input" id="compFTo" value="${esc(compFilter.to)}" aria-label="Записано по">
+      </div>
+    </div>` : '';
+
+    let list;
+    if (!all.length) {
+      list = '<p class="muted" style="margin:6px 0 0">Цен других магазинов пока никто не записал.</p>';
+    } else if (!rows.length) {
+      list = '<p class="muted" style="margin:6px 0 0">По этому фильтру записей нет — поменяй магазин или даты.</p>';
+    } else {
+      list = rows.map((r) => {
+        const price = Number(r.price);
+        let diff = '';
+        if (our != null) {
+          if (price < our) diff = `<span class="comp-diff comp-cheaper">у них дешевле на ${esc(fmtPrice(our - price))}</span>`;
+          else if (price > our) diff = `<span class="comp-diff comp-dearer">у них дороже на ${esc(fmtPrice(price - our))}</span>`;
+          else diff = '<span class="comp-diff">такая же цена</span>';
+        }
+        return `<div class="comp-row">
+          <span class="comp-store">🏬 ${esc(competitorName(r.competitor_id))}<span class="comp-date">записано ${esc(fmtDate(r.observed_at))}</span></span>
+          <span class="comp-price">${esc(fmtPrice(price))}${diff}</span>
+        </div>`;
+      }).join('');
+    }
+
+    box.innerHTML = `<div class="comp-block">
+      <div class="comp-title">Цены в других магазинах</div>
+      ${filterBar}${ourRow}${list}
+      ${canAdd ? '<button class="btn btn-secondary btn-block" id="compAddBtn">＋ Записать цену магазина</button>' : ''}
+    </div>`;
+  }
+
+  // ── Экран «Цены других магазинов»: сводка по магазинам и цены одного магазина ──
+  function renderCompStores() {
+    const box = $('compStoresList');
+    if (!box) return;
+    const prices = state.compPrices || [];
+    if (!prices.length) {
+      box.innerHTML = '<p class="muted">Пока никто не записал ни одной цены. Открой любой товар и нажми «Записать цену магазина».</p>';
+      return;
+    }
+    const byStore = new Map();
+    for (const r of prices) {
+      const cur = byStore.get(r.competitor_id) || { n: 0, last: '' };
+      cur.n++;
+      if (String(r.observed_at || '') > cur.last) cur.last = String(r.observed_at || '');
+      byStore.set(r.competitor_id, cur);
+    }
+    const rows = [...byStore.entries()].sort((a, b) => b[1].n - a[1].n);
+    box.innerHTML = rows.map(([id, st]) => `<button type="button" class="btn btn-secondary btn-block comp-store-btn" data-comp-view="${esc(id)}">
+        <span class="comp-store">🏬 ${esc(competitorName(id))}<span class="comp-date">последняя запись ${esc(fmtDate(st.last))}</span></span>
+        <span class="comp-store-n">${st.n} ${plural(st.n, 'цена', 'цены', 'цен')}</span>
+      </button>`).join('');
+  }
+
+  function openCompStoreView(storeId) {
+    const rows = (state.compPrices || []).filter((r) => r.competitor_id === storeId)
+      .slice().sort((a, b) => String(b.observed_at || '').localeCompare(String(a.observed_at || '')));
+    $('compStoreViewTitle').textContent = '🏬 ' + competitorName(storeId);
+    const body = $('compStoreViewBody');
+    body.innerHTML = rows.length ? rows.map((r) => {
+      const p = state.products.find((x) => x.id === r.product_id);
+      const our = p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : null;
       const price = Number(r.price);
       let diff = '';
       if (our != null) {
@@ -2314,18 +2435,12 @@
         else if (price > our) diff = `<span class="comp-diff comp-dearer">у них дороже на ${esc(fmtPrice(price - our))}</span>`;
         else diff = '<span class="comp-diff">такая же цена</span>';
       }
-      const name = (r.catalog_competitors && r.catalog_competitors.name) || competitorById(r.competitor_id)?.name || 'Магазин';
       return `<div class="comp-row">
-        <span class="comp-store">🏬 ${esc(name)}<span class="comp-date">внесено ${esc(fmtDate(r.observed_at))}</span></span>
+        <span class="comp-store">${esc(p ? p.name : 'Товар удалён')}<span class="comp-date">записано ${esc(fmtDate(r.observed_at))}${our != null ? ' · у нас ' + esc(fmtPrice(our)) : ''}</span></span>
         <span class="comp-price">${esc(fmtPrice(price))}${diff}</span>
       </div>`;
-    }).join('');
-
-    box.innerHTML = `<div class="comp-block">
-      <div class="comp-title">Цены в других магазинах</div>
-      ${ourRow}${list}
-      <button class="btn btn-secondary btn-block" id="compAddBtn">＋ Добавить цену магазина</button>
-    </div>`;
+    }).join('') : '<p class="muted">По этому магазину записей нет.</p>';
+    openSheet('compStoreViewSheet');
   }
 
   let compChosenId = null;   // выбранный существующий магазин
@@ -2377,22 +2492,31 @@
     if (price == null) { $('compError').textContent = 'Впиши цену числом'; $('compError').hidden = false; return; }
     if (!compChosenId) { $('compError').textContent = 'Выбери или создай магазин'; $('compError').hidden = false; return; }
     btn.disabled = true;
+    const record = {
+      product_id: compProduct.id,
+      competitor_id: compChosenId,
+      price,
+      observed_at: new Date().toISOString().slice(0, 10),
+    };
     try {
-      const record = {
-        product_id: compProduct.id,
-        competitor_id: compChosenId,
-        price,
-        observed_at: new Date().toISOString().slice(0, 10),
-      };
-      const { error } = await sb.from('catalog_competitor_prices')
-        .upsert(record, { onConflict: 'product_id,competitor_id' });
-      if (error) throw error;
+      if (state.serverless || CFG.STATIC_URL) {
+        // Бесплатный режим: цену за сегодня по этому магазину перезаписываем,
+        // прошлые даты остаются — так видно, как цена менялась.
+        const i = (state.compPrices || []).findIndex((r) => r.product_id === record.product_id
+          && r.competitor_id === record.competitor_id && r.observed_at === record.observed_at);
+        if (i >= 0) state.compPrices[i] = record; else (state.compPrices = state.compPrices || []).push(record);
+        if (!ghConfigured()) throw new Error('нет ключа публикации — открой «Публикация на GitHub» в меню и вставь ключ');
+        await publishCompetitors();
+      } else {
+        const { error } = await sb.from('catalog_competitor_prices')
+          .upsert(record, { onConflict: 'product_id,competitor_id' });
+        if (error) throw error;
+      }
       closeSheet('competitorAddSheet');
       toast('Цена магазина сохранена ✓');
       if (currentProduct === compProduct) renderCompetitors(compProduct);
     } catch (err) {
-      $('compError').textContent = 'Не удалось сохранить: ' + (err.message || err)
-        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-8.sql в SQL Editor.';
+      $('compError').textContent = 'Не удалось сохранить: ' + (err.message || err);
       $('compError').hidden = false;
     } finally {
       btn.disabled = false;
@@ -2565,6 +2689,12 @@
   }
 
   async function createCompetitor(name) {
+    if (state.serverless || !state.session || CFG.STATIC_URL) {   // бесплатный режим — храним у себя
+      const rec = { id: svUuid(), name: String(name).trim() };
+      state.competitors.push(rec);
+      state.competitors.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      return rec.id;
+    }
     const { data, error } = await sb.from('catalog_competitors').insert({ name }).select().single();
     if (error) { toast('Ошибка: ' + error.message); return null; }
     state.competitors.push(data);
@@ -5032,6 +5162,8 @@
         // «Фото на проверке» — показываем, если в очереди что-то есть
         $('menuSuggestions').hidden = !(state.suggCount > 0);
         $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+        // цены магазинов ведут все вошедшие — и владелец, и сотрудник
+        $('menuCompStores').hidden = false;
         // Бесплатный режим: серверные функции скрываем — они работали только с сервером
         if (state.serverless) {
           $('menuPhotoFill').hidden = true;
@@ -5062,8 +5194,26 @@
     });
 
     // разведка цен: «＋ Добавить цену магазина» в карточке товара
+    $('menuCompStores').addEventListener('click', () => {
+      closeSheet('adminMenuSheet');
+      renderCompStores();
+      openSheet('compStoresSheet');
+    });
+    $('compStoresList').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-comp-view]');
+      if (b) openCompStoreView(b.dataset.compView);
+    });
     $('sheetCompetitors').addEventListener('click', (e) => {
       if (e.target.closest('#compAddBtn') && currentProduct) openCompetitorAdd(currentProduct);
+    });
+    // фильтр цен магазинов внутри карточки: магазин и «когда записано»
+    $('sheetCompetitors').addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.id === 'compFStore') compFilter.store = t.value;
+      else if (t.id === 'compFFrom') compFilter.from = t.value;
+      else if (t.id === 'compFTo') compFilter.to = t.value;
+      else return;
+      if (currentProduct) renderCompetitors(currentProduct);
     });
     // выбор/создание магазина в форме разведки
     $('compStoreSearch').addEventListener('input', renderCompStoreList);

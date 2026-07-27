@@ -1003,3 +1003,13 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .tree-sub .check-text { flex: 1; color: var(--text-2); }
 .tree-cat .check-cb, .tree-sub .check-cb { width: 19px; height: 19px; accent-color: var(--accent); flex: 0 0 auto; }
 .tree-cat .check-count, .tree-sub .check-count { color: var(--text-2); font-size: 12px; }
+
+/* Фильтр цен других магазинов внутри карточки товара */
+.comp-filter { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
+.comp-filter .input { font-size: 15px; padding: 10px 12px; }
+.comp-filter-dates { display: flex; align-items: center; gap: 10px; }
+.comp-filter-dates .input { flex: 1; min-width: 0; text-align: center; }
+
+/* Экран «Цены других магазинов»: строка магазина в сводке */
+.comp-store-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; margin-bottom: 8px; }
+.comp-store-n { font-size: 13px; color: var(--text-2); white-space: nowrap; }
