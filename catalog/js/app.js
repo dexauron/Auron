@@ -486,7 +486,15 @@
         return y - x || byName(a, b);
       });
       case 'new': return list.slice().sort((a, b) => String(when(b)).localeCompare(String(when(a))) || byName(a, b));
-      case 'popular': return list.slice().sort((a, b) => (popViews(b.id) - popViews(a.id)) || byName(a, b));
+      case 'popular': {
+        // по продажам: порядок из списка популярного (buildPopularIds); нет продаж — по просмотрам
+        const rank = new Map((state.popularIds || []).map((id, i) => [id, i]));
+        return list.slice().sort((a, b) => {
+          const ra = rank.has(a.id) ? rank.get(a.id) : 1e9;
+          const rb = rank.has(b.id) ? rank.get(b.id) : 1e9;
+          return (ra - rb) || (popViews(b.id) - popViews(a.id)) || byName(a, b);
+        });
+      }
       default: // relevance: при поиске порядок уже по совпадению; без поиска — по названию
         return scored ? list : list.slice().sort(byName);
     }
@@ -754,18 +762,44 @@
   ];
 
   // Категории списком-чекбоксами в окне фильтра (как в референсе)
+  // какие категории раскрыты в дереве фильтра (показывают свои подкатегории)
+  const filterCatOpen = new Set();
   function renderFilterCats() {
     const box = $('filterCats');
     if (!box) return;
+    // товаров в категории и в каждой подгруппе; подгруппы, отнесённые к категории
     const counts = {};
-    for (const p of state.products) { const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1; }
+    const groupCounts = {};
+    const subsByCat = {};
+    for (const g of state.groups) {
+      const c = categoryOf(g.name) || OTHER_CAT.name;
+      (subsByCat[c] = subsByCat[c] || []).push(g);
+    }
+    for (const p of state.products) {
+      const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1;
+      if (p.group_id) groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
+    }
     const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
       .filter((c) => counts[c]).sort((a, b) => counts[b] - counts[a]);
     if (!cats.length) { box.innerHTML = '<p class="muted" style="margin:0">Категорий пока нет</p>'; return; }
     box.innerHTML = cats.map((c) => {
       const on = state.selCats.includes(c);
-      return `<label class="check-row"><input type="checkbox" class="check-cb" data-fcat="${esc(c)}"${on ? ' checked' : ''}>`
-        + `<span class="check-text">${catIcon(c)} ${esc(c)}</span><span class="check-count">${counts[c]}</span></label>`;
+      const subs = (subsByCat[c] || []).filter((g) => groupCounts[g.id]).sort((a, b) => groupCounts[b.id] - groupCounts[a.id]);
+      const expanded = filterCatOpen.has(c);
+      const caret = subs.length
+        ? `<button type="button" class="tree-caret${expanded ? ' open' : ''}" data-tcat="${esc(c)}" aria-label="Показать подкатегории">▸</button>`
+        : '<span class="tree-caret-empty"></span>';
+      let html = `<div class="tree-cat">${caret}`
+        + `<label class="tree-cat-label"><input type="checkbox" class="check-cb" data-fcat="${esc(c)}"${on ? ' checked' : ''}>`
+        + `<span class="check-text">${catIcon(c)} ${esc(c)}</span><span class="check-count">${counts[c]}</span></label></div>`;
+      if (subs.length && expanded) {
+        html += '<div class="tree-subs">' + subs.map((g) => {
+          const gon = state.selGroups.includes(g.id);
+          return `<label class="tree-sub"><input type="checkbox" class="check-cb" data-fgroup="${esc(g.id)}"${gon ? ' checked' : ''}>`
+            + `<span class="check-text">${esc(g.name)}</span><span class="check-count">${groupCounts[g.id]}</span></label>`;
+        }).join('') + '</div>';
+      }
+      return html;
     }).join('');
   }
 
@@ -4645,16 +4679,36 @@
     // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
     $('filterCats').addEventListener('change', (e) => {
       const cb = e.target.closest('[data-fcat]');
-      if (!cb) return;
-      const c = cb.dataset.fcat;
-      if (cb.checked) { if (!state.selCats.includes(c)) state.selCats = [...state.selCats, c]; }
-      else {
-        state.selCats = state.selCats.filter((x) => x !== c);
-        const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
-        state.selGroups = state.selGroups.filter((x) => !ids.has(x));
+      if (cb) {
+        const c = cb.dataset.fcat;
+        if (cb.checked) { if (!state.selCats.includes(c)) state.selCats = [...state.selCats, c]; }
+        else {
+          state.selCats = state.selCats.filter((x) => x !== c);
+          const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
+          state.selGroups = state.selGroups.filter((x) => !ids.has(x));
+        }
+        state.renderLimit = PAGE_SIZE;
+        renderAll();
+        renderFilterCats(); // обновить дерево (счётчики/галочки)
+        return;
       }
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
+      // подкатегория (подгруппа) в дереве
+      const gb = e.target.closest('[data-fgroup]');
+      if (gb) {
+        const gid = gb.dataset.fgroup;
+        if (gb.checked) { if (!state.selGroups.includes(gid)) state.selGroups = [...state.selGroups, gid]; }
+        else state.selGroups = state.selGroups.filter((x) => x !== gid);
+        state.renderLimit = PAGE_SIZE;
+        renderAll();
+      }
+    });
+    // сворачивание/разворачивание категории в дереве
+    $('filterCats').addEventListener('click', (e) => {
+      const car = e.target.closest('[data-tcat]');
+      if (!car) return;
+      const c = car.dataset.tcat;
+      if (filterCatOpen.has(c)) filterCatOpen.delete(c); else filterCatOpen.add(c);
+      renderFilterCats();
     });
 
     // Сортировка (сегменты)
