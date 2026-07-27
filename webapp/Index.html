@@ -2746,7 +2746,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.22.0';
+var APP_VERSION='4.23.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -2979,6 +2979,7 @@ var App={
     App._secLoad();
     gs('initUserApp',{}).then(function(r){
       document.getElementById('loader').classList.add('hide');
+      App.s.myEmail=(r&&r.myEmail)||'';
       if(App.sec&&App.sec.hash){App.lockNow();App._armLock();}
       if(r.isNew){
         // Пришёл по ссылке-приглашению и ещё не зарегистрирован →
@@ -3436,9 +3437,11 @@ var App={
         '<div style="max-width:420px;margin:0 auto;padding:40px 22px;">'+
         '<div style="font-size:44px;text-align:center;margin-bottom:8px;">👋</div>'+
         '<div style="font-size:23px;font-weight:800;text-align:center;letter-spacing:-.02em;">Вас пригласили</div>'+
-        '<div style="font-size:13.5px;color:var(--muted);text-align:center;margin:8px 0 24px;line-height:1.5;">Вы входите в магазин как сотрудник. Свой магазин создавать не нужно — просто представьтесь.</div>'+
+        '<div style="font-size:13.5px;color:var(--muted);text-align:center;margin:8px 0 20px;line-height:1.5;">Вы входите в магазин как сотрудник. Свой магазин создавать не нужно — просто представьтесь.</div>'+
+        (App.s.myEmail?('<div style="background:var(--brand-dim);border-radius:12px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:var(--text-2);line-height:1.5;text-align:center;">Вы вошли в Google как<br><b style="color:var(--text);word-break:break-all;">'+App._e(App.s.myEmail)+'</b><br>Владелец должен пригласить <u>именно этот</u> адрес.</div>'):'')+
         '<div class="field"><label>Как вас зовут</label><input id="join-name" type="text" placeholder="Имя" autocomplete="name"></div>'+
         '<button class="btn-primary" style="width:100%;margin-top:8px;" onclick="App._joinDo()">Присоединиться →</button>'+
+        '<div id="join-err" style="display:none;background:var(--expense-dim);color:var(--expense);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12.5px;line-height:1.5;"></div>'+
         '<div style="font-size:11.5px;color:var(--muted);text-align:center;margin-top:14px;">Владелец назначит вам роль и доступ.</div>'+
         '</div>';
     }
@@ -3452,8 +3455,11 @@ var App={
     var btn=document.querySelector('#scr-reg .btn-primary');
     if(btn){btn.disabled=true;btn.textContent='Подключаем…';}
     window.__INVITE_ORG__='';
+    var errBox=document.getElementById('join-err');if(errBox)errBox.style.display='none';
     gs('registerUser',{name:name,phone:'',inviteOrg:App._joinOrg}).then(function(r){
-      if(r&&r.__error){App.toast(r.__error,true);if(btn){btn.disabled=false;btn.textContent='Присоединиться →';}return;}
+      if(r&&r.__error){
+        if(errBox){errBox.textContent=r.__error;errBox.style.display='block';}else{App.toast(r.__error,true);}
+        if(btn){btn.disabled=false;btn.textContent='Присоединиться →';}return;}
       App.s.userName=name;App.s.ssId=r.ssId;App.s.orgName=r.orgName||'Магазин';
       App.toast('Вы в магазине ✓');
       App.loadSettings(function(){App.showApp();App.loadHome();});

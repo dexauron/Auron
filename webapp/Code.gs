@@ -133,7 +133,7 @@ function _profileSS() {
 function initUserApp() {
   try {
     var ss = _profileSS();
-    if (!ss) return { isNew: true };
+    if (!ss) return { isNew: true, myEmail: _myEmail() };
     var profSh = ss.getSheetByName(SH_PROFILE);
     var profile = {};
     if (profSh && profSh.getLastRow() >= 2) {
@@ -147,7 +147,7 @@ function initUserApp() {
         if (r[0]&&r[2]) orgs.push({id:String(r[0]),name:String(r[1]),ssId:String(r[2])});
       });
     }
-    return { isNew: false, profile: profile, orgs: orgs };
+    return { isNew: false, profile: profile, orgs: orgs, myEmail: _myEmail() };
   } catch(e) { return { isNew: true, __error: e.message }; }
 }
 
@@ -163,7 +163,14 @@ function registerUser(p) {
     var ex = _profileSS();
     if (ex) {
       // Профиль уже есть. Если пришёл по приглашению — просто подключаем магазин.
-      if (inviteOrg) { var a=acceptInvite({ssId:inviteOrg}); if(a&&a.ok) return {ssId:a.ssId,orgName:a.name,invited:true}; }
+      if (inviteOrg) {
+        var a=acceptInvite({ssId:inviteOrg});
+        if(a&&a.ok) return {ssId:a.ssId,orgName:a.name,invited:true};
+        var me=_myEmail();
+        return { __error:'Аккаунт '+(me||'(не определён)')+' пока не имеет доступа к магазину. '+
+          'Владелец должен пригласить именно этот адрес: Настройки → Сотрудники → Пригласить. '+
+          'И проверьте, что вы вошли в Google под этим же адресом.' };
+      }
       var d = initUserApp();
       return { ssId:(d.orgs&&d.orgs[0])?d.orgs[0].ssId:'', orgName:(d.orgs&&d.orgs[0])?d.orgs[0].name:'' };
     }
@@ -182,8 +189,13 @@ function registerUser(p) {
         orgsSh.appendRow([Utilities.getUuid(), onm, inviteOrg]);
         return { ssId:inviteOrg, orgName:onm, invited:true };
       } catch(ei) {
-        // Нет доступа к приглашённому магазину — не создаём свой, честно сообщаем.
-        return { __error:'Нет доступа к приглашённому магазину. Попроси владельца выслать ссылку заново.' };
+        // Нет доступа к приглашённому магазину. Почти всегда причина одна:
+        // владелец пригласил не тот email, ИЛИ сотрудник вошёл в Google под
+        // другим аккаунтом. Называем email — чтобы сразу было видно, что проверить.
+        var me=_myEmail();
+        return { __error:'Аккаунт '+(me||'(не определён)')+' пока не имеет доступа к магазину. '+
+          'Владелец должен пригласить именно этот адрес: Настройки → Сотрудники → Пригласить. '+
+          'И проверьте, что вы вошли в Google под этим же адресом.' };
       }
     }
     var res = _mkOrg(orgName0, ss);
