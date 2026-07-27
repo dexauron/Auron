@@ -570,6 +570,12 @@
   /* ── Отрисовка ────────────────────────────────── */
 
   function renderChips() {
+    // Строка чипов под поиском убрана по просьбе владельца — категории и все
+    // фильтры теперь выбираются через кнопку фильтра (⚙). Ряд скрыт.
+    const gc = $('groupChips');
+    if (gc) { gc.innerHTML = ''; gc.hidden = true; }
+    return;
+    // eslint-disable-next-line no-unreachable
     const groupCounts = {};   // товаров в каждой группе
     const catCounts = {};     // товаров в каждой категории
     let noGroup = 0;
@@ -791,6 +797,7 @@
   // синхронизирует окно фильтров и значок с состоянием
   function syncControls() {
     renderFilterCats();
+    { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
     document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
     document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
     // даты поступления в поля + подсветка активного пресета
@@ -4629,6 +4636,7 @@
 
     // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
     $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
+    $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
     $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
     $('filterReset').addEventListener('click', clearAllFilters);
     // Круглая иконка «вид» в шапке — переключает размер плиток
