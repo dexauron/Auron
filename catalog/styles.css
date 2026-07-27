@@ -948,3 +948,16 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 /* «Только избранное» в фильтре */
 .filter-fav { display: flex; align-items: center; gap: 10px; padding: 10px 4px 14px; font-size: 15px; font-weight: 600; cursor: pointer; }
 .filter-fav input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* Дерево категорий → подкатегорий в фильтре */
+.tree-cat { display: flex; align-items: center; gap: 4px; }
+.tree-cat-label { display: flex; align-items: center; gap: 10px; flex: 1; padding: 9px 4px; cursor: pointer; min-width: 0; }
+.tree-cat-label .check-text { flex: 1; font-weight: 600; }
+.tree-caret { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: transparent; color: var(--muted, #888); font-size: 13px; cursor: pointer; transition: transform .15s; display: flex; align-items: center; justify-content: center; }
+.tree-caret.open { transform: rotate(90deg); color: var(--accent); }
+.tree-caret-empty { flex: 0 0 auto; width: 30px; }
+.tree-subs { margin: 0 0 6px 34px; border-left: 2px solid var(--border, #2a2a2a); padding-left: 8px; }
+.tree-sub { display: flex; align-items: center; gap: 10px; padding: 7px 4px; cursor: pointer; font-size: 14px; }
+.tree-sub .check-text { flex: 1; color: var(--muted, #aaa); }
+.tree-cat .check-cb, .tree-sub .check-cb { width: 19px; height: 19px; accent-color: var(--accent); flex: 0 0 auto; }
+.tree-cat .check-count, .tree-sub .check-count { color: var(--muted, #888); font-size: 12px; }
