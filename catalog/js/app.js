@@ -2005,13 +2005,17 @@
       if (item.retail != null) p.retail_price = item.retail;
       svAddBarcodes(idx, p, barcodes);
       for (const supName of item.suppliers) { const sid = svSupplierId(supName); if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid); }
+      let maxDate = null; // дата поступления = самая свежая цена поставщика (столбец «Период»)
       for (const [supName, info] of item.prices) {
         const sid = svSupplierId(supName);
         if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
+        if (info.date && (!maxDate || info.date > maxDate)) maxDate = info.date;
         const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
         if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; } }
         else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null });
       }
+      // «Поступление» — самая свежая дата цены (для фильтра «🆕 Пришло сегодня»)
+      if (maxDate && (!p.arrival_at || maxDate > String(p.arrival_at).slice(0, 10))) p.arrival_at = maxDate;
     }
   }
   function svUploadRetail(parsed) {
