@@ -1,6 +1,6 @@
 // Auron Local — service worker (офлайн-кэш)
 // Бампай версию при каждом изменении index.html
-const CACHE = 'auron-local-v1';
+const CACHE = 'auron-local-v2';
 const ASSETS = ['.', 'index.html', 'manifest.webmanifest'];
 
 self.addEventListener('install', function (e) {

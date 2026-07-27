@@ -39,7 +39,7 @@
   .empty{text-align:center;color:var(--muted);font-size:13px;padding:26px 14px;}
   .fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom,0px));width:60px;height:60px;border-radius:50%;background:var(--brand);border:none;color:#fff;box-shadow:0 10px 26px -6px var(--brand);z-index:40;cursor:pointer;display:grid;place-items:center;}
   .nav{position:fixed;left:0;right:0;bottom:0;background:color-mix(in oklab,var(--surface) 92%,transparent);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;z-index:30;padding-bottom:env(safe-area-inset-bottom,0px);}
-  .nav button{flex:1;background:none;border:none;padding:9px 0 8px;color:var(--muted);font-family:var(--font);font-size:10.5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .nav button{flex:1;background:none;border:none;padding:9px 0 8px;color:var(--muted);font-family:var(--font);font-size:10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;white-space:nowrap;}
   .nav button.on{color:var(--brand);}
   .nav svg{width:22px;height:22px;}
   .page{display:none;} .page.on{display:block;animation:up .25s ease both;}
@@ -99,6 +99,17 @@
     <div class="card" id="hist-list"></div>
   </div>
 
+  <!-- SUPPLIERS -->
+  <div class="page" id="p-sup">
+    <div class="sec" style="margin-top:8px;">Записи по поставщикам</div>
+    <div class="card" id="sup-list"></div>
+    <button class="btn sec" style="margin-top:12px;" onclick="App.openSupplier()">+ Добавить запись</button>
+    <div class="row" style="padding:0;margin-top:12px;">
+      <button class="btn" onclick="App.exportICS()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px;"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Выгрузить в календарь</button>
+    </div>
+    <div class="note"><b>Резервная копия в календарь.</b> Кнопка выше создаёт файл для календаря (.ics). Открой его — все записи по поставщикам встанут событиями в Google Календарь (Android) или Календарь (iPhone) на нужные даты. Так записи не потеряются и напомнят о дне оплаты.</div>
+  </div>
+
   <!-- SETTINGS -->
   <div class="page" id="p-set">
     <div class="sec" style="margin-top:8px;">Данные (на устройстве)</div>
@@ -127,11 +138,11 @@
 <script>
 var DB_KEY='auron_local_v1';
 var App={
-  db:{accounts:[],txns:[],settings:{theme:'light'}},
+  db:{accounts:[],txns:[],suppliers:[],settings:{theme:'light'}},
   fmt:function(n){n=Math.round(n||0);var s=Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g,' ');return (n<0?'−':'')+s;},
   uid:function(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);},
   load:function(){try{var r=localStorage.getItem(DB_KEY);if(r)App.db=JSON.parse(r);}catch(e){}
-    if(!App.db.accounts)App.db.accounts=[];if(!App.db.txns)App.db.txns=[];if(!App.db.settings)App.db.settings={theme:'light'};
+    if(!App.db.accounts)App.db.accounts=[];if(!App.db.txns)App.db.txns=[];if(!App.db.suppliers)App.db.suppliers=[];if(!App.db.settings)App.db.settings={theme:'light'};
     if(!App.db.accounts.length){App.db.accounts=[{id:App.uid(),name:'Наличные',start:0},{id:App.uid(),name:'Карта',start:0}];App.save();}
   },
   save:function(){try{localStorage.setItem(DB_KEY,JSON.stringify(App.db));}catch(e){App.toast('Мало места в памяти',true);}},
@@ -155,6 +166,7 @@ var App={
     App.renderTxns('h-txns',8);
     App.renderTxns('hist-list',300);
     App.renderAccounts();
+    App.renderSuppliers();
   },
   txRow:function(t){
     var cfg={income:{c:'var(--pos)',sign:'+',ic:"<path d='M12 5v14M5 12l7 7 7-7'/>"},
@@ -180,6 +192,72 @@ var App={
         '<div class="v">'+App.fmt(App.balOf(a.id))+' ₽</div>'+
         '<button class="del" onclick="App.delAccount(\''+a.id+'\')" style="margin-left:8px;">✕</button></div>';
     }).join('')||'<div class="empty">Нет счетов.</div>';
+  },
+
+  // ── suppliers ──
+  renderSuppliers:function(){
+    var host=document.getElementById('sup-list');if(!host)return;
+    var list=App.db.suppliers.slice().sort(function(a,b){return new Date(a.date)-new Date(b.date);});
+    host.innerHTML=list.length?list.map(function(s){
+      var dt=new Date(s.date);var dstr=('0'+dt.getDate()).slice(-2)+'.'+('0'+(dt.getMonth()+1)).slice(-2)+'.'+dt.getFullYear();
+      var past=dt.getTime()<new Date(new Date().toDateString()).getTime();
+      return '<div class="row" onclick="App.openSupplier(\''+s.id+'\')" style="cursor:pointer;">'+
+        '<div class="ic" style="background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>'+
+        '<div class="t"><div class="n">'+App.esc(s.name||'Поставщик')+'</div><div class="s" style="'+(past?'color:var(--muted);':'color:var(--brand);')+'">'+dstr+(s.comment?' · '+App.esc(s.comment):'')+'</div></div>'+
+        '<div class="v">'+App.fmt(s.amount)+' ₽</div></div>';
+    }).join(''):'<div class="empty">Пока нет записей. Добавь, кому и на какое число оплата.</div>';
+  },
+  openSupplier:function(id){
+    var e=App.db.suppliers.find(function(x){return x.id===id;});
+    var s='<h2>'+(e?'Запись поставщику':'Новая запись')+'</h2>'+
+      '<div class="field"><label>Поставщик</label><input id="s-name" class="inp" type="text" value="'+(e?App.esc(e.name||''):'')+'" placeholder="Напр.: ООО Молоко"></div>'+
+      '<div class="field"><label>Сумма (₽)</label><input id="s-amt" class="inp" type="number" inputmode="decimal" value="'+(e?e.amount:'')+'" placeholder="0"></div>'+
+      '<div class="field"><label>Дата (приход / оплата)</label><input id="s-date" class="inp" type="date" value="'+(e?e.date.slice(0,10):new Date().toISOString().slice(0,10))+'"></div>'+
+      '<div class="field"><label>Комментарий</label><input id="s-cmt" class="inp" type="text" value="'+(e?App.esc(e.comment||''):'')+'" placeholder="напр.: заказ, придёт в пятницу"></div>'+
+      '<button class="btn" style="margin-top:16px;" onclick="App.saveSupplier(\''+(e?id:'')+'\')">'+(e?'Сохранить':'Добавить')+'</button>'+
+      (e?'<button class="btn sec" style="margin-top:10px;color:var(--neg);" onclick="App.delSupplier(\''+id+'\')">Удалить запись</button>':'');
+    App.openSheet(s);
+    setTimeout(function(){var el=document.getElementById('s-name');if(el&&!e)el.focus();},150);
+  },
+  saveSupplier:function(id){
+    var name=((document.getElementById('s-name')||{}).value||'').trim();
+    if(!name){App.toast('Введите поставщика',true);return;}
+    var amt=Math.round(parseFloat((document.getElementById('s-amt')||{}).value)||0);
+    var o={id:id||App.uid(),name:name,amount:amt,
+      date:(document.getElementById('s-date')||{}).value||new Date().toISOString().slice(0,10),
+      comment:((document.getElementById('s-cmt')||{}).value||'').trim()};
+    if(id){var i=App.db.suppliers.findIndex(function(x){return x.id===id;});if(i>=0)App.db.suppliers[i]=o;}
+    else App.db.suppliers.push(o);
+    App.save();App.render();App.closeSheet();App.toast(id?'Сохранено ✓':'Добавлено ✓');
+  },
+  delSupplier:function(id){App.db.suppliers=App.db.suppliers.filter(function(s){return s.id!==id;});App.save();App.render();App.closeSheet();App.toast('Удалено');},
+  _icsDate:function(d){var x=new Date(d);return x.getFullYear()+('0'+(x.getMonth()+1)).slice(-2)+('0'+x.getDate()).slice(-2);},
+  _icsEsc:function(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');},
+  exportICS:function(){
+    var list=App.db.suppliers;
+    if(!list.length){App.toast('Нет записей для выгрузки',true);return;}
+    var now=new Date();var stamp=now.getFullYear()+('0'+(now.getMonth()+1)).slice(-2)+('0'+now.getDate()).slice(-2)+'T'+('0'+now.getHours()).slice(-2)+('0'+now.getMinutes()).slice(-2)+'00';
+    var L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Auron Local//RU','CALSCALE:GREGORIAN','METHOD:PUBLISH'];
+    list.forEach(function(s){
+      var d=App._icsDate(s.date);
+      var next=new Date(s.date);next.setDate(next.getDate()+1);var dEnd=App._icsDate(next);
+      var title='Поставщик: '+(s.name||'—')+' — '+App.fmt(s.amount)+' RUB';
+      L.push('BEGIN:VEVENT');
+      L.push('UID:'+s.id+'@auron-local');
+      L.push('DTSTAMP:'+stamp+'Z');
+      L.push('DTSTART;VALUE=DATE:'+d);
+      L.push('DTEND;VALUE=DATE:'+dEnd);
+      L.push('SUMMARY:'+App._icsEsc(title));
+      if(s.comment)L.push('DESCRIPTION:'+App._icsEsc(s.comment));
+      L.push('BEGIN:VALARM','TRIGGER;RELATED=START:PT9H','ACTION:DISPLAY','DESCRIPTION:'+App._icsEsc(title),'END:VALARM');
+      L.push('END:VEVENT');
+    });
+    L.push('END:VCALENDAR');
+    var blob=new Blob([L.join('\r\n')],{type:'text/calendar;charset=utf-8'});
+    var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;
+    a.download='auron-postavshiki-'+new Date().toISOString().slice(0,10)+'.ics';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1500);
+    App.toast('Файл календаря готов ✓');
   },
 
   // ── add / edit transaction ──
@@ -259,12 +337,12 @@ var App={
     r.onload=function(){try{var o=JSON.parse(r.result);var db=o.db||o;
       if(!db.accounts||!db.txns){App.toast('Файл не подходит',true);return;}
       if(!confirm('Восстановить из копии? Текущие данные заменятся.'))return;
-      App.db={accounts:db.accounts,txns:db.txns,settings:db.settings||App.db.settings};
+      App.db={accounts:db.accounts,txns:db.txns,suppliers:db.suppliers||[],settings:db.settings||App.db.settings};
       App.save();App.applyTheme();App.render();App.toast('Восстановлено ✓');
     }catch(e){App.toast('Ошибка чтения файла',true);}};
     r.readAsText(f);inp.value='';},
   wipe:function(){if(!confirm('Стереть ВСЕ данные без возврата? Сделай копию заранее.'))return;
-    localStorage.removeItem(DB_KEY);App.db={accounts:[],txns:[],settings:App.db.settings};App.load();App.render();App.toast('Данные стёрты');},
+    localStorage.removeItem(DB_KEY);App.db={accounts:[],txns:[],suppliers:[],settings:App.db.settings};App.load();App.render();App.toast('Данные стёрты');},
 
   // ── theme / nav / sheet / toast ──
   toggleTheme:function(){App.db.settings.theme=App.db.settings.theme==='dark'?'light':'dark';App.save();App.applyTheme();},
@@ -275,6 +353,7 @@ var App={
   nav:function(){
     var items=[['home','Главная',"<path d='M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'/><polyline points='9 22 9 12 15 12 15 22'/>"],
       ['acc','Счета',"<rect x='2' y='5' width='20' height='14' rx='2'/><path d='M2 10h20'/>"],
+      ['sup','Поставки',"<path d='M1 3h15v13H1zM16 8h4l3 3v5h-7'/><circle cx='5.5' cy='18.5' r='2.5'/><circle cx='18.5' cy='18.5' r='2.5'/>"],
       ['hist','История',"<path d='M7 7h10M7 12h10M7 17h6'/><rect x='3' y='3' width='18' height='18' rx='3'/>"],
       ['set','Настройки',"<circle cx='12' cy='12' r='3'/><path d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'/>"]];
     document.getElementById('nav').innerHTML=items.map(function(it){
@@ -282,7 +361,7 @@ var App={
     }).join('');
   },
   go:function(t){App.tab=t;document.querySelectorAll('.page').forEach(function(p){p.classList.remove('on');});
-    var map={home:'p-home',acc:'p-acc',hist:'p-hist',set:'p-set'};document.getElementById(map[t]).classList.add('on');App.nav();window.scrollTo(0,0);},
+    var map={home:'p-home',acc:'p-acc',sup:'p-sup',hist:'p-hist',set:'p-set'};document.getElementById(map[t]).classList.add('on');App.nav();window.scrollTo(0,0);},
   openSheet:function(html){document.getElementById('sheet').innerHTML=html;document.getElementById('sheet-ov').classList.add('on');},
   closeSheet:function(){document.getElementById('sheet-ov').classList.remove('on');},
   _tt:null,toast:function(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('on');clearTimeout(App._tt);App._tt=setTimeout(function(){e.classList.remove('on');},1900);},
