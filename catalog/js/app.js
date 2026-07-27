@@ -407,7 +407,9 @@
       }
     }
     s = Math.max(s, matchPre(p._name, p._nameT, qVars, [100, 90, 80]));
-    if (p._sup) s = Math.max(s, matchPre(p._sup, p._supT, qVars, [60, 57, 55]));
+    // Поставщика в свободном поиске НЕ учитываем: иначе, набрав название товара,
+    // можно получить чужие товары того же поставщика (напр. поставщик «Адреналин»).
+    // Искать по поставщику — отдельным чипом «🚚 Поставщики».
     if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 40]));
     if (p._note) s = Math.max(s, matchPre(p._note, p._note, qVars, [38, 36, 35]));
     if (p.is_weighted && ('весовой'.startsWith(q) || 'весовые'.startsWith(q) || q === 'вес')) {
@@ -2033,7 +2035,7 @@
 
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, _state: () => state };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, _norm: norm, _translit: translit, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
