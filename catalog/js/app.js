@@ -1782,10 +1782,22 @@
 
   // Витринные поля — что можно показывать покупателю (тот же белый список, что и
   // в скрипте выгрузки). Секретное сюда не попадает.
-  const PUBLIC_FIELDS = ['id', 'name', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos'];
+  // arrival_at (только дата, без поставщика и закупочной цены) нужен покупателю:
+  // на нём держится сортировка «Новее». Без него она у покупателя ничего не делала.
+  const PUBLIC_FIELDS = ['id', 'name', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
   function buildPublicProducts() {
     return state.products
-      .map((p) => { const o = {}; for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k]; return o; })
+      .map((p) => {
+        const o = {};
+        for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
+        // даты кладём без времени — «Новее» нужна только дата, а витрину качает
+        // каждый покупатель, лишние 14 символов на товар тут заметны
+        if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);
+        // запасная дата: если товар ни разу не попадал в файл цен, «Новее»
+        // сортирует хотя бы по дате появления в каталоге
+        if (p.created_at) o.created_at = String(p.created_at).slice(0, 10);
+        return o;
+      })
       .sort((a, b) => String(a.name).localeCompare(String(b.name), 'ru'));
   }
   function buildPublicGroups() {
