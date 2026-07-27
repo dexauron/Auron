@@ -1091,8 +1091,11 @@
 
   // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
   function renderRecentProducts() {
+    // «Недавно смотрели» убрано по просьбе владельца — лента не показывается.
     const box = $('recentStrip');
-    if (!box) return;
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+    return;
+    // eslint-disable-next-line no-unreachable
     const show = !state.query && !state.favOnly && !anyFilterActive();
     if (!show) { box.hidden = true; box.innerHTML = ''; return; }
     const byId = new Map(state.products.map((p) => [p.id, p]));
@@ -1207,8 +1210,9 @@
     $('sheetFields').innerHTML = rows.join('');
 
     $('sheetAdminActions').hidden = !state.isAdmin;
-    $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p)); // ищем по штрихкоду ИЛИ названию
-    $('btnAddPhotoLabel').hidden = !state.session; // сотрудник добавляет фото сразу
+    // фото пока грузятся только на сервере — в бесплатном режиме кнопки прячем
+    $('btnFindPhoto').hidden = state.serverless || !(state.isAdmin && !hasPhoto(p));
+    $('btnAddPhotoLabel').hidden = state.serverless || !state.session;
     $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
@@ -2046,6 +2050,16 @@
     state.contacts = state.contacts || {};
     for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
   }
+  // После правки в памяти — пересобрать индекс, перерисовать и опубликовать на GitHub.
+  async function svSaveAndPublish(okMsg) {
+    state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    buildIndex();
+    state.popularIds = buildPopularIds();
+    renderAll();
+    try { await publishFull(secretPw); if (okMsg) toast(okMsg); }
+    catch (e) { toast('Сохранено, но опубликовать не удалось: ' + (e.message || e) + '. Проверь GitHub-ключ.'); }
+  }
+
   // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
   function svImportRows(rows) {
     const type = detectReportType(rows);
@@ -2215,7 +2229,7 @@
   async function renderCompetitors(p) {
     const box = $('sheetCompetitors');
     if (!box) return;
-    if (!state.session) { box.innerHTML = ''; return; } // разведка — только после входа
+    if (!state.session || state.serverless) { box.innerHTML = ''; return; } // разведка цен — серверная функция
     const our = (p.retail_price != null && p.retail_price !== '') ? Number(p.retail_price) : null;
     let rows = [];
     try {
@@ -2625,6 +2639,29 @@
     btn.disabled = true;
     btn.textContent = 'Сохраняем…';
     $('formError').hidden = true;
+    // Бесплатный режим: сохраняем товар в память и публикуем на GitHub (без сервера).
+    if (state.serverless) {
+      try {
+        const photos = formPhotos.map((ph) => ph.url).filter(Boolean); // новые фото-файлы пока не грузим
+        const rec = {
+          name: $('fName').value.trim(), group_id: $('fGroup').value || null, supplier_ids: formSupplierIds,
+          code: $('fCode').value.trim() || null, article: $('fArticle').value.trim() || null,
+          barcodes: $('fBarcodes').value.split('\n').map((s) => s.trim()).filter(Boolean),
+          is_weighted: $('fWeighted').checked, unit: $('fUnit').value.trim() || null,
+          department: $('fDepartment').value.trim() || null, note: $('fNote').value.trim() || null,
+          description: $('fDescription').value.trim() || null, photos, updated_at: new Date().toISOString(),
+        };
+        if (!rec.name) { $('formError').textContent = 'Впиши название товара.'; $('formError').hidden = false; btn.disabled = false; btn.textContent = 'Сохранить'; return; }
+        if (editingProduct) Object.assign(editingProduct, rec);
+        else state.products.push(Object.assign({ id: svUuid() }, rec));
+        closeSheet('formSheet'); closeSheet('productSheet');
+        await svSaveAndPublish(editingProduct ? 'Товар обновлён ✓' : 'Товар добавлен ✓');
+      } catch (err) {
+        $('formError').textContent = 'Не удалось сохранить: ' + (err.message || err);
+        $('formError').hidden = false;
+      } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      return;
+    }
     try {
       // загружаем новые фото
       const photoUrls = [];
@@ -2675,6 +2712,12 @@
   async function deleteProduct() {
     if (!currentProduct) return;
     if (!confirm(`Удалить «${currentProduct.name}» из каталога?`)) return;
+    if (state.serverless) {
+      state.products = state.products.filter((p) => p.id !== currentProduct.id);
+      closeSheet('productSheet');
+      await svSaveAndPublish('Товар удалён');
+      return;
+    }
     try {
       const { error } = await sb.from('catalog_products').delete().eq('id', currentProduct.id);
       if (error) throw error;
@@ -2702,6 +2745,13 @@
     const name = $('newGroupName').value.trim();
     if (!name) return;
     const maxSort = Math.max(0, ...state.groups.map((g) => g.sort_order || 0));
+    if (state.serverless) {
+      state.groups.push({ id: svUuid(), name, sort_order: maxSort + 1 });
+      $('newGroupName').value = '';
+      renderGroupsManager();
+      await svSaveAndPublish('Группа добавлена ✓');
+      return;
+    }
     const { error } = await sb.from('catalog_groups').insert({ name, sort_order: maxSort + 1 });
     if (error) { toast('Ошибка: ' + error.message); return; }
     $('newGroupName').value = '';
@@ -2713,6 +2763,11 @@
 
   async function renameGroup(id, name) {
     if (!name.trim()) return;
+    if (state.serverless) {
+      const g = groupById(id); if (g) g.name = name.trim();
+      await svSaveAndPublish();
+      return;
+    }
     const { error } = await sb.from('catalog_groups').update({ name: name.trim() }).eq('id', id);
     if (error) { toast('Ошибка: ' + error.message); return; }
     await refresh({ silent: true });
@@ -2722,6 +2777,14 @@
   async function deleteGroup(id) {
     const g = groupById(id);
     if (!confirm(`Удалить группу «${g?.name}»? Товары останутся — без группы.`)) return;
+    if (state.serverless) {
+      state.groups = state.groups.filter((x) => x.id !== id);
+      for (const p of state.products) if (p.group_id === id) p.group_id = null;
+      state.selGroups = state.selGroups.filter((x) => x !== id);
+      renderGroupsManager();
+      await svSaveAndPublish('Группа удалена');
+      return;
+    }
     const { error } = await sb.from('catalog_groups').delete().eq('id', id);
     if (error) { toast('Ошибка: ' + error.message); return; }
     state.selGroups = state.selGroups.filter((x) => x !== id);
@@ -4224,15 +4287,24 @@
   async function renderTopPeriods() {
     const box = $('topChips');
     let periods = [];
-    try {
-      const { data, error } = await sb.rpc('catalog_sales_periods');
-      if (error) throw error;
-      periods = data || [];
-    } catch (e) {
-      box.innerHTML = '';
-      $('topDeletePeriod').hidden = true;
-      $('topList').innerHTML = '<p class="muted">Не получилось прочитать продажи. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql</p>';
-      return;
+    if (state.serverless) {
+      const seen = new Map();
+      for (const s of (state.sales || [])) {
+        const k = (s.period_from || '') + '|' + (s.period_to || '');
+        if (!seen.has(k)) seen.set(k, { period_from: s.period_from, period_to: s.period_to });
+      }
+      periods = [...seen.values()].sort((a, b) => String(b.period_to || '').localeCompare(String(a.period_to || '')));
+    } else {
+      try {
+        const { data, error } = await sb.rpc('catalog_sales_periods');
+        if (error) throw error;
+        periods = data || [];
+      } catch (e) {
+        box.innerHTML = '';
+        $('topDeletePeriod').hidden = true;
+        $('topList').innerHTML = '<p class="muted">Не получилось прочитать продажи. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql</p>';
+        return;
+      }
     }
     if (!periods.length) {
       box.innerHTML = '';
@@ -4269,6 +4341,22 @@
     box.innerHTML = '<p class="muted">Считаем…</p>';
 
     let data; let total = null;
+    if (state.serverless) {
+      // считаем из данных продаж в памяти (тот же формат: product_id, total_qty, total_amount)
+      const byCode = new Map(), byName = new Map();
+      for (const p of state.products) { if (p.code) byCode.set(String(p.code), p); byName.set(norm(p.name), p); }
+      const agg = new Map();
+      for (const s of (state.sales || [])) {
+        if ((s.period_from || '') !== from || (s.period_to || '') !== to) continue;
+        const p = (s.code && byCode.get(String(s.code))) || byName.get(norm(s.name || ''));
+        if (!p) continue;
+        const a = agg.get(p.id) || { product_id: p.id, total_qty: 0, total_amount: 0 };
+        a.total_qty += Number(s.qty) || 0; a.total_amount += Number(s.amount) || 0;
+        agg.set(p.id, a);
+      }
+      data = [...agg.values()];
+      total = { total_amount: data.reduce((x, r) => x + r.total_amount, 0) };
+    } else {
     try {
       const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 200, p_order: topMode });
       if (res.error) throw res.error;
@@ -4281,6 +4369,7 @@
       const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 300 });
       if (res.error) { box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(res.error.message || '') + '</p>'; return; }
       data = res.data;
+    }
     }
     if (!data || !data.length) { box.innerHTML = '<p class="muted">За этот период продаж нет</p>'; return; }
 
@@ -4852,11 +4941,22 @@
         // «Фото на проверке» — показываем, если в очереди что-то есть
         $('menuSuggestions').hidden = !(state.suggCount > 0);
         $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+        // Бесплатный режим: серверные функции скрываем — они работали только с сервером
+        if (state.serverless) {
+          $('menuPhotoFill').hidden = true;
+          $('menuSuggestions').hidden = true;
+          $('menuSuppliers').hidden = true;
+          $('menuDedup').hidden = true;
+        } else {
+          $('menuPhotoFill').hidden = false;
+        }
         openSheet('adminMenuSheet');
-        loadSuggestionsCount().then(() => {
-          $('menuSuggestions').hidden = !(state.suggCount > 0);
-          $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
-        });
+        if (!state.serverless) {
+          loadSuggestionsCount().then(() => {
+            $('menuSuggestions').hidden = !(state.suggCount > 0);
+            $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+          });
+        }
       } else {
         openLogin();
       }
@@ -5350,10 +5450,18 @@
       const btn = $('topDeletePeriod');
       btn.disabled = true;
       try {
-        const { error } = await sb.rpc('catalog_delete_sales_period', { p_from: topPeriod.from, p_to: topPeriod.to });
-        if (error) throw error;
-        toast('Отчёт продаж удалён');
-        await renderTopPeriods(); // обновляем список периодов и топ
+        if (state.serverless) {
+          state.sales = (state.sales || []).filter((s) => !((s.period_from || '') === topPeriod.from && (s.period_to || '') === topPeriod.to));
+          state.popularIds = buildPopularIds();
+          await publishFull(secretPw);
+          toast('Отчёт продаж удалён');
+          await renderTopPeriods();
+        } else {
+          const { error } = await sb.rpc('catalog_delete_sales_period', { p_from: topPeriod.from, p_to: topPeriod.to });
+          if (error) throw error;
+          toast('Отчёт продаж удалён');
+          await renderTopPeriods(); // обновляем список периодов и топ
+        }
       } catch (e) {
         toast('Не удалось удалить: ' + (e.message || ''));
       } finally {
