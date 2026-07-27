@@ -1067,8 +1067,16 @@
     const box = $('popularStrip');
     if (!box) return;
     const show = !state.query && !state.favOnly && !anyFilterActive();
-    const top = state.products.filter((p) => popViews(p.id) > 0)
-      .sort((a, b) => popViews(b.id) - popViews(a.id)).slice(0, 12);
+    let top;
+    if (state.popularIds && state.popularIds.length) {
+      // популярное по продажам (глобально, для всех) — порядок из витрины
+      const byId = new Map(state.products.map((p) => [p.id, p]));
+      top = state.popularIds.map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
+    } else {
+      // запасной вариант — по просмотрам (старый счётчик, если продаж нет)
+      top = state.products.filter((p) => popViews(p.id) > 0)
+        .sort((a, b) => popViews(b.id) - popViews(a.id)).slice(0, 12);
+    }
     if (!show || top.length < 3) { box.hidden = true; box.innerHTML = ''; return; }
     box.hidden = false;
     box.innerHTML = '<div class="similar-title">🔥 Популярное</div><div class="similar-row">'
@@ -1720,6 +1728,21 @@
   function buildPublicGroups() {
     return state.groups.map((g) => ({ id: g.id, name: g.name, sort_order: g.sort_order }));
   }
+  // «Популярное» по продажам: суммируем проданное количество на товар (из данных
+  // продаж, товар ищем по коду → названию), берём топ. Публикуется отдельным
+  // списком id — видно всем (и покупателям), без раскрытия самих цифр продаж.
+  function buildPopularIds() {
+    if (!state.sales || !state.sales.length) return [];
+    const byCode = new Map(), byName = new Map();
+    for (const p of state.products) { if (p.code) byCode.set(String(p.code), p); byName.set(norm(p.name), p); }
+    const qty = new Map();
+    for (const s of state.sales) {
+      const p = (s.code && byCode.get(String(s.code))) || byName.get(norm(s.name || ''));
+      if (!p) continue;
+      qty.set(p.id, (qty.get(p.id) || 0) + (Number(s.qty) || 0));
+    }
+    return [...qty.entries()].filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([id]) => id);
+  }
 
   // Опубликовать витрину (товары + категории) одним коммитом на GitHub.
   // По умолчанию публикуем ТОЛЬКО если витрина изменилась (сравниваем подпись
@@ -1840,6 +1863,7 @@
     const files = [
       { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
       { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
+      { path: `${CFG.DATA_PATH}/popular.json`, content: JSON.stringify(buildPopularIds()) },
       { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: await encryptJSON(buildFullSnapshot(), password) },
     ];
     if (state.staffPassword) files.push({ path: `${CFG.DATA_PATH}/${STAFF_FILE}`, content: await encryptJSON(buildStaffSnapshot(), state.staffPassword) });
@@ -1862,6 +1886,7 @@
     state.competitors = data.competitors || [];
     state.staffPassword = data.staffPassword || null;
     buildIndex();
+    state.popularIds = buildPopularIds();
     state.serverless = true;
     state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
     return true;
@@ -1879,6 +1904,7 @@
     state.contacts = data.contacts || {};
     state.competitors = [];
     buildIndex();
+    state.popularIds = buildPopularIds();
     state.serverless = true;
     state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
     return true;
@@ -2035,7 +2061,7 @@
 
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, _norm: norm, _translit: translit, _state: () => state };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
@@ -2046,14 +2072,16 @@
   async function refreshStatic() {
     try {
       const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
-      const [pr, gr] = await Promise.all([
+      const [pr, gr, pop] = await Promise.all([
         fetch(base + 'products.json', { cache: 'no-cache' }),
         fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
+        fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
       ]);
       if (!pr || !pr.ok) return false;
       const products = await pr.json();
       if (!Array.isArray(products)) return false;
       state.groups = (gr && gr.ok) ? await gr.json() : [];
+      try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
       state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
       state.products = products.sort(byName);
       buildIndex();
@@ -3210,7 +3238,7 @@
         } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
       }
       state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-      buildIndex(); renderAll();
+      buildIndex(); state.popularIds = buildPopularIds(); renderAll();
       smartLog('Сохраняем на GitHub…');
       try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован ✓`); toast('Каталог обновлён ✓'); }
       catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('⚠ Не удалось опубликовать'); }
