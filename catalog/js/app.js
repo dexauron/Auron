@@ -9,6 +9,10 @@
   const CACHE_KEY = 'wm_catalog';       // ключ в IndexedDB
   const BUCKET = 'product-photos';
   const SEARCH_THRESHOLD = 25;
+  // Доля от лучшего совпадения, ниже которой результат считаем мусором.
+  // Пример: нашлось точное «Молоко» (100) — товары из группы «Молочные» (45)
+  // уже не показываем. Но если хорошего нет, слабые остаются: пустая выдача хуже.
+  const RELATIVE_CUTOFF = 0.6;
 
   /* ── Хранилище кэша (IndexedDB) ────────────────────
    * Каталог на 16 тыс. товаров — это ~8 МБ, больше лимита localStorage (~5 МБ),
@@ -353,6 +357,9 @@
       const name = norm(p.name);
       p._name = name;
       p._nameT = translit(name);
+      p._nameW = wordy(name);
+      p._nameWT = wordy(p._nameT);
+      p._hasLat = /[a-z]/.test(name);
       p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
       p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
       p._nameLoose = stripPunct(name);
@@ -361,20 +368,39 @@
       p._supT = translit(p._sup);
       p._grp = norm(groupById(p.group_id)?.name || '');
       p._grpT = translit(p._grp);
+      p._grpW = wordy(p._grp);
+      p._grpWT = wordy(p._grpT);
       p._note = norm(p.note || '');
+      p._noteW = wordy(p._note);
     }
   }
 
-  // сравнение текста с запросом с учётом транслитерации (рус ↔ англ)
-  function matchPre(text, textT, qVars, w) {
+  // «пословный» вид строки: все знаки (дефисы, точки, скобки) → пробелы,
+  // по краям тоже пробелы. Нужен, чтобы искать начало любого слова: ' дог '
+  // найдётся в «хот-дог», но «рис» НЕ найдётся в «ирис».
+  const wordy = (s) => ' ' + String(s).replace(/[^a-zа-я0-9]+/g, ' ').trim() + ' ';
+
+  // Сравнение текста с запросом (с учётом транслитерации рус ↔ англ).
+  // Веса: [0] — строка начинается с запроса, [1] — с запроса начинается любое
+  // слово, [2] — запрос попал ВНУТРЬ слова (слабый сигнал, только для длинных
+  // запросов: иначе «сок» лез в «Высокобелковый», а «рис» — в «Ирис»).
+  const MIDWORD_MIN = 5;
+  // Транслитерация «съедает» буквы: «водяной» → vodanoi, и тогда запрос «вода»
+  // ложно совпадает с началом слова. Поэтому сравниваем через транслит только
+  // когда языки букв разные (искали латиницей, а название русское, или наоборот).
+  // Если и запрос, и название чисто русские — сравниваем напрямую.
+  function matchPre(text, textT, qVars, w, textW, textWT, useT) {
     if (!text) return 0;
     let s = 0;
-    const tvs = text === textT ? [text] : [text, textT];
-    for (const tv of tvs) {
+    const tvs = (text === textT || useT === false) ? [[text, textW]] : [[text, textW], [textT, textWT]];
+    for (const [tv, tw] of tvs) {
       for (const qv of qVars) {
-        if (tv.startsWith(qv)) s = Math.max(s, w[0]);
-        else if (tv.includes(' ' + qv)) s = Math.max(s, w[1]);
-        else if (tv.includes(qv)) s = Math.max(s, w[2]);
+        // Целое слово важнее куска слова: по запросу «вода» сначала «Вода 0,5л»,
+        // и только потом «Водолей». +10 — «слово стоит в начале названия».
+        if (tw && tw.includes(' ' + qv + ' ')) s = Math.max(s, w[1] + (tv.startsWith(qv) ? 20 : 10));
+        else if (tv.startsWith(qv)) s = Math.max(s, w[0]);
+        else if (tw && tw.includes(' ' + qv)) s = Math.max(s, w[1]);
+        else if (w[2] && qv.length >= MIDWORD_MIN && tv.includes(qv)) s = Math.max(s, w[2]);
       }
     }
     return s;
@@ -420,21 +446,27 @@
           if (c.startsWith(qL)) s = Math.max(s, 92);
           else if (c.includes(qL)) s = Math.max(s, 68);
         }
-        if (qL.length >= 3 && (p._nameLoose || '').includes(qL)) s = Math.max(s, 78);
+        if (qL.length >= MIDWORD_MIN && (p._nameLoose || '').includes(qL)) s = Math.max(s, 78);
       }
     }
-    s = Math.max(s, matchPre(p._name, p._nameT, qVars, [100, 90, 80]));
+    // латиница есть в запросе или в названии → транслит нужен; иначе только «как есть»
+    const useT = p._hasLat || /[a-z]/.test(q);
+    s = Math.max(s, matchPre(p._name, p._nameT, qVars, [92, 90, 55], p._nameW, p._nameWT, useT));
     // Поставщика в свободном поиске НЕ учитываем: иначе, набрав название товара,
     // можно получить чужие товары того же поставщика (напр. поставщик «Адреналин»).
     // Искать по поставщику — отдельным чипом «🚚 Поставщики».
-    if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 40]));
-    if (p._note) s = Math.max(s, matchPre(p._note, p._note, qVars, [38, 36, 35]));
+    if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 0], p._grpW, p._grpWT, useT));
+    if (p._note) s = Math.max(s, matchPre(p._note, p._note, qVars, [38, 36, 0], p._noteW, p._noteW));
     if (p.is_weighted && ('весовой'.startsWith(q) || 'весовые'.startsWith(q) || q === 'вес')) {
       s = Math.max(s, 45);
     }
     // нечёткий поиск — только если точного совпадения не нашлось (прощает опечатки)
-    if (s < 60 && q.length >= 3) {
-      const fuzzy = fuzzyScore(p._name, p._nameT, qVars);
+    // Нечёткий поиск (прощает опечатки) — только для запросов от 4 букв.
+    // На коротких словах похожесть по буквосочетаниям врёт: «рис» так «находил»
+    // Rich и Ирис. Длину проверяем, а сам порог похожести оставляем мягким,
+    // иначе перестают находиться настоящие опечатки вроде «хатдок» → «хот-дог».
+    if (s < 60 && q.length >= 4) {
+      const fuzzy = fuzzyScore(p._name, useT ? p._nameT : p._name, useT ? qVars : [q]);
       if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
     }
     return s;
@@ -579,9 +611,17 @@
       const wt = translit(w);
       return { q: w, qVars: w === wt ? [w] : [w, wt] };
     });
-    const scored = list
+    let hits = list
       .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
-      .filter((x) => x.s >= SEARCH_THRESHOLD)
+      .filter((x) => x.s >= SEARCH_THRESHOLD);
+    // Отсекаем «хвост» слабых совпадений: если нашлось что-то хорошее, показывать
+    // заодно всё отдалённо похожее — это и есть тот самый мусор в выдаче.
+    if (hits.length) {
+      const best = hits.reduce((m, x) => Math.max(m, x.s), 0);
+      const floor = Math.max(SEARCH_THRESHOLD, best * RELATIVE_CUTOFF);
+      hits = hits.filter((x) => x.s >= floor);
+    }
+    const scored = hits
       .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
       .map((x) => x.p);
     return sortList(scored, true);
