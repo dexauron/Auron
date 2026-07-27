@@ -364,13 +364,21 @@ mark { background: rgba(48, 209, 88, .28); color: inherit; border-radius: 3px; p
 .card-photo.no-photo { aspect-ratio: 1 / 1; height: auto; font-size: 40px; opacity: .6; }
 .card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card-body { padding: 11px 12px 13px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+/* название показывается ПОЛНОСТЬЮ (без обрезки «…»); min-height держит короткие
+   имена ровными. Цена идёт последней и прижата к низу (order + margin-top:auto),
+   значки — над ней: поэтому в ряду цены стоят на одной линии независимо от того,
+   сколько у товара значков (высоту ряда сетка выравнивает автоматически) */
 .card-name {
-  font-size: 15.5px; font-weight: 700; line-height: 1.25;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  min-height: 2.5em;
+  order: 1;
+  font-size: 15px; font-weight: 700; line-height: 1.3;
+  min-height: 2.6em;
+  /* длинные слова переносим по слогам (lang="ru"), а рвём посреди слова только
+     если оно вообще не влезает в колонку — иначе получалось «ультрапастеризова/нное» */
+  overflow-wrap: break-word; hyphens: auto;
 }
-.card-price { font-size: 19px; font-weight: 800; color: var(--accent); margin-top: 2px; }
-.card-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; }
+.card-tags { order: 2; display: flex; flex-wrap: wrap; gap: 5px; }
+.card-tags:empty { display: none; }            /* без значков — без пустого отступа */
+.card-price { order: 3; font-size: 19px; font-weight: 800; color: var(--accent); margin-top: auto; padding-top: 4px; }
 .tag {
   font-size: 11.5px; font-weight: 600;
   padding: 3px 8px; border-radius: 7px;
