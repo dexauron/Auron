@@ -2,7 +2,7 @@
 <html lang="ru" data-theme="light" data-accent="green">
 <head>
 <meta charset="UTF-8">
-<script>window.__INVITE_ORG__="<?= inviteOrg ?>";</script>
+<script>window.__INVITE_ORG__="<?= inviteOrg ?>";window.__INVITE_EMAIL__="<?= inviteEmail ?>";</script>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#0E7A5F">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2746,7 +2746,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.23.0';
+var APP_VERSION='4.24.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3432,13 +3432,29 @@ var App={
   _showJoin:function(inviteOrg){
     App._joinOrg=inviteOrg;
     var host=document.getElementById('scr-reg');
+    var my=(App.s.myEmail||'').trim().toLowerCase();
+    var inv=((window.__INVITE_EMAIL__||'').trim()).toLowerCase();
+    // Аккаунт не совпадает с приглашённым — это причина №1 «нет доступа».
+    var mismatch=(my&&inv&&my!==inv);
+    var box='';
+    if(mismatch){
+      box='<div style="background:var(--expense-dim);color:var(--expense);border-radius:12px;padding:13px 15px;margin-bottom:16px;font-size:12.5px;line-height:1.6;">'+
+        '<b>⚠️ Вы вошли не под тем Google-аккаунтом.</b><br><br>'+
+        'Сейчас вы вошли как:<br><b style="word-break:break-all;">'+App._e(App.s.myEmail)+'</b><br>'+
+        'А приглашали:<br><b style="word-break:break-all;">'+App._e(window.__INVITE_EMAIL__)+'</b><br><br>'+
+        'Что сделать:<br>1. Откройте эту же ссылку в режиме <b>инкогнито</b> (в Chrome: ⋮ → «Новая вкладка инкогнито»).<br>'+
+        '2. Войдите <b>только</b> под <b style="word-break:break-all;">'+App._e(window.__INVITE_EMAIL__)+'</b>.<br>'+
+        '3. Снова нажмите «Присоединиться».</div>';
+    } else if(App.s.myEmail){
+      box='<div style="background:var(--brand-dim);border-radius:12px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:var(--text-2);line-height:1.5;text-align:center;">Вы вошли в Google как<br><b style="color:var(--text);word-break:break-all;">'+App._e(App.s.myEmail)+'</b>'+(inv?'':'<br>Владелец должен пригласить <u>именно этот</u> адрес.')+'</div>';
+    }
     if(host){
       host.innerHTML=
         '<div style="max-width:420px;margin:0 auto;padding:40px 22px;">'+
         '<div style="font-size:44px;text-align:center;margin-bottom:8px;">👋</div>'+
         '<div style="font-size:23px;font-weight:800;text-align:center;letter-spacing:-.02em;">Вас пригласили</div>'+
         '<div style="font-size:13.5px;color:var(--muted);text-align:center;margin:8px 0 20px;line-height:1.5;">Вы входите в магазин как сотрудник. Свой магазин создавать не нужно — просто представьтесь.</div>'+
-        (App.s.myEmail?('<div style="background:var(--brand-dim);border-radius:12px;padding:11px 14px;margin-bottom:16px;font-size:12.5px;color:var(--text-2);line-height:1.5;text-align:center;">Вы вошли в Google как<br><b style="color:var(--text);word-break:break-all;">'+App._e(App.s.myEmail)+'</b><br>Владелец должен пригласить <u>именно этот</u> адрес.</div>'):'')+
+        box+
         '<div class="field"><label>Как вас зовут</label><input id="join-name" type="text" placeholder="Имя" autocomplete="name"></div>'+
         '<button class="btn-primary" style="width:100%;margin-top:8px;" onclick="App._joinDo()">Присоединиться →</button>'+
         '<div id="join-err" style="display:none;background:var(--expense-dim);color:var(--expense);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:12.5px;line-height:1.5;"></div>'+

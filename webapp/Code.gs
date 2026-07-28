@@ -111,8 +111,12 @@ function _bustDash(ssId){
 // ─────────────────────────────────────────────────────────────────────
 function doGet(e) {
   var invite = (e && e.parameter && e.parameter.invite) ? String(e.parameter.invite) : '';
+  // Email приглашённого кладём в ссылку — чтобы на экране входа сравнить его с
+  // аккаунтом, под которым реально вошёл сотрудник, и поймать «не тот Google».
+  var invEmail = (e && e.parameter && e.parameter.email) ? String(e.parameter.email) : '';
   var t = HtmlService.createTemplateFromFile('Index');
   t.inviteOrg = invite;
+  t.inviteEmail = invEmail;
   return t.evaluate()
     .setTitle('Auron Finance')
     .addMetaTag('viewport','width=device-width,initial-scale=1,maximum-scale=1');
@@ -4319,7 +4323,7 @@ function inviteMember(p) {
       var appUrl=''; try{appUrl=ScriptApp.getService().getUrl();}catch(eu){}
       try{orgName=ss.getName().replace(/^Auron\s*[—-]\s*/,'');}catch(en){}
       if (appUrl) {
-        link=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'invite='+encodeURIComponent(ssId);
+        link=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'invite='+encodeURIComponent(ssId)+'&email='+encodeURIComponent(email);
         // Пытаемся отправить письмо, но НЕ полагаемся на него — ссылку вернём владельцу.
         try {
           var body='Вас пригласили в «'+orgName+'» (роль: '+role+').\n\n'+
