@@ -2818,7 +2818,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.32.0';
+var APP_VERSION='4.33.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9389,7 +9389,20 @@ var App={
     // Умный поиск товара — заметная строка сверху
     h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1.4px solid var(--line);border-radius:13px;padding:11px 14px;cursor:pointer;margin-bottom:10px;">'+
        '<span style="font-size:15px;">🔍</span><span style="color:var(--muted);font-size:13px;">Найти товар: код, артикул, штрихкод, название…</span></div>';
+    // Каталог — витрина всех товаров плиткой (главный вход, не прячем вглубь)
+    h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,var(--brand),color-mix(in oklab,var(--brand) 70%,#000));color:#fff;border-radius:15px;padding:14px 16px;cursor:pointer;margin-bottom:12px;box-shadow:0 8px 20px -12px var(--brand);">'+
+       '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>'+
+       '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:750;">Каталог товаров</div>'+
+       '<div style="font-size:11.5px;opacity:.85;margin-top:1px;">Все '+fmt(a.count)+' — плиткой, с ценами и остатками</div></div>'+
+       '<span style="opacity:.8;">›</span></div>';
     h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
+    // Мало поставщиков = не загружен отчёт «Цены поставщиков». Без него в
+    // карточке товара не будет выбора «у кого дешевле».
+    if(a.count>50&&a.suppliersCount<=1){
+      h+='<div style="background:color-mix(in oklab,var(--warn,#FF9F0A) 12%,transparent);border-radius:13px;padding:12px 14px;margin-top:8px;font-size:12.5px;line-height:1.6;">'+
+        'Поставщик пока один. Загрузите отчёт <b>«Текущие цены поставщиков»</b> — тогда в карточке товара будут <b>все поставщики с ценами</b> и видно, у кого дешевле. '+
+        '<b style="color:var(--brand);cursor:pointer;" onclick="event.stopPropagation();App.closeModal();App.openImport();">Загрузить →</b></div>';
+    }
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽',delta(a.momRevenue,true))+metric('прибыль',fm(a.totProfit)+' ₽',delta(a.momProfit,true))+'</div>';
     h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
     // ── Профессиональные метрики ────────────────────────────────────
