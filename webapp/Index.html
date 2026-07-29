@@ -1622,6 +1622,30 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .brf-auto-btn{flex-shrink:0;padding:9px 16px;border-radius:11px;border:none;background:var(--pos);color:#062;
   font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);}
 
+/* ── Плитка товаров (вид из каталога, данные наши — из 1С) ───────── */
+.g-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(150px,47%),1fr));gap:10px;}
+@media(min-width:700px){.g-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;}}
+.g-grid.compact{grid-template-columns:repeat(auto-fill,minmax(min(108px,31%),1fr));gap:8px;}
+.g-grid.compact .g-tags{display:none;}
+.g-grid.compact .g-name{font-size:12px;min-height:2.4em;}
+.g-grid.compact .g-price{font-size:14px;}
+.g-card{background:var(--surface);border:1px solid var(--line);border-radius:15px;overflow:hidden;
+  cursor:pointer;display:flex;flex-direction:column;transition:transform .12s ease,box-shadow .12s ease;}
+.g-card:active{transform:scale(.975);}
+@media(hover:hover){.g-card:hover{box-shadow:0 8px 20px -12px rgba(0,0,0,.35);}}
+/* Фото в 1С нет — вместо него плитка с буквой и цветом по названию */
+.g-ph{aspect-ratio:1/1;display:grid;place-items:center;font-size:30px;font-weight:800;color:#fff;
+  letter-spacing:-.02em;user-select:none;}
+.g-grid.compact .g-ph{font-size:22px;}
+.g-body{padding:9px 10px 11px;display:flex;flex-direction:column;gap:5px;flex:1;}
+.g-name{font-size:13px;font-weight:650;line-height:1.32;min-height:2.6em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.g-price{font-size:16px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.g-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;}
+.g-tag{font-size:10.5px;font-weight:700;padding:2.5px 6px;border-radius:7px;
+  background:var(--surface-2);color:var(--text-2);white-space:nowrap;}
+.g-tag.warn{background:color-mix(in oklab,var(--expense) 14%,transparent);color:var(--expense);}
+.g-tag.good{background:color-mix(in oklab,var(--income) 14%,transparent);color:var(--income);}
 </style>
 </head>
 <body>
@@ -2746,7 +2770,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.27.0';
+var APP_VERSION='4.28.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9375,6 +9399,7 @@ var App={
   openGoodsList:function(sort){
     var titles={profit:'по прибыли',markup:'низкая наценка',sold:'по продажам',stock:'по остаткам',dead:'неликвид',revenue:'по выручке',name:'А–Я'};
     App._goodsFilter={sort:sort||'profit',group:'',supplier:'',q:''};
+    try{var sv=localStorage.getItem('auron_goods_view');if(sv==='grid'||sv==='compact'||sv==='list')App._goodsView=sv;}catch(e){}
     App.openModal('<div class="modal-title">Товары · '+(titles[App._goodsFilter.sort]||'')+'</div>'+
       '<div style="display:flex;gap:8px;margin-bottom:8px;">'+
       '<input id="goods-q" placeholder="Код / артикул / штрихкод / название" oninput="App._goodsFilterSet(\'q\',this.value)" style="flex:1;min-width:0;padding:11px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);">'+
@@ -9471,15 +9496,76 @@ var App={
           if(f.sort==='name')return '';
           return it.profit?fm(it.profit)+' ₽':'—';
         };
-        el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:6px;">Найдено: '+r.items.length+(r.allTotal>r.items.length?' из '+r.allTotal:'')+'</div>'+
-          r.items.map(function(it,gi){
-            var sub=[];if(it.code)sub.push('код '+it.code);if(it.article)sub.push('арт '+it.article);if(it.supplier)sub.push(it.supplier);if(it.markup!=null)sub.push('нац '+it.markup+'%');if(it.daysOfStock!=null)sub.push('хватит '+it.daysOfStock+'дн');if(it.stockQty)sub.push('ост '+it.stockQty);
-            return'<div onclick="App.openProductCard('+gi+')" style="padding:10px 13px;border-top:1px solid var(--line-2);cursor:pointer;display:flex;align-items:center;gap:8px;"><div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
-              '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div>'+
-              '<span style="font-weight:700;font-size:12.5px;white-space:nowrap;">'+valFor(it)+'</span><span style="color:var(--muted);">›</span></div>';
-          }).join('');
+        App._goodsValFor=valFor;
+        el.innerHTML='<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'+
+            '<span style="font-size:12px;color:var(--muted);flex:1;">Найдено: '+r.items.length+(r.allTotal>r.items.length?' из '+r.allTotal:'')+'</span>'+
+            App._goodsViewBtns()+'</div><div id="goods-rows"></div>';
+        App._goodsRenderRows();
       }).catch(function(e){var el=document.getElementById('goods-list');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
     },200);
+  },
+
+  // ── Вид списка товаров: строки / плитка / плотная плитка ────────
+  // Плитка — оформление из нашего каталога, но данные наши (из 1С).
+  _goodsView:'grid',
+  _goodsViewBtns:function(){
+    var v=App._goodsView, b=function(k,t,svg){
+      var on=v===k;
+      return '<button onclick="App._goodsSetView(\''+k+'\')" title="'+t+'" style="width:32px;height:30px;border-radius:9px;cursor:pointer;'+
+        'border:1.2px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 15%,transparent)':'var(--surface-2)')+';'+
+        'color:'+(on?'var(--brand)':'var(--text-2)')+';display:grid;place-items:center;padding:0;">'+
+        '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'+svg+'</svg></button>';
+    };
+    return '<div style="display:flex;gap:5px;flex-shrink:0;">'+
+      b('grid','Плитка',"<rect x='3' y='3' width='7.5' height='7.5' rx='1.5'/><rect x='13.5' y='3' width='7.5' height='7.5' rx='1.5'/><rect x='3' y='13.5' width='7.5' height='7.5' rx='1.5'/><rect x='13.5' y='13.5' width='7.5' height='7.5' rx='1.5'/>")+
+      b('compact','Мельче',"<rect x='3' y='3' width='5' height='5' rx='1'/><rect x='9.5' y='3' width='5' height='5' rx='1'/><rect x='16' y='3' width='5' height='5' rx='1'/><rect x='3' y='9.5' width='5' height='5' rx='1'/><rect x='9.5' y='9.5' width='5' height='5' rx='1'/><rect x='16' y='9.5' width='5' height='5' rx='1'/><rect x='3' y='16' width='5' height='5' rx='1'/><rect x='9.5' y='16' width='5' height='5' rx='1'/><rect x='16' y='16' width='5' height='5' rx='1'/>")+
+      b('list','Списком',"<line x1='4' y1='6' x2='20' y2='6'/><line x1='4' y1='12' x2='20' y2='12'/><line x1='4' y1='18' x2='20' y2='18'/>")+
+      '</div>';
+  },
+  _goodsSetView:function(v){
+    App._goodsView=v;
+    try{localStorage.setItem('auron_goods_view',v);}catch(e){}
+    var el=document.getElementById('goods-list');
+    if(el){var head=el.firstElementChild;if(head&&head.lastElementChild)head.lastElementChild.outerHTML=App._goodsViewBtns();}
+    App._goodsRenderRows();
+  },
+  // Цвет плитки — стабильно из названия, чтобы товар всегда был «своего» цвета
+  _goodsHue:function(s){var h=0;s=String(s||'');for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return h;},
+  _goodsRenderRows:function(){
+    var host=document.getElementById('goods-rows'); if(!host)return;
+    var items=App._goodsItems||[], val=App._goodsValFor||function(){return'';};
+    if(!items.length){host.innerHTML='<div style="padding:16px 4px;color:var(--muted);">Ничего не найдено.</div>';return;}
+
+    if(App._goodsView==='list'){
+      host.innerHTML=items.map(function(it,gi){
+        var sub=[];if(it.code)sub.push('код '+it.code);if(it.article)sub.push('арт '+it.article);if(it.supplier)sub.push(it.supplier);
+        if(it.markup!=null)sub.push('нац '+it.markup+'%');if(it.daysOfStock!=null)sub.push('хватит '+it.daysOfStock+'дн');if(it.stockQty)sub.push('ост '+it.stockQty);
+        return'<div onclick="App.openProductCard('+gi+')" style="padding:10px 13px;border-top:1px solid var(--line-2);cursor:pointer;display:flex;align-items:center;gap:8px;">'+
+          '<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(it.name)+'</div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(sub.join(' · ')||it.barcode||'—')+'</div></div>'+
+          '<span style="font-weight:700;font-size:12.5px;white-space:nowrap;">'+val(it)+'</span><span style="color:var(--muted);">›</span></div>';
+      }).join('');
+      return;
+    }
+
+    var cls='g-grid'+(App._goodsView==='compact'?' compact':'');
+    host.innerHTML='<div class="'+cls+'">'+items.map(function(it,gi){
+      var nm=String(it.name||'—');
+      var h=App._goodsHue(nm);
+      var letter=App._e(nm.replace(/^[^0-9A-Za-zА-Яа-яЁё]+/,'').charAt(0).toUpperCase()||'?');
+      var price=it.retail?('₽ '+fmt(Math.round(it.retail))):'—';
+      var tags='';
+      if(it.markup!=null) tags+='<span class="g-tag'+(it.markup<10?' warn':'')+'">нац '+it.markup+'%</span>';
+      if(it.stockQty!=null&&it.stockQty<=0) tags+='<span class="g-tag warn">нет в наличии</span>';
+      else if(it.stockQty) tags+='<span class="g-tag">ост '+fmt(Math.round(it.stockQty))+'</span>';
+      if(it.daysOfStock!=null&&it.daysOfStock<=7) tags+='<span class="g-tag warn">хватит '+it.daysOfStock+'дн</span>';
+      if(it.soldQty) tags+='<span class="g-tag good">продано '+fmt(Math.round(it.soldQty))+'</span>';
+      return '<article class="g-card" onclick="App.openProductCard('+gi+')">'+
+        '<div class="g-ph" style="background:linear-gradient(135deg,hsl('+h+',42%,46%),hsl('+((h+28)%360)+',44%,36%));">'+letter+'</div>'+
+        '<div class="g-body"><div class="g-name">'+App._e(nm)+'</div>'+
+        '<div class="g-price">'+price+'</div>'+
+        (tags?'<div class="g-tags">'+tags+'</div>':'')+'</div></article>';
+    }).join('')+'</div>';
   },
 
   openProductCard:function(i){
