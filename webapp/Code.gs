@@ -52,8 +52,9 @@ var RC_ID=1,RC_NAME=2,RC_CAT=3,RC_AMT=4,RC_ACC=5,RC_DAY=6,RC_ACTIVE=7,RC_CREATED
 var RC_COLS=8;
 
 // ВЫПЛАТЫ columns (PY_NAME=payee, PY_CAT=title, PY_ACC=comment, PY_PAID=amount paid so far)
-var PY_ID=1,PY_NAME=2,PY_AMT=3,PY_ACC=4,PY_DUE=5,PY_STATUS=6,PY_CAT=7,PY_CREATED=8,PY_PAID=9;
-var PY_COLS=9;
+var PY_ID=1,PY_NAME=2,PY_AMT=3,PY_ACC=4,PY_DUE=5,PY_STATUS=6,PY_CAT=7,PY_CREATED=8,PY_PAID=9,
+    PY_CAL=10; // связь с личными календарями: {"почта":"id события"}
+var PY_COLS=10;
 
 // БАЗА columns (1-based)
 var B_ID=1,B_UUID=2,B_DATE=3,B_TYPE=4,B_CAT=5,B_AMT=6,B_ACC=7,
@@ -348,7 +349,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_SETTINGS, ['Ключ','Значение']);
   _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
   _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
-  _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено']);
+  _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено','Календарь']);
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено','Артикул','Код']);
   _mk(ss,SH_PRICEHIST,['Дата','Штрихкод','Наименование','Поставщик','Цена']);
   _mk(ss,SH_RETAILHIST,['Дата','Штрихкод','Наименование','Розничная цена']);
@@ -371,6 +372,7 @@ function ensureSheets(ss) {
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
   _grow(ss,SH_TIMESHEET,T_COLS);
+  _grow(ss,SH_PAYMENTS,PY_COLS);
   _migrateSchema(ss);
   // Кэшируем «сделано» только если защита реально встала (у владельца).
   // У сотрудника она не ставится — тогда попробуем снова в следующий раз.
@@ -461,7 +463,8 @@ function _grow(ss, name, need) {
     var defs = {
       'БАЗА':    ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена'],
       'ДОЛГИ':   ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано','Накладная','Статус'],
-      'ТАБЕЛЬ':  ['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий']
+      'ТАБЕЛЬ':  ['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий'],
+      'ВЫПЛАТЫ': ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено','Календарь']
     };
     var full = defs[name]; if (!full) return;
     sh.getRange(1,has+1,1,need-has).setValues([full.slice(has)])
@@ -3732,6 +3735,17 @@ function getMorningBriefing(p) {
 }
 
 function savePayment(p) {
+  var res = _savePaymentLocked(p);
+  // Календарь — после снятия замка. Ошибка календаря НЕ откатывает запись:
+  // источник истины — таблица, в UI покажем мягкое предупреждение.
+  if (res && res.ok) {
+    var w = _calSync(p.ssId, res.id, false);
+    if (w && w.__calError) res.calendarWarning = w.__calError;
+  }
+  return res;
+}
+
+function _savePaymentLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -3743,7 +3757,7 @@ function savePayment(p) {
     var paidAmt=parseFloat(d.paid)||0;
     var row=[id,_s(d.payee||d.name||''),Math.round(parseFloat(d.amount)||0),
              _s(d.comment||d.account||''),date,d.status||'open',
-             _s(d.title||d.category||''),new Date(),paidAmt];
+             _s(d.title||d.category||''),new Date(),paidAmt,''];
     if (d.id&&sh.getLastRow()>=2) {
       var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
       for (var i=0;i<vs.length;i++) {
@@ -3766,6 +3780,17 @@ function savePayment(p) {
 
 // Update payment status: pay / postpone / cancel / restore
 function updatePayment(p) {
+  var id = p && p.data && p.data.id;
+  var res = _updatePaymentLocked(p);
+  // «Оплачено» не удаляет событие — меняется заголовок и цвет (история).
+  if (res && res.ok && id) {
+    var w = _calSync(p.ssId, id, false);
+    if (w && w.__calError) res.calendarWarning = w.__calError;
+  }
+  return res;
+}
+
+function _updatePaymentLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   var id=String(d.id||'');
@@ -3813,6 +3838,15 @@ function updatePayment(p) {
 }
 
 function markPaymentPaid(p) {
+  var res = _markPaymentPaidLocked(p);
+  if (res && res.ok && p.id) {
+    var w = _calSync(p.ssId, p.id, false);
+    if (w && w.__calError) res.calendarWarning = w.__calError;
+  }
+  return res;
+}
+
+function _markPaymentPaidLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id, account=_s(p.account||'');
   try {
@@ -3845,6 +3879,22 @@ function markPaymentPaid(p) {
 }
 
 function deletePayment(p) {
+  // id СВОЕГО события забираем до удаления строки. Чужие ключи не трогаем —
+  // из чужого календаря удалить нельзя (осознанно оставляем «сироты»).
+  var myEv = '';
+  try {
+    var sh0 = SpreadsheetApp.openById(p.ssId).getSheetByName(SH_PAYMENTS);
+    var f = _payFind(sh0, p.id);
+    var me = _myEmail();
+    if (f && me) myEv = _calMap(f.data[PY_CAL-1])[me] || '';
+  } catch(e){}
+
+  var res = _deletePaymentLocked(p);
+  if (res && res.ok && myEv) { try { _calRemove(myEv); } catch(e){} }
+  return res;
+}
+
+function _deletePaymentLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
@@ -4072,14 +4122,14 @@ function seedDemoData(p) {
     var paysSh = ss.getSheetByName(SH_PAYMENTS);
     var pays = [
       // id, payee, amount, comment, date, status, title, created, paidAmt
-      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-5,10),  'open',      'Аренда помещения',       dt(0,10), 0],
-      [uid(), 'ООО Альфа-Трейд',   120000, '',  dt(-3,10),  'open',      'Поставка прод. №12',     dt(0,10), 0],
-      [uid(), 'ООО Альфа-Трейд',    75000, '',  dt(2,10),   'open',      'Поставка прод. №13',     dt(0,10), 0],
-      [uid(), 'ИП Захаров К.С.',    48000, '',  dt(-8,10),  'paid',      'Поставка косметики №7',  dt(0,10), 48000],
-      [uid(), 'ИП Захаров К.С.',    62000, '',  dt(5,10),   'open',      'Поставка косметики №8',  dt(0,10), 0],
-      [uid(), 'ГУП Горгаз',         12400, '',  dt(-2,10),  'open',      'Коммуналка',             dt(0,10), 0],
-      [uid(), 'ООО Альфа-Трейд',    95000, '',  dt(7,10),   'open',      'Поставка прод. №14',     dt(0,10), 0],
-      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-35,10), 'paid',      'Аренда прошлый месяц',   dt(0,10), 85000]
+      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-5,10),  'open',      'Аренда помещения',       dt(0,10), 0, ''],
+      [uid(), 'ООО Альфа-Трейд',   120000, '',  dt(-3,10),  'open',      'Поставка прод. №12',     dt(0,10), 0, ''],
+      [uid(), 'ООО Альфа-Трейд',    75000, '',  dt(2,10),   'open',      'Поставка прод. №13',     dt(0,10), 0, ''],
+      [uid(), 'ИП Захаров К.С.',    48000, '',  dt(-8,10),  'paid',      'Поставка косметики №7',  dt(0,10), 48000, ''],
+      [uid(), 'ИП Захаров К.С.',    62000, '',  dt(5,10),   'open',      'Поставка косметики №8',  dt(0,10), 0, ''],
+      [uid(), 'ГУП Горгаз',         12400, '',  dt(-2,10),  'open',      'Коммуналка',             dt(0,10), 0, ''],
+      [uid(), 'ООО Альфа-Трейд',    95000, '',  dt(7,10),   'open',      'Поставка прод. №14',     dt(0,10), 0, ''],
+      [uid(), 'ИП Смирнов М.К.',    85000, '',  dt(-35,10), 'paid',      'Аренда прошлый месяц',   dt(0,10), 85000, '']
     ];
     paysSh.getRange(2, 1, pays.length, PY_COLS).setValues(pays);
 
@@ -5841,33 +5891,17 @@ function xlsPreview(p) {
     if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
     _xlsSweep();
     tmp = _xlsToSheet(p.data, p.name);
-    var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
-    var type = _xlsType(rows);
+    // Проверка должна быть БЫСТРОЙ: читаем только шапку, чтобы понять тип
+    // отчёта. Полный разбор 23 тыс. строк делаем уже при загрузке —
+    // иначе файл разбирается дважды и вызов не укладывается в таймаут.
+    var sh0 = SpreadsheetApp.openById(tmp).getSheets()[0];
+    var lastRow = sh0.getLastRow(), lastCol = sh0.getLastColumn();
+    if (lastRow < 2) { _xlsDrop(tmp); return {__error:'Файл пустой.'}; }
+    var head = sh0.getRange(1,1,Math.min(12,lastRow),lastCol).getValues();
+    var type = _xlsType(head);
     if (!type) { _xlsDrop(tmp);
       return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты.'}; }
-    var items = _xlsParse(rows, type);
-    if (!items.length) { _xlsDrop(tmp); return {__error:'В файле не нашлось строк с данными.'}; }
-
-    // сколько обновится, сколько добавится
-    var known = {}, isNew = 0;
-    if (type === 'contractors') {
-      var csh = ss.getSheetByName(SH_CONTRACTORS);
-      if (csh && csh.getLastRow() >= 2)
-        csh.getRange(2,2,csh.getLastRow()-1,1).getValues().forEach(function(r){ known[String(r[0]).trim().toLowerCase()] = 1; });
-      items.forEach(function(o){ if (!known[o.name.toLowerCase()]) isNew++; });
-    } else {
-      var gsh = ss.getSheetByName(SH_GOODS);
-      if (gsh && gsh.getLastRow() >= 2)
-        gsh.getRange(2,1,gsh.getLastRow()-1,2).getValues().forEach(function(r){
-          if (r[0]) known['b'+_xlsBarcode(r[0])] = 1;
-          if (r[1]) known['n'+String(r[1]).trim().toLowerCase()] = 1; });
-      items.forEach(function(o){
-        var hit = o.barcode ? known['b'+o.barcode] : known['n'+o.name.toLowerCase()];
-        if (!hit) isNew++; });
-    }
-    return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type],
-             total:items.length, add:isNew, upd:items.length-isNew,
-             sample:items.slice(0,5) };
+    return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type], total:lastRow };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
 
@@ -5966,4 +6000,138 @@ function _xlsApplyGoods(ss, items, type) {
   if (cur.length) sh.getRange(2,1,cur.length,G_COLS).setValues(cur);
   if (add.length) sh.getRange(sh.getLastRow()+1,1,add.length,G_COLS).setValues(add);
   return { upd: upd, add: add.length };
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ЛИЧНЫЙ КАЛЕНДАРЬ ВЫПЛАТ
+// У каждого сотрудника — СВОЙ календарь (executeAs: USER_ACCESSING, значит
+// CalendarApp работает от имени вошедшего). Общего календаря нет, чужие
+// события не трогаем — из чужой календарь попасть технически нельзя.
+// Связь хранится в колонке PY_CAL: {"почта":"id события"}.
+// Все вызовы календаря — только ВНЕ замка (правило ТЗ).
+// ═══════════════════════════════════════════════════════════════════════
+
+var CAL_TZ = 'Europe/Moscow';
+var CAL_PREF_KEY = 'CAL_SYNC_ON'; // личная настройка, хранится у пользователя
+
+function _calPrefGet() {
+  try { return _props().getProperty(CAL_PREF_KEY) === '1'; } catch(e) { return false; }
+}
+function setCalendarPref(p) {
+  try { _props().setProperty(CAL_PREF_KEY, p && p.on ? '1' : '0'); return {ok:true, on:!!(p&&p.on)}; }
+  catch(e) { return {__error:e.message}; }
+}
+function getCalendarPref() { return { on:_calPrefGet() }; }
+
+// Разбор/сборка карты «почта → id события». Битое значение = пусто.
+function _calMap(v) {
+  try { var o = JSON.parse(String(v||'')); return (o && typeof o === 'object') ? o : {}; }
+  catch(e) { return {}; }
+}
+function _calStr(map) { try { return JSON.stringify(map||{}); } catch(e) { return '{}'; } }
+
+function _calTitle(payee, amount, paid) {
+  var t = 'Выплата: ' + String(payee||'—') + ' — ' + Math.round(_gnum(amount)) + ' ₽';
+  return paid ? ('✓ Оплачено: ' + String(payee||'—') + ' — ' + Math.round(_gnum(amount)) + ' ₽') : t;
+}
+
+// Создаёт/обновляет событие в календаре ТЕКУЩЕГО пользователя.
+// Идемпотентно: есть eventId — обновляем, нет — создаём.
+function _calUpsert(eventId, payee, amount, due, comment, paid) {
+  var cal = CalendarApp.getDefaultCalendar();
+  var title = _calTitle(payee, amount, paid);
+  var day = due instanceof Date ? due : new Date(due);
+  if (isNaN(day.getTime())) day = new Date();
+  var ev = null;
+  if (eventId) { try { ev = cal.getEventById(eventId); } catch(e) { ev = null; } }
+  if (ev) {
+    try {
+      ev.setTitle(title);
+      ev.setAllDayDate(day);
+      if (comment) ev.setDescription(String(comment));
+      if (paid) { try { ev.setColor(CalendarApp.EventColor.GREEN); } catch(e){} }
+      return ev.getId();
+    } catch(e) { ev = null; } // событие удалили руками — создадим заново
+  }
+  var made = cal.createAllDayEvent(title, day, {
+    description: (comment ? String(comment) + '\n\n' : '') + 'Создано в Auron Finance'
+  });
+  if (paid) { try { made.setColor(CalendarApp.EventColor.GREEN); } catch(e){} }
+  return made.getId();
+}
+
+function _calRemove(eventId) {
+  if (!eventId) return;
+  try { var ev = CalendarApp.getDefaultCalendar().getEventById(eventId); if (ev) ev.deleteEvent(); } catch(e){}
+}
+
+// Находит строку выплаты по id. Возвращает {rowNum, data} или null.
+function _payFind(sh, id) {
+  if (!sh || sh.getLastRow() < 2) return null;
+  var vs = sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
+  for (var i = 0; i < vs.length; i++)
+    if (String(vs[i][PY_ID-1]) === String(id)) return { rowNum:i+2, data:vs[i] };
+  return null;
+}
+
+// Записывает id события в PY_CAL под своей почтой (короткая запись под замком).
+function _calSaveLink(ssId, payId, eventId) {
+  return _withLock(function(){
+    try {
+      var sh = SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
+      var f = _payFind(sh, payId); if (!f) return {ok:false};
+      var map = _calMap(f.data[PY_CAL-1]);
+      var me = _myEmail(); if (!me) return {ok:false};
+      if (eventId) map[me] = eventId; else delete map[me];
+      sh.getRange(f.rowNum, PY_CAL).setValue(_calStr(map));
+      return {ok:true};
+    } catch(e) { return {ok:false}; }
+  });
+}
+
+// Синхронизация «моего» события для выплаты. Вызывать ТОЛЬКО вне замка.
+// force=true — создать даже если галочка выключена (кнопка «В мой календарь»).
+function _calSync(ssId, payId, force) {
+  try {
+    if (!force && !_calPrefGet()) return null;
+    var sh = SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
+    var f = _payFind(sh, payId); if (!f) return null;
+    var me = _myEmail(); if (!me) return null;
+    var map = _calMap(f.data[PY_CAL-1]);
+    var paid = String(f.data[PY_STATUS-1]||'') === 'paid';
+    var evId = _calUpsert(map[me]||'', f.data[PY_NAME-1], f.data[PY_AMT-1],
+                          f.data[PY_DUE-1], f.data[PY_ACC-1], paid);
+    if (evId && evId !== map[me]) _calSaveLink(ssId, payId, evId);
+    return evId;
+  } catch(e) { return {__calError: e.message}; }
+}
+
+// Кнопка [+] «В мой календарь» / [✓] «Убрать из моего календаря».
+function togglePaymentCalendar(p) {
+  try {
+    var ssId = p.ssId, id = p.id;
+    var sh = SpreadsheetApp.openById(ssId).getSheetByName(SH_PAYMENTS);
+    var f = _payFind(sh, id); if (!f) return {__error:'Выплата не найдена'};
+    var me = _myEmail(); if (!me) return {__error:'Не удалось определить ваш аккаунт'};
+    var map = _calMap(f.data[PY_CAL-1]);
+    if (map[me]) {                    // убрать своё событие
+      _calRemove(map[me]);
+      _calSaveLink(ssId, id, '');
+      return {ok:true, inCal:false};
+    }
+    var evId = _calSync(ssId, id, true);   // добавить своё
+    if (evId && evId.__calError) return {__error:'Календарь: '+evId.__calError};
+    if (!evId) return {__error:'Не удалось создать событие'};
+    return {ok:true, inCal:true};
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Есть ли выплата в МОЁМ календаре (для подписи кнопки).
+function isPaymentInMyCalendar(p) {
+  try {
+    var sh = SpreadsheetApp.openById(p.ssId).getSheetByName(SH_PAYMENTS);
+    var f = _payFind(sh, p.id); if (!f) return {inCal:false};
+    var me = _myEmail();
+    return { inCal: !!(me && _calMap(f.data[PY_CAL-1])[me]), pref:_calPrefGet() };
+  } catch(e) { return {inCal:false}; }
 }

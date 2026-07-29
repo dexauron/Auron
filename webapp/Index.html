@@ -2770,7 +2770,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.29.0';
+var APP_VERSION='4.30.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -2929,15 +2929,17 @@ function _gsBar(on){
   _gsBusy=Math.max(0,_gsBusy+(on?1:-1));
   b.classList.toggle('show',_gsBusy>0);
 }
-function gs(fn,args){
+function gs(fn,args,timeoutMs){
   _gsBar(true);
   return new Promise(function(ok,fail){
     var done=false;
-    // Сторож: если сервер молчит 45 сек — снимаем «загрузку», говорим честно
+    // Сторож: если сервер молчит — снимаем «загрузку», говорим честно.
+    // Обычным вызовам хватает 45 сек, импорту больших выгрузок из 1С —
+    // нет: файл на 7 МБ (23 тыс. строк) грузится и разбирается минутами.
     var wd=setTimeout(function(){
       if(done)return;done=true;_gsBar(false);
       fail(new Error('Сервер долго не отвечает. Проверь интернет и попробуй ещё раз.'));
-    },45000);
+    },timeoutMs||45000);
     google.script.run
       .withFailureHandler(function(e){if(done)return;done=true;clearTimeout(wd);_gsBar(false);fail(e);})
       .withSuccessHandler(function(r){
@@ -4611,8 +4613,8 @@ var App={
     var acc=document.getElementById('pay-acc').value;
     var cmt=document.getElementById('pay-cmt').value.trim();
     if(!amt){App.toast('Введите сумму',true);return;}
-    gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'pay',amount:amt,account:acc,comment:cmt}}).then(function(){
-      App.toast('Оплачено ✓');App.closeModal();App.loadSuppliers();
+    gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'pay',amount:amt,account:acc,comment:cmt}}).then(function(r){
+      App.toast('Оплачено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -8333,7 +8335,9 @@ var App={
       '<div class="field"><label>Сумма (₽) <span style="color:var(--muted);font-size:11px;font-weight:400;">можно 1200+350</span></label><input id="pf-amt" class="calc-input" type="text" inputmode="decimal" placeholder="0" value="'+(d&&d.amount?d.amount:'')+'"></div>'+
       '<div class="field"><label>Дата платежа</label><input id="pf-due" type="date" value="'+(d&&d.date?d.date:(d&&d.due?d.due:fmtISO(new Date())))+'"></div>'+
       '<div class="field"><label>Комментарий</label><input id="pf-comment" type="text" placeholder="…" value="'+(d?App._e(d.comment||d.note||''):'')+'" ></div>'+
-      '<button class="btn-primary" onclick="App._savePayment(\''+(d&&d.id?App._e(String(d.id)):'')+'\')">Сохранить</button>');
+      '<button class="btn-primary" onclick="App._savePayment(\''+(d&&d.id?App._e(String(d.id)):'')+'\')">Сохранить</button>'+
+      (d&&d.id?'<div id="pf-cal" style="margin-top:10px;"></div>':''));
+    if(d&&d.id)App._calBtnLoad(d.id);
     App._contrEnsure(function(){
       App.acAttach('pf-payee',function(){
         var names=App._contrNames();
@@ -8342,6 +8346,36 @@ var App={
       });
     });
     App.acAttach('pf-title',function(){return ['Поставка товара','Аванс по договору','Оплата услуг','За материалы','Плата за аренду','Коммунальные платежи','Логистика и доставка'];});
+  },
+
+  // ── Личный Google Календарь: кнопка на карточке выплаты ──────────
+  // Событие создаётся только в календаре ТОГО, кто нажал. Чужие не трогаем.
+  _calBtnLoad:function(id){
+    var box=document.getElementById('pf-cal'); if(!box)return;
+    box.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;">Проверяю календарь…</div>';
+    gs('isPaymentInMyCalendar',{ssId:App.s.ssId,id:id}).then(function(r){
+      App._calBtnDraw(id,!!(r&&r.inCal));
+    }).catch(function(){if(box)box.innerHTML='';});
+  },
+  _calBtnDraw:function(id,inCal){
+    var box=document.getElementById('pf-cal'); if(!box)return;
+    box.innerHTML='<button class="btn-secondary" style="width:100%;" onclick="App._calToggle(\''+App._e(String(id))+'\','+(inCal?'true':'false')+')">'+
+      (inCal?'✓ В моём календаре — убрать':'+ В мой Google Календарь')+'</button>'+
+      '<div style="font-size:11px;color:var(--muted);text-align:center;margin-top:6px;line-height:1.5;">'+
+      (inCal?'Событие только в вашем календаре.':'Добавится только вам. У других сотрудников — свои календари.')+'</div>';
+  },
+  _calToggle:function(id,inCal){
+    var box=document.getElementById('pf-cal'); if(!box)return;
+    box.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;">'+(inCal?'Убираю…':'Добавляю…')+'</div>';
+    gs('togglePaymentCalendar',{ssId:App.s.ssId,id:id}).then(function(r){
+      if(!r||r.__error){App.toast((r&&r.__error)||'Не получилось',true);App._calBtnDraw(id,inCal);return;}
+      App._calBtnDraw(id,!!r.inCal);
+      App.toast(r.inCal?'Добавлено в ваш календарь ✓':'Убрано из вашего календаря');
+    }).catch(function(e){App.toast(App._friendlyErr(e.message),true);App._calBtnDraw(id,inCal);});
+  },
+  // Мягкое предупреждение: запись в таблице сохранена, календарь — нет.
+  _calWarn:function(r){
+    if(r&&r.calendarWarning)App.toast('Сохранено, но календарь не обновился',true);
   },
 
   _savePayment:function(id){
@@ -8355,8 +8389,8 @@ var App={
     if(App._contractors&&!App._contrNames().some(function(n){return n.toLowerCase()===payee.toLowerCase();})){
       gs('saveContractor',{ssId:App.s.ssId,data:{name:payee,type:'Поставщик'}}).then(function(){App._contractors=null;}).catch(function(){});
     }
-    gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,amount:amt,date:date,comment:comment,status:'open'}}).then(function(){
-      App.toast('Сохранено ✓');App.closeModal();App.loadSuppliers();
+    gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,amount:amt,date:date,comment:comment,status:'open'}}).then(function(r){
+      App.toast('Сохранено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers();
     }).catch(function(e){App.toast(e.message,true);});
   },
 
@@ -8861,14 +8895,14 @@ var App={
     if(i>=files.length){App._xlsRenderQ(box);return;}
     var f=files[i];
     box.innerHTML=App._xlsMsg('wait','Читаю файл '+(i+1)+' из '+files.length+': «'+App._e(f.name)+'»…'+
-      (files.length>1?'<br>Это может занять до минуты на файл.':''));
+      '<br>Большие выгрузки грузятся несколько минут — не закрывай окно.');
     var rd=new FileReader();
     rd.onerror=function(){App._xlsQ.push({name:f.name,err:'Не удалось прочитать файл'});App._xlsRead(files,i+1,box);};
     rd.onload=function(){
       var b64=String(rd.result||'').split(',')[1]||'';
-      gs('xlsPreview',{ssId:App.s.ssId,name:f.name,data:b64}).then(function(r){
+      gs('xlsPreview',{ssId:App.s.ssId,name:f.name,data:b64},330000).then(function(r){
         if(!r||r.__error)App._xlsQ.push({name:f.name,err:(r&&r.__error)||'Ошибка чтения'});
-        else App._xlsQ.push({name:f.name,tmpId:r.tmpId,type:r.type,title:r.title,total:r.total,upd:r.upd,add:r.add});
+        else App._xlsQ.push({name:f.name,tmpId:r.tmpId,type:r.type,title:r.title,total:r.total});
         App._xlsRead(files,i+1,box);
       }).catch(function(e){
         App._xlsQ.push({name:f.name,err:App._friendlyErr(e.message)});
@@ -8897,7 +8931,7 @@ var App={
         h+='<div style="border-top:1px solid var(--line);padding:9px 0;">'+
            '<div style="font-size:13px;font-weight:700;">'+(i+1)+'. '+App._e(x.title)+'</div>'+
            '<div style="font-size:11.5px;color:var(--muted);margin:2px 0 3px;">'+App._e(x.name)+'</div>'+
-           '<div id="xq-'+i+'" style="font-size:12px;color:var(--text-2);">Строк: <b>'+x.total+'</b> · обновится <b style="color:var(--brand);">'+x.upd+'</b> · новых <b style="color:var(--income);">'+x.add+'</b></div></div>';
+           '<div id="xq-'+i+'" style="font-size:12px;color:var(--text-2);">Строк в файле: <b>'+x.total+'</b> — готов к загрузке</div></div>';
       }
     });
     if(ok.length) h+='<button class="btn-primary" style="margin-top:12px;" onclick="App._xlsApplyAll()">Загрузить '+
@@ -8932,7 +8966,7 @@ var App={
     var cur=q[i];
     var st=document.getElementById('xq-'+i);
     if(st)st.innerHTML='<b style="color:var(--brand);">Загружаю…</b>';
-    gs('xlsApply',{ssId:App.s.ssId,tmpId:cur.tmpId}).then(function(r){
+    gs('xlsApply',{ssId:App.s.ssId,tmpId:cur.tmpId},330000).then(function(r){
       if(!r||r.__error){
         App._xlsDone.push({title:cur.title,upd:0,add:0,err:(r&&r.__error)||'ошибка'});
         if(st)st.innerHTML='<span style="color:var(--expense);">Не удалось</span>';
