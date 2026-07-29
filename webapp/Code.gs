@@ -4321,6 +4321,20 @@ function setMemberWidgets(p) {
 }
 
 function inviteMember(p) {
+  // Письмо отправляем ПОСЛЕ снятия замка: MailApp занимает 1-3 сек, и всё
+  // это время остальные сотрудники не могут ничего сохранить (правило ТЗ —
+  // никаких внешних вызовов под замком).
+  var out = _inviteMemberLocked(p);
+  if (out && out.__error) return out;
+  if (out && out._mail) {
+    try { MailApp.sendEmail(out._mail.to, out._mail.subj, out._mail.body); out.emailSent = true; }
+    catch(e) { out.emailSent = false; }
+    delete out._mail;
+  }
+  return out;
+}
+
+function _inviteMemberLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
   try {
@@ -4351,25 +4365,23 @@ function inviteMember(p) {
     sh.appendRow([email,role,new Date()]);
     _log(ss,'Приглашение сотрудника',email+' · '+role);
     // Ссылка-приглашение прямо в эту организацию (доступ email уже выдан выше).
-    var link='', orgName='магазин', emailSent=false;
+    var link='', orgName='магазин', emailSent=false, mail=null;
     try {
       var appUrl=''; try{appUrl=ScriptApp.getService().getUrl();}catch(eu){}
       try{orgName=ss.getName().replace(/^Auron\s*[—-]\s*/,'');}catch(en){}
       if (appUrl) {
         link=appUrl+(appUrl.indexOf('?')>=0?'&':'?')+'invite='+encodeURIComponent(ssId)+'&email='+encodeURIComponent(email);
-        // Пытаемся отправить письмо, но НЕ полагаемся на него — ссылку вернём владельцу.
-        try {
-          var body='Вас пригласили в «'+orgName+'» (роль: '+role+').\n\n'+
+        // Письмо готовим здесь, а отправляем уже вне замка (см. inviteMember).
+        mail = { to: email, subj:'Приглашение в Auron Finance — '+orgName,
+          body:'Вас пригласили в «'+orgName+'» (роль: '+role+').\n\n'+
             '1. Откройте ссылку на телефоне (вы должны быть в Google под '+email+'):\n'+link+'\n\n'+
             '2. При первом входе задайте PIN-код и заполните профиль.\n'+
-            'Организация подключится автоматически.\n\n— Auron Finance';
-          MailApp.sendEmail(email,'Приглашение в Auron Finance — '+orgName,body);
-          emailSent=true;
-        } catch(em){}
+            'Организация подключится автоматически.\n\n— Auron Finance' };
       }
     } catch(e2){}
     var res=getTeam({ssId:ssId});
     res.inviteLink=link; res.inviteEmail=email; res.inviteRole=role; res.orgName=orgName; res.emailSent=emailSent;
+    if (mail) res._mail = mail; // письмо уйдёт после снятия замка
     return res;
   } catch(e) { return {__error:e.message}; }
 });
@@ -5690,6 +5702,20 @@ function _xlsToSheet(b64, fname) {
 
 function _xlsDrop(id) { try { DriveApp.getFileById(id).setTrashed(true); } catch(e){} }
 
+// Подчищаем брошенные временные таблицы (окно импорта закрыли, не загрузив).
+// Иначе они копятся на Диске владельца. Трогаем только старше часа —
+// чтобы не убить файл, который прямо сейчас готовится к загрузке.
+function _xlsSweep() {
+  try {
+    var cutoff = Date.now() - 3600*1000, n = 0;
+    var it = DriveApp.getFilesByName(XLS_TMP_NAME);
+    while (it.hasNext() && n < 50) {
+      var f = it.next(); n++;
+      try { if (f.getDateCreated().getTime() < cutoff) f.setTrashed(true); } catch(e){}
+    }
+  } catch(e){}
+}
+
 // Тип отчёта — по тексту в первых строках.
 function _xlsType(rows) {
   var head = '';
@@ -5813,6 +5839,7 @@ function xlsPreview(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+    _xlsSweep();
     tmp = _xlsToSheet(p.data, p.name);
     var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
     var type = _xlsType(rows);
@@ -5846,22 +5873,31 @@ function xlsPreview(p) {
 
 // Шаг 2: применить — обновить существующие, добавить новые.
 function xlsApply(p) {
-  return _withLock(function(){
   var tmp = p.tmpId;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+
+    // Чтение и разбор файла (десятки тысяч строк) — ДО замка, иначе
+    // остальные сотрудники ждут всё это время. Под замком — только запись.
     var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
     var type = _xlsType(rows);
+    if (!type) { _xlsDrop(tmp); return {__error:'Не понял, что это за отчёт.'}; }
     var items = _xlsParse(rows, type);
-    var res = (type === 'contractors') ? _xlsApplyContractors(ss, items)
-                                       : _xlsApplyGoods(ss, items, type);
+    rows = null; // освобождаем память до записи
+    if (!items.length) { _xlsDrop(tmp); return {__error:'В файле не нашлось строк с данными.'}; }
+
+    var res = _withLock(function(){
+      return (type === 'contractors') ? _xlsApplyContractors(ss, items)
+                                      : _xlsApplyGoods(ss, items, type);
+    });
+    if (res && res.__error) return res; // не смогли взять замок — файл не трогаем
+
     _xlsDrop(tmp);
     _log(ss,'Импорт из 1С', XLS_TITLES[type]+': обновлено '+res.upd+', добавлено '+res.add);
     try { _bustDash(p.ssId); } catch(e){}
     return { ok:true, type:type, title:XLS_TITLES[type], upd:res.upd, add:res.add };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
-});
 }
 
 function _xlsApplyContractors(ss, items) {
@@ -5901,9 +5937,13 @@ function _xlsApplyGoods(ss, items, type) {
       row = []; for (var k = 0; k < G_COLS; k++) row.push('');
       row[G_BARCODE-1] = o.barcode || '';
       row[G_NAME-1]    = o.name;
+      // Метка «уже добавлен в этом файле»: индекс в add[] со сдвигом,
+      // чтобы отличать от индексов существующих строк (те >= 0).
+      // Позицию берём ДО push — иначе ссылка уедет на строку вперёд.
+      var ni = add.length;
       add.push(row);
-      if (o.barcode) byBar[o.barcode] = -1 - add.length; // метка «уже добавлен»
-      byName[o.name.toLowerCase()] = -1 - add.length;
+      if (o.barcode) byBar[o.barcode] = -1 - ni;
+      byName[o.name.toLowerCase()] = -1 - ni;
     } else if (i >= 0) { row = cur[i]; upd++; }
     else { row = add[-i - 1]; }            // повтор внутри того же файла
 
