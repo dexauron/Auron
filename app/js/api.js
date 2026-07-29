@@ -31,6 +31,8 @@
       const msg = json?.message || json?.hint || json?.details || ('Ошибка ' + res.status);
       throw new Error(msg);
     }
+    // Отметка успешной связи с сервером — для индикатора «данные на HH:MM» в офлайне
+    try { localStorage.setItem('auron_last_sync', String(Date.now())); } catch (_) {}
     return json;
   }
 

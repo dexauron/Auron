@@ -1,4 +1,5 @@
-const CACHE_NAME = 'auron-v50';
+const CACHE_NAME = 'auron-v51';          // кэш оболочки приложения (бампать при изменении фронта)
+const DATA_CACHE = 'auron-data-v1';      // кэш последних ответов backend для офлайн-просмотра
 const APP_FILES = [
   './',
   './index.html',
@@ -20,48 +21,67 @@ self.addEventListener('install', event => {
   );
 });
 
-// Activate: remove stale caches from previous versions
+// Activate: удаляем старые версии кэша, но СОХРАНЯЕМ кэш данных (DATA_CACHE)
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(key => key !== CACHE_NAME)
+          .filter(key => key !== CACHE_NAME && key !== DATA_CACHE)
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim())
   );
 });
 
-// Fetch: network-first for anything off-origin (backend/API), cache-first for the app shell.
-// Detecting the backend by "different origin" (not by a hardcoded supabase.co host) is robust:
-// the self-hosted backend lives on its own host/IP, and this keeps working if that host later
-// becomes an HTTPS domain. Only same-origin app-shell files are cached.
+const offlineJson = () =>
+  new Response(JSON.stringify({ error: 'Offline' }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' }
+  });
+
+// Стратегия:
+//  • Запись на backend (не-GET, другой источник) — только по сети. Офлайн = НЕ пишем
+//    (сознательно, по docs/05-ARCHITECTURE.md: офлайн = только просмотр, без конфликтов).
+//  • Чтение с backend (GET, другой источник) — network-first: свежее с сети + кладём в
+//    DATA_CACHE; при обрыве отдаём последнее сохранённое (офлайн-просмотр). Это и есть
+//    stale-while-revalidate из архитектуры.
+//  • Оболочка приложения (свой источник, GET) — cache-first.
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-
-  // Only cache GET; never cache backend writes or non-GET requests.
   const isSameOrigin = url.origin === self.location.origin;
-  const isApiCall = !isSameOrigin || event.request.method !== 'GET';
+  const isGet = event.request.method === 'GET';
 
-  if (isApiCall) {
-    // Network-first: always try to reach the backend, no caching of financial data
+  // 1. Запись на backend — сеть или явная офлайн-ошибка (никакого кэша)
+  if (!isSameOrigin && !isGet) {
+    event.respondWith(fetch(event.request).catch(offlineJson));
+    return;
+  }
+
+  // 2. Чтение с backend — network-first с кэшированием для офлайн-просмотра
+  if (!isSameOrigin && isGet) {
     event.respondWith(
-      fetch(event.request).catch(() =>
-        new Response(JSON.stringify({ error: 'Offline' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' }
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200) {
+            const copy = response.clone();
+            caches.open(DATA_CACHE).then(cache => cache.put(event.request, copy));
+          }
+          return response;
         })
-      )
+        .catch(() =>
+          caches.open(DATA_CACHE)
+            .then(cache => cache.match(event.request))
+            .then(cached => cached || offlineJson())
+        )
     );
     return;
   }
 
-  // Cache-first: serve from cache, fall back to network and update cache
+  // 3. Оболочка приложения — cache-first, затем сеть с дозаписью в кэш
   event.respondWith(
     caches.match(event.request).then(cached => {
       if (cached) return cached;
-
       return fetch(event.request).then(response => {
         if (!response || response.status !== 200 || response.type !== 'basic') {
           return response;
