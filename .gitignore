@@ -1,5 +1,8 @@
 __pycache__/
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/SKILLS-INVENTORY.md
+!.claude/SKILLS-CATALOG.md
 node_modules/
 package-lock.json
 package.json

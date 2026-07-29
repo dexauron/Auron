@@ -1,0 +1,163 @@
+# Установленные скилы
+
+Всего: **128** (17 написаны с нуля под Auron, включая память).
+
+Отобраны из 100 репозиториев рейтинга GitHub — в них суммарно 12 249 файлов скилов, 5 546 уникальных имён.
+Критерий отбора: частота встречаемости в разных репозиториях (популярность) + репутация источника.
+Последние 9 добавлены адресно под задачи Auron: офлайн/PWA, разграничение доступа в PostgreSQL,
+скорость на телефоне, безопасность веб-приложения.
+
+
+## Написаны под Auron (7)
+
+Не скачаны, а написаны с нуля на основе утверждённых `docs/` и реального кода — чтобы
+будущая работа шла по вашим решениям, а не по общим шаблонам:
+
+| Скил | Про что |
+|---|---|
+| `auron-offline-sync` | Офлайн = только просмотр, `client_uuid`, `offline_queue`, Realtime, last-write-wins |
+| `auron-double-entry` | Двойная запись, неизменяемый реестр, сторно, закрытые периоды, копейки |
+| `auron-supabase-api` | Соглашения `api.js` поверх self-hosted Supabase, RLS, идемпотентность |
+| `auron-rls-roles` | Движок прав (permissions, не роли), 4 роли, изоляция по `org_id`, замещения |
+| `auron-pwa-deploy` | Бамп `auron-vNN`, разделение двух приложений и веток, деплой |
+| `auron-money-format` | Копейки bigint, деление на 100 только на экране, русский формат, ISO-даты |
+| `auron-web-research` | Как захожу на сайты и анализирую данные — в рамках законного доступа |
+
+
+## Экономия и обучение (написаны с нуля)
+
+| Скил | Про что |
+|---|---|
+| `auron-token-economy` | Как не жечь токены на большом `index.html` и длинных `docs` — искать, а не читать всё |
+| `precise-execution` | «Готово» = проверено; минимальные правки; не переусложнять; вопрос только если блокирует |
+| `auron-antipatterns` | Как НЕ надо в коде Auron и как надо — 10 ловушек с ❌/✅ |
+| `auron-security-antipatterns` | Ошибки безопасности вашего приложения и как их закрыть (защитно) |
+
+
+## Доступ к своим аккаунтам и безопасность (написаны с нуля)
+
+| Скил | Про что |
+|---|---|
+| `auron-account-assist` | Настройка сервисов за владельца в ЕГО аккаунтах: вход, что делаю сам, что через подтверждение, пароль не сохраняется |
+| `credential-safety` | Как безопасно давать доступ — что можно, что нельзя, лучшие альтернативы паролю |
+
+
+## Архитектурные домены (написаны с нуля)
+
+| Скил | Про что |
+|---|---|
+| `auron-modules` | Шина событий, реестр модулей, feature flags, конфиг вместо кода, кастомные поля |
+| `auron-integrations` | Вебхуки, API-ключи, мессенджеры (3 уровня), Zapier, email-to-action, импорт |
+| `auron-cloud-backup` | Бэкап в облако владельца: WebDAV/OAuth, шифрование до отправки, 152-ФЗ |
+
+| Скил | Что делает | Источник |
+|---|---|---|
+| `accessibility-compliance` | Implement WCAG 2.2 compliant interfaces with mobile accessibility, inclusive design patterns, and assistive technology support. Use when auditing accessibility, implementing ARIA patterns, building... | wshobson/agents |
+| `accessibility-review` | Run a WCAG 2.1 AA accessibility audit on a design or page. Trigger with "audit accessibility", "check a11y", "is this accessible?", or when reviewing a design for color contrast, keyboard navigatio... | anthropics/knowledge-work-plugins |
+| `agent-browser` | Browser automation CLI for AI agents. Use this when asked to test something in a real browser. | slopus/happy |
+| `agent-development` | This skill should be used when the user asks to "create an agent", "add an agent", "write a subagent", "agent frontmatter", "when to use description", "agent examples", "agent tools", "agent colors... | anthropics/claude-plugins-official |
+| `api-design-principles` | Master REST and GraphQL API design principles to build intuitive, scalable, and maintainable APIs that delight developers. Use when designing new APIs, reviewing API specifications, or establishing... | wshobson/agents |
+| `architecture-decision-records` | Write and maintain Architecture Decision Records (ADRs) following best practices for technical decision documentation. Use when documenting significant technical decisions, reviewing past architect... | wshobson/agents |
+| `artifacts-builder` | Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state ma... | ComposioHQ/awesome-claude-skills |
+| `auth-implementation-patterns` | Master authentication and authorization patterns including JWT, OAuth2, session management, and RBAC to build secure, scalable access control systems. Use when implementing auth systems, securing A... | wshobson/agents |
+| `brand-guidelines` | Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatt... | ComposioHQ/awesome-claude-skills |
+| `browser-automation` | Use when the user asks to automate browser tasks, scrape websites, fill forms, capture screenshots, extract structured data from web pages, or build web automation workflows. NOT for testing — use ... | alirezarezvani/claude-skills |
+| `build-mcp-app` | This skill should be used when the user wants to build an "MCP app", add "interactive UI" or "widgets" to an MCP server, "render components in chat", build "MCP UI resources", make a tool that show... | anthropics/claude-plugins-official |
+| `build-mcp-server` | This skill should be used when the user asks to "build an MCP server", "create an MCP", "make an MCP integration", "wrap an API for Claude", "expose tools to Claude", "make an MCP app", or discusse... | anthropics/claude-plugins-official |
+| `canvas-design` | Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create ... | ComposioHQ/awesome-claude-skills |
+| `claude-automation-recommender` | Analyze a codebase and recommend Claude Code automations (hooks, subagents, skills, plugins, MCP servers). Use when user asks for automation recommendations, wants to optimize their Claude Code set... | anthropics/claude-plugins-official |
+| `claude-md-improver` | Audit and improve CLAUDE.md files in repositories. Use when user asks to check, audit, update, improve, or fix CLAUDE.md files. Scans for all CLAUDE.md files, evaluates quality against templates, o... | anthropics/claude-plugins-official |
+| `claude-security` | The Claude Security menu — pick a job: scan the codebase (the whole repository or a scoped part of it), scan changes (this branch's or a pull request's diff, or one commit), or suggest patches (fin... | anthropics/claude-plugins-official |
+| `code-review` | Review code changes for security, performance, and correctness. Trigger with a PR URL or diff, "review this before I merge", "is this code safe?", or when checking a change for N+1 queries, injecti... | anthropics/knowledge-work-plugins |
+| `code-review-excellence` | Master effective code review practices to provide constructive feedback, catch bugs early, and foster knowledge sharing while maintaining team morale. Use when reviewing pull requests, establishing... | wshobson/agents |
+| `codebase-design` | Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or A... | mattpocock/skills |
+| `command-development` | This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "cre... | anthropics/claude-plugins-official |
+| `compliance-check` | Run a compliance check on a proposed action, product feature, or business initiative, surfacing applicable regulations, required approvals, and risk areas. Use when launching a feature that touches... | anthropics/knowledge-work-plugins |
+| `core-web-vitals` | Optimize Core Web Vitals (LCP, INP, CLS) for better page experience and search ranking. Use when asked to "improve Core Web Vitals", "fix LCP", "reduce CLS", "optimize INP", "page experience optimi... | davila7/claude-code-templates |
+| `cost-optimization` | Optimize cloud costs across AWS, Azure, GCP, and OCI through resource rightsizing, tagging strategies, reserved instances, and spending analysis. Use when reducing cloud expenses, analyzing infrast... | wshobson/agents |
+| `data-quality-frameworks` | Implement data quality validation with Great Expectations, dbt tests, and data contracts. Use when building data quality pipelines, implementing validation rules, or establishing data contracts. | wshobson/agents |
+| `data-visualization` | Create effective data visualizations with Python (matplotlib, seaborn, plotly). Use when building charts, choosing the right chart type for a dataset, creating publication-quality figures, or apply... | anthropics/knowledge-work-plugins |
+| `database-migration` | Execute database migrations across ORMs and platforms with zero-downtime strategies, data transformation, and rollback procedures. Use when migrating databases, changing schemas, performing data tr... | wshobson/agents |
+| `debug` | Structured debugging session — reproduce, isolate, diagnose, and fix. Trigger with an error message or stack trace, "this works in staging but not prod", "something broke after the deploy", or when... | anthropics/knowledge-work-plugins |
+| `debugging-strategies` | Master systematic debugging techniques, profiling tools, and root cause analysis to efficiently track down bugs across any codebase or technology stack. Use when investigating bugs, performance iss... | wshobson/agents |
+| `deep-research` | Universal deep research agent team. 13-agent pipeline for rigorous academic research on any topic. 8 modes: full research, quick brief, paper review, lit-review, fact-check, three-way literature sc... | Imbad0202/academic-research-skills |
+| `dependency-upgrade` | Manage major dependency version upgrades with compatibility analysis, staged rollout, and comprehensive testing. Use when upgrading framework versions, updating major dependencies, or managing brea... | wshobson/agents |
+| `deploy-checklist` | Pre-deployment verification checklist. Use when about to ship a release, deploying a change with database migrations or feature flags, verifying CI status and approvals before going to production, ... | anthropics/knowledge-work-plugins |
+| `deployment-pipeline-design` | Design multi-stage CI/CD pipelines with approval gates, security checks, and deployment orchestration. Use this skill when designing zero-downtime deployment pipelines, implementing canary rollout ... | wshobson/agents |
+| `design-critique` | Get structured design feedback on usability, hierarchy, and consistency. Trigger with "review this design", "critique this mockup", "what do you think of this screen?", or when sharing a Figma link... | anthropics/knowledge-work-plugins |
+| `design-system-patterns` | Build scalable design systems with design tokens, theming infrastructure, and component architecture patterns. Use when creating design tokens, implementing theme switching, building component libr... | wshobson/agents |
+| `diagnosing-bugs` | Diagnosis loop for hard bugs and performance regressions. Use when the user says "diagnose"/"debug this", or reports something broken/throwing/failing/slow. | mattpocock/skills |
+| `distributed-tracing` | Implement distributed tracing with Jaeger and Tempo to track requests across microservices and identify performance bottlenecks. Use when debugging microservices, analyzing request flows, or implem... | wshobson/agents |
+| `documentation` | Write and maintain technical documentation. Trigger with "write docs for", "document this", "create a README", "write a runbook", "onboarding guide", or when the user needs help with any form of te... | anthropics/knowledge-work-plugins |
+| `domain-modeling` | Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintai... | mattpocock/skills |
+| `e2e-testing-patterns` | Master end-to-end testing with Playwright and Cypress to build reliable test suites that catch bugs, improve confidence, and enable fast deployment. Use when implementing E2E tests, debugging flaky... | wshobson/agents |
+| `error-handling-patterns` | Master error handling patterns across languages including exceptions, Result types, error propagation, and graceful degradation to build resilient applications. Use when implementing error handling... | wshobson/agents |
+| `evaluation-methodology` | PluginEval quality methodology — dimensions, rubrics, statistical methods, and scoring formulas. Use this skill when understanding how plugin quality is measured, when interpreting a low score on a... | wshobson/agents |
+| `file-conversion` | Convert files between formats — PDF to Word, HEIC to JPG, MP4 to MP3, CSV to JSON, EPUB to MOBI, and 999 total routes across images, video, audio, documents, data, fonts, ebooks, and archives. Free... | wshobson/agents |
+| `forecast` | Generate a weighted sales forecast with best/likely/worst scenarios, commit vs. upside breakdown, and gap analysis. Use when preparing a quarterly forecast call, assessing gap-to-quota from a pipel... | anthropics/knowledge-work-plugins |
+| `frontend-design` | Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated de... | anthropics/claude-plugins-official |
+| `gdpr-data-handling` | Implement GDPR-compliant data handling with consent management, data subject rights, and privacy by design. Use when building systems that process EU personal data, implementing privacy controls, o... | wshobson/agents |
+| `git-advanced-workflows` | Master advanced Git workflows including rebasing, cherry-picking, bisect, worktrees, and reflog to maintain clean history and recover from any situation. Use when managing complex Git histories, co... | wshobson/agents |
+| `git-guardrails-claude-code` | Set up Claude Code hooks to block dangerous git commands (push, reset --hard, clean, branch -D, etc.) before they execute. Use when user wants to prevent destructive git operations, add git safety ... | mattpocock/skills |
+| `github-actions-templates` | Create production-ready GitHub Actions workflows for automated testing, building, and deploying applications. Use when setting up CI/CD with GitHub Actions, automating development workflows, or cre... | wshobson/agents |
+| `handoff` | Compact the current conversation into a handoff document for another agent to pick up. | mattpocock/skills |
+| `hook-development` | This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up ... | anthropics/claude-plugins-official |
+| `i18n` | \| Internationalization (i18n) workflow and standards for managing translations. Use when: (1) Adding new user-facing text, (2) Creating new components with user-facing text, (3) Reviewing code for ... | iOfficeAI/AionUi |
+| `implement` | Implement a piece of work based on a spec or set of tickets. | mattpocock/skills |
+| `improve-codebase-architecture` | Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick. | mattpocock/skills |
+| `incident-response` | Run an incident response workflow — triage, communicate, and write postmortem. Trigger with "we have an incident", "production is down", an alert that needs severity assessment, a status update mid... | anthropics/knowledge-work-plugins |
+| `javascript-testing-patterns` | Implement comprehensive testing strategies using Jest, Vitest, and Testing Library for unit tests, integration tests, and end-to-end testing with mocking, fixtures, and test-driven development. Use... | wshobson/agents |
+| `knowledge-synthesis` | Combines search results from multiple sources into coherent, deduplicated answers with source attribution. Handles confidence scoring based on freshness and authority, and summarizes large result s... | anthropics/knowledge-work-plugins |
+| `llm-evaluation` | Implement comprehensive evaluation strategies for LLM applications using automated metrics, human feedback, and benchmarking. Use when testing LLM performance, measuring AI application quality, or ... | wshobson/agents |
+| `mcp-builder` | Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate exte... | ComposioHQ/awesome-claude-skills |
+| `mcp-integration` | This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions ... | anthropics/claude-plugins-official |
+| `memory-management` | Two-tier memory system that makes Claude a true workplace collaborator. Decodes shorthand, acronyms, nicknames, and internal language so Claude understands requests like a colleague would. CLAUDE.m... | anthropics/knowledge-work-plugins |
+| `mobile-design` | Design mobile-first, touch-first interfaces that respect platform conventions. Use when building or reviewing UI for phones and tablets — touch target sizes, thumb-reachable layouts, gestures, safe... | sickn33/antigravity-awesome-skills |
+| `modern-javascript-patterns` | Master ES6+ features including async/await, destructuring, spread operators, arrow functions, promises, modules, iterators, generators, and functional programming patterns for writing clean, effici... | wshobson/agents |
+| `monorepo-management` | Master monorepo management with Turborepo, Nx, and pnpm workspaces to build efficient, scalable multi-package repositories with optimized builds and dependency management. Use when setting up monor... | wshobson/agents |
+| `obsidian-markdown` | Create and edit Obsidian Flavored Markdown with wikilinks, embeds, callouts, properties, and other Obsidian-specific syntax. Use when working with .md files in Obsidian, or when the user mentions w... | kepano/obsidian-skills |
+| `openapi-spec-generation` | Generate and maintain OpenAPI 3.1 specifications from code, design-first specs, and validation patterns. Use when creating API documentation, generating SDKs, or ensuring API contract compliance. | wshobson/agents |
+| `owasp-security` | Comprehensive OWASP-aligned security guidance across six standards - Top 10 (2021) for web apps, ASVS 5.0, MASVS v2.1.0 for mobile, API Security Top 10 (2023), Kubernetes Top 10 (2022), and the Age... | davila7/claude-code-templates |
+| `pci-compliance` | Implement PCI DSS compliance requirements for secure handling of payment card data and payment systems. Use when securing payment processing, achieving PCI compliance, or implementing payment card ... | wshobson/agents |
+| `plugin-structure` | This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}... | anthropics/claude-plugins-official |
+| `postgresql-table-design` | Use this skill when designing or reviewing a PostgreSQL-specific schema. Covers best-practices, data types, indexing, constraints, performance patterns, and advanced features | wshobson/agents |
+| `postmortem-writing` | Write effective blameless postmortems with root cause analysis, timelines, and action items. Use when conducting incident reviews, writing postmortem documents, or improving incident response proce... | wshobson/agents |
+| `progressive-web-app` | Build Progressive Web Apps (PWAs) with offline support, installability, and caching strategies. Trigger whenever the user mentions PWA, service workers, web app manifests, Workbox, 'add to home scr... | davila7/claude-code-templates |
+| `project-artifact` | Generate and publish a project status artifact — an opinionated, tabbed status page for a project too big for one update (overview & success criteria, the workstream sequence, next steps, plus back... | anthropics/claude-plugins-official |
+| `prompt-engineering-patterns` | >- This skill should be used when the user asks to "optimize a prompt", "improve prompt performance", "design a prompt template", "write better prompts", "debug prompt issues", "use chain-of-though... | wshobson/agents |
+| `prototype` | Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like. | mattpocock/skills |
+| `rag-implementation` | Build Retrieval-Augmented Generation (RAG) systems for LLM applications with vector databases and semantic search. Use when implementing knowledge-grounded AI, building document Q&A systems, or int... | wshobson/agents |
+| `request-refactor-plan` | Create a detailed refactor plan with tiny commits via user interview, then file it as a GitHub issue. Use when user wants to plan a refactor, create a refactoring RFC, or break a refactor into safe... | mattpocock/skills |
+| `research` | Investigate a question against high-trust primary sources and capture the findings as a Markdown file in the repo. Use when the user wants a topic researched, docs or API facts gathered, or reading... | mattpocock/skills |
+| `resolving-merge-conflicts` | Use when you need to resolve an in-progress git merge/rebase conflict. | mattpocock/skills |
+| `responsive-design` | Implement modern responsive layouts using container queries, fluid typography, CSS Grid, and mobile-first breakpoint strategies. Use when building adaptive interfaces, implementing fluid layouts, o... | wshobson/agents |
+| `risk-assessment` | Identify, assess, and mitigate operational risks. Trigger with "what are the risks", "risk assessment", "risk register", "what could go wrong", or when the user is evaluating risks associated with ... | anthropics/knowledge-work-plugins |
+| `runbook` | Create or update an operational runbook for a recurring task or procedure. Use when documenting a task that on-call or ops needs to run repeatably, turning tribal knowledge into exact step-by-step ... | anthropics/knowledge-work-plugins |
+| `saas-multi-tenant` | Design and implement multi-tenant SaaS architectures with row-level security, tenant-scoped queries, shared-schema isolation, and safe cross-tenant admin patterns in PostgreSQL and TypeScript. | davila7/claude-code-templates |
+| `sast-configuration` | Configure Static Application Security Testing (SAST) tools for automated vulnerability detection in application code. Use when setting up security scanning, implementing DevSecOps practices, or aut... | wshobson/agents |
+| `search-strategy` | Query decomposition and multi-source search orchestration. Breaks natural language questions into targeted searches per source, translates queries into source-specific syntax, ranks results by rele... | anthropics/knowledge-work-plugins |
+| `secrets-management` | Implement secure secrets management for CI/CD pipelines using Vault, AWS Secrets Manager, or native platform solutions. Use when handling sensitive credentials, rotating secrets, or securing CI/CD ... | wshobson/agents |
+| `security-audit` | Comprehensive security auditing workflow covering web application testing, API security, penetration testing, vulnerability scanning, and security hardening. | davila7/claude-code-templates |
+| `session-report` | Generate an explorable HTML report of Claude Code session usage (tokens, cache, subagents, skills, expensive prompts) from ~/.claude/projects transcripts. | anthropics/claude-plugins-official |
+| `setup-pre-commit` | Set up Husky pre-commit hooks with lint-staged (Prettier), type checking, and tests in the current repo. Use when user wants to add pre-commit hooks, set up Husky, configure lint-staged, or add com... | mattpocock/skills |
+| `skill-development` | This skill should be used when the user wants to "create a skill", "add a skill to plugin", "write a new skill", "improve skill description", "organize skill content", or needs guidance on skill st... | anthropics/claude-plugins-official |
+| `sql-optimization-patterns` | Master SQL query optimization, indexing strategies, and EXPLAIN analysis to dramatically improve database performance and eliminate slow queries. Use when debugging slow queries, designing database... | wshobson/agents |
+| `sql-queries` | Write correct, performant SQL across all major data warehouse dialects (Snowflake, BigQuery, Databricks, PostgreSQL, etc.). Use when writing queries, optimizing slow SQL, translating between dialec... | anthropics/knowledge-work-plugins |
+| `stride-analysis-patterns` | Apply STRIDE methodology to systematically identify threats. Use when analyzing system security, conducting threat modeling sessions, or creating security documentation. | wshobson/agents |
+| `supabase-postgres-best-practices` | Postgres performance optimization and best practices from Supabase. Use this skill when writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. | sickn33/antigravity-awesome-skills |
+| `synthesize-research` | Synthesize user research from interviews, surveys, and feedback into structured insights. Use when you have a pile of interview notes, survey responses, or support tickets to make sense of, need to... | anthropics/knowledge-work-plugins |
+| `system-design` | Design systems, services, and architectures. Trigger with "design a system for", "how should we architect", "system design for", "what's the right architecture for", or when the user needs help wit... | anthropics/knowledge-work-plugins |
+| `systematic-debugging` | 4-phase root cause debugging: understand bugs before fixing. | NousResearch/hermes-agent |
+| `tdd` | Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests. | mattpocock/skills |
+| `tech-debt` | Identify, categorize, and prioritize technical debt. Trigger with "tech debt", "technical debt audit", "what should we refactor", "code health", or when the user asks about code quality, refactorin... | anthropics/knowledge-work-plugins |
+| `testing-strategy` | Design test strategies and test plans. Trigger with "how should we test", "test strategy for", "write tests for", "test plan", "what tests do we need", or when the user needs help with testing appr... | anthropics/knowledge-work-plugins |
+| `top-web-vulnerabilities` | Provide a comprehensive, structured reference for the 100 most critical web application vulnerabilities organized by category. This skill enables systematic vulnerability identification, impact ass... | sickn33/antigravity-awesome-skills |
+| `triage` | Move issues and external PRs through a state machine of triage roles — categorise, verify, grill if needed, and write agent-ready briefs. | mattpocock/skills |
+| `validate-data` | QA an analysis before sharing -- methodology, accuracy, and bias checks. Use when reviewing an analysis before a stakeholder presentation, spot-checking calculations and aggregation logic, verifyin... | anthropics/knowledge-work-plugins |
+| `variance-analysis` | Decompose financial variances into drivers with narrative explanations and waterfall analysis. Use when analyzing budget vs. actual, period-over-period changes, revenue or expense variances, or pre... | anthropics/knowledge-work-plugins |
+| `verify` | Verify that a change really works before you claim completion | Yeachan-Heo/oh-my-claudecode |
+| `web-performance-optimization` | Optimize website and web application performance including loading speed, Core Web Vitals, bundle size, caching strategies, and runtime performance | sickn33/antigravity-awesome-skills |
+| `webapp-testing` | Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browse... | ComposioHQ/awesome-claude-skills |
+| `write-spec` | Write a feature spec or PRD from a problem statement or feature idea. Use when turning a vague idea or user request into a structured document, scoping a feature with goals and non-goals, defining ... | anthropics/knowledge-work-plugins |
+| `writing-great-skills` | Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable. | mattpocock/skills |
+| `writing-hookify-rules` | This skill should be used when the user asks to "create a hookify rule", "write a hook rule", "configure hookify", "add a hookify rule", or needs guidance on hookify rule syntax and patterns. | anthropics/claude-plugins-official |
