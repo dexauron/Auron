@@ -1,4 +1,4 @@
-const CACHE_NAME = 'auron-v49';
+const CACHE_NAME = 'auron-v50';
 const APP_FILES = [
   './',
   './index.html',
@@ -33,17 +33,19 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch: network-first for API calls, cache-first for app files
+// Fetch: network-first for anything off-origin (backend/API), cache-first for the app shell.
+// Detecting the backend by "different origin" (not by a hardcoded supabase.co host) is robust:
+// the self-hosted backend lives on its own host/IP, and this keeps working if that host later
+// becomes an HTTPS domain. Only same-origin app-shell files are cached.
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  const isApiCall =
-    url.hostname.includes('supabase.co') ||
-    url.hostname.includes('googleapis.com') ||
-    url.hostname.includes('accounts.google.com');
+  // Only cache GET; never cache backend writes or non-GET requests.
+  const isSameOrigin = url.origin === self.location.origin;
+  const isApiCall = !isSameOrigin || event.request.method !== 'GET';
 
   if (isApiCall) {
-    // Network-first: always try to reach the API, no caching
+    // Network-first: always try to reach the backend, no caching of financial data
     event.respondWith(
       fetch(event.request).catch(() =>
         new Response(JSON.stringify({ error: 'Offline' }), {
