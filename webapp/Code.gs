@@ -5652,3 +5652,278 @@ function setStoreDebt(p) {
   } catch(e) { return {__error:e.message}; }
 });
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ИМПОРТ ФАЙЛОВ ИЗ 1С (.xls / .xlsx)
+// Google Диск сам конвертирует файл в таблицу — сторонние библиотеки не
+// нужны. Читаем, распознаём отчёт по заголовку, раскладываем по листам.
+// Сверка по ШТРИХКОДУ (в Продажах его нет — там по наименованию):
+// что было — обновляем, чего не было — добавляем, чужие поля не трогаем.
+// ═══════════════════════════════════════════════════════════════════════
+
+var XLS_TMP_NAME = 'Auron_импорт_врем';
+
+// Загружает файл на Диск с конвертацией в Google Таблицу. Возвращает id.
+function _xlsToSheet(b64, fname) {
+  var blob = Utilities.newBlob(Utilities.base64Decode(b64),
+    'application/vnd.ms-excel', fname || 'import.xls');
+  var meta = { name: XLS_TMP_NAME, mimeType: 'application/vnd.google-apps.spreadsheet' };
+  var bnd = '----auron' + Date.now();
+  var head = Utilities.newBlob(
+      '--' + bnd + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(meta) + '\r\n' +
+      '--' + bnd + '\r\nContent-Type: ' + blob.getContentType() + '\r\n\r\n').getBytes();
+  var tail = Utilities.newBlob('\r\n--' + bnd + '--\r\n').getBytes();
+  var payload = head.concat(blob.getBytes()).concat(tail);
+  var res = UrlFetchApp.fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    { method: 'post',
+      contentType: 'multipart/related; boundary=' + bnd,
+      payload: payload,
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true });
+  if (res.getResponseCode() >= 300)
+    throw new Error('Google не смог открыть файл (' + res.getResponseCode() + '). ' +
+                    'Проверь, что это выгрузка из 1С в Excel.');
+  return JSON.parse(res.getContentText()).id;
+}
+
+function _xlsDrop(id) { try { DriveApp.getFileById(id).setTrashed(true); } catch(e){} }
+
+// Тип отчёта — по тексту в первых строках.
+function _xlsType(rows) {
+  var head = '';
+  for (var r = 0; r < Math.min(7, rows.length); r++) head += ' ' + rows[r].join(' ');
+  head = head.toLowerCase();
+  if (head.indexOf('прайс-лист') >= 0)          return 'price';
+  if (head.indexOf('цены поставщиков') >= 0)    return 'supplier';
+  if (head.indexOf('остатки') >= 0)             return 'stock';
+  if (head.indexOf('продажи') >= 0)             return 'sales';
+  if (head.indexOf('контрагенты') >= 0)         return 'contractors';
+  return '';
+}
+
+var XLS_TITLES = { price:'Прайс-лист', supplier:'Цены поставщиков',
+  stock:'Остатки номенклатуры', sales:'Продажи', contractors:'Контрагенты' };
+
+// Ищет колонку по названию заголовка (в первых upto строках).
+function _xlsCol(rows, names, upto) {
+  upto = Math.min(upto || 12, rows.length);
+  for (var r = 0; r < upto; r++) {
+    for (var c = 0; c < rows[r].length; c++) {
+      var v = String(rows[r][c] || '').toLowerCase().trim();
+      if (!v) continue;
+      for (var i = 0; i < names.length; i++) {
+        var n = names[i].toLowerCase();
+        if (v === n || v.indexOf(n) === 0) return c;
+      }
+    }
+  }
+  return -1;
+}
+
+function _xlsNum(v) {
+  if (typeof v === 'number') return v;
+  var s = String(v == null ? '' : v).replace(/ /g,'').replace(/ /g,'')
+          .replace(/,/g,'.').replace(/[^0-9.\-]/g,'');
+  var n = parseFloat(s); return isNaN(n) ? 0 : n;
+}
+
+function _xlsBarcode(v) {
+  var s = String(v == null ? '' : v).trim();
+  if (/^\d+([.,]0+)?$/.test(s)) s = s.replace(/[.,]0+$/,''); // 4690…711.0 -> 4690…711
+  return s;
+}
+
+// Разбирает файл в список записей {barcode,name,...} по типу отчёта.
+function _xlsParse(rows, type) {
+  var out = [], i;
+  if (type === 'contractors') {
+    var cN = _xlsCol(rows,['контрагент'],8), cP = _xlsCol(rows,['контрагент.конт','контактная'],8);
+    for (i = 0; i < rows.length; i++) {
+      var nm = String(rows[i][cN < 0 ? 0 : cN] || '').trim();
+      if (!nm || nm.toLowerCase().indexOf('контрагент') === 0 || nm.indexOf('Параметры') === 0) continue;
+      out.push({ name: nm, phone: cP >= 0 ? String(rows[i][cP]||'').trim() : '' });
+    }
+    return out;
+  }
+
+  var cName = _xlsCol(rows,['номенклатура'],10); if (cName < 0) cName = 0;
+  var cBar  = _xlsCol(rows,['основной штрих-код','штрихкод','штрих-код'],12);
+  var cCode = _xlsCol(rows,['код'],12);
+  var cArt  = _xlsCol(rows,['номенклатура.артикул','артикул'],12);
+  var cGrp  = _xlsCol(rows,['группа товара','группа'],12);
+  var cUnit = _xlsCol(rows,['единица измерения','базовая единица'],12);
+
+  var cBuy, cRet, cSup, cQty, cRev, cProf, cStockQ, cStockS;
+  if (type === 'price')      { cBuy = _xlsCol(rows,['закупочный тип цен'],8); cRet = _xlsCol(rows,['розничный тип цен'],8); }
+  else if (type==='supplier'){ cBuy = _xlsCol(rows,['цена'],8);               cSup = _xlsCol(rows,['контрагент'],8); }
+  else if (type === 'stock') { cBuy = _xlsCol(rows,['приходная цена'],12);    cRet = _xlsCol(rows,['розничная цена'],12);
+                               cQty = _xlsCol(rows,['количество'],12);        cStockS = _xlsCol(rows,['приходная сумма'],12); }
+  else if (type === 'sales') { cBuy = _xlsCol(rows,['усредненная цена закуп','усреднённая цена закуп'],8);
+                               cRet = _xlsCol(rows,['усредненная цена прод','усреднённая цена прод'],8);
+                               cQty = _xlsCol(rows,['количество'],8);
+                               cRev = _xlsCol(rows,['сумма продажи'],8);
+                               cProf= _xlsCol(rows,['прибыль'],8); }
+
+  var group = '';
+  for (i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var name = String(row[cName] || '').trim();
+    if (!name) continue;
+    var low = name.toLowerCase();
+    // служебные строки шапки / итогов
+    if (low === 'номенклатура' || low === 'склад' || low === 'контрагент' ||
+        low.indexOf('параметры') === 0 || low.indexOf('отбор') === 0 ||
+        low.indexOf('итог') === 0 || low.indexOf('основной склад') === 0 ||
+        low.indexOf('прайс-лист') === 0 || low.indexOf('остатки ') === 0 ||
+        low.indexOf('текущие цены') === 0 || low === 'продажи') continue;
+
+    var bc = cBar >= 0 ? _xlsBarcode(row[cBar]) : '';
+    // В прайсе строки без штрихкода — это названия групп: запоминаем их.
+    if (type === 'price' && !bc) { group = name; continue; }
+    if (type !== 'sales' && !bc) continue; // без штрихкода сопоставить нельзя
+
+    var o = { barcode: bc, name: name };
+    if (cGrp  >= 0 && row[cGrp])  o.group = String(row[cGrp]).trim(); else if (group) o.group = group;
+    if (cUnit >= 0 && row[cUnit]) o.unit = String(row[cUnit]).trim();
+    if (cArt  >= 0 && row[cArt])  o.article = String(row[cArt]).trim();
+    if (cCode >= 0 && row[cCode]) o.code = _xlsBarcode(row[cCode]);
+    if (cBuy  >= 0 && _xlsNum(row[cBuy]) > 0)  o.buy = _xlsNum(row[cBuy]);
+    if (cRet  >= 0 && _xlsNum(row[cRet]) > 0)  o.retail = _xlsNum(row[cRet]);
+    if (cSup  >= 0 && row[cSup])  o.supplier = String(row[cSup]).trim();
+    if (type === 'stock') {
+      if (cQty    >= 0) o.stockQty = _xlsNum(row[cQty]);
+      if (cStockS >= 0) o.stockSum = _xlsNum(row[cStockS]);
+    }
+    if (type === 'sales') {
+      if (cQty  >= 0) o.soldQty = _xlsNum(row[cQty]);
+      if (cRev  >= 0) o.revenue = _xlsNum(row[cRev]);
+      if (cProf >= 0) o.profit  = _xlsNum(row[cProf]);
+      if (!o.soldQty && !o.revenue) continue; // пустая строка продаж
+    }
+    out.push(o);
+  }
+  return out;
+}
+
+// Шаг 1: принять файл, распознать, показать сводку (без записи в базу).
+function xlsPreview(p) {
+  var tmp = '';
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+    tmp = _xlsToSheet(p.data, p.name);
+    var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
+    var type = _xlsType(rows);
+    if (!type) { _xlsDrop(tmp);
+      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты.'}; }
+    var items = _xlsParse(rows, type);
+    if (!items.length) { _xlsDrop(tmp); return {__error:'В файле не нашлось строк с данными.'}; }
+
+    // сколько обновится, сколько добавится
+    var known = {}, isNew = 0;
+    if (type === 'contractors') {
+      var csh = ss.getSheetByName(SH_CONTRACTORS);
+      if (csh && csh.getLastRow() >= 2)
+        csh.getRange(2,2,csh.getLastRow()-1,1).getValues().forEach(function(r){ known[String(r[0]).trim().toLowerCase()] = 1; });
+      items.forEach(function(o){ if (!known[o.name.toLowerCase()]) isNew++; });
+    } else {
+      var gsh = ss.getSheetByName(SH_GOODS);
+      if (gsh && gsh.getLastRow() >= 2)
+        gsh.getRange(2,1,gsh.getLastRow()-1,2).getValues().forEach(function(r){
+          if (r[0]) known['b'+_xlsBarcode(r[0])] = 1;
+          if (r[1]) known['n'+String(r[1]).trim().toLowerCase()] = 1; });
+      items.forEach(function(o){
+        var hit = o.barcode ? known['b'+o.barcode] : known['n'+o.name.toLowerCase()];
+        if (!hit) isNew++; });
+    }
+    return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type],
+             total:items.length, add:isNew, upd:items.length-isNew,
+             sample:items.slice(0,5) };
+  } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
+}
+
+// Шаг 2: применить — обновить существующие, добавить новые.
+function xlsApply(p) {
+  return _withLock(function(){
+  var tmp = p.tmpId;
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+    var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
+    var type = _xlsType(rows);
+    var items = _xlsParse(rows, type);
+    var res = (type === 'contractors') ? _xlsApplyContractors(ss, items)
+                                       : _xlsApplyGoods(ss, items, type);
+    _xlsDrop(tmp);
+    _log(ss,'Импорт из 1С', XLS_TITLES[type]+': обновлено '+res.upd+', добавлено '+res.add);
+    try { _bustDash(p.ssId); } catch(e){}
+    return { ok:true, type:type, title:XLS_TITLES[type], upd:res.upd, add:res.add };
+  } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
+});
+}
+
+function _xlsApplyContractors(ss, items) {
+  var sh = ss.getSheetByName(SH_CONTRACTORS);
+  var last = sh.getLastRow();
+  var cur = last >= 2 ? sh.getRange(2,1,last-1,6).getValues() : [];
+  var idx = {}; cur.forEach(function(r,i){ idx[String(r[1]).trim().toLowerCase()] = i; });
+  var upd = 0, add = [], now = new Date();
+  items.forEach(function(o){
+    var k = o.name.toLowerCase(), i = idx[k];
+    if (i === undefined) {
+      add.push([Utilities.getUuid(), o.name, 'Поставщик', o.phone||'', 'Из 1С', now]);
+      idx[k] = -1; // не задваивать внутри одного файла
+    } else if (i >= 0 && o.phone && !String(cur[i][3]||'').trim()) { cur[i][3] = o.phone; upd++; }
+  });
+  if (cur.length) sh.getRange(2,1,cur.length,6).setValues(cur);
+  if (add.length) sh.getRange(sh.getLastRow()+1,1,add.length,6).setValues(add);
+  return { upd: upd, add: add.length };
+}
+
+function _xlsApplyGoods(ss, items, type) {
+  var sh = ss.getSheetByName(SH_GOODS);
+  var last = sh.getLastRow();
+  var cur = last >= 2 ? sh.getRange(2,1,last-1,G_COLS).getValues() : [];
+  var byBar = {}, byName = {};
+  cur.forEach(function(r,i){
+    if (r[G_BARCODE-1]) byBar[_xlsBarcode(r[G_BARCODE-1])] = i;
+    if (r[G_NAME-1])    byName[String(r[G_NAME-1]).trim().toLowerCase()] = i;
+  });
+  var upd = 0, add = [], now = new Date();
+
+  items.forEach(function(o){
+    var i = o.barcode ? byBar[o.barcode] : undefined;
+    if (i === undefined) i = byName[o.name.toLowerCase()];
+    var row;
+    if (i === undefined) {
+      row = []; for (var k = 0; k < G_COLS; k++) row.push('');
+      row[G_BARCODE-1] = o.barcode || '';
+      row[G_NAME-1]    = o.name;
+      add.push(row);
+      if (o.barcode) byBar[o.barcode] = -1 - add.length; // метка «уже добавлен»
+      byName[o.name.toLowerCase()] = -1 - add.length;
+    } else if (i >= 0) { row = cur[i]; upd++; }
+    else { row = add[-i - 1]; }            // повтор внутри того же файла
+
+    // Пишем только то, что есть в этом отчёте — остальное не трогаем.
+    if (o.group    !== undefined) row[G_GROUP-1]   = o.group;
+    if (o.unit     !== undefined) row[G_UNIT-1]    = o.unit;
+    if (o.article  !== undefined) row[G_ARTICLE-1] = o.article;
+    if (o.code     !== undefined) row[G_CODE-1]    = o.code;
+    if (o.supplier !== undefined) row[G_SUPPLIER-1]= o.supplier;
+    if (o.buy      !== undefined) row[G_BUY-1]     = o.buy;
+    if (o.retail   !== undefined) row[G_RETAIL-1]  = o.retail;
+    if (o.stockQty !== undefined) row[G_STOCKQTY-1]= o.stockQty;
+    if (o.stockSum !== undefined) row[G_STOCKSUM-1]= o.stockSum;
+    if (o.soldQty  !== undefined) row[G_SOLDQTY-1] = o.soldQty;
+    if (o.revenue  !== undefined) row[G_REVENUE-1] = o.revenue;
+    if (o.profit   !== undefined) row[G_PROFIT-1]  = o.profit;
+    row[G_UPDATED-1] = now;
+  });
+
+  if (cur.length) sh.getRange(2,1,cur.length,G_COLS).setValues(cur);
+  if (add.length) sh.getRange(sh.getLastRow()+1,1,add.length,G_COLS).setValues(add);
+  return { upd: upd, add: add.length };
+}

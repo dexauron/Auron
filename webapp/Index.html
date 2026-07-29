@@ -2746,7 +2746,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.25.0';
+var APP_VERSION='4.26.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -8800,10 +8800,63 @@ var App={
   // ── Импорт из 1С (вставка Excel-таблицы) ──────────────────────
   openImport:function(){
     App.openModal('<div class="modal-title">Импорт из 1С</div>'+
-      '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Открой выгрузку из 1С в Excel → выдели данные с заголовками → Ctrl+C → вставь сюда.</div>'+
-      '<textarea id="imp-paste" placeholder="Вставь таблицу сюда…" style="width:100%;height:110px;padding:12px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:monospace;outline:none;resize:vertical;"></textarea>'+
-      '<button class="btn-primary" onclick="App._impParse()">Разобрать таблицу</button>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Загрузи файл выгрузки из 1С — приложение само поймёт, что это за отчёт.</div>'+
+      '<div style="background:var(--brand-dim);border-radius:13px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text-2);line-height:1.6;">'+
+        'Понимает: <b>Прайс-лист</b> · <b>Цены поставщиков</b> · <b>Остатки</b> · <b>Продажи</b> · <b>Контрагенты</b><br>'+
+        'Сверка по штрихкоду: что было — обновится, новое — добавится.</div>'+
+      '<input type="file" id="imp-file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="App._xlsPick(this)">'+
+      '<button class="btn-primary" onclick="document.getElementById(\'imp-file\').click()">Выбрать файл из 1С</button>'+
+      '<div id="imp-xls" style="margin-top:12px;"></div>'+
+      '<div style="border-top:1px solid var(--line);margin:18px 0 12px;"></div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Или вставь таблицу вручную (Ctrl+C из Excel):</div>'+
+      '<textarea id="imp-paste" placeholder="Вставь таблицу сюда…" style="width:100%;height:80px;padding:12px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:monospace;outline:none;resize:vertical;"></textarea>'+
+      '<button class="btn-secondary" onclick="App._impParse()">Разобрать вставленное</button>'+
       '<div id="imp-map"></div>');
+  },
+
+  // ── Загрузка файла .xls/.xlsx из 1С ──
+  _xlsPick:function(inp){
+    var f=inp.files&&inp.files[0]; if(!f)return;
+    inp.value='';
+    var box=document.getElementById('imp-xls'); if(!box)return;
+    var mb=f.size/1048576;
+    if(mb>18){box.innerHTML=App._xlsMsg('bad','Файл слишком большой ('+mb.toFixed(1)+' МБ). Выгрузи из 1С период поменьше.');return;}
+    box.innerHTML=App._xlsMsg('wait','Читаю «'+App._e(f.name)+'» ('+mb.toFixed(1)+' МБ)… Большой файл может занять до минуты.');
+    var rd=new FileReader();
+    rd.onerror=function(){box.innerHTML=App._xlsMsg('bad','Не удалось прочитать файл.');};
+    rd.onload=function(){
+      var b64=String(rd.result||'').split(',')[1]||'';
+      gs('xlsPreview',{ssId:App.s.ssId,name:f.name,data:b64}).then(function(r){
+        if(!r||r.__error){box.innerHTML=App._xlsMsg('bad',(r&&r.__error)||'Ошибка чтения файла');return;}
+        App._xlsTmp=r.tmpId;
+        box.innerHTML='<div style="background:var(--surface-2);border-radius:13px;padding:14px;">'+
+          '<div style="font-size:14px;font-weight:750;margin-bottom:8px;">'+App._e(r.title)+'</div>'+
+          '<div style="font-size:12.5px;color:var(--text-2);line-height:1.7;">'+
+            'Всего строк: <b>'+r.total+'</b><br>'+
+            'Обновится: <b style="color:var(--brand);">'+r.upd+'</b><br>'+
+            'Добавится новых: <b style="color:var(--income);">'+r.add+'</b></div>'+
+          (r.sample&&r.sample.length?'<div style="font-size:11px;color:var(--muted);margin-top:9px;line-height:1.5;">Например: '+App._e(r.sample[0].name||'')+'</div>':'')+
+          '<button class="btn-primary" style="margin-top:12px;" onclick="App._xlsApply()">Загрузить в приложение</button></div>';
+      }).catch(function(e){box.innerHTML=App._xlsMsg('bad',App._friendlyErr(e.message));});
+    };
+    rd.readAsDataURL(f);
+  },
+  _xlsMsg:function(kind,text){
+    var c=kind==='bad'?'var(--expense)':'var(--text-2)';
+    var bg=kind==='bad'?'var(--expense-dim)':'var(--surface-2)';
+    return '<div style="background:'+bg+';color:'+c+';border-radius:13px;padding:12px 14px;font-size:12.5px;line-height:1.55;">'+App._e(text)+'</div>';
+  },
+  _xlsApply:function(){
+    if(!App._xlsTmp)return;
+    var box=document.getElementById('imp-xls'); if(!box)return;
+    box.innerHTML=App._xlsMsg('wait','Загружаю данные… Не закрывай окно.');
+    gs('xlsApply',{ssId:App.s.ssId,tmpId:App._xlsTmp}).then(function(r){
+      App._xlsTmp='';
+      if(!r||r.__error){box.innerHTML=App._xlsMsg('bad',(r&&r.__error)||'Ошибка загрузки');return;}
+      box.innerHTML='<div style="background:var(--brand-dim);border-radius:13px;padding:14px;font-size:13px;line-height:1.7;">'+
+        '<b>Готово ✓</b><br>'+App._e(r.title)+'<br>Обновлено: <b>'+r.upd+'</b> · Добавлено: <b>'+r.add+'</b></div>';
+      App.toast('Данные из 1С загружены ✓');
+    }).catch(function(e){App._xlsTmp='';box.innerHTML=App._xlsMsg('bad',App._friendlyErr(e.message));});
   },
 
   _impParse:function(){
