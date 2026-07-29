@@ -815,6 +815,36 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 .modal-overlay.show .modal{animation:sheetUp .3s cubic-bezier(.2,.8,.2,1);}
 @keyframes sheetUp{from{transform:translateY(100%);opacity:.6;}to{transform:translateY(0);opacity:1;}}
 .modal-handle{width:40px;height:5px;background:var(--surface-3);border-radius:3px;margin:-8px auto 14px;cursor:grab;}
+/* Полноэкранная карточка (товар) — не «окошко», а полноценный экран */
+.modal-overlay.full{align-items:stretch;backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg);}
+.modal-overlay.full .modal{
+  max-height:100dvh;height:100dvh;border-radius:0;border:none;
+  padding:0 0 calc(var(--safe-bot) + 20px);background:var(--bg);
+}
+.modal-overlay.full .modal-handle{display:none;}
+.modal-overlay.show.full .modal{animation:fadeUp .22s ease both;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+/* Шапка карточки: кнопка «назад» + название */
+.pc-top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
+  padding:calc(var(--safe-top,0px) + 12px) 16px 12px;background:var(--bg);
+  border-bottom:1px solid var(--line-2);}
+.pc-back{flex-shrink:0;width:36px;height:36px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;}
+.pc-top h2{flex:1;min-width:0;font-size:16px;font-weight:800;line-height:1.28;letter-spacing:-.02em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.pc-wrap{padding:0 16px;}
+/* Крупная «шапка-герой» товара */
+.pc-hero{display:flex;gap:14px;align-items:center;padding:16px 0 4px;}
+.pc-ph{width:76px;height:76px;border-radius:18px;flex-shrink:0;display:grid;place-items:center;
+  font-size:30px;font-weight:800;color:#fff;}
+.pc-hero .pc-price{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;}
+.pc-hero .pc-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+/* Плитки-показатели */
+.pc-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:14px;}
+.pc-tile{background:var(--surface-2);border-radius:14px;padding:11px 12px;}
+.pc-tile .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700;}
+.pc-tile .v{font-size:16px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;}
+.pc-sec{font-size:13px;font-weight:800;margin:20px 0 7px;}
 body.view-only #fab,body.view-only .tx-actions,body.view-only .np-receipt-btn{display:none!important;}
 /* Роль без прав на удаление/настройки: прячем кнопки удаления и опасные строки настроек */
 body.no-manage .tx-act-del,body.no-manage .dt-act-del,body.no-manage .no-manage-hide{display:none!important;}
@@ -2526,6 +2556,24 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           </div>
         </div>
       </div>
+      <div class="settings-sec" data-sgrp="app" data-need="payments"><div class="settings-sec-title">Google Календарь</div>
+        <div class="settings-list">
+          <div class="settings-row">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Мои выплаты в моём календаре</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45;">Выплаты, которые создаю я, появятся в моём личном Google Календаре. У других сотрудников — свои календари.</div>
+            </div>
+            <label style="position:relative;display:inline-flex;align-items:center;cursor:pointer;">
+              <input type="checkbox" id="toggle-cal-sync" style="opacity:0;position:absolute;width:0;height:0;" onchange="App._calPrefSet(this.checked)">
+              <span id="toggle-cal-sync-track" style="display:inline-block;width:44px;height:26px;border-radius:13px;background:var(--surface-3);transition:background .2s;position:relative;">
+                <span style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.3);display:block;" id="toggle-cal-sync-thumb"></span>
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-sec" data-sgrp="app"><div class="settings-sec-title">Разное</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openTrash()" style="cursor:pointer;">
@@ -2770,7 +2818,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.30.0';
+var APP_VERSION='4.31.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4862,9 +4910,29 @@ var App={
       if(!App.s.settings.shifts)App.s.settings.shifts=['Смена 1','Смена 2','Смена 3'];
       if(!App.s.settings.suppliers)App.s.settings.suppliers=[];
       if(App.s.settings.showKassaBalance===undefined)App.s.settings.showKassaBalance=true;
-      App._applyKassaBalanceToggle();
+      App._applyKassaBalanceToggle();App._calPrefLoad();
       if(cb)cb();
     }).catch(function(){if(cb)cb();});
+  },
+
+  // ── Галочка «мои выплаты в моём календаре» ───────────────────────
+  // Настройка ЛИЧНАЯ (хранится у пользователя), не общая на магазин.
+  _calPrefDraw:function(on){
+    var cb=document.getElementById('toggle-cal-sync'); if(cb)cb.checked=!!on;
+    var tr=document.getElementById('toggle-cal-sync-track');
+    if(tr)tr.style.background=on?'var(--brand)':'var(--surface-3)';
+    var th=document.getElementById('toggle-cal-sync-thumb');
+    if(th)th.style.transform=on?'translateX(18px)':'translateX(0)';
+  },
+  _calPrefLoad:function(){
+    gs('getCalendarPref',{}).then(function(r){App._calPrefDraw(r&&r.on);}).catch(function(){});
+  },
+  _calPrefSet:function(on){
+    App._calPrefDraw(on);
+    gs('setCalendarPref',{on:!!on}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);App._calPrefDraw(!on);return;}
+      App.toast(on?'Новые ваши выплаты будут попадать в ваш календарь ✓':'Выключено');
+    }).catch(function(e){App.toast(App._friendlyErr(e.message),true);App._calPrefDraw(!on);});
   },
 
   _applyKassaBalanceToggle:function(){
@@ -8157,18 +8225,22 @@ var App={
     document.getElementById('sheet-overlay').classList.remove('show');
     document.querySelectorAll('.sheet').forEach(function(s){s.classList.remove('show');});
   },
-  openModal:function(html){
+  openModal:function(html,full){
     var m=document.getElementById('modal-body');
     m.innerHTML='<div class="modal-handle"></div>'+html;
-    document.getElementById('modal-overlay').classList.add('show');
+    var ov=document.getElementById('modal-overlay');
+    ov.classList.toggle('full',!!full);
+    ov.classList.add('show');
     m.scrollTop=0;m.style.transform='';
-    App._attachSwipeClose(m,App.closeModal);
+    // На полном экране свайп вниз не вешаем — иначе мешает прокрутке.
+    if(!full)App._attachSwipeClose(m,App.closeModal);
     App.haptic(8);
   },
   closeModal:function(){
     App.calcClose&&App.calcClose();
     var m=document.getElementById('modal-body');if(m)m.style.transform='';
-    document.getElementById('modal-overlay').classList.remove('show');
+    var ov=document.getElementById('modal-overlay');
+    ov.classList.remove('show');ov.classList.remove('full');
   },
 
   // ── Подробная карточка записи + история «кто/когда/что» ──────────
@@ -9607,7 +9679,20 @@ var App={
     App.openProductByName(it.name,it);
   },
   openProductByName:function(name,it){
-    App.openModal('<div class="modal-title" style="font-size:17px;line-height:1.3;">'+App._e(name)+'</div><div id="pc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    var h=App._goodsHue(name);
+    var letter=App._e(String(name||'?').replace(/^[^0-9A-Za-zА-Яа-яЁё]+/,'').charAt(0).toUpperCase()||'?');
+    App.openModal(
+      '<div class="pc-top">'+
+        '<button class="pc-back" onclick="App.closeModal()" title="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>'+
+        '<h2>'+App._e(name)+'</h2>'+
+      '</div>'+
+      '<div class="pc-wrap">'+
+        '<div class="pc-hero">'+
+          '<div class="pc-ph" style="background:linear-gradient(135deg,hsl('+h+',42%,46%),hsl('+((h+28)%360)+',44%,36%));">'+letter+'</div>'+
+          '<div style="flex:1;min-width:0;"><div class="pc-price" id="pc-price">—</div><div class="pc-sub" id="pc-meta">Загрузка…</div></div>'+
+        '</div>'+
+        '<div id="pc-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>'+
+      '</div>', true);
     gs('getProductDetail',{ssId:App.s.ssId,barcode:(it&&it.barcode)||'',name:name}).then(function(d){App._productRender(d,it||{name:name});})
       .catch(function(e){var b=document.getElementById('pc-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
   },
@@ -9617,23 +9702,51 @@ var App={
     var p=(d&&d.item)||it;var fm=function(v){return fmt(Math.round(v||0));};
     var row=function(lbl,val,col){return val==null||val===''||val===0?'':'<div style="display:flex;justify-content:space-between;padding:10px 13px;border-top:1px solid var(--line-2);font-size:13px;"><span style="color:var(--muted);">'+lbl+'</span><span style="font-weight:700;'+(col?'color:'+col+';':'')+'">'+val+'</span></div>';};
     var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
-    var meta=[];if(p.code)meta.push('Код: '+App._e(p.code));if(p.article)meta.push('Арт: '+App._e(p.article));if(p.barcode)meta.push('ШК: '+App._e(p.barcode));if(p.group)meta.push(App._e(p.group));
-    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">'+meta.join(' · ')+'</div>'+
-      '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+    // Шапка: цена крупно + строка «код · артикул · штрихкод · группа»
+    var pe=document.getElementById('pc-price');
+    if(pe)pe.innerHTML=p.retail?('₽ '+fm(p.retail)):'<span style="font-size:15px;color:var(--muted);">цена не задана</span>';
+    var meta=[];if(p.group)meta.push(App._e(p.group));if(p.unit)meta.push(App._e(p.unit));
+    if(p.code)meta.push('код '+App._e(p.code));if(p.article)meta.push('арт '+App._e(p.article));
+    if(p.barcode)meta.push('ШК '+App._e(p.barcode));
+    var me=document.getElementById('pc-meta');
+    if(me)me.innerHTML=meta.join(' · ')||'—';
+
+    // Плитки: главное — сразу и крупно
+    var tile=function(l,v,col){return v==null||v===''?'':
+      '<div class="pc-tile"><div class="l">'+l+'</div><div class="v"'+(col?' style="color:'+col+';"':'')+'>'+v+'</div></div>';};
+    var lowMk=p.markup!=null&&p.markup<10;
+    var soon=p.daysOfStock!=null&&p.daysOfStock<=7;
+    var h='<div class="pc-tiles">'+
+      tile('Закупка',p.buy?fm(p.buy)+' ₽':null)+
+      tile('Продажа',p.retail?fm(p.retail)+' ₽':null)+
+      tile('Наценка',p.markup!=null?p.markup+'%':null,lowMk?'var(--neg)':'var(--pos)')+
+      tile('Маржа',p.margin!=null?p.margin+'%':null)+
+      tile('Остаток',p.stockQty!=null?fm(p.stockQty)+' шт':null,p.stockQty<=0?'var(--neg)':null)+
+      tile('Хватит на',p.daysOfStock!=null?p.daysOfStock+' дн':null,soon?'var(--neg)':null)+
+      tile('Продано',p.soldQty?fm(p.soldQty)+' шт':null)+
+      tile('Выручка',p.revenue?fm(p.revenue)+' ₽':null)+
+      tile('Прибыль',p.profit?fm(p.profit)+' ₽':null,p.profit>=0?'var(--pos)':'var(--neg)')+
+      tile('Сумма остатка',p.stockSum?fm(p.stockSum)+' ₽':null)+
+      '</div>';
+    // Подсказки простым языком
+    var hints=[];
+    if(lowMk)hints.push('Наценка низкая — на этом товаре почти нет заработка.');
+    if(soon)hints.push('Товар скоро кончится — пора заказывать.');
+    if(p.stockQty!=null&&p.stockQty<=0)hints.push('Товара нет в наличии.');
+    if(p.soldQty===0&&p.stockQty>0)hints.push('Не продавался за период — лежит на полке.');
+    if(hints.length)h+='<div style="background:color-mix(in oklab,var(--warn,#FF9F0A) 12%,transparent);border-radius:13px;padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.6;">'+
+      hints.map(function(x){return '• '+x;}).join('<br>')+'</div>';
+    // Полный список полей — ниже, для тех кому нужны детали
+    h+='<div class="pc-sec">Все данные</div>'+
+      '<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+      row('Наименование',App._e(p.name||''))+
+      row('Группа',p.group?App._e(p.group):null)+
+      row('Единица',p.unit?App._e(p.unit):null)+
       row('Код товара',p.code?App._e(p.code):null)+
       row('Артикул',p.article?App._e(p.article):null)+
       row('Штрихкод',p.barcode?App._e(p.barcode):null)+
       row('Поставщик',p.supplier?App._e(p.supplier):null)+
-      row('Цена закупки',p.buy?fm(p.buy)+' ₽':null)+
-      row('Цена продажи',p.retail?fm(p.retail)+' ₽':null)+
-      row('Наценка',p.markup!=null?p.markup+'%':null,p.markup!=null&&p.markup<10?'var(--neg)':'var(--pos)')+
-      row('Маржа',p.margin!=null?p.margin+'%':null,p.margin!=null&&p.margin<10?'var(--neg)':'var(--ink)')+
-      row('Продано',p.soldQty?p.soldQty+' шт':null)+
-      row('Выручка',p.revenue?fm(p.revenue)+' ₽':null)+
-      row('Прибыль',p.profit?fm(p.profit)+' ₽':null,p.profit>=0?'var(--pos)':'var(--neg)')+
-      row('Остаток',p.stockQty?p.stockQty+' шт':null)+
-      row('Хватит на',p.daysOfStock!=null?p.daysOfStock+' дн':null,p.daysOfStock!=null&&p.daysOfStock<=7?'var(--neg)':'var(--ink)')+
-      row('Сумма остатка',p.stockSum?fm(p.stockSum)+' ₽':null)+
+      row('Обновлено',p.updated?App._e(p.updated):null)+
       '</div>';
     if(d&&d.priceHist&&d.priceHist.length>=2){
       var f0=d.priceHist[0],fL=d.priceHist[d.priceHist.length-1];

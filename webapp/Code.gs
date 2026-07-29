@@ -1314,7 +1314,10 @@ function getProductDetail(p) {
           margin:(buy>0&&retail>0)?Math.round((retail-buy)/retail*1000)/10:null,
           daysOfStock:(soldQty>0)?Math.round(stockQty/(soldQty/salesDays)):null,
           soldQty:soldQty,revenue:_gnum(r[G_REVENUE-1]),profit:_gnum(r[G_PROFIT-1]),
-          stockQty:stockQty,stockSum:_gnum(r[G_STOCKSUM-1]) };
+          stockQty:stockQty,stockSum:_gnum(r[G_STOCKSUM-1]),
+          updated:(r[G_UPDATED-1] instanceof Date)
+            ? Utilities.formatDate(r[G_UPDATED-1],Session.getScriptTimeZone(),'dd.MM.yyyy')
+            : String(r[G_UPDATED-1]||'') };
         break;
       }
     }
