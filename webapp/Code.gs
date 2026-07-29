@@ -361,11 +361,40 @@ function ensureSheets(ss) {
   _mk(ss,SH_NOTES,    ['Дата','Текст','Обновлено']);
   _mk(ss,SH_OBLIG,    ['ID','Тип','Название','Сумма','Комментарий','Создано']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
+
+  // Разовая работа (добавить колонки, миграция схемы, защита листа ДОСТУП)
+  // нужна один раз, а не на каждом запросе: это 5-6 лишних чтений таблицы
+  // перед КАЖДЫМ действием пользователя — главный источник тормозов.
+  // Ключ кэша включает SCHEMA_VERSION: при новой версии схемы кэш сам
+  // становится недействительным и миграция отрабатывает сразу.
+  if (_ensureHeavyDone(_ssIdSafe(ss))) return;
   _grow(ss,SH_BASE,   B_COLS);
   _grow(ss,SH_DEBTS,  D_COLS);
   _grow(ss,SH_TIMESHEET,T_COLS);
   _migrateSchema(ss);
-  _protectAccessSheet(ss);
+  // Кэшируем «сделано» только если защита реально встала (у владельца).
+  // У сотрудника она не ставится — тогда попробуем снова в следующий раз.
+  if (_protectAccessSheet(ss)) _ensureHeavyMark(_ssIdSafe(ss));
+}
+
+function _ssIdSafe(ss){ try{ return ss.getId(); }catch(e){ return ''; } }
+
+// Память в рамках одного запуска (несколько функций подряд зовут ensureSheets)
+var _ENSURED_RUN = {};
+
+function _ensureHeavyKey(id){ return 'ens_'+id+'_v'+SCHEMA_VERSION; }
+
+function _ensureHeavyDone(id){
+  if (!id) return false;
+  if (_ENSURED_RUN[id]) return true;
+  try { if (CacheService.getScriptCache().get(_ensureHeavyKey(id))) { _ENSURED_RUN[id]=true; return true; } } catch(e){}
+  return false;
+}
+
+function _ensureHeavyMark(id){
+  if (!id) return;
+  _ENSURED_RUN[id]=true;
+  try { CacheService.getScriptCache().put(_ensureHeavyKey(id),'1',21600); } catch(e){} // 6 часов
 }
 
 // Защита листа ДОСТУП (роли/права) от прямого редактирования сотрудниками.
@@ -373,18 +402,22 @@ function ensureSheets(ss) {
 // менять напрямую НЕ должен. Пишет этот лист только владелец (все функции
 // ролей проверяют _isOwner), поэтому защита не ломает легитимную запись.
 // Ставится, когда приложение открывает владелец (у него есть право защиты).
+// Возвращает true, если вопрос защиты закрыт (уже защищено или только что
+// защитили). false — если не удалось (сотрудник, а не владелец): тогда НЕ
+// кэшируем «сделано», чтобы защита встала при первом входе владельца.
 function _protectAccessSheet(ss) {
   try {
-    if (_getSettingStr(ss,'ACL_PROTECTED','')==='1') return;
-    var sh=ss.getSheetByName(SH_ACCESS); if(!sh) return;
+    if (_getSettingStr(ss,'ACL_PROTECTED','')==='1') return true;
+    var sh=ss.getSheetByName(SH_ACCESS); if(!sh) return true;
     var existing=sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
-    if (existing && existing.length){ _setSetting(ss,'ACL_PROTECTED','1'); return; }
+    if (existing && existing.length){ _setSetting(ss,'ACL_PROTECTED','1'); return true; }
     var p=sh.protect().setDescription('Auron: роли и права — только владелец');
     var eds=p.getEditors();
     if (eds && eds.length) eds.forEach(function(u){ try{ p.removeEditor(u); }catch(e){} });
     if (p.canDomainEdit && p.canDomainEdit()) p.setDomainEdit(false);
     _setSetting(ss,'ACL_PROTECTED','1');
-  } catch(e){} // не владелец / нет прав защиты — тихо, поставится при входе владельца
+    return true;
+  } catch(e){ return false; } // не владелец — тихо, поставится при входе владельца
 }
 
 // Версионирование схемы: новые листы/колонки добавляются выше идемпотентно.
