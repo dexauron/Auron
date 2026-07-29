@@ -1332,8 +1332,15 @@ function getProductDetail(p) {
         var d=r[PH_DATE-1], price=_gnum(r[PH_PRICE-1]), sup=String(r[PH_SUPPLIER-1]||'');
         var t=(d instanceof Date)?d.getTime():0;
         priceHist.push({label:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'', t:t, price:price, supplier:sup});
-        // последняя цена каждого поставщика (по дате поступления)
-        if (sup&&price){ if(!supPrices[sup]||supPrices[sup].t<=t) supPrices[sup]={price:price,t:t}; }
+        // По каждому поставщику: последняя цена + сколько раз привозил
+        if (sup&&price){
+          if(!supPrices[sup]) supPrices[sup]={price:price,t:t,n:0,min:price,max:price};
+          var sp=supPrices[sup];
+          sp.n++;
+          if(price<sp.min)sp.min=price;
+          if(price>sp.max)sp.max=price;
+          if(sp.t<=t){ sp.price=price; sp.t=t; }
+        }
       });
       priceHist.sort(function(a,b){return a.t-b.t;});
     }
@@ -1347,9 +1354,28 @@ function getProductDetail(p) {
     }
     var suppliers=Object.keys(supPrices).map(function(s){
       var sp=supPrices[s];
-      return {supplier:s, price:sp.price, phone:phones[s]||'',
+      return {supplier:s, price:sp.price, phone:phones[s]||'', deliveries:sp.n,
+        minPrice:sp.min, maxPrice:sp.max,
         date: sp.t?Utilities.formatDate(new Date(sp.t),tz,'dd.MM.yy'):''};
     }).sort(function(a,b){return a.price-b.price;});
+    // Основной поставщик — кто привозил чаще всех (при равенстве — кто позже).
+    // Если история пустая, берём того, что записан в карточке товара.
+    if (suppliers.length) {
+      var best=null;
+      suppliers.forEach(function(s){
+        if(!best || s.deliveries>best.deliveries) best=s;
+      });
+      // «Основной» честно ставим только когда история это подтверждает
+      // (кто-то привозил больше одного раза). В выгрузке «текущих цен»
+      // каждый поставщик встречается один раз — тогда просто отмечаем того,
+      // кто записан в карточке товара, как ТЕКУЩЕГО, а не «основного».
+      if (best && (best.deliveries>1 || suppliers.length===1)) { best.main=true; best.byHistory=true; }
+      else if (it.supplier) {
+        var cur2=suppliers.filter(function(s){return s.supplier===it.supplier;})[0];
+        if (cur2) { cur2.main=true; cur2.byHistory=false; }
+      }
+      if (suppliers.length>1) suppliers[0].cheapest=true;
+    }
     // История старых розничных цен
     var retailHist=[];
     var rh=ss.getSheetByName(SH_RETAILHIST);
@@ -5834,9 +5860,10 @@ function _xlsParse(rows, type) {
   var cGrp  = _xlsCol(rows,['группа товара','группа'],12);
   var cUnit = _xlsCol(rows,['единица измерения','базовая единица'],12);
 
-  var cBuy, cRet, cSup, cQty, cRev, cProf, cStockQ, cStockS;
+  var cBuy, cRet, cSup, cQty, cRev, cProf, cStockQ, cStockS, cDate;
   if (type === 'price')      { cBuy = _xlsCol(rows,['закупочный тип цен'],8); cRet = _xlsCol(rows,['розничный тип цен'],8); }
-  else if (type==='supplier'){ cBuy = _xlsCol(rows,['цена'],8);               cSup = _xlsCol(rows,['контрагент'],8); }
+  else if (type==='supplier'){ cBuy = _xlsCol(rows,['цена'],8);               cSup = _xlsCol(rows,['контрагент'],8);
+                               cDate = _xlsCol(rows,['период'],8); }
   else if (type === 'stock') { cBuy = _xlsCol(rows,['приходная цена'],12);    cRet = _xlsCol(rows,['розничная цена'],12);
                                cQty = _xlsCol(rows,['количество'],12);        cStockS = _xlsCol(rows,['приходная сумма'],12); }
   else if (type === 'sales') { cBuy = _xlsCol(rows,['усредненная цена закуп','усреднённая цена закуп'],8);
@@ -5871,6 +5898,7 @@ function _xlsParse(rows, type) {
     if (cBuy  >= 0 && _xlsNum(row[cBuy]) > 0)  o.buy = _xlsNum(row[cBuy]);
     if (cRet  >= 0 && _xlsNum(row[cRet]) > 0)  o.retail = _xlsNum(row[cRet]);
     if (cSup  >= 0 && row[cSup])  o.supplier = String(row[cSup]).trim();
+    if (cDate >= 0 && row[cDate]) o.priceDate = row[cDate]; // дата цены поставщика
     if (type === 'stock') {
       if (cQty    >= 0) o.stockQty = _xlsNum(row[cQty]);
       if (cStockS >= 0) o.stockSum = _xlsNum(row[cStockS]);
@@ -6002,7 +6030,54 @@ function _xlsApplyGoods(ss, items, type) {
 
   if (cur.length) sh.getRange(2,1,cur.length,G_COLS).setValues(cur);
   if (add.length) sh.getRange(sh.getLastRow()+1,1,add.length,G_COLS).setValues(add);
+
+  // Отчёт «Цены поставщиков» содержит ОДИН товар от РАЗНЫХ поставщиков
+  // (в выгрузке владельца таких повторов 6158). В ТОВАРЫ помещается только
+  // один поставщик, поэтому всех остальных пишем в историю цен — именно
+  // из неё карточка товара строит список «все поставщики и их цены».
+  if (type === 'supplier') _xlsSaveSupplierPrices(ss, items);
   return { upd: upd, add: add.length };
+}
+
+function _xlsSaveSupplierPrices(ss, items) {
+  try {
+    var ph = ss.getSheetByName(SH_PRICEHIST); if (!ph) return;
+    // Уже записанные пары «штрихкод|поставщик|дата» — чтобы повторный
+    // импорт того же файла не плодил дубли.
+    var seen = {};
+    if (ph.getLastRow() >= 2) {
+      ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+        var d = r[PH_DATE-1];
+        var dk = (d instanceof Date) ? d.getTime() : String(d||'');
+        seen[String(r[PH_BARCODE-1])+'|'+String(r[PH_SUPPLIER-1])+'|'+dk] = 1;
+      });
+    }
+    var rows = [];
+    items.forEach(function(o){
+      if (!o.supplier || !(o.buy > 0)) return;
+      var d = o.priceDate instanceof Date ? o.priceDate : _xlsDate(o.priceDate);
+      if (!d) d = new Date();
+      var k = String(o.barcode||'')+'|'+o.supplier+'|'+d.getTime();
+      if (seen[k]) return;
+      seen[k] = 1;
+      rows.push([d, String(o.barcode||''), o.name, o.supplier, o.buy]);
+    });
+    if (rows.length) {
+      var start = ph.getLastRow()+1;
+      ph.getRange(start,1,rows.length,PH_COLS).setValues(rows);
+      ph.getRange(start,PH_DATE,rows.length,1).setNumberFormat('dd.mm.yyyy');
+    }
+  } catch(e){}
+}
+
+// «12.02.2026 15:52:54» → Date. Пусто/мусор → null.
+function _xlsDate(v) {
+  if (v instanceof Date) return v;
+  var s = String(v||'').trim(); if (!s) return null;
+  var m = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
+  if (m) return new Date(+m[3], +m[2]-1, +m[1]);
+  var t = Date.parse(s);
+  return isNaN(t) ? null : new Date(t);
 }
 
 // ═══════════════════════════════════════════════════════════════════════

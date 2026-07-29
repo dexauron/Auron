@@ -2818,7 +2818,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.31.0';
+var APP_VERSION='4.32.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9755,15 +9755,35 @@ var App={
         '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px;"><span>'+App._e(f0.label)+' · '+fm(f0.price)+'₽</span><span>'+App._e(fL.label)+' · '+fm(fL.price)+'₽</span></div></div>';
     }
     if(d&&d.suppliers&&d.suppliers.length){
-      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;">🏭 Цены по поставщикам</div>'+
-        '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Последняя цена каждого поставщика · у кого дешевле</div>'+
-        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
-        d.suppliers.map(function(s,ix){var cheap=ix===0&&d.suppliers.length>1;
+      var main=d.suppliers.filter(function(s){return s.main;})[0];
+      var chp=d.suppliers.filter(function(s){return s.cheapest;})[0];
+      h+='<div class="pc-sec">Поставщики ('+d.suppliers.length+')</div>'+
+        '<div style="font-size:11.5px;color:var(--muted);margin:-4px 0 7px;line-height:1.5;">Последняя цена каждого. '+
+          (main&&main.byHistory?'«Основной» — кто привозит чаще всех.':'«Текущий» — записан в карточке. Кто основной, станет видно, когда накопится история загрузок.')+'</div>';
+      // Если основной дороже самого дешёвого — сразу показываем выгоду
+      if(main&&chp&&main.supplier!==chp.supplier&&main.price>chp.price){
+        h+='<div style="background:color-mix(in oklab,var(--warn,#FF9F0A) 12%,transparent);border-radius:13px;padding:11px 13px;margin-bottom:8px;font-size:12.5px;line-height:1.6;">'+
+          (main.byHistory?'Обычно берёте у ':'Сейчас берёте у ')+'<b>'+App._e(main.supplier)+'</b> по '+fm(main.price)+' ₽, '+
+          'а у <b>'+App._e(chp.supplier)+'</b> дешевле — '+fm(chp.price)+' ₽ '+
+          '(экономия '+fm(main.price-chp.price)+' ₽ на штуке).</div>';
+      }
+      h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+        d.suppliers.map(function(s){
           var tel=s.phone?s.phone.replace(/[^+0-9]/g,''):'';
-          return '<div style="display:flex;align-items:center;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;">'+
-            '<span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(cheap?'✅ ':'')+App._e(s.supplier)+(s.date?' <span style="color:var(--muted);">· '+App._e(s.date)+'</span>':'')+'</span>'+
-            (tel?'<a href="tel:'+App._e(tel)+'" onclick="event.stopPropagation();" style="flex-shrink:0;text-decoration:none;color:var(--brand);font-weight:700;">📞</a>':'')+
-            '<span style="font-weight:700;white-space:nowrap;color:'+(cheap?'var(--pos)':'var(--ink)')+';">'+fm(s.price)+' ₽</span></div>';
+          var badge='';
+          if(s.main)badge+='<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;background:color-mix(in oklab,var(--brand) 18%,transparent);color:var(--brand);white-space:nowrap;">'+(s.byHistory?'основной':'текущий')+'</span>';
+          if(s.cheapest)badge+='<span style="font-size:10px;font-weight:800;padding:2px 6px;border-radius:6px;background:color-mix(in oklab,var(--pos) 18%,transparent);color:var(--pos);white-space:nowrap;margin-left:4px;">дешевле всех</span>';
+          var sub=[];
+          if(s.deliveries)sub.push('привозил '+s.deliveries+' '+App._plural(s.deliveries,'раз','раза','раз'));
+          if(s.date)sub.push('последняя '+s.date);
+          if(s.minPrice!=null&&s.maxPrice!=null&&s.maxPrice>s.minPrice)sub.push('было '+fm(s.minPrice)+'–'+fm(s.maxPrice)+' ₽');
+          return '<div style="display:flex;align-items:center;gap:9px;padding:11px 13px;border-top:1px solid var(--line-2);">'+
+            '<div style="flex:1;min-width:0;">'+
+              '<div style="font-size:13px;font-weight:650;display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">'+App._e(s.supplier)+'</span>'+badge+'</div>'+
+              (sub.length?'<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+App._e(sub.join(' · '))+'</div>':'')+
+            '</div>'+
+            (tel?'<a href="tel:'+App._e(tel)+'" onclick="event.stopPropagation();" style="flex-shrink:0;text-decoration:none;color:var(--brand);font-weight:700;font-size:16px;">📞</a>':'')+
+            '<span style="font-weight:800;white-space:nowrap;font-size:14px;color:'+(s.cheapest?'var(--pos)':'var(--ink)')+';">'+fm(s.price)+' ₽</span></div>';
         }).join('')+'</div>';
     }
     if(d&&d.priceHist&&d.priceHist.length){
