@@ -2746,7 +2746,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.26.0';
+var APP_VERSION='4.27.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -8803,9 +8803,10 @@ var App={
       '<div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Загрузи файл выгрузки из 1С — приложение само поймёт, что это за отчёт.</div>'+
       '<div style="background:var(--brand-dim);border-radius:13px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text-2);line-height:1.6;">'+
         'Понимает: <b>Прайс-лист</b> · <b>Цены поставщиков</b> · <b>Остатки</b> · <b>Продажи</b> · <b>Контрагенты</b><br>'+
-        'Сверка по штрихкоду: что было — обновится, новое — добавится.</div>'+
-      '<input type="file" id="imp-file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="App._xlsPick(this)">'+
-      '<button class="btn-primary" onclick="document.getElementById(\'imp-file\').click()">Выбрать файл из 1С</button>'+
+        'Сверка по штрихкоду: что было — обновится, новое — добавится.<br>'+
+        'Можно выбрать <b>сразу несколько файлов</b> — порядок загрузки приложение выберет само.</div>'+
+      '<input type="file" id="imp-file" multiple accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="App._xlsPick(this)">'+
+      '<button class="btn-primary" onclick="document.getElementById(\'imp-file\').click()">Выбрать файлы из 1С</button>'+
       '<div id="imp-xls" style="margin-top:12px;"></div>'+
       '<div style="border-top:1px solid var(--line);margin:18px 0 12px;"></div>'+
       '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Или вставь таблицу вручную (Ctrl+C из Excel):</div>'+
@@ -8814,49 +8815,113 @@ var App={
       '<div id="imp-map"></div>');
   },
 
-  // ── Загрузка файла .xls/.xlsx из 1С ──
+  // ── Загрузка файлов .xls/.xlsx из 1С (можно сразу несколько) ──
+  // Порядок важен: сначала товары (прайс/цены/остатки), потом Продажи —
+  // в них 1С не выгружает штрихкод, сверка идёт по названию, поэтому
+  // товары должны появиться раньше.
+  _xlsOrder:{price:1,supplier:2,stock:3,sales:4,contractors:5},
+
   _xlsPick:function(inp){
-    var f=inp.files&&inp.files[0]; if(!f)return;
-    inp.value='';
+    var files=[].slice.call(inp.files||[]); inp.value='';
+    if(!files.length)return;
     var box=document.getElementById('imp-xls'); if(!box)return;
-    var mb=f.size/1048576;
-    if(mb>18){box.innerHTML=App._xlsMsg('bad','Файл слишком большой ('+mb.toFixed(1)+' МБ). Выгрузи из 1С период поменьше.');return;}
-    box.innerHTML=App._xlsMsg('wait','Читаю «'+App._e(f.name)+'» ('+mb.toFixed(1)+' МБ)… Большой файл может занять до минуты.');
+    var tooBig=files.filter(function(f){return f.size/1048576>18;});
+    if(tooBig.length){
+      box.innerHTML=App._xlsMsg('bad','Слишком большой файл: «'+App._e(tooBig[0].name)+'». Выгрузи из 1С период поменьше (до 18 МБ).');return;}
+    App._xlsQ=[];
+    App._xlsRead(files,0,box);
+  },
+
+  // Читаем файлы по очереди — так надёжнее, чем всё разом.
+  _xlsRead:function(files,i,box){
+    if(i>=files.length){App._xlsRenderQ(box);return;}
+    var f=files[i];
+    box.innerHTML=App._xlsMsg('wait','Читаю файл '+(i+1)+' из '+files.length+': «'+App._e(f.name)+'»…'+
+      (files.length>1?'<br>Это может занять до минуты на файл.':''));
     var rd=new FileReader();
-    rd.onerror=function(){box.innerHTML=App._xlsMsg('bad','Не удалось прочитать файл.');};
+    rd.onerror=function(){App._xlsQ.push({name:f.name,err:'Не удалось прочитать файл'});App._xlsRead(files,i+1,box);};
     rd.onload=function(){
       var b64=String(rd.result||'').split(',')[1]||'';
       gs('xlsPreview',{ssId:App.s.ssId,name:f.name,data:b64}).then(function(r){
-        if(!r||r.__error){box.innerHTML=App._xlsMsg('bad',(r&&r.__error)||'Ошибка чтения файла');return;}
-        App._xlsTmp=r.tmpId;
-        box.innerHTML='<div style="background:var(--surface-2);border-radius:13px;padding:14px;">'+
-          '<div style="font-size:14px;font-weight:750;margin-bottom:8px;">'+App._e(r.title)+'</div>'+
-          '<div style="font-size:12.5px;color:var(--text-2);line-height:1.7;">'+
-            'Всего строк: <b>'+r.total+'</b><br>'+
-            'Обновится: <b style="color:var(--brand);">'+r.upd+'</b><br>'+
-            'Добавится новых: <b style="color:var(--income);">'+r.add+'</b></div>'+
-          (r.sample&&r.sample.length?'<div style="font-size:11px;color:var(--muted);margin-top:9px;line-height:1.5;">Например: '+App._e(r.sample[0].name||'')+'</div>':'')+
-          '<button class="btn-primary" style="margin-top:12px;" onclick="App._xlsApply()">Загрузить в приложение</button></div>';
-      }).catch(function(e){box.innerHTML=App._xlsMsg('bad',App._friendlyErr(e.message));});
+        if(!r||r.__error)App._xlsQ.push({name:f.name,err:(r&&r.__error)||'Ошибка чтения'});
+        else App._xlsQ.push({name:f.name,tmpId:r.tmpId,type:r.type,title:r.title,total:r.total,upd:r.upd,add:r.add});
+        App._xlsRead(files,i+1,box);
+      }).catch(function(e){
+        App._xlsQ.push({name:f.name,err:App._friendlyErr(e.message)});
+        App._xlsRead(files,i+1,box);
+      });
     };
     rd.readAsDataURL(f);
   },
+
+  _xlsRenderQ:function(box){
+    box=box||document.getElementById('imp-xls'); if(!box)return;
+    var q=App._xlsQ||[];
+    var ok=q.filter(function(x){return !x.err;});
+    // выстраиваем правильный порядок загрузки
+    ok.sort(function(a,b){return (App._xlsOrder[a.type]||9)-(App._xlsOrder[b.type]||9);});
+    App._xlsQ=ok.concat(q.filter(function(x){return x.err;}));
+    if(!q.length){box.innerHTML=App._xlsMsg('bad','Ничего не удалось прочитать.');return;}
+    var h='<div style="background:var(--surface-2);border-radius:13px;padding:14px;">'+
+      '<div style="font-size:14px;font-weight:750;margin-bottom:10px;">Файлов готово: '+ok.length+
+      (ok.length>1?' <span style="font-size:11px;color:var(--muted);font-weight:600;">(загрузим по порядку)</span>':'')+'</div>';
+    App._xlsQ.forEach(function(x,i){
+      if(x.err){
+        h+='<div style="border-top:1px solid var(--line);padding:9px 0;font-size:12px;color:var(--expense);line-height:1.5;">'+
+           '<b>'+App._e(x.name)+'</b><br>'+App._e(x.err)+'</div>';
+      }else{
+        h+='<div style="border-top:1px solid var(--line);padding:9px 0;">'+
+           '<div style="font-size:13px;font-weight:700;">'+(i+1)+'. '+App._e(x.title)+'</div>'+
+           '<div style="font-size:11.5px;color:var(--muted);margin:2px 0 3px;">'+App._e(x.name)+'</div>'+
+           '<div id="xq-'+i+'" style="font-size:12px;color:var(--text-2);">Строк: <b>'+x.total+'</b> · обновится <b style="color:var(--brand);">'+x.upd+'</b> · новых <b style="color:var(--income);">'+x.add+'</b></div></div>';
+      }
+    });
+    if(ok.length) h+='<button class="btn-primary" style="margin-top:12px;" onclick="App._xlsApplyAll()">Загрузить '+
+      (ok.length>1?'все '+ok.length+' '+App._plural(ok.length,'файл','файла','файлов'):'в приложение')+'</button>';
+    box.innerHTML=h+'</div>';
+  },
+
   _xlsMsg:function(kind,text){
     var c=kind==='bad'?'var(--expense)':'var(--text-2)';
     var bg=kind==='bad'?'var(--expense-dim)':'var(--surface-2)';
-    return '<div style="background:'+bg+';color:'+c+';border-radius:13px;padding:12px 14px;font-size:12.5px;line-height:1.55;">'+App._e(text)+'</div>';
+    return '<div style="background:'+bg+';color:'+c+';border-radius:13px;padding:12px 14px;font-size:12.5px;line-height:1.55;">'+text+'</div>';
   },
-  _xlsApply:function(){
-    if(!App._xlsTmp)return;
+
+  _xlsApplyAll:function(){
+    var q=(App._xlsQ||[]).filter(function(x){return !x.err&&x.tmpId;});
+    if(!q.length)return;
+    App._xlsDone=[];
+    App._xlsStep(q,0);
+  },
+
+  _xlsStep:function(q,i){
     var box=document.getElementById('imp-xls'); if(!box)return;
-    box.innerHTML=App._xlsMsg('wait','Загружаю данные… Не закрывай окно.');
-    gs('xlsApply',{ssId:App.s.ssId,tmpId:App._xlsTmp}).then(function(r){
-      App._xlsTmp='';
-      if(!r||r.__error){box.innerHTML=App._xlsMsg('bad',(r&&r.__error)||'Ошибка загрузки');return;}
-      box.innerHTML='<div style="background:var(--brand-dim);border-radius:13px;padding:14px;font-size:13px;line-height:1.7;">'+
-        '<b>Готово ✓</b><br>'+App._e(r.title)+'<br>Обновлено: <b>'+r.upd+'</b> · Добавлено: <b>'+r.add+'</b></div>';
-      App.toast('Данные из 1С загружены ✓');
-    }).catch(function(e){App._xlsTmp='';box.innerHTML=App._xlsMsg('bad',App._friendlyErr(e.message));});
+    if(i>=q.length){
+      var h='<div style="background:var(--brand-dim);border-radius:13px;padding:14px;font-size:13px;line-height:1.7;"><b>Готово ✓</b>';
+      App._xlsDone.forEach(function(d){
+        h+='<br>'+App._e(d.title)+': обновлено <b>'+d.upd+'</b>, добавлено <b>'+d.add+'</b>'+(d.err?' — <span style="color:var(--expense);">'+App._e(d.err)+'</span>':'');
+      });
+      box.innerHTML=h+'</div>';
+      App._xlsQ=[];App.toast('Данные из 1С загружены ✓');
+      return;
+    }
+    var cur=q[i];
+    var st=document.getElementById('xq-'+i);
+    if(st)st.innerHTML='<b style="color:var(--brand);">Загружаю…</b>';
+    gs('xlsApply',{ssId:App.s.ssId,tmpId:cur.tmpId}).then(function(r){
+      if(!r||r.__error){
+        App._xlsDone.push({title:cur.title,upd:0,add:0,err:(r&&r.__error)||'ошибка'});
+        if(st)st.innerHTML='<span style="color:var(--expense);">Не удалось</span>';
+      }else{
+        App._xlsDone.push({title:r.title,upd:r.upd,add:r.add});
+        if(st)st.innerHTML='<span style="color:var(--income);">✓ обновлено '+r.upd+', добавлено '+r.add+'</span>';
+      }
+      App._xlsStep(q,i+1);
+    }).catch(function(e){
+      App._xlsDone.push({title:cur.title,upd:0,add:0,err:App._friendlyErr(e.message)});
+      if(st)st.innerHTML='<span style="color:var(--expense);">Не удалось</span>';
+      App._xlsStep(q,i+1);
+    });
   },
 
   _impParse:function(){
