@@ -3,7 +3,7 @@
 Результат сканирования 100 репозиториев из рейтинга GitHub.
 Найдено **12 249** файлов `SKILL.md`, **5 546** уникальных имён.
 Число во второй колонке — в скольких разных репозиториях встречается скил (мера популярности).
-Из этого списка отобраны и установлены 100 штук — см. `SKILLS-INVENTORY.md`.
+Из этого списка отобраны и установлены 109 штук — см. `SKILLS-INVENTORY.md`.
 
 | Скил | Репозиториев | Установлен |
 |---|---|---|
@@ -45,7 +45,7 @@
 | `architecture-decision-records` | 4 | да |
 | `architecture` | 4 |  |
 | `ad-creative` | 4 |  |
-| `writing-rules` | 3 |  |
+| `writing-rules` | 3 | да (как `writing-hookify-rules`) |
 | `workflow-automation` | 3 |  |
 | `webapp-testing` | 3 | да |
 | `web-design-guidelines` | 3 |  |
@@ -99,7 +99,7 @@
 | `prometheus-configuration` | 3 |  |
 | `product-manager-toolkit` | 3 |  |
 | `pricing-strategy` | 3 |  |
-| `postgresql` | 3 |  |
+| `postgresql` | 3 | да (как `postgresql-table-design`) |
 | `popup-cro` | 3 |  |
 | `polars` | 3 |  |
 | `plugin-structure` | 3 | да |
@@ -134,7 +134,7 @@
 | `json-canvas` | 3 |  |
 | `javascript-testing-patterns` | 3 | да |
 | `image-enhancer` | 3 |  |
-| `i18n` | 3 |  |
+| `i18n` | 3 | да |
 | `hook-development` | 3 | да |
 | `helm-chart-scaffolding` | 3 |  |
 | `grill-with-docs` | 3 |  |
@@ -198,7 +198,7 @@
 | `windows-privilege-escalation` | 2 |  |
 | `web3-testing` | 2 |  |
 | `web-security-testing` | 2 |  |
-| `web-performance-optimization` | 2 |  |
+| `web-performance-optimization` | 2 | да |
 | `web-games` | 2 |  |
 | `wcag-audit-patterns` | 2 |  |
 | `vulnerability-scanner` | 2 |  |
@@ -249,7 +249,7 @@
 | `transformers` | 2 |  |
 | `track-management` | 2 |  |
 | `torchdrug` | 2 |  |
-| `top-web-vulnerabilities` | 2 |  |
+| `top-web-vulnerabilities` | 2 | да |
 | `tmux` | 2 |  |
 | `threat-modeling-expert` | 2 |  |
 | `threat-mitigation-mapping` | 2 |  |
@@ -275,7 +275,7 @@
 | `swarm-orchestration` | 2 |  |
 | `swarm-advanced` | 2 |  |
 | `sveltekit` | 2 |  |
-| `supabase-postgres-best-practices` | 2 |  |
+| `supabase-postgres-best-practices` | 2 | да |
 | `stride-analysis-patterns` | 2 | да |
 | `stream-chain` | 2 |  |
 | `stitch-skill` | 2 |  |
@@ -355,7 +355,7 @@
 | `salesforce-development` | 2 |  |
 | `sales-enablement` | 2 |  |
 | `saga-orchestration` | 2 |  |
-| `saas-multi-tenant` | 2 |  |
+| `saas-multi-tenant` | 2 | да |
 | `rust-pro` | 2 |  |
 | `rust-async-patterns` | 2 |  |
 | `ruby-pro` | 2 |  |
@@ -416,7 +416,7 @@
 | `prompt-engineer` | 2 |  |
 | `prompt-caching` | 2 |  |
 | `projection-patterns` | 2 |  |
-| `progressive-web-app` | 2 |  |
+| `progressive-web-app` | 2 | да |
 | `production-scheduling` | 2 |  |
 | `production-code-audit` | 2 |  |
 | `production-audit` | 2 |  |
@@ -495,7 +495,7 @@
 | `molfeat` | 2 |  |
 | `modern-javascript-patterns` | 2 | да |
 | `mobile-games` | 2 |  |
-| `mobile-design` | 2 |  |
+| `mobile-design` | 2 | да |
 | `ml-pipeline-workflow` | 2 |  |
 | `ml-engineer` | 2 |  |
 | `minimalist-skill` | 2 |  |
@@ -2411,7 +2411,7 @@
 | `pacsomatic` | 1 |  |
 | `p5js` | 1 |  |
 | `owl-protocol-automation` | 1 |  |
-| `owasp-security` | 1 |  |
+| `owasp-security` | 1 | да |
 | `outlook-calendar-automation` | 1 |  |
 | `outlook-automation` | 1 |  |
 | `outlines` | 1 |  |
@@ -4404,7 +4404,7 @@
 | `cost-anomaly` | 1 |  |
 | `cosmic-database` | 1 |  |
 | `corrently-automation` | 1 |  |
-| `core-web-vitals` | 1 |  |
+| `core-web-vitals` | 1 | да |
 | `copywriting-psychologist` | 1 |  |
 | `copilot-sdk` | 1 |  |
 | `cookbook-audit` | 1 |  |

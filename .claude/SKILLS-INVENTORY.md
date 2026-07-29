@@ -1,9 +1,11 @@
 # Установленные скилы
 
-Всего: **100**. Лежат в `.claude/skills/`, подхватываются автоматически в любой сессии этого проекта.
+Всего: **109**. Лежат в `.claude/skills/`, подхватываются автоматически в любой сессии этого проекта.
 
 Отобраны из 100 репозиториев рейтинга GitHub — в них суммарно 12 249 файлов скилов, 5 546 уникальных имён.
 Критерий отбора: частота встречаемости в разных репозиториях (популярность) + репутация источника.
+Последние 9 добавлены адресно под задачи Auron: офлайн/PWA, разграничение доступа в PostgreSQL,
+скорость на телефоне, безопасность веб-приложения.
 
 | Скил | Что делает | Источник |
 |---|---|---|
@@ -28,6 +30,7 @@
 | `codebase-design` | Shared vocabulary for designing deep modules. Use when the user wants to design or improve a module's interface, find deepening opportunities, decide where a seam goes, make code more testable or A... | mattpocock/skills |
 | `command-development` | This skill should be used when the user asks to "create a slash command", "add a command", "write a custom command", "define command arguments", "use command frontmatter", "organize commands", "cre... | anthropics/claude-plugins-official |
 | `compliance-check` | Run a compliance check on a proposed action, product feature, or business initiative, surfacing applicable regulations, required approvals, and risk areas. Use when launching a feature that touches... | anthropics/knowledge-work-plugins |
+| `core-web-vitals` | Optimize Core Web Vitals (LCP, INP, CLS) for better page experience and search ranking. Use when asked to "improve Core Web Vitals", "fix LCP", "reduce CLS", "optimize INP", "page experience optimi... | davila7/claude-code-templates |
 | `cost-optimization` | Optimize cloud costs across AWS, Azure, GCP, and OCI through resource rightsizing, tagging strategies, reserved instances, and spending analysis. Use when reducing cloud expenses, analyzing infrast... | wshobson/agents |
 | `data-quality-frameworks` | Implement data quality validation with Great Expectations, dbt tests, and data contracts. Use when building data quality pipelines, implementing validation rules, or establishing data contracts. | wshobson/agents |
 | `data-visualization` | Create effective data visualizations with Python (matplotlib, seaborn, plotly). Use when building charts, choosing the right chart type for a dataset, creating publication-quality figures, or apply... | anthropics/knowledge-work-plugins |
@@ -56,6 +59,7 @@
 | `github-actions-templates` | Create production-ready GitHub Actions workflows for automated testing, building, and deploying applications. Use when setting up CI/CD with GitHub Actions, automating development workflows, or cre... | wshobson/agents |
 | `handoff` | Compact the current conversation into a handoff document for another agent to pick up. | mattpocock/skills |
 | `hook-development` | This skill should be used when the user asks to "create a hook", "add a PreToolUse/PostToolUse/Stop hook", "validate tool use", "implement prompt-based hooks", "use ${CLAUDE_PLUGIN_ROOT}", "set up ... | anthropics/claude-plugins-official |
+| `i18n` | \| Internationalization (i18n) workflow and standards for managing translations. Use when: (1) Adding new user-facing text, (2) Creating new components with user-facing text, (3) Reviewing code for ... | iOfficeAI/AionUi |
 | `implement` | Implement a piece of work based on a spec or set of tickets. | mattpocock/skills |
 | `improve-codebase-architecture` | Scan a codebase for deepening opportunities, present them as a visual HTML report, then grill through whichever one you pick. | mattpocock/skills |
 | `incident-response` | Run an incident response workflow — triage, communicate, and write postmortem. Trigger with "we have an incident", "production is down", an alert that needs severity assessment, a status update mid... | anthropics/knowledge-work-plugins |
@@ -65,14 +69,17 @@
 | `mcp-builder` | Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate exte... | ComposioHQ/awesome-claude-skills |
 | `mcp-integration` | This skill should be used when the user asks to "add MCP server", "integrate MCP", "configure MCP in plugin", "use .mcp.json", "set up Model Context Protocol", "connect external service", mentions ... | anthropics/claude-plugins-official |
 | `memory-management` | Two-tier memory system that makes Claude a true workplace collaborator. Decodes shorthand, acronyms, nicknames, and internal language so Claude understands requests like a colleague would. CLAUDE.m... | anthropics/knowledge-work-plugins |
+| `mobile-design` | Design mobile-first, touch-first interfaces that respect platform conventions. Use when building or reviewing UI for phones and tablets — touch target sizes, thumb-reachable layouts, gestures, safe... | sickn33/antigravity-awesome-skills |
 | `modern-javascript-patterns` | Master ES6+ features including async/await, destructuring, spread operators, arrow functions, promises, modules, iterators, generators, and functional programming patterns for writing clean, effici... | wshobson/agents |
 | `monorepo-management` | Master monorepo management with Turborepo, Nx, and pnpm workspaces to build efficient, scalable multi-package repositories with optimized builds and dependency management. Use when setting up monor... | wshobson/agents |
 | `obsidian-markdown` | Create and edit Obsidian Flavored Markdown with wikilinks, embeds, callouts, properties, and other Obsidian-specific syntax. Use when working with .md files in Obsidian, or when the user mentions w... | kepano/obsidian-skills |
 | `openapi-spec-generation` | Generate and maintain OpenAPI 3.1 specifications from code, design-first specs, and validation patterns. Use when creating API documentation, generating SDKs, or ensuring API contract compliance. | wshobson/agents |
+| `owasp-security` | Comprehensive OWASP-aligned security guidance across six standards - Top 10 (2021) for web apps, ASVS 5.0, MASVS v2.1.0 for mobile, API Security Top 10 (2023), Kubernetes Top 10 (2022), and the Age... | davila7/claude-code-templates |
 | `pci-compliance` | Implement PCI DSS compliance requirements for secure handling of payment card data and payment systems. Use when securing payment processing, achieving PCI compliance, or implementing payment card ... | wshobson/agents |
 | `plugin-structure` | This skill should be used when the user asks to "create a plugin", "scaffold a plugin", "understand plugin structure", "organize plugin components", "set up plugin.json", "use ${CLAUDE_PLUGIN_ROOT}... | anthropics/claude-plugins-official |
 | `postgresql-table-design` | Use this skill when designing or reviewing a PostgreSQL-specific schema. Covers best-practices, data types, indexing, constraints, performance patterns, and advanced features | wshobson/agents |
 | `postmortem-writing` | Write effective blameless postmortems with root cause analysis, timelines, and action items. Use when conducting incident reviews, writing postmortem documents, or improving incident response proce... | wshobson/agents |
+| `progressive-web-app` | Build Progressive Web Apps (PWAs) with offline support, installability, and caching strategies. Trigger whenever the user mentions PWA, service workers, web app manifests, Workbox, 'add to home scr... | davila7/claude-code-templates |
 | `project-artifact` | Generate and publish a project status artifact — an opinionated, tabbed status page for a project too big for one update (overview & success criteria, the workstream sequence, next steps, plus back... | anthropics/claude-plugins-official |
 | `prompt-engineering-patterns` | >- This skill should be used when the user asks to "optimize a prompt", "improve prompt performance", "design a prompt template", "write better prompts", "debug prompt issues", "use chain-of-though... | wshobson/agents |
 | `prototype` | Build a throwaway prototype to answer a design question. Use when the user wants to sanity-check whether a state model or logic feels right, or explore what a UI should look like. | mattpocock/skills |
@@ -83,6 +90,7 @@
 | `responsive-design` | Implement modern responsive layouts using container queries, fluid typography, CSS Grid, and mobile-first breakpoint strategies. Use when building adaptive interfaces, implementing fluid layouts, o... | wshobson/agents |
 | `risk-assessment` | Identify, assess, and mitigate operational risks. Trigger with "what are the risks", "risk assessment", "risk register", "what could go wrong", or when the user is evaluating risks associated with ... | anthropics/knowledge-work-plugins |
 | `runbook` | Create or update an operational runbook for a recurring task or procedure. Use when documenting a task that on-call or ops needs to run repeatably, turning tribal knowledge into exact step-by-step ... | anthropics/knowledge-work-plugins |
+| `saas-multi-tenant` | Design and implement multi-tenant SaaS architectures with row-level security, tenant-scoped queries, shared-schema isolation, and safe cross-tenant admin patterns in PostgreSQL and TypeScript. | davila7/claude-code-templates |
 | `sast-configuration` | Configure Static Application Security Testing (SAST) tools for automated vulnerability detection in application code. Use when setting up security scanning, implementing DevSecOps practices, or aut... | wshobson/agents |
 | `search-strategy` | Query decomposition and multi-source search orchestration. Breaks natural language questions into targeted searches per source, translates queries into source-specific syntax, ranks results by rele... | anthropics/knowledge-work-plugins |
 | `secrets-management` | Implement secure secrets management for CI/CD pipelines using Vault, AWS Secrets Manager, or native platform solutions. Use when handling sensitive credentials, rotating secrets, or securing CI/CD ... | wshobson/agents |
@@ -93,16 +101,19 @@
 | `sql-optimization-patterns` | Master SQL query optimization, indexing strategies, and EXPLAIN analysis to dramatically improve database performance and eliminate slow queries. Use when debugging slow queries, designing database... | wshobson/agents |
 | `sql-queries` | Write correct, performant SQL across all major data warehouse dialects (Snowflake, BigQuery, Databricks, PostgreSQL, etc.). Use when writing queries, optimizing slow SQL, translating between dialec... | anthropics/knowledge-work-plugins |
 | `stride-analysis-patterns` | Apply STRIDE methodology to systematically identify threats. Use when analyzing system security, conducting threat modeling sessions, or creating security documentation. | wshobson/agents |
+| `supabase-postgres-best-practices` | Postgres performance optimization and best practices from Supabase. Use this skill when writing, reviewing, or optimizing Postgres queries, schema designs, or database configurations. | sickn33/antigravity-awesome-skills |
 | `synthesize-research` | Synthesize user research from interviews, surveys, and feedback into structured insights. Use when you have a pile of interview notes, survey responses, or support tickets to make sense of, need to... | anthropics/knowledge-work-plugins |
 | `system-design` | Design systems, services, and architectures. Trigger with "design a system for", "how should we architect", "system design for", "what's the right architecture for", or when the user needs help wit... | anthropics/knowledge-work-plugins |
 | `systematic-debugging` | 4-phase root cause debugging: understand bugs before fixing. | NousResearch/hermes-agent |
 | `tdd` | Test-driven development. Use when the user wants to build features or fix bugs test-first, mentions "red-green-refactor", or wants integration tests. | mattpocock/skills |
 | `tech-debt` | Identify, categorize, and prioritize technical debt. Trigger with "tech debt", "technical debt audit", "what should we refactor", "code health", or when the user asks about code quality, refactorin... | anthropics/knowledge-work-plugins |
 | `testing-strategy` | Design test strategies and test plans. Trigger with "how should we test", "test strategy for", "write tests for", "test plan", "what tests do we need", or when the user needs help with testing appr... | anthropics/knowledge-work-plugins |
+| `top-web-vulnerabilities` | Provide a comprehensive, structured reference for the 100 most critical web application vulnerabilities organized by category. This skill enables systematic vulnerability identification, impact ass... | sickn33/antigravity-awesome-skills |
 | `triage` | Move issues and external PRs through a state machine of triage roles — categorise, verify, grill if needed, and write agent-ready briefs. | mattpocock/skills |
 | `validate-data` | QA an analysis before sharing -- methodology, accuracy, and bias checks. Use when reviewing an analysis before a stakeholder presentation, spot-checking calculations and aggregation logic, verifyin... | anthropics/knowledge-work-plugins |
 | `variance-analysis` | Decompose financial variances into drivers with narrative explanations and waterfall analysis. Use when analyzing budget vs. actual, period-over-period changes, revenue or expense variances, or pre... | anthropics/knowledge-work-plugins |
 | `verify` | Verify that a change really works before you claim completion | Yeachan-Heo/oh-my-claudecode |
+| `web-performance-optimization` | Optimize website and web application performance including loading speed, Core Web Vitals, bundle size, caching strategies, and runtime performance | sickn33/antigravity-awesome-skills |
 | `webapp-testing` | Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browse... | ComposioHQ/awesome-claude-skills |
 | `write-spec` | Write a feature spec or PRD from a problem statement or feature idea. Use when turning a vague idea or user request into a structured document, scoping a feature with goals and non-goals, defining ... | anthropics/knowledge-work-plugins |
 | `writing-great-skills` | Reference for writing and editing skills well — the vocabulary and principles that make a skill predictable. | mattpocock/skills |
