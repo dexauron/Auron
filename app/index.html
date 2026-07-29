@@ -10,6 +10,7 @@
 <link rel="manifest" href="./manifest.json">
 <script src="./js/config.js"></script>
 <script src="./js/auth.js"></script>
+<script src="./js/offline-queue.js"></script>
 <script src="./js/api.js"></script>
 <style>
 /* ── Reset & Variables ─────────────────────────────────────────────── */
@@ -460,10 +461,8 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 </head>
 <body>
 
-<!-- Офлайн-баннер: виден только без связи, показывает время последних данных -->
-<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;padding:calc(6px + env(safe-area-inset-top,0px)) 16px 6px;background:var(--warn,#FF9F0A);color:#000;font:600 13px/1.3 var(--font,-apple-system,sans-serif);text-align:center">
-  Нет связи — показаны сохранённые данные<span id="offline-since"></span>
-</div>
+<!-- Статус-бар связи: офлайн (данные на HH:MM) и/или сколько операций ждут отправки -->
+<div id="offline-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;padding:calc(6px + env(safe-area-inset-top,0px)) 16px 6px;color:#000;font:600 13px/1.3 var(--font,-apple-system,sans-serif);text-align:center"></div>
 
 <!-- ══ LOGIN SCREEN ═══════════════════════════════════════════════════════ -->
 <div id="screen-login" class="screen">
@@ -1731,24 +1730,36 @@ const App = (() => {
 window.addEventListener('load', () => App.init());
 </script>
 <script>
-// Индикатор офлайна: показать баннер без связи, скрыть при восстановлении.
-// Данные офлайн отдаёт Service Worker (последние загруженные); это только индикатор.
+// Статус-бар связи: офлайн-режим (данные отдаёт Service Worker) и/или сколько
+// операций (путь A) ждут отправки. Индикатор; сама очередь — в offline-queue.js.
 (function () {
   var banner = document.getElementById('offline-banner');
-  var since  = document.getElementById('offline-since');
+  if (!banner) return;
   function fmtTime(ts) {
     try { return new Date(+ts).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }); }
     catch (_) { return ''; }
   }
   function update() {
-    if (!banner) return;
-    if (navigator.onLine) { banner.style.display = 'none'; return; }
-    var ts = localStorage.getItem('auron_last_sync');
-    if (since) since.textContent = ts ? ' на ' + fmtTime(ts) : '';
-    banner.style.display = 'block';
+    var pending = (window.OfflineQueue && window.OfflineQueue.pendingCount()) || 0;
+    if (!navigator.onLine) {
+      var ts = localStorage.getItem('auron_last_sync');
+      banner.style.background = 'var(--warn,#FF9F0A)';
+      banner.textContent = 'Нет связи — данные' + (ts ? ' на ' + fmtTime(ts) : ' сохранены') +
+        (pending ? ' · ' + pending + ' ждут отправки' : '');
+      banner.style.display = 'block';
+    } else if (pending > 0) {
+      banner.style.background = 'var(--brand,#5E5CE6)';
+      banner.style.color = '#fff';
+      banner.textContent = 'Отправляю операции: ' + pending;
+      banner.style.display = 'block';
+    } else {
+      banner.style.display = 'none';
+      banner.style.color = '#000';
+    }
   }
   window.addEventListener('online', update);
   window.addEventListener('offline', update);
+  if (window.OfflineQueue && window.OfflineQueue.onChange) window.OfflineQueue.onChange(update);
   update();
 })();
 </script>

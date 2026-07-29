@@ -83,6 +83,18 @@
       },
 
       async insert(row) {
+        // Путь A: без сети операция уходит в очередь и досылается при связи.
+        // Клиентский id + client_uuid делают оптимистичный ответ и повтор идемпотентными.
+        if (typeof navigator !== 'undefined' && navigator.onLine === false &&
+            typeof window !== 'undefined' && window.OfflineQueue) {
+          const r = Object.assign({}, row);
+          if (!r.id) r.id = uuid();
+          window.OfflineQueue.enqueue({
+            table, method: 'POST', path: '/' + table, body: r,
+            client_uuid: r.client_uuid || r.id
+          });
+          return [r]; // оптимистичный ответ — вызывающий код продолжает работать
+        }
         return _req('POST', '/' + table, row);
       },
 
@@ -397,7 +409,10 @@
     if (data.employeeId) row.employee_id = data.employeeId;
 
     const [tx] = await _q('transactions').insert(row);
-    await _updateAccountBalance(tx.account_id, tx.type, tx.amount_kopecks);
+    // Офлайн: обновление баланса не пройдёт — баланс пересчитается при синхронизации
+    // и следующей загрузке данных. Не роняем сохранение операции.
+    try { await _updateAccountBalance(tx.account_id, tx.type, tx.amount_kopecks); }
+    catch (e) { if (typeof navigator !== 'undefined' && navigator.onLine !== false) throw e; }
     return _fmtTx(tx);
   }
 
@@ -830,8 +845,25 @@
   // PUBLIC
   // ══════════════════════════════════════════════════════════════════════════
 
+  // ── Офлайн-очередь: досылка накопленных операций при возврате связи ──────────
+  function _queueSender(op) {
+    return _req(op.method, op.path, op.body).catch(err => {
+      // операция уже применена ранее (дубль по client_uuid) — считаем успехом
+      if (/duplicate|already exists|23505|unique/i.test(String(err && err.message))) return null;
+      throw err;
+    });
+  }
+  function _flushQueue() {
+    if (window.OfflineQueue) window.OfflineQueue.flush(_queueSender);
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', _flushQueue);
+    window.addEventListener('load',   _flushQueue);
+  }
+
   window.API = {
     getOrgs, createOrg,
+    flushQueue: _flushQueue,
     getAccounts, saveAccount, deleteAccount, adjustBalance,
     getCategories, saveCategory, deleteCategory,
     getEmployees, saveEmployee, deleteEmployee,
