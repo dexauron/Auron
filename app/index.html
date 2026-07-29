@@ -885,6 +885,14 @@ const App = (() => {
   const $ = id => document.getElementById(id);
   const qs = (sel, ctx) => (ctx || document).querySelector(sel);
 
+  // Экранирование данных перед вставкой в HTML — защита от XSS (кража сессии
+  // через комментарий/имя вида <img onerror=...>). esc — для текста внутри HTML,
+  // escJs — для значений, попадающих в inline-обработчик onclick="...('...')".
+  const esc = s => String(s == null ? '' : s)
+    .replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const escJs = s => String(s == null ? '' : s)
+    .replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/[<>]/g, '');
+
   function fmtRub(kopecks) {
     const abs = Math.abs(Math.round(kopecks));
     const r   = Math.round(abs / 100);
@@ -946,8 +954,8 @@ const App = (() => {
       const div = document.createElement('div');
       div.className = 'picker-item';
       div.innerHTML = `
-        <div class="picker-item-icon" style="background:${item.color||'#5E5CE6'}22">${item.icon||'•'}</div>
-        <span class="picker-item-name">${item.name}</span>
+        <div class="picker-item-icon" style="background:${item.color||'#5E5CE6'}22">${esc(item.icon||'•')}</div>
+        <span class="picker-item-name">${esc(item.name)}</span>
         ${item.selected ? '<span class="picker-item-check">✓</span>' : ''}
       `;
       div.onclick = () => { closeSheet('picker-overlay','picker-sheet'); onSelect(item); };
@@ -1187,8 +1195,8 @@ const App = (() => {
     }
     el.innerHTML = accounts.map(a => `
       <div class="account-card" style="--c:${a.color}" onclick="App.openAccDetail('${a.id}')">
-        <div class="acc-icon">${a.icon}</div>
-        <div class="acc-name">${a.name}</div>
+        <div class="acc-icon">${esc(a.icon)}</div>
+        <div class="acc-name">${esc(a.name)}</div>
         <div class="acc-balance">${fmtRub(a.balance)}</div>
       </div>`).join('');
   }
@@ -1206,10 +1214,10 @@ const App = (() => {
       </div>
       ${g.items.map(tx => `
         <div class="tx-item" data-txid="${tx.id}">
-          <div class="tx-icon" style="background:${tx.categoryColor}22">${tx.categoryIcon}</div>
+          <div class="tx-icon" style="background:${tx.categoryColor}22">${esc(tx.categoryIcon)}</div>
           <div class="tx-info">
-            <div class="tx-name">${tx.categoryName || '—'}</div>
-            <div class="tx-meta">${tx.accountName}${tx.comment ? ' · ' + tx.comment : ''}</div>
+            <div class="tx-name">${esc(tx.categoryName || '—')}</div>
+            <div class="tx-meta">${esc(tx.accountName)}${tx.comment ? ' · ' + esc(tx.comment) : ''}</div>
           </div>
           <div class="tx-amount ${tx.type==='income'?'pos':'neg'}">
             ${tx.type==='income'?'+':'−'}${fmtRub(tx.amountKopecks)}
@@ -1247,7 +1255,7 @@ const App = (() => {
       const max  = Math.max(...cats.map(c => c.expense + c.income), 1);
       el.innerHTML = cats.map(c => `
         <div class="bar-row">
-          <span class="bar-label" style="font-size:18px">${c.icon} ${c.name.slice(0,8)}</span>
+          <span class="bar-label" style="font-size:18px">${esc(c.icon)} ${esc(c.name.slice(0,8))}</span>
           <div class="bar-track"><div class="bar-fill" style="width:${((c.expense+c.income)/max*100).toFixed(0)}%;background:${c.color}"></div></div>
           <span class="bar-val">${fmtRub(c.expense||c.income)}</span>
         </div>`).join('') || '<div class="empty-state"><div class="emoji">📊</div><p>Нет данных</p></div>';
@@ -1257,7 +1265,7 @@ const App = (() => {
           <div class="tx-item">
             <div class="tx-icon" style="background:#5E5CE622">${['🥇','🥈','🥉'][i]||'👤'}</div>
             <div class="tx-info">
-              <div class="tx-name">${c.name}</div>
+              <div class="tx-name">${esc(c.name)}</div>
               <div class="tx-meta">${c.shifts} смен · расхождение: ${fmtRub(Math.abs(c.diffTotal))}</div>
             </div>
             <div class="tx-amount pos">${fmtRub(c.income)}</div>
@@ -1268,7 +1276,7 @@ const App = (() => {
         const max = Math.max(...days.map(d => d.kopecks), 1);
         el.innerHTML = days.map(d => `
           <div class="bar-row">
-            <span class="bar-label">${d.day}</span>
+            <span class="bar-label">${esc(d.day)}</span>
             <div class="bar-track"><div class="bar-fill" style="width:${(d.kopecks/max*100).toFixed(0)}%;background:var(--brand)"></div></div>
             <span class="bar-val">${fmtRub(d.kopecks)}</span>
           </div>`).join('');
@@ -1453,11 +1461,11 @@ const App = (() => {
     if (!debts.length) { el.innerHTML = '<div class="empty-state"><div class="emoji">📝</div><p>Нет представителей</p></div>'; return; }
     el.innerHTML = debts.map(d => `
       <div class="debt-card">
-        <div class="debt-name">${d.name}</div>
+        <div class="debt-name">${esc(d.name)}</div>
         <div class="debt-amount" style="color:${d.balance>0?'var(--neg)':'var(--pos)'}">${fmtRub(d.balance)} долг</div>
         <div class="debt-actions">
-          <button class="debt-btn" onclick="App.addDebtEntry('${d.id}','${d.name}','debt')">+ Закупка</button>
-          <button class="debt-btn" onclick="App.addDebtEntry('${d.id}','${d.name}','payment')">Оплата</button>
+          <button class="debt-btn" onclick="App.addDebtEntry('${escJs(d.id)}','${escJs(d.name)}','debt')">+ Закупка</button>
+          <button class="debt-btn" onclick="App.addDebtEntry('${escJs(d.id)}','${escJs(d.name)}','payment')">Оплата</button>
         </div>
       </div>`).join('');
   }
@@ -1470,7 +1478,7 @@ const App = (() => {
       <div class="tx-item">
         <div class="tx-icon" style="background:#5E5CE622">🧾</div>
         <div class="tx-info">
-          <div class="tx-name">${s.date} · Смена ${s.shiftNum} · ${s.employeeName}</div>
+          <div class="tx-name">${s.date} · Смена ${s.shiftNum} · ${esc(s.employeeName)}</div>
           <div class="tx-meta">Расхождение: ${s.diffKopecks >= 0 ? '+' : ''}${fmtRub(s.diffKopecks)}</div>
         </div>
         <div class="tx-amount pos">${fmtRub(s.zTotalKopecks)}</div>
