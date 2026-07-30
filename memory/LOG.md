@@ -1,5 +1,11 @@
 # LOG — журнал сессий (новое сверху)
 
+## 2026-07-29 — Справочник бесплатных API
+- Собран memory/FREE-APIS.md: каталоги (public-apis, public-api-lists, free-for-dev) +
+  подборка под Auron (ЦБ РФ, DaData, API-ФНС, Telegram/Web Share — часть уже подключена).
+- Граница: AI-прокси (обход платных сервисов) не подключаем; ключи только у владельца.
+
+
 ## 2026-07-29 — Бесплатные интеграции + установлен GSD
 - app/js/integrations.js (ветка приложения 48ca5fa): Web Share (share/waLink/tgShareLink),
   курс валют ЦБ РФ (cbrRates, бесплатно, кэш на день), Telegram Bot (tgConfigure/tgReady/
