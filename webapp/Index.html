@@ -1031,7 +1031,11 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   left:50%;transform:translateX(-50%) translateY(16px);
   background:rgba(15,15,34,.98);color:#fff;
   padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;
-  z-index:500;opacity:0;transition:opacity .25s,transform .25s;white-space:nowrap;
+  z-index:500;opacity:0;transition:opacity .25s,transform .25s;
+  /* Раньше стояло white-space:nowrap — длинная ошибка не переносилась и
+     уезжала за правый край телефона: владелец видел обрывок фразы. */
+  max-width:min(calc(100vw - 32px),420px);text-align:center;
+  line-height:1.35;overflow-wrap:anywhere;
   backdrop-filter:blur(20px);border:1px solid var(--border);
   box-shadow:0 8px 32px rgba(0,0,0,.5);
 }
@@ -1564,6 +1568,16 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
   /* Строки-разделы (Настройки, Касса) — комфортная высота, не «простыни» */
   .settings-row{padding-top:13px;padding-bottom:13px;}
+
+  /* Экраны входа (приветствие, выбор магазина, новый магазин, знакомство)
+     — это .screen, а не .panel, и ограничение ширины выше их не касалось:
+     на мониторе поле «Телефон» растягивалось почти на 1900 точек, а кнопка
+     шла через весь экран. Форме нужна ширина формы. */
+  .screen{padding-top:calc(var(--safe-top) + 96px);}
+  .screen>*{max-width:460px;margin-left:auto;margin-right:auto;}
+  /* Кнопка — не блочный элемент, поэтому margin:auto её не центрирует:
+     без этой строки она прижимается к левому краю монитора. */
+  .screen>button{display:block;width:100%;}
 }
 @media(min-width:1500px){
   .panel>*{max-width:1320px;}
@@ -3042,7 +3056,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.46.0';
+var APP_VERSION='4.47.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
