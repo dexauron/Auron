@@ -25,6 +25,7 @@ var SH_CONTRACTORS='КОНТРАГЕНТЫ';
 var SH_ORDERS    = 'ЗАКАЗЫ';
 var SH_NOTES     = 'ЗАМЕТКИ';
 var SH_OBLIG     = 'ОБЯЗАТЕЛЬСТВА';
+var SH_LOSSES    = 'СПИСАНИЯ'; // списания и возвраты поставщикам
 var SH_GOODS     = 'ТОВАРЫ';
 var SH_PRICEHIST = 'ЦЕНЫ_ИСТ';
 var SH_RETAILHIST= 'РОЗНИЦА_ИСТ'; // история розничных цен (старые цены товара)
@@ -361,6 +362,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_ORDERS,   ['ID','Контрагент','Заказано','Ожидается','Сумма','Статус','Комментарий','Создано','Получено','Факт_Сумма']);
   _mk(ss,SH_NOTES,    ['Дата','Текст','Обновлено']);
   _mk(ss,SH_OBLIG,    ['ID','Тип','Название','Сумма','Комментарий','Создано']);
+  _mk(ss,SH_LOSSES,   ['ID','Дата','Вид','Причина','Наименование','Кол-во','Сумма','Контрагент','Комментарий','Создано','Кто']);
   var trash = ss.getSheetByName(SH_TRASH); if (trash) trash.hideSheet();
 
   // Разовая работа (добавить колонки, миграция схемы, защита листа ДОСТУП)
@@ -6219,4 +6221,213 @@ function isPaymentInMyCalendar(p) {
     var me = _myEmail();
     return { inCal: !!(me && _calMap(f.data[PY_CAL-1])[me]), pref:_calPrefGet() };
   } catch(e) { return {inCal:false}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: СПИСАНИЯ И ВОЗВРАТЫ + ИТОГ «ПЛЮС-МИНУС»
+// Два вида записей в одном листе СПИСАНИЯ:
+//   'writeoff' — списание. Причина решает, потеря это или расход:
+//        «Нужды магазина» — не потеря, а расход на себя;
+//        «Брак» / «Просрочка» / «Порча» — настоящая потеря.
+//   'return'   — возврат поставщику: товар вернули, деньги вернутся.
+// Итог: Выручка − Себестоимость − Расходы − Потери − Нужды + Возвраты.
+// ═══════════════════════════════════════════════════════════════════════
+
+var LS_ID=1,LS_DATE=2,LS_KIND=3,LS_REASON=4,LS_NAME=5,LS_QTY=6,LS_AMT=7,
+    LS_CONTR=8,LS_COMMENT=9,LS_CREATED=10,LS_WHO=11;
+var LS_COLS=11;
+
+// Причины списания. needs=true → это «нужды магазина», а не потеря.
+var LOSS_REASONS=[
+  ['Нужды магазина','Взяли для работы магазина',true],
+  ['Просрочка','Истёк срок годности',false],
+  ['Брак','Заводской брак / повреждён',false],
+  ['Порча','Испортился при хранении',false],
+  ['Недостача','Не нашли при пересчёте',false]
+];
+function _lossIsNeeds(reason){
+  for (var i=0;i<LOSS_REASONS.length;i++)
+    if (LOSS_REASONS[i][0]===String(reason)) return !!LOSS_REASONS[i][2];
+  return false;
+}
+
+function getLossMeta() { return { reasons:LOSS_REASONS }; }
+
+function getLosses(p) {
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var sh=ss.getSheetByName(SH_LOSSES);
+    var from=p.from?new Date(p.from):null, to=p.to?new Date(p.to):null;
+    if (to) to.setHours(23,59,59,999);
+    var tz=Session.getScriptTimeZone(), items=[];
+    if (sh.getLastRow()>=2) {
+      sh.getRange(2,1,sh.getLastRow()-1,LS_COLS).getValues().forEach(function(r){
+        if (!r[LS_ID-1]) return;
+        var d=r[LS_DATE-1]; if (!(d instanceof Date)) return;
+        if (from && d<from) return;
+        if (to && d>to) return;
+        items.push({ id:String(r[LS_ID-1]),
+          date:Utilities.formatDate(d,tz,'yyyy-MM-dd'),
+          dateLabel:Utilities.formatDate(d,tz,'dd.MM.yyyy'),
+          kind:String(r[LS_KIND-1]||'writeoff'),
+          reason:String(r[LS_REASON-1]||''),
+          name:String(r[LS_NAME-1]||''),
+          qty:_gnum(r[LS_QTY-1]),
+          amount:Math.round(_gnum(r[LS_AMT-1])),
+          contractor:String(r[LS_CONTR-1]||''),
+          comment:String(r[LS_COMMENT-1]||''),
+          who:String(r[LS_WHO-1]||''),
+          isNeeds:_lossIsNeeds(r[LS_REASON-1]) });
+      });
+    }
+    items.sort(function(a,b){return a.date<b.date?1:-1;});
+    var sum={losses:0,needs:0,returns:0};
+    items.forEach(function(x){
+      if (x.kind==='return') sum.returns+=x.amount;
+      else if (x.isNeeds)    sum.needs+=x.amount;
+      else                   sum.losses+=x.amount;
+    });
+    return { items:items, sum:sum, reasons:LOSS_REASONS };
+  } catch(e) { return {__error:e.message}; }
+}
+
+function saveLoss(p) {
+  return _withLock(function(){
+  var d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (!_permGuard(ss,'receive')) return {__error:'Нет прав записывать списания'};
+    var sh=ss.getSheetByName(SH_LOSSES);
+    var kind=(String(d.kind)==='return')?'return':'writeoff';
+    var amt=Math.round(parseFloat(d.amount)||0);
+    if (amt<=0) return {__error:'Укажите сумму'};
+    var name=_s(d.name||'');
+    if (!name) return {__error:'Укажите, что списываем'};
+    var reason=kind==='return'?'Возврат поставщику':_s(d.reason||'Порча');
+    var id=d.id||Utilities.getUuid();
+    var row=[id, d.date?new Date(d.date):new Date(), kind, reason, name,
+             _gnum(d.qty), amt, _s(d.contractor||''), _s(d.comment||''),
+             new Date(), _myEmail()];
+    var found=-1;
+    if (d.id && sh.getLastRow()>=2) {
+      var ids=sh.getRange(2,LS_ID,sh.getLastRow()-1,1).getValues();
+      for (var i=0;i<ids.length;i++) if (String(ids[i][0])===String(d.id)) { found=i+2; break; }
+    }
+    if (found>0) { sh.getRange(found,1,1,LS_COLS).setValues([row]); }
+    else {
+      sh.appendRow(row);
+      sh.getRange(sh.getLastRow(),LS_DATE,1,1).setNumberFormat('dd.mm.yyyy');
+      sh.getRange(sh.getLastRow(),LS_AMT,1,1).setNumberFormat('#,##0');
+    }
+    _audit(ss,'loss',id,found>0?'изменил':'создал',
+      (kind==='return'?'Возврат: ':'Списание: ')+name+' · '+amt+' ₽');
+    try { _bustDash(p.ssId); } catch(e){}
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
+function deleteLoss(p) {
+  return _withLock(function(){
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var sh=ss.getSheetByName(SH_LOSSES);
+    if (!sh||sh.getLastRow()<2) return {__error:'not found'};
+    var ids=sh.getRange(2,LS_ID,sh.getLastRow()-1,1).getValues();
+    for (var i=ids.length-1;i>=0;i--) {
+      if (String(ids[i][0])===String(p.id)) {
+        _audit(ss,'loss',String(p.id),'удалил','');
+        sh.deleteRow(i+2);
+        try { _bustDash(p.ssId); } catch(e){}
+        return {ok:true};
+      }
+    }
+    return {__error:'not found'};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
+// Итог «плюс-минус» за период — одной цифрой, куда всё сошлось.
+// Выручка − Себестоимость − Расходы − Потери − Нужды магазина + Возвраты.
+// Себестоимость берём из ТОВАРЫ (данные 1С), остальное — наши записи.
+function getBottomLine(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    var tz=Session.getScriptTimeZone();
+    var pd=_period(p.period||'month',tz);
+    var inRange=function(d){
+      if(!(d instanceof Date)) return false;
+      var ms=d.getTime();
+      if(pd.from&&ms<pd.from) return false;
+      if(pd.to&&ms>pd.to) return false;
+      return true;
+    };
+
+    // 1) Выручка и расходы — из операций (переводы не считаем)
+    var revenue=0, expense=0, expByCat={};
+    var base=ss.getSheetByName(SH_BASE);
+    if (base && base.getLastRow()>=2) {
+      base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+        if (!inRange(r[B_DATE-1])) return;
+        var cat=String(r[B_CAT-1]||''); if (cat==='Перевод') return;
+        var amt=_gnum(r[B_AMT-1]), t=String(r[B_TYPE-1]||'');
+        if (t==='Доход') revenue+=amt;
+        else if (t==='Расход') {
+          // Закупка товара — это себестоимость запаса, а не расход периода;
+          // иначе вычтем её дважды (второй раз через себестоимость продаж).
+          if (cat==='Закупка') return;
+          expense+=amt;
+          expByCat[cat]=(expByCat[cat]||0)+amt;
+        }
+      });
+    }
+
+    // 2) Себестоимость проданного — из выгрузки 1С (ТОВАРЫ)
+    var cogs=0, goodsRevenue=0, goodsProfit=0;
+    var gsh=ss.getSheetByName(SH_GOODS);
+    if (gsh && gsh.getLastRow()>=2) {
+      gsh.getRange(2,1,gsh.getLastRow()-1,G_COLS).getValues().forEach(function(r){
+        var rev=_gnum(r[G_REVENUE-1]), pr=_gnum(r[G_PROFIT-1]);
+        goodsRevenue+=rev; goodsProfit+=pr;
+      });
+      cogs=Math.max(goodsRevenue-goodsProfit,0);
+    }
+
+    // 3) Потери, нужды магазина и возвраты — наши записи
+    var losses=0, needs=0, returns=0, lossByReason={};
+    var lsh=ss.getSheetByName(SH_LOSSES);
+    if (lsh && lsh.getLastRow()>=2) {
+      lsh.getRange(2,1,lsh.getLastRow()-1,LS_COLS).getValues().forEach(function(r){
+        if (!r[LS_ID-1] || !inRange(r[LS_DATE-1])) return;
+        var amt=Math.round(_gnum(r[LS_AMT-1])), reason=String(r[LS_REASON-1]||'');
+        if (String(r[LS_KIND-1])==='return') { returns+=amt; return; }
+        if (_lossIsNeeds(reason)) needs+=amt; else losses+=amt;
+        lossByReason[reason]=(lossByReason[reason]||0)+amt;
+      });
+    }
+
+    // Выручку берём из операций; если их нет, а выгрузка 1С есть — из неё.
+    var revUsed = revenue>0 ? revenue : goodsRevenue;
+    var revSrc  = revenue>0 ? 'operations' : (goodsRevenue>0?'1c':'none');
+    var total = revUsed - cogs - expense - losses - needs + returns;
+
+    var lines=[
+      {k:'revenue', t:'Выручка',            v:Math.round(revUsed),  sign:1},
+      {k:'cogs',    t:'Себестоимость',      v:Math.round(cogs),     sign:-1},
+      {k:'expense', t:'Расходы',            v:Math.round(expense),  sign:-1},
+      {k:'losses',  t:'Потери',             v:Math.round(losses),   sign:-1},
+      {k:'needs',   t:'Нужды магазина',     v:Math.round(needs),    sign:-1},
+      {k:'returns', t:'Возвраты поставщикам',v:Math.round(returns), sign:1}
+    ];
+    var topExp=Object.keys(expByCat).map(function(c){return {name:c,amount:Math.round(expByCat[c])};})
+      .sort(function(a,b){return b.amount-a.amount;}).slice(0,6);
+    var byReason=Object.keys(lossByReason).map(function(c){return {name:c,amount:Math.round(lossByReason[c])};})
+      .sort(function(a,b){return b.amount-a.amount;});
+
+    return { period:p.period||'month', lines:lines, total:Math.round(total),
+             revenueSource:revSrc, topExpenses:topExp, lossByReason:byReason,
+             margin: revUsed>0 ? Math.round(total/revUsed*1000)/10 : null };
+  } catch(e) { return {__error:e.message}; }
 }
