@@ -1138,6 +1138,7 @@ function _gnum(v) {
 // p.rows = [{barcode,name,group,unit,supplier,buy,retail,qty,revenue,profit,stockQty,stockSum}]
 // Снимок: для каждого вида обновляем соответствующие поля по ключу товара (upsert).
 function saveGoods(p) {
+  try { _goodsCacheDrop(p&&p.ssId?p.ssId:''); } catch(e){} // меняем товары — сбрасываем кэш
   return _withLock(function(){
   var ssId = p.ssId, kind = p.kind || '', rows = p.rows || [];
   if(!_permGuard(ssId,'goods')) return {__error:'Нет доступа к загрузке товаров'};
@@ -1243,14 +1244,150 @@ function saveGoods(p) {
 });
 }
 
+
+
+// ── Кэш таблицы товаров ─────────────────────────────────────────────
+// Читать 16 555 строк × 15 колонок (≈248 000 ячеек) на каждый поиск и
+// на каждое открытие каталога — это секунды ожидания. Держим разобранный
+// список в кэше и обновляем его только после загрузки из 1С.
+// CacheService хранит максимум 100 КБ на ключ, поэтому режем на части.
+var GOODS_CACHE_TTL = 900; // 15 минут
+var GOODS_CHUNK = 90000;   // с запасом до предела в 100 КБ
+
+function _goodsCacheKey(ssId){ return 'gds_'+ssId+'_v1'; }
+
+function _goodsCacheGet(ssId){
+  try{
+    var c=CacheService.getScriptCache(), base=_goodsCacheKey(ssId);
+    var head=c.get(base); if(!head) return null;
+    var n=parseInt(head,10); if(!(n>0)) return null;
+    var keys=[]; for(var i=0;i<n;i++) keys.push(base+'_'+i);
+    var parts=c.getAll(keys), out='';
+    for(var j=0;j<n;j++){ var v=parts[base+'_'+j]; if(v==null) return null; out+=v; }
+    return JSON.parse(out);
+  }catch(e){ return null; }
+}
+
+function _goodsCachePut(ssId, rows){
+  try{
+    var str=JSON.stringify(rows);
+    if(str.length > GOODS_CHUNK*40) return; // слишком много — не кэшируем
+    var c=CacheService.getScriptCache(), base=_goodsCacheKey(ssId);
+    var map={}, n=0;
+    for(var i=0;i<str.length;i+=GOODS_CHUNK){ map[base+'_'+n]=str.substr(i,GOODS_CHUNK); n++; }
+    map[base]=String(n);
+    c.putAll(map, GOODS_CACHE_TTL);
+  }catch(e){}
+}
+
+function _goodsCacheDrop(ssId){
+  try{
+    var c=CacheService.getScriptCache(), base=_goodsCacheKey(ssId);
+    var head=c.get(base); var n=head?parseInt(head,10):0;
+    var keys=[base]; for(var i=0;i<n;i++) keys.push(base+'_'+i);
+    c.removeAll(keys);
+  }catch(e){}
+}
+
+// Строки листа ТОВАРЫ — из кэша либо из таблицы (и тогда кладём в кэш).
+function _goodsRows(ss, ssId){
+  var cached=_goodsCacheGet(ssId);
+  if(cached) return cached;
+  var sh=ss.getSheetByName(SH_GOODS);
+  if(!sh || sh.getLastRow()<2) return [];
+  var rows=sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+  // Даты в JSON не переживут круг — для поиска они и не нужны.
+  var plain=rows.map(function(r){
+    var o=[]; for(var i=0;i<G_COLS;i++){
+      var v=r[i];
+      o.push(v instanceof Date ? Utilities.formatDate(v,Session.getScriptTimeZone(),'yyyy-MM-dd') : v);
+    } return o;
+  });
+  _goodsCachePut(ssId, plain);
+  return plain;
+}
+
+// ── Поиск товаров: нормализация и транслитерация ────────────────────
+// Перенесено из нашего каталога. Решает реальные случаи из выгрузки 1С:
+// «улкер» находит Ulker, «кола» находит Cola, «0.33» находит «0,33»,
+// «рулет яшкино» находит «Яшкино Рулет…» (слова в любом порядке).
+var _TR={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ж:'zh',з:'z',и:'i',й:'i',к:'k',
+  л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',
+  ч:'ch',ш:'sh',щ:'sh',ъ:'',ы:'y',ь:'',э:'e',ю:'u',я:'a'};
+function _sNorm(v){ return String(v==null?'':v).toLowerCase().replace(/ё/g,'е').trim(); }
+function _sTranslit(v){ return _sNorm(v).replace(/[а-я]/g,function(c){ return _TR[c]!==undefined?_TR[c]:c; }); }
+// Убираем знаки и пробелы: «арт. 8816» → «арт8816», «0,33 л» → «033л»
+function _sLoose(v){ return _sNorm(v).replace(/[^0-9a-zа-я]/g,''); }
+// Сглаживание похожих латинских букв: в брендах одна и та же русская буква
+// пишется по-разному — Кола/Cola, Кофе/Coffee, Цезарь/Caesar. Приводим
+// c/k, ph/f, y/i к одному виду, чтобы «кола» находило Cola.
+function _sFold(v){
+  return _sTranslit(v).replace(/ph/g,'f').replace(/ck/g,'k')
+    .replace(/c/g,'k').replace(/y/g,'i').replace(/[^0-9a-z]/g,'');
+}
+
+// Оценка совпадения товара с одним словом запроса. Больше — точнее.
+function _sScoreTok(it, q){
+  var s=0, qL=_sLoose(q);
+  var codes=[it._bc,it._cd,it._ar];
+  for (var i=0;i<codes.length;i++){
+    var c=codes[i]; if(!c) continue;
+    if (c===q) return 120;
+    if (c.indexOf(q)===0) s=Math.max(s,95);
+    else if (c.indexOf(q)>=0) s=Math.max(s,70);
+  }
+  // Формы названия считаем ОДИН раз на товар (см. _sPrep), иначе на каждое
+  // слово запроса пересчитывается транслитерация — 16 000 товаров × слова.
+  var nm=it._n, nmT=it._nt, nmL=it._nl;
+  var qT=_sTranslit(q);
+  if (nm.indexOf(q)===0||nmT.indexOf(qT)===0) s=Math.max(s,92);
+  // слово с начала любого слова в названии — сильнее, чем середина слова
+  else if ((' '+nm).indexOf(' '+q)>=0||(' '+nmT).indexOf(' '+qT)>=0) s=Math.max(s,88);
+  else if (nm.indexOf(q)>=0||nmT.indexOf(qT)>=0) s=Math.max(s,55);
+  else if (qL.length>=3&&nmL.indexOf(qL)>=0) s=Math.max(s,52);
+  // Запасной вариант: сглаженная латиница («кола» → kola ↔ Cola → kola)
+  if (s<50 && q.length>=3){
+    var qF=_sFold(q);
+    if (qF && it._nf.indexOf(qF)>=0) s=Math.max(s,50);
+  }
+  if (!s && it._g){
+    if (it._g.indexOf(q)>=0||it._gt.indexOf(qT)>=0) s=Math.max(s,40);
+  }
+  return s;
+}
+
+// Готовит поисковые формы товара. Вызывать один раз на товар за запрос.
+function _sPrep(it){
+  it._n=_sNorm(it.name); it._nt=_sTranslit(it.name);
+  it._nl=_sLoose(it.name); it._nf=_sFold(it.name);
+  it._g=it.group?_sNorm(it.group):''; it._gt=it._g?_sTranslit(it.group):'';
+  it._bc=_sNorm(it.barcode); it._cd=_sNorm(it.code); it._ar=_sNorm(it.article);
+}
+
+// Оценка по всей фразе: либо целиком, либо КАЖДОЕ слово в любом порядке.
+// Если хоть одно слово не найдено — товар не подходит.
+function _sScore(it, q, toks){
+  _sPrep(it);
+  var whole=_sScoreTok(it,q);
+  if (toks.length<=1) return whole;
+  var total=0;
+  for (var i=0;i<toks.length;i++){
+    var v=_sScoreTok(it,toks[i]);
+    if (v<=0) return whole; // фраза целиком могла совпасть — её и вернём
+    total+=v;
+  }
+  return Math.max(whole, Math.round(total/toks.length));
+}
+
 function getGoods(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_GOODS);
     if (sh.getLastRow() < 2) return { items:[], groups:[], suppliers:[] };
-    var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
+    var data = _goodsRows(ss, p.ssId);
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
-    var q = String(p.q||'').toLowerCase().trim();
+    var q = _sNorm(p.q);
+    var qToks = q ? q.split(/\s+/).filter(function(t){return !!t;}) : [];
     var fGroup = String(p.group||'').trim();
     var fSupplier = String(p.supplier||'').trim();
     var sort = String(p.sort||'').trim(); // profit|revenue|markup|sold|stock|dead|name
@@ -1276,10 +1413,11 @@ function getGoods(p) {
       if (fGroup && it.group!==fGroup) return false;
       if (fSupplier && it.supplier!==fSupplier) return false;
       if (!q) return true;
-      // Умный поиск: все слова запроса должны встретиться (в названии,
-      // штрихкоде, коде, артикуле, поставщике, группе).
-      var hay=(it.name+' '+it.barcode+' '+it.code+' '+it.article+' '+it.supplier+' '+it.group).toLowerCase();
-      return q.split(/\s+/).every(function(tok){ return !tok || hay.indexOf(tok)>=0; });
+      // Оцениваем, насколько товар подходит запросу. Поставщика в свободном
+      // поиске НЕ учитываем: набрав название товара, иначе получишь чужие
+      // товары того же поставщика. Для поставщика есть отдельный фильтр.
+      it._s=_sScore(it,q,qToks);
+      return it._s>0;
     });
     var sorters={
       profit:function(a,b){return b.profit-a.profit;},
@@ -1290,21 +1428,62 @@ function getGoods(p) {
       dead:function(a,b){return (b.soldQty===0?b.stockSum:-1)-(a.soldQty===0?a.stockSum:-1);},
       name:function(a,b){return a.name.localeCompare(b.name);}
     };
-    if (sorters[sort]) items.sort(sorters[sort]);
+    // При поиске сортируем по точности совпадения: точный штрихкод и
+    // начало названия — выше, чем случайное вхождение в середине слова.
+    if (q) items.sort(function(a,b){ return (b._s-a._s)||a.name.localeCompare(b.name); });
+    else if (sorters[sort]) items.sort(sorters[sort]);
+    items.forEach(function(it){
+      delete it._s; delete it._n; delete it._nt; delete it._nl; delete it._nf;
+      delete it._g; delete it._gt; delete it._bc; delete it._cd; delete it._ar;
+    });
     return { items:items.slice(0,500), total:items.length, allTotal:data.length,
              groups:Object.keys(grpSet).sort(), suppliers:Object.keys(supSet).sort(), salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
 }
 
 // Подробности по одному товару: метрики + история цены + цены по поставщикам.
+
+// ── Быстрый поиск строк без выгрузки всего листа ───────────────────
+// Раньше карточка товара читала ТОВАРЫ (16 555×15) и ЦЕНЫ_ИСТ (~22 000×5)
+// целиком — 358 000 ячеек на одно открытие, отсюда «Загрузка…» на минуту.
+// createTextFinder ищет на стороне Google и возвращает только нужные строки.
+function _findRows(sh, col, value, cols) {
+  var out = [];
+  try {
+    var last = sh.getLastRow(); if (last < 2) return out;
+    var v = String(value == null ? '' : value).trim(); if (!v) return out;
+    var hits = sh.getRange(2, col, last - 1, 1)
+                 .createTextFinder(v).matchEntireCell(true).matchCase(false).findAll();
+    if (!hits || !hits.length) return out;
+    // Читаем одним блоком от первой до последней найденной строки: обычно
+    // совпадения лежат рядом (импорт пишет их подряд), и один запрос
+    // дешевле, чем десятки отдельных.
+    var rows = hits.map(function(r){ return r.getRow(); });
+    var lo = Math.min.apply(null, rows), hi = Math.max.apply(null, rows);
+    if (hi - lo + 1 <= Math.max(hits.length * 4, 60)) {
+      var block = sh.getRange(lo, 1, hi - lo + 1, cols).getValues();
+      rows.forEach(function(rn){ out.push(block[rn - lo]); });
+    } else {
+      rows.forEach(function(rn){ out.push(sh.getRange(rn, 1, 1, cols).getValues()[0]); });
+    }
+  } catch(e) {}
+  return out;
+}
+
 function getProductDetail(p) {
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_GOODS);
     if (sh.getLastRow() < 2) return { __error:'Нет данных' };
     var key = _goodsKey(p.barcode, p.name);
-    var data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30); if(salesDays<1)salesDays=30;
+    // Сначала пробуем найти по штрихкоду силами Таблиц. Если штрихкода нет
+    // (в отчёте «Продажи» его не бывает) — ищем по названию. Полное чтение
+    // листа остаётся только как последний вариант.
+    var data = [];
+    if (p.barcode) data = _findRows(sh, G_BARCODE, p.barcode, G_COLS);
+    if (!data.length && p.name) data = _findRows(sh, G_NAME, p.name, G_COLS);
+    if (!data.length) data = sh.getRange(2,1,sh.getLastRow()-1,G_COLS).getValues();
     var it=null;
     for (var i=0;i<data.length;i++){
       if (_goodsKey(data[i][G_BARCODE-1],data[i][G_NAME-1])===key){ var r=data[i];
@@ -1329,7 +1508,14 @@ function getProductDetail(p) {
     var priceHist=[], supPrices={};
     var ph=ss.getSheetByName(SH_PRICEHIST);
     if (ph && ph.getLastRow()>=2) {
-      ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues().forEach(function(r){
+      // Берём только строки этого товара: после загрузки цен поставщиков
+      // здесь десятки тысяч строк, и читать их все на каждое открытие
+      // карточки — главная причина долгой «Загрузки…».
+      var phRows = it.barcode ? _findRows(ph, PH_BARCODE, it.barcode, PH_COLS) : [];
+      if (!phRows.length) phRows = _findRows(ph, PH_NAME, it.name, PH_COLS);
+      if (!phRows.length && ph.getLastRow()<=3000)
+        phRows = ph.getRange(2,1,ph.getLastRow()-1,PH_COLS).getValues();
+      phRows.forEach(function(r){
         if (_goodsKey(r[PH_BARCODE-1],r[PH_NAME-1])!==key) return;
         var d=r[PH_DATE-1], price=_gnum(r[PH_PRICE-1]), sup=String(r[PH_SUPPLIER-1]||'');
         var t=(d instanceof Date)?d.getTime():0;
@@ -6064,6 +6250,8 @@ function _xlsApplyGoods(ss, items, type) {
   // один поставщик, поэтому всех остальных пишем в историю цен — именно
   // из неё карточка товара строит список «все поставщики и их цены».
   if (type === 'supplier') _xlsSaveSupplierPrices(ss, items);
+  // Товары изменились — кэш поиска и каталога больше не годится.
+  try { _goodsCacheDrop(ss.getId()); } catch(e){}
   return { upd: upd, add: add.length };
 }
 
