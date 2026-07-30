@@ -422,19 +422,125 @@ function _ensureHeavyMark(id){
 // Возвращает true, если вопрос защиты закрыт (уже защищено или только что
 // защитили). false — если не удалось (сотрудник, а не владелец): тогда НЕ
 // кэшируем «сделано», чтобы защита встала при первом входе владельца.
+// Защита листов от ПРЯМОЙ правки в Google Таблицах.
+//
+// Почему это нужно: приглашённый сотрудник — редактор всей таблицы (иначе
+// приложение у него не работает). Значит он может открыть таблицу мимо
+// приложения, и там наши проверки прав бессильны.
+//
+// Почему нельзя просто «закрыть всё на владельца»: приложение работает ОТ
+// ИМЕНИ вошедшего (executeAs: USER_ACCESSING). Закрыв БАЗУ, мы сломали бы
+// кассиру запись операции — приложение перестало бы работать для него.
+//
+// Поэтому защита ставится ПО ПРАВАМ: лист закрыт, а редактировать его могут
+// только те сотрудники, чья роль этого требует. Кассир по-прежнему пишет
+// операции, но уже не может руками поправить выплаты поставщикам.
+//
+// Что это НЕ закрывает (говорим честно): тот, кто по роли пишет в лист через
+// приложение, может править его и руками. Кассир и БАЗА — именно этот случай.
+// Полностью это лечится только своим сервером; пока — журнал и резервные копии.
+var SHEET_PERM = {
+  'ВЫПЛАТЫ':       'payments',
+  'ДОЛГИ':         'payments',
+  'ОБЯЗАТЕЛЬСТВА': 'finance',
+  'СЧЕТА':         'finance',
+  'КОРЗИНА':       'manage',
+  'ТАБЕЛЬ':        'manage',
+  'НАСТРОЙКИ':     'manage',
+  'ДОСТУП':        null       // null = только владелец
+};
+
+// Кто из участников имеет право (по ролям и личным правам из листа ДОСТУП).
+function _membersWithPerm(ss, perm) {
+  var out = [];
+  try {
+    var sh = ss.getSheetByName(SH_ACCESS);
+    if (!sh || sh.getLastRow() < 2) return out;
+    sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
+      var em = String(r[0]||'').toLowerCase(); if (!em) return;
+      var perms = _rolePerms(String(r[1]||'Сотрудник зала'));
+      var raw = String(r[3]||'');
+      if (raw) { try { var a=JSON.parse(raw); if (Array.isArray(a)) perms=a; } catch(e){} }
+      if (perms.indexOf(perm) >= 0) out.push(em);
+    });
+  } catch(e) {}
+  return out;
+}
+
+function _protectSheets(ss) {
+  var done = 0, failed = 0;
+  Object.keys(SHEET_PERM).forEach(function(name){
+    try {
+      var sh = ss.getSheetByName(name); if (!sh) return;
+      var perm = SHEET_PERM[name];
+      var allow = perm ? _membersWithPerm(ss, perm) : [];
+      var list = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+      var p = (list && list.length) ? list[0]
+            : sh.protect().setDescription('Auron: правка только через приложение');
+      // Убираем всех и оставляем только тех, кому лист нужен по роли.
+      try {
+        var eds = p.getEditors();
+        if (eds && eds.length) eds.forEach(function(u){ try{ p.removeEditor(u); }catch(e){} });
+      } catch(e){}
+      if (allow.length) { try { p.addEditors(allow); } catch(e){} }
+      if (p.canDomainEdit && p.canDomainEdit()) p.setDomainEdit(false);
+      done++;
+    } catch(e) { failed++; }   // не владелец — поставится при входе владельца
+  });
+  return { done: done, failed: failed };
+}
+
+// Ставится при первом входе владельца и заново после смены ролей.
 function _protectAccessSheet(ss) {
   try {
-    if (_getSettingStr(ss,'ACL_PROTECTED','')==='1') return true;
-    var sh=ss.getSheetByName(SH_ACCESS); if(!sh) return true;
-    var existing=sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
-    if (existing && existing.length){ _setSetting(ss,'ACL_PROTECTED','1'); return true; }
-    var p=sh.protect().setDescription('Auron: роли и права — только владелец');
-    var eds=p.getEditors();
-    if (eds && eds.length) eds.forEach(function(u){ try{ p.removeEditor(u); }catch(e){} });
-    if (p.canDomainEdit && p.canDomainEdit()) p.setDomainEdit(false);
-    _setSetting(ss,'ACL_PROTECTED','1');
+    if (_getSettingStr(ss,'SHEETS_PROTECTED_V2','')==='1') return true;
+    var r = _protectSheets(ss);
+    if (r.failed) return false;
+    _setSetting(ss,'SHEETS_PROTECTED_V2','1');
     return true;
-  } catch(e){ return false; } // не владелец — тихо, поставится при входе владельца
+  } catch(e) { return false; }
+}
+
+// Роли изменились — значит изменился и состав тех, кому лист доступен.
+// Права меняет только владелец, и он же имеет право ставить защиту, поэтому
+// перестраиваем её сразу: иначе у человека до следующего входа владельца
+// оставался бы доступ к листу, который ему уже не положен.
+function _protectionStale(ss) {
+  try {
+    _setSetting(ss,'SHEETS_PROTECTED_V2','');
+    try { _ENSURED_RUN[_ssIdSafe(ss)] = false;
+          CacheService.getScriptCache().remove(_ensureHeavyKey(_ssIdSafe(ss))); } catch(e){}
+    var r = _protectSheets(ss);
+    if (!r.failed) _setSetting(ss,'SHEETS_PROTECTED_V2','1');
+  } catch(e){}
+}
+
+// Для владельца: что защищено, а что открыто.
+function getSheetProtection(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец видит защиту листов'};
+    var prot = [], open = [];
+    Object.keys(SHEET_PERM).forEach(function(name){
+      var sh = ss.getSheetByName(name); if (!sh) return;
+      var ex = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+      (ex && ex.length ? prot : open).push(name);
+    });
+    return { protected: prot, unprotected: open, note:
+      'Листы, куда сотрудник пишет по своей работе (операции, смены, журнал), ' +
+      'защитить нельзя — иначе приложение у него перестанет работать.' };
+  } catch(e) { return {__error:e.message}; }
+}
+
+function protectSheetsNow(p) {
+  try {
+    var ss = SpreadsheetApp.openById(p.ssId);
+    if (!_isOwner(ss)) return {__error:'Защиту листов ставит только владелец'};
+    var r = _protectSheets(ss);
+    if (!r.failed) _setSetting(ss,'SHEETS_PROTECTED_V2','1');
+    _log(ss,'Защита листов','защищено '+r.done+', не удалось '+r.failed);
+    return { ok:true, done:r.done, failed:r.failed };
+  } catch(e) { return {__error:e.message}; }
 }
 
 // Версионирование схемы: новые листы/колонки добавляются выше идемпотентно.
@@ -4578,6 +4684,7 @@ function setMemberRole(p) {
         sh.getRange(i+2,2).setValue(role);
         sh.getRange(i+2,4).setValue(''); // сброс индивидуальных прав → по роли
         _log(ss,'Смена роли',email+' → '+role);
+        _protectionStale(ss);
         return getTeam({ssId:ssId});
       }
     }
@@ -4603,6 +4710,7 @@ function setMemberPerms(p) {
       for (var i=0;i<vs.length;i++) if (String(vs[i][0]).toLowerCase()===email) {
         sh.getRange(i+2,4).setValue(JSON.stringify(perms));
         _log(ss,'Изменены права',email+' · '+perms.join(','));
+        _protectionStale(ss);
         return getTeam({ssId:ssId});
       }
     }
@@ -4700,6 +4808,7 @@ function _inviteMemberLocked(p) {
     }
     sh.appendRow([email,role,new Date()]);
     _log(ss,'Приглашение сотрудника',email+' · '+role);
+    _protectionStale(ss);   // новому сотруднику открываем только его листы
     // Ссылка-приглашение прямо в эту организацию (доступ email уже выдан выше).
     var link='', orgName='магазин', emailSent=false, mail=null;
     try {
@@ -4737,6 +4846,7 @@ function removeMember(p) {
         if (String(vs[i][0]).toLowerCase()===email) sh.deleteRow(i+2);
     }
     _log(ss,'Удалён доступ',email);
+    _protectionStale(ss);
     return getTeam({ssId:ssId});
   } catch(e) { return {__error:e.message}; }
 });
