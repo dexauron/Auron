@@ -106,7 +106,7 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
   position:fixed;inset:0;
   background:var(--bg);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  z-index:9999;transition:opacity .5s;
+  z-index:9999;transition:opacity var(--dur-slow,.32s);
 }
 #loader.hide{opacity:0;pointer-events:none;}
 #loader-icon{
@@ -207,8 +207,10 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 /* Индикатор «работаю»: тонкая полоса сверху при обращении к серверу */
 #gs-bar{position:fixed;top:0;left:0;right:0;height:3px;z-index:600;background:transparent;overflow:hidden;pointer-events:none;opacity:0;transition:opacity .15s;}
 #gs-bar.show{opacity:1;}
-#gs-bar::before{content:"";position:absolute;left:0;top:0;height:100%;width:40%;background:var(--brand);border-radius:2px;animation:gsslide 1.1s ease-in-out infinite;}
-@keyframes gsslide{0%{left:-40%;}50%{left:35%;}100%{left:110%;}}
+#gs-bar::before{content:"";position:absolute;left:0;top:0;height:100%;width:40%;background:var(--brand);border-radius:2px;animation:gsslide 1.1s ease-in-out infinite;will-change:transform;}
+/* Двигаем transform, а не left: left заставляет браузер пересчитывать
+   разметку на каждом кадре, а полоса крутится всё время запроса. */
+@keyframes gsslide{0%{transform:translateX(-100%);}50%{transform:translateX(187%);}100%{transform:translateX(275%);}}
 /* Кнопка «занята», пока идёт операция — блокирует повторные нажатия */
 .btn-primary.is-busy{opacity:.6;filter:saturate(.7);}
 #ptr{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;pointer-events:none;z-index:150;opacity:0;transform:translateY(-16px);transition:opacity .2s,transform .2s;}
@@ -324,7 +326,8 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
   background:linear-gradient(100deg,transparent,rgba(255,255,255,.55),transparent);
   transform:skewX(-18deg);animation:shimmer 3.4s ease-in-out infinite;
 }
-@keyframes shimmer{0%{left:-120%}55%{left:130%}100%{left:130%}}
+/* Тоже transform вместо left — блик не должен трогать разметку. */
+@keyframes shimmer{0%{transform:skewX(-18deg) translateX(-120%);}55%{transform:skewX(-18deg) translateX(130%);}100%{transform:skewX(-18deg) translateX(130%);}}
 .nav-center-btn:active{transform:translateY(-14px) scale(.93);}
 .nav-center-btn svg{position:relative;z-index:1;}
 
@@ -889,6 +892,90 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
   .gd-hero-grid{grid-template-columns:repeat(4,1fr);}
   .gd-hero-v{font-size:34px;}
 }
+
+/* ══ ДВИЖЕНИЕ: одна система на всё приложение ══════════════════════
+   Правила, которых держимся:
+   1) Анимируем только transform и opacity — их считает видеокарта.
+      width/height/top/left не трогаем: от них дёргается вся страница.
+   2) Появление плавнее исчезновения: входим 0.32с, уходим 0.2с.
+   3) Анимация объясняет («откуда взялось», «что изменилось»),
+      а не украшает. Где нечего объяснять — не анимируем.
+   4) Стаггер списков ограничен: в каталоге 10 000 плиток, если
+      задерживать каждую — экран будет собираться минуту.
+   5) Кому движение мешает (укачивает) — выключаем полностью. */
+:root{
+  --dur-fast:.13s;   /* нажатие, наведение */
+  --dur-base:.2s;    /* обычные переходы */
+  --dur-slow:.32s;   /* вход экрана, панели */
+  --ease-out:cubic-bezier(.22,.8,.28,1);      /* быстро стартует, мягко тормозит */
+  --ease-spring:cubic-bezier(.34,1.32,.64,1); /* лёгкий «отскок» */
+}
+/* Один переключатель для всех, кому движение противопоказано */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{
+    animation-duration:.001ms!important;animation-delay:0ms!important;
+    animation-iteration-count:1!important;transition-duration:.001ms!important;
+  }
+}
+
+/* Вход в приложение: не «моргает», а собирается */
+@keyframes appIn{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}
+.app-enter{animation:appIn var(--dur-slow) var(--ease-out) both;}
+
+/* Смена вкладки: сама панель мягко проявляется */
+@keyframes panelIn{from{opacity:0;}to{opacity:1;}}
+.panel.active{animation:panelIn var(--dur-base) var(--ease-out) both;}
+
+/* Плитки товаров: стаггер только у первых — остальные сразу */
+@keyframes tileIn{from{opacity:0;transform:translateY(9px) scale(.985);}to{opacity:1;transform:none;}}
+.g-grid .g-card{animation:tileIn var(--dur-base) var(--ease-out) both;}
+.g-grid .g-card:nth-child(1){animation-delay:0ms;}
+.g-grid .g-card:nth-child(2){animation-delay:22ms;}
+.g-grid .g-card:nth-child(3){animation-delay:44ms;}
+.g-grid .g-card:nth-child(4){animation-delay:66ms;}
+.g-grid .g-card:nth-child(5){animation-delay:88ms;}
+.g-grid .g-card:nth-child(6){animation-delay:110ms;}
+.g-grid .g-card:nth-child(7){animation-delay:132ms;}
+.g-grid .g-card:nth-child(8){animation-delay:154ms;}
+/* дальше без задержки — иначе 10 000 плиток собирались бы минуту */
+.g-grid .g-card:nth-child(n+9){animation-delay:170ms;}
+
+/* Карточка товара: показатели проявляются по очереди */
+.pc-tiles .pc-tile{animation:tileIn var(--dur-base) var(--ease-out) both;}
+.pc-tiles .pc-tile:nth-child(1){animation-delay:30ms;}
+.pc-tiles .pc-tile:nth-child(2){animation-delay:50ms;}
+.pc-tiles .pc-tile:nth-child(3){animation-delay:70ms;}
+.pc-tiles .pc-tile:nth-child(4){animation-delay:90ms;}
+.pc-tiles .pc-tile:nth-child(5){animation-delay:110ms;}
+.pc-tiles .pc-tile:nth-child(n+6){animation-delay:125ms;}
+.pc-hero{animation:fadeUp var(--dur-slow) var(--ease-out) both;}
+
+/* Главные цифры (выручка, итог) — лёгкий «пружинный» въезд:
+   на них смотрят в первую очередь, поэтому им можно чуть больше */
+@keyframes heroPop{from{opacity:0;transform:translateY(10px) scale(.97);}to{opacity:1;transform:none;}}
+.gd-hero,.gd-acts{animation:heroPop var(--dur-slow) var(--ease-spring) both;}
+.gd-acts{animation-delay:60ms;}
+.gd-warn{animation:fadeUp var(--dur-base) var(--ease-out) both;animation-delay:120ms;}
+.gd-tiles .gd-tile{animation:tileIn var(--dur-base) var(--ease-out) both;}
+.gd-tiles .gd-tile:nth-child(2){animation-delay:40ms;}
+.gd-tiles .gd-tile:nth-child(3){animation-delay:80ms;}
+.gd-tiles .gd-tile:nth-child(4){animation-delay:120ms;}
+
+/* Отклик на нажатие — короткий, чтобы не тормозить работу */
+.gd-act,.g-card,.pc-back,.gd-warn b.act{transition:transform var(--dur-fast) var(--ease-out);}
+.gd-act:active,.pc-back:active{transform:scale(.97);}
+
+/* Списки (списания, поставщики): вешаем класс на КОНТЕЙНЕР — строки
+   проявляются сами, по очереди, с ограничением по количеству. */
+@keyframes rowIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+.row-anim>*{animation:rowIn var(--dur-base) var(--ease-out) both;}
+.row-anim>*:nth-child(1){animation-delay:0ms;}
+.row-anim>*:nth-child(2){animation-delay:26ms;}
+.row-anim>*:nth-child(3){animation-delay:52ms;}
+.row-anim>*:nth-child(4){animation-delay:78ms;}
+.row-anim>*:nth-child(5){animation-delay:104ms;}
+.row-anim>*:nth-child(6){animation-delay:130ms;}
+.row-anim>*:nth-child(n+7){animation-delay:145ms;}
 body.view-only #fab,body.view-only .tx-actions,body.view-only .np-receipt-btn{display:none!important;}
 /* Роль без прав на удаление/настройки: прячем кнопки удаления и опасные строки настроек */
 body.no-manage .tx-act-del,body.no-manage .dt-act-del,body.no-manage .no-manage-hide{display:none!important;}
@@ -1245,9 +1332,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 .ob-eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--brand);}
 .ob-h1{font-size:clamp(24px,3vw,31px);font-weight:800;letter-spacing:-0.03em;margin:11px 0 0;line-height:1.08;}
 .ob-sub{color:var(--muted);font-size:14.5px;line-height:1.55;margin-top:11px;max-width:50ch;}
-.ob-anim{animation:obIn .5s cubic-bezier(.2,.8,.2,1) both;}
+.ob-anim{animation:obIn var(--dur-slow,.32s) var(--ease-out,cubic-bezier(.22,.8,.28,1)) both;}
 @keyframes obIn{from{transform:translateY(12px)}to{transform:none}}
-@media(prefers-reduced-motion:reduce){.ob-anim{animation:none}}
 .ob-pick{display:grid;gap:12px;margin-top:26px;}
 .ob-card{position:relative;display:flex;align-items:flex-start;gap:16px;text-align:left;width:100%;
   padding:18px;border-radius:var(--radius);background:var(--surface-2);border:1.5px solid var(--line);
@@ -1571,7 +1657,6 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .panel.active>*:nth-child(4){animation-delay:.14s;}
 .panel.active>*:nth-child(5){animation-delay:.18s;}
 .panel.active>*:nth-child(n+6){animation-delay:.20s;}
-@media(prefers-reduced-motion:reduce){.panel.active>*{animation:none!important;}}
 
 /* Пустые экраны: кружок-иконка + заголовок + подсказка */
 .empty2{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 24px;gap:6px;}
@@ -2878,7 +2963,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.36.0';
+var APP_VERSION='4.37.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3494,7 +3579,15 @@ var App={
 
   showApp:function(){
     document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
-    document.getElementById('app').classList.add('active');
+    var appEl=document.getElementById('app');
+    appEl.classList.add('active');
+    // Вход в приложение: собирается один раз, при первом показе.
+    // Класс снимаем после проигрывания — иначе он мешает следующим анимациям.
+    if(!App._appEntered){
+      App._appEntered=true;
+      appEl.classList.add('app-enter');
+      setTimeout(function(){appEl.classList.remove('app-enter');},420);
+    }
     document.getElementById('fab').style.display='';
     document.getElementById('topbar-org-name').textContent=App.s.orgName||'Магазин';
     document.getElementById('topbar-user').textContent=App.s.userName||'';
@@ -7692,7 +7785,7 @@ var App={
         App._lossTile('Возвраты',s.returns,'var(--pos)')+'</div>';
       var items=r.items||[];
       if(!items.length){el.innerHTML='<div style="text-align:center;padding:20px 8px;color:var(--muted);line-height:1.6;">Записей пока нет.<br>Нажми «Списание» или «Возврат».</div>';return;}
-      el.innerHTML='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+      el.innerHTML='<div class="row-anim" style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
         items.map(function(x,i){
           var ret=x.kind==='return';
           var col=ret?'var(--pos)':(x.isNeeds?'var(--ink)':'var(--neg)');
@@ -10028,7 +10121,7 @@ var App={
           'а у <b>'+App._e(chp.supplier)+'</b> дешевле — '+fm(chp.price)+' ₽ '+
           '(экономия '+fm(main.price-chp.price)+' ₽ на штуке).</div>';
       }
-      h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+      h+='<div class="row-anim" style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
         d.suppliers.map(function(s){
           var tel=s.phone?s.phone.replace(/[^+0-9]/g,''):'';
           var badge='';
