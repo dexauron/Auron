@@ -1531,6 +1531,42 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   .modal-overlay.show .modal{animation:popIn .25s cubic-bezier(.2,.8,.2,1);}
   .sheet{max-width:560px;left:0;right:0;margin-left:auto;margin-right:auto;border-radius:28px;bottom:24px;}
   .sheet-overlay,.modal-overlay{padding:0 16px;}
+
+  /* Экраны с данными (Товары, Каталог, Итог, Списания) — широкие.
+     560px хватает форме на пару полей, но не экрану с 16 000 товаров:
+     на компьютере он превращался в узкую полоску среди пустоты. */
+  .modal-overlay.wide .modal{max-width:1120px;padding:24px 28px calc(var(--safe-bot) + 28px);}
+  /* На широком экране показатели и списки становятся в два столбца */
+  .modal-overlay.wide .wide-2col{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;}
+}
+@media(min-width:1240px){
+  .modal-overlay.wide .modal{max-width:1280px;}
+}
+
+/* ══ КОМПЬЮТЕР: экраны свёрстаны под телефон, но их нельзя просто
+   растягивать на 1900px — карточки становятся широкими и плоскими,
+   а вокруг образуется пустота. Ограничиваем ширину чтения и ставим
+   карточки в колонки, чтобы у них были нормальные пропорции. ══════ */
+@media(min-width:1100px){
+  /* Ширина чтения: длинные строки на всю ширину монитора читать неудобно */
+  .panel>*{max-width:1180px;margin-left:auto;margin-right:auto;}
+  .panel{padding-left:28px;padding-right:28px;}
+
+  /* Плитки-показатели и парные карточки — в две колонки, а не в столбик */
+  .home-split{display:grid!important;grid-template-columns:1fr 1fr;gap:14px;}
+  .rep-actions{display:grid!important;grid-template-columns:repeat(3,1fr);gap:10px;}
+
+  /* Календарь выплат: клетка была квадратной (aspect-ratio:1/1), и на
+     широком экране раздувалась до ~200px — месяц занимал два экрана.
+     Ограничиваем высоту: квадрат нужен только на телефоне. */
+  .cal-cell{aspect-ratio:auto;min-height:64px;max-height:84px;}
+  .cal{gap:8px;}
+
+  /* Строки-разделы (Настройки, Касса) — комфортная высота, не «простыни» */
+  .settings-row{padding-top:13px;padding-bottom:13px;}
+}
+@media(min-width:1500px){
+  .panel>*{max-width:1320px;}
 }
 @keyframes popIn{from{transform:scale(.96);opacity:.4;}to{transform:scale(1);opacity:1;}}
 /* Любая широкая таблица/блок внутри окна прокручивается, а не ломает вёрстку */
@@ -3006,7 +3042,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.39.0';
+var APP_VERSION='4.40.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7819,7 +7855,7 @@ var App={
         '<button class="btn-secondary" style="flex:1;margin:0;" onclick="App.openLossForm(\'writeoff\')">− Списание</button>'+
         '<button class="btn-secondary" style="flex:1;margin:0;" onclick="App.openLossForm(\'return\')">+ Возврат</button>'+
       '</div>'+
-      '<div id="loss-sum"></div><div id="loss-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+      '<div id="loss-sum"></div><div id="loss-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>','wide');
     App._lossLoad();
   },
   _lossLoad:function(){
@@ -7905,7 +7941,7 @@ var App={
     App._blPeriod=App._blPeriod||'month';
     App.openModal('<div class="modal-title">Итог «плюс-минус»</div>'+
       '<div id="bl-pills" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;"></div>'+
-      '<div id="bl-body" style="color:var(--muted);font-size:13px;">Считаю…</div>');
+      '<div id="bl-body" style="color:var(--muted);font-size:13px;">Считаю…</div>','wide');
     App._blRender();
   },
   _blRender:function(){
@@ -8569,11 +8605,14 @@ var App={
     document.getElementById('sheet-overlay').classList.remove('show');
     document.querySelectorAll('.sheet').forEach(function(s){s.classList.remove('show');});
   },
+  // full: во весь экран (карточка товара). wide: широкое окно на компьютере
+  // (экраны с данными). Без флагов — обычное узкое окно для форм.
   openModal:function(html,full){
     var m=document.getElementById('modal-body');
     m.innerHTML='<div class="modal-handle"></div>'+html;
     var ov=document.getElementById('modal-overlay');
-    ov.classList.toggle('full',!!full);
+    ov.classList.toggle('full',full==='full'||full===true);
+    ov.classList.toggle('wide',full==='wide');
     ov.classList.add('show');
     m.scrollTop=0;m.style.transform='';
     // На полном экране свайп вниз не вешаем — иначе мешает прокрутке.
@@ -8584,7 +8623,7 @@ var App={
     App.calcClose&&App.calcClose();
     var m=document.getElementById('modal-body');if(m)m.style.transform='';
     var ov=document.getElementById('modal-overlay');
-    ov.classList.remove('show');ov.classList.remove('full');
+    ov.classList.remove('show');ov.classList.remove('full');ov.classList.remove('wide');
   },
 
   // ── Подробная карточка записи + история «кто/когда/что» ──────────
@@ -9686,7 +9725,7 @@ var App={
 
   // ── Экран «Товары» (справочник + аналитика из 1С) ──────────────
   openGoods:function(){
-    App.openModal('<div class="modal-title">Товары</div><div id="goods-fresh"></div><div id="goods-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+    App.openModal('<div class="modal-title">Товары</div><div id="goods-fresh"></div><div id="goods-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>','wide');
     gs('getGoodsAnalytics',{ssId:App.s.ssId}).then(function(a){App._goodsRender(a);})
       .catch(function(e){var b=document.getElementById('goods-body');if(!b)return;
         // Нет доступа к аналитике (напр. сотрудник зала) — даём поиск товара
@@ -9710,6 +9749,12 @@ var App={
   },
   _goodsRender:function(a,elId){
     App._goodsA=a;
+    // Крупные суммы «набегают», а не появляются рывком — на них смотрят
+    // в первую очередь. animateNumber уважает «уменьшить движение».
+    setTimeout(function(){
+      var r=document.getElementById('gd-rev'); if(r)animateNumber(r,a.totRevenue,'₽ ');
+      var p2=document.getElementById('gd-prof'); if(p2)animateNumber(p2,a.totProfit,'₽ ');
+    },60);
     var b=document.getElementById(elId||'goods-body');if(!b)return;
     if(a.__error){b.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(a.__error)+'</div></div>';return;}
     if(a.empty||!a.count){
@@ -9737,9 +9782,9 @@ var App={
       return'<div class="gd-delta" style="color:'+(good?'#B9F5D8':'#FFC9C2')+';">'+(up?'▲ ':'▼ ')+Math.abs(v)+'% к прошлому месяцу</div>';};
     h+='<div class="gd-hero">'+
       '<div class="gd-hero-top"><div><div class="gd-hero-l">Выручка</div>'+
-        '<div class="gd-hero-v">₽ '+fm(a.totRevenue)+'</div>'+dl(a.momRevenue,true)+'</div></div>'+
+        '<div class="gd-hero-v" id="gd-rev">₽ '+fm(a.totRevenue)+'</div>'+dl(a.momRevenue,true)+'</div></div>'+
       '<div class="gd-hero-grid">'+
-        '<div class="gd-hero-cell"><div class="l">Прибыль</div><div class="v">₽ '+fm(a.totProfit)+'</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Прибыль</div><div class="v" id="gd-prof">₽ '+fm(a.totProfit)+'</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Рентабельность</div><div class="v">'+(a.avgMargin!=null?a.avgMargin+'%':'—')+'</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Наценка</div><div class="v">'+(a.avgMarkup||0)+'%</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Поставщиков</div><div class="v">'+fmt(a.suppliersCount||0)+'</div></div>'+
@@ -9903,7 +9948,7 @@ var App={
       '<button onclick="App.openScanner(function(c){var q=document.getElementById(\'goods-q\');if(q){q.value=c;App._goodsFilterSet(\'q\',c);}})" title="Сканировать штрихкод" style="flex-shrink:0;width:44px;border-radius:12px;border:1.5px solid var(--line);background:var(--brand);color:#fff;cursor:pointer;display:grid;place-items:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8"/></svg></button>'+
       '</div>'+
       '<div id="goods-controls"></div>'+
-      '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>');
+      '<div id="goods-list" style="color:var(--muted);font-size:13px;">Загрузка…</div>','wide');
     App._goodsSearch();
     setTimeout(function(){var q=document.getElementById('goods-q');if(q)q.focus();},120);
   },
