@@ -2115,6 +2115,10 @@ function getGoodsAnalytics(p) {
     var avgMarkup = cogsAll>0 ? Math.round((totRevenue-cogsAll)/cogsAll*1000)/10
                               : (mkN>0?Math.round(mkSum/mkN*10)/10:0);
     var avgMarkupSimple = mkN>0?Math.round(mkSum/mkN*10)/10:0;
+    // Рентабельность — сколько прибыли осталось с каждого рубля ВЫРУЧКИ.
+    // Это не наценка: наценка считается от себестоимости и всегда больше.
+    // Пример из реальных данных: наценка 29.5%, рентабельность 22.8%.
+    var avgMargin = totRevenue>0 ? Math.round(totProfit/totRevenue*1000)/10 : null;
     priceIssues.sort(function(a,b){return b.markup-a.markup;});
     priceIssues=priceIssues.slice(0,20);
     var frozenShare = totStock>0?Math.round(frozen/totStock*100):0;
@@ -2163,6 +2167,7 @@ function getGoodsAnalytics(p) {
       supplierCompare:supplierCompare, supplierRating:supplierRating,
       // проф-метрики и динамика
       salesDays:salesDays, avgMarkup:avgMarkup, avgMarkupSimple:avgMarkupSimple,
+      avgMargin:avgMargin,
       priceIssues:priceIssues, gmroi:gmroi,
       frozen:Math.round(frozen), frozenShare:frozenShare, deadCount:deadCnt,
       turnoverDays:turnoverDays, snapshots:snapshots,

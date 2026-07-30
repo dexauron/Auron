@@ -2963,7 +2963,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.37.0';
+var APP_VERSION='4.38.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7871,7 +7871,7 @@ var App={
       var h='<div style="background:linear-gradient(135deg,'+(plus?'var(--pos)':'var(--neg)')+',color-mix(in oklab,'+(plus?'var(--pos)':'var(--neg)')+' 65%,#000));color:#fff;border-radius:18px;padding:18px;text-align:center;margin-bottom:14px;">'+
         '<div style="font-size:12px;opacity:.85;">'+(plus?'Заработали':'Ушли в минус')+'</div>'+
         '<div style="font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:3px;">'+(plus?'':'−')+'₽ '+fmt(Math.abs(r.total))+'</div>'+
-        (r.margin!=null?'<div style="font-size:11.5px;opacity:.85;margin-top:3px;">'+r.margin+'% от выручки</div>':'')+'</div>';
+        (r.margin!=null?'<div style="font-size:11.5px;opacity:.85;margin-top:3px;">Рентабельность '+r.margin+'% — столько осталось с каждого рубля выручки</div>':'')+'</div>';
       h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
         (r.lines||[]).map(function(l){
           var zero=!l.v;
@@ -9690,8 +9690,8 @@ var App={
         '<div class="gd-hero-v">₽ '+fm(a.totRevenue)+'</div>'+dl(a.momRevenue,true)+'</div></div>'+
       '<div class="gd-hero-grid">'+
         '<div class="gd-hero-cell"><div class="l">Прибыль</div><div class="v">₽ '+fm(a.totProfit)+'</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Рентабельность</div><div class="v">'+(a.avgMargin!=null?a.avgMargin+'%':'—')+'</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Наценка</div><div class="v">'+(a.avgMarkup||0)+'%</div></div>'+
-        '<div class="gd-hero-cell"><div class="l">Товаров</div><div class="v">'+fmt(a.count)+'</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Поставщиков</div><div class="v">'+fmt(a.suppliersCount||0)+'</div></div>'+
       '</div></div>';
 
@@ -9735,8 +9735,11 @@ var App={
       '<div class="gd-tile"><div class="l">Неликвид</div><div class="v">'+(a.frozenShare||0)+'%</div><div class="h">₽ '+fm(a.frozen)+'</div></div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--muted);margin-top:7px;line-height:1.55;">'+
+      '<b>Рентабельность</b> — сколько прибыли осталось с каждого рубля выручки. '+
+      '<b>Наценка</b> — сколько накинули на закупку. Наценка всегда выше: '+
+      'накинули '+(a.avgMarkup||0)+'%, а с выручки осталось '+(a.avgMargin!=null?a.avgMargin:'—')+'%. '+
       'GMROI — сколько ₽ прибыли даёт 1 ₽, вложенный в товар (больше 1 — хорошо). '+
-      'Наценка считается по деньгам: вся выручка против всей себестоимости'+
+      'Оба показателя считаются по деньгам: вся выручка против всей себестоимости'+
       (a.avgMarkupSimple&&Math.abs(a.avgMarkupSimple-a.avgMarkup)>5?' (простое среднее по товарам дало бы '+a.avgMarkupSimple+'%, но его задирают товары с битой ценой)':'')+'. '+
       'Продажи взяты за '+(a.salesDays||30)+' дн.</div>';
 
