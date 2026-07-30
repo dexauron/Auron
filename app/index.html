@@ -1249,12 +1249,26 @@ const App = (() => {
   function renderAnalyticsTab(at, data) {
     const el = $('analytics-content');
     if (at === 'pl') {
+      const plabels = { today: 'сегодня', week: 'неделя', month: 'месяц', year: 'год' };
+      S._report = { periodLabel: plabels[S.analyticsPeriod] || '', income: data.totalIncome, expense: data.totalExpense, profit: data.profit };
       el.innerHTML = `
         <div class="card" style="margin:0 20px">
           <div class="pl-row"><span class="pl-label">Выручка</span><span class="pl-val text-pos">${fmtRub(data.totalIncome)}</span></div>
           <div class="pl-row"><span class="pl-label">Расходы</span><span class="pl-val text-neg">${fmtRub(data.totalExpense)}</span></div>
           <div class="pl-row" style="border-top:2px solid var(--line)"><span class="pl-label fw600">Прибыль</span><span class="pl-val" style="color:${data.profit>=0?'var(--pos)':'var(--neg)'}">${fmtRub(data.profit)}</span></div>
-        </div>`;
+        </div>
+        <button class="btn-primary" style="margin:16px 20px 0;width:calc(100% - 40px)" onclick="App.shareReport()">Поделиться отчётом</button>`;
+      // Курс ЦБ РФ — бесплатно, без ключа; строка появляется, если сервис доступен
+      if (window.Integrations && Integrations.cbrRates) {
+        Integrations.cbrRates().then(rates => {
+          if (rates && rates.USD) {
+            const line = document.createElement('div');
+            line.style.cssText = 'padding:10px 20px 0;color:var(--muted);font-size:13px';
+            line.textContent = 'Курс ЦБ: $ ' + rates.USD.toFixed(2) + '  ·  € ' + (rates.EUR ? rates.EUR.toFixed(2) : '—');
+            el.appendChild(line);
+          }
+        }).catch(() => {});
+      }
     } else if (at === 'categories') {
       const cats = data.byCategory.filter(c => c.expense > 0 || c.income > 0);
       const max  = Math.max(...cats.map(c => c.expense + c.income), 1);
@@ -1724,6 +1738,18 @@ const App = (() => {
     addDebtEntry,
     _addEmployee,
     _wUpdate, _wRemove,
+    shareReport: async () => {
+      const r = S._report;
+      if (!r) { toast('Откройте «Аналитика» → раздел P&L'); return; }
+      const text = 'Auron — отчёт (' + (r.periodLabel || '') + ')\n' +
+        'Выручка: ' + fmtRub(r.income) + '\n' +
+        'Расходы: ' + fmtRub(r.expense) + '\n' +
+        'Прибыль: ' + fmtRub(r.profit);
+      try {
+        const res = await Integrations.share({ title: 'Auron — отчёт', text });
+        if (res && res.via === 'clipboard') toast('Отчёт скопирован — вставьте в чат');
+      } catch (e) { toast('Не удалось поделиться'); }
+    },
     S
   };
 })();
