@@ -101,6 +101,19 @@
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
+  // Фото не загрузилось (битая ссылка) → убираем «сломанную картинку» браузера и
+  // показываем ту же заглушку 📦, что у товаров без фото. Соседние фото не трогаем.
+  window.wmImgFail = function (img) {
+    try {
+      const box = img.parentElement;
+      img.remove();
+      if (box && !box.querySelector('img')) {
+        box.classList.add('no-photo');
+        if (!box.textContent.trim()) box.insertAdjacentText('beforeend', '📦');
+      }
+    } catch (e) { /* ignore */ }
+  };
+
   const norm = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 
   // «свободная» нормализация: убирает всё, кроме букв и цифр —
@@ -755,7 +768,7 @@
     let html = shown.map((p) => {
       const photo = (p.photos || []).find((u) => u && String(u).trim());
       const img = photo
-        ? `<img src="${esc(photo)}" alt="" loading="lazy">`
+        ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
         : '📦';
       const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
       // минимализм: на плитке только код и, если весовой, значок ⚖ — остальное в карточке
@@ -1182,7 +1195,7 @@
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
@@ -1205,7 +1218,7 @@
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
@@ -1263,7 +1276,7 @@
 
     const photos = (p.photos || []).filter((u) => u && String(u).trim());
     $('sheetPhotos').innerHTML = photos.length
-      ? photos.map((u) => `<img src="${esc(u)}" alt="">`).join('')
+      ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
       : '<div class="photo-placeholder">📦</div>';
     $('sheetDots').innerHTML = photos.length > 1
       ? photos.map((_, i) => `<span class="dot${i === 0 ? ' active' : ''}"></span>`).join('')
@@ -1367,7 +1380,7 @@
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
