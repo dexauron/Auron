@@ -34,6 +34,16 @@ jobs:
         run: node webapp/tests/money.test.js
       - name: Тесты денежных потоков
         run: node webapp/tests/flows.test.js
+      # Вёрстка: Apps Script не грузит приложение при кривом HTML.
+      # Этот шаг обязателен — он ловит битые кавычки и незакрытые теги.
+      - name: Проверка вёрстки Index.html
+        run: node webapp/tests/html-valid.test.js
+      - name: Остальные тесты
+        run: |
+          for f in webapp/tests/*.test.js; do
+            case "$f" in *money*|*flows*|*html-valid*) continue;; esac
+            echo "== $f"; node "$f"
+          done
 
   push:
     needs: test
