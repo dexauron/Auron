@@ -3042,7 +3042,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.42.0';
+var APP_VERSION='4.43.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9958,53 +9958,92 @@ var App={
   // 3 уровня: (1) нативный мост будущего приложения → (2) веб-камера
   // BarcodeDetector (Android/Chrome) → (3) ручной ввод (iPhone/Safari).
   // cb(code) — что делать с распознанным кодом.
+  // ── Сканер штрихкода ─────────────────────────────────────────────
+  // Приложение работает внутри рамки Apps Script, а её песочница НЕ даёт
+  // доступ к камере (getUserMedia блокируется, разрешения на рамке не
+  // помогают). Поэтому сканер живёт отдельной страницей на нашем домене
+  // GitHub Pages — там камера работает штатно — и возвращает код обратно
+  // сообщением между окнами.
+  SCAN_URL:'https://dexauron.github.io/Auron/scan.html',
+  SCAN_ORIGIN:'https://dexauron.github.io',
+
   openScanner:function(cb){
     App._scanCb=cb||null;
-    // (1) Будущее нативное/установочное приложение подставит свой сканер.
+    // (1) Если приложение когда-нибудь станет нативным — у него свой сканер.
     if(window.AuronNative&&typeof window.AuronNative.scanBarcode==='function'){
       try{ window.AuronNative.scanBarcode(); return; }catch(e){}
     }
-    // (2) Веб-камера + распознавание в браузере.
-    var hasBD=('BarcodeDetector' in window);
-    var hasCam=!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);
-    if(hasBD&&hasCam){ App._scanCamera(); return; }
-    // (3) Ручной ввод.
-    App._scanManual();
+    // (2) Отдельное окно со сканером.
+    App._scanListen();
+    var w=null;
+    try{
+      w=window.open(App.SCAN_URL,'auron_scan',
+        'width=460,height=760,menubar=no,toolbar=no,location=no,status=no');
+    }catch(e){}
+    if(!w){
+      // Всплывающие окна заблокированы — честно объясняем и даём ручной ввод.
+      App._scanBlocked();
+      return;
+    }
+    App._scanWin=w;
+    try{ w.focus(); }catch(e){}
+    // Если окно закрыли, ничего не отсканировав — просто снимаем ожидание.
+    clearInterval(App._scanPoll);
+    App._scanPoll=setInterval(function(){
+      if(App._scanWin&&App._scanWin.closed){
+        clearInterval(App._scanPoll); App._scanWin=null;
+      }
+    },700);
   },
+
+  // Слушаем результат из окна сканера. Проверяем, что сообщение пришло
+  // именно с нашего домена, и что это похоже на штрихкод.
+  _scanListen:function(){
+    if(App._scanBound)return;
+    App._scanBound=true;
+    window.addEventListener('message',function(ev){
+      if(ev.origin!==App.SCAN_ORIGIN)return;
+      var d=ev.data;
+      if(!d||typeof d!=='object'||!d.auronScan)return;
+      var code=String(d.auronScan).trim();
+      if(!/^[0-9A-Za-z\-]{4,32}$/.test(code))return;
+      App._scanDeliver(code);
+    });
+  },
+
+  _scanBlocked:function(){
+    App.openModal('<div class="modal-title">Сканер</div>'+
+      '<div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:12px;">'+
+      'Браузер заблокировал окно сканера. Разрешите всплывающие окна для этого сайта '+
+      '(значок в адресной строке) — или откройте сканер отдельной вкладкой.</div>'+
+      '<a href="'+App._e(App.SCAN_URL)+'" target="_blank" rel="noopener" class="btn-primary" '+
+      'style="display:block;text-align:center;text-decoration:none;">Открыть сканер в новой вкладке</a>'+
+      '<div class="field" style="margin-top:14px;"><label>Или введите штрихкод вручную</label>'+
+      '<input id="scan-manual" type="text" inputmode="numeric" placeholder="например 4603290002882"></div>'+
+      '<button class="btn-secondary" onclick="App._scanManualSend()">Готово</button>');
+    setTimeout(function(){var e=document.getElementById('scan-manual');if(e)e.focus();},150);
+  },
+  _scanManualSend:function(){
+    var v=((document.getElementById('scan-manual')||{}).value||'').trim();
+    if(!/^[0-9A-Za-z\-]{4,32}$/.test(v)){App.toast('Введите штрихкод',true);return;}
+    App.closeModal();
+    App._scanDeliver(v);
+  },
+
   // Нативное приложение вызовет это с результатом (готово на будущее).
   onNativeScan:function(code){ App._scanDeliver(code); },
   _scanDeliver:function(code){
-    var cb=App._scanCb; App._scanCb=null; App._scanStop();
+    var cb=App._scanCb; App._scanCb=null;
+    clearInterval(App._scanPoll);
+    try{ if(App._scanWin&&!App._scanWin.closed)App._scanWin.close(); }catch(e){}
+    App._scanWin=null;
+    App._scanStop();
     if(cb&&code) cb(String(code).trim());
   },
   // Ручной ввод: поле поиска само и есть ручной ввод — фокусируем его.
-  // (Не открываем модалку, чтобы не закрыть уже открытый экран товаров.)
   _scanManual:function(){
-    App.toast('Сканер камеры недоступен — введите код в поле поиска');
+    App.toast('Сканер недоступен — введите код в поле поиска');
     var q=document.getElementById('goods-q'); if(q){ q.focus(); }
-  },
-  _scanCamera:function(){
-    var ov=document.createElement('div'); ov.id='scan-ov';
-    ov.style.cssText='position:fixed;inset:0;z-index:9000;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;';
-    ov.innerHTML='<video id="scan-vid" playsinline muted style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;"></video>'+
-      '<div style="position:relative;width:74%;max-width:320px;height:150px;border:3px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 100vmax rgba(0,0,0,.45);"></div>'+
-      '<div style="position:absolute;bottom:100px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-family:var(--font);">Наведите камеру на штрихкод</div>'+
-      '<button onclick="App._scanStop()" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 16px);right:16px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:20px;cursor:pointer;">✕</button>'+
-      '<button onclick="App._scanStop();App._scanManual();" style="position:absolute;bottom:40px;left:0;right:0;margin:auto;width:200px;padding:11px;border-radius:12px;border:1px solid rgba(255,255,255,.4);background:rgba(0,0,0,.4);color:#fff;font-size:13px;cursor:pointer;font-family:var(--font);">Ввести код вручную</button>';
-    document.body.appendChild(ov);
-    var vid=document.getElementById('scan-vid');
-    var det; try{ det=new window.BarcodeDetector(); }catch(e){ App._scanStop(); App._scanManual(); return; }
-    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}}).then(function(stream){
-      App._scanStream=stream; vid.srcObject=stream; vid.play();
-      var tick=function(){
-        if(!App._scanStream)return;
-        det.detect(vid).then(function(codes){
-          if(codes&&codes.length&&codes[0].rawValue){ App.haptic&&App.haptic(10); App._scanDeliver(codes[0].rawValue); return; }
-          if(App._scanStream) requestAnimationFrame(tick);
-        }).catch(function(){ if(App._scanStream) setTimeout(tick,300); });
-      };
-      setTimeout(tick,400);
-    }).catch(function(){ App._scanStop(); App.toast('Нет доступа к камере — введите код',true); App._scanManual(); });
   },
   _scanStop:function(){
     try{ if(App._scanStream){ App._scanStream.getTracks().forEach(function(t){t.stop();}); App._scanStream=null; } }catch(e){}
