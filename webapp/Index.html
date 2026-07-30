@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="light" data-accent="green">
+<html lang="ru" data-accent="green">
 <head>
 <meta charset="UTF-8">
 <script>window.__INVITE_ORG__="<?= inviteOrg ?>";window.__INVITE_EMAIL__="<?= inviteEmail ?>";</script>
@@ -42,17 +42,17 @@
    ═══════════════════════════════════════════════ */
 :root{
   /* Core surfaces */
-  --bg:#0A0B0D;
-  --surface:#1C1C1E;
-  --surface-2:#2C2C2E;
-  --surface-3:#3A3A3C;
+  --bg:#07090C;
+  --surface:#101318;
+  --surface-2:#161A21;
+  --surface-3:#212732;
   /* Text */
   --ink:#F3F4F6;
   --ink-2:#C7C7CC;
   --muted:#8E8E93;
   /* Borders */
-  --line:rgba(255,255,255,.10);
-  --line-2:rgba(255,255,255,.06);
+  --line:rgba(255,255,255,.075);
+  --line-2:rgba(255,255,255,.05);
   /* Brand & semantic */
   --brand:#5E5CE6;
   --brand2:color-mix(in oklab,var(--brand) 68%, #000 32%);
@@ -202,6 +202,24 @@ body.sums-hidden .cashier-amount,body.sums-hidden .tx-amount,body.sums-hidden .h
 body.sums-hidden .tx-day-total,body.sums-hidden .split-tile-x,body.sums-hidden .acct-pill-sub{filter:blur(9px);}
 body.sums-hidden #privacy-eye{background:var(--brand);color:#fff;}
 @keyframes slideup{from{transform:translateY(20px);opacity:0;}to{transform:none;opacity:1;}}
+/* Свечение от акцента вверху — приём из образцов, которые выбрал владелец.
+   Только в тёмной теме: на светлой оно выглядит грязным пятном. */
+html:not([data-theme="light"]) body::before{
+  content:"";position:fixed;top:-210px;left:50%;transform:translateX(-50%);
+  width:640px;height:440px;pointer-events:none;z-index:0;
+  background:radial-gradient(50% 50% at 50% 50%,
+    color-mix(in oklab,var(--brand) 26%,transparent),transparent 70%);
+}
+/* Экраны входа лежат поверх body своим фоном (position:fixed, z-index:100),
+   поэтому свечение из body::before под ними не видно — рисуем его фоном
+   самого экрана, а не отдельным слоем. */
+html:not([data-theme="light"]) .screen{
+  background:radial-gradient(50% 50% at 50% -80px,
+    color-mix(in oklab,var(--brand) 24%,transparent),transparent 70%) no-repeat,
+    var(--bg);
+  background-size:640px 470px,auto;
+  background-position:50% 0,0 0;
+}
 /* ── Светлая тема (переключается в Настройках, хранится на устройстве) ── */
 html[data-theme="light"]{
   --bg:#F2F2F7;--surface:#FFFFFF;--surface-2:#F1F1F4;--surface-3:#E4E4EA;
@@ -220,7 +238,7 @@ html[data-theme="light"] .home-hero{background:linear-gradient(160deg,#EDEBFF 0%
 html[data-theme="light"] .acct-pill{background:rgba(0,0,0,.04);border-color:rgba(0,0,0,.08);}
 /* ── Акцентные палитры (выбираются пользователем в Настройках) ──
    Базовое значение подобрано под тёмный фон; для светлой темы — своё. */
-html[data-accent="green"]  {--brand:#2FC898;}
+html[data-accent="green"]  {--brand:#34D07F;}
 html[data-accent="blue"]   {--brand:#4F8BFF;}
 html[data-accent="amber"]  {--brand:#F0A93C;}
 html[data-accent="coral"]  {--brand:#FF7A5C;}
@@ -3056,7 +3074,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.47.0';
+var APP_VERSION='4.48.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3329,7 +3347,7 @@ var App={
     // Приватность с прошлого раза
     try{if(localStorage.getItem('auron_privacy')==='1')document.body.classList.add('sums-hidden');}catch(e){}
     // Тема с прошлого раза (по умолчанию — светлая, как выбрал владелец)
-    try{var th=localStorage.getItem('auron_theme');App._applyTheme(th||'light');}catch(e){}
+    try{var th=localStorage.getItem('auron_theme');App._applyTheme(th||'dark');}catch(e){}
     // Акцентная палитра (по умолчанию — зелёная «Свежий»)
     try{var ac=localStorage.getItem('auron_accent');App._applyAccent(ac||'green');}catch(e){}
     // Офлайн-очередь: пробуем отправить отложенное при старте, при появлении сети и раз в 2 минуты
