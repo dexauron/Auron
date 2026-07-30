@@ -1,0 +1,173 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Auron — вариант 5</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07090C; --card:#101318; --card2:#151920; --line:rgba(255,255,255,.07);
+  --ink:#F4F6F8; --ink2:#A6AFBB; --mute:#6B7480;
+  --acc:#7C6BFF; --acc-ink:#0B0526; --neg:#FF5A4E;
+  --font:"Plus Jakarta Sans",system-ui,sans-serif;
+  --num:"Space Grotesk","Plus Jakarta Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);padding-bottom:108px;overflow-x:hidden}
+/* Свечение от акцента — то, что в образцах даёт ощущение «дорого» */
+.glow{position:fixed;top:-190px;left:50%;transform:translateX(-50%);width:640px;height:440px;
+  background:radial-gradient(50% 50% at 50% 50%,rgba(124,107,255,.32),rgba(52,208,127,0) 70%);
+  filter:blur(18px);pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;padding:0 16px}
+
+/* ── Шапка ── */
+.top{display:flex;align-items:center;gap:12px;padding:18px 0 22px}
+.ava{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#2A3140,#161A22);
+  border:1px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:15px;color:var(--acc)}
+.top-t{flex:1;line-height:1.25}
+.top-t b{display:block;font-size:15px;font-weight:700}
+.top-t span{font-size:12.5px;color:var(--mute)}
+.ico{width:40px;height:40px;border-radius:13px;background:var(--card);border:1px solid var(--line);
+  display:grid;place-items:center;color:var(--ink2)}
+
+/* ── Главная цифра ── */
+.hero{text-align:center;padding:6px 0 26px}
+.hero-k{font-size:12.5px;color:var(--ink2);letter-spacing:.02em;margin-bottom:10px;
+  display:inline-flex;align-items:center;gap:6px}
+.hero-v{font-family:var(--num);font-weight:700;letter-spacing:-.035em;line-height:1;white-space:nowrap;
+  /* Настоящие суммы магазина длинные — размер подстраивается под ширину,
+     иначе «1 284 350,40 ₽» разваливается на две строки. */
+  font-size:clamp(28px,10.4vw,44px)}
+.hero-v i{font-style:normal;color:var(--mute)}
+.hero-d{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:6px 12px;border-radius:999px;
+  background:rgba(124,107,255,.16);color:var(--acc);font-size:12.5px;font-weight:700}
+
+/* ── Четыре действия ── */
+.acts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.act{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 6px 11px;
+  text-align:center;transition:transform .18s cubic-bezier(.2,.9,.3,1),background .18s}
+.act:active{transform:scale(.95);background:var(--card2)}
+.act-i{width:38px;height:38px;margin:0 auto 8px;border-radius:13px;display:grid;place-items:center;
+  background:rgba(124,107,255,.16);color:var(--acc)}
+.act span{font-size:11.5px;font-weight:600;color:var(--ink2)}
+
+/* ── Период ── */
+.pills{display:flex;gap:8px;margin-bottom:14px;overflow-x:auto;scrollbar-width:none}
+.pill{flex:none;padding:8px 15px;border-radius:999px;background:var(--card);border:1px solid var(--line);
+  color:var(--ink2);font-size:12.5px;font-weight:600}
+.pill.on{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:700}
+
+/* ── Плитки ── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px}
+.tile-k{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:12px}
+.tile-i{width:28px;height:28px;border-radius:10px;display:grid;place-items:center}
+.tile-v{font-family:var(--num);font-size:22px;font-weight:700;letter-spacing:-.02em}
+.tile-x{font-size:11.5px;margin-top:6px;font-weight:600}
+.up{color:var(--acc)} .dn{color:var(--neg)}
+.bar{height:4px;border-radius:4px;background:rgba(255,255,255,.07);margin-top:11px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:4px;background:var(--acc)}
+
+/* ── Список ── */
+.sec{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px}
+.sec b{font-size:16px;font-weight:700} .sec a{font-size:12.5px;color:var(--acc);font-weight:700;text-decoration:none}
+.list{background:var(--card);border:1px solid var(--line);border-radius:22px;overflow:hidden}
+.row{display:flex;align-items:center;gap:13px;padding:14px 15px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row-i{width:40px;height:40px;flex:none;border-radius:13px;display:grid;place-items:center;background:var(--card2);color:var(--ink2)}
+.row-t{flex:1;min-width:0} .row-t b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-t span{font-size:11.5px;color:var(--mute)}
+.row-v{font-family:var(--num);font-size:15px;font-weight:700;white-space:nowrap}
+
+/* ── Нижняя панель ── */
+.nav{position:fixed;left:12px;right:12px;bottom:14px;z-index:5;display:grid;grid-template-columns:repeat(5,1fr);
+  background:rgba(16,19,24,.92);backdrop-filter:blur(24px);border:1px solid var(--line);
+  border-radius:26px;padding:9px 6px;box-shadow:0 18px 44px -14px rgba(0,0,0,.9)}
+.nb{display:grid;justify-items:center;gap:5px;color:var(--mute);font-size:10.5px;font-weight:600;padding:5px 0;border-radius:18px}
+.nb.on{color:var(--acc-ink);background:var(--acc);font-weight:700}
+</style></head><body>
+<div class="glow"></div>
+<div class="wrap">
+
+  <div class="top">
+    <div class="ava">WM</div>
+    <div class="top-t"><b>Way Market</b><span>Сегодня, 30 июля</span></div>
+    <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></div>
+    <div class="ico"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div>
+  </div>
+
+  <div class="hero">
+    <div class="hero-k">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+      Деньги в кассе и на счетах
+    </div>
+    <div class="hero-v">1 284 350<i>,40 ₽</i></div>
+    <div class="hero-d">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      +48 200 ₽ за сегодня
+    </div>
+  </div>
+
+  <div class="acts">
+    <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div><span>Приход</span></div>
+    <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M5 12h14"/></svg></div><span>Расход</span></div>
+    <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 7h13l-3-3M21 17H8l3 3"/></svg></div><span>Перевод</span></div>
+    <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg></div><span>Сканер</span></div>
+  </div>
+
+  <div class="pills">
+    <div class="pill on">Сегодня</div><div class="pill">Неделя</div>
+    <div class="pill">Месяц</div><div class="pill">Год</div><div class="pill">Свой</div>
+  </div>
+
+  <div class="grid">
+    <div class="tile">
+      <div class="tile-k"><div class="tile-i" style="background:rgba(124,107,255,.16);color:var(--acc)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>Выручка</div>
+      <div class="tile-v">186 400 ₽</div><div class="tile-x up">+12,4% к вчера</div>
+    </div>
+    <div class="tile">
+      <div class="tile-k"><div class="tile-i" style="background:rgba(255,90,78,.14);color:var(--neg)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5"/></svg></div>К выплате</div>
+      <div class="tile-v">412 800 ₽</div><div class="tile-x dn">7 поставщиков</div>
+    </div>
+    <div class="tile">
+      <div class="tile-k"><div class="tile-i" style="background:rgba(124,107,255,.16);color:var(--acc)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>Прибыль</div>
+      <div class="tile-v">42 900 ₽</div><div class="tile-x up">наценка 30,2%</div>
+    </div>
+    <div class="tile">
+      <div class="tile-k"><div class="tile-i" style="background:rgba(255,255,255,.08);color:var(--ink2)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 7H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1Z"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>План месяца</div>
+      <div class="tile-v">68%</div><div class="bar"><i style="width:68%"></i></div>
+    </div>
+  </div>
+
+  <div class="sec"><b>Последние операции</b><a href="#">Все →</a></div>
+  <div class="list">
+    <div class="row">
+      <div class="row-i" style="color:var(--acc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+      <div class="row-t"><b>Выручка за смену</b><span>Касса · 19:40</span></div>
+      <div class="row-v" style="color:var(--acc)">+86 200</div>
+    </div>
+    <div class="row">
+      <div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5"/></svg></div>
+      <div class="row-t"><b>ИП Хасаев — молочка</b><span>Поставщик · 17:12</span></div>
+      <div class="row-v" style="color:var(--neg)">−34 500</div>
+    </div>
+    <div class="row">
+      <div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg></div>
+      <div class="row-t"><b>Списание — порча овощей</b><span>Склад · 15:05</span></div>
+      <div class="row-v" style="color:var(--neg)">−2 340</div>
+    </div>
+    <div class="row">
+      <div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg></div>
+      <div class="row-t"><b>Аренда помещения</b><span>Обязательство · 12:00</span></div>
+      <div class="row-v" style="color:var(--neg)">−120 000</div>
+    </div>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="nb on"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h14V10"/></svg>Главная</div>
+  <div class="nb"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 11h18M7 15h4"/></svg>Касса</div>
+  <div class="nb"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16v13H4z"/><path d="M9 7V4h6v3"/></svg>Товары</div>
+  <div class="nb"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5"/></svg>Закупки</div>
+  <div class="nb"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>Ещё</div>
+</div>
+</body></html>
