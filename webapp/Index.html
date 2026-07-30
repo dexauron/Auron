@@ -3042,7 +3042,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.40.0';
+var APP_VERSION='4.41.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9774,7 +9774,7 @@ var App={
         rows.map(fmtRow).join('')+'</div>';};
     var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
     var h='';
-    // Аврон-советник: карта экономии (заполняется отдельным запросом)
+    // Auron-советник: карта экономии (заполняется отдельным запросом)
     h+='<div id="goods-savings-card"></div>';
     // Умный поиск товара — заметная строка сверху
     // ── Главное: деньги крупно ──────────────────────────────────────
@@ -9880,7 +9880,7 @@ var App={
     App._goodsLast=a;
     App._loadSavings();
   },
-  // ── Аврон-советник · Охотник за экономией ──────────────────────
+  // ── Auron-советник · Охотник за экономией ──────────────────────
   _loadSavings:function(){
     var el=document.getElementById('goods-savings-card');if(!el)return;
     gs('getSavingsHunter',{ssId:App.s.ssId}).then(function(s){
@@ -9890,13 +9890,13 @@ var App={
       var big=s.totalMonthly>0?fm(s.totalMonthly)+' ₽/мес':s.count+' товаров';
       var sub=s.totalMonthly>0?(s.count+' товаров выгоднее брать у другого поставщика'):'нашёл, где дешевле — показать';
       el.innerHTML='<div onclick="App.openSavings()" style="cursor:pointer;background:linear-gradient(135deg,#10B981,#0F9D8F);border-radius:16px;padding:15px 17px;color:#fff;margin-bottom:12px;box-shadow:0 6px 18px rgba(16,185,129,.28);">'+
-        '<div style="font-size:12px;opacity:.92;display:flex;align-items:center;gap:6px;">🤖 Аврон нашёл экономию</div>'+
+        '<div style="font-size:12px;opacity:.92;display:flex;align-items:center;gap:6px;">🤖 Auron нашёл экономию</div>'+
         '<div style="font-size:25px;font-weight:800;margin:3px 0;">'+big+'</div>'+
         '<div style="font-size:12px;opacity:.92;">'+sub+' ›</div></div>';
     }).catch(function(){el.innerHTML='';});
   },
   openSavings:function(){
-    App.openModal('<div class="modal-title">'+SVG.robot+' Аврон нашёл экономию</div><div id="sav-body" style="color:var(--muted);font-size:13px;">Считаю по твоим ценам…</div>');
+    App.openModal('<div class="modal-title">'+SVG.robot+' Auron нашёл экономию</div><div id="sav-body" style="color:var(--muted);font-size:13px;">Считаю по твоим ценам…</div>');
     var render=function(s){App._savingsRender(s);};
     if(App._savings&&!App._savings.__error)render(App._savings);
     else gs('getSavingsHunter',{ssId:App.s.ssId}).then(render).catch(function(e){var b=document.getElementById('sav-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
@@ -9905,7 +9905,7 @@ var App={
     var b=document.getElementById('sav-body');if(!b)return;
     if(s&&s.__error){b.innerHTML='<div style="color:var(--neg);">'+App._e(s.__error)+'</div>';return;}
     if(!s||s.empty||!s.items||!s.items.length){
-      b.innerHTML='<div style="text-align:center;padding:22px 8px;line-height:1.6;color:var(--muted);">Пока не с чем сравнивать.<br>Загрузи отчёт «Цены» из 1С, где у товаров есть <b>разные поставщики</b> — Аврон сам найдёт, где дешевле, и посчитает экономию.</div>';return;}
+      b.innerHTML='<div style="text-align:center;padding:22px 8px;line-height:1.6;color:var(--muted);">Пока не с чем сравнивать.<br>Загрузи отчёт «Цены» из 1С, где у товаров есть <b>разные поставщики</b> — Auron сам найдёт, где дешевле, и посчитает экономию.</div>';return;}
     var fm=function(v){return fmt(Math.round(v));};
     var h='<div style="position:relative;overflow:hidden;background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:16px;padding:18px;color:#fff;text-align:center;margin-bottom:14px;box-shadow:var(--shadow-card);">'+
       '<svg class="girih-bg on-brand" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih)"/></svg>'+
@@ -10486,13 +10486,13 @@ var App={
     {id:'quick',   t:'Быстрые действия', d:'Касса и Товары большими кнопками', c:'Действия'},
     {id:'reminders',t:'Напоминания',     d:'Оплаты, приход, что заканчивается', c:'Действия'},
     {id:'checklist',t:'Чек-лист смены',  d:'Открытие и закрытие по галочкам', c:'Действия'},
-    {id:'ask',     t:'Спросить Аврон',    d:'Вопрос голосом или текстом', c:'Действия'},
+    {id:'ask',     t:'Спросить Auron',    d:'Вопрос голосом или текстом', c:'Действия'},
     {id:'restock', t:'Что заканчивается', d:'План закупки — что скоро кончится', c:'Товары'},
-    {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Аврон'},
-    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни', c:'Аврон'},
-    {id:'advisor', t:'Аврон-советник',   d:'Что важно сейчас: экономия, что кончается', c:'Аврон', fin:true},
-    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках', c:'Аврон', fin:true},
-    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100', c:'Аврон', fin:true},
+    {id:'season',  t:'Сезон и праздники', d:'Что скоро и что закупать под спрос', c:'Auron'},
+    {id:'insight', t:'Наблюдение',        d:'Подсказки и слабые дни', c:'Auron'},
+    {id:'advisor', t:'Auron-советник',   d:'Что важно сейчас: экономия, что кончается', c:'Auron', fin:true},
+    {id:'savings', t:'Экономия',          d:'Сколько можно сэкономить на поставщиках', c:'Auron', fin:true},
+    {id:'pulse',   t:'Пульс магазина',    d:'Общий показатель здоровья 0–100', c:'Auron', fin:true},
     {id:'money',   t:'Деньги за месяц',   d:'Выручка · расход · прибыль', c:'Финансы', fin:true},
     {id:'debts',   t:'Долги поставщикам', d:'Общий долг и оплачено', c:'Финансы', fin:true},
     {id:'tax',     t:'Налоги',            d:'Доход за год и напоминание', c:'Финансы', fin:true},
@@ -10740,7 +10740,7 @@ var App={
       return App._smartHint()+'<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
     }
     if(id==='advisor') return '<div id="advisor-card"></div>';
-    if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Аврон своими словами</button></div>';
+    if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);">💬 Спросить Auron своими словами</button></div>';
     if(id==='pulse') return '<div id="pulse-card"></div>';
     if(id==='insight') return '<div id="insight-card"></div>';
     if(id==='savings') return '<div id="home-savings" style="padding:0 16px;margin-bottom:14px;"></div>';
@@ -10770,7 +10770,7 @@ var App={
       var v=s.totalMonthly>0?fmt(Math.round(s.totalMonthly))+' ₽/мес':s.count+' товаров';
       el.innerHTML='<div onclick="App.openSavings()" style="cursor:pointer;position:relative;overflow:hidden;background:linear-gradient(135deg,var(--brand),var(--brand2));border-radius:16px;padding:15px 17px;color:#fff;box-shadow:var(--shadow-card);">'+
         '<svg class="girih-bg on-brand" aria-hidden="true"><rect width="100%" height="100%" fill="url(#girih)"/></svg>'+
-        '<div style="position:relative;font-size:12px;opacity:.92;">🤖 Аврон нашёл экономию</div>'+
+        '<div style="position:relative;font-size:12px;opacity:.92;">🤖 Auron нашёл экономию</div>'+
         '<div style="position:relative;font-size:24px;font-weight:800;margin:3px 0;">'+v+'</div>'+
         '<div style="position:relative;font-size:12px;opacity:.92;">'+s.count+' товаров дешевле у другого поставщика ›</div></div>';};
     if(pre!==undefined){go(pre);return;}
@@ -10820,7 +10820,7 @@ var App={
     var j=i+dir;if(j<0||j>=cfg.length)return;var t=cfg[i];cfg[i]=cfg[j];cfg[j]=t;
     App._homeCfgSave(cfg);App._hcRender();App._renderHomeBoard();App.haptic(6);},
 
-  // ── Аврон-советник: проактивные подсказки ──────────────────────
+  // ── Auron-советник: проактивные подсказки ──────────────────────
   loadAdvisor:function(pre){
     var el=document.getElementById('advisor-card');if(!el)return;
     var go=function(r){App._advisor=r;var el=document.getElementById('advisor-card');if(!el)return;
@@ -10830,7 +10830,7 @@ var App={
       el.innerHTML='<div onclick="App.openAdvisor()" style="cursor:pointer;background:var(--surface-2);border:1.4px solid var(--line);border-radius:16px;padding:13px 15px;margin:0 16px 14px;display:flex;align-items:center;gap:11px;">'+
         '<div style="font-size:22px;flex-shrink:0;">🤖</div>'+
         '<div style="flex:1;min-width:0;">'+
-          '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Аврон-советник</div>'+
+          '<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">Auron-советник</div>'+
           '<div style="font-size:13px;font-weight:650;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+top.icon+' '+App._advTitle(top)+more+'</div>'+
         '</div><span style="color:var(--muted);">›</span></div>';};
     if(pre!==undefined){go(pre);return;}
@@ -10839,7 +10839,7 @@ var App={
   _advTitle:function(a){var fmn=function(v){return fmt(Math.round(v));};
     return (a.num!=null?fmn(a.num)+' '+(a.unit||'')+' — ':'')+App._e(a.title);},
   openAdvisor:function(){
-    App.openModal('<div class="modal-title">'+SVG.robot+' Аврон-советник</div><div id="adv-body" style="color:var(--muted);font-size:13px;">Смотрю, что важно…</div>');
+    App.openModal('<div class="modal-title">'+SVG.robot+' Auron-советник</div><div id="adv-body" style="color:var(--muted);font-size:13px;">Смотрю, что важно…</div>');
     var render=function(r){App._advisorRender(r);};
     if(App._advisor&&!App._advisor.__error)render(App._advisor);
     else gs('getAdvisor',{ssId:App.s.ssId}).then(render).catch(function(e){var b=document.getElementById('adv-body');if(b)b.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
@@ -10847,7 +10847,7 @@ var App={
   _advisorRender:function(r){
     var b=document.getElementById('adv-body');if(!b)return;
     if(r&&r.__error){b.innerHTML='<div style="color:var(--neg);">'+App._e(r.__error)+'</div>';return;}
-    if(!r||!r.count){b.innerHTML='<div style="text-align:center;padding:24px 8px;line-height:1.6;color:var(--muted);">✅ Всё спокойно.<br>Аврон не нашёл ничего срочного — касса, товары и цены в порядке.</div>';return;}
+    if(!r||!r.count){b.innerHTML='<div style="text-align:center;padding:24px 8px;line-height:1.6;color:var(--muted);">✅ Всё спокойно.<br>Auron не нашёл ничего срочного — касса, товары и цены в порядке.</div>';return;}
     var fmn=function(v){return fmt(Math.round(v));};
     var col=function(s){return s==='high'?'var(--neg)':s==='mid'?'var(--warn,#FF9F0A)':'var(--brand)';};
     var acts={savings:['openSavings','Показать экономию'],goods:['openGoods','Открыть товары'],payments:['goToPayments','К выплатам']};
@@ -10861,10 +10861,10 @@ var App={
     }).join('');
     b.innerHTML=h;
   },
-  // ── Аврон-помощник: чат вопрос-ответ (+ голос) ─────────────────
+  // ── Auron-помощник: чат вопрос-ответ (+ голос) ─────────────────
   openAssistant:function(preset){
     App._chat=App._chat||[];
-    App.openModal('<div class="modal-title">'+SVG.chat+' Спросить Аврон</div>'+
+    App.openModal('<div class="modal-title">'+SVG.chat+' Спросить Auron</div>'+
       '<div id="chat-log" style="max-height:52vh;overflow:auto;margin-bottom:10px;"></div>'+
       '<div id="chat-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;"></div>'+
       '<div style="display:flex;gap:8px;align-items:center;">'+
@@ -10888,10 +10888,10 @@ var App={
   },
   _chatRender:function(){
     var el=document.getElementById('chat-log');if(!el)return;
-    if(!App._chat.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12.5px;padding:14px 8px;line-height:1.5;">Привет! Я Аврон. Спроси про деньги или товары —<br>отвечу по данным твоего магазина.</div>';return;}
+    if(!App._chat.length){el.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12.5px;padding:14px 8px;line-height:1.5;">Привет! Я Auron. Спроси про деньги или товары —<br>отвечу по данным твоего магазина.</div>';return;}
     el.innerHTML=App._chat.map(function(m){
       if(m.role==='user')return'<div style="text-align:right;margin:6px 0;"><span style="display:inline-block;max-width:85%;text-align:left;background:var(--brand);color:#fff;padding:9px 13px;border-radius:14px 14px 4px 14px;font-size:13px;white-space:pre-wrap;">'+App._e(m.text)+'</span></div>';
-      return'<div style="margin:6px 0;"><span style="display:inline-block;max-width:90%;background:var(--surface-2);color:var(--ink);padding:10px 13px;border-radius:14px 14px 14px 4px;font-size:13px;white-space:pre-wrap;line-height:1.5;">'+(m.loading?'<span style="color:var(--muted);">Аврон думает…</span>':App._e(m.text)+(m.ai?' <span style="font-size:10px;color:var(--muted);">· ИИ</span>':''))+'</span>'+
+      return'<div style="margin:6px 0;"><span style="display:inline-block;max-width:90%;background:var(--surface-2);color:var(--ink);padding:10px 13px;border-radius:14px 14px 14px 4px;font-size:13px;white-space:pre-wrap;line-height:1.5;">'+(m.loading?'<span style="color:var(--muted);">Auron думает…</span>':App._e(m.text)+(m.ai?' <span style="font-size:10px;color:var(--muted);">· ИИ</span>':''))+'</span>'+
         (m.action?'<div><button onclick="App.closeModal();App.'+({savings:'openSavings',goods:'openGoods',advisor:'openAdvisor'}[m.action]||'closeModal')+'()" style="margin-top:6px;padding:6px 12px;border-radius:9px;border:none;background:var(--pos);color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">Показать →</button></div>':'')+'</div>';
     }).join('');
     el.scrollTop=el.scrollHeight;
@@ -10899,7 +10899,7 @@ var App={
   openAiSettings:function(){
     var st=App.s.settings||{};
     App.openModal('<div class="modal-title">'+SVG.robot+' Живой разум (ИИ)</div>'+
-      '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:14px;">Без ключа Аврон отвечает по правилам на твоих данных — бесплатно и офлайн. С ключом ИИ он отвечает по-человечески и учитывает район магазина и сезон. Ключ хранится в твоей таблице и никуда больше не уходит.</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:14px;">Без ключа Auron отвечает по правилам на твоих данных — бесплатно и офлайн. С ключом ИИ он отвечает по-человечески и учитывает район магазина и сезон. Ключ хранится в твоей таблице и никуда больше не уходит.</div>'+
       '<div class="field"><label>Адрес / район магазина</label><input id="ai-loc" placeholder="напр. Грозный, спальный район, рядом школа" value="'+App._e(st.storeLocation||'')+'"></div>'+
       '<div class="field"><label>Ключ ИИ (Anthropic API key)</label><input id="ai-key" type="password" autocomplete="off" placeholder="'+(st.aiEnabled?'•••• уже задан — пусто = не менять':'sk-ant-…')+'"></div>'+
       '<div class="field"><label>Модель (необязательно)</label><input id="ai-model" placeholder="claude-sonnet-5" value="'+App._e(st.aiModel||'')+'"></div>'+
@@ -11050,7 +11050,7 @@ var App={
     var items=r.items||[];
     if(r.learning){
       // Пока собирает данные — тихо, без деталей (по просьбе владельца).
-      b.innerHTML=h+'<div style="text-align:center;padding:26px 12px;line-height:1.6;color:var(--muted);">Аврон собирает данные о магазине.<br>Контроль включится, когда поймёт, что для вас норма.</div>';return;
+      b.innerHTML=h+'<div style="text-align:center;padding:26px 12px;line-height:1.6;color:var(--muted);">Auron собирает данные о магазине.<br>Контроль включится, когда поймёт, что для вас норма.</div>';return;
     }
     if(!items.length){
       b.innerHTML=h+'<div style="text-align:center;padding:26px 10px;line-height:1.6;color:var(--muted);">✅ Необычных операций не найдено.<br>Всё в пределах нормы для твоего магазина.</div>';return;
