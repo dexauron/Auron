@@ -2097,13 +2097,26 @@ function getGoodsAnalytics(p) {
     // ── Профессиональные метрики ─────────────────────────────────────
     var salesDays = _getSettingNum(ss,'GOODS_SALES_DAYS',30);
     if (!salesDays||salesDays<1) salesDays=30;
-    // Средняя наценка (взвешенная простая) и «замороженные» деньги (неликвид)
-    var mkSum=0,mkN=0,frozen=0,deadCnt=0;
+    // Средняя наценка — ВЗВЕШЕННАЯ по деньгам (выручка против себестоимости).
+    // Простое среднее по товарам врёт: один товар с битой ценой закупки
+    // (0,09 ₽ при продаже 75 ₽ = 83 000%) задирает его в разы. На реальной
+    // выгрузке владельца простое среднее давало 193%, взвешенное — 30%.
+    // Заодно собираем товары с невозможными ценами — их надо править в 1С.
+    var mkSum=0,mkN=0,frozen=0,deadCnt=0,priceIssues=[];
     items.forEach(function(it){
-      if(it.buy>0&&it.retail>0){ mkSum+=(it.retail-it.buy)/it.buy*100; mkN++; }
+      if(it.buy>0&&it.retail>0){
+        var mk=(it.retail-it.buy)/it.buy*100;
+        mkSum+=mk; mkN++;
+        if (mk>500 || it.buy<1) priceIssues.push({name:it.name,buy:it.buy,retail:it.retail,markup:Math.round(mk)});
+      }
       if(it.stockQty>0&&it.soldQty===0){ frozen+=it.stockSum; deadCnt++; }
     });
-    var avgMarkup = mkN>0?Math.round(mkSum/mkN*10)/10:0;
+    var cogsAll = Math.max(totRevenue-totProfit,0);
+    var avgMarkup = cogsAll>0 ? Math.round((totRevenue-cogsAll)/cogsAll*1000)/10
+                              : (mkN>0?Math.round(mkSum/mkN*10)/10:0);
+    var avgMarkupSimple = mkN>0?Math.round(mkSum/mkN*10)/10:0;
+    priceIssues.sort(function(a,b){return b.markup-a.markup;});
+    priceIssues=priceIssues.slice(0,20);
     var frozenShare = totStock>0?Math.round(frozen/totStock*100):0;
     // GMROI — сколько прибыли на 1 ₽, вложенный в запас (>1 хорошо)
     var gmroi = totStock>0?Math.round(totProfit/totStock*100)/100:0;
@@ -2149,7 +2162,8 @@ function getGoodsAnalytics(p) {
       groups:groups, turnover:turnover, restock:restock,
       supplierCompare:supplierCompare, supplierRating:supplierRating,
       // проф-метрики и динамика
-      salesDays:salesDays, avgMarkup:avgMarkup, gmroi:gmroi,
+      salesDays:salesDays, avgMarkup:avgMarkup, avgMarkupSimple:avgMarkupSimple,
+      priceIssues:priceIssues, gmroi:gmroi,
       frozen:Math.round(frozen), frozenShare:frozenShare, deadCount:deadCnt,
       turnoverDays:turnoverDays, snapshots:snapshots,
       momRevenue:momRevenue, momProfit:momProfit

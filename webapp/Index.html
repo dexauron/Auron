@@ -845,6 +845,50 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 .pc-tile .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700;}
 .pc-tile .v{font-size:16px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;}
 .pc-sec{font-size:13px;font-weight:800;margin:20px 0 7px;}
+
+/* ── Экран «Товары»: понятная иерархия вместо стопки серых коробок ── */
+.gd-hero{background:linear-gradient(135deg,var(--brand),color-mix(in oklab,var(--brand) 62%,#000));
+  color:#fff;border-radius:20px;padding:18px;margin-bottom:12px;
+  box-shadow:0 12px 28px -16px var(--brand);}
+.gd-hero-top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;}
+.gd-hero-l{font-size:11.5px;opacity:.85;text-transform:uppercase;letter-spacing:.5px;font-weight:700;}
+.gd-hero-v{font-size:29px;font-weight:800;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums;}
+.gd-hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.gd-hero-cell{background:rgba(255,255,255,.15);border-radius:13px;padding:10px 12px;}
+.gd-hero-cell .l{font-size:10.5px;opacity:.85;font-weight:600;}
+.gd-hero-cell .v{font-size:16px;font-weight:800;margin-top:1px;font-variant-numeric:tabular-nums;}
+.gd-delta{font-size:11px;font-weight:700;margin-top:2px;opacity:.95;}
+
+/* Кнопки-действия: каталог главный, поиск рядом */
+.gd-acts{display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:14px;}
+@media(max-width:420px){.gd-acts{grid-template-columns:1fr;}}
+.gd-act{display:flex;align-items:center;gap:11px;border-radius:15px;padding:13px 15px;cursor:pointer;
+  border:1.4px solid var(--line);background:var(--surface-2);color:var(--ink);}
+.gd-act.main{border-color:transparent;background:var(--surface);box-shadow:0 6px 18px -12px rgba(0,0,0,.4);}
+.gd-act:active{transform:scale(.985);}
+.gd-act .t{font-size:14.5px;font-weight:750;}
+.gd-act .s{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.gd-act .ic{width:38px;height:38px;border-radius:12px;flex-shrink:0;display:grid;place-items:center;
+  background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);}
+
+/* Показатели: ровная сетка, подписи не обрезаются */
+.gd-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(102px,1fr));gap:8px;}
+.gd-tile{background:var(--surface-2);border-radius:14px;padding:11px 12px;}
+.gd-tile .l{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px;line-height:1.25;}
+.gd-tile .v{font-size:17px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums;}
+.gd-tile .h{font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.3;}
+
+/* «Требует внимания» — что реально надо сделать */
+.gd-warn{border-radius:15px;padding:13px 15px;margin-top:12px;font-size:12.5px;line-height:1.6;
+  background:color-mix(in oklab,var(--warn,#FF9F0A) 11%,transparent);}
+.gd-warn+.gd-warn{margin-top:8px;}
+.gd-warn b.act{color:var(--brand);cursor:pointer;}
+.gd-warn-t{font-weight:800;font-size:13px;margin-bottom:3px;}
+
+@media(min-width:820px){
+  .gd-hero-grid{grid-template-columns:repeat(4,1fr);}
+  .gd-hero-v{font-size:34px;}
+}
 body.view-only #fab,body.view-only .tx-actions,body.view-only .np-receipt-btn{display:none!important;}
 /* Роль без прав на удаление/настройки: прячем кнопки удаления и опасные строки настроек */
 body.no-manage .tx-act-del,body.no-manage .dt-act-del,body.no-manage .no-manage-hide{display:none!important;}
@@ -2834,7 +2878,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.35.0';
+var APP_VERSION='4.36.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9522,6 +9566,7 @@ var App={
     }).catch(function(){});
   },
   _goodsRender:function(a,elId){
+    App._goodsA=a;
     var b=document.getElementById(elId||'goods-body');if(!b)return;
     if(a.__error){b.innerHTML='<div class="empty-state"><div class="empty-text">'+App._e(a.__error)+'</div></div>';return;}
     if(a.empty||!a.count){
@@ -9544,34 +9589,64 @@ var App={
     // Аврон-советник: карта экономии (заполняется отдельным запросом)
     h+='<div id="goods-savings-card"></div>';
     // Умный поиск товара — заметная строка сверху
-    h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1.4px solid var(--line);border-radius:13px;padding:11px 14px;cursor:pointer;margin-bottom:10px;">'+
-       '<span style="font-size:15px;">🔍</span><span style="color:var(--muted);font-size:13px;">Найти товар: код, артикул, штрихкод, название…</span></div>';
-    // Каталог — витрина всех товаров плиткой (главный вход, не прячем вглубь)
-    h+='<div onclick="App.openGoodsList(\'name\')" style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,var(--brand),color-mix(in oklab,var(--brand) 70%,#000));color:#fff;border-radius:15px;padding:14px 16px;cursor:pointer;margin-bottom:12px;box-shadow:0 8px 20px -12px var(--brand);">'+
-       '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg>'+
-       '<div style="flex:1;min-width:0;"><div style="font-size:15px;font-weight:750;">Каталог товаров</div>'+
-       '<div style="font-size:11.5px;opacity:.85;margin-top:1px;">Все '+fmt(a.count)+' — плиткой, с ценами и остатками</div></div>'+
-       '<span style="opacity:.8;">›</span></div>';
-    h+='<div style="display:flex;gap:8px;">'+metric('товаров',a.count)+metric('поставщиков',a.suppliersCount)+'</div>';
-    // Мало поставщиков = не загружен отчёт «Цены поставщиков». Без него в
-    // карточке товара не будет выбора «у кого дешевле».
+    // ── Главное: деньги крупно ──────────────────────────────────────
+    var dl=function(v,goodUp){if(v==null)return'';var up=v>=0;var good=goodUp?up:!up;
+      return'<div class="gd-delta" style="color:'+(good?'#B9F5D8':'#FFC9C2')+';">'+(up?'▲ ':'▼ ')+Math.abs(v)+'% к прошлому месяцу</div>';};
+    h+='<div class="gd-hero">'+
+      '<div class="gd-hero-top"><div><div class="gd-hero-l">Выручка</div>'+
+        '<div class="gd-hero-v">₽ '+fm(a.totRevenue)+'</div>'+dl(a.momRevenue,true)+'</div></div>'+
+      '<div class="gd-hero-grid">'+
+        '<div class="gd-hero-cell"><div class="l">Прибыль</div><div class="v">₽ '+fm(a.totProfit)+'</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Наценка</div><div class="v">'+(a.avgMarkup||0)+'%</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Товаров</div><div class="v">'+fmt(a.count)+'</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Поставщиков</div><div class="v">'+fmt(a.suppliersCount||0)+'</div></div>'+
+      '</div></div>';
+
+    // ── Куда пойти ──────────────────────────────────────────────────
+    h+='<div class="gd-acts">'+
+      '<div class="gd-act main" onclick="App.openGoodsList(\'name\')">'+
+        '<span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></svg></span>'+
+        '<div style="flex:1;min-width:0;"><div class="t">Каталог товаров</div><div class="s">Все '+fmt(a.count)+' — плиткой, с ценами</div></div>'+
+        '<span style="color:var(--muted);">›</span></div>'+
+      '<div class="gd-act" onclick="App.openGoodsList(\'name\')" title="Найти товар" style="justify-content:center;">'+
+        '<span class="ic" style="background:var(--surface-3);color:var(--ink-2);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg></span>'+
+        '<div style="min-width:0;"><div class="t">Поиск</div><div class="s">код · ШК · имя</div></div></div>'+
+      '</div>';
+
+    // ── Что требует внимания ────────────────────────────────────────
+    var warns='';
     if(a.count>50&&a.suppliersCount<=1){
-      h+='<div style="background:color-mix(in oklab,var(--warn,#FF9F0A) 12%,transparent);border-radius:13px;padding:12px 14px;margin-top:8px;font-size:12.5px;line-height:1.6;">'+
-        'Поставщик пока один. Загрузите отчёт <b>«Текущие цены поставщиков»</b> — тогда в карточке товара будут <b>все поставщики с ценами</b> и видно, у кого дешевле. '+
-        '<b style="color:var(--brand);cursor:pointer;" onclick="event.stopPropagation();App.closeModal();App.openImport();">Загрузить →</b></div>';
+      warns+='<div class="gd-warn"><div class="gd-warn-t">Поставщик всего один</div>'+
+        'Загрузите отчёт <b>«Текущие цены поставщиков»</b> — тогда в карточке товара будут все поставщики и видно, у кого дешевле. '+
+        '<b class="act" onclick="event.stopPropagation();App.closeModal();App.openImport();">Загрузить →</b></div>';
     }
-    h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('выручка',fm(a.totRevenue)+' ₽',delta(a.momRevenue,true))+metric('прибыль',fm(a.totProfit)+' ₽',delta(a.momProfit,true))+'</div>';
-    h+='<div style="display:flex;gap:8px;margin-top:8px;">'+metric('остатки (закуп)',fm(a.totStock)+' ₽')+'</div>';
-    // ── Профессиональные метрики ────────────────────────────────────
-    h+='<div style="display:flex;gap:6px;margin-top:8px;">'+
-       mini('ср. наценка',(a.avgMarkup||0)+'%',a.avgMarkup&&a.avgMarkup<15?'var(--neg)':'var(--pos)')+
-       mini('GMROI',(a.gmroi!=null?a.gmroi:'—'),a.gmroi>=1?'var(--pos)':a.gmroi>0?'var(--warn,#FF9F0A)':'var(--muted)')+
-       mini('оборот, дней',(a.turnoverDays||'—'),a.turnoverDays&&a.turnoverDays>60?'var(--neg)':'var(--ink)')+
-       '</div>';
-    if(a.frozen>0)h+='<div style="display:flex;gap:6px;margin-top:6px;">'+
-       mini('заморожено в неликвиде',fm(a.frozen)+' ₽ ('+a.frozenShare+'%)','var(--muted)')+'</div>';
-    // Подсказки к метрикам
-    h+='<div style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;">GMROI — сколько ₽ прибыли приносит 1 ₽, вложенный в товар (больше 1 — хорошо). Оборот — за сколько дней распродаётся текущий остаток (данные о продажах за '+(a.salesDays||30)+' дн).</div>';
+    if(a.frozen>0&&a.frozenShare>=15){
+      warns+='<div class="gd-warn"><div class="gd-warn-t">Заморожено ₽ '+fm(a.frozen)+' ('+a.frozenShare+'% запаса)</div>'+
+        a.deadCount+' '+App._plural(a.deadCount,'товар','товара','товаров')+' лежит без продаж. Это деньги на полке. '+
+        '<b class="act" onclick="event.stopPropagation();App.openGoodsList(\'dead\');">Посмотреть →</b></div>';
+    }
+    if(a.priceIssues&&a.priceIssues.length){
+      warns+='<div class="gd-warn"><div class="gd-warn-t">Похоже, ошибка в ценах: '+a.priceIssues.length+' '+App._plural(a.priceIssues.length,'товар','товара','товаров')+'</div>'+
+        'Цена закупки подозрительно низкая — например, <b>'+App._e(a.priceIssues[0].name.slice(0,32))+'</b>: закуп '+a.priceIssues[0].buy+' ₽ при продаже '+a.priceIssues[0].retail+' ₽. '+
+        'Из-за таких строк наценка по магазину считается неверно. Поправьте в 1С и загрузите заново. '+
+        '<b class="act" onclick="event.stopPropagation();App._goodsPriceIssues();">Показать список →</b></div>';
+    }
+    h+=warns;
+
+    // ── Показатели запаса ───────────────────────────────────────────
+    h+='<div class="pc-sec">Насколько эффективно работает запас</div>'+
+      '<div class="gd-tiles">'+
+      '<div class="gd-tile"><div class="l">Остатки</div><div class="v">₽ '+fm(a.totStock)+'</div><div class="h">по закупке</div></div>'+
+      '<div class="gd-tile"><div class="l">GMROI</div><div class="v" style="color:'+(a.gmroi>=1?'var(--pos)':a.gmroi>0?'var(--warn,#FF9F0A)':'var(--muted)')+';">'+(a.gmroi!=null?a.gmroi:'—')+'</div><div class="h">'+(a.gmroi>=1?'норма':'меньше 1 — слабо')+'</div></div>'+
+      '<div class="gd-tile"><div class="l">Оборот</div><div class="v" style="color:'+(a.turnoverDays&&a.turnoverDays>60?'var(--neg)':'var(--ink)')+';">'+(a.turnoverDays||'—')+'</div><div class="h">дней на распродажу</div></div>'+
+      '<div class="gd-tile"><div class="l">Неликвид</div><div class="v">'+(a.frozenShare||0)+'%</div><div class="h">₽ '+fm(a.frozen)+'</div></div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--muted);margin-top:7px;line-height:1.55;">'+
+      'GMROI — сколько ₽ прибыли даёт 1 ₽, вложенный в товар (больше 1 — хорошо). '+
+      'Наценка считается по деньгам: вся выручка против всей себестоимости'+
+      (a.avgMarkupSimple&&Math.abs(a.avgMarkupSimple-a.avgMarkup)>5?' (простое среднее по товарам дало бы '+a.avgMarkupSimple+'%, но его задирают товары с битой ценой)':'')+'. '+
+      'Продажи взяты за '+(a.salesDays||30)+' дн.</div>';
+
     // ── Динамика продаж по загрузкам ────────────────────────────────
     if(a.snapshots&&a.snapshots.length>=2){
       h+='<div style="margin-top:18px;font-size:14px;font-weight:700;">📈 Динамика продаж</div>'+
@@ -9842,6 +9917,22 @@ var App={
         '<div class="g-price">'+price+'</div>'+
         (tags?'<div class="g-tags">'+tags+'</div>':'')+'</div></article>';
     }).join('')+'</div>';
+  },
+
+  // Список товаров с подозрительной ценой закупки — их надо править в 1С.
+  _goodsPriceIssues:function(){
+    var a=App._goodsA||{};
+    var items=a.priceIssues||[];
+    App.openModal('<div class="modal-title">Похоже, ошибка в ценах</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.6;">'+
+      'У этих товаров цена закупки подозрительно низкая. Скорее всего в 1С не заполнена закупка — '+
+      'из-за них наценка по магазину считается неверно. Поправьте в 1С и загрузите выгрузку заново.</div>'+
+      (items.length?'<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+        items.map(function(x){
+          return '<div style="padding:11px 13px;border-top:1px solid var(--line-2);">'+
+            '<div style="font-size:13px;font-weight:650;">'+App._e(x.name)+'</div>'+
+            '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">закуп '+x.buy+' ₽ → продажа '+x.retail+' ₽ · наценка '+fmt(x.markup)+'%</div></div>';
+        }).join('')+'</div>':'<div style="color:var(--muted);">Таких товаров нет.</div>'));
   },
 
   openProductCard:function(i){
