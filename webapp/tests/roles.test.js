@@ -52,5 +52,12 @@ ROLES.forEach(function(r){
 ROLES.filter(function(r){return r!=='Владелец';}).forEach(function(r){
   t(r+' не равен владельцу', serverPerms(r).length<ALL.length);
 });
+// Гарды принимают ID таблицы (строку). Если передать объект Spreadsheet,
+// openById внутри падает и catch возвращает true — проверка пропускает всех.
+// Так было в xlsPreview/xlsApply/saveLoss: сотрудник зала мог грузить 1С.
+var srcGuards=require('fs').readFileSync(__dirname+'/../Code.gs','utf8');
+var badGuards=srcGuards.match(/_(perm|any|fin)Guard\(\s*ss\s*[,)]/g)||[];
+t('гарды не вызываются с объектом ss вместо ssId', badGuards.length===0);
+
 console.log('\nПрава по ролям: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

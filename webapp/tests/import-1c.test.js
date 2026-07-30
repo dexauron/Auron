@@ -14,7 +14,14 @@ function applyGoods(cur, items){
   var upd=0, add=[], now='NOW';
   items.forEach(function(o){
     var i=o.barcode?byBar[o.barcode]:undefined;
-    if(i===undefined)i=byName[o.name.toLowerCase()];
+    if(i===undefined){
+      var j=byName[o.name.toLowerCase()];
+      if(j!==undefined&&o.barcode){
+        var tgt=(j>=0)?cur[j]:add[-j-1];
+        var tb=tgt?String(tgt[G_BARCODE-1]||''):'';
+        if(!tb){ i=j; tgt[G_BARCODE-1]=o.barcode; byBar[o.barcode]=j; }
+      } else if(j!==undefined) i=j;
+    }
     var row;
     if(i===undefined){
       row=[];for(var k=0;k<G_COLS;k++)row.push('');
@@ -66,6 +73,16 @@ t('продажи легли по названию', r.add.length===0&&r.cur[0][
 // 5. новый товар добавляется
 r=applyGoods([mk('460','Рулет')],[{barcode:'777',name:'Новый',buy:5}]);
 t('новый товар добавлен', r.add.length===1&&r.add[0][G_BARCODE-1]==='777');
+
+// 6. одинаковые названия с РАЗНЫМИ штрихкодами — это разные товары
+r=applyGoods([mk('460','Пакет майка')],[{barcode:'777',name:'Пакет майка',buy:3}]);
+t('одинаковое имя + другой штрихкод = новый товар',
+  r.add.length===1&&r.add[0][G_BARCODE-1]==='777'&&r.cur[0][G_BUY-1]!==3);
+
+// 7. товар, заведённый из Продаж без штрихкода, получает штрихкод из прайса
+r=applyGoods([mk('','Рулет')],[{barcode:'460',name:'Рулет',buy:50}]);
+t('пустой штрихкод дозаполняется, дубля нет',
+  r.add.length===0&&r.cur[0][G_BARCODE-1]==='460'&&r.cur[0][G_BUY-1]===50);
 
 console.log('\nИмпорт из 1С: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

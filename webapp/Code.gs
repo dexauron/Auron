@@ -6038,7 +6038,16 @@ function _xlsToSheet(b64, fname) {
   return JSON.parse(res.getContentText()).id;
 }
 
-function _xlsDrop(id) { try { DriveApp.getFileById(id).setTrashed(true); } catch(e){} }
+// Это наш временный файл импорта? Защита от чужого id в tmpId:
+// удалять и разбирать можно ТОЛЬКО файл с нашим служебным именем.
+function _xlsIsTmp(id) {
+  try { return !!id && DriveApp.getFileById(id).getName() === XLS_TMP_NAME; }
+  catch(e) { return false; }
+}
+
+function _xlsDrop(id) {
+  try { if (_xlsIsTmp(id)) DriveApp.getFileById(id).setTrashed(true); } catch(e){}
+}
 
 // Подчищаем брошенные временные таблицы (окно импорта закрыли, не загрузив).
 // Иначе они копятся на Диске владельца. Трогаем только старше часа —
@@ -6178,7 +6187,7 @@ function xlsPreview(p) {
   var tmp = '';
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
-    if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+    if (!_permGuard(p.ssId,'goods')) return {__error:'Нет прав на импорт товаров'};
     _xlsSweep();
     tmp = _xlsToSheet(p.data, p.name);
     // Проверка должна быть БЫСТРОЙ: читаем только шапку, чтобы понять тип
@@ -6200,7 +6209,10 @@ function xlsApply(p) {
   var tmp = p.tmpId;
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
-    if (!_permGuard(ss,'goods')) return {__error:'Нет прав на импорт товаров'};
+    if (!_permGuard(p.ssId,'goods')) return {__error:'Нет прав на импорт товаров'};
+    // tmpId должен быть НАШИМ временным файлом импорта. Иначе чужой id
+    // (например id основной таблицы) был бы разобран и отправлен в корзину.
+    if (!_xlsIsTmp(tmp)) return {__error:'Файл импорта не найден — выберите файл заново.'};
 
     // Чтение и разбор файла (десятки тысяч строк) — ДО замка, иначе
     // остальные сотрудники ждут всё это время. Под замком — только запись.
@@ -6255,7 +6267,18 @@ function _xlsApplyGoods(ss, items, type) {
 
   items.forEach(function(o){
     var i = o.barcode ? byBar[o.barcode] : undefined;
-    if (i === undefined) i = byName[o.name.toLowerCase()];
+    // Сверка по названию — запасной путь (в Продажах штрихкода нет).
+    // Но если у нас штрихкод ЕСТЬ, а у найденной по названию строки —
+    // другой штрихкод, это разные товары (одинаковые названия обычны:
+    // «Пакет майка»). Тогда не сливаем их в одну строку.
+    if (i === undefined) {
+      var j = byName[o.name.toLowerCase()];
+      if (j !== undefined && o.barcode) {
+        var tgt = (j >= 0) ? cur[j] : add[-j - 1];
+        var tb  = tgt ? _xlsBarcode(tgt[G_BARCODE-1]) : '';
+        if (!tb) { i = j; tgt[G_BARCODE-1] = o.barcode; byBar[o.barcode] = j; }
+      } else if (j !== undefined) i = j;
+    }
     var row;
     if (i === undefined) {
       row = []; for (var k = 0; k < G_COLS; k++) row.push('');
@@ -6548,7 +6571,7 @@ function saveLoss(p) {
   var d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
-    if (!_permGuard(ss,'receive')) return {__error:'Нет прав записывать списания'};
+    if (!_permGuard(p.ssId,'receive')) return {__error:'Нет прав записывать списания'};
     var sh=ss.getSheetByName(SH_LOSSES);
     var kind=(String(d.kind)==='return')?'return':'writeoff';
     var amt=Math.round(parseFloat(d.amount)||0);
