@@ -1,8 +1,23 @@
 name: Deploy to GitHub Pages
 
+# Сайт собирается ИЗ ОДНОГО ИСТОЧНИКА — ветки claude/optimistic-einstein-Afzmv
+# (папка app/). Это важно: на разных ветках папка app/ разная, и если
+# публиковать «ту ветку, в которую только что запушили», сайт откатится
+# назад и потеряет файлы — публикация идёт с force_orphan, то есть заменяет
+# содержимое целиком.
+#
+# Страница сканера штрихкода (app/scan.html) лежит в рабочей ветке
+# claude/cool-archimedes-qv458l и докладывается поверх: приложению нужен
+# свой домен для доступа к камере, потому что внутри рамки Apps Script
+# камера заблокирована песочницей.
+
 on:
   push:
-    branches: [main, master, claude/optimistic-einstein-Afzmv]
+    branches:
+      - main
+      - master
+      - claude/optimistic-einstein-Afzmv
+      - claude/cool-archimedes-qv458l
   workflow_dispatch:
 
 permissions:
@@ -12,8 +27,26 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout сайта (единый источник)
         uses: actions/checkout@v4
+        with:
+          ref: claude/optimistic-einstein-Afzmv
+
+      - name: Checkout рабочей ветки (для сканера)
+        uses: actions/checkout@v4
+        with:
+          ref: claude/cool-archimedes-qv458l
+          path: work
+
+      - name: Добавить страницу сканера
+        run: |
+          if [ -f work/app/scan.html ]; then
+            cp work/app/scan.html app/scan.html
+            echo "scan.html добавлен"
+          else
+            echo "::warning::work/app/scan.html не найден — сканер не опубликован"
+          fi
+          rm -rf work
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
