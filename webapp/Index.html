@@ -119,6 +119,39 @@ html,body{height:100dvh;background:var(--bg);font-family:var(--font);color:var(-
 #loader h1{color:var(--ink);font-size:28px;font-weight:800;letter-spacing:-.8px;}
 #loader p{color:var(--muted);font-size:14px;margin-top:8px;font-weight:500;}
 
+/* ── Экран загрузки: живой, но спокойный ─────────────────────────
+   Логотип «дышит», под ним тонкая полоса-прогресс. Смысл — показать,
+   что приложение работает, а не зависло. Ничего быстрого и мигающего:
+   это первое, что человек видит, и оно не должно раздражать. */
+@keyframes loaderBreath{
+  0%,100%{transform:scale(1);box-shadow:0 12px 40px -8px color-mix(in oklab,var(--brand) 50%,transparent);}
+  50%    {transform:scale(1.045);box-shadow:0 18px 52px -6px color-mix(in oklab,var(--brand) 68%,transparent);}
+}
+#loader-icon{animation:loaderBreath 2.1s ease-in-out infinite;will-change:transform;}
+/* Появление логотипа и текста: логотип первым, подписи следом */
+@keyframes loaderIn{from{opacity:0;transform:translateY(10px) scale(.94);}to{opacity:1;transform:none;}}
+#loader-icon,#loader h1,#loader p{animation-fill-mode:both;}
+#loader h1{animation:loaderIn .42s var(--ease-out,cubic-bezier(.22,.8,.28,1)) .1s both;}
+#loader p {animation:loaderIn .42s var(--ease-out,cubic-bezier(.22,.8,.28,1)) .18s both;}
+/* Полоса-прогресс: не обещает процентов, просто показывает движение */
+#loader::after{
+  content:"";position:absolute;left:50%;bottom:26%;transform:translateX(-50%);
+  width:132px;height:3px;border-radius:2px;overflow:hidden;
+  background:color-mix(in oklab,var(--brand) 16%,transparent);
+}
+#loader::before{
+  content:"";position:absolute;left:50%;bottom:26%;
+  width:44px;height:3px;border-radius:2px;background:var(--brand);
+  animation:loaderRun 1.25s ease-in-out infinite;will-change:transform;
+}
+@keyframes loaderRun{
+  0%  {transform:translateX(-116px);}
+  100%{transform:translateX(72px);}
+}
+/* Уходит мягко, чуть уменьшаясь — как будто «отпускает» экран */
+#loader{transition:opacity var(--dur-slow,.32s) ease,transform var(--dur-slow,.32s) ease;}
+#loader.hide{opacity:0;pointer-events:none;transform:scale(1.02);}
+
 /* ── Auth screens ── */
 .screen{
   display:none;position:fixed;inset:0;
@@ -922,9 +955,19 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 @keyframes appIn{from{opacity:0;transform:translateY(8px) scale(.994);}to{opacity:1;transform:none;}}
 .app-enter{animation:appIn var(--dur-slow) var(--ease-out) both;}
 
-/* Смена вкладки: сама панель мягко проявляется */
-@keyframes panelIn{from{opacity:0;}to{opacity:1;}}
-.panel.active{animation:panelIn var(--dur-base) var(--ease-out) both;}
+/* Смена вкладки: панель не просто проявляется, а приезжает С ТОЙ СТОРОНЫ,
+   куда человек пошёл. Так понятно, вперёд ты двинулся или назад —
+   этому учат все нормальные мобильные приложения.
+   Сдвиг маленький (14px): большой отвлекает и кажется медленным. */
+@keyframes panelFwd{from{opacity:0;transform:translateX(14px);}to{opacity:1;transform:none;}}
+@keyframes panelBack{from{opacity:0;transform:translateX(-14px);}to{opacity:1;transform:none;}}
+.panel.active{animation:panelFwd var(--dur-base) var(--ease-out) both;}
+.panel.active.from-left{animation-name:panelBack;}
+
+/* Экраны входа/регистрации — тот же принцип, но заметнее: это отдельные
+   шаги, а не соседние вкладки */
+@keyframes screenIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+.screen.active{animation:screenIn var(--dur-slow) var(--ease-out) both;}
 
 /* Плитки товаров: стаггер только у первых — остальные сразу */
 @keyframes tileIn{from{opacity:0;transform:translateY(9px) scale(.985);}to{opacity:1;transform:none;}}
@@ -2963,7 +3006,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.38.0';
+var APP_VERSION='4.39.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4438,9 +4481,15 @@ var App={
   // а не защита: сюда можно попасть и другим путём, поэтому проверяем здесь.
   // Сервер всё равно перепроверяет права при каждом запросе.
   _tabNeed:{suppliers:'finance',journal:'finance',analytics:'finance',report:'finance',kassa:'kassa'},
+  // Порядок вкладок — чтобы понимать направление перехода.
+  // Идём вправо по списку — панель приезжает справа, влево — слева.
+  _tabOrder:['home','goods','suppliers','kassa','journal','analytics','report','settings'],
   setTab:function(tab,btn){
     var need=App._tabNeed[tab];
     if(need&&!App.can(need)){App.toast('Этот раздел вам не доступен',true);return;}
+    var from=App._tabOrder.indexOf(App._curTab||'home');
+    var to=App._tabOrder.indexOf(tab);
+    App._tabBack=(from>=0&&to>=0&&to<from);
     App._curTab=tab;
     App.closeActionMenu();
     document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
@@ -4448,6 +4497,7 @@ var App={
     document.querySelectorAll('.sb-nav-item').forEach(function(b){b.classList.remove('active');});
     var panel=document.getElementById('tab-'+tab);
     if(!panel)return;
+    panel.classList.toggle('from-left',!!App._tabBack);
     panel.classList.add('active');
     var navMatch=document.querySelector('.nav-item[data-tab="'+tab+'"]');
     if(navMatch)navMatch.classList.add('active');

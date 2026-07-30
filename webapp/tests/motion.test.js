@@ -26,15 +26,26 @@ var glob=css.match(/@media\s*\(\s*prefers-reduced-motion[^{]*\)\s*\{[\s\S]{0,400
 t('и отключается глобально (*), а не по одному классу',
   !!glob && /\*\s*,\s*\*::before/.test(glob[0]));
 
-// 3) переходы не затянуты: обычные ≤ 0.45с
+// 3) Переходы, которых человек ЖДЁТ, не затянуты: ≤ 0.45с.
+// Бесконечные фоновые анимации (дыхание логотипа, полоса загрузки, блик)
+// под это правило не попадают — их никто не ждёт, они идут сами по себе.
 var slow=[];
 (css.match(/(?:animation|transition)(?:-duration)?\s*:[^;}]+/g)||[]).forEach(function(d){
+  if(/\binfinite\b/.test(d)) return;
   (d.match(/(\d*\.?\d+)s/g)||[]).forEach(function(v){
-    var sec=parseFloat(v);
-    if(sec>0.45 && !/spin|shimmer|skel|gsslide|pulse/.test(d)) slow.push(d.trim().slice(0,44)+' ('+v+')');
+    if(parseFloat(v)>0.45) slow.push(d.trim().slice(0,44)+' ('+v+')');
   });
 });
-t('нет затянутых переходов (>0.45с)', slow.length===0, slow.slice(0,3).join(' | '));
+t('переходы, которых ждёшь, не затянуты (>0.45с)', slow.length===0, slow.slice(0,3).join(' | '));
+
+// 3b) Бесконечные анимации не должны быть дёрганно-быстрыми (<0.6с) —
+// быстрый бесконечный цикл раздражает и жрёт батарею.
+var twitchy=[];
+(css.match(/animation\s*:[^;}]*\binfinite\b[^;}]*/g)||[]).forEach(function(d){
+  var v=(d.match(/(\d*\.?\d+)s/)||[])[0];
+  if(v&&parseFloat(v)<0.6) twitchy.push(d.trim().slice(0,44)+' ('+v+')');
+});
+t('бесконечные анимации не дёрганые (<0.6с)', twitchy.length===0, twitchy.slice(0,3).join(' | '));
 
 // 4) стаггер в каталоге ограничен — есть правило для «всех остальных»
 t('стаггер плиток каталога ограничен', /\.g-grid\s+\.g-card:nth-child\(n\+\d+\)/.test(css));
