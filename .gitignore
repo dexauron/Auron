@@ -1,8 +1,11 @@
 __pycache__/
 .claude/*
 !.claude/skills/
+!.claude/commands/
+!.claude/agents/
 !.claude/SKILLS-INVENTORY.md
 !.claude/SKILLS-CATALOG.md
+!.claude/GSD-LICENSE.txt
 node_modules/
 package-lock.json
 package.json
