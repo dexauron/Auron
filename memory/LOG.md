@@ -1,5 +1,12 @@
 # LOG — журнал сессий (новое сверху)
 
+## 2026-07-29 — Интеграции встроены в UI приложения
+- Аналитика → P&L: кнопка «Поделиться отчётом» (Web Share, App.shareReport) + строка
+  «Курс ЦБ $/€» (Integrations.cbrRates). Кэш v54. node --check чист. Ветка приложения 9ffdea2.
+- Требующие ключей (банки/DaData/WB/SMS) и Telegram-отправка (нужен экран настроек токена) —
+  не встраивал. Проверка кнопки — на устройстве после входа (нужен HTTPS backend).
+
+
 ## 2026-07-29 — Справочник бесплатных API
 - Собран memory/FREE-APIS.md: каталоги (public-apis, public-api-lists, free-for-dev) +
   подборка под Auron (ЦБ РФ, DaData, API-ФНС, Telegram/Web Share — часть уже подключена).
