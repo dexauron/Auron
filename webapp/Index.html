@@ -3042,7 +3042,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.43.0';
+var APP_VERSION='4.44.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3307,7 +3307,7 @@ var App={
     }).catch(function(e){
       document.getElementById('loader').classList.add('hide');
       App.showScreen('scr-reg');
-      App.toast('Ошибка: '+e.message,true);
+      App.toast('Ошибка: '+App._friendlyErr(e),true);
     });
     document.addEventListener('keydown',function(e){
       if(e.key==='Escape')App.closeSheet();
@@ -3561,19 +3561,58 @@ var App={
     // 2) Перехват ошибок сервера, не пойманных вызывающим кодом
     window.addEventListener('unhandledrejection',function(ev){
       try{var r=ev.reason;var m=(r&&r.message)||String(r||'');
-        if(m&&m!=='undefined')App.toast(App._friendlyErr(m),true);}catch(e){}
+        if(m&&m!=='undefined')App.toast(App._friendlyErr(m),true);
+        App._unstick();}catch(e){}
     });
     // 3) Перехват ошибок JS — приложение не «обеляется» молча
     window.addEventListener('error',function(ev){
-      try{if(ev&&ev.message)App.toast('Сбой: '+ev.message,true);}catch(e){}
+      try{if(ev&&ev.message){App.toast('Сбой: '+App._friendlyErr(ev),true);App._unstick();}}catch(e){}
     });
   },
+  // Снимает зависшие надписи «Загрузка…»: если запрос сорвался, человек
+  // не должен смотреть в замерший экран и гадать, работает оно или нет.
+  // Показываем, что случилось, и как повторить.
+  _unstick:function(){
+    try{
+      var stuck=['Загрузка…','Загрузка...','Считаю…','Считаю...','Загружаю…'];
+      var all=document.querySelectorAll('#goods-body,#goods-list,#bl-body,#loss-list,#pc-body,[data-loading]');
+      Array.prototype.forEach.call(all,function(el){
+        var t=(el.textContent||'').trim();
+        if(stuck.indexOf(t)>=0){
+          el.innerHTML='<div style="text-align:center;padding:18px 8px;color:var(--muted);'+
+            'font-size:13px;line-height:1.6;">Не удалось загрузить.<br>'+
+            '<b style="color:var(--brand);cursor:pointer;" onclick="App.closeModal()">Закрыть</b>'+
+            ' и попробовать ещё раз.</div>';
+        }
+      });
+      // и глобальную полосу «работаю» тоже снимаем
+      var b=document.getElementById('gs-bar'); if(b)b.classList.remove('show');
+    }catch(e){}
+  },
+  // Превращает системную ошибку в человеческую фразу.
+  // Смысл: человек за прилавком не должен видеть «Exception: Service
+  // Spreadsheets failed while accessing document with id 1a2b3c…».
+  // Такое пугает, ничего не объясняет и иногда содержит внутренние адреса.
   _friendlyErr:function(m){
-    m=String(m||'');
-    if(/quota|exceeded|too many/i.test(m))return'Google ненадолго ограничил запросы — повтори через минуту';
-    if(/network|fetch|timeout|unavailable/i.test(m))return'Нет связи с сервером — проверь интернет';
-    if(/permission|authoriz|access/i.test(m))return'Нет доступа — войди заново';
-    return'Ошибка: '+m;
+    m=String((m&&m.message)||m||'');
+    if(!m)return'Не получилось. Попробуй ещё раз';
+    if(/quota|exceeded|too many|limit/i.test(m))
+      return'Google ненадолго ограничил запросы — подожди минуту и повтори';
+    if(/network|fetch|timeout|unavailable|failed to|connection/i.test(m))
+      return'Нет связи с сервером — проверь интернет и повтори';
+    if(/permission|authoriz|access denied|not have access/i.test(m))
+      return'Нет доступа. Войди заново или попроси владельца открыть доступ';
+    if(/lock|занят/i.test(m))
+      return'Кто-то сохраняет прямо сейчас — повтори через пару секунд';
+    if(/not found|не найден/i.test(m))
+      return'Запись не найдена — возможно, её уже удалили';
+    if(/спрятан|hidden|deleted|trash/i.test(m))
+      return'Таблица магазина недоступна — проверь, не удалили ли её с Диска';
+    // Наши собственные сообщения написаны по-русски и понятны — их
+    // показываем как есть. Всё остальное (системное, английское) прячем:
+    // человеку оно не поможет, а подробности всё равно попадают в журнал.
+    if(/[а-яА-ЯёЁ]/.test(m)) return m.length>160?m.slice(0,160)+'…':m;
+    return'Не получилось выполнить действие. Попробуй ещё раз';
   },
 
   showScreen:function(id){
@@ -3603,7 +3642,7 @@ var App={
         gs('uploadReceipt',{ssId:App.s.ssId,base64:b64,name:file.name,mimeType:file.type}).then(function(r){
           if(r.__error){App.toast('Ошибка загрузки: '+r.__error,true);return;}
           App.toast('Фото загружено ✓');cb(r.viewUrl);
-        }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+        }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);});
       };
       reader.readAsDataURL(file);
     };
@@ -3730,7 +3769,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.s.userName=name;App.s.ssId=r.ssId;App.s.orgName=r.orgName||name;
       App.loadSettings(function(){App.showApp();App.loadHome();});
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // Экран «Присоединиться к магазину» — для нового сотрудника по приглашению.
@@ -3785,7 +3824,7 @@ var App={
       App.s.userName=name;App.s.ssId=r.ssId;App.s.orgName=r.orgName||'Магазин';
       App.toast('Вы в магазине ✓');
       App.loadSettings(function(){App.showApp();App.loadHome();});
-    }).catch(function(e){App.toast(e.message||'Ошибка',true);if(btn){btn.disabled=false;btn.textContent='Присоединиться →';}});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);if(btn){btn.disabled=false;btn.textContent='Присоединиться →';}});
   },
 
   renderOrgList:function(orgs){
@@ -3820,7 +3859,7 @@ var App={
       App.renderOrgList(orgs);
       // if deleted active org, go to org picker
       if(ssId===App.s.ssId){App.s.ssId='';App.s.orgName='';App.showScreen('scr-orgs');}
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   selectOrgById:function(ssId){
@@ -3929,7 +3968,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Организация добавлена ✓');
       App.selectOrg({ssId:r.ssId,name:r.name});
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Сотрудники и доступ (только владелец) ──
@@ -4017,7 +4056,7 @@ var App={
       App._teamAll=r;App._renderTeamAll();
       // Главное — дать владельцу ссылку, чтобы отправить самому (на письмо не полагаемся)
       App._showInviteLink(r&&r.inviteLink,email,r&&r.emailSent);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _showInviteLink:function(link,email,emailSent){
     if(!link){App.toast('✅ Доступ выдан для '+email,false);return;}
@@ -4039,7 +4078,7 @@ var App={
     gs('setMemberRoleMulti',{ssId:ssId,email:email,role:role}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Роль обновлена ✓');App._teamAll=r;App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _memberInfo:function(ssId,email){var out={perms:[],role:'Сотрудник зала'};
     ((App._teamAll&&App._teamAll.orgs)||[]).forEach(function(o){if(o.ssId===ssId)(o.members||[]).forEach(function(m){if(m.email===email){out.perms=(m.perms||[]).slice();out.role=m.role;}});});
@@ -4062,12 +4101,12 @@ var App={
     gs('setMemberPermsMulti',{ssId:s.ssId,email:s.email,perms:s.perms}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Права сохранены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});},
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
   _mpReset:function(){var s=App._mp;if(!s)return;
     gs('setMemberRoleMulti',{ssId:s.ssId,email:s.email,role:s.role}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Права сброшены по роли ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});},
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
   // Владелец назначает набор виджетов сотруднику
   openMemberWidgets:function(ssId,email){
     var info=App._memberInfo(ssId,email);
@@ -4093,18 +4132,18 @@ var App={
     gs('setMemberWidgetsMulti',{ssId:s.ssId,email:s.email,widgets:s.sel}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Виджеты назначены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});},
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
   _mwClear:function(){var s=App._mw;if(!s)return;
     gs('setMemberWidgetsMulti',{ssId:s.ssId,email:s.email,widgets:[]}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Сброшено — сотрудник настроит сам ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});},
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
   _teamRemove:async function(ssId,email,orgName){
     if(!(await App._confirm('Убрать доступ '+email+' к «'+orgName+'»?')))return;
     gs('removeMemberMulti',{ssId:ssId,email:email}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Доступ удалён ✓');App._teamAll=r;App._renderTeamAll();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Справочник контрагентов ──
@@ -4123,7 +4162,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(c.archived?'Возвращён из архива ✓':'В архиве — скрыт из подсказок');
       App.openContractorsDir(App._cdArch);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _renderContractorsDir:function(){
     var b=document.getElementById('cd-body');if(!b)return;
@@ -4173,7 +4212,7 @@ var App={
     gs('saveContractor',{ssId:App.s.ssId,data:d}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Сохранено ✓');App.openContractorsDir();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   // ── Карточка контрагента: всё в одном месте (долг, выплаты, заказы) ──
   openContractorCard:function(name){
@@ -4342,7 +4381,7 @@ var App={
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'received'}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._ordOfferInvoice(o.contractor,o.amount);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _ordPartial:async function(i){
     var o=App._orders.orders[i];if(!o)return;
@@ -4353,7 +4392,7 @@ var App={
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'partial',factAmount:fact}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._ordOfferInvoice(o.contractor,fact);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   // Полуавтомат: приход заказа → сразу предлагаем записать накладную
   _ordOfferInvoice:function(name,amount){
@@ -4369,7 +4408,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(mode==='cash'?'Записано: закупка −₽ '+fmt(amount)+' ✓':'Записано в долг: +₽ '+fmt(amount)+' · Долг: ₽ '+fmt(r.storeDebt||0));
       App.openOrders();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _ordCancel:async function(i){
     var o=App._orders.orders[i];if(!o)return;
@@ -4377,14 +4416,14 @@ var App={
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'cancelled'}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Заказ отменён');App.openOrders();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _ordReopen:function(i){
     var o=App._orders.orders[i];if(!o)return;
     gs('setOrderStatus',{ssId:App.s.ssId,id:o.id,status:'active'}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.openOrders();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _ordDel:async function(i){
     var o=App._orders.orders[i];if(!o)return;
@@ -4392,7 +4431,7 @@ var App={
     gs('deleteOrder',{ssId:App.s.ssId,id:o.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Удалено ✓');App.openOrders();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   openOrderForm:function(){
     var today=fmtISO(new Date());
@@ -4422,7 +4461,7 @@ var App={
       gs('saveOrder',{ssId:App.s.ssId,data:d}).then(function(r){
         if(r&&r.__error){App.toast(r.__error,true);return;}
         App.toast('Заказ записан ✓');App.openOrders();
-      }).catch(function(e){App.toast(e.message,true);});
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
     };
     if(!known){
       gs('saveContractor',{ssId:App.s.ssId,data:{name:name,type:'Поставщик'}}).then(function(){App._contractors=null;go();}).catch(function(){go();});
@@ -4435,7 +4474,7 @@ var App={
     gs('deleteContractor',{ssId:App.s.ssId,id:c.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._contractors.splice(i,1);App._renderContractorsDir();App.toast('Удалено ✓');
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   createOrg:function(){
@@ -4452,7 +4491,7 @@ var App={
           App.toast('Настройки скопированы ✓');done();
         }).catch(function(){done();});
       } else done();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Нижние вкладки: свои по ролям + настраиваемые ───────────────
@@ -4590,7 +4629,7 @@ var App={
       App._renderSuppCalendar(App._suppPayables);
       App._renderPayList(App._suppPayables);
       App._checkNotifications();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   _renderSuppSummary:function(pays,debts){
@@ -4830,7 +4869,7 @@ var App={
       document.body.appendChild(a);a.click();document.body.removeChild(a);
       URL.revokeObjectURL(url);
       App.toast('Файл скачан ✓');
-    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+    }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);});
   },
 
   shareReport:function(){
@@ -4859,7 +4898,7 @@ var App={
       L.push('━━━━━━━━━━━━━');
       L.push('Auron Finance');
       App._shareModal('Отчёт за день',L.join('\n'));
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _shareModal:function(title,text){
     App._shareText=text;
@@ -4909,7 +4948,7 @@ var App={
     if(!amt){App.toast('Введите сумму',true);return;}
     gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'pay',amount:amt,account:acc,comment:cmt}}).then(function(r){
       App.toast('Оплачено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   _payPostpone:function(id){
@@ -4924,20 +4963,20 @@ var App={
     var reason=document.getElementById('pp-reason').value.trim();
     gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'postpone',date:date,comment:reason}}).then(function(){
       App.toast('Перенесено ✓');App.closeModal();App.loadSuppliers();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   _payCancel:async function(id){
     if(!(await App._confirm('Отменить запись?')))return;
     gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'cancel'}}).then(function(){
       App.toast('Отменено');App.loadSuppliers();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   _payRestore:function(id){
     gs('updatePayment',{ssId:App.s.ssId,data:{id:id,action:'restore'}}).then(function(){
       App.toast('Возвращено в долг ✓');App.loadSuppliers();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   initReport:function(){
@@ -5205,7 +5244,7 @@ var App={
       try{Object.keys(localStorage).forEach(function(k){if(k.indexOf('ac_')===0)localStorage.removeItem(k);});}catch(e){}
       App.toast('Удалено записей: '+(r.removed||0)+' ✓');
       App.loadHome();App.renderSettingsPage();
-    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+    }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);});
   },
 
   seedDemo:async function(){
@@ -5214,7 +5253,7 @@ var App={
     gs('seedDemoData',{ssId:App.s.ssId}).then(function(r){
       App.toast('Готово — '+App._plural(r.txCount,'добавлена','добавлены','добавлено')+' '+r.txCount+' '+App._plural(r.txCount,'операция','операции','операций')+' ✓');
       App.loadSettings(function(){App.loadHome();});
-    }).catch(function(e){App.toast('Ошибка: '+e.message,true);});
+    }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);});
   },
 
   // ── Home ──────────────────────────────────────────────────────
@@ -5466,7 +5505,7 @@ var App={
     var diff=newBal-currentBal;
     gs('adjustBalance',{ssId:App.s.ssId,data:{account:name,amount:diff,comment:cmt}}).then(function(){
       App.toast('Баланс скорректирован ✓');App.closeModal();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // Свайп влево по операции → показать действия (редактировать/удалить)
@@ -5800,7 +5839,7 @@ var App={
     gs('saveBudget',{ssId:App.s.ssId,budgetMap:bm}).then(function(){
       App.s._budgetMap=bm;App.toast('Бюджет сохранён ✓');App.closeModal();
       if(App.s.anTab==='budget')App.loadBudget();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   openAddRecurring:function(){App.openRecurringForm(null);},
@@ -6397,7 +6436,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Приём записан ✓ Долг «'+rep+'»: '+fmtFull(r.debt)+' ₽');
       App.closeModal();App.loadHome();App._loadKHub&&App._loadKHub();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Изъятия из кассы ──
@@ -6417,7 +6456,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Изъятие −₽ '+fmtFull(amt)+' записано ✓');App.closeModal();
       gs('getAccounts',{ssId:App.s.ssId}).then(function(a){App.s.accounts=a||[];App._loadKHub();});
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Вечер: накладные и долг магазина ──
@@ -6500,7 +6539,7 @@ var App={
       gs('saveTransfer',{ssId:App.s.ssId,data:{uuid:uid,date:new Date().toISOString(),account:from,toAccount:account,amount:amount,comment:'Автопилот: накопления из выручки'}}).then(function(r){
         if(r&&r.__error){App.toast(r.__error,true);return;}
         App.toast('Отложено '+fmtFull(amount)+' ₽ ✓');App._loadKHub&&App._loadKHub();App.loadHome&&App.loadHome();
-      }).catch(function(e){App.toast(e.message,true);});
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
     });
   },
 
@@ -6573,7 +6612,7 @@ var App={
         (rec.diff!==0?'<div style="font-size:12px;color:'+(rec.diff<0?'var(--neg)':'var(--warn,#FF9F0A)')+';margin-bottom:12px;line-height:1.5;">'+(rec.diff<0?'⚠️ Недостача — записана в историю смен на этого кассира.':'⚠️ Излишек — записан в историю смен.')+'</div>':'')+
         '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
       App.haptic(12);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // Вечер: накладные сохраняются отдельно от смены (свой учётный процесс)
@@ -6597,7 +6636,7 @@ var App={
         '</div>'+
         '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
       App.haptic(12);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Journal ───────────────────────────────────────────────────
@@ -6712,7 +6751,7 @@ var App={
     if(!name){App.toast('Введите имя',true);return;}
     gs('saveRep',{ssId:App.s.ssId,data:{name:name,phone:phone,initDebt:initDebt}}).then(function(){
       App.toast('Добавлен ✓');App.closeModal();App.loadReps();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   openDebtModal:function(repId,repName,type){
@@ -6737,7 +6776,7 @@ var App={
     gs('saveDebtEntry',{ssId:App.s.ssId,data:{repId:repId,type:type,amount:amt,account:acc,comment:comment,invoice:invoice,status:status}}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadReps();
       if(type==='oplata')App._offerClosePayment(repId,amt);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // Полуавтомат: оплатил долг ТП — предлагаем закрыть выплату в графике
@@ -6753,7 +6792,7 @@ var App={
       // Без счёта — деньги уже списаны оплатой долга, второй расход не создаём
       gs('updatePayment',{ssId:App.s.ssId,data:{id:best.id,action:'pay',amount:amt}}).then(function(){
         App.toast('Выплата отмечена ✓');App.loadSuppliers();
-      }).catch(function(e){App.toast(e.message,true);});
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
     },400);
   },
 
@@ -6818,14 +6857,14 @@ var App={
     if(amt!==undefined)data.amount=amt;
     gs('updateDebtEntry',{ssId:App.s.ssId,data:data}).then(function(){
       App.toast('Обновлено ✓');App.closeModal();App.openRepHistory(repId,repName);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   deleteDebtEntry:async function(id,repId,repName){
     if(!(await App._confirm('Удалить запись?')))return;
     gs('deleteDebtEntry',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалено');App.closeModal();App.openRepHistory(repId,repName);
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Timesheet ─────────────────────────────────────────────────
@@ -6950,7 +6989,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(r.added?'Заполнено дней: '+r.added+' ✓':'Все дни уже заполнены');
       App.closeModal();App.loadTimesheet();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // Выбрали сотрудника — подставляем его график, часы и ставку автоматически
@@ -7119,7 +7158,7 @@ var App={
       a.href=url;a.download='Auron_'+from+'_'+to+'.csv';document.body.appendChild(a);a.click();
       document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(url);},1000);
       App.toast('Файл скачан ✓');
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _shareTo:function(channel){
     var text=App._reportText||'';
@@ -7401,13 +7440,13 @@ var App={
     App.saveSettings();
     gs('saveAccount',{ssId:App.s.ssId,data:{id:id||null,name:name,startBalance:bal}}).then(function(){
       App.toast('Счёт сохранён ✓');App.closeModal();App.renderSettingsPage();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _delAcc:async function(id){
     if(!(await App._confirm('Удалить счёт? История сохранится.')))return;
     gs('deleteAccount',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалён');App.closeModal();App.renderSettingsPage();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Numpad ────────────────────────────────────────────────────
@@ -7689,7 +7728,7 @@ var App={
     gs(fn,{ssId:s.ssId,data:data}).then(function(){
       App.toast('Сохранено ✓');App.loadHome();
       if(data.type==='Расход'&&data.category)App._checkBudgetLimit(data.category);
-    }).catch(function(e){App.toast('Ошибка: '+e.message,true);App.loadHome();});
+    }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);App.loadHome();});
   },
 
   // ── Офлайн-очередь: записи, не дошедшие до сервера ──
@@ -7732,7 +7771,7 @@ var App={
     gs('testTelegram',{token:t,chat:c}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('✅ Сообщение отправлено — проверь Telegram');
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _tgHelp:function(){
     App.openModal('<div class="modal-title">Telegram за 3 минуты</div>'+
@@ -7841,7 +7880,7 @@ var App={
     gs('payEmployeeSalary',{ssId:App.s.ssId,data:{employee:emp,kind:kind,amount:amt,account:acc,comment:cmt}}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast((kind==='advance'?'Аванс':'ЗП')+' записана ✓');App.openSalaries();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Долги · Накопления · Кредиты ──
@@ -8050,7 +8089,7 @@ var App={
     gs('saveObligation',{ssId:App.s.ssId,data:d}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Сохранено ✓');App.openObligations();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _oblDel:async function(i){
     var o=(App._obl.items||[])[i];if(!o)return;
@@ -8058,7 +8097,7 @@ var App={
     gs('deleteObligation',{ssId:App.s.ssId,id:o.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Удалено ✓');App.openObligations();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   editStoreDebt:function(){
     var cur=(App._obl&&App._obl.storeDebt)||App._kStoreDebt||0;
@@ -8073,7 +8112,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Долг магазина обновлён ✓');App.closeModal();
       if(App._kView)App._loadStoreDebt&&App._loadStoreDebt();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Центр уведомлений ──
@@ -8133,7 +8172,7 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Акт ревизии записан: '+(diff>0?'+':'−')+'₽ '+fmt(Math.abs(diff))+' ✓');
       App.closeModal();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Заметка дня ──
@@ -8152,7 +8191,7 @@ var App={
     gs('saveDayNote',{ssId:App.s.ssId,date:fmtISO(new Date()),text:text}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(text?'Заметка сохранена ✓':'Заметка удалена');App.closeModal();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Размен по умолчанию ──
@@ -8219,7 +8258,7 @@ var App={
     if(tx)go(tx);
     else gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){
       go((r||[]).find(function(t){return String(t.id)===String(id);}));
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Чипы быстрых сумм ──
@@ -8270,7 +8309,7 @@ var App={
     gs('restoreTransaction',{ssId:App.s.ssId,id:t.id}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Восстановлено ✓');App.openTrash();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Поделиться отчётом текстом (WhatsApp и т.п.) ──
@@ -8376,7 +8415,7 @@ var App={
       try{sessionStorage.clear();}catch(e){}
       // Перезагружаем приложение — вход начнётся с чистого листа.
       setTimeout(function(){try{top.location.reload();}catch(e){location.reload();}},600);
-    }).catch(function(e){App.toast(e.message||'Ошибка',true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Мой профиль ──
@@ -8453,7 +8492,7 @@ var App={
     gs('updateMyProfile',d).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Сохранено ✓');App.s.userName=d.name;App.openProfile();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Автоматизация ──
@@ -8497,7 +8536,7 @@ var App={
     }).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast(r.enabled?'⚡ Автоматизация включена ✓':'Автоматизация выключена');App.closeModal();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // PDF одним тапом: печать содержимого отчёта из модалки
@@ -8584,9 +8623,9 @@ var App={
         gs('restoreTransaction',{ssId:App.s.ssId,id:id}).then(function(){
           App.toast('Восстановлено ✓');App.loadHome();
           if(App._jTxAll)App.loadHistory();
-        }).catch(function(e){App.toast(e.message,true);});
+        }).catch(function(e){App.toast(App._friendlyErr(e),true);});
       });
-    }).catch(function(e){App.toast(e.message,true);if(el)el.style.display='';});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);if(el)el.style.display='';});
   },
 
   openSearch:function(){
@@ -8846,7 +8885,7 @@ var App={
     }
     gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,amount:amt,date:date,comment:comment,status:'open'}}).then(function(r){
       App.toast('Сохранено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   openPaymentPay:function(id,name,amount){
@@ -8865,14 +8904,14 @@ var App={
     var acc=document.getElementById('pp-acc').value;
     gs('markPaymentPaid',{ssId:App.s.ssId,id:id,account:acc}).then(function(){
       App.toast('Оплачено ✓');App.closeModal();App.loadPayments();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   deletePayment:async function(id){
     if(!(await App._confirm('Удалить запись?')))return;
     gs('deletePayment',{ssId:App.s.ssId,id:id}).then(function(){
       App.toast('Удалено');App.loadPayments();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Recurring expenses ────────────────────────────────────────
@@ -8929,7 +8968,7 @@ var App={
     gs('saveRecurring',{ssId:App.s.ssId,data:{id:id||null,name:name,category:cat,amount:amt,account:acc,day:day,active:true}}).then(function(){
       App.toast('Сохранено ✓');App.closeModal();App.loadRecurring();
       if(App.s.anTab==='budget')App.loadBudget();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   deleteRecurring:async function(id){
@@ -8944,7 +8983,7 @@ var App={
     if(!(await App._confirm('Создать расходы по всем активным шаблонам за текущий месяц?')))return;
     gs('applyRecurring',{ssId:App.s.ssId}).then(function(r){
       App.toast('Применено: '+r.applied+' '+App._plural(r.applied,'запись','записи','записей'));App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Onboarding ─────────────────────────────────────────
@@ -9090,7 +9129,7 @@ var App={
     }).then(function(){
       App.loadSettings(function(){App.showApp();App.loadHome();});
     }).catch(function(e){
-      App.toast(e.message||'Ошибка регистрации',true);
+      App.toast(App._friendlyErr(e),true);
       if(btn){btn.disabled=false;btn.innerHTML=obIcon('store',19,2)+' Войти в Auron Finance';}
     });
   },
@@ -9538,7 +9577,7 @@ var App={
     gs('importRows',{ssId:App.s.ssId,rows:rows}).then(function(r){
       App.toast('Импортировано: '+r.added+(r.skipped?' · пропущено '+r.skipped:''));
       App.closeModal();App.loadHome();
-    }).catch(function(e){App.toast(e.message,true);if(btn){btn.disabled=false;btn.textContent='Импортировать';}});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);if(btn){btn.disabled=false;btn.textContent='Импортировать';}});
   },
 
   // ===== Движок «понимания» отчётов 1С (порт parse_1c_reports.py) =====
@@ -9720,7 +9759,7 @@ var App={
     gs('saveGoods',{ssId:App.s.ssId,kind:typ,rows:rows,salesDays:salesDays}).then(function(r){
       App.toast('Сохранено: новых '+r.saved+' · обновлено '+r.updated);
       App.closeModal();App.openGoods();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
   // ── Экран «Товары» (справочник + аналитика из 1С) ──────────────
@@ -10439,7 +10478,7 @@ var App={
     App.toast('Сохраняю…');
     gs('setDailyReport',{ssId:App.s.ssId,email:email,enabled:enabled,hour:hour,orgName:App.s.orgName||''}).then(function(){
       App.toast(enabled?'Автоотчёт включён ✓':'Автоотчёт выключен');App.closeModal();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _sendDailyNow:function(){
     var email=document.getElementById('dr-email').value.trim();
@@ -10447,7 +10486,7 @@ var App={
     App.toast('Отправляю…');
     gs('sendDailyReportNow',{ssId:App.s.ssId,email:email,orgName:App.s.orgName||''}).then(function(){
       App.toast('Отчёт отправлен на '+email+' ✓');
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   openActivity:function(){
     App.openModal('<div class="modal-title">'+SVG.users+' Активность команды</div>'+
@@ -10489,7 +10528,7 @@ var App={
         '<div style="background:var(--surface-2);border-radius:12px;padding:12px 14px;margin:12px 0;font-size:13px;font-weight:600;word-break:break-all;">'+App._e(r.name)+'</div>'+
         '<a href="'+App._e(r.url)+'" target="_blank" class="btn-primary" style="display:block;text-align:center;text-decoration:none;">Открыть копию на Диске</a>'+
         '<div style="font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5;">Совет: делай копию перед крупными изменениями или раз в неделю. Копия — на твоём Диске, отдельно от рабочей таблицы.</div>');
-    }).catch(function(e){App.toast('Не удалось: '+e.message,true);});
+    }).catch(function(e){App.toast('Не удалось: '+App._friendlyErr(e),true);});
   },
 
   // ── Наблюдение: машина времени + сигнал слабого дня ───────────
@@ -10956,14 +10995,14 @@ var App={
     gs('saveSettings',{ssId:App.s.ssId,data:data}).then(function(){
       if(key.trim())App.s.settings.aiEnabled=true;
       App.toast('Сохранено ✓');App.closeModal();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _disableAi:function(){
     var data={};for(var k in App.s.settings)data[k]=App.s.settings[k];
     data.aiClearKey=true;
     gs('saveSettings',{ssId:App.s.ssId,data:data}).then(function(){
       App.s.settings.aiEnabled=false;App.toast('ИИ отключён');App.closeModal();
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _chatAsk:function(q){var inp=document.getElementById('chat-q');if(inp)inp.value=q;App._chatSend();},
   _chatSend:function(){
@@ -11111,7 +11150,7 @@ var App={
     App._brain.sensitivity=v;
     gs('brainLearn',{ssId:App.s.ssId,action:'sensitivity',value:v}).then(function(){
       gs('getAnomalies',{ssId:App.s.ssId}).then(function(r){App._brain=r;App._brainRender();});
-    }).catch(function(e){App.toast(e.message,true);});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _brainAct:function(i,action){
     var it=App._brain.items[i];if(!it)return;
@@ -11119,7 +11158,7 @@ var App={
     gs('brainLearn',{ssId:App.s.ssId,action:action,key:it.key,category:it.category}).then(function(){
       App._brain.items.splice(i,1);App._brainRender();
       App.toast(action==='ok'?'Запомнил: это норма':'Запомнил: усилю контроль');
-    }).catch(function(e){App.toast(e.message,true);if(card)card.style.opacity='1';});
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);if(card)card.style.opacity='1';});
   },
 
   _impForceMap:function(){

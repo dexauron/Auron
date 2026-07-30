@@ -111,11 +111,23 @@ function _bustDash(ssId){
 // ─────────────────────────────────────────────────────────────────────
 // doGet
 // ─────────────────────────────────────────────────────────────────────
+
+// Берёт параметр из ссылки, только если он подходит под ожидаемый вид.
+// Всё остальное отбрасываем молча — как будто параметра не было.
+function _urlParam(e, name, re) {
+  try {
+    var v = (e && e.parameter && e.parameter[name]) ? String(e.parameter[name]) : '';
+    return re.test(v) ? v : '';
+  } catch(err) { return ''; }
+}
+
 function doGet(e) {
-  var invite = (e && e.parameter && e.parameter.invite) ? String(e.parameter.invite) : '';
-  // Email приглашённого кладём в ссылку — чтобы на экране входа сравнить его с
-  // аккаунтом, под которым реально вошёл сотрудник, и поймать «не тот Google».
-  var invEmail = (e && e.parameter && e.parameter.email) ? String(e.parameter.email) : '';
+  // Параметры из ссылки подставляются в страницу, поэтому пропускаем только
+  // строго ожидаемый формат. Экранирование Apps Script и так гасит подстановку,
+  // но полагаться на одну защиту не стоит: чужой параметр не должен доехать
+  // до страницы даже в виде мусора.
+  var invite = _urlParam(e, 'invite', /^[A-Za-z0-9_\-]{20,80}$/);      // id таблицы
+  var invEmail = _urlParam(e, 'email', /^[^@\s]{1,64}@[^@\s]{1,64}\.[A-Za-z]{2,16}$/);
   var t = HtmlService.createTemplateFromFile('Index');
   t.inviteOrg = invite;
   t.inviteEmail = invEmail;
@@ -299,6 +311,7 @@ function uploadReceipt(p) {
 }
 
 function exportTransactions(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, period=p.period||'month';
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -827,6 +840,7 @@ function deleteAccount(p) {
 
 // Manual balance correction — writes a Корректировка entry
 function adjustBalance(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, d=p.data||{};
   var amt=Math.round(parseFloat(d.amount)||0);
   if (!amt) return {__error:'Сумма не указана'};
@@ -843,6 +857,8 @@ function adjustBalance(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function saveQuickEntry(p) {
+  if (!_anyPermGuard(p&&p.ssId?p.ssId:p,['kassa','finance','receive','payments']))
+    return {__error:'Нет прав записывать операции'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -1030,6 +1046,7 @@ function getHomeSummary(p) {
 }
 
 function getAllTransactions(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return [];
   var ssId=p.ssId;
   try {
     var base=SpreadsheetApp.openById(ssId).getSheetByName(SH_BASE);
@@ -1039,6 +1056,7 @@ function getAllTransactions(p) {
 }
 
 function searchTransactions(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return [];
   var ssId=p.ssId, q=String(p.query||'').toLowerCase();
   try {
     var base=SpreadsheetApp.openById(ssId).getSheetByName(SH_BASE);
@@ -3070,6 +3088,7 @@ function getDayRating(p) {
 
 // Рекорды магазина за всё время: лучший день, неделя, месяц по выручке.
 function getRecords(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -3191,6 +3210,7 @@ function getInsights(p) {
 
 // Резервная копия: делает копию таблицы магазина на Диске пользователя.
 function backupNow(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'manage')) return MANAGE_DENIED;
   var ssId=p.ssId;
   try {
     var tz=Session.getScriptTimeZone();
@@ -3328,6 +3348,7 @@ function getTrendData(p) {
 }
 
 function getCashierAnalytics(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId, period=p.period;
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_SHIFTS);
@@ -3393,6 +3414,7 @@ function getDebtAnalytics(p) {
 
 // Выплата ЗП или аванса сотруднику — создаёт расход (категория ЗП/Аванс).
 function payEmployeeSalary(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет прав на выплаты'};
   var ssId=p.ssId, d=p.data||{};
   var cat=(d.kind==='advance')?'Аванс':'ЗП';
   return saveQuickEntry({ssId:ssId, data:{
@@ -3465,6 +3487,7 @@ function getSupplierAnalytics(p) {
 }
 
 function getShiftAnalytics(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId,period=p.period;
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -3503,6 +3526,7 @@ function getShiftAnalytics(p) {
 }
 
 function getAccountFlow(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId,period=p.period;
   try {
     var ss=SpreadsheetApp.openById(ssId);
@@ -3650,6 +3674,7 @@ function _audit(ss, entity, id, action, detail) {
   } catch(e) {}
 }
 function getEntityHistory(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss = SpreadsheetApp.openById(p.ssId);
     var sh = ss.getSheetByName(SH_AUDIT);
@@ -3826,6 +3851,7 @@ function getBudget(p) {
 }
 
 function saveBudget(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   return _withLock(function(){
   var ssId=p.ssId, budgetMap=p.budgetMap||{};
   try {
@@ -3882,6 +3908,7 @@ function getPayments(p) {
 // Базовая (средняя) дневная выручка за последние ~28 дней с выручкой —
 // для проверки аномалии при вводе Z-отчёта («сумма вдвое ниже — верно?»).
 function getRevenueBaseline(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var ss=SpreadsheetApp.openById(p.ssId);
     var base=ss.getSheetByName(SH_BASE);
@@ -3971,6 +3998,7 @@ function getMorningBriefing(p) {
 }
 
 function savePayment(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет прав на выплаты поставщикам'};
   var res = _savePaymentLocked(p);
   // Календарь — после снятия замка. Ошибка календаря НЕ откатывает запись:
   // источник истины — таблица, в UI покажем мягкое предупреждение.
@@ -4016,6 +4044,7 @@ function _savePaymentLocked(p) {
 
 // Update payment status: pay / postpone / cancel / restore
 function updatePayment(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет прав на выплаты поставщикам'};
   var id = p && p.data && p.data.id;
   var res = _updatePaymentLocked(p);
   // «Оплачено» не удаляет событие — меняется заголовок и цвет (история).
@@ -4074,6 +4103,7 @@ function _updatePaymentLocked(p) {
 }
 
 function markPaymentPaid(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет прав на выплаты поставщикам'};
   var res = _markPaymentPaidLocked(p);
   if (res && res.ok && p.id) {
     var w = _calSync(p.ssId, p.id, false);
@@ -4483,6 +4513,19 @@ function _hasPerm(ss, key) { return _myPerms(ss).indexOf(key)>=0; }
 function _logDenied(ss, key) { try{ _log(ss,'Отказ доступа',(_myEmail()||'?')+' → '+key); }catch(e){} }
 function _finGuard(ssId) { try{ var ss=SpreadsheetApp.openById(ssId); var ok=_hasPerm(ss,'finance'); if(!ok)_logDenied(ss,'finance'); return ok; }catch(e){ return true; } }
 function _permGuard(ssId, key) { try{ var ss=SpreadsheetApp.openById(ssId); var ok=_hasPerm(ss,key); if(!ok)_logDenied(ss,key); return ok; }catch(e){ return true; } }
+
+// Достаточно ЛЮБОГО из перечисленных прав. Нужно там, где действие
+// доступно нескольким ролям — например запись операции делает и кассир,
+// и бухгалтер, но не человек вообще без прав.
+function _anyPermGuard(ssId, keys) {
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    for (var i = 0; i < keys.length; i++) if (_hasPerm(ss, keys[i])) return true;
+    _logDenied(ss, keys.join('|'));
+    return false;
+  } catch(e) { return true; }
+}
+
 var FIN_DENIED={__error:'Нет доступа к финансовым данным (обратитесь к владельцу)'};
 
 function getTeam(p) {
@@ -5644,6 +5687,7 @@ function getGoodsMeta(p) {
 
 // Восстановление операции из корзины (для «Отменить» после удаления)
 function restoreTransaction(p) {
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'manage')) return MANAGE_DENIED;
   return _withLock(function(){
   var ssId=p.ssId, id=String(p.id||'');
   try {
@@ -5671,6 +5715,7 @@ function restoreTransaction(p) {
 
 // Содержимое корзины (последние 50 удалённых)
 function getTrash(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
     var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_TRASH);
     if (!sh||sh.getLastRow()<2) return {items:[]};
