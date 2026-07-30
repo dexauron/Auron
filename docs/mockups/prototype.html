@@ -1,0 +1,412 @@
+<title>Auron — живой макет</title>
+<style>
+:root{
+  --bg:#07090C; --card:#101318; --card2:#161A21; --line:rgba(255,255,255,.075);
+  --ink:#F4F6F8; --ink2:#A3ACB8; --mute:#69727E;
+  --acc:#34D07F; --acc-ink:#04240F; --neg:#FF5A4E; --warn:#F5A524;
+  --r:22px; --r-s:14px;
+  --font:ui-sans-serif,"Segoe UI Variable Display","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --e:cubic-bezier(.22,.9,.28,1);
+  --d1:.18s; --d2:.32s; --d3:.5s;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{background:#000;min-height:100%}
+body{font-family:var(--font);color:var(--ink);display:flex;justify-content:center;
+  align-items:flex-start;padding:0}
+
+/* Рамка телефона — только на большом экране. На телефоне макет во всю ширину. */
+.frame{width:100%;max-width:414px;min-height:100vh;background:var(--bg);position:relative;
+  overflow:hidden;display:flex;flex-direction:column}
+@media(min-width:520px){
+  body{padding:28px 16px;background:radial-gradient(120% 80% at 50% 0%,#0E1A14 0%,#000 60%)}
+  .frame{min-height:min(880px,calc(100vh - 56px));max-height:880px;border-radius:42px;
+    border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 90px -30px rgba(0,0,0,.9)}
+}
+
+/* Свечение от акцента */
+.glow{position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:620px;height:430px;
+  background:radial-gradient(50% 50% at 50% 50%,rgba(52,208,127,.28),rgba(52,208,127,0) 70%);
+  pointer-events:none;z-index:0;transition:background .4s var(--e)}
+.frame[data-s="debts"]{--tone:var(--warn)}
+.frame[data-s="debts"] .glow{background:radial-gradient(50% 50% at 50% 50%,rgba(245,165,36,.20),rgba(245,165,36,0) 70%)}
+
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;z-index:1;
+  padding:0 16px 116px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+
+/* ── Шапка ── */
+.top{display:flex;align-items:center;gap:12px;padding:20px 0 20px}
+.ava{width:42px;height:42px;border-radius:14px;flex:none;
+  background:linear-gradient(150deg,#28303D,#12161D);border:1px solid var(--line);
+  display:grid;place-items:center;font-weight:800;font-size:14px;color:var(--acc);letter-spacing:.02em}
+.top-t{flex:1;min-width:0;line-height:1.3}
+.top-t b{display:block;font-size:15px;font-weight:700}
+.top-t span{font-size:12px;color:var(--mute)}
+.ico{width:40px;height:40px;flex:none;border-radius:13px;background:var(--card);
+  border:1px solid var(--line);display:grid;place-items:center;color:var(--ink2);cursor:pointer;
+  transition:transform var(--d1) var(--e),background var(--d1)}
+.ico:active{transform:scale(.9);background:var(--card2)}
+
+/* ── Экраны ── */
+.screen{display:none}
+.screen.on{display:block;animation:in var(--d3) var(--e) both}
+@keyframes in{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* Каскад: элементы въезжают по очереди, но не бесконечно — после шестого сразу */
+.stag>*{animation:rise var(--d3) var(--e) both}
+.stag>*:nth-child(1){animation-delay:.02s} .stag>*:nth-child(2){animation-delay:.06s}
+.stag>*:nth-child(3){animation-delay:.10s} .stag>*:nth-child(4){animation-delay:.14s}
+.stag>*:nth-child(5){animation-delay:.18s} .stag>*:nth-child(n+6){animation-delay:.22s}
+@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+
+/* ── Главная цифра ── */
+.hero{text-align:center;padding:2px 0 24px}
+.hero-k{font-size:12px;color:var(--ink2);margin-bottom:11px;display:inline-flex;align-items:center;gap:6px}
+.hero-v{font-weight:800;letter-spacing:-.035em;line-height:1;white-space:nowrap;
+  font-variant-numeric:tabular-nums;font-size:clamp(30px,10.2vw,44px)}
+.hero-v i{font-style:normal;color:var(--mute)}
+.hero-d{display:inline-flex;align-items:center;gap:6px;margin-top:13px;padding:6px 13px;
+  border-radius:999px;background:rgba(52,208,127,.13);color:var(--acc);font-size:12.5px;font-weight:700}
+
+/* ── Четыре действия ── */
+.acts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:24px}
+.act{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:14px 4px 11px;
+  text-align:center;cursor:pointer;transition:transform var(--d1) var(--e),background var(--d1)}
+.act:active{transform:scale(.94);background:var(--card2)}
+.act-i{width:38px;height:38px;margin:0 auto 8px;border-radius:13px;display:grid;place-items:center;
+  background:rgba(52,208,127,.13);color:var(--acc)}
+.act span{font-size:11px;font-weight:600;color:var(--ink2)}
+
+/* ── Полоска периодов ── */
+.pills{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex:none;padding:8px 15px;border-radius:999px;background:var(--card);border:1px solid var(--line);
+  color:var(--ink2);font-size:12.5px;font-weight:600;cursor:pointer;
+  transition:background var(--d1),color var(--d1),transform var(--d1) var(--e)}
+.pill:active{transform:scale(.95)}
+.pill.on{background:var(--acc);border-color:var(--acc);color:var(--acc-ink);font-weight:700}
+
+/* ── Плитки ── */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;
+  cursor:pointer;transition:transform var(--d1) var(--e),border-color var(--d1)}
+.tile:active{transform:scale(.975);border-color:rgba(255,255,255,.16)}
+.tile-k{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--ink2);font-weight:600;margin-bottom:12px}
+.tile-i{width:28px;height:28px;flex:none;border-radius:10px;display:grid;place-items:center}
+.tile-v{font-size:21px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.tile-x{font-size:11px;margin-top:6px;font-weight:600}
+.up{color:var(--acc)} .dn{color:var(--neg)} .wr{color:var(--warn)}
+.bar{height:5px;border-radius:5px;background:rgba(255,255,255,.08);margin-top:11px;overflow:hidden}
+.bar>i{display:block;height:100%;border-radius:5px;background:var(--acc);width:0;
+  transition:width 1.1s var(--e)}
+
+/* ── Заголовок раздела и список ── */
+.sec{display:flex;align-items:center;justify-content:space-between;margin:0 0 12px}
+.sec b{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.sec a{font-size:12.5px;color:var(--tone,var(--acc));font-weight:700;text-decoration:none;cursor:pointer}
+.list{background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:22px}
+.row{display:flex;align-items:center;gap:13px;padding:14px 15px;border-bottom:1px solid var(--line);
+  cursor:pointer;transition:background var(--d1)}
+.row:last-child{border-bottom:0}
+.row:active{background:var(--card2)}
+.row-i{width:40px;height:40px;flex:none;border-radius:13px;display:grid;place-items:center;
+  background:var(--card2);color:var(--ink2)}
+.row-t{flex:1;min-width:0}
+.row-t b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-t span{font-size:11.5px;color:var(--mute)}
+.row-v{font-size:15px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.row-v small{display:block;font-size:10.5px;font-weight:600;color:var(--mute);text-align:right;margin-top:2px}
+
+/* ── Поиск ── */
+.search{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
+  border-radius:16px;padding:12px 14px;margin-bottom:14px;color:var(--mute);font-size:14px}
+.search input{flex:1;background:none;border:0;outline:0;color:var(--ink);font-size:14px;font-family:var(--font)}
+.search input::placeholder{color:var(--mute)}
+
+/* ── Предупреждение ── */
+.warn{display:flex;gap:11px;align-items:flex-start;background:rgba(245,165,36,.09);
+  border:1px solid rgba(245,165,36,.24);border-radius:var(--r-s);padding:13px 14px;margin-bottom:16px}
+.warn b{display:block;font-size:13px;font-weight:700;color:var(--warn);margin-bottom:2px}
+.warn span{font-size:12px;color:var(--ink2);line-height:1.45}
+
+/* ── Крупная кнопка ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:15px;
+  border:0;border-radius:18px;background:var(--acc);color:var(--acc-ink);font-size:15px;font-weight:800;
+  font-family:var(--font);cursor:pointer;margin-bottom:20px;
+  box-shadow:0 10px 26px -10px rgba(52,208,127,.6);
+  transition:transform var(--d1) var(--e),box-shadow var(--d1)}
+.btn:active{transform:scale(.97);box-shadow:0 5px 14px -8px rgba(52,208,127,.6)}
+
+/* ── Смена ── */
+.shift{background:linear-gradient(160deg,rgba(52,208,127,.15),rgba(52,208,127,.02));
+  border:1px solid rgba(52,208,127,.22);border-radius:var(--r);padding:18px;margin-bottom:20px}
+.shift-k{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--acc);font-weight:700;margin-bottom:10px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--acc);animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+.shift-v{font-size:28px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.shift-x{font-size:12px;color:var(--ink2);margin-top:5px}
+
+/* ── Срок у долга ── */
+.chip{display:inline-block;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:700;margin-top:4px}
+.chip.now{background:rgba(255,90,78,.16);color:var(--neg)}
+.chip.soon{background:rgba(245,165,36,.16);color:var(--warn)}
+.chip.ok{background:rgba(255,255,255,.07);color:var(--ink2)}
+
+/* ── Нижняя панель ── */
+.nav{position:absolute;left:12px;right:12px;bottom:14px;z-index:6;display:grid;
+  grid-template-columns:repeat(4,1fr);background:rgba(16,19,24,.94);
+  -webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px);
+  border:1px solid var(--line);border-radius:26px;padding:8px 6px;
+  box-shadow:0 18px 44px -14px rgba(0,0,0,.92)}
+.nb{display:grid;justify-items:center;gap:5px;color:var(--mute);font-size:10.5px;font-weight:600;
+  padding:7px 0;border-radius:19px;cursor:pointer;border:0;background:none;font-family:var(--font);
+  transition:color var(--d2) var(--e)}
+.nb.on{color:var(--acc-ink);font-weight:700}
+.nb svg{transition:transform var(--d2) var(--e)}
+.nb.on svg{transform:translateY(-1px) scale(1.06)}
+/* Подсветка выбранного пункта переезжает, а не мигает */
+.navpill{position:absolute;top:8px;bottom:8px;width:calc((100% - 12px)/4);left:6px;
+  background:var(--acc);border-radius:19px;z-index:-1;transition:transform var(--d2) var(--e)}
+.nav{position:absolute}
+.nb{position:relative;z-index:1}
+
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+}
+</style>
+
+<div class="frame" id="frame" data-s="home">
+  <div class="glow"></div>
+
+  <div class="scroll" id="scroll">
+    <div class="top">
+      <div class="ava">WM</div>
+      <div class="top-t"><b id="title">Way Market</b><span id="sub">Сегодня, 30 июля</span></div>
+      <div class="ico" aria-label="Поиск"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg></div>
+      <div class="ico" aria-label="Уведомления"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg></div>
+    </div>
+
+    <!-- ═══ ГЛАВНАЯ ═══ -->
+    <section class="screen on" id="s-home">
+      <div class="hero">
+        <div class="hero-k">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          Деньги в кассе и на счетах
+        </div>
+        <div class="hero-v"><span id="cnt" data-to="1284350">0</span><i>,40 ₽</i></div>
+        <div class="hero-d">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+          +48 200 ₽ за сегодня
+        </div>
+      </div>
+
+      <div class="acts stag">
+        <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div><span>Приход</span></div>
+        <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"></path></svg></div><span>Расход</span></div>
+        <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h13l-3-3M21 17H8l3 3"></path></svg></div><span>Перевод</span></div>
+        <div class="act"><div class="act-i"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"></path><path d="M7 12h10"></path></svg></div><span>Сканер</span></div>
+      </div>
+
+      <div class="pills" id="periods">
+        <div class="pill on">Сегодня</div><div class="pill">Неделя</div>
+        <div class="pill">Месяц</div><div class="pill">Год</div><div class="pill">Свой</div>
+      </div>
+
+      <div class="grid stag">
+        <div class="tile">
+          <div class="tile-k"><div class="tile-i" style="background:rgba(52,208,127,.14);color:var(--acc)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"></path><path d="M15 7h6v6"></path></svg></div>Выручка</div>
+          <div class="tile-v">186 400 ₽</div><div class="tile-x up">+12,4% к вчера</div>
+        </div>
+        <div class="tile">
+          <div class="tile-k"><div class="tile-i" style="background:rgba(255,90,78,.14);color:var(--neg)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5"></path></svg></div>К выплате</div>
+          <div class="tile-v">412 800 ₽</div><div class="tile-x dn">7 поставщиков</div>
+        </div>
+        <div class="tile">
+          <div class="tile-k"><div class="tile-i" style="background:rgba(52,208,127,.14);color:var(--acc)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></div>Прибыль</div>
+          <div class="tile-v">42 900 ₽</div><div class="tile-x up">наценка 30,2%</div>
+        </div>
+        <div class="tile">
+          <div class="tile-k"><div class="tile-i" style="background:rgba(255,255,255,.08);color:var(--ink2)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M20 7H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1Z"></path><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path></svg></div>План месяца</div>
+          <div class="tile-v">68%</div><div class="bar"><i data-w="68"></i></div>
+        </div>
+      </div>
+
+      <div class="sec"><b>Последние операции</b><a>Все →</a></div>
+      <div class="list stag">
+        <div class="row"><div class="row-i" style="color:var(--acc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></div>
+          <div class="row-t"><b>Выручка за смену</b><span>Касса · 19:40</span></div><div class="row-v up">+86 200</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5"></path></svg></div>
+          <div class="row-t"><b>ИП Хасаев — молочка</b><span>Поставщик · 17:12</span></div><div class="row-v dn">−34 500</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg></div>
+          <div class="row-t"><b>Списание — порча овощей</b><span>Склад · 15:05</span></div><div class="row-v dn">−2 340</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg></div>
+          <div class="row-t"><b>Аренда помещения</b><span>Обязательство · 12:00</span></div><div class="row-v dn">−120 000</div></div>
+      </div>
+    </section>
+
+    <!-- ═══ КАССА ═══ -->
+    <section class="screen" id="s-kassa">
+      <div class="shift">
+        <div class="shift-k"><span class="dot"></span>Смена открыта · Мадина · с 08:00</div>
+        <div class="shift-v">86 200 ₽</div>
+        <div class="shift-x">выручка за смену · 148 чеков · средний чек 582 ₽</div>
+      </div>
+
+      <button class="btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>Внести операцию</button>
+
+      <div class="pills">
+        <div class="pill on">Все</div><div class="pill">Приход</div>
+        <div class="pill">Расход</div><div class="pill">Переводы</div>
+      </div>
+
+      <div class="sec"><b>Операции за смену</b><a>Отчёт →</a></div>
+      <div class="list stag">
+        <div class="row"><div class="row-i" style="color:var(--acc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></div>
+          <div class="row-t"><b>Наличная выручка</b><span>19:40 · Мадина</span></div><div class="row-v up">+48 900<small>наличные</small></div></div>
+        <div class="row"><div class="row-i" style="color:var(--acc)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 11h18"></path></svg></div>
+          <div class="row-t"><b>Оплата картой</b><span>19:40 · эквайринг</span></div><div class="row-v up">+37 300<small>безнал</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5"></path></svg></div>
+          <div class="row-t"><b>ИП Хасаев — молочка</b><span>17:12 · оплата поставщику</span></div><div class="row-v dn">−34 500<small>наличные</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7h13l-3-3M21 17H8l3 3"></path></svg></div>
+          <div class="row-t"><b>Инкассация в банк</b><span>16:00 · Ахмед</span></div><div class="row-v">−200 000<small>перевод</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"></path></svg></div>
+          <div class="row-t"><b>Списание — порча овощей</b><span>15:05 · Мадина</span></div><div class="row-v dn">−2 340<small>списание</small></div></div>
+      </div>
+    </section>
+
+    <!-- ═══ ТОВАРЫ ═══ -->
+    <section class="screen" id="s-goods">
+      <div class="search">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+        <input placeholder="Название или штрихкод" aria-label="Поиск товара">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color:var(--acc)"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"></path><path d="M7 12h10"></path></svg>
+      </div>
+
+      <div class="warn">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2.2" stroke-linecap="round" style="flex:none;margin-top:1px"><path d="M12 9v5M12 17.5v.01"></path><path d="M10.3 3.9 2.4 17.6A2 2 0 0 0 4.1 20.6h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"></path></svg>
+        <div><b>34 товара без закупочной цены</b><span>По ним прибыль не считается. Загрузите приход из 1С или проставьте цены вручную.</span></div>
+      </div>
+
+      <div class="pills">
+        <div class="pill on">Все · 16 555</div><div class="pill">Молочка</div>
+        <div class="pill">Овощи</div><div class="pill">Бакалея</div><div class="pill">Напитки</div>
+      </div>
+
+      <div class="list stag">
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+          <div class="row-t"><b>Молоко «Домик в деревне» 3,2% 950 мл</b><span>4607001770787 · остаток 24 шт</span></div>
+          <div class="row-v">92,50<small>закуп 71,20</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+          <div class="row-t"><b>Хлеб «Дарницкий» нарезной 700 г</b><span>4600682015123 · остаток 8 шт</span></div>
+          <div class="row-v">48,00<small>закуп 33,60</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+          <div class="row-t"><b>Картофель мытый, весовой</b><span>2100000000012 · остаток 142,5 кг</span></div>
+          <div class="row-v">39,90<small>закуп 27,10</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+          <div class="row-t"><b>Сок «Добрый» апельсин 1 л</b><span>4600494110016 · остаток 0 шт</span></div>
+          <div class="row-v wr">104,00<small>закончился</small></div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5M12 13v8"></path></svg></div>
+          <div class="row-t"><b>Конфеты «Мишка косолапый», весовые</b><span>2100000000234 · остаток 6,2 кг</span></div>
+          <div class="row-v">742,00<small>закуп 0,09 ⚠</small></div></div>
+      </div>
+    </section>
+
+    <!-- ═══ ДОЛГИ ═══ -->
+    <section class="screen" id="s-debts">
+      <div class="hero">
+        <div class="hero-k">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5"></path></svg>
+          Долг поставщикам
+        </div>
+        <div class="hero-v" style="color:var(--warn)">412 800<i>,00 ₽</i></div>
+        <div class="hero-d" style="background:rgba(255,90,78,.14);color:var(--neg)">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+          86 500 ₽ просрочено
+        </div>
+      </div>
+
+      <button class="btn" style="background:var(--warn);color:#241500;box-shadow:0 10px 26px -10px rgba(245,165,36,.6)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M20 6 9 17l-5-5"></path></svg>Записать выплату</button>
+
+      <div class="sec"><b>По срокам</b><a>Календарь →</a></div>
+      <div class="list stag">
+        <div class="row"><div class="row-i" style="color:var(--neg)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></div>
+          <div class="row-t"><b>ИП Хасаев — молочка</b><span class="chip now">просрочено 4 дня</span></div><div class="row-v dn">86 500</div></div>
+        <div class="row"><div class="row-i" style="color:var(--warn)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg></div>
+          <div class="row-t"><b>ООО «Чеченские сады»</b><span class="chip soon">завтра, 31 июля</span></div><div class="row-v wr">124 000</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg></div>
+          <div class="row-t"><b>Бакалея-Юг</b><span class="chip ok">через 6 дней</span></div><div class="row-v">98 300</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg></div>
+          <div class="row-t"><b>Кока-Кола Дистрибьюшн</b><span class="chip ok">через 12 дней</span></div><div class="row-v">64 000</div></div>
+        <div class="row"><div class="row-i"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M8 3v4M16 3v4M3 11h18"></path></svg></div>
+          <div class="row-t"><b>Хлебозавод №3</b><span class="chip ok">через 18 дней</span></div><div class="row-v">40 000</div></div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="nav">
+    <span class="navpill" id="navpill"></span>
+    <button class="nb on" data-go="home"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 10.5 12 3l9 7.5"></path><path d="M5 10v10h14V10"></path></svg>Главная</button>
+    <button class="nb" data-go="kassa"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 11h18M7 15h4"></path></svg>Касса</button>
+    <button class="nb" data-go="goods"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16v13H4z"></path><path d="M9 7V4h6v3"></path></svg>Товары</button>
+    <button class="nb" data-go="debts"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M3 8l9 5 9-5"></path></svg>Закупки</button>
+  </nav>
+</div>
+
+<script>
+(function(){
+  var TITLES={home:['Way Market','Сегодня, 30 июля'],kassa:['Касса','Смена открыта · Мадина'],
+              goods:['Товары','16 555 позиций из 1С'],debts:['Закупки','7 поставщиков · 412 800 ₽']};
+  var frame=document.getElementById('frame'), pill=document.getElementById('navpill');
+  var nbs=[].slice.call(document.querySelectorAll('.nb'));
+  var slow=matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+  function movePill(i){ pill.style.transform='translateX(calc('+i+' * (100% + 4px)))'; }
+
+  // Цифра докручивается — так виднее, что она живая, а не картинка.
+  function count(el){
+    var to=+el.dataset.to, t0=performance.now(), dur=slow?0:900;
+    (function step(now){
+      var p=dur?Math.min(1,(now-t0)/dur):1;
+      var e=1-Math.pow(1-p,3);
+      el.textContent=Math.round(to*e).toLocaleString('ru-RU');
+      if(p<1) requestAnimationFrame(step);
+    })(t0);
+  }
+  function fillBars(root){
+    root.querySelectorAll('.bar>i').forEach(function(b){
+      b.style.width='0'; requestAnimationFrame(function(){ b.style.width=b.dataset.w+'%'; });
+    });
+  }
+
+  function go(name,i){
+    if(frame.dataset.s===name) return;
+    frame.dataset.s=name;
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.remove('on'); });
+    var scr=document.getElementById('s-'+name);
+    scr.classList.add('on');
+    document.getElementById('scroll').scrollTop=0;
+    nbs.forEach(function(b,k){ b.classList.toggle('on',k===i); });
+    movePill(i);
+    document.getElementById('title').textContent=TITLES[name][0];
+    document.getElementById('sub').textContent=TITLES[name][1];
+    if(name==='home'){ count(document.getElementById('cnt')); fillBars(scr); }
+  }
+
+  nbs.forEach(function(b,i){ b.addEventListener('click',function(){ go(b.dataset.go,i); }); });
+
+  // Полоски периодов — переключаются на месте
+  document.querySelectorAll('.pills').forEach(function(bar){
+    bar.addEventListener('click',function(e){
+      var p=e.target.closest('.pill'); if(!p) return;
+      bar.querySelectorAll('.pill').forEach(function(x){ x.classList.remove('on'); });
+      p.classList.add('on');
+    });
+  });
+
+  movePill(0);
+  count(document.getElementById('cnt'));
+  fillBars(document.getElementById('s-home'));
+})();
+</script>
