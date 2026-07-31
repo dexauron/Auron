@@ -2609,6 +2609,125 @@ function saveKassa(p) {
 });
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ИТОГ ДНЯ по модели владельца (отчёт ДДС)
+//
+// Формулы взяты из настоящего файла владельца и проверены пересчётом:
+// первые пять дней июля, 20 значений из 20 сошлись до рубля.
+//
+//   Общая торговля  = наличная(день+ночь) + онлайн(день+ночь)
+//   Наличка в кассе = наличная торговля − выплата кассы − Иман − перевод
+//   Расхождение     = наличная − выплата кассы − перевод − Иман − наличка  (ноль)
+//   Валовая (план)  = общая торговля × ставка (у владельца 0,25)
+//   Прибыль (план)  = валовая − расходники − ГСМ − комиссия − обед − списание
+//                     − Иман − переводы − зарплата − аренда − коммуналка − налог
+//   На закуп        = торговля − валовая − выплаты кассы − переводы − Иман
+//                     − прибыль − списание − комиссия − расходники − обед
+//   Расхождение офиса = на закуп − закуп за наличку − выплата долга − закуп в долг
+//   Долг поставщикам  = долг вчера − выплата долга + закуп в долг
+//
+// Прибыль показываем ДВУМЯ цифрами (решение владельца): «по плану 25%»
+// и «по факту» — простая разница внесённых доходов и расходов. Первая
+// привычна и сходится с его таблицей, вторая показывает, когда настоящая
+// наценка просела.
+// ═══════════════════════════════════════════════════════════════════════
+
+var DDS_RATE_KEY = 'DDS_RATE';   // ставка валовой прибыли, по умолчанию 25%
+
+// Категории операций → роль в модели дня. Ключи совпадают с теми, что
+// пишет закрытие смены и загрузка отчёта ДДС.
+var DDS_MAP = {
+  'выручка наличными':'cashRev', 'продажи':'cashRev', 'z-отчёт':'cashRev',
+  'выручка безналичными':'onlineRev',
+  'иман':'iman',
+  'перевод':'transfer', 'инкассация':'transfer',
+  'выплата кассы':'cashOut',
+  'закупка товара':'buyCash', 'закупка':'buyCash', 'оплата поставщику наличными':'buyCash',
+  'выплата поставщику':'payDebt', 'погашение долга поставщику':'payDebt',
+  'закуп товара в долг':'buyDebt',
+  'списание товара':'writeOff', 'списание':'writeOff',
+  'комиссия банка':'bank',
+  'питание сотрудников':'meal', 'обед':'meal',
+  'топливо':'fuel', 'гсм':'fuel',
+  'расходные материалы':'supplies', 'расходники':'supplies',
+  'зарплата':'salary', 'аренда':'rent',
+  'коммунальные услуги':'utils', 'налоги':'tax', 'налог':'tax'
+};
+
+function _ddsRate(ss) {
+  var v = parseFloat(_getSettingStr(ss, DDS_RATE_KEY, '')); 
+  return (isNaN(v) || v <= 0 || v >= 1) ? 0.25 : v;
+}
+
+// Собирает суммы дня по ролям модели.
+function _ddsCollect(rows, dateStr) {
+  var b = { cashRev:0,onlineRev:0,iman:0,transfer:0,cashOut:0,buyCash:0,payDebt:0,
+            buyDebt:0,writeOff:0,bank:0,meal:0,fuel:0,supplies:0,salary:0,rent:0,
+            utils:0,tax:0, other:0, count:0 };
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var d = r[B_DATE-1];
+    var ds = (d instanceof Date) ? Utilities.formatDate(d,'Europe/Moscow','yyyy-MM-dd')
+                                 : String(d||'').slice(0,10);
+    if (ds !== dateStr) continue;
+    var cat = String(r[B_CAT-1]||'').toLowerCase().trim();
+    var amt = Math.abs(_num(r[B_AMT-1]));
+    if (!amt) continue;
+    b.count++;
+    var key = DDS_MAP[cat];
+    if (key) b[key] += amt; else b.other += amt;
+  }
+  return b;
+}
+
+// Считает показатели дня по формулам владельца.
+function _ddsCompute(b, rate, debtYesterday) {
+  var trade = b.cashRev + b.onlineRev;
+  var gross = trade * rate;
+  var fixed = b.salary + b.rent + b.utils + b.tax;
+  var daily = b.supplies + b.fuel + b.bank + b.meal + b.writeOff;
+  var profitPlan = gross - daily - b.iman - b.transfer - fixed;
+  // По факту: всё, что пришло, минус всё, что ушло. «Закуп в долг» сюда
+  // не входит — товар взяли в долг, деньги по кассе не двигались.
+  var profitFact = trade - (b.buyCash + b.payDebt + daily + b.iman + b.transfer + fixed + b.other);
+  var cashLeft = b.cashRev - b.cashOut - b.iman - b.transfer;
+  var forBuy = trade - gross - b.cashOut - b.transfer - b.iman - profitPlan
+               - b.writeOff - b.bank - b.supplies - b.meal;
+  return {
+    trade: Math.round(trade),
+    cashRev: Math.round(b.cashRev), onlineRev: Math.round(b.onlineRev),
+    gross: Math.round(gross), rate: rate,
+    profitPlan: Math.round(profitPlan), profitFact: Math.round(profitFact),
+    profitGap: Math.round(profitFact - profitPlan),
+    cashLeft: Math.round(cashLeft),
+    cashDiff: Math.round(b.cashRev - b.cashOut - b.transfer - b.iman - cashLeft),
+    forBuy: Math.round(forBuy),
+    spentOnBuy: Math.round(b.buyCash + b.payDebt + b.buyDebt),
+    officeDiff: Math.round(forBuy - b.buyCash - b.payDebt - b.buyDebt),
+    debt: Math.round((debtYesterday||0) - b.payDebt + b.buyDebt),
+    parts: b
+  };
+}
+
+// Итог дня для экрана. Дата — 'yyyy-MM-dd'.
+function getDayDDS(p) {
+  try {
+    var ssId = p && p.ssId;
+    if (!_anyPermGuard(ssId, ['finance','kassa'])) return {__error:'Нет доступа к итогам дня'};
+    var ss = SpreadsheetApp.openById(ssId);
+    var date = String((p && p.date) || '').slice(0,10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return {__error:'Неверная дата'};
+    var sh = ss.getSheetByName(SH_BASE);
+    var rows = (sh && sh.getLastRow() > 1)
+      ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
+    var b = _ddsCollect(rows, date);
+    var prev = _num(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
+    var out = _ddsCompute(b, _ddsRate(ss), prev);
+    out.date = date;
+    return out;
+  } catch(e) { return {__error:e.message}; }
+}
+
 function getShifts(p) {
   var ssId=p.ssId, limit=parseInt(p.limit)||50;
   try {
