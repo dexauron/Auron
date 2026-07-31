@@ -206,7 +206,7 @@ body.sums-hidden #privacy-eye{background:var(--brand);color:#fff;}
    Только в тёмной теме: на светлой оно выглядит грязным пятном. */
 html:not([data-theme="light"]) body::before{
   content:"";position:fixed;top:-210px;left:50%;transform:translateX(-50%);
-  width:640px;height:440px;pointer-events:none;z-index:0;
+  width:640px;height:440px;pointer-events:none;z-index:-1;
   background:radial-gradient(50% 50% at 50% 50%,
     color-mix(in oklab,var(--brand) 26%,transparent),transparent 70%);
 }
@@ -3077,7 +3077,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.51.0';
+var APP_VERSION='4.52.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5315,7 +5315,10 @@ var App={
     }).catch(function(e){ if(!cached)App.toast(App._friendlyErr(e.message),true); });
     // долг поставщикам (с кэшем)
     var cDebt=App._cacheGet('debt');
-    if(cDebt!=null){var e0=document.getElementById('split-payable');if(e0)e0.textContent='₽ '+fmt(cDebt);}
+    if(cDebt!=null){var e0=document.getElementById('split-payable');
+      // Через textContent значение вставало молча, и следующая докрутка
+      // не запускалась: animateNumber не знал, откуда крутить.
+      if(e0)animateNumber(e0,cDebt,'₽ ',function(){App._fitText(e0,13,22);});}
     gs('getDebts',{ssId:App.s.ssId}).then(function(reps){
       var total=(reps||[]).reduce(function(s,r){return s+(r.debt||0);},0);
       App._cacheSet('debt',total);
