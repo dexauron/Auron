@@ -1,15 +1,18 @@
 name: Deploy to GitHub Pages
 
-# Сайт собирается ИЗ ОДНОГО ИСТОЧНИКА — ветки claude/optimistic-einstein-Afzmv
-# (папка app/). Это важно: на разных ветках папка app/ разная, и если
-# публиковать «ту ветку, в которую только что запушили», сайт откатится
-# назад и потеряет файлы — публикация идёт с force_orphan, то есть заменяет
-# содержимое целиком.
+# ВАЖНО. Сайт собирается из ТРЁХ независимых источников:
+#   приложение Auron   — ветка claude/optimistic-einstein-Afzmv (папка app/)
+#   каталог товаров    — ветка claude/store-product-catalog-60wer4 (папка catalog/)
+#   страница сканера   — ветка claude/cool-archimedes-qv458l (app/scan.html)
 #
-# Страница сканера штрихкода (app/scan.html) лежит в рабочей ветке
-# claude/cool-archimedes-qv458l и докладывается поверх: приложению нужен
-# свой домен для доступа к камере, потому что внутри рамки Apps Script
-# камера заблокирована песочницей.
+# Публикация идёт с force_orphan, то есть ЗАМЕНЯЕТ содержимое сайта целиком.
+# Поэтому каждая сборка обязана собрать все три части. Если workflow собирает
+# только свою часть — остальные пропадают с сайта (так каталог однажды уже
+# «превратился» в 404).
+#
+# ⚠️ ЭТОТ ФАЙЛ ДОЛЖЕН БЫТЬ ОДИНАКОВЫМ ВО ВСЕХ ВЕТКАХ ИЗ СПИСКА on.push.branches.
+# GitHub запускает workflow из той ветки, в которую пушнули, — своя копия есть
+# у каждой. Меняешь этот файл — синхронизируй во все перечисленные ветки.
 
 on:
   push:
@@ -17,38 +20,73 @@ on:
       - main
       - master
       - claude/optimistic-einstein-Afzmv
+      - claude/store-product-catalog-60wer4
       - claude/cool-archimedes-qv458l
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# Сборки выстраиваются в очередь и не наступают друг другу на пятки:
+# две одновременные публикации в gh-pages давали случайный результат.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout сайта (единый источник)
+      - name: Основа сайта — приложение Auron
         uses: actions/checkout@v4
         with:
           ref: claude/optimistic-einstein-Afzmv
 
-      - name: Checkout рабочей ветки (для сканера)
+      - name: Исходники каталога
         uses: actions/checkout@v4
         with:
+          ref: claude/store-product-catalog-60wer4
+          path: catalog-src
+
+      - name: Исходники страницы сканера
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
           ref: claude/cool-archimedes-qv458l
-          path: work
+          path: scan-src
+
+      - name: Добавить каталог
+        run: |
+          rm -rf app/catalog
+          mkdir -p app/catalog
+          cp -r catalog-src/catalog/. app/catalog/
+          rm -rf app/catalog/setup
+          rm -rf catalog-src
 
       - name: Добавить страницу сканера
         run: |
-          if [ -f work/app/scan.html ]; then
-            cp work/app/scan.html app/scan.html
+          if [ -f scan-src/app/scan.html ]; then
+            cp scan-src/app/scan.html app/scan.html
             echo "scan.html добавлен"
           else
-            echo "::warning::work/app/scan.html не найден — сканер не опубликован"
+            echo "::warning::scan-src/app/scan.html не найден — сканер не публикуется"
           fi
-          rm -rf work
+          rm -rf scan-src
 
-      - name: Deploy to gh-pages branch
+      # Страховка от «сайта без половины частей»: лучше не выложить ничего,
+      # чем выложить сайт, где у людей внезапно 404.
+      - name: Проверить, что собрались все части
+        run: |
+          missing=""
+          [ -f app/index.html ] || missing="$missing app/index.html"
+          [ -f app/catalog/index.html ] || missing="$missing app/catalog/index.html"
+          if [ -n "$missing" ]; then
+            echo "::error::не собрано:$missing — публикация отменена"
+            exit 1
+          fi
+          echo "все части на месте: приложение + каталог$( [ -f app/scan.html ] && echo ' + сканер' )"
+
+      - name: Опубликовать на GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
