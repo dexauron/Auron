@@ -116,5 +116,13 @@ t('разница прибылей посчитана', real.profitGap===real.pr
 t('ставка валовой прибыли настраивается', /DDS_RATE/.test(code));
 t('по умолчанию 25%', /\? 0\.25 :/.test(code) || /: 0\.25/.test(code));
 
+// ── Кривые данные не должны валить расчёт ────────────────────────────
+var zero=_ddsCompute(box({}),0.25,0,0);
+t('пустой день не даёт NaN', Object.keys(zero).every(function(k){
+  return typeof zero[k]!=='number'||isFinite(zero[k]);}), JSON.stringify(zero));
+var over=_ddsCompute(box({debtDown:5000}),0.25,1000,0);
+t('переплата долга даёт минус, а не мусор', over.debt===-4000, over.debt);
+t('ставка 0 не роняет', isFinite(_ddsCompute(box({cashRev:1000}),0,0,0).gross));
+
 console.log('\nМодель дня (ДДС): '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

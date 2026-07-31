@@ -614,12 +614,15 @@ function cleanTrash(p) {
     if (!sh || sh.getLastRow() < 2) return { ok:true, removed:0 };
     var cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
     var vals = sh.getRange(2,TR_COLS,sh.getLastRow()-1,1).getValues();
-    var removed = 0;
-    for (var i=vals.length-1;i>=0;i--) {
+    // Кусками, а не по одной: в корзине могут накопиться сотни записей,
+    // и построчное удаление съедает шесть минут Apps Script.
+    var kill = [];
+    for (var i=0;i<vals.length;i++) {
       var d = vals[i][0];
-      if (d instanceof Date && d < cutoff) { sh.deleteRow(i+2); removed++; }
+      if (d instanceof Date && d < cutoff) kill.push(i+2);
     }
-    return { ok:true, removed:removed };
+    _killRows(sh, kill);
+    return { ok:true, removed:kill.length };
   } catch(e) { return { __error: e.message }; }
 });
 }
@@ -657,9 +660,9 @@ function restoreFromTrash(p) {
       base.getRange(nr,B_DATE,1,1).setNumberFormat('dd.mm.yyyy');
       base.getRange(nr,B_AMT,1,1).setNumberFormat('#,##0');
     });
-    // Удаляем из корзины снизу вверх, чтобы не сползали номера строк
-    restore.map(function(x){return x.rn;}).sort(function(a,b){return b-a;})
-      .forEach(function(rn){ trash.deleteRow(rn); });
+    // Удаляем из корзины кусками (внутри — снизу вверх, чтобы номера
+    // оставшихся строк не сползали).
+    _killRows(trash, restore.map(function(x){return x.rn;}));
     try { _bustDash(ssId); } catch(e){}
     
     return { ok:true, restored:restore.length };
@@ -1073,10 +1076,9 @@ function deleteTransaction(p) {
     // Удаляем снизу вверх, чтобы номера строк не сползали
     targets.sort(function(a,b){return b-a;});
     targets.forEach(function(rn){
-      var rr=vals[rn-2];
-      trash.appendRow(rr.concat([new Date()]));
-      base.deleteRow(rn);
+      trash.appendRow(vals[rn-2].concat([new Date()]));
     });
+    _killRows(base, targets);
     _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
     _audit(ss,'tx',String(id),'удалил',String(row[B_TYPE-1])+' · '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1]));
     try { _bustDash(ssId); } catch(e){}
@@ -3138,9 +3140,30 @@ function _ddsWipe(ss, tags) {
   var kill = [];
   for (var i = 0; i < col.length; i++)
     if (tags[String(col[i][0]||'')]) kill.push(i+2);
-  // Удаляем снизу вверх — иначе номера строк уезжают.
-  for (var j = kill.length-1; j >= 0; j--) sh.deleteRow(kill[j]);
+  _killRows(sh, kill);
   return kill.length;
+}
+
+// Удаляет строки СПЛОШНЫМИ КУСКАМИ, а не по одной.
+//
+// Повод — счёт на настоящих числах владельца: повторная загрузка его
+// файла удаляет 3 320 строк в БАЗЕ и 2 304 в ДОЛГАХ. По одной это
+// 5 624 обращения к таблице, каждое в среднем десятые доли секунды —
+// в шесть минут Apps Script не влезает, и загрузка обрывается на
+// середине. Загруженные строки лежат подряд, поэтому кусков выходит
+// единицы, а не тысячи.
+function _killRows(sh, rows) {
+  if (!rows || !rows.length) return 0;
+  rows.sort(function(x,y){ return x-y; });
+  // Идём снизу вверх — иначе номера оставшихся строк уезжают вверх.
+  var end = rows.length-1;
+  for (var i = rows.length-1; i >= 0; i--) {
+    if (i === 0 || rows[i-1] !== rows[i]-1) {
+      sh.deleteRows(rows[i], end - i + 1);
+      end = i-1;
+    }
+  }
+  return rows.length;
 }
 
 // То же для листа ДОЛГИ. Метки там лежат в комментарии после «· »,
@@ -3155,7 +3178,7 @@ function _ddsWipeDebts(ss, tags) {
     var c = String(col[i][0]||''), k = c.lastIndexOf('· ');
     if (k >= 0 && tags[c.slice(k+2).trim()]) kill.push(i+2);
   }
-  for (var j = kill.length-1; j >= 0; j--) sh.deleteRow(kill[j]);
+  _killRows(sh, kill);
   return kill.length;
 }
 
@@ -3238,6 +3261,33 @@ function ddsImport(p) {
     Object.keys(a.months).forEach(function(m){ tags['DDS:'+m]=true; monthsList.push(m); });
     Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
 
+    // Долг на начало месяца. Пишем только за те месяцы, что реально
+    // загрузили: настройка за чужой месяц сбила бы прошлые расчёты.
+    var starts = {};
+    Object.keys(a.debtStart||{}).forEach(function(m){ if (a.months[m]) starts[m]=a.debtStart[m]; });
+    Object.keys(b.debtStart||{}).forEach(function(m){
+      if (b.months[m] && starts[m]===undefined) starts[m]=b.debtStart[m]; });
+
+    // Начальный долг — отдельной строкой в книге долгов, первым числом.
+    // Без неё карточка «Общий долг» на экране Поставщиков показала бы
+    // только движение за месяц (1 073 470 ₽) вместо настоящего долга
+    // (4 182 653 ₽): начальные 3 109 183 ₽ живут в настройке, а карточка
+    // считает по листу ДОЛГИ. В расчёт дня и месяца строка НЕ идёт —
+    // _ddsDebtByDay пропускает её по метке OPEN, иначе при загрузке двух
+    // месяцев подряд начальный долг посчитался бы дважды.
+    var openRows = [];
+    Object.keys(starts).forEach(function(m){
+      if (!starts[m]) return;
+      openRows.push([ Utilities.getUuid(), DDS_DEBT_REP, 'zakupka', starts[m],
+                      new Date(m + '-01T12:00:00'), '',
+                      'Долг на начало месяца · OPEN:' + m, new Date(), '', '' ]);
+    });
+    allDebts = allDebts.concat(openRows);
+
+    // ВСЕ записи — под ОДНИМ замком. Раньше начальный долг писался
+    // вторым заходом, и между двумя замками могла вклиниться чужая
+    // загрузка: она стёрла бы строку OPEN до того, как её увидит первая,
+    // либо начальный долг задвоился бы.
     var res = _withLock(function(){
       // К меткам источника добавляем OPEN:<месяц> — строку начального
       // долга тоже надо заменять, иначе вторая загрузка её удвоит.
@@ -3259,39 +3309,10 @@ function ddsImport(p) {
         dsh.getRange(dr, D_DATE, allDebts.length, 1).setNumberFormat('dd.mm.yyyy');
         dsh.getRange(dr, D_AMT,  allDebts.length, 1).setNumberFormat('#,##0');
       }
+      Object.keys(starts).forEach(function(m){
+        try { _setSetting(ss,'DDS_DEBT_START_'+m, String(starts[m])); } catch(e){}
+      });
       return { removed: removed };
-    });
-
-    // Долг на начало месяца. Пишем только за те месяцы, что реально
-    // загрузили: настройка за чужой месяц сбила бы прошлые расчёты.
-    var starts = {};
-    Object.keys(a.debtStart||{}).forEach(function(m){ if (a.months[m]) starts[m]=a.debtStart[m]; });
-    Object.keys(b.debtStart||{}).forEach(function(m){
-      if (b.months[m] && starts[m]===undefined) starts[m]=b.debtStart[m]; });
-    Object.keys(starts).forEach(function(m){
-      try { _setSetting(ss,'DDS_DEBT_START_'+m, String(starts[m])); } catch(e){}
-    });
-
-    // Долг на начало месяца — отдельной строкой в книге долгов, датой
-    // ПЕРЕД первым числом. Без неё карточка «Общий долг» на экране
-    // Поставщиков показала бы только движение за месяц (1 073 470 ₽)
-    // вместо настоящего долга (4 182 653 ₽): начальные 3 109 183 ₽
-    // живут в настройке, а карточка считает по листу ДОЛГИ.
-    // В расчёт дня и месяца она НЕ идёт (там начальный долг берётся из
-    // настройки) — _ddsDebtByDay такие строки пропускает по метке OPEN.
-    var openRows = [];
-    Object.keys(starts).forEach(function(m){
-      if (!starts[m]) return;
-      openRows.push([ Utilities.getUuid(), DDS_DEBT_REP, 'zakupka', starts[m],
-                      new Date(m + '-01T12:00:00'), '',
-                      'Долг на начало месяца · OPEN:' + m, new Date(), '', '' ]);
-    });
-    if (openRows.length) _withLock(function(){
-      var dsh = ss.getSheetByName(SH_DEBTS);
-      var dr = dsh.getLastRow()+1;
-      dsh.getRange(dr, 1, openRows.length, D_COLS).setValues(openRows);
-      dsh.getRange(dr, D_DATE, openRows.length, 1).setNumberFormat('dd.mm.yyyy');
-      dsh.getRange(dr, D_AMT,  openRows.length, 1).setNumberFormat('#,##0');
     });
 
     // План постоянных расходов на месяц.
@@ -3467,9 +3488,10 @@ function cancelShift(p) {
     var debtsSh=ss.getSheetByName(SH_DEBTS);
     if (debtsSh&&debtsSh.getLastRow()>=2) {
       var dVals=debtsSh.getRange(2,1,debtsSh.getLastRow()-1,D_COLS).getValues();
-      for (var j=dVals.length-1;j>=0;j--) {
-        if (String(dVals[j][D_STATUS-1])===String(shiftId)) debtsSh.deleteRow(j+2);
-      }
+      var dKill=[];
+      for (var j=0;j<dVals.length;j++)
+        if (String(dVals[j][D_STATUS-1])===String(shiftId)) dKill.push(j+2);
+      _killRows(debtsSh, dKill);
     }
     try { _bustDash(ssId); } catch(e){}
     
@@ -7154,6 +7176,12 @@ function xlsApply(p) {
     // «Общие доходы и расходы» — сводка регистра, а не список товаров.
     // Её не раскладываем по товарам: сохраняем итоги для сверки.
     if (type === 'incexp') {
+      // Это НЕ товары, а денежная сводка для экрана «Сверка». Права на
+      // товары для неё мало: именно по сверке владелец видит расхождение
+      // между 1С и своим отчётом (у него это 848 735 ₽ списаний против
+      // 15 089 ₽). Подменив её, сотрудник спрятал бы разрыв.
+      if (!_permGuard(p.ssId,'finance')) { _xlsDrop(tmp);
+        return {__error:'Сводку доходов и расходов загружает владелец или бухгалтер'}; }
       var ie = _incexpParse(rows);
       rows = null;
       if (!ie.month) { _xlsDrop(tmp);

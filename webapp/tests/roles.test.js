@@ -59,5 +59,27 @@ var srcGuards=require('fs').readFileSync(__dirname+'/../Code.gs','utf8');
 var badGuards=srcGuards.match(/_(perm|any|fin)Guard\(\s*ss\s*[,)]/g)||[];
 t('гарды не вызываются с объектом ss вместо ssId', badGuards.length===0);
 
+// Денежные экраны требуют права на финансы, а не на товары.
+// «Общие доходы и расходы» из 1С — это сводка для «Сверки»: именно по
+// ней владелец видит расхождение между 1С и своим отчётом. Раньше её
+// пускало право «товары», и сотрудник мог подменить цифры сверки.
+var incexpBlock = srcGuards.slice(srcGuards.indexOf("if (type === 'incexp')"),
+                                  srcGuards.indexOf("if (type === 'incexp')")+700);
+t('сводка доходов и расходов требует права финансов',
+  /_permGuard\(p\.ssId,'finance'\)/.test(incexpBlock));
+t('при отказе временный файл удаляется', /_xlsDrop\(tmp\);\n *return \{__error:'Сводку/.test(incexpBlock));
+
+// Загрузка собственного отчёта владельца — тоже деньги.
+[['ddsImport','finance'],['getReconcile','finance']].forEach(function(pair){
+  var i=srcGuards.indexOf('function '+pair[0]+'(');
+  t(pair[0]+' требует права «'+pair[1]+'»',
+    i>0 && srcGuards.slice(i,i+700).indexOf("_permGuard(ssId,'"+pair[1]+"')")>0);
+});
+[['getDayDDS'],['getMonthDDS']].forEach(function(pair){
+  var i=srcGuards.indexOf('function '+pair[0]+'(');
+  t(pair[0]+' требует финансов или кассы',
+    i>0 && srcGuards.slice(i,i+400).indexOf("_anyPermGuard(ssId, ['finance','kassa'])")>0);
+});
+
 console.log('\nПрава по ролям: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

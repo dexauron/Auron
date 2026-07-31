@@ -157,7 +157,10 @@ t('в расчёт дня и месяца строка OPEN не идёт',
 t('план постоянных расходов сохраняется в настройку',
   /_setSetting\(ss,'DDS_PLAN_'\+m/.test(code));
 t('замена прежних строк по метке источника', /_ddsWipe/.test(code));
-t('строки удаляются снизу вверх', /kill\.length-1; j >= 0; j--/.test(code));
+// Удаление кусками, а не по одной строке — подробности в wipe-rows.test.js.
+t('строки удаляются кусками', /_killRows\(sh, kill\)/.test(code));
+t('все записи под одним замком', code.split('_withLock').length-1 >= 1 &&
+  /allDebts = allDebts\.concat\(openRows\);/.test(code));
 t('запись одним куском, а не построчно', /setValues\(all\)/.test(code));
 t('загрузка только с правом финансов', /_permGuard\(ssId,'finance'\)/.test(code));
 
