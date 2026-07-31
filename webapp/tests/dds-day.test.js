@@ -22,8 +22,10 @@ eval(grab('_ddsCompute'));
 function box(o){
   var b={cashRev:0,onlineRev:0,iman:0,transfer:0,cashOut:0,buyCash:0,payDebt:0,
          buyDebt:0,writeOff:0,bank:0,meal:0,fuel:0,supplies:0,salary:0,rent:0,
-         utils:0,tax:0,other:0,count:0};
+         utils:0,tax:0,other:0,count:0,debtUp:0,debtDown:0};
   for(var k in o) b[k]=o[k];
+  // Закуп в долг живёт на листе ДОЛГИ: он растит долг, а не тратит деньги.
+  if (o && o.buyDebt && !o.debtUp) b.debtUp=o.buyDebt;
   return b;
 }
 
@@ -72,6 +74,17 @@ var a2=_ddsCompute(box({cashRev:100000,buyDebt:70000}),0.25,0);
 t('закуп в долг не трогает прибыль по факту', a1.profitFact===a2.profitFact,
   a1.profitFact+' vs '+a2.profitFact);
 t('закуп в долг увеличивает долг поставщикам', a2.debt===70000, a2.debt);
+// Смысл правила владельца: товар взяли, деньги не отдали. Значит ни
+// прибыль, ни касса от закупа в долг двинуться не должны. Раньше он
+// писался расходом наличными, и «Общий капитал» уходил в минус на 47,9 млн.
+var a2b=_ddsCompute(box({cashRev:100000}),0.25,0);
+t('закуп в долг НЕ уменьшает прибыль по факту', a2.profitFact===a2b.profitFact,
+  a2.profitFact+' vs '+a2b.profitFact);
+t('закуп в долг НЕ уменьшает остаток кассы', a2.cashLeft===a2b.cashLeft);
+// Оплата долга — обратный случай: деньги действительно уходят.
+var a2c=_ddsCompute(box({cashRev:100000,payDebt:70000,debtDown:70000}),0.25,70000);
+t('оплата долга уменьшает долг до нуля', a2c.debt===0, a2c.debt);
+t('оплата долга уменьшает прибыль по факту', a2c.profitFact===a2b.profitFact-70000);
 t('выплата долга уменьшает долг',
   _ddsCompute(box({payDebt:30000}),0.25,100000).debt===70000);
 

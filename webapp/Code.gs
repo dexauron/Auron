@@ -2655,7 +2655,8 @@ var DDS_MAP = {
   'выплата кассы':'cashOut',
   'закупка товара':'buyCash', 'закупка':'buyCash', 'оплата поставщику наличными':'buyCash',
   'выплата поставщику':'payDebt', 'погашение долга поставщику':'payDebt',
-  'закуп товара в долг':'buyDebt',
+  // «Закуп товара в долг» здесь больше нет: он не движение денег, а рост
+  // долга поставщиков. Берётся с листа ДОЛГИ (см. _ddsDebtByDay).
   'списание товара':'writeOff', 'списание':'writeOff',
   'комиссия банка':'bank',
   'питание сотрудников':'meal', 'обед':'meal',
@@ -2670,11 +2671,40 @@ function _ddsRate(ss) {
   return (isNaN(v) || v <= 0 || v >= 1) ? 0.25 : v;
 }
 
+// Движение ДОЛГА поставщиков по дням — с листа ДОЛГИ, а не с БАЗЫ.
+// Правило владельца: закуп в долг увеличивает долг, оплата долга его
+// уменьшает. Денег ни та, ни другая строка сама по себе не двигает —
+// расход по оплате лежит отдельно в БАЗЕ.
+// Возвращает { 'yyyy-MM-dd': {up:..., down:...} }.
+function _ddsDebtByDay(ss) {
+  var out = {};
+  try {
+    var sh = ss.getSheetByName(SH_DEBTS);
+    if (!sh || sh.getLastRow() < 2) return out;
+    var v = sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues();
+    for (var i = 0; i < v.length; i++) {
+      var d = v[i][D_DATE-1];
+      var ds = (d instanceof Date) ? Utilities.formatDate(d,'Europe/Moscow','yyyy-MM-dd')
+                                   : String(d||'').slice(0,10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
+      var amt = Math.abs(_gnum(v[i][D_AMT-1]));
+      if (!amt) continue;
+      var o = out[ds] = out[ds] || {up:0, down:0};
+      if (String(v[i][D_TYPE-1]||'').toLowerCase() === 'oplata') o.down += amt;
+      else o.up += amt;
+    }
+  } catch(e){}
+  return out;
+}
+
 // Собирает суммы дня по ролям модели.
-function _ddsCollect(rows, dateStr) {
+// debtDay — необязательная запись {up,down} с листа ДОЛГИ за этот день.
+function _ddsCollect(rows, dateStr, debtDay) {
   var b = { cashRev:0,onlineRev:0,iman:0,transfer:0,cashOut:0,buyCash:0,payDebt:0,
             buyDebt:0,writeOff:0,bank:0,meal:0,fuel:0,supplies:0,salary:0,rent:0,
-            utils:0,tax:0, other:0, count:0 };
+            utils:0,tax:0, other:0, count:0, debtUp:0, debtDown:0 };
+  if (debtDay) { b.debtUp = debtDay.up||0; b.debtDown = debtDay.down||0;
+                 b.buyDebt = b.debtUp; }
   for (var i = 0; i < rows.length; i++) {
     var r = rows[i];
     var d = r[B_DATE-1];
@@ -2726,7 +2756,9 @@ function _ddsCompute(b, rate, debtYesterday) {
     forBuy: Math.round(forBuy),
     spentOnBuy: Math.round(b.buyCash + b.payDebt + b.buyDebt),
     officeDiff: Math.round(forBuy - b.buyCash - b.payDebt - b.buyDebt),
-    debt: Math.round((debtYesterday||0) - b.payDebt + b.buyDebt),
+    // Долг считаем по книге долгов: она знает и те погашения, что завёл
+    // приём товара, а не только загруженный отчёт.
+    debt: Math.round((debtYesterday||0) - (b.debtDown||b.payDebt||0) + (b.debtUp||0)),
     shifts: b.shifts || null,
     parts: b
   };
@@ -2773,7 +2805,7 @@ function getDayDDS(p) {
     var sh = ss.getSheetByName(SH_BASE);
     var rows = (sh && sh.getLastRow() > 1)
       ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
-    var b = _ddsCollect(rows, date);
+    var b = _ddsCollect(rows, date, _ddsDebtByDay(ss)[date]);
     var prev = _gnum(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
     var out = _ddsCompute(b, _ddsRate(ss), prev);
     out.date = date;
@@ -2811,13 +2843,19 @@ function getMonthDDS(p) {
     }
 
     var rate = _ddsRate(ss);
+    var dByDay = _ddsDebtByDay(ss);
     var debt = _gnum(_getSettingStr(ss,'DDS_DEBT_START_'+ym,'')) || 0;
-    var days = Object.keys(byDay).sort();
+    // Дни берём из обоих источников: бывает день, где движение только по
+    // долгу (взяли товар в долг, а выручку внесли другим числом).
+    var dayset = {};
+    Object.keys(byDay).forEach(function(d){ dayset[d]=1; });
+    Object.keys(dByDay).forEach(function(d){ if (d.slice(0,7)===ym) dayset[d]=1; });
+    var days = Object.keys(dayset).sort();
     var out = [], tot = { trade:0, cashRev:0, onlineRev:0, gross:0,
                           profitPlan:0, profitFact:0, forBuy:0, spentOnBuy:0,
                           officeDiff:0, iman:0, writeOff:0, buyDebt:0, payDebt:0 };
     for (var k = 0; k < days.length; k++) {
-      var b = _ddsCollect(byDay[days[k]], days[k]);
+      var b = _ddsCollect(byDay[days[k]]||[], days[k], dByDay[days[k]]);
       var r = _ddsCompute(b, rate, debt);
       debt = r.debt;                       // долг накапливается изо дня в день
       r.date = days[k];
@@ -2857,7 +2895,6 @@ var DDS_COLS = [
   ['перевод',         'Расход', 'Перевод',                  'Наличные'],
   ['закуп за наличку','Расход', 'Закупка товара',           'Наличные'],
   ['выплата долга',   'Расход', 'Выплата поставщику',       'Наличные'],
-  ['закуп товаров долг','Расход','Закуп товара в долг',     'Наличные'],
   ['списание',        'Расход', 'Списание товара',          'Наличные'],
   ['комиссия банка',  'Расход', 'Комиссия банка',           'Карта'],
   ['обед',            'Расход', 'Питание сотрудников',      'Наличные'],
@@ -2872,10 +2909,35 @@ var DDS_COLS = [
 var OPL_COLS = [
   ['оплата за наличку','Расход','Оплата поставщику наличными','Наличные'],
   ['оплата долга',    'Расход', 'Погашение долга поставщику','Наличные'],
-  ['закуп в долг',    'Расход', 'Закуп товара в долг',      'Наличные'],
   ['зарплата',        'Расход', 'Зарплата',                 'Наличные'],
   ['прочие расход',   'Расход', 'Прочие расходы',           'Наличные']
 ];
+
+// Колонки, которые двигают ДОЛГ ПОСТАВЩИКОВ, а не деньги.
+//
+// Правило владельца: «закуп в долг — это увеличение долга поставщиков,
+// оплата долга — уменьшение долга поставщиков». Товар взяли, деньги не
+// отдали: касса не худеет, долг растёт. Поэтому такие строки идут на лист
+// ДОЛГИ, а НЕ расходом на лист БАЗА.
+//
+// Раньше «закуп в долг» писался расходом наличными. За июль это 25,6 млн
+// денег, которые из кассы не уходили, и «Общий капитал» показывал
+// −47 899 119 ₽ — цифра, которой в магазине никогда не было.
+//
+// «Оплата долга» — обратный случай: деньги ДЕЙСТВИТЕЛЬНО уходят, поэтому
+// она остаётся расходом в БАЗЕ (см. таблицы выше) и ДОПОЛНИТЕЛЬНО
+// уменьшает долг здесь. Двойного списания нет: в ДОЛГИ такие строки
+// пишутся без счёта, а расход по счёту создаёт только БАЗА.
+var DDS_DEBT_COLS = [
+  ['закуп товаров долг', 'zakupka'],
+  ['закуп в долг',       'zakupka'],
+  ['выплата долга',      'oplata'],
+  ['оплата долга',       'oplata']
+];
+
+// Один общий контрагент: в файле владельца поставщик не указан — там
+// сводная сумма за день по всем сразу.
+var DDS_DEBT_REP = 'Поставщики (из отчёта)';
 
 // Ищет лист по части имени (без учёта регистра и лишних пробелов).
 function _ddsFindSheet(ss, part) {
@@ -2896,28 +2958,34 @@ function _ddsDateKey(v) {
   return '';
 }
 
-// Превращает лист в операции. Возвращает {rows:[...], months:{...}}.
+// Превращает лист в операции. Возвращает {rows:[...], debts:[...], months:{...}}.
+// rows — движение денег (лист БАЗА), debts — движение долга (лист ДОЛГИ).
 function _ddsSheetToOps(sh, map, tag) {
-  var out = [], months = {};
-  if (!sh || sh.getLastRow() < 2) return { rows: out, months: months };
+  var out = [], debts = [], months = {};
+  if (!sh || sh.getLastRow() < 2) return { rows: out, debts: debts, months: months };
   var vals = sh.getRange(1,1,sh.getLastRow(),sh.getLastColumn()).getValues();
   // Шапка — первая строка, где есть слово «дата».
   var hRow = -1;
   for (var r = 0; r < Math.min(8, vals.length) && hRow < 0; r++)
     for (var c = 0; c < vals[r].length; c++)
       if (String(vals[r][c]||'').toLowerCase().trim().indexOf('дата') === 0) { hRow = r; break; }
-  if (hRow < 0) return { rows: out, months: months };
+  if (hRow < 0) return { rows: out, debts: debts, months: months };
 
   // Сопоставляем колонки по названиям, а не по номерам: если владелец
   // добавит колонку, загрузка не поедет.
-  var cols = [];
+  var cols = [], dcols = [];
   for (var c2 = 0; c2 < vals[hRow].length; c2++) {
     var h = String(vals[hRow][c2]||'').toLowerCase().replace(/ё/g,'е').trim();
     if (!h) continue;
     for (var m2 = 0; m2 < map.length; m2++)
       if (h.indexOf(map[m2][0].replace(/ё/g,'е')) === 0) { cols.push([c2, map[m2]]); break; }
+    // Та же колонка может двигать и деньги, и долг: «оплата долга» —
+    // расход в БАЗЕ и уменьшение долга в ДОЛГАХ. Поэтому ищем отдельно.
+    for (var m3 = 0; m3 < DDS_DEBT_COLS.length; m3++)
+      if (h.indexOf(DDS_DEBT_COLS[m3][0].replace(/ё/g,'е')) === 0) {
+        dcols.push([c2, DDS_DEBT_COLS[m3][1]]); break; }
   }
-  if (!cols.length) return { rows: out, months: months };
+  if (!cols.length && !dcols.length) return { rows: out, debts: debts, months: months };
 
   for (var i = hRow+1; i < vals.length; i++) {
     var ds = _ddsDateKey(vals[i][0]);
@@ -2932,8 +3000,17 @@ function _ddsSheetToOps(sh, map, tag) {
                  Math.round(Math.abs(amt)*100)/100, spec[3], '', 'Загружено из файла',
                  '', tag+':'+ds.slice(0,7), '', shift ]);
     }
+    // Движение долга. Счёт пустой — деньги здесь не трогаем.
+    for (var k2 = 0; k2 < dcols.length; k2++) {
+      var damt = _xlsNum(vals[i][dcols[k2][0]]);
+      if (!damt) continue;
+      debts.push([ Utilities.getUuid(), DDS_DEBT_REP, dcols[k2][1],
+                   Math.round(Math.abs(damt)), new Date(ds+'T12:00:00'), '',
+                   'Загружено из файла · ' + tag + ':' + ds.slice(0,7),
+                   new Date(), '', '' ]);
+    }
   }
-  return { rows: out, months: months };
+  return { rows: out, debts: debts, months: months };
 }
 
 // Удаляет ранее загруженные строки этого же источника и месяца.
@@ -2945,6 +3022,22 @@ function _ddsWipe(ss, tags) {
   for (var i = 0; i < col.length; i++)
     if (tags[String(col[i][0]||'')]) kill.push(i+2);
   // Удаляем снизу вверх — иначе номера строк уезжают.
+  for (var j = kill.length-1; j >= 0; j--) sh.deleteRow(kill[j]);
+  return kill.length;
+}
+
+// То же для листа ДОЛГИ. Метки там лежат в комментарии после «· »,
+// отдельной колонки-источника в ДОЛГАХ нет. Чужие долги, заведённые
+// руками при приёме товара, такой пометки не имеют и не трогаются.
+function _ddsWipeDebts(ss, tags) {
+  var sh = ss.getSheetByName(SH_DEBTS);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  var col = sh.getRange(2, D_CMT, sh.getLastRow()-1, 1).getValues();
+  var kill = [];
+  for (var i = 0; i < col.length; i++) {
+    var c = String(col[i][0]||''), k = c.lastIndexOf('· ');
+    if (k >= 0 && tags[c.slice(k+2).trim()]) kill.push(i+2);
+  }
   for (var j = kill.length-1; j >= 0; j--) sh.deleteRow(kill[j]);
   return kill.length;
 }
@@ -2985,11 +3078,17 @@ function ddsImport(p) {
         keep.push(b.rows[q]);
       }
       b.rows = keep;
+      // Долги за эти же месяцы тоже из ОПЛАТЫ не берём.
+      b.debts = b.debts.filter(function(row){
+        var c = String(row[D_CMT-1]||''), k = c.lastIndexOf(':');
+        return !a.months[k >= 0 ? c.slice(k+1).trim() : ''];
+      });
       skipped.forEach(function(m){ delete b.months[m]; });
     }
 
     var all = a.rows.concat(b.rows);
-    if (!all.length) { _xlsDrop(tmp);
+    var allDebts = (a.debts||[]).concat(b.debts||[]);
+    if (!all.length && !allDebts.length) { _xlsDrop(tmp);
       return {__error:'В листах нет строк с датами — загружать нечего.'}; }
 
     // Метки для замены: месяц + источник.
@@ -2998,20 +3097,29 @@ function ddsImport(p) {
     Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
 
     var res = _withLock(function(){
-      var removed = _ddsWipe(ss, tags);
+      var removed = _ddsWipe(ss, tags) + _ddsWipeDebts(ss, tags);
       var base = ss.getSheetByName(SH_BASE);
-      var startId = base.getLastRow();
-      for (var i = 0; i < all.length; i++) all[i][0] = startId + i;
-      // Пишем одним куском: построчная запись 4 700 операций не влезет.
-      base.getRange(base.getLastRow()+1, 1, all.length, B_COLS).setValues(all);
+      if (all.length) {
+        var startId = base.getLastRow();
+        for (var i = 0; i < all.length; i++) all[i][0] = startId + i;
+        // Пишем одним куском: построчная запись 4 700 операций не влезет.
+        base.getRange(base.getLastRow()+1, 1, all.length, B_COLS).setValues(all);
+      }
+      if (allDebts.length) {
+        var dsh = ss.getSheetByName(SH_DEBTS);
+        var dr = dsh.getLastRow()+1;
+        dsh.getRange(dr, 1, allDebts.length, D_COLS).setValues(allDebts);
+        dsh.getRange(dr, D_DATE, allDebts.length, 1).setNumberFormat('dd.mm.yyyy');
+        dsh.getRange(dr, D_AMT,  allDebts.length, 1).setNumberFormat('#,##0');
+      }
       return { removed: removed };
     });
 
     _xlsDrop(tmp);
     try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
-    _log(ss,'Загрузка отчёта', 'строк '+all.length+', заменено '+res.removed+
-         ', месяцы: '+monthsList.sort().join(', '));
-    return { ok:true, added: all.length, removed: res.removed,
+    _log(ss,'Загрузка отчёта', 'строк '+all.length+', долгов '+allDebts.length+
+         ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
+    return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }

@@ -16,7 +16,9 @@ function grabVar(n){var i=code.indexOf('var '+n+' = [');var j=code.indexOf('\n];
   return code.slice(i,j+3);}
 global.Utilities={getUuid:function(){return 'u';},
   formatDate:function(d){return d.toISOString().slice(0,10);}};
-eval(grabVar('DDS_COLS')); eval(grabVar('OPL_COLS'));
+eval(grabVar('DDS_COLS')); eval(grabVar('OPL_COLS')); eval(grabVar('DDS_DEBT_COLS'));
+var DDS_DEBT_REP = 'Поставщики (из отчёта)';
+var D_CMT = 7;
 eval(grab('_xlsNum')); eval(grab('_ddsDateKey')); eval(grab('_ddsSheetToOps'));
 var B_ZREF=11;
 
@@ -45,7 +47,18 @@ t('выручка наличными за сутки 233 777', sum(r.rows,'Вы�
   sum(r.rows,'Выручка наличными'));
 t('выручка безналом 134 021', sum(r.rows,'Выручка безналичными')===73068+60953);
 t('Иман 3 334', sum(r.rows,'Иман')===3334);
-t('закуп в долг 336 102', sum(r.rows,'Закуп товара в долг')===336102);
+// Закуп в долг — не расход денег, а рост долга поставщиков (правило
+// владельца). Поэтому в операциях его быть не должно вовсе.
+t('закуп в долг НЕ попал в расходы денег', sum(r.rows,'Закуп товара в долг')===0);
+function dsum(rows,type){var s=0;rows.forEach(function(x){if(x[2]===type)s+=x[3];});return s;}
+t('закуп в долг 336 102 увеличил долг', dsum(r.debts,'zakupka')===336102, dsum(r.debts,'zakupka'));
+t('выплата долга 168 323 уменьшила долг', dsum(r.debts,'oplata')===168323, dsum(r.debts,'oplata'));
+t('выплата долга ОСТАЛАСЬ расходом денег',
+  sum(r.rows,'Выплата поставщику')===168323);
+t('строки долга без счёта — деньги ими не двигаются',
+  r.debts.every(function(x){return x[5]==='';}));
+t('строка долга помечена источником',
+  String(r.debts[0][D_CMT-1]).indexOf('· DDS:2026-07')>0, r.debts[0][D_CMT-1]);
 t('расчётные колонки НЕ переносятся (наличка, на закуп)',
   sum(r.rows,'Наличка')===0 && sum(r.rows,'на закуп')===0);
 t('нули не создают пустых операций', r.rows.every(function(x){return x[5]>0;}));
@@ -61,6 +74,8 @@ var oplRows=[oHead,
 var o=_ddsSheetToOps(sheet(oplRows), OPL_COLS, 'OPL');
 t('оплата наличными разобрана', sum(o.rows,'Оплата поставщику наличными')===1360);
 t('погашение долга разобрано', sum(o.rows,'Погашение долга поставщику')===2600);
+t('закуп в долг с листа ОПЛАТА тоже пошёл в долг, а не в расход',
+  sum(o.rows,'Закуп товара в долг')===0 && dsum(o.debts,'zakupka')===24381+5000);
 t('два месяца увидены', o.months['2026-07']&&o.months['2026-08']);
 
 // ── Защита от двойного счёта: ОПЛАТА за месяц, который есть в ДДС ────

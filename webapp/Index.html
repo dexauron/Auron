@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.69.0';
+var APP_VERSION='4.70.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5009,6 +5009,8 @@ var App={
           '<div class="dds-ok" style="font-weight:750;">Загружено ✓</div>'+
           '<div style="font-size:12.5px;color:var(--ink-2);">Записей добавлено: <b>'+r.added+'</b>'+
           (r.removed?', заменено прежних: <b>'+r.removed+'</b>':'')+'</div>'+
+          (r.debts?'<div style="font-size:12.5px;color:var(--ink-2);">Движений долга поставщиков: <b>'+r.debts+'</b>'+
+            ' <span style="color:var(--muted);">(закуп в долг и оплата долга — они меняют долг, а не кассу)</span></div>':'')+
           '<div style="font-size:12.5px;color:var(--muted);">Из листа ДДС: '+r.fromDDS+
           ' · из листа Оплата: '+r.fromOPL+'</div>'+
           (mm?'<div style="font-size:12.5px;color:var(--muted);">Месяцы: '+App._e(mm)+'</div>':'')+
