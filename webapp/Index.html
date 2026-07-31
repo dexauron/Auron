@@ -1062,7 +1062,7 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 
 /* Значки, заменившие эмодзи: выравниваем по строке текста, чтобы не
    съезжали вверх, как это делают буквенные глифы. */
-.ei{vertical-align:-.18em;flex:none;}
+.ei{vertical-align:-.18em;flex:none;width:1.15em;height:1.15em;}
 /* ── Misc ── */
 .empty-state{text-align:center;padding:60px 20px;color:var(--text-2);}
 .empty-icon{font-size:48px;margin-bottom:14px;opacity:.5;}
@@ -2295,7 +2295,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div id="k-briefing"></div>
         <button onclick="App.openReceiveRep()" style="width:100%;text-align:left;padding:16px 18px;border-radius:20px;border:none;background:color-mix(in oklab,var(--brand) 14%,var(--surface));cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
           <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
-          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Приём торгового</span>
+          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Приём торгового представителя</span>
           <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплата · погашение долга · новый долг — за раз</span></span>
           <span style="color:var(--muted);">›</span>
         </button>
@@ -3090,7 +3090,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.57.0';
+var APP_VERSION='4.58.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6445,7 +6445,7 @@ var App={
   // ── Приём торгового: оплата наличкой + погашение долга + новый долг ──
   openReceiveRep:function(){
     App._recDebt=null;
-    App.openModal('<div class="modal-title">'+SVG.truck+' Приём торгового</div>'+
+    App.openModal('<div class="modal-title">'+SVG.truck+' Приём торгового представителя</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Всё по одному представителю за раз. Долг пересчитается сам.</div>'+
       '<div class="field"><label>Представитель / поставщик</label><input id="rec-rep" type="text" placeholder="Начните вводить…" autocomplete="off"></div>'+
       '<div id="rec-debt" style="display:none;font-size:12.5px;margin:-6px 0 12px;padding:9px 12px;border-radius:11px;background:var(--surface-2);"></div>'+
