@@ -1063,6 +1063,25 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 /* Значки, заменившие эмодзи: выравниваем по строке текста, чтобы не
    съезжали вверх, как это делают буквенные глифы. */
 .ei{vertical-align:-.18em;flex:none;width:1.15em;height:1.15em;}
+/* Итог дня по модели владельца */
+.dds-head{display:flex;align-items:center;gap:10px;margin:14px 0 4px;}
+.dds-date{flex:1;text-align:center;font-size:15px;font-weight:750;}
+.dds-nav{width:36px;height:36px;border-radius:12px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);font-size:17px;cursor:pointer;font-family:var(--font);}
+.dds-nav:active{transform:scale(.92);}
+.dds-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  padding:14px 16px;margin-bottom:12px;}
+.dds-card h4{font-size:12px;font-weight:700;color:var(--muted);margin:0 0 10px;
+  letter-spacing:.04em;text-transform:uppercase;}
+.dds-row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;font-size:13.5px;}
+.dds-row span{color:var(--ink-2);min-width:0;}
+.dds-row b{font-weight:750;white-space:nowrap;color:var(--ink);
+  font-variant-numeric:tabular-nums;}
+.dds-row.total{border-top:1px solid var(--line);margin-top:6px;padding-top:10px;font-size:15px;}
+.dds-hero{font-size:26px;font-weight:800;letter-spacing:-.03em;margin:2px 0 2px;color:var(--ink);
+  font-variant-numeric:tabular-nums;}
+.dds-note{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:8px;}
+.dds-ok{color:var(--pos);} .dds-bad{color:var(--neg);} .dds-warn{color:var(--warn,#FF9F0A);}
 /* ── Misc ── */
 .empty-state{text-align:center;padding:60px 20px;color:var(--text-2);}
 .empty-icon{font-size:48px;margin-bottom:14px;opacity:.5;}
@@ -2304,6 +2323,23 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <span id="k-title" style="font-size:18px;font-weight:800;letter-spacing:-.3px;">Касса</span>
       </div>
 
+      <!-- Вкладки раздела «Касса». «День» — итог по модели владельца
+           (формулы из его отчёта ДДС), «Месяц» — те же строки по дням. -->
+      <div class="supp-tabs" id="kassa-tabs" style="padding:0 20px;">
+        <button class="supp-tab active" data-kt="hub" onclick="App.setKassaTab('hub',this)">Смена</button>
+        <button class="supp-tab" data-kt="day" onclick="App.setKassaTab('day',this)">День</button>
+      </div>
+
+      <!-- ИТОГ ДНЯ -->
+      <div id="k-day" class="kassa-wrap" style="display:none;">
+        <div class="dds-head">
+          <button class="dds-nav" onclick="App.ddsShift(-1)" aria-label="Предыдущий день">‹</button>
+          <div id="dds-date" class="dds-date">—</div>
+          <button class="dds-nav" onclick="App.ddsShift(1)" aria-label="Следующий день">›</button>
+        </div>
+        <div id="dds-body" style="padding:14px 0;">Загрузка…</div>
+      </div>
+
       <!-- ХАБ: выбор действия -->
       <div id="k-hub" class="kassa-wrap">
         <div id="k-briefing"></div>
@@ -3119,7 +3155,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.60.0';
+var APP_VERSION='4.61.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4667,7 +4703,120 @@ var App={
     else if(tab==='settings')App.renderSettingsPage();
   },
 
+// ── Итог дня по модели владельца (формулы из его отчёта ДДС) ──
+  // Кассир видит только кассу и расхождение — сошлась ли смена.
+  // Прибыль, долг поставщикам и «на закуп» — под правом «финансы».
+  _ddsDate:null,
+  setKassaTab:function(tab,btn){
+    var boxes={hub:'k-hub',day:'k-day'};
+    Object.keys(boxes).forEach(function(k){
+      var el=document.getElementById(boxes[k]); if(el)el.style.display=(k===tab)?'':'none';
+    });
+    document.querySelectorAll('#kassa-tabs .supp-tab').forEach(function(b){
+      b.classList.toggle('active', b.dataset.kt===tab);
+    });
+    if(tab==='day')App.loadDayDDS();
+    App.haptic(6);
+  },
+  ddsShift:function(n){
+    var d=App._ddsDate?new Date(App._ddsDate):new Date();
+    d.setDate(d.getDate()+n);
+    App._ddsDate=App._ymd(d); App.loadDayDDS();
+  },
+  _ymd:function(d){
+    return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  },
+  loadDayDDS:function(){
+    if(!App.s.ssId)return;
+    if(!App._ddsDate)App._ddsDate=App._ymd(new Date());
+    var el=document.getElementById('dds-date');
+    if(el)el.textContent=App._ddsHuman(App._ddsDate);
+    var b=document.getElementById('dds-body'); if(b)b.innerHTML='<div class="skel" style="height:120px;border-radius:18px;"></div>';
+    gs('getDayDDS',{ssId:App.s.ssId,date:App._ddsDate}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._renderDayDDS(r);
+    }).catch(function(e){
+      var x=document.getElementById('dds-body');
+      if(x)x.innerHTML='<div style="color:var(--neg);padding:8px 0;">'+App._e(App._friendlyErr(e))+'</div>';
+    });
+  },
+  _ddsHuman:function(ymd){
+    var M=['января','февраля','марта','апреля','мая','июня','июля','августа',
+           'сентября','октября','ноября','декабря'];
+    var p=String(ymd).split('-');
+    var today=App._ymd(new Date());
+    var pref=(ymd===today)?'Сегодня · ':'';
+    return pref+parseInt(p[2],10)+' '+M[parseInt(p[1],10)-1]+' '+p[0];
+  },
+  _renderDayDDS:function(r){
+    var b=document.getElementById('dds-body'); if(!b)return;
+    var fin=App.can('finance');
+    var m=function(v){return '₽ '+fmtFull(Math.round(v||0));};
+    var row=function(l,v,cls){return '<div class="dds-row"><span>'+l+'</span><b'+
+      (cls?' class="'+cls+'"':'')+'>'+v+'</b></div>';};
+    var p=r.parts||{};
+    var h='';
+
+    // 1) Торговля — видят все
+    h+='<div class="dds-card"><h4>Торговля за сутки</h4>'+
+       '<div class="dds-hero">'+m(r.trade)+'</div>'+
+       row('Наличными',m(r.cashRev))+row('Онлайн',m(r.onlineRev))+'</div>';
+
+    // 2) Касса — главное для кассира
+    var ok=(r.cashDiff===0);
+    h+='<div class="dds-card"><h4>Касса</h4>'+
+       row('Осталось наличных',m(r.cashLeft))+
+       row('Взял хозяин (Иман)',m(p.iman))+
+       row('Переводы и инкассация',m(p.transfer))+
+       '<div class="dds-row total"><span>Расхождение</span><b class="'+(ok?'dds-ok':'dds-bad')+'">'+
+       (ok?'сошлось':m(r.cashDiff))+'</b></div>'+
+       (ok?'<div class="dds-note">Смена сошлась: вся выручка разложена по местам.</div>'
+          :'<div class="dds-note">Смена не сходится — проверьте, всё ли записано.</div>')+
+       '</div>';
+
+    // 3) Расходы дня — видят все, кто закрывает смену
+    h+='<div class="dds-card"><h4>Расходы дня</h4>'+
+       row('Списание товара',m(p.writeOff))+row('Комиссия банка',m(p.bank))+
+       row('Обед',m(p.meal))+row('Топливо',m(p.fuel))+row('Расходники',m(p.supplies))+
+       '</div>';
+
+    if(fin){
+      // 4) Закуп
+      h+='<div class="dds-card"><h4>Закуп</h4>'+
+         row('Можно потратить',m(r.forBuy))+
+         row('Потрачено',m(r.spentOnBuy))+
+         row('— за наличку',m(p.buyCash))+
+         row('— погашение долга',m(p.payDebt))+
+         row('— взято в долг',m(p.buyDebt))+
+         '<div class="dds-row total"><span>Разница</span><b class="'+
+         (r.officeDiff<0?'dds-bad':'dds-ok')+'">'+m(r.officeDiff)+'</b></div>'+
+         (r.officeDiff<0?'<div class="dds-note">Потрачено на закуп больше, чем позволила выручка. Разница уходит в долг и в товар на полке.</div>':'')+
+         '</div>';
+
+      // 5) Прибыль — двумя цифрами, как решил владелец
+      var gap=r.profitGap||0;
+      h+='<div class="dds-card"><h4>Прибыль дня</h4>'+
+         row('По плану ('+Math.round((r.rate||0.25)*100)+'% наценки)',m(r.profitPlan))+
+         row('По факту',m(r.profitFact), r.profitFact<0?'dds-bad':'')+
+         '<div class="dds-row total"><span>Разница</span><b class="'+
+         (gap<0?'dds-bad':'dds-ok')+'">'+(gap>0?'+':'')+m(gap)+'</b></div>'+
+         '<div class="dds-note">«По плану» — привычный расчёт от наценки. «По факту» — что реально осталось от выручки после всех трат. Расходятся, когда настоящая наценка не та, что заложена.</div>'+
+         '</div>';
+
+      // 6) Долг поставщикам
+      h+='<div class="dds-card"><h4>Долг поставщикам</h4>'+
+         '<div class="dds-hero '+(r.debt>0?'dds-warn':'')+'">'+m(r.debt)+'</div>'+
+         row('Взяли в долг за день',m(p.buyDebt))+
+         row('Погасили',m(p.payDebt))+'</div>';
+    }
+
+    if(!p.count)h='<div style="text-align:center;padding:28px 12px;color:var(--muted);line-height:1.6;">'+
+      'За этот день записей нет.<br>Закройте смену или выберите другой день.</div>';
+    b.innerHTML=h;
+  },
+
   openActionMenu:function(){
+
     if(App._fabLong){App._fabLong=false;return;} // было долгое нажатие — меню не открываем
     document.getElementById('am-overlay').classList.add('open');
   },

@@ -239,5 +239,43 @@
   "getTeam": {
     "members": [],
     "isOwner": true
+  },
+  "getDayDDS": {
+    "date": "2026-07-01",
+    "trade": 367798,
+    "cashRev": 233777,
+    "onlineRev": 134021,
+    "gross": 91950,
+    "rate": 0.25,
+    "profitPlan": 29676,
+    "profitFact": 41207,
+    "profitGap": 11531,
+    "cashLeft": 132898,
+    "cashDiff": 0,
+    "forBuy": 225899,
+    "spentOnBuy": 547630,
+    "officeDiff": -321731,
+    "debt": 3276962,
+    "parts": {
+      "cashRev": 233777,
+      "onlineRev": 134021,
+      "iman": 3334,
+      "transfer": 0,
+      "cashOut": 0,
+      "buyCash": 43205,
+      "payDebt": 168323,
+      "buyDebt": 336102,
+      "writeOff": 75,
+      "bank": 3116,
+      "meal": 1381,
+      "fuel": 0,
+      "supplies": 12368,
+      "salary": 23800,
+      "rent": 12200,
+      "utils": 3000,
+      "tax": 3000,
+      "other": 0,
+      "count": 14
+    }
   }
 }
