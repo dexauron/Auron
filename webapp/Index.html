@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.76.0';
+var APP_VERSION='4.77.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9918,13 +9918,14 @@ var App={
   // ── Импорт из 1С (вставка Excel-таблицы) ──────────────────────
   openImport:function(){
     App.openModal('<div class="modal-title">Импорт из 1С</div>'+
-      '<div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Загрузи файл выгрузки из 1С — приложение само поймёт, что это за отчёт.</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Загрузи файл — приложение само поймёт, что это за отчёт.</div>'+
       '<div style="background:var(--brand-dim);border-radius:13px;padding:12px 14px;margin-bottom:12px;font-size:12px;color:var(--text-2);line-height:1.6;">'+
-        'Понимает: <b>Прайс-лист</b> · <b>Цены поставщиков</b> · <b>Остатки</b> · <b>Продажи</b> · <b>Контрагенты</b><br>'+
+        'Из 1С: <b>Прайс-лист</b> · <b>Цены поставщиков</b> · <b>Остатки</b> · <b>Продажи</b> · <b>Контрагенты</b> · <b>Общие доходы и расходы</b><br>'+
+        'Свой: <b>отчёт с листами ДДС и Оплата</b> — тот, что вы заполняете сами.<br>'+
         'Сверка по штрихкоду: что было — обновится, новое — добавится.<br>'+
         'Можно выбрать <b>сразу несколько файлов</b> — порядок загрузки приложение выберет само.</div>'+
       '<input type="file" id="imp-file" multiple accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="App._xlsPick(this)">'+
-      '<button class="btn-primary" onclick="document.getElementById(\'imp-file\').click()">Выбрать файлы из 1С</button>'+
+      '<button class="btn-primary" onclick="document.getElementById(\'imp-file\').click()">Выбрать файлы</button>'+
       '<div id="imp-xls" style="margin-top:12px;"></div>'+
       '<div style="border-top:1px solid var(--line);margin:18px 0 12px;"></div>'+
       '<div style="font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.5;">Или вставь таблицу вручную (Ctrl+C из Excel):</div>'+
@@ -10017,6 +10018,17 @@ var App={
     if(i>=q.length){
       var h='<div style="background:var(--brand-dim);border-radius:13px;padding:14px;font-size:13px;line-height:1.7;"><b>Готово ✓</b>';
       App._xlsDone.forEach(function(d){
+        // Свой отчёт — это не товары, «обновлено/добавлено» про него
+        // ничего не говорит. Показываем то, что для него имеет смысл.
+        if(d.own){
+          h+='<br>'+App._e(d.title)+': операций <b>'+d.add+'</b>, движений долга <b>'+(d.debts||0)+'</b>'+
+             (d.months?' · '+App._e(d.months.join(', ')):'');
+          if(d.noRevenue&&d.noRevenue.length)
+            h+='<div style="color:var(--warn,#FF9F0A);font-size:12px;line-height:1.5;margin-top:6px;">'+
+               'За '+App._e(d.noRevenue.join(', '))+' в файле есть траты, но нет выручки. '+
+               'Пока их нет, «Общий капитал» будет показывать минус.</div>';
+          return;
+        }
         h+='<br>'+App._e(d.title)+': обновлено <b>'+d.upd+'</b>, добавлено <b>'+d.add+'</b>'+(d.err?' — <span style="color:var(--expense);">'+App._e(d.err)+'</span>':'');
       });
       box.innerHTML=h+'</div>';
@@ -10031,8 +10043,22 @@ var App={
         App._xlsDone.push({title:cur.title,upd:0,add:0,err:(r&&r.__error)||'ошибка'});
         if(st)st.innerHTML='<span style="color:var(--expense);">Не удалось</span>';
       }else{
-        App._xlsDone.push({title:r.title,upd:r.upd,add:r.add});
-        if(st)st.innerHTML='<span style="color:var(--income);">✓ обновлено '+r.upd+', добавлено '+r.add+'</span>';
+        var own=(r.type==='own');
+        App._xlsDone.push({title:r.title,upd:r.upd,add:r.add,own:own,
+                           debts:r.debts,months:r.months,noRevenue:r.noRevenue});
+        if(st)st.innerHTML='<span style="color:var(--income);">✓ '+(own
+          ?('операций '+r.add+', движений долга '+(r.debts||0))
+          :('обновлено '+r.upd+', добавлено '+r.add))+'</span>';
+        if(own){
+          // Итоги дня и месяца считаются по этим же операциям — местный
+          // кэш надо сбросить, иначе владелец увидит прежние цифры.
+          try{
+            var pref='ac_'+(App.s.ssId||'')+'_';
+            Object.keys(localStorage).forEach(function(k){
+              if(k.indexOf(pref)===0)localStorage.removeItem(k);
+            });
+          }catch(e){}
+        }
       }
       App._xlsStep(q,i+1);
     }).catch(function(e){

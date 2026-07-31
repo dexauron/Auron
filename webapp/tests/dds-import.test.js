@@ -164,5 +164,25 @@ t('все записи под одним замком', code.split('_withLock').
 t('запись одним куском, а не построчно', /setValues\(all\)/.test(code));
 t('загрузка только с правом финансов', /_permGuard\(ssId,'finance'\)/.test(code));
 
+// ── Свой отчёт узнаётся в ОБОИХ окнах загрузки ──────────────────────
+// Владелец принёс файл в «Импорт из 1С» и получил «не понял, что это за
+// отчёт». Он не обязан помнить, какое из двух окон для чего.
+t('свой отчёт узнаётся по листам, а не по первой странице',
+  /function _ddsIsOwnFile/.test(code) &&
+  /_ddsFindSheet\(wb,'ддс'\) \|\| _ddsFindSheet\(wb,'оплата'\)/.test(code));
+t('разбор вынесен в общую функцию', /function _ddsImportOpened/.test(code));
+t('окно «Касса» зовёт общую функцию',
+  /_ddsImportOpened\(ss, SpreadsheetApp\.openById\(tmp\)\)/.test(code));
+t('окно «Импорт из 1С» зовёт ту же функцию',
+  /if \(_ddsIsOwnFile\(wbTmp\)\) \{/.test(code) &&
+  /_ddsImportOpened\(ss, wbTmp\)/.test(code));
+t('в окне 1С свой отчёт тоже требует права финансов',
+  /_ddsIsOwnFile\(wbTmp\)[\s\S]{0,220}_permGuard\(p\.ssId,'finance'\)/.test(code));
+t('временный файл удаляется на обоих путях',
+  (code.match(/_xlsDrop\(tmp\)/g)||[]).length >= 4);
+// Опознание не должно ломать прежние отчёты 1С.
+t('свой отчёт проверяется ПОСЛЕ обычного опознания',
+  /if \(!type && _ddsIsOwnFile\(/.test(code));
+
 console.log('\nЗагрузка отчёта владельца: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

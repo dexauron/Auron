@@ -3183,21 +3183,28 @@ function _ddsWipeDebts(ss, tags) {
 }
 
 // Загрузка собственного файла владельца. Возвращает, что именно сделано.
-function ddsImport(p) {
-  var tmp = '';
-  try {
-    var ssId = p && p.ssId;
-    if (!_permGuard(ssId,'finance')) return {__error:'Загружать отчёт может владелец или бухгалтер'};
-    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
-    _xlsSweep();
-    tmp = _xlsToSheet(p.data, p.name);
-    if (!_xlsIsTmp(tmp)) { _xlsDrop(tmp); return {__error:'Файл не открылся'}; }
-    var wb = SpreadsheetApp.openById(tmp);
+// Это ли собственный отчёт владельца? Узнаём по листам, а не по первой
+// странице: в его файле первым идёт «ОТЧЁТ ДДС» — сводка со сводными
+// таблицами, по которой ничего не понять. Нужные листы «ДДС» и «ОПЛАТА»
+// лежат четвёртым и пятым.
+function _ddsIsOwnFile(wb) {
+  try { return !!(_ddsFindSheet(wb,'ддс') || _ddsFindSheet(wb,'оплата')); }
+  catch(e) { return false; }
+}
 
-    var shD = _ddsFindSheet(wb, 'ддс');
-    var shO = _ddsFindSheet(wb, 'оплата');
-    if (!shD && !shO) { _xlsDrop(tmp);
-      return {__error:'В файле нет листов «ДДС» или «ОПЛАТА». Проверьте, тот ли файл.'}; }
+// Загрузка собственного отчёта владельца из УЖЕ ОТКРЫТОГО файла.
+//
+// Вынесено отдельно, потому что звать её могут с двух экранов: «Касса →
+// Загрузка отчёта» и «Импорт из 1С». Владелец не обязан помнить, какой
+// файл в какое окно нести — приложение узнаёт его отчёт само.
+// Временный файл здесь НЕ удаляется: это делает тот, кто его открыл.
+function _ddsImportOpened(ss, wb) {
+  var shD = _ddsFindSheet(wb, 'ддс');
+  var shO = _ddsFindSheet(wb, 'оплата');
+  if (!shD && !shO)
+    return {__error:'В файле нет листов «ДДС» или «ОПЛАТА». Проверьте, тот ли файл.'};
+  var ssId = ss.getId();
+  {
 
     var a = shD ? _ddsSheetToOps(shD, DDS_COLS, 'DDS') : {rows:[],months:{}};
     var b = shO ? _ddsSheetToOps(shO, OPL_COLS, 'OPL') : {rows:[],months:{}};
@@ -3324,7 +3331,6 @@ function ddsImport(p) {
         { salary:pm.salary, rent:pm.rent, utils:pm.utils, tax:pm.tax, days:pm.days })); } catch(e){}
     });
 
-    _xlsDrop(tmp);
     try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
     _log(ss,'Загрузка отчёта', 'строк '+all.length+', долгов '+allDebts.length+
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
@@ -3332,6 +3338,22 @@ function ddsImport(p) {
              debtStart: starts, plan: plans, noRevenue: noRevenue,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
+  }
+}
+
+// Загрузка собственного отчёта владельца с экрана «Касса → Загрузка».
+function ddsImport(p) {
+  var tmp = '';
+  try {
+    var ssId = p && p.ssId;
+    if (!_permGuard(ssId,'finance')) return {__error:'Загружать отчёт может владелец или бухгалтер'};
+    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    _xlsSweep();
+    tmp = _xlsToSheet(p.data, p.name);
+    if (!_xlsIsTmp(tmp)) { _xlsDrop(tmp); return {__error:'Файл не открылся'}; }
+    var out = _ddsImportOpened(ss, SpreadsheetApp.openById(tmp));
+    _xlsDrop(tmp);
+    return out;
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
 
@@ -7031,7 +7053,10 @@ function _xlsType(rows) {
 
 var XLS_TITLES = { price:'Прайс-лист', supplier:'Цены поставщиков',
   stock:'Остатки номенклатуры', sales:'Продажи', contractors:'Контрагенты',
-  incexp:'Общие доходы и расходы' };
+  incexp:'Общие доходы и расходы',
+  // Не выгрузка из 1С, а собственный отчёт владельца — но узнаём его и
+  // здесь, чтобы он не гадал, в какое из двух окон нести файл.
+  own:'Ваш отчёт (ДДС и Оплата)' };
 
 // Ищет колонку по названию заголовка (в первых upto строках).
 function _xlsCol(rows, names, upto) {
@@ -7152,9 +7177,14 @@ function xlsPreview(p) {
     if (lastRow < 2) { _xlsDrop(tmp); return {__error:'Файл пустой.'}; }
     var head = sh0.getRange(1,1,Math.min(12,lastRow),lastCol).getValues();
     var type = _xlsType(head);
+    // Свой отчёт владельца узнаём по ЛИСТАМ, а не по первой странице:
+    // там у него сводные таблицы, по которым ничего не понять. Раньше
+    // это окно отвечало «не понял, что за отчёт» на его собственный файл
+    // — он ведь не обязан помнить, какое из двух окон для чего.
+    if (!type && _ddsIsOwnFile(SpreadsheetApp.openById(tmp))) type = 'own';
     if (!type) { _xlsDrop(tmp);
-      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты, Общие доходы и расходы.'}; }
-    return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type], total:lastRow };
+      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты, Общие доходы и расходы — или ваш собственный отчёт с листами ДДС и Оплата.'}; }
+    return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type]||'Ваш отчёт (ДДС и Оплата)', total:lastRow };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
 
@@ -7170,7 +7200,21 @@ function xlsApply(p) {
 
     // Чтение и разбор файла (десятки тысяч строк) — ДО замка, иначе
     // остальные сотрудники ждут всё это время. Под замком — только запись.
-    var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
+    var wbTmp = SpreadsheetApp.openById(tmp);
+    // Собственный отчёт владельца — отдаём тому же коду, что и экран
+    // «Касса → Загрузка отчёта». Права там свои: это деньги, а не товары.
+    if (_ddsIsOwnFile(wbTmp)) {
+      if (!_permGuard(p.ssId,'finance')) { _xlsDrop(tmp);
+        return {__error:'Загружать отчёт может владелец или бухгалтер'}; }
+      var own = _ddsImportOpened(ss, wbTmp);
+      _xlsDrop(tmp);
+      if (own && own.__error) return own;
+      own.type = 'own'; own.title = 'Ваш отчёт (ДДС и Оплата)';
+      own.upd = 0; own.add = own.added;
+      own.note = 'Записан как операции и долги. Итоги дня и месяца пересчитаны.';
+      return own;
+    }
+    var rows = wbTmp.getSheets()[0].getDataRange().getValues();
     var type = _xlsType(rows);
     if (!type) { _xlsDrop(tmp); return {__error:'Не понял, что это за отчёт.'}; }
     // «Общие доходы и расходы» — сводка регистра, а не список товаров.
