@@ -2679,6 +2679,17 @@ function _ddsCollect(rows, dateStr) {
     b.count++;
     var key = DDS_MAP[cat];
     if (key) b[key] += amt; else b.other += amt;
+
+    // Дневная и ночная смены — отдельно. В отчёте владельца на каждую
+    // дату две строки, и он смотрит их врозь: где выручка просела.
+    var sh = String(r[B_SHIFT-1]||'').trim().toLowerCase();
+    var slot = (sh.indexOf('ноч') === 0) ? 'night' : (sh.indexOf('ден') === 0 ? 'day' : '');
+    if (slot && (key === 'cashRev' || key === 'onlineRev' || key === 'iman')) {
+      b.shifts = b.shifts || { day:{cashRev:0,onlineRev:0,iman:0,count:0},
+                               night:{cashRev:0,onlineRev:0,iman:0,count:0} };
+      b.shifts[slot][key] += amt;
+      b.shifts[slot].count++;
+    }
   }
   return b;
 }
@@ -2708,6 +2719,7 @@ function _ddsCompute(b, rate, debtYesterday) {
     spentOnBuy: Math.round(b.buyCash + b.payDebt + b.buyDebt),
     officeDiff: Math.round(forBuy - b.buyCash - b.payDebt - b.buyDebt),
     debt: Math.round((debtYesterday||0) - b.payDebt + b.buyDebt),
+    shifts: b.shifts || null,
     parts: b
   };
 }

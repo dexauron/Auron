@@ -276,6 +276,20 @@
       "tax": 3000,
       "other": 0,
       "count": 14
+    },
+    "shifts": {
+      "day": {
+        "cashRev": 136232,
+        "onlineRev": 73068,
+        "iman": 3334,
+        "count": 7
+      },
+      "night": {
+        "cashRev": 97545,
+        "onlineRev": 60953,
+        "iman": 0,
+        "count": 2
+      }
     }
   },
   "getMonthDDS": {
