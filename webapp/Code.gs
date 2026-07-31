@@ -2728,6 +2728,56 @@ function getDayDDS(p) {
   } catch(e) { return {__error:e.message}; }
 }
 
+// Месяц целиком: те же формулы по каждому дню плюс итоги.
+// Читаем БАЗУ ОДИН раз и раскладываем по датам — на 16 555 товарах и
+// тысячах операций повторное чтение листа на каждый день не влезет
+// в 6 минут Apps Script.
+function getMonthDDS(p) {
+  try {
+    var ssId = p && p.ssId;
+    if (!_anyPermGuard(ssId, ['finance','kassa'])) return {__error:'Нет доступа к итогам месяца'};
+    var ss = SpreadsheetApp.openById(ssId);
+    var ym = String((p && p.month) || '').slice(0,7);
+    if (!/^\d{4}-\d{2}$/.test(ym)) return {__error:'Неверный месяц'};
+
+    var sh = ss.getSheetByName(SH_BASE);
+    var rows = (sh && sh.getLastRow() > 1)
+      ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
+
+    // Раскладываем строки по дням месяца за один проход.
+    var byDay = {};
+    for (var i = 0; i < rows.length; i++) {
+      var d = rows[i][B_DATE-1];
+      var ds = (d instanceof Date) ? Utilities.formatDate(d,'Europe/Moscow','yyyy-MM-dd')
+                                   : String(d||'').slice(0,10);
+      if (ds.slice(0,7) !== ym) continue;
+      (byDay[ds] = byDay[ds] || []).push(rows[i]);
+    }
+
+    var rate = _ddsRate(ss);
+    var debt = _num(_getSettingStr(ss,'DDS_DEBT_START_'+ym,'')) || 0;
+    var days = Object.keys(byDay).sort();
+    var out = [], tot = { trade:0, cashRev:0, onlineRev:0, gross:0,
+                          profitPlan:0, profitFact:0, forBuy:0, spentOnBuy:0,
+                          officeDiff:0, iman:0, writeOff:0, buyDebt:0, payDebt:0 };
+    for (var k = 0; k < days.length; k++) {
+      var b = _ddsCollect(byDay[days[k]], days[k]);
+      var r = _ddsCompute(b, rate, debt);
+      debt = r.debt;                       // долг накапливается изо дня в день
+      r.date = days[k];
+      out.push(r);
+      tot.trade+=r.trade; tot.cashRev+=r.cashRev; tot.onlineRev+=r.onlineRev;
+      tot.gross+=r.gross; tot.profitPlan+=r.profitPlan; tot.profitFact+=r.profitFact;
+      tot.forBuy+=r.forBuy; tot.spentOnBuy+=r.spentOnBuy; tot.officeDiff+=r.officeDiff;
+      tot.iman+=b.iman; tot.writeOff+=b.writeOff; tot.buyDebt+=b.buyDebt; tot.payDebt+=b.payDebt;
+    }
+    tot.profitGap = tot.profitFact - tot.profitPlan;
+    tot.debtEnd = Math.round(debt);
+    tot.days = out.length;
+    return { month: ym, rate: rate, days: out, total: tot };
+  } catch(e) { return {__error:e.message}; }
+}
+
 function getShifts(p) {
   var ssId=p.ssId, limit=parseInt(p.limit)||50;
   try {
