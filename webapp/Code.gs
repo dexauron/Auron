@@ -105,6 +105,9 @@ function _bustDash(ssId){
     ks.push('dash_'+ssId);
     ks.push('acc_'+ssId); // кэш балансов счетов (getAccounts)
     CacheService.getScriptCache().removeAll(ks);
+    // Итоги дня и месяца считаются по тем же операциям — если их не
+    // сбросить, после записи смены владелец увидит вчерашние цифры.
+    _ddsCacheBust(ssId);
   }catch(e){}
 }
 
@@ -2709,6 +2712,34 @@ function _ddsCompute(b, rate, debtYesterday) {
   };
 }
 
+// Кэш итогов: лист БАЗА после загрузки отчёта — это тысячи строк, и
+// читать его на каждое переключение вкладки нельзя. Google на частые
+// обращения отвечает «ненадолго ограничил запросы», и владелец видит сбой.
+var DDS_CACHE_TTL = 600;   // 10 минут
+function _ddsCacheKey(ssId, kind, key){ return 'dds_'+kind+'_'+ssId+'_'+key; }
+function _ddsCacheGet(ssId, kind, key){
+  try { var v = CacheService.getScriptCache().get(_ddsCacheKey(ssId,kind,key));
+        return v ? JSON.parse(v) : null; } catch(e){ return null; }
+}
+function _ddsCachePut(ssId, kind, key, val){
+  try { CacheService.getScriptCache()
+          .put(_ddsCacheKey(ssId,kind,key), JSON.stringify(val), DDS_CACHE_TTL); } catch(e){}
+}
+// Сбрасываем после любой записи, меняющей операции.
+function _ddsCacheBust(ssId){
+  try {
+    var c = CacheService.getScriptCache(), ks = [], d = new Date();
+    for (var i = 0; i < 62; i++) {
+      var t = new Date(d.getTime() - i*86400000);
+      var ds = Utilities.formatDate(t,'Europe/Moscow','yyyy-MM-dd');
+      ks.push(_ddsCacheKey(ssId,'day',ds));
+      var ym = ds.slice(0,7);
+      if (ks.indexOf(_ddsCacheKey(ssId,'mon',ym)) < 0) ks.push(_ddsCacheKey(ssId,'mon',ym));
+    }
+    c.removeAll(ks);
+  } catch(e){}
+}
+
 // Итог дня для экрана. Дата — 'yyyy-MM-dd'.
 function getDayDDS(p) {
   try {
@@ -2717,6 +2748,8 @@ function getDayDDS(p) {
     var ss = SpreadsheetApp.openById(ssId);
     var date = String((p && p.date) || '').slice(0,10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return {__error:'Неверная дата'};
+    var hit = _ddsCacheGet(ssId,'day',date);
+    if (hit) return hit;
     var sh = ss.getSheetByName(SH_BASE);
     var rows = (sh && sh.getLastRow() > 1)
       ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
@@ -2724,6 +2757,7 @@ function getDayDDS(p) {
     var prev = _gnum(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
     var out = _ddsCompute(b, _ddsRate(ss), prev);
     out.date = date;
+    _ddsCachePut(ssId,'day',date,out);
     return out;
   } catch(e) { return {__error:e.message}; }
 }
@@ -2739,6 +2773,8 @@ function getMonthDDS(p) {
     var ss = SpreadsheetApp.openById(ssId);
     var ym = String((p && p.month) || '').slice(0,7);
     if (!/^\d{4}-\d{2}$/.test(ym)) return {__error:'Неверный месяц'};
+    var hitM = _ddsCacheGet(ssId,'mon',ym);
+    if (hitM) return hitM;
 
     var sh = ss.getSheetByName(SH_BASE);
     var rows = (sh && sh.getLastRow() > 1)
@@ -2774,7 +2810,9 @@ function getMonthDDS(p) {
     tot.profitGap = tot.profitFact - tot.profitPlan;
     tot.debtEnd = Math.round(debt);
     tot.days = out.length;
-    return { month: ym, rate: rate, days: out, total: tot };
+    var resM = { month: ym, rate: rate, days: out, total: tot };
+    _ddsCachePut(ssId,'mon',ym,resM);
+    return resM;
   } catch(e) { return {__error:e.message}; }
 }
 
@@ -2950,6 +2988,7 @@ function ddsImport(p) {
     });
 
     _xlsDrop(tmp);
+    try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
     _log(ss,'Загрузка отчёта', 'строк '+all.length+', заменено '+res.removed+
          ', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, removed: res.removed,
