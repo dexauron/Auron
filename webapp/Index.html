@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.74.0';
+var APP_VERSION='4.75.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5022,6 +5022,10 @@ var App={
           '<div style="font-size:12.5px;color:var(--muted);">Из листа ДДС: '+r.fromDDS+
           ' · из листа Оплата: '+r.fromOPL+'</div>'+
           (mm?'<div style="font-size:12.5px;color:var(--muted);">Месяцы: '+App._e(mm)+'</div>':'')+
+          ((r.noRevenue&&r.noRevenue.length)?'<div style="font-size:12px;color:var(--warn,#FF9F0A);line-height:1.5;margin-top:6px;">'+
+            'За '+App._e(r.noRevenue.join(', '))+' в файле есть траты, но нет выручки. '+
+            'Это не ошибка приложения — продажи за эти месяцы в файл не попали. '+
+            'Пока их нет, «Общий капитал» будет показывать минус.</div>':'')+
           ((r.skipped&&r.skipped.length)?'<div style="font-size:12px;color:var(--warn,#FF9F0A);line-height:1.5;margin-top:6px;">'+
             'Лист «Оплата» за '+App._e(r.skipped.join(', '))+' пропущен: за эти месяцы те же деньги уже есть в листе ДДС. '+
             'Иначе расходы удвоились бы.</div>':'')+

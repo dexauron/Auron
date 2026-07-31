@@ -3217,6 +3217,19 @@ function ddsImport(p) {
 
     var all = a.rows.concat(b.rows);
     var allDebts = (a.debts||[]).concat(b.debts||[]);
+
+    // Месяцы, где есть траты, но нет ни рубля выручки. Такое бывает,
+    // когда лист ОПЛАТА ведётся за несколько месяцев, а ДДС — только за
+    // последний: тогда «Общий капитал» уйдёт в глубокий минус не из-за
+    // ошибки, а потому что продажи за те месяцы в файл не попали.
+    var mRev = {}, mExp = {};
+    all.forEach(function(r){
+      var m = String(r[B_ZREF-1]||'').split(':')[1] || '';
+      if (!m) return;
+      if (r[3] === 'Доход') mRev[m] = (mRev[m]||0) + r[5];
+      else mExp[m] = (mExp[m]||0) + r[5];
+    });
+    var noRevenue = Object.keys(mExp).filter(function(m){ return !mRev[m]; }).sort();
     if (!all.length && !allDebts.length) { _xlsDrop(tmp);
       return {__error:'В листах нет строк с датами — загружать нечего.'}; }
 
@@ -3295,7 +3308,7 @@ function ddsImport(p) {
     _log(ss,'Загрузка отчёта', 'строк '+all.length+', долгов '+allDebts.length+
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
-             debtStart: starts, plan: plans,
+             debtStart: starts, plan: plans, noRevenue: noRevenue,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
