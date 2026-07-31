@@ -1229,6 +1229,7 @@ function importRows(p) {
     });
     if (out.length) {
       var sr = base.getLastRow()+1;
+      _ensureRows(base, sr, out.length);
       base.getRange(sr,1,out.length,B_COLS).setValues(out);
       base.getRange(sr,B_DATE,out.length,1).setNumberFormat('dd.mm.yyyy');
       base.getRange(sr,B_AMT,out.length,1).setNumberFormat('#,##0');
@@ -1335,18 +1336,21 @@ function saveGoods(p) {
       row[G_UPDATED-1] = now;
     });
     if (data.length) {
+      _ensureRows(sh, 2, data.length);
       sh.getRange(2,1,data.length,G_COLS).setValues(data);
       sh.getRange(2,G_UPDATED,data.length,1).setNumberFormat('dd.mm.yyyy');
     }
     if (hist.length) {
       var ph = ss.getSheetByName(SH_PRICEHIST);
       var pr = ph.getLastRow()+1;
+      _ensureRows(ph, pr, hist.length);
       ph.getRange(pr,1,hist.length,PH_COLS).setValues(hist);
       ph.getRange(pr,PH_DATE,hist.length,1).setNumberFormat('dd.mm.yyyy');
     }
     if (rhist.length) {
       var rh = ss.getSheetByName(SH_RETAILHIST);
       var rr = rh.getLastRow()+1;
+      _ensureRows(rh, rr, rhist.length);
       rh.getRange(rr,1,rhist.length,RH_COLS).setValues(rhist);
       rh.getRange(rr,RH_DATE,rhist.length,1).setNumberFormat('dd.mm.yyyy');
     }
@@ -2599,6 +2603,7 @@ function saveKassa(p) {
     }
     if (baseRows.length) {
       var sr=base.getLastRow()+1;
+      _ensureRows(base, sr, baseRows.length);
       base.getRange(sr,1,baseRows.length,B_COLS).setValues(baseRows);
       base.getRange(sr,B_DATE,baseRows.length,1).setNumberFormat('dd.mm.yyyy');
       base.getRange(sr,B_AMT,baseRows.length,1).setNumberFormat('#,##0');
@@ -3144,6 +3149,19 @@ function _ddsWipe(ss, tags) {
   return kill.length;
 }
 
+// Готовит лист к записи n строк начиная со строки from.
+//
+// Лист в Google Таблицах имеет фиксированный размер сетки. Если написать
+// setValues за её пределами, приходит ошибка «диапазон выходит за
+// границы», и загрузка обрывается. Особенно наглядно после чистки:
+// строки удалены, сетка ужалась, а записать надо 3 320 штук.
+function _ensureRows(sh, from, n) {
+  try {
+    var need = from + n - 1 - sh.getMaxRows();
+    if (need > 0) sh.insertRowsAfter(sh.getMaxRows(), need);
+  } catch(e) {}
+}
+
 // Удаляет строки СПЛОШНЫМИ КУСКАМИ, а не по одной.
 //
 // Повод — счёт на настоящих числах владельца: повторная загрузка его
@@ -3155,6 +3173,19 @@ function _ddsWipe(ss, tags) {
 function _killRows(sh, rows) {
   if (!rows || !rows.length) return 0;
   rows.sort(function(x,y){ return x-y; });
+
+  // Google не разрешает удалить ВСЕ незакреплённые строки листа —
+  // отвечает «Невозможно удалить все незакреплённые строки», и вся
+  // загрузка обрывается. А при повторной загрузке отчёта именно так и
+  // выходит: все 3 320 строк БАЗЫ — с прошлой загрузки, кроме шапки не
+  // остаётся ничего. Поэтому заранее добавляем снизу пустых строк
+  // столько, чтобы листу было чем остаться. Пустой хвост никому не
+  // мешает: getLastRow() считает только строки с содержимым.
+  try {
+    var spare = sh.getMaxRows() - sh.getFrozenRows() - rows.length;
+    if (spare < 1) sh.insertRowsAfter(sh.getMaxRows(), 1 - spare);
+  } catch(e) {}
+
   // Идём снизу вверх — иначе номера оставшихся строк уезжают вверх.
   var end = rows.length-1;
   for (var i = rows.length-1; i >= 0; i--) {
@@ -3268,27 +3299,63 @@ function _ddsImportOpened(ss, wb) {
     Object.keys(a.months).forEach(function(m){ tags['DDS:'+m]=true; monthsList.push(m); });
     Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
 
-    // Долг на начало месяца. Пишем только за те месяцы, что реально
-    // загрузили: настройка за чужой месяц сбила бы прошлые расчёты.
-    var starts = {};
-    Object.keys(a.debtStart||{}).forEach(function(m){ if (a.months[m]) starts[m]=a.debtStart[m]; });
+    // ── Долг на начало месяцев ──────────────────────────────────────
+    //
+    // В файле остаток долга записан только там, где есть лист ДДС (у
+    // владельца это июль: 3 109 183 ₽). Но лист ОПЛАТА тянется с апреля,
+    // и его движения — это ровно то, из чего июльский остаток и сложился.
+    //
+    // Здесь я уже ошибся один раз: написал начальный долг июля отдельной
+    // строкой и оставил движения апреля–июня. Вышло 5 744 313 ₽ вместо
+    // 4 182 653 — апрель–июнь посчитались дважды, ровно на 1 561 660 ₽.
+    //
+    // Правильно так: берём известный остаток и ОТМАТЫВАЕМ его назад по
+    // движениям до самого раннего загружаемого месяца. Полученный остаток
+    // и есть настоящее начало — он пишется ОДНОЙ строкой, а дальше долг
+    // накапливается движениями сам.
+    var known = {};
+    Object.keys(a.debtStart||{}).forEach(function(m){ if (a.months[m]) known[m]=a.debtStart[m]; });
     Object.keys(b.debtStart||{}).forEach(function(m){
-      if (b.months[m] && starts[m]===undefined) starts[m]=b.debtStart[m]; });
+      if (b.months[m] && known[m]===undefined) known[m]=b.debtStart[m]; });
 
-    // Начальный долг — отдельной строкой в книге долгов, первым числом.
-    // Без неё карточка «Общий долг» на экране Поставщиков показала бы
-    // только движение за месяц (1 073 470 ₽) вместо настоящего долга
-    // (4 182 653 ₽): начальные 3 109 183 ₽ живут в настройке, а карточка
-    // считает по листу ДОЛГИ. В расчёт дня и месяца строка НЕ идёт —
-    // _ddsDebtByDay пропускает её по метке OPEN, иначе при загрузке двух
-    // месяцев подряд начальный долг посчитался бы дважды.
-    var openRows = [];
-    Object.keys(starts).forEach(function(m){
-      if (!starts[m]) return;
-      openRows.push([ Utilities.getUuid(), DDS_DEBT_REP, 'zakupka', starts[m],
-                      new Date(m + '-01T12:00:00'), '',
-                      'Долг на начало месяца · OPEN:' + m, new Date(), '', '' ]);
+    // Чистое движение долга по месяцам (строки OPEN сюда не попадают —
+    // их ещё нет).
+    var netByMonth = {};
+    allDebts.forEach(function(r){
+      var mm = String(r[D_CMT-1]||''), k = mm.lastIndexOf(':');
+      var m = k >= 0 ? mm.slice(k+1).trim() : '';
+      if (!m) return;
+      netByMonth[m] = (netByMonth[m]||0) + (r[D_TYPE-1]==='oplata' ? -r[D_AMT-1] : r[D_AMT-1]);
     });
+
+    var allMonths = monthsList.slice().sort();
+    var starts = {}, openRows = [];
+    var anchor = Object.keys(known).sort()[0];   // месяц с записанным остатком
+    if (anchor && allMonths.length) {
+      var first = allMonths[0];
+      var opening = known[anchor];
+      // Отматываем назад: из остатка на начало anchor вычитаем движения
+      // всех месяцев между first и anchor.
+      for (var z = 0; z < allMonths.length; z++) {
+        if (allMonths[z] >= anchor) break;
+        opening -= (netByMonth[allMonths[z]]||0);
+      }
+      // И раскатываем вперёд — начало каждого загружаемого месяца.
+      var acc = Math.round(opening);
+      for (var z2 = 0; z2 < allMonths.length; z2++) {
+        starts[allMonths[z2]] = acc;
+        acc = Math.round(acc + (netByMonth[allMonths[z2]]||0));
+      }
+      // Строка «долг на начало» — ОДНА, за самый ранний месяц. Без неё
+      // карточка «Общий долг» на экране Поставщиков показала бы только
+      // движение за загруженный период, а не настоящий долг.
+      // В расчёт дня и месяца она НЕ идёт: _ddsDebtByDay пропускает её
+      // по метке OPEN, там начало берётся из настройки.
+      if (starts[first])
+        openRows.push([ Utilities.getUuid(), DDS_DEBT_REP, 'zakupka', starts[first],
+                        new Date(first + '-01T12:00:00'), '',
+                        'Долг на начало периода · OPEN:' + first, new Date(), '', '' ]);
+    }
     allDebts = allDebts.concat(openRows);
 
     // ВСЕ записи — под ОДНИМ замком. Раньше начальный долг писался
@@ -3307,11 +3374,14 @@ function _ddsImportOpened(ss, wb) {
         var startId = base.getLastRow();
         for (var i = 0; i < all.length; i++) all[i][0] = startId + i;
         // Пишем одним куском: построчная запись 4 700 операций не влезет.
-        base.getRange(base.getLastRow()+1, 1, all.length, B_COLS).setValues(all);
+        var br = base.getLastRow()+1;
+        _ensureRows(base, br, all.length);
+        base.getRange(br, 1, all.length, B_COLS).setValues(all);
       }
       if (allDebts.length) {
         var dsh = ss.getSheetByName(SH_DEBTS);
         var dr = dsh.getLastRow()+1;
+        _ensureRows(dsh, dr, allDebts.length);
         dsh.getRange(dr, 1, allDebts.length, D_COLS).setValues(allDebts);
         dsh.getRange(dr, D_DATE, allDebts.length, 1).setNumberFormat('dd.mm.yyyy');
         dsh.getRange(dr, D_AMT,  allDebts.length, 1).setNumberFormat('#,##0');
@@ -5252,6 +5322,7 @@ function seedDemoData(p) {
       ['EMPLOYEES',    JSON.stringify(['Иванова Анна','Петров Виктор','Сидорова Мария','Козлова Татьяна'])],
       ['SHIFTS',       JSON.stringify(['Утренняя','Дневная','Вечерняя'])]
     ];
+    _ensureRows(settSh, 2, sett.length);
     settSh.getRange(2, 1, sett.length, 2).setValues(sett);
 
     // --- accounts (starting balances = 0, real balance built from transactions) ---
@@ -5314,6 +5385,7 @@ function seedDemoData(p) {
     rows.forEach(function(r,i){ r[0]=i+1; });
 
     var baseSh = ss.getSheetByName(SH_BASE);
+    _ensureRows(baseSh, 2, rows.length);
     baseSh.getRange(2, 1, rows.length, B_COLS).setValues(rows);
     baseSh.getRange(2, B_DATE, rows.length, 1).setNumberFormat('dd.mm.yyyy');
     baseSh.getRange(2, B_AMT,  rows.length, 1).setNumberFormat('#,##0');
@@ -5331,6 +5403,7 @@ function seedDemoData(p) {
       [uid(),'Оптовый склад Меркурий','zakupka',     41000, dt(13,14), 'Наличные', 'Закупка товара',          dt(13,14), 'МЕР-15', '❌ Не оплачено'],
       [uid(),'Оптовый склад Меркурий','oplata',      41000, dt(5,9),   'Наличные', 'Полная оплата',           dt(5,9),   '',       '✅ Оплачено']
     ];
+    _ensureRows(debtSh, 2, debts.length);
     debtSh.getRange(2, 1, debts.length, D_COLS).setValues(debts);
 
     // --- shifts ---

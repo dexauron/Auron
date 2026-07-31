@@ -45,6 +45,56 @@ var big=[]; for(var i=2;i<=3321;i++) big.push(i);
 t('3 320 подряд идущих строк — один вызов вместо 3 320', calls(big).length===1, calls(big).length);
 t('после удаления не осталось ни одной из них', eq(left(3321,big),[1]));
 
+// ── Google не даёт удалить ВСЕ незакреплённые строки ────────────────
+// Владелец увидел «Невозможно удалить все незакреплённые строки»: при
+// повторной загрузке все строки БАЗЫ — с прошлой загрузки, и кроме
+// закреплённой шапки не остаётся ничего. Значит перед удалением надо
+// добавить снизу пустых строк, чтобы листу было чем остаться.
+function withGrid(maxRows, frozen, rows){
+  var ins=[], del=[];
+  var sh={ getMaxRows:function(){return maxRows;},
+           getFrozenRows:function(){return frozen;},
+           insertRowsAfter:function(a,n){ins.push([a,n]);maxRows+=n;},
+           deleteRows:function(a,n){del.push([a,n]);} };
+  _killRows(sh, rows.slice());
+  return {ins:ins, del:del, left:maxRows-frozen-rows.length};
+}
+// Лист ровно из шапки и данных: удаляем всё, что не шапка.
+var full=[]; for(var q=2;q<=3321;q++) full.push(q);
+var g1=withGrid(3321,1,full);
+t('удаление всех строк добавляет запас снизу', g1.ins.length===1, g1.ins);
+t('после удаления остаётся хотя бы одна строка', g1.left>=1, g1.left);
+t('сами строки всё равно удаляются одним куском', g1.del.length===1, g1.del);
+// Если запас уже есть — ничего не добавляем.
+var g2=withGrid(5000,1,full);
+t('когда место есть, лишние строки не добавляются', g2.ins.length===0, g2.ins);
+// Лист без закреплённой шапки.
+var g3=withGrid(10,0,[1,2,3,4,5,6,7,8,9,10]);
+t('лист без шапки тоже не остаётся пустым', g3.ins.length===1 && g3.left>=1, g3);
+
+// ── Записать больше строк, чем есть в сетке листа, нельзя ───────────
+// После чистки лист ужимается, а записать надо 3 320 строк. Без запаса
+// приходит «диапазон выходит за границы» и загрузка обрывается.
+eval(grab('_ensureRows'));
+function grid(maxRows){var ins=[];return {sh:{getMaxRows:function(){return maxRows;},
+  insertRowsAfter:function(a,n){ins.push([a,n]);maxRows+=n;}},ins:ins,
+  size:function(){return maxRows;}};}
+var e1=grid(2); _ensureRows(e1.sh,2,3320);
+t('места не хватало — сетка выросла', e1.size()>=3321, e1.size());
+t('выросла ровно на нужное, не больше', e1.size()===3321, e1.size());
+var e2=grid(5000); _ensureRows(e2.sh,2,3320);
+t('места хватало — сетка не трогается', e2.ins.length===0);
+var e3=grid(100); _ensureRows(e3.sh,101,1);
+t('запись сразу за краем добавляет одну строку', e3.size()===101, e3.size());
+
+// Все массовые записи защищены — иначе на пустом магазине или после
+// чистки импорт из 1С упрётся в ту же стену.
+['base, sr, out.length','sh, 2, data.length','ph, pr, hist.length',
+ 'rh, rr, rhist.length','base, sr, baseRows.length','base, br, all.length',
+ 'dsh, dr, allDebts.length'].forEach(function(call){
+  t('защищена запись: '+call, code.indexOf('_ensureRows('+call+')')>0);
+});
+
 // Защита от возврата к построчному удалению.
 // Одиночные удаления (одна запись по её номеру) — это нормально.
 // Ловим именно ЦИКЛЫ, которые удаляют строку за строкой.
