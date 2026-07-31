@@ -2704,6 +2704,10 @@ function _ddsDebtByDay(ss) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(ds)) continue;
       var amt = Math.abs(_gnum(v[i][D_AMT-1]));
       if (!amt) continue;
+      // Строка «долг на начало месяца» — не движение за день, а остаток.
+      // В модели дня он приходит из настройки DDS_DEBT_START_<месяц>;
+      // если считать его ещё и здесь, месяц удвоит начальный долг.
+      if (String(v[i][D_CMT-1]||'').indexOf('OPEN:') >= 0) continue;
       var o = out[ds] = out[ds] || {up:0, down:0};
       if (String(v[i][D_TYPE-1]||'').toLowerCase() === 'oplata') o.down += amt;
       else o.up += amt;
@@ -3222,7 +3226,12 @@ function ddsImport(p) {
     Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
 
     var res = _withLock(function(){
-      var removed = _ddsWipe(ss, tags) + _ddsWipeDebts(ss, tags);
+      // К меткам источника добавляем OPEN:<месяц> — строку начального
+      // долга тоже надо заменять, иначе вторая загрузка её удвоит.
+      var dtags = {};
+      Object.keys(tags).forEach(function(k){ dtags[k]=1; });
+      monthsList.forEach(function(m){ dtags['OPEN:'+m]=1; });
+      var removed = _ddsWipe(ss, tags) + _ddsWipeDebts(ss, dtags);
       var base = ss.getSheetByName(SH_BASE);
       if (all.length) {
         var startId = base.getLastRow();
@@ -3248,6 +3257,28 @@ function ddsImport(p) {
       if (b.months[m] && starts[m]===undefined) starts[m]=b.debtStart[m]; });
     Object.keys(starts).forEach(function(m){
       try { _setSetting(ss,'DDS_DEBT_START_'+m, String(starts[m])); } catch(e){}
+    });
+
+    // Долг на начало месяца — отдельной строкой в книге долгов, датой
+    // ПЕРЕД первым числом. Без неё карточка «Общий долг» на экране
+    // Поставщиков показала бы только движение за месяц (1 073 470 ₽)
+    // вместо настоящего долга (4 182 653 ₽): начальные 3 109 183 ₽
+    // живут в настройке, а карточка считает по листу ДОЛГИ.
+    // В расчёт дня и месяца она НЕ идёт (там начальный долг берётся из
+    // настройки) — _ddsDebtByDay такие строки пропускает по метке OPEN.
+    var openRows = [];
+    Object.keys(starts).forEach(function(m){
+      if (!starts[m]) return;
+      openRows.push([ Utilities.getUuid(), DDS_DEBT_REP, 'zakupka', starts[m],
+                      new Date(m + '-01T12:00:00'), '',
+                      'Долг на начало месяца · OPEN:' + m, new Date(), '', '' ]);
+    });
+    if (openRows.length) _withLock(function(){
+      var dsh = ss.getSheetByName(SH_DEBTS);
+      var dr = dsh.getLastRow()+1;
+      dsh.getRange(dr, 1, openRows.length, D_COLS).setValues(openRows);
+      dsh.getRange(dr, D_DATE, openRows.length, 1).setNumberFormat('dd.mm.yyyy');
+      dsh.getRange(dr, D_AMT,  openRows.length, 1).setNumberFormat('#,##0');
     });
 
     // План постоянных расходов на месяц.
