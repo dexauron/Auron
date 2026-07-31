@@ -2250,7 +2250,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       </div>
       <div id="an-month-label" style="display:none;text-align:center;font-size:12.5px;font-weight:700;color:var(--brand);margin:8px 0 6px;"></div>
       <div class="an-tabs" style="margin-top:12px;">
-        <button class="an-tab active" onclick="App.setAnTab('pl',this)">P&amp;L</button>
+        <button class="an-tab active" onclick="App.setAnTab('pl',this)">Деньги</button>
         <button class="an-tab" onclick="App.setAnTab('growth',this)">Динамика</button>
         <button class="an-tab" onclick="App.setAnTab('cats',this)">Категории</button>
         <button class="an-tab" onclick="App.setAnTab('cashiers',this)">Кассиры</button>
@@ -3083,7 +3083,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.54.0';
+var APP_VERSION='4.55.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5134,7 +5134,7 @@ var App={
     var R=App._repRow,S=App._repSec;
     var h='';
     // P&L
-    h+=S('P&L — прибыль и убытки',
+    h+=S('Деньги — что заработали и что потратили',
       R('Выручка','₽ '+fmt(r.income),'var(--pos)')+
       R('Расходы','₽ '+fmt(r.expense),'var(--neg)')+
       R('Прибыль',(r.profit<0?'−':'')+'₽ '+fmt(Math.abs(r.profit)),r.profit>=0?'var(--pos)':'var(--neg)',true)+
@@ -5911,7 +5911,7 @@ var App={
         '<div class="metric-value" style="color:'+(profit>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(profit)+'</div></div>'+
       '<div class="metric-card" style="margin-bottom:16px;">'+
         '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">'+
-          '<div class="metric-label" style="margin:0;">Доходы vs Расходы</div>'+
+          '<div class="metric-label" style="margin:0;">Доходы и расходы</div>'+
           '<div style="font-size:22px;font-weight:800;color:'+(ratio>100?'var(--neg)':'var(--ink)')+';font-family:var(--font-num);">'+ratio+'%</div>'+
         '</div>'+
         '<div style="display:flex;flex-direction:column;gap:12px;">'+
@@ -10853,7 +10853,7 @@ var App={
   },
   _widgetHTML:function(id){
     if(id==='quick'){
-      var qb=function(oc,svg,t,sub){return '<button onclick="'+oc+'" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width=\'21\' height=\'21\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.9\' stroke-linecap=\'round\' stroke-linejoin=\'round\'>'+svg+'</svg></div><div><div style="font-size:14.5px;font-weight:750;color:var(--ink);">'+t+'</div><div style="font-size:11.5px;color:var(--muted);">'+sub+'</div></div></button>';};
+      var qb=function(oc,svg,t,sub){return '<button onclick="'+oc+'" style="display:flex;align-items:center;gap:11px;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);"><div style="width:40px;height:40px;border-radius:12px;background:var(--brand-dim);color:var(--brand);display:grid;place-items:center;flex-shrink:0;"><svg width=\'21\' height=\'21\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'currentColor\' stroke-width=\'1.9\' stroke-linecap=\'round\' stroke-linejoin=\'round\'>'+svg+'</svg></div><div style="min-width:0;"><div style="font-size:14.5px;font-weight:750;color:var(--ink);line-height:1.25;">'+t+'</div><div style="font-size:11.5px;color:var(--muted);line-height:1.3;margin-top:2px;">'+sub+'</div></div></button>';};
       var K="<path d='M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z'/><path d='M9 8h6M9 12h6'/>";
       var G="<path d='M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z'/><polyline points='3.27 6.96 12 12.01 20.73 6.96'/><line x1='12' y1='22.08' x2='12' y2='12'/>";
       var R="<circle cx='9' cy='20' r='1.3'/><circle cx='18' cy='20' r='1.3'/><path d='M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6'/>";
@@ -10861,7 +10861,7 @@ var App={
       // Подпись кассы зависит от времени: утром — открыть смену, вечером — закрыть.
       var kSub=(h>=5&&h<12)?'открыть смену':(h>=17||h<3)?'закрыть смену':'смены';
       var btns=[qb("App.setTab('kassa',null)",K,'Касса',kSub)];
-      if(App.s.myRole==='Сотрудник зала')btns.push(qb("App.openReceiveRep()",R,'Приём товара','поставка от ТП'));
+      if(App.s.myRole==='Сотрудник зала')btns.push(qb("App.openReceiveRep()",R,'Приём товара','накладная'));
       btns.push(qb("App.openGoods()",G,'Товары','поиск · цены'));
       return App._smartHint()+'<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
     }
