@@ -3090,7 +3090,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.56.0';
+var APP_VERSION='4.57.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3358,7 +3358,13 @@ var App={
       App.toast('Ошибка: '+App._friendlyErr(e),true);
     });
     document.addEventListener('keydown',function(e){
-      if(e.key==='Escape')App.closeSheet();
+      if(e.key!=='Escape')return;
+      // Escape закрывал только нижнюю панель. Окна (Товары, Каталог,
+      // карточка товара) им не закрывались, и на компьютере привычный
+      // способ выйти не работал. Закрываем то, что открыто сверху.
+      var ov=document.getElementById('modal-overlay');
+      if(ov&&ov.classList.contains('show')){App.closeModal();return;}
+      App.closeSheet();
     });
     // Приватность с прошлого раза
     try{if(localStorage.getItem('auron_privacy')==='1')document.body.classList.add('sums-hidden');}catch(e){}
