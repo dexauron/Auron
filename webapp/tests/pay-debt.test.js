@@ -110,6 +110,48 @@ t('сводка поставщиков тоже только по ДОЛГАМ',
 t('общий долг считается чистой суммой',
   /return s\+x\.debt;/.test(code) && !/Math\.max\(x\.debt,0\)/.test(code));
 
+// ── Деньги нельзя списать дважды ────────────────────────────────────
+// Владелец увидел: записи на 105 000, а в расходах 200 000 двумя
+// операциями. Причина — «Подтвердить оплату» списывало ВСЮ сумму
+// записи заново, не глядя на уже оплаченное.
+var mark=grab('_markPaymentPaidLocked');
+t('«подтвердить оплату» списывает только остаток',
+  /var rest=Math\.max\(total-already,0\);/.test(mark) &&
+  /if \(account&&rest>0\)/.test(mark));
+t('расход создаётся на остаток, а не на всю сумму',
+  /amount:rest,/.test(mark));
+t('если уже всё оплачено — расхода нет', /rest>0/.test(mark));
+var upd=grab('_updatePaymentLocked');
+t('частичная оплата не списывает больше остатка',
+  /payAmt = Math\.min\(payAmt, Math\.max\(totalAmt-paidBefore, 0\)\);/.test(upd));
+
+// Считаем на числах владельца: запись 100 000, оплатили её целиком,
+// потом нажали «подтвердить» — из кассы должно уйти 100 000, не 200 000.
+function payFlow(total, steps){
+  var paid=0, spent=0;
+  steps.forEach(function(st){
+    if(st.kind==='pay'){ var amt=Math.min(st.amount, Math.max(total-paid,0));
+      paid+=amt; spent+=amt; }
+    else { var rest=Math.max(total-paid,0); paid=total; spent+=rest; }
+  });
+  return spent;
+}
+t('оплата 100 000 + подтверждение = 100 000, а не 200 000',
+  payFlow(100000,[{kind:'pay',amount:100000},{kind:'mark'}])===100000,
+  payFlow(100000,[{kind:'pay',amount:100000},{kind:'mark'}]));
+t('две частичные по 50 000 = 100 000',
+  payFlow(100000,[{kind:'pay',amount:50000},{kind:'pay',amount:50000}])===100000);
+t('попытка заплатить больше суммы записи не проходит',
+  payFlow(100000,[{kind:'pay',amount:500000}])===100000);
+t('подтверждение дважды не списывает дважды',
+  payFlow(100000,[{kind:'mark'},{kind:'mark'}])===100000);
+
+// Один и тот же долг на двух экранах должен совпадать.
+var h=require('fs').readFileSync(__dirname+'/../Index.html','utf8');
+t('экран Поставщиков считает долг чистой суммой',
+  /var dv=\(d\.debt\|\|0\);realDebt\+=dv;/.test(h));
+t('на экране не осталось зажима минусов', !/Math\.max\(d\.debt\|\|0,0\)/.test(h));
+
 // ── Проверки в самом приложении ─────────────────────────────────────
 t('оплата записи гасит долг',
   /_payDebtLedger\(ss, id, String\(rowData\[PY_NAME-1\]\|\|''\), payAmt/.test(code));

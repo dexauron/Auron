@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.81.0';
+var APP_VERSION='4.82.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5199,16 +5199,20 @@ var App={
     });
     // Общий долг — из регистра ДОЛГИ: долги поставщикам + накладные магазина.
     // Записи на выплату (график) в общий долг НЕ включаем — показываем отдельно.
+    // Долг — ЧИСТАЯ сумма: переплата одному гасит долг другому, как на
+    // главной. Здесь стояло Math.max(...,0) — и после выплаты 100 000
+    // главная показывала 4 082 653, а этот экран 4 182 653. Одна и та же
+    // цифра расходилась на двух экранах.
     var realDebt=0,storeDebt=0;
     debts.forEach(function(d){
-      var dv=Math.max(d.debt||0,0);realDebt+=dv;
-      if(String(d.name||'').indexOf('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.8 4h14.4L21 9.5"/><path d="M4 9.5h16V20H4z"/><path d="M9 20v-6h6v6"/></svg>')===0)storeDebt+=dv;
+      var dv=(d.debt||0);realDebt+=dv;
+      if(String(d.name||'').indexOf('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.8 4h14.4L21 9.5"/><path d="M4 9.5h16V20H4z"/><path d="M9 20v-6h6v6"/></svg>')===0)storeDebt+=Math.max(dv,0);
     });
     var paidPct=recAmt?Math.round(recPaid/recAmt*100):0;
     var e=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
     e('supp-today-plan','₽ '+fmt(todayPlan));
     e('supp-open-count',openCount+' '+App._plural(openCount,'активная запись','активные записи','активных записей'));
-    e('supp-total-debt','₽ '+fmt(realDebt));
+    e('supp-total-debt','₽ '+fmt(Math.max(realDebt,0)));
     var bar=document.getElementById('supp-paid-bar');if(bar)bar.style.width=paidPct+'%';
     var row=document.getElementById('supp-paid-row');
     if(row)row.innerHTML='<div style="width:100%;">'+

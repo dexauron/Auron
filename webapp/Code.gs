@@ -5163,6 +5163,9 @@ function _updatePaymentLocked(p) {
       var paidBefore=parseFloat(rowData[PY_PAID-1])||0;
       var payAmt=parseFloat(d.amount)||0;
       var totalAmt=parseFloat(rowData[PY_AMT-1])||0;
+      // Списать больше, чем осталось, нельзя: «оплачено» не может быть
+      // больше суммы записи, а расход — больше того, что доплачиваем.
+      payAmt = Math.min(payAmt, Math.max(totalAmt-paidBefore, 0));
       var newPaid=Math.min(paidBefore+payAmt,totalAmt);
       var newStatus=newPaid>=totalAmt?'paid':'open';
       sh.getRange(rowNum,PY_PAID).setValue(newPaid);
@@ -5221,22 +5224,27 @@ function _markPaymentPaidLocked(p) {
       if (String(vs[i][PY_ID-1])===String(id)) { rowNum=i+2; rowData=vs[i]; break; }
     }
     if (rowNum===-1) {  return {__error:'not found'}; }
+    var total=parseFloat(rowData[PY_AMT-1])||0;
+    // Списываем только ОСТАТОК, а не всю сумму заново.
+    //
+    // Иначе выходит двойной расход: заплатил 100 000 через «оплатить»,
+    // потом нажал «Подтвердить оплату» — и в расходах 200 000, хотя из
+    // кассы ушло 100 000. Владелец это и увидел: две операции на 200 000
+    // при записях на 105 000.
+    var already=parseFloat(rowData[PY_PAID-1])||0;
+    var rest=Math.max(total-already,0);
     sh.getRange(rowNum,PY_STATUS).setValue('paid');
-    sh.getRange(rowNum,PY_PAID).setValue(parseFloat(rowData[PY_AMT-1])||0);
-    if (account&&rowData) {
-      var amt=parseFloat(rowData[PY_AMT-1])||0;
+    sh.getRange(rowNum,PY_PAID).setValue(total);
+    if (account&&rest>0) {
       var cat=String(rowData[PY_CAT-1])||'Выплата';
-      var name=String(rowData[PY_NAME-1]);
-      if (amt>0) {
-        saveQuickEntry({ssId:ssId,data:{uuid:Utilities.getUuid(),date:new Date().toISOString(),
-          type:'Расход',category:cat,account:account,amount:amt,comment:name}});
-      }
+      saveQuickEntry({ssId:ssId,data:{uuid:Utilities.getUuid(),date:new Date().toISOString(),
+        type:'Расход',category:cat,account:account,amount:rest,
+        comment:String(rowData[PY_NAME-1])}});
     }
     // Долг гасим независимо от того, выбран счёт или нет: деньги могли
     // уйти мимо приложения, но поставщику мы больше не должны.
     _unpayDebtLedger(ss, String(id));
-    _payDebtLedger(ss, String(id), String(rowData[PY_NAME-1]||''),
-                   parseFloat(rowData[PY_AMT-1])||0, '');
+    _payDebtLedger(ss, String(id), String(rowData[PY_NAME-1]||''), total, '');
     try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
