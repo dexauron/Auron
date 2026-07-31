@@ -2437,9 +2437,9 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Поставщики</div>
           <div style="display:flex;gap:7px;flex-shrink:0;">
-            <button onclick="App.openOrders()" title="Заказы товара" style="padding:8px 11px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">🚚</button>
+            <button onclick="App.openOrders()" title="Заказы товара" style="padding:8px 11px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg></button>
             <button onclick="App.openContractorsDir()" title="Справочник контрагентов" style="padding:8px 11px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📇</button>
-            <button onclick="App.openTimesheetView()" title="Табель" style="padding:8px 11px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">📋</button>
+            <button onclick="App.openTimesheetView()" title="Табель" style="padding:8px 11px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9zM7 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M8 12h8M8 16h5"/></svg></button>
             <button onclick="App.openPaymentForm(null)" style="padding:8px 13px;background:var(--brand);color:#fff;border:none;border-radius:12px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">+ Запись</button>
           </div>
         </div>
@@ -2449,7 +2449,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <!-- Summary cards -->
       <div class="supp-summary" id="supp-summary-cards">
         <div class="card" style="background:linear-gradient(150deg,color-mix(in oklab,var(--brand) 28%,var(--surface)),var(--surface));">
-          <div style="font-size:12.5px;color:var(--ink-2);font-weight:650;display:flex;align-items:center;gap:7px;">📅 Сегодня к выплате</div>
+          <div style="font-size:12.5px;color:var(--ink-2);font-weight:650;display:flex;align-items:center;gap:7px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>Сегодня к выплате</div>
           <div class="num" style="font-size:28px;font-weight:800;margin-top:8px;letter-spacing:-.03em;" id="supp-today-plan">—</div>
           <div style="font-size:12px;color:var(--muted);margin-top:4px;" id="supp-open-count"></div>
         </div>
@@ -3074,7 +3074,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.48.0';
+var APP_VERSION='4.49.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4712,7 +4712,7 @@ var App={
       var nextStr=c.next?(function(){var d=new Date(c.next+'T12:00:00');return'ближ. '+d.getDate()+' '+MON[d.getMonth()];})():c.cnt+' зап.';
       return '<div class="card" onclick="App.openContractorCard(\''+App._e(c.name).replace(/'/g,"\\'")+'\')" style="padding:14px;cursor:pointer;'+(on?'border-color:var(--brand);outline:1px solid var(--brand);':'')+'">'+
         '<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px;">'+
-          '<span class="tx-ico" style="width:34px;height:34px;background:'+(c.debt>0?'color-mix(in oklab,var(--neg) 16%,transparent)':'color-mix(in oklab,var(--pos) 16%,transparent)')+';color:'+(c.debt>0?'var(--neg)':'var(--pos)')+';">📦</span>'+
+          '<span class="tx-ico" style="width:34px;height:34px;background:'+(c.debt>0?'color-mix(in oklab,var(--neg) 16%,transparent)':'color-mix(in oklab,var(--pos) 16%,transparent)')+';color:'+(c.debt>0?'var(--neg)':'var(--pos)')+';"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span>'+
           '<div style="min-width:0;"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(c.name)+'</div>'+
           '<div style="font-size:11.5px;color:var(--muted);">Поставщик</div></div>'+
         '</div>'+
@@ -4811,7 +4811,7 @@ var App={
       var chevRot=isOpen?'rotate(90deg)':'none';
       return '<div class="prec" id="prec-'+App._e(String(r.id||''))+'">'+
         '<div class="prec-head" onclick="App._suppToggle(\''+App._e(String(r.id||''))+'\')">'+
-          '<span class="tx-ico" style="width:38px;height:38px;background:color-mix(in oklab,'+st.color+' 16%,transparent);color:'+st.color+';">📦</span>'+
+          '<span class="tx-ico" style="width:38px;height:38px;background:color-mix(in oklab,'+st.color+' 16%,transparent);color:'+st.color+';"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span>'+
           '<div class="main"><div class="t">'+App._e(r.payee||'')+'</div><div class="s">'+App._e(r.title||r.comment||'')+'&nbsp;·&nbsp;'+dStr+'</div></div>'+
           '<div class="r">'+
             (plan>0?'<div class="num" style="font-weight:800;color:'+st.color+';">₽ '+fmt(plan)+'</div>':'<span class="badge '+st.cls+'">'+st.label+'</span>')+
@@ -5129,7 +5129,7 @@ var App={
       R('Выручка','₽ '+fmt(r.income),'var(--pos)')+
       R('Расходы','₽ '+fmt(r.expense),'var(--neg)')+
       R('Прибыль',(r.profit<0?'−':'')+'₽ '+fmt(Math.abs(r.profit)),r.profit>=0?'var(--pos)':'var(--neg)',true)+
-      R('Маржа',r.margin+'%')+
+      R('Маржа',App._num(r.margin)+'%')+
       R('Операций',r.txCount));
     var cmp=[];
     var c1=App._cmpTxt(r.income,r.prevIncome,'прошлому месяцу');if(c1)cmp.push('Выручка: '+c1);
@@ -8028,7 +8028,7 @@ var App={
       var h='<div style="background:linear-gradient(135deg,'+(plus?'var(--pos)':'var(--neg)')+',color-mix(in oklab,'+(plus?'var(--pos)':'var(--neg)')+' 65%,#000));color:#fff;border-radius:18px;padding:18px;text-align:center;margin-bottom:14px;">'+
         '<div style="font-size:12px;opacity:.85;">'+(plus?'Заработали':'Ушли в минус')+'</div>'+
         '<div style="font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:3px;">'+(plus?'':'−')+'₽ '+fmt(Math.abs(r.total))+'</div>'+
-        (r.margin!=null?'<div style="font-size:11.5px;opacity:.85;margin-top:3px;">Рентабельность '+r.margin+'% — столько осталось с каждого рубля выручки</div>':'')+'</div>';
+        (r.margin!=null?'<div style="font-size:11.5px;opacity:.85;margin-top:3px;">Рентабельность '+App._num(r.margin)+'% — столько осталось с каждого рубля выручки</div>':'')+'</div>';
       h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
         (r.lines||[]).map(function(l){
           var zero=!l.v;
@@ -8365,6 +8365,9 @@ var App={
       '🏪 Долг магазина: '+fmt(r.debtStart)+' → '+fmt(r.debtEnd)+' ₽','','— Auron Finance'];
     App._shareText(L.join('\n'));
   },
+  // Дробное число по-русски: запятая, а не точка. Рядом суммы уже
+  // с пробелами по-русски, и «22.8%» посреди них выглядит чужим.
+  _num:function(v){ return (v===null||v===undefined||v==='')?'—':String(v).replace('.',','); },
   _shareText:function(text){
     if(navigator.share){navigator.share({text:text}).catch(function(){});}
     else if(navigator.clipboard){navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано — вставь в WhatsApp ✓');});}
@@ -9856,8 +9859,8 @@ var App={
         '<div class="gd-hero-v" id="gd-rev">₽ '+fm(a.totRevenue)+'</div>'+dl(a.momRevenue,true)+'</div></div>'+
       '<div class="gd-hero-grid">'+
         '<div class="gd-hero-cell"><div class="l">Прибыль</div><div class="v" id="gd-prof">₽ '+fm(a.totProfit)+'</div></div>'+
-        '<div class="gd-hero-cell"><div class="l">Рентабельность</div><div class="v">'+(a.avgMargin!=null?a.avgMargin+'%':'—')+'</div></div>'+
-        '<div class="gd-hero-cell"><div class="l">Наценка</div><div class="v">'+(a.avgMarkup||0)+'%</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Рентабельность</div><div class="v">'+(a.avgMargin!=null?App._num(a.avgMargin)+'%':'—')+'</div></div>'+
+        '<div class="gd-hero-cell"><div class="l">Наценка</div><div class="v">'+App._num(a.avgMarkup||0)+'%</div></div>'+
         '<div class="gd-hero-cell"><div class="l">Поставщиков</div><div class="v">'+fmt(a.suppliersCount||0)+'</div></div>'+
       '</div></div>';
 
@@ -9896,17 +9899,18 @@ var App={
     h+='<div class="pc-sec">Насколько эффективно работает запас</div>'+
       '<div class="gd-tiles">'+
       '<div class="gd-tile"><div class="l">Остатки</div><div class="v">₽ '+fm(a.totStock)+'</div><div class="h">по закупке</div></div>'+
-      '<div class="gd-tile"><div class="l">GMROI</div><div class="v" style="color:'+(a.gmroi>=1?'var(--pos)':a.gmroi>0?'var(--warn,#FF9F0A)':'var(--muted)')+';">'+(a.gmroi!=null?a.gmroi:'—')+'</div><div class="h">'+(a.gmroi>=1?'норма':'меньше 1 — слабо')+'</div></div>'+
+      '<div class="gd-tile"><div class="l">Отдача от товара</div><div class="v" style="color:'+(a.gmroi>=1?'var(--pos)':a.gmroi>0?'var(--warn,#FF9F0A)':'var(--muted)')+';">'+App._num(a.gmroi)+'</div><div class="h">'+(a.gmroi>=1?'норма':'меньше 1 — слабо')+'</div></div>'+
       '<div class="gd-tile"><div class="l">Оборот</div><div class="v" style="color:'+(a.turnoverDays&&a.turnoverDays>60?'var(--neg)':'var(--ink)')+';">'+(a.turnoverDays||'—')+'</div><div class="h">дней на распродажу</div></div>'+
       '<div class="gd-tile"><div class="l">Неликвид</div><div class="v">'+(a.frozenShare||0)+'%</div><div class="h">₽ '+fm(a.frozen)+'</div></div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--muted);margin-top:7px;line-height:1.55;">'+
       '<b>Рентабельность</b> — сколько прибыли осталось с каждого рубля выручки. '+
       '<b>Наценка</b> — сколько накинули на закупку. Наценка всегда выше: '+
-      'накинули '+(a.avgMarkup||0)+'%, а с выручки осталось '+(a.avgMargin!=null?a.avgMargin:'—')+'%. '+
-      'GMROI — сколько ₽ прибыли даёт 1 ₽, вложенный в товар (больше 1 — хорошо). '+
+      'накинули '+App._num(a.avgMarkup||0)+'%, а с выручки осталось '+App._num(a.avgMargin)+'%. '+
+      'Отдача от товара (GMROI) — сколько рублей прибыли приносит один рубль, '+
+      'вложенный в товар. Больше 1 — вложения окупаются, меньше — деньги стоят на полке. '+
       'Оба показателя считаются по деньгам: вся выручка против всей себестоимости'+
-      (a.avgMarkupSimple&&Math.abs(a.avgMarkupSimple-a.avgMarkup)>5?' (простое среднее по товарам дало бы '+a.avgMarkupSimple+'%, но его задирают товары с битой ценой)':'')+'. '+
+      (a.avgMarkupSimple&&Math.abs(a.avgMarkupSimple-a.avgMarkup)>5?' (простое среднее по товарам дало бы '+App._num(a.avgMarkupSimple)+'%, но его задирают товары с битой ценой)':'')+'. '+
       'Продажи взяты за '+(a.salesDays||30)+' дн.</div>';
 
     // ── Динамика продаж по загрузкам ────────────────────────────────
@@ -10282,7 +10286,7 @@ var App={
       tile('Закупка',p.buy?fm(p.buy)+' ₽':null)+
       tile('Продажа',p.retail?fm(p.retail)+' ₽':null)+
       tile('Наценка',p.markup!=null?p.markup+'%':null,lowMk?'var(--neg)':'var(--pos)')+
-      tile('Маржа',p.margin!=null?p.margin+'%':null)+
+      tile('Маржа',p.margin!=null?App._num(p.margin)+'%':null)+
       tile('Остаток',p.stockQty!=null?fm(p.stockQty)+' шт':null,p.stockQty<=0?'var(--neg)':null)+
       tile('Хватит на',p.daysOfStock!=null?p.daysOfStock+' дн':null,soon?'var(--neg)':null)+
       tile('Продано',p.soldQty?fm(p.soldQty)+' шт':null)+
@@ -10371,7 +10375,7 @@ var App={
       'Товаров: '+a.count+' · поставщиков: '+a.suppliersCount,
       'Выручка: '+fm(a.totRevenue)+' ₽'+(a.momRevenue!=null?' ('+(a.momRevenue>=0?'+':'')+a.momRevenue+'%)':''),
       'Прибыль: '+fm(a.totProfit)+' ₽'+(a.momProfit!=null?' ('+(a.momProfit>=0?'+':'')+a.momProfit+'%)':''),
-      'Ср. наценка: '+(a.avgMarkup||0)+'% · GMROI: '+(a.gmroi!=null?a.gmroi:'—'),
+      'Ср. наценка: '+App._num(a.avgMarkup||0)+'% · Отдача от товара: '+(a.gmroi!=null?a.gmroi:'—'),
       'Оборот: '+(a.turnoverDays||'—')+' дн · заморожено в неликвиде: '+fm(a.frozen)+' ₽',''];
     if(a.abc)L.push('ABC: A='+a.abc.a.count+' тов ('+a.abc.a.share+'% результата), B='+a.abc.b.count+', C='+a.abc.c.count,'');
     if(a.topProfit&&a.topProfit.length){L.push('💰 Топ по прибыли:');a.topProfit.slice(0,5).forEach(function(t){L.push('  • '+t.name+' — '+fm(t.profit)+' ₽');});L.push('');}
@@ -10611,7 +10615,7 @@ var App={
     {id:'topGoods',t:'Топ по прибыли',    d:'Какие товары приносят больше всего', c:'Товары', fin:true},
     {id:'dead',    t:'Неликвид',          d:'Замороженные деньги в остатках', c:'Товары', fin:true},
     {id:'abc',     t:'ABC-анализ',        d:'20% товаров дают 80% результата', c:'Товары', fin:true},
-    {id:'metrics', t:'Проф-метрики',      d:'Наценка · GMROI · оборачиваемость', c:'Товары', fin:true},
+    {id:'metrics', t:'Проф-метрики',      d:'Наценка · отдача · оборачиваемость', c:'Товары', fin:true},
     {id:'trend',   t:'Динамика продаж',   d:'График выручки по загрузкам', c:'Товары', fin:true},
     {id:'suppliers',t:'Рейтинг поставщиков',d:'Кто надёжнее по ценам', c:'Товары', fin:true}
   ],
@@ -10807,7 +10811,7 @@ var App={
       App._wRow('B — средние',ab.b.count+' тов · '+ab.b.share+'%')+
       App._wRow('C — балласт',ab.c.count+' тов · '+ab.c.share+'%','var(--muted)');
       App._wBox('abc','ABC-анализ',inner,"App.openGoods()");return;}
-    if(id==='metrics'){var inner=App._wRow('Средняя наценка',(a.avgMarkup||0)+'%')+App._wRow('GMROI',(a.gmroi!=null?a.gmroi:'—'))+App._wRow('Оборот',(a.turnoverDays||'—')+' дн');
+    if(id==='metrics'){var inner=App._wRow('Средняя наценка',App._num(a.avgMarkup||0)+'%')+App._wRow('Отдача от товара',App._num(a.gmroi))+App._wRow('Оборот',(a.turnoverDays||'—')+' дн');
       App._wBox('metrics','Проф-метрики',inner,"App.openGoods()");return;}
     if(id==='suppliers'){var inner=(a.supplierRating||[]).slice(0,4).map(function(t){return App._wRow(t.name,t.priceUps?t.priceUps+' повыш.':'стабильно',t.score>=80?'var(--pos)':t.score>=60?'var(--ink)':'var(--neg)');}).join('')||'—';
       App._wBox('suppliers','Рейтинг поставщиков',inner,"App.openGoods()");return;}
