@@ -1563,6 +1563,13 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   .modal-overlay.wide .modal{max-width:1120px;padding:24px 28px calc(var(--safe-bot) + 28px);}
   /* На широком экране показатели и списки становятся в два столбца */
   .modal-overlay.wide .wide-2col{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;}
+
+  /* Полноэкранные окна (Товары, Каталог) занимали всю ширину монитора:
+     кнопка «Загрузить отчёт из 1С» растягивалась на 1700 точек, а текста
+     в ней на треть строки. Высота остаётся во весь экран, ширина — как у
+     широких окон, содержимое по центру. */
+  .modal-overlay.full .modal{max-width:1120px;margin-left:auto;margin-right:auto;
+    padding-left:28px;padding-right:28px;}
 }
 @media(min-width:1240px){
   .modal-overlay.wide .modal{max-width:1280px;}
@@ -3083,7 +3090,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.55.0';
+var APP_VERSION='4.56.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
