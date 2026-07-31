@@ -2666,6 +2666,21 @@ var DDS_MAP = {
   'коммунальные услуги':'utils', 'налоги':'tax', 'налог':'tax'
 };
 
+// Доля месячного плана постоянных расходов, приходящаяся на один день.
+// Владелец разносит месячную сумму ровными долями, так и считаем.
+// Возвращает undefined, если плана нет — тогда берётся факт.
+function _ddsPlanDay(ss, ym) {
+  try {
+    var raw = _getSettingStr(ss, 'DDS_PLAN_'+ym, '');
+    if (!raw) return undefined;
+    var p = JSON.parse(raw);
+    var sum = (p.salary||0) + (p.rent||0) + (p.utils||0) + (p.tax||0);
+    var days = p.days || 0;
+    if (!sum || !days) return undefined;
+    return sum / days;
+  } catch(e) { return undefined; }
+}
+
 function _ddsRate(ss) {
   var v = parseFloat(_getSettingStr(ss, DDS_RATE_KEY, '')); 
   return (isNaN(v) || v <= 0 || v >= 1) ? 0.25 : v;
@@ -2733,15 +2748,23 @@ function _ddsCollect(rows, dateStr, debtDay) {
 }
 
 // Считает показатели дня по формулам владельца.
-function _ddsCompute(b, rate, debtYesterday) {
+// fixedPlan — доля месячного плана постоянных расходов на этот день.
+function _ddsCompute(b, rate, debtYesterday, fixedPlan) {
   var trade = b.cashRev + b.onlineRev;
   var gross = trade * rate;
-  var fixed = b.salary + b.rent + b.utils + b.tax;
+  // Постоянные расходы двумя цифрами. «По плану» — сколько владелец
+  // заложил на месяц (зарплата, аренда, коммунальные, налог), «по факту»
+  // — сколько на самом деле выплачено. За июль это 737 800 против
+  // 538 500 только по зарплате. Если плана нет — берём факт, чтобы
+  // расчёт не обнулился на магазинах, которые план не ведут.
+  var fixedFact = b.salary + b.rent + b.utils + b.tax;
+  var fixed = (fixedPlan === undefined || fixedPlan === null) ? fixedFact : fixedPlan;
   var daily = b.supplies + b.fuel + b.bank + b.meal + b.writeOff;
   var profitPlan = gross - daily - b.iman - b.transfer - fixed;
   // По факту: всё, что пришло, минус всё, что ушло. «Закуп в долг» сюда
   // не входит — товар взяли в долг, деньги по кассе не двигались.
-  var profitFact = trade - (b.buyCash + b.payDebt + daily + b.iman + b.transfer + fixed + b.other);
+  // Постоянные — настоящие выплаты, а не план.
+  var profitFact = trade - (b.buyCash + b.payDebt + daily + b.iman + b.transfer + fixedFact + b.other);
   var cashLeft = b.cashRev - b.cashOut - b.iman - b.transfer;
   var forBuy = trade - gross - b.cashOut - b.transfer - b.iman - profitPlan
                - b.writeOff - b.bank - b.supplies - b.meal;
@@ -2750,6 +2773,7 @@ function _ddsCompute(b, rate, debtYesterday) {
     cashRev: Math.round(b.cashRev), onlineRev: Math.round(b.onlineRev),
     gross: Math.round(gross), rate: rate,
     profitPlan: Math.round(profitPlan), profitFact: Math.round(profitFact),
+    fixedPlan: Math.round(fixed), fixedFact: Math.round(fixedFact),
     profitGap: Math.round(profitFact - profitPlan),
     cashLeft: Math.round(cashLeft),
     cashDiff: Math.round(b.cashRev - b.cashOut - b.transfer - b.iman - cashLeft),
@@ -2819,7 +2843,7 @@ function getDayDDS(p) {
           prev += (dByDay[d].up||0) - (dByDay[d].down||0);
       });
     }
-    var out = _ddsCompute(b, _ddsRate(ss), prev);
+    var out = _ddsCompute(b, _ddsRate(ss), prev, _ddsPlanDay(ss, date.slice(0,7)));
     out.date = date;
     _ddsCachePut(ssId,'day',date,out);
     return out;
@@ -2856,6 +2880,7 @@ function getMonthDDS(p) {
 
     var rate = _ddsRate(ss);
     var dByDay = _ddsDebtByDay(ss);
+    var planDay = _ddsPlanDay(ss, ym);
     var debt = _gnum(_getSettingStr(ss,'DDS_DEBT_START_'+ym,'')) || 0;
     // Дни берём из обоих источников: бывает день, где движение только по
     // долгу (взяли товар в долг, а выручку внесли другим числом).
@@ -2868,7 +2893,7 @@ function getMonthDDS(p) {
                           officeDiff:0, iman:0, writeOff:0, buyDebt:0, payDebt:0 };
     for (var k = 0; k < days.length; k++) {
       var b = _ddsCollect(byDay[days[k]]||[], days[k], dByDay[days[k]]);
-      var r = _ddsCompute(b, rate, debt);
+      var r = _ddsCompute(b, rate, debt, planDay);
       debt = r.debt;                       // долг накапливается изо дня в день
       r.date = days[k];
       out.push(r);
@@ -2912,11 +2937,25 @@ var DDS_COLS = [
   ['обед',            'Расход', 'Питание сотрудников',      'Наличные'],
   ['гсм',             'Расход', 'Топливо',                  'Наличные'],
   ['расходник',       'Расход', 'Расходные материалы',      'Наличные'],
-  ['зарплата',        'Расход', 'Зарплата',                 'Наличные'],
-  ['аренда',          'Расход', 'Аренда',                   'Наличные'],
-  ['комунальн',       'Расход', 'Коммунальные услуги',      'Наличные'],
-  ['коммунальн',      'Расход', 'Коммунальные услуги',      'Наличные'],
-  ['налог',           'Расход', 'Налоги',                   'Карта']
+];
+
+// Постоянные расходы в листе ДДС — это ПЛАН НА МЕСЯЦ, а не потраченные
+// деньги (правило владельца). Он разносит месячную сумму по дням ровными
+// долями: 23 800 зарплата, 12 200 аренда, 3 000 коммунальные, 3 000 налог.
+//
+// Поэтому операциями они НЕ становятся — иначе касса худела бы на деньги,
+// которые ещё не ушли. За июль план по зарплате 737 800 ₽, а на самом
+// деле выплачено 538 500 ₽ (лист ОПЛАТА). Разница 199 300 ₽.
+//
+// План копится за месяц и кладётся в настройку DDS_PLAN_<месяц>. Прибыль
+// «по плану» считается по нему, прибыль «по факту» — по настоящим
+// выплатам с листа ОПЛАТА.
+var DDS_PLAN_COLS = [
+  ['зарплата',   'salary'],
+  ['аренда',     'rent'],
+  ['комунальн',  'utils'],
+  ['коммунальн', 'utils'],
+  ['налог',      'tax']
 ];
 var OPL_COLS = [
   ['оплата за наличку','Расход','Оплата поставщику наличными','Наличные'],
@@ -2989,18 +3028,22 @@ function _ddsDateKey(v) {
 // rows — движение денег (лист БАЗА), debts — движение долга (лист ДОЛГИ).
 function _ddsSheetToOps(sh, map, tag) {
   var out = [], debts = [], months = {};
-  if (!sh || sh.getLastRow() < 2) return { rows: out, debts: debts, months: months, debtStart: {} };
+  if (!sh || sh.getLastRow() < 2)
+    return { rows: out, debts: debts, months: months, debtStart: {}, plan: {} };
   var vals = sh.getRange(1,1,sh.getLastRow(),sh.getLastColumn()).getValues();
   // Шапка — первая строка, где есть слово «дата».
   var hRow = -1;
   for (var r = 0; r < Math.min(8, vals.length) && hRow < 0; r++)
     for (var c = 0; c < vals[r].length; c++)
       if (String(vals[r][c]||'').toLowerCase().trim().indexOf('дата') === 0) { hRow = r; break; }
-  if (hRow < 0) return { rows: out, debts: debts, months: months, debtStart: {} };
+  if (hRow < 0) return { rows: out, debts: debts, months: months, debtStart: {}, plan: {} };
 
   // Сопоставляем колонки по названиям, а не по номерам: если владелец
   // добавит колонку, загрузка не поедет.
-  var cols = [], dcols = [], leftCol = -1, debtStart = {};
+  var cols = [], dcols = [], pcols = [], leftCol = -1, debtStart = {}, plan = {};
+  // План постоянных расходов есть только в листе ДДС. В ОПЛАТЕ колонка
+  // «Зарплата» — это настоящие выплаты, её планом считать нельзя.
+  var wantPlan = (tag === 'DDS');
   for (var c2 = 0; c2 < vals[hRow].length; c2++) {
     var h = String(vals[hRow][c2]||'').toLowerCase().replace(/ё/g,'е').trim();
     if (!h) continue;
@@ -3012,8 +3055,11 @@ function _ddsSheetToOps(sh, map, tag) {
       if (h.indexOf(DDS_DEBT_COLS[m3][0].replace(/ё/g,'е')) === 0) {
         dcols.push([c2, DDS_DEBT_COLS[m3][1]]); break; }
     if (leftCol < 0 && h.indexOf(DDS_DEBT_LEFT_COL) === 0) leftCol = c2;
+    if (wantPlan) for (var m4 = 0; m4 < DDS_PLAN_COLS.length; m4++)
+      if (h.indexOf(DDS_PLAN_COLS[m4][0]) === 0) { pcols.push([c2, DDS_PLAN_COLS[m4][1]]); break; }
   }
-  if (!cols.length && !dcols.length) return { rows: out, debts: debts, months: months, debtStart: debtStart };
+  if (!cols.length && !dcols.length && !pcols.length)
+    return { rows: out, debts: debts, months: months, debtStart: debtStart, plan: plan };
 
   // Начальный долг из скрытых строк между шапкой и первой датой.
   var openDebt = 0;
@@ -3054,6 +3100,18 @@ function _ddsSheetToOps(sh, map, tag) {
     // Долг на начало месяца — из первого дня, где владелец записал
     // остаток: «долг на конец дня» минус то, что за день набежало.
     var ym = ds.slice(0,7);
+
+    // План постоянных расходов копим за месяц: в файле он размазан по дням.
+    if (pcols.length) {
+      var pl = plan[ym] = plan[ym] || { salary:0, rent:0, utils:0, tax:0, days:0, _seen:{} };
+      // Дни считаем по РАЗНЫМ датам: на каждое число в файле две строки
+      // (день и ночь), и простой счётчик дал бы 62 дня вместо 31 —
+      // доля плана на день вышла бы вдвое меньше настоящей.
+      if (!pl._seen[ds]) { pl._seen[ds] = 1; pl.days++; }
+      for (var k3 = 0; k3 < pcols.length; k3++)
+        pl[pcols[k3][1]] += Math.abs(_xlsNum(vals[i][pcols[k3][0]]));
+    }
+
     if (leftCol >= 0 && debtStart[ym] === undefined) {
       // Сначала — записанный остаток из скрытой строки. Если его нет,
       // отматываем назад от остатка первого дня. Оба пути на июле
@@ -3065,7 +3123,7 @@ function _ddsSheetToOps(sh, map, tag) {
       }
     }
   }
-  return { rows: out, debts: debts, months: months, debtStart: debtStart };
+  return { rows: out, debts: debts, months: months, debtStart: debtStart, plan: plan };
 }
 
 // Удаляет ранее загруженные строки этого же источника и месяца.
@@ -3124,12 +3182,19 @@ function ddsImport(p) {
     // ДДС сводит за день. Взять оба — удвоить расходы месяца.
     // Поэтому за месяцы, которые есть в ДДС, лист ОПЛАТА пропускаем:
     // в ДДС вдобавок лежит выручка, которой в ОПЛАТЕ нет вообще.
+    // ...кроме того, чего в ДДС нет вовсе. «Зарплата» в ДДС — это ПЛАН на
+    // месяц, а настоящие выплаты записаны только в ОПЛАТЕ (июль: план
+    // 737 800, выплачено 538 500). «Прочие расходы» в ДДС нет совсем.
+    // Эти две статьи берём из ОПЛАТЫ даже за пропускаемые месяцы, иначе
+    // потеряем настоящие деньги.
+    var OPL_KEEP = { 'Зарплата':1, 'Прочие расходы':1 };
     var skipped = [];
     if (Object.keys(a.months).length && b.rows.length) {
       var keep = [];
       for (var q = 0; q < b.rows.length; q++) {
         var mm = String(b.rows[q][B_ZREF-1]||'').split(':')[1] || '';
-        if (a.months[mm]) { if (skipped.indexOf(mm) < 0) skipped.push(mm); continue; }
+        if (a.months[mm] && !OPL_KEEP[String(b.rows[q][B_CAT-1]||'')]) {
+          if (skipped.indexOf(mm) < 0) skipped.push(mm); continue; }
         keep.push(b.rows[q]);
       }
       b.rows = keep;
@@ -3138,7 +3203,12 @@ function ddsImport(p) {
         var c = String(row[D_CMT-1]||''), k = c.lastIndexOf(':');
         return !a.months[k >= 0 ? c.slice(k+1).trim() : ''];
       });
-      skipped.forEach(function(m){ delete b.months[m]; });
+      // Метку месяца снимаем только если из ОПЛАТЫ за него не осталось
+      // ни строчки — иначе _ddsWipe не найдёт их при повторной загрузке.
+      var left = {};
+      keep.forEach(function(row){
+        var m = String(row[B_ZREF-1]||'').split(':')[1] || ''; left[m] = 1; });
+      skipped.forEach(function(m){ if (!left[m]) delete b.months[m]; });
     }
 
     var all = a.rows.concat(b.rows);
@@ -3180,12 +3250,21 @@ function ddsImport(p) {
       try { _setSetting(ss,'DDS_DEBT_START_'+m, String(starts[m])); } catch(e){}
     });
 
+    // План постоянных расходов на месяц.
+    var plans = a.plan || {};
+    Object.keys(plans).forEach(function(m){
+      if (!a.months[m]) return;
+      var pm = plans[m];
+      try { _setSetting(ss,'DDS_PLAN_'+m, JSON.stringify(
+        { salary:pm.salary, rent:pm.rent, utils:pm.utils, tax:pm.tax, days:pm.days })); } catch(e){}
+    });
+
     _xlsDrop(tmp);
     try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
     _log(ss,'Загрузка отчёта', 'строк '+all.length+', долгов '+allDebts.length+
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
-             debtStart: starts,
+             debtStart: starts, plan: plans,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
