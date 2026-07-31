@@ -2671,7 +2671,7 @@ function _ddsCollect(rows, dateStr) {
                                  : String(d||'').slice(0,10);
     if (ds !== dateStr) continue;
     var cat = String(r[B_CAT-1]||'').toLowerCase().trim();
-    var amt = Math.abs(_num(r[B_AMT-1]));
+    var amt = Math.abs(_gnum(r[B_AMT-1]));
     if (!amt) continue;
     b.count++;
     var key = DDS_MAP[cat];
@@ -2721,7 +2721,7 @@ function getDayDDS(p) {
     var rows = (sh && sh.getLastRow() > 1)
       ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
     var b = _ddsCollect(rows, date);
-    var prev = _num(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
+    var prev = _gnum(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
     var out = _ddsCompute(b, _ddsRate(ss), prev);
     out.date = date;
     return out;
@@ -2755,7 +2755,7 @@ function getMonthDDS(p) {
     }
 
     var rate = _ddsRate(ss);
-    var debt = _num(_getSettingStr(ss,'DDS_DEBT_START_'+ym,'')) || 0;
+    var debt = _gnum(_getSettingStr(ss,'DDS_DEBT_START_'+ym,'')) || 0;
     var days = Object.keys(byDay).sort();
     var out = [], tot = { trade:0, cashRev:0, onlineRev:0, gross:0,
                           profitPlan:0, profitFact:0, forBuy:0, spentOnBuy:0,
