@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.80.0';
+var APP_VERSION='4.81.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5239,7 +5239,9 @@ var App={
           '<div style="min-width:0;"><div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(c.name)+'</div>'+
           '<div style="font-size:11.5px;color:var(--muted);">Поставщик</div></div>'+
         '</div>'+
-        '<div class="num" style="font-size:20px;font-weight:800;color:'+(c.debt>0?'var(--neg)':'var(--muted)')+';letter-spacing:-.02em;">'+(c.debt>0?'₽ '+fmt(c.debt):'нет долга')+'</div>'+
+        // Минус — это переплата: заплатили больше, чем числилось за этим
+        // поставщиком. Показываем словом, иначе «₽ −5 000» читается как долг.
+        '<div class="num" style="font-size:20px;font-weight:800;color:'+(c.debt>0?'var(--neg)':(c.debt<0?'var(--pos)':'var(--muted)'))+';letter-spacing:-.02em;">'+(c.debt>0?'₽ '+fmt(c.debt):(c.debt<0?'переплата ₽ '+fmt(-c.debt):'нет долга'))+'</div>'+
         '<div style="font-size:11.5px;color:var(--muted);margin-top:3px;">'+App._e(nextStr)+'</div>'+
       '</div>';
     }).join('');

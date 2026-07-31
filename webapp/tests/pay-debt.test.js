@@ -83,6 +83,33 @@ _payDebtLedger(L3.ss,'p9','Малаев',-500,'');
 t('нулевая, текстовая и отрицательная сумма игнорируются',
   L3.rows.length===before, L3.rows.length-before);
 
+// ── Общий долг — ЧИСТАЯ сумма, а не только должники ─────────────────
+// Тут и была настоящая причина жалобы. Погашение пишется на того
+// поставщика, кого выбрали в записи. Если за ним долга не числилось,
+// его долг уходит в минус. Раньше такие минусы отбрасывались, и общий
+// долг не двигался — «выплачиваю, а с общего не списывается».
+function totalOld(list){return list.reduce(function(s,x){return s+Math.max(x.debt,0);},0);}
+function totalNew(list){var v=list.reduce(function(s,x){return s+x.debt;},0);return v<0?0:v;}
+var mixed=[{debt:4182653},{debt:-5000}];
+t('по-старому выплата не уменьшала общий долг', totalOld(mixed)===4182653);
+t('по-новому уменьшает', totalNew(mixed)===4177653, totalNew(mixed));
+t('общий долг не уходит в минус', totalNew([{debt:-5000}])===0);
+t('переплата одному гасит долг другому',
+  totalNew([{debt:100000},{debt:-30000}])===70000);
+
+// ── Записи на выплату сами по себе долг НЕ трогают ──────────────────
+// Правило владельца: «записи не влияют на долг, если не было выплаты».
+var save=grab('_savePaymentLocked');
+t('создание записи не пишет в книгу долгов',
+  save.indexOf('_payDebtLedger')<0 && save.indexOf('SH_DEBTS')<0);
+t('создание записи не создаёт расход', save.indexOf('saveQuickEntry')<0);
+t('долг считается только по листу ДОЛГИ',
+  grab('getDebts').indexOf('SH_PAYMENTS')<0);
+t('сводка поставщиков тоже только по ДОЛГАМ',
+  grab('getSupplierAnalytics').indexOf('SH_PAYMENTS')<0);
+t('общий долг считается чистой суммой',
+  /return s\+x\.debt;/.test(code) && !/Math\.max\(x\.debt,0\)/.test(code));
+
 // ── Проверки в самом приложении ─────────────────────────────────────
 t('оплата записи гасит долг',
   /_payDebtLedger\(ss, id, String\(rowData\[PY_NAME-1\]\|\|''\), payAmt/.test(code));

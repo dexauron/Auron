@@ -3863,7 +3863,16 @@ function getAnalytics(p) {
     });
     var heatmap=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(function(d,i){return{dow:i+1,label:d,amount:Math.round(hm[i])};});
     var totalDebt=0;
-    try{getDebts({ssId:ssId}).forEach(function(d){if(d.debt>0)totalDebt+=d.debt;});}catch(e){}
+    // Долг считаем ЧИСТОЙ суммой, а не только должников.
+    //
+    // Правило владельца: долг общий, «какого бы поставщика я ни выбрал,
+    // списывается с общего долга». Раньше переплаченные поставщики
+    // отбрасывались (брались только те, у кого долг больше нуля) — и
+    // выплата тому, за кем долга не числилось, общий долг не двигала.
+    // Владелец это и увидел: «выплачиваю, а с общего долга не
+    // списывается».
+    try{getDebts({ssId:ssId}).forEach(function(d){totalDebt+=d.debt;});}catch(e){}
+    if (totalDebt<0) totalDebt=0;
     var _res={income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
             timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt)};
     try { CacheService.getScriptCache().put(_ak, JSON.stringify(_res), 90); } catch(_e){}
@@ -4510,7 +4519,10 @@ function getSupplierAnalytics(p) {
               payRatio:m.totalBuy>0?Math.round(m.totalPay/m.totalBuy*100):0};
     }).sort(function(a,b){return b.totalBuy-a.totalBuy;});
     var totalBuy=list.reduce(function(s,x){return s+x.totalBuy;},0);
-    var totalDebt=list.reduce(function(s,x){return s+Math.max(x.debt,0);},0);
+    // Чистая сумма: переплата одному гасит долг другому. Долг у
+    // владельца общий, а не по каждому поставщику отдельно.
+    var totalDebt=list.reduce(function(s,x){return s+x.debt;},0);
+    if (totalDebt<0) totalDebt=0;
     var totalPay=list.reduce(function(s,x){return s+x.totalPay;},0);
     return {suppliers:list,totalBuy:Math.round(totalBuy),totalDebt:Math.round(totalDebt),totalPay:Math.round(totalPay)};
   } catch(e) { return {suppliers:[],totalBuy:0,totalDebt:0,totalPay:0}; }
