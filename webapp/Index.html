@@ -2543,12 +2543,12 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           <button class="rp-chip jf-chip" data-jf="income" onclick="App.jFilter('income')">Доходы</button>
           <button class="rp-chip jf-chip" data-jf="expense" onclick="App.jFilter('expense')">Расходы</button>
           <select id="jf-emp" onchange="App._jEmpFilter=this.value;App._jRender();" style="flex:1;min-width:0;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
-            <option value=""><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg> Все сотрудники</option>
+            <option value="">Все сотрудники</option>
           </select>
         </div>
         <div style="display:flex;gap:7px;margin-top:8px;align-items:center;">
           <select id="jf-period" onchange="App._jPeriod=this.value;App._jRender();" style="flex:1;min-width:0;padding:8px 10px;border-radius:11px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:12.5px;font-family:var(--font);">
-            <option value=""><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg> За всё время</option>
+            <option value="">За всё время</option>
             <option value="today">Сегодня</option>
             <option value="week">7 дней</option>
             <option value="month">30 дней</option>
@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.68.0';
+var APP_VERSION='4.69.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5111,7 +5111,10 @@ var App={
   // Табель переехал в свой раздел. Имена оставлены: на них ссылаются
   // кнопки в других местах приложения.
   openTimesheetView:function(){ App.closeModal();App.setTab('timesheet',null); },
-  closeTimesheetView:function(){ App.setTab('suppliers',null); },
+  // Табель теперь свой раздел, «закрывать» внутри Поставщиков нечего.
+  // Раньше здесь стоял переход в Поставщики, а loadSuppliers зовёт эту
+  // функцию — получался бесконечный круг и приложение зависало.
+  closeTimesheetView:function(){},
   // Переключение вкладок раздела. Заказы и справочник грузим лениво:
   // при первом открытии, а не при каждом заходе в «Поставщиков».
   setSuppTab:function(tab,btn){
@@ -5153,7 +5156,6 @@ var App={
 
   loadSuppliers:function(){
     if(!App.s.ssId)return;
-    App.closeTimesheetView();
     App._loadCashForecast();
     Promise.all([
       gs('getPayments',{ssId:App.s.ssId}),
@@ -7211,14 +7213,18 @@ var App={
     App.haptic(6);App._jRender();
   },
   _jRender:function(){
-    var f=App._jFilter||'all';var all=App._jTxAll||[];
+    var f=App._jFilter||'all';
+    // Сервер может вернуть объект с ошибкой вместо списка — тогда
+    // forEach падал и экран «Журнал» переставал рисоваться.
+    var all=Array.isArray(App._jTxAll)?App._jTxAll:[];
     // Наполняем фильтр по сотрудникам из реальных данных
     var sel=document.getElementById('jf-emp');
     if(sel){
       var emps={};all.forEach(function(t){if(t.employee)emps[t.employee]=1;});
       var names=Object.keys(emps).sort();
       var cur=App._jEmpFilter||'';
-      sel.innerHTML='<option value=""><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg> Все сотрудники</option>'+names.map(function(n){
+      // В <option> разметка не работает — значок печатался бы как код.
+      sel.innerHTML='<option value="">Все сотрудники</option>'+names.map(function(n){
         return '<option'+(n===cur?' selected':'')+'>'+App._e(n)+'</option>';}).join('');
     }
     var list=f==='all'?all:all.filter(function(t){
