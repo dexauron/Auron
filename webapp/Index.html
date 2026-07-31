@@ -1082,6 +1082,11 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   font-variant-numeric:tabular-nums;}
 .dds-note{font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:8px;}
 .dds-ok{color:var(--pos);} .dds-bad{color:var(--neg);} .dds-warn{color:var(--warn,#FF9F0A);}
+/* Правило .dds-row b (класс + тег) сильнее одиночного класса, поэтому без
+   этих трёх строк красное и зелёное на цифрах не срабатывало вовсе. */
+.dds-row b.dds-ok,.ddm td.dds-ok{color:var(--pos);}
+.dds-row b.dds-bad,.ddm td.dds-bad{color:var(--neg);}
+.dds-row b.dds-warn,.ddm td.dds-warn{color:var(--warn,#FF9F0A);}
 /* Месяц по дням: таблица прокручивается вбок, а не ломает страницу */
 .ddm-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);
   border-radius:16px;background:var(--surface);}
@@ -2305,6 +2310,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <div id="an-month-label" style="display:none;text-align:center;font-size:12.5px;font-weight:700;color:var(--brand);margin:8px 0 6px;"></div>
       <div class="an-tabs" style="margin-top:12px;">
         <button class="an-tab active" onclick="App.setAnTab('pl',this)">Деньги</button>
+        <button class="an-tab" data-need="finance" onclick="App.setAnTab('rec',this)">Сверка с 1С</button>
         <button class="an-tab" onclick="App.setAnTab('growth',this)">Динамика</button>
         <button class="an-tab" onclick="App.setAnTab('cats',this)">Категории</button>
         <button class="an-tab" onclick="App.setAnTab('cashiers',this)">Кассиры</button>
@@ -2315,6 +2321,14 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <button class="an-tab" onclick="App.setAnTab('heatmap',this)">Дни</button>
         <button class="an-tab" onclick="App.setAnTab('debts',this)">Долги</button>
         <button class="an-tab" onclick="App.setAnTab('budget',this)">План/Факт</button>
+      </div>
+      <div id="an-rec" class="an-panel" style="padding:0 16px;">
+        <div class="dds-head">
+          <button class="dds-nav" onclick="App.recShift(-1)" aria-label="Предыдущий месяц">‹</button>
+          <div id="rec-title" class="dds-date">—</div>
+          <button class="dds-nav" onclick="App.recShift(1)" aria-label="Следующий месяц">›</button>
+        </div>
+        <div id="rec-body" style="padding:8px 0 16px;">Загрузка…</div>
       </div>
       <div id="an-pl" class="an-panel active"></div>
       <div id="an-growth" class="an-panel"></div>
@@ -3205,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.63.0';
+var APP_VERSION='4.64.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4992,7 +5006,68 @@ var App={
     rd.readAsDataURL(f);
   },
 
+// ── Сверка с 1С: где смены расходятся с тем, что видит 1С ──
+  _recMonth:null,
+  recShift:function(n){
+    var p=(App._recMonth||App._ymd(new Date()).slice(0,7)).split('-');
+    var d=new Date(+p[0],+p[1]-1+n,1);
+    App._recMonth=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2);
+    App.loadReconcile();
+  },
+  loadReconcile:function(){
+    if(!App.s.ssId)return;
+    if(!App._recMonth)App._recMonth=App._ymd(new Date()).slice(0,7);
+    var M=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август',
+           'Сентябрь','Октябрь','Ноябрь','Декабрь'];
+    var pp=App._recMonth.split('-');
+    var t=document.getElementById('rec-title');
+    if(t)t.textContent=M[+pp[1]-1]+' '+pp[0];
+    var b=document.getElementById('rec-body');
+    if(b)b.innerHTML='<div class="skel" style="height:140px;border-radius:16px;"></div>';
+    gs('getReconcile',{ssId:App.s.ssId,month:App._recMonth},60000).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App._renderReconcile(r);
+    }).catch(function(e){
+      var x=document.getElementById('rec-body');
+      if(x)x.innerHTML='<div style="color:var(--neg);padding:8px 0;">'+App._e(App._friendlyErr(e))+'</div>';
+    });
+  },
+  _renderReconcile:function(r){
+    var b=document.getElementById('rec-body'); if(!b)return;
+    var n=function(v){return '₽ '+fmtFull(Math.round(v||0));};
+    if(!r.hasIC){
+      b.innerHTML='<div class="dds-card"><h4>Данных 1С за этот месяц нет</h4>'+
+        '<div class="dds-note" style="margin:0;">Чтобы сверить, загрузите отчёт '+
+        '<b>«Общие доходы и расходы»</b> из 1С за этот месяц: Касса → Загрузка → Отчёты 1С. '+
+        'После этого здесь появится, где смены расходятся с 1С.</div></div>';
+      return;
+    }
+    var h='<div class="dds-note" style="margin:0 0 12px;">Слева — что записано в сменах, '+
+      'справа — что показывает 1С за '+App._e(r.period||'')+'. Расхождение значит, что '+
+      'в дне что-то не внесли.</div>';
+    (r.pairs||[]).forEach(function(p){
+      var big=p.pct>=20&&Math.abs(p.diff)>1000;
+      h+='<div class="dds-card"><h4>'+App._e(p.label)+'</h4>'+
+        '<div class="dds-row"><span>В сменах</span><b>'+n(p.mine)+'</b></div>'+
+        '<div class="dds-row"><span>По 1С</span><b>'+n(p.ic)+'</b></div>'+
+        '<div class="dds-row total"><span>Разница</span><b class="'+
+        (big?'dds-bad':(Math.abs(p.diff)>1000?'dds-warn':'dds-ok'))+'">'+
+        (p.diff>0?'+':'')+n(p.diff)+(p.pct?' · '+p.pct+'%':'')+'</b></div>'+
+        (big&&p.hint?'<div class="dds-note">'+App._e(p.hint)+'</div>':'')+
+        '</div>';
+    });
+    var ex=r.extra||{};
+    if(ex.surplus){
+      h+='<div class="dds-card"><h4>Инвентаризация</h4>'+
+        '<div class="dds-row"><span>Найдено излишков</span><b class="dds-warn">'+n(ex.surplus)+'</b></div>'+
+        '<div class="dds-note">Столько товара нашлось сверх того, что числилось в учёте. '+
+        'Большая цифра означает, что приходы записывались неточно.</div></div>';
+    }
+    b.innerHTML=h;
+  },
+
   openActionMenu:function(){
+
 
 
 
@@ -6084,6 +6159,7 @@ var App={
     document.getElementById('an-'+tab).classList.add('active');
     if(tab==='budget')App.loadBudget();
     if(tab==='goods')App.loadGoodsAnalytics();
+    if(tab==='rec')App.loadReconcile();
   },
 
   loadGoodsAnalytics:function(){

@@ -2958,6 +2958,111 @@ function ddsImport(p) {
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: СВЕРКА С 1С
+//
+// Файл «Общие доходы и расходы» — это сводка регистра, а не операции по
+// дням. В лист операций он не переносится: его дело — показать, где то,
+// что посчитало приложение по сменам, расходится с тем, что видит 1С.
+// Расхождение = в дне что-то не записали.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Статьи регистра, которые нам интересны, → понятное имя.
+var INCEXP_ROWS = [
+  ['поступление товара',  'Приход товара'],
+  ['оплата долга',        'Оплата долга поставщикам'],
+  ['оплата сразу',        'Оплата сразу'],
+  ['оплата с кассы',      'Оплата с кассы'],
+  ['продажа товара',      'Продажа товара'],
+  ['списание',            'Списание товара'],
+  ['оприходывание излишков','Оприходование излишков'],
+  ['оприходование излишков','Оприходование излишков']
+];
+
+// Разбирает выгрузку регистра в набор итогов.
+function _incexpParse(rows) {
+  var out = { period:'', items:{} }, i, c;
+  for (i = 0; i < Math.min(10, rows.length); i++) {
+    for (c = 0; c < rows[i].length; c++) {
+      var t = String(rows[i][c]||'');
+      var m = t.match(/(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})/);
+      if (m) { out.period = m[1]+' — '+m[2];
+               out.month = m[1].slice(6)+'-'+m[1].slice(3,5); }
+    }
+  }
+  // Колонки прихода и расхода ищем по шапке, номера у 1С плавают.
+  var cIn = _xlsCol(rows,['приход'],12), cOut = _xlsCol(rows,['расход'],12);
+  if (cIn < 0 || cOut < 0) return out;
+  for (i = 0; i < rows.length; i++) {
+    var raw = String(rows[i][0]||'');
+    var name = raw.trim().toLowerCase().replace(/ё/g,'е');
+    if (!name) continue;
+    // Берём только статьи верхнего уровня: у вложенных есть отступ слева.
+    if (raw.length - raw.replace(/^\s+/,'').length > 0) continue;
+    for (var k = 0; k < INCEXP_ROWS.length; k++) {
+      // ТОЧНОЕ совпадение, а не «начинается с». Иначе к итогу статьи
+      // «Списание» прибавлялись её же документы «Списание ПФ00000...»,
+      // и сумма выходила 941 822 вместо настоящих 848 735.
+      if (name !== INCEXP_ROWS[k][0]) continue;
+      var label = INCEXP_ROWS[k][1];
+      var cur = out.items[label] || { inc:0, exp:0 };
+      cur.inc += _xlsNum(rows[i][cIn]);
+      cur.exp += _xlsNum(rows[i][cOut]);
+      out.items[label] = cur;
+      break;
+    }
+  }
+  return out;
+}
+
+// Сохраняет итоги 1С за месяц в настройках — сверять будем потом.
+function _incexpSave(ss, data) {
+  if (!data || !data.month) return 0;
+  _setSetting(ss, 'IE_'+data.month, JSON.stringify(data));
+  return Object.keys(data.items||{}).length;
+}
+
+// Сверка: что посчитало приложение против того, что показывает 1С.
+function getReconcile(p) {
+  try {
+    var ssId = p && p.ssId;
+    if (!_permGuard(ssId,'finance')) return {__error:'Сверку смотрит владелец или бухгалтер'};
+    var ss = SpreadsheetApp.openById(ssId);
+    var ym = String((p && p.month)||'').slice(0,7);
+    if (!/^\d{4}-\d{2}$/.test(ym)) return {__error:'Неверный месяц'};
+
+    var raw = _getSettingStr(ss,'IE_'+ym,'');
+    var ie = null;
+    try { ie = raw ? JSON.parse(raw) : null; } catch(e) { ie = null; }
+
+    var mine = getMonthDDS({ssId:ssId, month:ym});
+    if (mine && mine.__error) return mine;
+    var t = (mine && mine.total) || {};
+
+    if (!ie) return { month:ym, hasIC:false, mine:t };
+
+    var it = ie.items || {};
+    var g = function(n,f){ return (it[n] && it[n][f]) || 0; };
+    var pairs = [
+      { label:'Списание товара',
+        mine: t.writeOff||0, ic: g('Списание товара','exp'),
+        hint:'Товар списан в 1С, но не отражён в сменах — это уходит незаметно.' },
+      { label:'Оплата долга поставщикам',
+        mine: t.payDebt||0,  ic: g('Оплата долга поставщикам','exp'), hint:'' },
+      { label:'Приход товара в долг',
+        mine: t.buyDebt||0,  ic: g('Приход товара','inc'), hint:'' }
+    ];
+    for (var i = 0; i < pairs.length; i++) {
+      pairs[i].diff = Math.round(pairs[i].mine - pairs[i].ic);
+      var base = Math.max(Math.abs(pairs[i].ic), Math.abs(pairs[i].mine), 1);
+      pairs[i].pct = Math.round(Math.abs(pairs[i].diff) / base * 100);
+    }
+    return { month:ym, hasIC:true, period:ie.period, mine:t, pairs:pairs,
+             extra:{ surplus:g('Оприходование излишков','inc'),
+                     sale:g('Продажа товара','inc') } };
+  } catch(e) { return {__error:e.message}; }
+}
+
 function getShifts(p) {
   var ssId=p.ssId, limit=parseInt(p.limit)||50;
   try {
@@ -6532,11 +6637,16 @@ function _xlsType(rows) {
   if (head.indexOf('остатки') >= 0)             return 'stock';
   if (head.indexOf('продажи') >= 0)             return 'sales';
   if (head.indexOf('контрагенты') >= 0)         return 'contractors';
+  // Регистр «Общие доходы и расходы» — сводка, а не операции по дням.
+  // Нужен для сверки: что 1С видит против того, что записано в сменах.
+  if (head.indexOf('общиедоходыирасходы') >= 0 ||
+      head.indexOf('общие доходы и расходы') >= 0) return 'incexp';
   return '';
 }
 
 var XLS_TITLES = { price:'Прайс-лист', supplier:'Цены поставщиков',
-  stock:'Остатки номенклатуры', sales:'Продажи', contractors:'Контрагенты' };
+  stock:'Остатки номенклатуры', sales:'Продажи', contractors:'Контрагенты',
+  incexp:'Общие доходы и расходы' };
 
 // Ищет колонку по названию заголовка (в первых upto строках).
 function _xlsCol(rows, names, upto) {
@@ -6658,7 +6768,7 @@ function xlsPreview(p) {
     var head = sh0.getRange(1,1,Math.min(12,lastRow),lastCol).getValues();
     var type = _xlsType(head);
     if (!type) { _xlsDrop(tmp);
-      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты.'}; }
+      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты, Общие доходы и расходы.'}; }
     return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type], total:lastRow };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
@@ -6678,6 +6788,21 @@ function xlsApply(p) {
     var rows = SpreadsheetApp.openById(tmp).getSheets()[0].getDataRange().getValues();
     var type = _xlsType(rows);
     if (!type) { _xlsDrop(tmp); return {__error:'Не понял, что это за отчёт.'}; }
+    // «Общие доходы и расходы» — сводка регистра, а не список товаров.
+    // Её не раскладываем по товарам: сохраняем итоги для сверки.
+    if (type === 'incexp') {
+      var ie = _incexpParse(rows);
+      rows = null;
+      if (!ie.month) { _xlsDrop(tmp);
+        return {__error:'В файле не нашёлся период — не понял, за какой месяц данные.'}; }
+      var n = _incexpSave(ss, ie);
+      _xlsDrop(tmp);
+      _log(ss,'Импорт из 1С','Общие доходы и расходы за '+ie.month+': статей '+n);
+      return { ok:true, type:type, title:XLS_TITLES[type], upd:0, add:n,
+               month:ie.month, period:ie.period,
+               note:'Сохранено для сверки. В операции этот файл не переносится.' };
+    }
+
     var items = _xlsParse(rows, type);
     rows = null; // освобождаем память до записи
     if (!items.length) { _xlsDrop(tmp); return {__error:'В файле не нашлось строк с данными.'}; }
