@@ -5085,6 +5085,52 @@ function updatePayment(p) {
   return res;
 }
 
+// Выплата поставщику ГАСИТ ДОЛГ.
+//
+// Правило владельца: «оплата долга — это уменьшение долга поставщиков»,
+// и долг у него общий: какого поставщика ни выбери, сумма списывается с
+// общего. Раньше запись о выплате жила своей жизнью — уменьшала деньги,
+// но книги долгов не касалась, и «Общий долг» стоял на месте. Владелец
+// это и заметил: «когда я выплачиваю по записи, с общего долга сумма не
+// списывается».
+//
+// Счёт в строке долга ПУСТОЙ: расход по счёту уже создан отдельно, и
+// если поставить счёт сюда, деньги спишутся дважды.
+// Метка PAY:<id> в комментарии нужна, чтобы удалить строку вместе с
+// записью о выплате.
+function _payDebtLedger(ss, payId, payee, amount, comment) {
+  try {
+    var amt = Math.round(parseFloat(amount)||0);
+    if (!amt || amt <= 0) return false;
+    var sh = ss.getSheetByName(SH_DEBTS);
+    if (!sh) return false;
+    var row = [ Utilities.getUuid(), _s(payee||''), 'oplata', amt, new Date(), '',
+                'Оплата по записи'+(comment?' · '+_s(comment):'')+' · PAY:'+payId,
+                new Date(), '', '' ];
+    var r = sh.getLastRow()+1;
+    _ensureRows(sh, r, 1);
+    sh.getRange(r,1,1,D_COLS).setValues([row]);
+    sh.getRange(r,D_DATE).setNumberFormat('dd.mm.yyyy');
+    sh.getRange(r,D_AMT).setNumberFormat('#,##0');
+    return true;
+  } catch(e) { return false; }
+}
+
+// Убирает погашения, созданные записью о выплате (когда её удаляют или
+// возвращают в работу). Иначе долг остался бы заниженным навсегда.
+function _unpayDebtLedger(ss, payId) {
+  try {
+    var sh = ss.getSheetByName(SH_DEBTS);
+    if (!sh || sh.getLastRow() < 2) return 0;
+    var col = sh.getRange(2, D_CMT, sh.getLastRow()-1, 1).getValues();
+    var kill = [];
+    for (var i = 0; i < col.length; i++)
+      if (String(col[i][0]||'').indexOf('PAY:'+payId) >= 0) kill.push(i+2);
+    _killRows(sh, kill);
+    return kill.length;
+  } catch(e) { return 0; }
+}
+
 function _updatePaymentLocked(p) {
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
@@ -5115,13 +5161,20 @@ function _updatePaymentLocked(p) {
           type:'Расход',category:String(rowData[PY_CAT-1])||'Выплата поставщику',
           account:_s(d.account),amount:payAmt,comment:String(rowData[PY_NAME-1])+(d.comment?' — '+_s(d.comment):''),locked:false}});
       }
+      // ...и гасим долг на ту же сумму.
+      _payDebtLedger(ss, id, String(rowData[PY_NAME-1]||''), payAmt, d.comment);
     } else if (d.action==='postpone') {
       sh.getRange(rowNum,PY_STATUS).setValue('postponed');
       if (d.date) sh.getRange(rowNum,PY_DUE).setValue(new Date(d.date));
     } else if (d.action==='cancel') {
       sh.getRange(rowNum,PY_STATUS).setValue('cancelled');
+      // Запись отменили — погашение по ней снимаем, долг возвращается.
+      _unpayDebtLedger(ss, id);
     } else if (d.action==='restore') {
       sh.getRange(rowNum,PY_STATUS).setValue('open');
+      // Запись вернули в работу — значит и долг возвращаем.
+      _unpayDebtLedger(ss, id);
+      sh.getRange(rowNum,PY_PAID).setValue(0);
     }
     var _actMap={pay:'оплатил',postpone:'перенёс',cancel:'отменил',restore:'вернул'};
     _audit(ss,'payment',id,_actMap[d.action]||'изменил',String(rowData[PY_NAME-1]||''));
@@ -5167,6 +5220,11 @@ function _markPaymentPaidLocked(p) {
           type:'Расход',category:cat,account:account,amount:amt,comment:name}});
       }
     }
+    // Долг гасим независимо от того, выбран счёт или нет: деньги могли
+    // уйти мимо приложения, но поставщику мы больше не должны.
+    _unpayDebtLedger(ss, String(id));
+    _payDebtLedger(ss, String(id), String(rowData[PY_NAME-1]||''),
+                   parseFloat(rowData[PY_AMT-1])||0, '');
     try { _bustDash(ssId); } catch(e){}
     
     return {ok:true};
@@ -5200,7 +5258,15 @@ function _deletePaymentLocked(p) {
     if (!sh||sh.getLastRow()<2) return {__error:'not found'};
     var vs=sh.getRange(2,PY_ID,sh.getLastRow()-1,1).getValues();
     for (var i=vs.length-1;i>=0;i--) {
-      if (String(vs[i][0])===String(id)) { _audit(ss,'payment',String(id),'удалил',''); sh.deleteRow(i+2); return {ok:true}; }
+      if (String(vs[i][0])===String(id)) {
+        _audit(ss,'payment',String(id),'удалил','');
+        // Запись удалили — погашение по ней тоже, иначе долг остался бы
+        // заниженным навсегда.
+        _unpayDebtLedger(ss, String(id));
+        sh.deleteRow(i+2);
+        try { _bustDash(ssId); } catch(e){}
+        return {ok:true};
+      }
     }
     return {__error:'not found'};
   } catch(e) { return {__error:e.message}; }
