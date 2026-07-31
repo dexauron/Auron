@@ -1590,6 +1590,12 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   /* Строки-разделы (Настройки, Касса) — комфортная высота, не «простыни» */
   .settings-row{padding-top:13px;padding-bottom:13px;}
 
+  /* Переключатель периода: на телефоне кнопки делят ширину поровну
+     (flex:1), а на мониторе из-за этого разъезжались через весь экран.
+     Здесь они занимают столько, сколько нужно тексту. */
+  .period-bar{max-width:max-content;}
+  .period-bar .pill{flex:0 0 auto;padding-left:18px;padding-right:18px;}
+
   /* Экраны входа (приветствие, выбор магазина, новый магазин, знакомство)
      — это .screen, а не .panel, и ограничение ширины выше их не касалось:
      на мониторе поле «Телефон» растягивалось почти на 1900 точек, а кнопка
@@ -2209,7 +2215,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         </div>
         <div class="split-tile" onclick="App.openMetricDetail('expense')" style="cursor:pointer;">
           <div class="split-tile-k">
-            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--brand) 15%,transparent);color:var(--brand);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+            <div class="split-tile-ic" style="background:color-mix(in oklab,var(--neg) 15%,transparent);color:var(--neg);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg></div>
             Расход
           </div>
           <div class="split-tile-v num" id="split-expense">—</div>
@@ -3077,7 +3083,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.52.0';
+var APP_VERSION='4.54.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -9852,7 +9858,7 @@ var App={
                     :'<div style="margin-top:18px;font-size:14px;font-weight:700;">'+title+'</div>';
       return head+'<div style="margin-top:8px;background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
         rows.map(fmtRow).join('')+'</div>';};
-    var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
+    var rowHtml=function(left,right,rc){return'<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._eIco(left)+'</span><span style="font-weight:700;color:'+(rc||'var(--ink)')+';white-space:nowrap;">'+right+'</span></div>';};
     var h='';
     // Auron-советник: карта экономии (заполняется отдельным запросом)
     h+='<div id="goods-savings-card"></div>';
@@ -10874,7 +10880,24 @@ var App={
     el.innerHTML='<div style="padding:0 16px;margin-bottom:14px;"><div '+(tap?'onclick="'+tap+'" style="cursor:pointer;':'style="')+'background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:15px;box-shadow:var(--shadow-card);">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><span style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;">'+title+'</span>'+(tap?'<span style="color:var(--brand);font-size:13px;font-weight:700;">›</span>':'')+'</div>'+inner+'</div></div>';
   },
-  _wRow:function(l,r,c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);">'+App._e(l)+'</span><span style="font-weight:700;white-space:nowrap;'+(c?'color:'+c+';':'')+'">'+r+'</span></div>';},
+  // Подпись строки экранируется целиком — иначе название товара из 1С
+  // могло бы протащить в страницу чужую разметку. Из-за этого наши
+  // собственные значки печатались кодом прямо на экране (виджет «Что
+  // заканчивается», 4.51.0). Пропускаем ТОЛЬКО наш значок и только если
+  // он в точности такой, каким мы его рисуем: разрешён только список
+  // атрибутов ниже. Первая версия принимала любой атрибут — через это
+  // прошёл бы onload. Поймал собственный тест, до отправки.
+  // Фиксированный набор
+  // атрибутов, внутри одни фигуры, никаких обработчиков событий.
+  // Всё остальное, включая любой другой тег, экранируется как раньше.
+  _EI:/^<svg class="ei" width="\d{1,2}" height="\d{1,2}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1\.9" stroke-linecap="round" stroke-linejoin="round">(?:<(?:circle|path|rect)(?: (?:cx|cy|rx|ry|r|d|x|y|width|height|fill|stroke-width|stroke-linecap|stroke-linejoin|stroke|opacity|transform|points)="[^"<>]*")*\s*\/>)+<\/svg>/,
+  _eIco:function(v){
+    var t=String(v==null?'':v);
+    var m=App._EI.exec(t);
+    if(!m) return App._e(t);
+    return m[0]+App._e(t.slice(m[0].length));
+  },
+  _wRow:function(l,r,c){return '<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:12.5px;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink-2);">'+App._eIco(l)+'</span><span style="font-weight:700;white-space:nowrap;'+(c?'color:'+c+';':'')+'">'+r+'</span></div>';},
   // Один запрос аналитики товаров на все товарные виджеты за рендер
   _ensureGoods:function(cb){
     if(App._homeGoods){cb(App._homeGoods);return;}
