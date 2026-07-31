@@ -2959,6 +2959,11 @@ var DDS_DEBT_REP = 'Поставщики (из отчёта)';
 // расчёт мы ведём по движениям, но без стартовой суммы месяц начинался
 // бы с нуля, и вместо 4 182 653 ₽ на конец июля приложение показало бы
 // 1 073 470 ₽ — ошибку ровно в тот долг, что был до первого числа.
+//
+// Владелец подсказал, где она лежит: в СКРЫТОЙ строке под шапкой, до
+// первой даты (у него это 3 109 183 = 2 854 749 + 254 434). Скрытые
+// строки и столбцы Таблицы отдают наравне с обычными, так что читаются
+// они без хитростей — надо было просто знать, что туда смотреть.
 var DDS_DEBT_LEFT_COL = 'долг поставщик';
 
 // Ищет лист по части имени (без учёта регистра и лишних пробелов).
@@ -3010,6 +3015,16 @@ function _ddsSheetToOps(sh, map, tag) {
   }
   if (!cols.length && !dcols.length) return { rows: out, debts: debts, months: months, debtStart: debtStart };
 
+  // Начальный долг из скрытых строк между шапкой и первой датой.
+  var openDebt = 0;
+  if (leftCol >= 0) {
+    for (var p0 = hRow+1; p0 < vals.length; p0++) {
+      if (_ddsDateKey(vals[p0][0])) break;        // пошли дни — хватит
+      var od = _xlsNum(vals[p0][leftCol]);
+      if (od) openDebt = Math.round(od);
+    }
+  }
+
   for (var i = hRow+1; i < vals.length; i++) {
     var ds = _ddsDateKey(vals[i][0]);
     if (!ds) continue;
@@ -3040,8 +3055,14 @@ function _ddsSheetToOps(sh, map, tag) {
     // остаток: «долг на конец дня» минус то, что за день набежало.
     var ym = ds.slice(0,7);
     if (leftCol >= 0 && debtStart[ym] === undefined) {
-      var left = _xlsNum(vals[i][leftCol]);
-      if (left) debtStart[ym] = Math.round(left - up + down);
+      // Сначала — записанный остаток из скрытой строки. Если его нет,
+      // отматываем назад от остатка первого дня. Оба пути на июле
+      // владельца дают одно и то же: 3 109 183 ₽.
+      if (openDebt) { debtStart[ym] = openDebt; openDebt = 0; }
+      else {
+        var left = _xlsNum(vals[i][leftCol]);
+        if (left) debtStart[ym] = Math.round(left - up + down);
+      }
     }
   }
   return { rows: out, debts: debts, months: months, debtStart: debtStart };
