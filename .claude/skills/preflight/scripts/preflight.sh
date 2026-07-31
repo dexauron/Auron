@@ -12,15 +12,24 @@ say()  { printf '%s\n' "$*"; }
 bad()  { printf '  ✗ %s\n' "$*"; FAIL=1; }
 good() { printf '  ✓ %s\n' "$*"; }
 
-changed() { git diff --name-only HEAD -- "$1" | grep -q . \
-         || git diff --cached --name-only -- "$1" | grep -q .; }
-
-# Файл, записанный в ту же секунду, что и предыдущая проверка, git может
-# счесть неизменённым (он сравнивает время из индекса). Из-за этого проверка
-# один раз соврала: сказала «версия не поднята», хотя она была поднята.
-# Ложная тревога не опасна, а вот ложное «всё хорошо» опасно — поэтому
-# заставляем git перечитать состояние файлов перед сравнением.
-git update-index -q --really-refresh >/dev/null 2>&1 || true
+# ВАЖНО, почему здесь нигде нет конструкции `git diff ... | grep -q`.
+# `grep -q` закрывает чтение на первом совпадении, git получает обрыв канала
+# и завершается с ошибкой, а `set -o pipefail` считает упавшим весь конвейер.
+# На маленьком изменении git успевал дописать вывод и проверка проходила,
+# на большом — нет. Из-за этого скрипт дважды соврал «версия не поднята» на
+# поднятой версии, и я сперва списал это на другое.
+# Поэтому вывод сначала кладём в переменную, а ищем уже в ней, без конвейера.
+changed() {
+  local a b
+  a=$(git diff --name-only HEAD -- "$1" 2>/dev/null || true)
+  b=$(git diff --cached --name-only -- "$1" 2>/dev/null || true)
+  [ -n "$a$b" ]
+}
+has_added() {   # has_added <файл> <что искать в добавленных строках>
+  local d
+  d=$(git diff HEAD -- "$1" 2>/dev/null || true)
+  grep -q "^+.*$2" <<< "$d"
+}
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
@@ -54,7 +63,7 @@ for pair in "webapp/Index.html|APP_VERSION" "app/index.html|APP_VERSION" "app/sw
   f="${pair%%|*}"; key="${pair##*|}"
   [ -f "$f" ] || continue
   if changed "$f"; then
-    if git diff HEAD -- "$f" | grep -q "^+.*$key"; then good "$f — $key поднят"
+    if has_added "$f" "$key"; then good "$f — $key поднят"
     else bad "$f изменён, но $key не поднят"; fi
   fi
 done
@@ -63,7 +72,8 @@ done
 # ── 4. Мусор, который нельзя пушить ─────────────────────────────────────
 say "4. Отладочный мусор в изменениях"
 for pat in 'console\.log' 'debugger' 'TODO:REMOVE' 'XXX'; do
-  hits=$(git diff HEAD -- webapp app 2>/dev/null | grep -c "^+.*$pat" || true)
+  d=$(git diff HEAD -- webapp app 2>/dev/null || true)
+  hits=$(grep -c "^+.*$pat" <<< "$d" || true)
   [ "${hits:-0}" -gt 0 ] && bad "$pat — $hits шт. в добавленных строках"
 done
 [ "$FAIL" -eq 0 ] && good "чисто"
