@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.67.0';
+var APP_VERSION='4.68.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5018,7 +5018,15 @@ var App={
           '</div>');
         App.toast('Отчёт загружен ✓');
         App._ddsMonth=(r.months&&r.months.length)?r.months[r.months.length-1]:App._ddsMonth;
-        App._cacheClear&&App._cacheClear();
+        // Сбрасываем локальный кэш: без этого владелец загрузит отчёт
+        // и увидит прежние цифры. Функции _cacheClear в приложении нет —
+        // чистим ключи напрямую тем же префиксом, что кладёт _cacheSet.
+        try{
+          var pref='ac_'+(App.s.ssId||'')+'_';
+          Object.keys(localStorage).forEach(function(k){
+            if(k.indexOf(pref)===0)localStorage.removeItem(k);
+          });
+        }catch(e){}
       }).catch(function(e){
         say('<div style="color:var(--neg);line-height:1.5;">'+App._e(App._friendlyErr(e))+'</div>');
       });

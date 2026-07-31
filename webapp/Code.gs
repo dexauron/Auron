@@ -253,6 +253,14 @@ function deleteOrg(p) {
       if (String(data[i][2]) === ssId) {
         orgsSh.deleteRow(i + 1);
         if (p.trash) {
+          // Удалить строку из СВОЕГО списка организаций может каждый —
+          // это его личный профиль. А отправить таблицу магазина в
+          // корзину — только владелец: иначе любой сотрудник, у которого
+          // есть доступ к таблице, унёс бы её вместе со всеми деньгами.
+          var okOwner = false;
+          try { okOwner = _isOwner(SpreadsheetApp.openById(ssId)); } catch(eo) { okOwner = false; }
+          if (!okOwner) return { ok: true, removedFromList: true,
+            note: 'Магазин убран из вашего списка. Саму таблицу удалить может только владелец.' };
           try { DriveApp.getFileById(ssId).setTrashed(true); } catch(e2) {}
         }
         return { ok: true };
@@ -6056,6 +6064,9 @@ function fillTimesheetMonth(p) {
   var timeIn=_s(p.timeIn||''),timeOut=_s(p.timeOut||'');
   var hours=parseFloat(p.hours)||0,rate=parseFloat(p.rate)||0;
   if (!emp) return {__error:'Выберите сотрудника'};
+  // Табель — рабочее время и деньги сотрудников. Без этой проверки любой
+  // сотрудник зала мог заполнить график себе сам.
+  if (!_permGuard(ssId,'manage')) return {__error:'Заполнять табель может владелец или администратор'};
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
     var filled={};
@@ -6487,6 +6498,10 @@ function getNotifications(p) {
 function cloneOrgSettings(p) {
   return _withLock(function(){
   var src=p.srcSsId, dst=p.dstSsId;
+  // Копирование пишет настройки и справочник в ДРУГУЮ таблицу. Права
+  // нужны на обе: иначе можно было залить своё в чужой магазин.
+  if (!_permGuard(src,'manage')) return {__error:'Нет прав на исходный магазин'};
+  if (!_permGuard(dst,'manage')) return {__error:'Нет прав на магазин-получатель'};
   try {
     var st=getSettings({ssId:src});
     saveSettings({ssId:dst,data:st});
