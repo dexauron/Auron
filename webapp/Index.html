@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.77.0';
+var APP_VERSION='4.78.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -10038,7 +10038,10 @@ var App={
     var cur=q[i];
     var st=document.getElementById('xq-'+i);
     if(st)st.innerHTML='<b style="color:var(--brand);">Загружаю…</b>';
-    gs('xlsApply',{ssId:App.s.ssId,tmpId:cur.tmpId},330000).then(function(r){
+    // Передаём тип, который определила проверка. Раньше загрузка
+    // опознавала файл заново, и на отчёте владельца два опознания
+    // разошлись: проверка сказала «Ваш отчёт», загрузка — «не понял».
+    gs('xlsApply',{ssId:App.s.ssId,tmpId:cur.tmpId,type:cur.type},330000).then(function(r){
       if(!r||r.__error){
         App._xlsDone.push({title:cur.title,upd:0,add:0,err:(r&&r.__error)||'ошибка'});
         if(st)st.innerHTML='<span style="color:var(--expense);">Не удалось</span>';

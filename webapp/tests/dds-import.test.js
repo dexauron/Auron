@@ -174,7 +174,7 @@ t('разбор вынесен в общую функцию', /function _ddsImpo
 t('окно «Касса» зовёт общую функцию',
   /_ddsImportOpened\(ss, SpreadsheetApp\.openById\(tmp\)\)/.test(code));
 t('окно «Импорт из 1С» зовёт ту же функцию',
-  /if \(_ddsIsOwnFile\(wbTmp\)\) \{/.test(code) &&
+  /_ddsIsOwnFile\(wbTmp\)\) \{/.test(code) &&
   /_ddsImportOpened\(ss, wbTmp\)/.test(code));
 t('в окне 1С свой отчёт тоже требует права финансов',
   /_ddsIsOwnFile\(wbTmp\)[\s\S]{0,220}_permGuard\(p\.ssId,'finance'\)/.test(code));
@@ -183,6 +183,19 @@ t('временный файл удаляется на обоих путях',
 // Опознание не должно ломать прежние отчёты 1С.
 t('свой отчёт проверяется ПОСЛЕ обычного опознания',
   /if \(!type && _ddsIsOwnFile\(/.test(code));
+
+// Проверка и загрузка опознавали файл ДВАЖДЫ и разошлись: проверка
+// сказала «Ваш отчёт», загрузка — «не понял, что это за отчёт».
+// Теперь загрузка берёт тип из проверки, а опознание — запасной путь.
+t('загрузка берёт тип из проверки', /p\.type === 'own' \|\| _ddsIsOwnFile\(wbTmp\)/.test(code));
+t('тип с экрана проверяется по списку известных',
+  /if \(p\.type && !XLS_TITLES\[p\.type\]\) p\.type = '';/.test(code));
+t('в списке известных есть свой отчёт', /own:'Ваш отчёт \(ДДС и Оплата\)'/.test(code));
+t('экран передаёт тип на сервер',
+  /gs\('xlsApply',\{ssId:App\.s\.ssId,tmpId:cur\.tmpId,type:cur\.type\}/
+    .test(require('fs').readFileSync(__dirname+'/../Index.html','utf8')));
+t('непонятный файл называет свои листы',
+  /Листы в файле: '\+names/.test(code));
 
 console.log('\nЗагрузка отчёта владельца: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);
