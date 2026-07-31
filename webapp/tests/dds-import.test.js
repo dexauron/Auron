@@ -1,0 +1,88 @@
+// Загрузка собственного отчёта владельца (листы ДДС и ОПЛАТА).
+// Числа — настоящие, из его файла за июль 2026. Главное, что проверяем:
+// повторная загрузка не удваивает суммы, и лист ОПЛАТА не складывается
+// с ДДС за один и тот же месяц — там одни и те же деньги.
+var fs=require('fs'), path=require('path');
+var code=fs.readFileSync(path.join(__dirname,'..','Code.gs'),'utf8');
+var ok=0,fail=0;
+function t(n,c,x){if(c){ok++;console.log('  ✓ '+n);}else{fail++;console.log('  ✗ '+n+(x?' → '+x:''));}}
+
+// Берём настоящие функции и таблицы соответствия из приложения.
+function grab(n){var i=code.indexOf('function '+n+'(');if(i<0)throw new Error('нет '+n);
+  var d=0,j=code.indexOf('{',i);
+  for(var k=j;k<code.length;k++){if(code[k]==='{')d++;else if(code[k]==='}'){d--;if(!d){j=k+1;break;}}}
+  return code.slice(i,j);}
+function grabVar(n){var i=code.indexOf('var '+n+' = [');var j=code.indexOf('\n];',i);
+  return code.slice(i,j+3);}
+global.Utilities={getUuid:function(){return 'u';},
+  formatDate:function(d){return d.toISOString().slice(0,10);}};
+eval(grabVar('DDS_COLS')); eval(grabVar('OPL_COLS'));
+eval(grab('_xlsNum')); eval(grab('_ddsDateKey')); eval(grab('_ddsSheetToOps'));
+var B_ZREF=11;
+
+function sheet(v){return {getLastRow:function(){return v.length;},
+  getLastColumn:function(){return v[0].length;},
+  getRange:function(){return {getValues:function(){return v;}};}};}
+
+// ── Дата понимается в разных видах ───────────────────────────────────
+t('дата как объект', _ddsDateKey(new Date('2026-07-01T12:00:00'))==='2026-07-01');
+t('дата 01.07.2026', _ddsDateKey('01.07.2026')==='2026-07-01');
+t('дата 2026-07-01', _ddsDateKey('2026-07-01')==='2026-07-01');
+t('мусор вместо даты — строка пропускается', _ddsDateKey('итого')==='');
+
+// ── Разбор листа ДДС на настоящих числах владельца ───────────────────
+var head=['Дата','Смена','Наличная Торголвя','Выплата Кассы','Онлайн Торговля','Перевод',
+          'Иман','Расхождение Кассы','Наличка','на закуп','Закуп за наличку офисом',
+          'Выплата долга офисом','Закуп товаров долг','СПИСАНИЕ ПРОДУКТА','КОМИССИЯ БАНКА',
+          'ОБЕД','ГСМ','РАСХОДНИКИ'];
+var d1=new Date('2026-07-01T12:00:00'), d2=new Date('2026-08-01T12:00:00');
+var ddsRows=[head,
+  [d1,'День',136232,0,73068,0,3334,0,132898,225899,43205,168323,336102,75,3116,1381,0,12368],
+  [d1,'Ночь', 97545,0,60953,0,0,   0, 97545,0,0,0,0,0,0,0,0,0]];
+var r=_ddsSheetToOps(sheet(ddsRows), DDS_COLS, 'DDS');
+function sum(rows,cat){var s=0;rows.forEach(function(x){if(x[4]===cat)s+=x[5];});return s;}
+t('выручка наличными за сутки 233 777', sum(r.rows,'Выручка наличными')===136232+97545,
+  sum(r.rows,'Выручка наличными'));
+t('выручка безналом 134 021', sum(r.rows,'Выручка безналичными')===73068+60953);
+t('Иман 3 334', sum(r.rows,'Иман')===3334);
+t('закуп в долг 336 102', sum(r.rows,'Закуп товара в долг')===336102);
+t('расчётные колонки НЕ переносятся (наличка, на закуп)',
+  sum(r.rows,'Наличка')===0 && sum(r.rows,'на закуп')===0);
+t('нули не создают пустых операций', r.rows.every(function(x){return x[5]>0;}));
+t('месяц определён', r.months['2026-07']===true);
+t('источник помечен для замены', r.rows[0][B_ZREF-1]==='DDS:2026-07');
+t('смена сохраняется', r.rows[0][12]==='День');
+
+// ── Лист ОПЛАТА ──────────────────────────────────────────────────────
+var oHead=['Дата','Оплата за наличку','Оплата Долга','Закуп в долг','Зарплата','Прочие Расходы'];
+var oplRows=[oHead,
+  [d1, 360, 600, 24381, 10500, 3500],
+  [d2, 1000, 2000, 5000, 0, 0]];       // август — другого месяца нет в ДДС
+var o=_ddsSheetToOps(sheet(oplRows), OPL_COLS, 'OPL');
+t('оплата наличными разобрана', sum(o.rows,'Оплата поставщику наличными')===1360);
+t('погашение долга разобрано', sum(o.rows,'Погашение долга поставщику')===2600);
+t('два месяца увидены', o.months['2026-07']&&o.months['2026-08']);
+
+// ── Защита от двойного счёта: ОПЛАТА за месяц, который есть в ДДС ────
+// Повторяем ту же логику, что в ddsImport, и проверяем результат.
+var ddsMonths=r.months, keep=[], skipped=[];
+o.rows.forEach(function(row){
+  var m=String(row[B_ZREF-1]||'').split(':')[1]||'';
+  if(ddsMonths[m]){ if(skipped.indexOf(m)<0)skipped.push(m); return; }
+  keep.push(row);
+});
+t('июль из ОПЛАТЫ пропущен (он уже в ДДС)', skipped.indexOf('2026-07')>=0, skipped.join(','));
+t('август из ОПЛАТЫ оставлен (в ДДС его нет)',
+  keep.some(function(x){return String(x[B_ZREF-1]).indexOf('2026-08')>0;}));
+t('в оставшемся нет июльских строк',
+  keep.every(function(x){return String(x[B_ZREF-1]).indexOf('2026-07')<0;}));
+
+// ── Защита стоит в самом приложении, а не только в тесте ────────────
+t('в коде есть пропуск месяцев-дублей', /if \(a\.months\[mm\]\)/.test(code));
+t('замена прежних строк по метке источника', /_ddsWipe/.test(code));
+t('строки удаляются снизу вверх', /kill\.length-1; j >= 0; j--/.test(code));
+t('запись одним куском, а не построчно', /setValues\(all\)/.test(code));
+t('загрузка только с правом финансов', /_permGuard\(ssId,'finance'\)/.test(code));
+
+console.log('\nЗагрузка отчёта владельца: '+ok+' passed, '+fail+' failed');
+process.exit(fail?1:0);

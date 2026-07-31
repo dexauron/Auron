@@ -2343,6 +2343,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <button class="supp-tab active" data-kt="hub" onclick="App.setKassaTab('hub',this)">Смена</button>
         <button class="supp-tab" data-kt="day" onclick="App.setKassaTab('day',this)">День</button>
         <button class="supp-tab" data-kt="month" onclick="App.setKassaTab('month',this)">Месяц</button>
+        <button class="supp-tab" data-kt="load" data-need="finance" onclick="App.setKassaTab('load',this)">Загрузка</button>
       </div>
 
       <!-- ИТОГ ДНЯ -->
@@ -2363,6 +2364,30 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           <button class="dds-nav" onclick="App.ddsMonthShift(1)" aria-label="Следующий месяц">›</button>
         </div>
         <div id="ddm-body" style="padding:14px 0;">Загрузка…</div>
+      </div>
+
+      <!-- ЗАГРУЗКА ФАЙЛОВ -->
+      <div id="k-load" class="kassa-wrap" style="display:none;">
+        <div class="dds-card" style="margin-top:14px;">
+          <h4>Мой отчёт (листы ДДС и Оплата)</h4>
+          <div class="dds-note" style="margin:0 0 12px;">Таблица, которую вы ведёте сами.
+            Строки станут операциями. Повторная загрузка того же месяца
+            <b>заменит</b> прежние строки, а не добавит вторые.</div>
+          <input type="file" id="dds-file" accept=".xlsx,.xls" style="display:none;"
+                 onchange="App.ddsUpload(this)">
+          <button class="btn-primary" style="width:100%;" onclick="document.getElementById('dds-file').click()">
+            Выбрать файл отчёта</button>
+          <div id="dds-up-log" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="dds-card">
+          <h4>Выгрузки из 1С</h4>
+          <div class="dds-note" style="margin:0 0 12px;">Прайс-лист, цены поставщиков,
+            остатки, продажи, контрагенты. Можно выбрать несколько файлов сразу —
+            товары обновятся, новые добавятся.</div>
+          <button class="btn-secondary" style="width:100%;" onclick="App.openImport&&App.openImport()">
+            Загрузить отчёты 1С</button>
+        </div>
       </div>
 
       <!-- ХАБ: выбор действия -->
@@ -3180,7 +3205,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.62.0';
+var APP_VERSION='4.63.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4733,7 +4758,7 @@ var App={
   // Прибыль, долг поставщикам и «на закуп» — под правом «финансы».
   _ddsDate:null,
   setKassaTab:function(tab,btn){
-    var boxes={hub:'k-hub',day:'k-day',month:'k-month'};
+    var boxes={hub:'k-hub',day:'k-day',month:'k-month',load:'k-load'};
     Object.keys(boxes).forEach(function(k){
       var el=document.getElementById(boxes[k]); if(el)el.style.display=(k===tab)?'':'none';
     });
@@ -4929,7 +4954,46 @@ var App={
           t.classList.add('active');}
   },
 
+// ── Загрузка собственного отчёта владельца (листы ДДС и Оплата) ──
+  ddsUpload:function(input){
+    var f=input&&input.files&&input.files[0];
+    input.value='';                      // чтобы тот же файл можно было выбрать снова
+    if(!f)return;
+    var log=document.getElementById('dds-up-log');
+    var say=function(html){ if(log)log.innerHTML=html; };
+    if(f.size>12*1024*1024){ say('<div style="color:var(--neg);">Файл больше 12 МБ — Google его не откроет.</div>'); return; }
+    say('<div style="color:var(--muted);">Читаю файл…</div>');
+    var rd=new FileReader();
+    rd.onerror=function(){ say('<div style="color:var(--neg);">Не удалось прочитать файл.</div>'); };
+    rd.onload=function(){
+      var b64=String(rd.result).split(',')[1]||'';
+      say('<div style="color:var(--muted);">Загружаю. Это может занять до минуты…</div>');
+      gs('ddsImport',{ssId:App.s.ssId,data:b64,name:f.name},300000).then(function(r){
+        if(r&&r.__error)throw new Error(r.__error);
+        var mm=(r.months||[]).join(', ');
+        say('<div style="line-height:1.6;">'+
+          '<div class="dds-ok" style="font-weight:750;">Загружено ✓</div>'+
+          '<div style="font-size:12.5px;color:var(--ink-2);">Записей добавлено: <b>'+r.added+'</b>'+
+          (r.removed?', заменено прежних: <b>'+r.removed+'</b>':'')+'</div>'+
+          '<div style="font-size:12.5px;color:var(--muted);">Из листа ДДС: '+r.fromDDS+
+          ' · из листа Оплата: '+r.fromOPL+'</div>'+
+          (mm?'<div style="font-size:12.5px;color:var(--muted);">Месяцы: '+App._e(mm)+'</div>':'')+
+          ((r.skipped&&r.skipped.length)?'<div style="font-size:12px;color:var(--warn,#FF9F0A);line-height:1.5;margin-top:6px;">'+
+            'Лист «Оплата» за '+App._e(r.skipped.join(', '))+' пропущен: за эти месяцы те же деньги уже есть в листе ДДС. '+
+            'Иначе расходы удвоились бы.</div>':'')+
+          '</div>');
+        App.toast('Отчёт загружен ✓');
+        App._ddsMonth=(r.months&&r.months.length)?r.months[r.months.length-1]:App._ddsMonth;
+        App._cacheClear&&App._cacheClear();
+      }).catch(function(e){
+        say('<div style="color:var(--neg);line-height:1.5;">'+App._e(App._friendlyErr(e))+'</div>');
+      });
+    };
+    rd.readAsDataURL(f);
+  },
+
   openActionMenu:function(){
+
 
 
     if(App._fabLong){App._fabLong=false;return;} // было долгое нажатие — меню не открываем

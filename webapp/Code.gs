@@ -2778,6 +2778,186 @@ function getMonthDDS(p) {
   } catch(e) { return {__error:e.message}; }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: загрузка СВОЕГО файла владельца (листы «ДДС» и «ОПЛАТА»)
+//
+// Это не выгрузка из 1С, а таблица, которую владелец ведёт руками.
+// Строки превращаются в операции листа БАЗА.
+//
+// Главное правило: ПОВТОРНАЯ загрузка того же месяца НЕ должна удваивать
+// суммы. Поэтому каждая строка помечается источником в колонке Z_Ref
+// (например «DDS:2026-07»), и при загрузке строки с той же пометкой
+// сначала удаляются, а потом пишутся заново.
+// ═══════════════════════════════════════════════════════════════════════
+
+// Колонка листа → тип операции, категория, счёт.
+var DDS_COLS = [
+  ['наличная торг',   'Доход',  'Выручка наличными',        'Наличные'],
+  ['онлайн торг',     'Доход',  'Выручка безналичными',     'Карта'],
+  ['иман',            'Расход', 'Иман',                     'Наличные'],
+  ['выплата кассы',   'Расход', 'Выплата кассы',            'Наличные'],
+  ['перевод',         'Расход', 'Перевод',                  'Наличные'],
+  ['закуп за наличку','Расход', 'Закупка товара',           'Наличные'],
+  ['выплата долга',   'Расход', 'Выплата поставщику',       'Наличные'],
+  ['закуп товаров долг','Расход','Закуп товара в долг',     'Наличные'],
+  ['списание',        'Расход', 'Списание товара',          'Наличные'],
+  ['комиссия банка',  'Расход', 'Комиссия банка',           'Карта'],
+  ['обед',            'Расход', 'Питание сотрудников',      'Наличные'],
+  ['гсм',             'Расход', 'Топливо',                  'Наличные'],
+  ['расходник',       'Расход', 'Расходные материалы',      'Наличные'],
+  ['зарплата',        'Расход', 'Зарплата',                 'Наличные'],
+  ['аренда',          'Расход', 'Аренда',                   'Наличные'],
+  ['комунальн',       'Расход', 'Коммунальные услуги',      'Наличные'],
+  ['коммунальн',      'Расход', 'Коммунальные услуги',      'Наличные'],
+  ['налог',           'Расход', 'Налоги',                   'Карта']
+];
+var OPL_COLS = [
+  ['оплата за наличку','Расход','Оплата поставщику наличными','Наличные'],
+  ['оплата долга',    'Расход', 'Погашение долга поставщику','Наличные'],
+  ['закуп в долг',    'Расход', 'Закуп товара в долг',      'Наличные'],
+  ['зарплата',        'Расход', 'Зарплата',                 'Наличные'],
+  ['прочие расход',   'Расход', 'Прочие расходы',           'Наличные']
+];
+
+// Ищет лист по части имени (без учёта регистра и лишних пробелов).
+function _ddsFindSheet(ss, part) {
+  var sh = ss.getSheets();
+  for (var i = 0; i < sh.length; i++) {
+    var n = String(sh[i].getName()||'').toLowerCase().replace(/\s+/g,'');
+    if (n.indexOf(part) === 0) return sh[i];
+  }
+  return null;
+}
+
+function _ddsDateKey(v) {
+  if (v instanceof Date) return Utilities.formatDate(v,'Europe/Moscow','yyyy-MM-dd');
+  var s = String(v||'').trim();
+  var m = s.match(/^(\d{2})[.\/](\d{2})[.\/](\d{4})/);
+  if (m) return m[3]+'-'+m[2]+'-'+m[1];
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  return '';
+}
+
+// Превращает лист в операции. Возвращает {rows:[...], months:{...}}.
+function _ddsSheetToOps(sh, map, tag) {
+  var out = [], months = {};
+  if (!sh || sh.getLastRow() < 2) return { rows: out, months: months };
+  var vals = sh.getRange(1,1,sh.getLastRow(),sh.getLastColumn()).getValues();
+  // Шапка — первая строка, где есть слово «дата».
+  var hRow = -1;
+  for (var r = 0; r < Math.min(8, vals.length) && hRow < 0; r++)
+    for (var c = 0; c < vals[r].length; c++)
+      if (String(vals[r][c]||'').toLowerCase().trim().indexOf('дата') === 0) { hRow = r; break; }
+  if (hRow < 0) return { rows: out, months: months };
+
+  // Сопоставляем колонки по названиям, а не по номерам: если владелец
+  // добавит колонку, загрузка не поедет.
+  var cols = [];
+  for (var c2 = 0; c2 < vals[hRow].length; c2++) {
+    var h = String(vals[hRow][c2]||'').toLowerCase().replace(/ё/g,'е').trim();
+    if (!h) continue;
+    for (var m2 = 0; m2 < map.length; m2++)
+      if (h.indexOf(map[m2][0].replace(/ё/g,'е')) === 0) { cols.push([c2, map[m2]]); break; }
+  }
+  if (!cols.length) return { rows: out, months: months };
+
+  for (var i = hRow+1; i < vals.length; i++) {
+    var ds = _ddsDateKey(vals[i][0]);
+    if (!ds) continue;
+    months[ds.slice(0,7)] = true;
+    var shift = String(vals[i][1]||'').trim();
+    for (var k = 0; k < cols.length; k++) {
+      var amt = _xlsNum(vals[i][cols[k][0]]);
+      if (!amt) continue;
+      var spec = cols[k][1];
+      out.push([ '', Utilities.getUuid(), new Date(ds+'T12:00:00'), spec[1], spec[2],
+                 Math.round(Math.abs(amt)*100)/100, spec[3], '', 'Загружено из файла',
+                 '', tag+':'+ds.slice(0,7), '', shift ]);
+    }
+  }
+  return { rows: out, months: months };
+}
+
+// Удаляет ранее загруженные строки этого же источника и месяца.
+function _ddsWipe(ss, tags) {
+  var sh = ss.getSheetByName(SH_BASE);
+  if (!sh || sh.getLastRow() < 2) return 0;
+  var col = sh.getRange(2, B_ZREF, sh.getLastRow()-1, 1).getValues();
+  var kill = [];
+  for (var i = 0; i < col.length; i++)
+    if (tags[String(col[i][0]||'')]) kill.push(i+2);
+  // Удаляем снизу вверх — иначе номера строк уезжают.
+  for (var j = kill.length-1; j >= 0; j--) sh.deleteRow(kill[j]);
+  return kill.length;
+}
+
+// Загрузка собственного файла владельца. Возвращает, что именно сделано.
+function ddsImport(p) {
+  var tmp = '';
+  try {
+    var ssId = p && p.ssId;
+    if (!_permGuard(ssId,'finance')) return {__error:'Загружать отчёт может владелец или бухгалтер'};
+    var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    _xlsSweep();
+    tmp = _xlsToSheet(p.data, p.name);
+    if (!_xlsIsTmp(tmp)) { _xlsDrop(tmp); return {__error:'Файл не открылся'}; }
+    var wb = SpreadsheetApp.openById(tmp);
+
+    var shD = _ddsFindSheet(wb, 'ддс');
+    var shO = _ddsFindSheet(wb, 'оплата');
+    if (!shD && !shO) { _xlsDrop(tmp);
+      return {__error:'В файле нет листов «ДДС» или «ОПЛАТА». Проверьте, тот ли файл.'}; }
+
+    var a = shD ? _ddsSheetToOps(shD, DDS_COLS, 'DDS') : {rows:[],months:{}};
+    var b = shO ? _ddsSheetToOps(shO, OPL_COLS, 'OPL') : {rows:[],months:{}};
+
+    // ВАЖНО: за один и тот же месяц оба листа описывают ОДНИ И ТЕ ЖЕ деньги.
+    // Проверено сложением по июлю: оплата за наличку 2 025 759 против
+    // 2 008 477 в ДДС, оплата долга 7 496 332 против 7 503 590, закуп в
+    // долг 8 566 042 против 8 577 060. ОПЛАТА расписывает по приходам,
+    // ДДС сводит за день. Взять оба — удвоить расходы месяца.
+    // Поэтому за месяцы, которые есть в ДДС, лист ОПЛАТА пропускаем:
+    // в ДДС вдобавок лежит выручка, которой в ОПЛАТЕ нет вообще.
+    var skipped = [];
+    if (Object.keys(a.months).length && b.rows.length) {
+      var keep = [];
+      for (var q = 0; q < b.rows.length; q++) {
+        var mm = String(b.rows[q][B_ZREF-1]||'').split(':')[1] || '';
+        if (a.months[mm]) { if (skipped.indexOf(mm) < 0) skipped.push(mm); continue; }
+        keep.push(b.rows[q]);
+      }
+      b.rows = keep;
+      skipped.forEach(function(m){ delete b.months[m]; });
+    }
+
+    var all = a.rows.concat(b.rows);
+    if (!all.length) { _xlsDrop(tmp);
+      return {__error:'В листах нет строк с датами — загружать нечего.'}; }
+
+    // Метки для замены: месяц + источник.
+    var tags = {}, monthsList = [];
+    Object.keys(a.months).forEach(function(m){ tags['DDS:'+m]=true; monthsList.push(m); });
+    Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
+
+    var res = _withLock(function(){
+      var removed = _ddsWipe(ss, tags);
+      var base = ss.getSheetByName(SH_BASE);
+      var startId = base.getLastRow();
+      for (var i = 0; i < all.length; i++) all[i][0] = startId + i;
+      // Пишем одним куском: построчная запись 4 700 операций не влезет.
+      base.getRange(base.getLastRow()+1, 1, all.length, B_COLS).setValues(all);
+      return { removed: removed };
+    });
+
+    _xlsDrop(tmp);
+    _log(ss,'Загрузка отчёта', 'строк '+all.length+', заменено '+res.removed+
+         ', месяцы: '+monthsList.sort().join(', '));
+    return { ok:true, added: all.length, removed: res.removed,
+             months: monthsList.sort(), skipped: skipped.sort(),
+             fromDDS: a.rows.length, fromOPL: b.rows.length };
+  } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
+}
+
 function getShifts(p) {
   var ssId=p.ssId, limit=parseInt(p.limit)||50;
   try {
