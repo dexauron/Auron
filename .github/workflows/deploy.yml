@@ -27,12 +27,37 @@ jobs:
           ref: claude/store-product-catalog-60wer4
           path: catalog-src
 
+      # Страница сканера живёт в рабочей ветке claude/cool-archimedes-qv458l.
+      # Забираем её сюда, иначе публикация с force_orphan сотрёт её с сайта.
+      - name: Checkout scanner branch
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: claude/cool-archimedes-qv458l
+          path: scan-src
+
       - name: Add catalog app
         run: |
           rm -rf app/catalog
           mkdir -p app/catalog
           cp -r catalog-src/catalog/. app/catalog/
           rm -rf app/catalog/setup
+
+      - name: Add scanner page
+        run: |
+          if [ -f scan-src/app/scan.html ]; then
+            cp scan-src/app/scan.html app/scan.html
+            echo "scan.html добавлен"
+          else
+            echo "::warning::scan-src/app/scan.html не найден — сканер не публикуется"
+          fi
+          rm -rf scan-src
+
+      # Страховка: без каталога сайт публиковать нельзя — иначе на /catalog/ будет 404
+      - name: Check catalog present
+        run: |
+          test -f app/catalog/index.html || { echo "::error::app/catalog/index.html отсутствует — публикация отменена"; exit 1; }
+          echo "каталог на месте"
 
       - name: Deploy to gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
