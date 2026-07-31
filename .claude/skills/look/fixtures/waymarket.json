@@ -1,55 +1,243 @@
 {
-  "_комментарий": "Поддельные ответы сервера, чтобы посмотреть на экраны с данными. Числа взяты близкими к настоящим: 16 555 товаров, 578 поставщиков, наценка ~30%, неликвид 2,36 млн. Названия — с длинными строками и краевыми ценами (0,09 ₽), потому что именно на них у нас ломалось.",
-
-  "initUserApp": { "isNew": false, "myEmail": "dexauron@gmail.com",
-    "profile": { "name": "Адам", "phone": "+7 900 000-00-00" },
-    "orgs": [ { "id": "1", "name": "Way Market", "ssId": "FAKE_SS_ID" } ] },
-
+  "_комментарий": "Числа из настоящего отчёта ДДС владельца за июль 2026: торговля 13 207 164 ₽ (нал 8 025 186 + безнал 5 181 978), закуп 18 089 127 ₽, прибыль 1 507 547 ₽, долг поставщикам на 31.07 — 4 182 653 ₽. Названия товаров и поставщиков вымышленные, суммы настоящие: ломалось всегда на величине чисел.",
+  "initUserApp": {
+    "isNew": false,
+    "myEmail": "dexauron@gmail.com",
+    "profile": {
+      "name": "Адам",
+      "phone": "+7 900 000-00-00"
+    },
+    "orgs": [
+      {
+        "id": "1",
+        "name": "Way Market",
+        "ssId": "FAKE_SS_ID"
+      }
+    ]
+  },
   "getAccountsAll": [
-    { "name": "Наличные", "balance": 486300, "status": "active", "kind": "cash" },
-    { "name": "Карта",    "balance": 712400, "status": "active", "kind": "card" },
-    { "name": "СБП",      "balance":  85650, "status": "active", "kind": "sbp" } ],
-
+    {
+      "name": "Наличные",
+      "balance": 7748736,
+      "status": "active",
+      "kind": "cash"
+    },
+    {
+      "name": "Карта",
+      "balance": 712400,
+      "status": "active",
+      "kind": "card"
+    },
+    {
+      "name": "СБП",
+      "balance": 85650,
+      "status": "active",
+      "kind": "sbp"
+    }
+  ],
   "getHomeSummary": {
-    "summary": { "income": 186400, "expense": 143500, "count": 148, "shiftRevenue": 186400 },
-    "spark": { "inc": [121000,134500,118900,162300,151700,173400,186400],
-               "exp": [ 98000,112400, 96700,131500,124800,139200,143500] },
+    "summary": {
+      "income": 426037,
+      "expense": 364720,
+      "count": 148,
+      "shiftRevenue": 426037
+    },
+    "spark": {
+      "inc": [
+        367798,
+        428336,
+        458890,
+        446869,
+        424384,
+        402113,
+        426037
+      ],
+      "exp": [
+        321731,
+        285620,
+        685126,
+        257455,
+        177433,
+        192903,
+        317064
+      ]
+    },
     "transactions": [
-      { "id":"1","type":"income","amount":86200,"account":"Наличные","category":"Выручка за смену","date":"2026-07-30T19:40:00","note":"Касса · Мадина" },
-      { "id":"2","type":"expense","amount":34500,"account":"Наличные","category":"ИП Хасаев — молочная продукция","date":"2026-07-30T17:12:00","note":"Оплата поставщику" },
-      { "id":"3","type":"expense","amount":2340,"account":"Наличные","category":"Списание — порча овощей","date":"2026-07-30T15:05:00","note":"Склад" },
-      { "id":"4","type":"expense","amount":120000,"account":"Карта","category":"Аренда помещения","date":"2026-07-30T12:00:00","note":"Обязательство" },
-      { "id":"5","type":"income","amount":37300,"account":"Карта","category":"Оплата картой","date":"2026-07-30T19:40:00","note":"Эквайринг" } ] },
-
+      {
+        "id": "1",
+        "type": "income",
+        "amount": 86200,
+        "account": "Наличные",
+        "category": "Выручка за смену",
+        "date": "2026-07-30T19:40:00",
+        "note": "Касса · Мадина"
+      },
+      {
+        "id": "2",
+        "type": "expense",
+        "amount": 34500,
+        "account": "Наличные",
+        "category": "ИП Хасаев — молочная продукция",
+        "date": "2026-07-30T17:12:00",
+        "note": "Оплата поставщику"
+      },
+      {
+        "id": "3",
+        "type": "expense",
+        "amount": 2340,
+        "account": "Наличные",
+        "category": "Списание — порча овощей",
+        "date": "2026-07-30T15:05:00",
+        "note": "Склад"
+      },
+      {
+        "id": "4",
+        "type": "expense",
+        "amount": 120000,
+        "account": "Карта",
+        "category": "Аренда помещения",
+        "date": "2026-07-30T12:00:00",
+        "note": "Обязательство"
+      },
+      {
+        "id": "5",
+        "type": "income",
+        "amount": 37300,
+        "account": "Карта",
+        "category": "Оплата картой",
+        "date": "2026-07-30T19:40:00",
+        "note": "Эквайринг"
+      }
+    ]
+  },
   "getDebts": [
-    { "name":"ИП Хасаев — молочная продукция","debt":86500,"due":"2026-07-26","overdue":true },
-    { "name":"ООО «Чеченские сады»","debt":124000,"due":"2026-07-31" },
-    { "name":"Бакалея-Юг","debt":98300,"due":"2026-08-05" },
-    { "name":"Кока-Кола Дистрибьюшн","debt":64000,"due":"2026-08-11" },
-    { "name":"Хлебозавод №3","debt":40000,"due":"2026-08-17" } ],
-
+    {
+      "name": "ИП Хасаев — молочная продукция",
+      "debt": 1240000,
+      "due": "2026-07-26",
+      "overdue": true
+    },
+    {
+      "name": "ООО «Чеченские сады»",
+      "debt": 1180000,
+      "due": "2026-07-31"
+    },
+    {
+      "name": "Бакалея-Юг",
+      "debt": 902653,
+      "due": "2026-08-05"
+    },
+    {
+      "name": "Кока-Кола Дистрибьюшн",
+      "debt": 560000,
+      "due": "2026-08-11"
+    },
+    {
+      "name": "Хлебозавод №3",
+      "debt": 300000,
+      "due": "2026-08-17"
+    }
+  ],
   "getGoodsAnalytics": {
-    "revenue": 11429001, "profit": 2604241, "avgMargin": 22.8, "avgMarkup": 29.5,
-    "avgMarkupSimple": 193.4, "suppliers": 578, "goodsCount": 16555,
-    "gmroi": 0.36, "turnoverDays": 22, "stockCost": 7254209,
-    "dead": { "sum": 2355371, "share": 32, "count": 3898 },
-    "priceIssues": [ { "name":"FitRoo Junicorn Готовый Завтрак","buy":0.01,"sell":145 } ],
+    "revenue": 13207164,
+    "profit": 1507547,
+    "avgMargin": 11.4,
+    "avgMarkup": 29.5,
+    "avgMarkupSimple": 193.4,
+    "suppliers": 578,
+    "goodsCount": 16555,
+    "gmroi": 0.36,
+    "turnoverDays": 22,
+    "stockCost": 7254209,
+    "dead": {
+      "sum": 2355371,
+      "share": 32,
+      "count": 3898
+    },
+    "priceIssues": [
+      {
+        "name": "FitRoo Junicorn Готовый Завтрак",
+        "buy": 0.01,
+        "sell": 145
+      }
+    ],
     "restock": [
-      { "name":"Молоко «Домик в деревне» 3,2% 950 мл","urgent":true,"stockQty":0,"soldQty":124,"supplier":"ИП Хасаев","daysOfStock":0 },
-      { "name":"Хлеб «Дарницкий» нарезной 700 г","urgent":true,"stockQty":0,"soldQty":88,"supplier":"Хлебозавод №3","daysOfStock":0 },
-      { "name":"Картофель мытый, весовой","urgent":false,"stockQty":142.5,"soldQty":310,"supplier":"ООО «Чеченские сады»","daysOfStock":4 },
-      { "name":"Сок «Добрый» апельсин 1 л","urgent":true,"stockQty":0,"soldQty":41,"supplier":"Кока-Кола","daysOfStock":0 } ],
+      {
+        "name": "Молоко «Домик в деревне» 3,2% 950 мл",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 124,
+        "supplier": "ИП Хасаев",
+        "daysOfStock": 0
+      },
+      {
+        "name": "Хлеб «Дарницкий» нарезной 700 г",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 88,
+        "supplier": "Хлебозавод №3",
+        "daysOfStock": 0
+      },
+      {
+        "name": "Картофель мытый, весовой",
+        "urgent": false,
+        "stockQty": 142.5,
+        "soldQty": 310,
+        "supplier": "ООО «Чеченские сады»",
+        "daysOfStock": 4
+      },
+      {
+        "name": "Сок «Добрый» апельсин 1 л",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 41,
+        "supplier": "Кока-Кола",
+        "daysOfStock": 0
+      }
+    ],
     "movers": [
-      { "name":"Хлеб «Дарницкий» нарезной 700 г","qty":880 },
-      { "name":"Молоко «Домик в деревне» 3,2% 950 мл","qty":642 },
-      { "name":"Конфеты «Мишка косолапый», весовые","qty":210 } ] },
-
-  "getSavingsHunter": { "sum": 462913, "count": 1817 },
-  "getAnalytics": { "income": 186400, "expense": 143500, "profit": 42900, "margin": 23.0 },
+      {
+        "name": "Хлеб «Дарницкий» нарезной 700 г",
+        "qty": 880
+      },
+      {
+        "name": "Молоко «Домик в деревне» 3,2% 950 мл",
+        "qty": 642
+      },
+      {
+        "name": "Конфеты «Мишка косолапый», весовые",
+        "qty": 210
+      }
+    ]
+  },
+  "getSavingsHunter": {
+    "sum": 462913,
+    "count": 1817
+  },
+  "getAnalytics": {
+    "income": 13207164,
+    "expense": 11306311,
+    "profit": 1900853,
+    "margin": 14.4
+  },
   "getContractors": [
-    { "name":"ИП Хасаев — молочная продукция","debt":86500,"kind":"Поставщик","records":12 },
-    { "name":"ООО «Чеченские сады»","debt":124000,"kind":"Поставщик","records":8 } ],
+    {
+      "name": "ИП Хасаев — молочная продукция",
+      "debt": 86500,
+      "kind": "Поставщик",
+      "records": 12
+    },
+    {
+      "name": "ООО «Чеченские сады»",
+      "debt": 124000,
+      "kind": "Поставщик",
+      "records": 8
+    }
+  ],
   "getMyWidgets": null,
   "getSettings": {},
-  "getTeam": { "members": [], "isOwner": true }
+  "getTeam": {
+    "members": [],
+    "isOwner": true
+  }
 }
