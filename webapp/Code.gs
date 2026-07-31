@@ -2805,8 +2805,20 @@ function getDayDDS(p) {
     var sh = ss.getSheetByName(SH_BASE);
     var rows = (sh && sh.getLastRow() > 1)
       ? sh.getRange(2,1,sh.getLastRow()-1,B_COLS).getValues() : [];
-    var b = _ddsCollect(rows, date, _ddsDebtByDay(ss)[date]);
-    var prev = _gnum(_getSettingStr(ss,'DDS_DEBT_'+date,'')) || 0;
+    var dByDay = _ddsDebtByDay(ss);
+    var b = _ddsCollect(rows, date, dByDay[date]);
+    // Долг на начало дня. Если его не проставили руками — считаем от
+    // начала месяца по движениям. Без этого день начинался бы с нуля, и
+    // «долг поставщикам» был бы меньше настоящего ровно на то, что
+    // накопилось до первого числа (у владельца это 3 109 183 ₽).
+    var prev = _gnum(_getSettingStr(ss,'DDS_DEBT_'+date,''));
+    if (!prev) {
+      prev = _gnum(_getSettingStr(ss,'DDS_DEBT_START_'+date.slice(0,7),'')) || 0;
+      Object.keys(dByDay).forEach(function(d){
+        if (d.slice(0,7) === date.slice(0,7) && d < date)
+          prev += (dByDay[d].up||0) - (dByDay[d].down||0);
+      });
+    }
     var out = _ddsCompute(b, _ddsRate(ss), prev);
     out.date = date;
     _ddsCachePut(ssId,'day',date,out);
@@ -2939,6 +2951,16 @@ var DDS_DEBT_COLS = [
 // сводная сумма за день по всем сразу.
 var DDS_DEBT_REP = 'Поставщики (из отчёта)';
 
+// Колонка ОСТАТКА долга («ДОЛГ ПОСТАВЩИКАМ»). Это не движение, а итог:
+// в файле владельца она считается как «вчера − выплата долга + закуп в
+// долг». Проверено на его июле: 31 день из 31 сошёлся до рубля.
+//
+// Нужна ровно для одного: узнать долг НА НАЧАЛО месяца. Сам по себе
+// расчёт мы ведём по движениям, но без стартовой суммы месяц начинался
+// бы с нуля, и вместо 4 182 653 ₽ на конец июля приложение показало бы
+// 1 073 470 ₽ — ошибку ровно в тот долг, что был до первого числа.
+var DDS_DEBT_LEFT_COL = 'долг поставщик';
+
 // Ищет лист по части имени (без учёта регистра и лишних пробелов).
 function _ddsFindSheet(ss, part) {
   var sh = ss.getSheets();
@@ -2962,18 +2984,18 @@ function _ddsDateKey(v) {
 // rows — движение денег (лист БАЗА), debts — движение долга (лист ДОЛГИ).
 function _ddsSheetToOps(sh, map, tag) {
   var out = [], debts = [], months = {};
-  if (!sh || sh.getLastRow() < 2) return { rows: out, debts: debts, months: months };
+  if (!sh || sh.getLastRow() < 2) return { rows: out, debts: debts, months: months, debtStart: {} };
   var vals = sh.getRange(1,1,sh.getLastRow(),sh.getLastColumn()).getValues();
   // Шапка — первая строка, где есть слово «дата».
   var hRow = -1;
   for (var r = 0; r < Math.min(8, vals.length) && hRow < 0; r++)
     for (var c = 0; c < vals[r].length; c++)
       if (String(vals[r][c]||'').toLowerCase().trim().indexOf('дата') === 0) { hRow = r; break; }
-  if (hRow < 0) return { rows: out, debts: debts, months: months };
+  if (hRow < 0) return { rows: out, debts: debts, months: months, debtStart: {} };
 
   // Сопоставляем колонки по названиям, а не по номерам: если владелец
   // добавит колонку, загрузка не поедет.
-  var cols = [], dcols = [];
+  var cols = [], dcols = [], leftCol = -1, debtStart = {};
   for (var c2 = 0; c2 < vals[hRow].length; c2++) {
     var h = String(vals[hRow][c2]||'').toLowerCase().replace(/ё/g,'е').trim();
     if (!h) continue;
@@ -2984,8 +3006,9 @@ function _ddsSheetToOps(sh, map, tag) {
     for (var m3 = 0; m3 < DDS_DEBT_COLS.length; m3++)
       if (h.indexOf(DDS_DEBT_COLS[m3][0].replace(/ё/g,'е')) === 0) {
         dcols.push([c2, DDS_DEBT_COLS[m3][1]]); break; }
+    if (leftCol < 0 && h.indexOf(DDS_DEBT_LEFT_COL) === 0) leftCol = c2;
   }
-  if (!cols.length && !dcols.length) return { rows: out, debts: debts, months: months };
+  if (!cols.length && !dcols.length) return { rows: out, debts: debts, months: months, debtStart: debtStart };
 
   for (var i = hRow+1; i < vals.length; i++) {
     var ds = _ddsDateKey(vals[i][0]);
@@ -3001,16 +3024,27 @@ function _ddsSheetToOps(sh, map, tag) {
                  '', tag+':'+ds.slice(0,7), '', shift ]);
     }
     // Движение долга. Счёт пустой — деньги здесь не трогаем.
+    var up = 0, down = 0;
     for (var k2 = 0; k2 < dcols.length; k2++) {
       var damt = _xlsNum(vals[i][dcols[k2][0]]);
       if (!damt) continue;
+      damt = Math.round(Math.abs(damt));
+      if (dcols[k2][1] === 'oplata') down += damt; else up += damt;
       debts.push([ Utilities.getUuid(), DDS_DEBT_REP, dcols[k2][1],
-                   Math.round(Math.abs(damt)), new Date(ds+'T12:00:00'), '',
+                   damt, new Date(ds+'T12:00:00'), '',
                    'Загружено из файла · ' + tag + ':' + ds.slice(0,7),
                    new Date(), '', '' ]);
     }
+
+    // Долг на начало месяца — из первого дня, где владелец записал
+    // остаток: «долг на конец дня» минус то, что за день набежало.
+    var ym = ds.slice(0,7);
+    if (leftCol >= 0 && debtStart[ym] === undefined) {
+      var left = _xlsNum(vals[i][leftCol]);
+      if (left) debtStart[ym] = Math.round(left - up + down);
+    }
   }
-  return { rows: out, debts: debts, months: months };
+  return { rows: out, debts: debts, months: months, debtStart: debtStart };
 }
 
 // Удаляет ранее загруженные строки этого же источника и месяца.
@@ -3115,11 +3149,22 @@ function ddsImport(p) {
       return { removed: removed };
     });
 
+    // Долг на начало месяца. Пишем только за те месяцы, что реально
+    // загрузили: настройка за чужой месяц сбила бы прошлые расчёты.
+    var starts = {};
+    Object.keys(a.debtStart||{}).forEach(function(m){ if (a.months[m]) starts[m]=a.debtStart[m]; });
+    Object.keys(b.debtStart||{}).forEach(function(m){
+      if (b.months[m] && starts[m]===undefined) starts[m]=b.debtStart[m]; });
+    Object.keys(starts).forEach(function(m){
+      try { _setSetting(ss,'DDS_DEBT_START_'+m, String(starts[m])); } catch(e){}
+    });
+
     _xlsDrop(tmp);
     try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
     _log(ss,'Загрузка отчёта', 'строк '+all.length+', долгов '+allDebts.length+
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
+             debtStart: starts,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
