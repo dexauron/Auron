@@ -1118,10 +1118,17 @@ function getHomeSummary(p) {
     var allRows=base.getLastRow()>=2?base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues():[];
     var totals={};
     var sumInc=0,sumExp=0,txCnt=0;
+    // Дата последней операции — по ВСЕЙ базе, а не за период.
+    // Нужна, чтобы приложение не встречало владельца нулями: он
+    // открывает его 1 августа, данные за июль, период стоит «Сегодня» —
+    // и все четыре карточки показывают ноль. Выглядит так, будто ничего
+    // не загрузилось, хотя всё на месте.
+    var lastMs=0;
     accounts.forEach(function(a){totals[a.name]={income:0,expense:0};});
     allRows.forEach(function(r){
       var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
       var ms=dt.getTime();
+      if(ms>lastMs && String(r[B_CAT-1])!=='Перевод') lastMs=ms;
       if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
       var t=String(r[B_TYPE-1]),amt=parseFloat(r[B_AMT-1])||0,acc=String(r[B_ACC-1]),cat=String(r[B_CAT-1]);
       if(!totals[acc]) totals[acc]={income:0,expense:0};
@@ -1158,6 +1165,7 @@ function getHomeSummary(p) {
     });
     var res={accounts:accounts,totals:totals,transactions:txs,
              spark:{inc:spInc.map(Math.round),exp:spExp.map(Math.round)},
+             lastOp: lastMs?Utilities.formatDate(new Date(lastMs),tz,'yyyy-MM-dd'):'',
              summary:{income:sumInc,expense:sumExp,count:txCnt,shiftRevenue:shiftRev}};
     try { CacheService.getScriptCache().put(cKey,JSON.stringify(res),60); } catch(e){}
     return res;

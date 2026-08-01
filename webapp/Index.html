@@ -2240,6 +2240,8 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
         <button class="pill" data-p="year" onclick="App.setPeriod('year')">Год</button>
         <button class="pill" data-p="custom" id="home-pill-custom" onclick="App.openCustomPeriod('home')">⊞ Свой</button>
       </div>
+      <!-- «За период записей нет, последняя — такого-то» -->
+      <div id="home-lastop" style="padding:0 16px;margin-top:8px;"></div>
       <!-- План выручки на месяц -->
       <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:16px;"></div>
       <!-- Настраиваемая доска виджетов (пользователь сам добавляет/двигает) -->
@@ -3221,7 +3223,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.90.0';
+var APP_VERSION='4.91.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5993,6 +5995,7 @@ var App={
       '<circle cx="'+(n>1?w:0)+'" cy="'+last+'" r="1.9" fill="'+color+'"/></svg>';
   },
   _applyHome:function(r,allAcc){
+    App._hintLastOp(r);
     App.s.accounts=(allAcc||[]).filter(function(a){return a.status!=='archived';});
     App.renderAccounts(App.s.accounts);
     App.renderTxList(r.transactions||[],'tx-list');
@@ -6102,6 +6105,43 @@ var App={
     }).join('')+'</div>';
     h+='<button class="btn-secondary" onclick="App.closeModal();App.openAccountForm();">+ Добавить счёт</button>';
     App.openModal('<div class="modal-title">Общий капитал</div>'+h);
+  },
+
+  // Приложение не должно встречать нулями.
+  //
+  // Владелец открыл его 1 августа, данные за июль, период стоит
+  // «Сегодня» — и все четыре карточки показали ноль. Он решил, что
+  // выручка не загрузилась, хотя всё было на месте.
+  //
+  // Период молча НЕ переключаем: тогда человек смотрит на цифры и не
+  // понимает, за что они. Показываем строку с датой последней операции
+  // и кнопкой — один тап, и видно, что хотел.
+  _hintLastOp:function(r){
+    var box=document.getElementById('home-lastop');
+    if(!box)return;
+    var cnt=(r.summary&&r.summary.count)||0;
+    var last=r.lastOp||'';
+    if(cnt>0||!last){ box.innerHTML=''; return; }
+    var d=new Date(last+'T12:00:00');
+    var ym=last.slice(0,7);
+    box.innerHTML='<div style="background:var(--surface-2);border-radius:13px;padding:11px 14px;'+
+      'font-size:12.5px;color:var(--ink-2);line-height:1.55;display:flex;gap:10px;'+
+      'align-items:center;flex-wrap:wrap;">'+
+      '<span style="flex:1;min-width:150px;">За выбранный период записей нет. '+
+        'Последняя — <b>'+App._e(App._fmtD(last))+'</b>.</span>'+
+      '<button onclick="App.showMonthOf(\''+App._e(ym)+'\')" style="padding:7px 13px;border:none;'+
+        'border-radius:10px;background:var(--brand);color:#06251A;font-weight:700;font-size:12.5px;'+
+        'cursor:pointer;font-family:var(--font);white-space:nowrap;">Показать '+
+        App._e(App._monthName(ym))+'</button></div>';
+  },
+
+  // Показать целиком месяц последней операции.
+  showMonthOf:function(ym){
+    var y=+ym.slice(0,4), m=+ym.slice(5,7);
+    var last=new Date(y,m,0).getDate();
+    App.s.customFrom=ym+'-01';
+    App.s.customTo=ym+'-'+(last<10?'0':'')+last;
+    App.setPeriod('custom');
   },
 
   setPeriod:function(p){
