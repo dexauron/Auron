@@ -2930,6 +2930,20 @@ function getMonthDDS(p) {
       tot.gross+=r.gross; tot.profitPlan+=r.profitPlan; tot.profitFact+=r.profitFact;
       tot.forBuy+=r.forBuy; tot.spentOnBuy+=r.spentOnBuy; tot.officeDiff+=r.officeDiff;
       tot.iman+=b.iman; tot.writeOff+=b.writeOff; tot.buyDebt+=b.buyDebt; tot.payDebt+=b.payDebt;
+
+      // Смены: в файле на каждую дату две строки — день и ночь. Копим
+      // их врозь, чтобы было видно, какая смена просела.
+      if (b.shifts) {
+        tot.shifts = tot.shifts || { day:{trade:0,cashRev:0,onlineRev:0,iman:0,days:0},
+                                     night:{trade:0,cashRev:0,onlineRev:0,iman:0,days:0} };
+        ['day','night'].forEach(function(sl){
+          var x = b.shifts[sl]; if (!x || !x.count) return;
+          var box = tot.shifts[sl];
+          box.cashRev += x.cashRev; box.onlineRev += x.onlineRev; box.iman += x.iman;
+          box.trade += x.cashRev + x.onlineRev;
+          box.days++;
+        });
+      }
     }
     tot.profitGap = tot.profitFact - tot.profitPlan;
     tot.debtEnd = Math.round(debt);
@@ -2938,6 +2952,14 @@ function getMonthDDS(p) {
     // Средние за день — по каждому показателю. Делим на дни С ЗАПИСЯМИ,
     // а не на календарные: в месяце может быть заполнено 22 дня, и
     // делить на 31 значит занижать всё на треть.
+    // Средняя выручка смены — по дням, когда эта смена была, а не по
+    // всем дням месяца: ночная может работать не каждый день.
+    if (tot.shifts) ['day','night'].forEach(function(sl){
+      var x = tot.shifts[sl];
+      ['trade','cashRev','onlineRev','iman'].forEach(function(k){ x[k] = Math.round(x[k]); });
+      x.avgTrade = x.days ? Math.round(x.trade/x.days) : 0;
+    });
+
     var dn = out.length || 1;
     tot.avg = {};
     ['trade','cashRev','onlineRev','gross','profitPlan','profitFact','profitGap',
@@ -4769,6 +4791,53 @@ function getSupplierAnalytics(p) {
   } catch(e) { return {suppliers:[],totalBuy:0,totalDebt:0,totalPay:0}; }
 }
 
+// Смены, собранные из операций БАЗЫ по пометке смены.
+// Расхождения кассы здесь нет: в файле его не ведут.
+function _shiftsFromBase(ss, period, tz) {
+  var empty = {byShift:[],byDay:[],total:0,totalDisc:0,fromBase:true};
+  try {
+    var base = ss.getSheetByName(SH_BASE);
+    if (!base || base.getLastRow() < 2) return empty;
+    var pd = _period(period, tz);
+    var rows = base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var shiftMap = {}, dayMap = {}, seen = {};
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (String(r[B_TYPE-1]) !== 'Доход') continue;          // смена — про выручку
+      var nm = String(r[B_SHIFT-1]||'').trim();
+      if (!nm) continue;
+      var dt = r[B_DATE-1]; if (!(dt instanceof Date)) continue;
+      var ms = dt.getTime();
+      if (pd.from && ms < pd.from) continue;
+      if (pd.to && ms > pd.to) continue;
+      var amt = Math.abs(_gnum(r[B_AMT-1]));
+      if (!amt) continue;
+      var dk = Utilities.formatDate(dt,tz,'yyyy-MM-dd');
+      if (!shiftMap[nm]) shiftMap[nm] = {name:nm, count:0, revenue:0, discrepancy:0};
+      shiftMap[nm].revenue += amt;
+      // Смену считаем один раз за дату, а не по каждой операции: иначе
+      // «средняя выручка за смену» поделится на число строк.
+      var key = nm + '|' + dk;
+      if (!seen[key]) { seen[key] = 1; shiftMap[nm].count++; }
+      if (!dayMap[dk]) dayMap[dk] = {revenue:0};
+      dayMap[dk].revenue += amt;
+    }
+    var byShift = Object.keys(shiftMap).map(function(k){
+      var x = shiftMap[k];
+      return {name:x.name, count:x.count, revenue:Math.round(x.revenue),
+              avgRevenue:x.count?Math.round(x.revenue/x.count):0, discrepancy:0};
+    }).sort(function(a,b){return b.revenue-a.revenue;});
+    var byDay = Object.keys(dayMap).sort().map(function(dk){
+      var p2 = dk.split('-');
+      return {label:parseInt(p2[2],10)+'.'+parseInt(p2[1],10),
+              revenue:Math.round(dayMap[dk].revenue)};
+    });
+    var total = byShift.reduce(function(a,x){return a+x.revenue;},0);
+    return {byShift:byShift, byDay:byDay, total:Math.round(total),
+            totalDisc:0, fromBase:true};
+  } catch(e) { return empty; }
+}
+
 function getShiftAnalytics(p) {
   if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId,period=p.period;
@@ -4776,7 +4845,13 @@ function getShiftAnalytics(p) {
     var ss=SpreadsheetApp.openById(ssId);
     var sh=ss.getSheetByName(SH_SHIFTS);
     var tz=Session.getScriptTimeZone();
-    if (!sh||sh.getLastRow()<2) return {byShift:[],byDay:[],total:0,totalDisc:0};
+    // Лист СМЕНЫ заполняется, только когда смену открывают и закрывают в
+    // самом приложении. У владельца смены приходят из файла — там на
+    // каждую дату две строки, «День» и «Ночь», — и попадают в БАЗУ
+    // пометкой в операции. Поэтому если лист смен пуст, собираем смены
+    // из операций: иначе экран «Аналитика → Смены» стоял бы пустым при
+    // полном отчёте, что владелец и увидел.
+    if (!sh||sh.getLastRow()<2) return _shiftsFromBase(ss, period, tz);
     var pd=_period(period,tz);
     var shiftMap={},dayMap={};
     sh.getRange(2,1,sh.getLastRow()-1,8).getValues().forEach(function(r){

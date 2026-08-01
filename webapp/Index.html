@@ -3221,7 +3221,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.89.0';
+var APP_VERSION='4.90.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4951,10 +4951,20 @@ var App={
     }
     var n=function(v){return fmtFull(Math.round(v||0));};
     // Колонки: кассиру — торговля и касса, финансам — вся картина.
+    // Столбцы смен показываем, только если смены в данных есть: у
+    // магазина без ночной смены пустая колонка — лишний шум.
+    var hasShifts=days.some(function(d){var f=d.shifts;
+      return f&&((f.day&&f.day.count)||(f.night&&f.night.count));});
+    var shTrade=function(d,sl){var f=d.shifts&&d.shifts[sl];
+      return f&&f.count?n((f.cashRev||0)+(f.onlineRev||0)):'—';};
     var cols=[['Дата',function(d){return d.date.slice(8)+'.'+d.date.slice(5,7);}],
-              ['Торговля',function(d){return n(d.trade);}],
+              ['Торговля',function(d){return n(d.trade);}]];
+    if(hasShifts) cols=cols.concat([
+      ['День',function(d){return shTrade(d,'day');}],
+      ['Ночь',function(d){return shTrade(d,'night');}]]);
+    cols=cols.concat([
               ['Наличными',function(d){return n(d.cashRev);}],
-              ['Онлайн',function(d){return n(d.onlineRev);}]];
+              ['Онлайн',function(d){return n(d.onlineRev);}]]);
     if(fin) cols=cols.concat([
       ['Можно на закуп',function(d){return n(d.forBuy);}],
       ['Потрачено',function(d){return n(d.spentOnBuy);}],
@@ -4973,15 +4983,18 @@ var App={
            return '<td'+cls+'>'+v+'</td>';
          }).join('')+'</tr>';
     });
-    var av=tt.avg||{};
-    h+='</tbody><tfoot><tr><td>Итого</td><td>'+n(tt.trade)+'</td><td>'+n(tt.cashRev)+
+    var av=tt.avg||{}, ts=tt.shifts||null;
+    var shCell=function(sl,fld){return (hasShifts&&ts&&ts[sl])?('<td>'+n(ts[sl][fld])+'</td>'):(hasShifts?'<td>—</td>':'');};
+    h+='</tbody><tfoot><tr><td>Итого</td><td>'+n(tt.trade)+'</td>'+
+       shCell('day','trade')+shCell('night','trade')+'<td>'+n(tt.cashRev)+
        '</td><td>'+n(tt.onlineRev)+'</td>';
     if(fin) h+='<td>'+n(tt.forBuy)+'</td><td>'+n(tt.spentOnBuy)+'</td><td>'+
        n(tt.profitPlan)+'</td><td>'+n(tt.profitFact)+'</td><td>'+n(tt.debtEnd)+'</td>';
     h+='</tr>';
     // Средние за день — по тем же колонкам. Долг усреднять нечего: это
     // остаток на конец, а не сумма за период.
-    h+='<tr class="ddm-avg"><td>В среднем за день</td><td>'+n(av.trade)+'</td><td>'+
+    h+='<tr class="ddm-avg"><td>В среднем за день</td><td>'+n(av.trade)+'</td>'+
+       shCell('day','avgTrade')+shCell('night','avgTrade')+'<td>'+
        n(av.cashRev)+'</td><td>'+n(av.onlineRev)+'</td>';
     if(fin) h+='<td>'+n(av.forBuy)+'</td><td>'+n(av.spentOnBuy)+'</td><td>'+
        n(av.profitPlan)+'</td><td>'+n(av.profitFact)+'</td><td>—</td>';
@@ -4997,7 +5010,25 @@ var App={
         '<div class="dds-row"><span>Взял хозяин за месяц</span><b>₽ '+n(tt.iman)+'</b></div>'+
         '<div class="dds-row"><span>Списано товара</span><b>₽ '+n(tt.writeOff)+'</b></div>'+
         '<div class="dds-row total"><span>Долг поставщикам на конец</span><b class="dds-warn">₽ '+n(tt.debtEnd)+'</b></div>'+
-        '</div><div class="dds-card" style="margin-top:14px;"><h4>В среднем за день</h4>'+
+        '</div>'+
+        (ts?('<div class="dds-card" style="margin-top:14px;"><h4>Дневная и ночная смены</h4>'+
+          (function(){
+            var D=ts.day||{},N=ts.night||{};
+            var sum=(D.trade||0)+(N.trade||0);
+            var pc=function(v){return sum?Math.round(v/sum*100):0;};
+            var line=function(t,x){
+              return '<div class="dds-row"><span>'+t+'</span><b>₽ '+n(x.trade)+
+                ' <span style="color:var(--muted);font-weight:600;">· '+pc(x.trade||0)+'%</span></b></div>'+
+                '<div class="dds-row"><span>&nbsp;&nbsp;в среднем за смену</span><b>₽ '+n(x.avgTrade)+'</b></div>'+
+                '<div class="dds-row"><span>&nbsp;&nbsp;смен за месяц</span><b>'+(x.days||0)+'</b></div>'+
+                ((x.iman)?'<div class="dds-row"><span>&nbsp;&nbsp;взял хозяин</span><b>₽ '+n(x.iman)+'</b></div>':'');
+            };
+            var diff=(D.avgTrade||0)-(N.avgTrade||0);
+            return line('Дневная',D)+line('Ночная',N)+
+              '<div class="dds-row total"><span>Разница средних</span><b>'+
+              (diff>=0?'дневная больше на ':'ночная больше на ')+'₽ '+n(Math.abs(diff))+'</b></div>';
+          })()+'</div>'):'')+
+        '<div class="dds-card" style="margin-top:14px;"><h4>В среднем за день</h4>'+
         '<div class="dds-note" style="margin:0 0 8px;">Считается по '+(tt.days||0)+' '+
           App._plural(tt.days||0,'дню','дням','дням')+' с записями, а не по всем дням месяца.</div>'+
         '<div class="dds-row"><span>Торговля</span><b>₽ '+n(av.trade)+'</b></div>'+
@@ -6268,7 +6299,11 @@ var App={
         '<div class="tx-icon" style="background:'+ci.bg+'18;color:'+ci.bg+';">'+ci.icon+'</div>'+
         '<div class="tx-info">'+
           '<div class="tx-cat">'+App._e(tx.category||'')+'</div>'+
-          '<div class="tx-meta">'+App._e(tx.account||'')+' · '+fmtTime(tx.date)+(tx.comment?' · '+App._e(tx.comment):'')+'</div>'+
+          // Смена — рядом с суммой: в отчёте владельца на каждую дату две
+          // строки, день и ночь, и без пометки их не различить.
+          '<div class="tx-meta">'+App._e(tx.account||'')+' · '+fmtTime(tx.date)+
+            (tx.shift?' · <span style="color:var(--brand);font-weight:650;">'+App._e(tx.shift)+'</span>':'')+
+            (tx.comment?' · '+App._e(tx.comment):'')+'</div>'+
         '</div>'+
         '<div class="tx-amount '+cls+'">'+sign+'₽ '+fmtFull(tx.amount)+'</div>'+
       '</div>'+
@@ -6801,13 +6836,16 @@ var App={
   _renderShifts:function(r){
     var el=document.getElementById('an-shifts');
     var list=r.byShift||[];
-    if(!list.length){el.innerHTML=App._empty('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>','Нет смен за период','Открой первую смену в разделе Касса.');return;}
+    if(!list.length){el.innerHTML=App._empty('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>','Нет смен за период','Открой смену в разделе Касса или загрузи отчёт — смены возьмутся из него.');return;}
     var shiftColors=['#5E5CE6','#30D158','#FF9F0A','#FF453A','#BF5AF2'];
     el.innerHTML=
       '<div class="metric-row" style="margin-bottom:16px;">'+
         '<div class="metric-card"><div class="metric-label">Выручка за период</div><div class="metric-value green">₽ '+fmt(r.total||0)+'</div></div>'+
         '<div class="metric-card"><div class="metric-label">Расхождений</div><div class="metric-value '+(r.totalDisc?'red':'')+'">₽ '+fmt(Math.abs(r.totalDisc||0))+'</div></div>'+
       '</div>'+
+      (r.fromBase?'<div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;">'+
+        'Смены собраны из загруженного отчёта: в нём на каждую дату две строки — день и ночь. '+
+        'Расхождения кассы там нет, поэтому оно пустое.</div>':'')+
       '<div style="font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">По типам смен</div>'+
       '<div style="background:var(--surface);border-radius:20px;overflow:hidden;border:1px solid rgba(255,255,255,.07);margin-bottom:16px;">'+
       list.map(function(s,i){
