@@ -3162,6 +3162,25 @@ function _ensureRows(sh, from, n) {
   } catch(e) {}
 }
 
+// Стирает ВСЕ данные листа, оставляя шапку.
+//
+// Казалось бы, достаточно deleteRows(2, сколько-есть). Но Google
+// отвечает «Невозможно удалить все незакреплённые строки»: лист не
+// может остаться совсем без обычных строк. Владелец упёрся в это дважды
+// — при повторной загрузке отчёта и в «Удалить все данные».
+function _wipeSheetRows(sh) {
+  if (!sh) return 0;
+  var last = sh.getLastRow();
+  if (last < 2) return 0;
+  var n = last - 1;
+  try {
+    var spare = sh.getMaxRows() - sh.getFrozenRows() - n;
+    if (spare < 1) sh.insertRowsAfter(sh.getMaxRows(), 1 - spare);
+  } catch(e) {}
+  sh.deleteRows(2, n);
+  return n;
+}
+
 // Удаляет строки СПЛОШНЫМИ КУСКАМИ, а не по одной.
 //
 // Повод — счёт на настоящих числах владельца: повторная загрузка его
@@ -5363,7 +5382,7 @@ function clearAllData(p) {
     var removed=0;
     wipe.forEach(function(n){
       var sh=ss.getSheetByName(n);
-      if(sh&&sh.getLastRow()>1){ var cnt=sh.getLastRow()-1; sh.deleteRows(2,cnt); removed+=cnt; }
+      removed += _wipeSheetRows(sh);
     });
     try{_bustDash(ssId);}catch(e){}
     
@@ -5395,7 +5414,7 @@ function seedDemoData(p) {
     var sheets = [SH_BASE, SH_ACCOUNTS, SH_DEBTS, SH_SHIFTS, SH_PAYMENTS, SH_SETTINGS];
     sheets.forEach(function(n) {
       var sh = ss.getSheetByName(n);
-      if (sh && sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+      _wipeSheetRows(sh);
     });
 
     // --- settings ---
@@ -5413,6 +5432,7 @@ function seedDemoData(p) {
 
     // --- accounts (starting balances = 0, real balance built from transactions) ---
     var accSh = ss.getSheetByName(SH_ACCOUNTS);
+    _ensureRows(accSh, 2, 3);
     accSh.getRange(2, 1, 3, 6).setValues([
       [uid(), 'Наличные', 0, 'active', '💵', '#10B981'],
       [uid(), 'Карта',    0, 'active', '💳', '#6366F1'],

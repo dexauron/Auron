@@ -95,6 +95,38 @@ t('запись сразу за краем добавляет одну стро�
   t('защищена запись: '+call, code.indexOf('_ensureRows('+call+')')>0);
 });
 
+// ── «Удалить все данные» упиралось в ту же стену ────────────────────
+// Владелец увидел ту же ошибку Google в Настройках → Аккаунт. Значит
+// починить надо было не одно место, а все, где лист чистят целиком.
+eval(grab('_wipeSheetRows'));
+function fullSheet(rows, frozen){
+  var maxRows=rows, ins=[], del=[];
+  return { sh:{ getLastRow:function(){return rows;}, getMaxRows:function(){return maxRows;},
+    getFrozenRows:function(){return frozen;},
+    insertRowsAfter:function(a,n){ins.push(n);maxRows+=n;},
+    deleteRows:function(st,n){
+      if(maxRows-frozen-n<1) throw new Error('Невозможно удалить все незакрепленные строки.');
+      del.push([st,n]); maxRows-=n; rows-=n; } },
+    ins:ins, del:del };
+}
+var w1=fullSheet(3321,1);
+var got=null; try{ got=_wipeSheetRows(w1.sh); }catch(e){ got=e.message; }
+t('чистка листа целиком не падает', got===3320, got);
+t('перед чисткой добавлен запас', w1.ins.length===1, w1.ins);
+t('удалены все данные, шапка осталась', w1.del.length===1 && w1.del[0][0]===2);
+// Лист без закреплённой шапки — запаса уже хватает.
+var w2=fullSheet(100,0);
+t('лист без закреплённой шапки чистится', _wipeSheetRows(w2.sh)===99, w2.ins);
+// Пустой лист.
+var w3=fullSheet(1,1);
+t('пустой лист — ничего не делаем', _wipeSheetRows(w3.sh)===0 && w3.del.length===0);
+
+t('«Удалить все данные» пользуется общей чисткой',
+  /removed \+= _wipeSheetRows\(sh\);/.test(code));
+t('демо-данные тоже', /^\s*_wipeSheetRows\(sh\);$/m.test(code));
+t('в коде не осталось прямых deleteRows\(2, ...\)',
+  !/deleteRows\(2,\s*(sh\.getLastRow|cnt)/.test(code));
+
 // Защита от возврата к построчному удалению.
 // Одиночные удаления (одна запись по её номеру) — это нормально.
 // Ловим именно ЦИКЛЫ, которые удаляют строку за строкой.
