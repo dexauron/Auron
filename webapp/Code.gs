@@ -2934,6 +2934,16 @@ function getMonthDDS(p) {
     tot.profitGap = tot.profitFact - tot.profitPlan;
     tot.debtEnd = Math.round(debt);
     tot.days = out.length;
+
+    // Средние за день — по каждому показателю. Делим на дни С ЗАПИСЯМИ,
+    // а не на календарные: в месяце может быть заполнено 22 дня, и
+    // делить на 31 значит занижать всё на треть.
+    var dn = out.length || 1;
+    tot.avg = {};
+    ['trade','cashRev','onlineRev','gross','profitPlan','profitFact','profitGap',
+     'forBuy','spentOnBuy','iman','writeOff','buyDebt','payDebt'].forEach(function(k){
+      tot.avg[k] = Math.round((tot[k]||0)/dn);
+    });
     var resM = { month: ym, rate: rate, days: out, total: tot };
     _ddsCachePut(ssId,'mon',ym,resM);
     return resM;
@@ -4058,14 +4068,24 @@ function getAnalytics(p) {
       if (t==='Доход') {
         income+=amt; dayMap[dk].income+=amt;
         var dow=dt.getDay(); hm[dow===0?6:dow-1]+=amt;
-        if(!catMap[cat])catMap[cat]={total:0,type:'income'};catMap[cat].total+=amt;
+        if(!catMap[cat])catMap[cat]={total:0,type:'income',days:{},n:0};
+        catMap[cat].total+=amt; catMap[cat].days[dk]=1; catMap[cat].n++;
       } else if (t==='Расход') {
         expense+=amt; dayMap[dk].expense+=amt;
-        if(!catMap[cat])catMap[cat]={total:0,type:'expense'};catMap[cat].total+=amt;
+        if(!catMap[cat])catMap[cat]={total:0,type:'expense',days:{},n:0};
+        catMap[cat].total+=amt; catMap[cat].days[dk]=1; catMap[cat].n++;
       }
     });
+    // Среднее по каждой статье: за день (в те дни, когда она вообще
+    // была) и за одну запись. Первое отвечает «сколько это в день»,
+    // второе — «сколько за раз», а это разные вопросы: обед бывает
+    // каждый день понемногу, а аренда — раз в месяц крупно.
     var byCategory=Object.keys(catMap).map(function(k){
-      return{category:k,total:Math.round(catMap[k].total),type:catMap[k].type};
+      var c=catMap[k], dn=Object.keys(c.days).length;
+      return{category:k,total:Math.round(c.total),type:c.type,
+             count:c.n, days:dn,
+             avgDay: dn?Math.round(c.total/dn):0,
+             avgOne: c.n?Math.round(c.total/c.n):0};
     }).sort(function(a,b){return b.total-a.total;});
     var timeline=Object.keys(dayMap).sort().map(function(dk){
       var p2=dk.split('-');var label=parseInt(p2[2])+'.'+parseInt(p2[1]);
@@ -4083,8 +4103,19 @@ function getAnalytics(p) {
     // списывается».
     try{getDebts({ssId:ssId}).forEach(function(d){totalDebt+=d.debt;});}catch(e){}
     if (totalDebt<0) totalDebt=0;
+    // Средние за день. Делим на дни, В КОТОРЫЕ БЫЛИ ЗАПИСИ, а не на все
+    // дни периода: магазин работает не каждый день и не каждый день
+    // заполняется. Делить на календарные дни — занижать среднее и
+    // сравнивать несравнимое.
+    var actDays = Object.keys(dayMap).filter(function(k){
+      return dayMap[k].income || dayMap[k].expense; }).length;
+    var avg = { days: actDays,
+      income:  actDays ? Math.round(income/actDays) : 0,
+      expense: actDays ? Math.round(expense/actDays) : 0,
+      profit:  actDays ? Math.round((income-expense)/actDays) : 0 };
+
     var _res={income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
-            timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt)};
+            timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt),avg:avg};
     try { CacheService.getScriptCache().put(_ak, JSON.stringify(_res), 90); } catch(_e){}
     return _res;
   } catch(e) { return {income:0,expense:0,byCategory:[],timeline:[],heatmap:_emptyHm(),totalDebt:0}; }

@@ -1101,6 +1101,8 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 .ddm tbody tr:active{background:var(--surface-2);}
 .ddm tfoot td{border-top:1.5px solid var(--line);font-weight:800;background:var(--surface-2);}
 .ddm tfoot td:first-child{background:var(--surface-2);}
+/* Строка средних — тише итога: это справка, а не итог месяца. */
+.ddm tfoot tr.ddm-avg td{font-weight:650;color:var(--ink-2);border-top:1px dashed var(--line-2);}
 /* ── Misc ── */
 .empty-state{text-align:center;padding:60px 20px;color:var(--text-2);}
 .empty-icon{font-size:48px;margin-bottom:14px;opacity:.5;}
@@ -3219,7 +3221,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.88.0';
+var APP_VERSION='4.89.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4971,10 +4973,18 @@ var App={
            return '<td'+cls+'>'+v+'</td>';
          }).join('')+'</tr>';
     });
+    var av=tt.avg||{};
     h+='</tbody><tfoot><tr><td>Итого</td><td>'+n(tt.trade)+'</td><td>'+n(tt.cashRev)+
        '</td><td>'+n(tt.onlineRev)+'</td>';
     if(fin) h+='<td>'+n(tt.forBuy)+'</td><td>'+n(tt.spentOnBuy)+'</td><td>'+
        n(tt.profitPlan)+'</td><td>'+n(tt.profitFact)+'</td><td>'+n(tt.debtEnd)+'</td>';
+    h+='</tr>';
+    // Средние за день — по тем же колонкам. Долг усреднять нечего: это
+    // остаток на конец, а не сумма за период.
+    h+='<tr class="ddm-avg"><td>В среднем за день</td><td>'+n(av.trade)+'</td><td>'+
+       n(av.cashRev)+'</td><td>'+n(av.onlineRev)+'</td>';
+    if(fin) h+='<td>'+n(av.forBuy)+'</td><td>'+n(av.spentOnBuy)+'</td><td>'+
+       n(av.profitPlan)+'</td><td>'+n(av.profitFact)+'</td><td>—</td>';
     h+='</tr></tfoot></table></div>';
 
     if(fin){
@@ -4987,6 +4997,18 @@ var App={
         '<div class="dds-row"><span>Взял хозяин за месяц</span><b>₽ '+n(tt.iman)+'</b></div>'+
         '<div class="dds-row"><span>Списано товара</span><b>₽ '+n(tt.writeOff)+'</b></div>'+
         '<div class="dds-row total"><span>Долг поставщикам на конец</span><b class="dds-warn">₽ '+n(tt.debtEnd)+'</b></div>'+
+        '</div><div class="dds-card" style="margin-top:14px;"><h4>В среднем за день</h4>'+
+        '<div class="dds-note" style="margin:0 0 8px;">Считается по '+(tt.days||0)+' '+
+          App._plural(tt.days||0,'дню','дням','дням')+' с записями, а не по всем дням месяца.</div>'+
+        '<div class="dds-row"><span>Торговля</span><b>₽ '+n(av.trade)+'</b></div>'+
+        '<div class="dds-row"><span>&nbsp;&nbsp;наличными</span><b>₽ '+n(av.cashRev)+'</b></div>'+
+        '<div class="dds-row"><span>&nbsp;&nbsp;онлайн</span><b>₽ '+n(av.onlineRev)+'</b></div>'+
+        '<div class="dds-row"><span>Можно на закуп</span><b>₽ '+n(av.forBuy)+'</b></div>'+
+        '<div class="dds-row"><span>Потрачено на товар</span><b>₽ '+n(av.spentOnBuy)+'</b></div>'+
+        '<div class="dds-row"><span>Прибыль по плану</span><b>₽ '+n(av.profitPlan)+'</b></div>'+
+        '<div class="dds-row"><span>Прибыль по факту</span><b class="'+(av.profitFact<0?'dds-bad':'')+'">₽ '+n(av.profitFact)+'</b></div>'+
+        '<div class="dds-row"><span>Взял хозяин</span><b>₽ '+n(av.iman)+'</b></div>'+
+        '<div class="dds-row"><span>Списано товара</span><b>₽ '+n(av.writeOff)+'</b></div>'+
         (tt.officeDiff<0?'<div class="dds-note">За месяц на закуп потрачено на ₽ '+n(-tt.officeDiff)+
           ' больше, чем позволила выручка. Эти деньги лежат в товаре на полке и в долге поставщикам.</div>':'')+
         '</div>';
@@ -5993,7 +6015,15 @@ var App={
       App._mdCatList=cats;
       var total=cats.reduce(function(s,c){return s+c.total;},0);
       var col=isInc?'var(--pos)':'var(--neg)';
-      var h='<div style="background:var(--surface-2);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:26px;font-weight:800;color:'+col+';">'+(isInc?'+':'−')+fmt(total)+' ₽</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">всего '+App._periodLabel()+'</div></div>';
+      var av=r.avg||{};
+      var avV=isInc?av.income:av.expense;
+      var h='<div style="background:var(--surface-2);border-radius:14px;padding:16px;text-align:center;margin-bottom:14px;"><div style="font-size:26px;font-weight:800;color:'+col+';">'+(isInc?'+':'−')+fmt(total)+' ₽</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">всего '+App._periodLabel()+'</div>'+
+        // Среднее за день — по дням С ЗАПИСЯМИ. Делить на календарные дни
+        // значит занижать: магазин заполняется не каждый день.
+        (av.days?'<div style="font-size:12.5px;color:var(--ink-2);margin-top:7px;padding-top:7px;border-top:1px solid var(--line-2);">'+
+          'В среднем <b>'+fmt(avV||0)+' ₽</b> в день · по '+av.days+' '+
+          App._plural(av.days,'дню','дням','дням')+' с записями</div>':'')+
+        '</div>';
       if(!cats.length){h+='<div style="text-align:center;padding:16px;color:var(--muted);">Нет операций за период.</div>';}
       else{
         var mx=cats[0].total||1;
@@ -6006,6 +6036,13 @@ var App={
               '<span style="font-size:13px;font-weight:700;color:'+col+';">'+fmt(c.total)+' ₽</span>'+
               '<span style="font-size:11px;color:var(--muted);width:34px;text-align:right;">'+share+'%</span>'+
             '</div>'+
+            // По каждой статье — среднее за день и за одну запись. Это
+            // разные вопросы: обед бывает каждый день понемногу, аренда —
+            // раз в месяц крупно.
+            ((c.days||c.count)?'<div style="margin-left:35px;font-size:11px;color:var(--muted);margin-bottom:3px;">'+
+              'в среднем '+fmt(c.avgDay||0)+' ₽/день'+
+              (c.count>1?' · '+fmt(c.avgOne||0)+' ₽ за раз ('+c.count+' '+
+                App._plural(c.count,'запись','записи','записей')+')':'')+'</div>':'')+
             '<div style="height:6px;background:var(--surface-3);border-radius:5px;overflow:hidden;margin-left:35px;"><div style="height:100%;width:'+Math.max(pct,3)+'%;background:'+col+';border-radius:5px;"></div></div>'+
           '</div>';
         }).join('');
