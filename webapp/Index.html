@@ -2154,7 +2154,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <div class="sb-avatar" id="sb-avatar">А</div>
       <div style="flex:1;">
         <div class="sb-user-name" id="sb-user-name">—</div>
-        <div class="sb-user-role">Администратор</div>
+        <div class="sb-user-role" id="sb-user-role">—</div>
       </div>
       <button onclick="App.logout()" title="Выйти" style="background:rgba(255,69,58,.12);border:none;border-radius:8px;padding:6px 8px;cursor:pointer;color:var(--neg);font-size:12px;display:flex;align-items:center;gap:4px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.82.0';
+var APP_VERSION='4.83.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3900,6 +3900,10 @@ var App={
     if(sbName)sbName.textContent=App.s.userName||'Пользователь';
     var sbAv=document.getElementById('sb-avatar');
     if(sbAv)sbAv.textContent=(App.s.userName||'А').charAt(0).toUpperCase();
+    // Роль была ЗАШИТА в вёрстку словом «Администратор» и не менялась
+    // никогда: владелец видел себя администратором, бухгалтер — тоже.
+    // На права это не влияло (их проверяет сервер), но сбивало с толку.
+    App._paintRole();
     // Онбординг-тур — один раз. Флаг «пройдено» проверяем на СЕРВЕРЕ,
     // т.к. localStorage в iframe Google на iPhone не сохраняется между заходами.
     try{
@@ -4072,11 +4076,12 @@ var App={
     return p.indexOf(key)>=0;
   },
   _loadRole:function(){
-    App.s.isOwner=true;App.s.myRole='Владелец';App.s.perms=App._rolePermsClient('Владелец');App._applyRoleUI();
+    App.s.isOwner=true;App.s.myRole='Владелец';App.s.perms=App._rolePermsClient('Владелец');App._applyRoleUI();App._paintRole();
     gs('getTeam',{ssId:App.s.ssId}).then(function(r){
       if(r&&!r.__error){
         App.s.isOwner=!!r.isOwner;App.s.myRole=r.myRole||'Сотрудник зала';App.s._team=r;
         App.s.perms=(r.myPerms&&r.myPerms.length)?r.myPerms:App._rolePermsClient(App.s.myRole);
+        App._paintRole();
         if(App.s.isOwner)App.s.perms=App._rolePermsClient('Владелец');
       }
       App._applyRoleUI();
@@ -4692,6 +4697,13 @@ var App={
     if(r==='Бухгалтер') return ['home','suppliers','analytics','report'];
     return ['home','goods','suppliers','analytics'];                    // владелец/админ
   },
+  // Подпись роли в боковой панели. Зовём и при входе, и когда сервер
+  // ответил, кто мы: до ответа роль ещё не известна.
+  _paintRole:function(){
+    var el=document.getElementById('sb-user-role');
+    if(el)el.textContent=App.s.myRole||'—';
+  },
+
   _navKey:function(){return 'auron_nav_'+(App.s.myRole||'user');},
   _navCfg:function(){
     var allowed=App._navAllowed().map(function(m){return m.id;});
