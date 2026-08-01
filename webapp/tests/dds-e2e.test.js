@@ -96,12 +96,41 @@ t('общий долг сходится с файлом владельца: 4 18
   Math.round(totalDebt)===4182653, Math.round(totalDebt));
 t('долг на начало июля — как записано в файле: 3 109 183',
   Number(settings['DDS_DEBT_START_2026-07'])===3109183, settings['DDS_DEBT_START_2026-07']);
-t('долг на начало апреля отмотан назад: 1 547 523',
-  Number(settings['DDS_DEBT_START_2026-04'])===1547523, settings['DDS_DEBT_START_2026-04']);
 t('план постоянных расходов за июль сохранён',
   JSON.parse(settings['DDS_PLAN_2026-07']||'{}').salary===737800, settings['DDS_PLAN_2026-07']);
 t('месяцы без выручки названы (апрель–июнь)',
   r1 && (r1.noRevenue||[]).join(',')==='2026-04,2026-05,2026-06', r1&&(r1.noRevenue||[]).join(','));
+
+// ── Берём только месяцы, где известны обе стороны ───────────────────
+// Решение владельца: «только за июль посчитай». В ОПЛАТЕ платежи с
+// апреля, выручка по дням — лишь за июль. Без отсева капитал уходил в
+// минус на 15 млн, которых не было.
+t('загружен только июль', r1 && (r1.months||[]).join(',')==='2026-07',
+  r1&&(r1.months||[]).join(','));
+var mset={};
+for(var i=1;i<base._rows.length;i++){
+  var z=String((base._rows[i]||[])[10]||''); var m=z.split(':')[1];
+  if(m) mset[m]=(mset[m]||0)+1;
+}
+t('в БАЗЕ нет строк апреля–июня',
+  !mset['2026-04'] && !mset['2026-05'] && !mset['2026-06'], Object.keys(mset).join(','));
+t('июльские строки на месте', mset['2026-07']>0, mset['2026-07']);
+// Долг не пострадал: он привязан к записанному остатку на 1 июля.
+t('долг на начало июля остался 3 109 183',
+  Number(settings['DDS_DEBT_START_2026-07'])===3109183, settings['DDS_DEBT_START_2026-07']);
+t('апрельского начального долга больше нет',
+  settings['DDS_DEBT_START_2026-04']===undefined, settings['DDS_DEBT_START_2026-04']);
+t('общий долг всё равно 4 182 653', Math.round(totalDebt)===4182653, Math.round(totalDebt));
 t('лист БАЗА не остался пустым', base.getLastRow()>1);
+
+// Капитал по загруженному: доходы минус расходы.
+var _inc=0,_exp=0;
+for(var ci=1;ci<base._rows.length;ci++){
+  var cr=base._rows[ci]; if(!cr||!cr[5])continue;
+  if(cr[3]==='Доход')_inc+=cr[5]; else _exp+=cr[5];
+}
+t('капитал по июлю положительный: доходы '+Math.round(_inc)+
+  ' − расходы '+Math.round(_exp)+' = '+Math.round(_inc-_exp),
+  _inc-_exp>0, Math.round(_inc-_exp));
 console.log('\nСквозная загрузка отчёта: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

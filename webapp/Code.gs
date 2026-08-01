@@ -3398,19 +3398,76 @@ function _ddsImportOpened(ss, wb) {
       if (r[3] === 'Доход') mRev[m] = (mRev[m]||0) + r[5];
       else mExp[m] = (mExp[m]||0) + r[5];
     });
-    var noRevenue = Object.keys(mExp).filter(function(m){ return !mRev[m]; }).sort();
+    // Месяцы, где выручка уже записана отдельно («Отчёт мес») — их
+    // считаем полными, даже если в самом файле выручки за них нет.
+    var monDone = {};
+    try {
+      var bs = ss.getSheetByName(SH_BASE);
+      if (bs && bs.getLastRow() > 1) {
+        var zc = bs.getRange(2, B_ZREF, bs.getLastRow()-1, 1).getValues();
+        for (var zi = 0; zi < zc.length; zi++) {
+          var zv = String(zc[zi][0]||'');
+          if (zv.indexOf(MON_TAG+':') === 0) monDone[zv.split(':')[1]] = true;
+        }
+      }
+    } catch(e) {}
+
+    var noRevenue = Object.keys(mExp)
+      .filter(function(m){ return !mRev[m] && !monDone[m]; }).sort();
+
+    // Все месяцы файла — до отсева. Нужны, чтобы стереть прежние строки.
+    var seenMonths = [];
+    Object.keys(a.months).forEach(function(m){ seenMonths.push(m); });
+    Object.keys(b.months).forEach(function(m){ if(seenMonths.indexOf(m)<0)seenMonths.push(m); });
+
+    // ── Берём месяц, только если известны ОБЕ стороны ────────────────
+    //
+    // Решение владельца: «только за июль посчитай». В листе ОПЛАТА
+    // платежи ведутся с апреля, а выручка по дням есть лишь за июль.
+    // Загружая такие месяцы, приложение честно складывало то, что дали,
+    // и «Общий капитал» уходил в минус на 15 млн, которых в жизни не
+    // было: записано, сколько заплатили, и не записано, сколько продали.
+    //
+    // Долг от этого не страдает: он привязан к записанному остатку на
+    // 1 июля (3 109 183 ₽), а не к движениям апреля–июня.
+    //
+    // Как только за месяц появится выручка — из файла или записанная
+    // через «Отчёт мес» — он подтянется вместе со своими платежами.
+    var skipNoRev = {};
+    noRevenue.forEach(function(m){ skipNoRev[m] = true; });
+    if (noRevenue.length) {
+      function keepRow(r) {
+        var mm = String(r[B_ZREF-1]||'').split(':')[1] || '';
+        return !skipNoRev[mm];
+      }
+      all = all.filter(keepRow);
+      allDebts = allDebts.filter(function(r){
+        var c = String(r[D_CMT-1]||''), k = c.lastIndexOf(':');
+        return !skipNoRev[k >= 0 ? c.slice(k+1).trim() : ''];
+      });
+      noRevenue.forEach(function(m){ delete a.months[m]; delete b.months[m]; });
+    }
 
     // Месячный итог из третьего листа. Месяц в нём не написан, поэтому
     // сюда он приходит без месяца — экран спросит, за какой он, и
     // предложит те месяцы, где траты есть, а выручки нет.
     var monthly = _ddsMonthlyRead(_ddsFindMonthlySheet(wb));
-    if (!all.length && !allDebts.length) { _xlsDrop(tmp);
-      return {__error:'В листах нет строк с датами — загружать нечего.'}; }
+    if (!all.length && !allDebts.length)
+      return {__error: noRevenue.length
+        ? ('За '+noRevenue.join(', ')+' в файле есть траты, но нет выручки, '+
+           'а месяцев с выручкой в файле нет. Загружать нечего.')
+        : 'В листах нет строк с датами — загружать нечего.'};
 
     // Метки для замены: месяц + источник.
+    //
+    // ВАЖНО: метки берём по ВСЕМ месяцам файла, включая пропускаемые.
+    // Иначе строки апреля–июня, загруженные прежней версией, остались бы
+    // в таблице навсегда: новых не добавим, а старые не сотрём — и
+    // «Общий капитал» так и висел бы в минусе.
     var tags = {}, monthsList = [];
-    Object.keys(a.months).forEach(function(m){ tags['DDS:'+m]=true; monthsList.push(m); });
-    Object.keys(b.months).forEach(function(m){ tags['OPL:'+m]=true; if(monthsList.indexOf(m)<0)monthsList.push(m); });
+    seenMonths.forEach(function(m){ tags['DDS:'+m]=true; tags['OPL:'+m]=true; });
+    Object.keys(a.months).forEach(function(m){ monthsList.push(m); });
+    Object.keys(b.months).forEach(function(m){ if(monthsList.indexOf(m)<0)monthsList.push(m); });
 
     // ── Долг на начало месяцев ──────────────────────────────────────
     //
@@ -3480,7 +3537,7 @@ function _ddsImportOpened(ss, wb) {
       // долга тоже надо заменять, иначе вторая загрузка её удвоит.
       var dtags = {};
       Object.keys(tags).forEach(function(k){ dtags[k]=1; });
-      monthsList.forEach(function(m){ dtags['OPEN:'+m]=1; });
+      seenMonths.forEach(function(m){ dtags['OPEN:'+m]=1; });
       var removed = _ddsWipe(ss, tags) + _ddsWipeDebts(ss, dtags);
       var base = ss.getSheetByName(SH_BASE);
       if (all.length) {
@@ -3519,6 +3576,7 @@ function _ddsImportOpened(ss, wb) {
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
              debtStart: starts, plan: plans, noRevenue: noRevenue,
+             skippedNoRev: noRevenue,
              monthly: (monthly && monthly.found && noRevenue.length) ? monthly : null,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
