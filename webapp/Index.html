@@ -3219,7 +3219,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.86.0';
+var APP_VERSION='4.87.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5001,6 +5001,65 @@ var App={
   },
 
 // ── Загрузка собственного отчёта владельца (листы ДДС и Оплата) ──
+  // Нашли месячный итог, но в листе не написано, за какой он месяц.
+  // Угадывать нельзя: ошибка месяца на 11 миллионах тихо испортит все
+  // расчёты. Показываем найденное и спрашиваем один раз.
+  _monthlyAsk:function(m,noRev){
+    var opts=(noRev||[]).map(function(x){
+      return '<option value="'+App._e(x)+'">'+App._e(App._monthName(x))+'</option>';}).join('');
+    if(!opts)return '';
+    App._monthlyData=m;
+    return '<div id="mon-ask" style="margin-top:12px;padding:12px 14px;border-radius:13px;'+
+      'background:var(--brand-dim);line-height:1.6;">'+
+      '<div style="font-weight:750;font-size:13px;">Нашлась выручка за месяц</div>'+
+      '<div style="font-size:12.5px;color:var(--ink-2);margin-top:4px;">'+
+        'Наличными <b>'+fmt(m.cash)+' ₽</b> · безналом <b>'+fmt(m.online)+' ₽</b> · '+
+        'всего <b>'+fmt(m.total)+' ₽</b></div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-top:6px;">'+
+        'В листе «Отчёт мес» не написано, за какой это месяц. Выберите сами — '+
+        'угадывать приложение не станет.</div>'+
+      '<div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap;">'+
+        '<select id="mon-pick" style="flex:1;min-width:150px;padding:9px 11px;border-radius:11px;'+
+          'background:var(--surface-2);color:var(--text);border:1px solid var(--line);'+
+          'font-size:13px;font-family:var(--font);">'+opts+'</select>'+
+        '<button onclick="App._monthlySave()" style="padding:9px 16px;border:none;border-radius:11px;'+
+          'background:var(--brand);color:#06251A;font-weight:750;font-size:13px;cursor:pointer;'+
+          'font-family:var(--font);">Записать</button>'+
+      '</div></div>';
+  },
+
+  _monthName:function(ym){
+    var M=['января','февраля','марта','апреля','мая','июня',
+           'июля','августа','сентября','октября','ноября','декабря'];
+    var p=String(ym).split('-');
+    return (M[parseInt(p[1],10)-1]||ym)+' '+p[0];
+  },
+
+  _monthlySave:function(){
+    var box=document.getElementById('mon-ask'); if(!box)return;
+    var sel=document.getElementById('mon-pick'); if(!sel)return;
+    var m=App._monthlyData||{};
+    box.innerHTML='<div style="font-size:12.5px;color:var(--muted);">Записываю…</div>';
+    gs('ddsMonthlySave',{ssId:App.s.ssId,month:sel.value,
+                         cash:m.cash,online:m.online},120000).then(function(r){
+      if(!r||r.__error)throw new Error((r&&r.__error)||'ошибка');
+      box.innerHTML='<div class="dds-ok" style="font-weight:750;font-size:13px;">Записано ✓</div>'+
+        '<div style="font-size:12.5px;color:var(--ink-2);margin-top:4px;">'+
+        App._e(App._monthName(r.month))+' — выручка <b>'+fmt(r.total)+' ₽</b>'+
+        (r.removed?' (прежняя запись заменена)':'')+'</div>';
+      App.toast('Выручка за месяц записана ✓');
+      try{
+        var pref='ac_'+(App.s.ssId||'')+'_';
+        Object.keys(localStorage).forEach(function(k){
+          if(k.indexOf(pref)===0)localStorage.removeItem(k);
+        });
+      }catch(e){}
+    }).catch(function(e){
+      box.innerHTML='<div style="color:var(--neg);font-size:12.5px;">'+
+        App._e(App._friendlyErr(e))+'</div>';
+    });
+  },
+
   ddsUpload:function(input){
     var f=input&&input.files&&input.files[0];
     input.value='';                      // чтобы тот же файл можно было выбрать снова
@@ -5031,6 +5090,7 @@ var App={
               ks.sort().map(function(m){return App._e(m)+' — <b>'+fmt(st[m])+' ₽</b>';}).join(' · ')+
               '</div>';
           })()+
+          (r.monthly?App._monthlyAsk(r.monthly,r.noRevenue):'')+
           '<div style="font-size:12.5px;color:var(--muted);">Из листа ДДС: '+r.fromDDS+
           ' · из листа Оплата: '+r.fromOPL+'</div>'+
           (mm?'<div style="font-size:12.5px;color:var(--muted);">Месяцы: '+App._e(mm)+'</div>':'')+
@@ -10045,6 +10105,7 @@ var App={
             h+='<div style="color:var(--warn,#FF9F0A);font-size:12px;line-height:1.5;margin-top:6px;">'+
                'За '+App._e(d.noRevenue.join(', '))+' в файле есть траты, но нет выручки. '+
                'Пока их нет, «Общий капитал» будет показывать минус.</div>';
+          if(d.monthly) h+=App._monthlyAsk(d.monthly,d.noRevenue);
           return;
         }
         h+='<br>'+App._e(d.title)+': обновлено <b>'+d.upd+'</b>, добавлено <b>'+d.add+'</b>'+(d.err?' — <span style="color:var(--expense);">'+App._e(d.err)+'</span>':'');
@@ -10066,7 +10127,8 @@ var App={
       }else{
         var own=(r.type==='own');
         App._xlsDone.push({title:r.title,upd:r.upd,add:r.add,own:own,
-                           debts:r.debts,months:r.months,noRevenue:r.noRevenue});
+                           debts:r.debts,months:r.months,noRevenue:r.noRevenue,
+                           monthly:r.monthly});
         if(st)st.innerHTML='<span style="color:var(--income);">✓ '+(own
           ?('операций '+r.add+', движений долга '+(r.debts||0))
           :('обновлено '+r.upd+', добавлено '+r.add))+'</span>';

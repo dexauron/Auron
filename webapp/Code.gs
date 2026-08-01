@@ -3034,6 +3034,77 @@ var DDS_DEBT_REP = 'Поставщики (из отчёта)';
 // они без хитростей — надо было просто знать, что туда смотреть.
 var DDS_DEBT_LEFT_COL = 'долг поставщик';
 
+// ── Месячный итог («ОТЧЁТ МЕС») ─────────────────────────────────────
+//
+// Третий лист в файле владельца: выручка и расходы за месяц одной
+// строкой каждая. Именно в нём лежит выручка за месяцы, которых нет в
+// подневном листе ДДС — за июнь это 11 142 917 ₽.
+//
+// Загвоздка: месяц в листе НЕ написан. Ни даты, ни заголовка — просто
+// числа, набранные руками, без единой формулы. Вычислить его по данным
+// нельзя: долг 2 854 749 не совпадает ни с началом, ни с концом ни
+// одного месяца, оборот закупа 8 357 188 лишь близок к июньскому
+// 8 281 777, а зарплата 654 000 не равна фактической ни за один месяц.
+// Поэтому месяц СПРАШИВАЕМ у владельца, а не угадываем: ошибиться
+// месяцем на 11 миллионах — тихо испортить все расчёты.
+var MON_ROWS = [
+  ['наличная торг', 'cash'],
+  ['онлайн торг',   'online']
+];
+var MON_TAG = 'MON';
+
+function _ddsFindMonthlySheet(wb) {
+  try {
+    var sh = wb.getSheets();
+    for (var i = 0; i < sh.length; i++) {
+      var n = String(sh[i].getName()||'').toLowerCase()
+                .replace(/ё/g,'е').replace(/\s+/g,'');
+      if (n.indexOf('отчетмес') === 0) return sh[i];
+    }
+  } catch(e) {}
+  return null;
+}
+
+// Читает месячный итог: подпись в первом столбце, число — первое
+// численное значение в той же строке (в файле оно стоит в пятом
+// столбце, но полагаться на номер нельзя).
+function _ddsMonthlyRead(sh) {
+  var out = { cash:0, online:0, found:false };
+  if (!sh || sh.getLastRow() < 1) return out;
+  var vals = sh.getRange(1,1,Math.min(sh.getLastRow(),60),
+                         Math.min(sh.getLastColumn(),20)).getValues();
+  for (var r = 0; r < vals.length; r++) {
+    var label = String(vals[r][0]||'').toLowerCase().replace(/ё/g,'е').trim();
+    if (!label) continue;
+    for (var k = 0; k < MON_ROWS.length; k++) {
+      if (label.indexOf(MON_ROWS[k][0]) !== 0) continue;
+      for (var c = 1; c < vals[r].length; c++) {
+        var num = _xlsNum(vals[r][c]);
+        if (num) { out[MON_ROWS[k][1]] = Math.round(Math.abs(num)); break; }
+      }
+      break;
+    }
+  }
+  out.found = !!(out.cash || out.online);
+  out.total = out.cash + out.online;
+  return out;
+}
+
+// Две операции выручки за месяц, последним числом месяца.
+function _ddsMonthlyRows(ym, cash, online) {
+  var d = new Date(ym + '-01T12:00:00');
+  d.setMonth(d.getMonth()+1); d.setDate(0);          // последний день месяца
+  var out = [], tag = MON_TAG + ':' + ym;
+  function row(cat, amt, acc) {
+    if (!amt) return;
+    out.push([ '', Utilities.getUuid(), new Date(d), 'Доход', cat,
+               Math.round(amt), acc, '', 'Итог за месяц из отчёта', '', tag, '', '' ]);
+  }
+  row('Выручка наличными', cash, 'Наличные');
+  row('Выручка безналичными', online, 'Карта');
+  return out;
+}
+
 // Ищет лист по части имени (без учёта регистра и лишних пробелов).
 function _ddsFindSheet(ss, part) {
   var sh = ss.getSheets();
@@ -3328,6 +3399,11 @@ function _ddsImportOpened(ss, wb) {
       else mExp[m] = (mExp[m]||0) + r[5];
     });
     var noRevenue = Object.keys(mExp).filter(function(m){ return !mRev[m]; }).sort();
+
+    // Месячный итог из третьего листа. Месяц в нём не написан, поэтому
+    // сюда он приходит без месяца — экран спросит, за какой он, и
+    // предложит те месяцы, где траты есть, а выручки нет.
+    var monthly = _ddsMonthlyRead(_ddsFindMonthlySheet(wb));
     if (!all.length && !allDebts.length) { _xlsDrop(tmp);
       return {__error:'В листах нет строк с датами — загружать нечего.'}; }
 
@@ -3443,6 +3519,7 @@ function _ddsImportOpened(ss, wb) {
          ', заменено '+res.removed+', месяцы: '+monthsList.sort().join(', '));
     return { ok:true, added: all.length, debts: allDebts.length, removed: res.removed,
              debtStart: starts, plan: plans, noRevenue: noRevenue,
+             monthly: (monthly && monthly.found && noRevenue.length) ? monthly : null,
              months: monthsList.sort(), skipped: skipped.sort(),
              fromDDS: a.rows.length, fromOPL: b.rows.length };
   }
@@ -3462,6 +3539,44 @@ function ddsImport(p) {
     _xlsDrop(tmp);
     return out;
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
+}
+
+// Записывает месячный итог выручки за месяц, который назвал владелец.
+//
+// Отдельным действием, а не при загрузке: месяц в файле не написан, и
+// назвать его может только человек. Числа приходят с экрана — те самые,
+// что он на экране и видел; на всякий случай сверяем, что они похожи на
+// деньги, и требуем право на финансы.
+function ddsMonthlySave(p) {
+  return _withLock(function(){
+    try {
+      var ssId = p && p.ssId;
+      if (!_permGuard(ssId,'finance'))
+        return {__error:'Записывать выручку может владелец или бухгалтер'};
+      var ym = String((p && p.month) || '').slice(0,7);
+      if (!/^\d{4}-\d{2}$/.test(ym)) return {__error:'Не указан месяц'};
+      var cash = Math.round(Math.abs(_gnum(p.cash)));
+      var online = Math.round(Math.abs(_gnum(p.online)));
+      if (!cash && !online) return {__error:'Выручка нулевая — записывать нечего'};
+
+      var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+      var tags = {}; tags[MON_TAG+':'+ym] = true;
+      var removed = _ddsWipe(ss, tags);          // повторная запись не удваивает
+
+      var rows = _ddsMonthlyRows(ym, cash, online);
+      var base = ss.getSheetByName(SH_BASE);
+      var r = base.getLastRow()+1, startId = base.getLastRow();
+      for (var i = 0; i < rows.length; i++) rows[i][0] = startId + i;
+      _ensureRows(base, r, rows.length);
+      base.getRange(r, 1, rows.length, B_COLS).setValues(rows);
+
+      try { _ddsCacheBust(ssId); _bustDash(ssId); } catch(e){}
+      _log(ss,'Выручка за месяц', ym+': наличными '+cash+', безналом '+online+
+           (removed?', заменено '+removed:''));
+      return { ok:true, month:ym, cash:cash, online:online,
+               total:cash+online, removed:removed };
+    } catch(e) { return {__error:e.message}; }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════

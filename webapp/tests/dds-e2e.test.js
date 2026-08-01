@@ -61,7 +61,11 @@ eval(gv('DDS_COLS'));eval(gv('OPL_COLS'));eval(gv('DDS_DEBT_COLS'));eval(gv('DDS
 var DDS_DEBT_REP='Поставщики (из отчёта)',DDS_DEBT_LEFT_COL='долг поставщик';
 eval(grab('_xlsNum'));eval(grab('_ddsDateKey'));eval(grab('_ddsSheetToOps'));
 eval(grab('_ddsFindSheet'));eval(grab('_ensureRows'));eval(grab('_killRows'));
-eval(grab('_ddsWipe'));eval(grab('_ddsWipeDebts'));eval(grab('_ddsImportOpened'));
+eval(grab('_ddsWipe'));eval(grab('_ddsWipeDebts'));
+// Месячный итог: в этом прогоне листа «Отчёт мес» нет, но функции
+// должны существовать — их зовёт загрузка.
+eval(grab('_ddsFindMonthlySheet'));eval(grab('_ddsMonthlyRead'));
+eval(grab('_ddsImportOpened'));
 
 function mk(f,n,name){var raw=JSON.parse(fs.readFileSync(f,'utf8')).map(function(r){
   return r.map(function(x){return (x&&x.__d)?new Date(x.__d+'T12:00:00'):(x===null?'':x);});});
