@@ -429,9 +429,17 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 .home-hero-delta.up{color:var(--pos);}
 .home-hero-delta.dn{color:var(--neg);}
 /* Account pills inside hero */
-.acct-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:10px;margin-top:18px;}
+/* Счета — ОДНОЙ строкой с прокруткой, а не сеткой в несколько рядов.
+   Сеткой три счёта ложились 2+1: третий занимал целый ряд, а рядом
+   оставалась пустота, и карточка капитала съедала пол-экрана. Из-за
+   этого цифры за период уходили за нижний край. */
+.acct-row{display:flex;gap:10px;margin-top:16px;overflow-x:auto;
+  scrollbar-width:none;-ms-overflow-style:none;
+  padding-bottom:2px;scroll-snap-type:x proximity;}
+.acct-row::-webkit-scrollbar{display:none;}
+.acct-row>.acct-pill{flex:0 0 auto;min-width:132px;scroll-snap-align:start;}
 .acct-pill{
-  min-width:0;padding:12px 13px;
+  min-width:0;padding:11px 13px;
   border-radius:16px;
   background:rgba(255,255,255,.05);
   border:1px solid rgba(255,255,255,.1);
@@ -2244,11 +2252,6 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <div id="home-lastop" style="padding:0 16px;margin-top:8px;"></div>
       <!-- План выручки на месяц -->
       <div id="target-bar" style="display:none;padding:0 16px;margin-bottom:16px;"></div>
-      <!-- Настраиваемая доска виджетов (пользователь сам добавляет/двигает) -->
-      <div id="home-board"></div>
-      <div style="padding:0 16px;margin-bottom:14px;">
-        <button onclick="App.openHomeCustomize()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px;border-radius:14px;border:1.5px dashed var(--line);background:transparent;color:var(--muted);font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> Настроить виджеты</button>
-      </div>
       <!-- 2×2 stat tiles -->
       <div class="home-split">
         <div class="split-tile" onclick="App.openMetricDetail('income')" style="cursor:pointer;">
@@ -2285,6 +2288,15 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           <div class="spark" id="spark-expense"></div>
           <div class="split-tile-x brand">подробнее →</div>
         </div>
+      </div>
+      <!-- Подсказки и виджеты — НИЖЕ цифр.
+           Главная жалоба людей на такие приложения — перегруженный экран.
+           Сначала деньги, потом советы: за советом человек листает
+           осознанно, а деньги должен видеть сразу. -->
+      <div class="grp-label" style="margin-top:18px;">Подсказки</div>
+      <div id="home-board"></div>
+      <div style="padding:0 16px;margin-bottom:14px;">
+        <button onclick="App.openHomeCustomize()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:12px;border:1px dashed var(--line-2);background:transparent;color:var(--muted);font-size:12px;font-weight:600;opacity:.75;cursor:pointer;font-family:var(--font);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> Настроить виджеты</button>
       </div>
       <!-- Recent transactions -->
       <div class="home-tx">
@@ -3223,7 +3235,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.91.0';
+var APP_VERSION='4.92.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
