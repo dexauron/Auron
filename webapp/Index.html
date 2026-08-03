@@ -1056,12 +1056,17 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   position:fixed;bottom:calc(var(--nav-h) + var(--safe-bot) + 20px);
   left:50%;transform:translateX(-50%) translateY(16px);
   background:rgba(15,15,34,.98);color:#fff;
-  padding:12px 24px;border-radius:24px;font-size:14px;font-weight:600;
+  padding:13px 18px;border-radius:16px;font-size:14px;font-weight:600;
   z-index:500;opacity:0;transition:opacity .25s,transform .25s;
-  /* Раньше стояло white-space:nowrap — длинная ошибка не переносилась и
-     уезжала за правый край телефона: владелец видел обрывок фразы. */
-  max-width:min(calc(100vw - 32px),420px);text-align:center;
-  line-height:1.35;overflow-wrap:anywhere;
+  /* Ширину задаём ЯВНО, а не «по содержимому».
+     Раньше стояло white-space:nowrap — длинная ошибка уезжала за край.
+     Потом поставили overflow-wrap:anywhere — и стало хуже: это свойство
+     влияет на расчёт собственной ширины блока, и подсказка съёжилась до
+     самого узкого слова. «Не получилось выполнить действие» разваливалось
+     на пять строк красным комом посреди экрана и накрывало форму.
+     Теперь это ровная полоса на ширину экрана, в одну-две строки. */
+  width:min(calc(100vw - 32px),420px);
+  text-align:center;line-height:1.4;overflow-wrap:break-word;
   backdrop-filter:blur(20px);border:1px solid var(--border);
   box-shadow:0 8px 32px rgba(0,0,0,.5);
 }
@@ -1417,7 +1422,15 @@ html[data-theme="light"] .supp-tab.active{color:#fff;}
 .cal-cell .dnum{font-size:13px;font-weight:700;line-height:1;}
 .cal-cell .dsum{font-size:9px;font-weight:700;color:var(--neg);margin-top:2px;line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Supplier summary grid */
-.supp-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 16px 0;}
+.supp-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 16px 0;
+  align-items:stretch;}
+/* Заголовки в двух карточках разной длины: «Сегодня к выплате» вставало
+   в две строки, «Общий долг» в одну — и суммы оказывались на разной
+   высоте. Глаз сравнивает две цифры по горизонтали, а сравнивать было
+   нечего. Держим заголовку место под две строки в обеих карточках. */
+.supp-summary>.card{display:flex;flex-direction:column;}
+.supp-summary>.card>div:first-child{min-height:2.6em;align-items:flex-start;}
+.supp-summary>.card>.num{margin-top:auto;}
 .contractor-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;padding:0 16px 16px;}
 
 /* ── Onboarding Wizard ─────────────────────────────── */
@@ -3235,7 +3248,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.93.0';
+var APP_VERSION='4.94.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
