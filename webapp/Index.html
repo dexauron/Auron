@@ -1427,30 +1427,48 @@ html[data-theme="light"] .supp-tab.active{color:#fff;}
   background:var(--surface-2);color:var(--ink-2);font-size:12.5px;font-weight:650;
   cursor:pointer;font-family:var(--font);transition:background .14s;}
 .ts-act:hover{background:var(--surface-3);}
-.ts-pane{padding-bottom:18px;}
-/* День — карточка со всеми, кто в этот день отмечен. Раньше показывался
-   только ОДИН человек за день: в один день работают несколько, и
-   остальные просто не были видны. */
-.ts-day{background:var(--surface);border:1px solid var(--line);border-radius:14px;
-  padding:11px 12px;display:flex;flex-direction:column;gap:7px;cursor:pointer;
+/* Запас снизу под нижнюю панель: без него легенда календаря и последние
+   строки списков прятались за ней. */
+.ts-pane{padding-bottom:calc(var(--nav-h) + var(--safe-bot) + 24px);}
+/* ── Календарь табеля ───────────────────────────────────────────────
+   Месяц сеткой 7×N, неделя начинается с понедельника. Раньше здесь был
+   список карточек в два столбца: по нему нельзя было увидеть неделю
+   целиком и понять, кто выходит в выходные. */
+.ts-cal{padding:0 12px;}
+.ts-dows{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;}
+.ts-dow{text-align:center;font-size:11px;font-weight:750;color:var(--muted);
+  padding:4px 0;letter-spacing:.02em;}
+.ts-dow.we{color:var(--neg);}
+.ts-weeks{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.ts-cell{position:relative;min-height:62px;border-radius:11px;padding:5px 4px 4px;
+  background:var(--surface);border:1px solid var(--line);cursor:pointer;
+  display:flex;flex-direction:column;gap:3px;align-items:center;
   transition:border-color .14s,background .14s;}
-.ts-day:hover{border-color:color-mix(in oklab,var(--brand) 40%,var(--line));}
-.ts-day.today{border-color:var(--brand);}
-.ts-day.weekend .ts-dnum{color:var(--neg);}
-.ts-dnum{font-size:12.5px;font-weight:750;color:var(--ink-2);display:flex;
-  align-items:center;justify-content:space-between;gap:6px;}
-.ts-dnum .dw{font-size:11px;font-weight:600;color:var(--muted);}
-.ts-emp{display:flex;align-items:center;gap:7px;font-size:12.5px;min-width:0;}
-.ts-emp .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.ts-chip{font-size:10.5px;font-weight:750;padding:2px 7px;border-radius:7px;white-space:nowrap;}
-.ts-chip.work{background:color-mix(in oklab,var(--pos) 18%,transparent);color:var(--pos);}
-.ts-chip.off{background:var(--surface-3);color:var(--muted);}
-.ts-chip.bad{background:color-mix(in oklab,var(--neg) 18%,transparent);color:var(--neg);}
-.ts-chip.money{background:color-mix(in oklab,#FF9F0A 20%,transparent);color:#FF9F0A;}
-.ts-empty{font-size:12px;color:var(--muted);}
-.timesheet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));
-  gap:10px;padding:0 16px;}
-/* Строка сотрудника в зарплате и справочнике */
+.ts-cell:hover{border-color:color-mix(in oklab,var(--brand) 45%,var(--line));}
+.ts-cell.pad{background:transparent;border-color:transparent;cursor:default;}
+.ts-cell.we{background:color-mix(in oklab,var(--neg) 5%,var(--surface));}
+.ts-cell.today{border-color:var(--brand);border-width:1.5px;}
+.ts-cell .dn{font-size:12.5px;font-weight:750;line-height:1;color:var(--ink-2);}
+.ts-cell.we .dn{color:var(--neg);}
+.ts-cell.today .dn{color:var(--brand);}
+/* Отметки: кружок с первой буквой имени, цвет — по тому, что было в этот
+   день. На телефоне в клетку влезает три; остальные — числом. */
+.ts-marks{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;}
+.ts-mark{width:17px;height:17px;border-radius:6px;font-size:9.5px;font-weight:800;
+  display:grid;place-items:center;line-height:1;}
+.ts-mark.work{background:color-mix(in oklab,var(--pos) 26%,transparent);color:var(--pos);}
+.ts-mark.off{background:var(--surface-3);color:var(--muted);}
+.ts-mark.bad{background:color-mix(in oklab,var(--neg) 26%,transparent);color:var(--neg);}
+.ts-mark.money{background:color-mix(in oklab,#FF9F0A 28%,transparent);color:#FF9F0A;}
+.ts-mark.more{background:transparent;color:var(--muted);font-weight:700;}
+.ts-legend{display:flex;flex-wrap:wrap;gap:10px;padding:12px 16px 0;
+  font-size:11.5px;color:var(--muted);}
+.ts-legend span{display:inline-flex;align-items:center;gap:5px;}
+.ts-legend i{width:11px;height:11px;border-radius:4px;display:inline-block;}
+@media(min-width:560px){
+  .ts-cell{min-height:78px;}
+  .ts-mark{width:20px;height:20px;font-size:11px;}
+}
 .ts-row{display:flex;align-items:center;gap:12px;padding:13px 14px;
   border-top:1px solid var(--line-2);}
 .ts-row:first-child{border-top:none;}
@@ -2656,7 +2674,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
           <button onclick="App.openTsFill()" class="ts-act">Заполнить по графику</button>
           <button onclick="App.openTsBonus()" class="ts-act">Премия или штраф</button>
         </div>
-        <div id="ts-grid" class="timesheet-grid"></div>
+        <div id="ts-grid" class="ts-cal"></div>
       </div>
 
       <div id="ts-pane-pay" class="ts-pane" style="display:none;"></div>
@@ -3303,7 +3321,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.96.0';
+var APP_VERSION='4.97.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7776,35 +7794,60 @@ var App={
     return m[st]||'off';
   },
 
-  // ── Вкладка «Табель»: день за днём ────────────────────────────────
+  // ── Вкладка «Табель»: календарь месяца ────────────────────────────
+  //
+  // Неделя начинается с ПОНЕДЕЛЬНИКА (правило владельца и наша привычка).
+  // В JavaScript getDay() отдаёт 0 для воскресенья, поэтому везде ниже
+  // día переводится: (getDay()+6)%7 → 0 = понедельник, 6 = воскресенье.
   _tsGrid:function(r){
-    var grid=document.getElementById('ts-grid');if(!grid)return;
+    var box=document.getElementById('ts-grid');if(!box)return;
+    var Y=App.s.tsYear, M=App.s.tsMonth;
     var days=r.days||[];
-    var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
-    var today=new Date();
-    var isThis=(today.getFullYear()===App.s.tsYear&&today.getMonth()===App.s.tsMonth);
     var byDay={};
-    // В один день работают несколько человек. Прежний экран показывал
-    // ТОЛЬКО ПЕРВОГО — остальные просто не были видны, и владелец не мог
-    // заметить, что смена не отмечена.
+    // В один день работают несколько человек — собираем всех.
     days.forEach(function(x){ (byDay[x.day]=byDay[x.day]||[]).push(x); });
-    var h='';
-    for(var i=1;i<=dIM;i++){
-      var dn=new Date(App.s.tsYear,App.s.tsMonth,i);
-      var dow=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dn.getDay()];
-      var weekend=(dn.getDay()===0||dn.getDay()===6);
-      var list=byDay[i]||[];
-      h+='<div class="ts-day'+(weekend?' weekend':'')+
-         ((isThis&&today.getDate()===i)?' today':'')+'" onclick="App.openTsDay('+i+')">'+
-         '<div class="ts-dnum"><span>'+i+'</span><span class="dw">'+dow+'</span></div>'+
-         (list.length?list.map(function(x){
-            return '<div class="ts-emp"><span class="nm">'+App._e(x.employee)+'</span>'+
-              '<span class="ts-chip '+App._tsStatusClass(x.status)+'">'+App._e(x.status||'П')+
-              ((x.status==='Прем'||x.status==='Штр')&&x.rate?' '+fmt(x.rate):'')+'</span></div>';
-          }).join(''):'<div class="ts-empty">никто не отмечен</div>')+
+
+    var dIM=new Date(Y,M+1,0).getDate();
+    var first=(new Date(Y,M,1).getDay()+6)%7;      // сколько пустых клеток слева
+    var today=new Date();
+    var isThis=(today.getFullYear()===Y&&today.getMonth()===M);
+    var DOW=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+
+    var h='<div class="ts-dows">'+DOW.map(function(d,i){
+      return '<div class="ts-dow'+(i>=5?' we':'')+'">'+d+'</div>';}).join('')+'</div>';
+    h+='<div class="ts-weeks">';
+    for(var i=0;i<first;i++) h+='<div class="ts-cell pad"></div>';
+    for(var d=1;d<=dIM;d++){
+      var dow=(new Date(Y,M,d).getDay()+6)%7;
+      var we=(dow>=5);
+      var list=byDay[d]||[];
+      var marks='';
+      // В клетку телефона помещается три отметки. Больше — числом:
+      // «+2» честнее, чем обрезать список молча.
+      list.slice(0,3).forEach(function(x){
+        marks+='<span class="ts-mark '+App._tsStatusClass(x.status)+'" title="'+
+          App._e(x.employee+' · '+(x.status||'П'))+'">'+
+          App._e((x.employee||'?').trim().charAt(0).toUpperCase())+'</span>';
+      });
+      if(list.length>3) marks+='<span class="ts-mark more">+'+(list.length-3)+'</span>';
+      h+='<div class="ts-cell'+(we?' we':'')+((isThis&&today.getDate()===d)?' today':'')+
+         '" onclick="App.openTsDay('+d+')">'+
+         '<span class="dn">'+d+'</span>'+
+         (marks?('<span class="ts-marks">'+marks+'</span>'):'')+
          '</div>';
     }
-    grid.innerHTML=h;
+    // Хвост до конца недели — чтобы последняя строка не разъезжалась.
+    var tail=(7-((first+dIM)%7))%7;
+    for(var q=0;q<tail;q++) h+='<div class="ts-cell pad"></div>';
+    h+='</div>';
+
+    h+='<div class="ts-legend">'+
+      '<span><i style="background:color-mix(in oklab,var(--pos) 26%,transparent);"></i>работал</span>'+
+      '<span><i style="background:var(--surface-3);"></i>отпуск, больничный, отгул</span>'+
+      '<span><i style="background:color-mix(in oklab,var(--neg) 26%,transparent);"></i>прогул</span>'+
+      '<span><i style="background:color-mix(in oklab,#FF9F0A 28%,transparent);"></i>премия или штраф</span>'+
+      '</div>';
+    box.innerHTML=h;
   },
 
   // ── Вкладка «Зарплата» ────────────────────────────────────────────
