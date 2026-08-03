@@ -4016,6 +4016,9 @@ function getRepDebt(p) {
 
 function getTimesheetMonth(p) {
   var ssId=p.ssId, year=parseInt(p.year), month=parseInt(p.month);
+  // Табель — это зарплаты людей. Смотрит владелец, бухгалтер или
+  // администратор, а не любой, кто дотянулся до функции.
+  if (!_anyPermGuard(ssId,['manage','payments'])) return {__error:'Нет доступа к табелю'};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_TIMESHEET);
@@ -4051,8 +4054,240 @@ function getTimesheetMonth(p) {
       });
     }
     var summary=Object.keys(summaryMap).map(function(k){return summaryMap[k];});
-    return {days:days,summary:summary,employees:empList};
-  } catch(e) { return {days:[],summary:[],employees:[]}; }
+
+    // ── Деньги: начислено, выдано, остаток ──────────────────────────
+    //
+    // Тип оплаты у каждого свой (правило владельца):
+    //   смена — число отработанных смен × ставка
+    //   час   — отработанные часы × ставка
+    //   оклад — ставка целиком за месяц
+    // Премии прибавляются, штрафы вычитаются. Выданное берём из настоящих
+    // операций «ЗП» и «Аванс» по этому сотруднику — иначе остаток будет
+    // выдумкой, а по нему выдают деньги на руки.
+    var emp2 = {};
+    _tsEmployees(ss, ssId).forEach(function(e){ emp2[e.name] = e; });
+
+    var bonus = {}, fine = {};
+    days.forEach(function(d){
+      var amt = Math.round(parseFloat(d.rate)||0);
+      if (d.status === 'Прем') bonus[d.employee] = (bonus[d.employee]||0) + amt;
+      if (d.status === 'Штр')  fine[d.employee]  = (fine[d.employee]||0) + amt;
+    });
+
+    var paid = {}, payList = {};
+    try {
+      var base = ss.getSheetByName(SH_BASE);
+      if (base && base.getLastRow() > 1) {
+        var tz = Session.getScriptTimeZone();
+        base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues().forEach(function(r){
+          var cat = String(r[B_CAT-1]||'');
+          if (cat !== 'ЗП' && cat !== 'Аванс') return;
+          var who = String(r[B_EMP-1]||''); if (!who) return;
+          var dt = r[B_DATE-1]; if (!(dt instanceof Date)) return;
+          if (dt.getFullYear() !== year || (dt.getMonth()+1) !== month) return;
+          var a = Math.abs(_gnum(r[B_AMT-1])); if (!a) return;
+          paid[who] = (paid[who]||0) + a;
+          (payList[who] = payList[who] || []).push({
+            date: Utilities.formatDate(dt,tz,'yyyy-MM-dd'), kind: cat, amount: Math.round(a) });
+        });
+      }
+    } catch(e){}
+
+    summary.forEach(function(x){
+      var e = emp2[x.employee] || {payType:'shift', rate:0};
+      x.payType = e.payType; x.rate = e.rate;
+      var base = 0;
+      if (e.payType === 'oklad')      base = e.rate;
+      else if (e.payType === 'hour')  base = Math.round(x.totalHours * e.rate);
+      else                            base = x.daysP * e.rate;
+      x.baseSalary = Math.round(base);
+      x.bonus = Math.round(bonus[x.employee]||0);
+      x.fine  = Math.round(fine[x.employee]||0);
+      x.accrued = Math.round(base + x.bonus - x.fine);
+      x.paid    = Math.round(paid[x.employee]||0);
+      x.left    = Math.round(x.accrued - x.paid);
+      x.payments = payList[x.employee] || [];
+    });
+
+    var tot = {accrued:0, paid:0, left:0, bonus:0, fine:0, daysP:0, hours:0};
+    summary.forEach(function(x){
+      tot.accrued+=x.accrued; tot.paid+=x.paid; tot.left+=x.left;
+      tot.bonus+=x.bonus; tot.fine+=x.fine; tot.daysP+=x.daysP; tot.hours+=x.totalHours;
+    });
+
+    return {days:days, summary:summary, employees:_tsEmployees(ss,ssId),
+            statuses:TS_STATUSES, total:tot, year:year, month:month};
+  } catch(e) { return {days:[],summary:[],employees:[],statuses:TS_STATUSES,
+                       total:{accrued:0,paid:0,left:0,bonus:0,fine:0,daysP:0,hours:0}}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ТАБЕЛЬ — сотрудники, начисления, выплаты
+//
+// Владелец: «у некоторых оклад, у некоторых за смену, у некоторых по
+// часам». Поэтому тип оплаты хранится У КАЖДОГО СОТРУДНИКА, а не один
+// на магазин. Список сотрудников лежит в настройках (ключ EMPLOYEES) —
+// туда же кладём тип и ставку, чтобы не заводить новый лист.
+//
+// Что считаем за месяц:
+//   начислено = база по типу оплаты + премии − штрафы
+//   выдано    = операции ЗП и Аванс по этому сотруднику за месяц
+//   остаток   = начислено − выдано
+//
+// Премии и штрафы живут строками того же табеля со статусом «Прем»/«Штр»
+// и суммой в колонке ставки: отдельный лист ради двух цифр — лишнее.
+// ═══════════════════════════════════════════════════════════════════════
+
+var TS_STATUSES = [
+  ['П',   'Работал',     'work'],
+  ['Отп', 'Отпуск',      'off'],
+  ['Б',   'Больничный',  'off'],
+  ['О',   'Отгул',       'off'],
+  ['В',   'Прогул',      'bad'],
+  ['Прем','Премия',      'money'],
+  ['Штр', 'Штраф',       'money']
+];
+
+// Сотрудник: {name, payType:'shift'|'hour'|'oklad', rate, active}
+function _tsEmployees(ss, ssId) {
+  var sett = getSettings({ssId:ssId});
+  var list = (sett.employees||[]).map(function(e){
+    if (typeof e === 'object' && e) {
+      return { name:_s(e.name||''), payType:_s(e.payType||'shift'),
+               rate:Math.round(parseFloat(e.rate)||0),
+               active:(e.active===false?false:true), phone:_s(e.phone||'') };
+    }
+    // Старый формат — просто имя строкой. Считаем посменным без ставки.
+    return { name:_s(e), payType:'shift', rate:0, active:true, phone:'' };
+  }).filter(function(e){ return e.name; });
+  if (!list.length) {
+    (sett.cashiers||[]).forEach(function(c){
+      if (c) list.push({name:_s(c),payType:'shift',rate:0,active:true,phone:''});
+    });
+  }
+  return list;
+}
+
+function getEmployees(p) {
+  var ssId = p && p.ssId;
+  if (!_anyPermGuard(ssId,['manage','payments'])) return {__error:'Нет доступа к сотрудникам'};
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    return { employees:_tsEmployees(ss, ssId), statuses:TS_STATUSES };
+  } catch(e) { return {__error:e.message}; }
+}
+
+// Добавить или изменить сотрудника. Имя — ключ: по нему связаны табель и
+// выплаты, поэтому при переименовании переносим и их.
+function saveEmployee(p) {
+  return _withLock(function(){
+    var ssId = p && p.ssId, d = p && p.data || {};
+    if (!_permGuard(ssId,'manage')) return {__error:'Менять сотрудников может владелец или администратор'};
+    var name = _s(d.name).trim();
+    if (!name) return {__error:'Впишите имя сотрудника'};
+    var payType = _s(d.payType||'shift');
+    if (['shift','hour','oklad'].indexOf(payType) < 0) payType = 'shift';
+    var rate = Math.round(parseFloat(d.rate)||0);
+    if (rate < 0) return {__error:'Ставка не может быть отрицательной'};
+    try {
+      var ss = SpreadsheetApp.openById(ssId); ensureSheets(ss);
+      var sett = getSettings({ssId:ssId});
+      var list = _tsEmployees(ss, ssId);
+      var was = _s(d.oldName||'').trim();
+      var idx = -1;
+      for (var i=0;i<list.length;i++) if (list[i].name === (was||name)) { idx=i; break; }
+      // Тёзка — это ошибка: имя связывает табель и выплаты.
+      for (var j=0;j<list.length;j++)
+        if (j!==idx && list[j].name.toLowerCase()===name.toLowerCase())
+          return {__error:'Сотрудник «'+name+'» уже есть'};
+      var rec = { name:name, payType:payType, rate:rate,
+                  active:(d.active===false?false:true), phone:_s(d.phone||'') };
+      if (idx >= 0) list[idx] = rec; else list.push(rec);
+      sett.employees = list;
+      saveSettings({ssId:ssId, data:sett});
+      // Переименование: тянем за собой табель, иначе история отвяжется.
+      if (was && was !== name) _tsRename(ss, was, name);
+      return { ok:true, employees:list, renamed:(was&&was!==name)?was:'' };
+    } catch(e) { return {__error:e.message}; }
+  });
+}
+
+function _tsRename(ss, was, now) {
+  try {
+    var sh = ss.getSheetByName(SH_TIMESHEET);
+    if (!sh || sh.getLastRow() < 2) return 0;
+    var rng = sh.getRange(2, T_EMP, sh.getLastRow()-1, 1);
+    var v = rng.getValues(), n = 0;
+    for (var i=0;i<v.length;i++) if (String(v[i][0])===was) { v[i][0]=now; n++; }
+    if (n) rng.setValues(v);
+    return n;
+  } catch(e) { return 0; }
+}
+
+// Удаление сотрудника. Если по нему есть табель — НЕ удаляем молча, а
+// предлагаем скрыть: стереть человека, за которым числится зарплата,
+// значит потерять историю выплат.
+function deleteEmployee(p) {
+  return _withLock(function(){
+    var ssId = p && p.ssId;
+    if (!_permGuard(ssId,'manage')) return {__error:'Удалять сотрудников может владелец или администратор'};
+    var name = _s(p && p.name).trim();
+    if (!name) return {__error:'Не указан сотрудник'};
+    try {
+      var ss = SpreadsheetApp.openById(ssId);
+      var used = 0;
+      var sh = ss.getSheetByName(SH_TIMESHEET);
+      if (sh && sh.getLastRow() >= 2)
+        sh.getRange(2,T_EMP,sh.getLastRow()-1,1).getValues()
+          .forEach(function(r){ if (String(r[0])===name) used++; });
+      var sett = getSettings({ssId:ssId});
+      var list = _tsEmployees(ss, ssId);
+      if (used && !p.force)
+        return {__error:'За «'+name+'» записано '+used+' дней табеля. '+
+                        'Его лучше скрыть, а не удалять — иначе пропадёт история.',
+                canHide:true, used:used};
+      sett.employees = list.filter(function(e){ return e.name !== name; });
+      saveSettings({ssId:ssId, data:sett});
+      return { ok:true, employees:sett.employees, removedDays:used };
+    } catch(e) { return {__error:e.message}; }
+  });
+}
+
+// Ищет строку табеля. kind: 'work' — рабочая запись (любой статус, кроме
+// денежных), 'Прем'/'Штр' — денежная. Возвращает номер строки или -1.
+function _tsFindRow(sh, year, month, day, emp, kind) {
+  if (!sh || sh.getLastRow() < 2) return -1;
+  var vs = sh.getRange(2,1,sh.getLastRow()-1,Math.min(sh.getLastColumn(),T_COLS)).getValues();
+  for (var i=0;i<vs.length;i++) {
+    if (parseInt(vs[i][T_YEAR-1])!==year) continue;
+    if (parseInt(vs[i][T_MON-1])!==month) continue;
+    if (parseInt(vs[i][T_DAY-1])!==day) continue;
+    if (String(vs[i][T_EMP-1])!==emp) continue;
+    var st = String(vs[i][T_STATUS-1]||'П');
+    var k  = (st==='Прем'||st==='Штр') ? st : 'work';
+    if (k===kind) return i+2;
+  }
+  return -1;
+}
+
+// Удалить запись табеля. Раньше это делалось «сохранением с пустым
+// именем», но такая запись не находилась по ключу и не удалялась
+// никогда: кнопка была, а действия за ней не было.
+function deleteTimesheetEntry(p) {
+  return _withLock(function(){
+    var ssId=p&&p.ssId;
+    if (!_permGuard(ssId,'manage')) return {__error:'Нет прав на табель'};
+    var year=parseInt(p.year), month=parseInt(p.month), day=parseInt(p.day);
+    var emp=_s(p.employee||''), kind=_s(p.kind||'work');
+    if (!emp||!day) return {__error:'Не указан день или сотрудник'};
+    try {
+      var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
+      var rowNum=_tsFindRow(sh, year, month, day, emp, kind);
+      if (rowNum<0) return {__error:'Запись не найдена'};
+      _killRows(sh, [rowNum]);
+      return {ok:true};
+    } catch(e) { return {__error:e.message}; }
+  });
 }
 
 function saveTimesheetEntry(p) {
@@ -4064,20 +4299,20 @@ function saveTimesheetEntry(p) {
   var status=_s(p.status||'П'),hours=parseFloat(p.hours)||0,rate=parseFloat(p.rate)||0,cmt=_s(p.comment||'');
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_TIMESHEET);
-    var rowNum=-1;
-    if (sh.getLastRow()>=2) {
-      // Ключ строки — день И СОТРУДНИК: в один день работают несколько человек,
-      // без сравнения по сотруднику мы бы перезаписывали чужую запись за этот день.
-      var vs=sh.getRange(2,1,sh.getLastRow()-1,4).getValues();
-      for (var i=0;i<vs.length;i++) {
-        if (parseInt(vs[i][0])===year&&parseInt(vs[i][1])===month&&parseInt(vs[i][2])===day&&String(vs[i][3])===emp) {rowNum=i+2;break;}
-      }
-    }
-    if (!emp) { if (rowNum>0) sh.deleteRow(rowNum); return {ok:true}; }
+    if (!emp) return {__error:'Не указан сотрудник'};
+    // Ключ строки — день, СОТРУДНИК и ВИД записи.
+    //
+    // День и сотрудник нужны потому, что в один день работают несколько
+    // человек. Вид — потому что премия и штраф ложатся на ту же дату, что
+    // и отработанная смена: без него премия затирала бы рабочий день, и
+    // человек терял смену из-за поощрения.
+    var money = (status==='Прем'||status==='Штр');
+    var kind  = money ? status : 'work';
+    var rowNum=_tsFindRow(sh, year, month, day, emp, kind);
     var row=[year,month,day,emp,timeIn,timeOut,status,hours,rate,cmt];
     if (rowNum>0) sh.getRange(rowNum,1,1,T_COLS).setValues([row]);
-    else sh.appendRow(row);
-    return {ok:true};
+    else { _ensureRows(sh, sh.getLastRow()+1, 1); sh.appendRow(row); }
+    return {ok:true, kind:kind};
   } catch(e) { return {__error:e.message}; }
 });
 }

@@ -720,20 +720,12 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 .rep-btn-pay{background:var(--income-dim);color:var(--income);}
 .rep-btn-hist{background:var(--glass);color:var(--text-3);}
 
-/* ── Timesheet ── */
-.timesheet-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:4px;}
-.ts-day{
-  background:var(--card);border-radius:14px;padding:12px 14px;
-  border:1px solid var(--sep);
-}
-.ts-day-num{font-size:12px;color:var(--text-3);margin-bottom:4px;font-weight:700;}
-.ts-day-emp{font-size:14px;font-weight:700;}
-.ts-day-empty{font-size:13px;color:var(--sep);}
-.ts-add-btn{
-  background:var(--brand-dim);border:none;color:var(--brand);
-  border-radius:10px;padding:6px 10px;font-size:12px;font-weight:700;
-  cursor:pointer;margin-top:6px;font-family:var(--font);
-}
+/* ── Табель: старые правила убраны ─────────────────────────────────
+   Здесь стояли .timesheet-grid, .ts-day и соседи от прежнего экрана.
+   Новые лежат ниже, рядом с остальными правилами табеля. Держать оба
+   набора нельзя: на вкладках поставщиков я уже наступал на эти грабли —
+   два правила с одним именем, и активная вкладка стала зелёным по
+   зелёному, то есть невидимой. */
 
 /* ── Settings ── */
 .settings-sec{padding:0 16px;margin-bottom:24px;}
@@ -881,7 +873,11 @@ body:not(.perm-manage)   [data-need~="manage"]{display:none!important;}
 .modal-overlay.full{align-items:stretch;backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg);}
 .modal-overlay.full .modal{
   max-height:100dvh;height:100dvh;border-radius:0;border:none;
-  padding:0 0 calc(var(--safe-bot) + 20px);background:var(--bg);
+  /* Поля по бокам и сверху. Раньше стояло padding:0 — на полной странице
+     заголовок и поля упирались в самый край экрана, и страница выглядела
+     обрезанной. Снизу оставляем место под безопасную зону телефона. */
+  padding:max(18px,env(safe-area-inset-top)) 16px calc(var(--safe-bot) + 24px);
+  background:var(--bg);
 }
 .modal-overlay.full .modal-handle{display:none;}
 .modal-overlay.show.full .modal{animation:fadeUp .22s ease both;}
@@ -1422,6 +1418,45 @@ html[data-theme="light"] .supp-tab.active{color:#fff;}
 .cal-cell .dnum{font-size:13px;font-weight:700;line-height:1;}
 .cal-cell .dsum{font-size:9px;font-weight:700;color:var(--neg);margin-top:2px;line-height:1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Supplier summary grid */
+/* ── Табель ─────────────────────────────────────────────────────── */
+.ts-nav{width:38px;height:38px;flex:0 0 auto;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink-2);border-radius:12px;font-size:20px;
+  line-height:1;cursor:pointer;font-family:var(--font);transition:background .14s;}
+.ts-nav:hover{background:var(--surface-3);}
+.ts-act{padding:9px 13px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink-2);font-size:12.5px;font-weight:650;
+  cursor:pointer;font-family:var(--font);transition:background .14s;}
+.ts-act:hover{background:var(--surface-3);}
+.ts-pane{padding-bottom:18px;}
+/* День — карточка со всеми, кто в этот день отмечен. Раньше показывался
+   только ОДИН человек за день: в один день работают несколько, и
+   остальные просто не были видны. */
+.ts-day{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+  padding:11px 12px;display:flex;flex-direction:column;gap:7px;cursor:pointer;
+  transition:border-color .14s,background .14s;}
+.ts-day:hover{border-color:color-mix(in oklab,var(--brand) 40%,var(--line));}
+.ts-day.today{border-color:var(--brand);}
+.ts-day.weekend .ts-dnum{color:var(--neg);}
+.ts-dnum{font-size:12.5px;font-weight:750;color:var(--ink-2);display:flex;
+  align-items:center;justify-content:space-between;gap:6px;}
+.ts-dnum .dw{font-size:11px;font-weight:600;color:var(--muted);}
+.ts-emp{display:flex;align-items:center;gap:7px;font-size:12.5px;min-width:0;}
+.ts-emp .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ts-chip{font-size:10.5px;font-weight:750;padding:2px 7px;border-radius:7px;white-space:nowrap;}
+.ts-chip.work{background:color-mix(in oklab,var(--pos) 18%,transparent);color:var(--pos);}
+.ts-chip.off{background:var(--surface-3);color:var(--muted);}
+.ts-chip.bad{background:color-mix(in oklab,var(--neg) 18%,transparent);color:var(--neg);}
+.ts-chip.money{background:color-mix(in oklab,#FF9F0A 20%,transparent);color:#FF9F0A;}
+.ts-empty{font-size:12px;color:var(--muted);}
+.timesheet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));
+  gap:10px;padding:0 16px;}
+/* Строка сотрудника в зарплате и справочнике */
+.ts-row{display:flex;align-items:center;gap:12px;padding:13px 14px;
+  border-top:1px solid var(--line-2);}
+.ts-row:first-child{border-top:none;}
+.ts-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  margin:0 16px 12px;overflow:hidden;}
+.ts-money{font-family:var(--font-num);font-weight:750;white-space:nowrap;}
 .supp-summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 16px 0;
   align-items:stretch;}
 /* Заголовки в двух карточках разной длины: «Сегодня к выплате» вставало
@@ -2593,20 +2628,40 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
     <!-- ТАБЕЛЬ: свой раздел. Раньше открывался значком без подписи
          в шапке «Поставщиков» — но табель про сотрудников, а не про
          поставщиков, и найти его там было нельзя. -->
-    <div id="tab-timesheet" class="panel" style="padding:16px;">
-        
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-          <div style="font-size:20px;font-weight:800;">Табель сотрудников</div>
-          <button onclick="App.openTsFill()" style="padding:8px 13px;background:color-mix(in oklab,var(--brand) 14%,transparent);color:var(--brand);border:none;border-radius:11px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">⚡ По графику</button>
+    <div id="tab-timesheet" class="panel" style="padding:0;">
+      <div style="padding:20px 16px 12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:-.4px;">Табель</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:3px;">Смены, зарплата и сотрудники</div>
+          </div>
+          <button onclick="App.openTsEntry(0)" style="padding:9px 14px;background:var(--brand);color:#06251A;border:none;border-radius:12px;font-size:13.5px;font-weight:750;cursor:pointer;font-family:var(--font);white-space:nowrap;">+ Смена</button>
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0 10px;">
-          <button onclick="App.tsPrevMonth()" style="background:none;border:none;font-size:26px;cursor:pointer;color:var(--text-2);padding:0 6px;">‹</button>
-          <span id="ts-month-label" style="font-size:16px;font-weight:700;"></span>
-          <button onclick="App.tsNextMonth()" style="background:none;border:none;font-size:26px;cursor:pointer;color:var(--text-2);padding:0 6px;">›</button>
+        <div class="supp-tabs" style="margin-top:14px;">
+          <button class="supp-tab active" data-ts="grid" onclick="App.setTsTab('grid',this)">Табель</button>
+          <button class="supp-tab" data-ts="pay" onclick="App.setTsTab('pay',this)">Зарплата</button>
+          <button class="supp-tab" data-ts="emp" onclick="App.setTsTab('emp',this)">Сотрудники</button>
         </div>
-        <div id="ts-summary" style="background:var(--card);border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+
+      <!-- месяц -->
+      <div id="ts-monthbar" style="display:flex;justify-content:space-between;align-items:center;padding:0 16px 12px;gap:10px;">
+        <button onclick="App.tsPrevMonth()" class="ts-nav" aria-label="Предыдущий месяц">‹</button>
+        <span id="ts-month-label" style="font-size:15.5px;font-weight:750;flex:1;text-align:center;"></span>
+        <button onclick="App.tsNextMonth()" class="ts-nav" aria-label="Следующий месяц">›</button>
+      </div>
+
+      <div id="ts-pane-grid" class="ts-pane">
+        <div style="padding:0 16px;display:flex;gap:8px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none;">
+          <button onclick="App.openTsFill()" class="ts-act">Заполнить по графику</button>
+          <button onclick="App.openTsBonus()" class="ts-act">Премия или штраф</button>
+        </div>
         <div id="ts-grid" class="timesheet-grid"></div>
       </div>
+
+      <div id="ts-pane-pay" class="ts-pane" style="display:none;"></div>
+      <div id="ts-pane-emp" class="ts-pane" style="display:none;"></div>
+    </div>
 
     <!-- SUPPLIERS (new design: summary + contractor grid + calendar + payable records) -->
     <div id="tab-suppliers" class="panel" style="padding:0;">
@@ -3248,7 +3303,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.95.0';
+var APP_VERSION='4.96.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4822,6 +4877,7 @@ var App={
     else if(tab==='kassa')App.initKassa();
     else if(tab==='journal')App.loadHistory();
     else if(tab==='suppliers')App.loadSuppliers();
+    else if(tab==='timesheet')App.loadTimesheet();
     else if(tab==='report'){App.initReport();App.loadShiftsLog();}
     else if(tab==='settings')App.renderSettingsPage();
   },
@@ -5303,7 +5359,10 @@ var App={
   // Переключение вкладок раздела. Заказы и справочник грузим лениво:
   // при первом открытии, а не при каждом заходе в «Поставщиков».
   setSuppTab:function(tab,btn){
-    if(tab==='timesheet'){App.openTimesheetView();return;}
+    // Табель — свой раздел с версии 4.69.0. Здесь оставался перехват,
+    // который уводил в старое окно внутри Поставщиков: новый экран не
+    // открывался вовсе.
+    if(tab==='timesheet'){App.setTab('timesheet',null);return;}
     var boxes={pay:'supp-main',ord:'supp-orders',contr:'supp-contr'};
     if(!boxes[tab])return;
     Object.keys(boxes).forEach(function(k){
@@ -7440,7 +7499,7 @@ var App={
     if(tab==='history')App.loadHistory();
     else if(tab==='payments'){App.setTab('suppliers',null);App.setSuppTab('payments',null);}
     else if(tab==='reps'){App.setTab('suppliers',null);App.setSuppTab('reps',null);}
-    else if(tab==='timesheet'){App.setTab('suppliers',null);App.setSuppTab('timesheet',null);}
+    else if(tab==='timesheet')App.setTab('timesheet',null);
     else if(tab==='shifts'||tab==='report')App.setTab('report',null);
   },
 
@@ -7668,97 +7727,400 @@ var App={
   },
 
   // ── Timesheet ─────────────────────────────────────────────────
+  // ══ ТАБЕЛЬ ═════════════════════════════════════════════════════════
+  //
+  // Три вкладки: сам табель по дням, зарплата и справочник сотрудников.
+  // Правки открываются ПОЛНОЙ страницей, а не мини-окошком: владелец
+  // прямо сказал, что маленькие окна ему мешают.
+  //
+  // Оплата у каждого своя — оклад, за смену или по часам, — поэтому
+  // ставка и тип хранятся у сотрудника, а не общие на магазин.
+  setTsTab:function(tab,btn){
+    App.s.tsTab=tab;
+    ['grid','pay','emp'].forEach(function(k){
+      var el=document.getElementById('ts-pane-'+k);
+      if(el)el.style.display=(k===tab?'':'none');
+    });
+    document.querySelectorAll('#tab-timesheet .supp-tab').forEach(function(b){
+      b.classList.toggle('active',b.dataset.ts===tab);
+    });
+    // Месяц нужен табелю и зарплате, справочнику — нет.
+    var mb=document.getElementById('ts-monthbar');
+    if(mb)mb.style.display=(tab==='emp'?'none':'');
+    App.loadTimesheet();
+  },
+
   loadTimesheet:function(){
     var d=new Date(App.s.tsYear,App.s.tsMonth,1);
-    document.getElementById('ts-month-label').textContent=monthName(d);
-    gs('getTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1}).then(function(r){
-      // Summary table
-      var sumEl=document.getElementById('ts-summary');
-      var sumArr=r.summary||[];
-      if(sumArr.length){
-        sumEl.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px;">'+
-          '<tr style="color:var(--text-2);"><th style="text-align:left;padding:4px 6px;">Сотрудник</th>'+
-          '<th style="padding:4px;">П</th><th style="padding:4px;">О</th><th style="padding:4px;">Б</th><th style="padding:4px;">Отп</th><th style="padding:4px;">В</th>'+
-          '<th style="padding:4px;">Часы</th><th style="text-align:right;padding:4px 6px;">Зарплата</th></tr>'+
-          sumArr.map(function(s){
-            if(!s.daysP&&!s.daysO&&!s.daysB&&!s.daysOt&&!s.daysV)return'';
-            return '<tr><td style="padding:4px 6px;font-weight:600;">'+App._e(s.employee)+'</td>'+
-              '<td style="text-align:center;padding:4px;color:var(--income);">'+s.daysP+'</td>'+
-              '<td style="text-align:center;padding:4px;color:var(--transfer);">'+s.daysO+'</td>'+
-              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysB+'</td>'+
-              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysOt+'</td>'+
-              '<td style="text-align:center;padding:4px;color:var(--text-2);">'+s.daysV+'</td>'+
-              '<td style="text-align:center;padding:4px;">'+s.totalHours+'</td>'+
-              '<td style="text-align:right;padding:4px 6px;font-weight:700;">₽ '+fmtFull(s.totalSalary)+'</td></tr>';
-          }).join('')+'</table>';
-      } else {
-        sumEl.innerHTML='<span style="color:var(--text-2);font-size:14px;">Нет данных</span>';
-      }
-      // Day grid
-      var grid=document.getElementById('ts-grid');grid.innerHTML='';
-      var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
-      var days=r.days||[];
-      var statusColors={П:'var(--income)',О:'var(--transfer)',Б:'var(--text-2)',Отп:'var(--brand)',В:'var(--text-2)'};
-      for(var i=1;i<=dIM;i++){
-        var di=i;var dd=days.find(function(x){return x.day===di;})||{};
-        var cell=document.createElement('div');cell.className='ts-day';
-        var dn=new Date(App.s.tsYear,App.s.tsMonth,i);
-        var dow=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dn.getDay()];
-        var isWeekend=dn.getDay()===0||dn.getDay()===6;
-        var statusColor=statusColors[dd.status]||'var(--text-2)';
-        cell.innerHTML='<div style="font-size:12px;color:'+(isWeekend?'var(--expense)':'var(--text-2)')+';margin-bottom:2px;">'+i+' '+dow+'</div>'+
-          (dd.employee?
-            '<div style="font-size:13px;font-weight:600;margin-bottom:2px;">'+App._e(dd.employee)+'</div>'+
-            '<div style="font-size:11px;color:'+statusColor+';">'+App._e(dd.status||'П')+(dd.timeIn?' '+App._e(dd.timeIn)+(dd.timeOut?'–'+App._e(dd.timeOut):''):'')+'</div>'+
-            (dd.rate?'<div style="font-size:11px;color:var(--text-2);">₽ '+fmtFull(dd.rate)+'</div>':'')
-          :'<div style="font-size:12px;color:var(--sep);">—</div>')+
-          '<button class="ts-add-btn" style="margin-top:4px;" onclick="App.openTsEntry('+di+')">'+
-            (dd.employee?'✎':'＋')+'</button>';
-        grid.appendChild(cell);
-      }
-    });
+    var lab=document.getElementById('ts-month-label');
+    if(lab)lab.textContent=monthName(d);
+    // Сетку месяца рисуем СРАЗУ, ещё до ответа сервера. Иначе при обрыве
+    // связи экран остаётся пустым, и это выглядит как поломка: ни дней,
+    // ни объяснения. Пустые дни — честная картина «данных пока нет».
+    App._tsGrid(App._ts&&App._ts.month===App.s.tsMonth+1?App._ts:{});
+    gs('getTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1})
+      .then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);return;}
+        App._ts=r||{};
+        App._tsGrid(App._ts);
+        App._tsPay(App._ts);
+        App._tsEmp(App._ts);
+      }).catch(function(e){
+        App.toast(App._friendlyErr(e),true);
+        App._tsPay(App._ts||{}); App._tsEmp(App._ts||{});
+      });
+  },
+
+  _tsStatusClass:function(st){
+    var m={'П':'work','Отп':'off','Б':'off','О':'off','В':'bad','Прем':'money','Штр':'money'};
+    return m[st]||'off';
+  },
+
+  // ── Вкладка «Табель»: день за днём ────────────────────────────────
+  _tsGrid:function(r){
+    var grid=document.getElementById('ts-grid');if(!grid)return;
+    var days=r.days||[];
+    var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
+    var today=new Date();
+    var isThis=(today.getFullYear()===App.s.tsYear&&today.getMonth()===App.s.tsMonth);
+    var byDay={};
+    // В один день работают несколько человек. Прежний экран показывал
+    // ТОЛЬКО ПЕРВОГО — остальные просто не были видны, и владелец не мог
+    // заметить, что смена не отмечена.
+    days.forEach(function(x){ (byDay[x.day]=byDay[x.day]||[]).push(x); });
+    var h='';
+    for(var i=1;i<=dIM;i++){
+      var dn=new Date(App.s.tsYear,App.s.tsMonth,i);
+      var dow=['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][dn.getDay()];
+      var weekend=(dn.getDay()===0||dn.getDay()===6);
+      var list=byDay[i]||[];
+      h+='<div class="ts-day'+(weekend?' weekend':'')+
+         ((isThis&&today.getDate()===i)?' today':'')+'" onclick="App.openTsDay('+i+')">'+
+         '<div class="ts-dnum"><span>'+i+'</span><span class="dw">'+dow+'</span></div>'+
+         (list.length?list.map(function(x){
+            return '<div class="ts-emp"><span class="nm">'+App._e(x.employee)+'</span>'+
+              '<span class="ts-chip '+App._tsStatusClass(x.status)+'">'+App._e(x.status||'П')+
+              ((x.status==='Прем'||x.status==='Штр')&&x.rate?' '+fmt(x.rate):'')+'</span></div>';
+          }).join(''):'<div class="ts-empty">никто не отмечен</div>')+
+         '</div>';
+    }
+    grid.innerHTML=h;
+  },
+
+  // ── Вкладка «Зарплата» ────────────────────────────────────────────
+  _tsPay:function(r){
+    var el=document.getElementById('ts-pane-pay');if(!el)return;
+    var sum=(r.summary||[]).filter(function(x){
+      return x.daysP||x.totalHours||x.accrued||x.paid;});
+    var t=r.total||{accrued:0,paid:0,left:0};
+    if(!sum.length){
+      el.innerHTML=App._empty('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
+        'За этот месяц никто не отмечен','Отметьте смены во вкладке «Табель» — зарплата посчитается сама.');
+      return;
+    }
+    var PT={shift:'за смену',hour:'по часам',oklad:'оклад'};
+    el.innerHTML=
+      '<div class="ts-card"><div class="ts-row" style="background:var(--surface-2);">'+
+        '<div style="flex:1;font-size:12.5px;color:var(--muted);font-weight:650;">Начислено за месяц</div>'+
+        '<div class="ts-money" style="font-size:17px;">₽ '+fmtFull(t.accrued)+'</div></div>'+
+        '<div class="ts-row"><div style="flex:1;font-size:13px;color:var(--ink-2);">Уже выдано</div>'+
+          '<div class="ts-money" style="color:var(--pos);">₽ '+fmtFull(t.paid)+'</div></div>'+
+        '<div class="ts-row"><div style="flex:1;font-size:13px;font-weight:700;">Осталось выдать</div>'+
+          '<div class="ts-money" style="color:'+(t.left>0?'var(--neg)':'var(--muted)')+';">₽ '+fmtFull(t.left)+'</div></div>'+
+      '</div>'+
+      '<div class="grp-label">По сотрудникам</div>'+
+      '<div class="ts-card">'+sum.map(function(x){
+        var base=x.payType==='oklad'?'оклад':(x.payType==='hour'?
+          (x.totalHours+' ч × '+fmt(x.rate)):(x.daysP+' см × '+fmt(x.rate)));
+        return '<div class="ts-row" onclick="App.openTsPerson(\''+App._e(x.employee).replace(/'/g,"\\'")+'\')" style="cursor:pointer;">'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:700;font-size:14.5px;">'+App._e(x.employee)+'</div>'+
+            '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">'+App._e(base)+
+              (x.bonus?' · премия '+fmt(x.bonus):'')+(x.fine?' · штраф '+fmt(x.fine):'')+'</div>'+
+          '</div>'+
+          '<div style="text-align:right;">'+
+            '<div class="ts-money" style="font-size:15px;">₽ '+fmtFull(x.accrued)+'</div>'+
+            '<div style="font-size:11.5px;margin-top:2px;color:'+(x.left>0?'var(--neg)':'var(--pos)')+';">'+
+              (x.left>0?('к выдаче '+fmt(x.left)):'выдано полностью')+'</div>'+
+          '</div></div>';
+      }).join('')+'</div>';
+  },
+
+  // ── Вкладка «Сотрудники» ──────────────────────────────────────────
+  _tsEmp:function(r){
+    var el=document.getElementById('ts-pane-emp');if(!el)return;
+    var list=r.employees||[];
+    var PT={shift:'за смену',hour:'по часам',oklad:'оклад'};
+    el.innerHTML=
+      '<div style="padding:0 16px 12px;"><button onclick="App.openTsEmpForm(null)" class="btn-primary" style="width:100%;">+ Добавить сотрудника</button></div>'+
+      (list.length?('<div class="ts-card">'+list.map(function(e){
+        return '<div class="ts-row">'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:700;font-size:14.5px;'+(e.active===false?'opacity:.5;':'')+'">'+
+              App._e(e.name)+(e.active===false?' · скрыт':'')+'</div>'+
+            '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">'+
+              (PT[e.payType]||'за смену')+(e.rate?' · ₽ '+fmt(e.rate):' · ставка не указана')+
+              (e.phone?' · '+App._e(e.phone):'')+'</div>'+
+          '</div>'+
+          '<button class="ts-act" onclick="App.openTsEmpForm(\''+App._e(e.name).replace(/'/g,"\\'")+'\')">Изменить</button>'+
+        '</div>';
+      }).join('')+'</div>'):
+        App._empty('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg>',
+          'Сотрудников пока нет','Добавьте первого — тогда можно отмечать смены и считать зарплату.'));
   },
 
   tsPrevMonth:function(){App.s.tsMonth--;if(App.s.tsMonth<0){App.s.tsMonth=11;App.s.tsYear--;}App.loadTimesheet();},
   tsNextMonth:function(){App.s.tsMonth++;if(App.s.tsMonth>11){App.s.tsMonth=0;App.s.tsYear++;}App.loadTimesheet();},
 
-  openTsEntry:function(day){
-    var days=[];
-    gs('getTimesheetMonth',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1}).then(function(r){
-      var existing=(r.days||[]).find(function(x){return x.day===day;})||{};
-      var empList=App.s.settings.cashiers||[];
-      // Also add employees from settings.employees
-      (App.s.settings.employees||[]).forEach(function(e){
-        var n=typeof e==='object'?e.name:e;
-        if(empList.indexOf(n)<0)empList.push(n);
-      });
-      var defaultRate=typeof existing.rate!=='undefined'?existing.rate:
-        (function(){var emp=(App.s.settings.employees||[]).find(function(e){return(typeof e==='object'?e.name:e)===existing.employee;});return emp&&emp.dailySalary?emp.dailySalary:0;})();
-      App.openModal('<div class="modal-title">'+day+' '+new Date(App.s.tsYear,App.s.tsMonth,day).toLocaleDateString('ru',{month:'long'})+'</div>'+
-        '<div class="field"><label>Сотрудник</label><select id="ts-emp" onchange="App._tsEmpDefaults(this.value)">'+
-          '<option value="">— выходной / не работал —</option>'+
-          empList.map(function(c){return'<option value="'+App._e(c)+'"'+(c===existing.employee?' selected':'')+'>'+App._e(c)+'</option>';}).join('')+
-        '</select></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-          '<div class="field" style="margin:0;"><label>Приход</label><input type="time" id="ts-in" value="'+App._e(existing.timeIn||'')+'"></div>'+
-          '<div class="field" style="margin:0;"><label>Уход</label><input type="time" id="ts-out" value="'+App._e(existing.timeOut||'')+'"></div>'+
-        '</div>'+
-        '<div class="field"><label>Статус</label><select id="ts-status">'+
-          ['П','О','Б','Отп','В'].map(function(s){
-            var l={П:'П — присутствовал',О:'О — опоздал',Б:'Б — больничный',Отп:'Отп — отпуск',В:'В — выходной'};
-            return'<option value="'+s+'"'+(s===(existing.status||'П')?' selected':'')+'>'+l[s]+'</option>';
-          }).join('')+
-        '</select></div>'+
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
-          '<div class="field" style="margin:0;"><label>Часов</label><input type="number" id="ts-hours" step="0.5" placeholder="8" value="'+App._e(String(existing.hours||''))+'"></div>'+
-          '<div class="field" style="margin:0;"><label>Дневная ставка (₽)</label><input type="number" id="ts-rate" placeholder="0" value="'+App._e(String(defaultRate||''))+'"></div>'+
-        '</div>'+
-        '<div class="field"><label>Комментарий</label><input type="text" id="ts-comment" placeholder="…" value="'+App._e(existing.comment||'')+'"></div>'+
-        '<button class="btn-primary" onclick="App._saveTsEntry('+day+')">Сохранить</button>');
-    });
+  // ── День целиком: кто отмечен, добавить, изменить, удалить ────────
+  // Полная страница, а не мини-окошко.
+  openTsDay:function(day){
+    var r=App._ts||{};
+    var list=(r.days||[]).filter(function(x){return x.day===day;});
+    var d=new Date(App.s.tsYear,App.s.tsMonth,day);
+    var title=day+' '+d.toLocaleDateString('ru',{month:'long'})+', '+
+      ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'][d.getDay()];
+    App.openModal('<div class="modal-title">'+App._e(title)+'</div>'+
+      (list.length?('<div class="ts-card" style="margin:0 0 14px;">'+list.map(function(x){
+        var kind=(x.status==='Прем'||x.status==='Штр')?x.status:'work';
+        var e=App._e(x.employee).replace(/'/g,"\\'");
+        return '<div class="ts-row">'+
+          '<div style="flex:1;min-width:0;">'+
+            '<div style="font-weight:700;">'+App._e(x.employee)+'</div>'+
+            '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">'+
+              App._e(x.status||'П')+(x.timeIn?' · '+App._e(x.timeIn)+(x.timeOut?'–'+App._e(x.timeOut):''):'')+
+              (x.hours?' · '+x.hours+' ч':'')+(x.rate?' · ₽ '+fmt(x.rate):'')+
+              (x.comment?' · '+App._e(x.comment):'')+'</div>'+
+          '</div>'+
+          '<button class="ts-act" onclick="App.openTsEntry('+day+',\''+e+'\',\''+kind+'\')">Изменить</button>'+
+          '<button class="ts-act" style="color:var(--neg);" onclick="App.tsDelete('+day+',\''+e+'\',\''+kind+'\')">Удалить</button>'+
+        '</div>';
+      }).join('')+'</div>'):'<div style="color:var(--muted);font-size:13.5px;margin-bottom:14px;">В этот день никто не отмечен.</div>')+
+      '<button class="btn-primary" onclick="App.openTsEntry('+day+')">+ Отметить сотрудника</button>'+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Закрыть</button>','full');
   },
 
-  // Полуавтомат: заполнить весь месяц по графику сотрудника
+  tsDelete:async function(day,emp,kind){
+    if(!(await App._confirm('Удалить запись «'+emp+'» за '+day+' число?')))return;
+    gs('deleteTimesheetEntry',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,
+      day:day,employee:emp,kind:kind||'work'}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App.toast('Удалено');App.closeModal();App.loadTimesheet();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
+  // Отметка сотрудника за день. day=0 — спросим дату.
+  openTsEntry:function(day,emp,kind){
+    var r=App._ts||{};
+    var list=(r.employees||[]).filter(function(e){return e.active!==false;});
+    if(!list.length){App.toast('Сначала добавьте сотрудника',true);App.setTsTab('emp');return;}
+    var cur={};
+    if(emp){
+      (r.days||[]).forEach(function(x){
+        var k=(x.status==='Прем'||x.status==='Штр')?x.status:'work';
+        if(x.day===day&&x.employee===emp&&k===(kind||'work'))cur=x;
+      });
+    }
+    var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
+    var dayOpts='';for(var i=1;i<=dIM;i++)dayOpts+='<option value="'+i+'"'+(i===(day||new Date().getDate())?' selected':'')+'>'+i+'</option>';
+    var ST=(r.statuses||[]).filter(function(x){return x[0]!=='Прем'&&x[0]!=='Штр';});
+    App.openModal('<div class="modal-title">'+(emp?'Изменить отметку':'Отметить сотрудника')+'</div>'+
+      '<div class="field"><label>День</label><select id="ts-day"'+(emp?' disabled':'')+'>'+dayOpts+'</select></div>'+
+      '<div class="field"><label>Сотрудник</label><select id="ts-emp"'+(emp?' disabled':'')+'>'+
+        list.map(function(e){return '<option value="'+App._e(e.name)+'"'+(e.name===emp?' selected':'')+'>'+App._e(e.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<div class="field"><label>Что было</label><select id="ts-status" onchange="App._tsHint()">'+
+        ST.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===(cur.status||'П')?' selected':'')+'>'+App._e(x[1])+'</option>';}).join('')+
+      '</select></div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'+
+        '<div class="field" style="margin:0;"><label>Приход</label><input type="time" id="ts-in" value="'+App._e(cur.timeIn||'')+'"></div>'+
+        '<div class="field" style="margin:0;"><label>Уход</label><input type="time" id="ts-out" value="'+App._e(cur.timeOut||'')+'"></div>'+
+      '</div>'+
+      '<div class="field"><label>Часов <span style="color:var(--muted);font-weight:400;font-size:12px;">нужно тем, кто по часам</span></label>'+
+        '<input type="number" id="ts-hours" step="0.5" placeholder="8" value="'+App._e(String(cur.hours||''))+'"></div>'+
+      '<div class="field"><label>Комментарий</label><input type="text" id="ts-cmt" placeholder="…" value="'+App._e(cur.comment||'')+'"></div>'+
+      '<div id="ts-hint" style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;"></div>'+
+      '<button class="btn-primary" onclick="App.saveTsEntry()">Сохранить</button>'+
+      (emp?'<button class="btn-secondary" style="margin-top:8px;color:var(--neg);" onclick="App.tsDelete('+day+',\''+App._e(emp).replace(/'/g,"\\'")+'\',\''+(kind||'work')+'\')">Удалить запись</button>':'')+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>','full');
+    App._tsHint();
+  },
+
+  // Подсказка, как посчитается зарплата за эту отметку — чтобы человек
+  // видел последствие сразу, а не в конце месяца.
+  _tsHint:function(){
+    var el=document.getElementById('ts-hint');if(!el)return;
+    var sel=document.getElementById('ts-status'),es=document.getElementById('ts-emp');
+    var st=sel?sel.value:'П', nm=es?es.value:'';
+    var e=((App._ts||{}).employees||[]).filter(function(x){return x.name===nm;})[0];
+    if(!e){el.textContent='';return;}
+    var PT={shift:'за смену',hour:'по часам',oklad:'оклад'};
+    if(st!=='П'){el.textContent='«'+nm+'» — '+(PT[e.payType]||'за смену')+'. Этот день в зарплату не пойдёт.';return;}
+    if(e.payType==='oklad')el.textContent='«'+nm+'» на окладе ₽ '+fmt(e.rate)+' в месяц — отметка на сумму не влияет.';
+    else if(e.payType==='hour')el.textContent='«'+nm+'» по ₽ '+fmt(e.rate)+' за час — впишите часы, иначе день не оплатится.';
+    else el.textContent='«'+nm+'» по ₽ '+fmt(e.rate)+' за смену — этот день добавит ₽ '+fmt(e.rate)+'.';
+  },
+
+  saveTsEntry:function(){
+    var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+    var emp=g('ts-emp');
+    if(!emp){App.toast('Выберите сотрудника',true);return;}
+    gs('saveTimesheetEntry',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,
+      day:parseInt(g('ts-day'),10),employee:emp,timeIn:g('ts-in'),timeOut:g('ts-out'),
+      status:g('ts-status'),hours:parseFloat(g('ts-hours'))||0,rate:0,comment:g('ts-cmt')})
+      .then(function(r){
+        if(r&&r.__error)throw new Error(r.__error);
+        App.toast('Сохранено ✓');App.closeModal();App.loadTimesheet();
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
+  // ── Премия и штраф ────────────────────────────────────────────────
+  openTsBonus:function(){
+    var r=App._ts||{};
+    var list=(r.employees||[]).filter(function(e){return e.active!==false;});
+    if(!list.length){App.toast('Сначала добавьте сотрудника',true);App.setTsTab('emp');return;}
+    var dIM=new Date(App.s.tsYear,App.s.tsMonth+1,0).getDate();
+    var today=Math.min(new Date().getDate(),dIM);
+    var dayOpts='';for(var i=1;i<=dIM;i++)dayOpts+='<option value="'+i+'"'+(i===today?' selected':'')+'>'+i+'</option>';
+    App.openModal('<div class="modal-title">Премия или штраф</div>'+
+      '<div class="field"><label>Сотрудник</label><select id="tb-emp">'+
+        list.map(function(e){return '<option>'+App._e(e.name)+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>Что это</label><select id="tb-kind">'+
+        '<option value="Прем">Премия — прибавится к зарплате</option>'+
+        '<option value="Штр">Штраф — вычтется из зарплаты</option></select></div>'+
+      '<div class="field"><label>День</label><select id="tb-day">'+dayOpts+'</select></div>'+
+      '<div class="field"><label>Сумма (₽)</label><input type="number" id="tb-amt" placeholder="0"></div>'+
+      '<div class="field"><label>За что</label><input type="text" id="tb-cmt" placeholder="недостача по кассе, опоздание, работа в выходной…"></div>'+
+      '<button class="btn-primary" onclick="App.saveTsBonus()">Сохранить</button>'+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>','full');
+  },
+
+  saveTsBonus:function(){
+    var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+    var amt=Math.round(parseFloat(g('tb-amt'))||0);
+    if(amt<=0){App.toast('Впишите сумму',true);return;}
+    gs('saveTimesheetEntry',{ssId:App.s.ssId,year:App.s.tsYear,month:App.s.tsMonth+1,
+      day:parseInt(g('tb-day'),10),employee:g('tb-emp'),status:g('tb-kind'),
+      hours:0,rate:amt,comment:g('tb-cmt')}).then(function(r){
+        if(r&&r.__error)throw new Error(r.__error);
+        App.toast('Сохранено ✓');App.closeModal();App.loadTimesheet();
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
+  // ── Сотрудник: добавить, изменить, скрыть, удалить ────────────────
+  openTsEmpForm:function(name){
+    var e=((App._ts||{}).employees||[]).filter(function(x){return x.name===name;})[0]||
+          {name:'',payType:'shift',rate:0,active:true,phone:''};
+    var PT=[['shift','За смену'],['hour','По часам'],['oklad','Оклад за месяц']];
+    App.openModal('<div class="modal-title">'+(name?'Сотрудник':'Новый сотрудник')+'</div>'+
+      '<div class="field"><label>Имя</label><input type="text" id="te-name" placeholder="Иванов Павел" value="'+App._e(e.name)+'"></div>'+
+      '<div class="field"><label>Телефон</label><input type="tel" id="te-phone" placeholder="+7…" value="'+App._e(e.phone||'')+'"></div>'+
+      '<div class="field"><label>Как платим</label><select id="te-type" onchange="App._teHint()">'+
+        PT.map(function(x){return '<option value="'+x[0]+'"'+(x[0]===e.payType?' selected':'')+'>'+x[1]+'</option>';}).join('')+
+      '</select></div>'+
+      '<div class="field"><label>Ставка (₽)</label><input type="number" id="te-rate" placeholder="0" value="'+App._e(String(e.rate||''))+'" oninput="App._teHint()"></div>'+
+      '<div id="te-hint" style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:12px;"></div>'+
+      '<label style="display:flex;align-items:center;gap:10px;font-size:13.5px;margin-bottom:14px;cursor:pointer;">'+
+        '<input type="checkbox" id="te-active"'+(e.active!==false?' checked':'')+' style="width:18px;height:18px;">'+
+        'Работает сейчас <span style="color:var(--muted);">(снимите — уйдёт из списков, история останется)</span></label>'+
+      '<button class="btn-primary" onclick="App.saveTsEmp(\''+App._e(name||'').replace(/'/g,"\\'")+'\')">Сохранить</button>'+
+      (name?'<button class="btn-secondary" style="margin-top:8px;color:var(--neg);" onclick="App.deleteTsEmp(\''+App._e(name).replace(/'/g,"\\'")+'\')">Удалить</button>':'')+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>','full');
+    App._teHint();
+  },
+
+  _teHint:function(){
+    var el=document.getElementById('te-hint');if(!el)return;
+    var t=(document.getElementById('te-type')||{}).value||'shift';
+    var r=Math.round(parseFloat((document.getElementById('te-rate')||{}).value)||0);
+    if(!r){el.textContent='Без ставки зарплата считаться не будет.';return;}
+    if(t==='oklad')el.textContent='₽ '+fmt(r)+' в месяц независимо от числа смен.';
+    else if(t==='hour')el.textContent='₽ '+fmt(r)+' за час. За 8-часовую смену выйдет ₽ '+fmt(r*8)+'.';
+    else el.textContent='₽ '+fmt(r)+' за смену. За 26 смен выйдет ₽ '+fmt(r*26)+'.';
+  },
+
+  saveTsEmp:function(oldName){
+    var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+    var name=g('te-name').trim();
+    if(!name){App.toast('Впишите имя',true);return;}
+    gs('saveEmployee',{ssId:App.s.ssId,data:{name:name,oldName:oldName||'',
+      payType:g('te-type'),rate:parseFloat(g('te-rate'))||0,phone:g('te-phone'),
+      active:!!(document.getElementById('te-active')||{}).checked}}).then(function(r){
+        if(r&&r.__error)throw new Error(r.__error);
+        App.toast('Сохранено ✓');App.closeModal();App.loadTimesheet();
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
+  deleteTsEmp:async function(name){
+    if(!(await App._confirm('Удалить сотрудника «'+name+'»?')))return;
+    gs('deleteEmployee',{ssId:App.s.ssId,name:name}).then(async function(r){
+      if(r&&r.__error){
+        // За человеком числится табель. Не стираем молча — предлагаем скрыть.
+        if(r.canHide){
+          if(await App._confirm(r.__error+'\n\nСкрыть его из списков? История сохранится.')){
+            gs('saveEmployee',{ssId:App.s.ssId,data:{name:name,oldName:name,active:false,
+              payType:'shift',rate:0}}).then(function(){
+              App.toast('Скрыт');App.closeModal();App.loadTimesheet();});
+          }
+          return;
+        }
+        throw new Error(r.__error);
+      }
+      App.toast('Удалён');App.closeModal();App.loadTimesheet();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
+  // Карточка человека за месяц: из чего сложилась зарплата и что выдано.
+  openTsPerson:function(name){
+    var x=((App._ts||{}).summary||[]).filter(function(s){return s.employee===name;})[0];
+    if(!x)return;
+    var PT={shift:'за смену',hour:'по часам',oklad:'оклад'};
+    var R=function(k,v,c){return '<div class="ts-row"><div style="flex:1;font-size:13.5px;'+(c||'')+'">'+k+
+      '</div><div class="ts-money">'+v+'</div></div>';};
+    App.openModal('<div class="modal-title">'+App._e(name)+'</div>'+
+      '<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">'+
+        (PT[x.payType]||'за смену')+' · ставка ₽ '+fmt(x.rate)+'</div>'+
+      '<div class="ts-card" style="margin:0 0 14px;">'+
+        R('Отработано', x.payType==='hour'?(x.totalHours+' ч'):(x.daysP+' '+App._plural(x.daysP,'смена','смены','смен')))+
+        R('Начислено по ставке','₽ '+fmtFull(x.baseSalary))+
+        (x.bonus?R('Премии','+ ₽ '+fmtFull(x.bonus),'color:var(--pos);'):'')+
+        (x.fine?R('Штрафы','− ₽ '+fmtFull(x.fine),'color:var(--neg);'):'')+
+        R('<b>Итого начислено</b>','₽ '+fmtFull(x.accrued))+
+        R('Выдано','₽ '+fmtFull(x.paid),'color:var(--pos);')+
+        R('<b>Осталось выдать</b>','₽ '+fmtFull(x.left))+
+      '</div>'+
+      ((x.payments||[]).length?('<div class="grp-label" style="margin:0 0 8px;">Выплаты за месяц</div><div class="ts-card" style="margin:0 0 14px;">'+
+        x.payments.map(function(pm){return '<div class="ts-row"><div style="flex:1;font-size:13px;">'+
+          App._e(pm.kind)+' · '+App._fmtD(pm.date)+'</div><div class="ts-money">₽ '+fmtFull(pm.amount)+'</div></div>';}).join('')+
+        '</div>'):'')+
+      (x.left>0?'<button class="btn-primary" onclick="App.closeModal();App.openSalaryPay(\''+App._e(name).replace(/'/g,"\\'")+'\','+x.left+')">Выдать ₽ '+fmt(x.left)+'</button>':'')+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Закрыть</button>','full');
+  },
+
+  openSalaryPay:function(name,amount){
+    App.openModal('<div class="modal-title">Выдать зарплату</div>'+
+      '<div style="font-size:13.5px;color:var(--muted);margin-bottom:14px;">'+App._e(name)+'</div>'+
+      '<div class="field"><label>Сумма (₽)</label><input type="number" id="sp-amt" value="'+(amount||'')+'"></div>'+
+      '<div class="field"><label>Что это</label><select id="sp-kind">'+
+        '<option value="salary">Зарплата</option><option value="advance">Аванс</option></select></div>'+
+      '<div class="field"><label>С какого счёта</label><select id="sp-acc">'+
+        (App.s.accounts||[]).map(function(a){return '<option>'+App._e(a.name)+'</option>';}).join('')+
+      '</select></div>'+
+      '<button class="btn-primary" onclick="App.saveSalaryPay(\''+App._e(name).replace(/'/g,"\\'")+'\')">Выдать</button>'+
+      '<button class="btn-secondary" style="margin-top:8px;" onclick="App.closeModal()">Отмена</button>','full');
+  },
+
+  saveSalaryPay:function(name){
+    var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+    var amt=Math.round(parseFloat(g('sp-amt'))||0);
+    if(amt<=0){App.toast('Впишите сумму',true);return;}
+    gs('payEmployeeSalary',{ssId:App.s.ssId,data:{employee:name,amount:amt,
+      kind:g('sp-kind'),account:g('sp-acc')}}).then(function(r){
+      if(r&&r.__error)throw new Error(r.__error);
+      App.toast('Выдано ✓');App.closeModal();App.loadTimesheet();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+
   openTsFill:function(){
     var emps=(App.s.settings.employees||[]).filter(function(e){return typeof e==='object';});
     if(!emps.length){App.toast('Сначала добавь сотрудника с графиком в Настройках',true);return;}
