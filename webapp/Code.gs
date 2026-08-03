@@ -808,6 +808,8 @@ function getAccounts(p) {
 }
 
 function saveAccount(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Нет прав на счета'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -1204,6 +1206,8 @@ function searchTransactions(p) {
 // p.rows = [{date, type:'Доход'|'Расход', category, amount, account, comment}]
 // Дедуп по ключу дата|тип|сумма|счёт|комментарий, чтобы повторный импорт не задваивал.
 function importRows(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Нет прав на загрузку операций'};
   return _withLock(function(){
   var ssId = p.ssId, rows = p.rows || [];
   if (!rows.length) return { ok:true, added:0, skipped:0 };
@@ -3871,6 +3875,8 @@ function getDebts(p) {
 }
 
 function saveRep(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'receive')) return {__error:'Нет прав на справочник поставщиков'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -3943,6 +3949,8 @@ function receiveRep(p) {
 }
 
 function updateDebtEntry(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет прав на изменение долгов'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -3982,6 +3990,9 @@ function deleteDebtEntry(p) {
 }
 
 function getRepDebt(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет доступа к долгам поставщиков'};
   var ssId=p.ssId, repId=String(p.repId);
   try {
     var sh=SpreadsheetApp.openById(ssId).getSheetByName(SH_DEBTS);
@@ -4045,6 +4056,8 @@ function getTimesheetMonth(p) {
 }
 
 function saveTimesheetEntry(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'manage')) return {__error:'Нет прав на табель'};
   return _withLock(function(){
   var ssId=p.ssId,year=parseInt(p.year),month=parseInt(p.month),day=parseInt(p.day);
   var emp=_s(p.employee||''),timeIn=_s(p.timeIn||''),timeOut=_s(p.timeOut||'');
@@ -5082,6 +5095,9 @@ function getActivityFeed(p) {
 }
 
 function getAuditLog(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'manage')) return {__error:'Журнал действий смотрит владелец или администратор'};
   try {
     var ss = SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh = ss.getSheetByName(SH_LOG);
@@ -5119,6 +5135,8 @@ function getRecurring(p) {
 }
 
 function saveRecurring(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Нет прав на регулярные платежи'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -5241,6 +5259,9 @@ function saveBudget(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getPayments(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'payments')) return {__error:'Нет доступа к выплатам'};
   var ssId=p.ssId;
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -5619,6 +5640,8 @@ function _deletePaymentLocked(p) {
 
 // Toggle account visibility: active ↔ hidden
 function toggleAccountVisibility(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Нет прав на счета'};
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
@@ -5697,6 +5720,11 @@ function clearAllData(p) {
 }
 
 function seedDemoData(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  // Заполнение демо-данными СТИРАЕТ всё, что есть. Это должен мочь
+  // только владелец: любой сотрудник мог обнулить книги магазина.
+  try { if (!_isOwner(SpreadsheetApp.openById(p&&p.ssId))) return {__error:'Заполнить тестовыми данными может только владелец'}; }
+  catch(e) { return {__error:'Заполнить тестовыми данными может только владелец'}; }
   return _withLock(function(){
   var ssId = _s(p.ssId);
   if (!ssId) return { __error: 'ssId required' };
@@ -6281,6 +6309,8 @@ function getContractors(p) {
 }
 
 function saveContractor(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'receive')) return {__error:'Нет прав на справочник контрагентов'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -6394,6 +6424,9 @@ function _catList(obj) {
 
 // Развёрнутый отчёт за день.
 function getDayReport(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Дневной отчёт смотрит владелец или бухгалтер'};
   var ssId=p.ssId, dateStr=p.date; // yyyy-MM-dd
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
@@ -6582,6 +6615,8 @@ function getOrders(p) {
 }
 
 function saveOrder(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'receive')) return {__error:'Нет прав на заказы'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -6613,6 +6648,8 @@ function saveOrder(p) {
 
 // Смена статуса: received / partial (факт-сумма) / cancelled / active (вернуть)
 function setOrderStatus(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'receive')) return {__error:'Нет прав на заказы'};
   return _withLock(function(){
   var ssId=p.ssId, id=p.id, status=_s(p.status);
   try {
@@ -7189,6 +7226,9 @@ function getTrash(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function saveDayNote(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'kassa')) return {__error:'Нет прав на заметки дня'};
   return _withLock(function(){
   var ssId=p.ssId, date=_s(p.date), text=_s(p.text||'').slice(0,500);
   try {
@@ -7363,6 +7403,8 @@ function testTelegram(p) {
 
 // Архив контрагента (колонка 7 = Статус)
 function setContractorStatus(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'receive')) return {__error:'Нет прав на справочник контрагентов'};
   return _withLock(function(){
   var ssId=p.ssId, id=p.id, status=_s(p.status||'');
   try {
@@ -7383,6 +7425,9 @@ function setContractorStatus(p) {
 // ═══════════════════════════════════════════════════════════════════════
 
 function getObligations(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Обязательства смотрит владелец или бухгалтер'};
   try {
     var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_OBLIG);
@@ -7404,6 +7449,8 @@ function getObligations(p) {
 }
 
 function saveObligation(p) {
+  // Аудит 4.95.0: экран мог позвать это напрямую без всякой проверки.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Нет прав на обязательства'};
   return _withLock(function(){
   var ssId=p.ssId, d=p.data||{};
   try {
@@ -8047,6 +8094,9 @@ function _lossIsNeeds(reason){
 function getLossMeta() { return { reasons:LOSS_REASONS }; }
 
 function getLosses(p) {
+  // Аудит 4.95.0: читалось без проверки прав — сотрудник зала
+  // видел бы то, что ему не положено.
+  if (!_permGuard(p&&p.ssId?p.ssId:p,'finance')) return {__error:'Потери смотрит владелец или бухгалтер'};
   try {
     var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
     var sh=ss.getSheetByName(SH_LOSSES);
