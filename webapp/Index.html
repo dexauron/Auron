@@ -3235,7 +3235,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.92.0';
+var APP_VERSION='4.93.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3464,6 +3464,9 @@ var App={
      chart1:null,chart2:null,searchTimer:null},
 
   init:function(){
+    // Кнопка «назад» должна работать с самого старта, а не с первого
+    // открытого окна: иначе первое же нажатие выкинет из приложения.
+    App._navInit();
     this.s.npDate=new Date();
     App._installGuards();
     App._applyViewOnly();
@@ -4766,9 +4769,24 @@ var App={
   // Порядок вкладок — чтобы понимать направление перехода.
   // Идём вправо по списку — панель приезжает справа, влево — слева.
   _tabOrder:['home','goods','suppliers','kassa','timesheet','journal','analytics','report','settings'],
+  // Переход в раздел с записью в историю: «назад» вернёт в предыдущий
+  // раздел, а не выбросит из приложения.
   setTab:function(tab,btn){
     var need=App._tabNeed[tab];
     if(need&&!App.can(need)){App.toast('Этот раздел вам не доступен',true);return;}
+    App._navInit();
+    App._tabStack=App._tabStack||['home'];
+    if(App._tabStack[App._tabStack.length-1]!==tab){
+      App._tabStack.push(tab);
+      // История длинная не нужна: помним последние десять переходов.
+      if(App._tabStack.length>10)App._tabStack.shift();
+      try{ history.pushState({auron:'tab',tab:tab},''); }catch(e){}
+    }
+    App._setTabRaw(tab,btn);
+  },
+
+  // Само переключение, без истории — сюда же приходит «назад».
+  _setTabRaw:function(tab,btn){
     var from=App._tabOrder.indexOf(App._curTab||'home');
     var to=App._tabOrder.indexOf(tab);
     App._tabBack=(from>=0&&to>=0&&to<from);
@@ -9407,13 +9425,81 @@ var App={
   },
 
   // ── Sheet/Modal helpers ───────────────────────────────────────
+  // ══ Кнопка «назад» и адреса окон ═══════════════════════════════════
+  //
+  // Раньше истории переходов не было вовсе: любое окно открывалось «из
+  // ниоткуда», и кнопка «назад» на телефоне не закрывала его, а выходила
+  // из приложения. Владелец описал это как «каждая кнопка должна иметь
+  // своё окно» — на деле ему не хватало не окон, а возможности вернуться.
+  //
+  // Держим стек открытых слоёв. Открыли — добавили запись в историю
+  // браузера. Нажали «назад» (или крестик) — снимаем верхний слой.
+  // Закрытие идёт ОДНИМ путём, через popstate: и крестик, и системная
+  // кнопка приводят сюда же, иначе история и экран разъезжаются.
+  _layers:[],
+
+  _pushLayer:function(type,closeFn){
+    App._navInit();
+    var pushed=false;
+    try{ history.pushState({auron:App._layers.length+1},''); pushed=true; }catch(e){}
+    App._layers.push({type:type,close:closeFn,pushed:pushed});
+  },
+
+  // Снять верхний слой БЕЗ работы с историей (нас уже вернули назад).
+  _popLayer:function(){
+    var l=App._layers.pop();
+    if(l&&l.close)try{l.close();}catch(e){}
+    return !!l;
+  },
+
+  // Закрыть верхний слой ПО ЖЕЛАНИЮ пользователя: уходим назад по
+  // истории, а закроет его popstate.
+  // Уходим назад ТОЛЬКО если запись в историю действительно легла.
+  // Иначе history.back() унесёт со страницы вообще — приложение
+  // закроется. Так и случилось на проверке роботом.
+  _closeTop:function(fallback){
+    var top=App._layers[App._layers.length-1];
+    if(top&&top.pushed){ try{ history.back(); return true; }catch(e){} }
+    if(top){ App._popLayer(); return true; }
+    if(fallback)fallback();
+    return false;
+  },
+
+  _navInit:function(){
+    if(App._navReady)return; App._navReady=true;
+    // Базовая запись: чтобы первое «назад» не выбрасывало из приложения.
+    try{ history.replaceState({auron:0,base:1},''); }catch(e){}
+    window.addEventListener('popstate',function(){
+      // Сначала слои, потом разделы. Если ничего нет — остаёмся на месте.
+      if(App._layers.length){ App._popLayer(); return; }
+      if(App._tabStack&&App._tabStack.length>1){
+        App._tabStack.pop();
+        App._setTabRaw(App._tabStack[App._tabStack.length-1]);
+        return;
+      }
+      // Дальше идти некуда: мы на главной и слоёв нет. Здесь «назад»
+      // должен ВЫПУСКАТЬ из приложения — так ведёт себя телефон, и
+      // удерживать человека силой неправильно. Ловушку не ставим.
+    });
+  },
+
   openSheet:function(id){
-    document.getElementById('sheet-overlay').classList.add('show');
-    document.getElementById(id).classList.add('show');
+    // Раньше при неверном имени падало на null.classList и экран
+    // застывал: окно не открылось, а ошибку никто не видел.
+    var sh=document.getElementById(id);
+    if(!sh){ App.toast('Окно не найдено',true); return; }
+    var ov=document.getElementById('sheet-overlay');
+    if(ov)ov.classList.add('show');
+    sh.classList.add('show');
+    App._pushLayer('sheet',App._closeSheetNow);
   },
   closeSheet:function(){
+    App._closeTop(App._closeSheetNow);
+  },
+  _closeSheetNow:function(){
     App.calcClose&&App.calcClose();
-    document.getElementById('sheet-overlay').classList.remove('show');
+    var ov=document.getElementById('sheet-overlay');
+    if(ov)ov.classList.remove('show');
     document.querySelectorAll('.sheet').forEach(function(s){s.classList.remove('show');});
   },
   // full: во весь экран (карточка товара). wide: широкое окно на компьютере
@@ -9429,11 +9515,16 @@ var App={
     // На полном экране свайп вниз не вешаем — иначе мешает прокрутке.
     if(!full)App._attachSwipeClose(m,App.closeModal);
     App.haptic(8);
+    App._pushLayer('modal',App._closeModalNow);
   },
   closeModal:function(){
+    App._closeTop(App._closeModalNow);
+  },
+  _closeModalNow:function(){
     App.calcClose&&App.calcClose();
     var m=document.getElementById('modal-body');if(m)m.style.transform='';
     var ov=document.getElementById('modal-overlay');
+    if(!ov)return;
     ov.classList.remove('show');ov.classList.remove('full');ov.classList.remove('wide');
   },
 
