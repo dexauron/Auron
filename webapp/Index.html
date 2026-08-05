@@ -3524,7 +3524,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.9.0';
+var APP_VERSION='6.0.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3920,7 +3920,7 @@ var App={
     else if(tab==='suppliers')App.loadSuppliers();
     else if(tab==='timesheet')App.loadTimesheet();
     else if(tab==='report'){App.initReport();App.loadShiftsLog();}
-    else if(tab==='settings')App.renderSettingsPage();
+    else if(tab==='settings'){App._settingsCur=null;App.renderSettingsPage();}
     else App.loadHome();
   },
 
@@ -5178,7 +5178,7 @@ var App={
     else if(tab==='suppliers')App.loadSuppliers();
     else if(tab==='timesheet')App.loadTimesheet();
     else if(tab==='report'){App.initReport();App.loadShiftsLog();}
-    else if(tab==='settings')App.renderSettingsPage();
+    else if(tab==='settings'){App._settingsCur=null;App.renderSettingsPage();}
   },
 
 // ── Итог дня по модели владельца (формулы из его отчёта ДДС) ──
@@ -7801,7 +7801,11 @@ var App={
     App._kZeroDay=false;
     var wySum=App.s.wyplatas.reduce(function(s,w){return s+(w.amount||0);},0);
     var wyCnt=App.s.wyplatas.length;
-    gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,recon:rec,wyplatas:App.s.wyplatas}}).then(function(){
+    // Свой номер операции: если связь оборвётся и телефон отправит
+    // повторно, сервер узнает эту же запись и не создаст второй Z-отчёт.
+    var payload={ssId:App.s.ssId,data:{opId:uuidv4(),date:date,shift:shift,cashier:cashier,
+      recon:rec,wyplatas:App.s.wyplatas}};
+    gs('saveKassa',payload).then(function(){
       // Форму чистим сразу после успешной записи. Раньше суммы
       // оставались, и в следующий раз владелец либо стирал их руками,
       // либо мог записать смену второй раз по тем же цифрам.
@@ -7821,7 +7825,39 @@ var App={
         (rec.diff!==0?'<div style="font-size:12px;color:'+(rec.diff<0?'var(--neg)':'var(--warn,#FF9F0A)')+';margin-bottom:12px;line-height:1.5;">'+(rec.diff<0?'⚠️ Недостача — записана в историю смен на этого кассира.':'⚠️ Излишек — записан в историю смен.')+'</div>':'')+
         '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
       App.haptic(12);
-    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+    }).catch(function(e){
+      // Связь пропала — не теряем введённое: кладём в очередь и чистим
+      // форму. Раньше всю смену приходилось набирать заново.
+      if(App._isOffline(e)){
+        App._outboxPush('saveKassa',payload);
+        App._kClearMorning();App.s.wyplatas=[];App.renderWyplatas();
+        App._offlineSaved('Смена сохранена на телефоне');
+        return;
+      }
+      App.toast(App._friendlyErr(e),true);
+    });
+  },
+
+  // Обрыв связи отличаем от отказа сервера: отказ («нет прав», «период
+  // закрыт») повторять бессмысленно — его надо показать человеку.
+  _isOffline:function(e){
+    try{ if(navigator.onLine===false)return true; }catch(x){}
+    // Берём именно message: у пустой ошибки он '' — это тоже обрыв,
+    // а String(e) вернул бы «Error» и правило бы не сработало.
+    var m=(e&&typeof e.message==='string')?e.message:String(e||'');
+    m=m.toLowerCase();
+    if(!m.trim())return true;
+    return ['network','failed to fetch','timeout','таймаут','связ','интернет',
+            'не отвеча','offline','сеть'].some(function(k){return m.indexOf(k)>=0;});
+  },
+  _offlineSaved:function(what){
+    App.haptic(10);
+    App._outboxBadge();
+    App.openModal('<div class="modal-title">Нет связи — сохранено на телефоне</div>'+
+      '<div style="font-size:13.5px;color:var(--ink-2);line-height:1.6;margin-bottom:14px;">'+
+      App._e(what)+'. Ничего не потеряно: как появится интернет, запись уйдёт сама. '+
+      'Внизу экрана видно, сколько записей ждёт отправки.</div>'+
+      '<button class="btn-primary" onclick="App.closeModal()">Понятно</button>');
   },
 
   // ── Умный поиск по названиям ─────────────────────────────────────
@@ -8066,8 +8102,9 @@ var App={
       var paid=App._mval('evt-paid'),repaid=App._mval('evt-repaid'),debt=App._mval('evt-debt');
       if(!paid&&!repaid&&!debt){App.toast('Введите хотя бы одну сумму',true);return;}
       App.toast('Записываю…');
-      gs('saveEveningTotal',{ssId:App.s.ssId,date:new Date().toISOString().slice(0,10),
-        paid:paid,repaid:repaid,debt:debt}).then(function(r){
+      var pl={ssId:App.s.ssId,opId:uuidv4(),date:new Date().toISOString().slice(0,10),
+        paid:paid,repaid:repaid,debt:debt};
+      gs('saveEveningTotal',pl).then(function(r){
         if(r&&r.__error){App.toast(r.__error,true);return;}
         ['evt-paid','evt-repaid','evt-debt'].forEach(function(id){
           var e=document.getElementById(id);if(e)e.value='';});
@@ -8081,7 +8118,17 @@ var App={
           R('Долг магазина','₽ '+fmt(r.storeDebt||0),'var(--neg)',true)+
           '</div><button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
         App.haptic(12);App.loadHome();
-      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+      }).catch(function(e){
+        if(App._isOffline(e)){
+          App._outboxPush('saveEveningTotal',pl);
+          ['evt-paid','evt-repaid','evt-debt'].forEach(function(id){
+            var el=document.getElementById(id);if(el)el.value='';});
+          App.evTotals();
+          App._offlineSaved('Накладные сохранены на телефоне');
+          return;
+        }
+        App.toast(App._friendlyErr(e),true);
+      });
       return;
     }
     var rows=[],bad=false;
@@ -8094,7 +8141,8 @@ var App={
     if(bad){App.toast('У строки с суммой не указан поставщик',true);return;}
     if(!rows.length){App.toast('Заполните суммы хотя бы по одному поставщику',true);return;}
     App.toast('Записываю…');
-    gs('saveEveningInvoices',{ssId:App.s.ssId,date:new Date().toISOString().slice(0,10),rows:rows}).then(function(r){
+    var pl2={ssId:App.s.ssId,opId:uuidv4(),date:new Date().toISOString().slice(0,10),rows:rows};
+    gs('saveEveningInvoices',pl2).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._ev=[{rep:'',paid:'',repaid:'',debt:''}];App.evRender();
       var R=App._repRow;
@@ -8111,7 +8159,15 @@ var App={
           '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+list+'</div>':'')+
         '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
       App.haptic(12);App.loadHome();
-    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+    }).catch(function(e){
+      if(App._isOffline(e)){
+        App._outboxPush('saveEveningInvoices',pl2);
+        App._ev=[{rep:'',paid:'',repaid:'',debt:''}];App.evRender();
+        App._offlineSaved('Накладные сохранены на телефоне');
+        return;
+      }
+      App.toast(App._friendlyErr(e),true);
+    });
   },
 
   // ── Journal ───────────────────────────────────────────────────
@@ -9007,14 +9063,14 @@ var App={
     host.className=host.className.replace(/\bsv-\S+/g,'').trim();
     if(cls)host.classList.add(cls);
   },
-  settingsOpenGroup:function(grp){
+  settingsOpenGroup:function(grp,keepScroll){
     App._settingsCur=grp;
     var r=document.getElementById('settings-root');if(r)r.style.display='none';
     App._svClass('sv-'+grp);
     var t=document.getElementById('settings-title');if(t)t.textContent=App._settingsGrpTitle[grp]||'Настройки';
     var c=document.getElementById('settings-crumb');if(c)c.textContent='Настройки · '+(App._settingsGrpTitle[grp]||'');
     var b=document.getElementById('settings-back');if(b)b.style.display='flex';
-    try{document.getElementById('tab-settings').scrollTop=0;window.scrollTo(0,0);}catch(e){}
+    if(!keepScroll)try{document.getElementById('tab-settings').scrollTop=0;window.scrollTo(0,0);}catch(e){}
   },
   settingsBack:function(){
     App._settingsResetRoot();
@@ -9030,7 +9086,20 @@ var App={
     App._settingsRenderMenu();
   },
   renderSettingsPage:function(){
+    // Перерисовка не должна выкидывать в корень настроек. Раньше любое
+    // действие внутри раздела (добавил кассира, удалил категорию,
+    // сохранил) возвращало владельца на самый верх, и он каждый раз
+    // заново проходил два-три нажатия до того же места.
+    var back=App._settingsCur;
+    // И место на экране тоже сохраняем: список кассиров длинный, и
+    // прыжок в начало раздела после каждой правки сбивает не меньше.
+    var host=document.getElementById('tab-settings');
+    var pos=host?host.scrollTop:0;
     App._settingsResetRoot();
+    if(back){
+      App.settingsOpenGroup(back,true);
+      if(host)setTimeout(function(){try{host.scrollTop=pos;}catch(e){}},0);
+    }
     var _si=function(id,svg){var e=document.getElementById(id);if(e)e.innerHTML=svg;};
     _si('accent-ic',SVG.palette);_si('nav-ic',SVG.compass);
     App.loadRecurring();
@@ -9552,6 +9621,13 @@ var App={
   // ── Офлайн-очередь: записи, не дошедшие до сервера ──
   _outboxGet:function(){try{return JSON.parse(localStorage.getItem('auron_outbox')||'[]');}catch(e){return[];}},
   _outboxSet:function(q){try{localStorage.setItem('auron_outbox',JSON.stringify(q));}catch(e){}App._outboxBadge();},
+  // Человеческое название операции — чтобы в очереди было видно, что
+  // именно ждёт отправки, а не «1 запись».
+  _outboxWhat:function(fn){
+    return {saveQuickEntry:'операция',saveTransfer:'перевод',
+            saveKassa:'смена',saveEveningInvoices:'накладные',
+            saveEveningTotal:'накладные'}[fn]||'запись';
+  },
   _outboxPush:function(fn,args){
     var q=App._outboxGet();q.push({fn:fn,args:args,ts:Date.now()});App._outboxSet(q);
   },
@@ -9565,8 +9641,23 @@ var App={
       var q2=App._outboxGet();q2.shift();App._outboxSet(q2);
       App._outboxFlushing=false;
       if(q2.length)App._outboxFlush();
-      else{App.toast('✅ Все отложенные записи отправлены');App.loadHome();}
-    }).catch(function(){App._outboxFlushing=false;});
+      else{App.toast('Отложенные записи отправлены ✓');App.loadHome();}
+    }).catch(function(e){
+      App._outboxFlushing=false;
+      // Связь всё ещё не поднялась — оставляем в очереди и ждём.
+      if(App._isOffline(e))return;
+      // Сервер ОТКАЗАЛ: нет прав, период закрыт. Повторять бессмысленно,
+      // и молчать нельзя — иначе запись будет вечно висеть в очереди, а
+      // владелец будет уверен, что смена записана.
+      var q2=App._outboxGet();q2.shift();App._outboxSet(q2);
+      App.openModal('<div class="modal-title">Запись не принята</div>'+
+        '<div style="font-size:13.5px;color:var(--ink-2);line-height:1.6;margin-bottom:14px;">'+
+        'Отложенная запись («'+App._e(App._outboxWhat(item.fn))+'») не сохранилась: '+
+        '<b>'+App._e(App._friendlyErr(e))+'</b><br><br>'+
+        'Введите её заново, когда разберётесь с причиной.</div>'+
+        '<button class="btn-primary" onclick="App.closeModal()">Понятно</button>');
+      if(q2.length)App._outboxFlush();
+    });
   },
   _outboxBadge:function(){
     var n=App._outboxGet().length;
@@ -9578,7 +9669,11 @@ var App={
       document.body.appendChild(el);
     }
     el.style.display=n?'block':'none';
-    if(n)el.textContent='📴 '+n+' '+App._plural(n,'запись ждёт','записи ждут','записей ждут')+' отправки — нажми';
+    if(n){
+      var q=App._outboxGet();
+      var what=(n===1)?App._outboxWhat(q[0].fn):(n+' '+App._plural(n,'запись','записи','записей'));
+      el.textContent='Нет связи: '+what+' ждёт отправки — нажмите';
+    }
   },
 
   _tgTest:function(){

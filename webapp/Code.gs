@@ -2725,6 +2725,7 @@ function saveKassa(p) {
     var base=ss.getSheetByName(SH_BASE);
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
     var cashAcc=_s(_cashAcc(ss)); // имя кассового счёта (настраиваемое)
+    if (_opSeen(ss, _s(d.opId))) return {ok:true, duplicate:true};
     var dt=new Date(d.date); var zRef=Utilities.getUuid();
     // Смена в закрытом периоде — то же самое, что запись задним числом.
     var kRow=[]; kRow[B_DATE-1]=dt;
@@ -4103,6 +4104,28 @@ function saveDebtEntry(p) {
 // Приём торгового одним действием: наличная оплата + погашение долга + новый
 // долг за один заход. Всё под одним замком (реентерабельно). Возвращает
 // пересчитанный долг представителя.
+// ── Защита от повторной отправки ────────────────────────────────────
+// Офлайн-очередь может отправить одну и ту же запись дважды: связь
+// пропала на середине ответа, телефон решил, что не дошло, и повторил.
+// Для быстрых операций защита уже есть (свой uuid), а смена и накладные
+// от этого не защищены — получился бы второй Z-отчёт на ту же выручку.
+// Поэтому каждая офлайн-операция несёт свой номер, и мы его запоминаем.
+function _opSeen(ss, opId) {
+  if (!opId) return false;
+  try {
+    var key='OPS_DONE';
+    var raw=_getSettingStr(ss,key,'');
+    var list=raw?raw.split(','):[];
+    if (list.indexOf(opId)>=0) return true;
+    list.push(opId);
+    // Храним последние 200: этого хватает на любую очередь, а настройка
+    // не разрастается до бесконечности.
+    if (list.length>200) list=list.slice(list.length-200);
+    _setSetting(ss,key,list.join(','));
+    return false;
+  } catch(e) { return false; }
+}
+
 // Вечер: накладные за день ПО КАЖДОМУ поставщику.
 // Раньше вечер писался тремя общими суммами на «Магазин — накладные»:
 // сколько всего оплатили, сколько погасили, сколько осталось в долг. Итог
@@ -4131,6 +4154,7 @@ function saveEveningTotal(p) {
   var date=p.date?new Date(p.date):new Date();
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     var lRow=[]; lRow[B_DATE-1]=date;
     var lk=_lockDeny(ss,lRow);
     if (lk) return {__error:'Период закрыт — накладные этой датой записать нельзя'};
@@ -4171,6 +4195,7 @@ function saveEveningInvoices(p) {
   var date=p.date?new Date(p.date):new Date();
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true, count:0, debts:{}};
     // Замок периода: вечер закрытого дня записывать нельзя — иначе
     // закрытый месяц продолжает меняться.
     var lRow=[]; lRow[B_DATE-1]=date;
