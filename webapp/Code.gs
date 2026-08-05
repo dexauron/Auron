@@ -235,6 +235,7 @@ function createOrg(p) {
     var ss = _profileSS();
     if (!ss) return { __error: 'Профиль не найден' };
     var res = _mkOrg(name, ss);
+    try { _inviteAllStoresInto(res.ssId); } catch(e2){}
     return { ssId: res.ssId, orgName: name };
   } catch(e) { return { __error: e.message }; }
 }
@@ -6188,11 +6189,33 @@ var PERM_CATALOG=[
 // платит, но не стоит на кассе и не принимает товар.
 // Владелец может выдать любому дополнительные права вручную
 // (Настройки → Команда → права участника) — этим ничего не потеряно.
-function _rolePerms(role) {
+var ALL_ROLES=['Владелец','Бухгалтер','Администратор','Сотрудник зала'];
+// Роль хранится строкой. У одного человека их может быть несколько —
+// тогда они записаны через запятую: «Бухгалтер, Администратор».
+// Так владелец не выбирает «кем считать» человека, который и платит
+// поставщикам, и ведёт магазин: права просто складываются.
+function _roleList(role) {
+  var out=[];
+  String(role||'').split(/\s*,\s*/).forEach(function(r){
+    r=r.trim();
+    if (r && ALL_ROLES.indexOf(r)>=0 && out.indexOf(r)<0) out.push(r);
+  });
+  return out.length?out:['Сотрудник зала'];
+}
+function _roleStr(role) { return _roleList(role).join(', '); }
+function _oneRolePerms(role) {
   if (role==='Владелец')      return ['finance','kassa','receive','goods','payments','manage'];
   if (role==='Администратор') return ['finance','kassa','receive','goods','payments'];
   if (role==='Бухгалтер')     return ['finance','payments','goods'];
   return ['kassa','receive']; // Сотрудник зала
+}
+// Права по роли (или по нескольким ролям — тогда объединение).
+function _rolePerms(role) {
+  var list=_roleList(role), out=[];
+  list.forEach(function(r){
+    _oneRolePerms(r).forEach(function(k){ if(out.indexOf(k)<0) out.push(k); });
+  });
+  return out;
 }
 // Эффективные права участника: явный список из НАСТРОЕК (если задан), иначе по роли.
 function _memberPerms(ss, email, role) {
@@ -6249,11 +6272,11 @@ function getTeam(p) {
       sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
         if (!r[0]) return;
         var em=String(r[0]).toLowerCase();
-        var role=String(r[1]||'Сотрудник зала');
+        var role=_roleStr(r[1]||'Сотрудник зала');
         var custom=false, perms=_rolePerms(role);
         var raw=String(r[3]||'');
         if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)){perms=arr;custom=true;} }catch(e){} }
-        members.push({email:em,role:role,
+        members.push({email:em,role:role,roles:_roleList(role),
           added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom,
           widgets: Array.isArray(wmap[em])?wmap[em]:null});
       });
@@ -6266,15 +6289,17 @@ function getTeam(p) {
     // чтобы статус владельца определялся надёжно и впредь.
     try { if(isOwner && me && !_getSettingStr(ss,'OWNER_EMAIL','')) _setSetting(ss,'OWNER_EMAIL',me); } catch(e){}
     return {isOwner:isOwner, myEmail:me, ownerEmail:ownerEmail, myRole:myRole,
-            members:members, permCatalog:PERM_CATALOG, roles:['Владелец','Бухгалтер','Администратор','Сотрудник зала'],
-            myPerms:_myPerms(ss)};
+            members:members, permCatalog:PERM_CATALOG, roles:ALL_ROLES,
+            myRoles:_roleList(myRole), myPerms:_myPerms(ss)};
   } catch(e) { return {__error:e.message}; }
 }
 
 // Владелец меняет роль сотрудника (сбрасывает индивидуальные права на роль).
 function setMemberRole(p) {
   return _withLock(function(){
-  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase();
+  // Ролей может быть несколько: приходят массивом или строкой через запятую.
+  var role=_roleStr(Array.isArray(p.roles)?p.roles.join(', '):_s(p.role||'Сотрудник зала'));
   try {
     var ss=SpreadsheetApp.openById(ssId);
     if (!_isOwner(ss)) return {__error:'Только владелец может менять роли'};
@@ -6381,7 +6406,8 @@ function inviteMember(p) {
 
 function _inviteMemberLocked(p) {
   return _withLock(function(){
-  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase();
+  var role=_roleStr(Array.isArray(p.roles)?p.roles.join(', '):_s(p.role||'Сотрудник зала'));
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
     if (!_isOwner(ss)) return {__error:'Только владелец может приглашать сотрудников'};
@@ -7215,8 +7241,53 @@ function getTeamAll() {
       if (t&&!t.__error&&t.isOwner)
         out.push({ssId:o.ssId,name:o.name,members:t.members||[]});
     });
-    return {orgs:out,myEmail:_myEmail(),permCatalog:PERM_CATALOG};
+    return {orgs:out,myEmail:_myEmail(),permCatalog:PERM_CATALOG,
+            roles:ALL_ROLES, allStores:_allStoresMap()};
   } catch(e) { return {orgs:[],__error:e.message}; }
+}
+
+// ── «Все мои магазины» ──────────────────────────────────────────────
+// Владелец отмечает человека галочкой — и тот получает доступ во ВСЕ его
+// магазины, включая те, которых ещё нет. Иначе после открытия новой точки
+// пришлось бы вспоминать и раздавать доступ заново каждому.
+// Карта хранится у владельца: { email: 'Бухгалтер, Администратор' }.
+function _allStoresMap() {
+  try { var raw=PropertiesService.getUserProperties().getProperty('ALL_STORES');
+    if (raw) { var m=JSON.parse(raw); if (m&&typeof m==='object') return m; } } catch(e){}
+  return {};
+}
+function _allStoresSave(m) {
+  try { PropertiesService.getUserProperties().setProperty('ALL_STORES',JSON.stringify(m)); } catch(e){}
+}
+// Включить/выключить галочку. При включении сразу добавляем во все
+// магазины, где человека ещё нет — галочка без этого была бы обещанием
+// на будущее и ничего не меняла бы сегодня.
+function setMemberAllStores(p) {
+  var email=String(p.email||'').trim().toLowerCase();
+  if (!email) return {__error:'Не указан сотрудник'};
+  var on=!!p.on;
+  var m=_allStoresMap();
+  if (!on) { delete m[email]; _allStoresSave(m); return getTeamAll(); }
+  var role=_roleStr(Array.isArray(p.roles)?p.roles.join(', '):_s(p.role||'Сотрудник зала'));
+  m[email]=role; _allStoresSave(m);
+  try {
+    var d=initUserApp();
+    (d.orgs||[]).forEach(function(o){
+      var t=getTeam({ssId:o.ssId});
+      if (!t||t.__error||!t.isOwner) return;
+      var has=(t.members||[]).some(function(x){ return x.email===email; });
+      if (!has) inviteMember({ssId:o.ssId,email:email,role:role});
+    });
+  } catch(e) { return {__error:e.message}; }
+  return getTeamAll();
+}
+// Новый магазин: сразу зовём тех, кому выдана галочка «все мои магазины».
+function _inviteAllStoresInto(ssId) {
+  var m=_allStoresMap();
+  for (var email in m) {
+    if (!m.hasOwnProperty(email)) continue;
+    try { inviteMember({ssId:ssId,email:email,role:m[email]}); } catch(e){}
+  }
 }
 
 // Сменить индивидуальные права сотрудника в одной организации
@@ -7235,7 +7306,8 @@ function setMemberWidgetsMulti(p) {
 
 // Пригласить сотрудника сразу в несколько организаций
 function inviteMemberMulti(p) {
-  var email=String(p.email||'').trim().toLowerCase(), role=_s(p.role||'Сотрудник зала');
+  var email=String(p.email||'').trim().toLowerCase();
+  var role=_roleStr(Array.isArray(p.roles)?p.roles.join(', '):_s(p.role||'Сотрудник зала'));
   var ssIds=p.ssIds||[];
   if (!ssIds.length) return {__error:'Выбери хотя бы одну организацию'};
   var ok=0, already=0, errs=[], link='', sent=false;

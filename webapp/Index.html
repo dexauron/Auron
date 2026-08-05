@@ -3337,7 +3337,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.98.0';
+var APP_VERSION='4.99.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4311,22 +4311,26 @@ var App={
       h+=emails.map(function(em){
         var list=byEmail[em];
         var chips=list.map(function(x){
-          var roleOpts=App._roles.map(function(ro){return '<option'+(ro===x.role?' selected':'')+'>'+ro+'</option>';}).join('');
           return '<div style="display:flex;align-items:center;gap:6px;background:var(--surface-2);border-radius:10px;padding:6px 8px;margin:4px 4px 0 0;">'+
             '<span style="font-size:11.5px;font-weight:700;max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.8 4h14.4L21 9.5"/><path d="M4 9.5h16V20H4z"/><path d="M9 20v-6h6v6"/></svg> '+App._e(x.org)+'</span>'+
-            '<select onchange="App._teamRole(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',this.value)" style="padding:4px 5px;border-radius:7px;border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:10.5px;font-family:var(--font);max-width:110px;">'+roleOpts+'</select>'+
+            '<button onclick="App.openMemberRoles(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Роли" style="padding:4px 7px;border-radius:7px;border:1px solid var(--line);background:var(--surface-3);color:var(--ink);font-size:10.5px;font-family:var(--font);font-weight:700;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;">'+App._e(x.role)+'</button>'+
             '<button onclick="App.openMemberPerms(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Права" style="background:none;border:none;color:'+(x.custom?'var(--brand)':'var(--muted)')+';font-size:14px;cursor:pointer;padding:2px;">⚙</button>'+
             '<button onclick="App.openMemberWidgets(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\')" title="Виджеты" style="background:none;border:none;color:'+(x.widgets?'var(--brand)':'var(--muted)')+';font-size:14px;cursor:pointer;padding:2px;">▦</button>'+
             '<button onclick="App._teamRemove(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',\''+App._e(x.org)+'\')" style="background:none;border:none;color:var(--neg);font-size:13px;cursor:pointer;padding:2px;">✕</button></div>';
         }).join('');
+        var all=!!((App._teamAll&&App._teamAll.allStores)||{})[em];
         return '<div style="padding:11px 0;border-bottom:1px solid var(--line-2);">'+
           '<div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(em)+'</div>'+
+          '<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11.5px;color:var(--muted);cursor:pointer;">'+
+            '<input type="checkbox" '+(all?'checked':'')+' onchange="App._teamAllStores(\''+App._e(em)+'\',this.checked,\''+App._e(list[0].role)+'\')" style="width:18px;height:18px;accent-color:var(--brand);flex-shrink:0;">'+
+            'Все мои магазины — и те, что откроются позже</label>'+
           '<div style="display:flex;flex-wrap:wrap;">'+chips+'</div></div>';
       }).join('');
     } else {
       h+='<div style="text-align:center;padding:14px;color:var(--muted);">Пока сотрудников нет — пригласи первого <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v13M7 12l5 5 5-5"/></svg></div>';
     }
-    // Форма приглашения: email + роль + в какие организации (тап-строки)
+    // Форма приглашения: email + роли + в какие организации (тап-строки)
+    App._invRoles=['Сотрудник зала'];
     App._invPick={};
     orgs.forEach(function(o){App._invPick[o.ssId]=(o.ssId===App.s.ssId);});
     var orgChecks=orgs.map(function(o){
@@ -4337,7 +4341,7 @@ var App={
     }).join('');
     h+='<div style="margin-top:16px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Пригласить сотрудника</div>'+
       '<div class="field" style="margin-top:8px;"><label>Email (Google-аккаунт)</label><input id="tm-email" type="email" placeholder="user@gmail.com" inputmode="email"></div>'+
-      '<div class="field"><label>Роль</label><select id="tm-role">'+App._roles.map(function(ro){return '<option>'+ro+'</option>';}).join('')+'</select></div>'+
+      '<div class="field"><label>Роли (можно несколько)</label>'+App._roleChecks(App._invRoles)+'</div>'+
       '<div class="field"><label>Доступ к организациям</label>'+orgChecks+'</div>'+
       '<button class="btn-primary" onclick="App._teamInvite()">Пригласить</button>'+
       '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:10px;">Сотрудник откроет приложение под своим Google-аккаунтом → на экране «Мои организации» появится приглашение → нажмёт «Принять».</div>';
@@ -4354,14 +4358,52 @@ var App={
     box.textContent=on?'✓':'';
     App.haptic(6);
   },
+  // Список ролей галочками. Одному человеку можно дать несколько: бывает,
+  // что он и бухгалтер, и администратор — права тогда складываются.
+  _roleChecks:function(sel,handler){
+    return App._roles.map(function(ro){
+      var on=(sel||[]).indexOf(ro)>=0;
+      return '<label style="display:flex;align-items:center;gap:11px;padding:11px 13px;background:var(--surface-2);border-radius:12px;margin-bottom:7px;cursor:pointer;">'+
+        '<input type="checkbox" '+(on?'checked':'')+' onchange="'+(handler||'App._invRoleToggle')+'(\''+App._e(ro)+'\',this.checked)" style="width:20px;height:20px;accent-color:var(--brand);flex-shrink:0;">'+
+        '<span style="font-size:13.5px;font-weight:600;">'+App._e(ro)+'</span></label>';
+    }).join('');
+  },
+  _pick:function(arr,v,on){var i=arr.indexOf(v);if(on&&i<0)arr.push(v);if(!on&&i>=0)arr.splice(i,1);return arr;},
+  _invRoleToggle:function(ro,on){App._invRoles=App._pick(App._invRoles||[],ro,on);},
+  // Роли уже работающего сотрудника в одном магазине
+  openMemberRoles:function(ssId,email){
+    var info=App._memberInfo(ssId,email);
+    App._mr={ssId:ssId,email:email,roles:String(info.role||'').split(/,\s*/).filter(Boolean)};
+    App.openModal('<div class="modal-title">Роли сотрудника</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">'+App._e(email)+'<br>Можно отметить несколько — права сложатся. Индивидуальные права (⚙) при смене ролей сбрасываются.</div>'+
+      App._roleChecks(App._mr.roles,'App._mrToggle')+
+      '<button class="btn-primary" onclick="App._mrSave()">Сохранить роли</button>');
+  },
+  _mrToggle:function(ro,on){if(App._mr)App._pick(App._mr.roles,ro,on);},
+  _mrSave:function(){var s=App._mr;if(!s)return;
+    if(!s.roles.length){App.toast('Выбери хотя бы одну роль',true);return;}
+    gs('setMemberRoleMulti',{ssId:s.ssId,email:s.email,roles:s.roles}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Роли обновлены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
+  // Галочка «все мои магазины»: доступ и в те точки, которых ещё нет
+  _teamAllStores:function(email,on,role){
+    App.toast(on?'Открываю все магазины…':'Убираю отметку…');
+    gs('setMemberAllStores',{email:email,on:on,role:role}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(on?'Доступ ко всем магазинам ✓':'Отметка снята ✓');
+      App._teamAll=r;App._renderTeamAll();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
   _teamInvite:function(){
     var email=document.getElementById('tm-email').value.trim();
-    var role=document.getElementById('tm-role').value;
+    var roles=(App._invRoles&&App._invRoles.length)?App._invRoles:['Сотрудник зала'];
+    var role=roles.join(', ');
     var ssIds=Object.keys(App._invPick||{}).filter(function(id){return App._invPick[id];});
     if(!email){App.toast('Введите email',true);return;}
     if(!ssIds.length){App.toast('Выбери хотя бы одну организацию',true);return;}
     App.toast('Отправляю приглашение…');
-    gs('inviteMemberMulti',{email:email,role:role,ssIds:ssIds}).then(function(r){
+    gs('inviteMemberMulti',{email:email,roles:roles,role:role,ssIds:ssIds}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App._teamAll=r;App._renderTeamAll();
       // Главное — дать владельцу ссылку, чтобы отправить самому (на письмо не полагаемся)
