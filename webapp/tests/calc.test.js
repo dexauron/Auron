@@ -81,5 +81,15 @@ t('калькулятор открывается полной страницей
 t('есть вход из настроек', /App\.openCalc\(\)/.test(html));
 t('считает без сервера', !/openCalc[\s\S]{0,3000}gs\('/.test(html));
 
+
+// ── Чего не хватало против калькулятора телефона ─────────────────────
+t('есть история счёта', /_calcHist:\[\]/.test(html) && /_calcRemember:function/.test(html));
+t('история не растёт бесконечно', /_calcHist\.length>10/.test(html));
+t('по нажатию число возвращается в поле', /_calcHistUse:function/.test(html));
+t('результат можно скопировать', /_calcCopy:function/.test(html));
+t('без результата копировать нечего', /_calcCopy[\s\S]{0,200}Сначала посчитайте/.test(html));
+t('список переживает переключение режима',
+  /_calcMode==='plain'\)App\._calcHistRender\(\)/.test(html));
+
 console.log('\nКалькулятор: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

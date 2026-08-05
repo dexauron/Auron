@@ -2964,6 +2964,14 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
+          <div class="settings-row owner-only" onclick="App.openLockDate()" style="cursor:pointer;">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Закрыть период</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="lock-date-sub">Запретить правки задним числом</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row" onclick="App.openBrain()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10z"/></svg></span>
             <div style="flex:1;">
@@ -3345,7 +3353,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.0.0';
+var APP_VERSION='5.1.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4310,7 +4318,8 @@ var App={
     orgs.forEach(function(o){
       (o.members||[]).forEach(function(m){
         if(!byEmail[m.email])byEmail[m.email]=[];
-        byEmail[m.email].push({ssId:o.ssId,org:o.name,role:m.role,perms:m.perms||[],custom:m.custom});
+        byEmail[m.email].push({ssId:o.ssId,org:o.name,role:m.role,perms:m.perms||[],custom:m.custom,
+          suspended:!!m.suspended,lastSeen:m.lastSeen||''});
       });
     });
     var emails=Object.keys(byEmail);
@@ -4327,8 +4336,13 @@ var App={
             '<button onclick="App._teamRemove(\''+App._e(x.ssId)+'\',\''+App._e(em)+'\',\''+App._e(x.org)+'\')" style="background:none;border:none;color:var(--neg);font-size:13px;cursor:pointer;padding:2px;">✕</button></div>';
         }).join('');
         var all=!!((App._teamAll&&App._teamAll.allStores)||{})[em];
+        var susp=list.some(function(x){return x.suspended;});
+        var seen=''; list.forEach(function(x){ if(x.lastSeen&&!seen)seen=x.lastSeen; });
         return '<div style="padding:11px 0;border-bottom:1px solid var(--line-2);">'+
-          '<div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(em)+'</div>'+
+          '<div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'+(susp?'opacity:.55;text-decoration:line-through;':'')+'">'+App._e(em)+'</div>'+
+          '<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+
+            (susp?'<span style="color:var(--neg);font-weight:700;">доступ приостановлен</span>':(seen?'был в приложении '+App._e(seen):'ещё не заходил'))+
+            ' · <b class="act" style="color:var(--brand);cursor:pointer;" onclick="App._teamSuspend(\''+App._e(em)+'\','+(susp?'false':'true')+')">'+(susp?'вернуть доступ':'приостановить')+'</b></div>'+
           '<label style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:11.5px;color:var(--muted);cursor:pointer;">'+
             '<input type="checkbox" '+(all?'checked':'')+' onchange="App._teamAllStores(\''+App._e(em)+'\',this.checked,\''+App._e(list[0].role)+'\')" style="width:18px;height:18px;accent-color:var(--brand);flex-shrink:0;">'+
             'Все мои магазины — и те, что откроются позже</label>'+
@@ -4394,6 +4408,24 @@ var App={
       if(r&&r.__error){App.toast(r.__error,true);return;}
       App.toast('Роли обновлены ✓');App._teamAll=r;App.closeModal();App._renderTeamAll();
     }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
+  // Приостановка: доступ закрыт, но человек и его настройки остаются.
+  // Приостанавливаем во ВСЕХ магазинах сразу — «уехал» значит уехал.
+  _teamSuspend:function(email,on){
+    var orgs=((App._teamAll&&App._teamAll.orgs)||[]).filter(function(o){
+      return (o.members||[]).some(function(m){return m.email===email;});
+    });
+    if(!orgs.length)return;
+    App.toast(on?'Приостанавливаю…':'Возвращаю доступ…');
+    var last=Promise.resolve();
+    orgs.forEach(function(o){
+      last=last.then(function(){return gs('setMemberSuspendedMulti',{ssId:o.ssId,email:email,on:on});});
+    });
+    last.then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(on?'Доступ приостановлен ✓':'Доступ возвращён ✓');
+      App._teamAll=r;App._renderTeamAll();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
   // Галочка «все мои магазины»: доступ и в те точки, которых ещё нет
   _teamAllStores:function(email,on,role){
     App.toast(on?'Открываю все магазины…':'Убираю отметку…');
@@ -6074,6 +6106,7 @@ var App={
   loadSettings:function(cb){
     gs('getSettings',{ssId:App.s.ssId}).then(function(r){
       App.s.settings=r||{};
+      try{App._lockDateSub();}catch(e){}
       if(!App.s.settings.cats)App.s.settings.cats=[];
       if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
       if(!App.s.settings.payTypes)App.s.settings.payTypes=['Наличные','Карта','СБП','Безналичный'];
@@ -9008,6 +9041,17 @@ var App={
       return;
     }
     App.toast('Сохраняю…');
+    // Правка существующей операции идёт отдельной функцией: обычная
+    // запись создавала бы вторую строку рядом со старой.
+    if(s.npEditId&&fn==='saveQuickEntry'){
+      var editId=s.npEditId;s.npEditId=null;
+      gs('updateTransaction',{ssId:s.ssId,id:editId,data:data}).then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);App.loadHome();return;}
+        App.toast('Изменено ✓');App.loadHome();
+        if(App._jTxAll)App.loadHistory();
+      }).catch(function(e){App.toast('Ошибка: '+App._friendlyErr(e),true);App.loadHome();});
+      return;
+    }
     gs(fn,{ssId:s.ssId,data:data}).then(function(){
       App.toast('Сохранено ✓');App.loadHome();
       if(data.type==='Расход'&&data.category)App._checkBudgetLimit(data.category);
@@ -9571,6 +9615,40 @@ var App={
       '<b style="color:var(--ink);">Мелочи</b><br>Свайп по операции влево — редактировать/удалить/повторить. Удалил случайно — жми «Отменить» или Настройки → Корзина. Глаз на главной прячет суммы.</div>','full');
   },
 
+  // ── Закрытый период ──────────────────────────────────────────────
+  // Так работают все бухгалтерские программы: месяц посчитали — закрыли,
+  // и задним числом его никто не переписывает. Иначе вчерашний отчёт,
+  // который владелец уже отправил, завтра покажет другие цифры.
+  openLockDate:function(){
+    var cur=(App.s.settings&&App.s.settings.lockDate)||'';
+    var d=new Date(); d.setDate(0); // последний день прошлого месяца
+    var prev=d.toISOString().slice(0,10);
+    App.openModal('<div class="modal-title">Закрыть период</div>'+
+      '<div style="font-size:13px;color:var(--ink-2);line-height:1.6;margin-bottom:14px;">'+
+        'Все записи <b>по эту дату включительно</b> нельзя будет исправить или удалить — никому, даже сотруднику с полными правами. Снять замок можете только вы.'+
+        '<br><br>Зачем: отчёт за закрытый месяц больше не поменяется задним числом.</div>'+
+      (cur?'<div style="background:color-mix(in oklab,var(--pos) 13%,transparent);border-radius:12px;padding:11px 13px;font-size:13px;margin-bottom:12px;">Сейчас закрыт период по <b>'+App._e(cur.split('-').reverse().join('.'))+'</b></div>':'')+
+      '<div class="field"><label>Закрыть по дату</label><input id="lock-date-inp" type="date" value="'+App._e(cur||prev)+'"></div>'+
+      '<button class="btn-primary" onclick="App._lockDateSave()">Закрыть период</button>'+
+      (cur?'<button class="btn-secondary" style="margin-top:10px;" onclick="App._lockDateSave(true)">Снять замок</button>':''));
+  },
+  _lockDateSave:function(clear){
+    var v=clear?'':(document.getElementById('lock-date-inp')||{}).value||'';
+    if(!clear&&!v){App.toast('Выберите дату',true);return;}
+    gs('setLockDate',{ssId:App.s.ssId,date:v}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      if(App.s.settings)App.s.settings.lockDate=v;
+      App._lockDateSub();
+      App.toast(clear?'Замок снят ✓':'Период закрыт ✓');App.closeModal();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+  _lockDateSub:function(){
+    var el=document.getElementById('lock-date-sub');if(!el)return;
+    var cur=(App.s.settings&&App.s.settings.lockDate)||'';
+    el.textContent=cur?('Закрыт по '+cur.split('-').reverse().join('.')):'Запретить правки задним числом';
+    el.style.color=cur?'var(--pos)':'var(--muted)';
+  },
+
   // ── Умный калькулятор ────────────────────────────────────────────
   // Четыре режима из списка владельца: обычный счёт, наценка, деление
   // суммы и пересчёт денег. Всё считается на телефоне, сервер не нужен —
@@ -9592,6 +9670,7 @@ var App={
       return '<button onclick="App._calcMode=\''+t[0]+'\';App._calcRender();" style="flex-shrink:0;padding:9px 15px;border-radius:11px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 14%,transparent)':'var(--surface-2)')+';color:'+(on?'var(--brand)':'var(--ink-2)')+';font-size:13px;font-weight:750;font-family:var(--font);cursor:pointer;">'+t[1]+'</button>';
     }).join('');
     body.innerHTML=App['_calc_'+App._calcMode]();
+    if(App._calcMode==='plain')App._calcHistRender();
     App.haptic(5);
   },
   _calcOut:function(html){
@@ -9649,13 +9728,54 @@ var App={
     return '<div class="field"><label>Выражение</label>'+
       '<input id="calc-expr" inputmode="text" placeholder="12500 + 3200 * 2" oninput="App._calcPlain()" autocomplete="off"></div>'+
       '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Пишите как в тетради: + − × ÷ и скобки. Считает сразу, нажимать ничего не надо.</div>'+
-      App._calcOut(App._calcRow('Результат','<span id="calc-plain-v">—</span>',true));
+      App._calcOut(App._calcRow('Результат','<span id="calc-plain-v">—</span>',true))+
+      '<div style="display:flex;gap:10px;margin-top:12px;">'+
+        '<button class="btn-secondary" style="flex:1;margin:0;" onclick="App._calcCopy()">Копировать</button>'+
+        '<button class="btn-secondary" style="flex:1;margin:0;" onclick="App._calcRemember()">Запомнить</button></div>'+
+      '<div id="calc-hist"></div>';
   },
   _calcPlain:function(){
     var el=document.getElementById('calc-plain-v');if(!el)return;
     var r=App._calcSafeEval(document.getElementById('calc-expr').value);
     el.textContent=r===null?'—':App._calcFmt(r);
     el.style.color=r===null?'var(--muted)':'var(--ink)';
+    App._calcLast=r;
+  },
+  // История счёта: в калькуляторе телефона она есть, и не зря — считаешь
+  // несколько накладных подряд и забываешь предыдущую сумму.
+  _calcHist:[],
+  _calcLast:null,
+  _calcRemember:function(){
+    var e=document.getElementById('calc-expr');
+    var r=App._calcSafeEval(e?e.value:'');
+    if(r===null){App.toast('Сначала посчитайте',true);return;}
+    App._calcHist.unshift({e:(e.value||'').trim(),v:r});
+    if(App._calcHist.length>10)App._calcHist.length=10;
+    App._calcHistRender();App.haptic(8);App.toast('Записал \u2713');
+  },
+  _calcHistRender:function(){
+    var box=document.getElementById('calc-hist');if(!box)return;
+    if(!App._calcHist.length){box.innerHTML='';return;}
+    box.innerHTML='<div style="margin-top:18px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Запомнено</div>'+
+      '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:8px;">'+
+      App._calcHist.map(function(x,i){
+        return '<div onclick="App._calcHistUse('+i+')" style="display:flex;justify-content:space-between;gap:10px;padding:11px 13px;border-top:1px solid var(--line-2);cursor:pointer;">'+
+          '<span style="color:var(--muted);font-size:12.5px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(x.e)+'</span>'+
+          '<span style="font-weight:700;white-space:nowrap;">'+App._calcFmt(x.v)+'</span></div>';
+      }).join('')+'</div>'+
+      '<button class="btn-secondary" style="margin-top:10px;" onclick="App._calcHist=[];App._calcHistRender();">Очистить список</button>';
+  },
+  _calcHistUse:function(i){
+    var x=App._calcHist[i];if(!x)return;
+    var e=document.getElementById('calc-expr');if(!e)return;
+    e.value=String(x.v);App._calcPlain();App.haptic(6);
+  },
+  _calcCopy:function(){
+    if(App._calcLast===null||App._calcLast===undefined){App.toast('Сначала посчитайте',true);return;}
+    var s=String(Math.round(App._calcLast*100)/100);
+    if(navigator.clipboard)navigator.clipboard.writeText(s).then(function(){App.toast('Скопировано \u2713');})
+      .catch(function(){App.toast('Скопируйте вручную: '+s,true);});
+    else App.toast('Скопируйте вручную: '+s,true);
   },
 
   // 2. Наценка — в обе стороны
@@ -9773,11 +9893,23 @@ var App={
         return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
           '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.type==='Доход'?'+':'−')+'₽ '+fmt(t.amount)+' · '+App._e(t.category)+'</div>'+
           '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(t.account)+' · '+App._e(t.date)+(t.comment?' · '+App._e(t.comment):'')+'</div>'+
+          (t.who?'<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">удалил '+App._e(t.who)+'</div>':'')+
           (t.daysLeft===null||t.daysLeft===undefined?'':'<div style="font-size:11px;margin-top:3px;color:'+(t.daysLeft<=3?'var(--neg)':'var(--muted)')+';">'+(t.daysLeft>0?'Удалится навсегда через '+t.daysLeft+' дн.':'Удалится сегодня')+'</div>')+'</div>'+
           '<button onclick="App._trashRestore('+i+')" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Вернуть</button></div>';
-      }).join('');
+      }).join('')+
+        '<button class="btn-secondary" style="margin-top:16px;color:var(--neg);" onclick="App._trashEmpty()">Очистить корзину сейчас</button>';
       App._trashItems=items;
     }).catch(function(e){var el=document.getElementById('trash-body');if(el)el.innerHTML='<div style="color:var(--neg);">'+App._e(e.message)+'</div>';});
+  },
+  // Очистка корзины необратима — здесь подтверждение уместно, в отличие
+  // от обычного удаления, где есть «Отменить».
+  _trashEmpty:function(){
+    var n=(App._trashItems||[]).length;
+    if(!confirm('Удалить навсегда '+n+' зап. из корзины? Вернуть их будет нельзя.'))return;
+    gs('emptyTrash',{ssId:App.s.ssId}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast('Корзина очищена ✓');App.openTrash();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _trashRestore:function(i){
     var t=(App._trashItems||[])[i];if(!t)return;
@@ -10065,6 +10197,9 @@ var App={
     gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){
       var tx=(r||[]).find(function(t){return String(t.id)===String(id);});
       if(!tx){App.toast('Не найдено',true);return;}
+      // Перевод — это две связанные строки. Править одну нельзя: деньги
+      // «уйдут» с одного счёта и не придут на другой.
+      if(tx.category==='Перевод'){App.toast('Перевод правится так: удалить и записать заново',true);return;}
       var acc=(App.s.accounts||[]).find(function(a){return a.name===tx.account;})||{name:tx.account};
       var acc2=tx.toAccount?(App.s.accounts||[]).find(function(a){return a.name===tx.toAccount;})||{name:tx.toAccount}:null;
       App.s.npAcc=acc;App.s.npAcc2=acc2;App.s.npCat=tx.category;
@@ -11950,8 +12085,31 @@ var App={
     }
     if(hd)h+='<button id="pc-all-btn" class="btn-secondary" style="margin-top:16px;" onclick="App._productToggleAll()">Показать всю информацию</button>'+
       '<div id="pc-all" style="display:none;">'+hd+'</div>';
+    // Поделиться карточкой: чаще всего это нужно, чтобы отправить
+    // поставщику или продавцу «вот этот товар, вот такие цены».
+    App._productLast={d:d,p:p};
+    h+='<button class="btn-secondary" style="margin-top:10px;" onclick="App._productShare()">Поделиться карточкой</button>';
     b.innerHTML=h;
     if(d&&d.priceHist&&d.priceHist.length>=2)App._drawSpark('pc-spark',d.priceHist.map(function(x){return x.price;}),'var(--brand)');
+  },
+  _productShare:function(){
+    var s=App._productLast;if(!s){App.toast('Карточка ещё не загружена',true);return;}
+    var p=s.p||{}, d=s.d||{}, T=d.totals||{};
+    var fm=function(v){return fmt(Math.round(v||0));};
+    var L=[(p.name||'Товар'),''];
+    if(p.barcode)L.push('Штрихкод: '+p.barcode);
+    if(p.group)L.push('Группа: '+p.group);
+    if(p.buy)L.push('Закупка: '+fm(p.buy)+' ₽');
+    if(p.retail)L.push('Продажа: '+fm(p.retail)+' ₽'+(p.markup!=null?' (наценка '+p.markup+'%)':''));
+    if(p.stockQty!=null)L.push('Остаток: '+fm(p.stockQty)+' шт'+(p.daysOfStock!=null?' — хватит на '+p.daysOfStock+' дн':''));
+    if(T.priceMin!=null&&T.priceMax!=null&&T.priceMax>T.priceMin)
+      L.push('Закупали от '+fm(T.priceMin)+' до '+fm(T.priceMax)+' ₽');
+    if(d.suppliers&&d.suppliers.length){
+      L.push('','Поставщики:');
+      d.suppliers.slice(0,5).forEach(function(x){L.push('  • '+x.supplier+' — '+fm(x.price)+' ₽');});
+    }
+    L.push('','— '+(App.s.orgName||'Auron Finance'));
+    App._shareModal('Карточка товара',L.join('\n'));
   },
   // Кнопка «показать всю информацию»: владелец просил, чтобы всё было
   // доступно, но не вываливалось сразу на экран.

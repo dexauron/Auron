@@ -73,7 +73,7 @@ var T_YEAR=1,T_MON=2,T_DAY=3,T_EMP=4,T_IN=5,T_OUT=6,
 var T_COLS=10;
 
 // КОРЗИНА = БАЗА columns + deleted timestamp (col 14)
-var TR_COLS=14;
+var TR_COLS=14, TR_WHO=15;
 
 // ─────────────────────────────────────────────────────────────────────
 // Единая блокировка на запись (защита при одновременной работе команды).
@@ -373,7 +373,7 @@ function ensureSheets(ss) {
   _mk(ss,SH_DEBTS,   ['ID','Представитель','Тип','Сумма','Дата','Счёт','Комментарий','Создано','Накладная','Статус']);
   _mk(ss,SH_TIMESHEET,['Год','Месяц','День','Сотрудник','Приход','Уход','Статус','Часы','Ставка','Комментарий']);
   _mk(ss,SH_SETTINGS, ['Ключ','Значение']);
-  _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено']);
+  _mk(ss,SH_TRASH,   ['ID','UUID','Дата','Тип','Категория','Сумма','Счёт','Сотрудник','Комментарий','Чек','Z_Ref','Locked','Смена','Удалено','Кто удалил']);
   _mk(ss,SH_RECURRING,['ID','Название','Категория','Сумма','Счёт','День','Активна','Создано']);
   _mk(ss,SH_PAYMENTS, ['ID','Контрагент','Сумма','Комментарий','Дата','Статус','Назначение','Создано','Оплачено','Календарь']);
   _mk(ss,SH_GOODS,    ['Штрихкод','Наименование','Группа','Единица','Поставщик','ЦенаЗакуп','ЦенаРозн','Продано_Кол','Выручка','Прибыль','Остаток_Кол','Остаток_Сумма','Обновлено','Артикул','Код']);
@@ -722,6 +722,7 @@ function getSettings(p) {
       aiEnabled:        !!(map['AI_KEY']),
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
+      lockDate:         String(map['LOCK_DATE']||''),
       taxRate:          parseFloat(map['TAX_RATE'])||6,
       savePct:          parseFloat(map['SAVE_PCT'])||10
     };
@@ -1068,8 +1069,32 @@ function _txAuthor(ss, id) {
   return '';
 }
 function _sameDay(a,b){ return a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+// Закрытый период («замок даты») — так устроено в любой бухгалтерской
+// программе: месяц посчитали, отчёт сдали, и задним числом его больше
+// никто не переписывает. У нас замок ставит и снимает только владелец;
+// пока он стоит, правку не пропустят даже права «править всё».
+function _lockDate(ss) {
+  try {
+    var raw=_getSettingStr(ss,'LOCK_DATE','');
+    if (!raw) return null;
+    var d=new Date(String(raw)+'T23:59:59');
+    return isNaN(d.getTime())?null:d;
+  } catch(e){ return null; }
+}
+function _lockDeny(ss, row) {
+  var lock=_lockDate(ss);
+  if (!lock) return '';
+  var d=row&&row[B_DATE-1];
+  if (!(d instanceof Date) || d.getTime()>lock.getTime()) return '';
+  var tz=Session.getScriptTimeZone();
+  return 'Период закрыт по '+Utilities.formatDate(lock,tz,'dd.MM.yyyy')+
+         ' — эту запись менять нельзя';
+}
 // Возвращает '' если можно, иначе текст отказа.
 function _txEditDeny(ss, id, row) {
+  // Замок периода сильнее любых прав: иначе он ничего не защищает.
+  // Владелец снимает его в настройках — осознанно и с записью в журнал.
+  var lk=_lockDeny(ss,row); if (lk) return lk;
   if (_canManage(ss)) return '';
   var me=_myEmail(); if (!me) return '';
   if (_editFreeList(ss).indexOf(me)>=0) return '';
@@ -1079,6 +1104,54 @@ function _txEditDeny(ss, id, row) {
   if (!(d instanceof Date) || !_sameDay(d,new Date()))
     return 'Исправлять можно только записи за сегодня — обратитесь к владельцу';
   return '';
+}
+
+// Правка операции НА МЕСТЕ.
+// Раньше «Изменить» отправляло обычную запись с uuid старой операции:
+// сервер такой uuid не находил (там лежит другой номер), старая строка
+// оставалась, и в журнале появлялся ДУБЛЬ. Владелец бы увидел двойной
+// расход и не понял почему. Теперь строка правится, а в истории записи
+// честно стоит «изменил» — не «удалил и создал заново».
+function updateTransaction(p) {
+  if (!_anyPermGuard(p&&p.ssId?p.ssId:p,['kassa','finance','receive','payments']))
+    return {__error:'Нет прав менять операции'};
+  return _withLock(function(){
+  var ssId=p.ssId, id=String(p.id||''), d=p.data||{};
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    var base=ss.getSheetByName(SH_BASE);
+    if (!base||base.getLastRow()<2) return {__error:'Запись не найдена'};
+    var vals=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
+    var rowNum=-1;
+    for (var i=0;i<vals.length;i++)
+      if (String(vals[i][B_ID-1])===id) { rowNum=i+2; break; }
+    if (rowNum===-1) return {__error:'Запись не найдена'};
+    var row=vals[rowNum-2];
+    var deny=_txEditDeny(ss,id,row);
+    if (deny) { _logDenied(ss,'правка чужой записи'); return {__error:deny}; }
+    if (row[B_LOCK-1]===true||row[B_LOCK-1]==='true')
+      return {__error:'Запись заблокирована Z-отчётом'};
+    // Перевод — две связанные строки; править их по одной нельзя, иначе
+    // баланс счетов разъедется. Такую правку делаем удалением и записью
+    // заново (как и было), а здесь честно отказываем.
+    if (String(row[B_CAT-1])==='Перевод')
+      return {__error:'Перевод правится удалением и новой записью'};
+    var was=String(row[B_TYPE-1])+' · '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1]);
+    var dt=d.date?new Date(d.date):row[B_DATE-1];
+    base.getRange(rowNum,B_DATE).setValue(dt).setNumberFormat('dd.mm.yyyy');
+    base.getRange(rowNum,B_TYPE).setValue(_s(d.type||row[B_TYPE-1]));
+    base.getRange(rowNum,B_CAT).setValue(_s(d.category||''));
+    base.getRange(rowNum,B_AMT).setValue(Math.round(parseFloat(d.amount)||0)).setNumberFormat('#,##0');
+    base.getRange(rowNum,B_ACC).setValue(_s(d.account||row[B_ACC-1]));
+    base.getRange(rowNum,B_CMT).setValue(_s(d.comment||''));
+    if (d.receiptUrl) base.getRange(rowNum,B_REC).setValue(_s(d.receiptUrl));
+    var now=_s(d.type)+' · '+Math.round(parseFloat(d.amount)||0)+' ₽ · '+_s(d.category||'');
+    _log(ss,'Правка операции',was+' → '+now);
+    _audit(ss,'tx',id,'изменил',was+' → '+now);
+    try { _bustDash(ssId); } catch(e){}
+    return {ok:true,id:id};
+  } catch(e) { return {__error:e.message}; }
+});
 }
 
 function deleteTransaction(p) {
@@ -1115,8 +1188,10 @@ function deleteTransaction(p) {
     }
     // Удаляем снизу вверх, чтобы номера строк не сползали
     targets.sort(function(a,b){return b-a;});
+    // В корзину пишем и того, КТО удалил: в Google Диске и Notion это
+    // видно, и первый вопрос владельца к пропавшей записи именно такой.
     targets.forEach(function(rn){
-      trash.appendRow(vals[rn-2].concat([new Date()]));
+      trash.appendRow(vals[rn-2].concat([new Date(), _myEmail()||'']));
     });
     _killRows(base, targets);
     _log(ss, 'Удаление операции', String(row[B_TYPE-1])+' '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1])+' · '+String(row[B_ACC-1])+(targets.length>1?' (перевод, обе стороны)':''));
@@ -6306,6 +6381,9 @@ function _memberPerms(ss, email, role) {
 function _myPerms(ss) {
   if (_isOwner(ss)) return _rolePerms('Владелец');
   var me=_myEmail(); if (!me) return _rolePerms('Владелец');
+  // Приостановленный доступ = ноль прав. Проверка именно здесь, а не в
+  // интерфейсе: спрятать кнопки — не защита, сервер должен отказать сам.
+  try { if (_suspendedList(ss).indexOf(me)>=0) return []; } catch(e){}
   return _memberPerms(ss, me, _myRole(ss));
 }
 function _hasPerm(ss, key) { return _myPerms(ss).indexOf(key)>=0; }
@@ -6338,6 +6416,8 @@ function getTeam(p) {
     var sh=ss.getSheetByName(SH_ACCESS);
     var wmap=_widgetsMap(ss);
     var efree=_editFreeList(ss);
+    var susp=_suspendedList(ss);
+    var seen=_lastSeenMap(ss);
     var members=[];
     if (sh&&sh.getLastRow()>=2) {
       sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
@@ -6348,6 +6428,7 @@ function getTeam(p) {
         var raw=String(r[3]||'');
         if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)){perms=arr;custom=true;} }catch(e){} }
         members.push({email:em,role:role,roles:_roleList(role),editFree:efree.indexOf(em)>=0,
+          suspended:susp.indexOf(em)>=0, lastSeen:(seen[em]?seen[em].label:''),
           added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom,
           widgets: Array.isArray(wmap[em])?wmap[em]:null});
       });
@@ -6386,6 +6467,72 @@ function setMemberRole(p) {
       }
     }
     return {__error:'Сотрудник не найден'};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
+// ── Приостановка доступа ────────────────────────────────────────────
+// Человек уехал, заболел, ушёл в отпуск — доступ надо закрыть, но не
+// стирать его настройки и историю. Так сделано во всех рабочих сервисах:
+// «отключить», а не «удалить». Приостановленный не имеет ни одного права.
+function _suspendedList(ss) {
+  try { var raw=_getSettingStr(ss,'SUSPENDED',''); if(raw){ var a=JSON.parse(raw); if(Array.isArray(a)) return a; } }catch(e){}
+  return [];
+}
+function setMemberSuspended(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), on=!!p.on;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Приостановить доступ может только владелец'};
+    var list=_suspendedList(ss), i=list.indexOf(email);
+    if (on && i<0) list.push(email);
+    if (!on && i>=0) list.splice(i,1);
+    _setSetting(ss,'SUSPENDED',JSON.stringify(list));
+    _log(ss,'Доступ',email+' → '+(on?'приостановлен':'возобновлён'));
+    _protectionStale(ss);
+    return getTeam({ssId:ssId});
+  } catch(e) { return {__error:e.message}; }
+});
+}
+function setMemberSuspendedMulti(p) {
+  var r=setMemberSuspended(p);
+  if (r&&r.__error) return r;
+  return getTeamAll();
+}
+
+// Когда человек последний раз что-то делал в приложении — берём из
+// журнала действий. В любом рабочем сервисе это видно, и владелец
+// сразу понимает, кто уже не пользуется приложением.
+function _lastSeenMap(ss) {
+  var out={};
+  try {
+    var sh=ss.getSheetByName(SH_AUDIT);
+    if (!sh||sh.getLastRow()<2) return out;
+    var n=Math.min(sh.getLastRow()-1,3000);
+    var tz=Session.getScriptTimeZone();
+    sh.getRange(sh.getLastRow()-n+1,1,n,5).getValues().forEach(function(r){
+      var em=String(r[4]||'').toLowerCase(); if(!em) return;
+      var d=r[0]; if(!(d instanceof Date)) return;
+      if (!out[em] || out[em].t<d.getTime())
+        out[em]={t:d.getTime(), label:Utilities.formatDate(d,tz,'dd.MM.yyyy')};
+    });
+  } catch(e){}
+  return out;
+}
+
+// Владелец закрывает период: всё по эту дату включительно больше не
+// правится и не удаляется. Снять замок может только он же.
+function setLockDate(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, date=String(p.date||'').trim();
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Закрывать и открывать период может только владелец'};
+    if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return {__error:'Неверная дата'};
+    _setSetting(ss,'LOCK_DATE',date);
+    _log(ss,'Закрытие периода',date?('закрыт по '+date):'замок снят');
+    return {ok:true,lockDate:date};
   } catch(e) { return {__error:e.message}; }
 });
 }
@@ -7636,6 +7783,23 @@ function _trashAutoClean(ss, ssId) {
   } catch(e){}
 }
 
+// Очистить корзину прямо сейчас (как «Очистить корзину» на Диске).
+// Необратимо — поэтому только владелец и только по явному нажатию.
+function emptyTrash(p) {
+  return _withLock(function(){
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    if (!_isOwner(ss)) return {__error:'Очистить корзину может только владелец'};
+    var sh=ss.getSheetByName(SH_TRASH);
+    if (!sh||sh.getLastRow()<2) return {ok:true,removed:0};
+    var n=sh.getLastRow()-1;
+    _wipeSheetRows(sh);
+    _log(ss,'Очистка корзины','удалено навсегда: '+n);
+    return {ok:true,removed:n};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
 // Содержимое корзины (последние 50 удалённых)
 function getTrash(p) {
   if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
@@ -7646,7 +7810,8 @@ function getTrash(p) {
     if (!sh||sh.getLastRow()<2) return {items:[]};
     var tz=Session.getScriptTimeZone();
     var n=Math.min(sh.getLastRow()-1,50);
-    var vals=sh.getRange(sh.getLastRow()-n+1,1,n,TR_COLS).getValues();
+    var w=Math.max(TR_COLS,Math.min(sh.getLastColumn(),TR_WHO));
+    var vals=sh.getRange(sh.getLastRow()-n+1,1,n,w).getValues();
     var now=Date.now();
     var items=vals.map(function(r){
       var d=r[B_DATE-1], del=r[TR_COLS-1];
@@ -7656,7 +7821,7 @@ function getTrash(p) {
       if (del instanceof Date) left=Math.max(0, 30-Math.floor((now-del.getTime())/86400000));
       return {id:String(r[0]),type:String(r[B_TYPE-1]),category:String(r[B_CAT-1]),
         amount:Math.round(parseFloat(r[B_AMT-1])||0),account:String(r[B_ACC-1]),
-        comment:String(r[B_CMT-1]||''), daysLeft:left,
+        comment:String(r[B_CMT-1]||''), daysLeft:left, who:String(r[TR_WHO-1]||''),
         deleted:(del instanceof Date)?Utilities.formatDate(del,tz,'dd.MM.yyyy'):'',
         date:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yyyy'):''};
     }).reverse();
