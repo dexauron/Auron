@@ -55,7 +55,7 @@ t('последняя строка не удаляется в ноль',
 t('подсказка по названиям поставщиков', /evSuggest:function/.test(html));
 t('итог показывает, сколько уйдёт из кассы', /уйдёт из кассы сегодня/.test(html));
 t('в итоге видно три суммы отдельно',
-  /Отдали<b/.test(html) && /Погасили<b/.test(html) && /В долг<b/.test(html));
+  /Оплачено<b/.test(html) && /Погасили<b/.test(html) && /В долг<b/.test(html));
 t('суммы в строках с разрядами', /_evCell:function/.test(html) && /App\._mfmt\(n\)/.test(html));
 t('ноль не рисуем — пустая клетка честнее', /shown=\(String\(val\|\|''\)\.trim\(\)===''\)\?''/.test(html));
 t('сумма без поставщика не сохранится', /У строки с суммой не указан поставщик/.test(html));
@@ -69,7 +69,7 @@ t('старых трёх общих полей больше нет',
 t('в кассе плитки долга больше нет', html.indexOf('id="kh-debt"')<0);
 t('наличные заняли всю ширину', /kh-money" style="grid-template-columns:1fr;"/.test(html));
 t('есть отдельный экран долга', /editStoreDebt:function[\s\S]{0,300}'full'\)/.test(html));
-t('вход из настроек', /Долг магазина и сверка/.test(html));
+t('вход из настроек', /Долг поставщикам и сверка/.test(html));
 t('история долга на сервере', /function getStoreDebtHistory\(/.test(code));
 t('история требует доступа к финансам',
   /function getStoreDebtHistory[\s\S]{0,120}_finGuard/.test(code));
@@ -77,7 +77,7 @@ t('в истории виден остаток до и после',
   /x\.before=run;/.test(code) && /x\.after=run;/.test(code));
 t('ручные сверки помечены отдельно',
   /x\.manual = \/\^Сверка долга\|Ручная корректировка\/\.test\(x\.comment\)/.test(code));
-t('новые записи сверху', /return \{items:rows\.reverse\(\), debt:run\};/.test(code));
+t('новые записи сверху', /return \{items:rows\.reverse\(\), debt:cur\.debt/.test(code));
 t('сверка пишет причину и автора в комментарий',
   /var note='Сверка долга: '\+cur\+' → '\+target/.test(code));
 t('автор не лезет в служебный столбец смены',

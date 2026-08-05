@@ -159,7 +159,22 @@
   }
  ],
  "getStoreDebt": {
-  "debt": 84000
+  "debt": 110500,
+  "overpaid": 0,
+  "parts": [
+   {
+    "name": "Молокозавод №1",
+    "debt": 66000
+   },
+   {
+    "name": "Хлебзавод Грозный",
+    "debt": 26500
+   },
+   {
+    "name": "ИП Ахмедов",
+    "debt": 18000
+   }
+  ]
  },
  "getPayments": [],
  "getContractors": [
@@ -520,34 +535,46 @@
   "ops": []
  },
  "getStoreDebtHistory": {
-  "debt": 84000,
+  "debt": 110500,
+  "overpaid": 0,
+  "parts": [
+   {
+    "name": "Молокозавод №1",
+    "debt": 66000
+   },
+   {
+    "name": "Хлебзавод Грозный",
+    "debt": 26500
+   },
+   {
+    "name": "ИП Ахмедов",
+    "debt": 18000
+   }
+  ],
   "items": [
    {
+    "date": "05.08.2026",
+    "rep": "Молокозавод №1",
+    "type": "zakupka",
+    "amount": 26500,
+    "comment": "Накладная в долг",
+    "manual": false
+   },
+   {
+    "date": "04.08.2026",
+    "rep": "ИП Ахмедов",
+    "type": "oplata",
+    "amount": 12000,
+    "comment": "Погашение долга по накладной",
+    "manual": false
+   },
+   {
     "date": "31.07.2026",
+    "rep": "Общей суммой",
     "type": "zakupka",
     "amount": 9000,
-    "comment": "Сверка долга: 75000 → 84000 · не занесли накладную от 12.07 · dexauron@gmail.com",
-    "before": 75000,
-    "after": 84000,
+    "comment": "Сверка долга: 75000 → 84000 · не занесли накладную от 12.07",
     "manual": true
-   },
-   {
-    "date": "28.07.2026",
-    "type": "oplata",
-    "amount": 25000,
-    "comment": "Погашение долга (вечер)",
-    "before": 100000,
-    "after": 75000,
-    "manual": false
-   },
-   {
-    "date": "27.07.2026",
-    "type": "zakupka",
-    "amount": 100000,
-    "comment": "Накладная в долг (вечер)",
-    "before": 0,
-    "after": 100000,
-    "manual": false
    }
   ]
  },

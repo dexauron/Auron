@@ -2689,15 +2689,30 @@ function getGoodsAnalytics(p) {
 // Изолирован от графика выплат поставщикам (ВЫПЛАТЫ): это отдельный регистр.
 var STORE_DEBT_REP='🏪 Магазин — накладные';
 
-// Текущий долг магазина по накладным (изолирован от долгов ТП и выплат).
+// Общий долг магазина поставщикам — ОДНО число на всё приложение.
+//
+// Раньше здесь считался только особый контрагент «Магазин — накладные»,
+// куда вечер писал три общие суммы. После перехода на запись по каждому
+// поставщику этот счётчик перестал пополняться, и в приложении оказалось
+// две разные правды: «долг магазина» и сумма долгов поставщиков. Теперь
+// правда одна — сумма долгов всех, кому мы должны.
+//
+// Переплаты (долг ушёл в минус) не вычитаем из общей суммы: если одному
+// переплатили 5 000, а другому должны 80 000, магазин должен 80 000, а не
+// 75 000. Переплата — это не деньги в кассе, её отдельно видно в карточке.
 function getStoreDebt(p) {
   if(!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   var ssId=p.ssId;
   try {
-    var debt=0;
-    getDebts({ssId:ssId}).forEach(function(d){ if(d.name===STORE_DEBT_REP) debt=d.debt; });
-    return {debt:Math.round(debt)};
-  } catch(e) { return {debt:0}; }
+    var debt=0, over=0, parts=[];
+    getDebts({ssId:ssId}).forEach(function(d){
+      var v=Math.round(d.debt||0);
+      if (v>0) { debt+=v; parts.push({name:d.name,debt:v}); }
+      else if (v<0) over+=-v;
+    });
+    parts.sort(function(a,b){ return b.debt-a.debt; });
+    return {debt:debt, overpaid:over, parts:parts};
+  } catch(e) { return {debt:0,overpaid:0,parts:[]}; }
 }
 
 function saveKassa(p) {
@@ -4123,11 +4138,11 @@ function saveEveningTotal(p) {
     if (paid>0) saveQuickEntry({ssId:ssId,data:{date:date.toISOString(),type:'Расход',
       category:'Закупка',account:acc,amount:paid,comment:'Накладные за день (общей суммой)'}});
     if (repaid>0) saveDebtEntry({ssId:ssId,data:{repId:STORE_DEBT_REP,type:'oplata',
-      amount:repaid,account:acc,date:date.toISOString(),comment:'Погашение долга (вечер, общей суммой)'}});
+      amount:repaid,account:acc,date:date.toISOString(),comment:'Погашение долга (общей суммой)'}});
     if (debt>0) saveDebtEntry({ssId:ssId,data:{repId:STORE_DEBT_REP,type:'zakupka',
-      amount:debt,date:date.toISOString(),comment:'Накладные в долг (вечер, общей суммой)'}});
+      amount:debt,date:date.toISOString(),comment:'Накладные в долг (общей суммой)'}});
     var storeDebt=getStoreDebt({ssId:ssId}).debt;
-    _log(ss,'Вечер — общей суммой','оплата '+paid+', погашение '+repaid+', в долг '+debt);
+    _log(ss,'Накладные за день (общей суммой)','оплата '+paid+', погашение '+repaid+', в долг '+debt);
     try { _bustDash(ssId); } catch(e){}
     return {ok:true, cash:paid, repaid:repaid, newDebt:debt, storeDebt:storeDebt};
   } catch(e) { return {__error:e.message}; }
@@ -4141,7 +4156,7 @@ function setEveningMode(p) {
     if (!_canManage(ss)) return MANAGE_DENIED;
     var mode=(String(p.mode||'')==='total')?'total':'suppliers';
     _setSetting(ss,'EVENING_MODE',mode);
-    _log(ss,'Настройка','режим вечера → '+(mode==='total'?'одной суммой':'по поставщикам'));
+    _log(ss,'Настройка','режим накладных → '+(mode==='total'?'одной суммой':'по поставщикам'));
     return {ok:true,mode:mode};
   } catch(e) { return {__error:e.message}; }
 });
@@ -4192,7 +4207,7 @@ function saveEveningInvoices(p) {
       });
     }
     Object.keys(debts).forEach(function(k){ debts[k]=Math.round(debts[k]); });
-    _log(ss,'Вечер — накладные',done.length+' поставщик(ов): оплата '+totCash+
+    _log(ss,'Накладные за день',done.length+' поставщик(ов): оплата '+totCash+
       ', погашение '+totRepaid+', в долг '+totDebt);
     try { _bustDash(ssId); } catch(e){}
     return {ok:true, count:done.length, cash:totCash, repaid:totRepaid,
@@ -8306,6 +8321,9 @@ function setStoreDebt(p) {
     // привязка к смене, и посторонняя запись сломала бы удаление смены.
     var me=_myEmail()||'';
     var note='Сверка долга: '+cur+' → '+target+(why?' · '+why:'')+(me?' · '+me:'');
+    // Разницу вешаем на служебного контрагента: раскидывать её по живым
+    // поставщикам нельзя — мы не знаем, чей именно долг посчитан неверно,
+    // а угадывание испортило бы их карточки.
     // diff>0 → увеличиваем долг (zakupka), diff<0 → уменьшаем (oplata)
     sh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,diff>0?'zakupka':'oplata',
       Math.abs(diff),new Date(),'',note,new Date(),'','']);
@@ -8327,15 +8345,23 @@ function getStoreDebtHistory(p) {
     var sh=ss.getSheetByName(SH_DEBTS);
     if (!sh||sh.getLastRow()<2) return {items:[],debt:0};
     var tz=Session.getScriptTimeZone();
+    // История по ВСЕМ поставщикам: долг магазина — это их сумма, значит и
+    // движение должно быть общим. Раньше показывался только особый
+    // контрагент, и после перехода на запись по поставщикам история
+    // выглядела бы пустой при растущем долге.
     var rows=[];
     sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
-      if (String(r[D_REP-1])!==STORE_DEBT_REP) return;
+      var nm=String(r[D_REP-1]||'');
+      if (!nm) return;
+      var cmt=String(r[D_CMT-1]||'');
+      if (cmt.indexOf('OPEN:')>=0) return;   // строка начального остатка
       var dt=r[D_DATE-1];
       rows.push({t:(dt instanceof Date)?dt.getTime():0,
         date:(dt instanceof Date)?Utilities.formatDate(dt,tz,'dd.MM.yyyy'):'',
+        rep:(nm===STORE_DEBT_REP)?'Общей суммой':nm,
         type:String(r[D_TYPE-1]),
         amount:Math.round(parseFloat(r[D_AMT-1])||0),
-        comment:String(r[D_CMT-1]||'')});
+        comment:cmt});
     });
     rows.sort(function(a,b){return a.t-b.t;});
     var run=0;
@@ -8345,7 +8371,12 @@ function getStoreDebtHistory(p) {
       x.after=run;
       x.manual = /^Сверка долга|Ручная корректировка/.test(x.comment);
     });
-    return {items:rows.reverse(), debt:run};
+    var cur={debt:0,parts:[],overpaid:0};
+    try { cur=getStoreDebt({ssId:p.ssId}); } catch(e){}
+    // Бегущий остаток считался по строкам этого листа; итог берём из
+    // общего расчёта, чтобы экран и все остальные места показывали одно.
+    return {items:rows.reverse(), debt:cur.debt, parts:cur.parts||[],
+            overpaid:cur.overpaid||0, moved:run};
   } catch(e) { return {items:[],debt:0,__error:e.message}; }
 }
 

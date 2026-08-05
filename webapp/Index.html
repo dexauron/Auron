@@ -2630,22 +2630,22 @@ input.money{font-variant-numeric:tabular-nums;}
         </div>
         <button class="kh-card" onclick="App.kShow('morning')">
           <span class="k-hub-ic" style="background:rgba(255,159,10,.14);color:#FF9F0A;"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="4"/><path d="M12 3v3M4 14H2M22 14h-2M5.6 7.6L4.2 6.2M18.4 7.6l1.4-1.4M2 20h20"/></svg></span>
-          <span class="kh-tx"><span class="kh-t">Кассовое утро</span><span class="kh-s">Смена, Z-отчёт, деньги с кассы</span></span>
+          <span class="kh-tx"><span class="kh-t">Приём кассы</span><span class="kh-s">Z-отчёт, выручка, инкассация</span></span>
           <span class="kh-go">›</span>
         </button>
         <button class="kh-card kh-lead" onclick="App.openReceiveRep()">
           <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
-          <span class="kh-tx"><span class="kh-t">Приём представителя</span><span class="kh-s">Оплата, долг и новый долг — за раз</span></span>
+          <span class="kh-tx"><span class="kh-t">Приём поставщика</span><span class="kh-s">Оплата, погашение долга и новый долг сразу</span></span>
           <span class="kh-go">›</span>
         </button>
         <button class="kh-card" onclick="App.kShow('evening')">
           <span class="k-hub-ic" style="background:rgba(129,140,248,.16);color:var(--transfer,#818CF8);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
-          <span class="kh-tx"><span class="kh-t">Вечер — накладные</span><span class="kh-s">Оплата наличными и долги</span></span>
+          <span class="kh-tx"><span class="kh-t">Накладные за день</span><span class="kh-s">Оплата, погашение долга, новый долг</span></span>
           <span class="kh-go">›</span>
         </button>
         <button class="kh-card" onclick="App.openDayNote()">
           <span class="k-hub-ic" style="background:var(--surface-2);color:var(--ink-2);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
-          <span class="kh-tx"><span class="kh-t">Заметка дня</span><span class="kh-s">Что важного случилось сегодня</span></span>
+          <span class="kh-tx"><span class="kh-t">Заметка за день</span><span class="kh-s">Что важного произошло за день</span></span>
           <span class="kh-go">›</span>
         </button>
         <button class="kh-card" onclick="App.setTab('report',null)">
@@ -2677,10 +2677,10 @@ input.money{font-variant-numeric:tabular-nums;}
             </div>
           </div>
 
-          <!-- 1. Сколько наторговали. Порядок такой же, как в Z-отчёте:
+          <!-- 1. Выручка за смену. Порядок такой же, как в Z-отчёте:
                сверху общая выручка, следом безнал — их читают подряд. -->
           <div class="kassa-row">
-            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg> Сколько наторговали</div>
+            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg> Выручка за смену</div>
             <div style="padding:12px 16px;display:grid;gap:12px;">
               <div class="field k-big" style="margin:0;"><label>Выручка наличными, ₽</label>
                 <input type="text" class="money" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
@@ -2698,15 +2698,15 @@ input.money{font-variant-numeric:tabular-nums;}
             </div>
           </div>
 
-          <!-- 2. Куда делись наличные. Три поля должны в сумме дать выручку —
+          <!-- 2. Куда ушли наличные. Три поля должны в сумме дать выручку —
                это и есть сверка, поэтому они стоят вместе. -->
           <div class="kassa-row">
-            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Куда делись наличные</div>
+            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Куда ушли наличные</div>
             <div style="padding:12px 16px;display:grid;gap:12px;">
-              <div class="field" style="margin:0;"><label>Оплачено поставщикам, ₽</label>
+              <div class="field" style="margin:0;"><label>Оплачено поставщикам наличными, ₽</label>
                 <input type="text" class="money" id="kz-cash-supp" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
                 <div class="k-help">Вся наличка, ушедшая поставщикам за смену — и пробитая через кассу, и взятая по заметке.</div></div>
-              <div class="field" style="margin:0;"><label>Забрал из кассы (инкассация), ₽</label>
+              <div class="field" style="margin:0;"><label>Инкассация — изъято из кассы, ₽</label>
                 <input type="text" class="money" id="kz-cash-collect" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
               <div class="field" style="margin:0;"><label>Осталось в кассе сверх размена, ₽</label>
                 <input type="text" class="money" id="kz-cash-left" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
@@ -2719,13 +2719,14 @@ input.money{font-variant-numeric:tabular-nums;}
             <div class="k-recon-h" id="kz-diff-hint">Заполните выручку и куда ушли деньги.</div>
             <div class="k-recon-l">
               <span>Выручка наличными<b class="num" id="kz-should">₽ 0</b></span>
-              <span>Разложено<b class="num" id="kz-got">₽ 0</b></span>
+              <span>Распределено<b class="num" id="kz-got">₽ 0</b></span>
             </div>
           </div>
 
           <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" class="k-clip"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.4"/><path d="M9 7l1.5-3h3L15 7"/></svg> Прикрепить Z-отчёт</button>
           <div class="k-save">
-            <button class="btn-primary" style="margin:0;" onclick="App.saveKassa()">Сохранить кассовое утро</button>
+            <button class="btn-primary" style="margin:0;" onclick="App.saveKassa()">Сохранить приём кассы</button>
+            <button class="btn-secondary" style="margin-top:10px;" onclick="App.kNoTrade()">Сегодня не торговали</button>
           </div>
         </div>
       </div>
@@ -2743,7 +2744,7 @@ input.money{font-variant-numeric:tabular-nums;}
         <div id="ev-by-total" style="display:none;">
           <div class="kassa-row">
             <div style="padding:12px 16px;display:grid;gap:12px;">
-              <div class="field" style="margin:0;"><label>Отдали поставщикам, ₽</label>
+              <div class="field" style="margin:0;"><label>Оплачено поставщикам, ₽</label>
                 <input type="text" class="money" id="evt-paid" inputmode="decimal" placeholder="0" oninput="App.evTotals()"></div>
               <div class="field" style="margin:0;"><label>Погасили старых долгов, ₽</label>
                 <input type="text" class="money" id="evt-repaid" inputmode="decimal" placeholder="0" oninput="App.evTotals()"></div>
@@ -2993,8 +2994,8 @@ input.money{font-variant-numeric:tabular-nums;}
           <div class="settings-row" onclick="App.editStoreDebt()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.8 4h14.4L21 9.5"/><path d="M4 9.5h16V20H4z"/><path d="M9 20v-6h6v6"/></svg></span>
             <div style="flex:1;">
-              <div class="settings-row-label">Долг магазина и сверка</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45;">Сумма по программе, сверка по факту в конце месяца, вся история</div>
+              <div class="settings-row-label">Долг поставщикам и сверка</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.45;">Кому и сколько должны, сверка по факту, вся история</div>
             </div>
             <span class="settings-row-arrow">›</span>
           </div>
@@ -3355,7 +3356,7 @@ input.money{font-variant-numeric:tabular-nums;}
 <div class="am-overlay" id="am-overlay" onclick="App.closeActionMenu()">
   <div class="am-sheet" onclick="event.stopPropagation()">
     <div class="am-handle"></div>
-    <div class="am-cap">Что записываем</div>
+    <div class="am-cap">Записать</div>
     <div class="am-grid">
     <button class="am-item am-main" data-need="finance" onclick="App.closeActionMenu();App.openNumpad()">
       <div class="am-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
@@ -3377,7 +3378,7 @@ input.money{font-variant-numeric:tabular-nums;}
       <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg></div>
       <div class="am-txt"><div class="am-name">Заказ поставщику</div><div class="am-sub">Что и на сколько заказать</div></div>
     </button>
-      <div class="am-cap" style="grid-column:1/-1;padding-top:10px;">Посмотреть</div>
+      <div class="am-cap" style="grid-column:1/-1;padding-top:10px;">Открыть</div>
     <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.setTab('journal',null)">
       <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 8h10M7 12h10M7 16h6"/></svg></div>
       <div class="am-txt"><div class="am-name">Операции</div><div class="am-sub">Журнал всех записей</div></div>
@@ -3523,7 +3524,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.8.0';
+var APP_VERSION='5.9.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7470,6 +7471,19 @@ var App={
   // ── Kassa ─────────────────────────────────────────────────────
   // Очистка формы кассового утра. Дата, смена и кассир остаются — за
   // один день бывает две смены, и выбирать заново их не надо.
+  // Выходной / технический перерыв: день должен остаться в истории с
+  // нулём, иначе он молча выпадет из средних и из отчёта за месяц —
+  // и средняя выручка окажется выше, чем на самом деле.
+  _kZeroDay:false,
+  kNoTrade:async function(){
+    var d=(document.getElementById('k-date')||{}).value||'';
+    if(!(await App._confirm('Записать '+(d?d.split('-').reverse().join('.'):'сегодня')+
+      ' как день без торговли?\n\nВыручка будет нулевой. День останется в отчётах — просто пустым.')))return;
+    var cash=document.getElementById('k-cashier');
+    if(cash&&!cash.value&&cash.options.length>1)cash.selectedIndex=1;
+    App._kZeroDay=true;
+    App.saveKassa();
+  },
   _kClearMorning:function(){
     ['kz-cash-rev','kz-cash-supp','kz-cash-collect','kz-cash-left'].forEach(function(id){
       var e=document.getElementById(id); if(e)e.value='';
@@ -7508,7 +7522,7 @@ var App={
     var m={hub:'k-hub',morning:'k-morning',evening:'k-evening'};
     Object.keys(m).forEach(function(k){var el=document.getElementById(m[k]);if(el)el.style.display=k===view?'block':'none';});
     var t=document.getElementById('k-title');
-    if(t)t.textContent=view==='morning'?'🌅 Кассовое утро':view==='evening'?'🌙 Накладные':'Касса';
+    if(t)t.textContent=view==='morning'?'Приём кассы':view==='evening'?'Накладные за день':'Касса';
     var bb=document.getElementById('k-back-btn');
     if(bb)bb.style.display=view==='hub'?'none':'';
     if(view==='morning'){App.kStep(1);App._loadRevBaseline();}
@@ -7585,7 +7599,7 @@ var App={
   // ── Приём торгового: оплата наличкой + погашение долга + новый долг ──
   openReceiveRep:function(){
     App._recDebt=null;
-    App.openModal('<div class="modal-title">'+SVG.truck+' Приём торгового представителя</div>'+
+    App.openModal('<div class="modal-title">'+SVG.truck+' Приём поставщика</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">Всё по одному представителю за раз. Долг пересчитается сам.</div>'+
       '<div class="field"><label>Представитель / поставщик</label><input id="rec-rep" type="text" placeholder="Начните вводить…" autocomplete="off"></div>'+
       '<div id="rec-debt" style="display:none;font-size:12.5px;margin:-6px 0 12px;padding:9px 12px;border-radius:11px;background:var(--surface-2);"></div>'+
@@ -7691,11 +7705,11 @@ var App={
     var h=document.getElementById('kz-diff-hint');
     var touched=rev>0||got>0;
     if(box)box.className='k-recon'+(!touched?'':(diff===0?' ok':' bad'));
-    if(d)d.textContent=!touched?'—':(diff===0?'Сходится':(diff<0?'Не хватает ':'Лишние ')+'₽ '+fmtFull(Math.abs(diff)));
+    if(d)d.textContent=!touched?'—':(diff===0?'Сходится':(diff<0?'Недостача ':'Излишек ')+'₽ '+fmtFull(Math.abs(diff)));
     if(h)h.textContent=!touched?'Заполните выручку и куда ушли деньги.'
       :diff===0?'Касса сошлась — кассир сдал всё верно.'
-      :diff<0?'Разложено меньше выручки на '+fmtFull(-diff)+' ₽ — недостача.'
-      :'Разложено больше выручки на '+fmtFull(diff)+' ₽ — проверь выручку в Z-отчёте.';
+      :diff<0?'Недостача: не хватает '+fmtFull(-diff)+' ₽ — недостача.'
+      :'Излишек: лишние '+fmtFull(diff)+' ₽ — проверь выручку в Z-отчёте.';
     // Проверка аномалии: общая выручка (нал + безнал) сильно ниже/выше средней
     var an=document.getElementById('kz-anomaly');
     if(an){
@@ -7780,7 +7794,11 @@ var App={
       cardRevs:channels, cardTotal:cardTotal, float:g('k-balance')
     };
     rec.diff=(rec.cashCollect+rec.cashSupp+rec.cashLeft)-rec.cashRev;
-    if(!rec.cashRev&&!cardTotal&&!rec.cashSupp&&!App.s.wyplatas.length){App.toast('Введите данные',true);return;}
+    // Выходной записывается отдельной кнопкой: пустая форма по ошибке и
+    // осознанный «не торговали» — разные вещи, и путать их нельзя.
+    if(!App._kZeroDay&&!rec.cashRev&&!cardTotal&&!rec.cashSupp&&!App.s.wyplatas.length){
+      App.toast('Введите суммы — или нажмите «Сегодня не торговали»',true);return;}
+    App._kZeroDay=false;
     var wySum=App.s.wyplatas.reduce(function(s,w){return s+(w.amount||0);},0);
     var wyCnt=App.s.wyplatas.length;
     gs('saveKassa',{ssId:App.s.ssId,data:{date:date,shift:shift,cashier:cashier,recon:rec,wyplatas:App.s.wyplatas}}).then(function(){
@@ -7903,7 +7921,7 @@ var App={
     var note=document.getElementById('ev-mode-note');
     if(note)note.textContent=(mode==='total')
       ? 'Одной суммой за день: три числа — и вечер закрыт. Долг ляжет на магазин целиком, без разбивки по поставщикам.'
-      : 'Одна строка — один поставщик за сегодня. Сколько ему отдали и сколько осталось в долг. Долг каждого посчитается сам.';
+      : 'Одна строка — один поставщик за сегодня. Сколько ему оплатили и сколько осталось в долг. Долг каждого посчитается сам.';
     App._moneyBind(document.getElementById('k-evening'));
     App.evRender();
     // Список поставщиков для подсказки — грузим один раз.
@@ -7935,7 +7953,7 @@ var App={
           '<button class="ev-del" onclick="App.evDelRow('+i+')" title="Убрать строку">✕</button>'+
         '</div>'+
         '<div class="ev-grid">'+
-          App._evCell(i,'paid','Отдали',r.paid)+
+          App._evCell(i,'paid','Оплатили',r.paid)+
           App._evCell(i,'repaid','Погасили',r.repaid)+
           App._evCell(i,'debt','В долг',r.debt)+
         '</div>'+
@@ -8004,7 +8022,7 @@ var App={
     el.innerHTML='<div class="k-recon-v">'+fmtFull(paid+repaid)+' ₽</div>'+
       '<div class="k-recon-h">уйдёт из кассы сегодня'+(App._evMode()==='total'?'':' · поставщиков: '+n)+'</div>'+
       '<div class="k-recon-l">'+
-        '<span>Отдали<b class="num">₽ '+fmtFull(paid)+'</b></span>'+
+        '<span>Оплачено<b class="num">₽ '+fmtFull(paid)+'</b></span>'+
         '<span>Погасили<b class="num">₽ '+fmtFull(repaid)+'</b></span>'+
         '<span>В долг<b class="num" style="color:'+(debt?'var(--neg)':'var(--ink)')+';">₽ '+fmtFull(debt)+'</b></span>'+
       '</div>';
@@ -8032,7 +8050,7 @@ var App={
     gs('setEveningMode',{ssId:App.s.ssId,mode:mode}).then(function(r){
       if(r&&r.__error){App.toast(r.__error,true);return;}
       if(App.s.settings)App.s.settings.eveningMode=mode;
-      App.toast(mode==='total'?'Вечер — одной суммой ✓':'Вечер — по поставщикам ✓');
+      App.toast(mode==='total'?'Накладные — одной суммой ✓':'Накладные — по поставщикам ✓');
       App.closeModal();
       App._evModeSub();
       if(App._kView==='evening')App.evInit();
@@ -8057,7 +8075,7 @@ var App={
         var R=App._repRow;
         App.openModal('<div class="modal-title">'+SVG.check+' Накладные записаны</div>'+
           '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
-          (r.cash?R('Отдали наличными','−₽ '+fmt(r.cash),'var(--neg)'):'')+
+          (r.cash?R('Оплачено наличными','−₽ '+fmt(r.cash),'var(--neg)'):'')+
           (r.repaid?R('Погашено долгов','−₽ '+fmt(r.repaid),'var(--pos)'):'')+
           (r.newDebt?R('Осталось в долг','+₽ '+fmt(r.newDebt),'var(--warn,#FF9F0A)'):'')+
           R('Долг магазина','₽ '+fmt(r.storeDebt||0),'var(--neg)',true)+
@@ -8085,7 +8103,7 @@ var App={
       }).join('');
       App.openModal('<div class="modal-title">'+SVG.check+' Накладные записаны</div>'+
         '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
-        (r.cash?R('Отдали наличными','−₽ '+fmt(r.cash),'var(--neg)'):'')+
+        (r.cash?R('Оплачено наличными','−₽ '+fmt(r.cash),'var(--neg)'):'')+
         (r.repaid?R('Погашено долгов','−₽ '+fmt(r.repaid),'var(--pos)'):'')+
         (r.newDebt?R('Осталось в долг','+₽ '+fmt(r.newDebt),'var(--warn,#FF9F0A)'):'')+
         '</div>'+
@@ -9905,7 +9923,7 @@ var App={
   // движение по накладным. Владелец пересчитывает накладные руками,
   // ставит цифру «по факту», а разница остаётся видимой строкой.
   editStoreDebt:function(){
-    App.openModal('<div class="modal-title">'+SVG.store+' Долг магазина</div>'+
+    App.openModal('<div class="modal-title">'+SVG.store+' Долг поставщикам</div>'+
       '<div id="sd-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>','full');
     App._sdLoad();
   },
@@ -9919,30 +9937,46 @@ var App={
   _sdRender:function(){
     var b=document.getElementById('sd-body');if(!b||!App._sd)return;
     var items=App._sd.items||[], debt=App._sd.debt||0;
+    var parts=App._sd.parts||[], over=App._sd.overpaid||0;
     var h='<div class="kh-m" style="margin-bottom:14px;">'+
-      '<div class="l">Долг магазина по программе</div>'+
-      '<div class="v num" style="font-size:26px;color:'+(debt>0?'var(--neg)':'var(--pos)')+';">₽ '+fmtFull(debt)+'</div></div>'+
+      '<div class="l">Всего должны поставщикам</div>'+
+      '<div class="v num" style="font-size:26px;color:'+(debt>0?'var(--neg)':'var(--pos)')+';">₽ '+fmtFull(debt)+'</div>'+
+      (over?'<div style="font-size:11.5px;color:var(--pos);margin-top:4px;">Переплата по отдельным поставщикам: ₽ '+fmtFull(over)+'</div>':'')+
+      '</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">'+
-      'Считается сам: новые накладные добавляют, погашение убирает. '+
-      'В конце месяца пересчитайте накладные вручную и поставьте сумму по факту — '+
-      'разница запишется отдельной строкой, её будет видно ниже.</div>'+
+      'Это сумма долгов всем поставщикам — считается сама по накладным. '+
+      'В конце месяца пересчитайте бумаги и поставьте сумму по факту: '+
+      'разница запишется отдельной строкой, её будет видно в истории.</div>'+
       '<button class="btn-primary" onclick="App._sdForm()">Сверить по факту</button>';
+    // Кому именно должны — первый вопрос после «сколько».
+    if(parts.length){
+      h+='<div class="pc-sec">Кому должны ('+parts.length+')</div>'+
+        '<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
+        parts.map(function(x){
+          return '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--line-2);">'+
+            '<div style="flex:1;min-width:0;font-size:13.5px;font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+
+              App._e(x.name)+'</div>'+
+            '<div style="font-weight:800;white-space:nowrap;color:var(--neg);">₽ '+fmtFull(x.debt)+'</div></div>';
+        }).join('')+'</div>';
+    }
     h+='<div class="pc-sec">История ('+items.length+')</div>';
     if(!items.length)h+='<div style="color:var(--muted);font-size:13px;padding:8px 0;">Пока пусто. Записи появятся, когда пойдут накладные.</div>';
     else h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
-      items.map(function(x){
+      items.slice(0,80).map(function(x){
         var up=x.type!=='oplata';
-        var title=x.manual?'Сверка по факту':(up?'Новые накладные в долг':'Погашение долга');
+        var title=x.manual?'Сверка по факту':(up?'Накладная в долг':'Погашение долга');
         return '<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid var(--line-2);">'+
           '<div style="flex:1;min-width:0;">'+
-            '<div style="font-size:13.5px;font-weight:700;">'+(x.manual?'✎ ':'')+App._e(title)+'</div>'+
+            '<div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+
+              (x.manual?'✎ ':'')+App._e(x.rep||title)+'</div>'+
             '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+
-              App._e(x.date)+' · '+fmtFull(x.before)+' → '+fmtFull(x.after)+' ₽</div>'+
-            (x.comment?'<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(x.comment)+'</div>':'')+
+              App._e(x.date)+' · '+App._e(title)+'</div>'+
+            ((x.comment&&x.comment.indexOf(title)<0)?'<div style="font-size:11px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(x.comment)+'</div>':'')+
           '</div>'+
           '<div style="font-weight:800;white-space:nowrap;color:'+(up?'var(--neg)':'var(--pos)')+';">'+
             (up?'+':'−')+'₽ '+fmtFull(x.amount)+'</div></div>';
-      }).join('')+'</div>';
+      }).join('')+'</div>'+
+      (items.length>80?'<div style="font-size:11.5px;color:var(--muted);margin-top:8px;">Показаны последние 80 записей.</div>':'');
     b.innerHTML=h;
   },
   _sdForm:function(){
@@ -9950,7 +9984,8 @@ var App={
     App.openModal('<div class="modal-title">Сверка долга по факту</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:14px;">'+
       'По программе сейчас <b style="color:var(--ink);">₽ '+fmtFull(cur)+'</b>. '+
-      'Впишите сумму, которая получилась у вас по накладным.</div>'+
+      'Впишите сумму, которая получилась у вас по бумагам. Разница ляжет '+
+      'отдельной строкой «Сверка по факту» — долги поставщиков не изменятся.</div>'+
       '<div class="field"><label>Долг по факту, ₽</label>'+
       '<input id="sd-val" type="text" class="money" inputmode="decimal" value="'+App._mfmt(cur)+'"></div>'+
       '<div class="field"><label>Почему разница (необязательно)</label>'+
@@ -10030,10 +10065,10 @@ var App={
     }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
-  // ── Заметка дня ──
+  // ── Заметка за день ──
   openDayNote:function(){
     var today=fmtISO(new Date());
-    App.openModal('<div class="modal-title">'+SVG.pencil+' Заметка дня</div>'+
+    App.openModal('<div class="modal-title">'+SVG.pencil+' Заметка за день</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:10px;">Что случилось сегодня: «отключали свет», «завоз задержали». Заметка попадёт в отчёт за день — потом не придётся вспоминать.</div>'+
       '<textarea id="dn-text" placeholder="Пиши сюда…" style="width:100%;height:90px;padding:12px;border-radius:13px;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink);font-size:14px;font-family:var(--font);outline:none;resize:vertical;"></textarea>'+
       '<button class="btn-primary" style="margin-top:10px;" onclick="App._dnSave()">Сохранить</button>');
@@ -10136,9 +10171,9 @@ var App={
   openHelp:function(){
     App.openModal('<div class="modal-title">'+SVG.help+' Как пользоваться</div>'+
       '<div style="font-size:13.5px;line-height:1.7;color:var(--ink-2);">'+
-      '<b style="color:var(--ink);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18M6.5 18a5.5 5.5 0 1 1 11 0"/><path d="M12 4v2M4.5 8.5 6 10M19.5 8.5 18 10M2 21h20"/></svg> Утро</b><br>Открой вкладку «Касса» → «Кассовое утро»: смена, Z-отчёт по счетам, выплаты с кассы. Всё по шагам.<br><br>'+
+      '<b style="color:var(--ink);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18h18M6.5 18a5.5 5.5 0 1 1 11 0"/><path d="M12 4v2M4.5 8.5 6 10M19.5 8.5 18 10M2 21h20"/></svg> Утро</b><br>Открой вкладку «Касса» → «Приём кассы»: смена, Z-отчёт по счетам, выплаты с кассы. Всё по шагам.<br><br>'+
       '<b style="color:var(--ink);">☀️ Днём</b><br>Каждый расход и доход — через кнопку «+». Выплата торговому представителю — отдельная запись.<br><br>'+
-      '<b style="color:var(--ink);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg> Вечер</b><br>«Касса» → «Вечер — накладные»: сколько оплатили наличными, сколько погасили долгов, сколько осталось в долг.<br><br>'+
+      '<b style="color:var(--ink);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg> Вечер</b><br>«Касса» → «Накладные за день»: сколько оплатили наличными, сколько погасили долгов, сколько осталось в долг.<br><br>'+
       '<b style="color:var(--ink);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg> Заказы и поставщики</b><br>Вкладка «Поставщики»: <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/></svg> заказы, <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10h4M7 14h6M16 9h2M16 13h2"/></svg> справочник, <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6v3H9zM7 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M8 12h8M8 16h5"/></svg> табель. Тап по поставщику — вся картина по нему.<br><br>'+
       '<b style="color:var(--ink);">Мелочи</b><br>Свайп по операции влево — редактировать/удалить/повторить. Удалил случайно — жми «Отменить» или Настройки → Корзина. Глаз на главной прячет суммы.</div>','full');
   },
