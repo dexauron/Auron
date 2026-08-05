@@ -634,7 +634,8 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 .cashier-amount{font-size:17px;font-weight:800;letter-spacing:-.02em;font-family:var(--font-num);}
 
 /* ── Kassa ── */
-.kassa-wrap{padding:16px;}
+/* Снизу нужен запас: подсказку и последнюю карточку перекрывало нижнее меню. */
+.kassa-wrap{padding:16px 16px calc(var(--nav-h) + var(--safe-bot) + 24px);}
 .kassa-row{
   background:var(--surface);border-radius:var(--radius);
   margin-bottom:12px;overflow:hidden;
@@ -1301,24 +1302,50 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   padding:0 16px calc(var(--nav-h) + var(--safe-bot) + 20px);
 }
 .am-overlay.open{display:flex;}
-.am-grid{
-  display:grid;grid-template-columns:1fr 1fr;
-  gap:12px;width:100%;max-width:420px;
+.am-sheet{
+  width:100%;max-width:440px;
+  background:var(--surface);border:1px solid var(--sep);
+  border-radius:26px;padding:8px 8px 10px;
+  box-shadow:0 26px 60px rgba(0,0,0,.55);
+  animation:amRise .22s cubic-bezier(.22,1,.36,1);
 }
+@keyframes amRise{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:none;}}
+.am-handle{width:38px;height:4px;border-radius:2px;background:var(--sep);margin:6px auto 12px;}
+.am-cap{font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+  color:var(--text-3);padding:0 12px 8px;}
+/* Одна колонка, а не две: в двух названия «Приём товара» и «Запись на
+   выплату» не помещались и обрывались многоточием — читать нечего. */
+.am-grid{display:grid;grid-template-columns:1fr;gap:2px;}
+/* Строка вместо плитки: подпись читается слева направо, как список дел,
+   и на экран влезает всё меню без пролистывания. */
 .am-item{
-  background:var(--card);border-radius:20px;
-  padding:20px 14px 16px;border:1px solid var(--sep);cursor:pointer;
-  display:flex;flex-direction:column;align-items:center;gap:8px;
-  transition:transform .12s,background .12s;font-family:var(--font);
-  text-align:center;
+  background:transparent;border:none;border-radius:16px;
+  padding:11px 12px;cursor:pointer;font-family:var(--font);text-align:left;
+  display:flex;align-items:center;gap:12px;min-width:0;
+  transition:transform .12s,background .12s;
 }
-.am-item:active{transform:scale(.94);background:var(--card2);}
+.am-item:active{transform:scale(.97);background:var(--card2);}
+/* Главное действие — во всю ширину и с фоном: девять раз из десяти
+   владелец жмёт «+» именно ради него. */
+.am-item.am-main{grid-column:1/-1;background:var(--card);border:1px solid var(--sep);padding:14px 14px;}
+.am-item.am-wide{grid-column:1/-1;}
 .am-icon{
-  width:52px;height:52px;border-radius:16px;
-  display:flex;align-items:center;justify-content:center;font-size:26px;
+  width:42px;height:42px;border-radius:13px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);color:var(--ink-2);
 }
-.am-name{font-size:14px;font-weight:700;color:var(--text-1);}
-.am-sub{font-size:11px;color:var(--text-3);margin-top:1px;}
+/* Цветом выделяем только действия, которые ЗАПИСЫВАЮТ деньги и товар.
+   Просмотр остаётся нейтральным — иначе цвет перестаёт что-то значить.
+   Красного здесь нет вовсе: красный в приложении значит «опасно». */
+.am-item.am-key .am-icon{background:var(--brand-dim);color:var(--brand);}
+.am-item.am-main .am-icon{width:46px;height:46px;border-radius:15px;
+  background:var(--income-dim);color:var(--pos);}
+.am-txt{min-width:0;flex:1;}
+.am-name{font-size:13.5px;font-weight:750;color:var(--text-1);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.am-item.am-main .am-name{font-size:16px;}
+.am-sub{font-size:11px;color:var(--text-3);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
 /* ── Suppliers panel ── */
 /* Вкладки раздела «Поставщики»: Выплаты · Заказы · Контрагенты.
@@ -1940,6 +1967,33 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 .qa-ic{width:54px;height:54px;border-radius:17px;display:flex;align-items:center;justify-content:center;
   margin:0 auto 10px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
 /* Иконка-бейдж в строках хаба Кассы (утро/вечер) */
+/* ── Экран «Касса»: один вид у всех строк ───────────────────────────
+   Раньше каждая кнопка была со своими цветами и отступами прямо в
+   разметке: круглая, квадратная, по центру, слева — рябило. Теперь один
+   класс, одна форма значка, один отступ. Цветом отмечены только два
+   действия дня (утро и вечер), остальное нейтральное. */
+.kh-card{
+  width:100%;text-align:left;font-family:var(--font);cursor:pointer;
+  background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  padding:15px 16px;margin-bottom:10px;
+  display:flex;align-items:center;gap:14px;
+  transition:transform .12s,background .12s;
+}
+.kh-card:active{transform:scale(.985);background:var(--card2);}
+.kh-card.kh-lead{background:color-mix(in oklab,var(--brand) 13%,var(--surface));
+  border-color:color-mix(in oklab,var(--brand) 26%,transparent);}
+.kh-tx{flex:1;min-width:0;}
+.kh-t{display:block;font-size:15.5px;font-weight:750;color:var(--ink);letter-spacing:-.01em;}
+.kh-s{display:block;font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.4;}
+.kh-go{color:var(--muted);flex-shrink:0;font-size:18px;}
+/* Деньги — наверх и крупно: за ними сюда и заходят. */
+.kh-money{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.kh-m{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:13px 14px;}
+.kh-m .l{font-size:11.5px;color:var(--muted);font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kh-m .v{font-size:19px;font-weight:800;margin-top:4px;letter-spacing:-.02em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.kh-hint{font-size:12px;color:var(--muted);line-height:1.55;padding:2px 4px 0;}
 .k-hub-ic{width:46px;height:46px;border-radius:15px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
 
@@ -2507,41 +2561,36 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
       <!-- ХАБ: выбор действия -->
       <div id="k-hub" class="kassa-wrap">
         <div id="k-briefing"></div>
-        <button onclick="App.openReceiveRep()" style="width:100%;text-align:left;padding:16px 18px;border-radius:20px;border:none;background:color-mix(in oklab,var(--brand) 14%,var(--surface));cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
-          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Приём торгового представителя</span>
-          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплата · погашение долга · новый долг — за раз</span></span>
-          <span style="color:var(--muted);">›</span>
-        </button>
-        <div class="kassa-row">
-          <div style="padding:14px 16px;display:grid;gap:8px;">
-            <div style="display:flex;justify-content:space-between;font-size:14px;"><span style="color:var(--muted);">Наличные по базе</span><span id="kh-cash" class="num" style="font-weight:800;">—</span></div>
-            <div onclick="App.editStoreDebt()" style="display:flex;justify-content:space-between;font-size:14px;cursor:pointer;"><span style="color:var(--muted);">Долг магазина (накладные) ✎</span><span id="kh-debt" class="num" style="font-weight:800;color:var(--neg);">—</span></div>
-          </div>
+        <div class="kh-money">
+          <div class="kh-m"><div class="l">Наличные в кассе</div><div class="v num" id="kh-cash">—</div></div>
+          <div class="kh-m" onclick="App.editStoreDebt()" style="cursor:pointer;"><div class="l">Долг магазина ✎</div><div class="v num" id="kh-debt">—</div></div>
         </div>
-        <button onclick="App.kShow('morning')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span class="k-hub-ic" style="background:rgba(255,159,10,.14);color:#FF9F0A;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="4"/><path d="M12 3v3M4 14H2M22 14h-2M5.6 7.6L4.2 6.2M18.4 7.6l1.4-1.4M2 20h20"/></svg></span>
-          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Кассовое утро</span>
-          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Смена, Z-отчёт и все доходы и расходы с кассы</span></span>
-          <span style="color:var(--muted);">›</span>
+        <button class="kh-card" onclick="App.kShow('morning')">
+          <span class="k-hub-ic" style="background:rgba(255,159,10,.14);color:#FF9F0A;"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="14" r="4"/><path d="M12 3v3M4 14H2M22 14h-2M5.6 7.6L4.2 6.2M18.4 7.6l1.4-1.4M2 20h20"/></svg></span>
+          <span class="kh-tx"><span class="kh-t">Кассовое утро</span><span class="kh-s">Смена, Z-отчёт, деньги с кассы</span></span>
+          <span class="kh-go">›</span>
         </button>
-        <button onclick="App.kShow('evening')" style="width:100%;text-align:left;padding:18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
-          <span style="flex:1;"><span style="display:block;font-size:16px;font-weight:800;color:var(--ink);">Вечер — накладные</span>
-          <span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;">Оплачено наличными, погашенные и новые долги</span></span>
-          <span style="color:var(--muted);">›</span>
+        <button class="kh-card kh-lead" onclick="App.openReceiveRep()">
+          <span class="k-hub-ic" style="background:var(--brand-dim);color:var(--brand);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
+          <span class="kh-tx"><span class="kh-t">Приём представителя</span><span class="kh-s">Оплата, долг и новый долг — за раз</span></span>
+          <span class="kh-go">›</span>
         </button>
-        <div style="display:flex;gap:10px;margin-bottom:12px;">
-          <button onclick="App.openDayNote()" style="flex:1;text-align:center;padding:13px;border-radius:18px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);">
-            <span style="font-size:20px;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><span style="display:block;font-size:12.5px;font-weight:700;color:var(--ink);margin-top:4px;">Заметка дня</span></button>
-        </div>
-        <button onclick="App.setTab('report',null)" style="width:100%;text-align:left;padding:14px 18px;border-radius:20px;border:1px solid rgba(255,255,255,.07);background:var(--surface);cursor:pointer;font-family:var(--font);margin-bottom:12px;display:flex;align-items:center;gap:14px;">
-          <span style="font-size:22px;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></span>
-          <span style="flex:1;"><span style="display:block;font-size:15px;font-weight:700;color:var(--ink);">Отчёты и история смен</span>
-          <span style="display:block;font-size:12px;color:var(--muted);margin-top:2px;">Дневной, месячный, налоги, сверка</span></span>
-          <span style="color:var(--muted);">›</span>
+        <button class="kh-card" onclick="App.kShow('evening')">
+          <span class="k-hub-ic" style="background:rgba(129,140,248,.16);color:var(--transfer,#818CF8);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span>
+          <span class="kh-tx"><span class="kh-t">Вечер — накладные</span><span class="kh-s">Оплата наличными и долги</span></span>
+          <span class="kh-go">›</span>
         </button>
-        <div style="font-size:12.5px;color:var(--muted);line-height:1.55;padding:0 4px;">Выплаты торговым представителям в течение дня записывай через «+» — каждая как отдельная операция.</div>
+        <button class="kh-card" onclick="App.openDayNote()">
+          <span class="k-hub-ic" style="background:var(--surface-2);color:var(--ink-2);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+          <span class="kh-tx"><span class="kh-t">Заметка дня</span><span class="kh-s">Что важного случилось сегодня</span></span>
+          <span class="kh-go">›</span>
+        </button>
+        <button class="kh-card" onclick="App.setTab('report',null)">
+          <span class="k-hub-ic" style="background:var(--surface-2);color:var(--ink-2);"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg></span>
+          <span class="kh-tx"><span class="kh-t">Отчёты и история смен</span><span class="kh-s">Дневной, месячный, налоги, сверка</span></span>
+          <span class="kh-go">›</span>
+        </button>
+        <div class="kh-hint">Выплаты торговым представителям в течение дня записывай через «+» — каждая как отдельная операция.</div>
       </div>
 
       <!-- КАССОВОЕ УТРО: пошаговый мастер (смена/Z → выплаты) -->
@@ -3194,42 +3243,40 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <!-- Action Menu Overlay -->
 <div class="am-overlay" id="am-overlay" onclick="App.closeActionMenu()">
-  <div class="am-grid" onclick="event.stopPropagation()">
-    <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.openNumpad()">
-      <div class="am-icon" style="background:var(--income-dim);color:var(--pos);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
-      <div class="am-name">Новая запись</div>
-      <div class="am-sub">Доход, расход, перевод</div>
+  <div class="am-sheet" onclick="event.stopPropagation()">
+    <div class="am-handle"></div>
+    <div class="am-cap">Что записываем</div>
+    <div class="am-grid">
+    <button class="am-item am-main" data-need="finance" onclick="App.closeActionMenu();App.openNumpad()">
+      <div class="am-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></div>
+      <div class="am-txt"><div class="am-name">Новая запись</div><div class="am-sub">Доход, расход, перевод</div></div>
     </button>
-    <button class="am-item" data-need="kassa" onclick="App.closeActionMenu();App.setTab('kassa',null)">
-      <div class="am-icon" style="background:var(--brand-dim);color:var(--brand);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div>
-      <div class="am-name">Касса</div>
-      <div class="am-sub">Утро · накладные · смены</div>
+    <button class="am-item am-key" data-need="receive" onclick="App.closeActionMenu();App.openReceiveRep()">
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg></div>
+      <div class="am-txt"><div class="am-name">Приём товара</div><div class="am-sub">Накладная от поставщика</div></div>
     </button>
-    <button class="am-item" data-need="receive" onclick="App.closeActionMenu();App.openReceiveRep()">
-      <div class="am-icon" style="background:var(--brand-dim);color:var(--brand);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg></div>
-      <div class="am-name">Приём товара</div>
-      <div class="am-sub">Накладная от поставщика</div>
+    <button class="am-item am-key" data-need="kassa" onclick="App.closeActionMenu();App.setTab('kassa',null)">
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></div>
+      <div class="am-txt"><div class="am-name">Касса</div><div class="am-sub">Утро · накладные · смены</div></div>
     </button>
-    <button class="am-item" onclick="App.closeActionMenu();App.openOrderForm()">
-      <div class="am-icon" style="background:var(--surface-2);color:var(--ink-2);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg></div>
-      <div class="am-name">Заказ поставщику</div>
-      <div class="am-sub">Что и на сколько заказать</div>
+    <button class="am-item am-key" data-need="payments" onclick="App.closeActionMenu();App.goToPayments()">
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg></div>
+      <div class="am-txt"><div class="am-name">Запись на выплату</div><div class="am-sub">График платежей</div></div>
     </button>
+    <button class="am-item am-key" onclick="App.closeActionMenu();App.openOrderForm()">
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.3"/><circle cx="18" cy="20" r="1.3"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg></div>
+      <div class="am-txt"><div class="am-name">Заказ поставщику</div><div class="am-sub">Что и на сколько заказать</div></div>
+    </button>
+      <div class="am-cap" style="grid-column:1/-1;padding-top:10px;">Посмотреть</div>
     <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.setTab('journal',null)">
-      <div class="am-icon" style="background:var(--surface-2);color:var(--ink-2);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10M7 12h10M7 17h6"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></div>
-      <div class="am-name">Операции</div>
-      <div class="am-sub">Журнал всех записей</div>
-    </button>
-    <button class="am-item" data-need="payments" onclick="App.closeActionMenu();App.goToPayments()">
-      <div class="am-icon" style="background:var(--transfer-dim);color:var(--transfer);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2.5"/><path d="M2 10h20"/></svg></div>
-      <div class="am-name">Запись на выплату</div>
-      <div class="am-sub">График платежей</div>
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7 8h10M7 12h10M7 16h6"/></svg></div>
+      <div class="am-txt"><div class="am-name">Операции</div><div class="am-sub">Журнал всех записей</div></div>
     </button>
     <button class="am-item" data-need="finance" onclick="App.closeActionMenu();App.setTab('report',null)">
-      <div class="am-icon" style="background:var(--expense-dim);color:var(--neg);"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
-      <div class="am-name">Отчёт</div>
-      <div class="am-sub">Финансовый отчёт</div>
+      <div class="am-icon"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+      <div class="am-txt"><div class="am-name">Отчёт</div><div class="am-sub">Итоги за период</div></div>
     </button>
+    </div>
   </div>
 </div>
 
@@ -3366,7 +3413,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.4.0';
+var APP_VERSION='5.5.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7356,10 +7403,16 @@ var App={
     var p=document.getElementById('tab-kassa');if(p)p.scrollTo(0,0);
   },
   _loadKHub:function(){
-    var set=function(id,v){var el=document.getElementById(id);if(el)el.textContent=v;};
-    var cash=(App.s.accounts||[]).filter(function(a){return a.name==='Наличные';})[0];
-    set('kh-cash',cash?'₽ '+fmtFull(Math.round(cash.balance||0)):'—');
-    set('kh-debt',App._kStoreDebt==null?'—':'₽ '+fmtFull(App._kStoreDebt));
+    // Цвет по значению, а не намертво в разметке. Долг был красным всегда —
+    // даже когда он ноль, то есть тревожно выглядело хорошее положение,
+    // а минус в кассе оставался обычным белым.
+    var set=function(id,v,col){var el=document.getElementById(id);
+      if(!el)return; el.textContent=v; el.style.color=col||'var(--ink)';};
+    var cash=(App._list(App.s.accounts)).filter(function(a){return a.name==='Наличные';})[0];
+    var cv=cash?Math.round(cash.balance||0):null;
+    set('kh-cash',cv==null?'—':'₽ '+fmtFull(cv), cv<0?'var(--neg)':'var(--ink)');
+    var dv=App._kStoreDebt;
+    set('kh-debt',dv==null?'—':'₽ '+fmtFull(dv), dv>0?'var(--neg)':'var(--pos)');
     App._loadBriefing();
   },
   // Утренний брифинг «Ожидаем сегодня»
