@@ -3366,7 +3366,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.3.0';
+var APP_VERSION='5.4.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6253,11 +6253,19 @@ var App={
       '<path d="M'+xy.join(' L')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'+
       '<circle cx="'+(n>1?w:0)+'" cy="'+last+'" r="1.9" fill="'+color+'"/></svg>';
   },
+  // Сервер обычно отдаёт список, но при отказе в правах или сбое может
+  // вернуться объект с ошибкой. Тогда .filter падал, и экран замирал
+  // недорисованным — владелец видел бы «зависло» вместо «нет доступа».
+  _list:function(v){
+    if(Array.isArray(v))return v;
+    if(v&&Array.isArray(v.items))return v.items;
+    return [];
+  },
   _applyHome:function(r,allAcc){
     App._hintLastOp(r);
-    App.s.accounts=(allAcc||[]).filter(function(a){return a.status!=='archived';});
+    App.s.accounts=App._list(allAcc).filter(function(a){return a.status!=='archived';});
     App.renderAccounts(App.s.accounts);
-    App.renderTxList(r.transactions||[],'tx-list');
+    App.renderTxList(App._list(r.transactions),'tx-list');
     // Zenmoney-паттерн: счета можно исключать из общего капитала
     var excl=App.s.settings.capExclude||[];
     var totalBal=(App.s.accounts||[]).reduce(function(s,a){
@@ -6452,7 +6460,7 @@ var App={
     var txEl=document.getElementById('acc-detail-txs');
     txEl.innerHTML='<div style="color:var(--text-2);text-align:center;padding:12px;">Загрузка…</div>';
     gs('getAllTransactions',{ssId:App.s.ssId}).then(function(r){
-      var filtered=(r||[]).filter(function(t){return t.account===acc.name;}).slice(0,20);
+      var filtered=App._list(r).filter(function(t){return t.account===acc.name;}).slice(0,20);
       if(!filtered.length){txEl.innerHTML='<div class="empty-state" style="padding:20px;"><div class="empty-text">Нет операций по этому счёту</div></div>';return;}
       txEl.innerHTML=filtered.map(function(tx){return App._txItem(tx);}).join('');
     });
@@ -8594,7 +8602,7 @@ var App={
       }).join('');
     });
     gs('getAccountsAll',{ssId:App.s.ssId}).then(function(r){
-      App.s.accounts=(r||[]).filter(function(a){return a.status!=='archived';});
+      App.s.accounts=App._list(r).filter(function(a){return a.status!=='archived';});
       var el=document.getElementById('settings-accounts-list');
       el.innerHTML=(r||[]).map(function(a){
         var statusLabel={active:'',hidden:' <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg> скрыт',archived:' <svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg> архив'};
