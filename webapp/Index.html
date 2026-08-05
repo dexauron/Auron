@@ -3095,6 +3095,14 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
       <div class="settings-sec" data-sgrp="app"><div class="settings-sec-title">Разное</div>
         <div class="settings-list">
+          <div class="settings-row" onclick="App.openCalc()" style="cursor:pointer;">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h4"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Калькулятор</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Наценка, деление суммы, сдача, обычный счёт</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
           <div class="settings-row" onclick="App.openTrash()" style="cursor:pointer;">
             <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></span>
             <div style="flex:1;">
@@ -3337,7 +3345,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='4.99.0';
+var APP_VERSION='5.0.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4433,7 +4441,7 @@ var App={
     }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
   _memberInfo:function(ssId,email){var out={perms:[],role:'Сотрудник зала'};
-    ((App._teamAll&&App._teamAll.orgs)||[]).forEach(function(o){if(o.ssId===ssId)(o.members||[]).forEach(function(m){if(m.email===email){out.perms=(m.perms||[]).slice();out.role=m.role;}});});
+    ((App._teamAll&&App._teamAll.orgs)||[]).forEach(function(o){if(o.ssId===ssId)(o.members||[]).forEach(function(m){if(m.email===email){out.perms=(m.perms||[]).slice();out.role=m.role;out.editFree=!!m.editFree;}});});
     return out;},
   openMemberPerms:function(ssId,email){
     var cat=(App._teamAll&&App._teamAll.permCatalog)||[];
@@ -4445,9 +4453,21 @@ var App={
     App.openModal('<div class="modal-title">Права сотрудника</div>'+
       '<div style="font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:12px;">'+App._e(email)+'<br>Роль: <b>'+App._e(info.role)+'</b>. Отметьте, что разрешено — это переопределит права роли.</div>'+
       rows+
-      '<button class="btn-primary" onclick="App._mpSave()">Сохранить права</button>'+
+      '<div style="margin-top:14px;padding:12px 13px;background:var(--surface-2);border-radius:12px;">'+
+        '<label style="display:flex;align-items:center;gap:11px;cursor:pointer;">'+
+          '<input type="checkbox" '+(info.editFree?'checked':'')+' onchange="App._mpEditFree(this.checked)" style="width:20px;height:20px;accent-color:var(--brand);flex-shrink:0;">'+
+          '<span style="font-size:13.5px;font-weight:600;">Может исправлять любые записи</span></label>'+
+        '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:7px;">Без галочки человек правит только свои записи и только за сегодня. С галочкой — любые, в том числе за прошлые дни. Каждая правка в любом случае видна в журнале действий.</div>'+
+      '</div>'+
+      '<button class="btn-primary" style="margin-top:12px;" onclick="App._mpSave()">Сохранить права</button>'+
       '<button class="btn-secondary" style="margin-top:10px;" onclick="App._mpReset()">Сбросить по умолчанию (по роли)</button>');
   },
+  _mpEditFree:function(on){var s=App._mp;if(!s)return;
+    gs('setMemberEditFreeMulti',{ssId:s.ssId,email:s.email,on:on}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      App.toast(on?'Может править любые записи ✓':'Правит только своё за сегодня ✓');
+      App._teamAll=r;
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});},
   _mpToggle:function(k,on){var s=App._mp;if(!s)return;var i=s.perms.indexOf(k);if(on&&i<0)s.perms.push(k);if(!on&&i>=0)s.perms.splice(i,1);},
   _mpSave:function(){var s=App._mp;if(!s)return;
     gs('setMemberPermsMulti',{ssId:s.ssId,email:s.email,perms:s.perms}).then(function(r){
@@ -9551,6 +9571,197 @@ var App={
       '<b style="color:var(--ink);">Мелочи</b><br>Свайп по операции влево — редактировать/удалить/повторить. Удалил случайно — жми «Отменить» или Настройки → Корзина. Глаз на главной прячет суммы.</div>','full');
   },
 
+  // ── Умный калькулятор ────────────────────────────────────────────
+  // Четыре режима из списка владельца: обычный счёт, наценка, деление
+  // суммы и пересчёт денег. Всё считается на телефоне, сервер не нужен —
+  // калькулятор должен работать и когда связи нет.
+  _calcMode:'plain',
+  openCalc:function(mode){
+    App._calcMode=mode||App._calcMode||'plain';
+    App.openModal('<div class="modal-title">Калькулятор</div>'+
+      '<div id="calc-tabs" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;-webkit-overflow-scrolling:touch;"></div>'+
+      '<div id="calc-body"></div>','full');
+    App._calcRender();
+  },
+  _calcTabs:[['plain','Обычный'],['markup','Наценка'],['split','Разделить'],['cash','Деньги']],
+  _calcRender:function(){
+    var tabs=document.getElementById('calc-tabs'), body=document.getElementById('calc-body');
+    if(!tabs||!body)return;
+    tabs.innerHTML=App._calcTabs.map(function(t){
+      var on=t[0]===App._calcMode;
+      return '<button onclick="App._calcMode=\''+t[0]+'\';App._calcRender();" style="flex-shrink:0;padding:9px 15px;border-radius:11px;border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';background:'+(on?'color-mix(in oklab,var(--brand) 14%,transparent)':'var(--surface-2)')+';color:'+(on?'var(--brand)':'var(--ink-2)')+';font-size:13px;font-weight:750;font-family:var(--font);cursor:pointer;">'+t[1]+'</button>';
+    }).join('');
+    body.innerHTML=App['_calc_'+App._calcMode]();
+    App.haptic(5);
+  },
+  _calcOut:function(html){
+    return '<div id="calc-res" style="margin-top:14px;padding:14px 15px;border-radius:14px;background:var(--surface-2);border:1px solid var(--line);font-size:14px;line-height:1.7;">'+html+'</div>';
+  },
+  _calcRow:function(label,val,big){
+    return '<div style="display:flex;justify-content:space-between;gap:12px;'+(big?'font-size:17px;font-weight:800;':'')+'"><span style="color:var(--muted);font-weight:600;">'+label+'</span><span>'+val+'</span></div>';
+  },
+  // Разбор выражения без eval: eval исполнил бы всё, что попадёт в поле.
+  // Здесь читаются только числа и + − × ÷ % и скобки — больше ничего.
+  _calcSafeEval:function(src){
+    var s=String(src||'').replace(/[×хx]/gi,'*').replace(/[÷:]/g,'/').replace(/,/g,'.').replace(/\s| /g,'');
+    if(!s)return null;
+    var toks=s.match(/\d+\.?\d*|[+\-*/%()]/g);
+    if(!toks||toks.join('')!==s)return null;
+    var prec={'+':1,'-':1,'*':2,'/':2,'%':2}, out=[], ops=[];
+    for(var i=0;i<toks.length;i++){
+      var t=toks[i];
+      if(/^\d/.test(t))out.push(parseFloat(t));
+      else if(t==='(')ops.push(t);
+      else if(t===')'){while(ops.length&&ops[ops.length-1]!=='(')out.push(ops.pop());if(!ops.length)return null;ops.pop();}
+      else{
+        // унарный минус: «-5» и «(-5)»
+        if(t==='-'&&(i===0||/^[+\-*/%(]$/.test(toks[i-1])))out.push(0);
+        while(ops.length&&ops[ops.length-1]!=='('&&prec[ops[ops.length-1]]>=prec[t])out.push(ops.pop());
+        ops.push(t);
+      }
+    }
+    while(ops.length){var o=ops.pop();if(o==='(')return null;out.push(o);}
+    var st=[];
+    for(var j=0;j<out.length;j++){
+      var v=out[j];
+      if(typeof v==='number'){st.push(v);continue;}
+      var b=st.pop(),a=st.pop();
+      if(a===undefined||b===undefined)return null;
+      if(v==='+')st.push(a+b);else if(v==='-')st.push(a-b);
+      else if(v==='*')st.push(a*b);
+      else if(v==='%')st.push(b?a%b:NaN);
+      else st.push(b?a/b:NaN);
+    }
+    if(st.length!==1||!isFinite(st[0]))return null;
+    return st[0];
+  },
+  _calcNum:function(id){var el=document.getElementById(id);if(!el)return null;
+    var v=String(el.value||'').replace(/\s| /g,'').replace(',','.');
+    if(!v)return null;var n=parseFloat(v);return isFinite(n)?n:null;},
+  _calcFmt:function(n){
+    if(n===null||n===undefined||!isFinite(n))return '—';
+    var r=Math.round(n*100)/100;
+    return (Math.abs(r-Math.round(r))<0.005?fmt(Math.round(r)):fmt(Math.round(r*100)/100).replace('.',','));
+  },
+
+  // 1. Обычный счёт
+  _calc_plain:function(){
+    return '<div class="field"><label>Выражение</label>'+
+      '<input id="calc-expr" inputmode="text" placeholder="12500 + 3200 * 2" oninput="App._calcPlain()" autocomplete="off"></div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Пишите как в тетради: + − × ÷ и скобки. Считает сразу, нажимать ничего не надо.</div>'+
+      App._calcOut(App._calcRow('Результат','<span id="calc-plain-v">—</span>',true));
+  },
+  _calcPlain:function(){
+    var el=document.getElementById('calc-plain-v');if(!el)return;
+    var r=App._calcSafeEval(document.getElementById('calc-expr').value);
+    el.textContent=r===null?'—':App._calcFmt(r);
+    el.style.color=r===null?'var(--muted)':'var(--ink)';
+  },
+
+  // 2. Наценка — в обе стороны
+  _calc_markup:function(){
+    return '<div class="field"><label>Закупочная цена, ₽</label><input id="calc-buy" inputmode="decimal" oninput="App._calcMarkup()" autocomplete="off"></div>'+
+      '<div class="field"><label>Наценка, %</label><input id="calc-pct" inputmode="decimal" oninput="App._calcMarkup(\'pct\')" autocomplete="off"></div>'+
+      '<div class="field"><label>Цена продажи, ₽</label><input id="calc-sell" inputmode="decimal" oninput="App._calcMarkup(\'sell\')" autocomplete="off"></div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Заполните закуп и одно из двух — второе посчитается само.</div>'+
+      App._calcOut(
+        App._calcRow('Цена продажи','<span id="mk-sell">—</span>',true)+
+        App._calcRow('Наценка','<span id="mk-pct">—</span>')+
+        App._calcRow('Заработок с единицы','<span id="mk-earn">—</span>')+
+        App._calcRow('Доля наценки в цене','<span id="mk-share">—</span>'));
+  },
+  _calcMarkup:function(src){
+    var buy=App._calcNum('calc-buy'), pct=App._calcNum('calc-pct'), sell=App._calcNum('calc-sell');
+    if(buy!==null&&src==='pct'&&pct!==null){sell=buy*(1+pct/100);document.getElementById('calc-sell').value=App._calcFmt(sell);}
+    else if(buy!==null&&src==='sell'&&sell!==null&&buy>0){pct=(sell/buy-1)*100;document.getElementById('calc-pct').value=App._calcFmt(pct);}
+    else if(buy!==null&&pct!==null&&sell===null){sell=buy*(1+pct/100);}
+    var set=function(id,v){var e=document.getElementById(id);if(e)e.innerHTML=v;};
+    set('mk-sell',sell===null?'—':App._calcFmt(sell)+' ₽');
+    set('mk-pct',pct===null?'—':App._calcFmt(pct)+' %');
+    var earn=(buy!==null&&sell!==null)?sell-buy:null;
+    set('mk-earn',earn===null?'—':'<span style="color:'+(earn<0?'var(--neg)':'var(--pos)')+';">'+App._calcFmt(earn)+' ₽</span>');
+    // Доля в цене — не то же, что наценка: наценка 25% от закупа это 20% цены.
+    set('mk-share',(earn===null||!sell)?'—':App._calcFmt(earn/sell*100)+' %');
+  },
+
+  // 3. Разделить сумму
+  _calc_split:function(){
+    return '<div class="field"><label>Сумма, ₽</label><input id="calc-sum" inputmode="decimal" oninput="App._calcSplit()" autocomplete="off"></div>'+
+      '<div class="field"><label>На сколько частей</label><input id="calc-parts" inputmode="numeric" value="2" oninput="App._calcSplit()" autocomplete="off"></div>'+
+      '<div style="font-size:12px;color:var(--muted);line-height:1.5;">Накладная по дням, расход на нескольких, оплата частями. Копейки не теряются: остаток показан отдельно.</div>'+
+      App._calcOut(
+        App._calcRow('По каждой части','<span id="sp-each">—</span>',true)+
+        App._calcRow('Остаток (добавить к последней)','<span id="sp-rest">—</span>')+
+        App._calcRow('Проверка','<span id="sp-check">—</span>'));
+  },
+  _calcSplit:function(){
+    var sum=App._calcNum('calc-sum'), n=App._calcNum('calc-parts');
+    var set=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
+    if(sum===null||n===null||n<1){set('sp-each','—');set('sp-rest','—');set('sp-check','—');return;}
+    n=Math.floor(n);
+    var each=Math.floor(sum/n), rest=Math.round((sum-each*n)*100)/100;
+    set('sp-each',fmt(each)+' ₽ × '+n);
+    set('sp-rest',rest?App._calcFmt(rest)+' ₽':'нет');
+    set('sp-check',App._calcFmt(each*n+rest)+' ₽');
+  },
+
+  // 4. Деньги: сдача и пересчёт кассы по купюрам
+  _calcNominals:[5000,2000,1000,500,200,100,50,10,5,2,1],
+  _calc_cash:function(){
+    var rows=App._calcNominals.map(function(v){
+      return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">'+
+        '<span style="width:58px;text-align:right;font-weight:750;font-size:13.5px;">'+fmt(v)+'</span>'+
+        '<span style="color:var(--muted);">×</span>'+
+        '<input class="calc-cnt" data-nom="'+v+'" inputmode="numeric" placeholder="0" oninput="App._calcCash()" autocomplete="off" style="flex:1;min-width:0;">'+
+        '<span id="cash-sub-'+v+'" style="width:88px;text-align:right;font-size:12.5px;color:var(--muted);">—</span></div>';
+    }).join('');
+    return '<div class="field"><label>Пересчёт кассы по купюрам</label>'+rows+'</div>'+
+      App._calcOut(App._calcRow('В кассе','<span id="cash-total">0</span> ₽',true))+
+      '<div style="margin-top:18px;font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Сдача</div>'+
+      '<div class="field" style="margin-top:8px;"><label>К оплате, ₽</label><input id="calc-due" inputmode="decimal" oninput="App._calcChange()" autocomplete="off"></div>'+
+      '<div class="field"><label>Дали, ₽</label><input id="calc-got" inputmode="decimal" oninput="App._calcChange()" autocomplete="off"></div>'+
+      App._calcOut(App._calcRow('Сдача','<span id="cash-change">—</span>',true)+
+        '<div id="cash-change-hint" style="font-size:12px;color:var(--muted);margin-top:6px;"></div>')+
+      '<button class="btn-secondary" style="margin-top:14px;" onclick="App._calcCashReset()">Очистить</button>';
+  },
+  _calcCash:function(){
+    var total=0;
+    Array.prototype.forEach.call(document.querySelectorAll('.calc-cnt'),function(el){
+      var nom=parseFloat(el.dataset.nom)||0;
+      var c=Math.max(0,Math.floor(parseFloat(String(el.value||'').replace(/\D/g,''))||0));
+      var sub=nom*c; total+=sub;
+      var s=document.getElementById('cash-sub-'+nom);
+      if(s)s.textContent=c?fmt(sub)+' ₽':'—';
+    });
+    var t=document.getElementById('cash-total');if(t)t.textContent=fmt(total);
+  },
+  _calcChange:function(){
+    var due=App._calcNum('calc-due'), got=App._calcNum('calc-got');
+    var el=document.getElementById('cash-change'), hint=document.getElementById('cash-change-hint');
+    if(!el)return;
+    if(due===null||got===null){el.textContent='—';el.style.color='var(--ink)';if(hint)hint.textContent='';return;}
+    var ch=got-due;
+    el.textContent=App._calcFmt(Math.abs(ch))+' ₽';
+    el.style.color=ch<0?'var(--neg)':'var(--ink)';
+    if(!hint)return;
+    if(ch<0)hint.textContent='Не хватает '+App._calcFmt(-ch)+' ₽';
+    else if(ch===0)hint.textContent='Ровно, сдачи нет';
+    else hint.textContent='Купюрами: '+App._calcBreak(Math.round(ch));
+  },
+  // Как выдать сдачу — крупными вперёд, чтобы не считать в уме у кассы.
+  _calcBreak:function(n){
+    var out=[];
+    App._calcNominals.forEach(function(v){
+      var c=Math.floor(n/v); if(c){out.push(fmt(v)+'×'+c); n-=v*c;}
+    });
+    return out.length?out.join(', '):'—';
+  },
+  _calcCashReset:function(){
+    Array.prototype.forEach.call(document.querySelectorAll('.calc-cnt'),function(el){el.value='';});
+    ['calc-due','calc-got'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+    App._calcCash();App._calcChange();App.haptic(6);
+  },
+
   // ── Корзина ──
   openTrash:function(){
     App.openModal('<div class="modal-title">'+SVG.trash+' Корзина</div><div id="trash-body" style="color:var(--muted);font-size:13px;">Загрузка…</div>','full');
@@ -9561,7 +9772,8 @@ var App={
       el.innerHTML='<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Хранится 30 дней, потом удаляется навсегда.</div>'+items.map(function(t,i){
         return '<div style="display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line-2);">'+
           '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+(t.type==='Доход'?'+':'−')+'₽ '+fmt(t.amount)+' · '+App._e(t.category)+'</div>'+
-          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(t.account)+' · '+App._e(t.date)+(t.comment?' · '+App._e(t.comment):'')+'</div></div>'+
+          '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+App._e(t.account)+' · '+App._e(t.date)+(t.comment?' · '+App._e(t.comment):'')+'</div>'+
+          (t.daysLeft===null||t.daysLeft===undefined?'':'<div style="font-size:11px;margin-top:3px;color:'+(t.daysLeft<=3?'var(--neg)':'var(--muted)')+';">'+(t.daysLeft>0?'Удалится навсегда через '+t.daysLeft+' дн.':'Удалится сегодня')+'</div>')+'</div>'+
           '<button onclick="App._trashRestore('+i+')" style="flex-shrink:0;padding:8px 12px;border:none;border-radius:10px;background:color-mix(in oklab,var(--pos) 15%,transparent);color:var(--pos);font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Вернуть</button></div>';
       }).join('');
       App._trashItems=items;
@@ -11649,8 +11861,22 @@ var App={
     if(p.soldQty===0&&p.stockQty>0)hints.push('Не продавался за период — лежит на полке.');
     if(hints.length)h+='<div style="background:color-mix(in oklab,var(--warn,#FF9F0A) 12%,transparent);border-radius:13px;padding:12px 14px;margin-top:12px;font-size:12.5px;line-height:1.6;">'+
       hints.map(function(x){return '• '+x;}).join('<br>')+'</div>';
+    // Итоги за всё время — коротко, до длинных списков
+    var T=(d&&d.totals)||{};
+    if(T.deliveries||T.lossQty){
+      var line=[];
+      if(T.deliveries)line.push('поступал '+T.deliveries+' '+App._plural(T.deliveries,'раз','раза','раз'));
+      if(T.suppliers)line.push(T.suppliers+' '+App._plural(T.suppliers,'поставщик','поставщика','поставщиков'));
+      if(T.priceMin!=null&&T.priceMax!=null&&T.priceMax>T.priceMin)line.push('закуп от '+fm(T.priceMin)+' до '+fm(T.priceMax)+' ₽');
+      if(T.lossQty)line.push('списано '+App._num(T.lossQty)+' на '+fm(T.lossSum)+' ₽');
+      h+='<div style="margin-top:12px;padding:12px 14px;background:var(--surface-2);border-radius:13px;font-size:12.5px;line-height:1.6;color:var(--ink-2);">'+
+        '<b style="color:var(--ink);">За всё время: </b>'+App._e(line.join(' · '))+'</div>';
+    }
+    // Дальше — всё подряд, но под кнопкой: на экране должно быть главное,
+    // а полная простыня открывается тем, кому она сейчас нужна.
+    var hd='';
     // Полный список полей — ниже, для тех кому нужны детали
-    h+='<div class="pc-sec">Все данные</div>'+
+    hd+='<div class="pc-sec">Все данные</div>'+
       '<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
       row('Наименование',App._e(p.name||''))+
       row('Группа',p.group?App._e(p.group):null)+
@@ -11700,19 +11926,43 @@ var App={
         }).join('')+'</div>';
     }
     if(d&&d.priceHist&&d.priceHist.length){
-      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg> История поступлений</div>'+
+      hd+='<div style="margin-top:16px;font-size:13px;font-weight:700;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10l4 4 4-4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg> История поступлений</div>'+
         '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Когда и по какой цене поступал товар</div>'+
         '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
         d.priceHist.slice().reverse().map(function(x){return rowHtml((x.label||'—')+(x.supplier?' · '+x.supplier:''),fm(x.price)+' ₽');}).join('')+'</div>';
     }
     if(d&&d.retailHist&&d.retailHist.length){
-      h+='<div style="margin-top:16px;font-size:13px;font-weight:700;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>️ Прошлые розничные цены</div>'+
+      hd+='<div style="margin-top:16px;font-size:13px;font-weight:700;"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.2"/></svg>️ Прошлые розничные цены</div>'+
         '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Как менялась цена на полке (новые изменения сверху)</div>'+
         '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;margin-top:6px;">'+
         d.retailHist.map(function(x){return rowHtml('было с '+(x.label||'—'),fm(x.price)+' ₽');}).join('')+'</div>';
     }
+    // Списания и возвраты: куда девался товар помимо продажи
+    if(d&&d.losses&&d.losses.length){
+      hd+='<div class="pc-sec">Списания и возвраты ('+d.losses.length+')</div>'+
+        '<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+
+        d.losses.map(function(x){
+          var left=(x.date||'—')+' · '+App._e(x.kind||'списание')+
+            (x.reason?' · '+App._e(x.reason):'')+(x.qty?' · '+App._num(x.qty):'')+
+            (x.who?' · '+App._e(x.who):'');
+          return rowHtml(left, fm(x.amount)+' ₽', 'var(--neg)');
+        }).join('')+'</div>';
+    }
+    if(hd)h+='<button id="pc-all-btn" class="btn-secondary" style="margin-top:16px;" onclick="App._productToggleAll()">Показать всю информацию</button>'+
+      '<div id="pc-all" style="display:none;">'+hd+'</div>';
     b.innerHTML=h;
     if(d&&d.priceHist&&d.priceHist.length>=2)App._drawSpark('pc-spark',d.priceHist.map(function(x){return x.price;}),'var(--brand)');
+  },
+  // Кнопка «показать всю информацию»: владелец просил, чтобы всё было
+  // доступно, но не вываливалось сразу на экран.
+  _productToggleAll:function(){
+    var el=document.getElementById('pc-all'), btn=document.getElementById('pc-all-btn');
+    if(!el||!btn)return;
+    var on=el.style.display==='none';
+    el.style.display=on?'block':'none';
+    btn.textContent=on?'Свернуть':'Показать всю информацию';
+    App.haptic(6);
+    if(on)setTimeout(function(){try{el.scrollIntoView({behavior:'smooth',block:'start'});}catch(e){}},60);
   },
   shareGoodsReport:function(){
     var a=App._goodsLast;if(!a){App.toast('Сначала откройте аналитику товаров',true);return;}

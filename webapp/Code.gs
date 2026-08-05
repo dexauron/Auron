@@ -1045,13 +1045,48 @@ function saveTransfer(p) {
   });
 }
 
+// ── Кто может исправить чужую запись ────────────────────────────────
+// Решение владельца: по умолчанию человек правит СВОЁ и только за
+// СЕГОДНЯ — так ошибку кассира не надо ждать до вечера, но вчерашние
+// закрытые дни он не перепишет. Отдельным людям владелец может
+// разрешить править всё; след в журнале остаётся в любом случае.
+function _editFreeList(ss) {
+  try { var raw=_getSettingStr(ss,'EDIT_FREE',''); if(raw){ var a=JSON.parse(raw); if(Array.isArray(a)) return a; } }catch(e){}
+  return [];
+}
+// Кто создал запись — берём из журнала действий (там записан email).
+function _txAuthor(ss, id) {
+  try {
+    var sh=ss.getSheetByName(SH_AUDIT);
+    if (!sh||sh.getLastRow()<2) return '';
+    var n=Math.min(sh.getLastRow()-1,2000);
+    var vs=sh.getRange(sh.getLastRow()-n+1,1,n,6).getValues();
+    for (var i=vs.length-1;i>=0;i--)
+      if (String(vs[i][1])==='tx' && String(vs[i][2])===String(id) && String(vs[i][3])==='создал')
+        return String(vs[i][4]||'').toLowerCase();
+  } catch(e){}
+  return '';
+}
+function _sameDay(a,b){ return a&&b&&a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate(); }
+// Возвращает '' если можно, иначе текст отказа.
+function _txEditDeny(ss, id, row) {
+  if (_canManage(ss)) return '';
+  var me=_myEmail(); if (!me) return '';
+  if (_editFreeList(ss).indexOf(me)>=0) return '';
+  var author=_txAuthor(ss,id);
+  if (author && author!==me) return 'Это не ваша запись — исправить может только владелец';
+  var d=row[B_DATE-1];
+  if (!(d instanceof Date) || !_sameDay(d,new Date()))
+    return 'Исправлять можно только записи за сегодня — обратитесь к владельцу';
+  return '';
+}
+
 function deleteTransaction(p) {
   return _withLock(function(){
   var ssId=p.ssId, id=p.id;
   try {
-    
+
     var ss=SpreadsheetApp.openById(ssId);
-    if (!_canManage(ss)) return MANAGE_DENIED;
     var base=ss.getSheetByName(SH_BASE);
     var trash=ss.getSheetByName(SH_TRASH);
     if (!base||base.getLastRow()<2) {  return {__error:'not found'}; }
@@ -1062,6 +1097,8 @@ function deleteTransaction(p) {
     }
     if (rowNum===-1) {  return {__error:'not found'}; }
     var row=vals[rowNum-2];
+    var deny=_txEditDeny(ss,id,row);
+    if (deny) { _logDenied(ss,'правка чужой записи'); return {__error:deny}; }
     if (row[B_LOCK-1]===true||row[B_LOCK-1]==='true') {
        return {__error:'Запись заблокирована Z-отчётом'};
     }
@@ -1730,7 +1767,40 @@ function getProductDetail(p) {
       });
       retailHist.sort(function(a,b){return b.t-a.t;}); // новые старые цены сверху
     }
-    return { item:it, priceHist:priceHist, suppliers:suppliers, retailHist:retailHist, salesDays:salesDays };
+    // Списания и возвраты по этому товару — владелец просил «любые
+    // операции, связанные с товаром». Без них карточка показывает, как
+    // товар покупали и продавали, но молчит о том, как он пропадал.
+    var losses=[];
+    try {
+      var lsh=ss.getSheetByName(SH_LOSSES);
+      if (lsh && lsh.getLastRow()>=2) {
+        var nameLow=String(it.name||'').toLowerCase();
+        lsh.getRange(2,1,lsh.getLastRow()-1,LS_COLS).getValues().forEach(function(r){
+          var nm=String(r[LS_NAME-1]||'').toLowerCase();
+          if (!nm || !nameLow || nm.indexOf(nameLow)<0) return;
+          var d=r[LS_DATE-1];
+          losses.push({date:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yy'):'',
+            t:(d instanceof Date)?d.getTime():0,
+            kind:String(r[LS_KIND-1]||''), reason:String(r[LS_REASON-1]||''),
+            qty:_gnum(r[LS_QTY-1]), amount:_gnum(r[LS_AMT-1]),
+            contractor:String(r[LS_CONTR-1]||''), who:String(r[LS_WHO-1]||'')});
+        });
+        losses.sort(function(a,b){return b.t-a.t;});
+      }
+    } catch(eL){}
+    // Итоги «за всё время» — чтобы кнопка «показать всю информацию» имела
+    // что показать одним взглядом, а не только простыни списков.
+    var totals={ deliveries:priceHist.length, suppliers:suppliers.length,
+      lossQty:0, lossSum:0, priceMin:null, priceMax:null, priceFirst:null, priceLast:null };
+    losses.forEach(function(x){ totals.lossQty+=x.qty; totals.lossSum+=x.amount; });
+    priceHist.forEach(function(x){
+      if (!x.price) return;
+      if (totals.priceMin===null||x.price<totals.priceMin) totals.priceMin=x.price;
+      if (totals.priceMax===null||x.price>totals.priceMax) totals.priceMax=x.price;
+    });
+    if (priceHist.length) { totals.priceFirst=priceHist[0].price; totals.priceLast=priceHist[priceHist.length-1].price; }
+    return { item:it, priceHist:priceHist, suppliers:suppliers, retailHist:retailHist,
+             losses:losses, totals:totals, salesDays:salesDays };
   } catch(e) { return { __error:e.message }; }
 }
 
@@ -6267,6 +6337,7 @@ function getTeam(p) {
     var ownerEmail=''; try{ownerEmail=String(ss.getOwner().getEmail()).toLowerCase();}catch(e){}
     var sh=ss.getSheetByName(SH_ACCESS);
     var wmap=_widgetsMap(ss);
+    var efree=_editFreeList(ss);
     var members=[];
     if (sh&&sh.getLastRow()>=2) {
       sh.getRange(2,1,sh.getLastRow()-1,4).getValues().forEach(function(r){
@@ -6276,7 +6347,7 @@ function getTeam(p) {
         var custom=false, perms=_rolePerms(role);
         var raw=String(r[3]||'');
         if (raw) { try{ var arr=JSON.parse(raw); if(Array.isArray(arr)){perms=arr;custom=true;} }catch(e){} }
-        members.push({email:em,role:role,roles:_roleList(role),
+        members.push({email:em,role:role,roles:_roleList(role),editFree:efree.indexOf(em)>=0,
           added:(r[2] instanceof Date)?r[2].toISOString():'', perms:perms, custom:custom,
           widgets: Array.isArray(wmap[em])?wmap[em]:null});
       });
@@ -6317,6 +6388,30 @@ function setMemberRole(p) {
     return {__error:'Сотрудник не найден'};
   } catch(e) { return {__error:e.message}; }
 });
+}
+
+// Владелец разрешает конкретному человеку править ЛЮБЫЕ записи, не
+// только свои и не только сегодняшние. Журнал действий при этом никуда
+// не девается: видно, кто и что поменял.
+function setMemberEditFree(p) {
+  return _withLock(function(){
+  var ssId=p.ssId, email=String(p.email||'').trim().toLowerCase(), on=!!p.on;
+  try {
+    var ss=SpreadsheetApp.openById(ssId);
+    if (!_isOwner(ss)) return {__error:'Только владелец может это разрешить'};
+    var list=_editFreeList(ss), i=list.indexOf(email);
+    if (on && i<0) list.push(email);
+    if (!on && i>=0) list.splice(i,1);
+    _setSetting(ss,'EDIT_FREE',JSON.stringify(list));
+    _log(ss,'Правка любых записей',email+' → '+(on?'разрешено':'запрещено'));
+    return getTeam({ssId:ssId});
+  } catch(e) { return {__error:e.message}; }
+});
+}
+function setMemberEditFreeMulti(p) {
+  var r=setMemberEditFree(p);
+  if (r&&r.__error) return r;
+  return getTeamAll();
 }
 
 // Владелец задаёт индивидуальные права сотруднику (массив ключей).
@@ -7481,8 +7576,28 @@ function getGoodsMeta(p) {
 }
 
 // Восстановление операции из корзины (для «Отменить» после удаления)
+// Кто сам удалил запись сегодня — тому «Отменить» должно работать.
+// Иначе сотрудник, которому мы разрешили править своё, удалил бы запись
+// и уже не смог её вернуть: хуже, чем если бы правки не было вовсе.
+function _deletedByMeToday(ss, id) {
+  try {
+    var me=_myEmail(); if (!me) return false;
+    var sh=ss.getSheetByName(SH_AUDIT);
+    if (!sh||sh.getLastRow()<2) return false;
+    var n=Math.min(sh.getLastRow()-1,2000);
+    var vs=sh.getRange(sh.getLastRow()-n+1,1,n,6).getValues();
+    for (var i=vs.length-1;i>=0;i--)
+      if (String(vs[i][1])==='tx' && String(vs[i][2])===String(id) && String(vs[i][3])==='удалил')
+        return String(vs[i][4]||'').toLowerCase()===me && _sameDay(vs[i][0],new Date());
+  } catch(e){}
+  return false;
+}
 function restoreTransaction(p) {
-  if (!_permGuard(p&&p.ssId?p.ssId:p,'manage')) return MANAGE_DENIED;
+  var _id0=p&&p.id?String(p.id):'';
+  try {
+    var _ss0=SpreadsheetApp.openById(p.ssId);
+    if (!_canManage(_ss0) && !_deletedByMeToday(_ss0,_id0)) return MANAGE_DENIED;
+  } catch(e0) {}
   return _withLock(function(){
   var ssId=p.ssId, id=String(p.id||'');
   try {
@@ -7508,20 +7623,41 @@ function restoreTransaction(p) {
 });
 }
 
+// Раз в сутки чистим корзину от записей старше 30 дней.
+// Само по себе cleanTrash никто не звал: корзина росла бы вечно, а
+// владельцу обещано «хранится 30 дней». Чистим при открытии корзины,
+// но не чаще раза в день — иначе каждый заход брал бы замок впустую.
+function _trashAutoClean(ss, ssId) {
+  try {
+    var today=Utilities.formatDate(new Date(),Session.getScriptTimeZone(),'yyyy-MM-dd');
+    if (_getSettingStr(ss,'TRASH_PURGED','')===today) return;
+    _setSetting(ss,'TRASH_PURGED',today);
+    cleanTrash({ssId:ssId});
+  } catch(e){}
+}
+
 // Содержимое корзины (последние 50 удалённых)
 function getTrash(p) {
   if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   try {
-    var sh=SpreadsheetApp.openById(p.ssId).getSheetByName(SH_TRASH);
+    var _ss=SpreadsheetApp.openById(p.ssId);
+    _trashAutoClean(_ss, p.ssId);
+    var sh=_ss.getSheetByName(SH_TRASH);
     if (!sh||sh.getLastRow()<2) return {items:[]};
     var tz=Session.getScriptTimeZone();
     var n=Math.min(sh.getLastRow()-1,50);
     var vals=sh.getRange(sh.getLastRow()-n+1,1,n,TR_COLS).getValues();
+    var now=Date.now();
     var items=vals.map(function(r){
-      var d=r[B_DATE-1];
+      var d=r[B_DATE-1], del=r[TR_COLS-1];
+      // Сколько дней осталось до автоочистки — чтобы владелец видел срок,
+      // а не гадал, когда запись исчезнет насовсем.
+      var left=null;
+      if (del instanceof Date) left=Math.max(0, 30-Math.floor((now-del.getTime())/86400000));
       return {id:String(r[0]),type:String(r[B_TYPE-1]),category:String(r[B_CAT-1]),
         amount:Math.round(parseFloat(r[B_AMT-1])||0),account:String(r[B_ACC-1]),
-        comment:String(r[B_CMT-1]||''),
+        comment:String(r[B_CMT-1]||''), daysLeft:left,
+        deleted:(del instanceof Date)?Utilities.formatDate(del,tz,'dd.MM.yyyy'):'',
         date:(d instanceof Date)?Utilities.formatDate(d,tz,'dd.MM.yyyy'):''};
     }).reverse();
     return {items:items};
