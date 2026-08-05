@@ -1993,6 +1993,36 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .kh-m .v{font-size:19px;font-weight:800;margin-top:4px;letter-spacing:-.02em;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+/* ── Заполнение кассы ───────────────────────────────────────────────
+   Подсказки мельче подписи, суммы крупнее обычного текста, а ответ
+   «сошлось или нет» — самым крупным на экране: за ним сюда и приходят. */
+.k-help{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.45;}
+.k-big input{font-size:20px;font-weight:750;letter-spacing:-.02em;}
+input.money{font-variant-numeric:tabular-nums;}
+.k-recon{
+  background:var(--surface);border:1px solid var(--line);border-radius:20px;
+  padding:16px;margin-bottom:12px;text-align:center;
+}
+.k-recon.ok{background:color-mix(in oklab,var(--pos) 12%,var(--surface));
+  border-color:color-mix(in oklab,var(--pos) 30%,transparent);}
+.k-recon.bad{background:color-mix(in oklab,var(--neg) 11%,var(--surface));
+  border-color:color-mix(in oklab,var(--neg) 30%,transparent);}
+.k-recon-v{font-size:26px;font-weight:850;letter-spacing:-.03em;font-variant-numeric:tabular-nums;}
+.k-recon.ok .k-recon-v{color:var(--pos);}
+.k-recon.bad .k-recon-v{color:var(--neg);}
+.k-recon-h{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:5px;}
+.k-recon-l{display:flex;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2);}
+.k-recon-l span{flex:1;min-width:0;font-size:11.5px;color:var(--muted);}
+.k-recon-l b{display:block;font-size:14.5px;color:var(--ink);margin-top:3px;font-weight:750;}
+.k-clip{background:var(--surface-2);border:none;border-radius:12px;padding:11px 16px;
+  cursor:pointer;color:var(--muted);font-size:13.5px;font-weight:600;
+  display:flex;align-items:center;gap:7px;font-family:var(--font);margin-bottom:12px;}
+/* Кнопка сохранения липкая: форма длинная, и до неё приходилось листать
+   обратно вниз после каждой правки. */
+/* Липкую кнопку пробовал — она наезжала на блок сверки и закрывала
+   главное число. Оставляю в конце формы: предсказуемо и ничего не
+   перекрывает. */
+.k-save{padding-top:2px;}
 .kh-hint{font-size:12px;color:var(--muted);line-height:1.55;padding:2px 4px 0;}
 .k-hub-ic{width:46px;height:46px;border-radius:15px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
@@ -2598,7 +2628,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
         <div id="k-step1">
           <div class="kassa-row">
-            <div class="kassa-row-hdr">Шаг 1 · Смена и Z-отчёт</div>
+            <div class="kassa-row-hdr">Смена</div>
             <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div class="field" style="margin:0;"><label>Дата</label><input type="date" id="k-date"></div>
               <div class="field" style="margin:0;"><label>Смена</label>
@@ -2607,48 +2637,63 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
               <div class="field" style="margin:0;grid-column:1/-1;"><label>Кассир</label>
                 <select id="k-cashier"><option value="">— выбрать —</option></select>
               </div>
-              <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Размен в кассе (начальный) ₽</label>
-                <input type="number" id="k-balance" placeholder="0" inputmode="decimal" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--sep);background:var(--card);color:var(--text-1);font-size:15px;outline:none;">
+              <div id="k-balance-wrap" class="field" style="margin:0;grid-column:1/-1;"><label>Размен в кассе, ₽</label>
+                <input type="text" class="money" id="k-balance" placeholder="0" inputmode="decimal">
+                <div class="k-help">Сколько денег лежало в кассе до начала торговли.</div>
               </div>
             </div>
           </div>
+
+          <!-- 1. Сколько наторговали. Порядок такой же, как в Z-отчёте:
+               сверху общая выручка, следом безнал — их читают подряд. -->
           <div class="kassa-row">
-            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg> Наличные — сверка кассира по Z-отчёту</div>
-            <div style="padding:12px 16px;display:grid;gap:10px;">
-              <div class="field" style="margin:0;"><label>Выручка наличными (строка «ВЫРУЧКА» в Z-отчёте)</label>
-                <input type="number" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
+            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.4"/></svg> Сколько наторговали</div>
+            <div style="padding:12px 16px;display:grid;gap:12px;">
+              <div class="field k-big" style="margin:0;"><label>Выручка наличными, ₽</label>
+                <input type="text" class="money" id="kz-cash-rev" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
+                <div class="k-help">Строка «ВЫРУЧКА» в Z-отчёте.</div>
                 <div id="kz-anomaly" style="display:none;font-size:12px;font-weight:700;margin-top:6px;padding:8px 11px;border-radius:10px;background:rgba(255,159,10,.13);color:#FF9F0A;"></div></div>
-              <div class="field" style="margin:0;"><label>Оплачено поставщикам наличкой <span style="color:var(--muted);font-weight:400;font-size:11px;">— и по чеку, и по заметкам</span></label>
-                <input type="number" id="kz-cash-supp" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
-                <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4;">Вся наличка, что ушла поставщикам за смену: пробитая через кассу (строка ВЫПЛАТ) + взятая физически по заметке. Неважно как оформили — важна общая сумма.</div></div>
-              <div class="field" style="margin:0;"><label>Инкассация — сколько наличных забрал</label>
-                <input type="number" id="kz-cash-collect" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
-              <div class="field" style="margin:0;"><label>Оставлено в кассе сверх размена</label>
-                <input type="number" id="kz-cash-left" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
-              <div style="background:var(--surface-2);border-radius:12px;padding:11px 13px;">
-                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;"><span style="color:var(--muted);">Должно быть (выручка):</span><span class="num" id="kz-should">₽ 0</span></div>
-                <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px;"><span style="color:var(--muted);">Собрано (забрал+оплатил+оставил):</span><span class="num" id="kz-got">₽ 0</span></div>
-                <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;"><span>Расхождение по кассе:</span><span id="kz-diff" class="kassa-diff zero">—</span></div>
-                <div id="kz-diff-hint" style="font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4;"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div class="field" style="margin:0;"><label>Картой, ₽</label>
+                  <input type="text" class="money kz-ch" data-ch="Карта" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+                <div class="field" style="margin:0;"><label>СБП / QR, ₽</label>
+                  <input type="text" class="money kz-ch" data-ch="СБП" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+                <div class="field" style="margin:0;grid-column:1/-1;"><label>Прочее / переводы, ₽</label>
+                  <input type="text" class="money kz-ch" data-ch="Прочее" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
               </div>
+              <div class="k-help">Безнал зачислится на один счёт. Каналы записываем отдельно — потом будет видно, чем платят чаще.</div>
             </div>
           </div>
+
+          <!-- 2. Куда делись наличные. Три поля должны в сумме дать выручку —
+               это и есть сверка, поэтому они стоят вместе. -->
           <div class="kassa-row">
-            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></svg> Безнал — эквайринг</div>
-            <div style="padding:12px 16px;display:grid;gap:10px;">
-              <div class="field" style="margin:0;"><label>Картой (₽)</label>
-                <input type="number" class="kz-ch" data-ch="Карта" placeholder="0" inputmode="decimal"></div>
-              <div class="field" style="margin:0;"><label>СБП / QR (₽)</label>
-                <input type="number" class="kz-ch" data-ch="СБП" placeholder="0" inputmode="decimal"></div>
-              <div class="field" style="margin:0;"><label>Прочее / переводы (₽)</label>
-                <input type="number" class="kz-ch" data-ch="Прочее" placeholder="0" inputmode="decimal"></div>
-              <div style="font-size:11.5px;color:var(--muted);line-height:1.4;">Всё зачислится на один безналичный счёт. Каналы записываются отдельно — в будущем покажем, чем клиенты платят чаще.</div>
+            <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Куда делись наличные</div>
+            <div style="padding:12px 16px;display:grid;gap:12px;">
+              <div class="field" style="margin:0;"><label>Оплачено поставщикам, ₽</label>
+                <input type="text" class="money" id="kz-cash-supp" placeholder="0" inputmode="decimal" oninput="App._kReconcile()">
+                <div class="k-help">Вся наличка, ушедшая поставщикам за смену — и пробитая через кассу, и взятая по заметке.</div></div>
+              <div class="field" style="margin:0;"><label>Забрал из кассы (инкассация), ₽</label>
+                <input type="text" class="money" id="kz-cash-collect" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
+              <div class="field" style="margin:0;"><label>Осталось в кассе сверх размена, ₽</label>
+                <input type="text" class="money" id="kz-cash-left" placeholder="0" inputmode="decimal" oninput="App._kReconcile()"></div>
             </div>
           </div>
-          <div style="padding:0 0 12px;">
-            <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" style="background:var(--surface-2);border:none;border-radius:12px;padding:10px 16px;cursor:pointer;color:var(--muted);font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;font-family:var(--font);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.4"/><path d="M9 7l1.5-3h3L15 7"/></svg> Прикрепить Z-отчёт</button>
+
+          <!-- 3. Ответ: сошлось или нет. Главное число утра — крупно. -->
+          <div class="k-recon" id="kz-recon">
+            <div class="k-recon-v" id="kz-diff">—</div>
+            <div class="k-recon-h" id="kz-diff-hint">Заполните выручку и куда ушли деньги.</div>
+            <div class="k-recon-l">
+              <span>Выручка наличными<b class="num" id="kz-should">₽ 0</b></span>
+              <span>Разложено<b class="num" id="kz-got">₽ 0</b></span>
+            </div>
           </div>
-          <button class="btn-primary" onclick="App.saveKassa()">Сохранить кассовое утро</button>
+
+          <button id="k-receipt-btn" onclick="App._attachKassaReceipt()" class="k-clip"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.4"/><path d="M9 7l1.5-3h3L15 7"/></svg> Прикрепить Z-отчёт</button>
+          <div class="k-save">
+            <button class="btn-primary" style="margin:0;" onclick="App.saveKassa()">Сохранить кассовое утро</button>
+          </div>
         </div>
       </div>
 
@@ -2659,13 +2704,13 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
             <div class="kassa-row-hdr"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z"/></svg> Накладные за день</div>
             <div style="padding:12px 16px;display:grid;gap:10px;">
               <div class="field" style="margin:0;"><label>Оплачено наличными (₽)</label>
-                <input type="number" id="ki-cash" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+                <input type="text" class="money" id="ki-cash" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
               </div>
               <div class="field" style="margin:0;"><label>Погашено старых долгов (₽)</label>
-                <input type="number" id="ki-repaid" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+                <input type="text" class="money" id="ki-repaid" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
               </div>
               <div class="field" style="margin:0;"><label>Осталось в долг — новые накладные (₽)</label>
-                <input type="number" id="ki-new" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
+                <input type="text" class="money" id="ki-new" placeholder="0" inputmode="decimal" oninput="App.calcInvoices()">
               </div>
               <div id="ki-summary" style="font-size:13px;color:var(--muted);line-height:1.55;"></div>
             </div>
@@ -3413,7 +3458,7 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.5.0';
+var APP_VERSION='5.6.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -7541,9 +7586,9 @@ var App={
   },
   calcInvoices:function(){
     var el=document.getElementById('ki-summary');if(!el)return;
-    var cash=Math.round(parseFloat(document.getElementById('ki-cash').value)||0);
-    var rep=Math.round(parseFloat(document.getElementById('ki-repaid').value)||0);
-    var nd=Math.round(parseFloat(document.getElementById('ki-new').value)||0);
+    var cash=App._mval('ki-cash');
+    var rep=App._mval('ki-repaid');
+    var nd=App._mval('ki-new');
     var out=[];
     if(cash+rep>0)out.push('Из кассы уйдёт: <b style="color:var(--neg);">−₽ '+fmtFull(cash+rep)+'</b> (наличные '+fmtFull(cash)+' + погашение '+fmtFull(rep)+')');
     if(App._kStoreDebt!=null&&(rep>0||nd>0)){
@@ -7558,7 +7603,8 @@ var App={
   _buildKassaGrid:function(){
     // Подставляем размен по умолчанию из настроек
     var bal=document.getElementById('k-balance');
-    if(bal&&!bal.value&&App.s.settings.cashFloat)bal.value=App.s.settings.cashFloat;
+    if(bal&&!bal.value&&App.s.settings.cashFloat)bal.value=App._mfmt(App.s.settings.cashFloat);
+    App._moneyBind(document.getElementById('tab-kassa'));
     App._kReconcile();
   },
   // Единый безналичный счёт: настройка или первый счёт-не-наличные
@@ -7570,22 +7616,27 @@ var App={
 
   // Живая сверка наличных: Выручка = Забрал + Оплатил поставщикам + Оставил
   _kReconcile:function(){
-    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var g=App._mval;
     var rev=g('kz-cash-rev');
     var got=g('kz-cash-collect')+g('kz-cash-supp')+g('kz-cash-left');
     var diff=got-rev;
     var se=function(id,v){var e=document.getElementById(id);if(e)e.textContent=v;};
     se('kz-should','₽ '+fmtFull(rev));
     se('kz-got','₽ '+fmtFull(got));
+    var box=document.getElementById('kz-recon');
     var d=document.getElementById('kz-diff');
-    if(d){d.className='kassa-diff '+(diff>0?'pos':diff<0?'neg':'zero');
-      d.textContent=diff===0?'✓ сходится':(diff>0?'+':'−')+'₽ '+fmtFull(Math.abs(diff));}
     var h=document.getElementById('kz-diff-hint');
-    if(h)h.textContent=diff===0?'Касса сошлась — кассир сдал всё верно.':diff<0?'Недостача: собрано меньше выручки — кассир недодал.':'Излишек: собрано больше выручки — проверь, не забыл ли что-то в выручке.';
+    var touched=rev>0||got>0;
+    if(box)box.className='k-recon'+(!touched?'':(diff===0?' ok':' bad'));
+    if(d)d.textContent=!touched?'—':(diff===0?'Сходится':(diff<0?'Не хватает ':'Лишние ')+'₽ '+fmtFull(Math.abs(diff)));
+    if(h)h.textContent=!touched?'Заполните выручку и куда ушли деньги.'
+      :diff===0?'Касса сошлась — кассир сдал всё верно.'
+      :diff<0?'Разложено меньше выручки на '+fmtFull(-diff)+' ₽ — недостача.'
+      :'Разложено больше выручки на '+fmtFull(diff)+' ₽ — проверь выручку в Z-отчёте.';
     // Проверка аномалии: общая выручка (нал + безнал) сильно ниже/выше средней
     var an=document.getElementById('kz-anomaly');
     if(an){
-      var cards=0;document.querySelectorAll('.kz-ch').forEach(function(inp){cards+=Math.round(parseFloat(inp.value)||0);});
+      var cards=0;document.querySelectorAll('.kz-ch').forEach(function(inp){cards+=App._mval(inp);});
       var totalRev=rev+cards;
       var base=App._revBaseline;
       if(base&&base.avgDay>0&&base.days>=5&&totalRev>0){
@@ -7652,12 +7703,12 @@ var App={
     var shift=document.getElementById('k-shift').value;
     var cashier=document.getElementById('k-cashier').value;
     if(!cashier){App.toast('Выберите кассира',true);return;}
-    var g=function(id){return Math.round(parseFloat((document.getElementById(id)||{}).value)||0);};
+    var g=App._mval;
     // Безнал: каналы (для аналитики) → один счёт
     var beznalAcc=App._beznalAccount();
     var channels=[];var cardTotal=0;
     document.querySelectorAll('.kz-ch').forEach(function(inp){
-      var amt=Math.round(parseFloat(inp.value)||0);
+      var amt=App._mval(inp);
       if(amt>0){channels.push({channel:inp.dataset.ch,account:beznalAcc,amount:amt});cardTotal+=amt;}
     });
     var rec={
@@ -7691,9 +7742,9 @@ var App={
   // Вечер: накладные сохраняются отдельно от смены (свой учётный процесс)
   saveInvoices:function(){
     var inv={
-      cashPaid:Math.round(parseFloat(document.getElementById('ki-cash').value)||0),
-      debtRepaid:Math.round(parseFloat(document.getElementById('ki-repaid').value)||0),
-      newDebt:Math.round(parseFloat(document.getElementById('ki-new').value)||0)
+      cashPaid:App._mval('ki-cash'),
+      debtRepaid:App._mval('ki-repaid'),
+      newDebt:App._mval('ki-new')
     };
     if(!(inv.cashPaid||inv.debtRepaid||inv.newDebt)){App.toast('Введите суммы по накладным',true);return;}
     var debtBefore=App._kStoreDebt;
@@ -9844,6 +9895,51 @@ var App={
   },
   // Разбор выражения без eval: eval исполнил бы всё, что попадёт в поле.
   // Здесь читаются только числа и + − × ÷ % и скобки — больше ничего.
+  // ── Денежные поля ────────────────────────────────────────────────
+  // Обычное числовое поле показывает «125000» — на телефоне легко
+  // промахнуться на ноль и не заметить. Здесь сумма форматируется по
+  // разрядам прямо во время ввода: 125 000 читается с одного взгляда.
+  // Считать выражения («1000+500») по-прежнему можно — разбор идёт при
+  // выходе из поля.
+  _mnum:function(v){
+    if(typeof v==='number')return v;
+    var s=String(v==null?'':v).replace(/[\s\u00A0]/g,'').replace(',','.');
+    if(!s)return 0;
+    if(/[+\-*/()]/.test(s.slice(1))){var r=App._calcSafeEval(s);if(r!==null)return r;}
+    var n=parseFloat(s);return isFinite(n)?n:0;
+  },
+  // Значение денежного поля числом — единая точка для всех расчётов.
+  _mval:function(id){
+    var el=(typeof id==='string')?document.getElementById(id):id;
+    if(!el)return 0;
+    return Math.round(App._mnum(el.value));
+  },
+  _mfmt:function(n){
+    if(!isFinite(n))return '';
+    return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  },
+  // Ставим поведение на поле. Вызывается один раз при появлении экрана.
+  _moneyBind:function(root){
+    var list=(root||document).querySelectorAll('input.money:not([data-money])');
+    Array.prototype.forEach.call(list,function(el){
+      el.setAttribute('data-money','1');
+      el.addEventListener('input',function(){
+        var raw=el.value, caretEnd=(el.selectionStart===raw.length);
+        // Во время ввода выражения не форматируем — иначе «1000+» ломается.
+        if(/[+\-*/()]/.test(raw.slice(1)))return;
+        var digits=raw.replace(/[^\d]/g,'');
+        if(!digits){el.value='';return;}
+        var out=App._mfmt(parseFloat(digits));
+        if(out!==raw){el.value=out; if(caretEnd)try{el.setSelectionRange(out.length,out.length);}catch(e){}}
+      });
+      el.addEventListener('blur',function(){
+        var n=App._mnum(el.value);
+        el.value=n?App._mfmt(n):'';
+        try{el.dispatchEvent(new Event('input',{bubbles:true}));}catch(e){}
+      });
+    });
+  },
+
   _calcSafeEval:function(src){
     var s=String(src||'').replace(/[×хx]/gi,'*').replace(/[÷:]/g,'/').replace(/,/g,'.').replace(/\s| /g,'');
     if(!s)return null;
