@@ -4065,7 +4065,10 @@ function saveDebtEntry(p) {
     var sh=ss.getSheetByName(SH_DEBTS);
     var id=Utilities.getUuid();
     var rep=_s(d.repId), type=_s(d.type), amt=Math.round(parseFloat(d.amount)||0);
-    sh.appendRow([id,rep,type,amt,new Date(),_s(d.account||''),_s(d.comment||''),
+    // Дату можно задать: вечер закрывают за сегодня, но бывает и задним
+    // числом. Кто дату не передал — получает сегодняшнюю, как раньше.
+    var dDate=d.date?new Date(d.date):new Date();
+    sh.appendRow([id,rep,type,amt,dDate,_s(d.account||''),_s(d.comment||''),
                   new Date(),_s(d.invoice||''),_s(d.status||'')]);
     sh.getRange(sh.getLastRow(),5,1,1).setNumberFormat('dd.mm.yyyy');
     sh.getRange(sh.getLastRow(),4,1,1).setNumberFormat('#,##0');
@@ -4081,6 +4084,69 @@ function saveDebtEntry(p) {
 // Приём торгового одним действием: наличная оплата + погашение долга + новый
 // долг за один заход. Всё под одним замком (реентерабельно). Возвращает
 // пересчитанный долг представителя.
+// Вечер: накладные за день ПО КАЖДОМУ поставщику.
+// Раньше вечер писался тремя общими суммами на «Магазин — накладные»:
+// сколько всего оплатили, сколько погасили, сколько осталось в долг. Итог
+// сходился, но ответа «кому именно и сколько я должен» не было — а это
+// первый вопрос владельца утром. Теперь каждая строка — свой поставщик,
+// и его долг растёт и гасится персонально.
+//
+// Это не бухгалтерия по документам: одна строка на поставщика за день,
+// без разбивки по позициям. Глубже владелец смотрит по 1С и накладным.
+function saveEveningInvoices(p) {
+  return _withLock(function(){
+  var ssId=p.ssId;
+  if(!_permGuard(ssId,'receive')) return {__error:'Нет доступа к приёму товара'};
+  var rows=(p.rows||[]).filter(function(r){ return r && _s(r.rep); });
+  if (!rows.length) return {__error:'Добавьте хотя бы одного поставщика'};
+  var date=p.date?new Date(p.date):new Date();
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    // Замок периода: вечер закрытого дня записывать нельзя — иначе
+    // закрытый месяц продолжает меняться.
+    var lRow=[]; lRow[B_DATE-1]=date;
+    var lk=_lockDeny(ss,lRow);
+    if (lk) return {__error:'Период закрыт — накладные этой датой записать нельзя'};
+    var cashAcc=_s(_cashAcc(ss));
+    var done=[], totCash=0, totRepaid=0, totDebt=0;
+    rows.forEach(function(r){
+      var rep=_s(r.rep);
+      var paid=Math.round(parseFloat(r.paid)||0);
+      var repaid=Math.round(parseFloat(r.repaid)||0);
+      var debt=Math.round(parseFloat(r.debt)||0);
+      if (paid<=0 && repaid<=0 && debt<=0) return;   // пустая строка — пропускаем
+      var acc=_s(r.account||cashAcc);
+      var cmt=_s(r.comment||'');
+      if (paid>0) saveQuickEntry({ssId:ssId,data:{date:date.toISOString(),type:'Расход',
+        category:'Закупка',account:acc,amount:paid,
+        comment:'Накладная: '+rep+(cmt?' · '+cmt:'')}});
+      if (repaid>0) saveDebtEntry({ssId:ssId,data:{repId:rep,type:'oplata',amount:repaid,
+        account:acc,date:date.toISOString(),comment:cmt||'Погашение долга (вечер)'}});
+      if (debt>0) saveDebtEntry({ssId:ssId,data:{repId:rep,type:'zakupka',amount:debt,
+        date:date.toISOString(),comment:cmt||'Накладная в долг (вечер)'}});
+      totCash+=paid; totRepaid+=repaid; totDebt+=debt;
+      done.push(rep);
+    });
+    if (!done.length) return {__error:'Все строки пустые — заполните суммы'};
+    // Долги всех задействованных поставщиков — одним проходом по листу.
+    var debts={}, dsh=ss.getSheetByName(SH_DEBTS);
+    if (dsh&&dsh.getLastRow()>=2) {
+      dsh.getRange(2,1,dsh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+        var nm=String(r[D_REP-1]);
+        if (done.indexOf(nm)<0) return;
+        debts[nm]=(debts[nm]||0)+(String(r[D_TYPE-1])==='oplata'?-1:1)*(parseFloat(r[D_AMT-1])||0);
+      });
+    }
+    Object.keys(debts).forEach(function(k){ debts[k]=Math.round(debts[k]); });
+    _log(ss,'Вечер — накладные',done.length+' поставщик(ов): оплата '+totCash+
+      ', погашение '+totRepaid+', в долг '+totDebt);
+    try { _bustDash(ssId); } catch(e){}
+    return {ok:true, count:done.length, cash:totCash, repaid:totRepaid,
+            newDebt:totDebt, debts:debts};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
 function receiveRep(p) {
   return _withLock(function(){
   var ssId=p.ssId, rep=_s(p.rep), account=_s(p.account||'');
@@ -8165,22 +8231,68 @@ function deleteObligation(p) {
 }
 
 // Установить долг магазина в нужную сумму (ручная корректировка регистра)
+// Корректировка общего долга магазина «по факту».
+// Владелец в конце месяца пересчитывает накладные вручную и сверяет с
+// программой. Разницу пишем не «поправкой из воздуха», а строкой в тот
+// же регистр долгов — с причиной и автором, чтобы через полгода было
+// видно, откуда взялась цифра.
 function setStoreDebt(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
   return _withLock(function(){
   var ssId=p.ssId, target=Math.round(parseFloat(p.target)||0);
+  var why=_s(p.reason||'');
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (target<0) return {__error:'Долг не может быть отрицательным'};
     var cur=getStoreDebt({ssId:ssId}).debt;
     var diff=target-cur;
-    if (diff===0) return {ok:true,debt:cur};
+    if (diff===0) return {ok:true,debt:cur,same:true};
     var sh=ss.getSheetByName(SH_DEBTS);
+    // Автора пишем в комментарий, а не в служебный столбец: там лежит
+    // привязка к смене, и посторонняя запись сломала бы удаление смены.
+    var me=_myEmail()||'';
+    var note='Сверка долга: '+cur+' → '+target+(why?' · '+why:'')+(me?' · '+me:'');
     // diff>0 → увеличиваем долг (zakupka), diff<0 → уменьшаем (oplata)
     sh.appendRow([Utilities.getUuid(),STORE_DEBT_REP,diff>0?'zakupka':'oplata',
-      Math.abs(diff),new Date(),'','Ручная корректировка долга магазина',new Date(),'','']);
+      Math.abs(diff),new Date(),'',note,new Date(),'','']);
+    _log(ss,'Сверка долга магазина',cur+' → '+target+(why?' ('+why+')':''));
+    _audit(ss,'debt','store','изменил',note);
     try { _bustDash(ssId); } catch(e){}
-    return {ok:true,debt:target};
+    return {ok:true,debt:target,was:cur,diff:diff};
   } catch(e) { return {__error:e.message}; }
 });
+}
+
+// История долга магазина: и накладные по дням, и ручные сверки.
+// Показываем в обратном порядке и с бегущим остатком — так видно, каким
+// долг был до каждой записи, а не только итог.
+function getStoreDebtHistory(p) {
+  if (!_finGuard(p&&p.ssId?p.ssId:p)) return FIN_DENIED;
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId);
+    var sh=ss.getSheetByName(SH_DEBTS);
+    if (!sh||sh.getLastRow()<2) return {items:[],debt:0};
+    var tz=Session.getScriptTimeZone();
+    var rows=[];
+    sh.getRange(2,1,sh.getLastRow()-1,D_COLS).getValues().forEach(function(r){
+      if (String(r[D_REP-1])!==STORE_DEBT_REP) return;
+      var dt=r[D_DATE-1];
+      rows.push({t:(dt instanceof Date)?dt.getTime():0,
+        date:(dt instanceof Date)?Utilities.formatDate(dt,tz,'dd.MM.yyyy'):'',
+        type:String(r[D_TYPE-1]),
+        amount:Math.round(parseFloat(r[D_AMT-1])||0),
+        comment:String(r[D_CMT-1]||'')});
+    });
+    rows.sort(function(a,b){return a.t-b.t;});
+    var run=0;
+    rows.forEach(function(x){
+      x.before=run;
+      run += (x.type==='oplata') ? -x.amount : x.amount;
+      x.after=run;
+      x.manual = /^Сверка долга|Ручная корректировка/.test(x.comment);
+    });
+    return {items:rows.reverse(), debt:run};
+  } catch(e) { return {items:[],debt:0,__error:e.message}; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════

@@ -47,8 +47,9 @@ t('минус в начале — это число, а не действие', 
 });
 
 // ── Разметка ─────────────────────────────────────────────────────────
-var moneyIds=['kz-cash-rev','kz-cash-supp','kz-cash-collect','kz-cash-left',
-              'k-balance','ki-cash','ki-repaid','ki-new'];
+// Поля вечера (ki-*) исчезли: вечер переделан на строки по поставщикам,
+// у них свой класс .ev-n. Проверяем то, что есть сейчас.
+var moneyIds=['kz-cash-rev','kz-cash-supp','kz-cash-collect','kz-cash-left','k-balance'];
 moneyIds.forEach(function(id){
   var re=new RegExp('<input type="text" class="money" id="'+id+'"');
   t('поле '+id+' денежное', re.test(html));
@@ -65,8 +66,8 @@ t('сохранение кассы читает через общий разбо
   /var g=App\._mval;\s*\/\/ Безнал/.test(html));
 t('каналы безнала читаются через общий разбор',
   /var amt=App\._mval\(inp\);/.test(html));
-t('накладные читаются через общий разбор',
-  /cash=App\._mval\('ki-cash'\)/.test(html) && /cashPaid:App\._mval\('ki-cash'\)/.test(html));
+t('строки вечера тоже денежные',
+  /class="money ev-n"/.test(html) && /App\._mnum\(r\.paid\)/.test(html));
 t('нигде не осталось parseFloat по этим полям',
   !/parseFloat\((document\.getElementById\('(kz-|ki-|k-balance)|inp\.value\)\|\|0\).{0,20}kz)/.test(html));
 

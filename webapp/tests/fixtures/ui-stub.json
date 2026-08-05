@@ -503,5 +503,48 @@
  "getContractorCard": {
   "name": "Молокозавод",
   "ops": []
+ },
+ "getStoreDebtHistory": {
+  "debt": 84000,
+  "items": [
+   {
+    "date": "31.07.2026",
+    "type": "zakupka",
+    "amount": 9000,
+    "comment": "Сверка долга: 75000 → 84000 · не занесли накладную от 12.07 · dexauron@gmail.com",
+    "before": 75000,
+    "after": 84000,
+    "manual": true
+   },
+   {
+    "date": "28.07.2026",
+    "type": "oplata",
+    "amount": 25000,
+    "comment": "Погашение долга (вечер)",
+    "before": 100000,
+    "after": 75000,
+    "manual": false
+   },
+   {
+    "date": "27.07.2026",
+    "type": "zakupka",
+    "amount": 100000,
+    "comment": "Накладная в долг (вечер)",
+    "before": 0,
+    "after": 100000,
+    "manual": false
+   }
+  ]
+ },
+ "saveEveningInvoices": {
+  "ok": true,
+  "count": 2,
+  "cash": 42000,
+  "repaid": 18000,
+  "newDebt": 26500,
+  "debts": {
+   "Молокозавод": 66000,
+   "Хлебзавод": 26500
+  }
  }
 }
