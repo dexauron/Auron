@@ -51,7 +51,8 @@ t('можно добавить и убрать строку',
   /evAddRow:function/.test(html) && /evDelRow:function/.test(html));
 t('последняя строка не удаляется в ноль',
   /evDelRow[\s\S]{0,200}if\(!App\._ev\.length\)App\._ev=\[\{rep:''/.test(html));
-t('подсказка по названиям поставщиков', /list="ev-sup-list"/.test(html));
+// datalist заменён своим списком с умным поиском — см. search-modes.test.js
+t('подсказка по названиям поставщиков', /evSuggest:function/.test(html));
 t('итог показывает, сколько уйдёт из кассы', /уйдёт из кассы сегодня/.test(html));
 t('в итоге видно три суммы отдельно',
   /Отдали<b/.test(html) && /Погасили<b/.test(html) && /В долг<b/.test(html));

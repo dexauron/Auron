@@ -165,8 +165,23 @@
  "getContractors": [
   {
    "id": "c1",
-   "name": "Молокозавод",
-   "phone": "+79000000000"
+   "name": "Молокозавод №1"
+  },
+  {
+   "id": "c2",
+   "name": "Хлебзавод Грозный"
+  },
+  {
+   "id": "c3",
+   "name": "ИП Ахмедов"
+  },
+  {
+   "id": "c4",
+   "name": "Coca-Cola Чечня"
+  },
+  {
+   "id": "c5",
+   "name": "Мясокомбинат Юг"
   }
  ],
  "getOrders": {
@@ -546,5 +561,16 @@
    "Молокозавод": 66000,
    "Хлебзавод": 26500
   }
+ },
+ "setEveningMode": {
+  "ok": true,
+  "mode": "total"
+ },
+ "saveEveningTotal": {
+  "ok": true,
+  "cash": 60000,
+  "repaid": 18000,
+  "newDebt": 26500,
+  "storeDebt": 110500
  }
 }

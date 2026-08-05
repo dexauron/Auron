@@ -2001,6 +2001,16 @@ html:not([data-theme="dark"]) .card::before{box-shadow:0 1px 0 rgba(255,255,255,
    поставщика: имя сверху, три суммы под ним в ряд. На телефоне ряд из
    трёх узких полей читается лучше, чем три подряд на всю ширину: видно,
    что это одно целое по одному человеку. */
+/* Подсказка поставщиков под полем. Свой список вместо datalist:
+   тот ищет только по началу строки и на каждом телефоне выглядит иначе. */
+.ev-sug{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.ev-sug:empty{margin-top:0;}
+.ev-sug-i{padding:8px 12px;border-radius:11px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--ink);font-size:13px;font-weight:650;
+  cursor:pointer;font-family:var(--font);max-width:100%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.ev-sug-i:active{background:var(--brand-dim);color:var(--brand);}
+.ev-sug-new{font-size:12px;color:var(--muted);padding:4px 2px;}
 .ev-row{background:var(--surface);border:1px solid var(--line);border-radius:18px;
   padding:12px 13px;margin-bottom:10px;}
 .ev-head{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
@@ -2720,16 +2730,32 @@ input.money{font-variant-numeric:tabular-nums;}
         </div>
       </div>
 
-      <!-- ВЕЧЕР: накладные по каждому поставщику -->
+      <!-- ВЕЧЕР: два режима — по поставщикам и одной суммой.
+           Какой включён, решает владелец в настройках. -->
       <div id="k-evening" class="kassa-wrap" style="display:none;">
-        <div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;">
-          Одна строка — один поставщик за сегодня. Сколько ему отдали и сколько
-          осталось в долг. Долг каждого посчитается сам.
+        <div id="ev-mode-note" style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:12px;"></div>
+
+        <div id="ev-by-sup">
+          <div id="ev-rows"></div>
+          <button class="btn-secondary" style="margin:0 0 12px;" onclick="App.evAddRow()">＋ Добавить поставщика</button>
         </div>
-        <div id="ev-rows"></div>
-        <button class="btn-secondary" style="margin:0 0 12px;" onclick="App.evAddRow()">＋ Добавить поставщика</button>
+
+        <div id="ev-by-total" style="display:none;">
+          <div class="kassa-row">
+            <div style="padding:12px 16px;display:grid;gap:12px;">
+              <div class="field" style="margin:0;"><label>Отдали поставщикам, ₽</label>
+                <input type="text" class="money" id="evt-paid" inputmode="decimal" placeholder="0" oninput="App.evTotals()"></div>
+              <div class="field" style="margin:0;"><label>Погасили старых долгов, ₽</label>
+                <input type="text" class="money" id="evt-repaid" inputmode="decimal" placeholder="0" oninput="App.evTotals()"></div>
+              <div class="field" style="margin:0;"><label>Осталось в долг, ₽</label>
+                <input type="text" class="money" id="evt-debt" inputmode="decimal" placeholder="0" oninput="App.evTotals()"></div>
+            </div>
+          </div>
+        </div>
+
         <div id="ev-total" class="k-recon"></div>
         <button class="btn-primary" onclick="App.saveEvening()">Сохранить накладные</button>
+        <button class="btn-secondary" style="margin-top:10px;" onclick="App.openEveningMode()">Сменить способ записи</button>
       </div>
     </div>
 
@@ -2949,6 +2975,19 @@ input.money{font-variant-numeric:tabular-nums;}
         </div>
         <div id="settings-menu"></div>
       </div>
+      <div class="settings-sec" data-sgrp="shop"><div class="settings-sec-title">Как вести учёт</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openEveningMode()" style="cursor:pointer;">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Как закрывать вечер</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;" id="ev-mode-set">Сейчас: по поставщикам</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-sec" data-sgrp="finance"><div class="settings-sec-title">Долг магазина</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.editStoreDebt()" style="cursor:pointer;">
@@ -3484,7 +3523,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='5.7.0';
+var APP_VERSION='5.8.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6252,7 +6291,7 @@ var App={
   loadSettings:function(cb){
     gs('getSettings',{ssId:App.s.ssId}).then(function(r){
       App.s.settings=r||{};
-      try{App._lockDateSub();}catch(e){}
+      try{App._lockDateSub();App._evModeSub();}catch(e){}
       if(!App.s.settings.cats)App.s.settings.cats=[];
       if(!App.s.settings.cashiers)App.s.settings.cashiers=[];
       if(!App.s.settings.payTypes)App.s.settings.payTypes=['Наличные','Карта','СБП','Безналичный'];
@@ -7767,13 +7806,105 @@ var App={
     }).catch(function(e){App.toast(App._friendlyErr(e),true);});
   },
 
+  // ── Умный поиск по названиям ─────────────────────────────────────
+  // Владелец пишет как придётся: «молок», «Moloko», «ьщдщл» (забыл
+  // переключить раскладку), «завод молоч» (слова наоборот). Обычный
+  // поиск по началу строки на всём этом молчит. Здесь: без регистра,
+  // ё=е, по любой части, по словам в любом порядке, с переводом
+  // латиницы в кириллицу и обратно, и с исправлением раскладки.
+  _ruLat:{'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z',
+    'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s',
+    'т':'t','у':'u','ф':'f','х':'h','ц':'c','ч':'ch','ш':'sh','щ':'sch','ъ':'',
+    'ы':'y','ь':'','э':'e','ю':'yu','я':'ya'},
+  // Раскладка: те же клавиши, другой алфавит.
+  _kbRu:'йцукенгшщзхъфывапролджэячсмитьбю',
+  _kbEn:'qwertyuiop[]asdfghjkl;\'zxcvbnm,.',
+  _norm:function(v){
+    return String(v==null?'':v).toLowerCase().replace(/ё/g,'е').replace(/[^\wа-я\s]/gi,' ')
+      .replace(/\s+/g,' ').trim();
+  },
+  _translit:function(v){
+    var o='';
+    for(var i=0;i<v.length;i++){var c=v[i];o+=(App._ruLat[c]!==undefined?App._ruLat[c]:c);}
+    return o;
+  },
+  // Латиница → кириллица по раскладке клавиатуры («ьщдщл» → «moloko»
+  // и наоборот): человек начал печатать, не глянув на язык ввода.
+  _kbSwap:function(v){
+    var o='';
+    for(var i=0;i<v.length;i++){
+      var c=v[i], j=App._kbEn.indexOf(c);
+      if(j>=0){o+=App._kbRu[j];continue;}
+      j=App._kbRu.indexOf(c);
+      o+=(j>=0)?App._kbEn[j]:c;
+    }
+    return o;
+  },
+  // Все варианты написания запроса — по любому совпадение засчитаем.
+  _searchKeys:function(q){
+    var n=App._norm(q);
+    if(!n)return [];
+    var keys=[n, App._translit(n), App._kbSwap(n)];
+    keys.push(App._translit(App._kbSwap(n)));
+    var out=[];
+    keys.forEach(function(k){ k=k.trim(); if(k&&out.indexOf(k)<0)out.push(k); });
+    return out;
+  },
+  // Латиница пишется по-разному: Cola и Kola, Alex и Aleks, Wagner и
+  // Vagner. Сводим к одному виду, иначе «кола» не находит «Coca-Cola».
+  _loose:function(v){
+    return String(v).replace(/ck/g,'k').replace(/c/g,'k').replace(/q/g,'k')
+      .replace(/w/g,'v').replace(/x/g,'ks').replace(/ph/g,'f');
+  },
+  // Совпадение имени с запросом + оценка, чтобы точное шло первым.
+  _matchScore:function(name,keys){
+    if(!keys.length)return 0;
+    var n=App._norm(name), tn=App._translit(n), ln=App._loose(tn);
+    var best=0;
+    keys.forEach(function(k){
+      var words=k.split(' ').filter(Boolean);
+      // Все слова запроса должны найтись — порядок не важен.
+      var okAll=words.every(function(w){
+        var lw=App._loose(App._translit(w));
+        return n.indexOf(w)>=0 || tn.indexOf(w)>=0 || ln.indexOf(lw)>=0;
+      });
+      if(!okAll)return;
+      var sc=1;
+      if(n.indexOf(k)===0||tn.indexOf(k)===0)sc=3;      // начало названия
+      else if(n.indexOf(' '+k)>=0)sc=2;                  // начало слова внутри
+      if(n===k)sc=4;                                     // точное совпадение
+      if(sc>best)best=sc;
+    });
+    return best;
+  },
+  _searchNames:function(list,q,limit){
+    var keys=App._searchKeys(q);
+    if(!keys.length)return (list||[]).slice(0,limit||8);
+    return (list||[]).map(function(n){ return {n:n,s:App._matchScore(n,keys)}; })
+      .filter(function(x){ return x.s>0; })
+      .sort(function(a,b){ return b.s-a.s || a.n.length-b.n.length; })
+      .slice(0,limit||8).map(function(x){ return x.n; });
+  },
+
   // ── Вечер: накладные по каждому поставщику ───────────────────────
   // Раньше вечер писался тремя общими суммами: сколько всего оплатили,
   // погасили и осталось в долг. Итог сходился, но «кому именно и сколько
   // я должен» приложение не знало — а это первый вопрос утром.
   _ev:[],
+  _evMode:function(){
+    return ((App.s.settings||{}).eveningMode==='total')?'total':'suppliers';
+  },
   evInit:function(){
     if(!App._ev.length)App._ev=[{rep:'',paid:'',repaid:'',debt:''}];
+    var mode=App._evMode();
+    var bs=document.getElementById('ev-by-sup'), bt=document.getElementById('ev-by-total');
+    if(bs)bs.style.display=(mode==='total')?'none':'block';
+    if(bt)bt.style.display=(mode==='total')?'block':'none';
+    var note=document.getElementById('ev-mode-note');
+    if(note)note.textContent=(mode==='total')
+      ? 'Одной суммой за день: три числа — и вечер закрыт. Долг ляжет на магазин целиком, без разбивки по поставщикам.'
+      : 'Одна строка — один поставщик за сегодня. Сколько ему отдали и сколько осталось в долг. Долг каждого посчитается сам.';
+    App._moneyBind(document.getElementById('k-evening'));
     App.evRender();
     // Список поставщиков для подсказки — грузим один раз.
     if(!App._evList)gs('getContractors',{ssId:App.s.ssId}).then(function(l){
@@ -7798,18 +7929,18 @@ var App={
     box.innerHTML=App._ev.map(function(r,i){
       return '<div class="ev-row">'+
         '<div class="ev-head">'+
-          '<input class="ev-rep" list="ev-sup-list" placeholder="Поставщик" autocomplete="off" '+
-            'value="'+App._e(r.rep||'')+'" oninput="App.evSet('+i+',\'rep\',this.value)">'+
+          '<input class="ev-rep" id="ev-rep-'+i+'" placeholder="Поставщик" autocomplete="off" '+
+            'value="'+App._e(r.rep||'')+'" oninput="App.evSet('+i+',\'rep\',this.value);App.evSuggest('+i+')" '+
+            'onfocus="App.evSuggest('+i+')" onblur="App.evSuggestHide('+i+')">'+
           '<button class="ev-del" onclick="App.evDelRow('+i+')" title="Убрать строку">✕</button>'+
         '</div>'+
         '<div class="ev-grid">'+
           App._evCell(i,'paid','Отдали',r.paid)+
           App._evCell(i,'repaid','Погасили',r.repaid)+
           App._evCell(i,'debt','В долг',r.debt)+
-        '</div></div>';
-    }).join('')+
-    '<datalist id="ev-sup-list">'+(App._evList||[]).map(function(n){
-      return '<option value="'+App._e(n)+'">';}).join('')+'</datalist>';
+        '</div>'+
+        '<div class="ev-sug" id="ev-sug-'+i+'"></div></div>';
+    }).join('');
     App._moneyBind(box);
     App.evTotals();
   },
@@ -7822,26 +7953,119 @@ var App={
     return '<label>'+label+', ₽<input class="money ev-n" inputmode="decimal" '+
       'value="'+App._e(shown)+'" oninput="App.evSet('+i+',\''+key+'\',this.value)"></label>';
   },
+  // Подсказка поставщиков под полем. Свой список, а не datalist:
+  // datalist ищет только по началу строки и на телефоне выглядит
+  // по-разному в каждом браузере.
+  evSuggest:function(i){
+    var box=document.getElementById('ev-sug-'+i);
+    var inp=document.getElementById('ev-rep-'+i);
+    if(!box||!inp)return;
+    var q=inp.value||'';
+    var names=App._searchNames(App._evList||[],q,6);
+    // Точное совпадение подсказывать незачем — уже выбрано.
+    if(names.length===1&&App._norm(names[0])===App._norm(q)){box.innerHTML='';return;}
+    if(!names.length){
+      box.innerHTML=q.trim()?'<div class="ev-sug-new">Новый поставщик — так и запишем</div>':'';
+      return;
+    }
+    box.innerHTML=names.map(function(n){
+      return '<button class="ev-sug-i" onmousedown="event.preventDefault()" '+
+        'onclick="App.evPick('+i+',this.dataset.n)" data-n="'+App._e(n)+'">'+App._e(n)+'</button>';
+    }).join('');
+  },
+  evPick:function(i,name){
+    App._ev[i].rep=name;
+    var inp=document.getElementById('ev-rep-'+i);
+    if(inp)inp.value=name;
+    var box=document.getElementById('ev-sug-'+i);
+    if(box)box.innerHTML='';
+    App.haptic(6);App.evTotals();
+  },
+  // Прячем с задержкой: без неё нажатие по подсказке не успевает пройти.
+  evSuggestHide:function(i){
+    setTimeout(function(){var b=document.getElementById('ev-sug-'+i);if(b)b.innerHTML='';},160);
+  },
   evTotals:function(){
     var el=document.getElementById('ev-total');if(!el)return;
     var paid=0,repaid=0,debt=0,n=0;
-    App._ev.forEach(function(r){
-      var p=App._mnum(r.paid),rp=App._mnum(r.repaid),d=App._mnum(r.debt);
-      if(r.rep&&(p||rp||d))n++;
-      paid+=p;repaid+=rp;debt+=d;
-    });
+    if(App._evMode()==='total'){
+      paid=App._mval('evt-paid');repaid=App._mval('evt-repaid');debt=App._mval('evt-debt');
+      n=(paid||repaid||debt)?1:0;
+    } else {
+      App._ev.forEach(function(r){
+        var p=App._mnum(r.paid),rp=App._mnum(r.repaid),d=App._mnum(r.debt);
+        if(r.rep&&(p||rp||d))n++;
+        paid+=p;repaid+=rp;debt+=d;
+      });
+    }
     if(!n){el.className='k-recon';
-      el.innerHTML='<div class="k-recon-h">Впишите поставщиков и суммы.</div>';return;}
+      el.innerHTML='<div class="k-recon-h">'+(App._evMode()==='total'?'Впишите суммы за день.':'Впишите поставщиков и суммы.')+'</div>';return;}
     el.className='k-recon';
     el.innerHTML='<div class="k-recon-v">'+fmtFull(paid+repaid)+' ₽</div>'+
-      '<div class="k-recon-h">уйдёт из кассы сегодня · поставщиков: '+n+'</div>'+
+      '<div class="k-recon-h">уйдёт из кассы сегодня'+(App._evMode()==='total'?'':' · поставщиков: '+n)+'</div>'+
       '<div class="k-recon-l">'+
         '<span>Отдали<b class="num">₽ '+fmtFull(paid)+'</b></span>'+
         '<span>Погасили<b class="num">₽ '+fmtFull(repaid)+'</b></span>'+
         '<span>В долг<b class="num" style="color:'+(debt?'var(--neg)':'var(--ink)')+';">₽ '+fmtFull(debt)+'</b></span>'+
       '</div>';
   },
+  // Переключение способа записи — и с экрана вечера, и из настроек.
+  openEveningMode:function(){
+    var m=App._evMode();
+    var card=function(id,title,sub,on){
+      return '<div onclick="App._evModeSet(\''+id+'\')" style="display:flex;align-items:flex-start;gap:12px;'+
+        'padding:14px;border-radius:16px;margin-bottom:10px;cursor:pointer;'+
+        'border:1.5px solid '+(on?'var(--brand)':'var(--line)')+';'+
+        'background:'+(on?'color-mix(in oklab,var(--brand) 12%,transparent)':'var(--surface-2)')+';">'+
+        '<span style="width:22px;height:22px;border-radius:50%;flex-shrink:0;margin-top:2px;display:grid;place-items:center;'+
+          'border:2px solid '+(on?'var(--brand)':'var(--muted)')+';color:var(--brand);font-size:13px;">'+(on?'●':'')+'</span>'+
+        '<span style="min-width:0;"><b style="font-size:14.5px;">'+title+'</b>'+
+        '<span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:3px;">'+sub+'</span></span></div>';
+    };
+    App.openModal('<div class="modal-title">Как закрывать вечер</div>'+
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.55;margin-bottom:14px;">'+
+      'Деньги посчитаются одинаково в обоих случаях. Разница в том, насколько подробно вы это записываете.</div>'+
+      card('suppliers','По поставщикам','Строка на каждого: кому отдали, кому остались должны. Дольше на минуту, зато видно, кому и сколько вы должны.',m==='suppliers')+
+      card('total','Одной суммой','Три числа за весь день. Быстрее всего, но долг будет общий, без разбивки по поставщикам.',m==='total'));
+  },
+  _evModeSet:function(mode){
+    gs('setEveningMode',{ssId:App.s.ssId,mode:mode}).then(function(r){
+      if(r&&r.__error){App.toast(r.__error,true);return;}
+      if(App.s.settings)App.s.settings.eveningMode=mode;
+      App.toast(mode==='total'?'Вечер — одной суммой ✓':'Вечер — по поставщикам ✓');
+      App.closeModal();
+      App._evModeSub();
+      if(App._kView==='evening')App.evInit();
+    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+  },
+  _evModeSub:function(){
+    var el=document.getElementById('ev-mode-set');if(!el)return;
+    el.textContent=(App._evMode()==='total')?'Сейчас: одной суммой':'Сейчас: по поставщикам';
+  },
   saveEvening:function(){
+    // Простой режим: три числа за день.
+    if(App._evMode()==='total'){
+      var paid=App._mval('evt-paid'),repaid=App._mval('evt-repaid'),debt=App._mval('evt-debt');
+      if(!paid&&!repaid&&!debt){App.toast('Введите хотя бы одну сумму',true);return;}
+      App.toast('Записываю…');
+      gs('saveEveningTotal',{ssId:App.s.ssId,date:new Date().toISOString().slice(0,10),
+        paid:paid,repaid:repaid,debt:debt}).then(function(r){
+        if(r&&r.__error){App.toast(r.__error,true);return;}
+        ['evt-paid','evt-repaid','evt-debt'].forEach(function(id){
+          var e=document.getElementById(id);if(e)e.value='';});
+        App.evTotals();
+        var R=App._repRow;
+        App.openModal('<div class="modal-title">'+SVG.check+' Накладные записаны</div>'+
+          '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
+          (r.cash?R('Отдали наличными','−₽ '+fmt(r.cash),'var(--neg)'):'')+
+          (r.repaid?R('Погашено долгов','−₽ '+fmt(r.repaid),'var(--pos)'):'')+
+          (r.newDebt?R('Осталось в долг','+₽ '+fmt(r.newDebt),'var(--warn,#FF9F0A)'):'')+
+          R('Долг магазина','₽ '+fmt(r.storeDebt||0),'var(--neg)',true)+
+          '</div><button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
+        App.haptic(12);App.loadHome();
+      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+      return;
+    }
     var rows=[],bad=false;
     App._ev.forEach(function(r){
       var p=App._mnum(r.paid),rp=App._mnum(r.repaid),d=App._mnum(r.debt);

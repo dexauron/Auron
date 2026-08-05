@@ -723,6 +723,10 @@ function getSettings(p) {
       savingsAccounts:  gj('SAVINGS_ACCOUNTS'),
       showKassaBalance: gb('SHOW_KASSA_BALANCE', true),
       lockDate:         String(map['LOCK_DATE']||''),
+      // Как закрывать вечер: 'suppliers' — по каждому поставщику,
+      // 'total' — одной общей суммой. Итог в деньгах одинаковый,
+      // разница только в подробности записи.
+      eveningMode:      (String(map['EVENING_MODE']||'suppliers')==='total')?'total':'suppliers',
       taxRate:          parseFloat(map['TAX_RATE'])||6,
       savePct:          parseFloat(map['SAVE_PCT'])||10
     };
@@ -4093,6 +4097,56 @@ function saveDebtEntry(p) {
 //
 // Это не бухгалтерия по документам: одна строка на поставщика за день,
 // без разбивки по позициям. Глубже владелец смотрит по 1С и накладным.
+// Режим закрытия вечера. Отдельной функцией, а не внутри общих
+// настроек: общее сохранение шлёт весь набор полей разом, и любое
+// изменение в других настройках сбрасывало бы режим обратно.
+// Вечер ОДНОЙ СУММОЙ (простой режим).
+// Владелец сам решает, насколько подробно вести день: расписать каждого
+// поставщика или закрыть тремя числами за минуту. В деньгах результат
+// тот же — расход из кассы и движение долга; разница в подробности.
+// Общая сумма ложится на «Магазин — накладные», как было до 5.7.0.
+function saveEveningTotal(p) {
+  return _withLock(function(){
+  var ssId=p.ssId;
+  if(!_permGuard(ssId,'receive')) return {__error:'Нет доступа к приёму товара'};
+  var paid=Math.round(parseFloat(p.paid)||0);
+  var repaid=Math.round(parseFloat(p.repaid)||0);
+  var debt=Math.round(parseFloat(p.debt)||0);
+  if (paid<=0&&repaid<=0&&debt<=0) return {__error:'Введите хотя бы одну сумму'};
+  var date=p.date?new Date(p.date):new Date();
+  try {
+    var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    var lRow=[]; lRow[B_DATE-1]=date;
+    var lk=_lockDeny(ss,lRow);
+    if (lk) return {__error:'Период закрыт — накладные этой датой записать нельзя'};
+    var acc=_s(p.account||_cashAcc(ss));
+    if (paid>0) saveQuickEntry({ssId:ssId,data:{date:date.toISOString(),type:'Расход',
+      category:'Закупка',account:acc,amount:paid,comment:'Накладные за день (общей суммой)'}});
+    if (repaid>0) saveDebtEntry({ssId:ssId,data:{repId:STORE_DEBT_REP,type:'oplata',
+      amount:repaid,account:acc,date:date.toISOString(),comment:'Погашение долга (вечер, общей суммой)'}});
+    if (debt>0) saveDebtEntry({ssId:ssId,data:{repId:STORE_DEBT_REP,type:'zakupka',
+      amount:debt,date:date.toISOString(),comment:'Накладные в долг (вечер, общей суммой)'}});
+    var storeDebt=getStoreDebt({ssId:ssId}).debt;
+    _log(ss,'Вечер — общей суммой','оплата '+paid+', погашение '+repaid+', в долг '+debt);
+    try { _bustDash(ssId); } catch(e){}
+    return {ok:true, cash:paid, repaid:repaid, newDebt:debt, storeDebt:storeDebt};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
+function setEveningMode(p) {
+  return _withLock(function(){
+  try {
+    var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (!_canManage(ss)) return MANAGE_DENIED;
+    var mode=(String(p.mode||'')==='total')?'total':'suppliers';
+    _setSetting(ss,'EVENING_MODE',mode);
+    _log(ss,'Настройка','режим вечера → '+(mode==='total'?'одной суммой':'по поставщикам'));
+    return {ok:true,mode:mode};
+  } catch(e) { return {__error:e.message}; }
+});
+}
+
 function saveEveningInvoices(p) {
   return _withLock(function(){
   var ssId=p.ssId;
