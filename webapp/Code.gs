@@ -6471,6 +6471,56 @@ function setMemberRole(p) {
 });
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// СЕТЬ: все магазины разом
+// Пока магазин один, экран показывает его же — и это правильно: человек
+// увидит его в тот же день, когда откроет вторую точку, и не будет
+// искать «а где сравнить».
+// ═══════════════════════════════════════════════════════════════════════
+function getNetworkSummary(p) {
+  var period=(p&&p.period)||'month';
+  try {
+    var d=initUserApp();
+    var orgs=(d.orgs||[]);
+    var out=[], tot={income:0,expense:0,profit:0,cash:0,debt:0,count:0};
+    orgs.forEach(function(o){
+      var row={ssId:o.ssId,name:o.name,income:0,expense:0,profit:0,cash:0,debt:0,
+               count:0,lastOp:'',denied:false};
+      try {
+        var s=getHomeSummary({ssId:o.ssId,period:period});
+        if (s && s.__error==='Нет доступа к финансовым данным (обратитесь к владельцу)') {
+          row.denied=true; out.push(row); return;
+        }
+        if (s && s.summary) {
+          row.income=Math.round(s.summary.income||0);
+          row.expense=Math.round(s.summary.expense||0);
+          row.profit=row.income-row.expense;
+          row.count=s.summary.count||0;
+          row.lastOp=s.lastOp||'';
+        }
+        (s&&s.accounts||[]).forEach(function(a){ row.cash+=Math.round(a.balance||0); });
+      } catch(e){}
+      // Долг поставщикам — сумма по тем же данным, что и экран «Поставщики».
+      try {
+        (getDebts({ssId:o.ssId})||[]).forEach(function(x){
+          var v=Math.round(x.debt||0); if (v>0) row.debt+=v;
+        });
+      } catch(e2){}
+      tot.income+=row.income; tot.expense+=row.expense; tot.profit+=row.profit;
+      tot.cash+=row.cash; tot.debt+=row.debt; tot.count+=row.count;
+      out.push(row);
+    });
+    // Лучший и худший — только когда есть с чем сравнивать.
+    var rated=out.filter(function(x){return !x.denied && (x.income||x.expense);});
+    var best='', worst='';
+    if (rated.length>1) {
+      var sorted=rated.slice().sort(function(a,b){return b.profit-a.profit;});
+      best=sorted[0].name; worst=sorted[sorted.length-1].name;
+    }
+    return {orgs:out, totals:tot, best:best, worst:worst, period:period, single:orgs.length<2};
+  } catch(e) { return {orgs:[],totals:{},__error:e.message}; }
+}
+
 // ── Приостановка доступа ────────────────────────────────────────────
 // Человек уехал, заболел, ушёл в отпуск — доступ надо закрыть, но не
 // стирать его настройки и историю. Так сделано во всех рабочих сервисах:
@@ -8183,6 +8233,16 @@ function _xlsType(rows) {
   if (head.indexOf('остатки') >= 0)             return 'stock';
   if (head.indexOf('продажи') >= 0)             return 'sales';
   if (head.indexOf('контрагенты') >= 0)         return 'contractors';
+  // Списания и возвраты поставщику. Названий у этих отчётов в 1С много,
+  // поэтому ловим по нескольким вариантам заголовка. Возврат проверяем
+  // ПЕРВЫМ: в его шапке нередко стоит и слово «списание».
+  if (head.indexOf('возврат товаров поставщику') >= 0 ||
+      head.indexOf('возврат поставщику') >= 0 ||
+      head.indexOf('возвраты поставщик') >= 0)   return 'retvend';
+  if (head.indexOf('списание товаров') >= 0 ||
+      head.indexOf('списание номенклатуры') >= 0 ||
+      head.indexOf('списания') >= 0 ||
+      head.indexOf('акт списания') >= 0)         return 'writeoff';
   // Регистр «Общие доходы и расходы» — сводка, а не операции по дням.
   // Нужен для сверки: что 1С видит против того, что записано в сменах.
   if (head.indexOf('общиедоходыирасходы') >= 0 ||
@@ -8193,6 +8253,7 @@ function _xlsType(rows) {
 var XLS_TITLES = { price:'Прайс-лист', supplier:'Цены поставщиков',
   stock:'Остатки номенклатуры', sales:'Продажи', contractors:'Контрагенты',
   incexp:'Общие доходы и расходы',
+  writeoff:'Списания', retvend:'Возвраты поставщику',
   // Не выгрузка из 1С, а собственный отчёт владельца — но узнаём его и
   // здесь, чтобы он не гадал, в какое из двух окон нести файл.
   own:'Ваш отчёт (ДДС и Оплата)' };
@@ -8300,6 +8361,71 @@ function _xlsParse(rows, type) {
   return out;
 }
 
+// ── Списания и возвраты из 1С ───────────────────────────────────────
+// Названия колонок в разных конфигурациях 1С отличаются, поэтому у
+// каждой ищем несколько вариантов. Строки без суммы пропускаем: в этих
+// отчётах между позициями попадаются подытоги и разделители складов.
+function _lossParse(rows, kind) {
+  var cName = _xlsCol(rows,['номенклатура','наименование','товар'],14);
+  var cQty  = _xlsCol(rows,['количество','кол-во'],14);
+  var cAmt  = _xlsCol(rows,['сумма','себестоимость','сумма списания','сумма возврата'],14);
+  var cDate = _xlsCol(rows,['дата','период'],14);
+  var cWhy  = _xlsCol(rows,['причина','характер списания','основание'],14);
+  var cWho  = _xlsCol(rows,['контрагент','поставщик'],14);
+  if (cName < 0 || cAmt < 0) return [];
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var name = String(row[cName]||'').trim();
+    if (!name) continue;
+    var low = name.toLowerCase();
+    if (low === 'номенклатура' || low === 'наименование' || low === 'товар' ||
+        low.indexOf('итог') === 0 || low.indexOf('параметры') === 0 ||
+        low.indexOf('отбор') === 0 || low.indexOf('списание') === 0 ||
+        low.indexOf('возврат') === 0) continue;
+    var amt = _xlsNum(row[cAmt]);
+    if (!(amt > 0)) continue;
+    out.push({ name:name, qty:cQty>=0?_xlsNum(row[cQty]):0, amount:amt,
+      date:(cDate>=0 && row[cDate] instanceof Date)?row[cDate]:null,
+      reason:cWhy>=0?String(row[cWhy]||'').trim():'',
+      contractor:cWho>=0?String(row[cWho]||'').trim():'',
+      kind:kind });
+  }
+  return out;
+}
+// Запись в лист СПИСАНИЯ. Повторную загрузку того же файла не дублируем:
+// сверяем по дате, названию и сумме — в этих отчётах своего номера нет.
+function _lossApply(ss, items, kind) {
+  var sh = ss.getSheetByName(SH_LOSSES);
+  var have = {};
+  if (sh.getLastRow() >= 2) {
+    sh.getRange(2,1,sh.getLastRow()-1,LS_COLS).getValues().forEach(function(r){
+      var d = r[LS_DATE-1];
+      have[(d instanceof Date?Utilities.formatDate(d,Session.getScriptTimeZone(),'yyyy-MM-dd'):'')+
+           '|'+String(r[LS_NAME-1]).toLowerCase()+'|'+Math.round(_gnum(r[LS_AMT-1]))] = true;
+    });
+  }
+  var tz = Session.getScriptTimeZone(), now = new Date(), me = _myEmail()||'';
+  var add = [], skip = 0;
+  items.forEach(function(o){
+    var dt = o.date || now;
+    var key = Utilities.formatDate(dt,tz,'yyyy-MM-dd')+'|'+o.name.toLowerCase()+'|'+Math.round(o.amount);
+    if (have[key]) { skip++; return; }
+    have[key] = true;
+    add.push([Utilities.getUuid(), dt, kind,
+      o.reason || (kind==='return'?'Возврат поставщику':'Списание из 1С'),
+      o.name, o.qty, Math.round(o.amount), o.contractor, 'Загружено из 1С', now, me]);
+  });
+  if (add.length) {
+    var from = sh.getLastRow()+1;
+    _ensureRows(sh, from, add.length);
+    sh.getRange(from,1,add.length,LS_COLS).setValues(add);
+    sh.getRange(from,LS_DATE,add.length,1).setNumberFormat('dd.mm.yyyy');
+    sh.getRange(from,LS_AMT,add.length,1).setNumberFormat('#,##0');
+  }
+  return { add: add.length, skip: skip };
+}
+
 // Шаг 1: принять файл, распознать, показать сводку (без записи в базу).
 function xlsPreview(p) {
   var tmp = '';
@@ -8322,7 +8448,7 @@ function xlsPreview(p) {
     // — он ведь не обязан помнить, какое из двух окон для чего.
     if (!type && _ddsIsOwnFile(SpreadsheetApp.openById(tmp))) type = 'own';
     if (!type) { _xlsDrop(tmp);
-      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты, Общие доходы и расходы — или ваш собственный отчёт с листами ДДС и Оплата.'}; }
+      return {__error:'Не понял, что это за отчёт. Нужен один из: Прайс-лист, Цены поставщиков, Остатки, Продажи, Контрагенты, Списания, Возвраты поставщику, Общие доходы и расходы — или ваш собственный отчёт с листами ДДС и Оплата.'}; }
     return { ok:true, tmpId:tmp, type:type, title:XLS_TITLES[type]||'Ваш отчёт (ДДС и Оплата)', total:lastRow };
   } catch(e) { if (tmp) _xlsDrop(tmp); return {__error:e.message}; }
 }
@@ -8390,6 +8516,27 @@ function xlsApply(p) {
       return { ok:true, type:type, title:XLS_TITLES[type], upd:0, add:n,
                month:ie.month, period:ie.period,
                note:'Сохранено для сверки. В операции этот файл не переносится.' };
+    }
+
+    // Списания и возвраты — это не справочник товаров, а движение: они
+    // ложатся в тот же лист, что и ручные списания, и попадают в итог
+    // «плюс-минус» и в карточку товара.
+    if (type === 'writeoff' || type === 'retvend') {
+      if (!_permGuard(p.ssId,'receive')) { _xlsDrop(tmp);
+        return {__error:'Загружать списания может тот, кто принимает товар'}; }
+      var lkind = (type === 'retvend') ? 'return' : 'writeoff';
+      var litems = _lossParse(rows, lkind);
+      rows = null;
+      if (!litems.length) { _xlsDrop(tmp);
+        return {__error:'В файле не нашлось строк со списаниями. Нужны колонки «Номенклатура» и «Сумма».'}; }
+      var lres = _withLock(function(){ return _lossApply(ss, litems, lkind); });
+      if (lres && lres.__error) return lres;
+      _xlsDrop(tmp);
+      _log(ss,'Импорт из 1С', XLS_TITLES[type]+': добавлено '+lres.add+', пропущено повторов '+lres.skip);
+      try { _bustDash(p.ssId); } catch(e){}
+      return { ok:true, type:type, title:XLS_TITLES[type], upd:0, add:lres.add,
+        note: lres.skip ? ('Повторы пропущены: '+lres.skip+'. Файл можно грузить повторно — дублей не будет.')
+                        : 'Записано в списания. Видно в итоге «плюс-минус» и в карточке товара.' };
     }
 
     var items = _xlsParse(rows, type);
