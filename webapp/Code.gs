@@ -989,6 +989,12 @@ function saveQuickEntry(p) {
     
     var ss=SpreadsheetApp.openById(ssId);
     var base=ss.getSheetByName(SH_BASE);
+    // Закрытый период должен запрещать не только правку, но и НОВУЮ
+    // запись задним числом. Иначе замок бесполезен: месяц закрыт, а
+    // сумма в нём всё равно меняется — просто новой строкой.
+    var newRow=[]; newRow[B_DATE-1]=d.date?new Date(d.date):new Date();
+    var lkNew=_lockDeny(ss,newRow);
+    if (lkNew) return {__error:lkNew.replace('эту запись менять нельзя','записывать туда нельзя')};
     var uid=d.uuid||Utilities.getUuid();
     var id=Utilities.getUuid();
     var dt=d.date?new Date(d.date):new Date();
@@ -1138,6 +1144,16 @@ function updateTransaction(p) {
       return {__error:'Перевод правится удалением и новой записью'};
     var was=String(row[B_TYPE-1])+' · '+Math.round(row[B_AMT-1])+' ₽ · '+String(row[B_CAT-1]);
     var dt=d.date?new Date(d.date):row[B_DATE-1];
+    // Запись нельзя и ПЕРЕНЕСТИ в закрытый период: иначе замок обходится
+    // в одно движение — поменял дату на прошлый месяц, и он уже другой.
+    var moved=[]; moved[B_DATE-1]=dt;
+    var lkTo=_lockDeny(ss,moved);
+    if (lkTo) return {__error:'В закрытый период запись переносить нельзя'};
+    // Кому можно править только сегодняшнее — тому и переносить только
+    // внутри сегодня. Иначе правило обходится: подвинул вчерашним числом
+    // расход, и сегодняшняя касса «сходится».
+    var denyMove=_txEditDeny(ss,id,moved);
+    if (denyMove) return {__error:'Дату можно менять только в пределах сегодняшнего дня'};
     base.getRange(rowNum,B_DATE).setValue(dt).setNumberFormat('dd.mm.yyyy');
     base.getRange(rowNum,B_TYPE).setValue(_s(d.type||row[B_TYPE-1]));
     base.getRange(rowNum,B_CAT).setValue(_s(d.category||''));
@@ -2691,6 +2707,10 @@ function saveKassa(p) {
     var shiftsSh=ss.getSheetByName(SH_SHIFTS);
     var cashAcc=_s(_cashAcc(ss)); // имя кассового счёта (настраиваемое)
     var dt=new Date(d.date); var zRef=Utilities.getUuid();
+    // Смена в закрытом периоде — то же самое, что запись задним числом.
+    var kRow=[]; kRow[B_DATE-1]=dt;
+    var lkK=_lockDeny(ss,kRow);
+    if (lkK) return {__error:'Период закрыт — смену этой датой записать нельзя'};
     var rows=d.rows||[], wyplatas=d.wyplatas||[];
     var zTotal=0, factTotal=0, baseRows=[];
     // Легаси-путь (старая сетка счетов) — оставлен для совместимости
