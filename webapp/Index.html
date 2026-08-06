@@ -3643,7 +3643,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.8.0';
+var APP_VERSION='6.9.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6625,6 +6625,11 @@ var App={
     return [];
   },
   _applyHome:function(r,allAcc){
+    App._shiftState=r.shift||{};
+    // Доска рисуется раньше, чем приходит ответ сервера. Перерисовываем
+    // только подсказку: полная перерисовка стоила бы лишнего запроса.
+    var sh=document.getElementById('smart-hint');
+    if(sh)sh.innerHTML=App._smartHint();
     App._hintLastOp(r);
     App.s.accounts=App._list(allAcc).filter(function(a){return a.status!=='archived';});
     App.renderAccounts(App.s.accounts);
@@ -6967,6 +6972,29 @@ var App={
     });
   },
 
+  // Таблетка статуса у операции.
+  //
+  // Взято из образцов владельца («Success» в таблице), но статусы наши,
+  // настоящие, а не выдуманные. Смысл в том, что обе эти вещи владелец
+  // раньше видеть не мог:
+  //   • «заперто» — период закрыт, поэтому у записи пропали кнопки
+  //     правки. Раньше они просто исчезали без всякого объяснения, и
+  //     это выглядело как поломка;
+  //   • «из смены» — запись создана Z-отчётом, а не руками. Правя её
+  //     по одной, владелец расходится с кассой.
+  _txTag:function(tx){
+    var pill=function(t,col,bg){
+      return '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:7px;'+
+        'padding:1px 7px;border-radius:20px;font-size:9.5px;font-weight:800;'+
+        'letter-spacing:.02em;color:'+col+';background:'+bg+';vertical-align:middle;">'+t+'</span>';
+    };
+    if(tx.locked||tx.Locked)
+      return pill('заперто','var(--muted)','rgba(255,255,255,.07)');
+    if(tx.shift)
+      return pill('из смены','var(--brand)','color-mix(in oklab,var(--brand) 15%,transparent)');
+    return '';
+  },
+
   _txItem:function(tx){
     var ci=catIcon(tx.category);
     var cls=tx.type==='Доход'||tx.type==='income'?'income':tx.type==='Перевод'||tx.type==='transfer'?'transfer':'expense';
@@ -6977,7 +7005,7 @@ var App={
       '<div class="tx-row">'+
         '<div class="tx-icon" style="background:'+ci.bg+'18;color:'+ci.bg+';">'+ci.icon+'</div>'+
         '<div class="tx-info">'+
-          '<div class="tx-cat">'+App._e(tx.category||'')+'</div>'+
+          '<div class="tx-cat">'+App._e(tx.category||'')+App._txTag(tx)+'</div>'+
           // Смена — рядом с суммой: в отчёте владельца на каждую дату две
           // строки, день и ночь, и без пометки их не различить.
           '<div class="tx-meta">'+App._e(tx.account||'')+' · '+fmtTime(tx.date)+
@@ -13640,19 +13668,40 @@ var App={
   },
   // Умная подсказка по времени суток: утром — открыть смену, вечером — закрыть.
   // Днём/ночью баннера нет (не мозолим глаза — принцип «не анимируй/не показывай частое»).
+  // Подсказка про смену. Раньше она смотрела ТОЛЬКО на часы и советовала
+  // «открыть смену» даже тогда, когда смена за сегодня уже записана —
+  // то есть врала. Теперь смотрит на факт: записана или нет.
+  //
+  // Порядок важен: незаписанная ВЧЕРАШНЯЯ смена — это дыра в учёте
+  // (выручка за день нигде не числится), и она важнее любой подсказки
+  // про сегодня. Поэтому идёт первой и красным.
   _smartHint:function(){
     var h=new Date().getHours();
+    var sh=App._shiftState||{};
     var sun="<circle cx='12' cy='12' r='4'/><path d='M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19'/>";
     var moon="<path d='M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'/>";
+    var warn="<path d='M12 3 2 20h20L12 3z'/><path d='M12 9v5M12 17.5v.5'/>";
+    var okIc="<path d='M20 6 9 17l-5-5'/>";
     var cfg=null;
-    if(h>=5&&h<12) cfg={ic:sun,t:'Доброе утро! Пора открыть смену',a:'Открыть кассу'};
-    else if(h>=17||h<3) cfg={ic:moon,t:'Вечер. Не забудьте закрыть кассу и инкассацию',a:'Закрыть кассу'};
+    if(sh.yesterday===false){
+      cfg={ic:warn,t:'Вчерашняя смена не записана — выручка за день нигде не числится',
+           a:'Записать',danger:true};
+    } else if(sh.today===true){
+      // Смена записана — говорим об этом и уходим с дороги. Зелёная
+      // отметка спокойнее, чем совет сделать уже сделанное.
+      cfg={ic:okIc,t:'Смена за сегодня записана',a:'Открыть кассу',done:true};
+    } else if(h>=5&&h<12){
+      cfg={ic:sun,t:'Доброе утро! Пора открыть смену',a:'Открыть кассу'};
+    } else if(h>=17||h<3){
+      cfg={ic:moon,t:'Вечер. Не забудьте закрыть кассу и инкассацию',a:'Закрыть кассу'};
+    }
     if(!cfg) return '';
+    var accent=cfg.danger?'var(--neg)':cfg.done?'var(--pos)':'var(--brand)';
     return '<div style="padding:0 16px;margin-bottom:14px;">'+
-      '<button onclick="App.setTab(\'kassa\',null)" style="width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:color-mix(in oklab,var(--brand) 12%,var(--surface));border:1px solid color-mix(in oklab,var(--brand) 25%,var(--line));border-radius:18px;padding:14px 15px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);">'+
-        '<div style="width:38px;height:38px;border-radius:12px;background:var(--brand);color:#fff;display:grid;place-items:center;flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+cfg.ic+'</svg></div>'+
+      '<button onclick="App.setTab(\'kassa\',null)" style="width:100%;display:flex;align-items:center;gap:12px;text-align:left;background:color-mix(in oklab,'+accent+' 12%,var(--surface));border:1px solid color-mix(in oklab,'+accent+' 25%,var(--line));border-radius:18px;padding:14px 15px;cursor:pointer;font-family:var(--font);box-shadow:var(--shadow-card);">'+
+        '<div style="width:38px;height:38px;border-radius:12px;background:'+accent+';color:#fff;display:grid;place-items:center;flex-shrink:0;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+cfg.ic+'</svg></div>'+
         '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:750;color:var(--ink);line-height:1.3;">'+cfg.t+'</div></div>'+
-        '<span style="flex-shrink:0;font-size:12.5px;font-weight:750;color:var(--brand);white-space:nowrap;">'+cfg.a+' ›</span>'+
+        '<span style="flex-shrink:0;font-size:12.5px;font-weight:750;color:'+accent+';white-space:nowrap;">'+cfg.a+' ›</span>'+
       '</button></div>';
   },
   _widgetHTML:function(id){
@@ -13667,7 +13716,7 @@ var App={
       var btns=[qb("App.setTab('kassa',null)",K,'Касса',kSub)];
       if(App.s.myRole==='Сотрудник зала')btns.push(qb("App.openReceiveRep()",R,'Приём товара','накладная'));
       btns.push(qb("App.openGoods()",G,'Товары','поиск · цены'));
-      return App._smartHint()+'<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
+      return '<div id="smart-hint">'+App._smartHint()+'</div>'+'<div style="padding:0 16px;margin-bottom:14px;"><div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+btns.join('')+'</div></div>';
     }
     if(id==='advisor') return '<div id="advisor-card"></div>';
     if(id==='ask') return '<div style="padding:0 16px;margin-bottom:14px;"><button onclick="App.openAssistant()" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;border-radius:14px;border:1.5px dashed var(--line);background:var(--surface-2);color:var(--ink);font-size:13.5px;font-weight:700;cursor:pointer;font-family:var(--font);"><svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 21l1.8-5A8 8 0 1 1 21 12Z"/></svg> Спросить Auron своими словами</button></div>';

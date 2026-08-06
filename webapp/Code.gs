@@ -1275,11 +1275,21 @@ function getHomeSummary(p) {
     });
     // Also compute Z-report (shift) revenue for the period
     var shiftRev=0;
+    // Записана ли смена за сегодня и за вчера. Раньше подсказка на
+    // Главной советовала «открыть смену» вслепую — даже когда смена уже
+    // записана. А не записанная вчерашняя смена это дыра в учёте, и
+    // молчать о ней нельзя. Считаем в том же проходе по листу смен.
+    var shToday=false, shYest=false;
+    var dayKey=function(d){return Utilities.formatDate(d,tz,'yyyy-MM-dd');};
+    var now0=new Date(); var kToday=dayKey(now0);
+    var kYest=dayKey(new Date(now0.getTime()-86400000));
     try {
       var shSh=ss.getSheetByName(SH_SHIFTS);
       if(shSh&&shSh.getLastRow()>=2){
         shSh.getRange(2,1,shSh.getLastRow()-1,8).getValues().forEach(function(sr){
           var sd=sr[1];if(!(sd instanceof Date))return;
+          var sk=dayKey(sd);
+          if(sk===kToday)shToday=true; else if(sk===kYest)shYest=true;
           var ms=sd.getTime();if(pd.from&&ms<pd.from)return;if(pd.to&&ms>pd.to)return;
           var rj=[];try{rj=JSON.parse(sr[4]||'[]');}catch(e2){}
           rj.forEach(function(row){shiftRev+=parseFloat(row.zAmount||0);});
@@ -1301,6 +1311,7 @@ function getHomeSummary(p) {
     var res={accounts:accounts,totals:totals,transactions:txs,
              spark:{inc:spInc.map(Math.round),exp:spExp.map(Math.round)},
              lastOp: lastMs?Utilities.formatDate(new Date(lastMs),tz,'yyyy-MM-dd'):'',
+             shift:{today:shToday,yesterday:shYest},
              summary:{income:sumInc,expense:sumExp,count:txCnt,shiftRevenue:shiftRev}};
     try { CacheService.getScriptCache().put(cKey,JSON.stringify(res),60); } catch(e){}
     return res;
