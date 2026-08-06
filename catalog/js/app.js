@@ -328,6 +328,8 @@
   const productCategory = (p) => { const g = groupById(p.group_id); return g ? categoryOf(g.name) : null; };
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
+  // число без единицы: 24 → «24», 2.5 → «2,5» (как принято в России)
+  const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
   // цена с единицей: у весовых показываем «/кг», чтобы было понятно
   const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
   const fmtDate = (d) => { const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}.${m}.${y.slice(2)}`; };
@@ -1312,7 +1314,16 @@
     if (state.session) {
       if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
       if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
-      barcodes.forEach((b, i) => rows.push(fieldRow(barcodes.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод', b, false, true)));
+      // У товара может быть несколько штрихкодов: на штуку, на упаковку, на блок.
+      // Подписываем каждый по-человечески («упаковка — 24 шт»), штучный — первым.
+      const bcOrdered = barcodes.slice().sort((x, y) => {
+        const a = barcodeSortKey(p, x); const b2 = barcodeSortKey(p, y);
+        return a[0] - b2[0] || a[1] - b2[1];
+      });
+      bcOrdered.forEach((b, i) => {
+        const label = fmtBarcodeUnit((p.barcode_units || {})[b]);
+        rows.push(fieldRow(label ? `Штрихкод · ${label}` : (bcOrdered.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод'), b, false, true));
+      });
       if (p.department) rows.push(fieldRow('Отдел', p.department));
       if (p.arrival_at) rows.push(fieldRow('Поступление', fmtDate(p.arrival_at)));
       if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
@@ -2209,6 +2220,26 @@
     catch (e) { toast('Сохранено, но опубликовать не удалось: ' + (e.message || e) + '. Проверь GitHub-ключ.'); }
   }
 
+  // Влить справочник штрихкодов: товар ищем по коду/названию, коды ДОБАВЛЯЕМ
+  // (не затирая уже имеющиеся) и запоминаем единицу каждого кода.
+  function svUploadBarcodes(parsed) {
+    const idx = svIndex();
+    let added = 0; let matched = 0; const missing = new Set();
+    for (const rec of parsed.recs) {
+      const p = svMatch(idx, rec.code, [rec.barcode], rec.name);
+      if (!p) { missing.add(rec.name); continue; }
+      p.barcodes = p.barcodes || [];
+      matched++;
+      if (!p.barcodes.includes(rec.barcode)) { p.barcodes.push(rec.barcode); added++; }
+      idx.byBc.set(String(rec.barcode), p);
+      if (rec.unit) {
+        p.barcode_units = p.barcode_units || {};
+        p.barcode_units[rec.barcode] = rec.unit;
+      }
+    }
+    return { added, matched, missing: missing.size };
+  }
+
   // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
   function svImportRows(rows) {
     const type = detectReportType(rows);
@@ -2218,6 +2249,7 @@
     else if (type === 'stock') svUploadStock(parseStockReport(rows));
     else if (type === 'sales') svUploadSales(parseSalesReport(rows));
     else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
+    else if (type === 'barcodes') svUploadBarcodes(parseBarcodesReport(rows));
     else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
     return type;
   }
@@ -3387,6 +3419,69 @@
     return { recs, fileDate };
   }
 
+  // Единица штрихкода из 1С приходит строкой: «шт», «упак (24)», «кг (2,5)»,
+  // «Упаковка (50)». В скобках — сколько штук (или кг) в этой упаковке.
+  // Разбираем её, чтобы показывать понятно: «упаковка — 24 шт».
+  function parseBarcodeUnit(raw) {
+    const str = String(raw || '').trim();
+    if (!str) return null;
+    const m = str.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
+    const base = (m ? m[1] : str).trim().toLowerCase();
+    const qty = m ? Number(String(m[2]).replace(',', '.').replace(/\s/g, '')) : null;
+    const isPack = /^упак|^упаковка|^блок|^кор/.test(base);
+    const isKg = /^кг$/.test(base);
+    const isPc = /^шт/.test(base);
+    return { raw: str, base, qty: Number.isFinite(qty) ? qty : null, isPack, isKg, isPc };
+  }
+
+  // «упак (24)» → «упаковка — 24 шт»; «кг (2,5)» → «фасовка 2,5 кг»; «шт» → «штука»
+  function fmtBarcodeUnit(raw) {
+    const u = parseBarcodeUnit(raw);
+    if (!u) return '';
+    const n = u.qty != null ? fmtNum(u.qty) : null;
+    if (u.isPack) return n ? `упаковка — ${n} шт` : 'упаковка';
+    if (u.isKg) return n ? `фасовка ${n} кг` : 'на вес, кг';
+    if (u.isPc) return n ? `набор — ${n} шт` : 'штука';
+    return n ? `${u.base} — ${n}` : u.base;
+  }
+
+  // порядок показа: сначала штучный код, потом упаковки/блоки по возрастанию
+  function barcodeSortKey(p, bc) {
+    const u = parseBarcodeUnit((p.barcode_units || {})[bc]);
+    if (!u) return [1, 0];
+    if (u.isPc && !u.qty) return [0, 0];
+    if (u.isKg) return [1, u.qty || 0];
+    return [2, u.qty || 0];
+  }
+
+  // Справочник «Штрих коды» из 1С: колонки «Штрих код», «Единица», «Номенклатура».
+  // У одного товара может быть НЕСКОЛЬКО штрихкодов — на штуку, на упаковку, на
+  // весовую фасовку. Единицу сохраняем рядом с кодом, чтобы было видно, что
+  // именно пробивается: «шт», «упак (24)», «кг (2,5)».
+  function parseBarcodesReport(rows) {
+    const det = detectColumns(rows);
+    if (!det || det.cols.barcode === undefined || det.cols.name === undefined) {
+      throw new Error('Не нашёл колонки «Штрих код» и «Номенклатура» в справочнике штрихкодов');
+    }
+    const { cols, dataStart } = det;
+    const recs = [];
+    for (let r = dataStart; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const barcode = cellStr(row[cols.barcode]);
+      const name = cellStr(row[cols.name]);
+      if (!barcode || !name) continue;
+      if (/^\s*(итого|всего)\b/i.test(name)) continue;
+      recs.push({
+        barcode,
+        name,
+        unit: cols.unit !== undefined ? cellStr(row[cols.unit]) : '',
+        code: cols.code !== undefined ? cellStr(row[cols.code]) : '',
+      });
+    }
+    if (!recs.length) throw new Error('В справочнике штрихкодов нет ни одной строки с кодом и номенклатурой');
+    return { recs };
+  }
+
   // Каталог сам определяет, что за файл 1С загрузили, по его шапке.
   // Возвращает: 'prices'|'stock'|'sales'|'contacts'|'retail'|'photo'|'barcodes'|null
   function detectReportType(rows) {
@@ -3395,13 +3490,24 @@
     const has = (s) => head.includes(s);
     const cellExact = (val) => scan.some((r) => (r || []).some((c) => cellStr(c).toLowerCase() === val));
     const hasPrice = /цена/.test(head);
-    const hasQty = has('количество') || /кол-?во/.test(head);
+    // «Выводить количество подчинённых записей: Да» — служебная строка выгрузки 1С,
+    // а не колонка количества. Из-за неё справочник штрихкодов раньше не опознавался.
+    const headNoService = head.replace(/выводить количество[^\n]*/g, '');
+    const hasQty = headNoService.includes('количество') || /кол-?во/.test(headNoService);
     const hasStock = has('остаток') || has('остатк') || has('на конец дня');
     const hasContragent = cellExact('контрагент');
     const hasPhone = has('телефон');
     const hasSupplier = has('поставщик') || hasContragent;
 
     if (/https?:\/\//.test(head)) return 'photo';
+    // Справочник штрихкодов: 1С сама пишет в шапке имя объекта.
+    if (/имя объекта:\s*штрих/.test(head)) return 'barcodes';
+    // Либо по составу колонок: есть «Штрих код» и «Номенклатура», а цен,
+    // количеств и сумм нет — значит это справочник кодов, а не отчёт.
+    const bcDet = detectColumns(rows);
+    if (bcDet && bcDet.cols.barcode !== undefined && bcDet.cols.name !== undefined
+      && bcDet.cols.price === undefined && bcDet.cols.retail === undefined
+      && bcDet.cols.qty === undefined && bcDet.cols.amount === undefined) return 'barcodes';
     // «Контрагент» + «телефон» — однозначно справочник контактов (в отчётах цен
     // телефона нет). Слово «количество» в служебной шапке не должно мешать.
     if (hasContragent && hasPhone) return 'contacts';
@@ -3502,21 +3608,24 @@
         else if (entry.type === 'sales') { entry.parsed = parseSalesReport(rows); entry.count = entry.parsed.recs.length; }
         else if (entry.type === 'contacts') { entry.parsed = parseContactsReport(rows); entry.count = entry.parsed.length; }
         else if (entry.type === 'photo') { entry.parsed = parsePhotoSheet(rows); entry.count = entry.parsed.length; }
-        else if (entry.type === 'barcodes') { entry.count = 0; }
+        else if (entry.type === 'barcodes') { entry.parsed = parseBarcodesReport(rows); entry.count = entry.parsed.recs.length; }
       } catch (e) { entry.error = e.message || String(e); }
       smartEntries.push(entry);
     }
-    // штрихкоды приклеиваем к файлу цен, если он есть
-    const priceEntry = smartEntries.find((e) => e.type === 'prices' && e.byKey);
-    for (const e of smartEntries) {
-      if (e.type === 'barcodes' && priceEntry && e.rows) {
-        try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
+    // На сервере штрихкоды умеют грузиться только «в довесок» к файлу цен —
+    // приклеиваем. В бесплатном режиме это отдельный полноценный файл.
+    if (!state.serverless) {
+      const priceEntry = smartEntries.find((e) => e.type === 'prices' && e.byKey);
+      for (const e of smartEntries) {
+        if (e.type === 'barcodes' && priceEntry && e.rows) {
+          try { e.count = mergeBarcodesReport(e.rows, priceEntry.byKey); e.mergedInto = priceEntry.name; } catch (er) { e.error = er.message; }
+        }
       }
     }
     renderSmartList();
     smartLog('');
     $('smartStatus').hidden = true;
-    if (smartEntries.some((e) => e.type && !e.error && !(e.type === 'barcodes' && !e.mergedInto))) $('smartRun').hidden = false;
+    if (smartEntries.some((e) => e.type && !e.error && (state.serverless || e.type !== 'barcodes' || e.mergedInto))) $('smartRun').hidden = false;
   }
 
   function renderSmartList() {
@@ -3539,7 +3648,7 @@
     btn.disabled = true;
     // порядок: сначала товары/цены/остатки/прайс, потом продажи/контакты/фото
     const order = { prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
-    const todo = smartEntries.filter((e) => e.type && !e.error && !(e.type === 'barcodes'))
+    const todo = smartEntries.filter((e) => e.type && !e.error && (state.serverless || e.type !== 'barcodes'))
       .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
     let okCount = 0;
 
@@ -3552,6 +3661,12 @@
           else if (e.type === 'stock') svUploadStock(e.parsed);
           else if (e.type === 'sales') svUploadSales(e.parsed);
           else if (e.type === 'contacts') svUploadContacts(e.parsed);
+          else if (e.type === 'barcodes') {
+            const r = svUploadBarcodes(e.parsed);
+            setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
+              + (r.missing ? `, не нашлось товаров: ${r.missing}` : ''));
+            okCount++; continue;
+          }
           else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
           setSmartRowStatus(e, 'загружено ✓'); okCount++;
         } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
