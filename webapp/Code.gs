@@ -4253,6 +4253,7 @@ function receiveRep(p) {
   if (cashPaid<=0&&debtRepaid<=0&&newDebt<=0) return {__error:'Заполните хотя бы одно поле'};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     if (!account) account=_s(_cashAcc(ss));
     if (cashPaid>0) saveQuickEntry({ssId:ssId,data:{date:new Date().toISOString(),type:'Расход',
       category:'Закупка',account:account,amount:cashPaid,comment:'Оплата наличкой: '+rep+(comment?' · '+comment:'')}});
@@ -5962,6 +5963,7 @@ function _savePaymentLocked(p) {
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     var sh=ss.getSheetByName(SH_PAYMENTS);
     var id=d.id||Utilities.getUuid();
     var date=d.date?new Date(d.date):(d.due?new Date(d.due):new Date());
@@ -6122,6 +6124,7 @@ function _markPaymentPaidLocked(p) {
   try {
     
     var ss=SpreadsheetApp.openById(ssId);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     var sh=ss.getSheetByName(SH_PAYMENTS);
     if (!sh||sh.getLastRow()<2) {  return {__error:'not found'}; }
     var vs=sh.getRange(2,1,sh.getLastRow()-1,PY_COLS).getValues();
@@ -7354,6 +7357,7 @@ function saveOrder(p) {
   var ssId=p.ssId, d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     var sh=ss.getSheetByName(SH_ORDERS);
     if (!_s(d.contractor)) return {__error:'Выберите контрагента'};
     var amt=Math.round(parseFloat(d.amount)||0);
@@ -9136,6 +9140,7 @@ function saveLoss(p) {
   var d=p.data||{};
   try {
     var ss=SpreadsheetApp.openById(p.ssId); ensureSheets(ss);
+    if (_opSeen(ss, _s(p.opId))) return {ok:true, duplicate:true};
     if (!_permGuard(p.ssId,'receive')) return {__error:'Нет прав записывать списания'};
     var sh=ss.getSheetByName(SH_LOSSES);
     var kind=(String(d.kind)==='return')?'return':'writeoff';

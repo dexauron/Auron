@@ -3524,7 +3524,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.0.0';
+var APP_VERSION='6.1.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5027,10 +5027,10 @@ var App={
     d.contractor=name;
     var known=App._contrNames().some(function(n){return n.toLowerCase()===name.toLowerCase();});
     var go=function(){
-      gs('saveOrder',{ssId:App.s.ssId,data:d}).then(function(r){
-        if(r&&r.__error){App.toast(r.__error,true);return;}
-        App.toast('Заказ записан ✓');App.openOrders();
-      }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+      App._send('saveOrder',{ssId:App.s.ssId,data:d},
+        'Заказ поставщику «'+name+'» сохранён на телефоне',
+        function(){ App.toast('Заказ записан ✓');App.openOrders(); })
+        .then(function(r){ if(r===null)App.closeModal(); });
     };
     if(!known){
       gs('saveContractor',{ssId:App.s.ssId,data:{name:name,type:'Поставщик'}}).then(function(){App._contractors=null;go();}).catch(function(){go();});
@@ -7643,11 +7643,13 @@ var App={
     if(!rep){App.toast('Выберите представителя',true);return;}
     if(cash<=0&&repay<=0&&nd<=0){App.toast('Заполните хотя бы одно поле',true);return;}
     App.toast('Записываю…');
-    gs('receiveRep',{ssId:App.s.ssId,rep:rep,account:acc,cashPaid:cash,debtRepaid:repay,newDebt:nd}).then(function(r){
-      if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Приём записан ✓ Долг «'+rep+'»: '+fmtFull(r.debt)+' ₽');
-      App.closeModal();App.loadHome();App._loadKHub&&App._loadKHub();
-    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+    App._send('receiveRep',{ssId:App.s.ssId,rep:rep,account:acc,
+        cashPaid:cash,debtRepaid:repay,newDebt:nd},
+      'Приём поставщика «'+rep+'» сохранён на телефоне',
+      function(r){
+        App.toast('Приём записан ✓ Долг «'+rep+'»: '+fmtFull(r.debt)+' ₽');
+        App.closeModal();App.loadHome();App._loadKHub&&App._loadKHub();
+      }).then(function(r){ if(r===null)App.closeModal(); });
   },
 
   // ── Изъятия из кассы ──
@@ -7835,6 +7837,30 @@ var App={
         return;
       }
       App.toast(App._friendlyErr(e),true);
+    });
+  },
+
+  // Отправка записи с защитой от потери. Один способ на всё приложение:
+  // добавляет номер операции (от дублей при повторе), а при обрыве связи
+  // кладёт в очередь и говорит человеку, что ничего не потеряно.
+  //   fn    — серверная функция
+  //   args  — что отправляем (номер операции добавим сами)
+  //   what  — что сказать владельцу: «Приём поставщика сохранён на телефоне»
+  //   onOk  — что сделать при успехе
+  _send:function(fn,args,what,onOk){
+    var payload=Object.assign({},args);
+    if(!payload.opId)payload.opId=uuidv4();
+    return gs(fn,payload).then(function(r){
+      if(onOk)onOk(r);
+      return r;
+    }).catch(function(e){
+      if(App._isOffline(e)){
+        App._outboxPush(fn,payload);
+        App._offlineSaved(what||'Запись сохранена на телефоне');
+        return null;
+      }
+      App.toast(App._friendlyErr(e),true);
+      throw e;
     });
   },
 
@@ -9626,7 +9652,9 @@ var App={
   _outboxWhat:function(fn){
     return {saveQuickEntry:'операция',saveTransfer:'перевод',
             saveKassa:'смена',saveEveningInvoices:'накладные',
-            saveEveningTotal:'накладные'}[fn]||'запись';
+            saveEveningTotal:'накладные',receiveRep:'приём поставщика',
+            saveLoss:'списание',savePayment:'запись на выплату',
+            markPaymentPaid:'оплата',saveOrder:'заказ'}[fn]||'запись';
   },
   _outboxPush:function(fn,args){
     var q=App._outboxGet();q.push({fn:fn,args:args,ts:Date.now()});App._outboxSet(q);
@@ -9869,16 +9897,16 @@ var App={
     var amt=App._calcEval((document.getElementById('ls-amt')||{}).value)||0;
     if(!name.trim()||!amt){App.toast('Укажите название и сумму',true);return;}
     var rEl=document.getElementById('ls-reason');
-    gs('saveLoss',{ssId:App.s.ssId,data:{
-      id:id||null,kind:kind,name:name.trim(),amount:amt,
-      reason:rEl?rEl.value:'',
-      qty:parseFloat((document.getElementById('ls-qty')||{}).value)||0,
-      contractor:((document.getElementById('ls-contr')||{}).value||'').trim(),
-      date:(document.getElementById('ls-date')||{}).value,
-      comment:((document.getElementById('ls-cmt')||{}).value||'').trim()}}).then(function(r){
-      if(r&&r.__error){App.toast(r.__error,true);return;}
-      App.toast('Сохранено ✓');App.closeModal();App.openLosses();
-    }).catch(function(e){App.toast(App._friendlyErr(e.message),true);});
+    App._send('saveLoss',{ssId:App.s.ssId,data:{
+        id:id||null,kind:kind,name:name.trim(),amount:amt,
+        reason:rEl?rEl.value:'',
+        qty:parseFloat((document.getElementById('ls-qty')||{}).value)||0,
+        contractor:((document.getElementById('ls-contr')||{}).value||'').trim(),
+        date:(document.getElementById('ls-date')||{}).value,
+        comment:((document.getElementById('ls-cmt')||{}).value||'').trim()}},
+      (kind==='return'?'Возврат поставщику':'Списание')+' сохранено на телефоне',
+      function(){ App.toast('Сохранено ✓');App.closeModal();App.openLosses(); })
+      .then(function(r){ if(r===null)App.closeModal(); });
   },
   _lossDel:function(id){
     if(!confirm('Удалить эту запись?'))return;
@@ -11357,9 +11385,11 @@ var App={
     if(App._contractors&&!App._contrNames().some(function(n){return n.toLowerCase()===payee.toLowerCase();})){
       gs('saveContractor',{ssId:App.s.ssId,data:{name:payee,type:'Поставщик'}}).then(function(){App._contractors=null;}).catch(function(){});
     }
-    gs('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,amount:amt,date:date,comment:comment,status:'open'}}).then(function(r){
-      App.toast('Сохранено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers();
-    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+    App._send('savePayment',{ssId:App.s.ssId,data:{id:id||null,payee:payee,title:title,
+        amount:amt,date:date,comment:comment,status:'open'}},
+      'Запись на выплату «'+payee+'» сохранена на телефоне',
+      function(r){ App.toast('Сохранено ✓');App._calWarn(r);App.closeModal();App.loadSuppliers(); })
+      .then(function(r){ if(r===null)App.closeModal(); });
   },
 
   openPaymentPay:function(id,name,amount){
@@ -11376,9 +11406,10 @@ var App={
 
   _confirmPaymentPay:function(id){
     var acc=document.getElementById('pp-acc').value;
-    gs('markPaymentPaid',{ssId:App.s.ssId,id:id,account:acc}).then(function(){
-      App.toast('Оплачено ✓');App.closeModal();App.loadPayments();App.loadHome();
-    }).catch(function(e){App.toast(App._friendlyErr(e),true);});
+    App._send('markPaymentPaid',{ssId:App.s.ssId,id:id,account:acc},
+      'Оплата сохранена на телефоне',
+      function(){ App.toast('Оплачено ✓');App.closeModal();App.loadPayments();App.loadHome(); })
+      .then(function(r){ if(r===null)App.closeModal(); });
   },
 
   deletePayment:async function(id){

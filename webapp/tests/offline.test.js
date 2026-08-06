@@ -86,5 +86,22 @@ t('вход на вкладку по-прежнему начинает с кор
 t('кнопка «Назад» по-прежнему возвращает в корень',
   /settingsBack:function\(\)\{\s*App\._settingsResetRoot\(\)/.test(html));
 
+// ── Офлайн распространён на ВСЕ записи ───────────────────────────────
+// Приём поставщика делается в магазине чаще смены: представитель уехал,
+// связь моргнула — вводить заново при нём же было бы стыдно.
+t('единый способ отправки для всех записей', /_send:function\(fn,args,what,onOk\)/.test(html));
+t('номер операции добавляется сам', /if\(!payload\.opId\)payload\.opId=uuidv4\(\);/.test(html));
+['receiveRep','saveLoss','savePayment','markPaymentPaid','saveOrder'].forEach(function(fn){
+  t('через общий способ: '+fn, new RegExp("App\\._send\\('"+fn+"'").test(html));
+});
+t('на сервере защита от повторов у всех',
+  (code.match(/_opSeen\(ss, _s\(/g)||[]).length>=8,
+  (code.match(/_opSeen\(ss, _s\(/g)||[]).length);
+t('в очереди понятные названия',
+  /receiveRep:'приём поставщика'/.test(html) && /saveLoss:'списание'/.test(html) &&
+  /markPaymentPaid:'оплата'/.test(html) && /saveOrder:'заказ'/.test(html));
+t('при обрыве окно закрывается — форма не висит зря',
+  /\.then\(function\(r\)\{ if\(r===null\)App\.closeModal\(\); \}\)/.test(html));
+
 console.log('\nОфлайн и настройки: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);
