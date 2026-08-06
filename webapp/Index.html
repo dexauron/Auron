@@ -3643,7 +3643,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.7.0';
+var APP_VERSION='6.8.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6576,6 +6576,35 @@ var App={
       '<path d="M'+xy.join(' L')+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>'+
       '<circle cx="'+(n>1?w:0)+'" cy="'+last+'" r="1.9" fill="'+color+'"/></svg>';
   },
+  // Подпись «норма или нет» под цифрой.
+  //
+  // Голая цифра ничего не говорит непрограммисту: маржа 42% — это
+  // хорошо или плохо? Ответ есть в его же прошлом периоде. Сравниваем
+  // с ним и говорим словами, а не процентом от процента.
+  //
+  //   now  — что получилось сейчас
+  //   was  — что было в прошлом таком же отрезке (null = сравнить не с чем)
+  //   good — 'up' если рост это хорошо (выручка), 'dn' если плохо (расход)
+  //
+  // Порог 8% выбран сознательно: меньше — обычные колебания торговли,
+  // и подписывать их «выросло» значит пугать владельца шумом.
+  _verdict:function(now,was,good){
+    if(was==null||!isFinite(was)||was===0)return null;
+    var diff=(now-was)/Math.abs(was)*100;
+    if(Math.abs(diff)<8)return {text:'как обычно',tone:'flat'};
+    var up=diff>0;
+    var ok=(good==='dn')?!up:up;
+    return {text:(up?'выше':'ниже')+' обычного на '+Math.abs(Math.round(diff))+'%',
+            tone:ok?'good':'bad'};
+  },
+  // Готовая строчка под цифру. Отдельно от _verdict, потому что один и
+  // тот же вывод рисуется и в карточке, и в списке, и в окне.
+  _verdictHtml:function(now,was,good){
+    var v=App._verdict(now,was,good);
+    if(!v)return '';
+    var col=v.tone==='good'?'var(--pos)':v.tone==='bad'?'var(--neg)':'var(--muted)';
+    return '<div style="font-size:11px;font-weight:700;color:'+col+';margin-top:4px;">'+v.text+'</div>';
+  },
   // Наглядная шкала вместо голого процента. У двух плиток из четырёх
   // не было ничего, кроме цифры, и экран выглядел недоделанным — а
   // главное, цифра сама по себе не отвечает на вопрос «это много или мало».
@@ -7216,15 +7245,27 @@ var App={
     var el=document.getElementById('an-pl');
     var income=r.income||0,expense=r.expense||0,profit=income-expense;
     var ratio=income>0?Math.round(expense/income*100):0;
+    // Прошлый такой же отрезок: с ним и сравниваем, чтобы под каждой
+    // цифрой стояло «как обычно» или «ниже обычного».
+    var pv=r.prev||{};
+    var vI=App._verdictHtml(income,pv.income,'up');
+    var vE=App._verdictHtml(expense,pv.expense,'dn');
+    var vP=App._verdictHtml(profit,pv.profit,'up');
     var mx=Math.max(income,expense,1);
     var bw=function(v){return Math.max(Math.round(Math.abs(v)/mx*100),2);};
     el.innerHTML=
       '<div class="metric-row">'+
-        '<div class="metric-card"><div class="metric-label">Выручка</div><div class="metric-value green">₽ '+fmt(income)+'</div></div>'+
-        '<div class="metric-card"><div class="metric-label">Расходы</div><div class="metric-value red">₽ '+fmt(expense)+'</div></div>'+
+        '<div class="metric-card"><div class="metric-label">Выручка</div><div class="metric-value green">₽ '+fmt(income)+'</div>'+vI+'</div>'+
+        '<div class="metric-card"><div class="metric-label">Расходы</div><div class="metric-value red">₽ '+fmt(expense)+'</div>'+vE+'</div>'+
       '</div>'+
       '<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Прибыль</div>'+
-        '<div class="metric-value" style="color:'+(profit>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(profit)+'</div></div>'+
+        '<div class="metric-value" style="color:'+(profit>=0?'var(--income)':'var(--expense)')+'">₽ '+fmt(profit)+'</div>'+vP+
+        // Маржа: сколько копеек осталось с рубля. Само число мало что
+        // говорит, поэтому рядом стоит вывод против прошлого периода.
+        (income>0?'<div style="font-size:12px;color:var(--muted);font-weight:650;margin-top:6px;">Маржа <b style="color:var(--ink);">'+
+          Math.round(profit/income*100)+'%</b> от выручки'+
+          (pv.margin!=null?' · было '+pv.margin+'%':'')+'</div>':'')+
+      '</div>'+
       '<div class="metric-card" style="margin-bottom:16px;">'+
         '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;">'+
           '<div class="metric-label" style="margin:0;">Доходы и расходы</div>'+

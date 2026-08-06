@@ -4662,9 +4662,22 @@ function getAnalytics(p) {
     var rows=base.getRange(2,1,base.getLastRow()-1,B_COLS).getValues();
     var income=0,expense=0,catMap={},dayMap={};
     var hm=[0,0,0,0,0,0,0]; // Mon-Sun
+    // Предыдущий такой же отрезок — чтобы цифру можно было подписать
+    // «как обычно» или «ниже вашего среднего». Лист всё равно читается
+    // целиком, а фильтр по датам идёт уже в памяти, поэтому второй
+    // период не стоит ни одного лишнего обращения к таблице.
+    var pFrom=null,pTo=null,pInc=0,pExp=0;
+    if(pd.from&&pd.to){ var len=pd.to-pd.from; pTo=pd.from-1; pFrom=pd.from-len-1; }
     rows.forEach(function(r){
       var dt=r[B_DATE-1]; if(!(dt instanceof Date)) return;
       var ms=dt.getTime();
+      if(pFrom!==null&&ms>=pFrom&&ms<=pTo){
+        var pt=String(r[B_TYPE-1]);
+        if(String(r[B_CAT-1])!=='Перевод'){
+          var pa=parseFloat(r[B_AMT-1])||0;
+          if(pt==='Доход')pInc+=pa; else if(pt==='Расход')pExp+=pa;
+        }
+      }
       if(pd.from&&ms<pd.from) return; if(pd.to&&ms>pd.to) return;
       var t=String(r[B_TYPE-1]),cat=String(r[B_CAT-1]),amt=parseFloat(r[B_AMT-1])||0;
       var dk=Utilities.formatDate(dt,tz,'yyyy-MM-dd');
@@ -4734,7 +4747,11 @@ function getAnalytics(p) {
 
     var _res={income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
             timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt),
-            debtTop:debtTop,avg:avg};
+            debtTop:debtTop,
+            prev:{income:Math.round(pInc),expense:Math.round(pExp),
+                  profit:Math.round(pInc-pExp),
+                  margin:pInc>0?Math.round((pInc-pExp)/pInc*100):null},
+            avg:avg};
     try { CacheService.getScriptCache().put(_ak, JSON.stringify(_res), 90); } catch(_e){}
     return _res;
   } catch(e) { return {income:0,expense:0,byCategory:[],timeline:[],heatmap:_emptyHm(),totalDebt:0}; }
