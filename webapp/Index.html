@@ -1305,9 +1305,32 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
   .sb-user-role{font-size:11px;color:var(--muted);}
 
   .nav{display:none;}
-  .panel{padding-bottom:36px;}
-  #fab{display:flex;bottom:26px;}
+  /* Компьютер должен показывать ТО ЖЕ, что телефон, только просторнее.
+     Без потолка ширины карточки растягивались на весь монитор: цифра
+     прижималась к левому краю, а справа оставалось пустое поле —
+     владелец видел два разных приложения. */
+  .app-body{min-width:0;}
+  .app-body>.topbar,.app-body>.panels{
+    max-width:1080px;margin-left:auto;margin-right:auto;width:100%;
+  }
+  /* Нижний отступ больше кнопки «+»: раньше она накрывала подсказку
+     «Открыть кассу», и до кнопки в подсказке было не дотянуться. */
+  .panel{padding-bottom:110px;}
+  /* Кнопка «+» стоит в правом поле, за колонкой содержимого — иначе
+     она накрывала карточки и до них было не дотянуться. */
+  #fab{display:flex;bottom:26px;right:26px;}
   .topbar{padding-top:18px;padding-bottom:18px;}
+  /* Название магазина стоит в боковом меню — второй раз в шапке это
+     дубль, а не навигация. */
+  .topbar-left{display:none!important;}
+  .topbar{justify-content:flex-end;}
+  /* На Главной капитал написан во всю карточку. Тот же капитал в
+     нижнем углу меню читается как вторая, другая цифра. */
+  body.on-home .sb-capital{display:none;}
+  /* «Выйти» упиралось в край панели и обрезалось наполовину. */
+  .sb-user{flex-wrap:wrap;}
+  .sb-user>div{min-width:0;}
+  .sb-user-name,.sb-user-role{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .home-hero-bal{font-size:clamp(42px,5vw,54px);}
   .home-split{grid-template-columns:1fr 1fr;}
 }
@@ -1816,7 +1839,9 @@ html[data-theme="light"] .supp-tab.active{color:#fff;}
   /* Переключатель периода: на телефоне кнопки делят ширину поровну
      (flex:1), а на мониторе из-за этого разъезжались через весь экран.
      Здесь они занимают столько, сколько нужно тексту. */
-  .period-bar{max-width:max-content;}
+  /* Прижат влево, как всё остальное на экране: по центру он выглядел
+     оторванным от карточек, под которые переключает период. */
+  .period-bar{max-width:max-content;margin-left:16px;margin-right:auto;}
   .period-bar .pill{flex:0 0 auto;padding-left:18px;padding-right:18px;}
 
   /* Экраны входа (приветствие, выбор магазина, новый магазин, знакомство)
@@ -2238,7 +2263,7 @@ input.money{font-variant-numeric:tabular-nums;}
 .g-tag.good{background:color-mix(in oklab,var(--income) 14%,transparent);color:var(--income);}
 </style>
 </head>
-<body>
+<body class="on-home">
 <!-- Геометрический узор гирих (8-кратная симметрия) — деликатный орнамент -->
 <svg width="0" height="0" style="position:absolute;pointer-events:none;" aria-hidden="true"><defs>
   <pattern id="girih" width="58" height="58" patternUnits="userSpaceOnUse">
@@ -3571,7 +3596,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.3.0';
+var APP_VERSION='6.4.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -3866,9 +3891,24 @@ var App={
   haptic:function(p){try{if(navigator.vibrate)navigator.vibrate(p);}catch(e){}},
 
   // Дружелюбное пустое состояние: иконка + заголовок + подсказка что делать
-  _empty:function(icon,title,hint){
+  // Пустой экран должен ОБЪЯСНЯТЬ, а не молчать: что здесь бывает,
+  // откуда это берётся и что нажать. Пустота без объяснения читается
+  // как «приложение недоделано», даже когда всё исправно.
+  //   act = ['Подпись кнопки','App.чтоСделать()']
+  _empty:function(icon,title,hint,act){
     return '<div class="empty-state"><div class="empty-icon">'+icon+'</div><div class="empty-text">'+App._e(title)+'</div>'+
-      (hint?'<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;max-width:280px;margin-left:auto;margin-right:auto;">'+App._e(hint)+'</div>':'')+'</div>';
+      (hint?'<div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;max-width:280px;margin-left:auto;margin-right:auto;">'+App._e(hint)+'</div>':'')+
+      (act?'<button onclick="'+act[1]+'" style="margin-top:16px;padding:11px 20px;border-radius:14px;border:none;background:var(--brand-dim);color:var(--brand);font-size:13.5px;font-weight:750;cursor:pointer;font-family:var(--font);">'+App._e(act[0])+'</button>':'')+
+      '</div>';
+  },
+  // Часто нужные значки для пустых экранов — чтобы не таскать SVG по коду.
+  _emptyIc:{
+    box:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/></svg>',
+    cart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h2.2l2.3 12a1 1 0 0 0 1 .8h9a1 1 0 0 0 1-.8L20.5 7H6"/></svg>',
+    doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/></svg>',
+    store:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 4.8 4h14.4L21 9.5"/><path d="M4 9.5h16V20H4z"/><path d="M9 20v-6h6v6"/></svg>',
+    scale:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4 7h16"/><path d="M7 7l-3 6h6zM17 7l-3 6h6z"/></svg>',
+    clock:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>'
   },
 
   // ── Безопасность: PIN-код + автоблокировка (локально на устройстве) ──
@@ -4880,7 +4920,8 @@ var App={
     if(r.goods&&r.goods.length)h+=S('Товары поставщика ('+r.goodsCount+')',r.goods.slice(0,30).map(function(g){
       return '<div onclick="App.openProductByName(\''+App._e(g.name).replace(/'/g,"\\'")+'\')" style="display:flex;justify-content:space-between;gap:8px;padding:9px 13px;border-top:1px solid var(--line-2);font-size:12.5px;cursor:pointer;"><span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+App._e(g.name)+(g.date?' <span style="color:var(--muted);">· '+App._fmtD(g.date)+'</span>':'')+'</span><span style="font-weight:700;white-space:nowrap;">₽ '+fmt(g.price)+'</span></div>';}).join(''));
     if(!actOrd.length&&!openP.length&&!(r.debtHist&&r.debtHist.length)&&!(r.goods&&r.goods.length))
-      h+='<div style="text-align:center;padding:16px;color:var(--muted);">Движений с этим контрагентом пока нет.</div>';
+      h+=App._empty(App._emptyIc.doc,'Движений пока нет',
+        'Здесь появятся накладные, оплаты и погашения долга по этому поставщику.');
     b.innerHTML=h;
   },
 
@@ -4954,7 +4995,10 @@ var App={
     var chip=function(id,lbl){return '<button onclick="App.ordFilter(\''+id+'\')" class="rp-chip" style="'+(f===id?'border-color:var(--brand);color:var(--brand);':'')+'">'+lbl+'</button>';};
     h+='<div style="display:flex;gap:6px;margin-bottom:12px;">'+chip('active','Активные')+chip('done','Завершённые')+chip('all','Все')+'</div>';
     if(!list.length){
-      h+='<div style="text-align:center;padding:18px;color:var(--muted);">'+(f==='active'?'Нет активных заказов.':'Пока пусто.')+'</div>';
+      h+=App._empty(App._emptyIc.cart,
+        f==='active'?'Нет активных заказов':'Заказов пока нет',
+        'Заказ — это договорённость с поставщиком: что и на сколько привезут. Когда товар придёт, отметите факт.',
+        ['Записать заказ','App.openOrderForm()']);
     } else {
       h+=list.map(function(o){
         var st=App._ordStatusInfo[o.status]||App._ordStatusInfo.active;
@@ -5205,6 +5249,10 @@ var App={
     var to=App._tabOrder.indexOf(tab);
     App._tabBack=(from>=0&&to>=0&&to<from);
     App._curTab=tab;
+    // Класс на теле страницы: по нему компьютерная версия прячет то,
+    // что на этом экране и так показано крупно (капитал на Главной).
+    document.body.className=document.body.className
+      .replace(/(^|\s)on-\S+/g,'').trim()+' on-'+tab;
     App.closeActionMenu();
     document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active');});
     document.querySelectorAll('.nav-item').forEach(function(b){b.classList.remove('active');});
@@ -9897,7 +9945,9 @@ var App={
         App._lossTile('Нужды магазина',s.needs,null)+
         App._lossTile('Возвраты',s.returns,'var(--pos)')+'</div>';
       var items=r.items||[];
-      if(!items.length){el.innerHTML='<div style="text-align:center;padding:20px 8px;color:var(--muted);line-height:1.6;">Записей пока нет.<br>Нажми «Списание» или «Возврат».</div>';return;}
+      if(!items.length){el.innerHTML=App._empty(App._emptyIc.box,'Списаний пока нет',
+        'Сюда попадает то, что не продалось: просрочка, брак, порча, а также возвраты поставщику. Это влияет на итог месяца.',
+        ['Записать списание','App.openLossForm(false)']);return;}
       el.innerHTML='<div class="row-anim" style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
         items.map(function(x,i){
           var ret=x.kind==='return';
@@ -10053,7 +10103,8 @@ var App={
           '<button onclick="App._oblDel('+i+')" style="background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:4px;flex-shrink:0;">✕</button></div>';
       }).join('');
     });
-    if(!r.items.length)h+='<div style="text-align:center;padding:14px;color:var(--muted);font-size:13px;">Пока пусто. Добавь долг, кредит или цель.</div>';
+    if(!r.items.length)h+=App._empty(App._emptyIc.scale,'Пока пусто',
+      'Здесь личные долги, кредиты и накопления — то, что к магазину не относится, но влияет на ваши деньги.');
     h+='<button class="btn-primary" style="margin-top:16px;" onclick="App.openObligForm(null)">+ Добавить</button>';
     b.innerHTML=h;
   },
@@ -10130,7 +10181,8 @@ var App={
         }).join('')+'</div>';
     }
     h+='<div class="pc-sec">История ('+items.length+')</div>';
-    if(!items.length)h+='<div style="color:var(--muted);font-size:13px;padding:8px 0;">Пока пусто. Записи появятся, когда пойдут накладные.</div>';
+    if(!items.length)h+=App._empty(App._emptyIc.store,'Движений пока нет',
+      'Записи появятся сами, когда вы начнёте закрывать накладные за день: что оплатили и что осталось в долг.');
     else h+='<div style="background:var(--surface-2);border-radius:14px;overflow:hidden;">'+
       items.slice(0,80).map(function(x){
         var up=x.type!=='oplata';
@@ -10376,7 +10428,8 @@ var App={
     if(r&&r.__error){b.innerHTML='<div style="color:var(--neg);">'+App._e(r.__error)+'</div>';return;}
     App._netLast=r;
     var orgs=(r&&r.orgs)||[], T=(r&&r.totals)||{};
-    if(!orgs.length){b.innerHTML='<div style="text-align:center;padding:22px;color:var(--muted);">Магазинов пока нет.</div>';return;}
+    if(!orgs.length){b.innerHTML=App._empty(App._emptyIc.store,'Магазинов пока нет',
+      'Здесь появятся все ваши точки с итогами по каждой и сравнением между ними.');return;}
     var fm=function(v){return fmt(Math.round(v||0));};
     var h='';
     if(r.single)h+='<div style="font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:12px;">У вас пока один магазин — здесь его итоги. Откроете второй, и на этом экране появится сравнение.</div>';
@@ -13068,7 +13121,9 @@ var App={
     var imap={};(an.timeline||[]).forEach(function(d){imap[d.label]=(imap[d.label]||0)+(d.income||0);});
     var labels={};Object.keys(zmap).forEach(function(k){labels[k]=1;});Object.keys(imap).forEach(function(k){labels[k]=1;});
     var keys=Object.keys(labels);
-    if(!keys.length){b.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);">Нет данных для сверки за период.<br>Нужны смены (Z-отчёты) и проведённая выручка.</div>';return;}
+    if(!keys.length){b.innerHTML=App._empty(App._emptyIc.scale,'Сверять пока нечего',
+      'Сверка показывает, сходится ли выручка по Z-отчётам с проведёнными операциями. Нужны записанные смены за выбранный период.',
+      ['Открыть кассу','App.closeModal();App.setTab(\'kassa\',null)']);return;}
     keys.sort(function(a,c){var pa=a.split('.'),pc=c.split('.');return (parseInt(pa[1])*100+parseInt(pa[0]))-(parseInt(pc[1])*100+parseInt(pc[0]));});
     var totZ=0,totI=0,anomalies=0;
     var rowsHtml=keys.map(function(k){
@@ -13160,7 +13215,8 @@ var App={
     gs('getAuditLog',{ssId:App.s.ssId}).then(function(r){
       var el=document.getElementById('audit-body');if(!el)return;
       var items=(r&&r.items)||[];
-      if(!items.length){el.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);">Пока пусто. Здесь появятся удаления операций и корректировки балансов.</div>';return;}
+      if(!items.length){el.innerHTML=App._empty(App._emptyIc.clock,'Записей пока нет',
+        'Здесь видно, кто и когда удалял операции и правил остатки. Пусто — значит ничего такого не происходило.');return;}
       el.innerHTML='<div style="background:var(--surface-2);border-radius:12px;overflow:hidden;">'+items.map(function(it){
         return'<div style="padding:11px 13px;border-top:1px solid var(--line-2);"><div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-size:13px;font-weight:700;">'+App._e(it.action)+'</span><span style="font-size:12px;color:var(--muted);">'+App._e(it.time)+'</span></div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">'+App._e(it.detail)+(it.user?' · <span style="color:var(--brand);">'+App._e(it.user)+'</span>':'')+'</div></div>';
       }).join('')+'</div>';
