@@ -6092,7 +6092,24 @@
 
     // офлайн-копия приложения + установка на главный экран телефона
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('sw.js').catch(() => { /* например, локальный запуск с file:// */ });
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        // проверяем обновление сразу и при каждом возврате к вкладке —
+        // иначе у человека может неделями работать старая версия
+        const check = () => reg.update().catch(() => { /* нет сети — не страшно */ });
+        check();
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      }).catch(() => { /* например, локальный запуск с file:// */ });
+      // Новая версия перехватила управление → перезагружаем страницу ОДИН раз,
+      // чтобы человек сразу работал на свежем коде и ничего не делал руками.
+      // ВАЖНО: только если управление БЫЛО и сменилось. При самом первом заходе
+      // контроллер появляется впервые — там перезагружать нечего и незачем.
+      const hadController = !!navigator.serviceWorker.controller;
+      let swReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController || swReloaded) return;
+        swReloaded = true;
+        location.reload();
+      });
     }
 
     if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
