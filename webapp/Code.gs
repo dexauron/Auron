@@ -4706,7 +4706,20 @@ function getAnalytics(p) {
     // выплата тому, за кем долга не числилось, общий долг не двигала.
     // Владелец это и увидел: «выплачиваю, а с общего долга не
     // списывается».
-    try{getDebts({ssId:ssId}).forEach(function(d){totalDebt+=d.debt;});}catch(e){}
+    // Заодно собираем, КОМУ именно должны: одна общая сумма не говорит,
+    // с кого начинать рассчитываться. Поставщиков бывает под шесть сотен,
+    // поэтому наружу отдаём только заметных, остальных — одной строкой.
+    var debtTop=[];
+    try{getDebts({ssId:ssId}).forEach(function(d){
+      totalDebt+=d.debt;
+      if (d.debt>0) debtTop.push({id:d.id||'',name:d.name,total:Math.round(d.debt)});
+    });}catch(e){}
+    debtTop.sort(function(a,b){return b.total-a.total;});
+    if (debtTop.length>8){
+      var rest=debtTop.slice(8).reduce(function(s,x){return s+x.total;},0);
+      debtTop=debtTop.slice(0,8);
+      if (rest>0) debtTop.push({id:'',name:'Остальные',total:rest});
+    }
     if (totalDebt<0) totalDebt=0;
     // Средние за день. Делим на дни, В КОТОРЫЕ БЫЛИ ЗАПИСИ, а не на все
     // дни периода: магазин работает не каждый день и не каждый день
@@ -4720,7 +4733,8 @@ function getAnalytics(p) {
       profit:  actDays ? Math.round((income-expense)/actDays) : 0 };
 
     var _res={income:Math.round(income),expense:Math.round(expense),byCategory:byCategory,
-            timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt),avg:avg};
+            timeline:timeline,heatmap:heatmap,totalDebt:Math.round(totalDebt),
+            debtTop:debtTop,avg:avg};
     try { CacheService.getScriptCache().put(_ak, JSON.stringify(_res), 90); } catch(_e){}
     return _res;
   } catch(e) { return {income:0,expense:0,byCategory:[],timeline:[],heatmap:_emptyHm(),totalDebt:0}; }

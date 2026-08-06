@@ -66,6 +66,15 @@
   --shadow-xl:0 2px 4px rgba(0,0,0,.4),0 24px 60px -20px rgba(0,0,0,.85);
   --glow-brand:0 0 40px color-mix(in oklab,var(--brand) 25%,transparent);
   --inner-light:0 1px 0 rgba(255,255,255,.06) inset;
+  /* Объём по-эппловски: свет ложится сверху, тень собирается снизу.
+     Две кромки внутри карточки — верхняя светлая, нижняя тёмная —
+     дают ощущение толщины без нарисованного «трёхмерного» рисунка.
+     Крикливый 3D в приложении про деньги мешает читать цифры. */
+  --bevel:inset 0 1px 0 rgba(255,255,255,.11),inset 0 -1px 0 rgba(0,0,0,.4);
+  /* Тень из двух слоёв: близкая держит край, дальняя даёт глубину. */
+  --lift:0 1px 2px rgba(0,0,0,.4),0 10px 24px -12px rgba(0,0,0,.7),0 28px 56px -28px rgba(0,0,0,.6);
+  /* Стеклянный блик поверх фона карточки. */
+  --glass:linear-gradient(180deg,rgba(255,255,255,.055) 0%,rgba(255,255,255,.012) 42%,rgba(255,255,255,0) 100%);
   /* Fonts */
   --font:"Plus Jakarta Sans",system-ui,sans-serif;
   --font-num:"Space Grotesk","Plus Jakarta Sans",system-ui,sans-serif;
@@ -357,8 +366,8 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
   background:rgba(14,14,22,.94);
   backdrop-filter:blur(26px) saturate(180%);-webkit-backdrop-filter:blur(26px) saturate(180%);
   border:1px solid rgba(255,255,255,.09);
-  border-radius:26px;
-  box-shadow:0 18px 44px -14px rgba(0,0,0,.8);
+  border-radius:28px;
+  box-shadow:var(--bevel),0 18px 44px -14px rgba(0,0,0,.8),0 40px 80px -40px rgba(0,0,0,.7);
   display:grid;
   /* Средняя колонка под «+» уже боковых: иначе «Поставщикам» не хватало
      места и подпись обрывалась на «Поставщ...». */
@@ -376,7 +385,16 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
 }
 .nav-item:active{transform:scale(.88);}
 .nav-item.active{color:var(--brand);}
-.nav-icon-wrap{display:flex;align-items:center;justify-content:center;}
+.nav-icon-wrap{display:flex;align-items:center;justify-content:center;position:relative;}
+/* Счётчик ждущих выплат. Владелец должен видеть его, не заходя в раздел. */
+.nav-badge{
+  position:absolute;top:-5px;right:-9px;min-width:17px;height:17px;padding:0 4px;
+  border-radius:9px;background:var(--neg);color:#fff;
+  font-size:10px;font-weight:800;line-height:17px;text-align:center;
+  align-items:center;justify-content:center;
+  box-shadow:0 2px 6px -1px rgba(0,0,0,.6);
+}
+.sb-nav-icon{position:relative;}
 /* Подписи ужимаем: «Поставщики» и «Аналитика» рядом слипались в одно
    слово, и меню читалось как каша. */
 .nav-label{font-size:9.5px;font-weight:700;letter-spacing:0;
@@ -433,10 +451,10 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
     radial-gradient(80% 120% at 100% -20%,color-mix(in oklab,var(--brand) 55%,transparent) 0%,transparent 60%),
     radial-gradient(50% 80% at 0% 100%,rgba(48,209,88,.12) 0%,transparent 60%),
     linear-gradient(160deg,#131318 0%,#1a1a22 100%);
-  border-radius:24px;border:1px solid rgba(255,255,255,.1);
+  border-radius:28px;border:1px solid rgba(255,255,255,.1);
   /* Было 24px со всех сторон — карточка занимала полэкрана. */
   padding:18px 18px 16px;
-  box-shadow:var(--inner-light),var(--shadow-xl);
+  box-shadow:var(--bevel),var(--shadow-xl),0 40px 80px -36px rgba(0,0,0,.75);
   position:relative;overflow:hidden;
 }
 /* Появление экрана: блоки поднимаются по очереди, а не возникают разом.
@@ -519,19 +537,23 @@ html[data-accent="lime"] #fab svg{stroke:#0B1105;}
 /* ── 2×2 split stat tiles ── */
 .home-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 16px 14px;}
 .split-tile{
-  background:var(--surface);
-  border-radius:20px;
+  background:var(--glass),var(--surface);
+  border-radius:24px;
   padding:18px 16px;
-  border:1px solid rgba(255,255,255,.07);
-  box-shadow:var(--inner-light),0 8px 24px -12px rgba(0,0,0,.6);
-  transition:transform .15s;
+  border:1px solid rgba(255,255,255,.08);
+  box-shadow:var(--bevel),var(--lift);
+  transition:transform .16s cubic-bezier(.22,1,.36,1),box-shadow .16s;
   cursor:pointer;
 }
-.split-tile:active{transform:scale(.97);}
+/* При нажатии карточка не просто сжимается, а «прогибается»: тень
+   уходит ближе к краю. Так палец чувствует, что нажал по предмету. */
+.split-tile:active{transform:scale(.975);
+  box-shadow:var(--bevel),0 1px 2px rgba(0,0,0,.5),0 4px 10px -6px rgba(0,0,0,.7);}
 .split-tile-k{font-size:12px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em;}
 .split-tile-ic{
   width:36px;height:36px;
-  border-radius:11px;
+  border-radius:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 -1px 0 rgba(0,0,0,.28),0 4px 10px -6px rgba(0,0,0,.7);
   display:grid;place-items:center;
   flex-shrink:0;font-size:17px;
 }
@@ -1283,6 +1305,12 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;
   }
   .sb-nav{display:flex;flex-direction:column;gap:4px;}
+  /* Девять пунктов подряд читаются как свалка. Три группы отвечают на
+     вопрос «где искать»: ежедневная работа, деньги, настройка. */
+  .sb-group{
+    font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--muted);opacity:.65;padding:0 14px;margin:14px 0 4px;
+  }
   .sb-nav-item{
     display:flex;align-items:center;gap:12px;padding:11px 14px;
     border-radius:14px;border:none;background:none;color:var(--ink-2);
@@ -2410,14 +2438,16 @@ input.money{font-variant-numeric:tabular-nums;}
       </div>
     </div>
     <nav class="sb-nav">
+      <div class="sb-group" style="margin-top:0;">Работа</div>
       <button class="sb-nav-item active" data-tab="home" onclick="App.setTab('home',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>Главная
       </button>
       <button class="sb-nav-item" data-need="goods" onclick="App.openGoods()">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>Товары
       </button>
+      <div class="sb-group">Деньги</div>
       <button class="sb-nav-item" data-need="finance" data-tab="suppliers" onclick="App.setTab('suppliers',this)">
-        <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Поставщики
+        <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="nav-badge" id="pay-badge-sb" style="display:none;"></span></span>Поставщики
       </button>
       <button class="sb-nav-item" data-need="kassa" data-tab="kassa" onclick="App.setTab('kassa',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>Касса
@@ -2433,6 +2463,7 @@ input.money{font-variant-numeric:tabular-nums;}
       <button class="sb-nav-item" data-need="finance" data-tab="report" onclick="App.setTab('report',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Отчёт
       </button>
+      <div class="sb-group">Настройка</div>
       <button class="sb-nav-item" data-tab="settings" onclick="App.setTab('settings',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Настройки
       </button>
@@ -3612,7 +3643,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.5.0';
+var APP_VERSION='6.7.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -4272,9 +4303,16 @@ var App={
       if(d<today){overdueAmt+=plan;overdueN++;}
       else if(d<=d3){upcomingAmt+=plan;upcomingN++;}
     });
-    var badge=document.getElementById('pay-badge');
     var total=overdueN+upcomingN;
-    if(badge){badge.textContent=total>9?'9+':total;badge.style.display=total>0?'flex':'none';}
+    ['pay-badge','pay-badge-sb'].forEach(function(id){
+      var badge=document.getElementById(id);
+      if(!badge)return;
+      badge.textContent=total>9?'9+':total;
+      badge.style.display=total>0?'flex':'none';
+      // Просрочка красная, «скоро платить» — жёлтая. Один цвет для
+      // обоих случаев заставлял бы открывать раздел, чтобы понять срочность.
+      badge.style.background=overdueN>0?'var(--neg)':'#D97706';
+    });
     var banner=document.getElementById('notif-banner');
     var text=document.getElementById('notif-text');
     if(banner&&text){
@@ -5214,8 +5252,12 @@ var App={
     var center='<div class="nav-center"><button class="nav-center-btn" onclick="App.openActionMenu()" aria-label="Действия"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button></div>';
     var btn=function(id){var m=App._navMeta(id);if(!m)return '';
       var on=(m.tab&&m.tab===App._curTab);
-      return '<button class="nav-item'+(on?' active':'')+'" '+(m.tab?'data-tab="'+m.tab+'" ':'')+'onclick="'+m.act+'"><div class="nav-icon-wrap"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg></div><span class="nav-label">'+m.t+'</span></button>';};
+      // Счётчик висит там, где ждут выплаты. Вкладку можно переставить
+      // или убрать, поэтому метку ставим по id пункта, а не по месту.
+      var bdg=(m.id==='suppliers')?'<span class="nav-badge" id="pay-badge" style="display:none;"></span>':'';
+      return '<button class="nav-item'+(on?' active':'')+'" '+(m.tab?'data-tab="'+m.tab+'" ':'')+'onclick="'+m.act+'"><div class="nav-icon-wrap"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+m.svg+'</svg>'+bdg+'</div><span class="nav-label">'+m.t+'</span></button>';};
     nav.innerHTML=btn(cfg[0])+btn(cfg[1])+center+btn(cfg[2])+btn(cfg[3]);
+    App._checkNotifications();
   },
   openNavCustomize:function(){
     var allowed=App._navAllowed(),cfg=App._navCfg();
@@ -7399,8 +7441,27 @@ var App={
 
   _renderDebtAn:function(r){
     var el=document.getElementById('an-debts');
-    el.innerHTML='<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Суммарный долг ТП</div>'+
+    var list=r.debtTop||[];
+    var h='<div class="metric-card" style="margin-bottom:16px;"><div class="metric-label">Долг поставщикам</div>'+
       '<div class="metric-value red">₽ '+fmt(r.totalDebt||0)+'</div></div>';
+    if(!list.length){
+      el.innerHTML=h+App._empty('<svg class="ei" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+        'Долгов нет','Всё, что взяли у поставщиков, оплачено.');
+      return;
+    }
+    // Одна общая сумма не отвечает на вопрос «с кого начинать
+    // рассчитываться». Кольцо и полоски показывают это с одного взгляда.
+    h+='<div class="grp-label">Кому должны</div>';
+    h+=App._donutRing(list,0,'Долг');
+    h+=App._shareRows(list,0,'App._mdDebtRep');
+    el.innerHTML=h;
+    App._anDebtList=list;
+  },
+  // Нажатие по строке долга — сразу история расчётов с этим поставщиком.
+  _mdDebtRep:function(i){
+    var d=App._anDebtList&&App._anDebtList[i];
+    if(!d||!d.id)return;
+    App.openRepHistory(d.id,d.name);
   },
 
   _renderSuppliers:function(r){
