@@ -71,6 +71,7 @@
     contacts: {},     // supplier_id → контакты (загружаются после входа)
     competitors: [],  // магазины конкурентов (список названий)
     compPrices: [],   // записанные цены магазинов: {product_id, competitor_id, price, observed_at}
+    unitCoef: {},     // словарь единиц: «упак (24)» → 24 базовых единицы
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
@@ -1324,6 +1325,13 @@
         const label = fmtBarcodeUnit((p.barcode_units || {})[b]);
         rows.push(fieldRow(label ? `Штрихкод · ${label}` : (bcOrdered.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод'), b, false, true));
       });
+      // Фасовки товара из справочника единиц: в чём он продаётся и сколько
+      // штук внутри. Показываем, только если фасовок больше одной.
+      const packs = (p.pack_units || []).filter((u) => u && u.unit);
+      if (packs.length > 1) {
+        const list = packs.map((u) => fmtBarcodeUnit(u.unit)).filter(Boolean).join(' · ');
+        if (list) rows.push(`<div class="field-row"><span class="field-key">Фасовки</span><span class="field-val" style="font-weight:600;font-size:14px">${esc(list)}</span></div>`);
+      }
       if (p.department) rows.push(fieldRow('Отдел', p.department));
       if (p.arrival_at) rows.push(fieldRow('Поступление', fmtDate(p.arrival_at)));
       if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
@@ -1986,6 +1994,7 @@
       products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
       competitors: state.competitors || [], compPrices: state.compPrices || [],
+      unitCoef: state.unitCoef || {},
       staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
     };
   }
@@ -1997,6 +2006,7 @@
       products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
       competitors: state.competitors || [], compPrices: state.compPrices || [],
+      unitCoef: state.unitCoef || {},
     };
   }
   // Открытый файл цен других магазинов: {магазины, записанные цены}
@@ -2043,6 +2053,7 @@
     state.contacts = data.contacts || {};
     state.competitors = data.competitors || [];
     state.compPrices = data.compPrices || [];
+    state.unitCoef = data.unitCoef || {};
     state.staffPassword = data.staffPassword || null;
     buildIndex();
     state.popularIds = buildPopularIds();
@@ -2063,6 +2074,7 @@
     state.contacts = data.contacts || {};
     state.competitors = data.competitors || [];   // цены магазинов сотрудник и видит, и вносит
     state.compPrices = data.compPrices || [];
+    state.unitCoef = data.unitCoef || {};
     buildIndex();
     state.popularIds = buildPopularIds();
     state.serverless = true;
@@ -2107,17 +2119,24 @@
      памяти (сопоставление по коду → штрихкоду → названию, id и фото сохраняются)
      и публикуется в зашифрованный файл. Парсеры не трогаем — переиспользуем. ── */
   function svUuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'p' + Date.now() + Math.random().toString(36).slice(2)); }
+  // Код номенклатуры из выгрузки Excel может прийти с разделителем тысяч:
+  // «1,001» — это код 1001, а не «1,001». Убираем только явные тройки.
+  function normCode(v) {
+    const str = String(v == null ? '' : v).trim();
+    return /^\d{1,3}(,\d{3})+$/.test(str) ? str.replace(/,/g, '') : str;
+  }
+
   function svIndex() {
     const byCode = new Map(), byBc = new Map(), byName = new Map();
     for (const p of state.products) {
-      if (p.code) byCode.set(String(p.code), p);
+      if (p.code) byCode.set(normCode(p.code), p);
       for (const b of (p.barcodes || [])) byBc.set(String(b), p);
       byName.set(norm(p.name), p);
     }
     return { byCode, byBc, byName };
   }
   function svMatch(idx, code, barcodes, name) {
-    if (code && idx.byCode.has(String(code))) return idx.byCode.get(String(code));
+    if (code && idx.byCode.has(normCode(code))) return idx.byCode.get(normCode(code));
     for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
     if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
     return null;
@@ -2240,6 +2259,30 @@
     return { added, matched, missing: missing.size };
   }
 
+  // Словарь единиц: название → сколько базовых единиц в одной такой.
+  function svUploadUnits(parsed) {
+    state.unitCoef = state.unitCoef || {};
+    const idx = svIndex();
+    const byProduct = new Map();     // товар → его единицы
+    let matched = 0; const missing = new Set();
+    for (const r of parsed.recs) {
+      if (r.coef != null) state.unitCoef[r.unit] = r.coef;
+      if (!r.code) continue;
+      const p = svMatch(idx, r.code, null, null);
+      if (!p) { missing.add(r.code); continue; }
+      const list = byProduct.get(p) || [];
+      if (!list.some((x) => x.unit === r.unit)) list.push({ unit: r.unit, coef: r.coef });
+      byProduct.set(p, list);
+    }
+    for (const [p, list] of byProduct) {
+      // базовая единица первой, дальше упаковки по возрастанию
+      list.sort((a, b) => (a.coef || 1) - (b.coef || 1));
+      p.pack_units = list;
+      matched++;
+    }
+    return { units: Object.keys(state.unitCoef).length, products: matched, missing: missing.size };
+  }
+
   // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
   function svImportRows(rows) {
     const type = detectReportType(rows);
@@ -2250,6 +2293,7 @@
     else if (type === 'sales') svUploadSales(parseSalesReport(rows));
     else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
     else if (type === 'barcodes') svUploadBarcodes(parseBarcodesReport(rows));
+    else if (type === 'units') svUploadUnits(parseUnitsReport(rows));
     else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
     return type;
   }
@@ -3410,7 +3454,7 @@
     for (let r = dataStart; r < rows.length; r++) {
       const name = cellStr(rows[r][cols.name]);
       if (!name) continue;
-      if (/^\s*(итого|всего|номенклатура|наименование)\b/i.test(name)) continue;
+      if (/^\s*(итого|всего|номенклатура|наименование)/i.test(name)) continue;
       const retail = parsePriceNum(rows[r][cols.retail]);
       if (retail == null) { group = name; continue; } // строка без цены — заголовок группы
       const art = (name.match(/арт[\.\s№:]*([0-9a-zа-яё][0-9a-zа-яё\-\/.]*)/i) || [])[1] || null;
@@ -3427,7 +3471,11 @@
     if (!str) return null;
     const m = str.match(/^(.*?)\s*\(([^)]+)\)\s*$/);
     const base = (m ? m[1] : str).trim().toLowerCase();
-    const qty = m ? Number(String(m[2]).replace(',', '.').replace(/\s/g, '')) : null;
+    // сколько базовых единиц в одной такой: сначала из справочника единиц
+    // (если он загружен), иначе — из числа в скобках названия
+    const fromDict = (state.unitCoef || {})[str];
+    const inParens = m ? Number(String(m[2]).replace(',', '.').replace(/\s/g, '')) : null;
+    const qty = (fromDict != null && fromDict !== 1) ? fromDict : inParens;
     const isPack = /^упак|^упаковка|^блок|^кор/.test(base);
     const isKg = /^кг$/.test(base);
     const isPc = /^шт/.test(base);
@@ -3454,6 +3502,46 @@
     return [2, u.qty || 0];
   }
 
+  // Справочник «Единицы измерения» из 1С. Товаров в нём нет — только сами
+  // единицы и коэффициент (сколько базовых единиц в одной такой). Нужен как
+  // словарь: «упак (24)» → 24 шт, «кг (2,5)» → 2,5 кг. Обычно число дублируется
+  // в скобках названия, но словарь надёжнее — он покрывает и единицы без скобок.
+  function parseUnitsReport(rows) {
+    const det = detectColumns(rows);
+    // у этого справочника нет колонки «Номенклатура», поэтому detectColumns не
+    // сработает — ищем колонки по шапке сами
+    let head = -1; let cUnit = 0; let cCoef = -1; let cCode = -1;
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const labels = (rows[r] || []).map((v) => cellStr(v).toLowerCase());
+      // именно СТРОКА ЗАГОЛОВКОВ: в ней есть и колонка единиц, и коэффициент.
+      // Служебные строки шапки («Имя объекта: Единицы измерения») так отсеиваются.
+      const ic = labels.findIndex((l) => l.includes('коэффициент') && !l.includes('цены'));
+      if (ic < 0) continue;
+      const iu = labels.findIndex((l) => /единиц/.test(l) && !l.includes('имя объекта') && !l.includes('в базовой'));
+      if (iu < 0) continue;
+      head = r; cUnit = iu; cCoef = ic;
+      // код номенклатуры — если выгружен, единицы привяжутся к товарам
+      cCode = labels.findIndex((l) => l.includes('номенклатура.код') || (l.includes('код') && l.includes('номенклатур')));
+      break;
+    }
+    if (head < 0) throw new Error('Не нашёл в файле колонки «Единицы измерения» и «Коэффициент»');
+    const recs = []; const seen = new Set();
+    for (let r = head + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const unit = cellStr(row[cUnit]);
+      if (!unit) continue;
+      if (/^\s*(итого|всего)/i.test(unit)) continue;   // строка итогов — не единица
+      const key = (cCode >= 0 ? normCode(row[cCode]) : '') + '|' + unit;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const coef = cCoef >= 0 ? parsePriceNum(row[cCoef]) : null;
+      const code = cCode >= 0 ? normCode(row[cCode]) : '';
+      recs.push({ unit, coef, code });
+    }
+    if (!recs.length) throw new Error('В справочнике единиц нет ни одной строки');
+    return { recs };
+  }
+
   // Справочник «Штрих коды» из 1С: колонки «Штрих код», «Единица», «Номенклатура».
   // У одного товара может быть НЕСКОЛЬКО штрихкодов — на штуку, на упаковку, на
   // весовую фасовку. Единицу сохраняем рядом с кодом, чтобы было видно, что
@@ -3470,7 +3558,7 @@
       const barcode = cellStr(row[cols.barcode]);
       const name = cellStr(row[cols.name]);
       if (!barcode || !name) continue;
-      if (/^\s*(итого|всего)\b/i.test(name)) continue;
+      if (/^\s*(итого|всего)/i.test(name)) continue;
       recs.push({
         barcode,
         name,
@@ -3500,6 +3588,10 @@
     const hasSupplier = has('поставщик') || hasContragent;
 
     if (/https?:\/\//.test(head)) return 'photo';
+    // Справочник единиц измерения. Проверяем ПЕРВЫМ: в его шапке есть слова
+    // «Розничная цена единицы» и «Количество в упаковке», из-за которых файл
+    // раньше принимался за отчёт об остатках.
+    if (/имя объекта:\s*единиц/.test(head)) return 'units';
     // Справочник штрихкодов: 1С сама пишет в шапке имя объекта.
     if (/имя объекта:\s*штрих/.test(head)) return 'barcodes';
     // Либо по составу колонок: есть «Штрих код» и «Номенклатура», а цен,
@@ -3528,6 +3620,7 @@
     retail: 'Прайс-лист (розничные цены)',
     photo: 'Фото по ссылкам',
     barcodes: 'Штрихкоды',
+    units: 'Справочник единиц измерения',
   };
 
   // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
@@ -3609,6 +3702,7 @@
         else if (entry.type === 'contacts') { entry.parsed = parseContactsReport(rows); entry.count = entry.parsed.length; }
         else if (entry.type === 'photo') { entry.parsed = parsePhotoSheet(rows); entry.count = entry.parsed.length; }
         else if (entry.type === 'barcodes') { entry.parsed = parseBarcodesReport(rows); entry.count = entry.parsed.recs.length; }
+        else if (entry.type === 'units') { entry.parsed = parseUnitsReport(rows); entry.count = entry.parsed.recs.length; }
       } catch (e) { entry.error = e.message || String(e); }
       smartEntries.push(entry);
     }
@@ -3646,8 +3740,9 @@
   async function smartRun() {
     const btn = $('smartRun');
     btn.disabled = true;
-    // порядок: сначала товары/цены/остатки/прайс, потом продажи/контакты/фото
-    const order = { prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+    // порядок: словарь единиц первым (чтобы штрихкоды сразу знали количества в
+    // упаковке), затем товары/цены/остатки/прайс, потом продажи/контакты/фото
+    const order = { units: 0, prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
     const todo = smartEntries.filter((e) => e.type && !e.error && (state.serverless || e.type !== 'barcodes'))
       .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
     let okCount = 0;
@@ -3661,6 +3756,12 @@
           else if (e.type === 'stock') svUploadStock(e.parsed);
           else if (e.type === 'sales') svUploadSales(e.parsed);
           else if (e.type === 'contacts') svUploadContacts(e.parsed);
+          else if (e.type === 'units') {
+            const r = svUploadUnits(e.parsed);
+            setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
+              + (r.missing ? `, кодов без товара: ${r.missing}` : ''));
+            okCount++; continue;
+          }
           else if (e.type === 'barcodes') {
             const r = svUploadBarcodes(e.parsed);
             setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
