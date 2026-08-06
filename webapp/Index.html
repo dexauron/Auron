@@ -420,6 +420,37 @@ html[data-theme="light"][data-accent="purple"]{--brand:#5E5CE6;}
   box-shadow:var(--inner-light),var(--shadow-xl);
   position:relative;overflow:hidden;
 }
+/* Быстрые действия под балансом. Круглый значок + подпись — читается
+   как «кнопка», а не как строка списка, и не спорит с цифрами выше. */
+.hero-qa{display:flex;gap:6px;margin-top:18px;position:relative;z-index:2;}
+.qa{flex:1;min-width:0;background:transparent;border:none;
+  padding:0;cursor:pointer;font-family:var(--font);
+  display:flex;flex-direction:column;align-items:center;gap:5px;
+  transition:transform .14s cubic-bezier(.22,1,.36,1);}
+.qa:active{transform:scale(.92);}
+.qa:active .qa-ic{background:rgba(255,255,255,.2);}
+/* Кружок со значком — как в образце, который прислал владелец: действие
+   читается за долю секунды и не спорит с крупными цифрами выше. */
+.qa-ic{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+  background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.10);
+  color:#fff;transition:background .14s;}
+.qa-t{font-size:11px;font-weight:650;color:rgba(255,255,255,.75);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+
+/* Появление экрана: блоки поднимаются по очереди, а не возникают разом.
+   Разница в 60 мс между ними — этого хватает, чтобы экран «ожил», и мало,
+   чтобы кто-то ждал. */
+@keyframes riseIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:none;}}
+#tab-home > .home-hero,
+#tab-home > .period-bar,
+#tab-home > .home-split,
+#tab-home > #home-board{animation:riseIn .34s cubic-bezier(.22,1,.36,1) both;}
+#tab-home > .period-bar{animation-delay:.05s;}
+#tab-home > .home-split{animation-delay:.10s;}
+#tab-home > #home-board{animation-delay:.15s;}
+/* Отдельного правила «выключить движение» здесь нет и не нужно: ниже
+   уже стоит одно глобальное на всё приложение (см. prefers-reduced-motion).
+   Второе такое же только создало бы два места правды. */
 .home-hero-ring{
   position:absolute;right:-70px;top:-90px;width:320px;height:320px;
   border-radius:50%;border:40px solid rgba(255,255,255,.04);pointer-events:none;
@@ -2436,6 +2467,20 @@ input.money{font-variant-numeric:tabular-nums;}
           <div class="skel acct-pill" style="height:62px;min-width:100px;"></div>
           <div class="skel acct-pill" style="height:62px;min-width:100px;"></div>
         </div>
+        <!-- Быстрые действия прямо в карточке баланса: три дела, ради
+             которых владелец открывает приложение чаще всего. Раньше до
+             них было два-три нажатия через «+» или вкладки. -->
+        <div class="hero-qa">
+          <button class="qa" data-need="finance" onclick="App.openNumpad()">
+            <span class="qa-ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2 2 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>
+            <span class="qa-t">Записать</span></button>
+          <button class="qa" data-need="kassa" onclick="App.setTab('kassa',null)">
+            <span class="qa-ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18l2-1 2 1 2-1 2 1 2-1 2 1V3l-2 1-2-1-2 1-2-1-2 1z"/><path d="M9 8h6M9 12h6"/></svg></span>
+            <span class="qa-t">Касса</span></button>
+          <button class="qa" data-need="receive" onclick="App.openReceiveRep()">
+            <span class="qa-ic"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7z"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg></span>
+            <span class="qa-t">Поставщик</span></button>
+        </div>
       </div>
       <!-- Period pills -->
       <div class="period-bar">
@@ -3524,7 +3569,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.1.0';
+var APP_VERSION='6.2.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
