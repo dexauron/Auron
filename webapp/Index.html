@@ -1389,6 +1389,43 @@ body.view-only .view-badge{display:inline-flex;align-items:center;gap:5px;font-s
 }
 #print-root{display:none;padding:20px;font-family:var(--font);}
 
+/* ── Чек ──
+   Итог смены выглядит как настоящий чек: рваный край сверху и снизу,
+   моноширинные цифры, колонки сходятся по правому краю. Смысл не в
+   украшении — такой чек не стыдно отправить в WhatsApp владельцу или
+   бухгалтеру, и он читается как документ, а не как экран программы.
+   Край рисуется маской из полукругов: картинки не нужны. */
+.receipt{
+  /* Светлее окна, в котором лежит: иначе вырезанные зубцы попадают на
+     фон того же цвета и рваного края попросту не видно. */
+  background:var(--surface-2);
+  padding:20px 16px 16px;
+  margin-bottom:14px;
+  position:relative;
+  --tooth:7px;
+  -webkit-mask:
+    radial-gradient(var(--tooth) at var(--tooth) 0,#0000 98%,#000) 0 0/calc(var(--tooth)*2) 100% repeat-x,
+    radial-gradient(var(--tooth) at var(--tooth) 100%,#0000 98%,#000) 0 100%/calc(var(--tooth)*2) 100% repeat-x;
+  mask:
+    radial-gradient(var(--tooth) at var(--tooth) 0,#0000 98%,#000) 0 0/calc(var(--tooth)*2) 100% repeat-x,
+    radial-gradient(var(--tooth) at var(--tooth) 100%,#0000 98%,#000) 0 100%/calc(var(--tooth)*2) 100% repeat-x;
+  -webkit-mask-composite:source-in;mask-composite:intersect;
+}
+.receipt-hdr{text-align:center;padding-bottom:12px;margin-bottom:10px;
+  border-bottom:1px dashed var(--line-2);}
+.receipt-shop{font-size:15px;font-weight:800;letter-spacing:-.01em;}
+.receipt-when{font-size:11.5px;color:var(--muted);margin-top:3px;}
+.receipt-row{display:flex;justify-content:space-between;gap:12px;
+  font-size:13px;padding:5px 0;align-items:baseline;}
+.receipt-row>span:first-child{color:var(--muted);font-weight:600;}
+.receipt-row>span:last-child{font-family:var(--font-num);font-weight:750;
+  white-space:nowrap;text-align:right;}
+.receipt-sum{border-top:1px dashed var(--line-2);margin-top:8px;padding-top:10px;}
+.receipt-sum .receipt-row{font-size:15px;}
+.receipt-sum .receipt-row>span:first-child{color:var(--ink);font-weight:750;}
+.receipt-foot{text-align:center;font-size:10.5px;color:var(--muted);
+  margin-top:12px;padding-top:10px;border-top:1px dashed var(--line-2);}
+
 /* ── Payments ── */
 .pay-item{background:var(--surface);border-radius:var(--radius);padding:16px;margin-bottom:10px;border:1px solid var(--line);box-shadow:var(--shadow);}
 .pay-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px;}
@@ -3643,7 +3680,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.9.0';
+var APP_VERSION='6.10.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -6154,6 +6191,47 @@ var App={
       '</div>'+
       (navigator.share?'<button onclick="App._shareVia(\'native\')" class="btn-secondary" style="margin-top:10px;">Ещё…</button>':''));
   },
+  // Чек одним куском — и на экран, и в текст для отправки. Держим их
+  // рядом, чтобы отправленное всегда совпадало с показанным.
+  _receiptHtml:function(r){
+    var shop=(App.s.orgName||'Магазин');
+    var when=fmtDate(r.date)+(r.shift?' · смена '+App._e(r.shift):'');
+    var rows=r.lines.map(function(L){
+      return '<div class="receipt-row"><span>'+L[0]+'</span><span>'+L[1]+'</span></div>';
+    }).join('');
+    var diffTxt=r.diff===0?'сходится':((r.diff>0?'излишек +':'недостача −')+'₽ '+fmt(Math.abs(r.diff)));
+    var diffCol=r.diff===0?'var(--pos)':'var(--neg)';
+    return '<div class="receipt">'+
+      '<div class="receipt-hdr"><div class="receipt-shop">'+App._e(shop)+'</div>'+
+        '<div class="receipt-when">'+when+'</div></div>'+
+      rows+
+      '<div class="receipt-sum">'+
+        '<div class="receipt-row"><span>Выручка всего</span><span>₽ '+fmt(r.total)+'</span></div>'+
+        '<div class="receipt-row"><span>Касса</span><span style="color:'+diffCol+';">'+diffTxt+'</span></div>'+
+      '</div>'+
+      '<div class="receipt-foot">Auron Finance · '+fmtDate(r.date)+'</div>'+
+    '</div>';
+  },
+  // Тот же чек словами. В WhatsApp нет ни рамок, ни колонок, поэтому
+  // строим ровный столбик из простого текста — иначе на телефоне
+  // получателя всё съедет.
+  _receiptText:function(r){
+    var out=[(App.s.orgName||'Магазин'),
+             fmtDate(r.date)+(r.shift?' · смена '+r.shift:''),''];
+    r.lines.forEach(function(L){ out.push(L[0]+': '+L[1]); });
+    out.push('');
+    out.push('Выручка всего: ₽ '+fmt(r.total));
+    out.push('Касса: '+(r.diff===0?'сходится':
+      ((r.diff>0?'излишек +':'недостача −')+'₽ '+fmt(Math.abs(r.diff)))));
+    return out.join('\n');
+  },
+  shareReceipt:function(){
+    var r=App._lastReceipt;
+    if(!r){App.toast('Чек не найден',true);return;}
+    App._shareText=App._receiptText(r);
+    if(navigator.share){navigator.share({text:App._shareText}).catch(function(){});return;}
+    App._shareVia('wa');
+  },
   _shareVia:function(how){
     var text=App._shareText||'';
     if(how==='copy'){ if(navigator.clipboard)navigator.clipboard.writeText(text).then(function(){App.toast('Скопировано ✓');}); else App.toast('Не поддерживается',true); return; }
@@ -8086,19 +8164,25 @@ var App={
       // либо мог записать смену второй раз по тем же цифрам.
       App._kClearMorning();
       App.s.wyplatas=[];App.renderWyplatas();
-      var R=App._repRow;
+      // Итог смены — чеком: его отправляют бухгалтеру и владельцу, и
+      // список строк на сером фоне для этого выглядел как черновик.
+      var lines=[
+        ['Кассир',App._e(cashier)],
+        ['Выручка наличными','₽ '+fmt(rec.cashRev)]
+      ];
+      if(rec.cardTotal)lines.push(['Выручка безналом','₽ '+fmt(rec.cardTotal)]);
+      if(rec.cashSupp)lines.push(['Оплачено поставщикам','−₽ '+fmt(rec.cashSupp)]);
+      if(rec.cashCollect)lines.push(['Инкассация (забрал)','₽ '+fmt(rec.cashCollect)]);
+      if(wyCnt)lines.push(['Выплаты с кассы',wyCnt+' шт · −₽ '+fmt(wySum)]);
+      App._lastReceipt={date:date,shift:shift,lines:lines,diff:rec.diff,
+        total:(rec.cashRev||0)+(rec.cardTotal||0)};
       App.openModal('<div class="modal-title">'+SVG.check+' Смена записана</div>'+
-        '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;margin-bottom:14px;">'+
-        R('Кассир',App._e(cashier))+
-        R('Выручка нал','₽ '+fmt(rec.cashRev))+
-        (rec.cardTotal?R('Выручка безнал','₽ '+fmt(rec.cardTotal)):'')+
-        (rec.cashSupp?R('Оплачено поставщикам','−₽ '+fmt(rec.cashSupp)):'')+
-        (rec.cashCollect?R('Инкассация (забрал)','₽ '+fmt(rec.cashCollect)):'')+
-        R('Расхождение по кассе',(rec.diff===0?'✓ сходится':((rec.diff>0?'+':'−')+'₽ '+fmt(Math.abs(rec.diff)))),rec.diff===0?'var(--pos)':'var(--neg)',true)+
-        (wyCnt?R('Выплаты с кассы',wyCnt+' шт · −₽ '+fmt(wySum)):'')+
-        '</div>'+
+        App._receiptHtml(App._lastReceipt)+
         (rec.diff!==0?'<div style="font-size:12px;color:'+(rec.diff<0?'var(--neg)':'var(--warn,#FF9F0A)')+';margin-bottom:12px;line-height:1.5;">'+(rec.diff<0?'⚠️ Недостача — записана в историю смен на этого кассира.':'⚠️ Излишек — записан в историю смен.')+'</div>':'')+
-        '<button class="btn-primary" onclick="App.closeModal();App.initKassa();">Готово</button>');
+        '<div style="display:flex;gap:8px;">'+
+          '<button class="btn-secondary" style="flex:1;margin:0;" onclick="App.shareReceipt()">Отправить</button>'+
+          '<button class="btn-primary" style="flex:1;margin:0;" onclick="App.closeModal();App.initKassa();">Готово</button>'+
+        '</div>');
       App.haptic(12);
     }).catch(function(e){
       // Связь пропала — не теряем введённое: кладём в очередь и чистим
