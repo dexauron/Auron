@@ -66,7 +66,13 @@ jobs:
           mkdir -p app/catalog
           cp -r catalog-src/catalog/. app/catalog/
           rm -rf app/catalog/setup
+          # Зашифрованные каталоги владельца и сотрудника приложение читает
+          # НАПРЯМУЮ из репозитория (raw.githubusercontent.com), а не с сайта.
+          # На сайте они не нужны, а весят ~29 МБ из 35 — из-за них публикация
+          # Pages тянулась долго и срывалась по таймауту.
+          rm -f app/catalog/data/*.enc
           rm -rf catalog-src
+          echo "размер сайта: $(du -sh app | cut -f1)"
 
       - name: Добавить страницу сканера
         run: |
