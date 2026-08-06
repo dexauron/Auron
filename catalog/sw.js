@@ -1,7 +1,7 @@
 /* Way Market · Каталог — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v51';
+const CACHE = 'wm-catalog-v52';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -51,8 +51,14 @@ self.addEventListener('fetch', (e) => {
   }
 
   if (url.origin !== self.location.origin) return;
+  // Оболочку приложения (страница, скрипты, стили) тянем МИМО обычного кэша
+  // браузера: GitHub Pages отдаёт их с запасом на несколько минут, и без этого
+  // «сначала сеть» могло вернуть старый файл — у людей оставалась прежняя версия.
+  const isShell = e.request.mode === 'navigate'
+    || /\.(html|js|css|webmanifest)$/i.test(url.pathname);
+  const req = isShell ? new Request(e.request, { cache: 'reload' }) : e.request;
   e.respondWith(
-    fetch(e.request)
+    fetch(req)
       .then((resp) => {
         if (resp.ok) {
           const copy = resp.clone();
@@ -60,6 +66,6 @@ self.addEventListener('fetch', (e) => {
         }
         return resp;
       })
-      .catch(() => caches.match(e.request, { ignoreSearch: true })),
+      .catch(() => caches.match(e.request, { ignoreSearch: true })),   // нет сети — из офлайн-копии
   );
 });
