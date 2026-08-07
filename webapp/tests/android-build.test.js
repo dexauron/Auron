@@ -65,6 +65,26 @@ t('чужой файл отклоняется понятно',
 t('после замены сбрасывается кэш — иначе экран покажет старое',
   /Object\.keys\(CACHE\)\.forEach\(function\(k\)\{delete CACHE\[k\];\}\)/.test(h));
 
+// ── Напоминания с телефона ───────────────────────────────────────────
+// Раньше подсказка «закрой смену» была видна только тому, кто сам
+// открыл приложение. А если открыл — он и так помнит.
+t('напоминание ставит сам телефон', /LocalNotifications/.test(h));
+t('разрешение спрашивается', /requestPermissions/.test(h));
+t('по умолчанию 21:00 — магазин закрыт, но записать ещё не поздно',
+  /auron_notif_hour'\)\|\|'21'/.test(h));
+t('час можно поменять', /window\.auronSetNotifHour=function/.test(h));
+t('напоминания можно выключить и включить',
+  /window\.auronNotifOff=function/.test(h) && /window\.auronNotifOn=function/.test(h));
+t('старые будильники снимаются перед новым — иначе телефон звонил бы пачками',
+  /cancel\(\{notifications:\[\{id:1\},\{id:2\}\]\}\)/.test(h));
+t('повторяется каждый день', /repeats:true, every:'day'/.test(h));
+t('просрочка по выплатам — отдельно и сразу', /function _notifOverdue\(\)/.test(h));
+t('о просрочке напоминаем не чаще раза в день',
+  /auron_overdue_'\+_bakToday\(\)/.test(h));
+t('без плагина приложение не падает',
+  /window\.Capacitor&&window\.Capacitor\.Plugins&&/.test(h) &&
+  /if\(!_Notif\) return Promise\.resolve\(false\);/.test(h));
+
 // ── Сборка на GitHub ─────────────────────────────────────────────────
 var wf=fs.readFileSync(path.join(ROOT,'.github','workflows','build-apk.yml'),'utf8');
 t('сборка запускается кнопкой', /workflow_dispatch/.test(wf));

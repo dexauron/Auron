@@ -199,6 +199,98 @@ window.auronRestoreFile=function(text){
   };
 };
 
+/* ── Напоминания с телефона ───────────────────────────────────────
+   Раньше подсказка «закрой смену» была видна, только когда человек сам
+   открыл приложение. А если он его открыл — он и так помнит. Такое
+   напоминание бесполезно.
+
+   Здесь напоминание приходит на телефон само, даже когда приложение
+   закрыто. Ни сервера, ни интернета для этого не нужно: будильник
+   ставит сам телефон.
+
+   Внутри браузера (при проверке на компьютере) плагина нет — тогда всё
+   молча пропускается, чтобы приложение не падало. */
+var _Notif=(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.LocalNotifications)||null;
+
+function _notifReady(){
+  if(!_Notif) return Promise.resolve(false);
+  return _Notif.requestPermissions()
+    .then(function(r){ return !!(r&&(r.display==='granted'||r.display==='prompt-with-rationale')); })
+    .catch(function(){ return false; });
+}
+
+/* Во сколько напоминать — человек меняет в настройках. По умолчанию
+   21:00: магазин закрыт, смена посчитана, но ещё не поздно записать. */
+function _notifHour(){
+  var h=parseInt(localStorage.getItem('auron_notif_hour')||'21',10);
+  return (h>=0&&h<=23)?h:21;
+}
+window.auronSetNotifHour=function(h){
+  localStorage.setItem('auron_notif_hour',String(h));
+  return _notifSchedule();
+};
+window.auronNotifOff=function(){
+  localStorage.setItem('auron_notif_off','1');
+  if(_Notif) _Notif.cancel({notifications:[{id:1},{id:2}]}).catch(function(){});
+};
+window.auronNotifOn=function(){
+  localStorage.removeItem('auron_notif_off');
+  return _notifSchedule();
+};
+
+function _notifSchedule(){
+  if(localStorage.getItem('auron_notif_off')==='1') return Promise.resolve(false);
+  return _notifReady().then(function(okPerm){
+    if(!okPerm) return false;
+    var at=new Date(); at.setHours(_notifHour(),0,0,0);
+    // Старые напоминания снимаем: иначе при каждом запуске приложения
+    // копился бы новый будильник, и телефон звонил бы пачками.
+    return _Notif.cancel({notifications:[{id:1},{id:2}]}).catch(function(){}).then(function(){
+      return _Notif.schedule({notifications:[{
+        id:1,
+        title:'Auron',
+        body:'Пора закрыть смену и записать кассу',
+        schedule:{ at:at, repeats:true, every:'day', allowWhileIdle:true },
+        smallIcon:'ic_stat_icon'
+      }]});
+    }).then(function(){ return true; }).catch(function(){ return false; });
+  });
+}
+
+/* Отдельно — то, что нельзя откладывать до вечера: просроченные
+   выплаты поставщикам. Проверяем при каждом открытии приложения. */
+function _notifOverdue(){
+  if(!_Notif) return;
+  try{
+    var pays=(typeof getPayables==='function')?getPayables({ssId:'local'}):null;
+    var list=(pays&&pays.items)||pays||[];
+    if(!Array.isArray(list)) return;
+    var today=new Date(); today.setHours(0,0,0,0);
+    var n=0, sum=0;
+    list.forEach(function(r){
+      if(r.status!=='open'&&r.status!=='postponed') return;
+      var left=Math.max((r.amount||0)-(r.paid||0),0); if(!left) return;
+      var d=new Date(String(r.date)+'T00:00:00');
+      if(d<today){ n++; sum+=left; }
+    });
+    if(!n) return;
+    // Не чаще раза в день: иначе при каждом открытии приложения
+    // человек получал бы одно и то же напоминание.
+    var mark='auron_overdue_'+_bakToday();
+    if(localStorage.getItem(mark)) return;
+    localStorage.setItem(mark,'1');
+    _notifReady().then(function(okPerm){
+      if(!okPerm) return;
+      _Notif.schedule({notifications:[{
+        id:2, title:'Просроченные выплаты',
+        body:n+' на сумму '+Math.round(sum).toLocaleString('ru-RU')+' ₽',
+        schedule:{ at:new Date(Date.now()+5000) },
+        smallIcon:'ic_stat_icon'
+      }]}).catch(function(){});
+    });
+  }catch(e){}
+}
+
 /* ── Первый запуск ───────────────────────────────────────────────── */
 (function(){
   var had=_dbLoad();
@@ -218,6 +310,7 @@ window.auronRestoreFile=function(text){
     }catch(e){ console.error('первый запуск:', e); }
   }
   _bakAuto();   // копия за сегодня — сразу, а не «когда-нибудь»
+  try{ _notifSchedule(); _notifOverdue(); }catch(e){}
 })();
 </script>
 `;
