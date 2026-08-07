@@ -131,5 +131,22 @@ t('битый ключ ловится сразу', /Ключ не раскоди
 t('неподписанный файл не уедет людям', /! -name '\*unsigned\*'/.test(wf));
 t('отладочная сборка больше не используется', !/app-debug\.apk/.test(wf));
 
+// ── Файлы сборки лежат в репозитории ─────────────────────────────────
+// Сборка на GitHub видит только то, что попало в репозиторий. Файл
+// android/package.json был исключён старым правилом `package.json`
+// в .gitignore: у меня локально он был, а на GitHub его не оказалось,
+// и сборка упала с «Could not read package.json». По коду это не
+// видно — файл же существует.
+var cp2=require('child_process');
+['android/package.json','android/capacitor.config.json','android/build-www.js',
+ 'android/gas-bridge.js','android/make-icons.py',
+ 'android/icons/ic_launcher_mdpi.png','.github/workflows/build-apk.yml'
+].forEach(function(f){
+  var tracked=true;
+  try{ cp2.execSync('git ls-files --error-unmatch '+f,{cwd:ROOT,stdio:'pipe'}); }
+  catch(e){ tracked=false; }
+  t('в репозитории: '+f, tracked, 'файл есть локально, но сборка его не увидит');
+});
+
 console.log('\nСборка приложения: '+ok+' passed, '+fail+' failed');
 process.exit(fail?1:0);

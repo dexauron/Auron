@@ -2,6 +2,10 @@ __pycache__/
 node_modules/
 package-lock.json
 package.json
+# Но настройки Android-приложения нужны в репозитории: без них сборка
+# на GitHub падает с «Could not read package.json». Правило выше
+# задумано против случайных package.json в корне, а не против этого.
+!android/package.json
 
 # Локальные настройки Claude в репозиторий не кладём — они у каждого свои.
 .claude/*
