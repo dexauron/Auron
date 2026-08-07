@@ -6,17 +6,18 @@
 # Как запустить руками: вкладка Actions → «Собрать приложение Android»
 # → кнопка «Run workflow». Через 5–10 минут файл готов.
 #
-# ⚠️ ПРО КЛЮЧ ПОДПИСИ. Сейчас собирается отладочная версия — её
-# подписывает временный ключ, который создаёт сам Android. Такую версию
-# можно давать людям на пробу, но ОБНОВИТЬ её потом не выйдет: у
-# следующей сборки ключ будет другой, и Android откажется ставить её
-# поверх, а данные людей пропадут.
+# ПРО КЛЮЧ ПОДПИСИ. Сборка подписывается постоянным ключом владельца.
+# Ключ лежит в Settings → Secrets репозитория и в сборку попадает оттуда:
+# ни в коде, ни в журналах сборки его нет.
 #
-# Поэтому перед раздачей приложения дальше знакомых нужно:
-#   1. создать постоянный ключ (см. docs/19-ANDROID-HOWTO.md);
-#   2. положить его в Settings → Secrets как KEYSTORE_BASE64,
-#      KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD;
-#   3. раскомментировать блок «подписываем постоянным ключом» ниже.
+# Что это даёт: обновление встаёт ПОВЕРХ прежней версии, и данные людей
+# остаются на месте. Без постоянного ключа каждая сборка подписывалась бы
+# новым временным, Android считал бы её чужой программой и отказывался
+# ставить поверх.
+#
+# Нужны четыре секрета: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS,
+# KEY_PASSWORD. Если их нет — сборка остановится с понятным сообщением,
+# а не выдаст молча неподписанный файл.
 
 name: Собрать приложение Android
 
@@ -75,33 +76,44 @@ jobs:
           done
           echo "значки на месте"
 
-      - name: Собрать apk
+      - name: Проверить, что ключ на месте
+        env:
+          K: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$K" ]; then
+            echo "::error::Нет ключа подписи. Добавьте секреты KEYSTORE_BASE64,"
+            echo "::error::KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD в Settings → Secrets."
+            echo "::error::Как это сделать — docs/20-KEY-HOWTO.md"
+            exit 1
+          fi
+          echo "ключ найден"
+
+      - name: Собрать и подписать apk
         working-directory: android/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      # ── Подпись постоянным ключом (включить перед раздачей людям) ──
-      # - name: Подписать
-      #   working-directory: android/android
-      #   env:
-      #     KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-      #     KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      #     KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      #     KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      #   run: |
-      #     echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
-      #     ./gradlew assembleRelease --no-daemon \
-      #       -Pandroid.injected.signing.store.file=$PWD/release.keystore \
-      #       -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
-      #       -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
-      #       -Pandroid.injected.signing.key.password=$KEY_PASSWORD
+          # Ключ живёт только внутри этой сборки и исчезает вместе с ней.
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > release.keystore
+          test -s release.keystore || { echo "::error::Ключ не раскодировался — проверьте KEYSTORE_BASE64"; exit 1; }
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          rm -f release.keystore
 
       - name: Переименовать по-человечески
         run: |
           find android/android -name '*.apk' -print
           mkdir -p out
-          cp $(find android/android -name 'app-debug.apk' | head -1) out/auron.apk
+          APK=$(find android/android -name '*release*.apk' ! -name '*unsigned*' | head -1)
+          test -n "$APK" || { echo "::error::Подписанный файл не найден"; exit 1; }
+          cp "$APK" out/auron.apk
           ls -lh out/auron.apk
 
       - name: Файл можно скачать здесь
