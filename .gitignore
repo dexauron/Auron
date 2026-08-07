@@ -17,3 +17,5 @@ Index-desktop.png
 
 # архив сборки — собирается скриптом, в репозитории не нужен
 auron-bundle-*.zip
+android/www/
+android/node_modules/
