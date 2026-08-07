@@ -50,9 +50,11 @@ jobs:
         uses: actions/setup-node@v4
         with: { node-version: '20' }
 
+      # Java 17, а не 21: под неё сделан Capacitor 6. На 21 сборка Gradle
+      # спотыкается о несовместимость плагина.
       - name: Java (нужна Android-сборке)
         uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: '21' }
+        with: { distribution: 'temurin', java-version: '17' }
 
       - name: Android SDK
         uses: android-actions/setup-android@v3
@@ -71,21 +73,40 @@ jobs:
       - name: Создать Android-проект
         working-directory: android
         run: |
-          npx cap add android || echo "проект уже есть"
+          # Раньше здесь стояло «|| echo проект уже есть»: настоящая ошибка
+          # пряталась, и падал уже следующий шаг — с непонятным сообщением.
+          # Проект каждый раз создаётся с нуля, поэтому глушить нечего.
+          npx cap add android
           npx cap sync android
+          test -f android/gradlew || { echo "::error::Android-проект не создался"; exit 1; }
+          echo "проект на месте"
 
       - name: Поставить значок приложения
         working-directory: android
         run: |
+          # На сервере GitHub Python есть, а библиотеки для картинок нет —
+          # именно на этом упала первая сборка.
+          python3 -m pip install --quiet --disable-pip-version-check pillow
           python3 make-icons.py
+
           R=android/app/src/main/res
           for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
             mkdir -p "$R/mipmap-$d"
-            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher.png"
-            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher_round.png"
-            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher_foreground.png"
+            cp "icons/ic_launcher_$d.png"        "$R/mipmap-$d/ic_launcher.png"
+            cp "icons/ic_launcher_$d.png"        "$R/mipmap-$d/ic_launcher_round.png"
+            cp "icons/ic_launcher_foreground.png" "$R/mipmap-$d/ic_launcher_foreground.png"
           done
-          echo "значки на месте"
+
+          # Capacitor кладёт свой «живой» значок — ic_launcher.xml. Он главнее
+          # наших картинок: телефон возьмёт его, а не букву A. Убираем, чтобы
+          # значок был тот, что мы нарисовали.
+          rm -rf "$R/mipmap-anydpi-v26"
+
+          echo "проверяем, что значки на месте:"
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            test -s "$R/mipmap-$d/ic_launcher.png" || { echo "::error::Нет значка $d"; exit 1; }
+          done
+          ls -la "$R/mipmap-xxhdpi/"
 
       - name: Проверить, что ключ на месте
         env:
@@ -108,6 +129,9 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           chmod +x gradlew
+          # Памяти по умолчанию Gradle берёт мало и падает без внятной
+          # причины — просто «процесс убит». Задаём явно.
+          echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m" >> gradle.properties
           # Ключ живёт только внутри этой сборки и исчезает вместе с ней.
           echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > release.keystore
           test -s release.keystore || { echo "::error::Ключ не раскодировался — проверьте KEYSTORE_BASE64"; exit 1; }
