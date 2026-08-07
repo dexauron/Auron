@@ -262,9 +262,8 @@ function _notifSchedule(){
 function _notifOverdue(){
   if(!_Notif) return;
   try{
-    var pays=(typeof getPayables==='function')?getPayables({ssId:'local'}):null;
-    var list=(pays&&pays.items)||pays||[];
-    if(!Array.isArray(list)) return;
+    var list=(typeof getPayments==='function')?getPayments({ssId:'local'}):null;
+    if(!Array.isArray(list)) return;   // при отказе в правах придёт объект ошибки
     var today=new Date(); today.setHours(0,0,0,0);
     var n=0, sum=0;
     list.forEach(function(r){
@@ -291,9 +290,83 @@ function _notifOverdue(){
   }catch(e){}
 }
 
+/* ── Календарь выплат: напоминаем заранее ─────────────────────────
+   В приложении есть платёжный календарь — когда и кому платить.
+   Толку от него мало, если человек туда не заглянул. Ставим будильник
+   на утро дня выплаты: успеть найти деньги, пока банк работает.
+
+   Смотрим на две недели вперёд — дальше телефон всё равно не держит
+   много будильников, а планы за месяц меняются. */
+function _notifCalendar(){
+  if(!_Notif) return;
+  if(localStorage.getItem('auron_notif_off')==='1') return;
+  try{
+    var list=(typeof getPayments==='function')?getPayments({ssId:'local'}):null;
+    if(!Array.isArray(list)||!list.length) return;
+
+    var today=new Date(); today.setHours(0,0,0,0);
+    var limit=new Date(today.getTime()+14*86400000);
+    var plan=[];
+    list.forEach(function(r){
+      if(r.status!=='open'&&r.status!=='postponed') return;
+      var left=Math.max((r.amount||0)-(r.paid||0),0); if(!left) return;
+      var d=new Date(String(r.date)+'T00:00:00');
+      if(isNaN(d)||d<today||d>limit) return;
+      var at=new Date(d); at.setHours(9,0,0,0);
+      if(at.getTime()<=Date.now()) return;   // сегодняшнее утро уже прошло
+      plan.push({date:at, name:String(r.payee||'поставщику'), sum:left});
+    });
+    if(!plan.length) return;
+
+    // Собираем по дню: три выплаты в один день — одно напоминание,
+    // а не три подряд. Иначе человек отключит уведомления вовсе.
+    var byDay={};
+    plan.forEach(function(x){
+      var k=x.date.toISOString().slice(0,10);
+      if(!byDay[k])byDay[k]={date:x.date,sum:0,names:[]};
+      byDay[k].sum+=x.sum; byDay[k].names.push(x.name);
+    });
+
+    var notes=Object.keys(byDay).sort().slice(0,10).map(function(k,i){
+      var g=byDay[k];
+      var who=g.names.length===1?g.names[0]:(g.names.length+' поставщикам');
+      return { id:100+i, title:'Сегодня платить',
+        body:who+' · '+Math.round(g.sum).toLocaleString('ru-RU')+' ₽',
+        schedule:{ at:g.date, allowWhileIdle:true }, smallIcon:'ic_stat_icon' };
+    });
+
+    // Старые календарные будильники снимаем: выплату могли уже оплатить
+    // или перенести, и напоминание о ней было бы враньём.
+    var oldIds=[]; for(var i=0;i<10;i++) oldIds.push({id:100+i});
+    _notifReady().then(function(okPerm){
+      if(!okPerm) return;
+      _Notif.cancel({notifications:oldIds}).catch(function(){}).then(function(){
+        return _Notif.schedule({notifications:notes});
+      }).catch(function(){});
+    });
+  }catch(e){}
+}
+
 /* ── Первый запуск ───────────────────────────────────────────────── */
 (function(){
   var had=_dbLoad();
+
+  /* ── Обновление приложения не должно ломать данные ──────────────
+     Каждый запуск подтягиваем структуру: новая версия могла завести
+     новый лист или новый столбец. ensureSheets умеет это сама —
+     существующие листы не трогает, недостающие создаёт, короткие
+     дополняет (_mk и _grow внутри).
+
+     Раньше это делалось ТОЛЬКО на чистом устройстве. То есть человек
+     с данными обновлял приложение — и новые возможности у него молча
+     не работали, потому что таблиц под них не появлялось. */
+  if(had){
+    try{
+      ensureSheets(SS);
+      _dbSaveNow();
+    }catch(e){ console.error('обновление структуры:', e); }
+  }
+
   if(!had){
     // Чистое устройство: заводим таблицы и объявляем хозяина телефона
     // владельцем. Проверки прав рассчитаны на несколько человек, а здесь
@@ -310,7 +383,7 @@ function _notifOverdue(){
     }catch(e){ console.error('первый запуск:', e); }
   }
   _bakAuto();   // копия за сегодня — сразу, а не «когда-нибудь»
-  try{ _notifSchedule(); _notifOverdue(); }catch(e){}
+  try{ _notifSchedule(); _notifOverdue(); _notifCalendar(); }catch(e){}
 })();
 </script>
 `;
