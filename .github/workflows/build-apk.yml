@@ -1,0 +1,125 @@
+# Сборка приложения для Android.
+#
+# Что делает: берёт наш экран и логику, собирает файл auron.apk и
+# кладёт его в раздел Releases — оттуда его скачивают по прямой ссылке.
+#
+# Как запустить руками: вкладка Actions → «Собрать приложение Android»
+# → кнопка «Run workflow». Через 5–10 минут файл готов.
+#
+# ⚠️ ПРО КЛЮЧ ПОДПИСИ. Сейчас собирается отладочная версия — её
+# подписывает временный ключ, который создаёт сам Android. Такую версию
+# можно давать людям на пробу, но ОБНОВИТЬ её потом не выйдет: у
+# следующей сборки ключ будет другой, и Android откажется ставить её
+# поверх, а данные людей пропадут.
+#
+# Поэтому перед раздачей приложения дальше знакомых нужно:
+#   1. создать постоянный ключ (см. docs/19-ANDROID-HOWTO.md);
+#   2. положить его в Settings → Secrets как KEYSTORE_BASE64,
+#      KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD;
+#   3. раскомментировать блок «подписываем постоянным ключом» ниже.
+
+name: Собрать приложение Android
+
+on:
+  workflow_dispatch:          # запуск кнопкой
+  push:
+    tags: ['v*']              # или сам, когда ставим метку версии
+
+permissions:
+  contents: write             # нужно, чтобы положить файл в Releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      - name: Java (нужна Android-сборке)
+        uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '21' }
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Собрать содержимое приложения
+        working-directory: android
+        run: |
+          node build-www.js
+          test -s www/index.html || { echo "www/index.html пустой"; exit 1; }
+          echo "размер: $(du -h www/index.html | cut -f1)"
+
+      - name: Поставить Capacitor
+        working-directory: android
+        run: npm install --no-audit --no-fund
+
+      - name: Создать Android-проект
+        working-directory: android
+        run: |
+          npx cap add android || echo "проект уже есть"
+          npx cap sync android
+
+      - name: Поставить значок приложения
+        working-directory: android
+        run: |
+          python3 make-icons.py
+          R=android/app/src/main/res
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "$R/mipmap-$d"
+            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher.png"
+            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher_round.png"
+            cp "icons/ic_launcher_$d.png" "$R/mipmap-$d/ic_launcher_foreground.png"
+          done
+          echo "значки на месте"
+
+      - name: Собрать apk
+        working-directory: android/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      # ── Подпись постоянным ключом (включить перед раздачей людям) ──
+      # - name: Подписать
+      #   working-directory: android/android
+      #   env:
+      #     KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      #     KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      #     KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      #     KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      #   run: |
+      #     echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+      #     ./gradlew assembleRelease --no-daemon \
+      #       -Pandroid.injected.signing.store.file=$PWD/release.keystore \
+      #       -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD \
+      #       -Pandroid.injected.signing.key.alias=$KEY_ALIAS \
+      #       -Pandroid.injected.signing.key.password=$KEY_PASSWORD
+
+      - name: Переименовать по-человечески
+        run: |
+          find android/android -name '*.apk' -print
+          mkdir -p out
+          cp $(find android/android -name 'app-debug.apk' | head -1) out/auron.apk
+          ls -lh out/auron.apk
+
+      - name: Файл можно скачать здесь
+        uses: actions/upload-artifact@v4
+        with:
+          name: auron-apk
+          path: out/auron.apk
+          retention-days: 90
+
+      - name: Положить в Releases (когда ставим метку версии)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/auron.apk
+          body: |
+            Приложение Auron Finance для Android.
+
+            **Как поставить:** скачайте файл `auron.apk` и откройте его.
+            Android спросит разрешение на установку — разрешите для браузера.
+
+            Данные хранятся только на вашем телефоне. Интернет не нужен.
