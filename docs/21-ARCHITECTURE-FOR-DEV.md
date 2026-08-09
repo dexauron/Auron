@@ -126,7 +126,8 @@ Google.** Timeweb куплен, там развёрнут Supabase — но пр
 
 - **живое** — `webapp/` (Apps Script) и `android/`;
 - **заготовки** — `app/`, `infra/`, `supabase/`, `server/`;
-- **мёртвое** — `prototype/`, `local/`, `tools/`, `cloudflare/`.
+Мёртвые эксперименты и скрипты генерации Excel-шаблонов удалены
+07.08.2026 — история осталась в git.
 
 ---
 
