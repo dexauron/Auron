@@ -2384,6 +2384,18 @@
     if (CFG.STATIC_URL && !state.session) {
       if (await refreshStatic()) return;
     }
+    // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
+    // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
+    if (!sb) {
+      $('loader').hidden = true;
+      const banner = $('offlineBanner');
+      banner.textContent = (await loadCache())
+        ? '📶 Нет связи. Показан сохранённый каталог'
+        : '📶 Нет интернета. Подключись к сети и обнови страницу';
+      banner.hidden = false;
+      renderAll();
+      return;
+    }
     try {
       await fetchSmall();
       if (!state.products.length || !state.syncMax) await fullLoadProducts();
@@ -6144,7 +6156,14 @@
       });
     }
 
-    if (!CFG.SUPABASE_URL || !CFG.SUPABASE_ANON_KEY) {
+    // Бесплатный режим (STATIC_URL) работает БЕЗ базы вообще: витрина берётся
+    // из файла, полный каталог — из зашифрованного файла по паролю. Поэтому
+    // подключение к базе теперь необязательно.
+    const hasDb = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
+
+    // Настраивать нечего только если не задано НИ подключение к базе,
+    // НИ бесплатная витрина — тогда показываем подсказку по настройке.
+    if (!hasDb && !CFG.STATIC_URL) {
       $('setupBanner').hidden = false;
       $('loader').hidden = true;
       await loadCache();
@@ -6152,22 +6171,12 @@
       return;
     }
 
-    if (!window.supabase) {
-      // библиотека базы не загрузилась (нет интернета) — показываем сохранённый каталог
-      $('loader').hidden = true;
-      const banner = $('offlineBanner');
-      banner.textContent = (await loadCache())
-        ? '📶 Нет связи. Показан сохранённый каталог'
-        : '📶 Нет интернета. Подключись к сети и обнови страницу';
-      banner.hidden = false;
-      renderAll();
-      return;
-    }
-
     // вход хранится на устройстве и продлевается сам — до нажатия «Выйти из аккаунта»
-    sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-      auth: { persistSession: true, autoRefreshToken: true },
-    });
+    if (hasDb) {
+      sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
+        auth: { persistSession: true, autoRefreshToken: true },
+      });
+    }
 
     // мгновенно показываем сохранённый каталог, затем тихо обновляем из базы
     if (await loadCache()) renderAll();
@@ -6185,7 +6194,7 @@
       }
     } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
-    if (!svRestored) {
+    if (!svRestored && hasDb) {
       // обычный путь через сервер — только если серверлес-вход не восстановлен
       sb.auth.getSession().then(({ data }) => { if (!state.serverless) applySession(data.session); });
       sb.auth.onAuthStateChange((_e, session) => { if (!state.serverless) setTimeout(() => applySession(session), 0); });
