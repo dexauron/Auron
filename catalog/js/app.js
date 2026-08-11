@@ -1836,9 +1836,20 @@
     const ref = await ghJson(`${ghRepo()}/git/ref/heads/${b}`);
     const baseCommit = ref.object.sha;
     const baseInfo = await ghJson(`${ghRepo()}/git/commits/${baseCommit}`);
+    // Каждый файл заливаем ОТДЕЛЬНЫМ запросом и складываем в дерево по ссылке.
+    // Раньше всё содержимое шло одним запросом — на большом каталоге он весил
+    // десятки мегабайт и обрывался («Failed to fetch»).
+    const entries = [];
+    for (const f of files) {
+      const blob = await ghJson(`${ghRepo()}/git/blobs`, {
+        method: 'POST',
+        body: JSON.stringify({ content: f.content, encoding: 'utf-8' }),
+      });
+      entries.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha });
+    }
     const tree = await ghJson(`${ghRepo()}/git/trees`, {
       method: 'POST',
-      body: JSON.stringify({ base_tree: baseInfo.tree.sha, tree: files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.content })) }),
+      body: JSON.stringify({ base_tree: baseInfo.tree.sha, tree: entries }),
     });
     const commit = await ghJson(`${ghRepo()}/git/commits`, {
       method: 'POST',
@@ -1947,17 +1958,38 @@
   }
   function b64(bytes) { let s = ''; const CH = 0x8000; for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
   function unb64(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  // Сжатие перед шифрованием. Каталог на 17 тыс. товаров — это десятки мегабайт
+  // текста, который жмётся в разы. Без сжатия публикация упиралась в размер
+  // запроса к GitHub и обрывалась с «Failed to fetch».
+  const canGzip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+  async function gzipBytes(u8) {
+    const st = new Blob([u8]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Uint8Array(await new Response(st).arrayBuffer());
+  }
+  async function gunzipBytes(u8) {
+    const st = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(st).arrayBuffer());
+  }
+
   async function encryptJSON(obj, password) {
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const key = await deriveKey(password, salt);
-    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))));
-    return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, salt: b64(salt), iv: b64(iv), data: b64(ct) });
+    let bytes = new TextEncoder().encode(JSON.stringify(obj));
+    let z = null;
+    if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+    return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, z, salt: b64(salt), iv: b64(iv), data: b64(ct) });
   }
   async function decryptJSON(blob, password) {
     const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
     const key = await deriveKey(password, unb64(env.salt));
-    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data));
+    let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+    // старые файлы без сжатия читаются как раньше (поля z у них нет)
+    if (env.z === 'gzip') {
+      if (!canGzip) throw new Error('Браузер не умеет распаковывать этот каталог — обнови браузер');
+      plain = await gunzipBytes(plain);
+    }
     return JSON.parse(new TextDecoder().decode(plain));
   }
 
