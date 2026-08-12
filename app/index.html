@@ -71,6 +71,7 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
 .pin-dot.error{background:var(--neg);border-color:var(--neg)}
 /* ── PIN keypad ─────────────────────────────────────────────────────── */
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;width:100%;max-width:300px}
+.keypad.locked{opacity:.4;pointer-events:none}
 .key{
   aspect-ratio:1;border-radius:50%;
   background:var(--card);font-size:24px;font-weight:500;
@@ -1056,6 +1057,10 @@ const App = (() => {
     $('pin-error-msg').textContent = '';
     updateDots('pin-dots', 0);
 
+    // Пауза переживает перезагрузку страницы — она хранится по времени окончания
+    const wait = AUTH.cooldownLeft();
+    if (wait > 0) startCooldown(wait);
+
     if (AUTH.hasBiometrics()) {
       $('btn-bio').style.display = 'block';
       $('btn-bio').onclick = async () => {
@@ -1082,9 +1087,15 @@ const App = (() => {
         } catch (e) {
           if (e.message === 'BLOCKED') {
             $('pin-error-msg').textContent = 'Слишком много попыток. Выйдите и войдите заново.';
+          } else if (e.message.startsWith('COOLDOWN:')) {
+            const secs = parseInt(e.message.split(':')[1], 10);
+            startCooldown(secs);
+            updateDots('pin-dots', 0, true);
           } else if (e.message.startsWith('WRONG:')) {
-            const left = e.message.split(':')[1];
-            $('pin-error-msg').textContent = `Неверный PIN. Осталось попыток: ${left}`;
+            const left = parseInt(e.message.split(':')[1], 10);
+            $('pin-error-msg').textContent = left > 0
+              ? `Неверный PIN. Осталось попыток: ${left}`
+              : 'Неверный PIN. Ещё одна ошибка — и придётся подождать';
             updateDots('pin-dots', 0, true);
           } else if (e.message === 'SESSION_EXPIRED') {
             toast('Сессия истекла, войдите снова');
@@ -1095,6 +1106,36 @@ const App = (() => {
         }
       }
     };
+  }
+
+  // Пауза между попытками PIN (03-SCREENS.md, Экран 0б).
+  // Клавиатура гаснет, в сообщении идёт обратный отсчёт.
+  let _cooldownTimer = null;
+
+  function startCooldown(secs) {
+    clearInterval(_cooldownTimer);
+    const pad = $('pin-keypad');
+    const msg = $('pin-error-msg');
+
+    const tick = () => {
+      if (secs <= 0) {
+        clearInterval(_cooldownTimer);
+        _cooldownTimer = null;
+        pad.classList.remove('locked');
+        msg.textContent = '';
+        return;
+      }
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      msg.textContent = m > 0
+        ? `Слишком много попыток. Подождите ${m}:${String(s).padStart(2, '0')}`
+        : `Слишком много попыток. Подождите ${s} сек`;
+      secs--;
+    };
+
+    pad.classList.add('locked');
+    tick();
+    _cooldownTimer = setInterval(tick, 1000);
   }
 
   function updateDots(id, count, error) {
