@@ -1,5 +1,14 @@
 __pycache__/
-.claude/
+
+# Настройки Claude Code: храним в репозитории только конфиг и лёгкие навыки.
+# Личные и временные файлы Claude, а также тяжёлый gstack (~23 МБ)
+# ставятся локально скриптом scripts/setup-claude-skills.sh
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+.claude/settings.local.json
+.claude/skills/gstack/
+
 node_modules/
 package-lock.json
 package.json
