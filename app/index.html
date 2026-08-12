@@ -9,10 +9,15 @@
 <title>Auron — Финансовый учёт</title>
 <link rel="manifest" href="./manifest.json">
 <script src="./js/config.js"></script>
+<!-- Порядок важен: ядро → авторизация → данные → навигация → модули экранов.
+     Модули регистрируют себя в реестре state.js, поэтому грузятся последними. -->
+<script src="./js/state.js"></script>
 <script src="./js/auth.js"></script>
 <script src="./js/offline-queue.js"></script>
 <script src="./js/integrations.js"></script>
 <script src="./js/api.js"></script>
+<script src="./js/router.js"></script>
+<script src="./js/modules/home.js"></script>
 <style>
 /* ── Reset & Variables ─────────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}

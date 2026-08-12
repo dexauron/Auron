@@ -1,13 +1,16 @@
-const CACHE_NAME = 'auron-v55';          // кэш оболочки приложения (бампать при изменении фронта)
+const CACHE_NAME = 'auron-v56';          // кэш оболочки приложения (бампать при изменении фронта)
 const DATA_CACHE = 'auron-data-v1';      // кэш последних ответов backend для офлайн-просмотра
 const APP_FILES = [
   './',
   './index.html',
+  './js/config.js',
+  './js/state.js',
+  './js/router.js',
   './js/auth.js',
   './js/offline-queue.js',
   './js/integrations.js',
   './js/api.js',
-  './js/config.js',
+  './js/modules/home.js',
   './js/supabase.min.js',
   './js/chart.min.js',
   './manifest.json',
