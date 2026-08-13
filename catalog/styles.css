@@ -127,18 +127,6 @@ body {
 
 .search-row { display: flex; gap: 8px; align-items: center; }
 .search-wrap { position: relative; flex: 1; }
-.scan-btn {
-  width: 50px; height: 50px;
-  flex-shrink: 0;
-  border-radius: 14px;
-  border: none;
-  background: var(--accent);
-  color: #fff;
-  display: grid; place-items: center;
-  cursor: pointer;
-  box-shadow: 0 3px 12px rgba(94, 92, 230, .35);
-}
-.scan-btn:active { transform: scale(.95); }
 .search-icon { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-2); pointer-events: none; }
 .search-input {
   width: 100%;
@@ -332,7 +320,6 @@ mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; p
   .brand-logo-img { width: 34px; height: 34px; }
   #adminBtnLabel { display: none; }               /* остаётся иконка входа */
   .chip { padding: 8px 12px; font-size: 14px; }
-  .filter-btn { padding: 8px 11px; font-size: 14px; }
   .card-name { font-size: 14px; }
   .card-price { font-size: 16px; }
   .sheet-body { --sheet-px: 14px; }
@@ -418,7 +405,6 @@ mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; p
   padding: 3px 8px; border-radius: 8px;
   background: var(--surface-2); color: var(--text-2);
 }
-.tag-code { background: rgba(94, 92, 230, .16); color: var(--brand-ink); }
 .tag-nobarcode { background: rgba(255, 159, 10, .15); color: var(--warn); }
 
 /* ── Пустое состояние / загрузка ───────────────── */
@@ -508,8 +494,6 @@ mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; p
 .similar-price { font-size: 14px; font-weight: 800; color: var(--text); padding: 0 9px; }
 
 /* ── «Недавно смотрели» — лента на главной ── */
-.recent-strip { margin-bottom: 6px; }
-.recent-strip .similar-title { margin-top: 4px; }
 
 /* ── ♥ Избранное ── */
 /* сердечко в карточке товара (правый верхний угол шторки) */
@@ -524,8 +508,6 @@ mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; p
 .sheet-fav:active { transform: scale(.9); }
 .sheet-fav.is-fav { color: #ff4d5e; background: rgba(255, 255, 255, .92); }
 /* чип «Избранное» в верхнем ряду */
-.chip-fav.active { background: #ff4d5e; border-color: #ff4d5e; color: #fff; }
-.chip-fav.active .chip-count { color: #fff; }
 
 /* Фото в карточке товара */
 .photo-strip {
@@ -786,7 +768,6 @@ select.input { appearance: none; }
 
 .price-block { margin: 4px 0 14px; }
 .price-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
-.price-row-wrap { margin-bottom: 8px; }
 .price-row {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -801,28 +782,16 @@ select.input { appearance: none; }
 .price-row[data-hist-toggle] { cursor: pointer; }
 .price-row.price-best { background: rgba(48, 209, 88, .12); border-color: rgba(48, 209, 88, .45); }
 .price-sup { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
-.price-contact { font-weight: 400; color: var(--text-2); }
 .price-val { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
 .price-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--text-2); }
 .price-badge { color: var(--pos); font-weight: 700; }
 .price-up { color: var(--danger); font-weight: 600; }
 .price-down { color: var(--pos); font-weight: 600; }
 .price-date { color: var(--text-2); }
-.price-call { display: flex; gap: 8px; justify-self: end; }
 .price-hint { margin-top: 2px; }
 
 .price-history { background: var(--surface-2); border-radius: 0 0 12px 12px; margin: -6px 8px 0; padding: 10px 12px 6px; border: 1px solid var(--border); border-top: none; }
 .price-hist-row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-2); padding: 3px 0; }
-
-.mini-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  text-decoration: none;
-  font-size: 18px;
-}
 
 /* ── Контакты в списке поставщиков ─────────────── */
 .sup-row { margin-bottom: 10px; }
@@ -900,21 +869,8 @@ select.input { appearance: none; }
 .btn-find-photo { grid-column: 1 / -1; }
 
 /* ── Подгруппы выбранной категории (второй ряд чипов) ── */
-.chips-sub { padding-top: 0; }
-.chips-sub .chip { font-size: 14px; padding: 7px 13px; background: var(--surface-2); }
-.chips-sub .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ── Поставщик в карточке товара: контакты + связь ── */
-.sup-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
-.sup-head { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-.sup-person { font-size: 14px; color: var(--text-2); }
-.sup-contact-card { display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
-.sup-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.sup-actions .btn { margin: 0; text-decoration: none; }
-.sup-call { justify-content: center; }
-.sup-wa { background: #25d366; color: #fff; justify-content: center; }
-.sup-nocontact { margin: 4px 0 8px; }
-.sup-allbtn { width: 100%; margin-top: 4px; justify-content: center; }
 
 /* ── Продажи товара в карточке ─────────────────── */
 .sales-stale { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--warn); }
@@ -991,8 +947,8 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 }
 
 /* Отклик на касание — лёгкое «вдавливание» с пружиной, как в iOS */
-.chip, .icon-btn, .copy-btn, .scan-btn, .fab, .btn, .card,
-.price-row, .field-row, .sup-row .btn, .tag, .menu-item {
+.chip, .icon-btn, .copy-btn, .fab, .btn, .card,
+.price-row, .field-row, .sup-row .btn, .tag {
   transition: transform .18s cubic-bezier(.2, .9, .3, 1.3), opacity .18s ease, background-color .18s ease;
   touch-action: manipulation;
 }
@@ -1157,8 +1113,6 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 }
 .card-code:active { transform: scale(.94); opacity: .8; }
 .grid.compact .card-code { font-size: 15px; padding: 2px 7px; }
-/* в плотном виде прячем только второстепенные метки — код остаётся */
-.grid.compact .card-tags { display: none; }
 
 /* ═══ Режим списка — «для кассы» ═══════════════════
    Без фото на экран влезает втрое больше строк, а код крупный и всегда справа,

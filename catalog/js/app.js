@@ -657,84 +657,6 @@
 
   /* ── Отрисовка ────────────────────────────────── */
 
-  function renderChips() {
-    // Строка чипов под поиском убрана по просьбе владельца — категории и все
-    // фильтры теперь выбираются через кнопку фильтра (⚙). Ряд скрыт.
-    const gc = $('groupChips');
-    if (gc) { gc.innerHTML = ''; gc.hidden = true; }
-    return;
-    // eslint-disable-next-line no-unreachable
-    const groupCounts = {};   // товаров в каждой группе
-    const catCounts = {};     // товаров в каждой категории
-    let noGroup = 0;
-    let weighted = 0;
-    for (const p of state.products) {
-      if (p.group_id) {
-        groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
-        const cat = productCategory(p);
-        if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
-      } else noGroup++;
-      if (p.is_weighted) weighted++;
-    }
-
-    // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
-    const { selCats, selGroups, selSuppliers } = state;
-    const allActive = !selCats.length && !selGroups.length;
-    // «Сбросить всё» теперь живёт в строке активных фильтров (renderActiveFilters),
-    // поэтому здесь дублирующую кнопку не показываем — чище
-    let html = `<button class="chip${allActive && !state.favOnly ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
-    // «Избранное» — показываем, если что-то добавлено в избранное или режим включён
-    const favs = favorites();
-    if (favs.length || state.favOnly) {
-      html += `<button class="chip chip-fav${state.favOnly ? ' active' : ''}" data-fav-chip>♥ Избранное<span class="chip-count">${favs.length}</span></button>`;
-    }
-    // Поставщики — внутренние данные магазина: показываем только тем, кто видит
-    // закупки (админ/аналитик). Покупателям без входа и кассиру их не показываем.
-    if (state.canPurchase && state.suppliers.length) {
-      const label = !selSuppliers.length ? '🚚 Поставщики'
-        : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
-          : `🚚 Поставщиков: ${selSuppliers.length}`;
-      const cnt = selSuppliers.length
-        ? state.products.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id))).length
-        : state.suppliers.length;
-      html += `<button class="chip${selSuppliers.length ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
-    }
-    if (state.canSales) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
-    if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
-    // сотруднику — быстрый «пришло сегодня» одним тапом (по дате из файла «Цены
-    // поставщиков», столбец «Период»). Совмещается с «Весовые»/категорией.
-    if (state.session) {
-      const todayOn = state.arrivalFrom === daysAgoISO(0) && state.arrivalTo === todayISO();
-      html += `<button class="chip${todayOn ? ' active' : ''}" data-arrival-today>🆕 Пришло сегодня</button>`;
-    }
-
-    // категории — по убыванию числа товаров; порядок стабильный
-    const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
-      .filter((c) => catCounts[c])
-      .sort((a, b) => catCounts[b] - catCounts[a]);
-    for (const c of cats) {
-      const active = selCats.includes(c) ? ' active' : '';
-      html += `<button class="chip${active}" data-category="${esc(c)}">${catIcon(c)} ${esc(c)}<span class="chip-count">${catCounts[c]}</span></button>`;
-    }
-    if (noGroup > 0) html += `<button class="chip${selGroups.includes('none') ? ' active' : ''}" data-group="none">Без группы<span class="chip-count">${noGroup}</span></button>`;
-    $('groupChips').innerHTML = html;
-
-    // ── Нижний ряд: подгруппы выбранных категорий (можно отметить несколько) ──
-    const sub = $('subChips');
-    if (!selCats.length) { sub.hidden = true; sub.innerHTML = ''; return; }
-    const subGroups = state.groups
-      .filter((g) => selCats.includes(categoryOf(g.name)) && groupCounts[g.id])
-      .sort((a, b) => (groupCounts[b.id] || 0) - (groupCounts[a.id] || 0));
-    let subHtml = '';
-    for (const g of subGroups) subHtml += chipHtml(g.id, g.name, groupCounts[g.id] || 0);
-    sub.innerHTML = subHtml;
-    sub.hidden = !subHtml;
-  }
-
-  function chipHtml(id, name, count) {
-    const active = state.selGroups.includes(id) ? ' active' : '';
-    return `<button class="chip${active}" data-group="${esc(id)}">${esc(name)}<span class="chip-count">${count}</span></button>`;
-  }
 
   /* ── Разделы нижней панели ──────────────────────────
    * «Каталог» — сетка товаров, «Категории» — плитки разделов, «Избранное» —
@@ -1099,9 +1021,9 @@
   }
 
   function renderAll() {
-    renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
+    renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
     syncTabs(); renderCatScreen();
-    renderNewProducts(); renderPopularProducts(); renderRecentProducts();
+    renderNewProducts(); renderPopularProducts();
     if (state.tab !== 'cats') renderGrid();
   }
 
@@ -1339,27 +1261,6 @@
   }
 
   // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
-  function renderRecentProducts() {
-    // «Недавно смотрели» убрано по просьбе владельца — лента не показывается.
-    const box = $('recentStrip');
-    if (box) { box.hidden = true; box.innerHTML = ''; }
-    return;
-    // eslint-disable-next-line no-unreachable
-    const show = !state.query && !state.favOnly && !anyFilterActive();
-    if (!show) { box.hidden = true; box.innerHTML = ''; return; }
-    const byId = new Map(state.products.map((p) => [p.id, p]));
-    const list = recentProducts().map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
-    if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
-    box.hidden = false;
-    box.innerHTML = '<div class="similar-title">Недавно смотрели</div><div class="similar-row">'
-      + list.map((x) => {
-        const ph = (x.photos || []).find((u) => u && String(u).trim());
-        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
-        return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
-          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
-      }).join('') + '</div>';
-  }
 
   function applyTheme(t) {
     // t: 'dark' | 'light' | null (авто — по системе)
@@ -1408,7 +1309,7 @@
     currentProduct = p;
     pushRecentProduct(p.id);
     trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
-    renderNewProducts(); renderPopularProducts(); renderRecentProducts(); // обновляем ленты под шторкой
+    renderNewProducts(); renderPopularProducts();   // обновляем ленты под шторкой
     updateFavButton(p);
     $('sheetName').textContent = p.name;
 
@@ -4491,7 +4392,9 @@
         else if (e.type === 'stock') { stockParsed = e.parsed; await stockUpload(); }
         else if (e.type === 'sales') { salesParsed = e.parsed; await salesUpload(); }
         else if (e.type === 'contacts') { contactsParsed = e.parsed; await contactsUpload(); }
-        else if (e.type === 'photo') { photoExcelParsed = e.parsed; await photoExcelApply(); }
+        // сырые строки файла надо сперва сопоставить с товарами: загрузчик ждёт
+        // готовое соответствие «товар → ссылка», а не список строк
+        else if (e.type === 'photo') { photoExcelParsed = matchPhotoRows(e.parsed).updates; await photoExcelApply(); }
         okCount++;
       } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
       smartSink = null;
@@ -5879,57 +5782,7 @@
       lb.addEventListener('touchend', end); lb.addEventListener('touchcancel', end);
     })();
 
-    // Группы-фильтры + чипы поставщика и «Ещё группы»
-    $('groupChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      if (chip.hasAttribute('data-supplier-chip')) {
-        $('supplierSearch').value = '';
-        renderSupplierList();
-        openSheet('supplierSheet');
-        return;
-      }
-      if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
-      // «Избранное» — переключаем режим показа только избранных товаров
-      if (chip.hasAttribute('data-fav-chip')) { state.favOnly = !state.favOnly; state.renderLimit = PAGE_SIZE; renderAll(); return; }
-      // «Пришло сегодня» — быстрый фильтр поступления за сегодня (повторный тап снимает)
-      if (chip.hasAttribute('data-arrival-today')) {
-        const from = daysAgoISO(0); const to = todayISO();
-        if (state.arrivalFrom === from && state.arrivalTo === to) { state.arrivalFrom = ''; state.arrivalTo = ''; }
-        else { state.arrivalFrom = from; state.arrivalTo = to; }
-        state.renderLimit = PAGE_SIZE; renderAll(); return;
-      }
-      // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
-      if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
-      // повторный тап снимает отметку; можно отметить несколько
-      if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; state.favOnly = false; }
-      else if (chip.hasAttribute('data-category')) {
-        const c = chip.dataset.category;
-        if (state.selCats.includes(c)) {
-          // снимаем категорию — и её подгруппы из выбора тоже
-          state.selCats = state.selCats.filter((x) => x !== c);
-          const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
-          state.selGroups = state.selGroups.filter((x) => !ids.has(x));
-        } else state.selCats = [...state.selCats, c];
-      } else {
-        const g = chip.dataset.group; // 'none' | 'weighted'
-        state.selGroups = state.selGroups.includes(g)
-          ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
-      }
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    });
 
-    // подгруппы выбранных категорий — тап отмечает/снимает
-    $('subChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      const g = chip.dataset.group;
-      state.selGroups = state.selGroups.includes(g)
-        ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    });
 
     // выбор поставщиков — тап отмечает/снимает, шторка остаётся открытой
     $('supplierList').addEventListener('click', (e) => {
@@ -6010,7 +5863,6 @@
       if (p) openProduct(p);
     };
     $('sheetSimilar').addEventListener('click', openSimilar);
-    $('recentStrip').addEventListener('click', openSimilar);
     $('popularStrip').addEventListener('click', openSimilar);
 
     // Точки под фото
@@ -6753,5 +6605,4 @@
   init();
 
   // для автотестов разбора 1С-файлов (не влияет на работу приложения)
-  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport, parseSalesReport, parseDateCell, parsePhotoSheet, categoryOf };
 })();
