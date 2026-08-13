@@ -745,10 +745,10 @@
 
   let openAdminOrLogin = () => {};   // задаётся в bindEvents (нужна и «Ещё», и кнопке входа)
 
-  // Наличие словами. У покупателя в витрине лежит готовое stock_state,
-  // у сотрудника — само число остатка, поэтому считаем на месте.
+  // Наличие словами — по живому числу остатка, которое есть только у вошедшего.
   function stockLabel(p) {
-    const st = p.stock_state || stockState(p, null);
+    if (!state.session) return null;      // без входа остатки не показываем вовсе
+    const st = stockState(p, null);
     if (st === 'in') return { txt: '✓ Есть в магазине', cls: 'tag-instock', short: '✓ Есть' };
     if (st === 'low') return { txt: 'Заканчивается', cls: 'tag-lowstock', short: 'Мало' };
     if (st === 'out') return { txt: 'Нет в наличии', cls: 'tag-outstock', short: 'Нет' };
@@ -2392,11 +2392,15 @@
   // в отличие от артикула, штрихкодов, поставщиков и закупочных цен.
   const PUBLIC_FIELDS = ['id', 'name', 'code', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
 
-  /* Наличие для покупателя. В открытую витрину кладём НЕ число остатка (это
-   * внутренние данные магазина), а одно слово: есть / заканчивается / нет.
+  /* Наличие товара — для СОТРУДНИКА, только после входа.
+   * Сначала я положил признак наличия в ОТКРЫТЫЙ файл витрины, рассуждая
+   * «покупателю полезно». Это было нарушением утверждённого правила: каталог —
+   * инструмент сотрудников, ссылка публичная, и без входа он не показывает ни
+   * цен, ни остатков. Слово «заканчивается» — тот же остаток, просто
+   * округлённый. Теперь наличие считается на устройстве вошедшего из живого
+   * числа и наружу не уходит вовсе.
    * «Заканчивается» — если известны продажи и хватит меньше чем на 2 дня,
-   * иначе по простому порогу. Остатков не загружали — не пишем ничего и
-   * молчим: соврать про наличие хуже, чем не сказать. */
+   * иначе по простому порогу. Остатков не загружали — молчим. */
   const LOW_DAYS = 2;      // хватит меньше — «заканчивается»
   const LOW_QTY = 3;       // если продажи неизвестны — просто мало штук
 
@@ -2408,30 +2412,11 @@
     return 'in';
   }
 
-  // средние продажи в день по каждому товару — для «заканчивается»
-  function salesPerDayMap() {
-    const map = new Map();
-    if (!state.sales || !state.sales.length) return map;
-    const byCode = new Map(); const byName = new Map();
-    for (const p of state.products) { if (p.code) byCode.set(String(p.code), p); byName.set(norm(p.name), p); }
-    for (const s of state.sales) {
-      const p = (s.code && byCode.get(String(s.code))) || byName.get(norm(s.name || ''));
-      if (!p) continue;
-      const d = daysBetween(s.period_from, s.period_to);
-      if (!(d > 0)) continue;
-      map.set(p.id, (map.get(p.id) || 0) + (Number(s.qty) || 0) / d);
-    }
-    return map;
-  }
-
   function buildPublicProducts() {
-    const perDay = salesPerDayMap();
     return state.products
       .map((p) => {
         const o = {};
         for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
-        const st = stockState(p, perDay.get(p.id));
-        if (st) o.stock_state = st;
         // даты кладём без времени — «Новее» нужна только дата, а витрину качает
         // каждый покупатель, лишние 14 символов на товар тут заметны
         if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);

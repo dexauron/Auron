@@ -121,7 +121,17 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
     'Магнит', 'ЦЕНЫ В ДРУГИХ МАГАЗИНАХ', 'Дешевле в магазине']) {
     if (buyer.includes(secret)) problems.push(`покупатель видит внутреннее: «${secret}»`);
   }
-  chk(/Код товара/.test(buyer), 'покупателю виден код товара (показываем намеренно)');
+  chk(/Код товара/.test(buyer), 'без входа виден код товара — ради него каталог и делался');
+  // самое важное: лишнее не должно попадать в ОТКРЫТЫЙ файл витрины, даже если
+  // в интерфейсе оно скрыто — файл скачивается по прямой ссылке
+  const leak = await page.evaluate(() => {
+    const P = window.WM_PUBLISH;
+    const closed = ['stock', 'stock_qty', 'stock_state', 'supplier_ids', 'barcodes', 'article', 'note', 'department'];
+    const found = new Set();
+    for (const o of P.buildPublicProducts()) for (const k of closed) if (k in o) found.add(k);
+    return [...found];
+  });
+  chk(!leak.length, `в открытой витрине нет внутренних полей${leak.length ? ': ' + leak.join(', ') : ''}`);
   chk(!/магазин/i.test(buyer.replace(/Есть в магазине|Нет в наличии/g, '')),
     'покупателю не видны цены чужих магазинов — каталог больше не отправляет его к конкуренту');
   // а вошедший сотрудник их видит
