@@ -1,13 +1,13 @@
 /* Way Market · Каталог — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v72';
+const CACHE = 'wm-catalog-v73';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
 const PHOTOS = 'wm-photos-v1';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/config.js',
-  'vendor/supabase.min.js', 'manifest.webmanifest',
+  'manifest.webmanifest',
   'icons/icon-192.png', 'icons/logo-round.png'];
 
 self.addEventListener('install', (e) => {

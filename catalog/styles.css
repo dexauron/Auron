@@ -266,12 +266,6 @@ body {
 mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 /* ── Фото на проверке (предложенные покупателями) ── */
-.sugg-row { display: flex; gap: 12px; padding: 10px; margin-bottom: 10px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--border); }
-.sugg-img { width: 84px; height: 84px; flex: 0 0 auto; object-fit: cover; border-radius: 10px; background: var(--surface); }
-.sugg-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.sugg-name { font-size: 15px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.sugg-actions { display: flex; gap: 8px; margin-top: auto; }
-.sugg-actions .btn { margin: 0; padding: 9px 12px; font-size: 14px; }
 
 /* ── «Дозаполни витрину»: список товаров без фото ── */
 .fill-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
@@ -766,9 +760,6 @@ select.input { appearance: none; }
 .markup-sub { grid-column: 1 / -1; font-size: 12px; color: var(--text-2); }
 
 /* ── История розничной цены ── */
-.retail-hist { margin: 0 0 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px; }
-.retail-hist summary { font-size: 13px; font-weight: 600; color: var(--text-2); cursor: pointer; padding: 8px 0; }
-.retail-hist .price-hist-row { border-top: 1px solid var(--border); }
 
 .price-block { margin: 4px 0 14px; }
 .price-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
