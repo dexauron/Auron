@@ -809,6 +809,7 @@
     const grid = $('productGrid');
     $('loader').hidden = true;
     grid.classList.toggle('compact', state.view === 'compact');
+    grid.classList.toggle('list', state.view === 'list');
     grid.classList.remove('skeleton');
     updateResultsCount(list.length);
 
@@ -853,16 +854,33 @@
       const tags = [];
       const sl = stockLabel(p);
       if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
-      if (p.code) tags.push(`<span class="tag tag-code">${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖</span>');
+      if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
       const price = (p.retail_price != null && p.retail_price !== '')
         ? `<div class="card-price">${esc(fmtRetail(p))}</div>` : '';
+      // Код — не метка в общей куче, а главное на плитке: ради него каталог и
+      // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
+      // кассой нужен именно код, а не описание товара.
+      const code = p.code
+        ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
+        : '';
+      const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
+      if (state.view === 'list') {
+        return `<article class="card card-row" data-id="${esc(p.id)}">
+          <div class="row-main">
+            <div class="card-name">${highlight(p.name, hlTokens)}</div>
+            <div class="row-sub">${price}${tagRow}</div>
+          </div>
+          ${code}
+        </article>`;
+      }
       return `<article class="card" data-id="${esc(p.id)}">
         <div class="${photoCls}">${img}</div>
         <div class="card-body">
           <div class="card-name">${highlight(p.name, hlTokens)}</div>
+          ${code}
           ${price}
-          <div class="card-tags">${tags.join('')}</div>
+          ${tagRow}
         </div>
       </article>`;
     }).join('');
@@ -903,12 +921,14 @@
     return list;
   }
 
+  // admin: фильтры «чего не хватает в каталоге» — это работа над самим каталогом,
+  // сотруднику в зале они не нужны и только занимают место
   const QUICK_CHIPS = [
     { k: 'withprice', label: '✅ С ценой' },
     { k: 'barcode', label: '🏷 Штрихкод' },
-    { k: 'nophoto', label: '📷 Без фото', warn: true },
-    { k: 'noprice', label: '💰 Без цены', warn: true },
-    { k: 'nobarcode', label: '⬜ Без ШК', warn: true },
+    { k: 'nophoto', label: '📷 Без фото', warn: true, admin: true },
+    { k: 'noprice', label: '💰 Без цены', warn: true, admin: true },
+    { k: 'nobarcode', label: '⬜ Без ШК', warn: true, admin: true },
   ];
 
   // Категории списком-чекбоксами в окне фильтра (как в референсе)
@@ -957,6 +977,7 @@
     const base = baseFiltered();
     let html = '';
     for (const c of QUICK_CHIPS) {
+      if (c.admin && !state.isAdmin) continue;
       const cnt = base.reduce((n, p) => n + (QUICK[c.k](p) ? 1 : 0), 0);
       if (!cnt && !state.quick.includes(c.k)) continue; // нечего показывать
       const active = state.quick.includes(c.k) ? ' active' : '';
@@ -2214,6 +2235,13 @@
 
     $('supViewBody').innerHTML = parts.join('');
     openSheet('supplierViewSheet');
+  }
+
+  // Копирование в буфер. Отдельно, потому что копировать код нужно из двух мест:
+  // из карточки и прямо с плитки — сотруднику за кассой хватает одного кода.
+  async function copyText(text, okMsg) {
+    try { await navigator.clipboard.writeText(String(text)); toast(okMsg || 'Скопировано'); }
+    catch (e) { toast('Не удалось скопировать'); }
   }
 
   function fieldRow(key, val, main = false, copy = false) {
@@ -5702,7 +5730,13 @@
     $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
     $('filterReset').addEventListener('click', clearAllFilters);
     // Круглая иконка «вид» в шапке — переключает размер плиток
-    $('viewToggleBtn').addEventListener('click', () => { state.view = state.view === 'compact' ? 'normal' : 'compact'; renderAll(); });
+    // Три режима по кругу: плитки → плотные плитки → список.
+    // Список — для кассы: без фото влезает втрое больше строк, а код крупный.
+    $('viewToggleBtn').addEventListener('click', () => {
+      state.view = state.view === 'normal' ? 'compact' : (state.view === 'compact' ? 'list' : 'normal');
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+    });
 
     // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
     $('filterCats').addEventListener('change', (e) => {
@@ -5944,6 +5978,8 @@
 
     // Открытие карточки
     $('productGrid').addEventListener('click', (e) => {
+      const cp = e.target.closest('[data-copy-code]');
+      if (cp) { copyText(cp.dataset.copyCode, 'Код скопирован'); return; }  // карточку не открываем
       const card = e.target.closest('.card');
       if (!card) return;
       const p = state.products.find((x) => x.id === card.dataset.id);
@@ -5985,15 +6021,9 @@
     }, { passive: true });
 
     // Копирование кодов
-    document.addEventListener('click', async (e) => {
+    document.addEventListener('click', (e) => {
       const btn = e.target.closest('.copy-btn');
-      if (!btn) return;
-      try {
-        await navigator.clipboard.writeText(btn.dataset.copy);
-        toast('Скопировано: ' + btn.dataset.copy);
-      } catch (err) {
-        toast('Не удалось скопировать');
-      }
+      if (btn) copyText(btn.dataset.copy, 'Скопировано: ' + btn.dataset.copy);
     });
 
     // Закрытие шторок: крестики, кнопки, тап по фону, стрелка «назад», смахивание вниз
