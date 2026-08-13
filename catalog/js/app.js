@@ -1346,7 +1346,7 @@
 
     $('sheetAdminActions').hidden = !state.isAdmin;
     // фото пока грузятся только на сервере — в бесплатном режиме кнопки прячем
-    $('btnFindPhoto').hidden = state.serverless || !(state.isAdmin && !hasPhoto(p));
+    $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p));
     $('btnAddPhotoLabel').hidden = state.serverless || !state.session;
     $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
@@ -4064,18 +4064,22 @@
 
   // поиск фото по штрихкоду
   async function offByBarcode(bc) {
+    let reached = false; // хоть одна база ответила по-человечески
     for (const host of PHOTO_HOSTS) {
       try {
         const r = await fetch(`https://${host}/api/v2/product/${encodeURIComponent(bc)}.json?fields=image_front_url`);
         if (r.ok) {
+          reached = true;
           const d = await r.json();
           const url = d.product && d.product.image_front_url;
-          if (url) return url;
+          if (url) return { url, reached: true };
+        } else if (r.status === 404) {
+          reached = true; // базе вопрос понятен: такого товара у неё просто нет
         }
       } catch (e) { /* сеть моргнула — товар проверим в следующий раз */ }
       await sleep(350); // вежливый темп к бесплатной базе
     }
-    return null;
+    return { url: null, reached };
   }
 
   // фото похоже на наш товар? (защита от чужой картинки — лучше без фото, чем не то)
@@ -4095,39 +4099,53 @@
   // Берём фото, только если найденное название реально похоже на наше.
   async function offByName(name) {
     const q = norm(name).replace(/[^0-9a-zа-я ]/gi, ' ').replace(/\s+/g, ' ').trim();
-    if (q.length < 3) return null;
+    if (q.length < 3) return { url: null, reached: true }; // короткое имя — искать нечего
+    let reached = false;
     for (const host of PHOTO_HOSTS) {
       try {
         const url = `https://${host}/cgi/search.pl?search_terms=${encodeURIComponent(q)}`
           + '&search_simple=1&action=process&json=1&page_size=5&fields=product_name,image_front_url';
         const r = await fetch(url);
         if (r.ok) {
+          reached = true;
           const d = await r.json();
           for (const prod of (d.products || [])) {
-            if (prod.image_front_url && photoNameMatches(name, prod.product_name)) return prod.image_front_url;
+            if (prod.image_front_url && photoNameMatches(name, prod.product_name)) return { url: prod.image_front_url, reached: true };
           }
         }
       } catch (e) { /* пропускаем источник */ }
       await sleep(500);
     }
-    return null;
+    return { url: null, reached };
   }
 
   // фото товара: сперва по штрихкодам, потом по названию
+  // Возвращает { url, reached }. reached = false означает «база не ответила»:
+  // такой товар НЕ помечаем проверенным, попробуем в другой раз.
   async function findProductPhoto(p) {
+    let reached = false;
     for (const bc of (p.barcodes || [])) {
       if (!bc) continue;
-      const u = await offByBarcode(bc);
-      if (u) return u;
+      const r = await offByBarcode(bc);
+      reached = reached || r.reached;
+      if (r.url) return r;
     }
-    if (p.name) return offByName(p.name);
-    return null;
+    if (p.name) {
+      const r = await offByName(p.name);
+      return { url: r.url, reached: reached || r.reached };
+    }
+    return { url: null, reached };
   }
 
-  // совместимость со старым вызовом (в карточке «Найти фото»): по штрихкоду
-  async function offLookup(bc) { return offByBarcode(bc); }
-
   async function attachFoundPhoto(p, url) {
+    // Бесплатный режим: своего хранилища нет, поэтому запоминаем ССЫЛКУ на фото
+    // из открытой базы. Скачать и переложить к себе браузер всё равно не даёт
+    // (чужие сайты это запрещают), а ссылка работает сразу и ничего не весит.
+    if (state.serverless) {
+      p.photos = [url];
+      p.updated_at = new Date().toISOString();
+      return;
+    }
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('фото недоступно');
     const small = await compressImage(await resp.blob(), 800, 0.8);
@@ -4148,7 +4166,7 @@
    * пока владелец в приложении. Продолжается после каждого импорта и между
    * заходами (проверенные штрихкоды запоминаются). Тихо, без кнопок. */
   async function autoPhotoSearch() {
-    if (!sb || !isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
+    if ((!sb && !state.serverless) || !isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
     let checked = {};
     try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
     const todo = photoCandidates().filter((p) => !checked[p.id]);
@@ -4158,19 +4176,28 @@
     toast(`🔎 Ищу фото товаров в фоне (${todo.length})…`);
     let done = 0;
     let found = 0;
+    let miss = 0;   // подряд неудачных обращений к базе (признак, что она недоступна)
     for (const p of todo) {
       if (!isOwner() || document.hidden || !navigator.onLine) break; // тихо приостановиться
       try {
-        const url = await findProductPhoto(p);
-        if (url) { await attachFoundPhoto(p, url); found++; if (found % 6 === 0) { saveCache(); renderGrid(); } }
-        else checked[p.id] = 1;
-      } catch (e) { /* пропускаем товар */ }
+        const r = await findProductPhoto(p);
+        if (r.url) { await attachFoundPhoto(p, r.url); found++; miss = 0; if (found % 6 === 0) { saveCache(); renderGrid(); } }
+        else if (r.reached) { checked[p.id] = 1; miss = 0; }
+        else miss++;   // база не ответила — товар не помечаем, попробуем позже
+      } catch (e) { miss++; }
+      if (miss >= 3) break;   // база явно лежит — не молотим впустую весь каталог
       done++;
       if (done % 15 === 0) save();
     }
     save();
     photoSearchRunning = false;
-    if (found) { saveCache(); renderGrid(); toast(`Добавлено фото: ${found} ✓`); }
+    if (found) {
+      saveCache(); renderGrid();
+      // публикуем ОДНИМ разом: публикация на каждое фото создала бы тысячи
+      // коммитов и упёрлась бы в ограничения GitHub
+      if (state.serverless) await svSaveAndPublish(`Добавлено фото: ${found} ✓`);
+      else toast(`Добавлено фото: ${found} ✓`);
+    }
   }
 
   /* Дубли товаров: оставляем один на «имя + штрихкоды», приоритет строке с кодом
@@ -4248,14 +4275,18 @@
     const status = (msg) => { const el = $('photoSearchStatus'); el.hidden = false; el.textContent = msg; };
     let done = 0;
     let found = 0;
+    let miss = 0;   // подряд неудачных обращений к базе
+    let outage = false;
     status(`Будем проверять: ${todo.length} товаров без фото (по штрихкоду и названию)`);
     for (const p of todo) {
       if (!photoSearchRunning || $('photoSearchSheet').hidden) break;
       try {
-        const url = await findProductPhoto(p);
-        if (url) { await attachFoundPhoto(p, url); found++; }
-        else checked[p.id] = 1;
-      } catch (e) { /* пропускаем товар, идём дальше */ }
+        const r = await findProductPhoto(p);
+        if (r.url) { await attachFoundPhoto(p, r.url); found++; miss = 0; }
+        else if (r.reached) { checked[p.id] = 1; miss = 0; }
+        else miss++;
+      } catch (e) { miss++; }
+      if (miss >= 3) { outage = true; break; }
       done++;
       if (done % 10 === 0) saveChecked();
       status(`Проверено ${done} из ${todo.length} · найдено фото: ${found}`);
@@ -4264,11 +4295,14 @@
     photoSearchRunning = false;
     const finished = done >= todo.length;
     btn.textContent = finished ? '▶ Проверить снова' : '▶ Продолжить поиск';
-    status(`${finished ? 'Готово!' : 'Пауза.'} Проверено ${done} из ${todo.length} · найдено фото: ${found}`);
+    status(outage
+      ? `Открытая база фото сейчас недоступна — попробуй позже. Проверено ${done} из ${todo.length} · найдено: ${found}. Проверенное не потеряется.`
+      : `${finished ? 'Готово!' : 'Пауза.'} Проверено ${done} из ${todo.length} · найдено фото: ${found}`);
     if (found) {
       saveCache();
       renderGrid();
-      toast(`Фото найдены и сохранены: ${found} ✓`);
+      if (state.serverless) await svSaveAndPublish(`Фото найдены и сохранены: ${found} ✓`);
+      else toast(`Фото найдены и сохранены: ${found} ✓`);
     }
   }
 
@@ -5657,15 +5691,21 @@
       btn.disabled = true;
       btn.textContent = 'Ищем фото…';
       try {
-        const url = await findProductPhoto(p);
-        if (!url) {
-          toast('В открытых базах фото этого товара нет — сфотографируй его через 📷 в карточке');
+        const { url, reached } = await findProductPhoto(p);
+        if (!url && !reached) {
+          toast('Открытая база фото сейчас недоступна — попробуй позже');
+        } else if (!url) {
+          toast(state.serverless
+            ? 'В открытых базах фото этого товара нет'
+            : 'В открытых базах фото этого товара нет — сфотографируй его через 📷 в карточке');
         } else {
           await attachFoundPhoto(p, url);
           saveCache();
           renderGrid();
           openProduct(p); // перерисуем карточку уже с фото
-          toast('Фото найдено и сохранено ✓');
+          // одно фото — публикуем сразу: владелец нажал кнопку и ждёт результата
+          if (state.serverless) await svSaveAndPublish('Фото найдено и сохранено ✓');
+          else toast('Фото найдено и сохранено ✓');
         }
       } catch (e) {
         toast('Не получилось: ' + (e.message || e));
