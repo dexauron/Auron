@@ -678,7 +678,9 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'more') { openAdminOrLogin(); return; }   // «Ещё» — не раздел, а меню
+    // «Ещё» — не раздел, а меню. Вошедшему открываем меню, остальным — настройки
+    // устройства: там же есть кнопка входа, и человек не упирается сразу в пароль.
+    if (tab === 'more') { if (state.session) openAdminOrLogin(); else openDeviceSheet(); return; }
     state.tab = tab;
     if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
     else if (state.favOnly) state.favOnly = false;
@@ -1059,7 +1061,7 @@
     try {
       localStorage.setItem(FILTERS_KEY, JSON.stringify({
         selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
-        quick: state.quick, sort: state.sort, view: state.view,
+        quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
         priceMin: state.priceMin, priceMax: state.priceMax,
         selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
       }));
@@ -1074,7 +1076,9 @@
       state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
       state.quick = Array.isArray(f.quick) ? f.quick : [];
       if (['relevance', 'name', 'cheap', 'expensive', 'new', 'popular'].includes(f.sort)) state.sort = f.sort;
-      if (f.view === 'compact' || f.view === 'normal') state.view = f.view;
+      if (['normal', 'compact', 'list'].includes(f.view)) state.view = f.view;
+      if (['catalog', 'cats', 'fav'].includes(f.tab)) state.tab = f.tab;
+      if (state.tab === 'fav') state.favOnly = true;
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
       if (f.selType === 'weighted' || f.selType === 'piece') state.selType = f.selType;
@@ -1144,6 +1148,73 @@
       try { localStorage.setItem('wm_device_id', id); } catch (e) { /* */ }
     }
     return id;
+  }
+
+  /* ── Настройки этого устройства ─────────────────────
+   * Каталог живёт на десятках телефонов: у кассы, у сотрудников зала, у
+   * владельца. Настройки у каждого свои и хранятся только на самом устройстве —
+   * ничего не улетает на сервер и не мешает соседнему телефону. Экран нужен,
+   * чтобы это перестало быть невидимым: видно, что запомнено, и как сбросить. */
+
+  const DEV_NAME_KEY = 'wm_device_name';
+
+  function deviceName() {
+    try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  // Что именно телефон помнит. Ключ → человеческое имя и краткое значение.
+  function deviceMemory() {
+    const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    const viewName = { normal: 'плитки', compact: 'плотные плитки', list: 'список' }[state.view] || state.view;
+    const tabName = { catalog: 'Каталог', cats: 'Категории', fav: 'Избранное' }[state.tab] || state.tab;
+    const themeRaw = get(THEME_KEY);
+    const rows = [
+      { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
+      { name: 'Вид списка', val: viewName },
+      { name: 'Открытый раздел', val: tabName },
+      { name: 'Тема', val: themeRaw === 'dark' ? 'тёмная' : themeRaw === 'light' ? 'светлая' : 'как в телефоне' },
+      { name: 'Избранное', val: `${favorites().length} ${plural(favorites().length, 'товар', 'товара', 'товаров')}` },
+      { name: 'Фильтры', val: countActiveFilters() ? `включено ${countActiveFilters()}` : 'не заданы' },
+      { name: 'Каталог для работы без связи', val: get(CACHE_KEY) || get('wm_catalog_db') ? 'сохранён' : 'нет' },
+    ];
+    if (ghToken()) rows.push({ name: 'Ключ публикации', val: 'сохранён на этом устройстве' });
+    return rows;
+  }
+
+  function renderDeviceSheet() {
+    const box = $('devList');
+    if (!box) return;
+    box.innerHTML = deviceMemory().map((r) => `<div class="dev-row">
+      <span class="dev-key">${esc(r.name)}</span><span class="dev-val">${esc(r.val)}</span></div>`).join('');
+    $('devName').value = deviceName();
+    // вход/выход прямо здесь: до этого экрана сотрудник доходит, ещё не войдя
+    $('devAuth').innerHTML = state.session
+      ? '<button type="button" class="btn btn-ghost btn-block" id="devLogout">Выйти из аккаунта на этом устройстве</button>'
+      : '<button type="button" class="btn btn-primary btn-block" id="devLogin">Войти</button>';
+  }
+
+  function openDeviceSheet() { renderDeviceSheet(); openSheet('deviceSheet'); }
+
+  // Сброс: чистим только СВОИ ключи и только настройки — сохранённый каталог и
+  // ключ публикации не трогаем, иначе сотрудник останется без данных офлайн,
+  // а владелец потеряет доступ к публикации из-за случайного нажатия.
+  function resetDevice() {
+    const keep = new Set([GH_TOKEN_KEY, CACHE_KEY, 'wm_catalog_db', SV_AUTH_KEY]);
+    let removed = 0;
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('wm_') && !keep.has(k)) { localStorage.removeItem(k); removed++; }
+      }
+    } catch (e) { /* приватный режим */ }
+    state.selCats = []; state.selGroups = []; state.selSuppliers = []; state.quick = [];
+    state.priceMin = null; state.priceMax = null; state.selType = '';
+    state.arrivalFrom = ''; state.arrivalTo = '';
+    state.sort = 'relevance'; state.view = 'normal'; state.tab = 'catalog'; state.favOnly = false;
+    state.query = ''; $('searchInput').value = '';
+    applyTheme(null);
+    renderAll();
+    renderDeviceSheet();
+    toast(`Настройки сброшены (${removed})`);
   }
 
   const popViews = (id) => state.popularity[id] || 0;
@@ -5984,6 +6055,17 @@
 
     // правила заказа: по ним считается точка заказа и объём закупки
     $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
+    $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
+    $('devName').addEventListener('change', () => {
+      const v = $('devName').value.trim();
+      try { if (v) localStorage.setItem(DEV_NAME_KEY, v); else localStorage.removeItem(DEV_NAME_KEY); } catch (e) { /* */ }
+      toast(v ? `Устройство названо: ${v}` : 'Название устройства убрано');
+    });
+    $('devReset').addEventListener('click', resetDevice);
+    $('devAuth').addEventListener('click', (e) => {
+      if (e.target.closest('#devLogin')) { closeSheet('deviceSheet'); openLogin(); }
+      if (e.target.closest('#devLogout')) { closeSheet('deviceSheet'); $('menuLogout').click(); }
+    });
     for (const id of ['orLead', 'orCycle', 'orSafety']) {
       $(id).addEventListener('input', renderOrderRulesExample);
     }

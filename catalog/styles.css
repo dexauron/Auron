@@ -1130,3 +1130,15 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .grid.list .card-price { font-size: 14px; font-weight: 700; margin: 0; }
 .grid.list .card-code { flex: 0 0 auto; align-self: center; font-size: 20px; padding: 6px 12px; }
 .grid.list .card-photo { display: none; }
+
+/* ═══ Настройки устройства ═════════════════════════
+   Каталог живёт на десятках телефонов, и настройки у каждого свои. Экран
+   делает это видимым: что запомнено и как сбросить. */
+.dev-list { margin: 4px 0 14px; }
+.dev-row {
+  display: flex; justify-content: space-between; gap: 12px; align-items: baseline;
+  padding: 9px 2px; border-bottom: 1px solid var(--border); font-size: 14px;
+}
+.dev-row:last-child { border-bottom: 0; }
+.dev-key { color: var(--text-2); }
+.dev-val { font-weight: 650; text-align: right; }
