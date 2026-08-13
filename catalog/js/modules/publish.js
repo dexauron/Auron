@@ -7,6 +7,7 @@ import { renderAll } from './render.js';
 import { orderRules } from './card.js';
 import { byName, saveCache } from './data.js';
 import { autoDedup } from './photos.js';
+import { digest, partName, pool, shard } from './parts.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -39,24 +40,31 @@ async function ghJson(path, opts) {
 }
 
 // Один коммит с несколькими файлами (текстовыми). files: [{path, content}],
-// path — от корня репозитория. При параллельной правке (ветка ушла вперёд)
-// один раз перечитываем вершину ветки и повторяем.
-export async function ghCommit(files, message, _retry = true) {
+// path — от корня репозитория. content === null — файл удаляется.
+// При параллельной правке (ветка ушла вперёд) один раз перечитываем вершину
+// ветки и повторяем. onProgress(готово, всего) — для показа хода публикации.
+export async function ghCommit(files, message, opts = {}) {
+  const { onProgress = null, retry = true } = opts;
   const b = ghBranch();
   const ref = await ghJson(`${ghRepo()}/git/ref/heads/${b}`);
   const baseCommit = ref.object.sha;
   const baseInfo = await ghJson(`${ghRepo()}/git/commits/${baseCommit}`);
   // Каждый файл заливаем ОТДЕЛЬНЫМ запросом и складываем в дерево по ссылке.
   // Раньше всё содержимое шло одним запросом — на большом каталоге он весил
-  // десятки мегабайт и обрывался («Failed to fetch»).
-  const entries = [];
-  for (const f of files) {
+  // десятки мегабайт и обрывался («Failed to fetch»). Пачками по четыре:
+  // по одному — долго, все разом — GitHub отвечает ошибкой.
+  let done = 0;
+  if (onProgress) onProgress(0, files.length);
+  const entries = await pool(files, 4, async (f) => {
+    if (f.content == null) { done++; if (onProgress) onProgress(done, files.length); return { path: f.path, mode: '100644', type: 'blob', sha: null }; }
     const blob = await ghJson(`${ghRepo()}/git/blobs`, {
       method: 'POST',
       body: JSON.stringify({ content: f.content, encoding: 'utf-8' }),
     });
-    entries.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha });
-  }
+    done++;
+    if (onProgress) onProgress(done, files.length);
+    return { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
+  });
   const tree = await ghJson(`${ghRepo()}/git/trees`, {
     method: 'POST',
     body: JSON.stringify({ base_tree: baseInfo.tree.sha, tree: entries }),
@@ -67,7 +75,7 @@ export async function ghCommit(files, message, _retry = true) {
   });
   const upd = await ghApi(`${ghRepo()}/git/refs/heads/${b}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
   if (!upd.ok) {
-    if ((upd.status === 409 || upd.status === 422) && _retry) return ghCommit(files, message, false);
+    if ((upd.status === 409 || upd.status === 422) && retry) return ghCommit(files, message, { ...opts, retry: false });
     throw new Error('GitHub PATCH ref → ' + upd.status + ' ' + (await upd.text()).slice(0, 200));
   }
   return commit.sha;
@@ -136,23 +144,60 @@ export function buildPopularIds() {
   return [...qty.entries()].filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([id]) => id);
 }
 
-// Опубликовать витрину (товары + категории) одним коммитом на GitHub.
-// По умолчанию публикуем ТОЛЬКО если витрина изменилась (сравниваем подпись
-// содержимого), чтобы не плодить пустые коммиты и лишние деплои. force=true —
-// опубликовать в любом случае (кнопка «Опубликовать сейчас», первый перенос).
-const GH_SIG_KEY = 'wm_gh_lastsig';
-function strHash(s) { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
-export async function publishShowcase({ force = false } = {}) {
-  const pJson = JSON.stringify(buildPublicProducts());
+/* ── Витрина по частям ──────────────────────────────────────────────────────
+   Витрина лежит кусками `data/p/00.json…`, рядом — опись `data/index.json`
+   с подписью каждого куска. Публикуем только те куски, чья подпись изменилась;
+   приложение по той же описи докачивает только изменившиеся (подпись стоит в
+   адресе, поэтому остальное берётся из кэша браузера).
+   Старый цельный `products.json` продолжаем читать — но больше не пишем. */
+const PUB_PARTS = 16;              // кусков витрины
+const PUB_DIR = 'p';               // папка кусков витрины
+const INDEX_FILE = 'index.json';   // опись витрины
+const LEGACY_FILE = 'products.json';      // старый цельный файл (только чтение)
+
+async function showcaseFiles(prev) {
+  const parts = shard(buildPublicProducts(), PUB_PARTS, (p) => p.id);
+  const files = [];
+  const hashes = [];
+  for (let i = 0; i < PUB_PARTS; i++) {
+    const json = JSON.stringify(parts[i]);
+    const h = await digest(json);
+    hashes.push(h);
+    if (!prev || (prev.parts || [])[i] !== h) files.push({ path: `${CFG.DATA_PATH}/${PUB_DIR}/${partName(i)}.json`, content: json });
+  }
   const gJson = JSON.stringify(buildPublicGroups());
-  const sig = strHash(pJson) + '.' + strHash(gJson);
-  if (!force) { try { if (localStorage.getItem(GH_SIG_KEY) === sig) return null; } catch (e) { /* приватный режим */ } }
-  const files = [
-    { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
-    { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
-  ];
-  const sha = await ghCommit(files, 'Каталог: обновлена витрина');
-  try { localStorage.setItem(GH_SIG_KEY, sig); } catch (e) { /* приватный режим */ }
+  const gHash = await digest(gJson);
+  if (!prev || prev.groups !== gHash) files.push({ path: `${CFG.DATA_PATH}/groups.json`, content: gJson });
+  const popJson = JSON.stringify(buildPopularIds());
+  const popHash = await digest(popJson);
+  if (!prev || prev.popular !== popHash) files.push({ path: `${CFG.DATA_PATH}/popular.json`, content: popJson });
+  const index = { v: 2, savedAt: new Date().toISOString(), n: PUB_PARTS, parts: hashes, groups: gHash, popular: popHash };
+  return { files, index };
+}
+
+// опись прошлой публикации: что уже лежит на GitHub
+async function loadPubIndex() {
+  try {
+    const raw = await fetchRaw(INDEX_FILE);
+    if (!raw) return null;
+    const idx = JSON.parse(raw);
+    return idx && idx.v === 2 ? idx : null;
+  } catch (e) { return null; }   // нет связи — считаем, что описи нет: перезальём всё
+}
+
+// Опубликовать витрину (товары + категории) одним коммитом на GitHub.
+// Уезжают только изменившиеся куски; ничего не изменилось — коммита нет
+// (раньше «изменилось ли» помнило само устройство, и на новом телефоне оно
+// перезаливало витрину зря; теперь сверяемся с описью на самом GitHub).
+export async function publishShowcase({ onProgress = null } = {}) {
+  const prev = await loadPubIndex();
+  const { files, index } = await showcaseFiles(prev);
+  if (!files.length) return null;
+  files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
+  // первый переход на куски: цельный файл больше не нужен — убираем, чтобы
+  // приложение не читало устаревшую витрину
+  if (!prev && await rawExists(LEGACY_FILE)) files.push({ path: `${CFG.DATA_PATH}/${LEGACY_FILE}`, content: null });
+  const sha = await ghCommit(files, 'Каталог: обновлена витрина', { onProgress });
   return sha;
 }
 
@@ -249,6 +294,16 @@ async function fetchRaw(file) {
   if (!r.ok) throw new Error('Не удалось скачать данные (' + r.status + ')');
   return r.text();
 }
+async function rawExists(file) {
+  try { return (await fetchRaw(file)) != null; } catch (e) { return false; }
+}
+// Кусок читаем с подписью в адресе: изменился — скачается заново, не изменился
+// — придёт из кэша браузера. Так вход после мелкой правки не тянет весь каталог.
+async function fetchPart(file, h) {
+  const r = await fetch(rawUrl(file) + '?h=' + h);
+  if (!r.ok) throw new Error('Не удалось скачать часть каталога (' + r.status + ')');
+  return r.text();
+}
 // полный товар без служебных полей индекса (начинаются с "_")
 function cleanProductsFull() {
   return state.products.map((p) => { const o = {}; for (const k in p) if (k[0] !== '_') o[k] = p[k]; return o; });
@@ -277,28 +332,144 @@ export function buildStaffSnapshot() {
   };
 }
 
-// Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный
-// каталог владельца (+ отдельный файл сотрудника, если задан его пароль).
-export async function publishFull(password) {
-  const pJson = JSON.stringify(buildPublicProducts());
-  const gJson = JSON.stringify(buildPublicGroups());
-  const files = [
-    { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
-    { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
-    { path: `${CFG.DATA_PATH}/popular.json`, content: JSON.stringify(buildPopularIds()) },
-    { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: await encryptJSON(buildFullSnapshot(), password) },
-  ];
-  if (state.staffPassword) files.push({ path: `${CFG.DATA_PATH}/${STAFF_FILE}`, content: await encryptJSON(buildStaffSnapshot(), state.staffPassword) });
-  const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные');
-  try { localStorage.setItem(GH_SIG_KEY, strHash(pJson) + '.' + strHash(gJson)); } catch (e) { /* приватный режим */ }
-  return sha;
+/* ── Закрытый каталог по частям ─────────────────────────────────────────────
+   Файл `secret-catalog.enc` теперь не весь каталог, а зашифрованная ОПИСЬ:
+   мелочь (группы, поставщики, контакты, правила) прямо в ней, а товары, цены и
+   продажи — кусками в `data/sec/…`. У каждого куска в описи своя подпись, и
+   на GitHub уезжают только изменившиеся.
+
+   Ключ шифрования один на все куски (иначе пришлось бы каждый раз
+   перешифровывать всё), поэтому «соль» берём из прошлой описи и меняем только
+   когда сменился пароль — тогда перезаписываются все куски. */
+const SETS = [
+  { name: 'products', n: 24, key: (r) => r.id },
+  { name: 'prices', n: 12, key: (r) => r.product_id },
+  { name: 'sales', n: 6, key: (r) => r.code || r.name },
+];
+const SEC_DIR = 'sec';            // куски каталога владельца
+const STAFF_DIR = 'sec-staff';    // куски каталога сотрудника
+// опись прошлой публикации, чтобы знать, что уже лежит на GitHub
+const _lastMani = {};             // файл описи → { salt, mani }
+
+async function encPart(key, obj) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  let bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let z = null;
+  if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  return JSON.stringify({ z, iv: b64(iv), data: b64(ct) });
+}
+async function decPart(key, raw) {
+  const env = JSON.parse(raw);
+  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+  if (env.z === 'gzip') plain = await gunzipBytes(plain);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// Разложить снимок на опись + куски и собрать список файлов к заливке.
+// prev — опись прошлой публикации (или null: тогда пишем всё).
+async function secretFiles(snapshot, password, dir, file, prev) {
+  const sameSalt = prev && prev.salt;
+  const salt = sameSalt ? unb64(prev.salt) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await deriveKey(password, salt);
+  const head = { ...snapshot };
+  const sets = {};
+  const files = [];
+  for (const s of SETS) {
+    delete head[s.name];
+    const parts = shard(snapshot[s.name] || [], s.n, s.key);
+    const hashes = [];
+    for (let i = 0; i < s.n; i++) {
+      const json = JSON.stringify(parts[i]);
+      const h = await digest(json);
+      hashes.push(h);
+      const known = prev && prev.mani && prev.mani.sets[s.name] && prev.mani.sets[s.name].h[i];
+      if (!sameSalt || known !== h) files.push({ path: `${CFG.DATA_PATH}/${dir}/${s.name}-${partName(i)}.enc`, content: await encPart(key, parts[i]) });
+    }
+    sets[s.name] = { n: s.n, h: hashes };
+  }
+  const mani = { v: 2, savedAt: new Date().toISOString(), head, sets };
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  let bytes = new TextEncoder().encode(JSON.stringify(mani));
+  let z = null;
+  if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  files.push({
+    path: `${CFG.DATA_PATH}/${file}`,
+    content: JSON.stringify({ v: 2, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, z, salt: b64(salt), iv: b64(iv), data: b64(ct) }),
+  });
+  return { files, saved: { salt: b64(salt), mani } };
+}
+
+// Прочитать закрытый каталог: опись + куски (новый формат) либо цельный файл
+// (старый). Наружу отдаёт то же самое, что лежало в старом файле.
+async function loadSnapshot(file, password) {
+  const raw = await fetchRaw(file);
+  if (raw == null) return null;
+  const env = JSON.parse(raw);
+  if (env.v !== 2) return decryptJSON(env, password);   // старый цельный файл
+  const salt = unb64(env.salt);
+  const key = await deriveKey(password, salt);
+  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+  if (env.z === 'gzip') plain = await gunzipBytes(plain);
+  const mani = JSON.parse(new TextDecoder().decode(plain));
+  _lastMani[file] = { salt: env.salt, mani };
+  const dir = file === SECRET_FILE ? SEC_DIR : STAFF_DIR;
+  const data = { ...mani.head };
+  for (const s of SETS) {
+    const set = mani.sets[s.name];
+    if (!set) { data[s.name] = []; continue; }
+    const idx = Array.from({ length: set.n }, (_, i) => i);
+    const chunks = await pool(idx, 6, async (i) => decPart(key, await fetchPart(`${dir}/${s.name}-${partName(i)}.enc`, set.h[i])));
+    data[s.name] = [].concat(...chunks);
+  }
+  return data;
+}
+
+// Опубликовать всё одним коммитом: открытая витрина + закрытый каталог
+// владельца (+ отдельный каталог сотрудника, если задан его пароль).
+// Возвращает {sha, sent, total} — сколько файлов реально уехало.
+export async function publishFull(password, { onProgress = null } = {}) {
+  const prevIdx = await loadPubIndex();
+  const { files, index } = await showcaseFiles(prevIdx);
+  files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
+  if (!prevIdx && await rawExists(LEGACY_FILE)) files.push({ path: `${CFG.DATA_PATH}/${LEGACY_FILE}`, content: null });
+
+  const own = await secretFiles(buildFullSnapshot(), password, SEC_DIR, SECRET_FILE, await prevMani(SECRET_FILE, password));
+  files.push(...own.files);
+  let staff = null;
+  if (state.staffPassword) {
+    staff = await secretFiles(buildStaffSnapshot(), state.staffPassword, STAFF_DIR, STAFF_FILE, await prevMani(STAFF_FILE, state.staffPassword));
+    files.push(...staff.files);
+  }
+  const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
+  _lastMani[SECRET_FILE] = own.saved;
+  if (staff) _lastMani[STAFF_FILE] = staff.saved;
+  return { sha, sent: files.length };
+}
+
+// Опись прошлой публикации: из памяти (мы её уже читали при входе) или с
+// GitHub. Не открылась нашим паролем — значит пароль сменился: перезапишем всё.
+async function prevMani(file, password) {
+  if (_lastMani[file]) return _lastMani[file];
+  try {
+    const raw = await fetchRaw(file);
+    if (raw == null) return null;
+    const env = JSON.parse(raw);
+    if (env.v !== 2) return null;                   // старый формат — переходим на куски целиком
+    const key = await deriveKey(password, unb64(env.salt));
+    let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+    if (env.z === 'gzip') plain = await gunzipBytes(plain);
+    const saved = { salt: env.salt, mani: JSON.parse(new TextDecoder().decode(plain)) };
+    _lastMani[file] = saved;
+    return saved;
+  } catch (e) { return null; }
 }
 // Вход владельца по паролю: скачать полный каталог и открыть паролем.
 // Бросает NO_SECRET, если файла ещё нет; бросает при неверном пароле.
 export async function unlockSecret(password) {
-  const raw = await fetchRaw(SECRET_FILE);
-  if (raw == null) throw new Error('NO_SECRET');
-  const data = await decryptJSON(raw, password); // неверный пароль → исключение
+  const data = await loadSnapshot(SECRET_FILE, password); // неверный пароль → исключение
+  if (data == null) throw new Error('NO_SECRET');
   state.groups = data.groups || [];
   state.suppliers = data.suppliers || [];
   state.products = (data.products || []).slice().sort(byName);
@@ -318,9 +489,8 @@ export async function unlockSecret(password) {
 }
 // Вход сотрудника по паролю: скачать файл сотрудника (без продаж) и открыть.
 export async function unlockStaff(password) {
-  const raw = await fetchRaw(STAFF_FILE);
-  if (raw == null) throw new Error('NO_STAFF');
-  const data = await decryptJSON(raw, password);
+  const data = await loadSnapshot(STAFF_FILE, password);
+  if (data == null) throw new Error('NO_STAFF');
   state.groups = data.groups || [];
   state.suppliers = data.suppliers || [];
   state.products = (data.products || []).slice().sort(byName);
