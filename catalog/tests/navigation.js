@@ -17,6 +17,7 @@ const products = [
   mk(4, 'Шампунь Head & Shoulders', 'g3'),                 // остатки не загружали
   mk(5, 'Конфеты Мишка косолапый', 'g4', { stock: 30 }),
   mk(6, 'Печенье Юбилейное', 'g4', { stock: 25 }),
+  mk(7, 'Шоколад молочный Алёнка', 'g4', { stock: 15 }),   // «мол…» найдётся в двух категориях
 ];
 const groups = [
   { id: 'g1', name: 'Молочные продукты', sort_order: 1 },
@@ -60,15 +61,44 @@ const groups = [
   chk(cats.tiles.every((t) => /\d+ товар/.test(t)), 'у каждой плитки написано, сколько товаров');
   chk(cats.tiles.join(' ').includes('Хлеб и выпечка'), 'хлеб — в своей категории');
 
-  // тап по плитке ведёт в каталог с этим фильтром
-  await page.click('.cat-tile[data-cat-tile="Молочное"]'); await page.waitForTimeout(600);
+  // ── второй уровень: внутри категории — её группы из 1С ──
+  await page.click('.cat-tile[data-cat-open="Молочное"]'); await page.waitForTimeout(500);
+  const inside = await page.evaluate(() => ({
+    head: (document.querySelector('.cat-head') || {}).innerText || '',
+    back: !!document.querySelector('[data-cat-back]'),
+    rows: [...document.querySelectorAll('.grp-row')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()),
+  }));
+  console.log('--- внутри категории ---\n' + inside.rows.join('\n') + '\n---');
+  chk(/Молочное/.test(inside.head), 'заголовок раскрытой категории на месте');
+  chk(inside.back, 'есть возврат «Все категории»');
+  chk(inside.rows.some((r) => /Молочные продукты/.test(r)), 'внутри категории видны настоящие группы из 1С');
+  chk(inside.rows.some((r) => /Показать все/.test(r)), 'есть «Показать все» — вся категория целиком');
+
+  // тап по группе ведёт в каталог с этой группой
+  await page.click('.grp-row[data-grp="g1"]'); await page.waitForTimeout(600);
   const after = await page.evaluate(() => ({
     tab: [...document.querySelectorAll('.tabbar .tab')].find((t) => t.classList.contains('active')).dataset.tab,
     names: [...document.querySelectorAll('#productGrid .card')].map((c) => c.innerText.replace(/\s+/g, ' ')),
   }));
-  chk(after.tab === 'catalog', 'после выбора категории открывается «Каталог»');
+  chk(after.tab === 'catalog', 'после выбора группы открывается «Каталог»');
   chk(after.names.length === 2 && after.names.every((n) => /Молоко|Кефир/.test(n)),
-    `показаны только товары категории (${after.names.length}: ${after.names.map((n) => n.slice(0, 18)).join(', ')})`);
+    `показаны только товары группы (${after.names.length}: ${after.names.map((n) => n.slice(0, 18)).join(', ')})`);
+
+  // ── поиск раскладывает найденное по категориям ──
+  await page.fill('#searchInput', ''); await page.waitForTimeout(200);
+  await page.evaluate(() => { const P = window.WM_PUBLISH; const s = P._state(); s.selGroups = []; s.selCats = []; P.renderAll(); });
+  await page.waitForTimeout(300);
+  await page.fill('#searchInput', 'мол'); await page.waitForTimeout(700);
+  const search = await page.evaluate(() => ({
+    seps: [...document.querySelectorAll('.cat-sep')].map((x) => x.innerText.replace(/\s+/g, ' ').trim()),
+    grouped: document.getElementById('productGrid').classList.contains('grouped'),
+  }));
+  console.log('--- заголовки в поиске ---\n' + search.seps.join('\n') + '\n---');
+  chk(search.grouped && search.seps.length >= 2, `найденное разложено по категориям (${search.seps.length})`);
+  chk(search.seps.every((t) => /\d+$/.test(t)), 'у каждой категории написано, сколько в ней нашлось');
+  await page.fill('#searchInput', ''); await page.waitForTimeout(400);
+  chk(!(await page.evaluate(() => document.getElementById('productGrid').classList.contains('grouped'))),
+    'без поиска заголовков нет — при листании каталога они мешают');
 
   // ── избранное ──
   await openProduct(page, 'p5');

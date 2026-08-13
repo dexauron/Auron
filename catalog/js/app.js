@@ -657,84 +657,6 @@
 
   /* ── Отрисовка ────────────────────────────────── */
 
-  function renderChips() {
-    // Строка чипов под поиском убрана по просьбе владельца — категории и все
-    // фильтры теперь выбираются через кнопку фильтра (⚙). Ряд скрыт.
-    const gc = $('groupChips');
-    if (gc) { gc.innerHTML = ''; gc.hidden = true; }
-    return;
-    // eslint-disable-next-line no-unreachable
-    const groupCounts = {};   // товаров в каждой группе
-    const catCounts = {};     // товаров в каждой категории
-    let noGroup = 0;
-    let weighted = 0;
-    for (const p of state.products) {
-      if (p.group_id) {
-        groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
-        const cat = productCategory(p);
-        if (cat) catCounts[cat] = (catCounts[cat] || 0) + 1;
-      } else noGroup++;
-      if (p.is_weighted) weighted++;
-    }
-
-    // ── Верхний ряд: Все · Сбросить · Поставщики · Ходовые · Весовые · категории ──
-    const { selCats, selGroups, selSuppliers } = state;
-    const allActive = !selCats.length && !selGroups.length;
-    // «Сбросить всё» теперь живёт в строке активных фильтров (renderActiveFilters),
-    // поэтому здесь дублирующую кнопку не показываем — чище
-    let html = `<button class="chip${allActive && !state.favOnly ? ' active' : ''}" data-all>Все<span class="chip-count">${state.products.length}</span></button>`;
-    // «Избранное» — показываем, если что-то добавлено в избранное или режим включён
-    const favs = favorites();
-    if (favs.length || state.favOnly) {
-      html += `<button class="chip chip-fav${state.favOnly ? ' active' : ''}" data-fav-chip>♥ Избранное<span class="chip-count">${favs.length}</span></button>`;
-    }
-    // Поставщики — внутренние данные магазина: показываем только тем, кто видит
-    // закупки (админ/аналитик). Покупателям без входа и кассиру их не показываем.
-    if (state.canPurchase && state.suppliers.length) {
-      const label = !selSuppliers.length ? '🚚 Поставщики'
-        : selSuppliers.length === 1 ? `🚚 ${supplierById(selSuppliers[0])?.name || 'Поставщик'}`
-          : `🚚 Поставщиков: ${selSuppliers.length}`;
-      const cnt = selSuppliers.length
-        ? state.products.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id))).length
-        : state.suppliers.length;
-      html += `<button class="chip${selSuppliers.length ? ' active' : ''}" data-supplier-chip>${esc(label)}<span class="chip-count">${cnt}</span></button>`;
-    }
-    if (state.canSales) html += '<button class="chip" data-top-chip>🔥 Ходовые</button>';
-    if (weighted > 0) html += `<button class="chip${selGroups.includes('weighted') ? ' active' : ''}" data-group="weighted">⚖ Весовые<span class="chip-count">${weighted}</span></button>`;
-    // сотруднику — быстрый «пришло сегодня» одним тапом (по дате из файла «Цены
-    // поставщиков», столбец «Период»). Совмещается с «Весовые»/категорией.
-    if (state.session) {
-      const todayOn = state.arrivalFrom === daysAgoISO(0) && state.arrivalTo === todayISO();
-      html += `<button class="chip${todayOn ? ' active' : ''}" data-arrival-today>🆕 Пришло сегодня</button>`;
-    }
-
-    // категории — по убыванию числа товаров; порядок стабильный
-    const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
-      .filter((c) => catCounts[c])
-      .sort((a, b) => catCounts[b] - catCounts[a]);
-    for (const c of cats) {
-      const active = selCats.includes(c) ? ' active' : '';
-      html += `<button class="chip${active}" data-category="${esc(c)}">${catIcon(c)} ${esc(c)}<span class="chip-count">${catCounts[c]}</span></button>`;
-    }
-    if (noGroup > 0) html += `<button class="chip${selGroups.includes('none') ? ' active' : ''}" data-group="none">Без группы<span class="chip-count">${noGroup}</span></button>`;
-    $('groupChips').innerHTML = html;
-
-    // ── Нижний ряд: подгруппы выбранных категорий (можно отметить несколько) ──
-    const sub = $('subChips');
-    if (!selCats.length) { sub.hidden = true; sub.innerHTML = ''; return; }
-    const subGroups = state.groups
-      .filter((g) => selCats.includes(categoryOf(g.name)) && groupCounts[g.id])
-      .sort((a, b) => (groupCounts[b.id] || 0) - (groupCounts[a.id] || 0));
-    let subHtml = '';
-    for (const g of subGroups) subHtml += chipHtml(g.id, g.name, groupCounts[g.id] || 0);
-    sub.innerHTML = subHtml;
-    sub.hidden = !subHtml;
-  }
-
-  function chipHtml(id, name, count) {
-    const active = state.selGroups.includes(id) ? ' active' : '';
-    return `<button class="chip${active}" data-group="${esc(id)}">${esc(name)}<span class="chip-count">${count}</span></button>`;
-  }
 
   /* ── Разделы нижней панели ──────────────────────────
    * «Каталог» — сетка товаров, «Категории» — плитки разделов, «Избранное» —
@@ -756,7 +678,9 @@
   }
 
   function switchTab(tab) {
-    if (tab === 'more') { openAdminOrLogin(); return; }   // «Ещё» — не раздел, а меню
+    // «Ещё» — не раздел, а меню. Вошедшему открываем меню, остальным — настройки
+    // устройства: там же есть кнопка входа, и человек не упирается сразу в пароль.
+    if (tab === 'more') { if (state.session) openAdminOrLogin(); else openDeviceSheet(); return; }
     state.tab = tab;
     if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
     else if (state.favOnly) state.favOnly = false;
@@ -782,25 +706,56 @@
 
   // Плитки категорий: иконка, название и сколько товаров. Пустые не показываем —
   // тыкать в раздел, где ничего нет, обидно.
+  /* Два уровня: сначала 13 понятных категорий плитками, внутри — настоящие
+   * группы из 1С, которые в эту категорию попали. Групп в базе больше двухсот,
+   * простым списком их не просмотреть; разложенные по категориям — можно.
+   * Товар ищется либо поиском, либо этими двумя тапами. */
+  let openCat = null;   // раскрытая категория на экране «Категории»
+
+  function catCounts() {
+    const cats = {}; const groupsIn = {};
+    for (const p of state.products) {
+      const c = productCategory(p) || OTHER_CAT.name;
+      cats[c] = (cats[c] || 0) + 1;
+      const g = p.group_id || 'none';
+      (groupsIn[c] = groupsIn[c] || {})[g] = (groupsIn[c][g] || 0) + 1;
+    }
+    return { cats, groupsIn };
+  }
+
   function renderCatScreen() {
     const box = $('catScreen');
     if (!box || state.tab !== 'cats') return;
-    const counts = {};
-    for (const p of state.products) {
-      const c = productCategory(p);
-      counts[c || OTHER_CAT.name] = (counts[c || OTHER_CAT.name] || 0) + 1;
-    }
-    const all = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]);
+    const { cats, groupsIn } = catCounts();
+    const all = [...CATEGORIES, OTHER_CAT].filter((c) => cats[c.name]);
     if (!all.length) {
       box.innerHTML = '<p class="muted cat-empty">Каталог пока пустой — категории появятся вместе с товарами.</p>';
       return;
     }
-    all.sort((a, b) => counts[b.name] - counts[a.name]);
+    all.sort((a, b) => cats[b.name] - cats[a.name]);
+
+    // вторая ступень: раскрытая категория показывает свои группы
+    if (openCat && cats[openCat]) {
+      const cat = all.find((c) => c.name === openCat) || OTHER_CAT;
+      const list = Object.entries(groupsIn[openCat] || {})
+        .map(([id, n]) => ({ id, name: id === 'none' ? 'Без группы' : (groupById(id) || {}).name || 'Без названия', n }))
+        .sort((a, b) => b.n - a.n);
+      box.innerHTML = `
+        <button class="cat-back" data-cat-back>‹ Все категории</button>
+        <div class="cat-head"><span class="cat-ico">${cat.icon}</span>
+          <span><b>${esc(openCat)}</b><span class="cat-count">${cats[openCat]} ${plural(cats[openCat], 'товар', 'товара', 'товаров')} · ${list.length} ${plural(list.length, 'группа', 'группы', 'групп')}</span></span></div>
+        <button class="grp-row grp-all" data-cat-tile="${esc(openCat)}">
+          <span class="grp-name">Показать все</span><span class="grp-count">${cats[openCat]}</span></button>
+        ${list.map((g) => `<button class="grp-row" data-grp="${esc(g.id)}">
+          <span class="grp-name">${esc(g.name)}</span><span class="grp-count">${g.n}</span></button>`).join('')}`;
+      return;
+    }
+
     box.innerHTML = '<div class="cat-grid">' + all.map((c) => `
-      <button class="cat-tile" data-cat-tile="${esc(c.name)}">
+      <button class="cat-tile" data-cat-open="${esc(c.name)}">
         <span class="cat-ico">${c.icon}</span>
         <span class="cat-name">${esc(c.name)}</span>
-        <span class="cat-count">${counts[c.name]} ${plural(counts[c.name], 'товар', 'товара', 'товаров')}</span>
+        <span class="cat-count">${cats[c.name]} ${plural(cats[c.name], 'товар', 'товара', 'товаров')} · ${Object.keys(groupsIn[c.name] || {}).length} ${plural(Object.keys(groupsIn[c.name] || {}).length, 'группа', 'группы', 'групп')}</span>
       </button>`).join('') + '</div>';
   }
 
@@ -810,6 +765,8 @@
     $('loader').hidden = true;
     grid.classList.toggle('compact', state.view === 'compact');
     grid.classList.toggle('list', state.view === 'list');
+    // с заголовками сетка перестаёт быть сеткой: колонки живут внутри разделов
+    grid.classList.toggle('grouped', !!state.query && state.view !== 'list');
     grid.classList.remove('skeleton');
     updateResultsCount(list.length);
 
@@ -844,7 +801,15 @@
     // на больших каталогах рисуем страницами — телефон не потянет 15 000 карточек разом
     const shown = list.slice(0, state.renderLimit);
     const hlTokens = queryHlTokens();
-    let html = shown.map((p) => {
+    // При поиске раскладываем найденное по категориям с заголовками: «Молочное 4»,
+    // «Сладости 2». Плоская простыня из шестидесяти карточек читается хуже, чем
+    // те же карточки, разложенные по полкам. Только при поиске: когда листаешь
+    // каталог целиком, заголовки мешают. В режиме списка тоже не делим — он и
+    // так плотный, а сотруднику там нужен код, а не раскладка.
+    const grouped = !!state.query && state.view !== 'list';
+    const catOf = (p) => productCategory(p) || OTHER_CAT.name;
+    const catIconOf = (n) => (CATEGORIES.find((c) => c.name === n) || OTHER_CAT).icon;
+    const cards = shown.map((p) => {
       const photo = (p.photos || []).find((u) => u && String(u).trim());
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
@@ -883,7 +848,21 @@
           ${tagRow}
         </div>
       </article>`;
-    }).join('');
+    });
+    let html = cards.join('');
+    if (grouped) {
+      const order = []; const buckets = new Map();
+      shown.forEach((p, i) => {
+        const c = catOf(p);
+        if (!buckets.has(c)) { buckets.set(c, []); order.push(c); }
+        buckets.get(c).push(cards[i]);
+      });
+      // одна категория на весь результат — заголовок ничего не делит, не рисуем
+      if (order.length > 1) {
+        html = order.map((c) => `<div class="cat-sep">${catIconOf(c)} ${esc(c)}<span class="cat-sep-n">${buckets.get(c).length}</span></div>`
+          + `<div class="cat-part">${buckets.get(c).join('')}</div>`).join('');
+      }
+    }
     grid.innerHTML = html;
     document.querySelectorAll('.load-more').forEach((b) => b.remove());
     if (list.length > shown.length) {
@@ -1099,9 +1078,9 @@
   }
 
   function renderAll() {
-    renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
+    renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
     syncTabs(); renderCatScreen();
-    renderNewProducts(); renderPopularProducts(); renderRecentProducts();
+    renderNewProducts(); renderPopularProducts();
     if (state.tab !== 'cats') renderGrid();
   }
 
@@ -1137,7 +1116,7 @@
     try {
       localStorage.setItem(FILTERS_KEY, JSON.stringify({
         selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
-        quick: state.quick, sort: state.sort, view: state.view,
+        quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
         priceMin: state.priceMin, priceMax: state.priceMax,
         selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
       }));
@@ -1152,7 +1131,9 @@
       state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
       state.quick = Array.isArray(f.quick) ? f.quick : [];
       if (['relevance', 'name', 'cheap', 'expensive', 'new', 'popular'].includes(f.sort)) state.sort = f.sort;
-      if (f.view === 'compact' || f.view === 'normal') state.view = f.view;
+      if (['normal', 'compact', 'list'].includes(f.view)) state.view = f.view;
+      if (['catalog', 'cats', 'fav'].includes(f.tab)) state.tab = f.tab;
+      if (state.tab === 'fav') state.favOnly = true;
       state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
       state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
       if (f.selType === 'weighted' || f.selType === 'piece') state.selType = f.selType;
@@ -1222,6 +1203,73 @@
       try { localStorage.setItem('wm_device_id', id); } catch (e) { /* */ }
     }
     return id;
+  }
+
+  /* ── Настройки этого устройства ─────────────────────
+   * Каталог живёт на десятках телефонов: у кассы, у сотрудников зала, у
+   * владельца. Настройки у каждого свои и хранятся только на самом устройстве —
+   * ничего не улетает на сервер и не мешает соседнему телефону. Экран нужен,
+   * чтобы это перестало быть невидимым: видно, что запомнено, и как сбросить. */
+
+  const DEV_NAME_KEY = 'wm_device_name';
+
+  function deviceName() {
+    try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
+  }
+
+  // Что именно телефон помнит. Ключ → человеческое имя и краткое значение.
+  function deviceMemory() {
+    const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+    const viewName = { normal: 'плитки', compact: 'плотные плитки', list: 'список' }[state.view] || state.view;
+    const tabName = { catalog: 'Каталог', cats: 'Категории', fav: 'Избранное' }[state.tab] || state.tab;
+    const themeRaw = get(THEME_KEY);
+    const rows = [
+      { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
+      { name: 'Вид списка', val: viewName },
+      { name: 'Открытый раздел', val: tabName },
+      { name: 'Тема', val: themeRaw === 'dark' ? 'тёмная' : themeRaw === 'light' ? 'светлая' : 'как в телефоне' },
+      { name: 'Избранное', val: `${favorites().length} ${plural(favorites().length, 'товар', 'товара', 'товаров')}` },
+      { name: 'Фильтры', val: countActiveFilters() ? `включено ${countActiveFilters()}` : 'не заданы' },
+      { name: 'Каталог для работы без связи', val: get(CACHE_KEY) || get('wm_catalog_db') ? 'сохранён' : 'нет' },
+    ];
+    if (ghToken()) rows.push({ name: 'Ключ публикации', val: 'сохранён на этом устройстве' });
+    return rows;
+  }
+
+  function renderDeviceSheet() {
+    const box = $('devList');
+    if (!box) return;
+    box.innerHTML = deviceMemory().map((r) => `<div class="dev-row">
+      <span class="dev-key">${esc(r.name)}</span><span class="dev-val">${esc(r.val)}</span></div>`).join('');
+    $('devName').value = deviceName();
+    // вход/выход прямо здесь: до этого экрана сотрудник доходит, ещё не войдя
+    $('devAuth').innerHTML = state.session
+      ? '<button type="button" class="btn btn-ghost btn-block" id="devLogout">Выйти из аккаунта на этом устройстве</button>'
+      : '<button type="button" class="btn btn-primary btn-block" id="devLogin">Войти</button>';
+  }
+
+  function openDeviceSheet() { renderDeviceSheet(); openSheet('deviceSheet'); }
+
+  // Сброс: чистим только СВОИ ключи и только настройки — сохранённый каталог и
+  // ключ публикации не трогаем, иначе сотрудник останется без данных офлайн,
+  // а владелец потеряет доступ к публикации из-за случайного нажатия.
+  function resetDevice() {
+    const keep = new Set([GH_TOKEN_KEY, CACHE_KEY, 'wm_catalog_db', SV_AUTH_KEY]);
+    let removed = 0;
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith('wm_') && !keep.has(k)) { localStorage.removeItem(k); removed++; }
+      }
+    } catch (e) { /* приватный режим */ }
+    state.selCats = []; state.selGroups = []; state.selSuppliers = []; state.quick = [];
+    state.priceMin = null; state.priceMax = null; state.selType = '';
+    state.arrivalFrom = ''; state.arrivalTo = '';
+    state.sort = 'relevance'; state.view = 'normal'; state.tab = 'catalog'; state.favOnly = false;
+    state.query = ''; $('searchInput').value = '';
+    applyTheme(null);
+    renderAll();
+    renderDeviceSheet();
+    toast(`Настройки сброшены (${removed})`);
   }
 
   const popViews = (id) => state.popularity[id] || 0;
@@ -1339,27 +1387,6 @@
   }
 
   // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
-  function renderRecentProducts() {
-    // «Недавно смотрели» убрано по просьбе владельца — лента не показывается.
-    const box = $('recentStrip');
-    if (box) { box.hidden = true; box.innerHTML = ''; }
-    return;
-    // eslint-disable-next-line no-unreachable
-    const show = !state.query && !state.favOnly && !anyFilterActive();
-    if (!show) { box.hidden = true; box.innerHTML = ''; return; }
-    const byId = new Map(state.products.map((p) => [p.id, p]));
-    const list = recentProducts().map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
-    if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
-    box.hidden = false;
-    box.innerHTML = '<div class="similar-title">Недавно смотрели</div><div class="similar-row">'
-      + list.map((x) => {
-        const ph = (x.photos || []).find((u) => u && String(u).trim());
-        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
-        return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
-          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
-      }).join('') + '</div>';
-  }
 
   function applyTheme(t) {
     // t: 'dark' | 'light' | null (авто — по системе)
@@ -1408,7 +1435,7 @@
     currentProduct = p;
     pushRecentProduct(p.id);
     trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
-    renderNewProducts(); renderPopularProducts(); renderRecentProducts(); // обновляем ленты под шторкой
+    renderNewProducts(); renderPopularProducts();   // обновляем ленты под шторкой
     updateFavButton(p);
     $('sheetName').textContent = p.name;
 
@@ -4491,7 +4518,9 @@
         else if (e.type === 'stock') { stockParsed = e.parsed; await stockUpload(); }
         else if (e.type === 'sales') { salesParsed = e.parsed; await salesUpload(); }
         else if (e.type === 'contacts') { contactsParsed = e.parsed; await contactsUpload(); }
-        else if (e.type === 'photo') { photoExcelParsed = e.parsed; await photoExcelApply(); }
+        // сырые строки файла надо сперва сопоставить с товарами: загрузчик ждёт
+        // готовое соответствие «товар → ссылка», а не список строк
+        else if (e.type === 'photo') { photoExcelParsed = matchPhotoRows(e.parsed).updates; await photoExcelApply(); }
         okCount++;
       } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
       smartSink = null;
@@ -5879,57 +5908,7 @@
       lb.addEventListener('touchend', end); lb.addEventListener('touchcancel', end);
     })();
 
-    // Группы-фильтры + чипы поставщика и «Ещё группы»
-    $('groupChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      if (chip.hasAttribute('data-supplier-chip')) {
-        $('supplierSearch').value = '';
-        renderSupplierList();
-        openSheet('supplierSheet');
-        return;
-      }
-      if (chip.hasAttribute('data-top-chip')) { openTopSheet(); return; }
-      // «Избранное» — переключаем режим показа только избранных товаров
-      if (chip.hasAttribute('data-fav-chip')) { state.favOnly = !state.favOnly; state.renderLimit = PAGE_SIZE; renderAll(); return; }
-      // «Пришло сегодня» — быстрый фильтр поступления за сегодня (повторный тап снимает)
-      if (chip.hasAttribute('data-arrival-today')) {
-        const from = daysAgoISO(0); const to = todayISO();
-        if (state.arrivalFrom === from && state.arrivalTo === to) { state.arrivalFrom = ''; state.arrivalTo = ''; }
-        else { state.arrivalFrom = from; state.arrivalTo = to; }
-        state.renderLimit = PAGE_SIZE; renderAll(); return;
-      }
-      // сброс — очищает всё (категории, группы, поставщиков, быстрые фильтры, цену, поиск)
-      if (chip.hasAttribute('data-reset')) { clearAllFilters(); return; }
-      // повторный тап снимает отметку; можно отметить несколько
-      if (chip.hasAttribute('data-all')) { state.selCats = []; state.selGroups = []; state.favOnly = false; }
-      else if (chip.hasAttribute('data-category')) {
-        const c = chip.dataset.category;
-        if (state.selCats.includes(c)) {
-          // снимаем категорию — и её подгруппы из выбора тоже
-          state.selCats = state.selCats.filter((x) => x !== c);
-          const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
-          state.selGroups = state.selGroups.filter((x) => !ids.has(x));
-        } else state.selCats = [...state.selCats, c];
-      } else {
-        const g = chip.dataset.group; // 'none' | 'weighted'
-        state.selGroups = state.selGroups.includes(g)
-          ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
-      }
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    });
 
-    // подгруппы выбранных категорий — тап отмечает/снимает
-    $('subChips').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      const g = chip.dataset.group;
-      state.selGroups = state.selGroups.includes(g)
-        ? state.selGroups.filter((x) => x !== g) : [...state.selGroups, g];
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    });
 
     // выбор поставщиков — тап отмечает/снимает, шторка остаётся открытой
     $('supplierList').addEventListener('click', (e) => {
@@ -6010,7 +5989,6 @@
       if (p) openProduct(p);
     };
     $('sheetSimilar').addEventListener('click', openSimilar);
-    $('recentStrip').addEventListener('click', openSimilar);
     $('popularStrip').addEventListener('click', openSimilar);
 
     // Точки под фото
@@ -6108,11 +6086,13 @@
       if (b) switchTab(b.dataset.tab);
     });
     $('catScreen').addEventListener('click', (e) => {
-      const t = e.target.closest('[data-cat-tile]');
-      if (!t) return;
-      state.selCats = [t.dataset.catTile];
-      state.selGroups = [];
-      switchTab('catalog');
+      if (e.target.closest('[data-cat-back]')) { openCat = null; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
+      const open = e.target.closest('[data-cat-open]');
+      if (open) { openCat = open.dataset.catOpen; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
+      const grp = e.target.closest('[data-grp]');
+      if (grp) { state.selCats = []; state.selGroups = [grp.dataset.grp]; switchTab('catalog'); return; }
+      const all = e.target.closest('[data-cat-tile]');
+      if (all) { state.selCats = [all.dataset.catTile]; state.selGroups = []; switchTab('catalog'); }
     });
 
     // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
@@ -6132,6 +6112,17 @@
 
     // правила заказа: по ним считается точка заказа и объём закупки
     $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
+    $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
+    $('devName').addEventListener('change', () => {
+      const v = $('devName').value.trim();
+      try { if (v) localStorage.setItem(DEV_NAME_KEY, v); else localStorage.removeItem(DEV_NAME_KEY); } catch (e) { /* */ }
+      toast(v ? `Устройство названо: ${v}` : 'Название устройства убрано');
+    });
+    $('devReset').addEventListener('click', resetDevice);
+    $('devAuth').addEventListener('click', (e) => {
+      if (e.target.closest('#devLogin')) { closeSheet('deviceSheet'); openLogin(); }
+      if (e.target.closest('#devLogout')) { closeSheet('deviceSheet'); $('menuLogout').click(); }
+    });
     for (const id of ['orLead', 'orCycle', 'orSafety']) {
       $(id).addEventListener('input', renderOrderRulesExample);
     }
@@ -6753,5 +6744,4 @@
   init();
 
   // для автотестов разбора 1С-файлов (не влияет на работу приложения)
-  window.__catalogTest = { detectColumns, parsePriceReport, mergeBarcodesReport, parseSalesReport, parseDateCell, parsePhotoSheet, categoryOf };
 })();

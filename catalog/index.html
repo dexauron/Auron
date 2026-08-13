@@ -53,8 +53,6 @@
         <span class="filter-badge" id="filterBadge" hidden></span>
       </button>
     </div>
-    <nav class="chips" id="groupChips"></nav>
-    <nav class="chips chips-sub" id="subChips" hidden></nav>
     <nav class="chips active-filters" id="activeFilters" hidden></nav>
   </header>
 
@@ -68,7 +66,6 @@
   <main class="content">
     <div class="recent-strip" id="newStrip" hidden></div>
     <div class="recent-strip" id="popularStrip" hidden></div>
-    <div class="recent-strip" id="recentStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
@@ -172,6 +169,7 @@
         <p class="muted" id="adminEmail"></p>
         <button class="btn btn-secondary btn-block" id="menuTop">🔥 Ходовые товары</button>
         <button class="btn btn-secondary btn-block" id="menuCompStores">🏬 Цены других магазинов</button>
+        <button class="btn btn-secondary btn-block" id="menuDevice">⚙️ Это устройство</button>
         <button class="btn btn-secondary btn-block" id="menuPhotoFill">📷 Дозаполнить фото</button>
         <button class="btn btn-secondary btn-block" id="menuSuggestions" hidden>🖼 Фото на проверке</button>
         <div id="menuAdminOnly">
@@ -356,6 +354,29 @@
           <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Настройки этого устройства: что телефон помнит и как это сбросить -->
+  <div class="sheet-backdrop" id="deviceSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">⚙️ Это устройство</h2>
+        <p class="muted">Каталог помнит настройки отдельно на каждом телефоне.
+        У сотрудника зала и у кассы могут быть разные — они не мешают друг другу.</p>
+
+        <label class="field-label">Название устройства</label>
+        <input type="text" id="devName" class="input" maxlength="40" placeholder="Например: Касса 1">
+        <p class="muted field-hint">Чтобы не путать телефоны. Видно только на этом устройстве.</p>
+
+        <div class="sec-title">Что запомнено</div>
+        <div id="devList" class="dev-list"></div>
+
+        <button type="button" class="btn btn-secondary btn-block" id="devReset">↺ Сбросить настройки этого устройства</button>
+        <div id="devAuth"></div>
+        <button class="btn btn-ghost sheet-close" data-close="deviceSheet">Закрыть</button>
       </div>
     </div>
   </div>
