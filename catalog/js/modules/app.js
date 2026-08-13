@@ -622,8 +622,8 @@ function bindEvents() {
     const btn = $('ghPublishNow'); btn.disabled = true; btn.textContent = 'Публикую…';
     $('publishError').hidden = true;
     try {
-      await publishShowcase({ force: true });
-      toast('Витрина опубликована');
+      const sha = await publishShowcase({ onProgress: (d, t) => { btn.textContent = `Публикую… ${d} из ${t}`; } });
+      toast(sha ? 'Витрина опубликована' : 'Витрина и так свежая — публиковать нечего');
     } catch (e) {
       $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
       $('publishError').hidden = false;
@@ -918,7 +918,7 @@ async function init() {
 
 // Тестовый доступ — только на localhost (в проде не открываем).
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
 }

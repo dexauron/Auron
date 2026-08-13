@@ -142,7 +142,10 @@ export async function svSaveAndPublish(okMsg) {
   buildIndex();
   state.popularIds = buildPopularIds();
   renderAll();
-  try { await publishFull(ui.secretPw); if (okMsg) toast(okMsg); }
+  // Каталог уезжает кусками, и их бывает много — показываем ход, чтобы человек
+  // не смотрел в неподвижный экран и не думал, что всё зависло.
+  const onProgress = (done, total) => { if (total > 3) toast(`Публикую… ${done} из ${total}`); };
+  try { await publishFull(ui.secretPw, { onProgress }); if (okMsg) toast(okMsg); }
   catch (e) { toast('Сохранено, но опубликовать не удалось: ' + (e.message || e) + '. Проверь GitHub-ключ.'); }
 }
 
@@ -210,17 +213,34 @@ export function svImportRows(rows) {
 // только витрина (товары, розничная цена, фото, описание, категория); секретное
 // (закупка, поставщики, поступления, штрихкоды) — нет. Если файла нет или он не
 // читается, тихо возвращаем false — приложение грузится с сервера, как раньше.
+// Витрина лежит кусками (`p/00.json…`) с описью `index.json`: подпись куска
+// стоит в адресе, поэтому после мелкой правки заново качается только один
+// кусок, остальное берётся из кэша браузера. Описи нет — читаем старый цельный
+// файл, как раньше.
+async function fetchShowcase(base) {
+  const idx = await fetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
+  if (idx && idx.ok) {
+    const meta = await idx.json().catch(() => null);
+    if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
+      const chunks = await Promise.all(meta.parts.map((h, i) =>
+        fetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).then((r) => (r.ok ? r.json() : []))));
+      return [].concat(...chunks);
+    }
+  }
+  const pr = await fetch(base + 'products.json', { cache: 'no-cache' });
+  return pr.json();
+}
+
 async function refreshStatic() {
   try {
     const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
     // Цены чужих магазинов больше не качаем: покупателю они не показываются,
     // а вошедший сотрудник берёт их из своего зашифрованного каталога.
-    const [pr, gr, pop] = await Promise.all([
-      fetch(base + 'products.json', { cache: 'no-cache' }),
+    const [products, gr, pop] = await Promise.all([
+      fetchShowcase(base),
       fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
       fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
     ]);
-    const products = await pr.json();
     if (!Array.isArray(products)) return false;
     state.groups = (gr && gr.ok) ? await gr.json() : [];
     try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
