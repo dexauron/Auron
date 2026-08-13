@@ -39,6 +39,18 @@ async function ghJson(path, opts) {
   return r.json();
 }
 
+// Залить один файл. GitHub при частых записях подряд может ответить «слишком
+// много запросов» — это не поломка, а просьба подождать: ждём и повторяем,
+// иначе публикация каталога из десятков кусков срывалась бы на середине.
+async function ghBlob(content, attempt = 0) {
+  const r = await ghApi(`${ghRepo()}/git/blobs`, { method: 'POST', body: JSON.stringify({ content, encoding: 'utf-8' }) });
+  if (r.ok) return r.json();
+  const wait = (r.status === 403 || r.status === 429 || r.status >= 500) && attempt < 3;
+  if (!wait) throw new Error('GitHub POST blob → ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+  return ghBlob(content, attempt + 1);
+}
+
 // Один коммит с несколькими файлами (текстовыми). files: [{path, content}],
 // path — от корня репозитория. content === null — файл удаляется.
 // При параллельной правке (ветка ушла вперёд) один раз перечитываем вершину
@@ -57,10 +69,7 @@ export async function ghCommit(files, message, opts = {}) {
   if (onProgress) onProgress(0, files.length);
   const entries = await pool(files, 4, async (f) => {
     if (f.content == null) { done++; if (onProgress) onProgress(done, files.length); return { path: f.path, mode: '100644', type: 'blob', sha: null }; }
-    const blob = await ghJson(`${ghRepo()}/git/blobs`, {
-      method: 'POST',
-      body: JSON.stringify({ content: f.content, encoding: 'utf-8' }),
-    });
+    const blob = await ghBlob(f.content);
     done++;
     if (onProgress) onProgress(done, files.length);
     return { path: f.path, mode: '100644', type: 'blob', sha: blob.sha };
@@ -349,7 +358,10 @@ const SETS = [
 const SEC_DIR = 'sec';            // куски каталога владельца
 const STAFF_DIR = 'sec-staff';    // куски каталога сотрудника
 // опись прошлой публикации, чтобы знать, что уже лежит на GitHub
-const _lastMani = {};             // файл описи → { salt, mani }
+const _lastMani = {};             // файл описи → { salt, mani } либо LEGACY
+// пометка «там лежит каталог старого формата»: описи нет и качать файл второй
+// раз незачем — он весит десятки мегабайт
+const LEGACY = { legacy: true };
 
 async function encPart(key, obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -407,7 +419,7 @@ async function loadSnapshot(file, password) {
   const raw = await fetchRaw(file);
   if (raw == null) return null;
   const env = JSON.parse(raw);
-  if (env.v !== 2) return decryptJSON(env, password);   // старый цельный файл
+  if (env.v !== 2) { _lastMani[file] = LEGACY; return decryptJSON(env, password); }   // старый цельный файл
   const salt = unb64(env.salt);
   const key = await deriveKey(password, salt);
   let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
@@ -451,7 +463,8 @@ export async function publishFull(password, { onProgress = null } = {}) {
 // Опись прошлой публикации: из памяти (мы её уже читали при входе) или с
 // GitHub. Не открылась нашим паролем — значит пароль сменился: перезапишем всё.
 async function prevMani(file, password) {
-  if (_lastMani[file]) return _lastMani[file];
+  const known = _lastMani[file];
+  if (known) return known === LEGACY ? null : known;
   try {
     const raw = await fetchRaw(file);
     if (raw == null) return null;
