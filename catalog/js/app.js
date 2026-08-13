@@ -2563,10 +2563,13 @@
      памяти (сопоставление по коду → штрихкоду → названию, id и фото сохраняются)
      и публикуется в зашифрованный файл. Парсеры не трогаем — переиспользуем. ── */
   function svUuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'p' + Date.now() + Math.random().toString(36).slice(2)); }
-  // Код номенклатуры из выгрузки Excel может прийти с разделителем тысяч:
-  // «1,001» — это код 1001, а не «1,001». Убираем только явные тройки.
+  // Код номенклатуры из выгрузки Excel приходит с разделителем тысяч, причём
+  // в разных файлах по-разному: «1 463», «1 463» (неразрывный пробел), «1,463».
+  // Один и тот же товар из-за этого раздваивался: код из прайса не совпадал с
+  // кодом из остатков. Приводим к одному виду: пробелы убираем всегда,
+  // запятые — только когда это явно тройки разрядов.
   function normCode(v) {
-    const str = String(v == null ? '' : v).trim();
+    const str = String(v == null ? '' : v).replace(/[\s\u00A0]/g, '');
     return /^\d{1,3}(,\d{3})+$/.test(str) ? str.replace(/,/g, '') : str;
   }
 
@@ -3845,6 +3848,25 @@
     return Number.isFinite(n) && n > 0 ? n : null;
   }
 
+  // Количество, остаток, коэффициент упаковки — НЕ деньги, и правило для них
+  // другое. 1С выгружает их с тремя знаками после запятой: «1,000» — это 1,
+  // «2,500» — это 2,5 кг, «48,000» — это 48 штук в упаковке. Денежный
+  // разборщик считал такую запятую разделителем тысяч и делал из 48 — 48 000,
+  // а из остатка 2,5 кг — 2500 кг. В русской выгрузке запятая всегда
+  // десятичная, разделитель тысяч — пробел. Минус допускаем: остаток бывает
+  // отрицательным. (Для цен старое правило оставлено: там «1,234» — это 1234 ₽.)
+  function parseCountNum(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return v;
+    let s = String(v).replace(/[\s\u00A0]/g, '');
+    const neg = s.startsWith('-');
+    s = s.replace(/^[-+]/, '');
+    // «1,234.56» — английский формат: запятая там разделяет тысячи
+    s = (s.includes(',') && s.includes('.')) ? s.replace(/,/g, '') : s.replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? (neg ? -n : n) : null;
+  }
+
   function parsePriceReport(rows) {
     const det = detectColumns(rows);
     if (!det) throw new Error('Не нашёл строку заголовков (Номенклатура, Код товара…) в файле 1');
@@ -3854,7 +3876,10 @@
       const row = rows[r];
       const name = cellStr(row[cols.name]);
       if (!name) continue;
-      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      // «Итого»/«Всего» в конце отчёта — не товар. Без этой проверки после
+      // каждой загрузки прайса в каталоге появлялся товар с таким названием.
+      if (/^\s*(итого|всего)/i.test(name)) continue;
+      const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
       const key = code || norm(name);
       let item = byKey.get(key);
       if (!item) {
@@ -3899,7 +3924,7 @@
       const row = rows[r];
       const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
       if (!bc) continue;
-      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
       const name = cellStr(row[cols.name]);
       const item = (code && byKey.get(code)) || byName.get(norm(name));
       if (item && !item.barcodes.has(bc)) { item.barcodes.add(bc); added++; }
@@ -4018,7 +4043,7 @@
       const key = (cCode >= 0 ? normCode(row[cCode]) : '') + '|' + unit;
       if (seen.has(key)) continue;
       seen.add(key);
-      const coef = cCoef >= 0 ? parsePriceNum(row[cCoef]) : null;
+      const coef = cCoef >= 0 ? parseCountNum(row[cCoef]) : null;
       const code = cCode >= 0 ? normCode(row[cCode]) : '';
       recs.push({ unit, coef, code });
     }
@@ -4047,7 +4072,7 @@
         barcode,
         name,
         unit: cols.unit !== undefined ? cellStr(row[cols.unit]) : '',
-        code: cols.code !== undefined ? cellStr(row[cols.code]) : '',
+        code: cols.code !== undefined ? normCode(row[cols.code]) : '',
       });
     }
     if (!recs.length) throw new Error('В справочнике штрихкодов нет ни одной строки с кодом и номенклатурой');
@@ -4076,6 +4101,10 @@
     // «Розничная цена единицы» и «Количество в упаковке», из-за которых файл
     // раньше принимался за отчёт об остатках.
     if (/имя объекта:\s*единиц/.test(head)) return 'units';
+    // Тот же справочник, выгруженный БЕЗ служебной шапки (другая настройка 1С,
+    // пересохранённый файл): узнаём по составу колонок. «Коэффициент» рядом с
+    // колонкой единиц больше ни в одном отчёте не встречается.
+    if (/коэффициент/.test(head) && !/коэффициент цены/.test(head) && /единиц/.test(head)) return 'units';
     // Справочник штрихкодов: 1С сама пишет в шапке имя объекта.
     if (/имя объекта:\s*штрих/.test(head)) return 'barcodes';
     // Либо по составу колонок: есть «Штрих код» и «Номенклатура», а цен,
@@ -4778,7 +4807,7 @@
       out.push({
         url,
         barcode: cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '',
-        code: cols.code !== undefined ? cellStr(row[cols.code]) : '',
+        code: cols.code !== undefined ? normCode(row[cols.code]) : '',
         name: cols.name !== undefined ? cellStr(row[cols.name]) : '',
       });
     }
@@ -4909,9 +4938,9 @@
       const name = cellStr(row[cols.name]);
       if (!name) continue;
       if (/^\s*(итого|всего|total)/i.test(name)) continue; // строки-итоги пропускаем
-      const qty = parsePriceNum(row[cols.qty]);
+      const qty = parseCountNum(row[cols.qty]);
       if (qty == null) continue; // итоговые и пустые строки
-      const code = cols.code !== undefined ? cellStr(row[cols.code]) : '';
+      const code = cols.code !== undefined ? normCode(row[cols.code]) : '';
       const amount = cols.amount !== undefined ? parsePriceNum(row[cols.amount]) : null;
       const key = code || norm(name);
       let rec = recs.get(key);
@@ -5088,23 +5117,7 @@
 
   // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
   // как parsePriceNum, но допускает 0 и отрицательные (остаток бывает минусовым)
-  function stockNum(v) {
-    if (v == null || v === '') return null;
-    if (typeof v === 'number') return v;
-    let s = String(v).replace(/\s/g, '');
-    const neg = s.startsWith('-');
-    s = s.replace(/^-/, '');
-    if (s.includes(',') && s.includes('.')) {
-      s = s.lastIndexOf(',') > s.lastIndexOf('.')
-        ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
-    } else if (s.includes(',')) {
-      const p = s.split(',');
-      s = (p.length === 2 && p[1].length === 3 && /^\d+$/.test(p[0]) && Number(p[0]) !== 0)
-        ? s.replace(',', '') : s.replace(',', '.');
-    }
-    const n = parseFloat(s);
-    return Number.isFinite(n) ? (neg ? -n : n) : null;
-  }
+  function stockNum(v) { return parseCountNum(v); }
 
   function parseStockReport(rows) {
     const cols = {};
@@ -5128,12 +5141,11 @@
     }
     if (cols.name === undefined) throw new Error('Не нашёл колонку «Номенклатура» в отчёте «Остатки»');
     if (cols.stock === undefined) throw new Error('Не нашёл колонку «Количество» — нужен отчёт «Остатки номенклатуры»');
-    const codeStr = (v) => cellStr(v).replace(/[\s ,]/g, ''); // код: убрать разделители тысяч
     const recs = [];
     for (let r = 0; r < rows.length; r++) {
       const name = cellStr(rows[r][cols.name]);
       if (!name) continue;
-      const code = cols.code !== undefined ? codeStr(rows[r][cols.code]) : '';
+      const code = cols.code !== undefined ? normCode(rows[r][cols.code]) : '';
       const barcode = cols.barcode !== undefined ? cellStr(rows[r][cols.barcode]).replace(/\s/g, '') : '';
       if (!code && !barcode) continue; // строки склада/итогов — пропускаем
       const retail = cols.retail !== undefined ? stockNum(rows[r][cols.retail]) : null;

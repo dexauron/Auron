@@ -955,6 +955,8 @@ select.input { appearance: none; }
 .supview-phone { text-align: center; font-size: 15px; color: var(--text-2); }
 .supview-note { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--text-2); }
 .supview-price { background: rgba(48,209,88,.08); border: 1px solid rgba(48,209,88,.3); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+/* устаревшая цена не должна выглядеть «хорошей»: тот же блок, но не зелёный */
+.supview-price.supview-price-old { background: rgba(255,159,10,.10); border-color: rgba(255,159,10,.40); }
 .supview-hist-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
 #supViewBody .price-history { position: static; margin: 0; }
 
