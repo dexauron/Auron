@@ -158,6 +158,7 @@
           <button class="btn btn-secondary btn-block" id="menuImportHub">⬆ Импорт данных (1С / Excel)</button>
           <button class="btn btn-secondary btn-block" id="menuGroups">📁 Группы товаров</button>
           <button class="btn btn-secondary btn-block" id="menuSuppliers">🚚 Поставщики</button>
+          <button class="btn btn-secondary btn-block" id="menuOrderRules">📦 Правила заказа</button>
           <button class="btn btn-secondary btn-block" id="menuDedup">🧹 Убрать дубли товаров</button>
           <button class="btn btn-secondary btn-block" id="menuStaffPass">🔑 Пароль магазина</button>
           <button class="btn btn-secondary btn-block" id="menuPublish">☁️ Публикация на GitHub</button>
@@ -334,6 +335,67 @@
           <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
         </form>
         <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Калькулятор цены: сравнить предложение поставщика с теми, что уже есть -->
+  <div class="sheet-backdrop" id="calcSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">🧮 Калькулятор цены</h2>
+        <p class="muted" id="calcProductName"></p>
+
+        <label class="field-label">Какую цену предлагают, ₽</label>
+        <input type="number" id="calcPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="1850">
+
+        <label class="field-label">Эта цена — за что?</label>
+        <div class="calc-seg" id="calcUnitSeg">
+          <label><input type="radio" name="calcUnit" value="pack" checked><span id="calcUnitPackLabel">За упаковку</span></label>
+          <label><input type="radio" name="calcUnit" value="piece"><span id="calcUnitPieceLabel">За штуку</span></label>
+        </div>
+
+        <div id="calcPackWrap">
+          <label class="field-label" id="calcPackLabel">Штук в упаковке</label>
+          <input type="number" id="calcPackQty" class="input" inputmode="numeric" step="1" min="1" placeholder="48">
+        </div>
+
+        <label class="field-label">Скидка, % — если обещают</label>
+        <input type="number" id="calcDiscount" class="input" inputmode="decimal" step="0.1" min="0" max="100" placeholder="0">
+
+        <div id="calcResult"></div>
+        <button class="btn btn-ghost sheet-close" data-close="calcSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Правила заказа: по ним считается точка заказа и объём закупки -->
+  <div class="sheet-backdrop" id="orderRulesSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">📦 Правила заказа</h2>
+        <p class="muted">По ним каталог считает, когда пора заказывать и сколько брать.
+        Заказывать надо не «когда мало», а когда остатка хватит ровно до приезда
+        следующей поставки — поэтому важно знать сроки.</p>
+
+        <label class="field-label">Доставка от поставщика, дней</label>
+        <input type="number" id="orLead" class="input" inputmode="numeric" step="1" min="0" max="90">
+        <p class="muted field-hint">Сколько дней проходит от заказа до приезда товара.</p>
+
+        <label class="field-label">Как часто делаем заказ, дней</label>
+        <input type="number" id="orCycle" class="input" inputmode="numeric" step="1" min="1" max="90">
+        <p class="muted field-hint">Раз в неделю — 7. Между заказами запас должен дожить.</p>
+
+        <label class="field-label">Страховой запас, дней</label>
+        <input type="number" id="orSafety" class="input" inputmode="numeric" step="1" min="0" max="90">
+        <p class="muted field-hint">Подушка на всплеск спроса и опоздание поставки.</p>
+
+        <div class="calc-out" id="orExample"></div>
+        <div class="form-error" id="orError" hidden></div>
+        <button type="button" class="btn btn-primary btn-block" id="orSave">Сохранить</button>
+        <button class="btn btn-ghost sheet-close" data-close="orderRulesSheet">Закрыть</button>
       </div>
     </div>
   </div>
