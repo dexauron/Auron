@@ -1,5 +1,25 @@
 __pycache__/
-.claude/
 node_modules/
 package-lock.json
 package.json
+# Но настройки Android-приложения нужны в репозитории: без них сборка
+# на GitHub падает с «Could not read package.json». Правило выше
+# задумано против случайных package.json в корне, а не против этого.
+!android/package.json
+
+# Локальные настройки Claude в репозиторий не кладём — они у каждого свои.
+.claude/*
+# А вот скилы кладём: без этого они не переживут новую сессию (репозиторий
+# клонируется заново) и правило «работает всегда» перестанет выполняться.
+!.claude/skills/
+
+# Снимки экрана от скила look — рабочий мусор, каждый раз новый.
+Index-phone.png
+Index-desktop.png
+*-phone.png
+*-desktop.png
+
+# архив сборки — собирается скриптом, в репозитории не нужен
+auron-bundle-*.zip
+android/www/
+android/node_modules/

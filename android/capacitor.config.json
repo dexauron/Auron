@@ -1,0 +1,19 @@
+{
+  "appId": "ru.auron.finance",
+  "appName": "Auron Finance",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_icon",
+      "iconColor": "#C5F82A"
+    }
+  },
+  "server": {
+    "androidScheme": "https"
+  }
+}

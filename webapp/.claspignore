@@ -1,0 +1,7 @@
+# Не заливать в Apps Script — только рабочий код (Code.gs, Index.html, appsscript.json).
+# Тесты используют Node (require), в Apps Script они ломают весь проект.
+tests/**
+**/*.test.js
+**/*.md
+.claspignore
+.clasp.json

@@ -1,0 +1,95 @@
+name: Deploy to Apps Script (clasp)
+
+# Авто-мост: при каждом пуше код из webapp/ заливается в проект Apps Script.
+# Нужен один секрет репозитория: CLASPRC_JSON — содержимое ~/.clasprc.json
+# после `clasp login` на компьютере (см. webapp/DEPLOY.md).
+# Необязательно: переменная APPSSCRIPT_DEPLOYMENT_ID — чтобы обновлять ЖИВУЮ
+# ссылку (/exec) автоматически. Без неё код заливается в проект (виден по /dev),
+# а живую версию разворачиваешь кнопкой один раз.
+
+on:
+  push:
+    branches: [main, master, claude/cool-archimedes-qv458l]
+    paths:
+      - 'webapp/**.gs'
+      - 'webapp/**.html'
+      - 'webapp/**.json'
+      - 'webapp/**.js'
+  workflow_dispatch:
+
+jobs:
+  # Тесты денежной математики — гоняются всегда; деплой без них не пойдёт.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Проверка синтаксиса Code.gs
+        run: cp webapp/Code.gs /tmp/Code.js && node --check /tmp/Code.js
+      - name: Тесты денежной математики
+        run: node webapp/tests/money.test.js
+      - name: Тесты денежных потоков
+        run: node webapp/tests/flows.test.js
+      # Вёрстка: Apps Script не грузит приложение при кривом HTML.
+      # Этот шаг обязателен — он ловит битые кавычки и незакрытые теги.
+      - name: Проверка вёрстки Index.html
+        run: node webapp/tests/html-valid.test.js
+      - name: Остальные тесты
+        run: |
+          for f in webapp/tests/*.test.js; do
+            case "$f" in *money*|*flows*|*html-valid*) continue;; esac
+            echo "== $f"; node "$f"
+          done
+
+  push:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+    steps:
+      - name: Check secret configured
+        id: cfg
+        run: |
+          if [ -n "$CLASPRC_JSON" ]; then echo "ready=true" >> "$GITHUB_OUTPUT";
+          else echo "ready=false" >> "$GITHUB_OUTPUT";
+          echo "ℹ️ Секрет CLASPRC_JSON не задан — авто-деплой пропущен (см. webapp/DEPLOY.md).";
+          fi
+
+      - name: Checkout
+        if: steps.cfg.outputs.ready == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        if: steps.cfg.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        if: steps.cfg.outputs.ready == 'true'
+        run: npm install -g @google/clasp@2.4.2
+
+      - name: Auth clasp
+        if: steps.cfg.outputs.ready == 'true'
+        run: printf '%s' "$CLASPRC_JSON" > "$HOME/.clasprc.json"
+
+      - name: Push code to Apps Script
+        if: steps.cfg.outputs.ready == 'true'
+        working-directory: webapp
+        run: clasp push -f
+
+      # Обновление ЖИВОЙ версии /exec — необязательное и «best-effort».
+      # Apps Script ограничивает проект 200 версиями; при достижении лимита
+      # clasp deploy падает. Это НЕ должно валить весь пайплайн — код уже
+      # залит выше (clasp push). Поэтому continue-on-error.
+      # Чтобы живой /exec снова обновлялся: разово удалить старые версии в
+      # редакторе Apps Script (История проекта) — см. webapp/DEPLOY.md.
+      - name: Deploy new version (optional, best-effort)
+        if: steps.cfg.outputs.ready == 'true' && vars.APPSSCRIPT_DEPLOYMENT_ID != ''
+        continue-on-error: true
+        working-directory: webapp
+        run: clasp deploy -i "${{ vars.APPSSCRIPT_DEPLOYMENT_ID }}" -d "Auto-deploy ${{ github.sha }}"

@@ -1,0 +1,793 @@
+{
+  "_комментарий": "Числа из настоящего отчёта ДДС владельца за июль 2026: торговля 13 207 164 ₽ (нал 8 025 186 + безнал 5 181 978), закуп 18 089 127 ₽, прибыль 1 507 547 ₽, долг поставщикам на 31.07 — 4 182 653 ₽. Названия товаров и поставщиков вымышленные, суммы настоящие: ломалось всегда на величине чисел.",
+  "initUserApp": {
+    "isNew": false,
+    "myEmail": "dexauron@gmail.com",
+    "profile": {
+      "name": "Адам",
+      "phone": "+7 900 000-00-00"
+    },
+    "orgs": [
+      {
+        "id": "1",
+        "name": "Way Market",
+        "ssId": "FAKE_SS_ID"
+      }
+    ]
+  },
+  "getAccountsAll": [
+    {
+      "name": "Наличные",
+      "balance": 7748736,
+      "status": "active",
+      "kind": "cash"
+    },
+    {
+      "name": "Карта",
+      "balance": 712400,
+      "status": "active",
+      "kind": "card"
+    },
+    {
+      "name": "СБП",
+      "balance": 85650,
+      "status": "active",
+      "kind": "sbp"
+    }
+  ],
+  "getHomeSummary": {
+    "summary": {
+      "income": 426037,
+      "expense": 364720,
+      "count": 148,
+      "shiftRevenue": 426037
+    },
+    "spark": {
+      "inc": [
+        367798,
+        428336,
+        458890,
+        446869,
+        424384,
+        402113,
+        426037
+      ],
+      "exp": [
+        321731,
+        285620,
+        685126,
+        257455,
+        177433,
+        192903,
+        317064
+      ]
+    },
+    "transactions": [
+      {
+        "id": "1",
+        "type": "income",
+        "amount": 86200,
+        "account": "Наличные",
+        "category": "Выручка за смену",
+        "date": "2026-07-30T19:40:00",
+        "note": "Касса · Мадина"
+      },
+      {
+        "id": "2",
+        "type": "expense",
+        "amount": 34500,
+        "account": "Наличные",
+        "category": "ИП Хасаев — молочная продукция",
+        "date": "2026-07-30T17:12:00",
+        "note": "Оплата поставщику"
+      },
+      {
+        "id": "3",
+        "type": "expense",
+        "amount": 2340,
+        "account": "Наличные",
+        "category": "Списание — порча овощей",
+        "date": "2026-07-30T15:05:00",
+        "note": "Склад"
+      },
+      {
+        "id": "4",
+        "type": "expense",
+        "amount": 120000,
+        "account": "Карта",
+        "category": "Аренда помещения",
+        "date": "2026-07-30T12:00:00",
+        "note": "Обязательство"
+      },
+      {
+        "id": "5",
+        "type": "income",
+        "amount": 37300,
+        "account": "Карта",
+        "category": "Оплата картой",
+        "date": "2026-07-30T19:40:00",
+        "note": "Эквайринг"
+      }
+    ]
+  },
+  "getDebts": [
+    {
+      "name": "Малаев",
+      "debt": 273001,
+      "due": "2026-07-26",
+      "overdue": true
+    },
+    {
+      "name": "Мороженое",
+      "debt": 139520,
+      "due": "2026-07-31"
+    },
+    {
+      "name": "Индиев",
+      "debt": 132120,
+      "due": "2026-08-05"
+    },
+    {
+      "name": "Аминат",
+      "debt": 100917,
+      "due": "2026-08-11"
+    },
+    {
+      "name": "ООО МАК",
+      "debt": 92643,
+      "due": "2026-08-17"
+    }
+  ],
+  "getGoodsAnalytics": {
+    "revenue": 13207164,
+    "profit": 1507547,
+    "avgMargin": 11.4,
+    "avgMarkup": 29.5,
+    "avgMarkupSimple": 193.4,
+    "suppliers": 578,
+    "goodsCount": 16555,
+    "gmroi": 0.36,
+    "turnoverDays": 22,
+    "stockCost": 7254209,
+    "dead": {
+      "sum": 2355371,
+      "share": 32,
+      "count": 3898
+    },
+    "priceIssues": [
+      {
+        "name": "FitRoo Junicorn Готовый Завтрак",
+        "buy": 0.01,
+        "sell": 145
+      }
+    ],
+    "restock": [
+      {
+        "name": "Молоко «Домик в деревне» 3,2% 950 мл",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 124,
+        "supplier": "ИП Хасаев",
+        "daysOfStock": 0
+      },
+      {
+        "name": "Хлеб «Дарницкий» нарезной 700 г",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 88,
+        "supplier": "Хлебозавод №3",
+        "daysOfStock": 0
+      },
+      {
+        "name": "Картофель мытый, весовой",
+        "urgent": false,
+        "stockQty": 142.5,
+        "soldQty": 310,
+        "supplier": "ООО «Чеченские сады»",
+        "daysOfStock": 4
+      },
+      {
+        "name": "Сок «Добрый» апельсин 1 л",
+        "urgent": true,
+        "stockQty": 0,
+        "soldQty": 41,
+        "supplier": "Кока-Кола",
+        "daysOfStock": 0
+      }
+    ],
+    "movers": [
+      {
+        "name": "Хлеб «Дарницкий» нарезной 700 г",
+        "qty": 880
+      },
+      {
+        "name": "Молоко «Домик в деревне» 3,2% 950 мл",
+        "qty": 642
+      },
+      {
+        "name": "Конфеты «Мишка косолапый», весовые",
+        "qty": 210
+      }
+    ]
+  },
+  "getSavingsHunter": {
+    "sum": 462913,
+    "count": 1817
+  },
+  "getAnalytics": {
+    "income": 13207164,
+    "expense": 11306311,
+    "profit": 1900853,
+    "margin": 14.4
+  },
+  "getContractors": [
+    {
+      "name": "Малаев",
+      "debt": 273001,
+      "kind": "Поставщик",
+      "records": 12
+    },
+    {
+      "name": "Мороженое",
+      "debt": 139520,
+      "kind": "Поставщик",
+      "records": 11
+    }
+  ],
+  "getMyWidgets": null,
+  "getSettings": {},
+  "getTeam": {
+    "members": [],
+    "isOwner": true
+  },
+  "getDayDDS": {
+    "date": "2026-07-01",
+    "trade": 367798,
+    "cashRev": 233777,
+    "onlineRev": 134021,
+    "gross": 91950,
+    "rate": 0.25,
+    "profitPlan": 29676,
+    "profitFact": 41207,
+    "profitGap": 11531,
+    "cashLeft": 132898,
+    "cashDiff": 0,
+    "forBuy": 225899,
+    "spentOnBuy": 547630,
+    "officeDiff": -321731,
+    "debt": 3276962,
+    "parts": {
+      "cashRev": 233777,
+      "onlineRev": 134021,
+      "iman": 3334,
+      "transfer": 0,
+      "cashOut": 0,
+      "buyCash": 43205,
+      "payDebt": 168323,
+      "buyDebt": 336102,
+      "writeOff": 75,
+      "bank": 3116,
+      "meal": 1381,
+      "fuel": 0,
+      "supplies": 12368,
+      "salary": 23800,
+      "rent": 12200,
+      "utils": 3000,
+      "tax": 3000,
+      "other": 0,
+      "count": 14
+    },
+    "shifts": {
+      "day": {
+        "cashRev": 136232,
+        "onlineRev": 73068,
+        "iman": 3334,
+        "count": 7
+      },
+      "night": {
+        "cashRev": 97545,
+        "onlineRev": 60953,
+        "iman": 0,
+        "count": 2
+      }
+    }
+  },
+  "getMonthDDS": {
+    "month": "2026-07",
+    "rate": 0.25,
+    "days": [
+      {
+        "date": "2026-07-01",
+        "trade": 367798,
+        "cashRev": 233777,
+        "onlineRev": 134021,
+        "gross": 91950,
+        "profitPlan": 29676,
+        "profitFact": 93996,
+        "forBuy": 225899,
+        "spentOnBuy": 547630,
+        "officeDiff": -321731,
+        "debt": 3276962,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-02",
+        "trade": 428336,
+        "cashRev": 290315,
+        "onlineRev": 138021,
+        "gross": 107084,
+        "profitPlan": 58152,
+        "profitFact": 130180,
+        "forBuy": 256168,
+        "spentOnBuy": 541788,
+        "officeDiff": -285620,
+        "debt": 3457001,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-03",
+        "trade": 458890,
+        "cashRev": 280017,
+        "onlineRev": 178873,
+        "gross": 114722,
+        "profitPlan": 55938,
+        "profitFact": -232216,
+        "forBuy": 271445,
+        "spentOnBuy": 956571,
+        "officeDiff": -685126,
+        "debt": 3247352,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-04",
+        "trade": 446869,
+        "cashRev": 318206,
+        "onlineRev": 128663,
+        "gross": 111717,
+        "profitPlan": 63525,
+        "profitFact": 174433,
+        "forBuy": 265434,
+        "spentOnBuy": 522890,
+        "officeDiff": -257456,
+        "debt": 3354589,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-05",
+        "trade": 424384,
+        "cashRev": 249576,
+        "onlineRev": 174808,
+        "gross": 106096,
+        "profitPlan": 54174,
+        "profitFact": -1793,
+        "forBuy": 254192,
+        "spentOnBuy": 431625,
+        "officeDiff": -177433,
+        "debt": 3059630,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-06",
+        "trade": 402113,
+        "cashRev": 233654,
+        "onlineRev": 168459,
+        "gross": 100528,
+        "profitPlan": 45526,
+        "profitFact": 62190,
+        "forBuy": 243056,
+        "spentOnBuy": 435960,
+        "officeDiff": -192904,
+        "debt": 3006811,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-07",
+        "trade": 354330,
+        "cashRev": 211548,
+        "onlineRev": 142782,
+        "gross": 88582,
+        "profitPlan": 39570,
+        "profitFact": 160266,
+        "forBuy": 220665,
+        "spentOnBuy": 537729,
+        "officeDiff": -317064,
+        "debt": 3315829,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-08",
+        "trade": 398079,
+        "cashRev": 238895,
+        "onlineRev": 159184,
+        "gross": 99520,
+        "profitPlan": 51832,
+        "profitFact": 84600,
+        "forBuy": 241040,
+        "spentOnBuy": 714842,
+        "officeDiff": -473802,
+        "debt": 3601645,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-09",
+        "trade": 382945,
+        "cashRev": 227900,
+        "onlineRev": 155045,
+        "gross": 95736,
+        "profitPlan": 49584,
+        "profitFact": -165386,
+        "forBuy": 233472,
+        "spentOnBuy": 866937,
+        "officeDiff": -633464,
+        "debt": 3535228,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-10",
+        "trade": 452874,
+        "cashRev": 277436,
+        "onlineRev": 175438,
+        "gross": 113218,
+        "profitPlan": 63376,
+        "profitFact": 70447,
+        "forBuy": 268437,
+        "spentOnBuy": 546127,
+        "officeDiff": -277690,
+        "debt": 3511398,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-11",
+        "trade": 463580,
+        "cashRev": 269956,
+        "onlineRev": 193624,
+        "gross": 115895,
+        "profitPlan": 65581,
+        "profitFact": 186544,
+        "forBuy": 273790,
+        "spentOnBuy": 637080,
+        "officeDiff": -363290,
+        "debt": 3727109,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-12",
+        "trade": 420814,
+        "cashRev": 233635,
+        "onlineRev": 187179,
+        "gross": 105204,
+        "profitPlan": 54698,
+        "profitFact": -36060,
+        "forBuy": 252407,
+        "spentOnBuy": 432575,
+        "officeDiff": -180168,
+        "debt": 3396605,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-13",
+        "trade": 373118,
+        "cashRev": 211183,
+        "onlineRev": 161935,
+        "gross": 93280,
+        "profitPlan": 42084,
+        "profitFact": 34711,
+        "forBuy": 228559,
+        "spentOnBuy": 517760,
+        "officeDiff": -289201,
+        "debt": 3379615,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-14",
+        "trade": 450153,
+        "cashRev": 264315,
+        "onlineRev": 185838,
+        "gross": 112538,
+        "profitPlan": 45925,
+        "profitFact": 34305,
+        "forBuy": 267076,
+        "spentOnBuy": 678572,
+        "officeDiff": -411496,
+        "debt": 3405717,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-15",
+        "trade": 461552,
+        "cashRev": 275971,
+        "onlineRev": 185581,
+        "gross": 115388,
+        "profitPlan": 56462,
+        "profitFact": 56450,
+        "forBuy": 274276,
+        "spentOnBuy": 798277,
+        "officeDiff": -524001,
+        "debt": 3557420,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-16",
+        "trade": 476476,
+        "cashRev": 272072,
+        "onlineRev": 204404,
+        "gross": 119119,
+        "profitPlan": 70338,
+        "profitFact": 70222,
+        "forBuy": 280238,
+        "spentOnBuy": 580863,
+        "officeDiff": -300625,
+        "debt": 3523756,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-17",
+        "trade": 425189,
+        "cashRev": 259090,
+        "onlineRev": 166099,
+        "gross": 106297,
+        "profitPlan": 58141,
+        "profitFact": 144636,
+        "forBuy": 254594,
+        "spentOnBuy": 570445,
+        "officeDiff": -315850,
+        "debt": 3702913,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-18",
+        "trade": 464261,
+        "cashRev": 288094,
+        "onlineRev": 176167,
+        "gross": 116065,
+        "profitPlan": 55342,
+        "profitFact": -30623,
+        "forBuy": 274130,
+        "spentOnBuy": 599488,
+        "officeDiff": -325358,
+        "debt": 3457240,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-19",
+        "trade": 389390,
+        "cashRev": 238191,
+        "onlineRev": 151199,
+        "gross": 97348,
+        "profitPlan": 49172,
+        "profitFact": 137971,
+        "forBuy": 236695,
+        "spentOnBuy": 325369,
+        "officeDiff": -88674,
+        "debt": 3420160,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-20",
+        "trade": 387003,
+        "cashRev": 220245,
+        "onlineRev": 166758,
+        "gross": 96751,
+        "profitPlan": 45958,
+        "profitFact": -84498,
+        "forBuy": 238502,
+        "spentOnBuy": 639935,
+        "officeDiff": -401434,
+        "debt": 3239769,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-21",
+        "trade": 396369,
+        "cashRev": 222431,
+        "onlineRev": 173938,
+        "gross": 99092,
+        "profitPlan": 37522,
+        "profitFact": 59527,
+        "forBuy": 241684,
+        "spentOnBuy": 692736,
+        "officeDiff": -451052,
+        "debt": 3453786,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-22",
+        "trade": 436830,
+        "cashRev": 253936,
+        "onlineRev": 182894,
+        "gross": 109208,
+        "profitPlan": 59018,
+        "profitFact": 199437,
+        "forBuy": 260415,
+        "spentOnBuy": 717170,
+        "officeDiff": -456755,
+        "debt": 3864756,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-23",
+        "trade": 458133,
+        "cashRev": 274587,
+        "onlineRev": 183546,
+        "gross": 114533,
+        "profitPlan": 759,
+        "profitFact": 115123,
+        "forBuy": 332688,
+        "spentOnBuy": 608469,
+        "officeDiff": -275782,
+        "debt": 4145278,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-24",
+        "trade": 437316,
+        "cashRev": 253683,
+        "onlineRev": 183633,
+        "gross": 109329,
+        "profitPlan": 55440,
+        "profitFact": -35269,
+        "forBuy": 260658,
+        "spentOnBuy": 753590,
+        "officeDiff": -492932,
+        "debt": 4108350,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-25",
+        "trade": 452098,
+        "cashRev": 284061,
+        "onlineRev": 168037,
+        "gross": 113024,
+        "profitPlan": 62884,
+        "profitFact": 144056,
+        "forBuy": 268049,
+        "spentOnBuy": 532981,
+        "officeDiff": -264932,
+        "debt": 4183009,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-26",
+        "trade": 411809,
+        "cashRev": 239225,
+        "onlineRev": 172584,
+        "gross": 102952,
+        "profitPlan": 53368,
+        "profitFact": 173468,
+        "forBuy": 247904,
+        "spentOnBuy": 255047,
+        "officeDiff": -7142,
+        "debt": 4119041,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-27",
+        "trade": 391467,
+        "cashRev": 243579,
+        "onlineRev": 147888,
+        "gross": 97867,
+        "profitPlan": 45969,
+        "profitFact": -151500,
+        "forBuy": 237734,
+        "spentOnBuy": 635082,
+        "officeDiff": -397348,
+        "debt": 3818550,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-28",
+        "trade": 447659,
+        "cashRev": 281363,
+        "onlineRev": 166296,
+        "gross": 111915,
+        "profitPlan": 60442,
+        "profitFact": 19625,
+        "forBuy": 265830,
+        "spentOnBuy": 700946,
+        "officeDiff": -435116,
+        "debt": 3848614,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-29",
+        "trade": 439539,
+        "cashRev": 303894,
+        "onlineRev": 135645,
+        "gross": 109885,
+        "profitPlan": 4253,
+        "profitFact": 25322,
+        "forBuy": 309438,
+        "spentOnBuy": 715758,
+        "officeDiff": -406320,
+        "debt": 4059042,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-30",
+        "trade": 444562,
+        "cashRev": 276795,
+        "onlineRev": 167767,
+        "gross": 111140,
+        "profitPlan": 51990,
+        "profitFact": 92424,
+        "forBuy": 270623,
+        "spentOnBuy": 594885,
+        "officeDiff": -324262,
+        "debt": 4182653,
+        "rate": 0.25
+      },
+      {
+        "date": "2026-07-31",
+        "trade": 463228,
+        "cashRev": 297556,
+        "onlineRev": 165672,
+        "gross": 115807,
+        "profitPlan": 20844,
+        "profitFact": 368265,
+        "forBuy": 321283,
+        "spentOnBuy": 0,
+        "officeDiff": 321283,
+        "debt": 4182653,
+        "rate": 0.25
+      }
+    ],
+    "total": {
+      "trade": 13207164,
+      "cashRev": 8025186,
+      "onlineRev": 5181978,
+      "gross": 3301790,
+      "profitPlan": 1507543,
+      "profitFact": 1900853,
+      "forBuy": 8076381,
+      "spentOnBuy": 18089127,
+      "officeDiff": -10012745,
+      "iman": 276450,
+      "writeOff": 15089,
+      "buyDebt": 8577060,
+      "payDebt": 7503590,
+      "profitGap": 393310,
+      "debtEnd": 4182653,
+      "days": 31
+    }
+  },
+  "getReconcile": {
+    "month": "2026-07",
+    "hasIC": true,
+    "period": "01.07.2026 — 30.07.2026",
+    "mine": {
+      "writeOff": 15089,
+      "payDebt": 7503590,
+      "buyDebt": 8577060
+    },
+    "pairs": [
+      {
+        "label": "Списание товара",
+        "mine": 15089,
+        "ic": 848735,
+        "diff": -833646,
+        "pct": 98,
+        "hint": "Товар списан в 1С, но не отражён в сменах — это уходит незаметно."
+      },
+      {
+        "label": "Оплата долга поставщикам",
+        "mine": 7503590,
+        "ic": 6198200,
+        "diff": 1305390,
+        "pct": 17,
+        "hint": ""
+      },
+      {
+        "label": "Приход товара в долг",
+        "mine": 8577060,
+        "ic": 10649766,
+        "diff": -2072706,
+        "pct": 19,
+        "hint": ""
+      }
+    ],
+    "extra": {
+      "surplus": 1853751,
+      "sale": 2599806
+    }
+  }
+}

@@ -1,0 +1,603 @@
+{
+ "initUserApp": {
+  "orgs": [
+   {
+    "ssId": "SS1",
+    "name": "Way Market"
+   }
+  ],
+  "needsProfile": false
+ },
+ "getSettings": {
+  "cats": [
+   "Продукты",
+   "Хозтовары"
+  ],
+  "cashiers": [
+   "Аня"
+  ],
+  "payTypes": [
+   "Наличные",
+   "Карта",
+   "СБП"
+  ],
+  "repStatuses": [
+   "Оплачено"
+  ],
+  "employees": [
+   "Аня",
+   "Иса"
+  ],
+  "shifts": [
+   "День",
+   "Ночь"
+  ],
+  "suppliers": [
+   "Молокозавод"
+  ],
+  "capExclude": [],
+  "savingsAccounts": [],
+  "monthTarget": 1000000,
+  "cashFloat": 5000,
+  "cashAccount": "Наличные",
+  "beznalAccount": "Карта",
+  "showKassaBalance": true,
+  "taxRate": 6,
+  "savePct": 10,
+  "lockDate": ""
+ },
+ "getAccounts": [
+  {
+   "id": "a1",
+   "name": "Наличные",
+   "balance": 125000,
+   "status": "active",
+   "icon": "💵",
+   "color": "#10B981"
+  },
+  {
+   "id": "a2",
+   "name": "Карта",
+   "balance": 48000,
+   "status": "active",
+   "icon": "💳",
+   "color": "#6366F1"
+  }
+ ],
+ "getHomeSummary": {
+  "accounts": [
+   {
+    "id": "a1",
+    "name": "Наличные",
+    "balance": 125000,
+    "status": "active"
+   },
+   {
+    "id": "a2",
+    "name": "Карта",
+    "balance": 48000,
+    "status": "active"
+   }
+  ],
+  "totals": {
+   "Наличные": {
+    "income": 300000,
+    "expense": 175000
+   }
+  },
+  "transactions": [
+   {
+    "id": "t1",
+    "date": "2026-08-05T09:00:00.000Z",
+    "type": "Доход",
+    "category": "Выручка",
+    "account": "Наличные",
+    "amount": 137000,
+    "comment": "",
+    "employee": "Аня",
+    "locked": false
+   },
+   {
+    "id": "t2",
+    "date": "2026-08-05T12:00:00.000Z",
+    "type": "Расход",
+    "category": "Продукты",
+    "account": "Наличные",
+    "amount": 42000,
+    "comment": "накладная",
+    "employee": "Иса",
+    "locked": false
+   }
+  ],
+  "spark": {
+   "inc": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+   ],
+   "exp": [
+    1,
+    1,
+    2,
+    2,
+    3,
+    3,
+    4
+   ]
+  },
+  "lastOp": "2026-08-05",
+  "summary": {
+   "income": 300000,
+   "expense": 175000,
+   "count": 2,
+   "shiftRevenue": 300000
+  }
+ },
+ "getAllTransactions": [
+  {
+   "id": "t1",
+   "date": "2026-08-05T09:00:00.000Z",
+   "type": "Доход",
+   "category": "Выручка",
+   "account": "Наличные",
+   "amount": 137000,
+   "comment": "",
+   "employee": "Аня",
+   "locked": false
+  }
+ ],
+ "searchTransactions": [],
+ "getDebts": [
+  {
+   "name": "Молокозавод",
+   "debt": 84000,
+   "paid": 0
+  }
+ ],
+ "getStoreDebt": {
+  "debt": 110500,
+  "overpaid": 0,
+  "parts": [
+   {
+    "name": "Молокозавод №1",
+    "debt": 66000
+   },
+   {
+    "name": "Хлебзавод Грозный",
+    "debt": 26500
+   },
+   {
+    "name": "ИП Ахмедов",
+    "debt": 18000
+   }
+  ]
+ },
+ "getPayments": [],
+ "getContractors": [
+  {
+   "id": "c1",
+   "name": "Молокозавод №1"
+  },
+  {
+   "id": "c2",
+   "name": "Хлебзавод Грозный"
+  },
+  {
+   "id": "c3",
+   "name": "ИП Ахмедов"
+  },
+  {
+   "id": "c4",
+   "name": "Coca-Cola Чечня"
+  },
+  {
+   "id": "c5",
+   "name": "Мясокомбинат Юг"
+  }
+ ],
+ "getOrders": {
+  "orders": []
+ },
+ "getTeam": {
+  "isOwner": true,
+  "myEmail": "dexauron@gmail.com",
+  "myRole": "Владелец",
+  "members": [],
+  "permCatalog": [
+   [
+    "finance",
+    "Финансы и аналитика"
+   ],
+   [
+    "kassa",
+    "Касса и смены"
+   ]
+  ],
+  "roles": [
+   "Владелец",
+   "Бухгалтер",
+   "Администратор",
+   "Сотрудник зала"
+  ],
+  "myRoles": [
+   "Владелец"
+  ],
+  "myPerms": [
+   "finance",
+   "kassa",
+   "receive",
+   "goods",
+   "payments",
+   "manage"
+  ]
+ },
+ "getTeamAll": {
+  "orgs": [
+   {
+    "ssId": "SS1",
+    "name": "Way Market",
+    "members": []
+   }
+  ],
+  "myEmail": "dexauron@gmail.com",
+  "permCatalog": [
+   [
+    "finance",
+    "Финансы и аналитика"
+   ]
+  ],
+  "roles": [
+   "Владелец",
+   "Бухгалтер",
+   "Администратор",
+   "Сотрудник зала"
+  ],
+  "allStores": {}
+ },
+ "getNetworkSummary": {
+  "orgs": [
+   {
+    "ssId": "SS1",
+    "name": "Way Market",
+    "income": 300000,
+    "expense": 175000,
+    "profit": 125000,
+    "cash": 173000,
+    "debt": 84000,
+    "count": 2,
+    "lastOp": "2026-08-05",
+    "denied": false
+   }
+  ],
+  "totals": {
+   "income": 300000,
+   "expense": 175000,
+   "profit": 125000,
+   "cash": 173000,
+   "debt": 84000,
+   "count": 2
+  },
+  "best": "",
+  "worst": "",
+  "single": true
+ },
+ "getTrash": {
+  "items": []
+ },
+ "getAuditLog": {
+  "items": []
+ },
+ "getActivityFeed": {
+  "items": []
+ },
+ "getGoodsAnalytics": {
+  "count": 0,
+  "suppliersCount": 0,
+  "totRevenue": 0,
+  "totProfit": 0
+ },
+ "getGoodsMeta": {
+  "lastUpdate": "2026-08-01",
+  "count": 16555
+ },
+ "getShiftsLog": {
+  "items": []
+ },
+ "getAnalytics": {
+  "income": 300000,
+  "expense": 175000,
+  "profit": 125000,
+  "byCat": []
+ },
+ "getMyWidgets": null,
+ "getUserFlags": {
+  "tourSeen": true
+ },
+ "getMyProfile": {
+  "name": "Адам",
+  "phone": "",
+  "birth": "",
+  "email": "dexauron@gmail.com",
+  "orgs": [
+   {
+    "ssId": "SS1",
+    "name": "Way Market",
+    "isOwner": true,
+    "role": "Владелец"
+   }
+  ]
+ },
+ "getRecurring": [],
+ "getObligations": {
+  "items": []
+ },
+ "getLosses": {
+  "items": []
+ },
+ "getTimesheetMonth": {
+  "employees": [],
+  "days": []
+ },
+ "getEmployees": {
+  "employees": []
+ },
+ "getTaxSummary": {
+  "year": 2026,
+  "yearIncome": 0,
+  "quarters": [
+   {
+    "income": 0,
+    "expense": 0
+   },
+   {
+    "income": 0,
+    "expense": 0
+   },
+   {
+    "income": 0,
+    "expense": 0
+   },
+   {
+    "income": 0,
+    "expense": 0
+   }
+  ]
+ },
+ "getAccountsAll": [
+  {
+   "id": "a1",
+   "name": "Наличные",
+   "balance": 125000,
+   "status": "active",
+   "icon": "💵",
+   "color": "#10B981"
+  },
+  {
+   "id": "a2",
+   "name": "Карта",
+   "balance": 48000,
+   "status": "active",
+   "icon": "💳",
+   "color": "#6366F1"
+  }
+ ],
+ "getRecords": {
+  "items": []
+ },
+ "getShifts": {
+  "items": []
+ },
+ "getCashierShifts": {
+  "items": []
+ },
+ "getNotifications": {
+  "items": []
+ },
+ "getReminders": {
+  "items": []
+ },
+ "getRestock": {
+  "items": []
+ },
+ "getAnomalies": {
+  "items": []
+ },
+ "getQuickTemplates": {
+  "items": []
+ },
+ "getSalaries": {
+  "items": []
+ },
+ "getInsights": {
+  "items": []
+ },
+ "getDayDDS": {
+  "rows": [],
+  "date": "2026-08-05"
+ },
+ "getMonthDDS": {
+  "days": [],
+  "title": "Август 2026"
+ },
+ "getReconcile": {
+  "rows": []
+ },
+ "getDayReport": {
+  "date": "2026-08-05",
+  "income": 300000,
+  "expense": 175000,
+  "profit": 125000,
+  "txCount": 2,
+  "storeDebt": 0,
+  "izyatia": 0
+ },
+ "getMonthReport": {
+  "year": 2026,
+  "month": 7,
+  "income": 0,
+  "expense": 0,
+  "profit": 0,
+  "margin": 0,
+  "workDays": 0,
+  "avgDayIncome": 0,
+  "debtStart": 0,
+  "debtEnd": 0
+ },
+ "getCalendarPref": {
+  "on": false
+ },
+ "getBudget": {
+  "items": []
+ },
+ "getBottomLine": {
+  "income": 0,
+  "expense": 0,
+  "result": 0
+ },
+ "getDashboard": {},
+ "getPulse": {},
+ "getAdvisor": {
+  "alerts": []
+ },
+ "getSeason": {
+  "upcoming": []
+ },
+ "getWeekdayPeaks": {
+  "days": []
+ },
+ "getGrowthData": {
+  "points": []
+ },
+ "getCashForecast": {
+  "days": []
+ },
+ "getSavingsHunter": {
+  "items": [],
+  "totalMonthly": 0,
+  "count": 0
+ },
+ "getGoods": {
+  "items": []
+ },
+ "getProductDetail": {
+  "item": {
+   "name": "Молоко",
+   "barcode": "1",
+   "buy": 50,
+   "retail": 65
+  },
+  "priceHist": [],
+  "suppliers": [],
+  "retailHist": [],
+  "losses": [],
+  "totals": {}
+ },
+ "getEntityHistory": {
+  "items": []
+ },
+ "getAppUrl": {
+  "url": ""
+ },
+ "getAutomation": {
+  "items": []
+ },
+ "getDailyReportConfig": {
+  "on": false,
+  "email": ""
+ },
+ "getDayNote": {
+  "note": ""
+ },
+ "getDayRating": {},
+ "getRevenueBaseline": {},
+ "getRepDebt": {
+  "items": []
+ },
+ "getMorningBriefing": {},
+ "getSupplierAnalytics": {
+  "items": []
+ },
+ "getShiftAnalytics": {
+  "items": []
+ },
+ "getCashierAnalytics": {
+  "items": []
+ },
+ "getAccountFlow": {
+  "items": []
+ },
+ "getContractorCard": {
+  "name": "Молокозавод",
+  "ops": []
+ },
+ "getStoreDebtHistory": {
+  "debt": 110500,
+  "overpaid": 0,
+  "parts": [
+   {
+    "name": "Молокозавод №1",
+    "debt": 66000
+   },
+   {
+    "name": "Хлебзавод Грозный",
+    "debt": 26500
+   },
+   {
+    "name": "ИП Ахмедов",
+    "debt": 18000
+   }
+  ],
+  "items": [
+   {
+    "date": "05.08.2026",
+    "rep": "Молокозавод №1",
+    "type": "zakupka",
+    "amount": 26500,
+    "comment": "Накладная в долг",
+    "manual": false
+   },
+   {
+    "date": "04.08.2026",
+    "rep": "ИП Ахмедов",
+    "type": "oplata",
+    "amount": 12000,
+    "comment": "Погашение долга по накладной",
+    "manual": false
+   },
+   {
+    "date": "31.07.2026",
+    "rep": "Общей суммой",
+    "type": "zakupka",
+    "amount": 9000,
+    "comment": "Сверка долга: 75000 → 84000 · не занесли накладную от 12.07",
+    "manual": true
+   }
+  ]
+ },
+ "saveEveningInvoices": {
+  "ok": true,
+  "count": 2,
+  "cash": 42000,
+  "repaid": 18000,
+  "newDebt": 26500,
+  "debts": {
+   "Молокозавод": 66000,
+   "Хлебзавод": 26500
+  }
+ },
+ "setEveningMode": {
+  "ok": true,
+  "mode": "total"
+ },
+ "saveEveningTotal": {
+  "ok": true,
+  "cash": 60000,
+  "repaid": 18000,
+  "newDebt": 26500,
+  "storeDebt": 110500
+ }
+}
