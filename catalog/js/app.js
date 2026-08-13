@@ -86,6 +86,7 @@
     arrivalTo: '',
     suggCount: 0,        // сколько фото от покупателей ждёт проверки
     favOnly: false,      // показывать только избранные товары (сердечко)
+    tab: 'catalog',      // раздел нижней панели: catalog | cats | fav
     popularity: {},      // id товара → сколько раз открывали (для «Популярное»)
     popularTerms: [],    // частые запросы (обезличенно) — подсказки поиска
   };
@@ -735,6 +736,74 @@
     return `<button class="chip${active}" data-group="${esc(id)}">${esc(name)}<span class="chip-count">${count}</span></button>`;
   }
 
+  /* ── Разделы нижней панели ──────────────────────────
+   * «Каталог» — сетка товаров, «Категории» — плитки разделов, «Избранное» —
+   * отмеченные сердечком, «Ещё» — меню/вход. Так устроено любое продуктовое
+   * приложение: разделы внизу, под большим пальцем, а не спрятаны в фильтре.
+   * Категории у нас уже есть (CATEGORIES) — раньше они были доступны только
+   * через кнопку фильтра, и с главной страницы каталог не «просматривался». */
+
+  let openAdminOrLogin = () => {};   // задаётся в bindEvents (нужна и «Ещё», и кнопке входа)
+
+  // Наличие словами. У покупателя в витрине лежит готовое stock_state,
+  // у сотрудника — само число остатка, поэтому считаем на месте.
+  function stockLabel(p) {
+    const st = p.stock_state || stockState(p, null);
+    if (st === 'in') return { txt: '✓ Есть в магазине', cls: 'tag-instock', short: '✓ Есть' };
+    if (st === 'low') return { txt: 'Заканчивается', cls: 'tag-lowstock', short: 'Мало' };
+    if (st === 'out') return { txt: 'Нет в наличии', cls: 'tag-outstock', short: 'Нет' };
+    return null;
+  }
+
+  function switchTab(tab) {
+    if (tab === 'more') { openAdminOrLogin(); return; }   // «Ещё» — не раздел, а меню
+    state.tab = tab;
+    if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
+    else if (state.favOnly) state.favOnly = false;
+    if (tab !== 'catalog') { state.query = ''; $('searchInput').value = ''; }
+    state.renderLimit = PAGE_SIZE;
+    window.scrollTo({ top: 0 });
+    renderAll();
+  }
+
+  function syncTabs() {
+    for (const b of document.querySelectorAll('.tabbar .tab')) {
+      b.classList.toggle('active', b.dataset.tab === state.tab);
+    }
+    const n = favorites().length;
+    const badge = $('tabFavCount');
+    if (badge) { badge.textContent = n > 99 ? '99+' : n; badge.hidden = !n; }
+    // экран категорий и сетка товаров не показываются одновременно
+    const cats = state.tab === 'cats';
+    $('catScreen').hidden = !cats;
+    $('productGrid').hidden = cats;
+    if (cats) { $('emptyState').hidden = true; $('loader').hidden = true; }
+  }
+
+  // Плитки категорий: иконка, название и сколько товаров. Пустые не показываем —
+  // тыкать в раздел, где ничего нет, обидно.
+  function renderCatScreen() {
+    const box = $('catScreen');
+    if (!box || state.tab !== 'cats') return;
+    const counts = {};
+    for (const p of state.products) {
+      const c = productCategory(p);
+      counts[c || OTHER_CAT.name] = (counts[c || OTHER_CAT.name] || 0) + 1;
+    }
+    const all = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]);
+    if (!all.length) {
+      box.innerHTML = '<p class="muted cat-empty">Каталог пока пустой — категории появятся вместе с товарами.</p>';
+      return;
+    }
+    all.sort((a, b) => counts[b.name] - counts[a.name]);
+    box.innerHTML = '<div class="cat-grid">' + all.map((c) => `
+      <button class="cat-tile" data-cat-tile="${esc(c.name)}">
+        <span class="cat-ico">${c.icon}</span>
+        <span class="cat-name">${esc(c.name)}</span>
+        <span class="cat-count">${counts[c.name]} ${plural(counts[c.name], 'товар', 'товара', 'товаров')}</span>
+      </button>`).join('') + '</div>';
+  }
+
   function renderGrid() {
     const list = visibleProducts();
     const grid = $('productGrid');
@@ -782,6 +851,8 @@
       const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
       // минимализм: на плитке только код и, если весовой, значок ⚖ — остальное в карточке
       const tags = [];
+      const sl = stockLabel(p);
+      if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
       if (p.code) tags.push(`<span class="tag tag-code">${esc(p.code)}</span>`);
       if (p.is_weighted) tags.push('<span class="tag">⚖</span>');
       const price = (p.retail_price != null && p.retail_price !== '')
@@ -1008,8 +1079,9 @@
 
   function renderAll() {
     renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
+    syncTabs(); renderCatScreen();
     renderNewProducts(); renderPopularProducts(); renderRecentProducts();
-    renderGrid();
+    if (state.tab !== 'cats') renderGrid();
   }
 
   // есть ли хоть один активный фильтр/поиск
@@ -1333,6 +1405,9 @@
     const badges = [];
     const g = groupById(p.group_id);
     if (g) badges.push(`<span class="tag">${esc(g.name)}</span>`);
+    // наличие — первым: покупателю это важнее всего остального
+    const sl = stockLabel(p);
+    if (sl) badges.unshift(`<span class="tag ${sl.cls}">${sl.txt}</span>`);
     if (p.is_weighted) badges.push('<span class="tag">⚖ Весовой товар</span>');
     if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">📏 Продаётся: ${esc(p.unit)}</span>`);
     const barcodes = p.barcodes || [];
@@ -2316,11 +2391,47 @@
   // он берёт, и найти товар поиском по коду. Секретного в нём ничего нет —
   // в отличие от артикула, штрихкодов, поставщиков и закупочных цен.
   const PUBLIC_FIELDS = ['id', 'name', 'code', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+
+  /* Наличие для покупателя. В открытую витрину кладём НЕ число остатка (это
+   * внутренние данные магазина), а одно слово: есть / заканчивается / нет.
+   * «Заканчивается» — если известны продажи и хватит меньше чем на 2 дня,
+   * иначе по простому порогу. Остатков не загружали — не пишем ничего и
+   * молчим: соврать про наличие хуже, чем не сказать. */
+  const LOW_DAYS = 2;      // хватит меньше — «заканчивается»
+  const LOW_QTY = 3;       // если продажи неизвестны — просто мало штук
+
+  function stockState(p, perDay) {
+    const q = p.stock != null ? Number(p.stock) : (p.stock_qty != null ? Number(p.stock_qty) : null);
+    if (q == null || !Number.isFinite(q)) return null;
+    if (q <= 0) return 'out';
+    if (perDay > 0 ? q / perDay < LOW_DAYS : q <= LOW_QTY) return 'low';
+    return 'in';
+  }
+
+  // средние продажи в день по каждому товару — для «заканчивается»
+  function salesPerDayMap() {
+    const map = new Map();
+    if (!state.sales || !state.sales.length) return map;
+    const byCode = new Map(); const byName = new Map();
+    for (const p of state.products) { if (p.code) byCode.set(String(p.code), p); byName.set(norm(p.name), p); }
+    for (const s of state.sales) {
+      const p = (s.code && byCode.get(String(s.code))) || byName.get(norm(s.name || ''));
+      if (!p) continue;
+      const d = daysBetween(s.period_from, s.period_to);
+      if (!(d > 0)) continue;
+      map.set(p.id, (map.get(p.id) || 0) + (Number(s.qty) || 0) / d);
+    }
+    return map;
+  }
+
   function buildPublicProducts() {
+    const perDay = salesPerDayMap();
     return state.products
       .map((p) => {
         const o = {};
         for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
+        const st = stockState(p, perDay.get(p.id));
+        if (st) o.stock_state = st;
         // даты кладём без времени — «Новее» нужна только дата, а витрину качает
         // каждый покупатель, лишние 14 символов на товар тут заметны
         if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);
@@ -5986,7 +6097,12 @@
       openSheet('loginSheet');
     }
 
-    $('adminBtn').addEventListener('click', () => {
+    // через стрелку, а не напрямую: обработчик вешается ДО присваивания ниже,
+    // и прямая ссылка запомнила бы пустую заглушку — кнопка «Войти» молчала бы
+    $('adminBtn').addEventListener('click', () => openAdminOrLogin());
+    // «Ещё» в нижней панели открывает то же самое — меню или вход.
+    // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
+    openAdminOrLogin = function () {
       if (state.session) {
         // Бесплатный режим: две роли — владелец и сотрудник. Подпись человеческая,
         // без служебных слов вроде «owner» (раньше они попадали на экран).
@@ -6034,6 +6150,19 @@
       } else {
         openLogin();
       }
+    };
+
+    // нижняя панель: переключение разделов + плитки категорий
+    $('tabbar').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-tab]');
+      if (b) switchTab(b.dataset.tab);
+    });
+    $('catScreen').addEventListener('click', (e) => {
+      const t = e.target.closest('[data-cat-tile]');
+      if (!t) return;
+      state.selCats = [t.dataset.catTile];
+      state.selGroups = [];
+      switchTab('catalog');
     });
 
     // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
