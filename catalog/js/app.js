@@ -72,6 +72,7 @@
     competitors: [],  // магазины конкурентов (список названий)
     compPrices: [],   // записанные цены магазинов: {product_id, competitor_id, price, observed_at}
     unitCoef: {},     // словарь единиц: «упак (24)» → 24 базовых единицы
+    orderRules: null, // правила заказа: срок доставки, периодичность, страховой запас (в днях)
     lastFetch: 0,
     syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
     renderLimit: PAGE_SIZE,
@@ -1351,6 +1352,7 @@
     $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
+    cardSuppliers = {}; cardSales = null;
     renderStock(p, null);   // остаток виден сразу; продажи дорисуют «сколько заказать»
     renderProductSales(p);
     renderProductPrices(p);
@@ -1440,19 +1442,225 @@
       <div class="sales-line"><span><b>${fmtNum(round(Number(s.qty)))}</b> ${esc(u)}</span><span><b>${fmtNum(perDay)}</b> ${esc(u)} в день</span></div>
     </div>`;
     // продажи известны — пересобираем остаток уже с подсказкой «сколько заказать»
-    renderStock(p, Number(s.qty) / days);
+    cardSales = { perDay: Number(s.qty) / days, periodTo: s.period_to };
+    renderStock(p, cardSales);
+  }
+
+  /* ── Калькулятор цены поставщика ───────────────────
+   * Пришёл новый поставщик и обещает выгодную цену. Считать в уме мешает то,
+   * что цены у всех в разных единицах: у одного за штуку, у другого за
+   * коробку, третий обещает «минус 5%». Калькулятор приводит предложение к
+   * цене за штуку и сразу показывает разницу со всеми, кто уже есть,
+   * наценку при нашей рознице и выгоду за месяц по нашим продажам. */
+
+  let calcProduct = null;
+
+  function calcBase(p) { return p && p.is_weighted ? 'кг' : (p && p.unit ? p.unit : 'шт'); }
+
+  function openPriceCalc(p) {
+    calcProduct = p;
+    const mp = mainPack(p);
+    const base = calcBase(p);
+    $('calcProductName').textContent = p.name;
+    $('calcUnitPieceLabel').textContent = base === 'кг' ? 'За кг' : 'За штуку';
+    $('calcPackLabel').textContent = base === 'кг' ? 'Кг в упаковке' : 'Штук в упаковке';
+    $('calcPrice').value = '';
+    $('calcDiscount').value = '';
+    $('calcPackQty').value = mp ? mp.qty : '';
+    // если упаковка известна — обычно её цену и называют; иначе считаем за штуку
+    const want = mp ? 'pack' : 'piece';
+    for (const r of document.querySelectorAll('input[name="calcUnit"]')) r.checked = (r.value === want);
+    renderCalcResult();
+    openSheet('calcSheet');
+    setTimeout(() => $('calcPrice').focus(), 250);
+  }
+
+  // Чистый расчёт: что получится из введённого предложения.
+  function calcOffer(raw, perPack, packQty, discount) {
+    const price = Number(raw);
+    if (!Number.isFinite(price) || price <= 0) return null;
+    const disc = Number(discount);
+    const net = price * (1 - (Number.isFinite(disc) && disc > 0 && disc < 100 ? disc / 100 : 0));
+    const q = Number(packQty);
+    const hasPack = Number.isFinite(q) && q > 0;
+    if (perPack) {
+      if (!hasPack) return null;                 // «за упаковку», но сколько в ней — не сказано
+      return { piece: net / q, pack: net, packQty: q, net };
+    }
+    return { piece: net, pack: hasPack ? net * q : null, packQty: hasPack ? q : null, net };
+  }
+
+  function renderCalcResult() {
+    const box = $('calcResult');
+    const p = calcProduct;
+    if (!box || !p) return;
+    const perPack = (document.querySelector('input[name="calcUnit"]:checked') || {}).value === 'pack';
+    $('calcPackWrap').hidden = false; // количество в упаковке нужно в обоих режимах
+    const o = calcOffer($('calcPrice').value, perPack, $('calcPackQty').value, $('calcDiscount').value);
+    if (!o) {
+      box.innerHTML = perPack && $('calcPrice').value
+        ? '<p class="muted calc-hint">Укажи, сколько штук в упаковке — иначе цену за штуку не посчитать.</p>'
+        : '<p class="muted calc-hint">Введи цену — покажу разницу со всеми поставщиками.</p>';
+      return;
+    }
+    const base = calcBase(p);
+    const parts = [];
+
+    const packTxt = o.packQty ? ` · <b>${esc(fmtPrice(o.pack))}</b> за упаковку (${fmtNum(o.packQty)} ${esc(base)})` : '';
+    parts.push(`<div class="calc-out calc-main"><b>${esc(fmtPiecePrice(o.piece))}</b> за ${esc(base)}${packTxt}</div>`);
+
+    // с кем сравниваем: поставщики этого товара, цены уже приведены к штуке
+    const rivals = Object.values(cardSuppliers || {})
+      .filter((e) => e && e.parts && e.prod === p)
+      .map((e) => ({ name: e.sup.name, piece: e.parts.piece, fresh: e.fresh }))
+      .sort((a, b) => a.piece - b.piece);
+    const best = rivals.length ? rivals[0] : null;
+
+    if (best) {
+      const diff = o.piece - best.piece;
+      const pct = Math.round((Math.abs(diff) / best.piece) * 1000) / 10;
+      if (diff < 0) {
+        parts.push(`<div class="calc-out calc-good">✓ Дешевле лучшей цены на <b>${esc(fmtPiecePrice(-diff))}</b> за ${esc(base)} (−${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
+      } else if (diff > 0) {
+        parts.push(`<div class="calc-out calc-bad">✗ Дороже лучшей цены на <b>${esc(fmtPiecePrice(diff))}</b> за ${esc(base)} (+${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
+      } else {
+        parts.push(`<div class="calc-out">Ровно как у «${esc(best.name)}» — разницы нет</div>`);
+      }
+      // выгода за месяц по нашим продажам — понятнее, чем копейки со штуки
+      if (cardSales && cardSales.perDay > 0 && diff !== 0) {
+        const perMonth = Math.abs(diff) * cardSales.perDay * 30;
+        parts.push(`<div class="calc-line">Продаём ${fmtNum(Math.round(cardSales.perDay * 100) / 100)} ${esc(base)} в день → ${diff < 0 ? 'экономия' : 'переплата'} примерно <b>${esc(fmtPrice(perMonth))}</b> в месяц</div>`);
+      }
+    }
+
+    // наценка при нашей розничной цене
+    if (p.retail_price != null && p.retail_price !== '') {
+      const retail = Number(p.retail_price);
+      if (Number.isFinite(retail) && retail > 0) {
+        const abs = retail - o.piece;
+        const pct = Math.round((abs / o.piece) * 100);
+        parts.push(`<div class="calc-line${abs < 0 ? ' calc-bad-text' : ''}">${abs < 0 ? '⚠ Продаём в убыток: ' : 'Наценка при рознице '}${esc(fmtPrice(retail))}: <b>${abs > 0 ? '+' : ''}${esc(fmtPrice(abs))}</b> (${abs > 0 ? '+' : ''}${pct}%)</div>`);
+      }
+    }
+
+    if (rivals.length) {
+      parts.push('<div class="sec-title">Кто сейчас поставляет</div>'
+        + rivals.map((r) => {
+          const d = r.piece - o.piece;
+          const tag = d > 0 ? `<span class="calc-worse">дороже на ${esc(fmtPiecePrice(d))}</span>`
+            : d < 0 ? `<span class="calc-better">дешевле на ${esc(fmtPiecePrice(-d))}</span>`
+              : '<span>столько же</span>';
+          return `<div class="calc-row"><span>${esc(r.name)}${r.fresh ? '' : ' <span class="price-old">⚠ старая цена</span>'}</span><span>${esc(fmtPiecePrice(r.piece))} <span class="calc-tag">${tag}</span></span></div>`;
+        }).join(''));
+    } else {
+      parts.push('<p class="muted calc-hint">У этого товара пока нет цен поставщиков — сравнить не с чем, но цену за штуку и наценку посчитал.</p>');
+    }
+
+    box.innerHTML = parts.join('');
   }
 
   /* ── Остаток и «сколько заказать» ──────────────────
-   * Остатки из 1С каталог загружал давно, но нигде не показывал — данные
-   * лежали мёртвым грузом. Вместе с продажами они отвечают на главный вопрос
-   * у полки: на сколько дней хватит и сколько упаковок брать.
-   * Остаток из отчёта — на момент выгрузки, поэтому дату пишем рядом. */
+   * Считаем по общепринятой схеме управления запасами (точка заказа +
+   * уровень пополнения), а не «на глазок»:
+   *
+   *   d   — средний дневной спрос = продано ÷ дней в периоде отчёта
+   *   L   — доставка: сколько дней идёт товар от поставщика
+   *   R   — периодичность: как часто мы вообще делаем заказ
+   *   SS  — страховой запас в днях: подушка на всплеск спроса и задержку
+   *
+   *   Точка заказа  ROP = d × (L + SS)     ← остаток упал до неё → заказывать
+   *   Уровень до    S   = d × (L + R + SS) ← до какого запаса дозаказываем
+   *   Сколько взять Q   = S − остаток      ← округляем ВВЕРХ до упаковок
+   *
+   * Почему точка заказа, а не «осталось меньше N дней»: заказывать надо не
+   * когда мало, а когда остатка хватит ровно до приезда следующей поставки.
+   * Если поставщик едет 1 день — рано морозить деньги в запасе; если 10 —
+   * ждать «пока мало» уже поздно, товар кончится до приезда.
+   *
+   * L, R и SS каталог знать не может — их задаёт владелец («Правила заказа»).
+   * Значения по умолчанию: доставка 3 дня, заказ раз в 7 дней, запас 3 дня.
+   *
+   * Чего расчёт НЕ знает (и об этом честно пишем в карточке):
+   *   — товар в пути (уже заказанный) — учёта заказов у нас нет;
+   *   — упущенные продажи: если товара не было на полке, «продано» занижено,
+   *     и реальный спрос выше расчётного. */
 
-  const ORDER_COVER_DAYS = 14;   // на сколько дней вперёд предлагаем закупиться
-  const ORDER_ALERT_DAYS = 7;    // осталось меньше — «пора заказывать»
+  const ORDER_RULES_KEY = 'wm_order_rules_v1';
+  const ORDER_RULES_DEFAULT = { lead: 3, cycle: 7, safety: 3 };
+  const SALES_STALE_DAYS = 45;   // отчёт продаж старше — предупреждаем, что цифры устарели
 
-  function renderStock(p, perDay) {
+  function orderRules() {
+    const r = state.orderRules || {};
+    const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d);
+    return {
+      lead: num(r.lead, ORDER_RULES_DEFAULT.lead),
+      cycle: Math.max(1, num(r.cycle, ORDER_RULES_DEFAULT.cycle)),
+      safety: num(r.safety, ORDER_RULES_DEFAULT.safety),
+    };
+  }
+  function loadOrderRules() {
+    if (state.orderRules) return;
+    try { state.orderRules = JSON.parse(localStorage.getItem(ORDER_RULES_KEY)) || null; } catch (e) { state.orderRules = null; }
+  }
+
+  // Чистый расчёт заказа — без вёрстки, чтобы его можно было проверить отдельно.
+  // d — средний дневной спрос, qty — остаток, packQty — штук в упаковке.
+  function orderPlan(d, qty, packQty) {
+    const { lead, cycle, safety } = orderRules();
+    const rop = d * (lead + safety);              // точка заказа
+    const upTo = d * (lead + cycle + safety);     // до какого уровня пополняем
+    const need = Math.max(0, upTo - Math.max(qty, 0));
+    const packs = packQty > 0 ? Math.ceil(need / packQty) : 0;
+    return {
+      lead, cycle, safety, rop, upTo, need,
+      packs, total: packs * (packQty || 0),
+      due: qty <= rop,                            // пора заказывать
+    };
+  }
+
+  function openOrderRules() {
+    const r = orderRules();
+    $('orLead').value = r.lead;
+    $('orCycle').value = r.cycle;
+    $('orSafety').value = r.safety;
+    $('orError').hidden = true;
+    renderOrderRulesExample();
+    openSheet('orderRulesSheet');
+  }
+
+  // Живой пример на понятных числах: правила абстрактные, а так сразу видно,
+  // что они означают для конкретного товара.
+  function renderOrderRulesExample() {
+    const box = $('orExample');
+    if (!box) return;
+    const n = (id, d) => { const v = Number($(id).value); return Number.isFinite(v) && v >= 0 ? v : d; };
+    const lead = n('orLead', 3); const cycle = Math.max(1, n('orCycle', 7)); const safety = n('orSafety', 3);
+    const d = 5; // пример: продаём 5 шт в день
+    const rop = Math.ceil(d * (lead + safety));
+    const upTo = Math.ceil(d * (lead + cycle + safety));
+    box.innerHTML = `Например, товар продаётся по <b>${d}</b> шт в день:<br>
+      заказывать, когда останется <b>${fmtNum(rop)}</b> шт — это ${lead} ${plural(lead, 'день', 'дня', 'дней')} доставки + ${safety} ${plural(safety, 'день', 'дня', 'дней')} запаса;<br>
+      пополнять до <b>${fmtNum(upTo)}</b> шт — чтобы хватило до следующего заказа.`;
+  }
+
+  async function saveOrderRules() {
+    const n = (id) => Number($(id).value);
+    const lead = n('orLead'); const cycle = n('orCycle'); const safety = n('orSafety');
+    const bad = (m) => { const e = $('orError'); e.textContent = m; e.hidden = false; };
+    if (![lead, cycle, safety].every((v) => Number.isFinite(v) && v >= 0)) return bad('Впиши числа во все три поля');
+    if (cycle < 1) return bad('Заказ не может быть реже, чем раз в 1 день');
+    if (lead > 90 || cycle > 90 || safety > 90) return bad('Больше 90 дней — похоже на опечатку');
+    state.orderRules = { lead, cycle, safety };
+    try { localStorage.setItem(ORDER_RULES_KEY, JSON.stringify(state.orderRules)); } catch (e) { /* приватный режим */ }
+    $('orError').hidden = true;
+    if (!$('productSheet').hidden && currentProduct) renderStock(currentProduct, cardSales);
+    closeSheet('orderRulesSheet');
+    // правила общие для магазина — кладём их в каталог, чтобы у сотрудников были те же
+    if (state.serverless && state.isAdmin && ghConfigured()) await svSaveAndPublish('Правила заказа сохранены');
+    else toast('Правила заказа сохранены');
+  }
+
+  function renderStock(p, sales) {
     const box = $('sheetStock');
     if (!box) return;
     box.innerHTML = '';
@@ -1461,32 +1669,46 @@
     if (qty == null || !Number.isFinite(qty)) return; // остатки не загружали — блока нет
     const u = p.unit || 'шт';
     const at = fmtDate(p.stock_at);
+    const d = sales && sales.perDay > 0 ? sales.perDay : 0;
 
     let head; let cls = '';
     if (qty <= 0) { head = 'Закончился'; cls = ' stock-out'; }
     else head = `<b>${fmtNum(qty)}</b> ${esc(u)} на складе`;
 
     const lines = [];
-    // на сколько хватит — считаем только если знаем средние продажи в день
-    if (perDay > 0 && qty > 0) {
-      const days = qty / perDay;
-      const soon = days < ORDER_ALERT_DAYS;
-      lines.push(`<div class="stock-line${soon ? ' stock-warn' : ''}">${soon ? '⚠ ' : ''}Хватит на <b>${fmtNum(Math.round(days * 10) / 10)}</b> ${plural(Math.round(days), 'день', 'дня', 'дней')}${soon ? ' — пора заказывать' : ''}</div>`);
-    }
-    // сколько брать: считаем в упаковках, потому что заказывают упаковками
-    if (perDay > 0) {
-      const need = perDay * ORDER_COVER_DAYS - Math.max(qty, 0);
-      if (need > 0) {
-        const mp = mainPack(p);
-        if (mp) {
-          const packs = Math.ceil(need / mp.qty);
-          const total = packs * mp.qty;
-          const cover = Math.round((Math.max(qty, 0) + total) / perDay);
-          lines.push(`<div class="stock-line">Заказать <b>${fmtNum(packs)}</b> ${plural(packs, 'упаковку', 'упаковки', 'упаковок')} (${fmtNum(total)} ${esc(u)}) — хватит на ${fmtNum(cover)} ${plural(cover, 'день', 'дня', 'дней')}</div>`);
-        } else {
-          lines.push(`<div class="stock-line">Заказать примерно <b>${fmtNum(Math.ceil(need))}</b> ${esc(u)} — на ${ORDER_COVER_DAYS} дней</div>`);
-        }
+    if (d > 0) {
+      const mp = mainPack(p);
+      const plan = orderPlan(d, qty, mp ? mp.qty : 0);
+      const rop = Math.ceil(plan.rop);
+      if (qty > 0) {
+        const days = qty / d;
+        lines.push(`<div class="stock-line">Хватит на <b>${fmtNum(Math.round(days * 10) / 10)}</b> ${plural(Math.round(days), 'день', 'дня', 'дней')}</div>`);
       }
+      if (plan.due) {
+        lines.push(`<div class="stock-line stock-warn">⚠ Пора заказывать — точка заказа ${fmtNum(rop)} ${esc(u)}</div>`);
+      } else {
+        lines.push(`<div class="stock-line">Заказывать, когда останется ${fmtNum(rop)} ${esc(u)}</div>`);
+      }
+      if (plan.need > 0) {
+        const amount = plan.packs > 0
+          ? `<b>${fmtNum(plan.packs)}</b> ${plural(plan.packs, 'упаковку', 'упаковки', 'упаковок')} (${fmtNum(plan.total)} ${esc(u)})`
+          : `<b>${fmtNum(Math.ceil(plan.need))}</b> ${esc(u)}`;
+        lines.push(`<div class="stock-line">Заказать ${amount}</div>`);
+        lines.push(`<details class="stock-why"><summary>Откуда это число</summary>
+          <div class="stock-why-body">
+            Продаём <b>${fmtNum(Math.round(d * 100) / 100)}</b> ${esc(u)} в день.<br>
+            Доставка ${plan.lead} ${plural(plan.lead, 'день', 'дня', 'дней')} · заказ раз в ${plan.cycle} ${plural(plan.cycle, 'день', 'дня', 'дней')} · страховой запас ${plan.safety} ${plural(plan.safety, 'день', 'дня', 'дней')}.<br>
+            Запас нужен на ${plan.lead + plan.cycle + plan.safety} ${plural(plan.lead + plan.cycle + plan.safety, 'день', 'дня', 'дней')} — это ${fmtNum(Math.ceil(plan.upTo))} ${esc(u)}. Есть ${fmtNum(Math.max(qty, 0))} → не хватает ${fmtNum(Math.ceil(plan.need))} ${esc(u)}.<br>
+            <span class="stock-note">Товар в пути каталог не знает — если уже заказал, вычти сам. Сроки меняются в «Правилах заказа».</span>
+          </div></details>`);
+      }
+      // честные оговорки: молчать о них опаснее, чем показать «красивое» число
+      if (qty <= 0) lines.push('<div class="stock-note">⚠ Товара нет на полке — значит, продажи в отчёте занижены, а спрос выше расчётного.</div>');
+      if (sales.periodTo && priceAgeDays(sales.periodTo) > SALES_STALE_DAYS) {
+        lines.push(`<div class="stock-note">⚠ Продажи за старый период (по ${fmtDate(sales.periodTo)}) — расчёт мог устареть, загрузи свежий отчёт.</div>`);
+      }
+    } else if (qty > 0) {
+      lines.push('<div class="stock-note">Загрузи отчёт продаж — каталог посчитает, на сколько хватит и сколько заказать.</div>');
     }
 
     box.innerHTML = `<div class="sales-block${cls}">
@@ -1609,6 +1831,7 @@
    * контакты — только после входа (доступ закрыт правами базы). */
 
   let cardSuppliers = {}; // supplier_id → {sup, last, hist, prev} для открытия карточки поставщика
+  let cardSales = null;   // продажи открытого товара {perDay, periodTo} — нужны калькулятору
 
   async function renderProductPrices(p) {
     const box = $('sheetPrices');
@@ -1748,6 +1971,8 @@
     else if (opt.stale) footer = `<p class="muted price-hint">${esc(opt.stale)}</p>`;
     else if (!freshPriced.length && entries.some((e) => e.last)) footer = `<p class="muted price-hint">⚠ Все цены старше ${STALE_PRICE_DAYS} дней — поступлений давно не было, цены могли измениться. «Выгоднее» не показываем.</p>`;
     else footer = '<p class="muted price-hint">Нажми на поставщика — контакты, звонок и WhatsApp</p>';
+    // предложение нового поставщика удобнее сравнивать рядом с текущими ценами
+    if (state.canPurchase) footer += '<button class="btn btn-secondary btn-block" id="calcOpenBtn">🧮 Посчитать предложение поставщика</button>';
 
     box.innerHTML = `<div class="price-block"><div class="price-title">Поставщики и цены</div>${rowsHtml}${footer}</div>`;
   }
@@ -2177,6 +2402,7 @@
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
       competitors: state.competitors || [], compPrices: state.compPrices || [],
       unitCoef: state.unitCoef || {},
+      orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
       staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
     };
   }
@@ -2189,6 +2415,7 @@
       prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
       competitors: state.competitors || [], compPrices: state.compPrices || [],
       unitCoef: state.unitCoef || {},
+      orderRules: state.orderRules || null,
     };
   }
   // Открытый файл цен других магазинов: {магазины, записанные цены}
@@ -2236,6 +2463,7 @@
     state.competitors = data.competitors || [];
     state.compPrices = data.compPrices || [];
     state.unitCoef = data.unitCoef || {};
+    if (data.orderRules) state.orderRules = data.orderRules;
     state.staffPassword = data.staffPassword || null;
     buildIndex();
     state.popularIds = buildPopularIds();
@@ -2257,6 +2485,7 @@
     state.competitors = data.competitors || [];   // цены магазинов сотрудник и видит, и вносит
     state.compPrices = data.compPrices || [];
     state.unitCoef = data.unitCoef || {};
+    if (data.orderRules) state.orderRules = data.orderRules;
     buildIndex();
     state.popularIds = buildPopularIds();
     state.serverless = true;
@@ -2485,7 +2714,8 @@
 
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state };
+    window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+      _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
   }
 
   // Витрина из статического файла (data/products.json на GitHub Pages) — для
@@ -5725,9 +5955,23 @@
     // тап по поставщику в карточке товара → его контакты и цена
     $('sheetPrices').addEventListener('click', (e) => {
       if (e.target.closest('#pricesLoginBtn')) { openLogin(); return; }
+      if (e.target.closest('#calcOpenBtn')) { if (currentProduct) openPriceCalc(currentProduct); return; }
       const row = e.target.closest('[data-supplier-view]');
       if (row) openSupplierView(row.dataset.supplierView);
     });
+
+    // калькулятор: пересчитываем на каждое изменение — без кнопки «посчитать»
+    for (const id of ['calcPrice', 'calcPackQty', 'calcDiscount']) {
+      $(id).addEventListener('input', renderCalcResult);
+    }
+    $('calcUnitSeg').addEventListener('change', renderCalcResult);
+
+    // правила заказа: по ним считается точка заказа и объём закупки
+    $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
+    for (const id of ['orLead', 'orCycle', 'orSafety']) {
+      $(id).addEventListener('input', renderOrderRulesExample);
+    }
+    $('orSave').addEventListener('click', saveOrderRules);
 
     // разведка цен: «＋ Добавить цену магазина» в карточке товара
     $('menuCompStores').addEventListener('click', () => {
@@ -6347,6 +6591,7 @@
     deviceId(); // закрепляем анонимный номер устройства (память избранного/просмотров)
     initTheme();
     loadFilters();
+    loadOrderRules();
     renderRecent();
     bindEvents();
     showSkeleton();
