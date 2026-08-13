@@ -2347,15 +2347,12 @@
   async function refreshStatic() {
     try {
       const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
-      console.log('МЕТКА витрина: старт запросов');
       const [pr, gr, pop, cmp] = await Promise.all([
         fetch(base + 'products.json', { cache: 'no-cache' }),
         fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
         fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
         fetch(base + COMP_FILE, { cache: 'no-cache' }).catch(() => null),
       ]);
-      console.log('МЕТКА витрина: запросы вернулись');
-      if (!pr || !pr.ok) { console.log('МЕТКА витрина: файла нет'); return false; }
       const products = await pr.json();
       if (!Array.isArray(products)) return false;
       state.groups = (gr && gr.ok) ? await gr.json() : [];
@@ -2377,7 +2374,6 @@
       renderAll();
       return true;
     } catch (e) {
-      console.log('МЕТКА витрина: сбой ' + (e && e.message));
       return false; // любой сбой — откат на загрузку с сервера
     }
   }
@@ -2389,14 +2385,11 @@
     // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
     // Сотрудник после входа всегда грузится с сервера (полные данные).
     if (CFG.STATIC_URL && !state.session) {
-      const okStatic = await refreshStatic();
-      console.log('МЕТКА витрина вернула: ' + okStatic + ', sb=' + (!!sb));
-      if (okStatic) return;
+      if (await refreshStatic()) return;
     }
     // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
     // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
     if (!sb) {
-      console.log('МЕТКА ветка без базы');
       $('loader').hidden = true;
       const banner = $('offlineBanner');
       banner.textContent = (await loadCache())
@@ -6188,9 +6181,8 @@
       });
     }
 
-    console.log('МЕТКА до loadCache');
+    // мгновенно показываем сохранённый каталог, затем тихо обновляем из базы
     if (await loadCache()) renderAll();
-    console.log('МЕТКА после loadCache');
 
     // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
     // «Выйти», даже после обновления страницы. Роль поднимаем сразу (данные —
@@ -6211,9 +6203,7 @@
       sb.auth.onAuthStateChange((_e, session) => { if (!state.serverless) setTimeout(() => applySession(session), 0); });
     }
 
-    console.log('МЕТКА до refresh');
     await refresh();
-    console.log('МЕТКА после refresh');
     openFromHash(); // если открыли по ссылке на товар — показываем его
   }
 
