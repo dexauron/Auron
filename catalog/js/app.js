@@ -1008,7 +1008,7 @@
 
   function renderAll() {
     renderChips(); renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
-    renderPopularProducts(); renderRecentProducts();
+    renderNewProducts(); renderPopularProducts(); renderRecentProducts();
     renderGrid();
   }
 
@@ -1183,6 +1183,42 @@
   }
 
   // «Популярное» — горизонтальная лента самых просматриваемых товаров (главная)
+  /* ── «Что нового в магазине» ────────────────────────
+   * Лента новинок на главной — видна всем, в том числе покупателю без входа.
+   * «Новое» = товар ПОЯВИЛСЯ в каталоге недавно (created_at), а не «был
+   * последний завоз» (arrival_at): иначе в новинки каждую неделю попадали бы
+   * хлеб и молоко, которые просто регулярно привозят.
+   * Оговорка: при первой загрузке каталога у ВСЕХ товаров дата появления —
+   * день импорта, и лента показала бы весь ассортимент. Поэтому если «новых»
+   * больше пятой части каталога, это не новинки, а первая загрузка — молчим. */
+
+  const NEW_DAYS = 30;          // сколько дней товар считается новым
+  const NEW_MAX_SHARE = 0.2;    // больше этой доли каталога — это первая загрузка
+
+  function newProducts() {
+    const from = daysAgoISO(NEW_DAYS);
+    const fresh = state.products.filter((p) => String(p.created_at || '').slice(0, 10) >= from);
+    if (!fresh.length || fresh.length > state.products.length * NEW_MAX_SHARE) return [];
+    return fresh.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 12);
+  }
+
+  function renderNewProducts() {
+    const box = $('newStrip');
+    if (!box) return;
+    const show = !state.query && !state.favOnly && !anyFilterActive();
+    const top = show ? newProducts() : [];
+    if (!top.length) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    box.innerHTML = '<div class="similar-title">🆕 Новое в магазине</div><div class="similar-row">'
+      + top.map((x) => {
+        const ph = (x.photos || []).find((u) => u && String(u).trim());
+        const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
+        return `<button class="similar-card" data-similar="${esc(x.id)}">
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
+          <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
+      }).join('') + '</div>';
+  }
+
   function renderPopularProducts() {
     const box = $('popularStrip');
     if (!box) return;
@@ -1279,7 +1315,7 @@
     currentProduct = p;
     pushRecentProduct(p.id);
     trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
-    renderPopularProducts(); renderRecentProducts(); // обновляем ленты под шторкой
+    renderNewProducts(); renderPopularProducts(); renderRecentProducts(); // обновляем ленты под шторкой
     updateFavButton(p);
     $('sheetName').textContent = p.name;
 
@@ -1318,8 +1354,9 @@
     }
     // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
     // покупателям без входа их не показываем
+    // код товара виден всем — по нему покупатель объяснит кассиру, что берёт
+    if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
     if (state.session) {
-      if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
       if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
       // У товара может быть несколько штрихкодов: на штуку, на упаковку, на блок.
       // Подписываем каждый по-человечески («упаковка — 24 шт»), штучный — первым.
@@ -2275,7 +2312,10 @@
   // в скрипте выгрузки). Секретное сюда не попадает.
   // arrival_at (только дата, без поставщика и закупочной цены) нужен покупателю:
   // на нём держится сортировка «Новее». Без него она у покупателя ничего не делала.
-  const PUBLIC_FIELDS = ['id', 'name', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+  // Код товара показываем всем: с ним покупателю проще объяснить кассиру, что
+  // он берёт, и найти товар поиском по коду. Секретного в нём ничего нет —
+  // в отличие от артикула, штрихкодов, поставщиков и закупочных цен.
+  const PUBLIC_FIELDS = ['id', 'name', 'code', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
   function buildPublicProducts() {
     return state.products
       .map((p) => {
