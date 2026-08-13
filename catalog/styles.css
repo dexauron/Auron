@@ -32,9 +32,11 @@
   --shadow: 0 4px 20px rgba(0, 0, 0, .4);
 
   /* скругления Auron: карточки 20 · элементы 14 · мелочь 10 */
-  --radius: 20px;
-  --radius-sm: 14px;
-  --radius-xs: 10px;
+  /* Скругления как в iOS: карточки и группы списков 14, элементы 10, мелочь 8.
+     20 px давали «пузырьковый» вид — в системных приложениях так не делают. */
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 8px;
 }
 
 @media (prefers-color-scheme: light) {
@@ -89,7 +91,9 @@
 html { height: 100%; }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
   background: var(--bg);
   color: var(--text);
   min-height: 100%;
@@ -1177,3 +1181,77 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .cat-part { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 47%), 1fr)); gap: 10px; }
 .grid.compact .cat-part { grid-template-columns: repeat(auto-fill, minmax(min(108px, 31%), 1fr)); gap: 8px; }
 @media (min-width: 700px) { .cat-part { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; } }
+
+/* ═══ Иконки вместо эмодзи ═════════════════════════
+   Один набор контурных значков: одна толщина линии, цвет наследуется от
+   текста, размер задаётся классом. Эмодзи в интерфейсе больше нет — они
+   рисуются шрифтом системы и на разных телефонах выглядят по-разному. */
+.ic { width: 22px; height: 22px; flex: 0 0 auto; vertical-align: -.28em; }
+.ic-xs { width: 15px; height: 15px; vertical-align: -.2em; }
+.ic-cat { width: 26px; height: 26px; }
+.ic-ph { width: 34px; height: 34px; opacity: .3; }        /* заглушка «нет фото» */
+.empty-icon .ic { width: 44px; height: 44px; opacity: .45; }
+.tabbar .tab .ic { width: 25px; height: 25px; }
+.tabbar .tab.active .ic { stroke-width: 2; }
+.sheet-fav .ic, .btn .ic { pointer-events: none; }
+.sheet-fav.is-fav .ic, .tab.active[data-tab="fav"] .ic { fill: currentColor; }
+.price-badge .ic, .comp-v-good .ic, .calc-good .ic { color: var(--pos); }
+.stock-warn .ic, .price-old .ic, .comp-v-bad .ic, .tag-nobarcode .ic { color: var(--warn); }
+
+/* ═══ Оформление в стиле iOS ═══════════════════════
+   Палитра у нас и так системная (те же серые и индиго, что в iOS). Не хватало
+   трёх вещей: типографики, тонких разделителей вместо рамок вокруг каждой
+   строки и полупрозрачных панелей с размытием. */
+
+/* Шапка и нижняя панель — «материал» iOS: полупрозрачность + размытие */
+.header {
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: .5px solid var(--border);
+}
+.tabbar {
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: .5px solid var(--border);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .header { background: var(--bg); }
+  .tabbar { background: var(--surface); }
+}
+
+/* Крупный заголовок — фирменная деталь iOS */
+.brand-name { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.sheet-title { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.brand-sub { font-size: 12.5px; }
+
+/* Разделители тоньше волоса и без рамок вокруг каждой строки: в iOS строки
+   списка разделяет линия, а рамка идёт вокруг ГРУППЫ строк */
+.field-row, .dev-row, .calc-row, .grp-row, .comp-row, .price-hist-row {
+  border-width: .5px;
+}
+.grp-row { border: 0; border-bottom: .5px solid var(--border); border-radius: 0; margin-bottom: 0; background: var(--surface); }
+.grp-row:first-of-type { border-top-left-radius: var(--radius); border-top-right-radius: var(--radius); }
+.grp-row:last-child { border-bottom: 0; border-bottom-left-radius: var(--radius); border-bottom-right-radius: var(--radius); }
+.grp-all { border-radius: var(--radius) !important; border: .5px solid var(--brand); margin-bottom: 10px; }
+
+/* Кнопки: у iOS главная — сплошная заливка, второстепенная — просто цветной
+   текст без рамки. Заливка на каждой кнопке делала экран пёстрым. */
+.btn { font-weight: 600; letter-spacing: -.01em; border-radius: var(--radius-sm); }
+.btn-primary { font-weight: 650; }
+.btn-secondary {
+  background: var(--surface-2); border: .5px solid transparent; color: var(--brand-ink);
+}
+.btn-ghost { color: var(--brand-ink); font-weight: 600; }
+
+/* Поля ввода — как в системных формах */
+.input { border-radius: var(--radius-sm); border-width: .5px; font-size: 17px; }
+.field-label { font-size: 13px; letter-spacing: -.01em; }
+
+/* Шторки: скругление только сверху и «ручка» посередине — как в iOS */
+.sheet { border-radius: 16px 16px 0 0; }
+.sheet-handle { width: 36px; height: 5px; border-radius: 3px; }
+
+/* Значения выравниваем табличными цифрами — числа не «пляшут» */
+.card-price, .field-hero-val, .price-val, .dev-val, .grp-count { font-variant-numeric: tabular-nums; }

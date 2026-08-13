@@ -112,7 +112,7 @@
       img.remove();
       if (box && !box.querySelector('img')) {
         box.classList.add('no-photo');
-        if (!box.textContent.trim()) box.insertAdjacentText('beforeend', '📦');
+        if (!box.textContent.trim()) box.insertAdjacentHTML('beforeend', ic('box', 'ic-ph'));
       }
     } catch (e) { /* ignore */ }
   };
@@ -302,21 +302,99 @@
   /* ── Категории: 200+ групп 1С → ~12 понятных разделов ──
    * Раскладываем автоматически по названию группы. Первое совпадение выигрывает.
    * Порядок правил важен: сначала точные (детское, гигиена), потом общие. */
+  /* ── Иконки вместо эмодзи ───────────────────────────
+   * Эмодзи рисуются шрифтом системы: на Android, iPhone и Windows они разного
+   * вида, размера и веса, и в единый интерфейс не складываются. Здесь — один
+   * набор контурных значков в духе системных иконок iOS: одна толщина линии,
+   * скруглённые концы, цвет наследуется от текста. */
+  const ICONS = {
+    catalog: '<path d="M6 8h12l-1.1 11.2A2 2 0 0 1 14.9 21H9.1a2 2 0 0 1-2-1.8L6 8Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+    cats: '<rect x="3.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2.2"/>',
+    heart: '<path d="M12 20.3s-7.5-4.7-7.5-10A4.2 4.2 0 0 1 12 7.4a4.2 4.2 0 0 1 7.5 2.9c0 5.3-7.5 10-7.5 10Z"/>',
+    more: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
+    close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    plus: '<path d="M12 5.5v13M5.5 12h13"/>',
+    left: '<path d="m14.5 5.5-6.5 6.5 6.5 6.5"/>',
+    up: '<path d="M12 19.5V5M6 11l6-6 6 6"/>',
+    refresh: '<path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4.5v5h-5"/>',
+    camera: '<path d="M4 8h3l1.4-2h7.2L17 8h3a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5v-8A1.5 1.5 0 0 1 4 8Z"/><circle cx="12" cy="13.2" r="3.2"/>',
+    image: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.4" cy="10" r="1.4"/><path d="m4 17.5 4.6-3.8 3.6 2.8 3-2.2 4 3.2"/>',
+    trash: '<path d="M5 7h14M10 7V4.8h4V7M7.5 7l.9 12.2A1.8 1.8 0 0 0 10.2 21h3.6a1.8 1.8 0 0 0 1.8-1.8L16.5 7"/>',
+    pencil: '<path d="M4 20.2l.9-3.9L16.1 5.1l3 3L7.9 19.3 4 20.2Z"/>',
+    share: '<path d="M12 15.5V4M8.2 7.8 12 4l3.8 3.8"/><path d="M5 13.5v5.6a1.4 1.4 0 0 0 1.4 1.4h11.2a1.4 1.4 0 0 0 1.4-1.4v-5.6"/>',
+    box: '<path d="m4 8 8-4 8 4v8l-8 4-8-4V8Z"/><path d="m4 8 8 4 8-4M12 12v8"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/>',
+    moon: '<path d="M20.5 14.3A8.6 8.6 0 0 1 9.7 3.5a8.6 8.6 0 1 0 10.8 10.8Z"/>',
+    auto: '<circle cx="12" cy="12" r="8.6"/><path d="M12 3.4v17.2a8.6 8.6 0 0 0 0-17.2Z" fill="currentColor" stroke="none"/>',
+    torch: '<path d="M9.5 3h5v2.6L13 8.4V21h-2V8.4L9.5 5.6V3Z"/>',
+    doc: '<path d="M13.5 3H7.5A1.5 1.5 0 0 0 6 4.5v15A1.5 1.5 0 0 0 7.5 21h9a1.5 1.5 0 0 0 1.5-1.5V7.5L13.5 3Z"/><path d="M13.3 3v4.4h4.5"/>',
+    globe: '<circle cx="12" cy="12" r="8.6"/><path d="M3.5 12h17"/><path d="M12 3.4a13.5 13.5 0 0 1 0 17.2 13.5 13.5 0 0 1 0-17.2Z"/>',
+    scale: '<path d="M12 4.2v15.6M7 6.6h10M6.8 19.8h10.4"/><path d="m8.6 7-2.8 5.6h5.6L8.6 7ZM15.4 7l-2.8 5.6h5.6L15.4 7Z"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2.4"/><path d="M8.4 10.5V8a3.6 3.6 0 0 1 7.2 0v2.5"/>',
+    phone: '<path d="M6.4 3.6h3l1.4 3.6-2 1.4a11 11 0 0 0 5.2 5.2l1.4-2 3.6 1.4v3a2 2 0 0 1-2.2 2A16.4 16.4 0 0 1 4.4 5.8a2 2 0 0 1 2-2.2Z"/>',
+    truck: '<path d="M3 6.5h10.5v9H3zM13.5 9.5H17l3 3v3h-6.5z"/><circle cx="7" cy="18" r="1.9"/><circle cx="17" cy="18" r="1.9"/>',
+    store: '<path d="M4 9.5h16V20H4z"/><path d="M4 9.5 5.5 4.5h13L20 9.5"/><path d="M9.5 20v-5.5h5V20"/>',
+    key: '<circle cx="8" cy="12" r="3.6"/><path d="M11.6 12H21M18 12v3M15 12v2.4"/>',
+    cloud: '<path d="M7.5 18.5A4 4 0 0 1 7.8 10.6a5.2 5.2 0 0 1 10 1.3 3.4 3.4 0 0 1-.6 6.6H7.5Z"/>',
+    folder: '<path d="M3.5 6.6h5.6l1.8 2.2h9.6V19a1.4 1.4 0 0 1-1.4 1.4H4.9A1.4 1.4 0 0 1 3.5 19V6.6Z"/>',
+    flame: '<path d="M12 3.2s5.2 4 5.2 8.6a5.2 5.2 0 1 1-10.4 0c0-1.7.9-3.2 1.9-4.4.4 1.2 1.2 2 2 2 0-2.6.6-4.7 1.3-6.2Z"/>',
+    calc: '<rect x="5" y="3.2" width="14" height="17.6" rx="2.4"/><path d="M8.4 7.6h7.2M8.6 12h.01M12 12h.01M15.4 12h.01M8.6 16.2h.01M12 16.2h.01M15.4 16.2h.01"/>',
+    gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M4.6 4.6l1.7 1.7M17.7 17.7l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.6 19.4l1.7-1.7M17.7 6.3l1.7-1.7"/>',
+    exit: '<path d="M14.5 3.5h3.6A1.4 1.4 0 0 1 19.5 5v14a1.4 1.4 0 0 1-1.4 1.4h-3.6"/><path d="M10 8.4 6.4 12l3.6 3.6M6.6 12h8.4"/>',
+    broom: '<path d="M14 3.5 20.5 10M12.4 5.1 8 9.5l6.5 6.5 4.4-4.4"/><path d="M8 9.5 3.5 20.5 14.5 16"/>',
+    palette: '<path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.4 0 1.9-1 1.5-2-.5-1.3.4-2.4 1.8-2.4h1.4a3.8 3.8 0 0 0 3.8-3.8c0-4.8-3.8-8.8-8.5-8.8Z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.6" r="1"/><circle cx="16" cy="10" r="1"/>',
+    wifioff: '<path d="M3.5 9.4a14 14 0 0 1 5-3M12 4.4a14 14 0 0 1 8.5 5M7.4 13.2a8.4 8.4 0 0 1 8.6-1.5M10.4 16.8a3.6 3.6 0 0 1 4-.4"/><path d="m4 4 16 16"/>',
+    check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
+    warn: '<path d="M12 4.5 21 20H3l9-15.5Z"/><path d="M12 10v4.4M12 17.4h.01"/>',
+  };
+  // значки категорий — те же правила: контур, одна толщина, цвет от текста
+  const CAT_ICONS = {
+    'Детское': '<path d="M10 3.2h4v2.2h-4z"/><path d="M8.8 7h6.4v11.8a2.2 2.2 0 0 1-2.2 2.2h-2a2.2 2.2 0 0 1-2.2-2.2Z"/><path d="M8.8 11.4h6.4"/>',
+    'Красота и гигиена': '<path d="M12 3.2s5.4 6 5.4 9.8A5.4 5.4 0 0 1 6.6 13C6.6 9.2 12 3.2 12 3.2Z"/>',
+    'Дом и химия': '<path d="M10 3.4h4v3.2h-4z"/><rect x="7.6" y="6.6" width="8.8" height="14" rx="2"/><path d="M16.4 5h3.2"/>',
+    'Напитки': '<path d="M6.4 6h11.2l-1.3 13.2a1.8 1.8 0 0 1-1.8 1.6H9.5a1.8 1.8 0 0 1-1.8-1.6Z"/><path d="M7.2 11.4h9.6"/>',
+    'Молочное': '<path d="M8.6 3.4h6.8V6l2.2 3.2v9.4a2 2 0 0 1-2 2H8.4a2 2 0 0 1-2-2V9.2L8.6 6Z"/><path d="M8.6 6h6.8"/>',
+    'Мясо и рыба': '<path d="M3.6 12c4.6-5.4 12.4-5.4 17 0-4.6 5.4-12.4 5.4-17 0Z"/><circle cx="8.4" cy="12" r="1"/>',
+    'Заморозка': '<path d="M12 3.2v17.6M4.4 7.6l15.2 8.8M19.6 7.6 4.4 16.4"/>',
+    'Хлеб и выпечка': '<path d="M4.6 12.4a4.4 4.4 0 0 1 4.4-4.4h6a4.4 4.4 0 0 1 4.4 4.4V19a1.4 1.4 0 0 1-1.4 1.4H6a1.4 1.4 0 0 1-1.4-1.4Z"/><path d="M9.4 8.2v12.2M14.6 8.2v12.2"/>',
+    'Сладости': '<circle cx="12" cy="12" r="4.2"/><path d="m3.6 7.6 4.2 4.4-4.2 4.4ZM20.4 7.6 16.2 12l4.2 4.4Z"/>',
+    'Снеки': '<path d="M8 3.6h8l1.8 15.2a1.8 1.8 0 0 1-1.8 2H8a1.8 1.8 0 0 1-1.8-2Z"/><path d="M9 8.4h6"/>',
+    'Овощи и фрукты': '<path d="M20.4 3.6C10.2 3.6 3.6 10.2 3.6 20.4c10.2 0 16.8-6.6 16.8-16.8Z"/><path d="M3.6 20.4 14.2 9.8"/>',
+    'Бакалея': '<path d="M6 8h12l-1.1 11.2A2 2 0 0 1 14.9 21H9.1a2 2 0 0 1-2-1.8L6 8Z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',
+    'Прочее': '<path d="m4 8 8-4 8 4v8l-8 4-8-4V8Z"/><path d="m4 8 8 4 8-4M12 12v8"/>',
+  };
+
+  const checkMark = `${ic('check', 'ic-xs')} `;
+  const warnMark = `${ic('warn', 'ic-xs')} `;
+
+  function ic(name, cls) {
+    const d = ICONS[name] || CAT_ICONS[name] || CAT_ICONS['Прочее'];
+    return `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  }
+  // в разметке иконки помечены <i data-ic="имя">, здесь подменяем их на рисунки
+  function paintIcons(root) {
+    for (const el of [...(root || document).querySelectorAll('[data-ic]')]) {
+      el.outerHTML = ic(el.dataset.ic, el.className);
+    }
+  }
+
   const CATEGORIES = [
-    { name: 'Детское',           icon: '👶', re: /детск|подгуз|пластилин|игрушечные яйц/ },
-    { name: 'Красота и гигиена', icon: '🧴', re: /шампун|бальзам|кондиционер для волос|краск[аи] для волос|мыл|зубн|дезодор|женская гигиен|влажные салфет|ватные|крем|космет|станки|для обуви|прокладк/ },
-    { name: 'Дом и химия',       icon: '🧽', re: /стир|порошок|ополаск|мытья посуд|чистящ|для стекол|освежит|ароматизат|мешки|пакет|полотенц|салфет|туалетная бумага|мочалк|губк|тряпк|швабр|ведр|щетк|уборк|перчатк|насиком|для кошек|для собак|бель|батарейк|лампочк|удлинител|свеч|зажигалк|спичк|скотч|изолент|клей|канц|тетрад|ручк|карандаш|маркер|фломастер|ластик|точилк|линейк|ножниц|кист|краск|альбом|блокнот|фольг|пленк|запекан|пластиков|деревянн|стакан|тарелк|товары для дома|товары для|подарочн|подставк|аксесуар|носки|колготк|инструмент|хими/ },
-    { name: 'Напитки',           icon: '🥤', re: /вода|сок|лимонад|напит|энергет|кофе|чай|какао|коктел|квас|сироп/ },
-    { name: 'Молочное',          icon: '🥛', re: /молок|молоч|кефир|йогурт|творог|сметан|сливк|сыр|масло сливоч|сгущ|яйц/ },
-    { name: 'Мясо и рыба',       icon: '🥩', re: /колбас|мясн|курин|фарш|полуфабрикат|рыба|морепродукт|икра|сосиск|паштет|суш[её]ное мясо|сущ[её]ное мясо/ },
-    { name: 'Заморозка',         icon: '❄️', re: /заморож|мороженн/ },
-    { name: 'Хлеб и выпечка',    icon: '🍞', re: /хлеб|булоч|булк|выпечк|лаваш|кекс|рулет|пирожн|торт|фаст[\s-]?фуд|фастфуд/ },
-    { name: 'Сладости',          icon: '🍬', re: /конфет|шоколад|драже|карамел|мармелад|зефир|пастил|печен|пряник|вафл|халв|козинак|леденц|чупа|рахат|батончик|жеват|мед|варень|джем|повидл|кондитер|сладост|десерт|яшкино|ulker/ },
-    { name: 'Снеки',             icon: '🍟', re: /чипс|снэк|снек|попкорн|кукурузн|семечк|арахис|фисташк|сухофрукт|орех|хлопья|готовый завтрак|сухар|хлебц|мюсли/ },
-    { name: 'Овощи и фрукты',    icon: '🥦', re: /овощ|фрукт|зелень|гриб/ },
-    { name: 'Бакалея',           icon: '🛒', re: /бакале|греч|рис|пшено|перловк|манк|булгур|каша|овсянк|круп|мука|сахар|соль|сода|дрожж|макарон|лапша|масло|фасол|специ|приправ|соус|томат|майонез|кетчуп|уксус|консерв|маринован|кулинар|безглютен|европейские|готовый|диетическ/ },
+    { name: 'Детское',           icon: null, re: /детск|подгуз|пластилин|игрушечные яйц/ },
+    { name: 'Красота и гигиена', icon: null, re: /шампун|бальзам|кондиционер для волос|краск[аи] для волос|мыл|зубн|дезодор|женская гигиен|влажные салфет|ватные|крем|космет|станки|для обуви|прокладк/ },
+    { name: 'Дом и химия',       icon: null, re: /стир|порошок|ополаск|мытья посуд|чистящ|для стекол|освежит|ароматизат|мешки|пакет|полотенц|салфет|туалетная бумага|мочалк|губк|тряпк|швабр|ведр|щетк|уборк|перчатк|насиком|для кошек|для собак|бель|батарейк|лампочк|удлинител|свеч|зажигалк|спичк|скотч|изолент|клей|канц|тетрад|ручк|карандаш|маркер|фломастер|ластик|точилк|линейк|ножниц|кист|краск|альбом|блокнот|фольг|пленк|запекан|пластиков|деревянн|стакан|тарелк|товары для дома|товары для|подарочн|подставк|аксесуар|носки|колготк|инструмент|хими/ },
+    { name: 'Напитки',           icon: null, re: /вода|сок|лимонад|напит|энергет|кофе|чай|какао|коктел|квас|сироп/ },
+    { name: 'Молочное',          icon: null, re: /молок|молоч|кефир|йогурт|творог|сметан|сливк|сыр|масло сливоч|сгущ|яйц/ },
+    { name: 'Мясо и рыба',       icon: null, re: /колбас|мясн|курин|фарш|полуфабрикат|рыба|морепродукт|икра|сосиск|паштет|суш[её]ное мясо|сущ[её]ное мясо/ },
+    { name: 'Заморозка',         icon: null, re: /заморож|мороженн/ },
+    { name: 'Хлеб и выпечка',    icon: null, re: /хлеб|булоч|булк|выпечк|лаваш|кекс|рулет|пирожн|торт|фаст[\s-]?фуд|фастфуд/ },
+    { name: 'Сладости',          icon: null, re: /конфет|шоколад|драже|карамел|мармелад|зефир|пастил|печен|пряник|вафл|халв|козинак|леденц|чупа|рахат|батончик|жеват|мед|варень|джем|повидл|кондитер|сладост|десерт|яшкино|ulker/ },
+    { name: 'Снеки',             icon: null, re: /чипс|снэк|снек|попкорн|кукурузн|семечк|арахис|фисташк|сухофрукт|орех|хлопья|готовый завтрак|сухар|хлебц|мюсли/ },
+    { name: 'Овощи и фрукты',    icon: null, re: /овощ|фрукт|зелень|гриб/ },
+    { name: 'Бакалея',           icon: null, re: /бакале|греч|рис|пшено|перловк|манк|булгур|каша|овсянк|круп|мука|сахар|соль|сода|дрожж|макарон|лапша|масло|фасол|специ|приправ|соус|томат|майонез|кетчуп|уксус|консерв|маринован|кулинар|безглютен|европейские|готовый|диетическ/ },
   ];
-  const OTHER_CAT = { name: 'Прочее', icon: '📦' };
+  const OTHER_CAT = { name: 'Прочее', icon: null };
   const catCache = {};
   function categoryOf(groupName) {
     const key = groupName || '';
@@ -327,7 +405,7 @@
     catCache[key] = cat;
     return cat;
   }
-  const catIcon = (name) => (CATEGORIES.find((c) => c.name === name) || OTHER_CAT).icon;
+  const catIcon = (name) => ic(name, 'ic-cat');
   const productCategory = (p) => { const g = groupById(p.group_id); return g ? categoryOf(g.name) : null; };
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
@@ -477,7 +555,7 @@
     s = Math.max(s, matchPre(p._name, p._nameT, qVars, [92, 90, 55], p._nameW, p._nameWT, useT));
     // Поставщика в свободном поиске НЕ учитываем: иначе, набрав название товара,
     // можно получить чужие товары того же поставщика (напр. поставщик «Адреналин»).
-    // Искать по поставщику — отдельным чипом «🚚 Поставщики».
+    // Искать по поставщику — отдельным чипом «Поставщики».
     if (p._grp) s = Math.max(s, matchPre(p._grp, p._grpT, qVars, [45, 42, 0], p._grpW, p._grpWT, useT));
     if (p._note) s = Math.max(s, matchPre(p._note, p._note, qVars, [38, 36, 0], p._noteW, p._noteW));
     if (p.is_weighted && ('весовой'.startsWith(q) || 'весовые'.startsWith(q) || q === 'вес')) {
@@ -671,7 +749,7 @@
   function stockLabel(p) {
     if (!state.session) return null;      // без входа остатки не показываем вовсе
     const st = stockState(p, null);
-    if (st === 'in') return { txt: '✓ Есть в магазине', cls: 'tag-instock', short: '✓ Есть' };
+    if (st === 'in') return { txt: `${ic('check', 'ic-xs')} Есть в магазине`, cls: 'tag-instock', short: 'Есть' };
     if (st === 'low') return { txt: 'Заканчивается', cls: 'tag-lowstock', short: 'Мало' };
     if (st === 'out') return { txt: 'Нет в наличии', cls: 'tag-outstock', short: 'Нет' };
     return null;
@@ -742,7 +820,7 @@
         .sort((a, b) => b.n - a.n);
       box.innerHTML = `
         <button class="cat-back" data-cat-back>‹ Все категории</button>
-        <div class="cat-head"><span class="cat-ico">${cat.icon}</span>
+        <div class="cat-head"><span class="cat-ico">${catIcon(cat.name)}</span>
           <span><b>${esc(openCat)}</b><span class="cat-count">${cats[openCat]} ${plural(cats[openCat], 'товар', 'товара', 'товаров')} · ${list.length} ${plural(list.length, 'группа', 'группы', 'групп')}</span></span></div>
         <button class="grp-row grp-all" data-cat-tile="${esc(openCat)}">
           <span class="grp-name">Показать все</span><span class="grp-count">${cats[openCat]}</span></button>
@@ -753,7 +831,7 @@
 
     box.innerHTML = '<div class="cat-grid">' + all.map((c) => `
       <button class="cat-tile" data-cat-open="${esc(c.name)}">
-        <span class="cat-ico">${c.icon}</span>
+        <span class="cat-ico">${catIcon(c.name)}</span>
         <span class="cat-name">${esc(c.name)}</span>
         <span class="cat-count">${cats[c.name]} ${plural(cats[c.name], 'товар', 'товара', 'товаров')} · ${Object.keys(groupsIn[c.name] || {}).length} ${plural(Object.keys(groupsIn[c.name] || {}).length, 'группа', 'группы', 'групп')}</span>
       </button>`).join('') + '</div>';
@@ -776,17 +854,17 @@
       empty.hidden = false;
       const filtered = anyFilterActive() || state.favOnly;
       if (state.favOnly && !favorites().length) {
-        empty.querySelector('.empty-icon').textContent = '♡';
+        empty.querySelector('.empty-icon').innerHTML = ic('heart');
         empty.querySelector('.empty-title').textContent = 'В избранном пусто';
-        empty.querySelector('.empty-text').textContent = 'Открой товар и нажми ♥ — он появится здесь';
+        empty.querySelector('.empty-text').textContent = 'Открой товар и нажми на сердечко — товар появится здесь';
       } else if (!state.products.length) {
-        empty.querySelector('.empty-icon').textContent = '📦';
+        empty.querySelector('.empty-icon').innerHTML = ic('box');
         empty.querySelector('.empty-title').textContent = 'Каталог пока пустой';
         empty.querySelector('.empty-text').textContent = state.session
-          ? 'Нажми ＋ внизу, чтобы добавить первый товар'
+          ? 'Нажми внизу, чтобы добавить первый товар'
           : 'Администратор скоро его заполнит';
       } else {
-        empty.querySelector('.empty-icon').textContent = '🔍';
+        empty.querySelector('.empty-icon').innerHTML = ic('search');
         empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
         empty.querySelector('.empty-text').textContent = filtered
           ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
@@ -808,18 +886,18 @@
     // так плотный, а сотруднику там нужен код, а не раскладка.
     const grouped = !!state.query && state.view !== 'list';
     const catOf = (p) => productCategory(p) || OTHER_CAT.name;
-    const catIconOf = (n) => (CATEGORIES.find((c) => c.name === n) || OTHER_CAT).icon;
+    const catIconOf = (n) => catIcon(n);
     const cards = shown.map((p) => {
       const photo = (p.photos || []).find((u) => u && String(u).trim());
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
-        : '📦';
+        : ic('box', 'ic-ph');
       const photoCls = photo ? 'card-photo' : 'card-photo no-photo';
-      // минимализм: на плитке только код и, если весовой, значок ⚖ — остальное в карточке
+      // минимализм: на плитке только код и, если весовой, значок — остальное в карточке
       const tags = [];
       const sl = stockLabel(p);
       if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
-      if (p.is_weighted) tags.push('<span class="tag">⚖</span>');
+      if (p.is_weighted) tags.push(`<span class="tag">${ic('scale', 'ic-xs')}</span>`);
       if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
       const price = (p.retail_price != null && p.retail_price !== '')
         ? `<div class="card-price">${esc(fmtRetail(p))}</div>` : '';
@@ -903,11 +981,11 @@
   // admin: фильтры «чего не хватает в каталоге» — это работа над самим каталогом,
   // сотруднику в зале они не нужны и только занимают место
   const QUICK_CHIPS = [
-    { k: 'withprice', label: '✅ С ценой' },
-    { k: 'barcode', label: '🏷 Штрихкод' },
-    { k: 'nophoto', label: '📷 Без фото', warn: true, admin: true },
-    { k: 'noprice', label: '💰 Без цены', warn: true, admin: true },
-    { k: 'nobarcode', label: '⬜ Без ШК', warn: true, admin: true },
+    { k: 'withprice', label: 'С ценой' },
+    { k: 'barcode', label: 'Штрихкод' },
+    { k: 'nophoto', label: 'Без фото', warn: true, admin: true },
+    { k: 'noprice', label: 'Без цены', warn: true, admin: true },
+    { k: 'nobarcode', label: 'Без ШК', warn: true, admin: true },
   ];
 
   // Категории списком-чекбоксами в окне фильтра (как в референсе)
@@ -1007,12 +1085,12 @@
     const gBtn = $('filterGroupsBtn');
     if (gBtn) {
       const gn = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted').length + state.selCats.length;
-      gBtn.textContent = gn ? `📁 Группы: выбрано ${gn}` : '📁 Выбрать группы…';
+      gBtn.textContent = gn ? `Группы: выбрано ${gn}` : 'Выбрать группы…';
       gBtn.classList.toggle('picked', gn > 0);
     }
     const sBtn = $('filterSuppliersBtn');
     if (sBtn) {
-      sBtn.textContent = state.selSuppliers.length ? `🚚 Поставщики: ${state.selSuppliers.length}` : '🚚 Выбрать поставщиков…';
+      sBtn.textContent = state.selSuppliers.length ? `Поставщики: ${state.selSuppliers.length}` : 'Выбрать поставщиков…';
       sBtn.classList.toggle('picked', state.selSuppliers.length > 0);
     }
     const n = countActiveFilters();
@@ -1035,12 +1113,12 @@
       const label = gid === 'none' ? 'Без группы' : gid === 'weighted' ? 'Весовые' : (groupById(gid)?.name || 'Группа');
       items.push(['group', gid, label]);
     }
-    for (const sid of state.selSuppliers) items.push(['sup', sid, '🚚 ' + (supplierById(sid)?.name || 'Поставщик')]);
-    if (state.selType) items.push(['type', '', state.selType === 'weighted' ? '⚖ Весовые' : 'Штучные']);
+    for (const sid of state.selSuppliers) items.push(['sup', sid, '' + (supplierById(sid)?.name || 'Поставщик')]);
+    if (state.selType) items.push(['type', '', state.selType === 'weighted' ? 'Весовые' : 'Штучные']);
     if (state.arrivalFrom || state.arrivalTo) {
       const f = state.arrivalFrom ? fmtDate(state.arrivalFrom) : '…';
       const t = state.arrivalTo ? fmtDate(state.arrivalTo) : '…';
-      items.push(['arrival', '', `📦 ${f}–${t}`]);
+      items.push(['arrival', '', `${f}–${t}`]);
     }
     if (state.priceMin != null || state.priceMax != null) {
       const lbl = state.priceMin != null && state.priceMax != null ? `${state.priceMin}–${state.priceMax} ₽`
@@ -1052,7 +1130,7 @@
     if (!items.length) { box.hidden = true; box.innerHTML = ''; return; }
     box.hidden = false;
     let html = items.map(([t, v, label]) =>
-      `<button class="chip chip-active-filter" data-rm="${esc(t)}" data-val="${esc(v)}">${esc(label)}<span class="rm-x">✕</span></button>`).join('');
+      `<button class="chip chip-active-filter" data-rm="${esc(t)}" data-val="${esc(v)}">${esc(label)}<span class="rm-x">${ic('close', 'ic-xs')}</span></button>`).join('');
     html += '<button class="chip chip-reset" data-rm="all" data-val="">Сбросить всё</button>';
     box.innerHTML = html;
   }
@@ -1355,7 +1433,7 @@
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
@@ -1376,12 +1454,12 @@
     }
     if (!show || top.length < 3) { box.hidden = true; box.innerHTML = ''; return; }
     box.hidden = false;
-    box.innerHTML = '<div class="similar-title">🔥 Популярное</div><div class="similar-row">'
+    box.innerHTML = '<div class="similar-title">Популярное</div><div class="similar-row">'
       + top.map((x) => {
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
@@ -1394,7 +1472,7 @@
     if (t === 'dark' || t === 'light') root.setAttribute('data-theme', t);
     else root.removeAttribute('data-theme');
     const icon = $('themeIcon');
-    if (icon) icon.textContent = t === 'dark' ? '☀️' : t === 'light' ? '🌙' : '🌗';
+    if (icon) icon.innerHTML = ic(t === 'dark' ? 'sun' : t === 'light' ? 'moon' : 'auto');
   }
   function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
   function toggleTheme() {
@@ -1442,7 +1520,7 @@
     const photos = (p.photos || []).filter((u) => u && String(u).trim());
     $('sheetPhotos').innerHTML = photos.length
       ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
-      : '<div class="photo-placeholder">📦</div>';
+      : `<div class="photo-placeholder">${ic('box', 'ic-ph')}</div>`;
     $('sheetDots').innerHTML = photos.length > 1
       ? photos.map((_, i) => `<span class="dot${i === 0 ? ' active' : ''}"></span>`).join('')
       : '';
@@ -1456,10 +1534,10 @@
     // наличие — первым: покупателю это важнее всего остального
     const sl = stockLabel(p);
     if (sl) badges.unshift(`<span class="tag ${sl.cls}">${sl.txt}</span>`);
-    if (p.is_weighted) badges.push('<span class="tag">⚖ Весовой товар</span>');
-    if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">📏 Продаётся: ${esc(p.unit)}</span>`);
+    if (p.is_weighted) badges.push(`<span class="tag">${ic('scale', 'ic-xs')} Весовой товар</span>`);
+    if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">Продаётся: ${esc(p.unit)}</span>`);
     const barcodes = p.barcodes || [];
-    if (state.session && !barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
+    if (state.session && !barcodes.length) badges.push(`<span class="tag tag-nobarcode">${ic('warn', 'ic-xs')} Штрихкода нет — пробивать по коду</span>`);
     $('sheetBadges').innerHTML = badges.join('');
 
     // описание товара (под названием, видно всем — как в витрине магазина)
@@ -1567,7 +1645,7 @@
         const ph = (x.photos || []).find((u) => u && String(u).trim());
         const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
         return `<button class="similar-card" data-similar="${esc(x.id)}">
-          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : '📦'}</span>
+          <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
           <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
       }).join('') + '</div>';
   }
@@ -1682,9 +1760,9 @@
       const diff = o.piece - best.piece;
       const pct = Math.round((Math.abs(diff) / best.piece) * 1000) / 10;
       if (diff < 0) {
-        parts.push(`<div class="calc-out calc-good">✓ Дешевле лучшей цены на <b>${esc(fmtPiecePrice(-diff))}</b> за ${esc(base)} (−${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
+        parts.push(`<div class="calc-out calc-good">${ic('check', 'ic-xs')} Дешевле лучшей цены на <b>${esc(fmtPiecePrice(-diff))}</b> за ${esc(base)} (−${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
       } else if (diff > 0) {
-        parts.push(`<div class="calc-out calc-bad">✗ Дороже лучшей цены на <b>${esc(fmtPiecePrice(diff))}</b> за ${esc(base)} (+${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
+        parts.push(`<div class="calc-out calc-bad">${ic('close', 'ic-xs')} Дороже лучшей цены на <b>${esc(fmtPiecePrice(diff))}</b> за ${esc(base)} (+${fmtNum(pct)}%)<span class="calc-sub">сейчас лучшая — «${esc(best.name)}», ${esc(fmtPiecePrice(best.piece))}</span></div>`);
       } else {
         parts.push(`<div class="calc-out">Ровно как у «${esc(best.name)}» — разницы нет</div>`);
       }
@@ -1701,7 +1779,7 @@
       if (Number.isFinite(retail) && retail > 0) {
         const abs = retail - o.piece;
         const pct = Math.round((abs / o.piece) * 100);
-        parts.push(`<div class="calc-line${abs < 0 ? ' calc-bad-text' : ''}">${abs < 0 ? '⚠ Продаём в убыток: ' : 'Наценка при рознице '}${esc(fmtPrice(retail))}: <b>${abs > 0 ? '+' : ''}${esc(fmtPrice(abs))}</b> (${abs > 0 ? '+' : ''}${pct}%)</div>`);
+        parts.push(`<div class="calc-line${abs < 0 ? ' calc-bad-text' : ''}">${abs < 0 ? warnMark + 'Продаём в убыток: ' : 'Наценка при рознице '}${esc(fmtPrice(retail))}: <b>${abs > 0 ? '+' : ''}${esc(fmtPrice(abs))}</b> (${abs > 0 ? '+' : ''}${pct}%)</div>`);
       }
     }
 
@@ -1727,7 +1805,7 @@
       parts.push(`<div class="sec-title">Не сравниваем — поступлений давно не было</div>`
         + stale.map((r) => {
           const dt = fmtDate(r.date);
-          return `<div class="calc-row calc-row-old"><span>${esc(r.name)}<span class="calc-date">${dt ? `⚠ цена от ${dt}` : 'дата неизвестна'}</span></span><span>${esc(fmtPiecePrice(r.piece))}</span></div>`;
+          return `<div class="calc-row calc-row-old"><span>${esc(r.name)}<span class="calc-date">${dt ? `${ic('warn', 'ic-xs')} цена от ${dt}` : 'дата неизвестна'}</span></span><span>${esc(fmtPiecePrice(r.piece))}</span></div>`;
         }).join(''));
     }
 
@@ -1878,7 +1956,7 @@
         lines.push(`<div class="stock-line">Хватит на <b>${fmtNum(Math.round(days * 10) / 10)}</b> ${plural(Math.round(days), 'день', 'дня', 'дней')}</div>`);
       }
       if (plan.due) {
-        lines.push(`<div class="stock-line stock-warn">⚠ Пора заказывать — точка заказа ${fmtNum(rop)} ${esc(u)}</div>`);
+        lines.push(`<div class="stock-line stock-warn">${ic('warn', 'ic-xs')} Пора заказывать — точка заказа ${fmtNum(rop)} ${esc(u)}</div>`);
       } else {
         lines.push(`<div class="stock-line">Заказывать, когда останется ${fmtNum(rop)} ${esc(u)}</div>`);
       }
@@ -1896,9 +1974,9 @@
           </div></details>`);
       }
       // честные оговорки: молчать о них опаснее, чем показать «красивое» число
-      if (qty <= 0) lines.push('<div class="stock-note">⚠ Товара нет на полке — значит, продажи в отчёте занижены, а спрос выше расчётного.</div>');
+      if (qty <= 0) lines.push(`<div class="stock-note">${ic('warn', 'ic-xs')} Товара нет на полке — значит, продажи в отчёте занижены, а спрос выше расчётного.</div>`);
       if (sales.periodTo && priceAgeDays(sales.periodTo) > SALES_STALE_DAYS) {
-        lines.push(`<div class="stock-note">⚠ Продажи за старый период (по ${fmtDate(sales.periodTo)}) — расчёт мог устареть, загрузи свежий отчёт.</div>`);
+        lines.push(`<div class="stock-note">${ic('warn', 'ic-xs')} Продажи за старый период (по ${fmtDate(sales.periodTo)}) — расчёт мог устареть, загрузи свежий отчёт.</div>`);
       }
     } else if (qty > 0) {
       lines.push('<div class="stock-note">Загрузи отчёт продаж — каталог посчитает, на сколько хватит и сколько заказать.</div>');
@@ -2051,7 +2129,7 @@
       if (currentProduct !== p) return;
       const cached = readPriceCache()[p.id];
       renderCardSuppliers(p, (cached && cached.rows) || [], baseSupIds,
-        { stale: cached ? `⚠ Нет связи — данные от ${fmtDate(new Date(cached.ts).toISOString())}` : '⚠ Нет связи с базой' });
+        { stale: cached ? `${warnMark}Нет связи — данные от ${fmtDate(new Date(cached.ts).toISOString())}` : warnMark + 'Нет связи с базой' });
       return;
     }
     if (currentProduct !== p) return; // пока грузили, открыли другой товар
@@ -2090,7 +2168,7 @@
       // ничего не показать молча — плохо: пользователь думает, что «сломалось».
       // Объясняем словами, что делать.
       if (opt.locked) {
-        box.innerHTML = '<div class="price-block"><button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены и контакты — вход для сотрудников</button></div>';
+        box.innerHTML = '<div class="price-block"><button class="btn btn-secondary btn-block" id="pricesLoginBtn">Цены и контакты — вход для сотрудников</button></div>';
       } else if (opt.stale) {
         box.innerHTML = `<div class="price-block"><p class="muted price-hint">${esc(opt.stale)}</p></div>`;
       } else {
@@ -2140,7 +2218,7 @@
           ? '<span class="price-date">дата неизвестна</span>'
           : (e.fresh
             ? `<span class="price-date">поступление ${d}</span>`
-            : `<span class="price-date price-old">⚠ цена от ${d} · поступления не было</span>`);
+            : `<span class="price-date price-old">${ic('warn', 'ic-xs')} цена от ${d} · поступления не было</span>`);
         // сверху — цена за штуку (её и сравниваем с розницей), снизу — за упаковку
         const per = p.is_weighted ? 'кг' : 'шт';
         const packLine = e.parts.packQty
@@ -2148,24 +2226,24 @@
           : '';
         right = `<span class="price-val${e.fresh ? '' : ' price-val-old'}">${fmtPiecePrice(e.parts.piece)}<span class="price-per"> / ${per}</span></span>
           ${packLine}
-          <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}${dateLabel}</span>`;
+          <span class="price-meta">${isBest ? `<span class="price-badge">${ic('check', 'ic-xs')} выгоднее</span>` : ''}${trend}${dateLabel}</span>`;
       } else {
         right = `<span class="price-noprice">${state.session ? 'цена не указана' : ''}</span>`;
       }
       return `<button class="price-row${isBest ? ' price-best' : ''}${e.last && !e.fresh ? ' price-row-old' : ''}" data-supplier-view="${esc(e.sup.id)}">
-        <span class="price-sup">🚚 ${esc(e.sup.name)}${hasContact ? ' <span class="sup-hasphone">📞</span>' : ''}</span>
+        <span class="price-sup">${esc(e.sup.name)}${hasContact ? ` <span class="sup-hasphone">${ic('phone', 'ic-xs')}</span>` : ''}</span>
         ${right}
         ${chevron}
       </button>`;
     }).join('');
 
     let footer = '';
-    if (opt.locked) footer = '<button class="btn btn-secondary btn-block" id="pricesLoginBtn">🔒 Цены и контакты — вход для сотрудников</button>';
+    if (opt.locked) footer = '<button class="btn btn-secondary btn-block" id="pricesLoginBtn">Цены и контакты — вход для сотрудников</button>';
     else if (opt.stale) footer = `<p class="muted price-hint">${esc(opt.stale)}</p>`;
-    else if (!freshPriced.length && entries.some((e) => e.last)) footer = `<p class="muted price-hint">⚠ Все цены старше ${STALE_PRICE_DAYS} дней — поступлений давно не было, цены могли измениться. «Выгоднее» не показываем.</p>`;
+    else if (!freshPriced.length && entries.some((e) => e.last)) footer = `<p class="muted price-hint">${warnMark}Все цены старше ${STALE_PRICE_DAYS} дней — поступлений давно не было, цены могли измениться. «Выгоднее» не показываем.</p>`;
     else footer = '<p class="muted price-hint">Нажми на поставщика — контакты, звонок и WhatsApp</p>';
     // предложение нового поставщика удобнее сравнивать рядом с текущими ценами
-    if (state.canPurchase) footer += '<button class="btn btn-secondary btn-block" id="calcOpenBtn">🧮 Посчитать предложение поставщика</button>';
+    if (state.canPurchase) footer += '<button class="btn btn-secondary btn-block" id="calcOpenBtn">Посчитать предложение поставщика</button>';
 
     box.innerHTML = `<div class="price-block"><div class="price-title">Поставщики и цены</div>${rowsHtml}${footer}</div>`;
   }
@@ -2186,7 +2264,7 @@
     // закупку показываем за ту же единицу, что и розница, — за штуку (или кг)
     const per = p.is_weighted ? 'кг' : 'шт';
     box.innerHTML = `<div class="markup-line ${cls}">
-      <span class="markup-val">${loss ? '⚠ ' : ''}Наценка ${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
+      <span class="markup-val">${loss ? warnMark : ''}Наценка ${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
       <span class="markup-sub">закупка ${esc(fmtPiecePrice(cost))} / ${per}</span>
     </div>`;
   }
@@ -2218,16 +2296,16 @@
     if (!sup) return;
     const e = cardSuppliers[id];
     const c = state.contacts[id];
-    $('supViewName').textContent = '🚚 ' + sup.name;
+    $('supViewName').textContent = sup.name;
 
     const parts = [];
     if (!state.session) {
-      parts.push('<button class="btn btn-secondary btn-block" id="supViewLogin">🔒 Цены и контакты — вход для сотрудников</button>');
+      parts.push('<button class="btn btn-secondary btn-block" id="supViewLogin">Цены и контакты — вход для сотрудников</button>');
     } else if (c && c.phone) {
       if (c.contact_name) parts.push(`<div class="supview-person">${esc(c.contact_name)}</div>`);
       parts.push(`<div class="supview-actions">
-        <a class="btn btn-primary supview-call" href="${esc(telHref(c.phone))}">📞 Позвонить</a>
-        <a class="btn supview-wa" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a></div>`);
+        <a class="btn btn-primary supview-call" href="${esc(telHref(c.phone))}">Позвонить</a>
+        <a class="btn supview-wa" href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">WhatsApp</a></div>`);
       parts.push(`<div class="supview-phone">${esc(c.phone)}</div>`);
       if (c.note) parts.push(`<div class="supview-note">${esc(c.note)}</div>`);
     } else if (state.session) {
@@ -2246,7 +2324,7 @@
         ? `<div class="supview-price">Цена: ${price}<br><span class="price-date">дата неизвестна</span></div>`
         : (isFreshPrice(e.last)
           ? `<div class="supview-price">Цена: ${price}<br><span class="price-date">поступление ${d}</span></div>`
-          : `<div class="supview-price supview-price-old">Цена: ${price}<br><span class="price-old">⚠ от ${d} · нового поступления не было, цена могла измениться</span></div>`));
+          : `<div class="supview-price supview-price-old">Цена: ${price}<br><span class="price-old">${ic('warn', 'ic-xs')} от ${d} · нового поступления не было, цена могла измениться</span></div>`));
       if (e.hist.length > 1) {
         parts.push('<div class="supview-hist-title">История цены (за ' + per + ')</div><div class="price-history">'
           + e.hist.slice(0, 12).map((h) => {
@@ -2258,7 +2336,7 @@
     }
 
     parts.push(`<button class="btn btn-secondary btn-block" data-supplier-all="${esc(id)}">Показать все товары поставщика →</button>`);
-    if (state.isAdmin) parts.push(`<button class="btn btn-ghost btn-block" id="supViewEdit" data-edit="${esc(id)}">✏️ Изменить контакты</button>`);
+    if (state.isAdmin) parts.push(`<button class="btn btn-ghost btn-block" id="supViewEdit" data-edit="${esc(id)}">Изменить контакты</button>`);
 
     $('supViewBody').innerHTML = parts.join('');
     openSheet('supplierViewSheet');
@@ -2534,9 +2612,9 @@
     _pubBusy = true;
     try {
       const sha = await publishShowcase();
-      if (sha) toast('☁️ Витрина обновлена на GitHub');
+      if (sha) toast('Витрина обновлена на GitHub');
     } catch (e) {
-      toast('⚠ Витрину не удалось опубликовать — проверь ключ в «Публикация на GitHub»');
+      toast('Витрину не удалось опубликовать — проверь ключ в «Публикация на GitHub»');
     } finally {
       _pubBusy = false;
       if (_pubAgain) { _pubAgain = false; autoPublish(); }
@@ -2987,8 +3065,8 @@
       $('loader').hidden = true;
       const banner = $('offlineBanner');
       banner.textContent = (await loadCache())
-        ? '📶 Нет связи. Показан сохранённый каталог'
-        : '📶 Нет интернета. Подключись к сети и обнови страницу';
+        ? 'Нет связи. Показан сохранённый каталог'
+        : 'Нет интернета. Подключись к сети и обнови страницу';
       banner.hidden = false;
       renderAll();
       return;
@@ -3007,9 +3085,9 @@
         const banner = $('offlineBanner');
         if (state.products.length) {
           const mins = Math.max(1, Math.round((Date.now() - state.lastFetch) / 60000));
-          banner.textContent = `📶 Нет связи с базой. Показан каталог, сохранённый ${mins < 60 ? mins + ' мин' : Math.round(mins / 60) + ' ч'} назад`;
+          banner.textContent = `Нет связи с базой. Показан каталог, сохранённый ${mins < 60 ? mins + ' мин' : Math.round(mins / 60) + ' ч'} назад`;
         } else {
-          banner.textContent = '📶 Нет связи с базой данных. Проверь интернет и обнови страницу';
+          banner.textContent = 'Нет связи с базой данных. Проверь интернет и обнови страницу';
         }
         banner.hidden = false;
         $('loader').hidden = true;
@@ -3065,7 +3143,7 @@
       $('sheetAdminActions').hidden = !state.isAdmin;
       if (currentProduct) { renderProductPrices(currentProduct); renderCompetitors(currentProduct); }
     }
-    renderAll(); // и сетка, и чипы — после входа появляется «🔥 Ходовые»
+    renderAll(); // и сетка, и чипы — после входа появляется «Ходовые»
     // владелец вошёл → тихо убираем дубли (если есть) и запускаем автопоиск фото
     if (isOwner()) { setTimeout(autoDedup, 2000); setTimeout(autoPhotoSearch, 4000); }
   }
@@ -3140,9 +3218,9 @@
     const d = fmtDate(cheap.observed_at);
     const n = list.length;
     const sub = `<span class="comp-v-sub">сравнили с ${n} ${plural(n, 'магазином', 'магазинами', 'магазинами')}${d ? ` · запись от ${d}` : ''}</span>`;
-    if (cp > our) return `<div class="comp-verdict comp-v-good">✓ У нас дешевле всех — на ${esc(fmtPrice(cp - our))} дешевле, чем в магазине «${who}» ${sub}</div>`;
+    if (cp > our) return `<div class="comp-verdict comp-v-good">${ic('check', 'ic-xs')} У нас дешевле всех — на ${esc(fmtPrice(cp - our))} дешевле, чем в магазине «${who}» ${sub}</div>`;
     if (cp === our) return `<div class="comp-verdict">У нас цена как у самых дешёвых — в магазине «${who}» столько же ${sub}</div>`;
-    return `<div class="comp-verdict comp-v-bad">⚠ Дешевле в магазине «${who}» — ${esc(fmtPrice(cp))}, это на ${esc(fmtPrice(our - cp))} меньше нашей ${sub}</div>`;
+    return `<div class="comp-verdict comp-v-bad">${ic('warn', 'ic-xs')} Дешевле в магазине «${who}» — ${esc(fmtPrice(cp))}, это на ${esc(fmtPrice(our - cp))} меньше нашей ${sub}</div>`;
   }
 
   // Цены в других магазинах. Видят ВСЕ (в том числе покупатель без входа),
@@ -3160,7 +3238,7 @@
     const canAdd = !!state.session; // вошедший сотрудник или владелец
 
     const ourRow = `<div class="comp-row comp-ours">
-      <span class="comp-store">🏪 Наш магазин</span>
+      <span class="comp-store">Наш магазин</span>
       <span class="comp-price">${our != null ? esc(fmtPrice(our)) : '<span class="muted" style="margin:0">цена не указана</span>'}</span>
     </div>`;
 
@@ -3193,7 +3271,7 @@
           else diff = '<span class="comp-diff">такая же цена</span>';
         }
         return `<div class="comp-row">
-          <span class="comp-store">🏬 ${esc(competitorName(r.competitor_id))}<span class="comp-date">записано ${esc(fmtDate(r.observed_at))}</span></span>
+          <span class="comp-store">${esc(competitorName(r.competitor_id))}<span class="comp-date">записано ${esc(fmtDate(r.observed_at))}</span></span>
           <span class="comp-price">${esc(fmtPrice(price))}${diff}</span>
         </div>`;
       }).join('');
@@ -3202,7 +3280,7 @@
     box.innerHTML = `<div class="comp-block">
       <div class="comp-title">Цены в других магазинах</div>
       ${compVerdict(our, all)}${filterBar}${ourRow}${list}
-      ${canAdd ? '<button class="btn btn-secondary btn-block" id="compAddBtn">＋ Записать цену магазина</button>' : ''}
+      ${canAdd ? '<button class="btn btn-secondary btn-block" id="compAddBtn">Записать цену магазина</button>' : ''}
     </div>`;
   }
 
@@ -3224,7 +3302,7 @@
     }
     const rows = [...byStore.entries()].sort((a, b) => b[1].n - a[1].n);
     box.innerHTML = rows.map(([id, st]) => `<button type="button" class="btn btn-secondary btn-block comp-store-btn" data-comp-view="${esc(id)}">
-        <span class="comp-store">🏬 ${esc(competitorName(id))}<span class="comp-date">последняя запись ${esc(fmtDate(st.last))}</span></span>
+        <span class="comp-store">${esc(competitorName(id))}<span class="comp-date">последняя запись ${esc(fmtDate(st.last))}</span></span>
         <span class="comp-store-n">${st.n} ${plural(st.n, 'цена', 'цены', 'цен')}</span>
       </button>`).join('');
   }
@@ -3232,7 +3310,7 @@
   function openCompStoreView(storeId) {
     const rows = (state.compPrices || []).filter((r) => r.competitor_id === storeId)
       .slice().sort((a, b) => String(b.observed_at || '').localeCompare(String(a.observed_at || '')));
-    $('compStoreViewTitle').textContent = '🏬 ' + competitorName(storeId);
+    $('compStoreViewTitle').textContent = competitorName(storeId);
     const body = $('compStoreViewBody');
     body.innerHTML = rows.length ? rows.map((r) => {
       const p = state.products.find((x) => x.id === r.product_id);
@@ -3283,12 +3361,12 @@
     let html = filtered.slice(0, 30).map((c) => {
       const on = compChosenId === c.id;
       return `<button type="button" class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-comp-store="${esc(c.id)}">
-        ${on ? '✓ ' : ''}🏬 ${esc(c.name)}</button>`;
+        ${on ? checkMark : ''}${esc(c.name)}</button>`;
     }).join('');
     // предложить создать новый магазин из введённого текста
     const exists = filtered.some((c) => norm(c.name) === q);
     if (typed && !exists) {
-      html += `<button type="button" class="btn btn-secondary btn-block comp-new" data-comp-new="${esc(typed)}">＋ Создать магазин «${esc(typed)}»</button>`;
+      html += `<button type="button" class="btn btn-secondary btn-block comp-new" data-comp-new="${esc(typed)}">Создать магазин «${esc(typed)}»</button>`;
     }
     if (!html) html = '<p class="muted">Начни вводить название магазина</p>';
     $('compStoreList').innerHTML = html;
@@ -3325,7 +3403,7 @@
         if (error) throw error;
       }
       closeSheet('competitorAddSheet');
-      toast('Цена магазина сохранена ✓');
+      toast('Цена магазина сохранена');
       if (currentProduct === compProduct) renderCompetitors(compProduct);
     } catch (err) {
       $('compError').textContent = 'Не удалось сохранить: ' + (err.message || err);
@@ -3350,7 +3428,7 @@
       p.photos = [...(p.photos || []), url]; // сразу показываем
       if (currentProduct === p) openProduct(p);
       renderGrid();
-      toast('Фото добавлено ✓');
+      toast('Фото добавлено');
     } catch (err) {
       toast('Не удалось добавить фото: ' + (err.message || err));
     } finally {
@@ -3372,7 +3450,7 @@
       const url = await uploadPhoto(blob, 'suggestions');
       const { error } = await sb.rpc('catalog_suggest_photo', { p_product_id: p.id, p_url: url });
       if (error) throw error;
-      toast('Спасибо! Фото отправлено на проверку ✓');
+      toast('Спасибо! Фото отправлено на проверку');
     } catch (err) {
       toast('Не удалось отправить фото: ' + (err.message || err));
     } finally {
@@ -3409,7 +3487,7 @@
 
   function renderSuggestions() {
     const box = $('suggestionsList');
-    if (!suggestions.length) { box.innerHTML = '<p class="muted">🎉 Очередь пуста — новых предложений нет.</p>'; return; }
+    if (!suggestions.length) { box.innerHTML = '<p class="muted">Очередь пуста — новых предложений нет.</p>'; return; }
     const byId = new Map(state.products.map((p) => [p.id, p]));
     box.innerHTML = suggestions.map((s) => {
       const p = byId.get(s.product_id);
@@ -3418,8 +3496,8 @@
         <div class="sugg-info">
           <div class="sugg-name">${esc(p ? p.name : 'Товар удалён')}</div>
           <div class="sugg-actions">
-            <button class="btn btn-primary sugg-ok" data-approve="${esc(s.id)}">✓ Одобрить</button>
-            <button class="btn btn-danger sugg-no" data-reject="${esc(s.id)}">✕ Отклонить</button>
+            <button class="btn btn-primary sugg-ok" data-approve="${esc(s.id)}">Одобрить</button>
+            <button class="btn btn-danger sugg-no" data-reject="${esc(s.id)}">Отклонить</button>
           </div>
         </div>
       </div>`;
@@ -3438,7 +3516,7 @@
       renderSuggestions();
       saveCache(); renderGrid();
       state.suggCount = Math.max(0, (state.suggCount || 1) - 1);
-      toast('Фото одобрено ✓');
+      toast('Фото одобрено');
     } catch (e) { toast('Не получилось: ' + (e.message || e)); }
   }
 
@@ -3477,7 +3555,7 @@
     if (!list.length) {
       box.innerHTML = total
         ? '<p class="muted">Ничего не нашлось. Измени запрос.</p>'
-        : '<p class="muted">🎉 У всех товаров есть фото — витрина заполнена!</p>';
+        : '<p class="muted">У всех товаров есть фото — витрина заполнена!</p>';
       return;
     }
     const shown = list.slice(0, PHOTO_FILL_LIMIT);
@@ -3485,7 +3563,7 @@
       const sub = [p.code ? 'Код ' + esc(p.code) : '', (p.barcodes || [])[0] ? 'ШК ' + esc(p.barcodes[0]) : ''].filter(Boolean).join(' · ');
       return `<div class="fill-row">
         <div class="fill-info"><div class="fill-name">${esc(p.name)}</div>${sub ? `<div class="fill-sub">${sub}</div>` : ''}</div>
-        <button class="btn btn-primary fill-cam" data-fill-cam="${esc(p.id)}">📷</button>
+        <button class="btn btn-primary fill-cam" data-fill-cam="${esc(p.id)}" aria-label="Снять">${ic('camera', 'ic-xs')}</button>
       </div>`;
     }).join('') + (list.length > shown.length
       ? `<p class="muted" style="text-align:center;margin-top:10px">…и ещё ${list.length - shown.length}. Уточни поиском.</p>` : '');
@@ -3548,9 +3626,9 @@
     const html = formPhotos.map((ph, i) => `
       <div class="photo-thumb">
         <img src="${esc(ph.url || ph.preview)}" alt="">
-        <button type="button" class="thumb-x" data-idx="${i}">✕</button>
+        <button type="button" class="thumb-x" data-idx="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
       </div>`).join('');
-    $('photoManager').innerHTML = html + '<button type="button" class="photo-add" id="photoAddBtn">📷</button>';
+    $('photoManager').innerHTML = html + `<button type="button" class="photo-add" id="photoAddBtn" aria-label="Добавить фото">${ic('camera')}</button>`;
   }
 
   async function compressImage(file, maxSide = 1280, quality = 0.82) {
@@ -3658,7 +3736,7 @@
         if (editingProduct) Object.assign(editingProduct, rec);
         else state.products.push(Object.assign({ id: svUuid() }, rec));
         closeSheet('formSheet'); closeSheet('productSheet');
-        await svSaveAndPublish(editingProduct ? 'Товар обновлён ✓' : 'Товар добавлен ✓');
+        await svSaveAndPublish(editingProduct ? 'Товар обновлён' : 'Товар добавлен');
       } catch (err) {
         $('formError').textContent = 'Не удалось сохранить: ' + (err.message || err);
         $('formError').hidden = false;
@@ -3693,11 +3771,11 @@
         const { error } = await sb.from('catalog_products').update(record).eq('id', editingProduct.id);
         if (error) throw error;
         await removePhotosFromStorage(removed);
-        toast('Товар обновлён ✓');
+        toast('Товар обновлён');
       } else {
         const { error } = await sb.from('catalog_products').insert(record);
         if (error) throw error;
-        toast('Товар добавлен ✓');
+        toast('Товар добавлен');
       }
       closeSheet('formSheet');
       closeSheet('productSheet');
@@ -3740,7 +3818,7 @@
     $('groupsList').innerHTML = state.groups.map((g) => `
       <div class="group-row" data-id="${esc(g.id)}">
         <input class="input group-name" value="${esc(g.name)}">
-        <button class="group-del" title="Удалить группу">🗑</button>
+        <button class="group-del" title="Удалить группу" aria-label="Удалить">${ic('trash', 'ic-xs')}</button>
       </div>`).join('') || '<p class="muted">Групп пока нет — добавь первую ниже</p>';
   }
 
@@ -3752,7 +3830,7 @@
       state.groups.push({ id: svUuid(), name, sort_order: maxSort + 1 });
       $('newGroupName').value = '';
       renderGroupsManager();
-      await svSaveAndPublish('Группа добавлена ✓');
+      await svSaveAndPublish('Группа добавлена');
       return;
     }
     const { error } = await sb.from('catalog_groups').insert({ name, sort_order: maxSort + 1 });
@@ -3761,7 +3839,7 @@
     await refresh({ silent: true });
     renderAll();
     renderGroupsManager();
-    toast('Группа добавлена ✓');
+    toast('Группа добавлена');
   }
 
   async function renameGroup(id, name) {
@@ -3804,7 +3882,7 @@
     $('fSupplierTags').innerHTML = formSupplierIds.map((id) => {
       const s = supplierById(id);
       if (!s) return '';
-      return `<span class="tag">🚚 ${esc(s.name)} <button type="button" data-untag="${esc(id)}">✕</button></span>`;
+      return `<span class="tag">${esc(s.name)} <button type="button" data-untag="${esc(id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button></span>`;
     }).join('') || '<span class="muted" style="margin:0">Не указаны</span>';
   }
 
@@ -3820,7 +3898,7 @@
       : state.suppliers;
     let html = '';
     if (state.selSuppliers.length) {
-      html += `<button class="btn btn-ghost btn-block" data-pick-supplier="" style="margin-bottom:6px">✕ Снять выбор (${state.selSuppliers.length})</button>`;
+      html += `<button class="btn btn-ghost btn-block" data-pick-supplier="" style="margin-bottom:6px">Снять выбор (${state.selSuppliers.length})</button>`;
     }
     html += filtered.slice(0, 100).map((s) => {
       const on = state.selSuppliers.includes(s.id);
@@ -3828,12 +3906,12 @@
       const c = state.contacts[s.id];
       const contact = c && (c.phone || c.contact_name || c.note)
         ? `<div class="sup-contact">${c.contact_name ? `<span>${esc(c.contact_name)}</span>` : ''}${
-          c.phone ? `<a href="${esc(telHref(c.phone))}">📞 ${esc(c.phone)}</a><a href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">💬 WhatsApp</a>` : ''}${
+          c.phone ? `<a href="${esc(telHref(c.phone))}">${esc(c.phone)}</a><a href="${esc(waHref(c.phone))}" target="_blank" rel="noopener">WhatsApp</a>` : ''}${
           c.note ? `<div class="sup-note">${esc(c.note)}</div>` : ''}</div>`
         : '';
       return `<div class="sup-row">
         <button class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-pick-supplier="${esc(s.id)}">
-          <span>${on ? '✓ ' : ''}🚚 ${esc(s.name)}</span> <span class="chip-count">${counts[s.id] || 0}</span>
+          <span>${on ? checkMark : ''}${esc(s.name)}</span> <span class="chip-count">${counts[s.id] || 0}</span>
         </button>${contact}</div>`;
     }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
     if (filtered.length > 100) html += `<p class="muted">Показаны первые 100 из ${filtered.length} — уточни поиск</p>`;
@@ -3852,13 +3930,13 @@
     const picked = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted');
     let html = '';
     if (picked.length) {
-      html += `<button class="btn btn-ghost btn-block" data-pick-group="" style="margin-bottom:6px">✕ Снять выбор (${picked.length})</button>`;
+      html += `<button class="btn btn-ghost btn-block" data-pick-group="" style="margin-bottom:6px">Снять выбор (${picked.length})</button>`;
     }
     html += filtered.map((g) => {
       const on = state.selGroups.includes(g.id);
       return `
       <button class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-pick-group="${esc(g.id)}">
-        <span>${on ? '✓ ' : ''}📁 ${esc(g.name)}</span> <span class="chip-count">${counts[g.id] || 0}</span>
+        <span>${on ? checkMark : ''}${esc(g.name)}</span> <span class="chip-count">${counts[g.id] || 0}</span>
       </button>`;
     }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
     $('groupsPickList').innerHTML = html;
@@ -3869,8 +3947,8 @@
     $('suppliersManageList').innerHTML = state.suppliers.map((s) => `
       <div class="group-row" data-id="${esc(s.id)}">
         <input class="input supplier-name" value="${esc(s.name)}">
-        <button class="group-del sup-contact-btn" title="Контакты поставщика">${state.contacts[s.id]?.phone ? '📞' : '📇'}</button>
-        <button class="group-del" title="Удалить поставщика">🗑</button>
+        <button class="group-del sup-contact-btn" title="Контакты поставщика">${ic('phone', 'ic-xs')}</button>
+        <button class="group-del" title="Удалить поставщика" aria-label="Удалить">${ic('trash', 'ic-xs')}</button>
       </div>`).join('') || '<p class="muted">Поставщиков пока нет — добавь первого ниже</p>';
   }
 
@@ -3908,7 +3986,7 @@
       state.contacts[editingContactSupplier] = record;
       closeSheet('supplierContactSheet');
       renderSuppliersManager();
-      toast('Контакты сохранены ✓');
+      toast('Контакты сохранены');
     } catch (err) {
       $('contactError').textContent = 'Не удалось сохранить: ' + (err.message || err)
         + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-2.sql в SQL Editor.';
@@ -3927,7 +4005,7 @@
     await refresh({ silent: true });
     renderAll();
     renderSuppliersManager();
-    toast('Поставщик добавлен ✓');
+    toast('Поставщик добавлен');
   }
 
   async function renameSupplier(id, name) {
@@ -4369,7 +4447,7 @@
     }
     await refresh({ silent: true });
     renderAll();
-    status(`Готово! Розничных цен обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
+    status(`Готово! Розничных цен обновлено: ${updates.length}, новых товаров: ${inserts.length}`);
   }
 
   /* ── Умный импорт: одна вкладка, каталог сам распознаёт файлы ──
@@ -4423,10 +4501,10 @@
 
   function renderSmartList() {
     $('smartList').innerHTML = smartEntries.map((e) => {
-      if (e.error) return `<div class="smart-row smart-bad"><b>${esc(e.name)}</b><span>⚠ ${esc(e.error)}</span></div>`;
+      if (e.error) return `<div class="smart-row smart-bad"><b>${esc(e.name)}</b><span>${esc(e.error)}</span></div>`;
       const label = REPORT_LABEL[e.type] || e.type;
       const extra = e.mergedInto ? ` → добавятся к «${esc(e.mergedInto)}»` : '';
-      return `<div class="smart-row"><b>${esc(e.name)}</b><span>✓ ${esc(label)}: ${e.count} ${extra}<span class="smart-st" data-st="${esc(e.name)}"></span></span></div>`;
+      return `<div class="smart-row"><b>${esc(e.name)}</b><span>${esc(label)}: ${e.count} ${extra}<span class="smart-st" data-st="${esc(e.name)}"></span></span></div>`;
     }).join('');
   }
 
@@ -4497,15 +4575,15 @@
             okCount++; continue;
           }
           else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
-          setSmartRowStatus(e, 'загружено ✓'); okCount++;
+          setSmartRowStatus(e, 'загружено'); okCount++;
         } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
       }
       state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
       buildIndex(); state.popularIds = buildPopularIds(); renderAll();
       smartLog('Сохраняем на GitHub…');
       $('smartMissing').hidden = !lastMissing.length;
-      try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован ✓`); toast('Каталог обновлён ✓'); }
-      catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('⚠ Не удалось опубликовать'); }
+      try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован`); toast('Каталог обновлён'); }
+      catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('Не удалось опубликовать'); }
       btn.disabled = false; btn.hidden = true;
       return;
     }
@@ -4527,8 +4605,8 @@
     }
     btn.disabled = false;
     btn.hidden = true;
-    smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён ✓`);
-    toast('Импорт завершён ✓');
+    smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён`);
+    toast('Импорт завершён');
   }
 
   function impStatus(msg) { if (smartSink) smartSink(msg); }
@@ -4669,15 +4747,15 @@
       await refresh({ silent: true });
       renderAll();
       if (pricesError) {
-        impStatus(`Товары загружены (${total} ✓), но цены сохранить не удалось: ${pricesError.message}. `
+        impStatus(`Товары загружены (${total}), но цены сохранить не удалось: ${pricesError.message}. `
           + 'Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-2.sql в SQL Editor и повтори импорт.');
       } else {
         const priceNote = priceRows.length
           ? ` Цены: изменилось ${pricesChanged} из ${priceRows.length} (одинаковые не записываются — база не растёт зря).`
           : '';
-        impStatus(`Готово! Загружено ${total} товаров ✓${priceNote} Можно закрыть окно.`);
+        impStatus(`Готово! Загружено ${total} товаров${priceNote} Можно закрыть окно.`);
       }
-      toast('Импорт завершён ✓');
+      toast('Импорт завершён');
       await autoDedup(); // тихо убрать дубли, если вдруг появились
       setTimeout(autoPhotoSearch, 1500); // сразу дотянуть фото для новых товаров
       impParsed = null;
@@ -4825,7 +4903,7 @@
     if (!todo.length) return;
     photoSearchRunning = true;
     const save = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
-    toast(`🔎 Ищу фото товаров в фоне (${todo.length})…`);
+    toast(`Ищу фото товаров в фоне (${todo.length})…`);
     let done = 0;
     let found = 0;
     let miss = 0;   // подряд неудачных обращений к базе (признак, что она недоступна)
@@ -4847,8 +4925,8 @@
       saveCache(); renderGrid();
       // публикуем ОДНИМ разом: публикация на каждое фото создала бы тысячи
       // коммитов и упёрлась бы в ограничения GitHub
-      if (state.serverless) await svSaveAndPublish(`Добавлено фото: ${found} ✓`);
-      else toast(`Добавлено фото: ${found} ✓`);
+      if (state.serverless) await svSaveAndPublish(`Добавлено фото: ${found}`);
+      else toast(`Добавлено фото: ${found}`);
     }
   }
 
@@ -4894,18 +4972,18 @@
       const del = new Set(toDelete);
       state.products = state.products.filter((p) => !del.has(p.id));
       buildIndex(); saveCache(); renderAll();
-      toast(`Убрано дублей: ${toDelete.length} ✓`);
+      toast(`Убрано дублей: ${toDelete.length}`);
     } catch (e) {
       if (!silent) toast('Ошибка: ' + (e.message || e));
     } finally {
       dedupRunning = false;
-      if (btn) { btn.disabled = false; btn.textContent = '🧹 Убрать дубли товаров'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Убрать дубли товаров'; }
     }
   }
 
   function dedupProducts() { // ручная кнопка
     const ids = findDuplicateIds();
-    if (!ids.length) { toast('Дублей не найдено ✓'); return; }
+    if (!ids.length) { toast('Дублей не найдено'); return; }
     if (confirm(`Найдено дублей: ${ids.length}. Убрать их? Останется по одному товару.`)) runDedup(ids, { silent: false });
   }
 
@@ -4953,8 +5031,8 @@
     if (found) {
       saveCache();
       renderGrid();
-      if (state.serverless) await svSaveAndPublish(`Фото найдены и сохранены: ${found} ✓`);
-      else toast(`Фото найдены и сохранены: ${found} ✓`);
+      if (state.serverless) await svSaveAndPublish(`Фото найдены и сохранены: ${found}`);
+      else toast(`Фото найдены и сохранены: ${found}`);
     }
   }
 
@@ -5047,8 +5125,8 @@
       }
       saveCache();
       renderGrid();
-      photoExcelStatus(`Готово! Фото показаны у ${entries.length} товаров ✓`);
-      toast('Фото из Excel добавлены ✓');
+      photoExcelStatus(`Готово! Фото показаны у ${entries.length} товаров`);
+      toast('Фото из Excel добавлены');
       photoExcelParsed = null;
       btn.textContent = 'Проверить файл';
     } catch (err) {
@@ -5162,10 +5240,10 @@
         done += Math.min(500, list.length - i);
         salesStatus(`Сохраняем продажи… ${done} из ${list.length}`);
       }
-      salesStatus(`Готово! Продажи за ${fmtDate(periodFrom)}–${fmtDate(periodTo)} сохранены: ${list.length} товаров ✓`
+      salesStatus(`Готово! Продажи за ${fmtDate(periodFrom)}–${fmtDate(periodTo)} сохранены: ${list.length} товаров`
         + (unmatched ? ` Не нашлось по названию: ${unmatched}.` : '')
-        + ' Смотри «🔥 Ходовые товары».');
-      toast('Продажи загружены ✓');
+        + ' Смотри «Ходовые товары».');
+      toast('Продажи загружены');
       salesParsed = null;
       btn.textContent = 'Проверить файл';
     } catch (err) {
@@ -5237,8 +5315,8 @@
       await refresh({ silent: true });
       if (state.canPurchase) await loadContacts();
       renderAll();
-      contactsStatus(`Готово! Поставщиков в файле: ${list.length}, телефонов сохранено: ${records.length} ✓`);
-      toast('Контакты загружены ✓');
+      contactsStatus(`Готово! Поставщиков в файле: ${list.length}, телефонов сохранено: ${records.length}`);
+      toast('Контакты загружены');
       contactsParsed = null;
       btn.textContent = 'Проверить файл';
     } catch (err) {
@@ -5378,8 +5456,8 @@
       await refresh({ silent: true });
       renderAll();
       await autoDedup(); // тихо убрать дубли, если появились при сопоставлении по названию
-      stockStatus(`Готово! Остатки на ${fmtDate(at)} сохранены. Обновлено: ${updates.length}, новых товаров: ${inserts.length} ✓`);
-      toast('Остатки загружены ✓');
+      stockStatus(`Готово! Остатки на ${fmtDate(at)} сохранены. Обновлено: ${updates.length}, новых товаров: ${inserts.length}`);
+      toast('Остатки загружены');
       stockParsed = null;
       btn.textContent = 'Проверить файл';
     } catch (err) {
@@ -5439,7 +5517,7 @@
     if (!periods.length) {
       box.innerHTML = '';
       $('topDeletePeriod').hidden = true;
-      $('topList').innerHTML = '<p class="muted">Продажи ещё не загружены. Меню админа → «📈 Импорт продаж» — загрузи отчёт «Продажи» из 1С.</p>';
+      $('topList').innerHTML = '<p class="muted">Продажи ещё не загружены. Меню админа → «Импорт продаж» — загрузи отчёт «Продажи» из 1С.</p>';
       return;
     }
     // удалить отчёт может только администратор
@@ -5531,7 +5609,7 @@
       const barW = Math.max(4, Math.round((metric(row) / maxMetric) * 100));
       return `<div class="top-row${i < 3 ? ' top-row-lead' : ''}" data-id="${esc(p.id)}">
         <span class="top-rank">${i + 1}</span>
-        <span class="top-photo">${photo ? `<img src="${esc(photo)}" loading="lazy" alt="">` : '📦'}</span>
+        <span class="top-photo">${photo ? `<img src="${esc(photo)}" loading="lazy" alt="">` : ic('box', 'ic-ph')}</span>
         <div class="top-main">
           <div class="top-name">${esc(p.name)}</div>
           <div class="top-bar"><span style="width:${barW}%"></span></div>
@@ -5665,10 +5743,10 @@
       if (!caps || !caps.torch) return; // камера не умеет — прячем кнопку
     } catch (e) { return; }
     btn.hidden = false;
-    btn.textContent = '🔦 Подсветка';
+    btn.textContent = 'Подсветка';
     btn.onclick = async () => {
       on = !on;
-      try { await track.applyConstraints({ advanced: [{ torch: on }] }); btn.textContent = on ? '🔦 Выключить подсветку' : '🔦 Подсветка'; }
+      try { await track.applyConstraints({ advanced: [{ torch: on }] }); btn.textContent = on ? 'Выключить подсветку' : 'Подсветка'; }
       catch (e) { toast('Подсветка недоступна на этом телефоне'); }
     };
   }
@@ -6053,10 +6131,10 @@
         $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
         // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
         const noPhoto = photoCandidates().length;
-        $('menuPhotoFill').textContent = noPhoto ? `📷 Дозаполнить фото (${noPhoto})` : '📷 Дозаполнить фото — всё есть ✓';
+        $('menuPhotoFill').textContent = noPhoto ? `Дозаполнить фото (${noPhoto})` : 'Дозаполнить фото — всё есть';
         // «Фото на проверке» — показываем, если в очереди что-то есть
         $('menuSuggestions').hidden = !(state.suggCount > 0);
-        $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+        $('menuSuggestions').textContent = `Фото на проверке (${state.suggCount || 0})`;
         // цены магазинов ведут все вошедшие — и владелец, и сотрудник
         $('menuCompStores').hidden = false;
         // Бесплатный режим: серверные функции скрываем — они работали только с сервером
@@ -6072,7 +6150,7 @@
         if (!state.serverless) {
           loadSuggestionsCount().then(() => {
             $('menuSuggestions').hidden = !(state.suggCount > 0);
-            $('menuSuggestions').textContent = `🖼 Фото на проверке (${state.suggCount || 0})`;
+            $('menuSuggestions').textContent = `Фото на проверке (${state.suggCount || 0})`;
           });
         }
       } else {
@@ -6095,7 +6173,7 @@
       if (all) { state.selCats = [all.dataset.catTile]; state.selGroups = []; switchTab('catalog'); }
     });
 
-    // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
+    // цены в карточке: открывает вход, тап по строке — историю цены
     // тап по поставщику в карточке товара → его контакты и цена
     $('sheetPrices').addEventListener('click', (e) => {
       if (e.target.closest('#pricesLoginBtn')) { openLogin(); return; }
@@ -6128,7 +6206,7 @@
     }
     $('orSave').addEventListener('click', saveOrderRules);
 
-    // разведка цен: «＋ Добавить цену магазина» в карточке товара
+    // разведка цен: «Добавить цену магазина» в карточке товара
     $('menuCompStores').addEventListener('click', () => {
       closeSheet('adminMenuSheet');
       renderCompStores();
@@ -6258,21 +6336,21 @@
         } else if (!url) {
           toast(state.serverless
             ? 'В открытых базах фото этого товара нет'
-            : 'В открытых базах фото этого товара нет — сфотографируй его через 📷 в карточке');
+            : 'В открытых базах фото этого товара нет — сфотографируй его через в карточке');
         } else {
           await attachFoundPhoto(p, url);
           saveCache();
           renderGrid();
           openProduct(p); // перерисуем карточку уже с фото
           // одно фото — публикуем сразу: владелец нажал кнопку и ждёт результата
-          if (state.serverless) await svSaveAndPublish('Фото найдено и сохранено ✓');
-          else toast('Фото найдено и сохранено ✓');
+          if (state.serverless) await svSaveAndPublish('Фото найдено и сохранено');
+          else toast('Фото найдено и сохранено');
         }
       } catch (e) {
         toast('Не получилось: ' + (e.message || e));
       } finally {
         btn.disabled = false;
-        btn.textContent = '🖼 Найти фото в интернете';
+        btn.textContent = 'Найти фото в интернете';
       }
     });
 
@@ -6300,7 +6378,7 @@
         try {
           await publishFull(secretPw);
           closeSheet('staffPassSheet');
-          toast('Пароль сотрудника сохранён ✓ Теперь сотрудник входит этим паролем');
+          toast('Пароль сотрудника сохранён Теперь сотрудник входит этим паролем');
         } catch (err) {
           $('staffPassError').textContent = 'Не удалось опубликовать: ' + (err.message || err) + '. Проверь GitHub-ключ.';
           $('staffPassError').hidden = false;
@@ -6318,7 +6396,7 @@
         return;
       }
       closeSheet('staffPassSheet');
-      toast('Пароль магазина изменён ✓ Устройства сотрудников выйдут в течение часа');
+      toast('Пароль магазина изменён Устройства сотрудников выйдут в течение часа');
     });
 
     $('btnLogoutStaff').addEventListener('click', async () => {
@@ -6331,14 +6409,14 @@
         return;
       }
       closeSheet('staffPassSheet');
-      toast('Готово ✓ Устройства сотрудников выйдут в течение часа');
+      toast('Готово Устройства сотрудников выйдут в течение часа');
     });
 
     // ── Публикация на GitHub: окошко ключа ──
     function renderPublishStatus() {
       const has = ghConfigured();
       $('publishStatus').innerHTML = has
-        ? '<span class="pub-ok">✓ Ключ на месте. Витрина публикуется автоматически после правок.</span>'
+        ? '<span class="pub-ok">Ключ на месте. Витрина публикуется автоматически после правок.</span>'
         : '<span class="pub-warn">Ключ ещё не вставлен — витрина на GitHub не обновляется.</span>';
       $('ghTokenClear').hidden = !ghToken();
       $('ghPublishNow').hidden = !has;
@@ -6368,7 +6446,7 @@
         // проверяем: ключ действителен и видит нашу ветку деплоя
         const r = await ghApi(`${ghRepo()}/git/ref/heads/${ghBranch()}`);
         if (!r.ok) throw new Error(r.status === 404 ? 'нет доступа к репозиторию Auron — проверь, что выбрал его при создании ключа' : 'ключ не подошёл (' + r.status + ')');
-        toast('Ключ сохранён ✓');
+        toast('Ключ сохранён');
         $('ghTokenInput').value = '';
         renderPublishStatus();
       } catch (e) {
@@ -6383,7 +6461,7 @@
       $('publishError').hidden = true;
       try {
         await publishShowcase({ force: true });
-        toast('☁️ Витрина опубликована ✓');
+        toast('Витрина опубликована');
       } catch (e) {
         $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
         $('publishError').hidden = false;
@@ -6415,7 +6493,7 @@
           $('loginPassword').value = ''; $('loginEmail').value = '';
           closeSheet('loginSheet');
           btn.disabled = false; btn.textContent = 'Войти';
-          toast('Вход выполнен ✓');
+          toast('Вход выполнен');
           return;
         } catch (err) {
           btn.disabled = false; btn.textContent = 'Войти';
@@ -6429,7 +6507,7 @@
             applyServerless(password);
             $('loginPassword').value = ''; $('loginEmail').value = '';
             closeSheet('loginSheet');
-            toast('Первый вход. Загрузи Excel — соберём каталог ✓');
+            toast('Первый вход. Загрузи Excel — соберём каталог');
             openImportHub();
             return;
           }
@@ -6439,7 +6517,7 @@
             applyStaff(password);
             $('loginPassword').value = ''; $('loginEmail').value = '';
             closeSheet('loginSheet');
-            toast('Вход сотрудника ✓');
+            toast('Вход сотрудника');
             return;
           } catch (e2) {
             $('loginError').textContent = 'Пароль не подошёл. Проверь пароль каталога или пароль сотрудника.';
@@ -6489,7 +6567,7 @@
       $('loginPassword').value = '';
       $('loginEmail').value = '';
       closeSheet('loginSheet');
-      toast('Вход выполнен ✓');
+      toast('Вход выполнен');
     });
 
     $('menuLogout').addEventListener('click', async () => {
@@ -6519,7 +6597,7 @@
       const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
       if (!lines.includes(text)) lines.push(text);
       ta.value = lines.join('\n');
-      toast('Штрихкод считан ✓');
+      toast('Штрихкод считан');
     }));
 
     // Поставщики в форме товара: добавить из списка / убрать тапом по ✕
@@ -6664,6 +6742,7 @@
 
   async function init() {
     deviceId(); // закрепляем анонимный номер устройства (память избранного/просмотров)
+    paintIcons();        // <i data-ic="…"> в разметке → рисунки из набора
     initTheme();
     loadFilters();
     loadOrderRules();
