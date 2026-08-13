@@ -1509,11 +1509,13 @@
     const packTxt = o.packQty ? ` · <b>${esc(fmtPrice(o.pack))}</b> за упаковку (${fmtNum(o.packQty)} ${esc(base)})` : '';
     parts.push(`<div class="calc-out calc-main"><b>${esc(fmtPiecePrice(o.piece))}</b> за ${esc(base)}${packTxt}</div>`);
 
-    // с кем сравниваем: поставщики этого товара, цены уже приведены к штуке
-    const rivals = Object.values(cardSuppliers || {})
-      .filter((e) => e && e.parts && e.prod === p)
-      .map((e) => ({ name: e.sup.name, piece: e.parts.piece, fresh: e.fresh }))
-      .sort((a, b) => a.piece - b.piece);
+    // С кем сравниваем: ТОЛЬКО свежие цены. Цена без поступления больше месяца
+    // — это уже не цена, а воспоминание: поставщик её давно мог поменять, и
+    // сравнивать с ней новое предложение значит обманывать себя.
+    const mine = Object.values(cardSuppliers || {}).filter((e) => e && e.parts && e.prod === p);
+    const toRow = (e) => ({ name: e.sup.name, piece: e.parts.piece, date: e.last ? e.last.price_date : null });
+    const rivals = mine.filter((e) => e.fresh).map(toRow).sort((a, b) => a.piece - b.piece);
+    const stale = mine.filter((e) => !e.fresh).map(toRow).sort((a, b) => a.piece - b.piece);
     const best = rivals.length ? rivals[0] : null;
 
     if (best) {
@@ -1544,16 +1546,47 @@
     }
 
     if (rivals.length) {
-      parts.push('<div class="sec-title">Кто сейчас поставляет</div>'
+      parts.push(`<div class="sec-title">Кто сейчас поставляет · цены за ${STALE_PRICE_DAYS} дней</div>`
         + rivals.map((r) => {
           const d = r.piece - o.piece;
           const tag = d > 0 ? `<span class="calc-worse">дороже на ${esc(fmtPiecePrice(d))}</span>`
             : d < 0 ? `<span class="calc-better">дешевле на ${esc(fmtPiecePrice(-d))}</span>`
               : '<span>столько же</span>';
-          return `<div class="calc-row"><span>${esc(r.name)}${r.fresh ? '' : ' <span class="price-old">⚠ старая цена</span>'}</span><span>${esc(fmtPiecePrice(r.piece))} <span class="calc-tag">${tag}</span></span></div>`;
+          const dt = fmtDate(r.date);
+          return `<div class="calc-row"><span>${esc(r.name)}${dt ? `<span class="calc-date">поступление ${dt}</span>` : ''}</span><span>${esc(fmtPiecePrice(r.piece))} <span class="calc-tag">${tag}</span></span></div>`;
         }).join(''));
+    } else if (stale.length) {
+      parts.push(`<p class="muted calc-hint">Сравнивать не с чем: у всех поставщиков поступлений не было больше ${STALE_PRICE_DAYS} дней. Старые цены — ниже, в истории.</p>`);
     } else {
       parts.push('<p class="muted calc-hint">У этого товара пока нет цен поставщиков — сравнить не с чем, но цену за штуку и наценку посчитал.</p>');
+    }
+
+    // Устаревшие цены не выбрасываем — они полезны как история, просто в
+    // сравнении не участвуют. Показываем с датой поступления.
+    if (stale.length) {
+      parts.push(`<div class="sec-title">Не сравниваем — поступлений давно не было</div>`
+        + stale.map((r) => {
+          const dt = fmtDate(r.date);
+          return `<div class="calc-row calc-row-old"><span>${esc(r.name)}<span class="calc-date">${dt ? `⚠ цена от ${dt}` : 'дата неизвестна'}</span></span><span>${esc(fmtPiecePrice(r.piece))}</span></div>`;
+        }).join(''));
+    }
+
+    // Полная история поступлений по всем поставщикам — чтобы перед разговором
+    // было видно, как цена менялась и кто когда привозил.
+    const hist = [];
+    for (const e of mine) {
+      for (const h of (e.hist || [])) {
+        const q = priceParts(p, h);
+        if (q) hist.push({ date: h.price_date, name: e.sup.name, piece: q.piece });
+      }
+    }
+    hist.sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    if (hist.length > 1) {
+      parts.push(`<details class="calc-hist"><summary>История цен и поступлений (${hist.length})</summary>`
+        + hist.slice(0, 40).map((h) => {
+          const dt = fmtDate(h.date);
+          return `<div class="calc-row"><span>${dt || 'дата неизвестна'} · ${esc(h.name)}</span><span>${esc(fmtPiecePrice(h.piece))}</span></div>`;
+        }).join('') + '</details>');
     }
 
     box.innerHTML = parts.join('');
