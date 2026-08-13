@@ -8,13 +8,15 @@ const mk = (i, name, group, extra) => Object.assign({
   id: 'p' + i, name, code: String(1000 + i), group_id: group,
   retail_price: 50 + i, is_weighted: false, unit: 'шт', photos: [], created_at: now,
 }, extra || {});
+// Остаток — внутренние данные: он есть только у вошедшего сотрудника,
+// в открытый файл витрины не попадает вовсе.
 const products = [
-  mk(1, 'Молоко Простоквашино 3.2%', 'g1', { stock_state: 'in' }),
-  mk(2, 'Кефир Домик в деревне', 'g1', { stock_state: 'low' }),
-  mk(3, 'Хлеб Бородинский', 'g2', { stock_state: 'out' }),
-  mk(4, 'Шампунь Head & Shoulders', 'g3'),    // наличие неизвестно
-  mk(5, 'Конфеты Мишка косолапый', 'g4', { stock_state: 'in' }),
-  mk(6, 'Печенье Юбилейное', 'g4', { stock_state: 'in' }),
+  mk(1, 'Молоко Простоквашино 3.2%', 'g1', { stock: 40 }),
+  mk(2, 'Кефир Домик в деревне', 'g1', { stock: 2 }),      // мало
+  mk(3, 'Хлеб Бородинский', 'g2', { stock: 0 }),           // закончился
+  mk(4, 'Шампунь Head & Shoulders', 'g3'),                 // остатки не загружали
+  mk(5, 'Конфеты Мишка косолапый', 'g4', { stock: 30 }),
+  mk(6, 'Печенье Юбилейное', 'g4', { stock: 25 }),
 ];
 const groups = [
   { id: 'g1', name: 'Молочные продукты', sort_order: 1 },
@@ -82,8 +84,13 @@ const groups = [
   chk(!fav.hidden && fav.badge === '1', `на «Избранном» счётчик (${fav.badge})`);
   chk(fav.n === 1, `в избранном ровно отмеченный товар (${fav.n})`);
 
-  // ── наличие ──
+  // ── наличие: без входа его не видно вовсе ──
   await page.click('.tabbar [data-tab="catalog"]'); await page.waitForTimeout(500);
+  const guest = await page.evaluate(() => document.getElementById('productGrid').innerText);
+  chk(!/Мало|Нет в наличии|Есть в магазине/.test(guest), 'без входа наличие не показывается — каталог для сотрудников, но ссылка публичная');
+  // входим сотрудником
+  await page.evaluate(() => { const P = window.WM_PUBLISH; P.applyServerless('pw'); P.renderAll(); });
+  await page.waitForTimeout(500);
   const tiles = await page.evaluate(() => Object.fromEntries(
     [...document.querySelectorAll('#productGrid .card')].map((c) => [c.dataset.id, c.innerText.replace(/\s+/g, ' ').trim()])));
   chk(/Нет/.test(tiles.p3 || ''), `у закончившегося товара на плитке «Нет» (${tiles.p3})`);
