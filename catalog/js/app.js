@@ -706,25 +706,56 @@
 
   // Плитки категорий: иконка, название и сколько товаров. Пустые не показываем —
   // тыкать в раздел, где ничего нет, обидно.
+  /* Два уровня: сначала 13 понятных категорий плитками, внутри — настоящие
+   * группы из 1С, которые в эту категорию попали. Групп в базе больше двухсот,
+   * простым списком их не просмотреть; разложенные по категориям — можно.
+   * Товар ищется либо поиском, либо этими двумя тапами. */
+  let openCat = null;   // раскрытая категория на экране «Категории»
+
+  function catCounts() {
+    const cats = {}; const groupsIn = {};
+    for (const p of state.products) {
+      const c = productCategory(p) || OTHER_CAT.name;
+      cats[c] = (cats[c] || 0) + 1;
+      const g = p.group_id || 'none';
+      (groupsIn[c] = groupsIn[c] || {})[g] = (groupsIn[c][g] || 0) + 1;
+    }
+    return { cats, groupsIn };
+  }
+
   function renderCatScreen() {
     const box = $('catScreen');
     if (!box || state.tab !== 'cats') return;
-    const counts = {};
-    for (const p of state.products) {
-      const c = productCategory(p);
-      counts[c || OTHER_CAT.name] = (counts[c || OTHER_CAT.name] || 0) + 1;
-    }
-    const all = [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]);
+    const { cats, groupsIn } = catCounts();
+    const all = [...CATEGORIES, OTHER_CAT].filter((c) => cats[c.name]);
     if (!all.length) {
       box.innerHTML = '<p class="muted cat-empty">Каталог пока пустой — категории появятся вместе с товарами.</p>';
       return;
     }
-    all.sort((a, b) => counts[b.name] - counts[a.name]);
+    all.sort((a, b) => cats[b.name] - cats[a.name]);
+
+    // вторая ступень: раскрытая категория показывает свои группы
+    if (openCat && cats[openCat]) {
+      const cat = all.find((c) => c.name === openCat) || OTHER_CAT;
+      const list = Object.entries(groupsIn[openCat] || {})
+        .map(([id, n]) => ({ id, name: id === 'none' ? 'Без группы' : (groupById(id) || {}).name || 'Без названия', n }))
+        .sort((a, b) => b.n - a.n);
+      box.innerHTML = `
+        <button class="cat-back" data-cat-back>‹ Все категории</button>
+        <div class="cat-head"><span class="cat-ico">${cat.icon}</span>
+          <span><b>${esc(openCat)}</b><span class="cat-count">${cats[openCat]} ${plural(cats[openCat], 'товар', 'товара', 'товаров')} · ${list.length} ${plural(list.length, 'группа', 'группы', 'групп')}</span></span></div>
+        <button class="grp-row grp-all" data-cat-tile="${esc(openCat)}">
+          <span class="grp-name">Показать все</span><span class="grp-count">${cats[openCat]}</span></button>
+        ${list.map((g) => `<button class="grp-row" data-grp="${esc(g.id)}">
+          <span class="grp-name">${esc(g.name)}</span><span class="grp-count">${g.n}</span></button>`).join('')}`;
+      return;
+    }
+
     box.innerHTML = '<div class="cat-grid">' + all.map((c) => `
-      <button class="cat-tile" data-cat-tile="${esc(c.name)}">
+      <button class="cat-tile" data-cat-open="${esc(c.name)}">
         <span class="cat-ico">${c.icon}</span>
         <span class="cat-name">${esc(c.name)}</span>
-        <span class="cat-count">${counts[c.name]} ${plural(counts[c.name], 'товар', 'товара', 'товаров')}</span>
+        <span class="cat-count">${cats[c.name]} ${plural(cats[c.name], 'товар', 'товара', 'товаров')} · ${Object.keys(groupsIn[c.name] || {}).length} ${plural(Object.keys(groupsIn[c.name] || {}).length, 'группа', 'группы', 'групп')}</span>
       </button>`).join('') + '</div>';
   }
 
@@ -734,6 +765,8 @@
     $('loader').hidden = true;
     grid.classList.toggle('compact', state.view === 'compact');
     grid.classList.toggle('list', state.view === 'list');
+    // с заголовками сетка перестаёт быть сеткой: колонки живут внутри разделов
+    grid.classList.toggle('grouped', !!state.query && state.view !== 'list');
     grid.classList.remove('skeleton');
     updateResultsCount(list.length);
 
@@ -768,7 +801,15 @@
     // на больших каталогах рисуем страницами — телефон не потянет 15 000 карточек разом
     const shown = list.slice(0, state.renderLimit);
     const hlTokens = queryHlTokens();
-    let html = shown.map((p) => {
+    // При поиске раскладываем найденное по категориям с заголовками: «Молочное 4»,
+    // «Сладости 2». Плоская простыня из шестидесяти карточек читается хуже, чем
+    // те же карточки, разложенные по полкам. Только при поиске: когда листаешь
+    // каталог целиком, заголовки мешают. В режиме списка тоже не делим — он и
+    // так плотный, а сотруднику там нужен код, а не раскладка.
+    const grouped = !!state.query && state.view !== 'list';
+    const catOf = (p) => productCategory(p) || OTHER_CAT.name;
+    const catIconOf = (n) => (CATEGORIES.find((c) => c.name === n) || OTHER_CAT).icon;
+    const cards = shown.map((p) => {
       const photo = (p.photos || []).find((u) => u && String(u).trim());
       const img = photo
         ? `<img src="${esc(photo)}" alt="" loading="lazy" onerror="wmImgFail(this)">`
@@ -807,7 +848,21 @@
           ${tagRow}
         </div>
       </article>`;
-    }).join('');
+    });
+    let html = cards.join('');
+    if (grouped) {
+      const order = []; const buckets = new Map();
+      shown.forEach((p, i) => {
+        const c = catOf(p);
+        if (!buckets.has(c)) { buckets.set(c, []); order.push(c); }
+        buckets.get(c).push(cards[i]);
+      });
+      // одна категория на весь результат — заголовок ничего не делит, не рисуем
+      if (order.length > 1) {
+        html = order.map((c) => `<div class="cat-sep">${catIconOf(c)} ${esc(c)}<span class="cat-sep-n">${buckets.get(c).length}</span></div>`
+          + `<div class="cat-part">${buckets.get(c).join('')}</div>`).join('');
+      }
+    }
     grid.innerHTML = html;
     document.querySelectorAll('.load-more').forEach((b) => b.remove());
     if (list.length > shown.length) {
@@ -6031,11 +6086,13 @@
       if (b) switchTab(b.dataset.tab);
     });
     $('catScreen').addEventListener('click', (e) => {
-      const t = e.target.closest('[data-cat-tile]');
-      if (!t) return;
-      state.selCats = [t.dataset.catTile];
-      state.selGroups = [];
-      switchTab('catalog');
+      if (e.target.closest('[data-cat-back]')) { openCat = null; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
+      const open = e.target.closest('[data-cat-open]');
+      if (open) { openCat = open.dataset.catOpen; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
+      const grp = e.target.closest('[data-grp]');
+      if (grp) { state.selCats = []; state.selGroups = [grp.dataset.grp]; switchTab('catalog'); return; }
+      const all = e.target.closest('[data-cat-tile]');
+      if (all) { state.selCats = [all.dataset.catTile]; state.selGroups = []; switchTab('catalog'); }
     });
 
     // цены в карточке: 🔒 открывает вход, тап по строке — историю цены
