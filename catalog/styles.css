@@ -878,10 +878,17 @@ select.input { appearance: none; }
   background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
   padding: 12px 12px; min-height: 56px; margin-bottom: 8px; font-family: inherit; color: var(--text);
 }
-.price-row .price-sup { flex: 1 1 46%; font-size: 15px; font-weight: 600; }
-.price-row .price-val { font-size: 17px; font-weight: 800; white-space: nowrap; margin-left: auto; }
-.price-row .price-meta { flex-basis: 100%; justify-content: flex-start; }
-.price-row .price-noprice { margin-left: auto; font-size: 13px; color: var(--text-2); }
+/* Порядок внутри строки задан явно: имя + цена за штуку + стрелка в первой
+   строке, цена за упаковку — во второй, дата и значки — в третьей. Без order
+   стрелка уезжала бы вниз, под цену упаковки. */
+.price-row .price-sup { order: 1; flex: 1 1 46%; font-size: 15px; font-weight: 600; }
+.price-row .price-val { order: 2; font-size: 17px; font-weight: 800; white-space: nowrap; margin-left: auto; }
+.price-row .price-noprice { order: 2; margin-left: auto; font-size: 13px; color: var(--text-2); }
+.price-row .sup-chevron { order: 3; }
+.price-row .price-pack { order: 4; flex-basis: 100%; font-size: 13px; color: var(--text-2); }
+.price-row .price-meta { order: 5; flex-basis: 100%; justify-content: flex-start; }
+.price-per { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.price-pack b { font-weight: 700; color: var(--text); }
 .sup-hasphone { font-size: 12px; opacity: .7; }
 .sup-chevron { font-size: 22px; color: var(--text-2); line-height: 1; align-self: center; }
 .price-row.price-best { background: rgba(48,209,88,.12); border-color: rgba(48,209,88,.45); }
