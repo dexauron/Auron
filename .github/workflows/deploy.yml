@@ -66,6 +66,7 @@ jobs:
           mkdir -p app/catalog
           cp -r catalog-src/catalog/. app/catalog/
           rm -rf app/catalog/setup
+          rm -rf app/catalog/tests    # проверки — для разработки, на сайте не нужны
           # Зашифрованные каталоги владельца и сотрудника приложение читает
           # НАПРЯМУЮ из репозитория (raw.githubusercontent.com), а не с сайта.
           # На сайте они не нужны, а весят ~29 МБ из 35 — из-за них публикация
