@@ -2848,7 +2848,7 @@
         p.barcode_units[rec.barcode] = rec.unit;
       }
     }
-    return { added, matched, missing: missing.size };
+    return { added, matched, missing: missing.size, missingList: [...missing] };
   }
 
   // Словарь единиц: название → сколько базовых единиц в одной такой.
@@ -2872,7 +2872,7 @@
       p.pack_units = list;
       matched++;
     }
-    return { units: Object.keys(state.unitCoef).length, products: matched, missing: missing.size };
+    return { units: Object.keys(state.unitCoef).length, products: matched, missing: missing.size, missingList: [...missing] };
   }
 
   // Разобрать и влить один файл (rows — AoA из readSheet). Возвращает тип.
@@ -2893,6 +2893,7 @@
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+      _importOrder: () => IMPORT_ORDER,
       _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
   }
 
@@ -4395,14 +4396,43 @@
     smartLog(`${entry.name}: ${msg}`);
   }
 
+  // «Не нашлось товаров: 228» — с голым числом ничего не сделать. Показываем
+  // несколько примеров и складываем полный список, чтобы владелец мог свериться
+  // с 1С: чаще всего это снятые с продажи позиции, которых в каталоге и нет.
+  let lastMissing = [];        // [{файл, коды}] последней загрузки
+  function missingHint(entry, list) {
+    if (!list || !list.length) return '';
+    lastMissing.push({ file: entry.name, codes: list });
+    const shown = list.slice(0, 3).join(', ');
+    return ` (например: ${shown}${list.length > 3 ? '…' : ''})`;
+  }
+  // Полный список — файлом: так его можно открыть в Excel и сверить с 1С.
+  function downloadMissing() {
+    const txt = lastMissing.map((m) => `=== ${m.file} — не нашлось в каталоге: ${m.codes.length}\n` + m.codes.join('\n')).join('\n\n');
+    const url = URL.createObjectURL(new Blob([txt], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = 'не-нашлось-в-каталоге.txt';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  /* Порядок обработки файлов при загрузке нескольких сразу.
+   * Сначала те, что СОЗДАЮТ товары (прайс, розница, остатки), и только потом
+   * справочники, которые к товарам привязываются (единицы, штрихкоды).
+   * Раньше словарь единиц шёл ПЕРВЫМ — и фасовки у товаров, появившихся в этой
+   * же загрузке, не проставлялись: справочник искал их в каталоге, где их ещё
+   * не было. Отсюда «кодов без товара» в отчёте о загрузке.
+   * Штрихкодам словарь единиц при загрузке не нужен: единицу они хранят
+   * строкой как есть, а расшифровывается она уже при показе карточки. */
+  const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+
   async function smartRun() {
     const btn = $('smartRun');
     btn.disabled = true;
-    // порядок: словарь единиц первым (чтобы штрихкоды сразу знали количества в
-    // упаковке), затем товары/цены/остатки/прайс, потом продажи/контакты/фото
-    const order = { units: 0, prices: 1, retail: 2, stock: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+    lastMissing = [];
+    $('smartMissing').hidden = true;
     const todo = smartEntries.filter((e) => e.type && !e.error && (state.serverless || e.type !== 'barcodes'))
-      .sort((a, b) => (order[a.type] || 9) - (order[b.type] || 9));
+      .sort((a, b) => (IMPORT_ORDER[a.type] ?? 9) - (IMPORT_ORDER[b.type] ?? 9));
     let okCount = 0;
 
     // ── Серверлес: те же файлы, но в зашифрованный каталог на GitHub ──
@@ -4417,13 +4447,13 @@
           else if (e.type === 'units') {
             const r = svUploadUnits(e.parsed);
             setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
-              + (r.missing ? `, кодов без товара: ${r.missing}` : ''));
+              + (r.missing ? `, кодов без товара: ${r.missing}${missingHint(e, r.missingList)}` : ''));
             okCount++; continue;
           }
           else if (e.type === 'barcodes') {
             const r = svUploadBarcodes(e.parsed);
             setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
-              + (r.missing ? `, не нашлось товаров: ${r.missing}` : ''));
+              + (r.missing ? `, не нашлось товаров: ${r.missing}${missingHint(e, r.missingList)}` : ''));
             okCount++; continue;
           }
           else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
@@ -4433,6 +4463,7 @@
       state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
       buildIndex(); state.popularIds = buildPopularIds(); renderAll();
       smartLog('Сохраняем на GitHub…');
+      $('smartMissing').hidden = !lastMissing.length;
       try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован ✓`); toast('Каталог обновлён ✓'); }
       catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('⚠ Не удалось опубликовать'); }
       btn.disabled = false; btn.hidden = true;
@@ -6196,6 +6227,7 @@
     $('menuImportHub').addEventListener('click', openImportHub);
     $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
     $('smartRun').addEventListener('click', smartRun);
+    $('smartMissing').addEventListener('click', downloadMissing);
 
     // Поиск фото по штрихкодам (только админ)
     $('hubPhotoSearch').addEventListener('click', () => {
