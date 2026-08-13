@@ -91,7 +91,6 @@
     popularTerms: [],    // частые запросы (обезличенно) — подсказки поиска
   };
 
-  let sb = null;
   let secretPw = null; // пароль серверлес-каталога (в памяти, для публикации после правок)
   let currentProduct = null;   // товар, открытый в карточке
   let editingProduct = null;   // товар в форме редактирования (null = новый)
@@ -1415,42 +1414,23 @@
   function saveTracked(o) { try { localStorage.setItem(TRACK_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
 
   function trackView(p) {
-    if (!sb || !p || state.serverless || CFG.STATIC_URL) return; // без сервера «Популярное» считается по продажам
+    if (!p) return;
     const o = trackedToday();
     if (o.v[p.id]) return;      // сегодня уже считали — не накручиваем
     o.v[p.id] = 1; saveTracked(o);
     state.popularity[p.id] = popViews(p.id) + 1; // оптимистично — «Популярное» живое сразу
-    sb.rpc('catalog_track_view', { p_product_id: p.id }).then(() => {}, () => {});
   }
   function trackSearch(q) {
-    if (!sb || state.serverless || CFG.STATIC_URL) return;
+    if (!q) return;
     q = String(q || '').trim().toLowerCase();
     if (q.length < 2) return;
     const o = trackedToday();
     if (o.s[q]) return;
     o.s[q] = 1; saveTracked(o);
-    sb.rpc('catalog_track_search', { p_term: q }).then(() => {}, () => {});
   }
 
   // загрузка счётчиков популярности (не критично: если ОБНОВЛЕНИЕ-16 не выполнено —
   // просто нет «Популярного», приложение работает как обычно)
-  async function loadPopularity() {
-    if (!sb) return;
-    try {
-      const [pop, terms] = await Promise.all([
-        sb.from('catalog_popularity').select('product_id,views').order('views', { ascending: false }).range(0, 199),
-        sb.from('catalog_search_terms').select('term,hits').order('hits', { ascending: false }).range(0, 19),
-      ]);
-      if (!pop.error && Array.isArray(pop.data)) {
-        const m = {};
-        for (const r of pop.data) m[r.product_id] = Number(r.views) || 0;
-        // не затираем оптимистично начисленные локально просмотры за эту сессию
-        state.popularity = Object.assign(m, state.popularity);
-      }
-      if (!terms.error && Array.isArray(terms.data)) state.popularTerms = terms.data.map((r) => r.term);
-      renderRecent();
-    } catch (e) { /* база старой версии — «Популярное» просто не показываем */ }
-  }
 
   // «Популярное» — горизонтальная лента самых просматриваемых товаров (главная)
   /* ── «Что нового в магазине» ────────────────────────
@@ -1637,15 +1617,11 @@
     $('sheetAdminActions').hidden = !state.isAdmin;
     // фото пока грузятся только на сервере — в бесплатном режиме кнопки прячем
     $('btnFindPhoto').hidden = !(state.isAdmin && !hasPhoto(p));
-    $('btnAddPhotoLabel').hidden = state.serverless || !state.session;
-    $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
-    $('sheetRetailHist').innerHTML = '';
     cardSuppliers = {}; cardSales = null;
     renderStock(p, null);   // остаток виден сразу; продажи дорисуют «сколько заказать»
     renderProductSales(p);
     renderProductPrices(p);
-    renderRetailHistory(p);
     compFilter = { store: '', from: '', to: '' };
     renderCompetitors(p);
     renderSimilar(p);
@@ -2051,36 +2027,9 @@
       if (s && currentProduct === p) renderSalesBox(p, { period_from: s.period_from, period_to: s.period_to, qty: s.qty }, false);
       return;
     }
-    if (!sb) return;
-    let s;
-    try {
-      const { data, error } = await sb.from('catalog_sales')
-        .select('period_from,period_to,qty').eq('product_id', p.id)
-        .order('period_to', { ascending: false }).limit(1);
-      if (error) throw error;
-      s = data[0];
-    } catch (e) {
-      const cached = readCache(SALES_CACHE_KEY)[p.id];
-      if (cached && currentProduct === p) renderSalesBox(p, cached, true);
-      return;
-    }
-    if (currentProduct !== p) return;
-    if (!s) { box.innerHTML = ''; return; } // продаж нет — не показываем
-    writeCache(SALES_CACHE_KEY, p.id, s, 400);
-    renderSalesBox(p, s, false);
   }
 
   // общий кэш карточек (цены/продажи) на телефоне
-  function readCache(key) { try { return JSON.parse(localStorage.getItem(key)) || {}; } catch (e) { return {}; } }
-  function writeCache(key, id, val, max) {
-    try {
-      const all = readCache(key);
-      all[id] = { ...val, ts: Date.now() };
-      const keys = Object.keys(all);
-      if (keys.length > max) keys.sort((a, b) => all[a].ts - all[b].ts).slice(0, keys.length - max).forEach((k) => delete all[k]);
-      localStorage.setItem(key, JSON.stringify(all));
-    } catch (e) { /* нет места */ }
-  }
 
   /* ── Цена за штуку и цена за упаковку ──────────────
    * В прайсе 1С у каждой строки своя единица: у одного поставщика цена стоит
@@ -2157,7 +2106,7 @@
 
   async function renderProductPrices(p) {
     const box = $('sheetPrices');
-    if (!sb) { box.innerHTML = ''; return; }
+    if (!state.session) { box.innerHTML = ''; return; }
     const baseSupIds = [...new Set(p.supplier_ids || [])];
     // покупатель без входа не видит поставщиков вовсе (никаких намёков на «вход
     // для сотрудников»); кассир видит только розничную цену
@@ -2169,23 +2118,6 @@
       renderCardSuppliers(p, rows, baseSupIds, {});
       return;
     }
-    box.innerHTML = '<p class="muted">Загружаем цены…</p>';
-    let rows;
-    try {
-      const { data, error } = await sb.from('catalog_prices').select('*')
-        .eq('product_id', p.id).order('price_date', { ascending: false });
-      if (error) throw error;
-      rows = data;
-    } catch (e) {
-      if (currentProduct !== p) return;
-      const cached = readPriceCache()[p.id];
-      renderCardSuppliers(p, (cached && cached.rows) || [], baseSupIds,
-        { stale: cached ? `${warnMark}Нет связи — данные от ${fmtDate(new Date(cached.ts).toISOString())}` : warnMark + 'Нет связи с базой' });
-      return;
-    }
-    if (currentProduct !== p) return; // пока грузили, открыли другой товар
-    cachePrices(p.id, rows);
-    renderCardSuppliers(p, rows, baseSupIds, {});
   }
 
   // строит единый список поставщиков товара (с ценами, если есть) и запоминает
@@ -2321,24 +2253,6 @@
   }
 
   /* ── История розничной цены в карточке (item 16) ──── */
-  async function renderRetailHistory(p) {
-    const box = $('sheetRetailHist');
-    if (!box) return;
-    box.innerHTML = '';
-    if (!sb || !state.session || state.serverless) return; // история — после входа (в бесплатном режиме не ведётся)
-    let rows;
-    try {
-      const { data, error } = await sb.from('catalog_retail_history')
-        .select('retail_price,changed_at').eq('product_id', p.id)
-        .order('changed_at', { ascending: false }).limit(12);
-      if (error) throw error;
-      rows = data;
-    } catch (e) { return; } // таблицы может не быть на старой базе — просто не показываем
-    if (currentProduct !== p || !rows || rows.length < 2) return; // одна запись — не история
-    const items = rows.map((r) =>
-      `<div class="price-hist-row"><span>${fmtDate(r.changed_at)}</span><span>${fmtPrice(r.retail_price)}</span></div>`).join('');
-    box.innerHTML = `<details class="retail-hist"><summary>История розничной цены (${rows.length})</summary>${items}</details>`;
-  }
 
   /* ── Карточка поставщика (контакты, звонок, WhatsApp) ── */
 
@@ -2444,63 +2358,12 @@
   const trackMax = (rows) => { for (const r of rows) if (r.updated_at && r.updated_at > state.syncMax) state.syncMax = r.updated_at; };
 
   // маленькие таблицы (группы, поставщики) — всегда целиком, это быстро
-  async function fetchSmall() {
-    const [g, sup] = await Promise.all([
-      sb.from('catalog_groups').select('*').order('sort_order').order('name'),
-      sb.from('catalog_suppliers').select('*').order('name').order('id').range(0, 4999),
-    ]);
-    if (g.error) throw g.error;
-    if (sup.error) throw sup.error;
-    state.groups = g.data;
-    state.suppliers = sup.data;
-    loadPopularity(); // счётчики популярности — в фоне, загрузку каталога не задерживают
-  }
 
   // Полная загрузка товаров страницами по id (быстро — id проиндексирован).
   // Первую страницу показываем сразу, остальное дозагружаем в фоне — экран не пустует.
-  async function fullLoadProducts() {
-    const all = [];
-    state.syncMax = '';
-    for (let from = 0; ; from += PAGE) {
-      const { data, error } = await sb.from('catalog_products').select('*')
-        .order('id').range(from, from + PAGE - 1);
-      if (error) throw error;
-      all.push(...data);
-      trackMax(data);
-      if (from === 0 && data.length) {
-        // мгновенно показываем первую тысячу, пока грузится остальное
-        state.products = all.slice().sort(byName);
-        buildIndex();
-        $('loader').hidden = true;
-        renderAll();
-      }
-      if (data.length < PAGE) break;
-    }
-    state.products = all.sort(byName);
-    buildIndex();
-  }
 
   // Докачка: берём только товары, изменившиеся с прошлого раза, и вливаем в кэш.
   // Обычно это 0–несколько строк → мгновенно. Удаления ловим сверкой количества.
-  async function deltaSyncProducts() {
-    const { data, error } = await sb.from('catalog_products').select('*')
-      .gt('updated_at', state.syncMax).order('updated_at').range(0, 4999);
-    if (error) throw error;
-    if (data.length >= 5000) { await fullLoadProducts(); return; } // много изменений (импорт) → проще перезабрать
-    if (data.length) {
-      const map = new Map(state.products.map((p) => [p.id, p]));
-      for (const r of data) map.set(r.id, r);
-      trackMax(data);
-      state.products = [...map.values()].sort(byName);
-      buildIndex();
-    }
-    // сверка количества — поймать удалённые товары
-    const { count, error: cErr } = await sb.from('catalog_products')
-      .select('id', { count: 'exact', head: true });
-    if (!cErr && count != null && count !== state.products.length) {
-      await fullLoadProducts();
-    }
-  }
 
   /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
      Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -2849,6 +2712,7 @@
     $('adminBtnLabel').hidden = true;
     saveCache();
     renderAll();
+    setTimeout(autoDedup, 2000);   // тихо убрать дубли, если импорт их наплодил
   }
   // Включить режим «вошёл сотрудник»: видит закупку/контакты, но не «Ходовые» и
   // не правит каталог. Тоже запоминается на устройстве.
@@ -3112,119 +2976,25 @@
     }
     // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
     // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
-    if (!sb) {
-      $('loader').hidden = true;
-      const banner = $('offlineBanner');
-      banner.textContent = (await loadCache())
-        ? 'Нет связи. Показан сохранённый каталог'
-        : 'Нет интернета. Подключись к сети и обнови страницу';
-      banner.hidden = false;
-      renderAll();
-      return;
-    }
-    try {
-      await fetchSmall();
-      if (!state.products.length || !state.syncMax) await fullLoadProducts();
-      else await deltaSyncProducts();
-      state.lastFetch = Date.now();
-      saveCache();
-      $('offlineBanner').hidden = true;
-      renderAll();
-      autoPublish(); // админ поправил каталог → тихо обновим витрину на GitHub
-    } catch (e) {
-      if (!silent) {
-        const banner = $('offlineBanner');
-        if (state.products.length) {
-          const mins = Math.max(1, Math.round((Date.now() - state.lastFetch) / 60000));
-          banner.textContent = `Нет связи с базой. Показан каталог, сохранённый ${mins < 60 ? mins + ' мин' : Math.round(mins / 60) + ' ч'} назад`;
-        } else {
-          banner.textContent = 'Нет связи с базой данных. Проверь интернет и обнови страницу';
-        }
-        banner.hidden = false;
-        $('loader').hidden = true;
-        renderAll();
-      }
-    }
+    // Сервера нет: витрина не загрузилась — значит нет интернета. Показываем
+    // сохранённый каталог и честно говорим, что связи нет.
+    $('loader').hidden = true;
+    const banner = $('offlineBanner');
+    banner.textContent = (await loadCache())
+      ? 'Нет связи. Показан сохранённый каталог'
+      : 'Нет интернета. Подключись к сети и обнови страницу';
+    banner.hidden = false;
+    renderAll();
   }
 
   /* ── Вход/выход: админ или сотрудник ──────────── */
 
-  async function applySession(session) {
-    state.session = session;
-    state.isAdmin = false;
-    state.role = null;
-    state.canPurchase = false;
-    state.canSales = false;
-    if (session) {
-      try {
-        // роль аккаунта: admin / manager / cashier
-        const { data, error } = await sb.rpc('catalog_my_role');
-        if (error) throw error;
-        state.role = data || 'cashier';
-        state.isAdmin = state.role === 'admin';
-        state.canPurchase = state.role === 'admin' || state.role === 'manager';
-        state.canSales = state.canPurchase; // «Ходовые» — кому доступна закупка
-      } catch (e) {
-        // база без ролей (ОБНОВЛЕНИЕ-7 ещё не выполнено) — прежнее поведение:
-        // вошедший видит цены; админ определяется по старому списку catalog_admins
-        try {
-          const { data } = await sb.from('catalog_admins').select('email');
-          state.isAdmin = (data || []).some((a) => a.email === session.user?.email);
-        } catch (e2) { state.isAdmin = true; }
-        state.role = state.isAdmin ? 'admin' : 'manager';
-        state.canPurchase = true;
-        state.canSales = true;
-      }
-      if (state.canPurchase) loadContacts(); else state.contacts = {};
-      if (!state.serverless && !CFG.STATIC_URL) loadCompetitors(); // список магазинов с сервера (старый режим)
-    } else {
-      state.competitors = [];
-      state.contacts = {};
-      // при выходе стираем сохранённые цены и контакты — они только для вошедших
-      try {
-        localStorage.removeItem(PRICE_CACHE_KEY);
-        localStorage.removeItem(CONTACTS_CACHE_KEY);
-        localStorage.removeItem(SALES_CACHE_KEY);
-      } catch (e) { /* некритично */ }
-    }
-    $('fabAdd').hidden = !state.isAdmin;
-    $('adminBtn').classList.toggle('is-admin', !!session);
-    $('adminBtnLabel').hidden = !!session; // после входа — только значок, без «Войти»
-    if (!$('productSheet').hidden) {
-      $('sheetAdminActions').hidden = !state.isAdmin;
-      if (currentProduct) { renderProductPrices(currentProduct); renderCompetitors(currentProduct); }
-    }
-    renderAll(); // и сетка, и чипы — после входа появляется «Ходовые»
-    // владелец вошёл → тихо убираем дубли (если есть) и запускаем автопоиск фото
-    if (isOwner()) { setTimeout(autoDedup, 2000); setTimeout(autoPhotoSearch, 4000); }
-  }
 
-  async function loadContacts() {
-    try {
-      const { data, error } = await sb.from('catalog_supplier_contacts').select('*');
-      if (error) throw error;
-      state.contacts = Object.fromEntries(data.map((c) => [c.supplier_id, c]));
-      try { localStorage.setItem(CONTACTS_CACHE_KEY, JSON.stringify(state.contacts)); } catch (e) { /* нет места */ }
-    } catch (e) {
-      // нет связи — берём сохранённые контакты; база старой версии — работаем без них
-      try { state.contacts = JSON.parse(localStorage.getItem(CONTACTS_CACHE_KEY)) || {}; }
-      catch (e2) { state.contacts = {}; }
-    }
-    if (!$('productSheet').hidden && currentProduct) renderProductPrices(currentProduct);
-  }
 
   /* ── Разведка цен: сравнение с другими магазинами ──────
    * Любой вошедший сотрудник может внести розничную цену товара в чужом
    * магазине. В карточке видно нашу цену и цены конкурентов с датой. */
 
-  function loadCompetitors() {
-    return sb.from('catalog_competitors').select('*').order('name')
-      .then(({ data, error }) => {
-        if (!error) state.competitors = data || [];
-        if (!$('productSheet').hidden && currentProduct) renderCompetitors(currentProduct);
-      })
-      .catch(() => { /* нет связи — работаем без списка магазинов */ });
-  }
 
   function competitorById(id) { return state.competitors.find((c) => c.id === id) || null; }
   function competitorName(id) { const c = competitorById(id); return c ? c.name : 'Магазин'; }
@@ -3437,22 +3207,15 @@
       observed_at: new Date().toISOString().slice(0, 10),
     };
     try {
-      if (state.serverless || CFG.STATIC_URL) {
-        // Бесплатный режим: цену за сегодня по этому магазину перезаписываем,
-        // прошлые даты остаются — так видно, как цена менялась.
-        const i = (state.compPrices || []).findIndex((r) => r.product_id === record.product_id
-          && r.competitor_id === record.competitor_id && r.observed_at === record.observed_at);
-        if (i >= 0) state.compPrices[i] = record; else (state.compPrices = state.compPrices || []).push(record);
-        if (!ghConfigured()) throw new Error('нет ключа публикации — открой «Публикация на GitHub» в меню и вставь ключ');
-        // Раньше цена уходила в ОТКРЫТЫЙ файл на сайте — его мог прочитать
-        // кто угодно по прямой ссылке. Теперь она едет в зашифрованный каталог.
-        if (!secretPw) throw new Error('сохранить цену магазина может владелец — у сотрудника нет доступа к публикации');
-        await publishFull(secretPw);
-      } else {
-        const { error } = await sb.from('catalog_competitor_prices')
-          .upsert(record, { onConflict: 'product_id,competitor_id' });
-        if (error) throw error;
-      }
+      // Цену за сегодня по этому магазину перезаписываем, прошлые даты
+      // остаются — так видно, как цена менялась.
+      const i = (state.compPrices || []).findIndex((r) => r.product_id === record.product_id
+        && r.competitor_id === record.competitor_id && r.observed_at === record.observed_at);
+      if (i >= 0) state.compPrices[i] = record; else (state.compPrices = state.compPrices || []).push(record);
+      if (!ghConfigured()) throw new Error('нет ключа публикации — открой «Публикация на GitHub» в меню и вставь ключ');
+      // Цены чужих магазинов едут в зашифрованный каталог, а не в открытый файл.
+      if (!secretPw) throw new Error('сохранить цену магазина может владелец — у сотрудника нет доступа к публикации');
+      await publishFull(secretPw);
       closeSheet('competitorAddSheet');
       toast('Цена магазина сохранена');
       if (currentProduct === compProduct) renderCompetitors(compProduct);
@@ -3464,125 +3227,17 @@
     }
   }
 
-  // добавить фото товара — доступно любому вошедшему сотруднику
-  async function addPhotoToProduct(file, p) {
-    if (!file || !p || !sb) return;
-    const label = $('btnAddPhotoLabel');
-    try {
-      label.style.pointerEvents = 'none';
-      toast('Загружаем фото…');
-      let blob = await compressImage(file);
-      if (cleanPhotosOn()) blob = await whitenBackground(blob, toast);
-      const url = await uploadPhoto(blob);
-      const { error } = await sb.rpc('catalog_add_photo', { p_product_id: p.id, p_url: url });
-      if (error) throw error;
-      p.photos = [...(p.photos || []), url]; // сразу показываем
-      if (currentProduct === p) openProduct(p);
-      renderGrid();
-      toast('Фото добавлено');
-    } catch (err) {
-      toast('Не удалось добавить фото: ' + (err.message || err));
-    } finally {
-      label.style.pointerEvents = '';
-      $('addPhotoInput').value = '';
-    }
-  }
 
   // Покупатель без аккаунта предлагает фото — попадает в очередь на проверку,
   // видно всем станет после одобрения сотрудником (защита витрины от плохих фото)
-  async function suggestPhotoToProduct(file, p) {
-    if (!file || !p || !sb) return;
-    const label = $('btnSuggestPhotoLabel');
-    try {
-      label.style.pointerEvents = 'none';
-      toast('Отправляем фото…');
-      let blob = await compressImage(file);
-      if (cleanPhotosOn()) blob = await whitenBackground(blob, toast);
-      const url = await uploadPhoto(blob, 'suggestions');
-      const { error } = await sb.rpc('catalog_suggest_photo', { p_product_id: p.id, p_url: url });
-      if (error) throw error;
-      toast('Спасибо! Фото отправлено на проверку');
-    } catch (err) {
-      toast('Не удалось отправить фото: ' + (err.message || err));
-    } finally {
-      label.style.pointerEvents = '';
-      $('suggestPhotoInput').value = '';
-    }
-  }
 
   /* ── Предложенные фото: сотрудник одобряет/отклоняет ── */
   let suggestions = [];
 
-  async function loadSuggestionsCount() {
-    if (!sb || !state.session) { state.suggCount = 0; return; }
-    try {
-      const { count } = await sb.from('catalog_photo_suggestions').select('id', { count: 'exact', head: true });
-      state.suggCount = count || 0;
-    } catch (e) { state.suggCount = 0; }
-  }
 
-  async function openSuggestions() {
-    openSheet('suggestionsSheet');
-    $('suggestionsList').innerHTML = '<p class="muted">Загружаем…</p>';
-    try {
-      const { data, error } = await sb.from('catalog_photo_suggestions')
-        .select('*').order('created_at', { ascending: false }).limit(200);
-      if (error) throw error;
-      suggestions = data || [];
-    } catch (e) {
-      $('suggestionsList').innerHTML = '<p class="muted">Не удалось загрузить. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-13.sql</p>';
-      return;
-    }
-    renderSuggestions();
-  }
 
-  function renderSuggestions() {
-    const box = $('suggestionsList');
-    if (!suggestions.length) { box.innerHTML = '<p class="muted">Очередь пуста — новых предложений нет.</p>'; return; }
-    const byId = new Map(state.products.map((p) => [p.id, p]));
-    box.innerHTML = suggestions.map((s) => {
-      const p = byId.get(s.product_id);
-      return `<div class="sugg-row" data-sugg="${esc(s.id)}">
-        <img class="sugg-img" src="${esc(s.url)}" alt="" loading="lazy">
-        <div class="sugg-info">
-          <div class="sugg-name">${esc(p ? p.name : 'Товар удалён')}</div>
-          <div class="sugg-actions">
-            <button class="btn btn-primary sugg-ok" data-approve="${esc(s.id)}">Одобрить</button>
-            <button class="btn btn-danger sugg-no" data-reject="${esc(s.id)}">Отклонить</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-  }
 
-  async function approveSuggestion(id) {
-    const s = suggestions.find((x) => x.id === id);
-    try {
-      const { error } = await sb.rpc('catalog_approve_suggestion', { p_id: id });
-      if (error) throw error;
-      // сразу показываем фото у товара локально
-      const p = state.products.find((x) => x.id === s.product_id);
-      if (p) { p.photos = [...(p.photos || []), s.url]; }
-      suggestions = suggestions.filter((x) => x.id !== id);
-      renderSuggestions();
-      saveCache(); renderGrid();
-      state.suggCount = Math.max(0, (state.suggCount || 1) - 1);
-      toast('Фото одобрено');
-    } catch (e) { toast('Не получилось: ' + (e.message || e)); }
-  }
 
-  async function rejectSuggestion(id) {
-    const s = suggestions.find((x) => x.id === id);
-    try {
-      const { error } = await sb.from('catalog_photo_suggestions').delete().eq('id', id);
-      if (error) throw error;
-      if (s) await removePhotosFromStorage([s.url]);
-      suggestions = suggestions.filter((x) => x.id !== id);
-      renderSuggestions();
-      state.suggCount = Math.max(0, (state.suggCount || 1) - 1);
-      toast('Отклонено');
-    } catch (e) { toast('Не получилось: ' + (e.message || e)); }
-  }
 
   /* ── «Дозаполни витрину»: сотрудник быстро фотографирует товары без фото ── */
   let photoFillTarget = null;
@@ -3630,17 +3285,10 @@
   }
 
   async function createCompetitor(name) {
-    if (state.serverless || !state.session || CFG.STATIC_URL) {   // бесплатный режим — храним у себя
-      const rec = { id: svUuid(), name: String(name).trim() };
-      state.competitors.push(rec);
-      state.competitors.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-      return rec.id;
-    }
-    const { data, error } = await sb.from('catalog_competitors').insert({ name }).select().single();
-    if (error) { toast('Ошибка: ' + error.message); return null; }
-    state.competitors.push(data);
+    const rec = { id: svUuid(), name: String(name).trim() };
+    state.competitors.push(rec);
     state.competitors.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-    return data.id;
+    return rec.id;
   }
 
   /* ── Кэш цен на телефоне: карточки открываются и без связи ── */
@@ -3649,27 +3297,7 @@
   const CONTACTS_CACHE_KEY = 'wm_contacts_cache_v1';
   const PRICE_CACHE_MAX = 400; // товаров в кэше; старые вытесняются
 
-  function readPriceCache() {
-    try { return JSON.parse(localStorage.getItem(PRICE_CACHE_KEY)) || {}; }
-    catch (e) { return {}; }
-  }
 
-  function cachePrices(productId, rows) {
-    try {
-      const all = readPriceCache();
-      all[productId] = {
-        rows: rows.map(({ supplier_id, price, price_date, unit }) => ({ supplier_id, price, price_date, unit })),
-        ts: Date.now(),
-      };
-      const keys = Object.keys(all);
-      if (keys.length > PRICE_CACHE_MAX) {
-        keys.sort((a, b) => all[a].ts - all[b].ts)
-          .slice(0, keys.length - PRICE_CACHE_MAX)
-          .forEach((k) => delete all[k]);
-      }
-      localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(all));
-    } catch (e) { /* нет места — кэш вспомогательный */ }
-  }
 
   /* ── Админ: фото в форме ──────────────────────── */
 
@@ -3703,41 +3331,9 @@
   // становятся ровными, как в витрине. Работает на телефоне, «мозг» для обрезки
   // подгружается один раз. Если не вышло (нет сети/не потянул) — берём обычное фото.
   let _bgr = null;
-  async function loadBgRemoval() {
-    if (_bgr) return _bgr;
-    _bgr = await import('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm');
-    return _bgr;
-  }
   const cleanPhotosOn = () => { try { return localStorage.getItem('wm_clean_photos') === '1'; } catch (e) { return false; } };
-  async function whitenBackground(blob, onStep) {
-    try {
-      if (onStep) onStep('Делаю чистый белый фон…');
-      const mod = await loadBgRemoval();
-      const cut = await mod.removeBackground(blob, { publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/dist/' });
-      const img = await createImageBitmap(cut);
-      const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
-      const cx = c.getContext('2d');
-      cx.fillStyle = '#ffffff'; cx.fillRect(0, 0, c.width, c.height); cx.drawImage(img, 0, 0);
-      const out = await new Promise((res) => c.toBlob((b) => res(b), 'image/jpeg', 0.9));
-      return out || blob;
-    } catch (e) { return blob; }
-  }
 
-  async function uploadPhoto(blob, folder = 'products') {
-    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-    const { error } = await sb.storage.from(BUCKET).upload(path, blob, {
-      contentType: 'image/jpeg', cacheControl: '31536000',
-    });
-    if (error) throw error;
-    return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-  }
 
-  async function removePhotosFromStorage(urls) {
-    const paths = urls
-      .map((u) => { const m = u.split(`/${BUCKET}/`)[1]; return m ? decodeURIComponent(m) : null; })
-      .filter(Boolean);
-    if (paths.length) await sb.storage.from(BUCKET).remove(paths).catch(() => {});
-  }
 
   /* ── Админ: форма товара ──────────────────────── */
 
@@ -3771,96 +3367,33 @@
     btn.disabled = true;
     btn.textContent = 'Сохраняем…';
     $('formError').hidden = true;
-    // Бесплатный режим: сохраняем товар в память и публикуем на GitHub (без сервера).
-    if (state.serverless) {
-      try {
-        const photos = formPhotos.map((ph) => ph.url).filter(Boolean); // новые фото-файлы пока не грузим
-        const rec = {
-          name: $('fName').value.trim(), group_id: $('fGroup').value || null, supplier_ids: formSupplierIds,
-          code: $('fCode').value.trim() || null, article: $('fArticle').value.trim() || null,
-          barcodes: $('fBarcodes').value.split('\n').map((s) => s.trim()).filter(Boolean),
-          is_weighted: $('fWeighted').checked, unit: $('fUnit').value.trim() || null,
-          department: $('fDepartment').value.trim() || null, note: $('fNote').value.trim() || null,
-          description: $('fDescription').value.trim() || null, photos, updated_at: new Date().toISOString(),
-        };
-        if (!rec.name) { $('formError').textContent = 'Впиши название товара.'; $('formError').hidden = false; btn.disabled = false; btn.textContent = 'Сохранить'; return; }
-        if (editingProduct) Object.assign(editingProduct, rec);
-        else state.products.push(Object.assign({ id: svUuid() }, rec));
-        closeSheet('formSheet'); closeSheet('productSheet');
-        await svSaveAndPublish(editingProduct ? 'Товар обновлён' : 'Товар добавлен');
-      } catch (err) {
-        $('formError').textContent = 'Не удалось сохранить: ' + (err.message || err);
-        $('formError').hidden = false;
-      } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
-      return;
-    }
     try {
-      // загружаем новые фото
-      const photoUrls = [];
-      for (const ph of formPhotos) {
-        if (ph.url) photoUrls.push(ph.url);
-        else photoUrls.push(await uploadPhoto(ph.blob));
-      }
-      const record = {
-        name: $('fName').value.trim(),
-        group_id: $('fGroup').value || null,
-        supplier_ids: formSupplierIds,
-        code: $('fCode').value.trim() || null,
-        article: $('fArticle').value.trim() || null,
+      const photos = formPhotos.map((ph) => ph.url).filter(Boolean); // новые фото-файлы пока не грузим
+      const rec = {
+        name: $('fName').value.trim(), group_id: $('fGroup').value || null, supplier_ids: formSupplierIds,
+        code: $('fCode').value.trim() || null, article: $('fArticle').value.trim() || null,
         barcodes: $('fBarcodes').value.split('\n').map((s) => s.trim()).filter(Boolean),
-        is_weighted: $('fWeighted').checked,
-        unit: $('fUnit').value.trim() || null,
-        department: $('fDepartment').value.trim() || null,
-        note: $('fNote').value.trim() || null,
-        photos: photoUrls,
-        updated_at: new Date().toISOString(),
-        // описание пишем, только если колонка добавлена (ОБНОВЛЕНИЕ-15)
-        ...(hasProductCol('description') ? { description: $('fDescription').value.trim() || null } : {}),
+        is_weighted: $('fWeighted').checked, unit: $('fUnit').value.trim() || null,
+        department: $('fDepartment').value.trim() || null, note: $('fNote').value.trim() || null,
+        description: $('fDescription').value.trim() || null, photos, updated_at: new Date().toISOString(),
       };
-      if (editingProduct) {
-        const removed = (editingProduct.photos || []).filter((u) => !photoUrls.includes(u));
-        const { error } = await sb.from('catalog_products').update(record).eq('id', editingProduct.id);
-        if (error) throw error;
-        await removePhotosFromStorage(removed);
-        toast('Товар обновлён');
-      } else {
-        const { error } = await sb.from('catalog_products').insert(record);
-        if (error) throw error;
-        toast('Товар добавлен');
-      }
-      closeSheet('formSheet');
-      closeSheet('productSheet');
-      await refresh({ silent: true });
-      renderAll();
+      if (!rec.name) { $('formError').textContent = 'Впиши название товара.'; $('formError').hidden = false; btn.disabled = false; btn.textContent = 'Сохранить'; return; }
+      if (editingProduct) Object.assign(editingProduct, rec);
+      else state.products.push(Object.assign({ id: svUuid() }, rec));
+      closeSheet('formSheet'); closeSheet('productSheet');
+      await svSaveAndPublish(editingProduct ? 'Товар обновлён' : 'Товар добавлен');
     } catch (err) {
       $('formError').textContent = 'Не удалось сохранить: ' + (err.message || err);
       $('formError').hidden = false;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = 'Сохранить';
-    }
+    } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
   }
 
   async function deleteProduct() {
     if (!currentProduct) return;
     if (!confirm(`Удалить «${currentProduct.name}» из каталога?`)) return;
-    if (state.serverless) {
-      state.products = state.products.filter((p) => p.id !== currentProduct.id);
-      closeSheet('productSheet');
-      await svSaveAndPublish('Товар удалён');
-      return;
-    }
-    try {
-      const { error } = await sb.from('catalog_products').delete().eq('id', currentProduct.id);
-      if (error) throw error;
-      await removePhotosFromStorage(currentProduct.photos || []);
-      toast('Товар удалён');
-      closeSheet('productSheet');
-      await refresh({ silent: true });
-      renderAll();
-    } catch (err) {
-      toast('Ошибка удаления: ' + (err.message || err));
-    }
+    state.products = state.products.filter((p) => p.id !== currentProduct.id);
+    closeSheet('productSheet');
+    await svSaveAndPublish('Товар удалён');
   }
 
   /* ── Админ: группы ────────────────────────────── */
@@ -3884,13 +3417,6 @@
       await svSaveAndPublish('Группа добавлена');
       return;
     }
-    const { error } = await sb.from('catalog_groups').insert({ name, sort_order: maxSort + 1 });
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    $('newGroupName').value = '';
-    await refresh({ silent: true });
-    renderAll();
-    renderGroupsManager();
-    toast('Группа добавлена');
   }
 
   async function renameGroup(id, name) {
@@ -3900,10 +3426,6 @@
       await svSaveAndPublish();
       return;
     }
-    const { error } = await sb.from('catalog_groups').update({ name: name.trim() }).eq('id', id);
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    await refresh({ silent: true });
-    renderAll();
   }
 
   async function deleteGroup(id) {
@@ -3917,13 +3439,6 @@
       await svSaveAndPublish('Группа удалена');
       return;
     }
-    const { error } = await sb.from('catalog_groups').delete().eq('id', id);
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    state.selGroups = state.selGroups.filter((x) => x !== id);
-    await refresh({ silent: true });
-    renderAll();
-    renderGroupsManager();
-    toast('Группа удалена');
   }
 
   /* ── Поставщики ───────────────────────────────── */
@@ -4007,77 +3522,10 @@
 
   let editingContactSupplier = null;
 
-  function openContactForm(supplierId) {
-    editingContactSupplier = supplierId;
-    const s = supplierById(supplierId);
-    const c = state.contacts[supplierId] || {};
-    $('contactTitle').textContent = s ? `Контакты: ${s.name}` : 'Контакты поставщика';
-    $('cPhone').value = c.phone || '';
-    $('cName').value = c.contact_name || '';
-    $('cNote').value = c.note || '';
-    $('contactError').hidden = true;
-    openSheet('supplierContactSheet');
-  }
 
-  async function submitContactForm(e) {
-    e.preventDefault();
-    const btn = $('contactSubmit');
-    btn.disabled = true;
-    try {
-      const record = {
-        supplier_id: editingContactSupplier,
-        phone: $('cPhone').value.trim() || null,
-        contact_name: $('cName').value.trim() || null,
-        note: $('cNote').value.trim() || null,
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await sb.from('catalog_supplier_contacts')
-        .upsert(record, { onConflict: 'supplier_id' });
-      if (error) throw error;
-      state.contacts[editingContactSupplier] = record;
-      closeSheet('supplierContactSheet');
-      renderSuppliersManager();
-      toast('Контакты сохранены');
-    } catch (err) {
-      $('contactError').textContent = 'Не удалось сохранить: ' + (err.message || err)
-        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-2.sql в SQL Editor.';
-      $('contactError').hidden = false;
-    } finally {
-      btn.disabled = false;
-    }
-  }
 
-  async function addSupplier() {
-    const name = $('newSupplierName').value.trim();
-    if (!name) return;
-    const { error } = await sb.from('catalog_suppliers').insert({ name });
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    $('newSupplierName').value = '';
-    await refresh({ silent: true });
-    renderAll();
-    renderSuppliersManager();
-    toast('Поставщик добавлен');
-  }
 
-  async function renameSupplier(id, name) {
-    if (!name.trim()) return;
-    const { error } = await sb.from('catalog_suppliers').update({ name: name.trim() }).eq('id', id);
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    await refresh({ silent: true });
-    renderAll();
-  }
 
-  async function deleteSupplier(id) {
-    const s = supplierById(id);
-    if (!confirm(`Удалить поставщика «${s?.name}»? Товары останутся — без поставщика.`)) return;
-    const { error } = await sb.from('catalog_suppliers').delete().eq('id', id);
-    if (error) { toast('Ошибка: ' + error.message); return; }
-    state.selSuppliers = state.selSuppliers.filter((x) => x !== id);
-    await refresh({ silent: true });
-    renderAll();
-    renderSuppliersManager();
-    toast('Поставщик удалён');
-  }
 
   /* ── Импорт из 1С (Excel) ─────────────────────────
    * Файл 1 — отчёт «Цены поставщиков»: товары, коды, группы, поставщики, ед.изм.
@@ -4453,53 +3901,6 @@
 
   // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
   // обновляет розничную цену (+ история), новый — создаёт с группой.
-  async function coreUploadRetail(parsed, status) {
-    const { recs, fileDate } = parsed;
-    status('Создаём группы…');
-    const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
-    const byName = new Map(); const byArticle = new Map(); const byId = new Map();
-    for (const p of state.products) {
-      if (p.name) byName.set(norm(p.name), p.id);
-      if (p.article) byArticle.set(norm(p.article), p.id);
-      byId.set(p.id, p);
-    }
-    const at = new Date().toISOString().slice(0, 10);
-    // прайс-лист НЕ трогает дату поступления: она только из файла «Цены поставщиков»
-    const updates = []; const inserts = []; const hist = []; const seen = new Set();
-    for (const r of recs) {
-      const pid = (r.article && byArticle.get(norm(r.article))) || byName.get(norm(r.name));
-      if (pid) {
-        if (seen.has(pid)) continue; // один товар — одна цена за загрузку
-        seen.add(pid);
-        updates.push({ id: pid, name: r.name, retail_price: r.retail, updated_at: new Date().toISOString() });
-        const cur = byId.get(pid);
-        const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
-        if (old == null || old !== Number(r.retail)) hist.push({ product_id: pid, retail_price: r.retail, changed_at: at });
-      } else {
-        inserts.push({ name: r.name, article: r.article || null, group_id: r.group ? groupMap.get(norm(r.group)) : null, retail_price: r.retail });
-      }
-    }
-    let done = 0; const total = updates.length + inserts.length;
-    for (let i = 0; i < updates.length; i += 500) {
-      const { error } = await sb.from('catalog_products').upsert(updates.slice(i, i + 500), { onConflict: 'id' });
-      if (error) throw error;
-      done += Math.min(500, updates.length - i); status(`Обновляем цены… ${done} из ${total}`);
-    }
-    for (let i = 0; i < inserts.length; i += 400) {
-      const { error } = await sb.from('catalog_products').insert(inserts.slice(i, i + 400));
-      if (error) throw error;
-      done += Math.min(400, inserts.length - i); status(`Добавляем новые товары… ${done} из ${total}`);
-    }
-    if (hist.length) {
-      for (let i = 0; i < hist.length; i += 500) {
-        try { await sb.from('catalog_retail_history').upsert(hist.slice(i, i + 500), { onConflict: 'product_id,changed_at' }); }
-        catch (e) { break; }
-      }
-    }
-    await refresh({ silent: true });
-    renderAll();
-    status(`Готово! Розничных цен обновлено: ${updates.length}, новых товаров: ${inserts.length}`);
-  }
 
   /* ── Умный импорт: одна вкладка, каталог сам распознаёт файлы ──
    * Пользователь выбирает любые файлы 1С — программа определяет тип каждого и
@@ -4600,34 +4001,32 @@
     btn.disabled = true;
     lastMissing = [];
     $('smartMissing').hidden = true;
-    const todo = smartEntries.filter((e) => e.type && !e.error && (state.serverless || e.type !== 'barcodes'))
+    const todo = smartEntries.filter((e) => e.type && !e.error)
       .sort((a, b) => (IMPORT_ORDER[a.type] ?? 9) - (IMPORT_ORDER[b.type] ?? 9));
     let okCount = 0;
 
-    // ── Серверлес: те же файлы, но в зашифрованный каталог на GitHub ──
-    if (state.serverless) {
-      for (const e of todo) {
-        try {
-          if (e.type === 'prices') svUploadPrices(e.byKey);
-          else if (e.type === 'retail') svUploadRetail(e.parsed);
-          else if (e.type === 'stock') svUploadStock(e.parsed);
-          else if (e.type === 'sales') svUploadSales(e.parsed);
-          else if (e.type === 'contacts') svUploadContacts(e.parsed);
-          else if (e.type === 'units') {
-            const r = svUploadUnits(e.parsed);
-            setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
-              + (r.missing ? `, кодов без товара: ${r.missing}${missingHint(e, r.missingList)}` : ''));
-            okCount++; continue;
-          }
-          else if (e.type === 'barcodes') {
-            const r = svUploadBarcodes(e.parsed);
-            setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
-              + (r.missing ? `, не нашлось товаров: ${r.missing}${missingHint(e, r.missingList)}` : ''));
-            okCount++; continue;
-          }
-          else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
-          setSmartRowStatus(e, 'загружено'); okCount++;
-        } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
+    for (const e of todo) {
+      try {
+        if (e.type === 'prices') svUploadPrices(e.byKey);
+        else if (e.type === 'retail') svUploadRetail(e.parsed);
+        else if (e.type === 'stock') svUploadStock(e.parsed);
+        else if (e.type === 'sales') svUploadSales(e.parsed);
+        else if (e.type === 'contacts') svUploadContacts(e.parsed);
+        else if (e.type === 'units') {
+          const r = svUploadUnits(e.parsed);
+          setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
+            + (r.missing ? `, кодов без товара: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+          okCount++; continue;
+        }
+        else if (e.type === 'barcodes') {
+          const r = svUploadBarcodes(e.parsed);
+          setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
+            + (r.missing ? `, не нашлось товаров: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+          okCount++; continue;
+        }
+        else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
+        setSmartRowStatus(e, 'загружено'); okCount++;
+      } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
       }
       state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
       buildIndex(); state.popularIds = buildPopularIds(); renderAll();
@@ -4636,189 +4035,11 @@
       try { await publishFull(secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован`); toast('Каталог обновлён'); }
       catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('Не удалось опубликовать'); }
       btn.disabled = false; btn.hidden = true;
-      return;
-    }
-
-    for (const e of todo) {
-      smartSink = (msg) => setSmartRowStatus(e, msg);
-      try {
-        if (e.type === 'prices') { impParsed = [...e.byKey.values()]; await impUpload(); }
-        else if (e.type === 'retail') { await coreUploadRetail(e.parsed, smartSink); }
-        else if (e.type === 'stock') { stockParsed = e.parsed; await stockUpload(); }
-        else if (e.type === 'sales') { salesParsed = e.parsed; await salesUpload(); }
-        else if (e.type === 'contacts') { contactsParsed = e.parsed; await contactsUpload(); }
-        // сырые строки файла надо сперва сопоставить с товарами: загрузчик ждёт
-        // готовое соответствие «товар → ссылка», а не список строк
-        else if (e.type === 'photo') { photoExcelParsed = matchPhotoRows(e.parsed).updates; await photoExcelApply(); }
-        okCount++;
-      } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
-      smartSink = null;
-    }
-    btn.disabled = false;
-    btn.hidden = true;
-    smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён`);
-    toast('Импорт завершён');
   }
 
-  function impStatus(msg) { if (smartSink) smartSink(msg); }
 
 
-  async function getOrCreateByName(table, names, existing) {
-    const map = new Map(existing.map((x) => [norm(x.name), x.id]));
-    const missing = [...new Set(names.filter((n) => !map.has(norm(n))))];
-    for (let i = 0; i < missing.length; i += 500) {
-      const chunk = missing.slice(i, i + 500).map((name) => ({ name }));
-      const { data, error } = await sb.from(table).insert(chunk).select();
-      if (error) throw error;
-      data.forEach((x) => map.set(norm(x.name), x.id));
-    }
-    return map;
-  }
 
-  async function impUpload() {
-    const items = impParsed;
-    const btn = deadBtn();
-    btn.disabled = true;
-    try {
-      impStatus('Создаём группы и поставщиков…');
-      const groupMap = await getOrCreateByName('catalog_groups',
-        items.map((i) => i.group).filter(Boolean), state.groups);
-      const supMap = await getOrCreateByName('catalog_suppliers',
-        items.flatMap((i) => [...i.suppliers]), state.suppliers);
-
-      // существующие товары — чтобы товары БЕЗ кода находить по штрихкоду/названию
-      // и ОБНОВЛЯТЬ, а не вставлять заново (иначе повторный импорт двоит каталог)
-      const exByBarcode = new Map();
-      const exByName = new Map();
-      for (const p of state.products) {
-        for (const b of (p.barcodes || [])) if (b) exByBarcode.set(String(b).trim(), p.id);
-        if (p.name) exByName.set(norm(p.name), p.id);
-      }
-      const findExisting = (i) => {
-        for (const b of i.barcodes) { const id = exByBarcode.get(String(b).trim()); if (id) return id; }
-        return exByName.get(norm(i.name)) || null;
-      };
-
-      const today = new Date().toISOString().slice(0, 10);
-      const AC = arrivalColExists();
-      const withCode = [];
-      const noCodeUpdate = []; // товары без кода, найденные в базе → обновляем по id
-      const noCodeInsert = [];
-      const noCodeInsertItems = [];
-      for (const i of items) {
-        // дата поступления = самая свежая дата из колонки «Период» файла цен (иначе — день импорта)
-        let arrival = null;
-        for (const [, pr] of i.prices) if (pr.date && (!arrival || pr.date > arrival)) arrival = pr.date;
-        const base = {
-          name: i.name,
-          article: i.article,
-          group_id: i.group ? groupMap.get(norm(i.group)) : null,
-          supplier_ids: [...i.suppliers].map((s) => supMap.get(norm(s))).filter(Boolean),
-          barcodes: [...i.barcodes],
-          is_weighted: i.weighted,
-          unit: i.unit,
-          updated_at: new Date().toISOString(),
-          ...(AC ? { arrival_at: arrival || today } : {}),
-          // розничную цену пишем только если она есть в файле — иначе не затираем прежнюю
-          ...(i.retail != null ? { retail_price: i.retail } : {}),
-        };
-        if (i.code) { withCode.push({ ...base, code: i.code }); continue; }
-        const exId = findExisting(i);
-        if (exId) { noCodeUpdate.push({ ...base, id: exId }); i._id = exId; } // код НЕ трогаем — вдруг товар уже с кодом
-        else { noCodeInsert.push(base); noCodeInsertItems.push(i); }
-      }
-
-      const idByCode = new Map(); // код товара → id в базе (для загрузки цен)
-      let done = 0;
-      const total = withCode.length + noCodeUpdate.length + noCodeInsert.length;
-      for (let i = 0; i < withCode.length; i += 400) {
-        const { data, error } = await sb.from('catalog_products')
-          .upsert(withCode.slice(i, i + 400), { onConflict: 'code' })
-          .select('id,code');
-        if (error) throw error;
-        for (const row of data) idByCode.set(row.code, row.id);
-        done += Math.min(400, withCode.length - i);
-        impStatus(`Загружаем товары… ${done} из ${total}`);
-      }
-      // найденные без кода — обновляем по id (не плодим дубли)
-      for (let i = 0; i < noCodeUpdate.length; i += 400) {
-        const { error } = await sb.from('catalog_products')
-          .upsert(noCodeUpdate.slice(i, i + 400), { onConflict: 'id' });
-        if (error) throw error;
-        done += Math.min(400, noCodeUpdate.length - i);
-        impStatus(`Загружаем товары… ${done} из ${total}`);
-      }
-      // действительно новые без кода — вставляем
-      for (let i = 0; i < noCodeInsert.length; i += 400) {
-        const chunk = noCodeInsert.slice(i, i + 400);
-        const { data, error } = await sb.from('catalog_products').insert(chunk).select('id');
-        if (error) throw error;
-        data.forEach((row, j) => { noCodeInsertItems[i + j]._id = row.id; });
-        done += Math.min(400, noCodeInsert.length - i);
-        impStatus(`Загружаем товары… ${done} из ${total}`);
-      }
-
-      // цены поставщиков: дата = последнее поступление из файла (нет колонки даты — день импорта)
-      const priceRows = [];
-      for (const i of items) {
-        const pid = i.code ? idByCode.get(i.code) : i._id;
-        if (!pid) continue;
-        for (const [supName, pr] of i.prices) {
-          const sid = supMap.get(norm(supName));
-          if (sid) priceRows.push({ product_id: pid, supplier_id: sid, price: pr.price, price_date: pr.date || today });
-        }
-      }
-      // база пишет только новые и изменившиеся цены — одинаковые не плодят строк
-      let pricesSaved = 0;
-      let pricesChanged = 0;
-      let pricesError = null;
-      let smartSave = true;
-      for (let i = 0; i < priceRows.length; i += 500) {
-        const chunk = priceRows.slice(i, i + 500);
-        if (smartSave) {
-          const { data, error } = await sb.rpc('catalog_save_prices', { p_rows: chunk });
-          if (error && /catalog_save_prices/.test(error.message || '')) {
-            smartSave = false; // база без ОБНОВЛЕНИЯ-4 — пишем по-старому
-            i -= 500;
-            continue;
-          }
-          if (error) { pricesError = error; break; }
-          pricesChanged += data || 0;
-        } else {
-          const { error } = await sb.from('catalog_prices')
-            .upsert(chunk, { onConflict: 'product_id,supplier_id,price_date' });
-          if (error) { pricesError = error; break; }
-          pricesChanged += chunk.length;
-        }
-        pricesSaved += chunk.length;
-        impStatus(`Сохраняем цены… ${pricesSaved} из ${priceRows.length}`);
-      }
-
-      impStatus('Обновляем каталог…');
-      await refresh({ silent: true });
-      renderAll();
-      if (pricesError) {
-        impStatus(`Товары загружены (${total}), но цены сохранить не удалось: ${pricesError.message}. `
-          + 'Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-2.sql в SQL Editor и повтори импорт.');
-      } else {
-        const priceNote = priceRows.length
-          ? ` Цены: изменилось ${pricesChanged} из ${priceRows.length} (одинаковые не записываются — база не растёт зря).`
-          : '';
-        impStatus(`Готово! Загружено ${total} товаров${priceNote} Можно закрыть окно.`);
-      }
-      toast('Импорт завершён');
-      await autoDedup(); // тихо убрать дубли, если вдруг появились
-      setTimeout(autoPhotoSearch, 1500); // сразу дотянуть фото для новых товаров
-      impParsed = null;
-      btn.textContent = 'Проверить файлы';
-    } catch (err) {
-      impStatus('Ошибка: ' + (err.message || err) + '. Если база ещё старой версии — выполни setup/ОБНОВЛЕНИЕ-1.sql в SQL Editor и повтори.');
-      impParsed = null;
-      btn.textContent = 'Проверить файлы';
-    } finally {
-      btn.disabled = false;
-    }
-  }
 
   /* ── Поиск фото по штрихкодам ─────────────────────
    * Открытая всемирная база Open Food Facts (+ Open Beauty Facts для химии
@@ -4993,19 +4214,10 @@
     // Бесплатный режим: своего хранилища нет, поэтому запоминаем ССЫЛКУ на фото
     // из открытой базы. Скачать и переложить к себе браузер всё равно не даёт
     // (чужие сайты это запрещают), а ссылка работает сразу и ничего не весит.
-    if (state.serverless) {
-      p.photos = [url];
-      p.updated_at = new Date().toISOString();
-      return;
-    }
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('фото недоступно');
-    const small = await compressImage(await resp.blob(), 800, 0.8);
-    const photos = [await uploadPhoto(small)];
-    const { error } = await sb.from('catalog_products')
-      .update({ photos, updated_at: new Date().toISOString() }).eq('id', p.id);
-    if (error) throw error;
-    p.photos = photos;
+    // Чужую картинку скачать и положить к себе браузер не даёт (защита сайтов),
+    // поэтому запоминаем ссылку — лицензия открытой базы это позволяет.
+    p.photos = [url];
+    p.updated_at = new Date().toISOString();
   }
 
   // владелец (личный аккаунт), а не общий аккаунт сотрудников — только он тянет фото автоматически
@@ -5018,7 +4230,7 @@
    * пока владелец в приложении. Продолжается после каждого импорта и между
    * заходами (проверенные штрихкоды запоминаются). Тихо, без кнопок. */
   async function autoPhotoSearch() {
-    if ((!sb && !state.serverless) || !isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
+    if (!isOwner() || photoSearchRunning || document.hidden || !navigator.onLine) return;
     let checked = {};
     try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
     const todo = photoCandidates().filter((p) => !checked[p.id]);
@@ -5076,25 +4288,20 @@
     return toDelete;
   }
 
-  async function runDedup(toDelete, { silent } = {}) {
-    if (dedupRunning || !toDelete.length || !sb || !isOwner()) return;
+
+  // Убрать дубли в бесплатном режиме: правим каталог в памяти и публикуем.
+  // Раньше это делала база (DELETE ... IN), теперь сервера нет.
+  async function svDedup(toDelete, silent) {
+    if (dedupRunning || !toDelete.length || !isOwner()) return;
     dedupRunning = true;
     const btn = $('menuDedup');
     if (btn) btn.disabled = true;
     if (!silent) toast(`Убираю дубли: ${toDelete.length}…`);
     try {
-      let done = 0;
-      for (let i = 0; i < toDelete.length; i += 200) {
-        const batch = toDelete.slice(i, i + 200);
-        const { error } = await sb.from('catalog_products').delete().in('id', batch);
-        if (error) throw error;
-        done += batch.length;
-        if (btn) btn.textContent = `Убираю дубли… ${done} из ${toDelete.length}`;
-      }
       const del = new Set(toDelete);
       state.products = state.products.filter((p) => !del.has(p.id));
-      buildIndex(); saveCache(); renderAll();
-      toast(`Убрано дублей: ${toDelete.length}`);
+      buildIndex(); saveCache();
+      await svSaveAndPublish(`Убрано дублей: ${toDelete.length}`);
     } catch (e) {
       if (!silent) toast('Ошибка: ' + (e.message || e));
     } finally {
@@ -5106,13 +4313,13 @@
   function dedupProducts() { // ручная кнопка
     const ids = findDuplicateIds();
     if (!ids.length) { toast('Дублей не найдено'); return; }
-    if (confirm(`Найдено дублей: ${ids.length}. Убрать их? Останется по одному товару.`)) runDedup(ids, { silent: false });
+    if (confirm(`Найдено дублей: ${ids.length}. Убрать их? Останется по одному товару.`)) svDedup(ids, false);
   }
 
   async function autoDedup() { // тихо, само (после импорта, при входе владельца)
     if (!isOwner()) return;
     const ids = findDuplicateIds();
-    if (ids.length) await runDedup(ids, { silent: true });
+    if (ids.length) await svDedup(ids, true);
   }
 
   async function runPhotoSearch() {
@@ -5201,62 +4408,9 @@
   }
 
   // сопоставляем строки с товарами: штрихкод → код → точное название
-  function matchPhotoRows(recs) {
-    const byBarcode = new Map();
-    const byCode = new Map();
-    const byName = new Map();
-    for (const p of state.products) {
-      for (const b of (p.barcodes || [])) byBarcode.set(String(b).trim(), p);
-      if (p.code) byCode.set(String(p.code).trim(), p);
-      byName.set(norm(p.name), p);
-    }
-    const updates = new Map(); // product.id → url (последняя ссылка выигрывает)
-    let unmatched = 0;
-    for (const r of recs) {
-      const p = (r.barcode && byBarcode.get(r.barcode.trim()))
-        || (r.code && byCode.get(r.code.trim()))
-        || (r.name && byName.get(norm(r.name)));
-      if (p) updates.set(p.id, r.url);
-      else unmatched++;
-    }
-    return { updates, unmatched };
-  }
-
-  function photoExcelStatus(msg) { if (smartSink) smartSink(msg); }
 
 
-  async function photoExcelApply() {
-    const updates = photoExcelParsed;
-    const btn = deadBtn();
-    btn.disabled = true;
-    try {
-      const entries = [...updates.entries()];
-      let done = 0;
-      for (let i = 0; i < entries.length; i += 200) {
-        const chunk = entries.slice(i, i + 200);
-        // по одному апдейту — у каждого товара свой url; шлём параллельно пачкой
-        await Promise.all(chunk.map(([id, url]) =>
-          sb.from('catalog_products').update({ photos: [url], updated_at: new Date().toISOString() }).eq('id', id)
-            .then(({ error }) => {
-              if (error) throw error;
-              const p = state.products.find((x) => x.id === id);
-              if (p) p.photos = [url];
-            })));
-        done += chunk.length;
-        photoExcelStatus(`Сохраняем… ${done} из ${entries.length}`);
-      }
-      saveCache();
-      renderGrid();
-      photoExcelStatus(`Готово! Фото показаны у ${entries.length} товаров`);
-      toast('Фото из Excel добавлены');
-      photoExcelParsed = null;
-      btn.textContent = 'Проверить файл';
-    } catch (err) {
-      photoExcelStatus('Ошибка: ' + (err.message || err));
-    } finally {
-      btn.disabled = false;
-    }
-  }
+
 
   /* ── Импорт продаж из 1С ──────────────────────────
    * Отчёт «Продажи»: товар + количество (+ сумма, + дата/период, если есть).
@@ -5323,60 +4477,8 @@
     return { recs: [...recs.values()], periodFrom, periodTo, hasPeriod: !!(periodFrom && periodTo) };
   }
 
-  function salesStatus(msg) { if (smartSink) smartSink(msg); }
 
 
-  async function salesUpload() {
-    const { recs, hasPeriod } = salesParsed;
-    const btn = deadBtn();
-    btn.disabled = true;
-    try {
-      // период: из файла, иначе из полей «с»/«по» (или сегодня)
-      const today = new Date().toISOString().slice(0, 10);
-      // период берём из файла; нет его — считаем сегодняшним днём
-      const periodFrom = hasPeriod ? salesParsed.periodFrom : today;
-      const periodTo = hasPeriod ? salesParsed.periodTo : today;
-      const byCode = new Map();
-      const byName = new Map();
-      for (const p of state.products) {
-        if (p.code) byCode.set(p.code, p.id);
-        byName.set(norm(p.name), p.id);
-      }
-      const out = new Map(); // товар в базе → продажи за период
-      let unmatched = 0;
-      for (const r of recs) {
-        const pid = (r.code && byCode.get(r.code)) || byName.get(norm(r.name));
-        if (!pid) { unmatched++; continue; }
-        let row = out.get(pid);
-        if (!row) { row = { product_id: pid, period_from: periodFrom, period_to: periodTo, qty: 0, amount: null }; out.set(pid, row); }
-        row.qty += r.qty;
-        if (r.hasAmount) row.amount = (row.amount || 0) + r.amount;
-      }
-      const list = [...out.values()];
-      if (!list.length) throw new Error('Ни один товар из отчёта не найден в каталоге по названию. Сначала сделай импорт товаров тем же файлом «Цены поставщиков».');
-      let done = 0;
-      for (let i = 0; i < list.length; i += 500) {
-        const { error } = await sb.from('catalog_sales')
-          .upsert(list.slice(i, i + 500), { onConflict: 'product_id,period_from,period_to' });
-        if (error) throw error;
-        done += Math.min(500, list.length - i);
-        salesStatus(`Сохраняем продажи… ${done} из ${list.length}`);
-      }
-      salesStatus(`Готово! Продажи за ${fmtDate(periodFrom)}–${fmtDate(periodTo)} сохранены: ${list.length} товаров`
-        + (unmatched ? ` Не нашлось по названию: ${unmatched}.` : '')
-        + ' Смотри «Ходовые товары».');
-      toast('Продажи загружены');
-      salesParsed = null;
-      btn.textContent = 'Проверить файл';
-    } catch (err) {
-      salesStatus('Ошибка: ' + (err.message || err)
-        + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-3.sql в SQL Editor и повтори.');
-      salesParsed = null;
-      btn.textContent = 'Проверить файл';
-    } finally {
-      btn.disabled = false;
-    }
-  }
 
   /* ── Импорт контактов поставщиков из 1С ───────────
    * Справочник «Контрагенты»: колонка «Контрагент» (название) + колонка с
@@ -5410,44 +4512,7 @@
   }
 
 
-  function contactsStatus(msg) { if (smartSink) smartSink(msg); }
 
-  async function contactsUpload() {
-    const list = contactsParsed;
-    const btn = deadBtn();
-    btn.disabled = true;
-    try {
-      contactsStatus('Создаём поставщиков…');
-      // создаём/находим всех поставщиков из файла (новые появятся в каталоге)
-      const supMap = await getOrCreateByName('catalog_suppliers', list.map((c) => c.name), state.suppliers);
-      const records = [];
-      for (const c of list) {
-        if (!c.phone) continue;
-        const sid = supMap.get(norm(c.name));
-        if (sid) records.push({ supplier_id: sid, phone: c.phone, updated_at: new Date().toISOString() });
-      }
-      let saved = 0;
-      for (let i = 0; i < records.length; i += 500) {
-        const { error } = await sb.from('catalog_supplier_contacts')
-          .upsert(records.slice(i, i + 500), { onConflict: 'supplier_id' });
-        if (error) throw error;
-        saved += Math.min(500, records.length - i);
-        contactsStatus(`Сохраняем контакты… ${saved} из ${records.length}`);
-      }
-      await refresh({ silent: true });
-      if (state.canPurchase) await loadContacts();
-      renderAll();
-      contactsStatus(`Готово! Поставщиков в файле: ${list.length}, телефонов сохранено: ${records.length}`);
-      toast('Контакты загружены');
-      contactsParsed = null;
-      btn.textContent = 'Проверить файл';
-    } catch (err) {
-      contactsStatus('Ошибка: ' + (err.message || err)
-        + '. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql в SQL Editor.');
-    } finally {
-      btn.disabled = false;
-    }
-  }
 
   /* ── Импорт остатков из 1С (отчёт «Остатки номенклатуры») ──
    * Многострочная шапка. Берём: название, код, штрихкод, группа, ед.,
@@ -5501,94 +4566,8 @@
     return { recs, stockAt };
   }
 
-  function stockStatus(msg) { if (smartSink) smartSink(msg); }
 
 
-  async function stockUpload() {
-    const { recs, stockAt } = stockParsed;
-    const btn = deadBtn();
-    btn.disabled = true;
-    try {
-      stockStatus('Создаём группы…');
-      const groupMap = await getOrCreateByName('catalog_groups', recs.map((r) => r.group).filter(Boolean), state.groups);
-      const byCode = new Map(); const byBarcode = new Map(); const byName = new Map();
-      for (const p of state.products) {
-        if (p.code) byCode.set(p.code, p.id);
-        for (const b of (p.barcodes || [])) if (b) byBarcode.set(String(b).trim(), p.id);
-        if (p.name) byName.set(norm(p.name), p.id);
-      }
-      const at = stockAt || new Date().toISOString().slice(0, 10);
-      const byId = new Map(state.products.map((p) => [p.id, p]));
-      const updates = []; const inserts = []; const histInserts = [];
-      for (const r of recs) {
-        const pid = (r.code && byCode.get(r.code))
-          || (r.barcode && byBarcode.get(String(r.barcode).trim()))
-          || byName.get(norm(r.name));
-        if (pid) {
-          // name обязательно (NOT NULL): если id вдруг устарел и строка вставится,
-          // а не обновится — не упадём на пустом имени
-          const u = { id: pid, name: r.name, stock_qty: r.stock, stock_at: at, updated_at: new Date().toISOString() };
-          if (r.retail != null) {
-            u.retail_price = r.retail; // не затираем, если цены нет
-            // записываем в историю розничной цены, если цена изменилась
-            const cur = byId.get(pid);
-            const old = cur && cur.retail_price != null && cur.retail_price !== '' ? Number(cur.retail_price) : null;
-            if (old == null || old !== Number(r.retail)) histInserts.push({ product_id: pid, retail_price: r.retail, changed_at: at });
-          }
-          updates.push(u);
-        } else {
-          inserts.push({
-            name: r.name, code: r.code,
-            group_id: r.group ? groupMap.get(norm(r.group)) : null,
-            barcodes: r.barcode ? [r.barcode] : [],
-            unit: r.unit || null,
-            is_weighted: r.unit === 'кг',
-            stock_qty: r.stock, stock_at: at,
-            ...(r.retail != null ? { retail_price: r.retail } : {}),
-          });
-        }
-      }
-      let done = 0; const total = updates.length + inserts.length;
-      for (let i = 0; i < updates.length; i += 500) {
-        const { error } = await sb.from('catalog_products')
-          .upsert(updates.slice(i, i + 500), { onConflict: 'id' });
-        if (error) throw error;
-        done += Math.min(500, updates.length - i);
-        stockStatus(`Обновляем остатки… ${done} из ${total}`);
-      }
-      for (let i = 0; i < inserts.length; i += 400) {
-        // upsert по коду: если товар с таким кодом уже есть (а в состоянии его не
-        // было), обновим его, а не упадём на уникальном индексе кода
-        const { error } = await sb.from('catalog_products')
-          .upsert(inserts.slice(i, i + 400), { onConflict: 'code' });
-        if (error) throw error;
-        done += Math.min(400, inserts.length - i);
-        stockStatus(`Добавляем новые товары… ${done} из ${total}`);
-      }
-      // история розничной цены (не критично — если таблицы нет, тихо пропускаем)
-      if (histInserts.length) {
-        for (let i = 0; i < histInserts.length; i += 500) {
-          try {
-            await sb.from('catalog_retail_history')
-              .upsert(histInserts.slice(i, i + 500), { onConflict: 'product_id,changed_at' });
-          } catch (e) { break; } // старая база без таблицы истории
-        }
-      }
-      stockStatus('Обновляем каталог…');
-      await refresh({ silent: true });
-      renderAll();
-      await autoDedup(); // тихо убрать дубли, если появились при сопоставлении по названию
-      stockStatus(`Готово! Остатки на ${fmtDate(at)} сохранены. Обновлено: ${updates.length}, новых товаров: ${inserts.length}`);
-      toast('Остатки загружены');
-      stockParsed = null;
-      btn.textContent = 'Проверить файл';
-    } catch (err) {
-      stockStatus('Ошибка: ' + (err.message || err)
-        + '. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql в SQL Editor.');
-    } finally {
-      btn.disabled = false;
-    }
-  }
 
   /* ── Ходовые товары (после входа) ─────────────── */
 
@@ -5624,17 +4603,6 @@
         if (!seen.has(k)) seen.set(k, { period_from: s.period_from, period_to: s.period_to });
       }
       periods = [...seen.values()].sort((a, b) => String(b.period_to || '').localeCompare(String(a.period_to || '')));
-    } else {
-      try {
-        const { data, error } = await sb.rpc('catalog_sales_periods');
-        if (error) throw error;
-        periods = data || [];
-      } catch (e) {
-        box.innerHTML = '';
-        $('topDeletePeriod').hidden = true;
-        $('topList').innerHTML = '<p class="muted">Не получилось прочитать продажи. Если база старой версии — выполни setup/ВСЕ-ОБНОВЛЕНИЯ.sql</p>';
-        return;
-      }
     }
     if (!periods.length) {
       box.innerHTML = '';
@@ -5686,20 +4654,6 @@
       }
       data = [...agg.values()];
       total = { total_amount: data.reduce((x, r) => x + r.total_amount, 0) };
-    } else {
-    try {
-      const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 200, p_order: topMode });
-      if (res.error) throw res.error;
-      data = res.data;
-      const tot = await sb.rpc('catalog_period_total', { p_from: from, p_to: to });
-      if (!tot.error && tot.data && tot.data[0]) total = tot.data[0];
-    } catch (e) {
-      // старая база (функция без p_order / без catalog_period_total): берём как
-      // раньше и сортируем на клиенте — фича продолжает работать до ОБНОВЛЕНИЯ-17
-      const res = await sb.rpc('catalog_top_products', { p_from: from, p_to: to, p_limit: 300 });
-      if (res.error) { box.innerHTML = '<p class="muted">Не получилось посчитать: ' + esc(res.error.message || '') + '</p>'; return; }
-      data = res.data;
-    }
     }
     if (!data || !data.length) { box.innerHTML = '<p class="muted">За этот период продаж нет</p>'; return; }
 
@@ -6274,10 +5228,6 @@
         }
         openSheet('adminMenuSheet');
         if (!state.serverless) {
-          loadSuggestionsCount().then(() => {
-            $('menuSuggestions').hidden = !(state.suggCount > 0);
-            $('menuSuggestions').textContent = `Фото на проверке (${state.suggCount || 0})`;
-          });
         }
       } else {
         openLogin();
@@ -6368,25 +5318,7 @@
     });
     $('competitorForm').addEventListener('submit', submitCompetitorPrice);
 
-    // добавить фото товара — любой вошедший сотрудник (камера на телефоне)
-    $('addPhotoInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file && currentProduct) addPhotoToProduct(file, currentProduct);
-    });
 
-    // Покупатель без аккаунта предлагает фото (на проверку)
-    $('suggestPhotoInput').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file && currentProduct) suggestPhotoToProduct(file, currentProduct);
-    });
-    // Сотрудник разбирает очередь предложенных фото
-    $('menuSuggestions').addEventListener('click', () => { closeSheet('adminMenuSheet'); openSuggestions(); });
-    $('suggestionsList').addEventListener('click', (e) => {
-      const ok = e.target.closest('[data-approve]');
-      if (ok) { ok.disabled = true; approveSuggestion(ok.dataset.approve); return; }
-      const no = e.target.closest('[data-reject]');
-      if (no) { no.disabled = true; rejectSuggestion(no.dataset.reject); }
-    });
 
     // «Дозаполнить фото» — режим для сотрудника: снять камерой товары без фото
     $('menuPhotoFill').addEventListener('click', () => { closeSheet('adminMenuSheet'); openPhotoFill(); });
@@ -6419,10 +5351,8 @@
       }
       if (e.target.closest('#supViewLogin')) { openLogin(); return; }
       const edit = e.target.closest('[data-edit]');
-      if (edit) { closeSheet('supplierViewSheet'); openContactForm(edit.dataset.edit); }
     });
 
-    $('supplierContactForm').addEventListener('submit', submitContactForm);
 
     // Умный импорт: меню админа → одна вкладка, каталог сам распознаёт файлы
     function openImportHub() {
@@ -6511,32 +5441,8 @@
         } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
         return;
       }
-      if (!confirm('Сменить пароль магазина? Все устройства сотрудников выйдут из системы.')) return;
-      btn.disabled = true;
-      const { error } = await sb.rpc('catalog_set_staff_password', { p_password: pass });
-      btn.disabled = false;
-      if (error) {
-        $('staffPassError').textContent = 'Не получилось: ' + (error.message || error)
-          + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-4.sql в SQL Editor.';
-        $('staffPassError').hidden = false;
-        return;
-      }
-      closeSheet('staffPassSheet');
-      toast('Пароль магазина изменён Устройства сотрудников выйдут в течение часа');
     });
 
-    $('btnLogoutStaff').addEventListener('click', async () => {
-      if (!confirm('Выгнать все устройства сотрудников? Им придётся войти заново с текущим паролем.')) return;
-      const { error } = await sb.rpc('catalog_logout_staff');
-      if (error) {
-        $('staffPassError').textContent = 'Не получилось: ' + (error.message || error)
-          + '. Если база старой версии — выполни setup/ОБНОВЛЕНИЕ-4.sql в SQL Editor.';
-        $('staffPassError').hidden = false;
-        return;
-      }
-      closeSheet('staffPassSheet');
-      toast('Готово Устройства сотрудников выйдут в течение часа');
-    });
 
     // ── Публикация на GitHub: окошко ключа ──
     function renderPublishStatus() {
@@ -6667,33 +5573,6 @@
         if (savedAdmin && !emails.includes(savedAdmin)) emails.push(savedAdmin);
       }
 
-      let ok = null;
-      for (const email of emails) {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (!error) { ok = email; break; }
-      }
-      btn.disabled = false;
-      btn.textContent = 'Войти';
-
-      if (!ok) {
-        if ($('loginEmailWrap').hidden) {
-          // пароль не подошёл сотрудникам — возможно, это админ: спросим email
-          $('loginEmailWrap').hidden = false;
-          $('loginError').textContent = 'Пароль не подошёл. Сотрудник — проверь пароль магазина. Администратор — укажи свой email выше';
-        } else {
-          $('loginError').textContent = 'Неверный email или пароль';
-        }
-        $('loginError').hidden = false;
-        return;
-      }
-
-      if (ok !== CFG.STAFF_EMAIL) {
-        try { localStorage.setItem(ADMIN_EMAIL_KEY, ok); } catch (err) { /* некритично */ }
-      }
-      $('loginPassword').value = '';
-      $('loginEmail').value = '';
-      closeSheet('loginSheet');
-      toast('Вход выполнен');
     });
 
     $('menuLogout').addEventListener('click', async () => {
@@ -6706,8 +5585,6 @@
         location.reload();
         return;
       }
-      await sb.auth.signOut();
-      toast('Вы вышли из аккаунта');
     });
 
     $('fabAdd').addEventListener('click', () => openForm(null));
@@ -6807,11 +5684,6 @@
           await publishFull(secretPw);
           toast('Отчёт продаж удалён');
           await renderTopPeriods();
-        } else {
-          const { error } = await sb.rpc('catalog_delete_sales_period', { p_from: topPeriod.from, p_to: topPeriod.to });
-          if (error) throw error;
-          toast('Отчёт продаж удалён');
-          await renderTopPeriods(); // обновляем список периодов и топ
         }
       } catch (e) {
         toast('Не удалось удалить: ' + (e.message || ''));
@@ -6843,23 +5715,11 @@
       renderSuppliersManager();
       openSheet('suppliersManageSheet');
     });
-    $('btnAddSupplier').addEventListener('click', addSupplier);
-    $('newSupplierName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSupplier(); } });
-    $('suppliersManageList').addEventListener('change', (e) => {
-      const row = e.target.closest('.group-row');
-      if (row && e.target.classList.contains('supplier-name')) renameSupplier(row.dataset.id, e.target.value);
-    });
-    $('suppliersManageList').addEventListener('click', (e) => {
-      const contact = e.target.closest('.sup-contact-btn');
-      if (contact) { openContactForm(contact.closest('.group-row').dataset.id); return; }
-      const del = e.target.closest('.group-del');
-      if (del) deleteSupplier(del.closest('.group-row').dataset.id);
-    });
 
     // Возврат на вкладку — обновляем каталог, если данные старше 5 минут; и продолжаем автопоиск фото
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) return;
-      if (sb && Date.now() - state.lastFetch > 5 * 60 * 1000) refresh({ silent: true }).then(renderAll);
+      if (Date.now() - state.lastFetch > 5 * 60 * 1000) refresh({ silent: true }).then(renderAll);
       if (isOwner()) setTimeout(autoPhotoSearch, 2000);
     });
     window.addEventListener('online', () => { if (isOwner()) setTimeout(autoPhotoSearch, 2000); });
@@ -6899,14 +5759,10 @@
       });
     }
 
-    // Бесплатный режим (STATIC_URL) работает БЕЗ базы вообще: витрина берётся
-    // из файла, полный каталог — из зашифрованного файла по паролю. Поэтому
-    // подключение к базе теперь необязательно.
-    const hasDb = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
-
-    // Настраивать нечего только если не задано НИ подключение к базе,
-    // НИ бесплатная витрина — тогда показываем подсказку по настройке.
-    if (!hasDb && !CFG.STATIC_URL) {
+    // Каталог работает БЕЗ сервера: витрина берётся из файла на сайте, полный
+    // каталог — из зашифрованного файла по паролю. Настраивать нечего только
+    // если не указано, откуда брать витрину.
+    if (!CFG.STATIC_URL) {
       $('setupBanner').hidden = false;
       $('loader').hidden = true;
       await loadCache();
@@ -6914,14 +5770,7 @@
       return;
     }
 
-    // вход хранится на устройстве и продлевается сам — до нажатия «Выйти из аккаунта»
-    if (hasDb) {
-      sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
-        auth: { persistSession: true, autoRefreshToken: true },
-      });
-    }
-
-    // мгновенно показываем сохранённый каталог, затем тихо обновляем из базы
+    // мгновенно показываем сохранённый каталог, затем тихо обновляем
     if (await loadCache()) renderAll();
 
     // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
@@ -6937,11 +5786,6 @@
       }
     } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
-    if (!svRestored && hasDb) {
-      // обычный путь через сервер — только если серверлес-вход не восстановлен
-      sb.auth.getSession().then(({ data }) => { if (!state.serverless) applySession(data.session); });
-      sb.auth.onAuthStateChange((_e, session) => { if (!state.serverless) setTimeout(() => applySession(session), 0); });
-    }
 
     await refresh();
     openFromHash(); // если открыли по ссылке на товар — показываем его

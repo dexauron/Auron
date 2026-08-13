@@ -58,7 +58,7 @@
 
   <!-- Плашки состояния -->
   <div class="banner banner-warn" id="setupBanner" hidden>
-    Каталог ещё не подключён к базе данных. Администратор: см. <code>setup/НАСТРОЙКА.md</code>
+    Каталог ещё не настроен: в <code>js/config.js</code> не указано, откуда брать витрину.
   </div>
   <div class="banner banner-info" id="offlineBanner" hidden></div>
 
@@ -112,7 +112,6 @@
         <p class="sheet-desc" id="sheetDescription" hidden></p>
         <div class="fields" id="sheetFields"></div>
         <div id="sheetMarkup"></div>
-        <div id="sheetRetailHist"></div>
         <div id="sheetSales"></div>
         <div id="sheetStock"></div>
         <div id="sheetPrices"></div>
@@ -120,12 +119,6 @@
         <div id="sheetSupplier"></div>
         <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
         <div id="sheetSimilar"></div>
-        <label class="btn btn-secondary btn-block" id="btnAddPhotoLabel" hidden>Добавить фото товара
-          <input type="file" id="addPhotoInput" accept="image/*" capture="environment" hidden>
-        </label>
-        <label class="btn btn-secondary btn-block" id="btnSuggestPhotoLabel" hidden>Предложить фото товара
-          <input type="file" id="suggestPhotoInput" accept="image/*" capture="environment" hidden>
-        </label>
         <div class="admin-actions" id="sheetAdminActions" hidden>
           <button class="btn btn-secondary btn-find-photo" id="btnFindPhoto" hidden>Найти фото в интернете</button>
           <button class="btn btn-secondary" id="btnEditProduct">Изменить</button>
@@ -473,7 +466,6 @@
         <h2 class="sheet-title">Поставщики (редактирование)</h2>
         <div id="suppliersManageList"></div>
         <div class="input-row">
-          <input type="text" id="newSupplierName" class="input" placeholder="Новый поставщик…">
           <button class="btn btn-primary" id="btnAddSupplier" aria-label="Добавить"><i data-ic="plus"></i></button>
         </div>
         <button class="btn btn-ghost sheet-close" data-close="suppliersManageSheet">Закрыть</button>
@@ -556,27 +548,6 @@
     </div>
   </div>
 
-  <!-- Контакты поставщика (редактирует админ) -->
-  <div class="sheet-backdrop" id="supplierContactSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title" id="contactTitle">Контакты поставщика</h2>
-        <p class="muted">Видны сотрудникам после входа — для связи с поставщиком</p>
-        <form id="supplierContactForm">
-          <label class="field-label">Телефон <span class="hint">— с +7, по нему звонок и WhatsApp</span></label>
-          <input type="tel" id="cPhone" class="input" placeholder="+7 900 000-00-00" autocomplete="off">
-          <label class="field-label">Контактное лицо</label>
-          <input type="text" id="cName" class="input" placeholder="Иван, торговый представитель" autocomplete="off">
-          <label class="field-label">Примечание</label>
-          <textarea id="cNote" class="input" rows="2" placeholder="Заказы принимает до 14:00, привоз по вторникам"></textarea>
-          <div class="form-error" id="contactError" hidden></div>
-          <button type="submit" class="btn btn-primary btn-block" id="contactSubmit">Сохранить</button>
-        </form>
-        <button class="btn btn-ghost sheet-close" data-close="supplierContactSheet">Отмена</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Группы товаров (управление) -->
   <div class="sheet-backdrop" id="groupsSheet" hidden>
@@ -604,20 +575,6 @@
         <div id="scanContainer" class="scan-box"></div>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Предложенные покупателями фото: проверка сотрудником -->
-  <div class="sheet-backdrop" id="suggestionsSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Фото на проверке</h2>
-        <p class="muted">Фото, предложенные покупателями. Одобри — станет видно всем;
-        отклони — удалится. Так витрина остаётся аккуратной.</p>
-        <div id="suggestionsList"></div>
-        <button class="btn btn-ghost sheet-close" data-close="suggestionsSheet">Закрыть</button>
       </div>
     </div>
   </div>
@@ -732,7 +689,6 @@
   <div class="toast" id="toast" hidden></div>
 
   <!-- Библиотека базы лежит рядом (не с чужого CDN) — быстрее старт и работает офлайн -->
-  <script src="vendor/supabase.min.js"></script>
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>
 </body>
