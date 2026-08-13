@@ -2562,7 +2562,6 @@
   const STAFF_FILE = 'secret-staff.enc';    // урезанный каталог сотрудника (без продаж/«Ходовых»)
   // Цены других магазинов лежат ОТКРЫТО (не шифруются): это чужие ценники из
   // торгового зала, не наша тайна, а видеть их должны все — даже покупатель без входа.
-  const COMP_FILE = 'competitors.json';
   const SV_AUTH_KEY = 'wm_sv_auth';         // запомненный вход на устройстве (роль + пароль)
   function rawUrl(file) {
     return `https://raw.githubusercontent.com/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}/${ghBranch()}/${CFG.DATA_PATH}/${file}`;
@@ -2602,18 +2601,6 @@
       orderRules: state.orderRules || null,
     };
   }
-  // Открытый файл цен других магазинов: {магазины, записанные цены}
-  function buildCompetitorsPublic() {
-    return { stores: state.competitors || [], prices: state.compPrices || [] };
-  }
-  // Публикация ТОЛЬКО цен магазинов — отдельным маленьким коммитом. Так цену
-  // может записать и сотрудник: файл открытый, пароль владельца не требуется.
-  async function publishCompetitors() {
-    return ghCommit(
-      [{ path: `${CFG.DATA_PATH}/${COMP_FILE}`, content: JSON.stringify(buildCompetitorsPublic()) }],
-      'Каталог: цены других магазинов',
-    );
-  }
 
   // Опубликовать всё одним коммитом: открытая витрина + зашифрованный полный
   // каталог владельца (+ отдельный файл сотрудника, если задан его пароль).
@@ -2624,7 +2611,6 @@
       { path: `${CFG.DATA_PATH}/products.json`, content: pJson },
       { path: `${CFG.DATA_PATH}/groups.json`, content: gJson },
       { path: `${CFG.DATA_PATH}/popular.json`, content: JSON.stringify(buildPopularIds()) },
-      { path: `${CFG.DATA_PATH}/${COMP_FILE}`, content: JSON.stringify(buildCompetitorsPublic()) },
       { path: `${CFG.DATA_PATH}/${SECRET_FILE}`, content: await encryptJSON(buildFullSnapshot(), password) },
     ];
     if (state.staffPassword) files.push({ path: `${CFG.DATA_PATH}/${STAFF_FILE}`, content: await encryptJSON(buildStaffSnapshot(), state.staffPassword) });
@@ -2713,6 +2699,11 @@
   /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
      памяти (сопоставление по коду → штрихкоду → названию, id и фото сохраняются)
      и публикуется в зашифрованный файл. Парсеры не трогаем — переиспользуем. ── */
+  // Отдельных экранов загрузки больше нет — всё идёт через «Импорт данных».
+  // Сами функции загрузки остались (их зовёт умный импорт), но кнопки у них
+  // теперь не существует: обращения к ней принимает пустышка вместо падения.
+  const deadBtn = () => ({ disabled: false, textContent: '' });
+
   function svUuid() { return (crypto.randomUUID ? crypto.randomUUID() : 'p' + Date.now() + Math.random().toString(36).slice(2)); }
   // Код номенклатуры из выгрузки Excel приходит с разделителем тысяч, причём
   // в разных файлах по-разному: «1 463», «1 463» (неразрывный пробел), «1,463».
@@ -2913,22 +2904,18 @@
   async function refreshStatic() {
     try {
       const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
-      const [pr, gr, pop, cmp] = await Promise.all([
+      // Цены чужих магазинов больше не качаем: покупателю они не показываются,
+      // а вошедший сотрудник берёт их из своего зашифрованного каталога.
+      const [pr, gr, pop] = await Promise.all([
         fetch(base + 'products.json', { cache: 'no-cache' }),
         fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
         fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
-        fetch(base + COMP_FILE, { cache: 'no-cache' }).catch(() => null),
       ]);
       const products = await pr.json();
       if (!Array.isArray(products)) return false;
       state.groups = (gr && gr.ok) ? await gr.json() : [];
       try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
-      // цены других магазинов — открытые: их видит и покупатель без входа
-      try {
-        const cj = (cmp && cmp.ok) ? await cmp.json() : null;
-        state.competitors = (cj && cj.stores) || [];
-        state.compPrices = (cj && cj.prices) || [];
-      } catch (e) { state.competitors = []; state.compPrices = []; }
+      state.competitors = []; state.compPrices = []; // разведка цен — только для вошедших
       state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
       state.products = products.sort(byName);
       buildIndex();
@@ -3122,6 +3109,10 @@
   function renderCompetitors(p) {
     const box = $('sheetCompetitors');
     if (!box) return;
+    // Цены чужих магазинов — внутренняя разведка магазина, а не витрина.
+    // Покупателю их показывать нельзя: каталог прямым текстом сообщал ему,
+    // где тот же товар дешевле, и отправлял к конкуренту.
+    if (!state.session) { box.innerHTML = ''; return; }
     const our = (p.retail_price != null && p.retail_price !== '') ? Number(p.retail_price) : null;
     const all = (state.compPrices || []).filter((r) => r.product_id === p.id);
     const rows = compRowsFor(p.id);
@@ -3283,7 +3274,10 @@
           && r.competitor_id === record.competitor_id && r.observed_at === record.observed_at);
         if (i >= 0) state.compPrices[i] = record; else (state.compPrices = state.compPrices || []).push(record);
         if (!ghConfigured()) throw new Error('нет ключа публикации — открой «Публикация на GitHub» в меню и вставь ключ');
-        await publishCompetitors();
+        // Раньше цена уходила в ОТКРЫТЫЙ файл на сайте — его мог прочитать
+        // кто угодно по прямой ссылке. Теперь она едет в зашифрованный каталог.
+        if (!secretPw) throw new Error('сохранить цену магазина может владелец — у сотрудника нет доступа к публикации');
+        await publishFull(secretPw);
       } else {
         const { error } = await sb.from('catalog_competitor_prices')
           .upsert(record, { onConflict: 'product_id,competitor_id' });
@@ -4464,40 +4458,8 @@
     toast('Импорт завершён ✓');
   }
 
-  function impStatus(msg) {
-    if (smartSink) { smartSink(msg); return; }
-    const el = $('impStatus');
-    el.hidden = false;
-    el.textContent = msg;
-  }
+  function impStatus(msg) { if (smartSink) smartSink(msg); }
 
-  async function impParse() {
-    const f1 = $('impFile1').files[0];
-    if (!f1) { impStatus('Сначала выбери файл 1 — отчёт «Цены поставщиков»'); return; }
-    impStatus('Читаем файлы…');
-    await loadXlsxLib();
-    const byKey = parsePriceReport(await readSheet(f1));
-    let extra = 0;
-    const f2 = $('impFile2').files[0];
-    if (f2) extra = mergeBarcodesReport(await readSheet(f2), byKey);
-    const items = [...byKey.values()];
-    const groups = new Set(items.map((i) => i.group).filter(Boolean));
-    const sups = new Set();
-    items.forEach((i) => i.suppliers.forEach((s) => sups.add(s)));
-    const withBc = items.filter((i) => i.barcodes.size).length;
-    const priceCnt = items.reduce((n, i) => n + i.prices.size, 0);
-    const retailCnt = items.filter((i) => i.retail != null).length;
-    impParsed = items;
-    // предупреждаем, если в файле не нашлось ни одной цены — иначе в карточках
-    // товара не будет цен, и это выглядит как «поломка»
-    const priceWarn = priceCnt === 0
-      ? '⚠ ЦЕНЫ НЕ НАЙДЕНЫ. В карточках товара цены не появятся. Проверь, что в файле есть колонки «Поставщик/Контрагент» и «Цена» в одной строке с товаром. '
-      : '';
-    impStatus(`${priceWarn}Найдено: ${items.length} товаров, ${groups.size} групп, ${sups.size} поставщиков, ${priceCnt} закупочных цен, ${retailCnt} розничных цен. `
-      + `Со штрихкодами: ${withBc}${extra ? ` (+${extra} штрихкодов из файла 2)` : ''}. `
-      + 'Проверь цифры и нажми кнопку ещё раз — начнётся загрузка.');
-    $('impRun').textContent = `⬆ Загрузить ${items.length} товаров в каталог`;
-  }
 
   async function getOrCreateByName(table, names, existing) {
     const map = new Map(existing.map((x) => [norm(x.name), x.id]));
@@ -4513,7 +4475,7 @@
 
   async function impUpload() {
     const items = impParsed;
-    const btn = $('impRun');
+    const btn = deadBtn();
     btn.disabled = true;
     try {
       impStatus('Создаём группы и поставщиков…');
@@ -4987,26 +4949,12 @@
     return { updates, unmatched };
   }
 
-  function photoExcelStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('photoExcelStatus'); el.hidden = false; el.textContent = msg; }
+  function photoExcelStatus(msg) { if (smartSink) smartSink(msg); }
 
-  async function photoExcelParse() {
-    const f = $('photoExcelFile').files[0];
-    if (!f) { photoExcelStatus('Сначала выбери файл Excel'); return; }
-    photoExcelStatus('Читаем файл…');
-    await loadXlsxLib();
-    const recs = parsePhotoSheet(await readSheet(f));
-    if (!recs.length) { photoExcelParsed = null; photoExcelStatus('В файле не нашлось строк со ссылками на фото (ссылка должна начинаться с http)'); return; }
-    const { updates, unmatched } = matchPhotoRows(recs);
-    photoExcelParsed = updates;
-    photoExcelStatus(`Ссылок в файле: ${recs.length}. Совпало с товарами: ${updates.size}`
-      + (unmatched ? `, не нашлось: ${unmatched}` : '')
-      + '. Нажми кнопку ещё раз — покажем фото у этих товаров.');
-    $('photoExcelRun').textContent = `🖼 Показать фото у ${updates.size} товаров`;
-  }
 
   async function photoExcelApply() {
     const updates = photoExcelParsed;
-    const btn = $('photoExcelRun');
+    const btn = deadBtn();
     btn.disabled = true;
     try {
       const entries = [...updates.entries()];
@@ -5102,38 +5050,19 @@
     return { recs: [...recs.values()], periodFrom, periodTo, hasPeriod: !!(periodFrom && periodTo) };
   }
 
-  function salesStatus(msg) {
-    if (smartSink) { smartSink(msg); return; }
-    const el = $('salesStatus');
-    el.hidden = false;
-    el.textContent = msg;
-  }
+  function salesStatus(msg) { if (smartSink) smartSink(msg); }
 
-  async function salesParse() {
-    const f = $('salesFile').files[0];
-    if (!f) { salesStatus('Сначала выбери файл — отчёт «Продажи» из 1С'); return; }
-    salesStatus('Читаем файл…');
-    await loadXlsxLib();
-    salesParsed = parseSalesReport(await readSheet(f));
-    const { recs, periodFrom, periodTo, hasPeriod } = salesParsed;
-    if (!recs.length) { salesParsed = null; salesStatus('В файле не нашлось строк с продажами'); return; }
-    const when = hasPeriod
-      ? `Период из файла: ${fmtDate(periodFrom)} — ${fmtDate(periodTo)}.`
-      : `Периода в файле не нашёл — укажи даты периода ниже (с / по).`;
-    salesStatus(`Найдено товаров с продажами: ${recs.length}. ${when} `
-      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка.');
-    $('salesRun').textContent = `⬆ Загрузить продажи (${recs.length})`;
-  }
 
   async function salesUpload() {
     const { recs, hasPeriod } = salesParsed;
-    const btn = $('salesRun');
+    const btn = deadBtn();
     btn.disabled = true;
     try {
       // период: из файла, иначе из полей «с»/«по» (или сегодня)
       const today = new Date().toISOString().slice(0, 10);
-      const periodFrom = hasPeriod ? salesParsed.periodFrom : ($('salesFrom').value || today);
-      const periodTo = hasPeriod ? salesParsed.periodTo : ($('salesTo').value || $('salesFrom').value || today);
+      // период берём из файла; нет его — считаем сегодняшним днём
+      const periodFrom = hasPeriod ? salesParsed.periodFrom : today;
+      const periodTo = hasPeriod ? salesParsed.periodTo : today;
       const byCode = new Map();
       const byName = new Map();
       for (const p of state.products) {
@@ -5207,24 +5136,12 @@
     return [...byName.values()];
   }
 
-  async function contactsParse() {
-    const f = $('contactsFile').files[0];
-    if (!f) { contactsStatus('Сначала выбери файл — контакты из 1С'); return; }
-    contactsStatus('Читаем файл…');
-    await loadXlsxLib();
-    contactsParsed = parseContactsReport(await readSheet(f));
-    const withPhone = contactsParsed.filter((c) => c.phone).length;
-    if (!contactsParsed.length) { contactsParsed = null; contactsStatus('В файле не нашлось контрагентов'); return; }
-    contactsStatus(`Найдено контрагентов: ${contactsParsed.length}, из них с телефоном: ${withPhone}. `
-      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка (новые поставщики создадутся, телефоны обновятся).');
-    $('contactsRun').textContent = `⬆ Загрузить контакты (${withPhone})`;
-  }
 
-  function contactsStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('contactsStatus'); el.hidden = false; el.textContent = msg; }
+  function contactsStatus(msg) { if (smartSink) smartSink(msg); }
 
   async function contactsUpload() {
     const list = contactsParsed;
-    const btn = $('contactsRun');
+    const btn = deadBtn();
     btn.disabled = true;
     try {
       contactsStatus('Создаём поставщиков…');
@@ -5311,25 +5228,12 @@
     return { recs, stockAt };
   }
 
-  function stockStatus(msg) { if (smartSink) { smartSink(msg); return; } const el = $('stockStatus'); el.hidden = false; el.textContent = msg; }
+  function stockStatus(msg) { if (smartSink) smartSink(msg); }
 
-  async function stockParse() {
-    const f = $('stockFile').files[0];
-    if (!f) { stockStatus('Сначала выбери файл — отчёт «Остатки номенклатуры»'); return; }
-    stockStatus('Читаем файл…');
-    await loadXlsxLib();
-    stockParsed = parseStockReport(await readSheet(f));
-    const { recs, stockAt } = stockParsed;
-    if (!recs.length) { stockParsed = null; stockStatus('В файле не нашлось товаров с остатками'); return; }
-    const withRetail = recs.filter((r) => r.retail != null).length;
-    stockStatus(`Найдено товаров: ${recs.length}${stockAt ? `, остатки на ${fmtDate(stockAt)}` : ''}, розничных цен: ${withRetail}. `
-      + 'Проверь и нажми кнопку ещё раз — начнётся загрузка (остаток обновится, новые товары создадутся).');
-    $('stockRun').textContent = `⬆ Загрузить остатки (${recs.length})`;
-  }
 
   async function stockUpload() {
     const { recs, stockAt } = stockParsed;
-    const btn = $('stockRun');
+    const btn = deadBtn();
     btn.disabled = true;
     try {
       stockStatus('Создаём группы…');
@@ -6292,19 +6196,6 @@
     $('menuImportHub').addEventListener('click', openImportHub);
     $('smartFiles').addEventListener('change', () => { smartPick([...$('smartFiles').files]); });
     $('smartRun').addEventListener('click', smartRun);
-    $('photoExcelFile').addEventListener('change', () => {
-      $('photoExcelName').textContent = $('photoExcelFile').files[0]?.name || '';
-      photoExcelParsed = null;
-      $('photoExcelRun').textContent = 'Проверить файл';
-    });
-    $('photoExcelRun').addEventListener('click', async () => {
-      const btn = $('photoExcelRun');
-      if (photoExcelParsed) { photoExcelApply(); return; }
-      btn.disabled = true;
-      try { await photoExcelParse(); }
-      catch (err) { photoExcelStatus('Ошибка чтения: ' + (err.message || err)); photoExcelParsed = null; }
-      finally { btn.disabled = false; }
-    });
 
     // Поиск фото по штрихкодам (только админ)
     $('hubPhotoSearch').addEventListener('click', () => {
@@ -6645,30 +6536,6 @@
       if (del) deleteGroup(del.closest('.group-row').dataset.id);
     });
 
-    // Старые отдельные экраны импорта скрыты — вход теперь через «умный импорт».
-    // Их обработчики файлов/загрузки оставлены (элементы существуют, вреда нет).
-    $('impFile1').addEventListener('change', () => {
-      $('impFile1Name').textContent = $('impFile1').files[0]?.name || '';
-      impParsed = null;
-      $('impRun').textContent = 'Проверить файлы';
-    });
-    $('impFile2').addEventListener('change', () => {
-      $('impFile2Name').textContent = $('impFile2').files[0]?.name || '';
-      impParsed = null;
-      $('impRun').textContent = 'Проверить файлы';
-    });
-    $('impRun').addEventListener('click', async () => {
-      const btn = $('impRun');
-      if (impParsed) { impUpload(); return; }
-      btn.disabled = true;
-      try {
-        await impParse();
-      } catch (err) {
-        impStatus('Ошибка чтения: ' + (err.message || err));
-      } finally {
-        btn.disabled = false;
-      }
-    });
 
     // Убрать дубли товаров (только админ)
     $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });
@@ -6724,52 +6591,8 @@
       if (p) { closeSheet('topSheet'); openProduct(p); }
     });
 
-    $('salesFile').addEventListener('change', () => {
-      $('salesFileName').textContent = $('salesFile').files[0]?.name || '';
-      salesParsed = null;
-      $('salesRun').textContent = 'Проверить файл';
-    });
-    $('salesRun').addEventListener('click', async () => {
-      const btn = $('salesRun');
-      if (salesParsed) { salesUpload(); return; }
-      btn.disabled = true;
-      try {
-        await salesParse();
-      } catch (err) {
-        salesStatus('Ошибка чтения: ' + (err.message || err));
-        salesParsed = null;
-      } finally {
-        btn.disabled = false;
-      }
-    });
 
-    $('stockFile').addEventListener('change', () => {
-      $('stockFileName').textContent = $('stockFile').files[0]?.name || '';
-      stockParsed = null;
-      $('stockRun').textContent = 'Проверить файл';
-    });
-    $('stockRun').addEventListener('click', async () => {
-      const btn = $('stockRun');
-      if (stockParsed) { stockUpload(); return; }
-      btn.disabled = true;
-      try { await stockParse(); }
-      catch (err) { stockStatus('Ошибка чтения: ' + (err.message || err)); stockParsed = null; }
-      finally { btn.disabled = false; }
-    });
 
-    $('contactsFile').addEventListener('change', () => {
-      $('contactsFileName').textContent = $('contactsFile').files[0]?.name || '';
-      contactsParsed = null;
-      $('contactsRun').textContent = 'Проверить файл';
-    });
-    $('contactsRun').addEventListener('click', async () => {
-      const btn = $('contactsRun');
-      if (contactsParsed) { contactsUpload(); return; }
-      btn.disabled = true;
-      try { await contactsParse(); }
-      catch (err) { contactsStatus('Ошибка чтения: ' + (err.message || err)); contactsParsed = null; }
-      finally { btn.disabled = false; }
-    });
 
     // Поставщики (управление, только админ)
     $('menuSuppliers').addEventListener('click', () => {

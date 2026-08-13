@@ -47,8 +47,13 @@ const closeAll = (page) => page.evaluate(() => {
   document.querySelectorAll('.sheet-backdrop').forEach((x) => { x.hidden = true; });
 });
 
+// ВАЖНО: сначала сбрасываем адрес. Если он уже указывает на этот товар,
+// повторная установка того же значения не считается переходом — карточка не
+// перерисуется, и тест будет смотреть на старое содержимое.
 const openProduct = async (page, id) => {
   await closeAll(page);
+  await page.evaluate(() => { window.location.hash = ''; });
+  await page.waitForTimeout(150);
   await page.evaluate((i) => { window.location.hash = '#p=' + i; }, id);
   await page.waitForTimeout(800);
 };

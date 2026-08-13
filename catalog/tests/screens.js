@@ -117,10 +117,19 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   await page.waitForTimeout(300);
   await openProduct(page, 'p1');
   const buyer = await page.evaluate(() => document.querySelector('#productSheet .sheet').innerText);
-  for (const secret of ['Артикул', 'Штрихкод', 'Наценка', 'закупка', 'Остаток', 'Своя Закупка', 'ПРОДАЖИ']) {
+  for (const secret of ['Артикул', 'Штрихкод', 'Наценка', 'закупка', 'Остаток', 'Своя Закупка', 'ПРОДАЖИ',
+    'Магнит', 'ЦЕНЫ В ДРУГИХ МАГАЗИНАХ', 'Дешевле в магазине']) {
     if (buyer.includes(secret)) problems.push(`покупатель видит внутреннее: «${secret}»`);
   }
   chk(/Код товара/.test(buyer), 'покупателю виден код товара (показываем намеренно)');
+  chk(!/магазин/i.test(buyer.replace(/Есть в магазине|Нет в наличии/g, '')),
+    'покупателю не видны цены чужих магазинов — каталог больше не отправляет его к конкуренту');
+  // а вошедший сотрудник их видит
+  await page.evaluate(() => { const P = window.WM_PUBLISH; P.applyServerless('pw'); P.renderAll(); });
+  await page.waitForTimeout(300);
+  await openProduct(page, 'p1');
+  chk(/Магнит/.test(await page.evaluate(() => document.getElementById('sheetCompetitors').innerText)),
+    'сотруднику цены чужих магазинов по-прежнему видны');
 
   const rej = await page.evaluate(() => window.__rej || []);
   rej.forEach((r) => problems.push('необработанный сбой: ' + String(r).slice(0, 120)));
