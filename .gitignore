@@ -1,5 +1,10 @@
 __pycache__/
-.claude/
+# Личные настройки Claude Code игнорируем, но общее для проекта храним в
+# репозитории: хуки (защита от отката папки) и settings.json, который их включает.
+.claude/*
+!.claude/skills/
+!.claude/hooks/
+!.claude/settings.json
 node_modules/
 package-lock.json
 package.json
