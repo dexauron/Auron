@@ -80,8 +80,10 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   await closeAll(page); await page.click('#adminBtn'); await page.waitForTimeout(400);
   const menuIds = await page.evaluate(() => [...document.querySelectorAll('#adminMenuSheet button[id]')]
     .filter((x) => x.offsetParent !== null).map((x) => x.id));
+  // кнопки-действия ничего не открывают, они сразу делают работу
+  const ACTIONS = ['menuLogout', 'menuDedup', 'menuSortCats'];
   for (const id of menuIds) {
-    if (id === 'menuLogout') continue;
+    if (ACTIONS.includes(id)) continue;
     await closeAll(page); await page.click('#adminBtn'); await page.waitForTimeout(250);
     await page.click('#' + id).catch((e) => problems.push(`меню «${id}»: ${e.message.slice(0, 60)}`));
     await page.waitForTimeout(500);
