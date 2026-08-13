@@ -1,0 +1,37 @@
+{
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "context7@claude-plugins-official": true,
+    "playwright@claude-plugins-official": true,
+    "firecrawl@claude-plugins-official": true,
+    "supabase@claude-plugins-official": true,
+    "telegram@claude-plugins-official": true,
+    "hyperframes@claude-plugins-official": true,
+    "github@claude-plugins-official": true,
+    "notion@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "caveman@claude-community": true,
+    "claude-seo@claude-community": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "claude-community": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-community"
+      }
+    },
+    "superpowers-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "obra/superpowers-marketplace"
+      }
+    }
+  }
+}

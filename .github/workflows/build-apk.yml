@@ -1,0 +1,172 @@
+# Сборка приложения для Android.
+#
+# Что делает: берёт наш экран и логику, собирает файл auron.apk и
+# кладёт его в раздел Releases — оттуда его скачивают по прямой ссылке.
+#
+# Как запустить руками: вкладка Actions → «Собрать приложение Android»
+# → кнопка «Run workflow». Через 5–10 минут файл готов.
+#
+# ПРО КЛЮЧ ПОДПИСИ. Сборка подписывается постоянным ключом владельца.
+# Ключ лежит в Settings → Secrets репозитория и в сборку попадает оттуда:
+# ни в коде, ни в журналах сборки его нет.
+#
+# Что это даёт: обновление встаёт ПОВЕРХ прежней версии, и данные людей
+# остаются на месте. Без постоянного ключа каждая сборка подписывалась бы
+# новым временным, Android считал бы её чужой программой и отказывался
+# ставить поверх.
+#
+# Нужны четыре секрета: KEYSTORE_BASE64, KEYSTORE_PASSWORD, KEY_ALIAS,
+# KEY_PASSWORD. Если их нет — сборка остановится с понятным сообщением,
+# а не выдаст молча неподписанный файл.
+
+name: Собрать приложение Android
+
+on:
+  workflow_dispatch:          # запуск кнопкой
+    inputs:
+      branch:
+        description: 'Из какой ветки собирать'
+        required: false
+        default: 'claude/cool-archimedes-qv458l'
+  push:
+    tags: ['v*']              # или сам, когда ставим метку версии
+
+permissions:
+  contents: write             # нужно, чтобы положить файл в Releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Этот файл лежит в ГЛАВНОЙ ветке — иначе GitHub не покажет кнопку
+      # запуска. А код приложения пока в рабочей ветке, поэтому берём
+      # его оттуда. Когда работа вольётся в главную, значение по
+      # умолчанию можно поменять на неё.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || 'claude/cool-archimedes-qv458l' }}
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # Java 17, а не 21: под неё сделан Capacitor 6. На 21 сборка Gradle
+      # спотыкается о несовместимость плагина.
+      - name: Java (нужна Android-сборке)
+        uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: '17' }
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Собрать содержимое приложения
+        working-directory: android
+        run: |
+          node build-www.js
+          test -s www/index.html || { echo "www/index.html пустой"; exit 1; }
+          echo "размер: $(du -h www/index.html | cut -f1)"
+
+      - name: Поставить Capacitor
+        working-directory: android
+        run: npm install --no-audit --no-fund
+
+      - name: Создать Android-проект
+        working-directory: android
+        run: |
+          # Раньше здесь стояло «|| echo проект уже есть»: настоящая ошибка
+          # пряталась, и падал уже следующий шаг — с непонятным сообщением.
+          # Проект каждый раз создаётся с нуля, поэтому глушить нечего.
+          npx cap add android
+          npx cap sync android
+          test -f android/gradlew || { echo "::error::Android-проект не создался"; exit 1; }
+          echo "проект на месте"
+
+      - name: Поставить значок приложения
+        working-directory: android
+        run: |
+          # На сервере GitHub Python есть, а библиотеки для картинок нет —
+          # именно на этом упала первая сборка.
+          python3 -m pip install --quiet --disable-pip-version-check pillow
+          python3 make-icons.py
+
+          R=android/app/src/main/res
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            mkdir -p "$R/mipmap-$d"
+            cp "icons/ic_launcher_$d.png"        "$R/mipmap-$d/ic_launcher.png"
+            cp "icons/ic_launcher_$d.png"        "$R/mipmap-$d/ic_launcher_round.png"
+            cp "icons/ic_launcher_foreground.png" "$R/mipmap-$d/ic_launcher_foreground.png"
+          done
+
+          # Capacitor кладёт свой «живой» значок — ic_launcher.xml. Он главнее
+          # наших картинок: телефон возьмёт его, а не букву A. Убираем, чтобы
+          # значок был тот, что мы нарисовали.
+          rm -rf "$R/mipmap-anydpi-v26"
+
+          echo "проверяем, что значки на месте:"
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            test -s "$R/mipmap-$d/ic_launcher.png" || { echo "::error::Нет значка $d"; exit 1; }
+          done
+          ls -la "$R/mipmap-xxhdpi/"
+
+      - name: Проверить, что ключ на месте
+        env:
+          K: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$K" ]; then
+            echo "::error::Нет ключа подписи. Добавьте секреты KEYSTORE_BASE64,"
+            echo "::error::KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD в Settings → Secrets."
+            echo "::error::Как это сделать — docs/20-KEY-HOWTO.md"
+            exit 1
+          fi
+          echo "ключ найден"
+
+      - name: Собрать и подписать apk
+        working-directory: android/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          # Памяти по умолчанию Gradle берёт мало и падает без внятной
+          # причины — просто «процесс убит». Задаём явно.
+          echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=768m" >> gradle.properties
+          # Ключ живёт только внутри этой сборки и исчезает вместе с ней.
+          echo "$KEYSTORE_BASE64" | tr -d '\r\n' | base64 -d > release.keystore
+          test -s release.keystore || { echo "::error::Ключ не раскодировался — проверьте KEYSTORE_BASE64"; exit 1; }
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file=$PWD/release.keystore \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          rm -f release.keystore
+
+      - name: Переименовать по-человечески
+        run: |
+          find android/android -name '*.apk' -print
+          mkdir -p out
+          APK=$(find android/android -name '*release*.apk' ! -name '*unsigned*' | head -1)
+          test -n "$APK" || { echo "::error::Подписанный файл не найден"; exit 1; }
+          cp "$APK" out/auron.apk
+          ls -lh out/auron.apk
+
+      - name: Файл можно скачать здесь
+        uses: actions/upload-artifact@v4
+        with:
+          name: auron-apk
+          path: out/auron.apk
+          retention-days: 90
+
+      - name: Положить в Releases (когда ставим метку версии)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/auron.apk
+          body: |
+            Приложение Auron Finance для Android.
+
+            **Как поставить:** скачайте файл `auron.apk` и откройте его.
+            Android спросит разрешение на установку — разрешите для браузера.
+
+            Данные хранятся только на вашем телефоне. Интернет не нужен.
