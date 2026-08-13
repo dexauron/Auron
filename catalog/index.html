@@ -373,7 +373,7 @@
 
         <label class="field-label">Эта цена — за что?</label>
         <div class="calc-seg" id="calcUnitSeg">
-          <label><input type="radio" name="calcUnit" value="pack" checked><span id="calcUnitPackLabel">За упаковку</span></label>
+          <label><input type="radio" name="calcUnit" value="pack" checked><span>За упаковку</span></label>
           <label><input type="radio" name="calcUnit" value="piece"><span id="calcUnitPieceLabel">За штуку</span></label>
         </div>
 
@@ -441,29 +441,6 @@
     </div>
   </div>
 
-  <!-- Импорт из 1С (только админ) -->
-  <div class="sheet-backdrop" id="importSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Импорт из 1С</h2>
-        <p class="muted">Файл 1 — отчёт «Цены поставщиков» (обязательный). Файл 2 — отчёт
-        «Штрихкоды номенклатуры», если нужны все штрихкоды (необязательный).
-        Товары объединяются по коду: существующие обновятся, фото не тронутся.</p>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл 1 — цены и товары
-          <input type="file" id="impFile1" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="impFile1Name"></div>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл 2 — штрихкоды (не обязательно)
-          <input type="file" id="impFile2" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="impFile2Name"></div>
-        <button class="btn btn-primary btn-block" id="impRun">Проверить файлы</button>
-        <div class="banner banner-info" id="impStatus" hidden></div>
-        <button class="btn btn-ghost sheet-close" data-close="importSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Поставщики (управление, только админ) -->
   <div class="sheet-backdrop" id="suppliersManageSheet" hidden>
@@ -499,93 +476,9 @@
     </div>
   </div>
 
-  <!-- Импорт продаж из 1С (только админ) -->
-  <div class="sheet-backdrop" id="salesImportSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Импорт продаж из 1С</h2>
-        <p class="muted">Отчёт «Продажи» (Excel) из 1С: товары и количество за период.
-        Период программа берёт из шапки файла сама. Товары находятся по названию.
-        Повторная загрузка того же периода просто обновит данные.</p>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл — отчёт «Продажи»
-          <input type="file" id="salesFile" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="salesFileName"></div>
-        <label class="field-label">Период <span class="hint">— заполнять только если в файле его нет</span></label>
-        <div class="input-pair">
-          <input type="date" id="salesFrom" class="input" aria-label="с">
-          <input type="date" id="salesTo" class="input" aria-label="по">
-        </div>
-        <button class="btn btn-primary btn-block" id="salesRun">Проверить файл</button>
-        <div class="banner banner-info" id="salesStatus" hidden></div>
-        <button class="btn btn-ghost sheet-close" data-close="salesImportSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Импорт остатков (только админ) -->
-  <div class="sheet-backdrop" id="stockImportSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Импорт остатков из 1С</h2>
-        <p class="muted">Отчёт «Остатки номенклатуры» (Excel): количество на складе,
-        код, штрихкод, группа, розничная цена. Дату остатков программа берёт из
-        файла. Товар находится по коду/штрихкоду/названию — остаток и розничная
-        цена обновятся; новый товар создастся.</p>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл — «Остатки»
-          <input type="file" id="stockFile" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="stockFileName"></div>
-        <button class="btn btn-primary btn-block" id="stockRun">Проверить файл</button>
-        <div class="banner banner-info" id="stockStatus" hidden></div>
-        <button class="btn btn-ghost sheet-close" data-close="stockImportSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Импорт контактов поставщиков (только админ) -->
-  <div class="sheet-backdrop" id="contactsImportSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Импорт контактов поставщиков</h2>
-        <p class="muted">Excel из 1С: справочник «Контрагенты» с колонками
-        «Контрагент» (название) и «Номер телефона». Поставщик находится по
-        названию; если его нет — создаётся. Телефон обновляется, если изменился.</p>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл — контакты
-          <input type="file" id="contactsFile" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="contactsFileName"></div>
-        <button class="btn btn-primary btn-block" id="contactsRun">Проверить файл</button>
-        <div class="banner banner-info" id="contactsStatus" hidden></div>
-        <button class="btn btn-ghost sheet-close" data-close="contactsImportSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
 
-  <!-- Фото из Excel по ссылкам (только админ) -->
-  <div class="sheet-backdrop" id="photoExcelSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">🖼 Фото из Excel</h2>
-        <p class="muted">Excel-файл, где в одной колонке — <b>ссылка на фото</b> (скопированная
-        с любого сайта), а в другой — <b>штрихкод</b>, <b>код</b> или <b>название</b> товара.
-        Программа найдёт товары (сначала по штрихкоду, потом по коду, потом по точному
-        названию) и покажет у них это фото. Само фото никуда не загружается — показывается
-        по ссылке.</p>
-        <label class="btn btn-secondary btn-block">📄 Выбрать файл Excel
-          <input type="file" id="photoExcelFile" hidden accept=".xls,.xlsx">
-        </label>
-        <div class="muted" id="photoExcelName"></div>
-        <button class="btn btn-primary btn-block" id="photoExcelRun">Проверить файл</button>
-        <div class="banner banner-info" id="photoExcelStatus" hidden></div>
-        <button class="btn btn-ghost sheet-close" data-close="photoExcelSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
 
   <!-- Поиск фото по штрихкодам (только админ) -->
   <div class="sheet-backdrop" id="photoSearchSheet" hidden>
