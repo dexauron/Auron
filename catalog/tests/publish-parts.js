@@ -91,8 +91,10 @@ function fakeGithub() {
   chk(first && first.sha, `первая публикация прошла (файлов: ${firstPaths.length})`);
   chk(firstPaths.some((p) => /\/p\/00\.json$/.test(p)) && firstPaths.some((p) => /index\.json$/.test(p)),
     'витрина легла кусками и с описью');
-  chk(firstPaths.some((p) => /sec\/products-00\.enc$/.test(p)) && firstPaths.some((p) => /secret-catalog\.enc$/.test(p)),
+  chk(firstPaths.some((p) => /sec\/products-00\.enc$/.test(p)) && firstPaths.some((p) => /catalog\.enc$/.test(p)),
     'закрытый каталог тоже лёг кусками и с описью');
+  chk(firstPaths.some((p) => /keys\.json$/.test(p)) && !firstPaths.some((p) => /sec-staff/.test(p)),
+    'каталог ОДИН на всех: конвертики с ключом есть, второй копии для сотрудника нет');
 
   // ── 2. Правка ОДНОГО товара: уезжают единицы файлов ──
   await page.evaluate(() => {
@@ -110,6 +112,8 @@ function fakeGithub() {
     'из витрины переписан ровно один кусок');
   chk(second.filter((p) => /sec\/products-\d+\.enc$/.test(p)).length === 1,
     'из закрытого каталога переписан ровно один кусок товаров');
+  chk(!second.some((p) => /keys\.json$/.test(p)),
+    'конвертики с ключом не переписывались — пароли не менялись');
   chk(!second.some((p) => /sec\/(prices|sales)-/.test(p)),
     'цены и продажи не переписывались — они не менялись');
 
@@ -154,7 +158,35 @@ function fakeGithub() {
   chk(shop.products === N, `витрина собралась из кусков (${shop.products} товаров)`);
   chk(shop.price7 === 999, 'в витрине свежая цена — куски и опись согласованы');
 
-  // ── 7. Старый цельный файл всё ещё читается ──
+  // ── 7. Смена пароля сотрудника = отключение прежнего: ключ каталога меняется ──
+  await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state();
+    s.session = null; s.serverless = false;
+    await P.unlockSecret('ownerpw');            // войти владельцем, ключ каталога в памяти
+    s.staffPassword = 'другойпароль';
+    await P.publishFull('ownerpw');
+  });
+  const rekey = gh.commits[gh.commits.length - 1];
+  chk(rekey.filter((p) => /sec\/.*\.enc$/.test(p)).length >= 40 && rekey.some((p) => /keys\.json$/.test(p)),
+    `после смены пароля сотрудника каталог перешифрован целиком (${rekey.filter((p) => /sec\//.test(p)).length} кусков)`);
+  const oldStaff = await page.evaluate(async () => {
+    try { await window.WM_PUBLISH.unlockStaff('staffpw'); return 'открылось'; } catch (e) { return 'отказ'; }
+  });
+  chk(oldStaff === 'отказ', 'прежний пароль сотрудника больше не открывает каталог');
+  const newStaff = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state(); s.products = [];
+    await P.unlockStaff('другойпароль');
+    return s.products.length;
+  });
+  chk(newStaff === N, `новый пароль сотрудника открывает каталог (${newStaff} товаров)`);
+
+  // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
+  const keysFile = gh.fs.get('catalog/data/keys.json') || '';
+  chk(!/ownerpw|staffpw|другойпароль/.test(keysFile) && keysFile.length < 2000,
+    `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
+
+  // ── 9. Старый цельный файл всё ещё читается ──
+  ['catalog/data/keys.json', 'catalog/data/catalog.enc'].forEach((f) => gh.fs.delete(f));
   const legacy = await page.evaluate(async () => {
     const P = window.WM_PUBLISH;
     const old = await P.encryptJSON({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
