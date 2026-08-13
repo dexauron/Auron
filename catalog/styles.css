@@ -1089,3 +1089,55 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 /* Экран «Цены других магазинов»: строка магазина в сводке */
 .comp-store-btn { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; margin-bottom: 8px; }
 .comp-store-n { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+
+/* ═══ Нижняя панель разделов ═══════════════════════
+   Как в любом продуктовом приложении: разделы внизу, под большим пальцем.
+   Раньше единственным способом попасть в категории была кнопка фильтра в
+   шапке — с главной страницы каталог просто не просматривался. */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar .tab {
+  position: relative;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-height: 56px; padding: 7px 4px 6px;
+  border: 0; background: none; cursor: pointer;
+  color: var(--text-2); font-family: inherit; font-size: 11px; font-weight: 600;
+}
+.tabbar .tab .tab-ico { font-size: 20px; line-height: 1; }
+.tabbar .tab.active { color: var(--brand-ink); }
+.tabbar .tab:active { opacity: .6; }
+.tab-badge {
+  position: absolute; top: 4px; left: 50%; margin-left: 6px;
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+/* панель перекрывает низ страницы — освобождаем место под ней */
+body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
+.fab { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+/* ═══ Экран категорий ══════════════════════════════ */
+.cat-screen { padding: 14px calc(14px + env(safe-area-inset-right)) 8px calc(14px + env(safe-area-inset-left)); }
+.cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.cat-tile {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+  padding: 16px 14px; min-height: 104px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.cat-tile:active { transform: scale(.97); opacity: .9; }
+.cat-ico { font-size: 30px; line-height: 1.1; }
+.cat-name { font-size: 15px; font-weight: 700; line-height: 1.2; }
+.cat-count { font-size: 12.5px; color: var(--text-2); }
+.cat-empty { padding: 24px 4px; }
+
+/* Наличие товара — покупателю понятнее любых цифр */
+.tag-instock { color: var(--pos); border-color: rgba(48, 209, 88, .45); background: rgba(48, 209, 88, .12); }
+.tag-lowstock { color: var(--warn); border-color: rgba(255, 159, 10, .45); background: rgba(255, 159, 10, .12); }
+.tag-outstock { color: var(--text-2); border-color: var(--border); background: var(--surface-2); }

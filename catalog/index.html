@@ -69,6 +69,7 @@
     <div class="recent-strip" id="newStrip" hidden></div>
     <div class="recent-strip" id="popularStrip" hidden></div>
     <div class="recent-strip" id="recentStrip" hidden></div>
+    <div class="cat-screen" id="catScreen" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
       <div class="empty-icon">🔍</div>
@@ -81,6 +82,25 @@
 
   <!-- Кнопка добавления (только админ) -->
   <button class="fab" id="fabAdd" hidden title="Добавить товар">＋</button>
+
+  <!-- Нижняя панель: главный способ переключаться между разделами.
+       Так устроено любое продуктовое приложение — большие пальцы дотягиваются
+       до низа экрана, а не до шапки. -->
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="catalog">
+      <span class="tab-ico">🛒</span><span class="tab-txt">Каталог</span>
+    </button>
+    <button class="tab" data-tab="cats">
+      <span class="tab-ico">🗂</span><span class="tab-txt">Категории</span>
+    </button>
+    <button class="tab" data-tab="fav">
+      <span class="tab-ico">♥</span><span class="tab-txt">Избранное</span>
+      <span class="tab-badge" id="tabFavCount" hidden></span>
+    </button>
+    <button class="tab" data-tab="more">
+      <span class="tab-ico">☰</span><span class="tab-txt">Ещё</span>
+    </button>
+  </nav>
 
   <!-- Карточка товара -->
   <div class="sheet-backdrop" id="productSheet" hidden>
