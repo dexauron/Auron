@@ -333,7 +333,12 @@
   const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
   // цена с единицей: у весовых показываем «/кг», чтобы было понятно
   const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
-  const fmtDate = (d) => { const [y, m, day] = String(d).slice(0, 10).split('-'); return `${day}.${m}.${y.slice(2)}`; };
+  // Пустая дата (в файле её могло не быть) раньше превращалась в «undefined.undefined.ll».
+  // Теперь возвращаем пустую строку — вызывающий сам решает, что показать.
+  const fmtDate = (d) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
+    return m ? `${m[3]}.${m[2]}.${m[1].slice(2)}` : '';
+  };
   // цена старше этого срока считается устаревшей: нового поступления давно не было,
   // цена у поставщика могла измениться — не помечаем такую как «выгодную»
   const STALE_PRICE_DAYS = 30;
@@ -1292,7 +1297,7 @@
     const g = groupById(p.group_id);
     if (g) badges.push(`<span class="tag">${esc(g.name)}</span>`);
     if (p.is_weighted) badges.push('<span class="tag">⚖ Весовой товар</span>');
-    if (p.unit) badges.push(`<span class="tag">📏 Продаётся: ${esc(p.unit)}</span>`);
+    if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">📏 Продаётся: ${esc(p.unit)}</span>`);
     const barcodes = p.barcodes || [];
     if (state.session && !barcodes.length) badges.push('<span class="tag tag-nobarcode">⚠ Штрихкода нет — пробивать по коду</span>');
     $('sheetBadges').innerHTML = badges.join('');
@@ -1308,12 +1313,12 @@
     const rows = [];
     // розничная цена (цена на полке) — видна всем, крупно вверху
     if (p.retail_price != null && p.retail_price !== '') {
-      rows.push(`<div class="field-row field-main"><span class="field-key">Цена</span><span class="field-val">${esc(fmtRetail(p))}</span></div>`);
+      rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span></div>`);
     }
     // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
     // покупателям без входа их не показываем
     if (state.session) {
-      if (p.code) rows.push(fieldRow('Код кассы', p.code, true));
+      if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
       if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
       // У товара может быть несколько штрихкодов: на штуку, на упаковку, на блок.
       // Подписываем каждый по-человечески («упаковка — 24 шт»), штучный — первым.
@@ -1325,15 +1330,15 @@
         const label = fmtBarcodeUnit((p.barcode_units || {})[b]);
         rows.push(fieldRow(label ? `Штрихкод · ${label}` : (bcOrdered.length > 1 ? `Штрихкод ${i + 1}` : 'Штрихкод'), b, false, true));
       });
-      // Фасовки товара из справочника единиц: в чём он продаётся и сколько
-      // штук внутри. Показываем, только если фасовок больше одной.
+      // Фасовки отдельной строкой НЕ показываем: те же «штука» и «упаковка — 48 шт»
+      // уже подписаны у штрихкодов. Строка нужна, только если штрихкодов нет вовсе.
       const packs = (p.pack_units || []).filter((u) => u && u.unit);
-      if (packs.length > 1) {
+      if (!bcOrdered.length && packs.length > 1) {
         const list = packs.map((u) => fmtBarcodeUnit(u.unit)).filter(Boolean).join(' · ');
-        if (list) rows.push(`<div class="field-row"><span class="field-key">Фасовки</span><span class="field-val" style="font-weight:600;font-size:14px">${esc(list)}</span></div>`);
+        if (list) rows.push(fieldRow('Фасовки', list));
       }
       if (p.department) rows.push(fieldRow('Отдел', p.department));
-      if (p.arrival_at) rows.push(fieldRow('Поступление', fmtDate(p.arrival_at)));
+      if (p.arrival_at) rows.push(fieldRow('Последнее поступление', fmtDate(p.arrival_at)));
       if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
     }
     if (!rows.length && state.session) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
@@ -1429,13 +1434,9 @@
     const round = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
     const days = daysBetween(s.period_from, s.period_to);
     const perDay = round(Number(s.qty) / days);
-    $('sheetSales').innerHTML = `<div class="sales-box">
-      <div class="sales-title">Продажи${stale ? ' <span class="sales-stale">· без связи</span>' : ''}</div>
-      <div class="sales-nums">
-        <div class="sales-cell"><span class="sales-n">${round(Number(s.qty))}</span><span class="sales-l">${esc(u)} за период</span></div>
-        <div class="sales-cell"><span class="sales-n">${perDay}</span><span class="sales-l">${esc(u)}/день</span></div>
-        <div class="sales-cell"><span class="sales-n" style="font-size:15px">${fmtDate(s.period_from)}<br>${fmtDate(s.period_to)}</span><span class="sales-l">период</span></div>
-      </div>
+    $('sheetSales').innerHTML = `<div class="sales-block">
+      <div class="sec-title">Продажи · ${fmtDate(s.period_from)} — ${fmtDate(s.period_to)}${stale ? ' <span class="sales-stale">· без связи</span>' : ''}</div>
+      <div class="sales-line"><span><b>${fmtNum(round(Number(s.qty)))}</b> ${esc(u)}</span><span><b>${fmtNum(perDay)}</b> ${esc(u)} в день</span></div>
     </div>`;
   }
 
@@ -1590,9 +1591,13 @@
           trend = diff > 0 ? `<span class="price-up">↑ ${pct}%</span>` : `<span class="price-down">↓ ${pct}%</span>`;
         }
         // устаревшая цена: помечаем и НЕ даём как выгодную
-        const dateLabel = e.fresh
-          ? `<span class="price-date">поступление ${fmtDate(e.last.price_date)}</span>`
-          : `<span class="price-date price-old">⚠ цена от ${fmtDate(e.last.price_date)} · поступления не было</span>`;
+        // даты в файле может не быть — тогда про неё просто молчим
+        const d = fmtDate(e.last.price_date);
+        const dateLabel = !d
+          ? '<span class="price-date">дата неизвестна</span>'
+          : (e.fresh
+            ? `<span class="price-date">поступление ${d}</span>`
+            : `<span class="price-date price-old">⚠ цена от ${d} · поступления не было</span>`);
         right = `<span class="price-val${e.fresh ? '' : ' price-val-old'}">${fmtPrice(e.last.price)}</span>
           <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}${dateLabel}</span>`;
       } else {
@@ -1627,10 +1632,9 @@
     const loss = abs < 0;
     const cls = loss ? 'markup-loss' : 'markup-ok';
     const sign = abs > 0 ? '+' : '';
-    box.innerHTML = `<div class="markup-box ${cls}">
-      <span class="markup-label">${loss ? '⚠ Наценка' : 'Наценка'}</span>
-      <span class="markup-val">${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
-      <span class="markup-sub">розница ${esc(fmtPrice(retail))} − закупка ${esc(fmtPrice(cost))}</span>
+    box.innerHTML = `<div class="markup-line ${cls}">
+      <span class="markup-val">${loss ? '⚠ ' : ''}Наценка ${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
+      <span class="markup-sub">закупка ${esc(fmtPrice(cost))}</span>
     </div>`;
   }
 
@@ -2349,7 +2353,6 @@
         fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
         fetch(base + COMP_FILE, { cache: 'no-cache' }).catch(() => null),
       ]);
-      if (!pr || !pr.ok) return false;
       const products = await pr.json();
       if (!Array.isArray(products)) return false;
       state.groups = (gr && gr.ok) ? await gr.json() : [];
