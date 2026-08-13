@@ -1482,6 +1482,70 @@
     } catch (e) { /* нет места */ }
   }
 
+  /* ── Цена за штуку и цена за упаковку ──────────────
+   * В прайсе 1С у каждой строки своя единица: у одного поставщика цена стоит
+   * за штуку, у другого — сразу за упаковку (колонка «Ед.»). Раньше число
+   * брали как есть, поэтому цена коробки сравнивалась с розничной ценой за
+   * штуку: «выгоднее» доставалось не тому поставщику, а наценка врала в разы.
+   * Теперь любую цену приводим к базовой единице (штука или кг) и отдельно
+   * считаем, сколько стоит целая упаковка. Сравниваем всегда за штуку. */
+
+  // сколько базовых единиц в одной такой единице измерения: «упак (48)» → 48,
+  // «шт» → 1. Не знаем — null (тогда считаем цену как есть, как раньше).
+  function unitQty(p, unitStr) {
+    const str = String(unitStr || '').trim();
+    if (!str) return null;
+    const key = norm(str);
+    // справочник единиц этого товара — самый надёжный источник
+    const hit = ((p && p.pack_units) || []).find((u) => u && norm(u.unit) === key);
+    if (hit && Number(hit.coef) > 0) return Number(hit.coef);
+    const u = parseBarcodeUnit(str);
+    if (!u) return null;
+    if (u.qty > 0) return u.qty;
+    if (u.isPack) return null;               // «упаковка» без числа — сколько в ней, неизвестно
+    return 1;                                 // «шт», «кг», «л» — базовая единица
+  }
+
+  // Основная упаковка товара: самая мелкая, где больше одной штуки.
+  // Берём из справочника единиц, а если его нет — из единиц штрихкодов.
+  function mainPack(p) {
+    let best = null;
+    const consider = (unitStr) => {
+      const q = unitQty(p, unitStr);
+      if (!(q > 1)) return;
+      if (!best || q < best.qty) best = { unit: String(unitStr), qty: q };
+    };
+    for (const u of (p.pack_units || [])) if (u && u.unit) consider(u.unit);
+    if (!best) for (const v of Object.values(p.barcode_units || {})) consider(v);
+    return best;
+  }
+
+  // Цена поставщика в двух видах: за базовую единицу и за упаковку.
+  // row.unit — единица из прайса. В режиме с базой её нет: тогда считаем, что
+  // цена указана за штуку (как работало раньше), а упаковку домножаем сами.
+  function priceParts(p, row) {
+    const raw = row ? Number(row.price) : NaN;
+    if (!Number.isFinite(raw) || raw <= 0) return null;
+    const rowQty = unitQty(p, row.unit);
+    // цена в файле указана за упаковку — делим на количество в ней
+    if (rowQty > 1) return { piece: raw / rowQty, pack: raw, packQty: rowQty, packUnit: row.unit, fromPack: true };
+    const mp = mainPack(p);
+    if (mp) return { piece: raw, pack: raw * mp.qty, packQty: mp.qty, packUnit: mp.unit, fromPack: false };
+    return { piece: raw, pack: null, packQty: null, packUnit: null, fromPack: false };
+  }
+
+  // «0,9 ₽» читается хуже, чем «0,90 ₽» — у мелких цен показываем копейки
+  const fmtPiecePrice = (n) => Number(n).toLocaleString('ru-RU',
+    { minimumFractionDigits: Number(n) < 100 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
+
+  // «за упаковку · 48 шт», «за блок · 10 шт»
+  function packLabel(p, parts) {
+    if (!parts || !parts.packQty) return '';
+    const b = (parseBarcodeUnit(parts.packUnit) || {}).base || '';
+    const word = /^блок/.test(b) ? 'блок' : (/^кор/.test(b) ? 'коробку' : 'упаковку');
+    return `за ${word} · ${fmtNum(parts.packQty)} ${p.is_weighted ? 'кг' : 'шт'}`;
+  }
+
   /* ── Поставщики и цены в карточке ──────────────────
    * Единый список: все поставщики товара, у каждого — цена и дата последнего
    * поступления по этой цене. Строка кликабельна → открывается карточка
@@ -1540,7 +1604,12 @@
       const sup = supplierById(id);
       if (!sup) return null;
       const hist = bySup.get(id) || [];
-      const e = { sup, hist, last: hist[0] || null, prev: hist.find((h) => hist[0] && Number(h.price) !== Number(hist[0].price)) || null };
+      const last = hist[0] || null;
+      const parts = priceParts(p, last);
+      // «предыдущая цена» — первая, что отличается ЗА ШТУКУ: если поставщик
+      // перешёл со штук на упаковки, само число меняется, а цена — нет
+      const prev = parts ? hist.find((h) => { const q = priceParts(p, h); return q && q.piece !== parts.piece; }) || null : null;
+      const e = { sup, hist, last, prev, parts, prod: p };
       cardSuppliers[id] = e;
       return e;
     }).filter(Boolean);
@@ -1566,13 +1635,14 @@
       const rank = (e) => (e.last ? (e.fresh ? 0 : 1) : 2);
       const ra = rank(a); const rb = rank(b);
       if (ra !== rb) return ra - rb;
-      if (a.last && b.last) return Number(a.last.price) - Number(b.last.price);
+      // сравниваем цену за штуку, а не число из файла: у кого-то там упаковка
+      if (a.parts && b.parts) return a.parts.piece - b.parts.piece;
       return a.sup.name.localeCompare(b.sup.name, 'ru');
     });
     // «выгоднее» считаем ТОЛЬКО среди свежих цен — старую цену без нового
     // поступления нельзя считать актуальной
-    const freshPriced = entries.filter((e) => e.fresh);
-    const best = freshPriced.length ? Math.min(...freshPriced.map((e) => Number(e.last.price))) : null;
+    const freshPriced = entries.filter((e) => e.fresh && e.parts);
+    const best = freshPriced.length ? Math.min(...freshPriced.map((e) => e.parts.piece)) : null;
 
     // Наценка (только админ/аналитик): розничная − лучшая свежая закупочная и %
     renderMarkup(p, best);
@@ -1581,12 +1651,13 @@
     const rowsHtml = entries.map((e) => {
       const c = state.contacts[e.sup.id];
       const hasContact = state.session && c && c.phone;
-      const isBest = e.fresh && freshPriced.length > 1 && Number(e.last.price) === best;
+      const isBest = e.fresh && e.parts && freshPriced.length > 1 && e.parts.piece === best;
       let right = '';
-      if (e.last) {
+      if (e.last && e.parts) {
         let trend = '';
         if (e.prev) {
-          const diff = ((Number(e.last.price) - Number(e.prev.price)) / Number(e.prev.price)) * 100;
+          const was = priceParts(p, e.prev).piece;
+          const diff = ((e.parts.piece - was) / was) * 100;
           const pct = Math.abs(diff) >= 10 ? Math.round(Math.abs(diff)) : Math.round(Math.abs(diff) * 10) / 10;
           trend = diff > 0 ? `<span class="price-up">↑ ${pct}%</span>` : `<span class="price-down">↓ ${pct}%</span>`;
         }
@@ -1598,7 +1669,13 @@
           : (e.fresh
             ? `<span class="price-date">поступление ${d}</span>`
             : `<span class="price-date price-old">⚠ цена от ${d} · поступления не было</span>`);
-        right = `<span class="price-val${e.fresh ? '' : ' price-val-old'}">${fmtPrice(e.last.price)}</span>
+        // сверху — цена за штуку (её и сравниваем с розницей), снизу — за упаковку
+        const per = p.is_weighted ? 'кг' : 'шт';
+        const packLine = e.parts.packQty
+          ? `<span class="price-pack"><b>${fmtPrice(e.parts.pack)}</b> ${esc(packLabel(p, e.parts))}</span>`
+          : '';
+        right = `<span class="price-val${e.fresh ? '' : ' price-val-old'}">${fmtPiecePrice(e.parts.piece)}<span class="price-per"> / ${per}</span></span>
+          ${packLine}
           <span class="price-meta">${isBest ? '<span class="price-badge">✓ выгоднее</span>' : ''}${trend}${dateLabel}</span>`;
       } else {
         right = `<span class="price-noprice">${state.session ? 'цена не указана' : ''}</span>`;
@@ -1632,9 +1709,11 @@
     const loss = abs < 0;
     const cls = loss ? 'markup-loss' : 'markup-ok';
     const sign = abs > 0 ? '+' : '';
+    // закупку показываем за ту же единицу, что и розница, — за штуку (или кг)
+    const per = p.is_weighted ? 'кг' : 'шт';
     box.innerHTML = `<div class="markup-line ${cls}">
       <span class="markup-val">${loss ? '⚠ ' : ''}Наценка ${sign}${esc(fmtPrice(abs))} <span class="markup-pct">(${sign}${pct}%)</span></span>
-      <span class="markup-sub">закупка ${esc(fmtPrice(cost))}</span>
+      <span class="markup-sub">закупка ${esc(fmtPiecePrice(cost))} / ${per}</span>
     </div>`;
   }
 
@@ -1682,13 +1761,24 @@
     }
 
     // цена этого товара у поставщика + история
-    if (state.session && e && e.last) {
-      parts.push(isFreshPrice(e.last)
-        ? `<div class="supview-price">Цена: <b>${fmtPrice(e.last.price)}</b> · поступление ${fmtDate(e.last.price_date)}</div>`
-        : `<div class="supview-price supview-price-old">Цена: <b>${fmtPrice(e.last.price)}</b><br><span class="price-old">⚠ от ${fmtDate(e.last.price_date)} · нового поступления не было, цена могла измениться</span></div>`);
+    if (state.session && e && e.last && e.parts) {
+      const prod = e.prod || currentProduct || {};
+      const per = prod.is_weighted ? 'кг' : 'шт';
+      const packLine = e.parts.packQty
+        ? `<br><b>${fmtPrice(e.parts.pack)}</b> ${esc(packLabel(prod, e.parts))}` : '';
+      const price = `<b>${fmtPiecePrice(e.parts.piece)}</b> / ${per}${packLine}`;
+      const d = fmtDate(e.last.price_date);
+      parts.push(!d
+        ? `<div class="supview-price">Цена: ${price}<br><span class="price-date">дата неизвестна</span></div>`
+        : (isFreshPrice(e.last)
+          ? `<div class="supview-price">Цена: ${price}<br><span class="price-date">поступление ${d}</span></div>`
+          : `<div class="supview-price supview-price-old">Цена: ${price}<br><span class="price-old">⚠ от ${d} · нового поступления не было, цена могла измениться</span></div>`));
       if (e.hist.length > 1) {
-        parts.push('<div class="supview-hist-title">История цены</div><div class="price-history">'
-          + e.hist.slice(0, 12).map((h) => `<div class="price-hist-row"><span>${fmtDate(h.price_date)}</span><span>${fmtPrice(h.price)}</span></div>`).join('')
+        parts.push('<div class="supview-hist-title">История цены (за ' + per + ')</div><div class="price-history">'
+          + e.hist.slice(0, 12).map((h) => {
+            const q = priceParts(prod, h);
+            return `<div class="price-hist-row"><span>${fmtDate(h.price_date)}</span><span>${q ? fmtPiecePrice(q.piece) : fmtPrice(h.price)}</span></div>`;
+          }).join('')
           + '</div>');
       }
     }
@@ -2222,8 +2312,8 @@
         if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
         if (info.date && (!maxDate || info.date > maxDate)) maxDate = info.date;
         const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
-        if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; } }
-        else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null });
+        if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; ex.unit = info.unit || null; } }
+        else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null, unit: info.unit || null });
       }
       // «Поступление» — самая свежая дата цены (для фильтра «🆕 Пришло сегодня»)
       if (maxDate && (!p.arrival_at || maxDate > String(p.arrival_at).slice(0, 10))) p.arrival_at = maxDate;
@@ -2905,7 +2995,7 @@
     try {
       const all = readPriceCache();
       all[productId] = {
-        rows: rows.map(({ supplier_id, price, price_date }) => ({ supplier_id, price, price_date })),
+        rows: rows.map(({ supplier_id, price, price_date, unit }) => ({ supplier_id, price, price_date, unit })),
         ts: Date.now(),
       };
       const keys = Object.keys(all);
@@ -3442,9 +3532,11 @@
       if (unit && !item.unit) item.unit = unit;
       if (unit === 'кг') item.weighted = true;
       if (sup && price != null) {
-        // несколько строк по поставщику — оставляем самое свежее поступление
+        // несколько строк по поставщику — оставляем самое свежее поступление.
+        // Единицу строки запоминаем: у одного поставщика цена стоит за штуку,
+        // у другого — сразу за упаковку, и без этого их нельзя сравнивать.
         const prev = item.prices.get(sup);
-        if (!prev || (rowDate || '') >= (prev.date || '')) item.prices.set(sup, { price, date: rowDate });
+        if (!prev || (rowDate || '') >= (prev.date || '')) item.prices.set(sup, { price, date: rowDate, unit: unit || null });
       }
     }
     return byKey;
