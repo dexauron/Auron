@@ -8,7 +8,7 @@ import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, buildStaffSnapshot, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockSecret, unlockStaff } from './publish.js';
+import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, deleteGroup, deleteProduct, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -650,12 +650,14 @@ function bindEvents() {
     // бесплатный режим (STATIC_URL) или есть GitHub-ключ.
     if (CFG.STATIC_URL || ghConfigured()) {
       try {
-        await unlockSecret(password);
-        applyServerless(password);
+        // Каталог один на всех, а роль определяется тем, ЧЕЙ конвертик с ключом
+        // открылся: пароль владельца — полные права, пароль сотрудника — просмотр.
+        const role = await unlockAny(password);
+        if (role === 'staff') applyStaff(password); else applyServerless(password);
         $('loginPassword').value = ''; $('loginEmail').value = '';
         closeSheet('loginSheet');
         btn.disabled = false; btn.textContent = 'Войти';
-        toast('Вход выполнен');
+        toast(role === 'staff' ? 'Вход сотрудника' : 'Вход выполнен');
         return;
       } catch (err) {
         btn.disabled = false; btn.textContent = 'Войти';
@@ -673,19 +675,9 @@ function bindEvents() {
           openImportHub();
           return;
         }
-        // не пароль владельца — пробуем аккаунт сотрудника (свой файл, без «Ходовых»)
-        try {
-          await unlockStaff(password);
-          applyStaff(password);
-          $('loginPassword').value = ''; $('loginEmail').value = '';
-          closeSheet('loginSheet');
-          toast('Вход сотрудника');
-          return;
-        } catch (e2) {
-          $('loginError').textContent = 'Пароль не подошёл. Проверь пароль каталога или пароль сотрудника.';
-          $('loginError').hidden = false;
-          return;
-        }
+        $('loginError').textContent = 'Пароль не подошёл. Проверь пароль каталога или пароль сотрудника.';
+        $('loginError').hidden = false;
+        return;
       }
     }
 
@@ -907,8 +899,13 @@ async function init() {
     const saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null');
     if (saved && saved.pw) {
       svRestored = true;
-      if (saved.role === 'staff') { applyStaff(saved.pw); unlockStaff(saved.pw).then(renderAll).catch(() => {}); }
-      else { applyServerless(saved.pw); unlockSecret(saved.pw).then(renderAll).catch(() => {}); }
+      // Права поднимаем сразу по запомненной роли, но окончательное слово — за
+      // каталогом: владелец мог сменить пароль сотрудника, и тогда роль другая.
+      if (saved.role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
+      unlockAny(saved.pw).then((role) => {
+        if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
+        renderAll();
+      }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
     }
   } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
@@ -918,7 +915,7 @@ async function init() {
 
 // Тестовый доступ — только на localhost (в проде не открываем).
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
 }

@@ -328,40 +328,48 @@ export function buildFullSnapshot() {
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
   };
 }
-// Каталог для сотрудника: полный ПРОСМОТР (товары + закупка + продажи +
-// контакты), но без прав на правку/загрузку — это остаётся только у владельца.
-export function buildStaffSnapshot() {
-  return {
-    v: 1, savedAt: new Date().toISOString(), staff: true,
-    products: cleanProductsFull(), groups: state.groups, suppliers: state.suppliers,
-    prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
-    competitors: state.competitors || [], compPrices: state.compPrices || [],
-    unitCoef: state.unitCoef || {},
-    orderRules: state.orderRules || null,
-  };
-}
+/* ── Закрытый каталог: один на всех, ключ — в «конвертиках» ─────────────────
+   Раньше один и тот же каталог шифровался ДВАЖДЫ: файл владельца и почти такой
+   же файл сотрудника. Это удваивало и хранение (два раза по 17 МБ), и работу
+   при каждой публикации, а появление третьей роли стоило бы ещё столько же.
 
-/* ── Закрытый каталог по частям ─────────────────────────────────────────────
-   Файл `secret-catalog.enc` теперь не весь каталог, а зашифрованная ОПИСЬ:
-   мелочь (группы, поставщики, контакты, правила) прямо в ней, а товары, цены и
-   продажи — кусками в `data/sec/…`. У каждого куска в описи своя подпись, и
-   на GitHub уезжают только изменившиеся.
+   Теперь каталог один. Он зашифрован случайным «ключом каталога», а сам ключ
+   лежит рядом в маленьких конвертиках — по одному на каждый пароль
+   (`keys.json`). Пароль открывает свой конвертик, из него достаётся ключ, а уже
+   ключом читается каталог. Отсюда:
+   — публикация вдвое меньше, новая роль стоит полкилобайта;
+   — смена пароля сотрудника переписывает конвертик, а не весь каталог;
+   — какая роль вошла, видно по тому, ЧЕЙ конвертик открылся.
 
-   Ключ шифрования один на все куски (иначе пришлось бы каждый раз
-   перешифровывать всё), поэтому «соль» берём из прошлой описи и меняем только
-   когда сменился пароль — тогда перезаписываются все куски. */
+   Каталог лежит кусками `data/sec/…`, опись (мелочь + подписи кусков) — в
+   `data/catalog.enc`, тоже под ключом каталога. Уезжают только те куски, чья
+   подпись изменилась. */
 const SETS = [
   { name: 'products', n: 24, key: (r) => r.id },
   { name: 'prices', n: 12, key: (r) => r.product_id },
   { name: 'sales', n: 6, key: (r) => r.code || r.name },
 ];
-const SEC_DIR = 'sec';            // куски каталога владельца
-const STAFF_DIR = 'sec-staff';    // куски каталога сотрудника
-// опись прошлой публикации, чтобы знать, что уже лежит на GitHub
-const _lastMani = {};             // файл описи → { salt, mani } либо LEGACY
-// пометка «там лежит каталог старого формата»: описи нет и качать файл второй
-// раз незачем — он весит десятки мегабайт
-const LEGACY = { legacy: true };
+const SEC_DIR = 'sec';               // куски каталога
+const KEYS_FILE = 'keys.json';       // конвертики с ключом каталога
+const CAT_FILE = 'catalog.enc';      // опись каталога
+const ROLES = ['owner', 'staff'];    // порядок проверки паролей при входе
+
+// Что уже лежит на GitHub: ключ каталога и последняя опись. Заполняется при
+// входе и после публикации — чтобы не качать и не расшифровывать одно и то же.
+let _cat = null;                     // { raw, key, role, mani, staffPassword }
+
+async function wrapKey(raw, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const kek = await deriveKey(password, salt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, kek, raw));
+  return { kdf: 'PBKDF2', iter: ENC_ITER, salt: b64(salt), iv: b64(iv), data: b64(ct) };
+}
+async function unwrapKey(entry, password) {
+  const kek = await deriveKey(password, unb64(entry.salt));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(entry.iv) }, kek, unb64(entry.data)));
+}
+const importKey = (raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
 
 async function encPart(key, obj) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -378,12 +386,65 @@ async function decPart(key, raw) {
   return JSON.parse(new TextDecoder().decode(plain));
 }
 
-// Разложить снимок на опись + куски и собрать список файлов к заливке.
-// prev — опись прошлой публикации (или null: тогда пишем всё).
-async function secretFiles(snapshot, password, dir, file, prev) {
-  const sameSalt = prev && prev.salt;
-  const salt = sameSalt ? unb64(prev.salt) : crypto.getRandomValues(new Uint8Array(16));
-  const key = await deriveKey(password, salt);
+/* Открыть каталог паролем. Возвращает { data, role } либо бросает:
+   NO_SECRET — каталога ещё нет (первая настройка), BAD_PASSWORD — не подошёл.
+   Понимает и старый формат (два цельных файла) — на время перехода. */
+async function openCatalog(password) {
+  const keysRaw = await fetchRaw(KEYS_FILE);
+  if (keysRaw == null) return openLegacy(password);
+  const ks = JSON.parse(keysRaw);
+  let raw = null; let role = null;
+  for (const r of ROLES) {
+    if (!ks[r]) continue;
+    try { raw = await unwrapKey(ks[r], password); role = r; break; } catch (e) { /* не этот пароль */ }
+  }
+  if (!raw) throw new Error('BAD_PASSWORD');
+  const key = await importKey(raw);
+  const catRaw = await fetchRaw(CAT_FILE);
+  if (catRaw == null) throw new Error('NO_SECRET');
+  const mani = await decPart(key, catRaw);
+  const data = { ...mani.head };
+  for (const s of SETS) {
+    const set = mani.sets[s.name];
+    if (!set) { data[s.name] = []; continue; }
+    const idx = Array.from({ length: set.n }, (_, i) => i);
+    const chunks = await pool(idx, 6, async (i) => decPart(key, await fetchPart(`${SEC_DIR}/${s.name}-${partName(i)}.enc`, set.h[i])));
+    data[s.name] = [].concat(...chunks);
+  }
+  _cat = { raw, key, role, mani, staffPassword: data.staffPassword || null };
+  return { data, role };
+}
+
+// Старый формат: два отдельных цельных файла. Читаем, пока владелец не
+// опубликовал каталог заново — при первой же публикации они удаляются.
+async function openLegacy(password) {
+  const own = await fetchRaw(SECRET_FILE);
+  if (own != null) {
+    try { return { data: await decryptJSON(own, password), role: 'owner' }; } catch (e) { /* может, это пароль сотрудника */ }
+  }
+  const staff = await fetchRaw(STAFF_FILE);
+  if (staff != null) {
+    try { return { data: await decryptJSON(staff, password), role: 'staff' }; } catch (e) { /* не подошёл */ }
+  }
+  if (own == null && staff == null) throw new Error('NO_SECRET');
+  throw new Error('BAD_PASSWORD');
+}
+
+// Разложить каталог на опись + куски. Ключ каталога тот же, что и был, —
+// поэтому неизменившиеся куски не трогаем. rotate=true меняет ключ и
+// переписывает всё (нужно, когда сотрудника отключают сменой пароля).
+async function catalogFiles(password, rotate) {
+  const snapshot = buildFullSnapshot();
+  const staffPw = state.staffPassword || null;
+  // Смена пароля сотрудника — это отключение прежнего сотрудника. Старый ключ
+  // у него мог остаться, поэтому меняем ключ каталога: иначе «смена пароля»
+  // была бы видимостью защиты.
+  const staffChanged = _cat && _cat.staffPassword !== staffPw;
+  const fresh = !_cat || rotate || staffChanged;
+  const raw = fresh ? crypto.getRandomValues(new Uint8Array(32)) : _cat.raw;
+  const key = fresh ? await importKey(raw) : _cat.key;
+  const prev = fresh ? null : _cat.mani;
+
   const head = { ...snapshot };
   const sets = {};
   const files = [];
@@ -395,94 +456,42 @@ async function secretFiles(snapshot, password, dir, file, prev) {
       const json = JSON.stringify(parts[i]);
       const h = await digest(json);
       hashes.push(h);
-      const known = prev && prev.mani && prev.mani.sets[s.name] && prev.mani.sets[s.name].h[i];
-      if (!sameSalt || known !== h) files.push({ path: `${CFG.DATA_PATH}/${dir}/${s.name}-${partName(i)}.enc`, content: await encPart(key, parts[i]) });
+      const known = prev && prev.sets[s.name] && prev.sets[s.name].h[i];
+      if (known !== h) files.push({ path: `${CFG.DATA_PATH}/${SEC_DIR}/${s.name}-${partName(i)}.enc`, content: await encPart(key, parts[i]) });
     }
     sets[s.name] = { n: s.n, h: hashes };
   }
-  const mani = { v: 2, savedAt: new Date().toISOString(), head, sets };
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  let bytes = new TextEncoder().encode(JSON.stringify(mani));
-  let z = null;
-  if (canGzip) { bytes = await gzipBytes(bytes); z = 'gzip'; }
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
-  files.push({
-    path: `${CFG.DATA_PATH}/${file}`,
-    content: JSON.stringify({ v: 2, alg: 'AES-GCM', kdf: 'PBKDF2', iter: ENC_ITER, z, salt: b64(salt), iv: b64(iv), data: b64(ct) }),
-  });
-  return { files, saved: { salt: b64(salt), mani } };
-}
-
-// Прочитать закрытый каталог: опись + куски (новый формат) либо цельный файл
-// (старый). Наружу отдаёт то же самое, что лежало в старом файле.
-async function loadSnapshot(file, password) {
-  const raw = await fetchRaw(file);
-  if (raw == null) return null;
-  const env = JSON.parse(raw);
-  if (env.v !== 2) { _lastMani[file] = LEGACY; return decryptJSON(env, password); }   // старый цельный файл
-  const salt = unb64(env.salt);
-  const key = await deriveKey(password, salt);
-  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
-  if (env.z === 'gzip') plain = await gunzipBytes(plain);
-  const mani = JSON.parse(new TextDecoder().decode(plain));
-  _lastMani[file] = { salt: env.salt, mani };
-  const dir = file === SECRET_FILE ? SEC_DIR : STAFF_DIR;
-  const data = { ...mani.head };
-  for (const s of SETS) {
-    const set = mani.sets[s.name];
-    if (!set) { data[s.name] = []; continue; }
-    const idx = Array.from({ length: set.n }, (_, i) => i);
-    const chunks = await pool(idx, 6, async (i) => decPart(key, await fetchPart(`${dir}/${s.name}-${partName(i)}.enc`, set.h[i])));
-    data[s.name] = [].concat(...chunks);
+  const mani = { v: 3, savedAt: new Date().toISOString(), head, sets };
+  files.push({ path: `${CFG.DATA_PATH}/${CAT_FILE}`, content: await encPart(key, mani) });
+  if (fresh) {
+    const keys = { v: 3, owner: await wrapKey(raw, password) };
+    if (staffPw) keys.staff = await wrapKey(raw, staffPw);
+    files.push({ path: `${CFG.DATA_PATH}/${KEYS_FILE}`, content: JSON.stringify(keys) });
   }
-  return data;
+  return { files, saved: { raw, key, role: 'owner', mani, staffPassword: staffPw } };
 }
 
-// Опубликовать всё одним коммитом: открытая витрина + закрытый каталог
-// владельца (+ отдельный каталог сотрудника, если задан его пароль).
-// Возвращает {sha, sent, total} — сколько файлов реально уехало.
-export async function publishFull(password, { onProgress = null } = {}) {
+// Опубликовать всё одним коммитом: открытая витрина + закрытый каталог.
+// Возвращает { sha, sent } — сколько файлов реально уехало.
+export async function publishFull(password, { onProgress = null, rotate = false } = {}) {
   const prevIdx = await loadPubIndex();
   const { files, index } = await showcaseFiles(prevIdx);
   files.push({ path: `${CFG.DATA_PATH}/${INDEX_FILE}`, content: JSON.stringify(index) });
   if (!prevIdx && await rawExists(LEGACY_FILE)) files.push({ path: `${CFG.DATA_PATH}/${LEGACY_FILE}`, content: null });
 
-  const own = await secretFiles(buildFullSnapshot(), password, SEC_DIR, SECRET_FILE, await prevMani(SECRET_FILE, password));
-  files.push(...own.files);
-  let staff = null;
-  if (state.staffPassword) {
-    staff = await secretFiles(buildStaffSnapshot(), state.staffPassword, STAFF_DIR, STAFF_FILE, await prevMani(STAFF_FILE, state.staffPassword));
-    files.push(...staff.files);
+  const cat = await catalogFiles(password, rotate);
+  files.push(...cat.files);
+  // переход со старого формата: две цельные копии больше не нужны
+  for (const old of [SECRET_FILE, STAFF_FILE]) {
+    if (await rawExists(old)) files.push({ path: `${CFG.DATA_PATH}/${old}`, content: null });
   }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
-  _lastMani[SECRET_FILE] = own.saved;
-  if (staff) _lastMani[STAFF_FILE] = staff.saved;
+  _cat = cat.saved;
   return { sha, sent: files.length };
 }
 
-// Опись прошлой публикации: из памяти (мы её уже читали при входе) или с
-// GitHub. Не открылась нашим паролем — значит пароль сменился: перезапишем всё.
-async function prevMani(file, password) {
-  const known = _lastMani[file];
-  if (known) return known === LEGACY ? null : known;
-  try {
-    const raw = await fetchRaw(file);
-    if (raw == null) return null;
-    const env = JSON.parse(raw);
-    if (env.v !== 2) return null;                   // старый формат — переходим на куски целиком
-    const key = await deriveKey(password, unb64(env.salt));
-    let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
-    if (env.z === 'gzip') plain = await gunzipBytes(plain);
-    const saved = { salt: env.salt, mani: JSON.parse(new TextDecoder().decode(plain)) };
-    _lastMani[file] = saved;
-    return saved;
-  } catch (e) { return null; }
-}
-// Вход владельца по паролю: скачать полный каталог и открыть паролем.
-// Бросает NO_SECRET, если файла ещё нет; бросает при неверном пароле.
-export async function unlockSecret(password) {
-  const data = await loadSnapshot(SECRET_FILE, password); // неверный пароль → исключение
-  if (data == null) throw new Error('NO_SECRET');
+// Разложить открытый каталог по состоянию приложения.
+function applySnapshot(data, role) {
   state.groups = data.groups || [];
   state.suppliers = data.suppliers || [];
   state.products = (data.products || []).slice().sort(byName);
@@ -497,27 +506,29 @@ export async function unlockSecret(password) {
   buildIndex();
   state.popularIds = buildPopularIds();
   state.serverless = true;
-  state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
+  state.isAdmin = role === 'owner';
+  state.role = role === 'owner' ? 'admin' : 'staff';
+  state.canPurchase = true;
+  state.canSales = true;
+  return role;
+}
+
+// Вход по паролю: приложение само понимает, чей это пароль — владельца или
+// сотрудника (чей конвертик открылся). Возвращает 'owner' | 'staff'.
+export async function unlockAny(password) {
+  const { data, role } = await openCatalog(password);
+  return applySnapshot(data, role);
+}
+// Вход именно владельца (запомненный вход, проверки).
+export async function unlockSecret(password) {
+  const role = await unlockAny(password);
+  if (role !== 'owner') throw new Error('BAD_PASSWORD');
   return true;
 }
-// Вход сотрудника по паролю: скачать файл сотрудника (без продаж) и открыть.
+// Вход именно сотрудника.
 export async function unlockStaff(password) {
-  const data = await loadSnapshot(STAFF_FILE, password);
-  if (data == null) throw new Error('NO_STAFF');
-  state.groups = data.groups || [];
-  state.suppliers = data.suppliers || [];
-  state.products = (data.products || []).slice().sort(byName);
-  state.prices = data.prices || [];
-  state.sales = data.sales || []; // сотрудник видит всё, включая продажи
-  state.contacts = data.contacts || {};
-  state.competitors = data.competitors || [];   // цены магазинов сотрудник и видит, и вносит
-  state.compPrices = data.compPrices || [];
-  state.unitCoef = data.unitCoef || {};
-  if (data.orderRules) state.orderRules = data.orderRules;
-  buildIndex();
-  state.popularIds = buildPopularIds();
-  state.serverless = true;
-  state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
+  const role = await unlockAny(password);
+  if (role !== 'staff') throw new Error('BAD_PASSWORD');
   return true;
 }
 
