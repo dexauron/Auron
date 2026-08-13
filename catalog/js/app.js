@@ -1351,6 +1351,7 @@
     $('btnSuggestPhotoLabel').hidden = !!state.session; // покупатель может предложить фото (на проверку)
     $('sheetMarkup').innerHTML = '';
     $('sheetRetailHist').innerHTML = '';
+    renderStock(p, null);   // остаток виден сразу; продажи дорисуют «сколько заказать»
     renderProductSales(p);
     renderProductPrices(p);
     renderRetailHistory(p);
@@ -1437,6 +1438,61 @@
     $('sheetSales').innerHTML = `<div class="sales-block">
       <div class="sec-title">Продажи · ${fmtDate(s.period_from)} — ${fmtDate(s.period_to)}${stale ? ' <span class="sales-stale">· без связи</span>' : ''}</div>
       <div class="sales-line"><span><b>${fmtNum(round(Number(s.qty)))}</b> ${esc(u)}</span><span><b>${fmtNum(perDay)}</b> ${esc(u)} в день</span></div>
+    </div>`;
+    // продажи известны — пересобираем остаток уже с подсказкой «сколько заказать»
+    renderStock(p, Number(s.qty) / days);
+  }
+
+  /* ── Остаток и «сколько заказать» ──────────────────
+   * Остатки из 1С каталог загружал давно, но нигде не показывал — данные
+   * лежали мёртвым грузом. Вместе с продажами они отвечают на главный вопрос
+   * у полки: на сколько дней хватит и сколько упаковок брать.
+   * Остаток из отчёта — на момент выгрузки, поэтому дату пишем рядом. */
+
+  const ORDER_COVER_DAYS = 14;   // на сколько дней вперёд предлагаем закупиться
+  const ORDER_ALERT_DAYS = 7;    // осталось меньше — «пора заказывать»
+
+  function renderStock(p, perDay) {
+    const box = $('sheetStock');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!state.session) return;                       // остаток — внутренние данные магазина
+    const qty = p.stock != null ? Number(p.stock) : (p.stock_qty != null ? Number(p.stock_qty) : null);
+    if (qty == null || !Number.isFinite(qty)) return; // остатки не загружали — блока нет
+    const u = p.unit || 'шт';
+    const at = fmtDate(p.stock_at);
+
+    let head; let cls = '';
+    if (qty <= 0) { head = 'Закончился'; cls = ' stock-out'; }
+    else head = `<b>${fmtNum(qty)}</b> ${esc(u)} на складе`;
+
+    const lines = [];
+    // на сколько хватит — считаем только если знаем средние продажи в день
+    if (perDay > 0 && qty > 0) {
+      const days = qty / perDay;
+      const soon = days < ORDER_ALERT_DAYS;
+      lines.push(`<div class="stock-line${soon ? ' stock-warn' : ''}">${soon ? '⚠ ' : ''}Хватит на <b>${fmtNum(Math.round(days * 10) / 10)}</b> ${plural(Math.round(days), 'день', 'дня', 'дней')}${soon ? ' — пора заказывать' : ''}</div>`);
+    }
+    // сколько брать: считаем в упаковках, потому что заказывают упаковками
+    if (perDay > 0) {
+      const need = perDay * ORDER_COVER_DAYS - Math.max(qty, 0);
+      if (need > 0) {
+        const mp = mainPack(p);
+        if (mp) {
+          const packs = Math.ceil(need / mp.qty);
+          const total = packs * mp.qty;
+          const cover = Math.round((Math.max(qty, 0) + total) / perDay);
+          lines.push(`<div class="stock-line">Заказать <b>${fmtNum(packs)}</b> ${plural(packs, 'упаковку', 'упаковки', 'упаковок')} (${fmtNum(total)} ${esc(u)}) — хватит на ${fmtNum(cover)} ${plural(cover, 'день', 'дня', 'дней')}</div>`);
+        } else {
+          lines.push(`<div class="stock-line">Заказать примерно <b>${fmtNum(Math.ceil(need))}</b> ${esc(u)} — на ${ORDER_COVER_DAYS} дней</div>`);
+        }
+      }
+    }
+
+    box.innerHTML = `<div class="sales-block${cls}">
+      <div class="sec-title">Остаток${at ? ` · на ${at}` : ''}</div>
+      <div class="stock-head">${head}</div>
+      ${lines.join('')}
     </div>`;
   }
 
@@ -2343,6 +2399,9 @@
       if (rec.unit === 'кг') p.is_weighted = true;
       if (rec.retail != null) p.retail_price = rec.retail;
       p.stock = rec.stock;
+      // дата остатка из шапки отчёта («на конец дня: 12.08.2026») — без неё
+      // непонятно, насколько число свежее, а устаревает оно за сутки
+      p.stock_at = parsed.stockAt || null;
     }
   }
   function svUploadSales(parsed) {
@@ -2618,6 +2677,29 @@
       .sort((a, b) => Number(a.price) - Number(b.price));
   }
 
+  // Итог сравнения одной понятной строкой: раньше цены конкурентов лежали
+  // столбиком и сравнивать приходилось глазами. По каждому магазину берём
+  // САМУЮ СВЕЖУЮ запись — цена, записанная полгода назад, ничего не значит.
+  function compVerdict(our, all) {
+    if (our == null || !all.length) return '';
+    const latest = new Map();
+    for (const r of all) {
+      const cur = latest.get(r.competitor_id);
+      if (!cur || String(r.observed_at || '') > String(cur.observed_at || '')) latest.set(r.competitor_id, r);
+    }
+    const list = [...latest.values()].filter((r) => Number(r.price) > 0);
+    if (!list.length) return '';
+    const cheap = list.reduce((a, b) => (Number(b.price) < Number(a.price) ? b : a));
+    const cp = Number(cheap.price);
+    const who = esc(competitorName(cheap.competitor_id));
+    const d = fmtDate(cheap.observed_at);
+    const n = list.length;
+    const sub = `<span class="comp-v-sub">сравнили с ${n} ${plural(n, 'магазином', 'магазинами', 'магазинами')}${d ? ` · запись от ${d}` : ''}</span>`;
+    if (cp > our) return `<div class="comp-verdict comp-v-good">✓ У нас дешевле всех — на ${esc(fmtPrice(cp - our))} дешевле, чем в магазине «${who}» ${sub}</div>`;
+    if (cp === our) return `<div class="comp-verdict">У нас цена как у самых дешёвых — в магазине «${who}» столько же ${sub}</div>`;
+    return `<div class="comp-verdict comp-v-bad">⚠ Дешевле в магазине «${who}» — ${esc(fmtPrice(cp))}, это на ${esc(fmtPrice(our - cp))} меньше нашей ${sub}</div>`;
+  }
+
   // Цены в других магазинах. Видят ВСЕ (в том числе покупатель без входа),
   // вносит любой вошедший — владелец или сотрудник.
   function renderCompetitors(p) {
@@ -2670,7 +2752,7 @@
 
     box.innerHTML = `<div class="comp-block">
       <div class="comp-title">Цены в других магазинах</div>
-      ${filterBar}${ourRow}${list}
+      ${compVerdict(our, all)}${filterBar}${ourRow}${list}
       ${canAdd ? '<button class="btn btn-secondary btn-block" id="compAddBtn">＋ Записать цену магазина</button>' : ''}
     </div>`;
   }
