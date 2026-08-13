@@ -764,6 +764,11 @@ select.input { appearance: none; }
 }
 .calc-row:last-child { border-bottom: 0; }
 .calc-tag { font-size: 12px; }
+.calc-date { display: block; font-size: 11.5px; color: var(--text-2); font-weight: 400; }
+.calc-row-old { opacity: .72; }
+.calc-row-old .calc-date { color: var(--warn); }
+.calc-hist { margin-top: 10px; }
+.calc-hist summary { font-size: 13px; color: var(--brand-ink); cursor: pointer; padding: 6px 0; }
 .calc-better { color: var(--pos); }
 .calc-worse { color: var(--text-2); }
 .calc-hint { margin-top: 10px; }
