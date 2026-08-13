@@ -13,7 +13,8 @@ const SKIP = /^\s*(\/\/|\*|\/\*)|═|──/;
 let fail = false;
 const chk = (c, m) => { if (!c) { console.log('FAIL:', m); fail = true; } else console.log('OK:', m); };
 
-for (const f of ['index.html', 'js/app.js']) {
+const MODULES = fs.readdirSync(path.join(dir, 'js/modules')).map((f) => 'js/modules/' + f);
+for (const f of ['index.html', ...MODULES]) {
   const lines = fs.readFileSync(path.join(dir, f), 'utf8').split('\n');
   const bad = [];
   lines.forEach((l, i) => {
@@ -25,7 +26,7 @@ for (const f of ['index.html', 'js/app.js']) {
 }
 
 // набор значков на месте и каждая категория умеет рисоваться
-const app = fs.readFileSync(path.join(dir, 'js/app.js'), 'utf8');
+const app = MODULES.map((f) => fs.readFileSync(path.join(dir, f), 'utf8')).join('\n');
 chk(/const ICONS = \{/.test(app) && /function ic\(name, cls\)/.test(app), 'набор значков и функция ic() на месте');
 const cats = [...app.matchAll(/\{ name: '([^']+)',\s*icon: null/g)].map((m) => m[1]);
 const drawn = [...app.matchAll(/^\s*'([^']+)':\s*'<(?:path|circle|rect)/gm)].map((m) => m[1]);
