@@ -396,6 +396,44 @@
   ];
   const OTHER_CAT = { name: 'Прочее', icon: null };
   const catCache = {};
+  /* ── Как определяется категория товара ──────────────
+   * Раньше категория бралась ТОЛЬКО из названия группы 1С. Но группа часто
+   * заполнена неверно, обобщённо («Товары», «Прочее») или пуста — и товар
+   * оказывался не на своей полке. Теперь порядок такой:
+   *   1. ручная правка или найденное в интернете (поле category у товара);
+   *   2. САМО НАЗВАНИЕ товара — в выгрузках 1С оно почти всегда начинается с
+   *      самого товара: «Молоко Простоквашино», «Шампунь Head & Shoulders»;
+   *   3. название группы — как было;
+   *   4. «Прочее».
+   * Правила по названию нарочно привязаны к НАЧАЛУ строки: «молоко …» — это
+   * молочное, а вот «крем-сода» в середине названия ловилась бы как косметика.
+   * Детское проверяем первым: подгузники подходят и под гигиену.
+   * Про границу слова: в JS кириллица не считается словесным символом, поэтому
+   * «сок\b» НЕ срабатывает на «Сок Добрый» — границы там не возникает. Пишем
+   * «сок(?![а-яё])»: дальше не буква. На этом уже спотыкались в разборе 1С. */
+  const NAME_RULES = [
+    [/^(подгуз|пюре детск|смесь детск|каш[аи] детск|соск|бутылочк|пустышк|погремушк)/, 'Детское'],
+    [/^(молок|кефир|смета|творог|творож|йогурт|сырок|сыр(?![а-яё])|ряженк|простокваш|сливк|масло сливоч|сгущ|яйц)/, 'Молочное'],
+    [/^(хлеб|батон|булоч|булк|лаваш|багет|сухар|пирож|пирог|торт|кекс|рулет|слойк|круасс|пицц|самса|чебурек|хачапур|блин)/, 'Хлеб и выпечка'],
+    [/^(вода|сок(?![а-яё])|нектар|лимонад|напит|квас|морс|кофе|чай(?![а-яё])|какао|энергет|компот|сироп|минерал)/, 'Напитки'],
+    [/^(конфет|шоколад|мармелад|зефир|пастил|печен|пряник|вафл|халв|козинак|леденц|драже|карамел|батончик|м[её]д(?![а-яё])|варень|джем|повидл|жеват|ирис|щербет|рахат)/, 'Сладости'],
+    [/^(чипс|сн[еэ]к|попкорн|семечк|арахис|фисташк|орех|миндал|кешью|сухофрукт|хлебц|мюсли|хлопь|кукурузн палоч|гренк)/, 'Снеки'],
+    [/^(колбас|сосиск|сардельк|ветчин|бекон|карбонад|мясо|фарш|курин|куриц|говядин|свинин|индейк|баранин|рыба|сельд|скумбри|горбуш|л[оа]сос|икра|креветк|краб|кальмар|паштет|шпик|сало|окорок|шашлык)/, 'Мясо и рыба'],
+    [/^(мороженое|мороженно|заморож|пельмен|вареник|наггетс|хингал|манты|котлет заморож|лед пищев)/, 'Заморозка'],
+    [/^(шампун|бальзам|кондиционер для волос|мыло|зубн|дезодор|антиперспирант|крем для|гель для душа|пена для|станк|бритв|прокладк|тампон|салфетк влаж|ватн|туалетная вода|духи|лак для|краск[аи] для волос|шапочк для душа)/, 'Красота и гигиена'],
+    [/^(порошок стир|гель для стир|кондиционер для бел|средство для|чистящ|отбелив|освежит|мешк|пакет|перчатк|губк|тряпк|швабр|ведр|щетк|туалетная бумага|полотенц бумаж|фольг|пл[её]нк|батарейк|лампочк|свеч|зажигалк|спичк|скотч|клей|салфетк бумаж|прищепк|веник|совок)/, 'Дом и химия'],
+    [/^(овощ|фрукт|яблок|банан|апельсин|лимон|мандарин|картоф|морков|лук(?![а-яё])|капуст|огурц|помидор|томат свеж|зелень|укроп|петрушк|гриб|виноград|груш|киви|ананас|арбуз|дын|перец свеж|чеснок|свекл|редис|кабач|баклаж|зелен[ьи])/, 'Овощи и фрукты'],
+    [/^(мука|сахар|соль(?![а-яё])|сода|дрожж|макарон|лапш|спагетти|верм[иеё]шел|греч|рис(?![а-яё])|пшено|перловк|манк|булгур|крупа|горох|фасол|чечевиц|масло подсолн|масло растит|масло оливк|уксус|соус|кетчуп|майонез|специ|приправ|консерв|тушенк|паштет консерв|крахмал|разрыхлит|желатин|панировк)/, 'Бакалея'],
+  ];
+
+  // категория по САМОМУ названию товара; null — не распознали
+  function categoryByName(name) {
+    const n = norm(name);
+    if (!n) return null;
+    for (const [re, cat] of NAME_RULES) if (re.test(n)) return cat;
+    return null;
+  }
+
   function categoryOf(groupName) {
     const key = groupName || '';
     if (key in catCache) return catCache[key];
@@ -406,7 +444,19 @@
     return cat;
   }
   const catIcon = (name) => ic(name, 'ic-cat');
-  const productCategory = (p) => { const g = groupById(p.group_id); return g ? categoryOf(g.name) : null; };
+  const CAT_NAMES = new Set([...CATEGORIES.map((c) => c.name), OTHER_CAT.name]);
+  // Результат кладём в служебное поле _cat: на 17 000 товаров прогонять тринадцать
+  // правил при каждой отрисовке — заметно. Сбрасывается в buildIndex().
+  function productCategory(p) {
+    if (!p) return null;
+    if (p._cat !== undefined) return p._cat;
+    let cat = null;
+    if (p.category && CAT_NAMES.has(p.category)) cat = p.category;   // правка вручную или из интернета
+    if (!cat) cat = categoryByName(p.name);                          // само название товара
+    if (!cat) { const g = groupById(p.group_id); if (g) cat = categoryOf(g.name); }
+    p._cat = cat || null;
+    return p._cat;
+  }
 
   const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 }) + ' ₽';
   // число без единицы: 24 → «24», 2.5 → «2,5» (как принято в России)
@@ -454,6 +504,7 @@
   // Поисковый индекс считается один раз при загрузке данных, а не на каждую букву —
   // иначе на 15 000+ товаров поиск будет тормозить на телефоне
   function buildIndex() {
+    for (const p of state.products) delete p._cat;   // категории пересчитаются заново
     for (const p of state.products) {
       const name = norm(p.name);
       p._name = name;
@@ -2523,7 +2574,7 @@
   // Код товара показываем всем: с ним покупателю проще объяснить кассиру, что
   // он берёт, и найти товар поиском по коду. Секретного в нём ничего нет —
   // в отличие от артикула, штрихкодов, поставщиков и закупочных цен.
-  const PUBLIC_FIELDS = ['id', 'name', 'code', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+  const PUBLIC_FIELDS = ['id', 'name', 'code', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
 
   /* Наличие товара — для СОТРУДНИКА, только после входа.
    * Сначала я положил признак наличия в ОТКРЫТЫЙ файл витрины, рассуждая
@@ -3011,7 +3062,7 @@
   // Тестовый доступ — только на localhost (в проде не открываем).
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, buildPublicProducts, buildFullSnapshot, buildStaffSnapshot, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
-      _importOrder: () => IMPORT_ORDER,
+      _importOrder: () => IMPORT_ORDER, _cat: productCategory,
       _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
   }
 
@@ -4792,6 +4843,77 @@
   ];
   const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
+  /* ── Категория по штрихкоду из открытой базы ────────
+   * Что не удалось узнать по названию, пробуем узнать в интернете: у Open Food
+   * Facts к штрихкоду привязаны категории. Они на английском и французском,
+   * поэтому переводим их в наши тринадцать. Работает только для товаров со
+   * штрихкодом и только для тех, что остались в «Прочем» — остальным интернет
+   * не нужен, название и так всё сказало. */
+  const OFF_CAT_MAP = [
+    [/dairy|milk|cheese|yogurt|yaourt|cream|butter|egg|fromage|lait/, 'Молочное'],
+    [/bread|bakery|pastr|viennoiser|pain|biscotte|cake/, 'Хлеб и выпечка'],
+    [/beverage|drink|water|juice|soda|coffee|tea|boisson|eau|jus/, 'Напитки'],
+    [/chocolate|candy|sweet|confectioner|biscuit|cookie|wafer|honey|jam|dessert|bonbon/, 'Сладости'],
+    [/snack|chips|crisps|nuts|popcorn|cracker|seeds/, 'Снеки'],
+    [/meat|sausage|fish|seafood|poultry|ham|bacon|viande|poisson|charcuter/, 'Мясо и рыба'],
+    [/frozen|ice-cream|ice cream|surgel|glace/, 'Заморозка'],
+    [/hygiene|cosmetic|shampoo|soap|toothpaste|deodorant|beauty|shower|hair/, 'Красота и гигиена'],
+    [/cleaning|detergent|laundry|household|home|battery|paper-towel/, 'Дом и химия'],
+    [/vegetable|fruit|legume|fresh-produce/, 'Овощи и фрукты'],
+    [/cereal|pasta|rice|flour|sugar|salt|oil|sauce|canned|conserve|condiment|spice|grocer/, 'Бакалея'],
+    [/baby|infant|diaper|couche/, 'Детское'],
+  ];
+  function catFromOffTags(tags) {
+    const t = (tags || []).join(' ').toLowerCase();
+    if (!t) return null;
+    for (const [re, cat] of OFF_CAT_MAP) if (re.test(t)) return cat;
+    return null;
+  }
+  // возвращает {cat, reached}: «база не ответила» и «база не знает» — разные
+  // вещи, иначе один сбой сети пометил бы товары как безнадёжные
+  async function catByBarcode(bc) {
+    let reached = false;
+    for (const host of PHOTO_HOSTS) {
+      try {
+        const r = await fetch(`https://${host}/api/v2/product/${encodeURIComponent(bc)}.json?fields=categories_tags`);
+        if (r.ok) {
+          reached = true;
+          const d = await r.json();
+          const cat = catFromOffTags(d.product && d.product.categories_tags);
+          if (cat) return { cat, reached: true };
+        } else if (r.status === 404) reached = true;
+      } catch (e) { /* сеть моргнула — попробуем в другой раз */ }
+      await sleep(320);   // вежливый темп к бесплатной базе
+    }
+    return { cat: null, reached };
+  }
+
+  // товары, которым название и группа ничего не подсказали
+  function uncategorized() {
+    return state.products.filter((p) => !p.category && productCategory(p) === OTHER_CAT.name);
+  }
+
+  async function sortByInternet() {
+    const todo = uncategorized().filter((p) => (p.barcodes || []).length);
+    if (!todo.length) { toast('Все товары уже разложены по категориям'); return; }
+    let found = 0; let miss = 0;
+    toast(`Определяю категории по штрихкодам (${todo.length})…`);
+    for (let i = 0; i < todo.length; i++) {
+      const p = todo[i];
+      const r = await catByBarcode(p.barcodes[0]);
+      if (!r.reached) {
+        if (++miss >= 3) { toast('Открытая база сейчас недоступна, попробуй позже. Найденное не потеряется'); break; }
+      } else { miss = 0; }
+      if (r.cat) { p.category = r.cat; delete p._cat; found++; }
+      if (i % 20 === 0) toast(`Проверено ${i + 1} из ${todo.length}, определено ${found}`);
+    }
+    buildIndex(); renderAll();
+    if (!found) { toast('В открытой базе про эти товары ничего не нашлось'); return; }
+    if (state.serverless && state.isAdmin) await svSaveAndPublish(`Разложено по категориям: ${found}`);
+    else toast(`Разложено по категориям: ${found}`);
+  }
+
+
   // поиск фото по штрихкоду
   async function offByBarcode(bc) {
     let reached = false; // хоть одна база ответила по-человечески
@@ -6130,6 +6252,10 @@
         $('menuAdminOnly').hidden = !state.isAdmin;
         $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
         // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
+        const noCat = uncategorized().length;
+        $('menuSortCats').textContent = noCat
+          ? `Разложить по категориям (${noCat} в «Прочем»)`
+          : 'Разложить по категориям — всё разложено';
         const noPhoto = photoCandidates().length;
         $('menuPhotoFill').textContent = noPhoto ? `Дозаполнить фото (${noPhoto})` : 'Дозаполнить фото — всё есть';
         // «Фото на проверке» — показываем, если в очереди что-то есть
@@ -6655,6 +6781,7 @@
 
     // Убрать дубли товаров (только админ)
     $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });
+    $('menuSortCats').addEventListener('click', () => { closeSheet('adminMenuSheet'); sortByInternet(); });
 
     // Ходовые товары (после входа)
     $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
