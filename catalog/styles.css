@@ -725,6 +725,13 @@ select.input { appearance: none; }
 .sales-block { margin-bottom: 12px; }
 .sales-line { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 15px; color: var(--text-2); padding: 2px 0; }
 .sales-line b { color: var(--text); font-weight: 750; font-variant-numeric: tabular-nums; }
+/* Остаток и подсказка «сколько заказать» — тот же вид, что у продаж */
+.stock-head { font-size: 17px; font-weight: 700; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.stock-line { font-size: 14px; color: var(--text-2); padding: 2px 0; }
+.stock-line b { color: var(--text); font-weight: 750; font-variant-numeric: tabular-nums; }
+.stock-warn { color: var(--warn); font-weight: 600; }
+.stock-warn b { color: var(--warn); }
+.stock-out .stock-head { color: var(--danger); }
 .markup-val { font-size: 18px; font-weight: 700; text-align: right; }
 .markup-ok .markup-val { color: var(--pos); }
 .markup-loss .markup-val { color: var(--danger); }
@@ -979,6 +986,14 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 /* ── Разведка цен (другие магазины) ────────────── */
 .comp-block { margin-top: 14px; }
 .comp-title { font-size: 13px; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 8px; }
+/* Итог сравнения одной строкой — чтобы не сравнивать цены глазами */
+.comp-verdict {
+  font-size: 14px; font-weight: 600; line-height: 1.35; margin-bottom: 10px;
+  padding: 10px 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--border);
+}
+.comp-verdict.comp-v-good { color: var(--pos); background: rgba(48, 209, 88, .12); border-color: rgba(48, 209, 88, .45); }
+.comp-verdict.comp-v-bad { color: var(--warn); background: rgba(255, 159, 10, .12); border-color: rgba(255, 159, 10, .45); }
+.comp-v-sub { display: block; margin-top: 2px; font-size: 12px; font-weight: 400; color: var(--text-2); }
 .comp-row {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 11px 14px; border: 1px solid var(--border); border-radius: 12px;
