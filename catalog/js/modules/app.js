@@ -12,6 +12,7 @@ import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapsho
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, deleteGroup, deleteProduct, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
+import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { scanToSearch, startScan } from './scanner.js';
 
@@ -846,6 +847,7 @@ function bindEvents() {
 /* ── Старт ────────────────────────────────────── */
 
 async function init() {
+  applyBrand();        // название, логотип, цвет и что включено — из настроек магазина
   deviceId(); // закрепляем анонимный номер устройства (память избранного/просмотров)
   paintIcons();        // <i data-ic="…"> в разметке → рисунки из набора
   initTheme();

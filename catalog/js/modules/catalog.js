@@ -1,6 +1,6 @@
 // Категории товаров и умный поиск
 
-import { $, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state } from './store.js';
+import { $, CFG, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state } from './store.js';
 import { groupById, norm, stripPunct, supplierById, translit } from './core.js';
 import { CATEGORIES, OTHER_CAT, catCache, ic } from './icons.js';
 import { favorites } from './render.js';
@@ -42,7 +42,13 @@ const NAME_RULES = [
 ];
 
 // категория по САМОМУ названию товара; null — не распознали
+// Набор правил под отрасль магазина. 'none' — своих правил нет: разделы
+// берутся из групп 1С как есть (так каталог годится любому магазину, а не
+// только продуктовому).
+const useNameRules = () => (CFG.CATEGORIES || 'grocery') !== 'none';
+
 function categoryByName(name) {
+  if (!useNameRules()) return null;
   const n = norm(name);
   if (!n) return null;
   for (const [re, cat] of NAME_RULES) if (re.test(n)) return cat;
@@ -59,6 +65,13 @@ export function categoryOf(groupName) {
   return cat;
 }
 export const catIcon = (name) => ic(name, 'ic-cat');
+/* Какие разделы показывать на экране «Категории». У продуктового магазина это
+ * наш готовый список; у любого другого — те разделы, что реально получились из
+ * групп 1С (иначе экран был бы пустым: наших названий там нет). */
+export function catalogSections(counts) {
+  if (useNameRules()) return [...CATEGORIES, OTHER_CAT].filter((c) => counts[c.name]);
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a]).map((name) => ({ name }));
+}
 // Считаем при первом обращении, а не при загрузке модуля: список категорий
 // живёт в соседнем модуле, и на момент загрузки он может быть ещё не готов.
 let _catNames = null;
@@ -68,6 +81,12 @@ const CAT_NAMES = { has: (n) => (_catNames || (_catNames = new Set([...CATEGORIE
 export function productCategory(p) {
   if (!p) return null;
   if (p._cat !== undefined) return p._cat;
+  // Магазин не продуктовый: своих правил нет, раздел — это группа 1С как есть.
+  if (!useNameRules()) {
+    const g = p.category ? null : groupById(p.group_id);
+    p._cat = p.category || (g ? g.name : null);
+    return p._cat;
+  }
   let cat = null;
   if (p.category && CAT_NAMES.has(p.category)) cat = p.category;   // правка вручную или из интернета
   if (!cat) cat = categoryByName(p.name);                          // само название товара

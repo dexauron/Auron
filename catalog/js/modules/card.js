@@ -8,6 +8,7 @@ import { isFav, pushRecentProduct, renderNewProducts, renderPopularProducts, sto
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
+import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
 
@@ -442,6 +443,7 @@ export function renderStock(p, sales) {
   const box = $('sheetStock');
   if (!box) return;
   box.innerHTML = '';
+  if (!feature('stock')) return;                    // выключено в настройках магазина
   if (!state.session) return;                       // остаток — внутренние данные магазина
   const qty = p.stock != null ? Number(p.stock) : (p.stock_qty != null ? Number(p.stock_qty) : null);
   if (qty == null || !Number.isFinite(qty)) return; // остатки не загружали — блока нет
