@@ -3,7 +3,7 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, supplierById } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts } from './catalog.js';
 import { openDeviceSheet, popViews, trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
@@ -76,7 +76,7 @@ export function renderCatScreen() {
   const box = $('catScreen');
   if (!box || state.tab !== 'cats') return;
   const { cats, groupsIn } = catCounts();
-  const all = [...CATEGORIES, OTHER_CAT].filter((c) => cats[c.name]);
+  const all = catalogSections(cats);
   if (!all.length) {
     box.innerHTML = '<p class="muted cat-empty">Каталог пока пустой — категории появятся вместе с товарами.</p>';
     return;
@@ -277,8 +277,7 @@ export function renderFilterCats() {
     const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1;
     if (p.group_id) groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
   }
-  const cats = [...CATEGORIES.map((c) => c.name), OTHER_CAT.name]
-    .filter((c) => counts[c]).sort((a, b) => counts[b] - counts[a]);
+  const cats = catalogSections(counts).map((c) => c.name).sort((a, b) => counts[b] - counts[a]);
   if (!cats.length) { box.innerHTML = '<p class="muted" style="margin:0">Категорий пока нет</p>'; return; }
   box.innerHTML = cats.map((c) => {
     const on = state.selCats.includes(c);

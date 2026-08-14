@@ -1,4 +1,4 @@
-/* Way Market · Каталог — стили. Мобильный в первую очередь, светлая/тёмная тема автоматически */
+/* Каталог товаров — стили. Мобильный в первую очередь, светлая/тёмная тема автоматически */
 
 /* ═══ Дизайн-система Auron Finance (docs/04-DESIGN-SYSTEM.md + app/index.html) ═══
    Те же токены, что и в приложении Auron: тёмная тема по умолчанию, светлая —
@@ -844,8 +844,12 @@ select.input { appearance: none; }
 .top-primary { font-size: 15px; font-weight: 800; }
 .top-secondary { font-size: 12px; font-weight: 500; color: var(--text-2); }
 
-/* ── Логотип Way Market в шапке ────────────────── */
+/* ── Логотип магазина в шапке ───────────────────── */
 .brand-logo-img { width: 40px; height: 40px; border-radius: 50%; background: #fff; border: 1px solid var(--border); }
+/* Логотипа нет — кружок с первой буквой названия: чужой каталог не должен
+   выглядеть недоделанным только потому, что картинку ещё не нарисовали. */
+.brand-logo-letter { display: flex; align-items: center; justify-content: center;
+  background: var(--brand); color: #fff; font-weight: 700; font-size: 18px; border: none; }
 
 /* ── Экран входа ───────────────────────────────── */
 .login-logo { display: block; width: 68px; height: 68px; margin: 6px auto 10px; border-radius: 50%; border: 1px solid var(--border); }
