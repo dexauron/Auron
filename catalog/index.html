@@ -65,7 +65,6 @@
   <!-- Сетка товаров -->
   <main class="content">
     <div class="recent-strip" id="newStrip" hidden></div>
-    <div class="recent-strip" id="popularStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
@@ -94,8 +93,9 @@
       <span class="tab-ico"><i data-ic="heart"></i></span><span class="tab-txt">Избранное</span>
       <span class="tab-badge" id="tabFavCount" hidden></span>
     </button>
-    <button class="tab" data-tab="more">
-      <span class="tab-ico"><i data-ic="more"></i></span><span class="tab-txt">Ещё</span>
+    <button class="tab" data-tab="filters">
+      <span class="tab-ico"><i data-ic="filter"></i></span><span class="tab-txt">Фильтры</span>
+      <span class="tab-badge" id="tabFilterCount" hidden></span>
     </button>
   </nav>
 
@@ -148,36 +148,54 @@
           <div class="form-error" id="loginError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="loginSubmit">Войти</button>
         </form>
+        <button class="btn btn-ghost btn-block" id="loginDevice">Настройки этого устройства</button>
         <button class="btn btn-ghost sheet-close" data-close="loginSheet">Отмена</button>
       </div>
     </div>
   </div>
 
-  <!-- Меню администратора -->
+  <!-- Меню администратора: сгруппированный список, как в системных настройках -->
   <div class="sheet-backdrop" id="adminMenuSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title" id="menuTitle">Администратор</h2>
+        <button class="ios-nav-btn strong" data-close="adminMenuSheet">Готово</button>
+      </div>
       <div class="sheet-body">
-        <h2 class="sheet-title" id="menuTitle">Администратор</h2>
-        <p class="muted" id="adminEmail"></p>
-        <button class="btn btn-secondary btn-block" id="menuTop">Ходовые товары</button>
-        <button class="btn btn-secondary btn-block" id="menuCompStores">Цены других магазинов</button>
-        <button class="btn btn-secondary btn-block" id="menuDevice">Это устройство</button>
-        <button class="btn btn-secondary btn-block" id="menuPhotoFill">Дозаполнить фото</button>
-        <button class="btn btn-secondary btn-block" id="menuSuggestions" hidden>Фото на проверке</button>
-        <div id="menuAdminOnly">
-          <button class="btn btn-primary btn-block" id="menuAddProduct">Добавить товар</button>
-          <button class="btn btn-secondary btn-block" id="menuImportHub">Импорт данных (1С / Excel)</button>
-          <button class="btn btn-secondary btn-block" id="menuGroups">Группы товаров</button>
-          <button class="btn btn-secondary btn-block" id="menuSuppliers">Поставщики</button>
-          <button class="btn btn-secondary btn-block" id="menuOrderRules">Правила заказа</button>
-          <button class="btn btn-secondary btn-block" id="menuSortCats">Разложить по категориям</button>
-          <button class="btn btn-secondary btn-block" id="menuDedup">Убрать дубли товаров</button>
-          <button class="btn btn-secondary btn-block" id="menuStaffPass">Пароль магазина</button>
-          <button class="btn btn-secondary btn-block" id="menuPublish">Публикация на GitHub</button>
+        <p class="muted menu-role" id="adminEmail"></p>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
+          <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
+          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
+          <button class="ios-row ios-row-link" id="menuPhotoFill"><span class="ios-row-title">Дозаполнить фото</span></button>
+          <button class="ios-row ios-row-link" id="menuSuggestions" hidden><span class="ios-row-title">Фото на проверке</span></button>
         </div>
-        <button class="btn btn-secondary btn-block" id="menuLogout">Выйти из аккаунта</button>
-        <button class="btn btn-ghost sheet-close" data-close="adminMenuSheet">Закрыть</button>
+
+        <div id="menuAdminOnly">
+          <div class="ios-group-title">Каталог</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuAddProduct"><span class="ios-row-title">Добавить товар</span></button>
+            <button class="ios-row ios-row-link" id="menuImportHub"><span class="ios-row-title">Загрузка из 1С</span></button>
+            <button class="ios-row ios-row-link" id="menuGroups"><span class="ios-row-title">Группы товаров</span></button>
+            <button class="ios-row ios-row-link" id="menuSuppliers"><span class="ios-row-title">Поставщики</span></button>
+            <button class="ios-row ios-row-link" id="menuOrderRules"><span class="ios-row-title">Правила заказа</span></button>
+            <button class="ios-row ios-row-link" id="menuSortCats"><span class="ios-row-title">Разложить по категориям</span></button>
+            <button class="ios-row ios-row-link" id="menuDedup"><span class="ios-row-title">Убрать дубли товаров</span></button>
+          </div>
+
+          <div class="ios-group-title">Доступ и публикация</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuStaffPass"><span class="ios-row-title">Пароль сотрудника</span></button>
+            <button class="ios-row ios-row-link" id="menuPublish"><span class="ios-row-title">Публикация на GitHub</span></button>
+          </div>
+        </div>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="menuLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>
+        </div>
       </div>
     </div>
   </div>
@@ -356,21 +374,31 @@
   <div class="sheet-backdrop" id="deviceSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Это устройство</h2>
+        <button class="ios-nav-btn strong" data-close="deviceSheet">Готово</button>
+      </div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Это устройство</h2>
-        <p class="muted">Каталог помнит настройки отдельно на каждом телефоне.
+        <p class="ios-note">Каталог помнит настройки отдельно на каждом телефоне.
         У сотрудника зала и у кассы могут быть разные — они не мешают друг другу.</p>
 
-        <label class="field-label">Название устройства</label>
-        <input type="text" id="devName" class="input" maxlength="40" placeholder="Например: Касса 1">
-        <p class="muted field-hint">Чтобы не путать телефоны. Видно только на этом устройстве.</p>
+        <div class="ios-group-title">Название устройства</div>
+        <div class="ios-group">
+          <div class="ios-row">
+            <input type="text" id="devName" class="ios-inp ios-inp-wide" maxlength="40" placeholder="Например: Касса 1">
+          </div>
+        </div>
+        <p class="ios-note">Чтобы не путать телефоны. Видно только на этом устройстве.</p>
 
-        <div class="sec-title">Что запомнено</div>
-        <div id="devList" class="dev-list"></div>
+        <div class="ios-group-title">Что запомнено</div>
+        <div class="ios-group" id="devList"></div>
 
-        <button type="button" class="btn btn-secondary btn-block" id="devReset">Сбросить настройки этого устройства</button>
-        <div id="devAuth"></div>
-        <button class="btn btn-ghost sheet-close" data-close="deviceSheet">Закрыть</button>
+        <div class="ios-group" id="devAuth" style="margin-top:18px"></div>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="devReset"><span class="ios-row-title">Забыть всё на этом устройстве</span></button>
+        </div>
       </div>
     </div>
   </div>
@@ -604,78 +632,103 @@
   <div class="sheet-backdrop" id="filterSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" data-no-back>
       <div class="sheet-handle"></div>
-      <div class="filter-head">
-        <h2 class="filter-head-title">Фильтр</h2>
-        <button class="filter-head-btn" data-close="filterSheet" title="Закрыть" aria-label="Закрыть">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-        </button>
+      <!-- Шапка как в системных окнах iOS: действие слева, название по центру,
+           действие справа. Никаких крестиков в углу. -->
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="filterReset">Сбросить</button>
+        <h2 class="ios-nav-title">Фильтры</h2>
+        <button class="ios-nav-btn strong" data-close="filterSheet">Готово</button>
       </div>
-      <div class="sheet-body">
-        <label class="filter-fav"><input type="checkbox" id="filterFav"> <span>Только избранное</span></label>
-        <div class="filter-section-title">Категории</div>
-        <div class="check-list" id="filterCats"></div>
+      <div class="sheet-body filter-body">
 
-        <div class="filter-section-title">Сортировка</div>
-        <div class="seg" id="sortSeg">
-          <button data-sort="relevance">Совпадение</button>
-          <button data-sort="name">А-Я</button>
-          <button data-sort="cheap">Дешевле</button>
-          <button data-sort="expensive">Дороже</button>
-          <button data-sort="new">Новее</button>
-          <button data-sort="popular">Популярные</button>
+        <!-- Сгруппированный список: как «Настройки» на iPhone -->
+        <div class="ios-group">
+          <label class="ios-row" for="filterFav">
+            <span class="ios-row-title">Только избранное</span>
+            <span class="ios-switch"><input type="checkbox" id="filterFav"><span class="ios-knob"></span></span>
+          </label>
         </div>
 
-        <button class="btn btn-secondary btn-block" id="filterGroupsBtn" style="margin-top:14px" hidden>Подгруппы…</button>
+        <div class="ios-group-title">Сортировка</div>
+        <div class="ios-group" id="sortSeg">
+          <button class="ios-row" data-sort="relevance"><span class="ios-row-title">По совпадению</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="name"><span class="ios-row-title">По названию, А–Я</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="cheap"><span class="ios-row-title">Сначала дешёвые</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="expensive"><span class="ios-row-title">Сначала дорогие</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="new"><span class="ios-row-title">Сначала новые</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="popular"><span class="ios-row-title">Сначала ходовые</span><span class="ios-check"></span></button>
+        </div>
+
+        <div class="ios-group-title">Категории</div>
+        <div class="ios-group check-list" id="filterCats"></div>
+        <button class="btn btn-secondary btn-block" id="filterGroupsBtn" hidden>Подгруппы…</button>
 
         <div class="emp-only">
-          <div class="filter-label">Тип товара</div>
+          <div class="ios-group-title">Тип товара</div>
           <div class="seg" id="typeSeg">
             <button data-type="">Все</button>
             <button data-type="weighted">Весовые</button>
             <button data-type="piece">Штучные</button>
           </div>
-
-          <div class="filter-label">Поступление <span class="filter-hint">— по дате из файла «Цены поставщиков» (колонка «Период»)</span></div>
-          <div class="chips chips-wrap" id="arrivalPresets">
-            <button class="chip" data-days="0">Сегодня</button>
-            <button class="chip" data-days="7">7 дней</button>
-            <button class="chip" data-days="30">30 дней</button>
-            <button class="chip" data-days="90">3 месяца</button>
-          </div>
-          <div class="price-range" style="margin-top:8px">
-            <input type="date" id="arrivalFrom" class="input price-inp" aria-label="Поступление с">
-            <span class="price-dash">—</span>
-            <input type="date" id="arrivalTo" class="input price-inp" aria-label="Поступление по">
-          </div>
         </div>
 
-        <div class="purchase-only">
-          <div class="filter-label">Поставщики</div>
-          <button class="btn btn-secondary btn-block" id="filterSuppliersBtn">Выбрать поставщиков…</button>
-        </div>
-
-        <div class="emp-only">
-          <div class="filter-label">Показывать</div>
-          <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
-        </div>
-
-        <div class="filter-label">Цена, ₽</div>
+        <div class="ios-group-title">Цена, ₽</div>
         <div class="chips chips-wrap price-presets" id="pricePresets">
           <button class="chip" data-pmin="" data-pmax="100">до 100</button>
           <button class="chip" data-pmin="100" data-pmax="300">100–300</button>
           <button class="chip" data-pmin="300" data-pmax="1000">300–1000</button>
           <button class="chip" data-pmin="1000" data-pmax="">от 1000</button>
         </div>
-        <div class="price-range">
-          <input type="number" id="priceMin" class="input price-inp" inputmode="decimal" placeholder="от" min="0">
-          <span class="price-dash">—</span>
-          <input type="number" id="priceMax" class="input price-inp" inputmode="decimal" placeholder="до" min="0">
+        <div class="ios-group">
+          <div class="ios-row">
+            <span class="ios-row-title">От</span>
+            <input type="number" id="priceMin" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+          </div>
+          <div class="ios-row">
+            <span class="ios-row-title">До</span>
+            <input type="number" id="priceMax" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+          </div>
         </div>
 
-        <div class="filter-actions">
-          <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
-          <button class="btn btn-ghost btn-block" id="filterReset">Сбросить всё</button>
+        <div class="emp-only">
+          <div class="ios-group-title">Поступление</div>
+          <div class="chips chips-wrap" id="arrivalPresets">
+            <button class="chip" data-days="0">Сегодня</button>
+            <button class="chip" data-days="7">7 дней</button>
+            <button class="chip" data-days="30">30 дней</button>
+            <button class="chip" data-days="90">3 месяца</button>
+          </div>
+          <div class="ios-group">
+            <div class="ios-row">
+              <span class="ios-row-title">С</span>
+              <input type="date" id="arrivalFrom" class="ios-inp" aria-label="Поступление с">
+            </div>
+            <div class="ios-row">
+              <span class="ios-row-title">По</span>
+              <input type="date" id="arrivalTo" class="ios-inp" aria-label="Поступление по">
+            </div>
+          </div>
+          <p class="ios-note">Дата берётся из файла «Цены поставщиков» (колонка «Период»).</p>
         </div>
+
+        <div class="purchase-only">
+          <div class="ios-group-title">Поставщики</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="filterSuppliersBtn">
+              <span class="ios-row-title">Выбрать поставщиков</span>
+              <span class="ios-row-value" id="filterSuppliersVal">Все</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="emp-only">
+          <div class="ios-group-title">Показывать</div>
+          <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
+        </div>
+      </div>
+      <!-- Кнопка результата всегда на виду, как в фильтрах системных приложений -->
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
       </div>
     </div>
   </div>

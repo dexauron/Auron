@@ -35,6 +35,22 @@ const groups = [
   const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar .tab')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
   chk(tabs.length === 4, `в нижней панели 4 раздела (${tabs.join(' | ')})`);
   chk(/Каталог/.test(tabs[0]) && /Категории/.test(tabs[1]), 'первые разделы — «Каталог» и «Категории»');
+  // «Ещё» заменили на «Фильтры»: до фильтров теперь дотягивается большой палец
+  chk(/Фильтры/.test(tabs[3]) && !tabs.some((t) => /Ещё/.test(t)),
+    `последний раздел — «Фильтры», а не «Ещё» (${tabs[3]})`);
+  await page.click('.tabbar [data-tab="filters"]'); await page.waitForTimeout(450);
+  const filt = await page.evaluate(() => ({
+    open: !document.getElementById('filterSheet').hidden,
+    nav: (document.querySelector('#filterSheet .ios-nav-title') || {}).textContent,
+    apply: (document.getElementById('filterApply') || {}).textContent,
+  }));
+  chk(filt.open && /Фильтры/.test(filt.nav || ''), `вкладка открывает окно фильтров (${filt.nav})`);
+  chk(/Показать/.test(filt.apply || ''), `внизу окна видно, сколько товаров найдётся (${filt.apply})`);
+  await page.click('#filterSheet [data-close="filterSheet"]'); await page.waitForTimeout(350);
+  // ленты «Популярное» на главной больше нет — владелец попросил убрать
+  const noPopular = await page.evaluate(() => !document.getElementById('popularStrip')
+    && !/Популярное/.test(document.body.innerText));
+  chk(noPopular, 'на главной нет ленты «Популярное»');
   const atBottom = await page.evaluate(() => {
     const t = document.getElementById('tabbar'); const r = t.getBoundingClientRect();
     return getComputedStyle(t).position === 'fixed' && Math.abs(r.bottom - innerHeight) < 2;
