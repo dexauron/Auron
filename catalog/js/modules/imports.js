@@ -217,13 +217,20 @@ export function svImportRows(rows) {
 // стоит в адресе, поэтому после мелкой правки заново качается только один
 // кусок, остальное берётся из кэша браузера. Описи нет — читаем старый цельный
 // файл, как раньше.
-async function fetchShowcase(base) {
+async function fetchShowcase(base, onChunk) {
   const idx = await fetch(base + 'index.json', { cache: 'no-cache' }).catch(() => null);
   if (idx && idx.ok) {
     const meta = await idx.json().catch(() => null);
     if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
-      const chunks = await Promise.all(meta.parts.map((h, i) =>
-        fetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).then((r) => (r.ok ? r.json() : []))));
+      const chunks = [];
+      // Куски показываем ПО МЕРЕ ПРИХОДА, а не после последнего: каталог на
+      // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
+      // первой картинкой в зале слишком долго.
+      await Promise.all(meta.parts.map(async (h, i) => {
+        const r = await fetch(`${base}p/${String(i).padStart(2, '0')}.json?h=${h}`).catch(() => null);
+        chunks[i] = (r && r.ok) ? await r.json().catch(() => []) : [];
+        if (onChunk) onChunk(chunks[i]);
+      }));
       return [].concat(...chunks);
     }
   }
@@ -231,13 +238,36 @@ async function fetchShowcase(base) {
   return pr.json();
 }
 
-async function refreshStatic() {
+/* Показ по мере загрузки. Полная пересборка поискового индекса на 17 тысячах
+ * товаров стоит заметного времени, поэтому делаем её не чаще раза в полсекунды,
+ * а в конце — обязательно. Так первые товары видны почти сразу, а телефон не
+ * захлёбывается перерисовками. */
+function progressiveShow() {
+  let last = 0;
+  const acc = [];
+  return {
+    add(list) {
+      if (!list || !list.length) return;
+      acc.push(...list);
+      const now = Date.now();
+      if (now - last < 500) return;
+      last = now;
+      state.products = acc.slice().sort(byName);
+      buildIndex();
+      $('loader').hidden = true;
+      renderAll();
+    },
+  };
+}
+
+async function refreshStatic({ progressive = false } = {}) {
   try {
     const base = CFG.STATIC_URL.endsWith('/') ? CFG.STATIC_URL : CFG.STATIC_URL + '/';
+    const show = progressive ? progressiveShow() : null;
     // Цены чужих магазинов больше не качаем: покупателю они не показываются,
     // а вошедший сотрудник берёт их из своего зашифрованного каталога.
     const [products, gr, pop] = await Promise.all([
-      fetchShowcase(base),
+      fetchShowcase(base, show ? (list) => show.add(list) : null),
       fetch(base + 'groups.json', { cache: 'no-cache' }).catch(() => null),
       fetch(base + 'popular.json', { cache: 'no-cache' }).catch(() => null),
     ]);
@@ -267,7 +297,18 @@ export async function refresh({ silent = false } = {}) {
   // Не удалось (файла ещё нет / ошибка) — падаем на обычную загрузку с сервера.
   // Сотрудник после входа всегда грузится с сервера (полные данные).
   if (CFG.STATIC_URL && !state.session) {
-    if (await refreshStatic()) return;
+    // Сохранённая копия с телефона уже показана при запуске (init). Если её
+    // нет — это первый заход, и тогда показываем товары ПО МЕРЕ ЗАГРУЗКИ, не
+    // дожидаясь последнего куска: иначе человек смотрит на пустой экран,
+    // пока качаются мегабайты.
+    const cached = state.products.length > 0;
+    if (await refreshStatic({ progressive: !cached })) return;
+    if (cached) {                       // сеть не ответила, но каталог показан
+      const b = $('offlineBanner');
+      b.textContent = 'Нет связи. Показан сохранённый каталог';
+      b.hidden = false;
+      return;
+    }
   }
   // Магазин без базы (бесплатный режим): к серверу идти не к кому. Витрина не
   // загрузилась — значит нет интернета: показываем сохранённое и говорим об этом.
