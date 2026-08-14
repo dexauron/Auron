@@ -1,10 +1,10 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
 import { $, PAGE_SIZE, state, ui } from './store.js';
-import { esc, expectPop, groupById, highlight, supplierById } from './core.js';
+import { esc, expectPop, groupById, highlight, openSheet, supplierById } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts } from './catalog.js';
-import { openDeviceSheet, popViews, trackSearch } from './device.js';
+import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 
@@ -28,9 +28,9 @@ export function stockLabel(p) {
 }
 
 export function switchTab(tab) {
-  // «Ещё» — не раздел, а меню. Вошедшему открываем меню, остальным — настройки
-  // устройства: там же есть кнопка входа, и человек не упирается сразу в пароль.
-  if (tab === 'more') { if (state.session) ui.openAdminOrLogin(); else openDeviceSheet(); return; }
+  // «Фильтры» — не раздел, а окно: нижняя панель даёт до них дотянуться большим
+  // пальцем. Меню и настройки устройства переехали на кнопку человечка в шапке.
+  if (tab === 'filters') { syncControls(); openSheet('filterSheet'); return; }
   state.tab = tab;
   if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
   else if (state.favOnly) state.favOnly = false;
@@ -428,7 +428,7 @@ export function removeFilter(type, val) {
 export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
-  renderNewProducts(); renderPopularProducts();
+  renderNewProducts();
   if (state.tab !== 'cats') renderGrid();
 }
 
@@ -580,32 +580,6 @@ export function renderNewProducts() {
   if (!top.length) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
   box.innerHTML = '<div class="similar-title">🆕 Новое в магазине</div><div class="similar-row">'
-    + top.map((x) => {
-      const ph = (x.photos || []).find((u) => u && String(u).trim());
-      const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
-      return `<button class="similar-card" data-similar="${esc(x.id)}">
-        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
-        <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
-    }).join('') + '</div>';
-}
-
-export function renderPopularProducts() {
-  const box = $('popularStrip');
-  if (!box) return;
-  const show = !state.query && !state.favOnly && !anyFilterActive();
-  let top;
-  if (state.popularIds && state.popularIds.length) {
-    // популярное по продажам (глобально, для всех) — порядок из витрины
-    const byId = new Map(state.products.map((p) => [p.id, p]));
-    top = state.popularIds.map((id) => byId.get(id)).filter(Boolean).slice(0, 12);
-  } else {
-    // запасной вариант — по просмотрам (старый счётчик, если продаж нет)
-    top = state.products.filter((p) => popViews(p.id) > 0)
-      .sort((a, b) => popViews(b.id) - popViews(a.id)).slice(0, 12);
-  }
-  if (!show || top.length < 3) { box.hidden = true; box.innerHTML = ''; return; }
-  box.hidden = false;
-  box.innerHTML = '<div class="similar-title">Популярное</div><div class="similar-row">'
     + top.map((x) => {
       const ph = (x.photos || []).find((u) => u && String(u).trim());
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';

@@ -51,14 +51,20 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
     `другое устройство начинает со своих настроек (вид «${fresh.view}», раздел «${fresh.tab}»)`);
 
   // ── экран «Это устройство» ──
-  await two.page.click('.tabbar [data-tab="more"]'); await two.page.waitForTimeout(500);
+  // Путь человека: кнопка входа в шапке → «Настройки этого устройства».
+  // Раньше сюда вела вкладка «Ещё», теперь на её месте «Фильтры».
+  const openDevice = async (page) => {
+    await page.click('#adminBtn'); await page.waitForTimeout(350);
+    await page.click('#loginDevice'); await page.waitForTimeout(450);
+  };
+  await openDevice(two.page);
   const dev = await two.page.evaluate(() => ({
     open: !document.getElementById('deviceSheet').hidden,
     txt: document.getElementById('devList').innerText.replace(/\s+/g, ' ').trim(),
     hasLogin: !!document.getElementById('devLogin'),
   }));
   console.log('--- что помнит устройство ---\n' + dev.txt + '\n---');
-  chk(dev.open, '«Ещё» без входа открывает настройки устройства, а не сразу пароль');
+  chk(dev.open, 'настройки устройства открываются из окна входа');
   chk(dev.hasLogin, 'кнопка входа тут же — человек не упирается в тупик');
   for (const row of ['Вход', 'Вид списка', 'Тема', 'Избранное', 'Фильтры']) {
     chk(dev.txt.includes(row), `видно, что запомнено: «${row}»`);
@@ -70,7 +76,7 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   await two.page.reload({ waitUntil: 'load' });
   await two.page.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
   await two.page.waitForTimeout(700);
-  await two.page.click('.tabbar [data-tab="more"]'); await two.page.waitForTimeout(400);
+  await openDevice(two.page);
   chk(await two.page.evaluate(() => document.getElementById('devName').value) === 'Касса 1',
     'название устройства запомнилось');
   chk(await one.page.evaluate(() => { try { return localStorage.getItem('wm_device_name'); } catch (e) { return null; } }) === null,
@@ -83,7 +89,7 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   });
   await two.page.waitForTimeout(200);
   await two.page.click('#viewToggleBtn'); await two.page.waitForTimeout(200);
-  await two.page.click('.tabbar [data-tab="more"]'); await two.page.waitForTimeout(400);
+  await openDevice(two.page);
   await two.page.click('#devReset'); await two.page.waitForTimeout(500);
   const reset = await two.page.evaluate(() => ({
     view: window.WM_PUBLISH._state().view,

@@ -278,7 +278,6 @@ function bindEvents() {
     if (p) openProduct(p);
   };
   $('sheetSimilar').addEventListener('click', openSimilar);
-  $('popularStrip').addEventListener('click', openSimilar);
 
   // Точки под фото
   $('sheetPhotos').addEventListener('scroll', () => {
@@ -317,7 +316,9 @@ function bindEvents() {
   // через стрелку, а не напрямую: обработчик вешается ДО присваивания ниже,
   // и прямая ссылка запомнила бы пустую заглушку — кнопка «Войти» молчала бы
   $('adminBtn').addEventListener('click', () => ui.openAdminOrLogin());
-  // «Ещё» в нижней панели открывает то же самое — меню или вход.
+  // Настройки устройства раньше открывались вкладкой «Ещё»; теперь на её месте
+  // «Фильтры», поэтому вход к ним — из окна входа (там же, где кнопка «Войти»).
+  $('loginDevice').addEventListener('click', () => { closeSheet('loginSheet'); openDeviceSheet(); });
   // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
   ui.openAdminOrLogin = function () {
     if (state.session) {

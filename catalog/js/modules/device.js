@@ -41,13 +41,13 @@ function deviceMemory() {
 function renderDeviceSheet() {
   const box = $('devList');
   if (!box) return;
-  box.innerHTML = deviceMemory().map((r) => `<div class="dev-row">
-    <span class="dev-key">${esc(r.name)}</span><span class="dev-val">${esc(r.val)}</span></div>`).join('');
+  box.innerHTML = deviceMemory().map((r) => `<div class="ios-row">
+    <span class="ios-row-title">${esc(r.name)}</span><span class="ios-row-value">${esc(r.val)}</span></div>`).join('');
   $('devName').value = deviceName();
   // вход/выход прямо здесь: до этого экрана сотрудник доходит, ещё не войдя
   $('devAuth').innerHTML = state.session
-    ? '<button type="button" class="btn btn-ghost btn-block" id="devLogout">Выйти из аккаунта на этом устройстве</button>'
-    : '<button type="button" class="btn btn-primary btn-block" id="devLogin">Войти</button>';
+    ? '<button type="button" class="ios-row ios-row-danger" id="devLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>'
+    : '<button type="button" class="ios-row ios-row-action" id="devLogin"><span class="ios-row-title">Войти</span></button>';
 }
 
 export function openDeviceSheet() { renderDeviceSheet(); openSheet('deviceSheet'); }

@@ -149,7 +149,9 @@ document.addEventListener('keydown', (e) => {
 export function addBackButtons() {
   document.querySelectorAll('.sheet').forEach((sheet) => {
     const bd = sheet.closest('.sheet-backdrop');
-    if (!bd || sheet.hasAttribute('data-no-back') || sheet.querySelector('.sheet-back')) return;
+    // У окон со своей шапкой (.ios-nav) кнопка закрытия уже есть — круглая
+    // стрелка поверх заголовка выглядела бы чужеродно.
+    if (!bd || sheet.hasAttribute('data-no-back') || sheet.querySelector('.sheet-back') || sheet.querySelector('.ios-nav')) return;
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'sheet-back';

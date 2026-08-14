@@ -4,7 +4,7 @@ import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast } from './core.js';
 import { ic, warnMark } from './icons.js';
 import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, waHref } from './catalog.js';
-import { isFav, pushRecentProduct, renderNewProducts, renderPopularProducts, stockLabel } from './render.js';
+import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
@@ -27,7 +27,7 @@ export function openProduct(p) {
   ui.currentProduct = p;
   pushRecentProduct(p.id);
   trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
-  renderNewProducts(); renderPopularProducts();   // обновляем ленты под шторкой
+  renderNewProducts();   // обновляем ленту под шторкой
   updateFavButton(p);
   $('sheetName').textContent = p.name;
 

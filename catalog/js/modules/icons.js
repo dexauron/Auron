@@ -13,6 +13,8 @@ const ICONS = {
   cats: '<rect x="3.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2.2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2.2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2.2"/>',
   heart: '<path d="M12 20.3s-7.5-4.7-7.5-10A4.2 4.2 0 0 1 12 7.4a4.2 4.2 0 0 1 7.5 2.9c0 5.3-7.5 10-7.5 10Z"/>',
   more: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  // ползунки — как в системных настройках iOS
+  filter: '<path d="M4 7.5h5M13 7.5h7M4 16.5h7M15 16.5h5"/><circle cx="11" cy="7.5" r="2.2"/><circle cx="13" cy="16.5" r="2.2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
   plus: '<path d="M12 5.5v13M5.5 12h13"/>',
