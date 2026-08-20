@@ -386,6 +386,10 @@ export function loadOrderRules() {
 // d — средний дневной спрос, qty — остаток, packQty — штук в упаковке.
 export function orderPlan(d, qty, packQty) {
   const { lead, cycle, safety } = orderRules();
+  // Продаж не знаем — советовать нечего. Без этой оговорки расчёт выдавал
+  // «пора заказывать» на любой товар с нулём на складе и нулём продаж,
+  // да ещё и «заказать 0» рядом — совет, который сам себе противоречит.
+  if (!(d > 0)) return { lead, cycle, safety, rop: null, upTo: null, need: 0, packs: 0, total: 0, due: false };
   const rop = d * (lead + safety);              // точка заказа
   const upTo = d * (lead + cycle + safety);     // до какого уровня пополняем
   const need = Math.max(0, upTo - Math.max(qty, 0));

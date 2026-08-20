@@ -358,14 +358,15 @@ export function syncControls() {
     gBtn.textContent = gn ? `Группы: выбрано ${gn}` : 'Выбрать группы…';
     gBtn.classList.toggle('picked', gn > 0);
   }
-  const sBtn = $('filterSuppliersBtn');
-  if (sBtn) {
-    sBtn.textContent = state.selSuppliers.length ? `Поставщики: ${state.selSuppliers.length}` : 'Выбрать поставщиков…';
-    sBtn.classList.toggle('picked', state.selSuppliers.length > 0);
-  }
+  const sVal = $('filterSuppliersVal');
+  if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   const n = countActiveFilters();
   const badge = $('filterBadge');
   if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
+  // тот же счётчик на вкладке «Фильтры» — видно, что фильтр включён,
+  // даже когда шапка ушла вверх при прокрутке
+  const tb = $('tabFilterCount');
+  if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
   const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
 }
 

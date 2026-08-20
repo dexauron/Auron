@@ -1,7 +1,7 @@
 // Правка каталога: товар, группы, поставщики, «Ходовые»
 
 import { $, state, ui } from './store.js';
-import { closeSheet, esc, groupById, norm, openSheet, supplierById, translit } from './core.js';
+import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, translit } from './core.js';
 import { checkMark, ic } from './icons.js';
 import { fmtDate, fmtPrice, telHref, waHref } from './catalog.js';
 import { byName } from './data.js';
@@ -181,14 +181,83 @@ export function renderGroupsPick() {
   $('groupsPickList').innerHTML = html;
 }
 
-// управление (только админ)
+// управление (только админ): список поставщиков с числом товаров
 export function renderSuppliersManager() {
-  $('suppliersManageList').innerHTML = state.suppliers.map((s) => `
-    <div class="group-row" data-id="${esc(s.id)}">
-      <input class="input supplier-name" value="${esc(s.name)}">
-      <button class="group-del sup-contact-btn" title="Контакты поставщика">${ic('phone', 'ic-xs')}</button>
-      <button class="group-del" title="Удалить поставщика" aria-label="Удалить">${ic('trash', 'ic-xs')}</button>
-    </div>`).join('') || '<p class="muted">Поставщиков пока нет — добавь первого ниже</p>';
+  const counts = {};
+  for (const p of state.products) for (const id of p.supplier_ids || []) counts[id] = (counts[id] || 0) + 1;
+  $('suppliersManageList').innerHTML = state.suppliers.map((s) => {
+    const c = state.contacts[s.id] || {};
+    const sub = c.phone ? ` · ${esc(c.phone)}` : '';
+    return `<button class="ios-row ios-row-link" data-sup-edit="${esc(s.id)}">
+      <span class="ios-row-title">${esc(s.name)}${sub}</span>
+      <span class="ios-row-value">${counts[s.id] || 0}</span></button>`;
+  }).join('') || '<div class="ios-row"><span class="ios-row-title muted">Поставщиков пока нет</span></div>';
+}
+
+/* ── Один поставщик: название, контакты, удаление ─────────────────────────
+   Раньше этот экран был мёртвым: кнопки рисовались, но ни одна ничего не
+   делала — правка поставщиков жила на сервере, а сервер убрали. Теперь всё
+   происходит на устройстве владельца и уезжает обычной публикацией. */
+let editingSupplier = null;
+
+export function openSupplierEdit(id) {
+  const sup = supplierById(id);
+  if (!sup) return;
+  editingSupplier = id;
+  const c = state.contacts[id] || {};
+  $('supEditName').value = sup.name || '';
+  $('supEditPhone').value = c.phone || '';
+  $('supEditPerson').value = c.contact_name || '';
+  $('supEditNote').value = c.note || '';
+  const n = state.products.filter((p) => (p.supplier_ids || []).includes(id)).length;
+  $('supEditInfo').textContent = n
+    ? `За этим поставщиком числится товаров: ${n}. Удалить можно — товары останутся, просто без поставщика.`
+    : 'За этим поставщиком товаров нет.';
+  openSheet('supplierEditSheet');
+}
+
+export async function saveSupplierEdit() {
+  if (!editingSupplier) return;
+  const name = $('supEditName').value.trim();
+  if (!name) { toast('Название не может быть пустым'); return; }
+  const sup = supplierById(editingSupplier);
+  if (sup) sup.name = name;
+  const phone = $('supEditPhone').value.trim();
+  const person = $('supEditPerson').value.trim();
+  const note = $('supEditNote').value.trim();
+  if (phone || person || note) state.contacts[editingSupplier] = { phone, contact_name: person, note };
+  else delete state.contacts[editingSupplier];
+  closeSheet('supplierEditSheet');
+  renderSuppliersManager();
+  await svSaveAndPublish('Поставщик сохранён');
+}
+
+export async function deleteSupplier() {
+  if (!editingSupplier) return;
+  const sup = supplierById(editingSupplier);
+  const n = state.products.filter((p) => (p.supplier_ids || []).includes(editingSupplier)).length;
+  const warn = n ? `\nУ ${n} товаров он указан — они останутся, просто без этого поставщика.` : '';
+  if (!confirm(`Удалить поставщика «${sup?.name}»?${warn}`)) return;
+  const id = editingSupplier;
+  state.suppliers = state.suppliers.filter((x) => x.id !== id);
+  for (const p of state.products) if (p.supplier_ids) p.supplier_ids = p.supplier_ids.filter((x) => x !== id);
+  state.prices = (state.prices || []).filter((r) => r.supplier_id !== id);
+  state.selSuppliers = state.selSuppliers.filter((x) => x !== id);
+  delete state.contacts[id];
+  editingSupplier = null;
+  closeSheet('supplierEditSheet');
+  renderSuppliersManager();
+  await svSaveAndPublish('Поставщик удалён');
+}
+
+export async function addSupplier() {
+  const name = (prompt('Название поставщика') || '').trim();
+  if (!name) return;
+  const id = svUuid();
+  state.suppliers.push({ id, name });
+  renderSuppliersManager();
+  await svSaveAndPublish('Поставщик добавлен');
+  openSupplierEdit(id);
 }
 
 /* ── Контакты поставщика (редактирует админ) ──── */

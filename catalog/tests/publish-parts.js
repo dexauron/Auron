@@ -180,9 +180,31 @@ function fakeGithub() {
   });
   chk(newStaff === N, `новый пароль сотрудника открывает каталог (${newStaff} товаров)`);
 
+  // ── 7б. Владелец может сменить СВОЙ пароль — с полной перешифровкой ──
+  // Иначе смена была бы обманом: старый файл ключей остаётся в истории
+  // репозитория, и знавший прежний пароль открыл бы каталог и дальше.
+  await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    await P.unlockSecret('ownerpw');
+    await P.publishFull('новыйпароль', { rotate: true });
+  });
+  const afterRotate = gh.commits[gh.commits.length - 1];
+  chk(afterRotate.filter((p) => /sec\/.*\.enc$/.test(p)).length >= 40 && afterRotate.some((p) => /keys\.json$/.test(p)),
+    `смена пароля владельца перешифровала каталог целиком (${afterRotate.filter((p) => /sec\//.test(p)).length} кусков)`);
+  const oldOwner = await page.evaluate(async () => {
+    try { await window.WM_PUBLISH.unlockSecret('ownerpw'); return 'открылось'; } catch (e) { return 'отказ'; }
+  });
+  chk(oldOwner === 'отказ', 'прежний пароль владельца больше не открывает каталог');
+  const newOwner = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state(); s.products = [];
+    await P.unlockSecret('новыйпароль');
+    return s.products.length;
+  });
+  chk(newOwner === N, `новый пароль владельца открывает каталог (${newOwner} товаров)`);
+
   // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
   const keysFile = gh.fs.get('catalog/data/keys.json') || '';
-  chk(!/ownerpw|staffpw|другойпароль/.test(keysFile) && keysFile.length < 2000,
+  chk(!/ownerpw|staffpw|другойпароль|новыйпароль/.test(keysFile) && keysFile.length < 2000,
     `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
 
   // ── 9. Старый цельный файл всё ещё читается ──
