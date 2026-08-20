@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Вай Маркет — ERP-дашборд магазина 24/7</title>
+<style>
+  :root {
+    --bg-main: #0B131F; --bg-card: #152238; --bg-card-hdr: #1A2B47; --bg-sidebar: #0D1829;
+    --cyan: #00F2FE; --teal: #00D2D3; --green: #2ECC71; --red: #FF5E57; --yellow: #F1C40F;
+    --violet: #9B59B6; --text-white: #FFFFFF; --text-muted: #8E9EB5; --border: #1F3454; --active-menu: #0F4C5C;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; }
+  body { background: var(--bg-main); color: var(--text-white); display: flex; height: 100vh; overflow: hidden; }
+
+  aside { width: 268px; background: var(--bg-sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; }
+  .brand-area { padding: 16px; border-bottom: 1px solid var(--border); }
+  .brand-title { font-size: 15px; font-weight: 800; color: var(--cyan); display: flex; align-items: center; gap: 8px; }
+  .brand-sub { margin-top: 5px; font-size: 10px; color: var(--teal); background: rgba(0,242,254,.1); padding: 2px 6px; border-radius: 4px; display: inline-block; border: 1px solid rgba(0,242,254,.2); }
+  .menu-list { overflow-y: auto; flex: 1; padding: 8px 0; }
+  .menu-section-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 12px 18px 4px; letter-spacing: .5px; }
+  .menu-item { display: flex; align-items: center; gap: 10px; padding: 9px 18px; color: var(--text-muted); font-size: 12px; font-weight: 500; cursor: pointer; transition: .15s; border-left: 3px solid transparent; }
+  .menu-item:hover { background: rgba(0,242,254,.05); color: var(--text-white); }
+  .menu-item.active { background: var(--active-menu); color: var(--text-white); border-left-color: var(--cyan); font-weight: 600; }
+  .menu-badge { margin-left: auto; font-size: 9.5px; font-weight: 700; background: #3B1B26; color: var(--red); border-radius: 10px; padding: 1px 7px; }
+
+  main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  header { min-height: 62px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 8px 20px; background: rgba(13,24,41,.85); gap: 10px; flex-shrink: 0; }
+  .header-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .page-title { font-size: 14px; font-weight: 700; color: var(--cyan); text-transform: uppercase; letter-spacing: .4px; }
+  .period-presets { display: flex; background: #132238; border-radius: 6px; padding: 2px; border: 1px solid var(--border); gap: 2px; }
+  .btn-pill { background: transparent; border: none; color: var(--text-muted); padding: 5px 10px; font-size: 11px; font-weight: 600; border-radius: 4px; cursor: pointer; }
+  .btn-pill.active, .btn-pill:hover { background: var(--active-menu); color: var(--text-white); }
+  .top-actions { display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+  .btn-tool { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-white); padding: 7px 11px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+  .btn-tool:hover { background: #1F3454; border-color: var(--teal); }
+  .btn-primary { background: linear-gradient(135deg, #00D2D3, #00A8B5); color: #05101A; font-weight: 700; border: none; }
+  .btn-primary:hover { opacity: .9; }
+  .btn-mini { padding: 4px 8px; font-size: 10.5px; }
+  .btn-danger { border-color: rgba(255,94,87,.4); color: var(--red); }
+  #folderInput, #filesInput { display: none; }
+
+  .sub-bar { background: #0E1A2B; border-bottom: 1px solid var(--border); padding: 8px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+  .search-box, .ai-prompt-box { display: flex; align-items: center; background: #132238; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; }
+  .search-box { flex: 1; min-width: 200px; max-width: 340px; }
+  .ai-prompt-box { flex: 2; min-width: 240px; border-color: rgba(0,242,254,.3); }
+  .search-box input, .ai-prompt-box input { background: transparent; border: none; outline: none; color: var(--text-white); font-size: 12px; width: 100%; }
+  .ai-prompt-box input { color: var(--cyan); }
+  select.scope { background: #132238; color: var(--text-white); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 11px; outline: none; }
+
+  .content { padding: 18px 20px 40px; overflow-y: auto; flex: 1; }
+  .view { display: none; flex-direction: column; gap: 16px; }
+  .view.active { display: flex; }
+
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(205px, 1fr)); gap: 12px; }
+  .kpi-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 13px 16px; display: flex; flex-direction: column; gap: 3px; }
+  .kpi-title { font-size: 10.5px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; }
+  .kpi-val { font-size: 21px; font-weight: 800; }
+  .kpi-sub { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+  .trend-pos { color: var(--green); } .trend-neg { color: var(--red); } .trend-warn { color: var(--yellow); }
+
+  .bep-container { background: #0E1A2B; border: 1px solid var(--border); border-radius: 8px; padding: 13px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .bep-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; flex-wrap: wrap; gap: 8px; }
+  .bep-bar-bg { height: 12px; background: #132238; border-radius: 6px; overflow: hidden; border: 1px solid var(--border); }
+  .bep-bar-fill { height: 100%; background: linear-gradient(90deg, #00D2D3, #2ECC71); border-radius: 6px; transition: width .4s ease; }
+
+  .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .panel-hdr { padding: 11px 16px; background: var(--bg-card-hdr); border-bottom: 1px solid var(--border); font-size: 12.5px; font-weight: 700; color: var(--teal); display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .panel-body { padding: 14px 16px; font-size: 12px; color: #CBD5E1; line-height: 1.55; }
+  .tbl-wrap { overflow-x: auto; }
+  .data-tbl { width: 100%; border-collapse: collapse; text-align: left; font-size: 11.5px; }
+  .data-tbl th { background: #132238; color: var(--cyan); padding: 9px 11px; font-weight: 700; border-bottom: 1px solid var(--border); white-space: nowrap; position: sticky; top: 0; }
+  .data-tbl td { padding: 8px 11px; border-bottom: 1px solid var(--border); color: #E2E8F0; }
+  .data-tbl tr:hover td { background: rgba(0,242,254,.03); }
+  .data-tbl tr.total-row td { background: #132238; font-weight: 800; }
+  .num { text-align: right; white-space: nowrap; } .center { text-align: center; }
+  .muted { color: var(--text-muted); }
+  .more-row td { text-align: center; color: var(--text-muted); font-size: 11px; }
+
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 9.5px; font-weight: 700; white-space: nowrap; }
+  .badge-red { background: #3B1B26; color: var(--red); border: 1px solid rgba(255,94,87,.3); }
+  .badge-yellow { background: #3D371B; color: var(--yellow); border: 1px solid rgba(241,196,15,.3); }
+  .badge-green { background: #18332A; color: var(--green); border: 1px solid rgba(46,204,113,.3); }
+  .badge-blue { background: #10293D; color: var(--cyan); border: 1px solid rgba(0,242,254,.3); }
+  .badge-grey { background: #1A2333; color: var(--text-muted); border: 1px solid var(--border); }
+
+  .chart-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
+  .chart-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; height: 290px; }
+  @media (max-width: 1100px) { .chart-grid { grid-template-columns: 1fr; } }
+
+  .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; padding: 14px 16px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+  .field input, .field select, .field textarea { background: #0B131F; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text-white); font-size: 12px; outline: none; }
+  .field input:focus, .field select:focus { border-color: var(--cyan); }
+  .form-actions { padding: 0 16px 14px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  .hint { font-size: 11px; color: var(--text-muted); padding: 0 16px 12px; line-height: 1.5; }
+  .calc-preview { font-size: 12px; font-weight: 700; color: var(--cyan); padding: 0 16px 12px; }
+
+  .privacy-active .private-data { filter: blur(6px); user-select: none; }
+
+  .toast { position: fixed; right: 20px; bottom: 20px; background: var(--bg-card-hdr); border: 1px solid var(--teal); color: var(--text-white); padding: 12px 16px; border-radius: 8px; font-size: 12px; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,.5); z-index: 60; white-space: pre-line; }
+  .overlay { position: fixed; inset: 0; background: rgba(5,12,20,.82); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .overlay-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 22px 26px; min-width: 320px; max-width: 92vw; max-height: 86vh; overflow-y: auto; }
+  .overlay-title { font-size: 13px; font-weight: 700; color: var(--cyan); margin-bottom: 12px; }
+  .progress-bar { height: 8px; background: #132238; border-radius: 4px; overflow: hidden; margin-top: 10px; border: 1px solid var(--border); }
+  .progress-fill { height: 100%; background: linear-gradient(90deg, #00D2D3, #2ECC71); width: 0; transition: width .2s; }
+
+  .status-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); background: #132238; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .status-dot.off { background: var(--text-muted); box-shadow: none; }
+
+  .empty-state { padding: 26px 18px; text-align: center; color: var(--text-muted); font-size: 12.5px; line-height: 1.7; }
+  .empty-state b { color: var(--text-white); }
+  a.tel { color: var(--cyan); text-decoration: none; font-weight: 600; }
+  a.tel:hover { text-decoration: underline; }
+
+  @media print {
+    body { display: block; height: auto; overflow: visible; background: #fff; color: #000; }
+    aside, header, .sub-bar, .btn-tool, .form-actions, .no-print { display: none !important; }
+    .content { overflow: visible; padding: 0; }
+    .panel, .kpi-card, .chart-box, .bep-container { border: 1px solid #999; background: #fff; color: #000; break-inside: avoid; }
+    .panel-hdr { background: #eee; color: #000; }
+    .data-tbl th { background: #eee; color: #000; } .data-tbl td { color: #000; }
+    .privacy-active .private-data { filter: none; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <div class="brand-area">
+    <div class="brand-title">👑 <span id="sidebarStoreName">ВАЙ МАРКЕТ</span></div>
+    <div class="brand-sub">Режим 24/7 • Единый ERP-контур</div>
+  </div>
+  <nav class="menu-list" id="menuList"></nav>
+</aside>
+
+<main>
+  <header>
+    <div class="header-left">
+      <div class="page-title" id="pageTitle">Главный экран руководителя</div>
+      <div class="period-presets" id="periodPresets"></div>
+    </div>
+    <div class="top-actions">
+      <div class="status-badge" id="syncBadge"><span class="status-dot off"></span><span id="syncText">Данные не загружены</span></div>
+      <button class="btn-tool" id="privacyBtn">👁️ Приватность: ВЫКЛ</button>
+      <button class="btn-tool" id="exportExcelBtn">💾 Excel-база</button>
+      <button class="btn-tool" id="printBtn">📄 PDF-отчёт</button>
+      <input type="file" id="folderInput" webkitdirectory directory multiple>
+      <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv">
+      <button class="btn-tool btn-primary" id="syncBtn">📂 Синхронизировать папку базы</button>
+    </div>
+  </header>
+
+  <div class="sub-bar">
+    <div class="search-box">
+      <span style="margin-right:6px;color:var(--text-muted)">🔍</span>
+      <input type="text" id="globalSearch" placeholder="Поиск: товар, штрихкод, артикул, поставщик, телефон…">
+    </div>
+    <select class="scope" id="searchScope">
+      <option value="all">Везде</option>
+      <option value="sales">В продажах 1С</option>
+      <option value="stock">В остатках склада</option>
+      <option value="prices">В ценах поставщиков</option>
+      <option value="contacts">В контактах</option>
+    </select>
+    <div class="ai-prompt-box">
+      <span style="margin-right:6px">🤖</span>
+      <input type="text" id="aiPrompt" placeholder="Советник: «какой долг поставщикам?», «что заказать?», «где дешевле молоко?» — Enter">
+    </div>
+  </div>
+
+  <div class="content" id="content"></div>
+</main>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
