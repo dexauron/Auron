@@ -188,6 +188,7 @@
 
           <div class="ios-group-title">Доступ и публикация</div>
           <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuOwnerPass"><span class="ios-row-title">Пароль каталога (ваш)</span></button>
             <button class="ios-row ios-row-link" id="menuStaffPass"><span class="ios-row-title">Пароль сотрудника</span></button>
             <button class="ios-row ios-row-link" id="menuPublish"><span class="ios-row-title">Публикация на GitHub</span></button>
           </div>
@@ -764,6 +765,35 @@
       <!-- Кнопка результата всегда на виду, как в фильтрах системных приложений -->
       <div class="filter-actions">
         <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Смена пароля каталога (владелец) -->
+  <div class="sheet-backdrop" id="ownerPassSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="ownerPassSheet">Отмена</button>
+        <h2 class="ios-nav-title">Пароль каталога</h2>
+        <span></span>
+      </div>
+      <div class="sheet-body">
+        <p class="ios-note">Это ваш пароль — тот, которым открывается весь каталог.
+        При смене каталог перешифровывается заново: старый пароль перестаёт работать
+        даже у того, кто успел его записать. Займёт столько же, сколько обычная публикация.</p>
+        <form id="ownerPassForm">
+          <div class="ios-group">
+            <div class="ios-row"><span class="ios-row-title">Новый пароль</span>
+              <input type="password" id="ownerPassNew" class="ios-inp" autocomplete="new-password" required></div>
+            <div class="ios-row"><span class="ios-row-title">Ещё раз</span>
+              <input type="password" id="ownerPassAgain" class="ios-inp" autocomplete="new-password" required></div>
+          </div>
+          <div class="form-error" id="ownerPassError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="ownerPassSubmit" style="margin-top:16px">Сменить пароль</button>
+        </form>
+        <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
+        где не потеряете.</p>
       </div>
     </div>
   </div>

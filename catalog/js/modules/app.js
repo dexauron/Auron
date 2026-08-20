@@ -544,6 +544,38 @@ function bindEvents() {
   });
 
   // Пароль магазина (только админ): смена выкидывает все устройства сотрудников
+  // Смена пароля каталога (владелец). Обязательно с перешифровкой: старый
+  // файл ключей остаётся в истории репозитория навсегда, и без нового ключа
+  // тот, кто знал прежний пароль, продолжил бы открывать каталог.
+  $('menuOwnerPass').addEventListener('click', () => {
+    closeSheet('adminMenuSheet');
+    $('ownerPassNew').value = ''; $('ownerPassAgain').value = '';
+    $('ownerPassError').hidden = true;
+    openSheet('ownerPassSheet');
+  });
+  $('ownerPassForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const pw = $('ownerPassNew').value.trim();
+    const again = $('ownerPassAgain').value.trim();
+    const err = $('ownerPassError');
+    const btn = $('ownerPassSubmit');
+    err.hidden = true;
+    if (pw.length < 4) { err.textContent = 'Пароль — минимум 4 символа.'; err.hidden = false; return; }
+    if (pw !== again) { err.textContent = 'Пароли не совпали.'; err.hidden = false; return; }
+    if (!ghConfigured()) { err.textContent = 'Нужен ключ публикации: меню → «Публикация на GitHub».'; err.hidden = false; return; }
+    btn.disabled = true; btn.textContent = 'Перешифровываю…';
+    try {
+      await publishFull(pw, { rotate: true, onProgress: (d, t) => { btn.textContent = `Перешифровываю… ${d} из ${t}`; } });
+      ui.secretPw = pw;
+      applyServerless(pw);            // запомнить новый пароль на этом устройстве
+      closeSheet('ownerPassSheet');
+      toast('Пароль каталога сменён');
+    } catch (e2) {
+      err.textContent = 'Не удалось: ' + (e2.message || e2);
+      err.hidden = false;
+    } finally { btn.disabled = false; btn.textContent = 'Сменить пароль'; }
+  });
+
   $('menuStaffPass').addEventListener('click', () => {
     closeSheet('adminMenuSheet');
     $('newStaffPass').value = '';
