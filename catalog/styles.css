@@ -255,12 +255,9 @@ body {
 .filter-actions {
   position: sticky; bottom: 0; z-index: 1;
   background: var(--bg);
-  margin: 20px calc(-1 * var(--sheet-px, 18px)) calc(-18px - env(safe-area-inset-bottom));
   padding: 10px var(--sheet-px, 18px) calc(12px + env(safe-area-inset-bottom));
-  border-top: 1px solid var(--border);
 }
 .filter-actions #filterApply { margin: 0; }
-.filter-actions #filterReset { margin-top: 6px; }
 
 /* совпавшие слова в результатах поиска */
 mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; padding: 0 1px; }
@@ -1351,7 +1348,7 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 /* Окно фильтров: список на сером фоне, кнопка результата всегда внизу */
 .filter-body { padding-top: 0; padding-bottom: 12px; }
 .filter-actions {
-  position: sticky; bottom: 0; z-index: 2;
+  position: sticky; bottom: 0; z-index: 2; margin: 0;
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--bg) 62%, transparent);
 }
