@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, toast, translit } from './core.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, setRowText, toast, translit } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
@@ -11,7 +11,7 @@ import { loadCache, saveCache } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
-import { addGroup, deleteGroup, deleteProduct, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
+import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { scanToSearch, startScan } from './scanner.js';
@@ -343,14 +343,14 @@ function bindEvents() {
       $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
       // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
       const noCat = uncategorized().length;
-      $('menuSortCats').textContent = noCat
+      setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
-        : 'Разложить по категориям — всё разложено';
+        : 'Разложить по категориям — всё разложено');
       const noPhoto = photoCandidates().length;
-      $('menuPhotoFill').textContent = noPhoto ? `Дозаполнить фото (${noPhoto})` : 'Дозаполнить фото — всё есть';
+      setRowText('menuPhotoFill', noPhoto ? `Дозаполнить фото (${noPhoto})` : 'Дозаполнить фото — всё есть');
       // «Фото на проверке» — показываем, если в очереди что-то есть
       $('menuSuggestions').hidden = !(state.suggCount > 0);
-      $('menuSuggestions').textContent = `Фото на проверке (${state.suggCount || 0})`;
+      setRowText('menuSuggestions', `Фото на проверке (${state.suggCount || 0})`);
       // цены магазинов ведут все вошедшие — и владелец, и сотрудник
       $('menuCompStores').hidden = false;
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
@@ -778,6 +778,15 @@ function bindEvents() {
     const del = e.target.closest('.group-del');
     if (del) deleteGroup(del.closest('.group-row').dataset.id);
   });
+
+  // Поставщики (управление): строка открывает правку, там же контакты и удаление
+  $('suppliersManageList').addEventListener('click', (e) => {
+    const row = e.target.closest('[data-sup-edit]');
+    if (row) openSupplierEdit(row.dataset.supEdit);
+  });
+  $('btnAddSupplier').addEventListener('click', addSupplier);
+  $('supEditSave').addEventListener('click', saveSupplierEdit);
+  $('supEditDelete').addEventListener('click', deleteSupplier);
 
   // Убрать дубли товаров (только админ)
   $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });

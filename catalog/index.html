@@ -490,13 +490,48 @@
   <div class="sheet-backdrop" id="suppliersManageSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Поставщики</h2>
+        <button class="ios-nav-btn strong" data-close="suppliersManageSheet">Готово</button>
+      </div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Поставщики (редактирование)</h2>
-        <div id="suppliersManageList"></div>
-        <div class="input-row">
-          <button class="btn btn-primary" id="btnAddSupplier" aria-label="Добавить"><i data-ic="plus"></i></button>
+        <p class="ios-note">Поставщики появляются сами при загрузке файла «Цены поставщиков».
+        Здесь можно поправить название, записать телефон и убрать лишнего.</p>
+        <div class="ios-group" id="suppliersManageList"></div>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-action" id="btnAddSupplier"><span class="ios-row-title">Добавить поставщика</span></button>
         </div>
-        <button class="btn btn-ghost sheet-close" data-close="suppliersManageSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Один поставщик: название, контакты, удаление -->
+  <div class="sheet-backdrop" id="supplierEditSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="supplierEditSheet">Отмена</button>
+        <h2 class="ios-nav-title">Поставщик</h2>
+        <button class="ios-nav-btn strong" id="supEditSave">Сохранить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">Название</span>
+            <input type="text" id="supEditName" class="ios-inp" maxlength="80" placeholder="Название"></div>
+          <div class="ios-row"><span class="ios-row-title">Телефон</span>
+            <input type="tel" id="supEditPhone" class="ios-inp" placeholder="+7…"></div>
+          <div class="ios-row"><span class="ios-row-title">Кто общается</span>
+            <input type="text" id="supEditPerson" class="ios-inp" maxlength="60" placeholder="имя"></div>
+        </div>
+        <div class="ios-group-title">Примечание</div>
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="supEditNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="Например: возит по вторникам"></div>
+        </div>
+        <p class="ios-note" id="supEditInfo"></p>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-danger" id="supEditDelete"><span class="ios-row-title">Удалить поставщика</span></button>
+        </div>
       </div>
     </div>
   </div>

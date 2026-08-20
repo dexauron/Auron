@@ -145,6 +145,16 @@ document.addEventListener('keydown', (e) => {
   closeSheet(sheetStack[sheetStack.length - 1]);
 });
 
+/* Подпись строки списка. Писать в строку через textContent нельзя: внутри есть
+ * <span> с названием (и иногда со значением), и textContent их стирает —
+ * строка теряет разметку, а стрелка съезжает к тексту. */
+export function setRowText(id, text) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const title = el.querySelector('.ios-row-title');
+  if (title) title.textContent = text; else el.textContent = text;
+}
+
 // Стрелка «назад» в левом верхнем углу каждого окна
 export function addBackButtons() {
   document.querySelectorAll('.sheet').forEach((sheet) => {

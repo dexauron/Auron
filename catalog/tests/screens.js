@@ -145,6 +145,38 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
 
   const rej = await page.evaluate(() => window.__rej || []);
   rej.forEach((r) => problems.push('необработанный сбой: ' + String(r).slice(0, 120)));
+
+  // ── Поставщики: экран, который до аудита был мёртвым ──
+  // Кнопки рисовались, но ни переименование, ни удаление, ни контакты не
+  // работали — правка жила на сервере, а сервер убрали.
+  await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
+  await page.evaluate(() => { const st = window.WM_PUBLISH._state(); st.suppliers = [{ id: 's1', name: 'Поставщик А' }, { id: 's2', name: 'Поставщик Б' }]; });
+  await page.evaluate(() => document.getElementById('adminBtn').click());
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.getElementById('menuSuppliers').click());
+  await page.waitForTimeout(400);
+  const sup = await page.evaluate(async () => {
+    window.confirm = () => true;
+    document.querySelector('[data-sup-edit="s1"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('supEditName').value = 'Молокозавод';
+    document.getElementById('supEditPhone').value = '+79990001122';
+    document.getElementById('supEditSave').click();
+    await new Promise((r) => setTimeout(r, 450));
+    const s = window.WM_PUBLISH._state();
+    const named = s.suppliers[0].name; const phone = (s.contacts.s1 || {}).phone;
+    document.getElementById('menuSuppliers').click();
+    await new Promise((r) => setTimeout(r, 200));
+    document.querySelector('[data-sup-edit="s2"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('supEditDelete').click();
+    await new Promise((r) => setTimeout(r, 450));
+    return { named, phone, left: s.suppliers.length };
+  });
+  chk(sup.named === 'Молокозавод', `поставщика можно переименовать (${sup.named})`);
+  chk(sup.phone === '+79990001122', `телефон поставщика сохраняется (${sup.phone})`);
+  chk(sup.left === 1, `лишнего поставщика можно удалить (осталось ${sup.left})`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   chk(!problems.length, `нет замечаний по экранам (${problems.length})`);
   [...new Set(problems)].forEach((p) => console.log('   • ' + p));
