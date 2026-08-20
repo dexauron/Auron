@@ -30,10 +30,23 @@
     discountCrit: 30,       // уценка в красной зоне, %
     discountWarn: 15,       // уценка в жёлтой зоне, %
     writeoffsToMonth: true, // приводить списания из 1С к месяцу в P&L
-    autoSyncSeconds: 3      // как часто проверять папку на изменения, сек
+    autoSyncSeconds: 3,     // как часто проверять папку на изменения, сек
+
+    // Финансовый учёт (как в вашей таблице): справочники и пороги сигналов
+    finCategories: 'Закуп товара, ЗП, Аренда, Налоги, Коммуналка, Интернет, Оплата ТП, Реклама, Другое',
+    finCashiers: '',
+    finShifts: 'Утро, Вечер, Ночная',
+    finSuppliers: '',
+    openCashStart: 0,       // начальный остаток наличных
+    openCardStart: 0,       // начальный остаток на карте
+    openTransferStart: 0,   // начальный остаток на счёте
+    debtWarn: 200000,       // долг поставщикам: внимание
+    debtCrit: 500000,       // долг поставщикам: критично
+    dueWarn: 7,             // за сколько дней предупреждать о платеже
+    diffCrit: 1000          // критичное расхождение кассы
   };
 
-  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi'];
+  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi', 'dds', 'plans'];
 
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };

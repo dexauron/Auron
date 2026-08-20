@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const XLSX = require(path.join(__dirname, '..', 'vendor', 'xlsx.full.min.js'));
 const WM = require(path.join(__dirname, '..', 'js', 'engine.js'));
+const FIN = require(path.join(__dirname, '..', 'js', 'finance.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -176,6 +177,52 @@ for (const f of files) {
       check('платёжная ведомость разобрана', pr.length > 0,
         pr.length + ' человек, ставка ' + WM.fmtMoney(pr[0].rate) + ' за смену', '>0');
     }
+  }
+  if (kind === 'finance_book') {
+    const { wb } = readMatrix(full);
+    const sheet = n => wb.Sheets[n] ? XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' }) : null;
+    const base = sheet('БАЗА_ДДС') ? FIN.parseDdsBase(sheet('БАЗА_ДДС')).rows : [];
+    const plans = sheet('Запись_Выплат') ? FIN.parsePayPlan(sheet('Запись_Выплат')).rows : [];
+    const cfg = sheet('Настройки') ? FIN.parseFinSettings(sheet('Настройки')) : null;
+    const t = FIN.totals(base);
+    const bal = FIN.balances(base, cfg ? cfg.opening : {});
+    check('операций разобрано', base.length > 10, base.length, '>10');
+    check('выплат разобрано', plans.length > 0, plans.length, '>0');
+    check('справочники прочитаны', cfg && cfg.dict.categories.length > 3 && cfg.dict.cashiers.length > 0,
+      cfg && (cfg.dict.cashiers.length + ' кассиров, ' + cfg.dict.categories.length + ' категорий'), 'есть');
+    check('прибыль = приход − расход', near(t.profit, t.income - t.expense, 1),
+      WM.fmtMoney(t.profit), WM.fmtMoney(t.income - t.expense));
+    check('остатки по способам = прибыль', near(bal.total, t.profit + (cfg ? cfg.opening.cash + cfg.opening.card + cfg.opening.transfer : 0), 1),
+      WM.fmtMoney(bal.total), WM.fmtMoney(t.profit));
+    check('долг = взято в долг − погашено', near(t.debtNow, t.debtTaken - t.debtPaid, 1),
+      WM.fmtMoney(t.debtNow), WM.fmtMoney(t.debtTaken - t.debtPaid));
+    check('маржа считается по закупу', t.margin > 0 && t.margin < 100, WM.fmtPct(t.margin), '0–100%');
+    const cats = FIN.byCategory(base);
+    const catSum = cats.reduce((a, c) => a + c.sum, 0);
+    check('расходы по категориям = общий расход', near(catSum, t.expense, 1), WM.fmtMoney(catSum), WM.fmtMoney(t.expense));
+    const meth = FIN.byMethodIncome(base);
+    const methSum = meth.reduce((a, m) => a + m.sum, 0);
+    check('выручка по способам = общая выручка', near(methSum, t.income, 1), WM.fmtMoney(methSum), WM.fmtMoney(t.income));
+    const wd = FIN.byWeekday(base);
+    check('выручка по дням недели сходится', near(wd.reduce((a, d) => a + d.sum, 0), t.income, 1),
+      wd.length + ' дней недели', 'сходится');
+    const months = [...new Set(base.map(r => r.date.slice(0, 7)))].sort();
+    if (months.length > 1) {
+      const rep = FIN.monthReport(base, months[months.length - 1]);
+      check('отчёт за месяц строится', rep.finance.length > 5 && rep.cur.income >= 0,
+        rep.title + ': выручка ' + WM.fmtMoney(rep.cur.income), 'есть');
+    }
+    const day = base[0] && base[0].date;
+    if (day) {
+      const dr = FIN.dayReport(base, day, cfg ? cfg.opening : {});
+      check('отчёт за день строится', dr.totals.tx > 0,
+        day + ': операций ' + dr.totals.tx + ', выручка ' + WM.fmtMoney(dr.totals.income), '>0');
+    }
+    const pt = FIN.planTotals(plans, '2025-12-31');
+    check('план выплат считается', pt.count === plans.length,
+      'оплачено ' + WM.fmtMoney(pt.paid) + ', просрочено ' + WM.fmtMoney(pt.overdue), 'все платежи');
+    const cal = FIN.calendarMonth(plans, plans[0] ? plans[0].due.slice(0, 7) : '2025-01', '2025-12-31');
+    check('календарь выплат строится', cal.weeks.length >= 4, cal.title + ', недель ' + cal.weeks.length, '>=4');
   }
   if (kind === 'journal_shifts') {
     const { wb } = readMatrix(full);

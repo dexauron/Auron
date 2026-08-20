@@ -246,6 +246,11 @@
       D.writeoffs = r.rows.map(function (x) {
         return { name: x.name, reason: x.reason || 'Без причины', qty: x.qty, cost: x.sum, retail: 0, key: E.norm(x.name) };
       });
+    } else if (kind === 'finance_book') {
+      var res = window.WM_IMPORT_FINANCE ? window.WM_IMPORT_FINANCE(m.wb, sheetOf) : null;
+      info.rows = res ? res.dds : 0;
+      info.note = res ? ('операций ' + res.dds + ', выплат ' + res.plans + (res.settings ? ', справочники перенесены' : '')) : '';
+      r = { rows: [] };
     } else if (kind === 'owner_book') {
       var book = { daily: [], payments: [], payroll: [], monthly: [], openingDebt: 0, file: name };
       m.names.forEach(function (sn) {
@@ -590,6 +595,14 @@
     }
   };
 
+  if (window.WM_EXTRA_FORMS) {
+    for (var fk in window.WM_EXTRA_FORMS) FORMS[fk] = window.WM_EXTRA_FORMS[fk];
+    // Касса и расходы ведутся в единой базе операций: старые кнопки открывают
+    // те же формы, чтобы одно и то же не вводилось в двух местах.
+    if (FORMS.cashShift) FORMS.shift = FORMS.cashShift;
+    if (FORMS.ddsExpense) FORMS.expense = FORMS.ddsExpense;
+  }
+
   function openForm(id, prefill) {
     var f = FORMS[id]; if (!f) return;
     var lists = datalist('dl-sup', supplierNames()) +
@@ -610,12 +623,22 @@
     return Object.keys(set).sort();
   }
 
+  // Помощники рисования отдаём экранам финансов (js/finviews.js)
+  window.WMUI = {
+    esc: esc, money: money, priv: priv, nf: nf, pct: pct, num: num, cls: cls, badge: badge,
+    dateRu: dateRu, plural: plural, today: today,
+    card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
+    fieldRow: fieldRow, pageHead: pageHead, toast: toast, sheet: sheet, closeSheet: closeSheet,
+    periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
+    go: function (id) { go(id); }, render: function () { render(); }
+  };
+
   function quickBar() {
     return '<div class="quick">' +
-      '<button class="btn btn-primary" data-form="invoice">📥 Приход товара</button>' +
-      '<button class="btn" data-form="payment">💸 Оплата поставщику</button>' +
-      '<button class="btn" data-form="shift">💵 Смена и касса</button>' +
-      '<button class="btn" data-form="expense">🧾 Расход</button>' +
+      '<button class="btn btn-primary" data-form="cashShift">💵 Касса за смену</button>' +
+      '<button class="btn" data-form="ddsExpense">🧾 Расход</button>' +
+      '<button class="btn" data-form="payPlan">📅 Выплата поставщику</button>' +
+      '<button class="btn" data-form="invoice">📥 Приход товара</button>' +
       '<button class="btn" data-form="writeoff">🗑 Списание</button>' +
       '</div>';
   }
@@ -668,10 +691,16 @@
       .filter(function (f) { return f.level === 'crit' || f.level === 'expired'; });
     if (exp.length) items.push({ icon: '⏰', title: 'Сроки годности заканчиваются',
       sub: 'Уценить или снять с полки', value: '<span class="c-red">' + exp.length + ' поз.</span>', view: 'expiry' });
-    var sh = E.shiftsTotals(jrn('shifts'));
-    if (sh.count && sh.diff !== 0) items.push({ icon: '💵', title: sh.diff < 0 ? 'Недостача по кассе' : 'Излишек по кассе',
-      sub: 'За ' + periodName().toLowerCase() + ', смен: ' + sh.count,
-      value: '<span class="' + cls(sh.diff) + ' private">' + money(sh.diff) + '</span>', view: 'cash' });
+    var led = (S.state.dds || []).filter(function (r) { return inPeriod(r.date); });
+    var finT = window.WMFin.totals(led.length ? led : (S.state.dds || []));
+    if (finT.diffCount && finT.diffSum !== 0) items.push({
+      icon: '💵', title: finT.diffSum < 0 ? 'Недостача по кассе' : 'Излишек по кассе',
+      sub: 'Смен с расхождением: ' + finT.diffCount,
+      value: '<span class="' + cls(finT.diffSum) + ' private">' + money(finT.diffSum) + '</span>', view: 'cash' });
+    var pl = window.WMFin.planTotals(S.state.plans || [], t);
+    if (pl.overdueCount) items.push({ icon: '📅', title: 'Просроченные выплаты по плану',
+      sub: pl.overdueCount + ' ' + plural(pl.overdueCount, 'платёж', 'платежа', 'платежей'),
+      value: '<span class="c-red private">' + money(pl.overdue) + '</span>', view: 'finpay' });
     if (F.state !== 'ready') items.push({ icon: '💾', title: 'Данные не сохраняются в файл',
       sub: F.state === 'unsupported' ? 'Откройте дашборд в Chrome или Edge' : 'Подключите папку — записи будут храниться в файле',
       value: '<button class="btn btn-sm btn-primary" data-act="' + (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">Подключить</button>' });
@@ -684,12 +713,18 @@
   /* --- Экран «Сегодня» --------------------------------------------------------- */
   function viewToday() {
     var debt = debtNow();
+    var Fin = window.WMFin;
+    var ledger = S.state.dds || [];
+    var ledgerPeriod = ledger.filter(function (r) { return inPeriod(r.date); });
+    if (!ledgerPeriod.length) ledgerPeriod = ledger;
+    var fin = Fin.totals(ledgerPeriod);
+    var finBal = Fin.balances(ledger, { cash: num(S.settings.openCashStart), card: num(S.settings.openCardStart), transfer: num(S.settings.openTransferStart) });
     var sh = E.shiftsTotals(jrn('shifts'));
     var man = manual();
     var t = C.sales || E.salesTotals([]);
     var ownerSel = ownerRows(), ownerT = D.owner ? E.ownerTotals(ownerSel.rows) : null;
-    var lastShift = (S.state.shifts || []).slice().sort(function (a, b) { return (a.date || '').localeCompare(b.date || ''); }).pop();
-    var cashNow = lastShift ? num(lastShift.factCash) : 0;
+    var lastDate = ledger.length ? ledger.map(function (r) { return r.date; }).sort().pop() : '';
+    var cashNow = ledger.length ? finBal.map['Наличные'] : 0;
     var att = attention();
     var docs = dueDocs();
     var payPeriod = jrn('payments').reduce(function (a, p) { return a + num(p.amount); }, 0);
@@ -711,10 +746,13 @@
     h += quickBar();
 
     h += '<div class="stat-grid">' +
-      stat('Наличные в кассе', priv(cashNow), lastShift ? 'На конец смены ' + dateRu(lastShift.date) : 'Запишите смену') +
-      stat('Выручка', priv(ownerT && ownerT.revenue ? ownerT.revenue : (sh.revenue || t.revenue)),
-        ownerT && ownerT.revenue ? 'По вашей книге, ' + ownerT.dayCount + ' дн.' : (sh.count ? 'По сменам за ' + periodName().toLowerCase() : 'По отчёту 1С')) +
-      stat('Валовая прибыль', priv(t.gross), t.revenue ? 'Маржа ' + pct(t.margin) : 'Нужен отчёт 1С «Продажи»') +
+      stat('Наличные в кассе', priv(cashNow), ledger.length ? 'На ' + dateRu(lastDate) + ' по базе операций' : 'Запишите кассу за смену') +
+      stat('Выручка', priv(fin.income || (ownerT && ownerT.revenue) || t.revenue),
+        fin.income ? 'По базе операций · ' + fin.days + ' ' + plural(fin.days, 'день', 'дня', 'дней')
+          : (ownerT && ownerT.revenue ? 'По вашей книге, ' + ownerT.dayCount + ' дн.' : 'По отчёту 1С')) +
+      stat('Прибыль', priv(fin.income ? fin.profit : t.gross),
+        fin.income ? 'Рентабельность ' + pct(fin.profitability) : (t.revenue ? 'Маржа ' + pct(t.margin) : 'Нужны данные'),
+        (fin.income ? fin.profit : t.gross) >= 0 ? 'c-green' : 'c-red') +
       stat('Куплено товара', priv(man.totals.supplies || (C.payments1c ? C.payments1c.totalSum : 0)),
         man.totals.docs ? man.totals.docs + ' ' + plural(man.totals.docs, 'накладная', 'накладные', 'накладных') + ' за ' + periodName().toLowerCase() : 'По накладным 1С') +
       '</div>';
@@ -750,7 +788,13 @@
   // Данные для графика выручки: сначала книга владельца, иначе журнал смен
   function chartDays() {
     var byDay = {};
-    if (D.owner && D.owner.daily.length) {
+    var ledger = S.state.dds || [];
+    if (ledger.length) {
+      ledger.forEach(function (r) {
+        if (!r.date || !window.WMFin.isIncome(r)) return;
+        byDay[r.date] = (byDay[r.date] || 0) + num(r.amount);
+      });
+    } else if (D.owner && D.owner.daily.length) {
       D.owner.daily.forEach(function (r) {
         if (!r.date) return;
         byDay[r.date] = (byDay[r.date] || 0) + num(r.cash) + num(r.online) + num(r.transfer);
@@ -761,7 +805,7 @@
         byDay[s.date] = (byDay[s.date] || 0) + num(s.zCash) + num(s.terminal);
       });
     }
-    return Object.keys(byDay).sort().slice(-21).map(function (d) { return { date: d, sum: byDay[d] }; });
+    return Object.keys(byDay).sort().slice(-30).map(function (d) { return { date: d, sum: byDay[d] }; });
   }
 
   function drawChart() {
@@ -887,27 +931,69 @@
   }
 
   /* --- Касса и смены ------------------------------------------------------------ */
+  // Смены собираются из базы операций: записи одной смены сгруппированы
+  // по дате, смене и кассиру — как строки «Ввод_Касса» в вашей таблице.
+  function shiftsFromLedger() {
+    var Fin = window.WMFin;
+    var rows = (S.state.dds || []).filter(function (r) { return inPeriod(r.date); });
+    if (!rows.length && (S.state.dds || []).length) rows = S.state.dds;
+    var map = {};
+    rows.forEach(function (r) {
+      var key = r.date + '|' + (r.shift || '') + '|' + (r.cashier || '');
+      if (!map[key]) map[key] = { date: r.date, shift: r.shift || '—', cashier: r.cashier || '—',
+        z: 0, diff: 0, payouts: 0, cash: 0, card: 0, transfer: 0, ids: [] };
+      var g = map[key];
+      g.ids.push(r.id);
+      if (Fin.isIncome(r)) {
+        g.z += num(r.amount); g.diff += num(r.diff);
+        if (r.method === 'Наличные') g.cash += num(r.amount);
+        else if (r.method === 'Карта') g.card += num(r.amount);
+        else g.transfer += num(r.amount);
+      } else if (Fin.isExpense(r) && E.norm(r.category).indexOf('выплата из кассы') >= 0) {
+        g.payouts += num(r.amount);
+      }
+    });
+    var out = [];
+    for (var k in map) {
+      var g = map[k];
+      if (!g.z && !g.payouts) continue;
+      g.z = E.safeRound(g.z); g.diff = E.safeRound(g.diff); g.payouts = E.safeRound(g.payouts);
+      g.fact = E.safeRound(g.z + g.diff);
+      out.push(g);
+    }
+    return out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  }
+
   function viewCash() {
-    var rows = jrn('shifts').sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
-    var t = E.shiftsTotals(rows);
+    var rows = shiftsFromLedger();
+    var t = { count: rows.length, zCash: 0, factCash: 0, payouts: 0, diff: 0, terminal: 0, short: 0, over: 0 };
+    rows.forEach(function (g) {
+      t.zCash += g.cash; t.terminal += g.card + g.transfer; t.payouts += g.payouts;
+      t.diff += g.diff; t.factCash += g.fact;
+      if (g.diff < 0) t.short += Math.abs(g.diff); else t.over += g.diff;
+    });
+    for (var tk in t) t[tk] = E.safeRound(t[tk]);
+    t.count = rows.filter(function (g) { return g.shift && g.shift !== '—'; }).length || rows.length;
+    t.revenue = E.safeRound(t.zCash + t.terminal);
     var byCashier = {};
-    rows.forEach(function (s) {
-      var k = s.cashier || 'Без имени', c = E.shiftCalc(s);
+    rows.forEach(function (g) {
+      var k = g.cashier || 'Без имени';
       if (!byCashier[k]) byCashier[k] = { name: k, shifts: 0, diff: 0, short: 0, over: 0, z: 0 };
-      byCashier[k].shifts++; byCashier[k].diff += c.diff; byCashier[k].z += num(s.zCash);
-      if (c.diff < 0) byCashier[k].short += Math.abs(c.diff); else byCashier[k].over += c.diff;
+      byCashier[k].shifts++; byCashier[k].diff += g.diff; byCashier[k].z += g.z;
+      if (g.diff < 0) byCashier[k].short += Math.abs(g.diff); else byCashier[k].over += g.diff;
     });
     var people = Object.keys(byCashier).map(function (k) { return byCashier[k]; })
       .sort(function (a, b) { return a.diff - b.diff; });
 
     var h = '<div class="page-head"><div><div class="page-title">Касса и смены</div>' +
       '<div class="page-sub">День 09:00–21:00 · ночь 21:00–09:00</div></div>' +
-      '<button class="btn btn-primary" data-form="shift">＋ Закрыть смену</button></div>';
+      '<button class="btn btn-primary" data-form="cashShift">＋ Закрыть смену</button></div>';
 
     h += '<div class="stat-grid">' +
-      stat('Наличными по Z-отчётам', priv(t.zCash), t.count + ' ' + plural(t.count, 'смена', 'смены', 'смен')) +
-      stat('Выдано из кассы', priv(t.payouts), 'Оплаты поставщикам и расходы') +
-      stat('В ящике по факту', priv(t.factCash), 'Последняя сверка') +
+      stat('Выручка за смены', priv(t.revenue), t.count + ' ' + plural(t.count, 'смена', 'смены', 'смен') +
+        ' · наличными ' + money(t.zCash)) +
+      stat('Выдано из кассы', priv(t.payouts), 'Оплаты и расходы из ящика') +
+      stat('Факт по кассе', priv(t.factCash), 'С учётом расхождений') +
       stat(t.diff < 0 ? 'Недостача' : 'Расхождение', priv(t.diff),
         'Недостачи ' + money(t.short) + ' · излишки ' + money(t.over), t.diff === 0 ? 'c-green' : (t.diff < 0 ? 'c-red' : 'c-orange')) +
       '</div>';
@@ -924,25 +1010,32 @@
     h += card('Журнал смен', table('shiftsT', [
       { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
       { title: 'Смена', fn: function (r) { return esc(r.shift); } },
-      { title: 'Кассир', fn: function (r) { return esc(r.cashier || '—'); } },
-      { title: 'Утро', cls: 'num', fn: function (r) { return priv(r.openCash); } },
-      { title: 'Z-отчёт', cls: 'num', fn: function (r) { return priv(r.zCash); } },
+      { title: 'Кассир', fn: function (r) { return esc(r.cashier); } },
+      { title: 'Наличные', cls: 'num', fn: function (r) { return priv(r.cash); } },
+      { title: 'Карта', cls: 'num', fn: function (r) { return priv(r.card); } },
+      { title: 'Перевод', cls: 'num', fn: function (r) { return priv(r.transfer); } },
+      { title: 'Выручка смены', cls: 'num', fn: function (r) { return priv(r.z); } },
       { title: 'Выдано', cls: 'num', fn: function (r) { return priv(r.payouts); } },
-      { title: 'Должно быть', cls: 'num', fn: function (r) { return priv(E.shiftCalc(r).expected); } },
-      { title: 'В ящике', cls: 'num', fn: function (r) { return priv(r.factCash); } },
-      { title: 'Карта/перевод', cls: 'num', fn: function (r) { return priv(r.terminal); } },
-      { title: 'Разница', cls: 'num', fn: function (r) { var c = E.shiftCalc(r); return '<span class="' + cls(c.diff) + ' private">' + money(c.diff) + '</span>'; } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="shifts:' + r.id + '">✕</button>'; } }
+      { title: 'Факт', cls: 'num', fn: function (r) { return priv(r.fact); } },
+      { title: 'Расхождение', cls: 'num', fn: function (r) { return '<span class="' + cls(r.diff) + ' private">' + money(r.diff) + '</span>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm btn-danger" data-act="del-shift" data-ids="' + r.ids.join(',') + '">✕</button>'; } }
     ], rows, { step: 30, empty: 'Смен за период нет. Нажмите «Закрыть смену».',
-      total: [{ html: 'Итого', span: 3 }, { html: money(t.openCash), cls: 'num' }, { html: money(t.zCash), cls: 'num' },
-        { html: money(t.payouts), cls: 'num' }, { html: money(t.expected), cls: 'num' }, { html: money(t.factCash), cls: 'num' },
-        { html: money(t.terminal), cls: 'num' }, { html: '<span class="' + cls(t.diff) + '">' + money(t.diff) + '</span>', cls: 'num' }, { html: '' }] }));
+      total: [{ html: 'Итого', span: 3 }, { html: money(t.zCash), cls: 'num' },
+        { html: money(rows.reduce(function (a, r) { return a + r.card; }, 0)), cls: 'num' },
+        { html: money(rows.reduce(function (a, r) { return a + r.transfer; }, 0)), cls: 'num' },
+        { html: money(t.revenue), cls: 'num' }, { html: money(t.payouts), cls: 'num' },
+        { html: money(t.factCash), cls: 'num' },
+        { html: '<span class="' + cls(t.diff) + '">' + money(t.diff) + '</span>', cls: 'num' }, { html: '' }] }));
     return h;
   }
 
   /* --- Расходы и книга ДДС -------------------------------------------------------- */
   function viewDds() {
-    var exp = jrn('expenses').sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var Fin = window.WMFin;
+    var ledger = (S.state.dds || []).filter(function (r) { return inPeriod(r.date) && Fin.isExpense(r); });
+    if (!ledger.length) ledger = (S.state.dds || []).filter(Fin.isExpense);
+    var exp = ledger.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     var byCat = {};
     exp.forEach(function (e) { byCat[e.category || 'Прочее'] = (byCat[e.category || 'Прочее'] || 0) + num(e.amount); });
     var cats = Object.keys(byCat).map(function (k) { return { name: k, sum: E.safeRound(byCat[k]) }; })
@@ -952,10 +1045,10 @@
 
     var h = '<div class="page-head"><div><div class="page-title">Расходы</div>' +
       '<div class="page-sub">Куда уходят деньги магазина</div></div>' +
-      '<button class="btn btn-primary" data-form="expense">＋ Записать расход</button></div>';
+      '<button class="btn btn-primary" data-form="ddsExpense">＋ Записать расход</button></div>';
 
     h += '<div class="stat-grid">' +
-      stat('Мои расходы за период', priv(expSum), exp.length + ' ' + plural(exp.length, 'запись', 'записи', 'записей')) +
+      stat('Расходы за период', priv(expSum), exp.length + ' ' + plural(exp.length, 'запись', 'записи', 'записей')) +
       stat('Постоянные расходы в месяц', priv(S.fixedMonthly()), 'Аренда, зарплата, налоги — из настроек') +
       (ot ? stat('Оборот по книге ДДС', priv(ot.revenue), ot.dayCount + ' дн.' + (sel.whole ? ' (весь файл)' : '')) : '') +
       (ot ? stat('Прибыль по книге', priv(ot.profit), 'Ваш расчёт: 25% минус расходы', ot.profit >= 0 ? 'c-green' : 'c-red') : '') +
@@ -968,13 +1061,13 @@
       }), ''));
     }
 
-    h += card('Мои записи расходов', table('expT', [
+    h += card('Записи расходов', table('expT', [
       { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
       { title: 'Статья', fn: function (r) { return esc(r.category); } },
-      { title: 'Чем платили', fn: function (r) { return esc(r.form || '—'); } },
+      { title: 'Чем платили', fn: function (r) { return esc(r.method || '—'); } },
       { title: 'Заметка', fn: function (r) { return esc(r.note || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.amount); } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="expenses:' + r.id + '">✕</button>'; } }
+      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
     ], exp, { step: 30, empty: 'Расходов пока не записано' }));
 
     if (!D.owner) return h;
@@ -1528,6 +1621,19 @@
     { id: 'settings', icon: '⚙️', name: 'Настройки', group: 'Ещё', render: viewSettings }
   ];
 
+  // Экраны финансового учёта встают рядом со своими разделами
+  if (window.WM_EXTRA_VIEWS) {
+    window.WM_EXTRA_VIEWS.forEach(function (v) {
+      var idx = VIEWS.length;
+      if (v.after) {
+        for (var i = 0; i < VIEWS.length; i++) if (VIEWS[i].id === v.after) { idx = i + 1; break; }
+      } else {
+        for (var j = VIEWS.length - 1; j >= 0; j--) if (VIEWS[j].group === v.group) { idx = j + 1; break; }
+      }
+      VIEWS.splice(idx, 0, v);
+    });
+  }
+
   function counters() {
     var c = {}, t = today();
     var docs = dueDocs();
@@ -1544,6 +1650,10 @@
     }
     var sh = E.shiftsTotals(jrn('shifts'));
     if (sh.count && sh.diff !== 0) c.cash = '!';
+    if (window.WMFin && (S.state.plans || []).length) {
+      var pt = window.WMFin.planTotals(S.state.plans, t);
+      if (pt.overdueCount) c.finpay = pt.overdueCount > 99 ? '99+' : pt.overdueCount;
+    }
     var att = 0;
     if (over) att++;
     return c;
@@ -1579,6 +1689,8 @@
     $('page').innerHTML = html;
     renderNav(); renderPeriods();
     if (VIEW === 'today') drawChart();
+    var cur = VIEWS.filter(function (x) { return x.id === VIEW; })[0];
+    if (cur && cur.onDraw) { try { cur.onDraw(); } catch (e) { /* график не критичен */ } }
   }
   function go(id) { VIEW = id; PAGE = {}; render(); $('scroll').scrollTop = 0; }
 
@@ -1619,6 +1731,19 @@
     add('Пересчёты', S.state.inventory || []);
     if (C.payments1c) { add('Накладные 1С', C.payments1c.docs); add('Долг 1С', C.balance1c); }
     if (D.owner) add('Книга ДДС', D.owner.daily);
+    if ((S.state.dds || []).length) {
+      add('БАЗА_ДДС', S.state.dds.map(function (r) {
+        return { Дата: r.date, Смена: r.shift, Кассир: r.cashier, Тип: r.type, Категория: r.category,
+          'Способ оплаты': r.method, Сумма: num(r.amount), Расхождение: num(r.diff), Комментарий: r.note };
+      }));
+    }
+    if ((S.state.plans || []).length) {
+      add('Запись_Выплат', S.state.plans.map(function (p) {
+        return { 'Дата плановой оплаты': p.due, 'Поставщик (ТП)': p.supplier, Сумма: num(p.amount),
+          Статус: p.status, Накладная: p.doc, 'Способ оплаты': p.method, 'Дата фактической оплаты': p.paidAt,
+          Примечание: p.note };
+      }));
+    }
     if (D.sales.length && D.stock.length) {
       add('Заказать', E.ropList(D.sales, D.stock, D.salesPeriod ? D.salesPeriod.days : 30, S.settings, C.bestPrices).slice(0, 300));
     }
@@ -1700,7 +1825,18 @@
       else if (a === 'backup') backup();
       else if (a === 'restore') restore();
       else if (a === 'print') window.print();
+      else if (a === 'del-shift') {
+        if (confirm('Удалить смену целиком?')) {
+          el.dataset.ids.split(',').forEach(function (id) { S.remove('dds', id); });
+          render();
+        }
+      }
       else if (a === 'print-labels') printLabels();
+      else if (window.WM_EXTRA_ACTIONS && window.WM_EXTRA_ACTIONS[a]) {
+        var msg = window.WM_EXTRA_ACTIONS[a](el);
+        render();
+        if (msg) toast(msg);
+      }
       else if (a === 'owner-to-settings') {
         var t = E.ownerTotals(ownerRows().rows);
         if (!t.dayCount) { toast('В книге нет заполненных дней.'); return; }
@@ -1728,21 +1864,27 @@
       }
     });
 
+    document.addEventListener('change', function (e) {
+      if (window.WM_EXTRA_CHANGE && window.WM_EXTRA_CHANGE(e.target)) { render(); }
+    });
+
     var timer = null;
     $('search').addEventListener('input', function () {
       clearTimeout(timer);
       timer = setTimeout(function () {
         var q = $('search').value.trim();
-        if (['stock', 'pricecmp', 'search'].indexOf(VIEW) >= 0) { PAGE = {}; render(); }
+        if (['stock', 'pricecmp', 'search', 'finbase'].indexOf(VIEW) >= 0) { PAGE = {}; render(); }
         else if (q.length >= 2) go('search');
       }, 280);
     });
     $('addBtn').addEventListener('click', function () {
       sheet('Что записать?', listOf([
+        listRow({ icon: '💵', title: 'Касса за смену', sub: 'Z-отчёт и фактические деньги', tap: true, attrs: ' data-form="cashShift"' }),
+        listRow({ icon: '🧾', title: 'Расход', sub: 'закуп, аренда, ЗП, прочее', tap: true, attrs: ' data-form="ddsExpense"' }),
+        listRow({ icon: '💰', title: 'Приход денег', sub: 'прочие поступления', tap: true, attrs: ' data-form="ddsIncome"' }),
+        listRow({ icon: '📅', title: 'Выплата поставщику', sub: 'план платежа и оплата', tap: true, attrs: ' data-form="payPlan"' }),
         listRow({ icon: '📥', title: 'Приход товара', sub: 'накладная от поставщика', tap: true, attrs: ' data-form="invoice"' }),
         listRow({ icon: '💸', title: 'Оплата поставщику', sub: 'наличными или переводом', tap: true, attrs: ' data-form="payment"' }),
-        listRow({ icon: '💵', title: 'Смена и касса', sub: 'сдача кассы, Z-отчёт', tap: true, attrs: ' data-form="shift"' }),
-        listRow({ icon: '🧾', title: 'Расход магазина', sub: 'аренда, коммуналка, прочее', tap: true, attrs: ' data-form="expense"' }),
         listRow({ icon: '🗑', title: 'Списание товара', sub: 'просрочка, бой, потери', tap: true, attrs: ' data-form="writeoff"' }),
         listRow({ icon: '⏰', title: 'Товар с коротким сроком', sub: 'чтобы вовремя уценить', tap: true, attrs: ' data-form="expiryItem"' }),
         listRow({ icon: '👤', title: 'Смена сотрудника', sub: 'часы и ставка', tap: true, attrs: ' data-form="timesheet"' }),
@@ -1764,6 +1906,48 @@
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
   }
 
+  // Разовый перенос: смены и расходы, записанные раньше, переезжают
+  // в единую базу операций, чтобы всё лежало в одном месте.
+  function migrateToLedger() {
+    if (S.state.migratedLedger) return 0;
+    var moved = 0;
+    (S.state.shifts || []).forEach(function (sh) {
+      var c = E.shiftCalc(sh);
+      if (num(sh.zCash)) {
+        S.add('dds', { date: sh.date, shift: sh.shift, cashier: sh.cashier, type: 'Приход',
+          category: 'Продажи', method: 'Наличные', amount: num(sh.zCash), diff: c.diff,
+          note: sh.note || '', src: 'перенос' });
+        moved++;
+      }
+      if (num(sh.terminal)) {
+        S.add('dds', { date: sh.date, shift: sh.shift, cashier: sh.cashier, type: 'Приход',
+          category: 'Продажи', method: 'Карта', amount: num(sh.terminal), diff: 0, note: '', src: 'перенос' });
+        moved++;
+      }
+      if (num(sh.payouts)) {
+        S.add('dds', { date: sh.date, shift: sh.shift, cashier: sh.cashier, type: 'Расход',
+          category: 'Выплата из кассы', method: 'Наличные', amount: num(sh.payouts), diff: 0,
+          note: '', src: 'перенос' });
+        moved++;
+      }
+    });
+    var methodOf = function (form) {
+      var f = E.norm(form);
+      if (f.indexOf('перевод') >= 0) return 'Перевод';
+      if (f.indexOf('карт') >= 0) return 'Карта';
+      return 'Наличные';
+    };
+    (S.state.expenses || []).forEach(function (e) {
+      S.add('dds', { date: e.date, shift: '', cashier: '', type: 'Расход',
+        category: e.category || 'Другое', method: methodOf(e.form), amount: num(e.amount),
+        diff: 0, note: e.note || '', src: 'перенос' });
+      moved++;
+    });
+    S.state.migratedLedger = true;
+    S.save();
+    return moved;
+  }
+
   /* --- Запуск -------------------------------------------------------------------------- */
   async function init() {
     if (typeof XLSX === 'undefined' || typeof S === 'undefined') {
@@ -1774,7 +1958,9 @@
     }
     try { if (localStorage.getItem('wm_priv') === '1') { document.body.classList.add('priv'); $('privacyBtn').textContent = '🙈'; } } catch (e) {}
 
+    var moved = migrateToLedger();
     recompute(); bind(); render();
+    if (moved) toast('Прежние записи о кассе и расходах перенесены в базу операций: ' + moved + '.', 7000);
 
     // сохранение в файл: подписываемся на любые изменения журналов
     S.onChange(function () { F.scheduleSave(function () { return S.state; }); });

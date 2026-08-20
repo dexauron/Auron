@@ -165,6 +165,9 @@
     var fn = norm(fileName || '');
     var sn = norm((sheetNames || []).join(' '));
 
+    // Книга финансового учёта: листы БАЗА_ДДС / Ввод_Касса / Запись_Выплат
+    if (sn.indexOf('база_ддс') >= 0 || sn.indexOf('ввод_касса') >= 0 ||
+        (sn.indexOf('пульт') >= 0 && sn.indexOf('настройки') >= 0)) return 'finance_book';
     // Ручная книга владельца: листы ДДС / ОПЛАТА / ПЛАТЕЖКА / ОТЧЁТ
     if (sn.indexOf('ддс') >= 0 || sn.indexOf('платежка') >= 0 || sn.indexOf('кассовая книга') >= 0) return 'owner_book';
     if (sn.indexOf('журнал_смен') >= 0 || sn.indexOf('журнал смен') >= 0 ||
