@@ -66,6 +66,21 @@ const products = Array.from({ length: 6 }, (_, i) => ({
       await scan(id);
     }
     chk(!bad.length, `ширина ${W}px: ничего не вылезает за край${bad.length ? ' — ' + bad.join(' | ') : ''}`);
+
+    // Размер под палец: система советует 44×44. Исключения осознанные —
+    // переключатель iOS ровно 51×31 по стандарту, а галочка в списке живёт
+    // внутри строки во всю ширину, и нажимается строка целиком.
+    const small = await page.evaluate(() => {
+      const skip = (el) => el.closest('.ios-switch') || el.classList.contains('check-cb') || el.closest('.tree-sub');
+      const out = [];
+      document.querySelectorAll('button, [role="button"]').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height || skip(el)) return;
+        if (r.height < 34 || r.width < 32) out.push(`${Math.round(r.width)}×${Math.round(r.height)} «${(el.innerText || el.id).replace(/\s+/g, ' ').slice(0, 20)}»`);
+      });
+      return [...new Set(out)].slice(0, 5);
+    });
+    chk(!small.length, `ширина ${W}px: кнопки не мельче пальца${small.length ? ' — ' + small.join(' | ') : ''}`);
     chk(!errs.length, `ширина ${W}px: нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
   }

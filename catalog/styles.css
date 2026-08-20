@@ -1396,3 +1396,12 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 /* Значение кода — то, ради чего открывают карточку: читаемо и крупно */
 .field-val { color: var(--text); font-weight: 600; }
 .field-key { color: var(--text-2); font-size: 15px; }
+
+/* ── Размер под палец ────────────────────────────────────────────────────
+   Система советует не меньше 44×44 на касание. Мелкие кнопки «попадаются
+   через раз», а в зале телефон держат одной рукой. Внешний вид не меняем —
+   увеличиваем именно область нажатия. */
+.copy-btn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.ios-nav-btn { min-height: 44px; }
+.seg button { min-height: 36px; }
+.card-code, .code-chip { min-height: 34px; display: inline-flex; align-items: center; }
