@@ -1306,6 +1306,79 @@
     return out.sort(function (a, b) { return b.accrued - a.accrued; });
   }
 
+  /* --- 7б. Ручной учёт: поставки и оплаты поставщикам --------------------- */
+  // Владелец записывает накладную (что привезли) и оплату (что отдал).
+  // Долг поставщику = сумма поставок − сумма оплат.
+
+  function paymentsFor(doc, payments) {
+    var sum = 0;
+    for (var i = 0; i < payments.length; i++) {
+      if (doc && norm(payments[i].doc) === norm(doc)) sum += num(payments[i].amount);
+    }
+    return safeRound(sum);
+  }
+
+  function manualDocs(invoices, payments) {
+    var out = [];
+    for (var i = 0; i < invoices.length; i++) {
+      var inv = invoices[i];
+      // paidCash/paidDebt приходят из старых журналов Excel — это тоже оплаты
+      var paid = safeRound(num(inv.paidCash) + num(inv.paidDebt) + paymentsFor(inv.doc, payments));
+      var left = Math.max(0, safeRound(num(inv.total) - paid));
+      out.push({
+        id: inv.id, date: inv.date, doc: inv.doc, supplier: inv.supplier, goods: inv.goods,
+        due: inv.due || '', sum: safeRound(inv.total), paid: paid, left: left,
+        status: left === 0 ? 'paid' : (paid > 0 ? 'part' : 'debt'),
+        statusText: left === 0 ? 'Оплачено' : (paid > 0 ? 'Частично' : 'В долг')
+      });
+    }
+    return out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  }
+
+  function manualBalance(invoices, payments) {
+    var map = {}, i, k;
+    function slot(name) {
+      var key = norm(name) || '—';
+      if (!map[key]) map[key] = { supplier: name || 'Без названия', docs: 0, sum: 0, paid: 0, payCount: 0 };
+      return map[key];
+    }
+    for (i = 0; i < invoices.length; i++) {
+      var m = slot(invoices[i].supplier);
+      m.docs++; m.sum += num(invoices[i].total);
+      m.paid += num(invoices[i].paidCash) + num(invoices[i].paidDebt);
+    }
+    for (i = 0; i < payments.length; i++) {
+      var p = slot(payments[i].supplier);
+      p.paid += num(payments[i].amount); p.payCount++;
+    }
+    var out = [];
+    for (k in map) {
+      var v = map[k];
+      v.sum = safeRound(v.sum); v.paid = safeRound(v.paid);
+      v.debt = safeRound(v.sum - v.paid);
+      out.push(v);
+    }
+    return out.sort(function (a, b) { return b.debt - a.debt; });
+  }
+
+  function manualTotals(invoices, payments) {
+    var t = { supplies: 0, paid: 0, paidNow: 0, paidDebt: 0, debt: 0, docs: invoices.length, payments: payments.length };
+    for (var i = 0; i < invoices.length; i++) {
+      t.supplies += num(invoices[i].total);
+      t.paid += num(invoices[i].paidCash) + num(invoices[i].paidDebt);
+      t.paidNow += num(invoices[i].paidCash); t.paidDebt += num(invoices[i].paidDebt);
+    }
+    for (var j = 0; j < payments.length; j++) {
+      t.paid += num(payments[j].amount);
+      if (norm(payments[j].kind).indexOf('долг') >= 0) t.paidDebt += num(payments[j].amount);
+      else t.paidNow += num(payments[j].amount);
+    }
+    for (var k in t) t[k] = safeRound(t[k]);
+    t.debt = safeRound(t.supplies - t.paid);
+    t.docs = invoices.length; t.payments = payments.length;
+    return t;
+  }
+
   /* --- 8. Точка безубыточности, P&L, ROP, FEFO --------------------------- */
 
   // BEP = постоянные расходы / маржинальность
@@ -1461,6 +1534,7 @@
     shiftCalc: shiftCalc, shiftsTotals: shiftsTotals,
     invoiceCalc: invoiceCalc, invoicesTotals: invoicesTotals, debtBySupplier: debtBySupplier,
     timesheetCalc: timesheetCalc, payrollSummary: payrollSummary,
+    manualDocs: manualDocs, manualBalance: manualBalance, manualTotals: manualTotals, paymentsFor: paymentsFor,
     bep: bep, pnl: pnl, ropList: ropList, fefoStatus: fefoStatus, search: search
   };
 });

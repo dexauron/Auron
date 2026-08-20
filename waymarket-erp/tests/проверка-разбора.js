@@ -241,5 +241,32 @@ if (global.__sales && global.__stock) {
   console.log('');
 }
 
+/* Ручной учёт: накладные и оплаты, которые владелец вводит в дашборде */
+console.log('— Ручной учёт поставок и оплат');
+{
+  const inv = [
+    { id: 'a', date: '2026-08-20', doc: 'НАКЛ-1', supplier: 'Молоко Юг', total: 28000 },
+    { id: 'b', date: '2026-08-20', doc: 'НАКЛ-2', supplier: 'Молоко Юг', total: 12000 },
+    { id: 'c', date: '2026-08-19', doc: 'НАКЛ-3', supplier: 'Пекарня', total: 4500, paidCash: 4500 }
+  ];
+  const pay = [
+    { date: '2026-08-20', supplier: 'Молоко Юг', doc: 'НАКЛ-1', amount: 15000, kind: 'оплата сразу при приёмке' },
+    { date: '2026-08-21', supplier: 'Молоко Юг', doc: '', amount: 5000, kind: 'погашение долга' }
+  ];
+  const t = WM.manualTotals(inv, pay);
+  const bal = WM.manualBalance(inv, pay);
+  const docs = WM.manualDocs(inv, pay);
+  check('поставки сложились', t.supplies === 44500, WM.fmtMoney(t.supplies), '44 500 ₽');
+  check('оплаты учтены (включая «отдали сразу»)', t.paid === 24500, WM.fmtMoney(t.paid), '24 500 ₽');
+  check('долг = поставки − оплаты', t.debt === 20000, WM.fmtMoney(t.debt), '20 000 ₽');
+  check('долг по поставщику', bal[0].supplier === 'Молоко Юг' && bal[0].debt === 20000,
+    bal[0].supplier + ' ' + WM.fmtMoney(bal[0].debt), 'Молоко Юг 20 000 ₽');
+  check('оплата привязалась к накладной', docs.find(d => d.doc === 'НАКЛ-1').left === 13000,
+    WM.fmtMoney(docs.find(d => d.doc === 'НАКЛ-1').left), '13 000 ₽');
+  check('накладная с полной оплатой закрыта', docs.find(d => d.doc === 'НАКЛ-3').status === 'paid',
+    docs.find(d => d.doc === 'НАКЛ-3').statusText, 'Оплачено');
+}
+console.log('');
+
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

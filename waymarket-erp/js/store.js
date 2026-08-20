@@ -23,6 +23,7 @@
     rateNight: 220,         // ставка ночной смены, ₽/час
     openCash: 10000,        // разменный остаток в кассе на начало смены, ₽
     leadDays: 2,            // плечо доставки поставщика, дней
+    graceDays: 0,           // отсрочка оплаты поставщику, дней (0 — срок не считаем)
     safetyPct: 30,          // страховой запас, % от расхода за плечо
     fefoCrit: 2,            // «красная зона» срока годности, дней
     fefoWarn: 5,            // «жёлтая зона», дней
@@ -32,7 +33,7 @@
     autoSyncSeconds: 3      // как часто проверять папку на изменения, сек
   };
 
-  var COLLECTIONS = ['shifts', 'invoices', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi'];
+  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi'];
 
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
@@ -68,13 +69,26 @@
     return base;
   }
 
+  var changeHooks = [];
+  // на изменение подписывается сохранение в файл (js/filestore.js)
+  function onChange(fn) { changeHooks.push(fn); }
+
   function save() {
+    var ok = true;
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
-      return true;
     } catch (e) {
-      return false; // например, переполнено хранилище браузера
+      ok = false; // например, переполнено хранилище браузера
     }
+    changeHooks.forEach(function (fn) { try { fn(state); } catch (e) {} });
+    return ok;
+  }
+
+  // Заменить всё содержимое базы (например, прочитанное из файла в папке)
+  function replaceAll(data) {
+    state = merge(emptyState(), data || {});
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    return state;
   }
 
   function uid() { return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
@@ -145,6 +159,6 @@
     get settings() { return state.settings; },
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
-    fixedMonthly: fixedMonthly, uid: uid
+    fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll
   };
 });
