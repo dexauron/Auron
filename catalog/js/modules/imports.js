@@ -30,19 +30,48 @@ export function normCode(v) {
   return /^\d{1,3}(,\d{3})+$/.test(str) ? str.replace(/,/g, '') : str;
 }
 
+/* Ключ названия: те же слова в любом порядке и с единой записью единиц.
+ * В справочниках 1С одно и то же пишут по-разному: «Сметана Чабан 25% стакан
+ * 200гр» против «Чабан Сметана 25% стакан 200г». Из-за этого штрихкоды таких
+ * товаров не привязывались. Сравниваем НАБОР слов: он либо совпадает целиком,
+ * либо нет. «Трусики 44шт» и «Трусики 38шт» так не склеятся — числа остаются
+ * частью слова, а это разные товары.
+ * Про кириллицу и границу слова: в JS «г\b» не срабатывает после русской буквы,
+ * поэтому пишем «(?![а-яё])» — на этом уже спотыкались и в поиске, и в разборе. */
+const UNIT_FIX = [
+  [/(\d+)\s*(?:грамм|гр|г)(?![а-яё])/g, '$1г'],
+  [/(\d+)\s*(?:килограмм|кг)(?![а-яё])/g, '$1кг'],
+  [/(\d+)\s*(?:миллилитр|мл)(?![а-яё])/g, '$1мл'],
+  [/(\d+)\s*(?:литр|л)(?![а-яё])/g, '$1л'],
+  [/(\d+)\s*(?:штук|шт)(?![а-яё])/g, '$1шт'],
+];
+export function nameKey(name) {
+  let s = norm(name);
+  if (!s) return '';
+  for (const [re, to] of UNIT_FIX) s = s.replace(re, to);
+  const words = s.replace(/[^0-9a-zа-я%]+/g, ' ').split(' ').filter(Boolean);
+  return words.sort().join(' ');
+}
+
 function svIndex() {
-  const byCode = new Map(), byBc = new Map(), byName = new Map();
+  const byCode = new Map(), byBc = new Map(), byName = new Map(), byKey = new Map();
   for (const p of state.products) {
     if (p.code) byCode.set(normCode(p.code), p);
     for (const b of (p.barcodes || [])) byBc.set(String(b), p);
     byName.set(norm(p.name), p);
+    const k = nameKey(p.name);
+    // ключ, который подходит сразу двум товарам, ничего не доказывает —
+    // такой не используем вовсе, чтобы не привязать штрихкод не туда
+    if (k) byKey.set(k, byKey.has(k) ? null : p);
   }
-  return { byCode, byBc, byName };
+  return { byCode, byBc, byName, byKey };
 }
 function svMatch(idx, code, barcodes, name) {
   if (code && idx.byCode.has(normCode(code))) return idx.byCode.get(normCode(code));
   for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
   if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
+  // последняя попытка: те же слова в другом порядке / «200гр» против «200г»
+  if (name) { const k = nameKey(name); if (k && idx.byKey.get(k)) return idx.byKey.get(k); }
   return null;
 }
 function svGroupId(name) {
