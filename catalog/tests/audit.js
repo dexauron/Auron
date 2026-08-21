@@ -44,5 +44,14 @@ const EMO = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu;
 const inHtml = [...new Set(html.match(EMO) || [])];
 chk(!inHtml.length, `в разметке нет эмодзи${inHtml.length ? ': ' + inHtml.join(' ') : ''}`);
 
+// ── 5. Ничего чужого из интернета: всё нужное лежит рядом ──
+// Разборщик Excel раньше грузился с чужого сайта — на телефоне без интернета
+// (или там, где чужие адреса закрыты) загрузка файлов просто не работала.
+const vendor = fs.existsSync(path.join(root, 'vendor', 'xlsx.min.js'));
+chk(vendor, 'разборщик Excel лежит своей копией в vendor/');
+const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+chk(sw.includes('vendor/xlsx.min.js'), 'офлайн-кэш знает про разборщик Excel');
+chk(/loadScript\('vendor\/xlsx\.min\.js'\)/.test(all), 'загрузка файлов берёт разборщик из своей копии');
+
 console.log(fail ? '\n=== АУДИТ РАЗМЕТКИ: ЕСТЬ ОШИБКИ ===' : '\n=== АУДИТ РАЗМЕТКИ: ОК ===');
 process.exit(fail ? 1 : 0);

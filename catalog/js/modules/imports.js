@@ -9,6 +9,7 @@ import { renderAll } from './render.js';
 import { byName, loadCache, saveCache, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
+import { plural } from './competitors.js';
 import { loadScript } from './scanner.js';
 
 /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
@@ -30,19 +31,48 @@ export function normCode(v) {
   return /^\d{1,3}(,\d{3})+$/.test(str) ? str.replace(/,/g, '') : str;
 }
 
+/* Ключ названия: те же слова в любом порядке и с единой записью единиц.
+ * В справочниках 1С одно и то же пишут по-разному: «Сметана Чабан 25% стакан
+ * 200гр» против «Чабан Сметана 25% стакан 200г». Из-за этого штрихкоды таких
+ * товаров не привязывались. Сравниваем НАБОР слов: он либо совпадает целиком,
+ * либо нет. «Трусики 44шт» и «Трусики 38шт» так не склеятся — числа остаются
+ * частью слова, а это разные товары.
+ * Про кириллицу и границу слова: в JS «г\b» не срабатывает после русской буквы,
+ * поэтому пишем «(?![а-яё])» — на этом уже спотыкались и в поиске, и в разборе. */
+const UNIT_FIX = [
+  [/(\d+)\s*(?:грамм|гр|г)(?![а-яё])/g, '$1г'],
+  [/(\d+)\s*(?:килограмм|кг)(?![а-яё])/g, '$1кг'],
+  [/(\d+)\s*(?:миллилитр|мл)(?![а-яё])/g, '$1мл'],
+  [/(\d+)\s*(?:литр|л)(?![а-яё])/g, '$1л'],
+  [/(\d+)\s*(?:штук|шт)(?![а-яё])/g, '$1шт'],
+];
+function nameKey(name) {
+  let s = norm(name);
+  if (!s) return '';
+  for (const [re, to] of UNIT_FIX) s = s.replace(re, to);
+  const words = s.replace(/[^0-9a-zа-я%]+/g, ' ').split(' ').filter(Boolean);
+  return words.sort().join(' ');
+}
+
 function svIndex() {
-  const byCode = new Map(), byBc = new Map(), byName = new Map();
+  const byCode = new Map(), byBc = new Map(), byName = new Map(), byKey = new Map();
   for (const p of state.products) {
     if (p.code) byCode.set(normCode(p.code), p);
     for (const b of (p.barcodes || [])) byBc.set(String(b), p);
     byName.set(norm(p.name), p);
+    const k = nameKey(p.name);
+    // ключ, который подходит сразу двум товарам, ничего не доказывает —
+    // такой не используем вовсе, чтобы не привязать штрихкод не туда
+    if (k) byKey.set(k, byKey.has(k) ? null : p);
   }
-  return { byCode, byBc, byName };
+  return { byCode, byBc, byName, byKey };
 }
 function svMatch(idx, code, barcodes, name) {
   if (code && idx.byCode.has(normCode(code))) return idx.byCode.get(normCode(code));
   for (const b of (barcodes || [])) if (idx.byBc.has(String(b))) return idx.byBc.get(String(b));
   if (name && idx.byName.has(norm(name))) return idx.byName.get(norm(name));
+  // последняя попытка: те же слова в другом порядке / «200гр» против «200г»
+  if (name) { const k = nameKey(name); if (k && idx.byKey.get(k)) return idx.byKey.get(k); }
   return null;
 }
 function svGroupId(name) {
@@ -128,9 +158,15 @@ function svUploadStock(parsed) {
 }
 function svUploadSales(parsed) {
   state.sales = (state.sales || []).filter((s) => !(s.period_from === (parsed.periodFrom || null) && s.period_to === (parsed.periodTo || null)));
+  const idx = svIndex();
+  const missing = new Set();
   for (const rec of parsed.recs) {
+    // Продажи хранятся строками как есть, но сразу проверяем, находится ли товар:
+    // молча потерянные строки означали бы, что «Ходовые товары» врут.
+    if (!svMatch(idx, rec.code, [], rec.name)) missing.add(rec.name || rec.code || '?');
     state.sales.push({ period_from: parsed.periodFrom || null, period_to: parsed.periodTo || null, code: rec.code || null, name: rec.name, qty: rec.qty, amount: rec.hasAmount ? rec.amount : null });
   }
+  return { rows: parsed.recs.length, missing: missing.size, missingList: [...missing] };
 }
 function svUploadContacts(list) {
   state.contacts = state.contacts || {};
@@ -330,9 +366,14 @@ export async function refresh({ silent = false } = {}) {
 
 let impParsed = null; // результат разбора файлов, ждёт подтверждения
 
+/* Разборщик Excel лежит РЯДОМ, а не на чужом сайте: загрузка файлов должна
+ * работать и без интернета (телефон в подсобке), и там, где чужие адреса
+ * закрыты. Если местной копии почему-то нет — пробуем интернет, чтобы старые
+ * устройства с прежним кэшем не остались без импорта. */
 function loadXlsxLib() {
   if (window.XLSX) return Promise.resolve();
-  return loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js');
+  return loadScript('vendor/xlsx.min.js')
+    .catch(() => loadScript('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'));
 }
 
 export function cellStr(v) {
@@ -788,6 +829,21 @@ export function downloadMissing() {
  * не было. Отсюда «кодов без товара» в отчёте о загрузке.
  * Штрихкодам словарь единиц при загрузке не нужен: единицу они хранят
  * строкой как есть, а расшифровывается она уже при показе карточки. */
+/* Пары товаров с одинаковым набором слов, но разными кодами. Это почти всегда
+ * один и тот же товар, заведённый в 1С дважды («Круассаны Мини» и «Мини
+ * Круассаны»). Каталогу они не мешают, но владельцу полезно знать. */
+function findTwins() {
+  const seen = new Map(); const out = [];
+  for (const p of state.products) {
+    const k = nameKey(p.name);
+    if (!k) continue;
+    const first = seen.get(k);
+    if (first) { if (String(first.code || '') !== String(p.code || '')) out.push(`${first.name} [${first.code || 'без кода'}] ↔ ${p.name} [${p.code || 'без кода'}]`); }
+    else seen.set(k, p);
+  }
+  return out;
+}
+
 export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
 
 export async function smartRun() {
@@ -804,7 +860,12 @@ export async function smartRun() {
       if (e.type === 'prices') svUploadPrices(e.byKey);
       else if (e.type === 'retail') svUploadRetail(e.parsed);
       else if (e.type === 'stock') svUploadStock(e.parsed);
-      else if (e.type === 'sales') svUploadSales(e.parsed);
+      else if (e.type === 'sales') {
+        const r = svUploadSales(e.parsed);
+        setSmartRowStatus(e, `строк продаж: ${r.rows}`
+          + (r.missing ? `. Нет в каталоге: ${r.missing} — продажи по товарам, которых нет в прайсе${missingHint(e, r.missingList)}` : ''));
+        okCount++; continue;
+      }
       else if (e.type === 'contacts') svUploadContacts(e.parsed);
       else if (e.type === 'units') {
         const r = svUploadUnits(e.parsed);
@@ -827,6 +888,14 @@ export async function smartRun() {
     // иначе висели бы в памяти телефона до перезагрузки страницы.
     for (const e of ui.smartEntries) { e.parsed = null; e.byKey = null; e.rows = null; }
     const tidy = tidyMemory();   // выкинуть залежавшуюся историю цен и старые отчёты
+    // Одни и те же товары под ДВУМЯ кодами — это дубли в самой 1С, а не в
+    // каталоге. Сами их не сливаем (у каждого свой код, и оба пробиваются на
+    // кассе), но показываем владельцу: почистить проще у источника.
+    const twins = findTwins();
+    if (twins.length) {
+      smartLog(`Похоже на дубли в самой 1С: ${twins.length} ${plural(twins.length, 'пара', 'пары', 'пар')} — один товар заведён под двумя кодами. Список можно скачать.`);
+      ui.lastMissing.push({ file: 'Похожие товары под разными кодами', codes: twins });
+    }
     buildIndex(); state.popularIds = buildPopularIds(); renderAll();
     if (tidy.pricesRemoved || tidy.salesRemoved) {
       smartLog(`Убрал из памяти старое: строк истории цен ${tidy.pricesRemoved}, строк старых отчётов продаж ${tidy.salesRemoved}`);
