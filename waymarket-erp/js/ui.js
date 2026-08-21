@@ -603,8 +603,11 @@
     if (FORMS.ddsExpense) FORMS.expense = FORMS.ddsExpense;
   }
 
-  function openForm(id, prefill) {
+  var EDIT = null;    // что правим: {coll, id}
+
+  function openForm(id, prefill, edit) {
     var f = FORMS[id]; if (!f) return;
+    EDIT = edit || null;
     var lists = datalist('dl-sup', supplierNames()) +
       datalist('dl-staff', staffNames()) +
       datalist('dl-goods', D.stock.slice(0, 900).map(function (r) { return r.name; }));
@@ -612,7 +615,7 @@
       '<form id="wmForm" data-fid="' + id + '"><div class="form-list">' + f.body(prefill) + '</div>' +
       (f.hint ? '<div class="form-hint">' + esc(f.hint) + '</div>' : '') + lists +
       '<div class="form-actions"><button type="button" class="btn" data-act="close-sheet">Отмена</button>' +
-      '<button type="submit" class="btn btn-primary btn-lg">Сохранить</button></div></form>');
+      '<button type="submit" class="btn btn-primary btn-lg">' + (edit ? 'Сохранить изменения' : 'Сохранить') + '</button></div></form>');
   }
   function staffNames() {
     var set = {};
@@ -914,7 +917,9 @@
       { title: 'Оплачено', cls: 'num', fn: function (r) { return priv(r.paid); } },
       { title: 'Долг', cls: 'num', fn: function (r) { return '<span class="' + (r.left > 0 ? 'c-red' : 'c-green') + ' private">' + money(r.left) + '</span>'; } },
       { title: 'Оплатить до', fn: function (r) { return r.due ? (r.due < t ? '<span class="c-red">' + dateRu(r.due) + '</span>' : esc(dateRu(r.due))) : '—'; } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="invoices:' + r.id + '">✕</button>'; } }
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="invoices:' + r.id + ':invoice">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="invoices:' + r.id + '">✕</button>'; } }
     ], man.docs, { step: 30, empty: 'Накладных ещё нет' }));
 
     h += card('Оплаты', table('manPays', [
@@ -924,7 +929,9 @@
       { title: 'Чем', fn: function (r) { return esc(r.form || '—'); } },
       { title: 'Накладная', fn: function (r) { return esc(r.doc || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.amount); } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="payments:' + r.id + '">✕</button>'; } }
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="payments:' + r.id + ':payment">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="payments:' + r.id + '">✕</button>'; } }
     ], man.payments.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }),
       { step: 30, empty: 'Оплат ещё нет' }));
     return h;
@@ -1593,6 +1600,20 @@
       fieldRow('Предупреждать за, дней', 'fefoWarn', 'number', s.fefoWarn) +
       fieldRow('Скидка срочная, %', 'discountCrit', 'number', s.discountCrit) +
       fieldRow('Скидка обычная, %', 'discountWarn', 'number', s.discountWarn) +
+      '</div>' +
+      '<div class="form-hint" style="margin-top:16px">Справочники финансового учёта — через запятую. ' +
+      'Они подставляются в формах ввода.</div><div class="form-list">' +
+      fieldRow('Статьи расходов', 'finCategories', 'text', s.finCategories) +
+      fieldRow('Кассиры', 'finCashiers', 'text', s.finCashiers) +
+      fieldRow('Смены', 'finShifts', 'text', s.finShifts) +
+      fieldRow('Поставщики', 'finSuppliers', 'text', s.finSuppliers) +
+      '</div><div class="form-list" style="margin-top:16px">' +
+      fieldRow('Начальный остаток наличных', 'openCashStart', 'number', s.openCashStart) +
+      fieldRow('Начальный остаток на карте', 'openCardStart', 'number', s.openCardStart) +
+      fieldRow('Начальный остаток на счёте', 'openTransferStart', 'number', s.openTransferStart) +
+      fieldRow('Долг: предупреждать от, ₽', 'debtWarn', 'number', s.debtWarn) +
+      fieldRow('Долг: критично от, ₽', 'debtCrit', 'number', s.debtCrit) +
+      fieldRow('Расхождение кассы: критично от, ₽', 'diffCrit', 'number', s.diffCrit) +
       '</div><div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">Сохранить</button></div></form>';
 
     h += card('О программе', '<div class="card-body">Вай Маркет — учёт магазина 24/7. Работает без интернета: ' +
@@ -1795,11 +1816,21 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit]');
       if (!el) return;
       if (el.dataset.go) { closeSheet(); go(el.dataset.go); return; }
       if (el.dataset.period) { PERIOD = el.dataset.period; PAGE = {}; render(); return; }
       if (el.dataset.tab) { var p = el.dataset.tab.split(':'); TAB[p[0]] = p[1]; render(); return; }
+      if (el.dataset.edit) {
+        var parts = el.dataset.edit.split(':');      // коллекция : id : форма
+        var rec = (S.state[parts[0]] || []).filter(function (x) { return x.id === parts[1]; })[0];
+        if (rec) {
+          var pre = JSON.parse(JSON.stringify(rec));
+          if (parts[0] === 'dds') pre.debt = rec.type === 'Долг' ? 'да' : 'нет';
+          openForm(parts[2], pre, { coll: parts[0], id: parts[1] });
+        }
+        return;
+      }
       if (el.dataset.form) {
         var pre = {};
         if (el.dataset.supplier) pre.supplier = el.dataset.supplier;
@@ -1814,15 +1845,14 @@
       }
       var a = el.dataset.act;
       if (a === 'close-sheet') closeSheet();
+      else if (a === 'pick-files' || a === 'backup') { closeSheet(); if (a === 'backup') backup(); else $('filesInput').click(); }
       else if (a === 'more') { PAGE[el.dataset.id] = (PAGE[el.dataset.id] || +el.dataset.step) + (+el.dataset.step) * 3; render(); }
-      else if (a === 'pick-files') $('filesInput').click();
       else if (a === 'pick-folder') $('folderInput').click();
       else if (a === 'folder-connect') connectFolder();
       else if (a === 'folder-reconnect') reconnectFolder();
       else if (a === 'folder-sync') syncFolder(false);
       else if (a === 'folder-forget') { if (confirm('Отключить папку? Записи останутся в браузере и в уже сохранённом файле.')) { F.forget(); render(); } }
       else if (a === 'export-excel') exportExcel();
-      else if (a === 'backup') backup();
       else if (a === 'restore') restore();
       else if (a === 'print') window.print();
       else if (a === 'del-shift') {
@@ -1856,6 +1886,8 @@
         var id = f.dataset.fid, def = FORMS[id];
         var res = def.save(formValues(f));
         if (typeof res === 'string') { toast(res); return; }
+        // при правке новая запись уже добавлена — убираем старую
+        if (EDIT) { S.remove(EDIT.coll, EDIT.id); EDIT = null; }
         closeSheet(); render(); toast(res.ok);
       } else if (f.id === 'setForm') {
         var v = formValues(f);
@@ -1876,6 +1908,19 @@
         if (['stock', 'pricecmp', 'search', 'finbase'].indexOf(VIEW) >= 0) { PAGE = {}; render(); }
         else if (q.length >= 2) go('search');
       }, 280);
+    });
+    $('menuBtn').addEventListener('click', function () {
+      var group = '', rows = [];
+      VIEWS.forEach(function (v) {
+        if (v.group !== group) { group = v.group; rows.push('<div class="nav-group">' + esc(group) + '</div>'); }
+        rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true, attrs: ' data-go="' + v.id + '"' }));
+      });
+      var actions = [
+        listRow({ icon: '📂', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
+        listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
+      ];
+      sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
+        '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
     });
     $('addBtn').addEventListener('click', function () {
       sheet('Что записать?', listOf([

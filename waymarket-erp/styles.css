@@ -209,11 +209,31 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
 .saved-dot.off { background: var(--label-3); }
 .sync-line { font-size: 13px; color: var(--label-2); display: flex; align-items: center; gap: 7px; }
 
+.only-mobile { display: none; }
 @media (max-width: 860px) {
   .sidebar { display: none; }
-  .page { padding: 18px 14px 50px; }
-  .hero-value { font-size: 34px; }
-  .form-row label { flex-basis: 40%; }
+  .only-mobile { display: inline-flex; }
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .search { order: 3; max-width: none; flex-basis: 100%; }
+  .segmented { order: 4; flex-basis: 100%; overflow-x: auto; }
+  .segmented button { flex: 1; padding: 6px 4px; font-size: 12.5px; }
+  .hide-mobile { display: none !important; }
+  #addBtn { flex: 1; }
+  .page { padding: 16px 12px 60px; }
+  .page-title { font-size: 27px; }
+  .hero-value { font-size: 32px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat-value { font-size: 22px; }
+  .form-row { flex-wrap: wrap; }
+  .form-row label { flex-basis: 100%; font-size: 13px; color: var(--label-2); }
+  .form-row input, .form-row select { text-align: left; font-size: 16px; padding: 4px 0 8px; }
+  .sheet { width: 100%; max-height: 92vh; border-radius: 20px 20px 0 0; align-self: flex-end; }
+  .backdrop { padding: 0; align-items: flex-end; }
+  .quick .btn { flex: 1 1 46%; }
+}
+@media (max-width: 440px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
 }
 @media print {
   .sidebar, .topbar, .quick, .btn { display: none !important; }

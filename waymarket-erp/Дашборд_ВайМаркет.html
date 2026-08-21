@@ -22,13 +22,14 @@
 
 <main class="main">
   <div class="topbar">
+    <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню">☰</button>
     <div class="search">
       <span>🔍</span>
       <input type="text" id="search" placeholder="Товар, поставщик, штрихкод, телефон">
     </div>
     <div class="segmented" id="periods"></div>
     <button class="btn btn-primary" id="addBtn">＋ Записать</button>
-    <button class="btn" id="syncBtn">📂 Обновить из 1С</button>
+    <button class="btn hide-mobile" id="syncBtn">📂 Обновить из 1С</button>
     <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы">👁</button>
     <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv" hidden>
     <input type="file" id="folderInput" webkitdirectory directory multiple hidden>

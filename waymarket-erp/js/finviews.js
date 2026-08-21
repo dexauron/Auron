@@ -149,9 +149,14 @@
         if (!v.supplier) return 'Укажите поставщика.';
         if (!E.num(v.amount)) return 'Укажите сумму.';
         var paid = E.norm(v.status).indexOf('оплач') >= 0;
+        var already = paid && (S.state.dds || []).some(function (r) {
+          // расход по этой оплате уже мог быть записан раньше — не дублируем
+          return E.norm(r.category).indexOf('оплата тп') >= 0 && r.date === v.due &&
+            E.num(r.amount) === E.num(v.amount) && E.norm(r.note).indexOf(E.norm(v.supplier)) >= 0;
+        });
         S.add('plans', { due: v.due, supplier: v.supplier, amount: E.num(v.amount), doc: v.doc,
           method: v.method, status: v.status, paidAt: paid ? v.due : '', note: v.note });
-        if (paid) markPaidRecord({ supplier: v.supplier, amount: E.num(v.amount), method: v.method, doc: v.doc }, v.due);
+        if (paid && !already) markPaidRecord({ supplier: v.supplier, amount: E.num(v.amount), method: v.method, doc: v.doc }, v.due);
         return { ok: 'Выплата записана: ' + v.supplier + ' — ' + E.fmtMoney(v.amount) };
       }
     }
@@ -427,7 +432,9 @@
         return r.diff ? '<span class="' + u.cls(r.diff) + ' private">' + E.fmtMoney(r.diff) + '</span>' : '—'; } },
       { title: 'Комментарий', fn: function (r) { return u.esc(r.note || ''); } },
       { title: '', cls: 'center', fn: function (r) {
-        return '<button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
+        var form = F.isIncome(r) ? 'ddsIncome' : 'ddsExpense';
+        return '<button class="btn btn-sm" data-edit="dds:' + r.id + ':' + form + '" title="Исправить">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
     ], rows, { step: 50, empty: 'Записей нет' }));
     return h;
   }
@@ -492,6 +499,7 @@
       { title: '', cls: 'center', fn: function (r) {
         var st = F.planStatus(r, t);
         return (st === 'paid' ? '' : '<button class="btn btn-sm btn-primary" data-act="fin-pay" data-id="' + r.id + '">Оплатил</button> ') +
+          '<button class="btn btn-sm" data-edit="plans:' + r.id + ':payPlan" title="Исправить">✎</button> ' +
           '<button class="btn btn-sm btn-danger" data-del="plans:' + r.id + '">✕</button>'; } }
     ], plans, { step: 40, empty: 'Выплат пока нет. Нажмите «＋ Выплата».' }));
     return h;
