@@ -6,7 +6,7 @@ import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache } from './data.js';
+import { byName, loadCache, saveCache, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { loadScript } from './scanner.js';
@@ -809,13 +809,13 @@ export async function smartRun() {
       else if (e.type === 'units') {
         const r = svUploadUnits(e.parsed);
         setSmartRowStatus(e, `единиц: ${r.units}` + (r.products ? `, фасовки у товаров: ${r.products}` : '')
-          + (r.missing ? `, кодов без товара: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+          + (r.missing ? `. Нет в каталоге: ${r.missing} — это позиции, которых нет в прайсе (обычно снятые с продажи)${missingHint(e, r.missingList)}` : ''));
         okCount++; continue;
       }
       else if (e.type === 'barcodes') {
         const r = svUploadBarcodes(e.parsed);
         setSmartRowStatus(e, `новых штрихкодов: ${r.added}, привязано к товарам: ${r.matched}`
-          + (r.missing ? `, не нашлось товаров: ${r.missing}${missingHint(e, r.missingList)}` : ''));
+          + (r.missing ? `. Нет в каталоге: ${r.missing} — штрихкоды от товаров, которых нет в прайсе${missingHint(e, r.missingList)}` : ''));
         okCount++; continue;
       }
       else { setSmartRowStatus(e, 'пропущен (пока не поддержан)'); continue; }
@@ -823,7 +823,14 @@ export async function smartRun() {
     } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
     }
     state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    // Разобранные файлы больше не нужны: это десятки тысяч строк, которые
+    // иначе висели бы в памяти телефона до перезагрузки страницы.
+    for (const e of ui.smartEntries) { e.parsed = null; e.byKey = null; e.rows = null; }
+    const tidy = tidyMemory();   // выкинуть залежавшуюся историю цен и старые отчёты
     buildIndex(); state.popularIds = buildPopularIds(); renderAll();
+    if (tidy.pricesRemoved || tidy.salesRemoved) {
+      smartLog(`Убрал из памяти старое: строк истории цен ${tidy.pricesRemoved}, строк старых отчётов продаж ${tidy.salesRemoved}`);
+    }
     smartLog('Сохраняем на GitHub…');
     $('smartMissing').hidden = !ui.lastMissing.length;
     try { await publishFull(ui.secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован`); toast('Каталог обновлён'); }

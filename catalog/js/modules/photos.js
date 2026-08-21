@@ -108,7 +108,19 @@ const cleanPhotosOn = () => { try { return localStorage.getItem('wm_clean_photos
  * известные бренды. Найденное фото сжимается и сохраняется в НАШЕ
  * хранилище — дальше работает как обычное фото товара, в т.ч. офлайн. */
 
-const PHOTO_CHECKED_KEY = 'wm_photo_checked_v2'; // товары (id), по которым фото уже искали и не нашли
+const PHOTO_CHECKED_KEY = 'wm_photo_checked_v3'; // товар → когда искали фото и не нашли
+/* Отметки хранились вечно и без даты: список рос вместе с каталогом (на 17 тысяч
+ * товаров это сотни килобайт в памяти телефона), а товар, у которого фото
+ * появилось в открытой базе позже, уже никогда не перепроверялся.
+ * Теперь запоминаем дату и забываем отметку через RECHECK_DAYS. */
+const RECHECK_DAYS = 90;
+function loadChecked() {
+  let o = {};
+  try { o = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
+  const edge = Date.now() - RECHECK_DAYS * 86400000;
+  for (const id of Object.keys(o)) if (!(Number(o[id]) > edge)) delete o[id];
+  return o;
+}
 export const photoCandidates = () =>
   state.products.filter((p) => !hasPhoto(p) && (p.name || (p.barcodes || []).length));
 
@@ -288,8 +300,7 @@ export const isOwner = () => !!(state.session && state.isAdmin);
  * заходами (проверенные штрихкоды запоминаются). Тихо, без кнопок. */
 export async function autoPhotoSearch() {
   if (!isOwner() || ui.photoSearchRunning || document.hidden || !navigator.onLine) return;
-  let checked = {};
-  try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
+  const checked = loadChecked();
   const todo = photoCandidates().filter((p) => !checked[p.id]);
   if (!todo.length) return;
   ui.photoSearchRunning = true;
@@ -303,7 +314,7 @@ export async function autoPhotoSearch() {
     try {
       const r = await findProductPhoto(p);
       if (r.url) { await attachFoundPhoto(p, r.url); found++; miss = 0; if (found % 6 === 0) { saveCache(); renderGrid(); } }
-      else if (r.reached) { checked[p.id] = 1; miss = 0; }
+      else if (r.reached) { checked[p.id] = Date.now(); miss = 0; }
       else miss++;   // база не ответила — товар не помечаем, попробуем позже
     } catch (e) { miss++; }
     if (miss >= 3) break;   // база явно лежит — не молотим впустую весь каталог
@@ -381,8 +392,7 @@ export async function runPhotoSearch() {
   if (ui.photoSearchRunning) { ui.photoSearchRunning = false; return; }
   ui.photoSearchRunning = true;
   btn.textContent = '⏸ Остановить';
-  let checked = {};
-  try { checked = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
+  const checked = loadChecked();
   const saveChecked = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
   const todo = photoCandidates().filter((p) => !checked[p.id]);
   const status = (msg) => { const el = $('photoSearchStatus'); el.hidden = false; el.textContent = msg; };
@@ -396,7 +406,7 @@ export async function runPhotoSearch() {
     try {
       const r = await findProductPhoto(p);
       if (r.url) { await attachFoundPhoto(p, r.url); found++; miss = 0; }
-      else if (r.reached) { checked[p.id] = 1; miss = 0; }
+      else if (r.reached) { checked[p.id] = Date.now(); miss = 0; }
       else miss++;
     } catch (e) { miss++; }
     if (miss >= 3) { outage = true; break; }
