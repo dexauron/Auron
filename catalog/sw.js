@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v84';
+const CACHE = 'wm-catalog-v85';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -28,6 +28,16 @@ self.addEventListener('activate', (e) => {
       .then(() => self.clients.claim()),
   );
 });
+
+/* Фото копятся вечно: у каталога на 17 тысяч товаров это могли быть сотни
+ * мегабайт на телефоне. Держим не больше PHOTO_LIMIT картинок — при переполнении
+ * выкидываем самые старые (они добавляются в конец, поэтому режем начало). */
+const PHOTO_LIMIT = 600;
+async function trimPhotos(cache) {
+  const keys = await cache.keys();
+  if (keys.length <= PHOTO_LIMIT) return;
+  for (const k of keys.slice(0, keys.length - PHOTO_LIMIT)) await cache.delete(k);
+}
 
 // фото товара? (картинка из Storage Supabase — всегда другой домен).
 // Иконки самого приложения (свой домен) сюда не попадают — они в оболочке
@@ -74,7 +84,7 @@ self.addEventListener('fetch', (e) => {
       caches.open(PHOTOS).then((c) => c.match(e.request).then((hit) => {
         if (hit) return hit;
         return fetch(e.request).then((resp) => {
-          if (resp.ok || resp.type === 'opaque') c.put(e.request, resp.clone());
+          if (resp.ok || resp.type === 'opaque') c.put(e.request, resp.clone()).then(() => trimPhotos(c));
           return resp;
         });
       })),

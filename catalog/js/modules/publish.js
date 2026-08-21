@@ -5,7 +5,7 @@ import { norm, toast } from './core.js';
 import { buildIndex } from './catalog.js';
 import { renderAll } from './render.js';
 import { orderRules } from './card.js';
-import { byName, saveCache } from './data.js';
+import { byName, saveCache, tidyMemory } from './data.js';
 import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
 
@@ -503,6 +503,7 @@ function applySnapshot(data, role) {
   state.unitCoef = data.unitCoef || {};
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
+  tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу
   buildIndex();
   state.popularIds = buildPopularIds();
   state.serverless = true;

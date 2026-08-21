@@ -7,7 +7,7 @@ import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, toda
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
-import { loadCache, saveCache } from './data.js';
+import { loadCache, saveCache, tidyMemory } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
@@ -889,7 +889,11 @@ function bindEvents() {
 /* ── Старт ────────────────────────────────────── */
 
 async function init() {
-  applyBrand();        // название, логотип, цвет и что включено — из настроек магазина
+  applyBrand();
+  // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
+  // них сохранённые данные — владелец видел в поиске каталога свою почту.
+  // Имя, которое меняется при каждом запуске, узнать невозможно.
+  try { $('searchInput').name = 'q' + Math.random().toString(36).slice(2, 9); } catch (e) { /* некритично */ }        // название, логотип, цвет и что включено — из настроек магазина
   deviceId(); // закрепляем анонимный номер устройства (память избранного/просмотров)
   paintIcons();        // <i data-ic="…"> в разметке → рисунки из набора
   initTheme();
@@ -961,7 +965,7 @@ async function init() {
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
-    _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer };
+    _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory };
 }
 
 init();

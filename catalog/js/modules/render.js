@@ -27,6 +27,9 @@ export function stockLabel(p) {
   return null;
 }
 
+// «похоже на адрес почты»: собака, точка после неё и никаких пробелов
+const looksLikeEmail = (q) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(q || '').trim());
+
 export function switchTab(tab) {
   // «Фильтры» — не раздел, а окно: нижняя панель даёт до них дотянуться большим
   // пальцем. Меню и настройки устройства переехали на кнопку человечка в шапке.
@@ -134,6 +137,13 @@ export function renderGrid() {
       empty.querySelector('.empty-text').textContent = state.session
         ? 'Нажми внизу, чтобы добавить первый товар'
         : 'Администратор скоро его заполнит';
+    } else if (looksLikeEmail(state.query)) {
+      // Браузер иногда сам подставляет в поиск сохранённый адрес почты.
+      // В каталоге почты нет и быть не может, поэтому не отправляем человека
+      // «искать по-другому», а прямо говорим, что случилось.
+      empty.querySelector('.empty-icon').innerHTML = ic('search');
+      empty.querySelector('.empty-title').textContent = 'Это адрес почты';
+      empty.querySelector('.empty-text').textContent = 'Похоже, браузер подставил его сам. В каталоге почты нет — очисти поиск и введи название или код.';
     } else {
       empty.querySelector('.empty-icon').innerHTML = ic('search');
       empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
@@ -143,6 +153,11 @@ export function renderGrid() {
     }
     // когда пусто из-за фильтров — предлагаем сбросить одним касанием
     $('emptyReset').hidden = !(filtered && state.products.length);
+    // Ничего не нашлось — значит и показывать нечего: чистим сетку и убираем
+    // кнопку «Показать ещё» от прошлого показа. Без этого экран говорил
+    // «Ничего не нашлось» и тут же предлагал «Показать ещё (осталось 17795)».
+    grid.innerHTML = '';
+    document.querySelectorAll('.load-more').forEach((b) => b.remove());
     return;
   }
 
