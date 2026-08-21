@@ -1,0 +1,177 @@
+/* ============================================================================
+   Хранилище оперативных журналов и настроек магазина.
+   Всё лежит в браузере (localStorage) — интернет не нужен.
+   Выгрузки 1С здесь НЕ хранятся: они большие и читаются из папки заново.
+   ========================================================================== */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory();
+  else root.WMStore = factory();
+})(typeof self !== 'undefined' ? self : this, function () {
+  'use strict';
+
+  var KEY = 'waymarket_erp_v1';
+
+  var DEFAULT_SETTINGS = {
+    storeName: 'ВАЙ МАРКЕТ',
+    fot: 280000,            // ФОТ в месяц, ₽
+    rent: 110000,           // аренда в месяц, ₽
+    utilities: 35000,       // коммуналка и свет, ₽
+    taxes: 40000,           // налоги и фиксированные платежи, ₽
+    other: 0,               // прочие постоянные расходы, ₽
+    marginManual: '',       // маржинальность вручную, % (пусто = считать из продаж)
+    rateDay: 200,           // ставка дневной смены, ₽/час
+    rateNight: 220,         // ставка ночной смены, ₽/час
+    openCash: 10000,        // разменный остаток в кассе на начало смены, ₽
+    leadDays: 2,            // плечо доставки поставщика, дней
+    graceDays: 0,           // отсрочка оплаты поставщику, дней (0 — срок не считаем)
+    safetyPct: 30,          // страховой запас, % от расхода за плечо
+    fefoCrit: 2,            // «красная зона» срока годности, дней
+    fefoWarn: 5,            // «жёлтая зона», дней
+    discountCrit: 30,       // уценка в красной зоне, %
+    discountWarn: 15,       // уценка в жёлтой зоне, %
+    writeoffsToMonth: true, // приводить списания из 1С к месяцу в P&L
+    autoSyncSeconds: 3,     // как часто проверять папку на изменения, сек
+
+    // Финансовый учёт (как в вашей таблице): справочники и пороги сигналов
+    finCategories: 'Закуп товара, ЗП, Аренда, Налоги, Коммуналка, Интернет, Оплата ТП, Реклама, Другое',
+    finCashiers: '',
+    finShifts: 'Утро, Вечер, Ночная',
+    finSuppliers: '',
+    openCashStart: 0,       // начальный остаток наличных
+    openCardStart: 0,       // начальный остаток на карте
+    openTransferStart: 0,   // начальный остаток на счёте
+    debtWarn: 200000,       // долг поставщикам: внимание
+    debtCrit: 500000,       // долг поставщикам: критично
+    dueWarn: 7,             // за сколько дней предупреждать о платеже
+    diffCrit: 1000          // критичное расхождение кассы
+  };
+
+  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi', 'dds', 'plans'];
+
+  function emptyState() {
+    var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
+    for (var i = 0; i < COLLECTIONS.length; i++) s[COLLECTIONS[i]] = [];
+    return s;
+  }
+
+  var state = emptyState();
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        state = merge(emptyState(), parsed);
+      }
+    } catch (e) { /* повреждённое хранилище не должно ломать запуск */ }
+    return state;
+  }
+
+  function merge(base, patch) {
+    for (var k in patch) {
+      if (k === 'settings') {
+        for (var s in patch.settings) base.settings[s] = patch.settings[s];
+      } else if (Object.prototype.toString.call(patch[k]) === '[object Array]') {
+        base[k] = patch[k];
+      } else if (patch[k] !== null && typeof patch[k] === 'object') {
+        base[k] = merge(base[k] || {}, patch[k]);
+      } else {
+        base[k] = patch[k];
+      }
+    }
+    return base;
+  }
+
+  var changeHooks = [];
+  // на изменение подписывается сохранение в файл (js/filestore.js)
+  function onChange(fn) { changeHooks.push(fn); }
+
+  function save() {
+    var ok = true;
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+    } catch (e) {
+      ok = false; // например, переполнено хранилище браузера
+    }
+    changeHooks.forEach(function (fn) { try { fn(state); } catch (e) {} });
+    return ok;
+  }
+
+  // Заменить всё содержимое базы (например, прочитанное из файла в папке)
+  function replaceAll(data) {
+    state = merge(emptyState(), data || {});
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+    return state;
+  }
+
+  function uid() { return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+  function add(coll, item) {
+    if (!state[coll]) state[coll] = [];
+    if (!item.id) item.id = uid();
+    state[coll].push(item);
+    save();
+    return item;
+  }
+
+  function addMany(coll, items, replace) {
+    if (!state[coll]) state[coll] = [];
+    if (replace) state[coll] = [];
+    for (var i = 0; i < items.length; i++) {
+      if (!items[i].id) items[i].id = uid();
+      state[coll].push(items[i]);
+    }
+    save();
+    return state[coll].length;
+  }
+
+  function update(coll, id, patch) {
+    var rows = state[coll] || [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id === id) { for (var k in patch) rows[i][k] = patch[k]; save(); return rows[i]; }
+    }
+    return null;
+  }
+
+  function remove(coll, id) {
+    var rows = state[coll] || [];
+    for (var i = 0; i < rows.length; i++) {
+      if (rows[i].id === id) { rows.splice(i, 1); save(); return true; }
+    }
+    return false;
+  }
+
+  function clear(coll) {
+    if (coll) state[coll] = []; else state = emptyState();
+    save();
+  }
+
+  function setSetting(key, value) { state.settings[key] = value; save(); }
+
+  // Резервная копия: журналы и настройки одним файлом
+  function exportJSON() {
+    return JSON.stringify({ exported: new Date().toISOString(), data: state }, null, 2);
+  }
+  function importJSON(text) {
+    var obj = JSON.parse(text);
+    var data = obj.data || obj;
+    state = merge(emptyState(), data);
+    save();
+    return state;
+  }
+
+  // Постоянные расходы в месяц — база для точки безубыточности
+  function fixedMonthly() {
+    var s = state.settings;
+    return (+s.fot || 0) + (+s.rent || 0) + (+s.utilities || 0) + (+s.taxes || 0) + (+s.other || 0);
+  }
+
+  return {
+    KEY: KEY, DEFAULT_SETTINGS: DEFAULT_SETTINGS, COLLECTIONS: COLLECTIONS,
+    get state() { return state; },
+    get settings() { return state.settings; },
+    load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
+    clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
+    fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll
+  };
+});

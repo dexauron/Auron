@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Вай Маркет</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-name" id="brandName">Вай Маркет</div>
+    <div class="brand-sub">Магазин 24/7</div>
+  </div>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidebar-foot">
+    <div class="sync-line" id="saveState"><span class="saved-dot off"></span><span>Сохранение не настроено</span></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню">☰</button>
+    <div class="search">
+      <span>🔍</span>
+      <input type="text" id="search" placeholder="Товар, поставщик, штрихкод, телефон">
+    </div>
+    <div class="segmented" id="periods"></div>
+    <button class="btn btn-primary" id="addBtn">＋ Записать</button>
+    <button class="btn hide-mobile" id="syncBtn">📂 Обновить из 1С</button>
+    <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы">👁</button>
+    <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv" hidden>
+    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+  </div>
+  <div class="scroll" id="scroll">
+    <div class="page" id="page"></div>
+  </div>
+</main>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/store.js"></script>
+<script src="js/finance.js"></script>
+<script src="js/finviews.js"></script>
+<script src="js/filestore.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
