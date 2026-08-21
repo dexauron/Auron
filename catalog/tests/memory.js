@@ -88,6 +88,25 @@ for (let m = 1; m <= 20; m++) {
   });
   chk(kept === 0, `ни один товар не остался без цены после уборки (без цены: ${kept})`);
 
+  // ── 6. Поиск по коду должен быть мгновенным: его набирают у кассы ──
+  const speed = await page.evaluate(() => {
+    const P = window.WM_PUBLISH, s = P._state();
+    const many = Array.from({ length: 4000 }, (_, i) => ({
+      id: 'x' + i, name: 'Товар ' + i, code: String(20000 + i), group_id: 'g1',
+      retail_price: 10, unit: 'шт', photos: [], barcodes: ['46' + String(i).padStart(11, '0')],
+    }));
+    s.products = s.products.concat(many);
+    P.buildIndex();
+    const t = (q) => { s.query = q; const a = performance.now(); P.visibleProducts(); return performance.now() - a; };
+    t('20500');                       // прогрев
+    const code = Math.max(t('20500'), t('21000'));
+    const word = t('товар');
+    s.query = '';
+    return { code: Math.round(code), word: Math.round(word), n: s.products.length };
+  });
+  console.log(`--- поиск на ${speed.n} товарах: по коду ${speed.code} мс, по слову ${speed.word} мс ---`);
+  chk(speed.code < 60, `поиск по коду мгновенный (${speed.code} мс на ${speed.n} товарах)`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
