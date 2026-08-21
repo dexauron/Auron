@@ -393,6 +393,11 @@ export function visibleProducts() {
 
   const q = norm(state.query);
   if (!q) return sortList(list, false);
+  // Запрос из одних цифр — это код или штрихкод, самый частый случай у кассы.
+  // Полная оценка всех 17 тысяч товаров на такой запрос занимала на телефоне
+  // около секунды НА КАЖДУЮ НАЖАТУЮ ЦИФРУ, и каталог казался зависшим.
+  // Цифры ищем напрямую по кодам — без транслита и разбора опечаток.
+  if (/^\d{2,}$/.test(q)) return sortList(searchByCode(list, q), true);
   const qT = translit(q);
   const qVars = q === qT ? [q] : [q, qT];
   // слова запроса — каждое ищется отдельно (в любом порядке)
@@ -414,6 +419,41 @@ export function visibleProducts() {
     .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
     .map((x) => x.p);
   return sortList(scored, true);
+}
+
+/* Быстрый поиск по цифрам. Оценки берутся те же, что и в общем поиске
+ * (код: точно 120, начало 95, внутри 70; без знаков: 118/92/68; название —
+ * через общий matchPre), поэтому выдача совпадает — меняется только скорость:
+ * полная оценка 17 тысяч товаров занимала около секунды НА КАЖДУЮ НАЖАТУЮ
+ * ЦИФРУ, и каталог у кассы казался зависшим. Нечёткий поиск для цифр не нужен:
+ * код — вещь точная, «похожий» код хуже, чем честное «ничего не нашлось». */
+function searchByCode(list, q) {
+  const hits = [];
+  for (const p of list) {
+    let s = 0;
+    for (const c of (p._codes || [])) {
+      if (c === q) { s = 120; break; }
+      if (c.startsWith(q)) { if (s < 95) s = 95; }
+      else if (c.includes(q)) { if (s < 70) s = 70; }
+    }
+    if (s < 118) {
+      for (const c of (p._codesLoose || [])) {
+        if (c === q) { s = Math.max(s, 118); break; }
+        if (c.startsWith(q)) { if (s < 92) s = 92; }
+        else if (c.includes(q)) { if (s < 68) s = 68; }
+      }
+    }
+    // цифры в названии («Молоко 1234 отборное», «Кола 0,5») — теми же правилами,
+    // что и обычный поиск по названию
+    if (s < 112) s = Math.max(s, matchPre(p._name, p._name, [q], [92, 90, 55], p._nameW, p._nameW, false));
+    if (s >= SEARCH_THRESHOLD) hits.push({ p, s });
+  }
+  if (!hits.length) return [];
+  const best = hits.reduce((m, x) => Math.max(m, x.s), 0);
+  const floor = Math.max(SEARCH_THRESHOLD, best * RELATIVE_CUTOFF);
+  return hits.filter((x) => x.s >= floor)
+    .sort((a2, b2) => b2.s - a2.s || a2.p.name.localeCompare(b2.p.name, 'ru'))
+    .map((x) => x.p);
 }
 
 // слова запроса для подсветки (только буквенно-цифровые, длиннее 1 символа)
