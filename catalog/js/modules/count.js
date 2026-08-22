@@ -58,6 +58,17 @@ export function addToCount(p, delta = 1) {
   return row;
 }
 
+/* Кнопки «−» и «+» в строке: правим только то, что уже посчитано, поэтому
+ * товар искать не нужно — строка со всеми данными уже есть. */
+export function bumpCount(id, delta) {
+  const sheet = read();
+  const row = sheet.items.find((x) => x.id === id);
+  if (!row) return;
+  row.qty = Math.max(0, Math.round((row.qty + delta) * 1000) / 1000);
+  write(sheet);
+  renderCount();
+}
+
 export function setCountQty(id, qty) {
   const sheet = read();
   const row = sheet.items.find((x) => x.id === id);

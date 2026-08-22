@@ -17,7 +17,7 @@ import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRo
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
-import { addCountByCode, clearCount, openCount, removeFromCount, setCountQty, shareCount, startCountScan, addToCount } from './count.js';
+import { addCountByCode, bumpCount, clearCount, openCount, removeFromCount, setCountQty, shareCount, startCountScan } from './count.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -920,9 +920,9 @@ function bindEvents() {
   $('countScanBtn').addEventListener('click', startCountScan);
   $('countBody').addEventListener('click', (e) => {
     const minus = e.target.closest('[data-cnt-minus]');
-    if (minus) { addToCount({ id: minus.dataset.cntMinus }, -1); openCount(); return; }
+    if (minus) { bumpCount(minus.dataset.cntMinus, -1); return; }
     const plus = e.target.closest('[data-cnt-plus]');
-    if (plus) { addToCount({ id: plus.dataset.cntPlus }, 1); openCount(); return; }
+    if (plus) { bumpCount(plus.dataset.cntPlus, 1); return; }
     const rm = e.target.closest('[data-cnt-rm]');
     if (rm) removeFromCount(rm.dataset.cntRm);
   });
