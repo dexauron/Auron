@@ -101,6 +101,10 @@
       <span class="tab-ico"><i data-ic="heart"></i></span><span class="tab-txt">Избранное</span>
       <span class="tab-badge" id="tabFavCount" hidden></span>
     </button>
+    <button class="tab" data-tab="work">
+      <span class="tab-ico"><i data-ic="truck"></i></span><span class="tab-txt">Работа</span>
+      <span class="tab-badge" id="tabWorkCount" hidden></span>
+    </button>
     <button class="tab" data-tab="filters">
       <span class="tab-ico"><i data-ic="filter"></i></span><span class="tab-txt">Фильтры</span>
       <span class="tab-badge" id="tabFilterCount" hidden></span>
@@ -820,7 +824,20 @@
     </div>
   </div>
 
-  <!-- Заказы поставщикам: неделя, суммы по дням, список -->
+  <!-- Работа: заказы, «закончилось», сравнение — в одном месте -->
+  <div class="sheet-backdrop" id="workSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Работа</h2>
+        <button class="ios-nav-btn strong" data-close="workSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="workBody"></div>
+    </div>
+  </div>
+
+  <!-- Заказы поставщикам: неделя, месяц, суммы по дням, список -->
   <div class="sheet-backdrop" id="ordersSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>

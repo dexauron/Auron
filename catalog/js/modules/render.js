@@ -50,6 +50,9 @@ function syncTabs() {
   const n = favorites().length;
   const badge = $('tabFavCount');
   if (badge) { badge.textContent = n > 99 ? '99+' : n; badge.hidden = !n; }
+  // «Работа»: сколько дел ждёт. Через ui, а не импортом — иначе модули
+  // сетки и рабочих списков ссылались бы друг на друга по кругу.
+  if (ui.renderWorkBadge) ui.renderWorkBadge();
   // экран категорий и сетка товаров не показываются одновременно
   const cats = state.tab === 'cats';
   $('catScreen').hidden = !cats;

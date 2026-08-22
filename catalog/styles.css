@@ -1427,7 +1427,7 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
    Столбик = сумма поставок за день. Видно, какой день перегружен, а какой
    пустой, — не читая ни одной цифры. */
 .ord-week { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0 8px; }
-.ord-week-label { font-size: 15px; font-weight: 600; }
+.ord-week-label { font-size: 15px; font-weight: 600; text-align: center; margin-bottom: 8px; }
 .ord-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
 .ord-day {
   display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px;
@@ -1483,3 +1483,32 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 /* Уже заказанное видно, но не мешает: приглушаем */
 .rst-done .ios-row-title { color: var(--text-2); }
 
+
+/* ── Календарь заказов: месяц, «Сегодня», просрочка ─────────────────────── */
+.ord-seg { display: flex; margin: 2px 0 10px; }
+.ord-seg button { flex: 1; }
+.ord-today {
+  border: none; background: none; color: var(--accent);
+  font-size: 15px; font-weight: 600; min-height: 44px; padding: 0 10px; cursor: pointer;
+}
+.ord-today:active { opacity: .45; }
+/* дни недели над сеткой месяца */
+.ord-grid-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;
+  font-size: 11px; color: var(--text-2); text-align: center; margin-bottom: 4px;
+}
+.ord-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
+.ord-cell {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: 2px; min-height: 52px; padding: 5px 1px;
+  border: none; border-radius: 10px; background: var(--surface-2);
+  color: var(--text-2); cursor: pointer;
+}
+.ord-cell.out { opacity: .35; }                 /* хвосты соседних месяцев */
+.ord-cell.has { background: var(--surface); color: var(--text); }
+.ord-cell.is-today { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ord-cell-date { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ord-cell-sum { font-size: 9px; line-height: 1.1; font-variant-numeric: tabular-nums; color: var(--accent); }
+/* просроченная поставка: день прихода прошёл, «пришёл» никто не отметил */
+.ord-late { color: var(--neg); font-weight: 600; font-size: 12px; }
+.ord-late-head { color: var(--neg); }
