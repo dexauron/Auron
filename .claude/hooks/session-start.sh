@@ -62,7 +62,7 @@ DIRTY=$(git status --porcelain | grep -v '^??' | head -20)
 
 if [ "$LOCAL" = "$REMOTE" ]; then
   [ -n "$DIRTY" ] && echo "Внимание: есть несохранённые правки (git status):"$'\n'"$DIRTY"
-  echo "Папка совпадает с GitHub (ветка $BR, коммит ${LOCAL:0:7})."
+  [ -z "${AURON_HOOK_REEXEC:-}" ] && echo "Папка совпадает с GitHub (ветка $BR, коммит ${LOCAL:0:7})."
   restore_autosave
   exit 0
 fi
@@ -77,6 +77,11 @@ if git merge-base --is-ancestor "$LOCAL" "$REMOTE"; then
     exit 0
   fi
   git reset --hard -q "origin/$BR" && echo "Папка откатилась на $BEHIND коммит(ов) — восстановил из GitHub (ветка $BR, коммит ${REMOTE:0:7})."
+  # Откат вернул старым и сам этот файл — дальше выполнялась бы устаревшая
+  # версия проверки. Перезапускаем уже восстановленную.
+  if [ -z "${AURON_HOOK_REEXEC:-}" ]; then
+    AURON_HOOK_REEXEC=1 exec bash "$0"
+  fi
   restore_autosave
   exit 0
 fi
