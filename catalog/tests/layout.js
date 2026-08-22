@@ -4,7 +4,8 @@
 const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers');
 
 const SHEETS = ['filterSheet', 'adminMenuSheet', 'deviceSheet', 'suppliersManageSheet', 'supplierEditSheet',
-  'groupsSheet', 'orderRulesSheet', 'calcSheet', 'topSheet', 'publishSheet', 'formSheet', 'loginSheet'];
+  'groupsSheet', 'orderRulesSheet', 'calcSheet', 'topSheet', 'publishSheet', 'formSheet', 'loginSheet',
+  'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'countSheet', 'scanSheet'];
 
 const products = Array.from({ length: 6 }, (_, i) => ({
   id: 'p' + i, name: 'Очень длинное название товара для проверки переноса ' + i,
@@ -64,6 +65,29 @@ const products = Array.from({ length: 6 }, (_, i) => ({
       if (!ok) { bad.push(`${id}: окна нет в разметке`); continue; }
       await page.waitForTimeout(100);
       await scan(id);
+    }
+    // Списки сотрудника — с настоящим содержимым: пустое окно почти ничего не
+    // проверяет, а вылезают за край как раз длинные названия и колонка «−  5  +».
+    await page.evaluate(() => {
+      const long = 'Молоко Простоквашино отборное пастеризованное 3.2% 930 мл';
+      localStorage.setItem('wm_restock_v1', JSON.stringify([
+        { id: 'p1', name: long, code: '101', supplier_id: 's1', supplier_name: 'Поставщик с очень длинным названием ООО', who: 'Смена 1', at: '2026-08-22' },
+        { id: 'p2', name: long + ' второй', code: '102', supplier_id: '', supplier_name: '', who: '', at: '2026-08-22', ordered: '2026-08-22' },
+      ]));
+      localStorage.setItem('wm_count_v1', JSON.stringify({ started: '2026-08-22', items: [
+        { id: 'p1', name: long, code: '101', unit: 'шт', stock: 15, qty: 12.345 },
+        { id: 'p3', name: 'Выпечка весовая', code: '303', unit: 'кг', stock: null, qty: 3.5 },
+      ] }));
+    });
+    for (const [id, menu] of [['restockSheet', 'menuRestock'], ['countSheet', 'menuCount']]) {
+      await page.evaluate(async (m) => {
+        document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+        document.getElementById('adminBtn').click();
+        await new Promise((r) => setTimeout(r, 250));
+        document.getElementById(m).click();
+        await new Promise((r) => setTimeout(r, 350));
+      }, menu);
+      await scan(`${id} со списком`);
     }
     chk(!bad.length, `ширина ${W}px: ничего не вылезает за край${bad.length ? ' — ' + bad.join(' | ') : ''}`);
 
