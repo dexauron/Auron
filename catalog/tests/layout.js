@@ -5,7 +5,7 @@ const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers')
 
 const SHEETS = ['filterSheet', 'adminMenuSheet', 'deviceSheet', 'suppliersManageSheet', 'supplierEditSheet',
   'groupsSheet', 'orderRulesSheet', 'calcSheet', 'topSheet', 'publishSheet', 'formSheet', 'loginSheet',
-  'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'scanSheet'];
+  'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'workSheet', 'scanSheet'];
 
 const products = Array.from({ length: 6 }, (_, i) => ({
   id: 'p' + i, name: 'Очень длинное название товара для проверки переноса ' + i,

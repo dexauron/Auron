@@ -21,6 +21,7 @@ import { svSaveAndPublish, svUuid } from './imports.js';
 const LOCAL_KEY = 'wm_orders_local_v1';   // заказы сотрудника, ещё не у владельца
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
+const MODE_KEY = 'wm_ord_mode';   // «неделя» или «месяц» — как человек привык
 let weekStart = null;      // понедельник показываемой недели (ISO)
 let editingId = null;
 let onSaved = null;        // что сделать после сохранения (например, пометить
@@ -49,6 +50,58 @@ function addDays(dateISO, n) {
   return iso(d);
 }
 const weekDays = (start) => Array.from({ length: 7 }, (_, i) => addDays(start, i));
+const monthOf = (dateISO) => String(dateISO).slice(0, 7);
+const MONTHS = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+  'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
+function monthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${y}`;
+}
+// все дни месяца, начиная с понедельника той недели, в которую попало 1-е число
+function monthGrid(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  const first = `${ym}-01`;
+  const days = new Date(y, m, 0).getDate();
+  const start = mondayOf(first);
+  const cells = [];
+  for (let d = start; ; d = addDays(d, 1)) {
+    cells.push(d);
+    if (cells.length >= 42) break;
+    if (d >= `${ym}-${String(days).padStart(2, '0')}` && new Date(d + 'T00:00:00').getDay() === 0) break;
+  }
+  return cells;
+}
+
+const mode = () => { try { return localStorage.getItem(MODE_KEY) === 'month' ? 'month' : 'week'; } catch (e) { return 'week'; } };
+export function setOrdersMode(m) {
+  try { localStorage.setItem(MODE_KEY, m); } catch (e) { /* приватный режим */ }
+  renderOrders();
+}
+export function ordersToday() {
+  weekStart = mondayOf(todayISO());
+  renderOrders();
+}
+
+/* Просроченные поставки: день прихода прошёл, а «пришёл» никто не отметил.
+ * Их показываем отдельно и всегда — иначе заказ, потерявшийся на прошлой
+ * неделе, никто больше не увидит. */
+function overdueOrders() {
+  const today = todayISO();
+  return allOrders().filter((o) => o.status !== 'cancelled' && o.status !== 'received'
+    && String(o.due_at || '').slice(0, 10) < today);
+}
+
+/* Короткая сводка для экрана «Работа»: сколько поставок на этой неделе, на
+ * какую сумму и сколько просрочено. */
+export function ordersSummary() {
+  const days = weekDays(mondayOf(todayISO()));
+  const list = allOrders().filter((o) => o.status !== 'cancelled' && days.includes(String(o.due_at || '').slice(0, 10)));
+  return {
+    week: list.length,
+    sum: list.reduce((s, o) => s + (Number(o.amount) || 0), 0),
+    overdue: overdueOrders().length,
+  };
+}
 
 export function openOrders() {
   if (!weekStart) weekStart = mondayOf(todayISO());
@@ -59,6 +112,26 @@ export function openOrders() {
 function renderOrders() {
   const box = $('ordersBody');
   if (!box) return;
+  /* Просроченное показываем отдельным блоком, но только то, чего не видно в
+   * самом календаре: иначе заказ этой недели попадал бы в список дважды.
+   * В режиме месяца отдельных строк нет вовсе — там показываем всё. */
+  const days = weekDays(weekStart);
+  const late = overdueOrders().filter((o) => mode() === 'month'
+    || !days.includes(String(o.due_at || '').slice(0, 10)));
+  const lateBlock = late.length
+    ? `<div class="ios-group-title ord-late-head">Просрочено · ${late.length}</div>
+       <div class="ios-group">${late.sort((a, b) => String(a.due_at).localeCompare(String(b.due_at))).map(orderRow).join('')}</div>`
+    : '';
+  const head = `<div class="seg ord-seg" id="ordModeSeg">
+      <button data-ord-mode="week"${mode() === 'week' ? ' class="active"' : ''}>Неделя</button>
+      <button data-ord-mode="month"${mode() === 'month' ? ' class="active"' : ''}>Месяц</button>
+    </div>`;
+  box.innerHTML = head + (mode() === 'month' ? renderMonth() : renderWeek()) + lateBlock;
+}
+
+/* Неделя: столбик = сумма поставок за день. Видно, какой день перегружен, а
+ * какой пустой, ещё до того как прочитаешь хоть одну цифру. */
+function renderWeek() {
   const days = weekDays(weekStart);
   const list = allOrders().filter((o) => o.status !== 'cancelled');
   const byDay = {};
@@ -70,8 +143,6 @@ function renderOrders() {
   const weekSum = weekList.reduce((s, o) => s + (Number(o.amount) || 0), 0);
   const maxDay = Math.max(1, ...days.map((d) => (byDay[d] || []).reduce((s, o) => s + (Number(o.amount) || 0), 0)));
 
-  // Столбик = сумма поставок за день: видно, какой день перегружен, а какой
-  // пустой, ещё до того как прочитаешь хоть одну цифру.
   const calendar = days.map((d, i) => {
     const dayList = byDay[d] || [];
     const sum = dayList.reduce((s, o) => s + (Number(o.amount) || 0), 0);
@@ -89,23 +160,59 @@ function renderOrders() {
     .map(orderRow).join('')
     || '<div class="ios-row"><span class="ios-row-title muted">На этой неделе поставок нет</span></div>';
 
-  box.innerHTML = `
-    <div class="ord-week">
+  return `<div class="ord-week">
       <button class="ios-nav-btn" data-ord-week="-1">‹ Неделя</button>
-      <span class="ord-week-label">${fmtDate(weekStart)} — ${fmtDate(addDays(weekStart, 6))}</span>
+      <button class="ord-today" data-ord-today="1">Сегодня</button>
       <button class="ios-nav-btn" data-ord-week="1">Неделя ›</button>
     </div>
+    <div class="ord-week-label">${fmtDate(weekStart)} — ${fmtDate(addDays(weekStart, 6))}</div>
     <div class="ord-cal">${calendar}</div>
     <div class="ord-total">${weekList.length} ${plural(weekList.length, 'поставка', 'поставки', 'поставок')} · на сумму <b>${fmtPrice(weekSum)}</b></div>
     <div class="ios-group">${rows}</div>`;
+}
+
+/* Месяц: вся картина сразу — в какие дни поставки и на сколько. Тап по дню
+ * переводит на его неделю, где день расписан по заказам. */
+function renderMonth() {
+  const ym = monthOf(weekStart || todayISO());
+  const byDay = {};
+  for (const o of allOrders()) {
+    if (o.status === 'cancelled') continue;
+    const d = String(o.due_at || '').slice(0, 10);
+    (byDay[d] = byDay[d] || []).push(o);
+  }
+  const cells = monthGrid(ym).map((d) => {
+    const list = byDay[d] || [];
+    const sum = list.reduce((s, o) => s + (Number(o.amount) || 0), 0);
+    const out = monthOf(d) !== ym;
+    return `<button class="ord-cell${out ? ' out' : ''}${d === todayISO() ? ' is-today' : ''}${list.length ? ' has' : ''}" data-ord-month-day="${d}">
+      <span class="ord-cell-date">${d.slice(8, 10)}</span>
+      <span class="ord-cell-sum">${list.length ? fmtPrice(sum) : ''}</span>
+    </button>`;
+  }).join('');
+  const monthList = Object.entries(byDay).filter(([d]) => monthOf(d) === ym).flatMap(([, v]) => v);
+  const sum = monthList.reduce((s, o) => s + (Number(o.amount) || 0), 0);
+
+  return `<div class="ord-week">
+      <button class="ios-nav-btn" data-ord-month="-1">‹ Месяц</button>
+      <button class="ord-today" data-ord-today="1">Сегодня</button>
+      <button class="ios-nav-btn" data-ord-month="1">Месяц ›</button>
+    </div>
+    <div class="ord-week-label">${monthLabel(ym)}</div>
+    <div class="ord-grid-dow">${DAYS.map((d) => `<span>${d}</span>`).join('')}</div>
+    <div class="ord-grid">${cells}</div>
+    <div class="ord-total">${monthList.length} ${plural(monthList.length, 'поставка', 'поставки', 'поставок')} за месяц · на сумму <b>${fmtPrice(sum)}</b></div>
+    <p class="ios-note">Тап по дню — покажу его неделю с заказами.</p>`;
 }
 
 function orderRow(o) {
   const sup = o.supplier_name || (supplierById(o.supplier_id) || {}).name || 'Поставщик';
   const mark = o.local ? '<span class="ord-flag">не отправлен</span>' : '';
   const done = o.status === 'received' ? '<span class="ord-done">пришёл</span>' : '';
+  const late = (o.status !== 'received' && String(o.due_at || '').slice(0, 10) < todayISO())
+    ? '<span class="ord-late">просрочен</span>' : '';
   return `<button class="ios-row ios-row-link" data-ord-open="${esc(o.id)}">
-    <span class="ios-row-title">${esc(sup)} ${mark}${done}
+    <span class="ios-row-title">${esc(sup)} ${mark}${done}${late}
       <span class="ord-sub">${fmtDate(o.due_at)} · заказал ${esc(o.who || '—')} · от ${fmtDate(o.placed_at)}</span></span>
     <span class="ios-row-value">${fmtPrice(Number(o.amount) || 0)}</span>
   </button>`;
@@ -247,4 +354,19 @@ export async function shareOrders() {
 export function shiftWeek(n) {
   weekStart = addDays(weekStart || mondayOf(todayISO()), n * 7);
   renderOrders();
+}
+
+export function shiftMonth(n) {
+  const ym = monthOf(weekStart || todayISO());
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  weekStart = mondayOf(iso(d));
+  renderOrders();
+}
+
+/* Тап по дню в месяце — на его неделю: в месяце видно «где густо», а что
+ * именно за поставки, читается уже в неделе. */
+export function showDayWeek(dateISO) {
+  weekStart = mondayOf(dateISO);
+  setOrdersMode('week');
 }

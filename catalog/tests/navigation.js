@@ -33,11 +33,13 @@ const groups = [
 
   // ── нижняя панель ──
   const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar .tab')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
-  chk(tabs.length === 4, `в нижней панели 4 раздела (${tabs.join(' | ')})`);
+  chk(tabs.length === 5, `в нижней панели 5 разделов (${tabs.join(' | ')})`);
   chk(/Каталог/.test(tabs[0]) && /Категории/.test(tabs[1]), 'первые разделы — «Каталог» и «Категории»');
-  // «Ещё» заменили на «Фильтры»: до фильтров теперь дотягивается большой палец
-  chk(/Фильтры/.test(tabs[3]) && !tabs.some((t) => /Ещё/.test(t)),
-    `последний раздел — «Фильтры», а не «Ещё» (${tabs[3]})`);
+  // «Ещё» заменили на «Фильтры»: до фильтров теперь дотягивается большой палец.
+  // «Работа» — дела смены (заказы, «закончилось»), раньше они прятались в меню.
+  chk(/Фильтры/.test(tabs[4]) && !tabs.some((t) => /Ещё/.test(t)),
+    `последний раздел — «Фильтры», а не «Ещё» (${tabs[4]})`);
+  chk(/Работа/.test(tabs[3]), `рядом с фильтрами — «Работа» (${tabs[3]})`);
   await page.click('.tabbar [data-tab="filters"]'); await page.waitForTimeout(450);
   const filt = await page.evaluate(() => ({
     open: !document.getElementById('filterSheet').hidden,

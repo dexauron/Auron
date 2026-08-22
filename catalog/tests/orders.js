@@ -120,6 +120,54 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     `заказ сотрудника остаётся на его телефоне (свои ${staff.local}, в каталоге ${staff.inCatalog})`);
   chk(staff.flagged === 1, 'заказ сотрудника помечен «не отправлен»');
 
+  // ── Месяц, «Сегодня» и просроченные поставки ──
+  const month = await page.evaluate(async () => {
+    document.querySelector('[data-ord-mode="month"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    const box = document.getElementById('ordersBody');
+    return {
+      cells: box.querySelectorAll('[data-ord-month-day]').length,
+      withSum: [...box.querySelectorAll('.ord-cell.has')].length,
+      label: (box.querySelector('.ord-week-label') || {}).textContent,
+      total: (box.querySelector('.ord-total') || {}).innerText.replace(/\s+/g, ' '),
+    };
+  });
+  chk(month.cells >= 28 && month.cells <= 42, `месяц показывает сетку дней (${month.cells})`);
+  chk(month.withSum >= 2, `дни с поставками выделены (${month.withSum})`);
+  chk(/за месяц/.test(month.total), `внизу итог за месяц (${month.total})`);
+  chk(/20\d\d/.test(month.label || ''), `видно, какой это месяц (${month.label})`);
+
+  const back = await page.evaluate(async () => {
+    document.querySelector('.ord-cell.has[data-ord-month-day]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    const box = document.getElementById('ordersBody');
+    return { days: box.querySelectorAll('[data-ord-day]').length, rows: box.querySelectorAll('[data-ord-open]').length };
+  });
+  chk(back.days === 7 && back.rows > 0, `тап по дню в месяце открывает его неделю (${back.rows} заказ(ов))`);
+
+  const today = await page.evaluate(async (mon) => {
+    document.querySelector('[data-ord-week="1"]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    document.querySelector('[data-ord-today]').click();
+    await new Promise((r) => setTimeout(r, 250));
+    return (document.querySelector('#ordersBody .ord-week-label') || {}).textContent;
+  });
+  chk(!!today, `кнопка «Сегодня» возвращает на текущую неделю (${today})`);
+
+  const late = await page.evaluate(async (due) => {
+    const P = window.WM_PUBLISH;
+    P._state().orders.push({ id: 'late1', status: 'ordered', supplier_id: 's1', supplier_name: 'Молзавод', placed_at: due, due_at: due, amount: 1000, who: 'Анна' });
+    document.querySelector('[data-ord-today]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    const box = document.getElementById('ordersBody');
+    return {
+      head: (box.querySelector('.ord-late-head') || {}).textContent || '',
+      marks: box.querySelectorAll('.ord-late').length,
+    };
+  }, iso(-10));
+  chk(/Просрочено · 1/.test(late.head), `поставка из прошлой недели без отметки «пришёл» видна как просроченная (${late.head})`);
+  chk(late.marks >= 1, `в строке стоит пометка «просрочен» (${late.marks})`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

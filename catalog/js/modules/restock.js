@@ -9,7 +9,7 @@
  * поэтому список лежит на телефоне сотрудника и одной кнопкой уходит владельцу
  * текстом. Так же, как заказы: инструмент есть у всех, записи не теряются. */
 
-import { $, state } from './store.js';
+import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
@@ -39,7 +39,7 @@ function restockList() {
   const list = tidy(read());
   return list;
 }
-const restockCount = () => restockList().filter((x) => !x.ordered).length;
+export const restockCount = () => restockList().filter((x) => !x.ordered).length;
 export const inRestock = (id) => restockList().some((x) => x.id === id);
 
 /* Отметить/снять отметку. Название и код запоминаем прямо в строке: товар
@@ -81,9 +81,10 @@ export function clearRestock() {
 // Счётчик в меню: сколько позиций ждёт заказа, видно не открывая список
 export function renderRestockBadge() {
   const el = $('menuRestockCount');
-  if (!el) return;
+  if (!el) { if (ui.renderWorkBadge) ui.renderWorkBadge(); return; }
   const n = restockCount();
   el.textContent = n ? String(n) : '';
+  if (ui.renderWorkBadge) ui.renderWorkBadge();
 }
 
 export function openRestock() {

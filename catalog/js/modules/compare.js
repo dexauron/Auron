@@ -16,6 +16,7 @@ const MAX = 8;   // больше восьми колонок на телефон
 
 function compareIds() { return ui.compareIds || (ui.compareIds = []); }
 export const inCompare = (id) => compareIds().includes(id);
+export const compareCount = () => compareIds().length;
 
 export function toggleCompare(id) {
   const list = compareIds();

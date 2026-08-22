@@ -15,8 +15,9 @@ import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, open
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
-import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
+import { deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
+import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -377,7 +378,16 @@ function bindEvents() {
   // нижняя панель: переключение разделов + плитки категорий
   $('tabbar').addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]');
-    if (b) switchTab(b.dataset.tab);
+    if (!b) return;
+    // «Работа» — окно с делами смены, сетку товаров под ним не трогаем
+    if (b.dataset.tab === 'work') { openWork(); return; }
+    switchTab(b.dataset.tab);
+  });
+  $('workBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-work]');
+    if (!b) return;
+    closeSheet('workSheet');
+    runWorkAction(b.dataset.work);
   });
   $('catScreen').addEventListener('click', (e) => {
     if (e.target.closest('[data-cat-back]')) { ui.openCat = null; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
@@ -891,6 +901,13 @@ function bindEvents() {
   });
 
   // ── Заказы поставщикам ──
+  ui.renderWorkBadge = renderWorkBadge;   // значок «сколько дел» на вкладке
+  ui.workActions = {
+    orders: openOrders,
+    restock: openRestock,
+    compare: openCompare,
+    scan: () => runScan(),
+  };
   $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
@@ -898,6 +915,13 @@ function bindEvents() {
   $('ordReceived').addEventListener('click', markReceived);
   $('ordShare').addEventListener('click', shareOrders);
   $('ordersBody').addEventListener('click', (e) => {
+    const md = e.target.closest('[data-ord-mode]');
+    if (md) { setOrdersMode(md.dataset.ordMode); return; }
+    if (e.target.closest('[data-ord-today]')) { ordersToday(); return; }
+    const mo = e.target.closest('[data-ord-month]');
+    if (mo) { shiftMonth(Number(mo.dataset.ordMonth)); return; }
+    const cell = e.target.closest('[data-ord-month-day]');
+    if (cell) { showDayWeek(cell.dataset.ordMonthDay); return; }
     const wk = e.target.closest('[data-ord-week]');
     if (wk) { shiftWeek(Number(wk.dataset.ordWeek)); return; }
     const row = e.target.closest('[data-ord-open]');
