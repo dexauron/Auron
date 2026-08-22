@@ -1463,3 +1463,23 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .cmp-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cmp-best { color: var(--pos); font-weight: 700; }
 .cmp-rm { border: none; background: none; color: var(--text-2); font-size: 16px; cursor: pointer; padding: 4px 6px; min-height: 34px; }
+
+/* ── «Закончилось на полке»: список пополнения ──────────────────────────── */
+/* Заголовок группы с кнопкой «Заказать» справа: заказ оформляется прямо
+   из списка, не переписывая названия руками. */
+.rst-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rst-order {
+  border: none; background: none; color: var(--accent);
+  font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0;
+  padding: 6px 2px; min-height: 44px; cursor: pointer;
+}
+.rst-order:active { opacity: .45; }
+/* Крестик «убрать» — во всю высоту строки, чтобы попадать пальцем */
+.rst-rm {
+  border: none; background: none; color: var(--text-2);
+  padding: 0 6px; min-width: 44px; min-height: 44px; cursor: pointer;
+}
+.rst-rm:active { opacity: .45; }
+/* Уже заказанное видно, но не мешает: приглушаем */
+.rst-done .ios-row-title { color: var(--text-2); }
+

@@ -9,6 +9,7 @@ import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
 import { inCompare, renderCompareBar } from './compare.js';
+import { inRestock } from './restock.js';
 import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
@@ -29,6 +30,7 @@ export function openProduct(p) {
   pushRecentProduct(p.id);
   trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
   { const b = $('btnCompareAdd'); if (b) b.textContent = inCompare(p.id) ? 'Убрать из сравнения' : 'К сравнению'; }
+  { const b = $('btnRestock'); if (b) b.textContent = inRestock(p.id) ? 'Убрать из списка пополнения' : 'Закончилось на полке'; }
   renderCompareBar();
   renderNewProducts();   // обновляем ленту под шторкой
   updateFavButton(p);
