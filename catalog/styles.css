@@ -1505,6 +1505,10 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .cnt-ok { color: var(--pos); }
 .cnt-none { color: var(--text-2); }
 .cnt-actions { display: flex; flex-direction: column; gap: 8px; }
-.cnt-add { display: flex; gap: 8px; }
-.cnt-add .ios-inp { flex: 1; }
-.cnt-add .btn { flex: 0 0 auto; margin: 0; }
+.cnt-add { display: flex; gap: 8px; align-items: center; }
+/* поле ввода вне строки списка: без своей рамки оно выглядит как просто текст */
+.cnt-add .ios-inp {
+  flex: 1; width: auto; height: 44px; padding: 0 12px;
+  border: .5px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.cnt-add .btn { flex: 0 0 auto; margin: 0; height: 44px; }
