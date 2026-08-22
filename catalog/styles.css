@@ -1444,3 +1444,22 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .ord-sub { display: block; font-size: 13px; color: var(--text-2); font-weight: 400; margin-top: 2px; }
 .ord-flag { font-size: 12px; color: var(--warn); font-weight: 600; }
 .ord-done { font-size: 12px; color: var(--pos); font-weight: 600; }
+
+/* ── Сравнение товаров ──────────────────────────────────────────────────── */
+.compare-bar {
+  position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 25;
+  display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+  background: var(--surface); border-top: .5px solid var(--border);
+}
+.compare-bar .btn { flex: 1; height: 44px; margin: 0; }
+.compare-bar .btn-ghost { flex: 0 0 auto; }
+.cmp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th { text-align: left; font-size: 12px; font-weight: 600; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; white-space: nowrap; }
+.cmp td { padding: 10px 8px; border-top: .5px solid var(--border); vertical-align: top; }
+.cmp-name { min-width: 150px; font-weight: 600; }
+.cmp-code { display: block; font-weight: 700; color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+.cmp-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cmp-best { color: var(--pos); font-weight: 700; }
+.cmp-rm { border: none; background: none; color: var(--text-2); font-size: 16px; cursor: pointer; padding: 4px 6px; min-height: 34px; }

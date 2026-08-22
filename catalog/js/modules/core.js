@@ -155,6 +155,52 @@ export function setRowText(id, text) {
   if (title) title.textContent = text; else el.textContent = text;
 }
 
+/* ── Чтобы каталог не «умирал» на одной ошибке ──────────────────────────────
+ * Одна необработанная ошибка в JS обрывает всё, что шло за ней: экран замирает,
+ * человек видит зависший каталог и не понимает, что делать. Ловим такие случаи
+ * глобально: сообщаем по-человечески, предлагаем обновить и записываем
+ * последние ошибки на устройстве — чтобы владелец мог их показать.
+ * Само приложение при этом продолжает работать: остальные обработчики целы. */
+const ERR_KEY = 'wm_errors_v1';
+const ERR_KEEP = 20;
+let lastErrAt = 0;
+
+function logError(where, err) {
+  const msg = String((err && (err.message || err)) || 'неизвестная ошибка').slice(0, 300);
+  try {
+    const list = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');
+    list.unshift({ at: new Date().toISOString(), where, msg });
+    localStorage.setItem(ERR_KEY, JSON.stringify(list.slice(0, ERR_KEEP)));
+  } catch (e) { /* приватный режим или нет места */ }
+  // не заваливаем человека сообщениями: не чаще одного раза в 10 секунд
+  const now = Date.now();
+  if (now - lastErrAt > 10000) {
+    lastErrAt = now;
+    toast('Что-то пошло не так, но каталог работает. Если повторится — закрой и открой заново');
+  }
+}
+
+export function savedErrors() {
+  try { return JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch (e) { return []; }
+}
+
+export function watchErrors() {
+  window.addEventListener('error', (e) => logError('экран', e.error || e.message));
+  window.addEventListener('unhandledrejection', (e) => logError('фоновая задача', e.reason));
+}
+
+/* Обёртка для действий, которые не должны ронять приложение целиком:
+ * отрисовка, обработчики кнопок, фоновые задачи. */
+export function safely(where, fn) {
+  return (...args) => {
+    try {
+      const r = fn(...args);
+      if (r && typeof r.catch === 'function') r.catch((e) => logError(where, e));
+      return r;
+    } catch (e) { logError(where, e); return undefined; }
+  };
+}
+
 // Стрелка «назад» в левом верхнем углу каждого окна
 export function addBackButtons() {
   document.querySelectorAll('.sheet').forEach((sheet) => {

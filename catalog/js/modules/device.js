@@ -1,7 +1,7 @@
 // Настройки этого устройства
 
 import { $, CACHE_KEY, state } from './store.js';
-import { esc, openSheet, toast } from './core.js';
+import { esc, openSheet, savedErrors, toast } from './core.js';
 import { todayISO } from './catalog.js';
 import { THEME_KEY, applyTheme, countActiveFilters, favorites, renderAll } from './render.js';
 import { GH_TOKEN_KEY, SV_AUTH_KEY, ghToken } from './publish.js';
@@ -44,6 +44,13 @@ function renderDeviceSheet() {
   box.innerHTML = deviceMemory().map((r) => `<div class="ios-row">
     <span class="ios-row-title">${esc(r.name)}</span><span class="ios-row-value">${esc(r.val)}</span></div>`).join('');
   $('devName').value = deviceName();
+  // Последние сбои — здесь, а не в тайной консоли: если каталог однажды повёл
+  // себя странно, владелец видит, что именно случилось, и может это назвать.
+  const errs = savedErrors();
+  $('devErrors').innerHTML = errs.length
+    ? errs.slice(0, 5).map((e) => `<div class="ios-row"><span class="ios-row-title">${esc(e.msg)}
+        <span class="ord-sub">${esc(String(e.at).slice(0, 16).replace('T', ' '))} · ${esc(e.where)}</span></span></div>`).join('')
+    : '<div class="ios-row"><span class="ios-row-title muted">Сбоев не было</span></div>';
   // вход/выход прямо здесь: до этого экрана сотрудник доходит, ещё не войдя
   $('devAuth').innerHTML = state.session
     ? '<button type="button" class="ios-row ios-row-danger" id="devLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>'
