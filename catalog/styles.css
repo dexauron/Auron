@@ -1483,32 +1483,3 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 /* Уже заказанное видно, но не мешает: приглушаем */
 .rst-done .ios-row-title { color: var(--text-2); }
 
-/* ── Пересчёт остатков ──────────────────────────────────────────────────── */
-.cnt-row { align-items: center; }
-/* «−  12  +  ✕» — считать можно одной рукой, все кнопки в палец шириной */
-.cnt-step { display: flex; align-items: center; gap: 2px; flex: 0 0 auto; }
-.cnt-step > button {
-  border: none; background: none; color: var(--accent);
-  font-size: 22px; line-height: 1; min-width: 40px; min-height: 44px; cursor: pointer;
-}
-.cnt-step > button:active { opacity: .45; }
-.cnt-step input {
-  width: 56px; height: 36px; text-align: center; font-size: 16px; font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  border: .5px solid var(--border); border-radius: 8px;
-  background: var(--bg); color: var(--text);
-}
-.cnt-rm { color: var(--text-2) !important; min-width: 36px !important; }
-/* разница с базой: недостача — красным, излишек — оранжевым, сходится — зелёным */
-.cnt-minus { color: var(--neg); font-weight: 600; }
-.cnt-plus { color: var(--warn); font-weight: 600; }
-.cnt-ok { color: var(--pos); }
-.cnt-none { color: var(--text-2); }
-.cnt-actions { display: flex; flex-direction: column; gap: 8px; }
-.cnt-add { display: flex; gap: 8px; align-items: center; }
-/* поле ввода вне строки списка: без своей рамки оно выглядит как просто текст */
-.cnt-add .ios-inp {
-  flex: 1; width: auto; height: 44px; padding: 0 12px;
-  border: .5px solid var(--border); border-radius: 10px; background: var(--surface);
-}
-.cnt-add .btn { flex: 0 0 auto; margin: 0; height: 44px; }

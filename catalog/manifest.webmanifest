@@ -52,19 +52,6 @@
           "type": "image/png"
         }
       ]
-    },
-    {
-      "name": "Пересчёт остатков",
-      "short_name": "Пересчёт",
-      "description": "Сверить полку с базой",
-      "url": "./?do=count",
-      "icons": [
-        {
-          "src": "icons/icon-192.png",
-          "sizes": "192x192",
-          "type": "image/png"
-        }
-      ]
     }
   ]
 }
