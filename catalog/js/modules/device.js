@@ -15,7 +15,7 @@ import { plural } from './competitors.js';
 
 export const DEV_NAME_KEY = 'wm_device_name';
 
-function deviceName() {
+export function deviceName() {
   try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
 }
 

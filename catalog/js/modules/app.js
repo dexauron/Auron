@@ -15,6 +15,7 @@ import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, open
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -850,6 +851,22 @@ function bindEvents() {
   $('btnAddSupplier').addEventListener('click', addSupplier);
   $('supEditSave').addEventListener('click', saveSupplierEdit);
   $('supEditDelete').addEventListener('click', deleteSupplier);
+
+  // ── Заказы поставщикам ──
+  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
+  $('ordAdd').addEventListener('click', () => openOrderForm(null));
+  $('ordSave').addEventListener('click', saveOrder);
+  $('ordDelete').addEventListener('click', deleteOrder);
+  $('ordReceived').addEventListener('click', markReceived);
+  $('ordShare').addEventListener('click', shareOrders);
+  $('ordersBody').addEventListener('click', (e) => {
+    const wk = e.target.closest('[data-ord-week]');
+    if (wk) { shiftWeek(Number(wk.dataset.ordWeek)); return; }
+    const row = e.target.closest('[data-ord-open]');
+    if (row) { openOrderForm(row.dataset.ordOpen); return; }
+    const day = e.target.closest('[data-ord-day]');
+    if (day) openOrderForm(null, day.dataset.ordDay);
+  });
 
   // Убрать дубли товаров (только админ)
   $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });
