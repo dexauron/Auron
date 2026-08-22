@@ -17,6 +17,7 @@ import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRo
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
+import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -364,6 +365,7 @@ function bindEvents() {
       } else {
         $('menuPhotoFill').hidden = false;
       }
+      renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
@@ -756,14 +758,19 @@ function bindEvents() {
      «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
      включённой и на каждый штрихкод крупно показывает цену. */
   const SCAN_MODE_KEY = 'wm_scan_mode';
-  const scanMode = () => { try { return localStorage.getItem(SCAN_MODE_KEY) === 'price' ? 'price' : 'card'; } catch (e) { return 'card'; } };
+  const MODES = ['card', 'price', 'out'];
+  const scanMode = () => {
+    try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
+  };
   const syncScanMode = () => {
     document.querySelectorAll('#scanModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.scanmode === scanMode()));
     const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
   };
   const runScan = () => {
     syncScanMode();
-    if (scanMode() === 'price') startScan(scanToPrice, { keepOpen: true });
+    const m = scanMode();
+    if (m === 'price') startScan(scanToPrice, { keepOpen: true });
+    else if (m === 'out') startScan(scanToRestock, { keepOpen: true });
     else startScan(scanToSearch);
   };
   $('scanSearchBtn').addEventListener('click', runScan);
@@ -883,6 +890,24 @@ function bindEvents() {
     if (row) { openOrderForm(row.dataset.ordOpen); return; }
     const day = e.target.closest('[data-ord-day]');
     if (day) openOrderForm(null, day.dataset.ordDay);
+  });
+
+  // ── «Закончилось на полке»: список пополнения ──
+  $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
+  $('btnRestock').addEventListener('click', () => {
+    const p = ui.currentProduct;
+    if (!p) return;
+    const added = toggleRestock(p);
+    $('btnRestock').textContent = added ? 'Убрать из списка пополнения' : 'Закончилось на полке';
+    toast(added ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
+  });
+  $('restockShare').addEventListener('click', shareRestock);
+  $('restockClear').addEventListener('click', clearRestock);
+  $('restockBody').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rst-rm]');
+    if (rm) { removeRestock(rm.dataset.rstRm); return; }
+    const ord = e.target.closest('[data-rst-order]');
+    if (ord) orderFromRestock(ord.dataset.rstOrder);
   });
 
   // Убрать дубли товаров (только админ)
@@ -1031,7 +1056,8 @@ async function init() {
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
-    _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui };
+    _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
+    _scanRestock: scanToRestock };
 }
 
 init();
