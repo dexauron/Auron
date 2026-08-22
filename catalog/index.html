@@ -180,7 +180,6 @@
           <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
           <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
           <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
-          <button class="ios-row ios-row-link" id="menuCount"><span class="ios-row-title">Пересчёт остатков</span><span class="ios-row-value" id="menuCountValue"></span></button>
           <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
           <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
           <button class="ios-row ios-row-link" id="menuPhotoFill"><span class="ios-row-title">Дозаполнить фото</span></button>
@@ -888,27 +887,6 @@
       <div class="sheet-body" id="restockBody"></div>
       <div class="filter-actions">
         <button class="btn btn-secondary btn-block" id="restockClear">Очистить список</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Пересчёт остатков: что на полке против того, что в базе -->
-  <div class="sheet-backdrop" id="countSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="ios-nav">
-        <button class="ios-nav-btn" id="countShare">Передать</button>
-        <h2 class="ios-nav-title">Пересчёт</h2>
-        <button class="ios-nav-btn strong" data-close="countSheet">Готово</button>
-      </div>
-      <div class="sheet-body" id="countBody"></div>
-      <div class="filter-actions cnt-actions">
-        <div class="cnt-add">
-          <input type="text" id="countCode" class="ios-inp ios-inp-wide" placeholder="код или штрихкод" inputmode="numeric" autocomplete="off">
-          <button class="btn btn-secondary" id="countAdd">Добавить</button>
-        </div>
-        <button class="btn btn-primary btn-block" id="countScanBtn">Сканировать подряд</button>
-        <button class="btn btn-ghost btn-block" id="countClear">Очистить пересчёт</button>
       </div>
     </div>
   </div>
