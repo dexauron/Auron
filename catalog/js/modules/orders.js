@@ -23,6 +23,7 @@ const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 let weekStart = null;      // понедельник показываемой недели (ISO)
 let editingId = null;
+let fromRestock = null;    // поставщик, чей список «закончилось» превращаем в заказ
 
 function localOrders() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch (e) { return []; }
@@ -109,19 +110,23 @@ function orderRow(o) {
   </button>`;
 }
 
-export function openOrderForm(id, dayISO) {
+/* prefill — заказ, начатый из списка «закончилось на полке»: поставщик уже
+ * выбран, в примечании перечислено, что закончилось. После сохранения такие
+ * позиции помечаются заказанными, чтобы их не заказали второй раз. */
+export function openOrderForm(id, dayISO, prefill) {
   editingId = id || null;
+  fromRestock = (prefill && prefill.supplier_id) || null;
   const o = id ? allOrders().find((x) => x.id === id) : null;
   const sel = $('ordSupplier');
   sel.innerHTML = '<option value="">— выбери поставщика —</option>'
     + state.suppliers.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  sel.value = o ? (o.supplier_id || '') : '';
+  sel.value = o ? (o.supplier_id || '') : ((prefill && prefill.supplier_id) || '');
   $('ordPlaced').value = o ? String(o.placed_at || '').slice(0, 10) : todayISO();
   // тап по дню недели — сразу заказ на этот день, без лишней возни
   $('ordDue').value = o ? String(o.due_at || '').slice(0, 10) : (dayISO || addDays(todayISO(), 3));
   $('ordAmount').value = o ? (o.amount ?? '') : '';
   $('ordWho').value = o ? (o.who || '') : deviceName();
-  $('ordNote').value = o ? (o.note || '') : '';
+  $('ordNote').value = o ? (o.note || '') : ((prefill && prefill.note) || '');
   $('ordError').hidden = true;
   $('ordDelete').hidden = !o;
   $('ordReceived').hidden = !o || o.status === 'received';
@@ -164,6 +169,7 @@ export async function saveOrder() {
     else state.orders.push({ id: svUuid(), status: 'ordered', ...data });
     closeSheet('orderFormSheet');
     showWeekOf(data.due_at);
+    closeRestockItems(data.supplier_id);
     await svSaveAndPublish('Заказ сохранён');
     return;
   }
@@ -174,7 +180,17 @@ export async function saveOrder() {
   saveLocal(list);
   closeSheet('orderFormSheet');
   showWeekOf(data.due_at);
+  closeRestockItems(data.supplier_id);
   toast('Заказ записан на этом телефоне');
+}
+
+/* Заказ оформлен — значит то, что закончилось у этого поставщика, уже заказано.
+ * Модуль подгружаем на месте: списку пополнения нужны заказы, заказам — список,
+ * и при обычном импорте два модуля ссылались бы друг на друга по кругу. */
+function closeRestockItems(supplierId) {
+  if (!fromRestock || fromRestock !== supplierId) { fromRestock = null; return; }
+  fromRestock = null;
+  import('./restock.js').then((m) => m.markRestockOrdered(supplierId)).catch(() => {});
 }
 
 export async function markReceived() {
