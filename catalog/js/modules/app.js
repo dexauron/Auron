@@ -17,6 +17,7 @@ import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRo
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
+import { addCountByCode, bumpCount, clearCount, openCount, removeFromCount, renderCountBadge, setCountQty, shareCount, startCountScan } from './count.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -366,6 +367,7 @@ function bindEvents() {
         $('menuPhotoFill').hidden = false;
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
+      renderCountBadge();     // и не забыт ли начатый пересчёт
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
@@ -767,6 +769,8 @@ function bindEvents() {
     const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
   };
   const runScan = () => {
+    // переключатель мог быть спрятан пересчётом — возвращаем его
+    const seg = $('scanModeSeg'); if (seg) seg.hidden = false;
     syncScanMode();
     const m = scanMode();
     if (m === 'price') startScan(scanToPrice, { keepOpen: true });
@@ -908,6 +912,26 @@ function bindEvents() {
     if (rm) { removeRestock(rm.dataset.rstRm); return; }
     const ord = e.target.closest('[data-rst-order]');
     if (ord) orderFromRestock(ord.dataset.rstOrder);
+  });
+
+  // ── Пересчёт остатков ──
+  $('menuCount').addEventListener('click', () => { closeSheet('adminMenuSheet'); openCount(); });
+  $('countShare').addEventListener('click', shareCount);
+  $('countClear').addEventListener('click', clearCount);
+  $('countAdd').addEventListener('click', addCountByCode);
+  $('countCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addCountByCode(); } });
+  $('countScanBtn').addEventListener('click', startCountScan);
+  $('countBody').addEventListener('click', (e) => {
+    const minus = e.target.closest('[data-cnt-minus]');
+    if (minus) { bumpCount(minus.dataset.cntMinus, -1); return; }
+    const plus = e.target.closest('[data-cnt-plus]');
+    if (plus) { bumpCount(plus.dataset.cntPlus, 1); return; }
+    const rm = e.target.closest('[data-cnt-rm]');
+    if (rm) removeFromCount(rm.dataset.cntRm);
+  });
+  $('countBody').addEventListener('change', (e) => {
+    const inp = e.target.closest('[data-cnt-qty]');
+    if (inp) setCountQty(inp.dataset.cntQty, inp.value);
   });
 
   // Убрать дубли товаров (только админ)
