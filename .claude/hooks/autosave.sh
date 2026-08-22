@@ -26,8 +26,14 @@ SAVE="claude/autosave-${BR##*/}"
 MARK="/tmp/.auron-autosave-$(pwd | md5sum | cut -c1-8)"
 if [ -f "$MARK" ] && [ $(( $(date +%s) - $(stat -c %Y "$MARK" 2>/dev/null || echo 0) )) -lt 15 ]; then exit 0; fi
 
-# Нечего сохранять — выходим молча
-[ -z "$(git status --porcelain)" ] && exit 0
+# Папка чистая И копилка уже совпадает с последним коммитом — делать нечего.
+# Если папка чистая, но копилка отстала (работу только что закоммитили) —
+# снимок всё равно нужен: иначе в копилке навсегда останется «хвост», который
+# в следующей сессии вернётся как якобы потерянная работа.
+if [ -z "$(git status --porcelain)" ] \
+   && [ "$(git rev-parse -q "refs/remotes/origin/$SAVE^{tree}" 2>/dev/null)" = "$(git rev-parse -q "HEAD^{tree}" 2>/dev/null)" ]; then
+  exit 0
+fi
 touch "$MARK"
 
 # Слепок рабочей папки через ОТДЕЛЬНЫЙ индекс: рабочий индекс не трогаем
