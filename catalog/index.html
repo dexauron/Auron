@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+  <title>Way Market · Каталог</title>
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Шапка -->
+  <header class="header">
+    <div class="header-row">
+      <div class="brand">
+        <img class="brand-logo-img" src="icons/logo-round.png" alt="Way Market">
+        <div class="brand-text">
+          <div class="brand-name">Way Market</div>
+          <div class="brand-sub">Каталог товаров</div>
+        </div>
+      </div>
+      <div class="header-btns">
+        <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
+          <span id="themeIcon"><i data-ic="auto"></i></span>
+        </button>
+        <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
+          <span id="adminBtnLabel">Войти</span>
+        </button>
+      </div>
+    </div>
+    <div class="search-row">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input type="search" id="searchInput" class="search-input" placeholder="Название, код, штрихкод…"
+               name="wm-q" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
+               inputmode="search" autocapitalize="off" aria-autocomplete="none"
+               data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore list="recentQ">
+        <datalist id="recentQ"></datalist>
+        <button class="search-clear" id="searchClear" hidden aria-label="Очистить"><i data-ic="close"></i></button>
+      </div>
+      <button class="round-btn round-btn-accent" id="scanSearchBtn" title="Сканировать штрихкод камерой">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/><path d="M18 8v8"/></svg>
+      </button>
+      <button class="round-btn" id="viewToggleBtn" title="Размер плиток">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+      </button>
+      <button class="round-btn" id="filterBtn" title="Фильтр">
+        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 16h16"/><circle cx="9" cy="8" r="2.3" fill="var(--surface)"/><circle cx="15" cy="16" r="2.3" fill="var(--surface)"/></svg>
+        <span class="filter-badge" id="filterBadge" hidden></span>
+      </button>
+    </div>
+    <nav class="chips active-filters" id="activeFilters" hidden></nav>
+  </header>
+
+  <!-- Плашки состояния -->
+  <div class="banner banner-warn" id="setupBanner" hidden>
+    Каталог ещё не настроен: в <code>js/config.js</code> не указано, откуда брать витрину.
+  </div>
+  <div class="banner banner-info" id="offlineBanner" hidden></div>
+
+  <!-- Сетка товаров -->
+  <main class="content">
+    <div class="recent-strip" id="myStrip" hidden></div>
+    <div class="recent-strip" id="newStrip" hidden></div>
+    <div class="cat-screen" id="catScreen" hidden></div>
+    <div class="grid" id="productGrid"></div>
+    <div class="empty-state" id="emptyState" hidden>
+      <div class="empty-icon"><i data-ic="search"></i></div>
+      <div class="empty-title">Ничего не нашлось</div>
+      <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
+      <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
+    </div>
+    <div class="loader" id="loader"><div class="spinner"></div></div>
+  </main>
+
+  <!-- Кнопка добавления (только админ) -->
+  <button class="fab" id="fabAdd" hidden title="Добавить товар" aria-label="Добавить товар"><i data-ic="plus"></i></button>
+
+  <!-- Нижняя панель: главный способ переключаться между разделами.
+       Так устроено любое продуктовое приложение — большие пальцы дотягиваются
+       до низа экрана, а не до шапки. -->
+  <!-- Отобрано для сравнения: полоска над нижней панелью -->
+  <div class="compare-bar" id="compareBar" hidden>
+    <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
+    <button class="btn btn-ghost" id="compareClear">Очистить</button>
+  </div>
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab active" data-tab="catalog">
+      <span class="tab-ico"><i data-ic="catalog"></i></span><span class="tab-txt">Каталог</span>
+    </button>
+    <button class="tab" data-tab="cats">
+      <span class="tab-ico"><i data-ic="cats"></i></span><span class="tab-txt">Категории</span>
+    </button>
+    <button class="tab" data-tab="fav">
+      <span class="tab-ico"><i data-ic="heart"></i></span><span class="tab-txt">Избранное</span>
+      <span class="tab-badge" id="tabFavCount" hidden></span>
+    </button>
+    <button class="tab" data-tab="work">
+      <span class="tab-ico"><i data-ic="truck"></i></span><span class="tab-txt">Работа</span>
+      <span class="tab-badge" id="tabWorkCount" hidden></span>
+    </button>
+    <button class="tab" data-tab="filters">
+      <span class="tab-ico"><i data-ic="filter"></i></span><span class="tab-txt">Фильтры</span>
+      <span class="tab-badge" id="tabFilterCount" hidden></span>
+    </button>
+  </nav>
+
+  <!-- Карточка товара -->
+  <div class="sheet-backdrop" id="productSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <button class="sheet-fav" id="btnFav" type="button" aria-pressed="false" aria-label="В избранное"><i data-ic="heart"></i></button>
+      <div class="photo-strip" id="sheetPhotos"></div>
+      <div class="photo-dots" id="sheetDots"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="sheetName"></h2>
+        <div class="badge-row" id="sheetBadges"></div>
+        <p class="sheet-desc" id="sheetDescription" hidden></p>
+        <div class="fields" id="sheetFields"></div>
+        <div id="sheetMarkup"></div>
+        <div id="sheetSales"></div>
+        <div id="sheetStock"></div>
+        <div id="sheetPrices"></div>
+        <div id="sheetCompetitors"></div>
+        <div id="sheetSupplier"></div>
+        <button class="btn btn-secondary btn-block purchase-only" id="btnCompareAdd">К сравнению</button>
+        <button class="btn btn-secondary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
+        <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
+        <div id="sheetSimilar"></div>
+        <div class="admin-actions" id="sheetAdminActions" hidden>
+          <button class="btn btn-secondary btn-find-photo" id="btnFindPhoto" hidden>Найти фото в интернете</button>
+          <button class="btn btn-secondary" id="btnEditProduct">Изменить</button>
+          <button class="btn btn-danger" id="btnDeleteProduct">Удалить</button>
+        </div>
+        <button class="btn btn-ghost sheet-close" id="sheetClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Вход: одна форма для всех — права определяются по аккаунту -->
+  <div class="sheet-backdrop" id="loginSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <img class="login-logo" src="icons/logo-round.png" alt="">
+        <h2 class="sheet-title login-title">Вход</h2>
+        <p class="muted login-sub">Введи пароль своего аккаунта — программа сама
+        определит доступ: кассир, аналитик или администратор</p>
+        <form id="loginForm">
+          <div id="loginEmailWrap" hidden>
+            <label class="field-label">Email администратора <span class="hint">— спрашивается один раз</span></label>
+            <input type="email" id="loginEmail" class="input" autocomplete="username">
+          </div>
+          <label class="field-label">Пароль</label>
+          <input type="password" id="loginPassword" class="input" required autocomplete="current-password">
+          <div class="form-error" id="loginError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="loginSubmit">Войти</button>
+        </form>
+        <button class="btn btn-ghost btn-block" id="loginDevice">Настройки этого устройства</button>
+        <button class="btn btn-ghost sheet-close" data-close="loginSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Меню администратора: сгруппированный список, как в системных настройках -->
+  <div class="sheet-backdrop" id="adminMenuSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title" id="menuTitle">Администратор</h2>
+        <button class="ios-nav-btn strong" data-close="adminMenuSheet">Готово</button>
+      </div>
+      <div class="sheet-body">
+        <p class="muted menu-role" id="adminEmail"></p>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
+          <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
+          <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
+          <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
+          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
+          <button class="ios-row ios-row-link" id="menuPhotoFill"><span class="ios-row-title">Дозаполнить фото</span></button>
+          <button class="ios-row ios-row-link" id="menuSuggestions" hidden><span class="ios-row-title">Фото на проверке</span></button>
+        </div>
+
+        <div id="menuAdminOnly">
+          <div class="ios-group-title">Каталог</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuAddProduct"><span class="ios-row-title">Добавить товар</span></button>
+            <button class="ios-row ios-row-link" id="menuImportHub"><span class="ios-row-title">Загрузка из 1С</span></button>
+            <button class="ios-row ios-row-link" id="menuGroups"><span class="ios-row-title">Группы товаров</span></button>
+            <button class="ios-row ios-row-link" id="menuSuppliers"><span class="ios-row-title">Поставщики</span></button>
+            <button class="ios-row ios-row-link" id="menuOrderRules"><span class="ios-row-title">Правила заказа</span></button>
+            <button class="ios-row ios-row-link" id="menuSortCats"><span class="ios-row-title">Разложить по категориям</span></button>
+            <button class="ios-row ios-row-link" id="menuDedup"><span class="ios-row-title">Убрать дубли товаров</span></button>
+          </div>
+
+          <div class="ios-group-title">Доступ и публикация</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuOwnerPass"><span class="ios-row-title">Пароль каталога (ваш)</span></button>
+            <button class="ios-row ios-row-link" id="menuStaffPass"><span class="ios-row-title">Пароль сотрудника</span></button>
+            <button class="ios-row ios-row-link" id="menuPublish"><span class="ios-row-title">Публикация на GitHub</span></button>
+          </div>
+        </div>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="menuLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Обзор: какие магазины мы записали и сколько по ним цен -->
+  <div class="sheet-backdrop" id="compStoresSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Цены других магазинов</h2>
+        <p class="muted">Сколько цен записано по каждому магазину. Нажми на магазин — увидишь все его цены.</p>
+        <div id="compStoresList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="compStoresSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Все цены одного магазина -->
+  <div class="sheet-backdrop" id="compStoreViewSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="compStoreViewTitle">Магазин</h2>
+        <div id="compStoreViewBody"></div>
+        <button class="btn btn-ghost sheet-close" data-close="compStoreViewSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Публикация каталога на GitHub (бесплатно, без сервера) — только админ -->
+  <div class="sheet-backdrop" id="publishSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Публикация на GitHub</h2>
+        <p class="muted">Каталог для покупателей хранится бесплатно на GitHub — без сервера и без VPN. Чтобы приложение сохраняло его туда, нужно один раз вставить «ключ». Ключ хранится только на этом устройстве.</p>
+        <div id="publishStatus" class="publish-status"></div>
+        <label class="field-label">Ключ GitHub</label>
+        <input type="password" id="ghTokenInput" class="input" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+        <div class="form-error" id="publishError" hidden></div>
+        <button class="btn btn-primary btn-block" id="ghTokenSave">Сохранить и проверить</button>
+        <button class="btn btn-secondary btn-block" id="ghPublishNow">Опубликовать витрину сейчас</button>
+        <button class="btn btn-ghost btn-block" id="ghTokenClear" hidden>Удалить ключ с устройства</button>
+        <details class="publish-help">
+          <summary>Где взять ключ? (2 минуты)</summary>
+          <ol class="publish-help-list">
+            <li>Зайди на <b>github.com</b> под своим аккаунтом.</li>
+            <li>Settings → Developer settings → Personal access tokens → <b>Fine-grained tokens</b>.</li>
+            <li>«Generate new token». Repository access → Only select repositories → выбери <b>Auron</b>.</li>
+            <li>Permissions → Repository → <b>Contents</b> → <b>Read and write</b>.</li>
+            <li>Срок (Expiration) — побольше (например 1 год).</li>
+            <li>Generate → скопируй ключ (показывается один раз) → вставь сюда.</li>
+          </ol>
+        </details>
+        <button class="btn btn-ghost sheet-close" data-close="publishSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Форма товара (добавить/изменить) -->
+  <div class="sheet-backdrop" id="formSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="formTitle">Новый товар</h2>
+        <form id="productForm">
+          <label class="field-label">Фотографии</label>
+          <div class="photo-manager" id="photoManager"></div>
+          <input type="file" id="photoInput" accept="image/*" multiple hidden>
+
+          <label class="field-label">Название * <span class="hint">— как в кассе</span></label>
+          <input type="text" id="fName" class="input" required placeholder="Хот-дог датский">
+
+          <label class="field-label">Описание <span class="hint">— текст в карточке товара</span></label>
+          <textarea id="fDescription" class="input" rows="3" placeholder="Краткое описание товара для покупателей"></textarea>
+
+          <label class="field-label">Группа</label>
+          <select id="fGroup" class="input"></select>
+
+          <label class="field-label">Поставщики <span class="hint">— можно несколько</span></label>
+          <div id="fSupplierTags" class="tag-picker"></div>
+          <div class="input-row">
+            <select id="fSupplier" class="input"></select>
+            <button type="button" class="btn btn-secondary" id="btnAddSupplierToProduct" aria-label="Добавить"><i data-ic="plus"></i></button>
+          </div>
+
+          <div class="input-pair">
+            <div>
+              <label class="field-label">Код товара</label>
+              <input type="text" id="fCode" class="input" inputmode="numeric" placeholder="1024">
+            </div>
+            <div>
+              <label class="field-label">Артикул</label>
+              <input type="text" id="fArticle" class="input" placeholder="ХД-01">
+            </div>
+          </div>
+
+          <label class="field-label">Штрихкоды <span class="hint">— каждый с новой строки; пусто, если нет</span></label>
+          <div class="input-row">
+            <textarea id="fBarcodes" class="input" rows="2" placeholder="4600000000000"></textarea>
+            <button type="button" class="btn btn-secondary btn-scan" id="btnScan" aria-label="Сканировать"><i data-ic="camera"></i></button>
+          </div>
+
+          <label class="check-row"><input type="checkbox" id="fWeighted"> Весовой товар</label>
+
+          <label class="field-label">Единица продажи <span class="hint">— шт, кг, упак… (заполняется импортом из 1С)</span></label>
+          <input type="text" id="fUnit" class="input" placeholder="шт">
+
+          <label class="field-label">Отдел / секция кассы <span class="hint">— если есть</span></label>
+          <input type="text" id="fDepartment" class="input" inputmode="numeric" placeholder="2">
+
+          <label class="field-label">Примечание</label>
+          <textarea id="fNote" class="input" rows="2" placeholder="Пробивать по коду, штрихкода нет"></textarea>
+
+          <div class="form-error" id="formError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="formSubmit">Сохранить</button>
+        </form>
+        <button class="btn btn-ghost sheet-close" data-close="formSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Выбор поставщика (фильтр, доступен всем) -->
+  <div class="sheet-backdrop" id="supplierSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Поставщики</h2>
+        <p class="muted">Отметь одного или нескольких — покажем их товары. Повторный тап снимает отметку.</p>
+        <input type="search" id="supplierSearch" class="input" placeholder="Найти поставщика…" autocomplete="off">
+        <div id="supplierList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="supplierSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Выбор группы (все группы, доступен всем) -->
+  <div class="sheet-backdrop" id="groupsPickSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Все группы</h2>
+        <p class="muted">Отметь одну или несколько групп. Повторный тап снимает отметку.</p>
+        <input type="search" id="groupsPickSearch" class="input" placeholder="Найти группу…" autocomplete="off">
+        <div id="groupsPickList"></div>
+        <button class="btn btn-ghost sheet-close" data-close="groupsPickSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Разведка цен: добавить цену другого магазина -->
+  <div class="sheet-backdrop" id="competitorAddSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Цена в другом магазине</h2>
+        <p class="muted" id="compProductName"></p>
+        <form id="competitorForm">
+          <label class="field-label">Магазин</label>
+          <input type="search" id="compStoreSearch" class="input" placeholder="Найти или создать магазин…" autocomplete="off">
+          <div id="compStoreList" class="comp-store-list"></div>
+          <div id="compChosen" class="comp-chosen" hidden></div>
+
+          <label class="field-label">Их розничная цена, ₽</label>
+          <input type="number" id="compPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="149.90" required>
+
+          <div class="form-error" id="compError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
+        </form>
+        <button class="btn btn-ghost sheet-close" data-close="competitorAddSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Настройки этого устройства: что телефон помнит и как это сбросить -->
+  <div class="sheet-backdrop" id="deviceSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Это устройство</h2>
+        <button class="ios-nav-btn strong" data-close="deviceSheet">Готово</button>
+      </div>
+      <div class="sheet-body">
+        <p class="ios-note">Каталог помнит настройки отдельно на каждом телефоне.
+        У сотрудника зала и у кассы могут быть разные — они не мешают друг другу.</p>
+
+        <div class="ios-group-title">Название устройства</div>
+        <div class="ios-group">
+          <div class="ios-row">
+            <input type="text" id="devName" class="ios-inp ios-inp-wide" maxlength="40" placeholder="Например: Касса 1">
+          </div>
+        </div>
+        <p class="ios-note">Чтобы не путать телефоны. Видно только на этом устройстве.</p>
+
+        <div class="ios-group-title">Что запомнено</div>
+        <div class="ios-group" id="devList"></div>
+
+        <div class="ios-group-title">Сбои приложения</div>
+        <div class="ios-group" id="devErrors"></div>
+
+        <div class="ios-group" id="devAuth" style="margin-top:18px"></div>
+
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="devReset"><span class="ios-row-title">Забыть всё на этом устройстве</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Калькулятор цены: сравнить предложение поставщика с теми, что уже есть -->
+  <div class="sheet-backdrop" id="calcSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Калькулятор цены</h2>
+        <p class="muted" id="calcProductName"></p>
+
+        <label class="field-label">Какую цену предлагают, ₽</label>
+        <input type="number" id="calcPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="1850">
+
+        <label class="field-label">Эта цена — за что?</label>
+        <div class="calc-seg" id="calcUnitSeg">
+          <label><input type="radio" name="calcUnit" value="pack" checked><span>За упаковку</span></label>
+          <label><input type="radio" name="calcUnit" value="piece"><span id="calcUnitPieceLabel">За штуку</span></label>
+        </div>
+
+        <div id="calcPackWrap">
+          <label class="field-label" id="calcPackLabel">Штук в упаковке</label>
+          <input type="number" id="calcPackQty" class="input" inputmode="numeric" step="1" min="1" placeholder="48">
+        </div>
+
+        <label class="field-label">Скидка, % — если обещают</label>
+        <input type="number" id="calcDiscount" class="input" inputmode="decimal" step="0.1" min="0" max="100" placeholder="0">
+
+        <div id="calcResult"></div>
+        <button class="btn btn-ghost sheet-close" data-close="calcSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Правила заказа: по ним считается точка заказа и объём закупки -->
+  <div class="sheet-backdrop" id="orderRulesSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Правила заказа</h2>
+        <p class="muted">По ним каталог считает, когда пора заказывать и сколько брать.
+        Заказывать надо не «когда мало», а когда остатка хватит ровно до приезда
+        следующей поставки — поэтому важно знать сроки.</p>
+
+        <label class="field-label">Доставка от поставщика, дней</label>
+        <input type="number" id="orLead" class="input" inputmode="numeric" step="1" min="0" max="90">
+        <p class="muted field-hint">Сколько дней проходит от заказа до приезда товара.</p>
+
+        <label class="field-label">Как часто делаем заказ, дней</label>
+        <input type="number" id="orCycle" class="input" inputmode="numeric" step="1" min="1" max="90">
+        <p class="muted field-hint">Раз в неделю — 7. Между заказами запас должен дожить.</p>
+
+        <label class="field-label">Страховой запас, дней</label>
+        <input type="number" id="orSafety" class="input" inputmode="numeric" step="1" min="0" max="90">
+        <p class="muted field-hint">Подушка на всплеск спроса и опоздание поставки.</p>
+
+        <div class="calc-out" id="orExample"></div>
+        <div class="form-error" id="orError" hidden></div>
+        <button type="button" class="btn btn-primary btn-block" id="orSave">Сохранить</button>
+        <button class="btn btn-ghost sheet-close" data-close="orderRulesSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Умный импорт: одна вкладка, каталог сам распознаёт файлы (только админ) -->
+  <div class="sheet-backdrop" id="importHubSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Импорт данных</h2>
+        <p class="muted">Выбери любые файлы из 1С или Excel — каталог сам поймёт, что это:
+        цены поставщиков, остатки, продажи, контакты или прайс-лист розничных цен — и загрузит.</p>
+        <label class="btn btn-secondary btn-block">Выбрать файлы (можно несколько)
+          <input type="file" id="smartFiles" hidden accept=".xls,.xlsx" multiple>
+        </label>
+        <div id="smartList" class="smart-list"></div>
+        <button class="btn btn-primary btn-block" id="smartRun" hidden>Загрузить всё</button>
+        <div class="banner banner-info" id="smartStatus" hidden></div>
+        <button class="btn btn-secondary btn-block" id="smartMissing" hidden>⤓ Скачать список того, что не нашлось в каталоге</button>
+        <button class="btn btn-secondary btn-block" id="hubPhotoSearch" style="margin-top:14px">Найти фото по штрихкодам (интернет)</button>
+        <button class="btn btn-ghost sheet-close" data-close="importHubSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Поставщики (управление, только админ) -->
+  <div class="sheet-backdrop" id="suppliersManageSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Поставщики</h2>
+        <button class="ios-nav-btn strong" data-close="suppliersManageSheet">Готово</button>
+      </div>
+      <div class="sheet-body">
+        <p class="ios-note">Поставщики появляются сами при загрузке файла «Цены поставщиков».
+        Здесь можно поправить название, записать телефон и убрать лишнего.</p>
+        <div class="ios-group" id="suppliersManageList"></div>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-action" id="btnAddSupplier"><span class="ios-row-title">Добавить поставщика</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Один поставщик: название, контакты, удаление -->
+  <div class="sheet-backdrop" id="supplierEditSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="supplierEditSheet">Отмена</button>
+        <h2 class="ios-nav-title">Поставщик</h2>
+        <button class="ios-nav-btn strong" id="supEditSave">Сохранить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">Название</span>
+            <input type="text" id="supEditName" class="ios-inp" maxlength="80" placeholder="Название"></div>
+          <div class="ios-row"><span class="ios-row-title">Телефон</span>
+            <input type="tel" id="supEditPhone" class="ios-inp" placeholder="+7…"></div>
+          <div class="ios-row"><span class="ios-row-title">Кто общается</span>
+            <input type="text" id="supEditPerson" class="ios-inp" maxlength="60" placeholder="имя"></div>
+        </div>
+        <div class="ios-group-title">Примечание</div>
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="supEditNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="Например: возит по вторникам"></div>
+        </div>
+        <p class="ios-note" id="supEditInfo"></p>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-danger" id="supEditDelete"><span class="ios-row-title">Удалить поставщика</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ходовые товары (после входа) -->
+  <div class="sheet-backdrop" id="topSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Ходовые товары</h2>
+        <div class="top-period" id="topChips"></div>
+        <div class="seg" id="topModeSeg">
+          <button data-mode="amount" class="active">По выручке</button>
+          <button data-mode="qty">По количеству</button>
+        </div>
+        <div id="topList"></div>
+        <button class="btn btn-ghost top-del" id="topDeletePeriod" hidden>Удалить выбранный отчёт продаж</button>
+        <button class="btn btn-ghost sheet-close" data-close="topSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+
+
+
+
+  <!-- Поиск фото по штрихкодам (только админ) -->
+  <div class="sheet-backdrop" id="photoSearchSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Найти фото автоматически</h2>
+        <p class="muted">Ищем фото товаров по <b>штрихкоду и названию</b> в открытых
+        всемирных базах (продукты, косметика, бытовая химия, корма). Находятся в
+        основном известные бренды. Фото, похожие на наш товар, сохраняются в каталог
+        и видны всем. Товары без бренда (развес, игрушки и т.п.) в базах не найти —
+        их лучше сфотографировать самим через камеру в карточке товара.</p>
+        <div class="banner banner-info" id="photoSearchStatus" hidden></div>
+        <button class="btn btn-primary btn-block" id="photoSearchRun">▶ Начать поиск</button>
+        <p class="muted" style="margin-top:12px">Держи это окно открытым, пока идёт поиск.
+        Останавливать и продолжать можно в любой день — прогресс сохраняется.</p>
+        <button class="btn btn-ghost sheet-close" data-close="photoSearchSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Пароль магазина (только админ) -->
+  <div class="sheet-backdrop" id="staffPassSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Пароль магазина</h2>
+        <p class="muted">Общий пароль, по которому входят сотрудники. После смены
+        <b>все их устройства выйдут из системы</b> — скажи новый пароль смене.
+        Меняй его при увольнении сотрудника.</p>
+        <form id="staffPassForm">
+          <label class="field-label">Новый пароль магазина <span class="hint">— от 6 символов</span></label>
+          <input type="text" id="newStaffPass" class="input" required minlength="6" autocomplete="off">
+          <div class="form-error" id="staffPassError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="staffPassSubmit">Сменить пароль и выгнать устройства</button>
+        </form>
+        <button class="btn btn-secondary btn-block" id="btnLogoutStaff">Только выгнать все устройства сотрудников</button>
+        <button class="btn btn-ghost sheet-close" data-close="staffPassSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Карточка поставщика: контакты, звонок, WhatsApp (открывается по тапу) -->
+  <div class="sheet-backdrop" id="supplierViewSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title" id="supViewName"></h2>
+        <div id="supViewBody"></div>
+        <button class="btn btn-ghost sheet-close" data-close="supplierViewSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Группы товаров (управление) -->
+  <div class="sheet-backdrop" id="groupsSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Группы товаров</h2>
+        <div id="groupsList"></div>
+        <div class="input-row">
+          <input type="text" id="newGroupName" class="input" placeholder="Новая группа…">
+          <button class="btn btn-primary" id="btnAddGroup" aria-label="Добавить"><i data-ic="plus"></i></button>
+        </div>
+        <button class="btn btn-ghost sheet-close" data-close="groupsSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сканер штрихкода -->
+  <div class="sheet-backdrop" id="scanSheet" hidden>
+    <div class="sheet sheet-small">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Наведи камеру на штрихкод</h2>
+        <!-- Два разных дела: найти товар (открыть карточку) и проверить ценники
+             подряд, не выходя из камеры. Выбор запоминается на телефоне. -->
+        <div class="seg" id="scanModeSeg">
+          <button data-scanmode="card">Товар</button>
+          <button data-scanmode="price">Ценник</button>
+          <button data-scanmode="out" class="emp-only">Закончилось</button>
+        </div>
+        <div id="scanResult" class="scan-result" hidden></div>
+        <div id="scanContainer" class="scan-box"></div>
+        <button class="btn btn-secondary btn-block" id="scanTorch" hidden>Подсветка</button>
+        <button class="btn btn-ghost sheet-close" data-close="scanSheet">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Дозаполнить витрину: товары без фото → снять камерой (для сотрудников) -->
+  <div class="sheet-backdrop" id="photoFillSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Дозаполнить фото</h2>
+        <p class="muted">Товары без фото. Сфотографируй те, что перед тобой на полке —
+        фото сразу появится у всех и в витрине.</p>
+        <label class="check-row" style="border:none;padding:6px 2px 12px">
+          <input type="checkbox" class="check-cb" id="cleanPhotosToggle">
+          <span class="check-text">Чистый белый фон <span class="hint">— вырезать фон (пробно; первый раз грузится дольше)</span></span>
+        </label>
+        <div class="banner banner-info" id="photoFillCount"></div>
+        <input type="search" id="photoFillSearch" class="input" placeholder="Найти товар по названию или коду…" autocomplete="off">
+        <div id="photoFillList"></div>
+        <input type="file" id="photoFillInput" accept="image/*" capture="environment" hidden>
+        <button class="btn btn-ghost sheet-close" data-close="photoFillSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
+  <div class="sheet-backdrop" id="filterSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" data-no-back>
+      <div class="sheet-handle"></div>
+      <!-- Шапка как в системных окнах iOS: действие слева, название по центру,
+           действие справа. Никаких крестиков в углу. -->
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="filterReset">Сбросить</button>
+        <h2 class="ios-nav-title">Фильтры</h2>
+        <button class="ios-nav-btn strong" data-close="filterSheet">Готово</button>
+      </div>
+      <div class="sheet-body filter-body">
+
+        <!-- Сгруппированный список: как «Настройки» на iPhone -->
+        <div class="ios-group">
+          <label class="ios-row" for="filterFav">
+            <span class="ios-row-title">Только избранное</span>
+            <span class="ios-switch"><input type="checkbox" id="filterFav"><span class="ios-knob"></span></span>
+          </label>
+        </div>
+
+        <div class="ios-group-title">Сортировка</div>
+        <div class="ios-group" id="sortSeg">
+          <button class="ios-row" data-sort="relevance"><span class="ios-row-title">По совпадению</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="name"><span class="ios-row-title">По названию, А–Я</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="cheap"><span class="ios-row-title">Сначала дешёвые</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="expensive"><span class="ios-row-title">Сначала дорогие</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="new"><span class="ios-row-title">Сначала новые</span><span class="ios-check"></span></button>
+          <button class="ios-row" data-sort="popular"><span class="ios-row-title">Сначала ходовые</span><span class="ios-check"></span></button>
+        </div>
+
+        <div class="ios-group-title">Категории</div>
+        <div class="ios-group check-list" id="filterCats"></div>
+        <button class="btn btn-secondary btn-block" id="filterGroupsBtn" hidden>Подгруппы…</button>
+
+        <div class="emp-only">
+          <div class="ios-group-title">Тип товара</div>
+          <div class="seg" id="typeSeg">
+            <button data-type="">Все</button>
+            <button data-type="weighted">Весовые</button>
+            <button data-type="piece">Штучные</button>
+          </div>
+        </div>
+
+        <div class="ios-group-title">Цена, ₽</div>
+        <div class="chips chips-wrap price-presets" id="pricePresets">
+          <button class="chip" data-pmin="" data-pmax="100">до 100</button>
+          <button class="chip" data-pmin="100" data-pmax="300">100–300</button>
+          <button class="chip" data-pmin="300" data-pmax="1000">300–1000</button>
+          <button class="chip" data-pmin="1000" data-pmax="">от 1000</button>
+        </div>
+        <div class="ios-group">
+          <div class="ios-row">
+            <span class="ios-row-title">От</span>
+            <input type="number" id="priceMin" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+          </div>
+          <div class="ios-row">
+            <span class="ios-row-title">До</span>
+            <input type="number" id="priceMax" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+          </div>
+        </div>
+
+        <div class="emp-only">
+          <div class="ios-group-title">Поступление</div>
+          <div class="chips chips-wrap" id="arrivalPresets">
+            <button class="chip" data-days="0">Сегодня</button>
+            <button class="chip" data-days="7">7 дней</button>
+            <button class="chip" data-days="30">30 дней</button>
+            <button class="chip" data-days="90">3 месяца</button>
+          </div>
+          <div class="ios-group">
+            <div class="ios-row">
+              <span class="ios-row-title">С</span>
+              <input type="date" id="arrivalFrom" class="ios-inp" aria-label="Поступление с">
+            </div>
+            <div class="ios-row">
+              <span class="ios-row-title">По</span>
+              <input type="date" id="arrivalTo" class="ios-inp" aria-label="Поступление по">
+            </div>
+          </div>
+          <p class="ios-note">Дата берётся из файла «Цены поставщиков» (колонка «Период»).</p>
+        </div>
+
+        <div class="purchase-only">
+          <div class="ios-group-title">Поставщики</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="filterSuppliersBtn">
+              <span class="ios-row-title">Выбрать поставщиков</span>
+              <span class="ios-row-value" id="filterSuppliersVal">Все</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="emp-only">
+          <div class="ios-group-title">Показывать</div>
+          <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
+        </div>
+      </div>
+      <!-- Кнопка результата всегда на виду, как в фильтрах системных приложений -->
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Смена пароля каталога (владелец) -->
+  <div class="sheet-backdrop" id="ownerPassSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="ownerPassSheet">Отмена</button>
+        <h2 class="ios-nav-title">Пароль каталога</h2>
+        <span></span>
+      </div>
+      <div class="sheet-body">
+        <p class="ios-note">Это ваш пароль — тот, которым открывается весь каталог.
+        При смене каталог перешифровывается заново: старый пароль перестаёт работать
+        даже у того, кто успел его записать. Займёт столько же, сколько обычная публикация.</p>
+        <form id="ownerPassForm">
+          <div class="ios-group">
+            <div class="ios-row"><span class="ios-row-title">Новый пароль</span>
+              <input type="password" id="ownerPassNew" class="ios-inp" autocomplete="new-password" required></div>
+            <div class="ios-row"><span class="ios-row-title">Ещё раз</span>
+              <input type="password" id="ownerPassAgain" class="ios-inp" autocomplete="new-password" required></div>
+          </div>
+          <div class="form-error" id="ownerPassError" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block" id="ownerPassSubmit" style="margin-top:16px">Сменить пароль</button>
+        </form>
+        <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
+        где не потеряете.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Работа: заказы, «закончилось», сравнение — в одном месте -->
+  <div class="sheet-backdrop" id="workSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Работа</h2>
+        <button class="ios-nav-btn strong" data-close="workSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="workBody"></div>
+    </div>
+  </div>
+
+  <!-- Заказы поставщикам: неделя, месяц, суммы по дням, список -->
+  <div class="sheet-backdrop" id="ordersSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="ordShare">Передать</button>
+        <h2 class="ios-nav-title">Заказы</h2>
+        <button class="ios-nav-btn strong" data-close="ordersSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="ordersBody"></div>
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-block" id="ordAdd">Новый заказ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Один заказ -->
+  <div class="sheet-backdrop" id="orderFormSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="orderFormSheet">Отмена</button>
+        <h2 class="ios-nav-title" id="ordFormTitle">Новый заказ</h2>
+        <button class="ios-nav-btn strong" id="ordSave">Сохранить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">У кого</span>
+            <select id="ordSupplier" class="ios-inp"></select></div>
+          <div class="ios-row"><span class="ios-row-title">Сумма, ₽</span>
+            <input type="number" id="ordAmount" class="ios-inp" inputmode="decimal" min="0" placeholder="0"></div>
+        </div>
+        <div class="ios-group-title">Сроки</div>
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">Заказали</span>
+            <input type="date" id="ordPlaced" class="ios-inp"></div>
+          <div class="ios-row"><span class="ios-row-title">Должен прийти</span>
+            <input type="date" id="ordDue" class="ios-inp"></div>
+        </div>
+        <div class="ios-group-title">Кто заказал</div>
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="ordWho" class="ios-inp ios-inp-wide" maxlength="40" placeholder="имя или смена"></div>
+          <div class="ios-row"><input type="text" id="ordNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="примечание"></div>
+        </div>
+        <div class="form-error" id="ordError" hidden></div>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-action" id="ordReceived"><span class="ios-row-title">Отметить: заказ пришёл</span></button>
+        </div>
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="ordDelete"><span class="ios-row-title">Удалить заказ</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Закончилось на полке: список пополнения по поставщикам -->
+  <div class="sheet-backdrop" id="restockSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="restockShare">Передать</button>
+        <h2 class="ios-nav-title">Закончилось</h2>
+        <button class="ios-nav-btn strong" data-close="restockSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="restockBody"></div>
+      <div class="filter-actions">
+        <button class="btn btn-secondary btn-block" id="restockClear">Очистить список</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сравнение товаров: цены поставщиков рядом -->
+  <div class="sheet-backdrop" id="compareSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="compareClear2">Очистить</button>
+        <h2 class="ios-nav-title">Сравнение</h2>
+        <button class="ios-nav-btn strong" data-close="compareSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="compareBody"></div>
+    </div>
+  </div>
+
+  <!-- Просмотр фото на весь экран -->
+  <div class="lightbox" id="lightbox" hidden>
+    <img id="lightboxImg" src="" alt="">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Закрыть"><i data-ic="close"></i></button>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <!-- Библиотека базы лежит рядом (не с чужого CDN) — быстрее старт и работает офлайн -->
+  <script src="js/config.js"></script>
+  <script type="module" src="js/modules/app.js"></script>
+</body>
+</html>
