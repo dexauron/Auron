@@ -778,6 +778,18 @@ function bindEvents() {
     else startScan(scanToSearch);
   };
   $('scanSearchBtn').addEventListener('click', runScan);
+
+  /* Быстрые действия с ярлыка приложения (долгое нажатие на значок на главном
+     экране телефона): «Сканер», «Закончилось», «Пересчёт». Ярлык открывает
+     каталог с адресом ?do=…, а здесь сразу открывается нужный экран — на
+     одно-два касания меньше в начале каждой смены. */
+  ui.runQuickAction = (what) => {
+    if (what === 'scan') { runScan(); return; }
+    if (what !== 'restock' && what !== 'count') return;
+    // списки — рабочие, для вошедших: без входа сначала показываем вход
+    if (!state.session) { ui.openAdminOrLogin(); return; }
+    if (what === 'restock') openRestock(); else openCount();
+  };
   $('scanModeSeg').addEventListener('click', (e) => {
     const b = e.target.closest('[data-scanmode]');
     if (!b) return;
@@ -1074,6 +1086,18 @@ async function init() {
 
   await safely('обновление каталога', refresh)();
   openFromHash(); // если открыли по ссылке на товар — показываем его
+  runQuickActionFromUrl();
+}
+
+/* Ярлык на главном экране телефона открывает каталог с ?do=… Разбираем это
+ * один раз и убираем из адреса: иначе обновление страницы снова открывало бы
+ * камеру, а ссылкой на каталог нельзя было бы просто поделиться. */
+function runQuickActionFromUrl() {
+  let what = '';
+  try { what = new URLSearchParams(location.search).get('do') || ''; } catch (e) { return; }
+  if (!what) return;
+  try { history.replaceState(history.state, '', location.pathname + location.hash); } catch (e) { /* некритично */ }
+  if (ui.runQuickAction) safely('быстрое действие', () => ui.runQuickAction(what))();
 }
 
 // Тестовый доступ — только на localhost (в проде не открываем).
