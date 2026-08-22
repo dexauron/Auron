@@ -383,6 +383,8 @@ function bindEvents() {
     if (b.dataset.tab === 'work') { openWork(); return; }
     switchTab(b.dataset.tab);
   });
+  // плашка «сегодня поставка» — прямой путь к заказам
+  $('todayBanner').addEventListener('click', () => openOrders());
   $('workBody').addEventListener('click', (e) => {
     const b = e.target.closest('[data-work]');
     if (!b) return;

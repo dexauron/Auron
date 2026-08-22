@@ -8,9 +8,9 @@
 
 import { $, state, ui } from './store.js';
 import { openSheet } from './core.js';
-import { fmtPrice } from './catalog.js';
+import { fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
-import { ordersSummary } from './orders.js';
+import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
 import { compareCount } from './compare.js';
 
@@ -54,9 +54,27 @@ function renderWork() {
     не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>`;
 }
 
+/* Плашка вверху главного экрана: что ждёт сегодня. Сотрудник заходит в каталог
+ * десятки раз за смену — и первым делом должен видеть, что сегодня приезжает
+ * поставка и что с прошлой недели висит непринятый заказ. */
+function renderTodayBanner() {
+  const el = $('todayBanner');
+  if (!el) return;
+  if (!state.session) { el.hidden = true; return; }
+  const t = ordersDue(todayISO());
+  const late = ordersSummary().overdue;
+  if (!t.count && !late) { el.hidden = true; return; }
+  const parts = [];
+  if (t.count) parts.push(`Сегодня ${t.count} ${plural(t.count, 'поставка', 'поставки', 'поставок')} · ${fmtPrice(t.sum)}`);
+  if (late) parts.push(`<span class="ord-late">просрочено ${late}</span>`);
+  el.innerHTML = `${parts.join(' · ')} <span class="banner-go">Открыть ›</span>`;
+  el.hidden = false;
+}
+
 /* Значок на вкладке: сколько дел ждёт — просроченные поставки и позиции,
  * которые закончились. Ноль значка не рисует: пустой кружок только мешает. */
 export function renderWorkBadge() {
+  renderTodayBanner();
   const el = $('tabWorkCount');
   if (!el) return;
   const n = state.session ? ordersSummary().overdue + restockCount() : 0;
