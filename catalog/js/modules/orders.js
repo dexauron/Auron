@@ -91,6 +91,13 @@ function overdueOrders() {
     && String(o.due_at || '').slice(0, 10) < today);
 }
 
+// Поставки, которые должны прийти в этот день (и на какую сумму)
+export function ordersDue(dateISO) {
+  const list = allOrders().filter((o) => o.status !== 'cancelled' && o.status !== 'received'
+    && String(o.due_at || '').slice(0, 10) === dateISO);
+  return { count: list.length, sum: list.reduce((s, o) => s + (Number(o.amount) || 0), 0) };
+}
+
 /* Короткая сводка для экрана «Работа»: сколько поставок на этой неделе, на
  * какую сумму и сколько просрочено. */
 export function ordersSummary() {

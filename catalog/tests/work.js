@@ -85,6 +85,38 @@ const openWork = (page) => page.evaluate(async () => {
     chk(ok.work && ok.ids.includes(sheet), `«${what}» открывает свой экран (${ok.ids.join(',')})`);
   }
 
+  // 4. Плашка «что ждёт сегодня» на главном экране
+  const banner = await page.evaluate(async (today) => {
+    const P = window.WM_PUBLISH;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    P._state().orders.push({ id: 'o3', status: 'ordered', supplier_id: 's1', supplier_name: 'Молзавод', placed_at: today, due_at: today, amount: 5400, who: 'Анна' });
+    P.renderAll();
+    await new Promise((r) => setTimeout(r, 250));
+    const el = document.getElementById('todayBanner');
+    return { shown: !el.hidden, text: el.innerText.replace(/\s+/g, ' ') };
+  }, local(new Date()));
+  chk(banner.shown && /Сегодня 1 поставка/.test(banner.text), `видно, что сегодня ждём поставку (${banner.text})`);
+  chk(/5\s?400/.test(banner.text.replace(/ /g, ' ')) && /просрочено 1/.test(banner.text),
+    `в плашке сумма на сегодня и просрочка (${banner.text})`);
+
+  const bannerGo = await page.evaluate(async () => {
+    document.getElementById('todayBanner').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return !document.getElementById('ordersSheet').hidden;
+  });
+  chk(bannerGo, 'тап по плашке открывает заказы');
+
+  const bannerOff = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    P._state().orders = [];
+    localStorage.setItem('wm_restock_v1', '[]');
+    P.renderAll();
+    await new Promise((r) => setTimeout(r, 250));
+    return { banner: document.getElementById('todayBanner').hidden, badge: document.getElementById('tabWorkCount').hidden };
+  });
+  chk(bannerOff.banner && bannerOff.badge, 'когда дел нет — ни плашки, ни значка');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

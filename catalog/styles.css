@@ -1512,3 +1512,11 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 /* просроченная поставка: день прихода прошёл, «пришёл» никто не отметил */
 .ord-late { color: var(--neg); font-weight: 600; font-size: 12px; }
 .ord-late-head { color: var(--neg); }
+/* Плашка «что ждёт сегодня» — кнопка во всю ширину над сеткой товаров */
+.banner-today {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: none; font: inherit; font-size: 14px;
+  background: var(--surface); color: var(--text);
+}
+.banner-today:active { opacity: .6; }
+.banner-go { float: right; color: var(--accent); font-weight: 600; }
