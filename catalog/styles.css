@@ -1520,3 +1520,13 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 }
 .banner-today:active { opacity: .6; }
 .banner-go { float: right; color: var(--accent); font-weight: 600; }
+/* Строка добавления позиции в заказ: название, количество, кнопка */
+.ord-add { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.ord-add .ios-inp {
+  flex: 1; width: auto; height: 44px; padding: 0 12px; text-align: left;
+  border: .5px solid var(--border); border-radius: 10px; background: var(--surface);
+}
+.ord-add .ord-qty { flex: 0 0 64px; text-align: center; }
+.ord-add .btn { flex: 0 0 auto; margin: 0; height: 44px; }
+/* подсказка в заголовке группы — обычным текстом, заголовок и так капсом */
+.ios-group-title .hint { text-transform: none; letter-spacing: 0; }

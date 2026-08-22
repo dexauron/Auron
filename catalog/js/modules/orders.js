@@ -13,6 +13,7 @@
 
 import { $, state } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
+import { ic } from './icons.js';
 import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
 import { plural } from './competitors.js';
@@ -24,6 +25,7 @@ const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 const MODE_KEY = 'wm_ord_mode';   // «неделя» или «месяц» — как человек привык
 let weekStart = null;      // понедельник показываемой недели (ISO)
 let editingId = null;
+let formItems = [];        // позиции текущего заказа: что именно заказали
 let onSaved = null;        // что сделать после сохранения (например, пометить
                            // заказанным то, что закончилось на полке)
 
@@ -220,9 +222,49 @@ function orderRow(o) {
     ? '<span class="ord-late">просрочен</span>' : '';
   return `<button class="ios-row ios-row-link" data-ord-open="${esc(o.id)}">
     <span class="ios-row-title">${esc(sup)} ${mark}${done}${late}
-      <span class="ord-sub">${fmtDate(o.due_at)} · заказал ${esc(o.who || '—')} · от ${fmtDate(o.placed_at)}</span></span>
+      <span class="ord-sub">${fmtDate(o.due_at)} · заказал ${esc(o.who || '—')} · от ${fmtDate(o.placed_at)}${
+  (o.items || []).length ? ` · ${o.items.length} ${plural(o.items.length, 'позиция', 'позиции', 'позиций')}` : ''}</span></span>
     <span class="ios-row-value">${fmtPrice(Number(o.amount) || 0)}</span>
   </button>`;
+}
+
+/* ── Что заказали ────────────────────────────────────────────────────────
+ * Раньше в заказе была только сумма — при приёмке сверять было не с чем.
+ * Позиции необязательны: заказ по телефону «как обычно» так и остаётся одной
+ * суммой, а если позиции записали — они видны и в списке, и в сообщении
+ * владельцу. Товар ищем по коду, штрихкоду и названию; чего нет в каталоге,
+ * записываем как есть (заказывают и то, чего в базе ещё нет). */
+function renderOrderItems() {
+  const box = $('ordItems');
+  if (!box) return;
+  box.hidden = !formItems.length;
+  box.innerHTML = formItems.map((it, i) => `<div class="ios-row">
+    <span class="ios-row-title">${esc(it.name)}${it.code ? `<span class="ord-sub">код ${esc(it.code)}</span>` : ''}</span>
+    <span class="ios-row-value">${it.qty ? '× ' + esc(String(it.qty)) : ''}</span>
+    <button class="rst-rm" data-ord-item-rm="${i}" aria-label="Убрать позицию">${ic('close', 'ic-xs')}</button>
+  </div>`).join('');
+}
+
+export function addOrderItem() {
+  const nameEl = $('ordItemName'); const qtyEl = $('ordItemQty');
+  const raw = String(nameEl.value || '').trim();
+  if (!raw) return;
+  const low = raw.toLowerCase();
+  const p = state.products.find((x) => String(x.code || '').trim() === raw)
+    || state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === raw))
+    || state.products.find((x) => String(x.name || '').toLowerCase() === low);
+  formItems.push({
+    name: p ? p.name : raw,
+    code: p ? (p.code || '') : '',
+    qty: Number(String(qtyEl.value).replace(',', '.')) || 0,
+  });
+  nameEl.value = ''; qtyEl.value = '';
+  renderOrderItems();
+}
+
+export function removeOrderItem(i) {
+  formItems.splice(Number(i), 1);
+  renderOrderItems();
 }
 
 /* prefill — заказ, начатый из списка «закончилось на полке»: поставщик уже
@@ -232,6 +274,7 @@ export function openOrderForm(id, dayISO, prefill) {
   editingId = id || null;
   onSaved = (prefill && prefill.onSaved) || null;
   const o = id ? allOrders().find((x) => x.id === id) : null;
+  formItems = (o ? (o.items || []) : ((prefill && prefill.items) || [])).map((x) => ({ ...x }));
   const sel = $('ordSupplier');
   sel.innerHTML = '<option value="">— выбери поставщика —</option>'
     + state.suppliers.map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
@@ -242,6 +285,8 @@ export function openOrderForm(id, dayISO, prefill) {
   $('ordAmount').value = o ? (o.amount ?? '') : '';
   $('ordWho').value = o ? (o.who || '') : deviceName();
   $('ordNote').value = o ? (o.note || '') : ((prefill && prefill.note) || '');
+  renderOrderItems();
+  $('ordItemName').value = ''; $('ordItemQty').value = '';
   $('ordError').hidden = true;
   $('ordDelete').hidden = !o;
   $('ordReceived').hidden = !o || o.status === 'received';
@@ -259,6 +304,7 @@ function readForm() {
     amount: Number(String($('ordAmount').value).replace(',', '.')) || 0,
     who: $('ordWho').value.trim() || deviceName(),
     note: $('ordNote').value.trim(),
+    items: formItems.map((x) => ({ ...x })),
   };
 }
 
@@ -349,7 +395,9 @@ export async function shareOrders() {
   if (!mine.length) { toast('Своих заказов пока нет'); return; }
   const text = 'Заказы поставщикам:\n' + mine.map((o) => {
     const sup = o.supplier_name || (supplierById(o.supplier_id) || {}).name || 'поставщик';
-    return `${sup} · ${fmtPrice(Number(o.amount) || 0)} · заказал ${o.who || '—'} ${fmtDate(o.placed_at)} · придёт ${fmtDate(o.due_at)}${o.note ? ' · ' + o.note : ''}`;
+    const items = (o.items || []).length
+      ? '\n   ' + o.items.map((x) => `${x.name}${x.qty ? ' × ' + x.qty : ''}`).join(', ') : '';
+    return `${sup} · ${fmtPrice(Number(o.amount) || 0)} · заказал ${o.who || '—'} ${fmtDate(o.placed_at)} · придёт ${fmtDate(o.due_at)}${o.note ? ' · ' + o.note : ''}${items}`;
   }).join('\n');
   try {
     if (navigator.share) { await navigator.share({ text }); return; }
