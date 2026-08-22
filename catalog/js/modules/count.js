@@ -92,6 +92,15 @@ export function clearCount() {
   renderCount();
 }
 
+/* В меню видно, что пересчёт начат и не доведён до конца: без этого его легко
+ * забыть открытым на неделю и потом удивиться цифрам. */
+export function renderCountBadge() {
+  const el = $('menuCountValue');
+  if (!el) return;
+  const n = read().items.length;
+  el.textContent = n ? `посчитано ${n}` : '';
+}
+
 export function openCount() {
   renderCount();
   openSheet('countSheet');

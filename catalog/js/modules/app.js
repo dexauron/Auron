@@ -17,7 +17,7 @@ import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRo
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
-import { addCountByCode, bumpCount, clearCount, openCount, removeFromCount, setCountQty, shareCount, startCountScan } from './count.js';
+import { addCountByCode, bumpCount, clearCount, openCount, removeFromCount, renderCountBadge, setCountQty, shareCount, startCountScan } from './count.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -367,6 +367,7 @@ function bindEvents() {
         $('menuPhotoFill').hidden = false;
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
+      renderCountBadge();     // и не забыт ли начатый пересчёт
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
