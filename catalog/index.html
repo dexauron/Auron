@@ -65,6 +65,7 @@
 
   <!-- Сетка товаров -->
   <main class="content">
+    <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <div class="grid" id="productGrid"></div>
@@ -636,10 +637,16 @@
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title">Наведи камеру на штрихкод</h2>
-        <p class="muted">Держи телефон ровно, штрихкод — по центру. Читает светлые и тёмные коды.</p>
+        <!-- Два разных дела: найти товар (открыть карточку) и проверить ценники
+             подряд, не выходя из камеры. Выбор запоминается на телефоне. -->
+        <div class="seg" id="scanModeSeg">
+          <button data-scanmode="card">Открыть товар</button>
+          <button data-scanmode="price">Проверить ценник</button>
+        </div>
+        <div id="scanResult" class="scan-result" hidden></div>
         <div id="scanContainer" class="scan-box"></div>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>Подсветка</button>
-        <button class="btn btn-ghost sheet-close" data-close="scanSheet">Отмена</button>
+        <button class="btn btn-ghost sheet-close" data-close="scanSheet">Готово</button>
       </div>
     </div>
   </div>

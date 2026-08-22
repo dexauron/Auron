@@ -1,8 +1,9 @@
 // Сканер штрихкода камерой
 
 import { $, state } from './store.js';
-import { closeSheet, norm, openSheet, toast } from './core.js';
+import { closeSheet, esc, norm, openSheet, toast } from './core.js';
 import { renderActiveFilters, renderGrid } from './render.js';
+import { fmtRetail } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -17,14 +18,30 @@ export function stopScan() {
   if (scanStopFn) { scanStopFn(); scanStopFn = null; }
 }
 
-export async function startScan(onResult) {
+/* keepOpen — режим «подряд»: камера не закрывается после каждого товара.
+ * Раньше после каждого штрихкода окно захлопывалось, и чтобы проверить пять
+ * ценников подряд, сотрудник пять раз открывал камеру заново.
+ * Один и тот же код в течение REPEAT_MS не считаем повторно — иначе кадр за
+ * кадром распознаётся одно и то же. */
+const REPEAT_MS = 2500;
+export async function startScan(onResult, { keepOpen = false } = {}) {
   openSheet('scanSheet');
   let finished = false;
+  let lastText = ''; let lastAt = 0;
   const done = (text) => {
+    const t = String(text).trim();
+    if (keepOpen) {
+      const now = Date.now();
+      if (t === lastText && now - lastAt < REPEAT_MS) return;
+      lastText = t; lastAt = now;
+      try { navigator.vibrate && navigator.vibrate(40); } catch (e) { /* необязательно */ }
+      onResult(t);
+      return;                       // камера продолжает работать
+    }
     if (finished) return;
     finished = true;
     closeSheet('scanSheet'); // closeSheet сам остановит камеру
-    onResult(String(text).trim());
+    onResult(t);
   };
   try {
     if ('BarcodeDetector' in window) await scanNative(done);
@@ -90,7 +107,7 @@ async function scanNative(done) {
     if (!active) return;
     try {
       const codes = await detector.detect(video);
-      if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); return; }
+      if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); if (!active) return; }
       // каждый второй кадр пробуем инверсию (для тёмных/светлых штрихкодов)
       if (video.videoWidth && (frame++ % 2 === 0)) {
         const w = Math.min(960, video.videoWidth); const h = Math.round(video.videoHeight * (w / video.videoWidth));
@@ -101,7 +118,7 @@ async function scanNative(done) {
         for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
         cx.putImageData(img, 0, 0);
         const inv = await detector.detect(canvas);
-        if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); return; }
+        if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); if (!active) return; }
       }
     } catch (e) { /* кадр не считался — пробуем дальше */ }
     setTimeout(tick, 160);
@@ -167,6 +184,27 @@ async function scanWithLibrary(done) {
 }
 
 // сотрудник отсканировал штрихкод → ищем товар
+/* Проверка ценника: крупно название, цена и код — прямо в окне камеры.
+ * Карточку не открываем: при сверке ценников подряд она бы каждый раз
+ * перекрывала камеру. Кнопка «Открыть товар» рядом — на случай, когда нужны
+ * подробности. */
+export function scanToPrice(text) {
+  const box = $('scanResult');
+  if (!box) return;
+  const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
+  box.hidden = false;
+  if (!p) {
+    box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>
+      <div class="scan-result-code">${esc(text)}</div>`;
+    return;
+  }
+  const price = (p.retail_price != null && p.retail_price !== '') ? fmtRetail(p) : 'цена не указана';
+  box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
+    <div class="scan-result-price">${esc(price)}</div>
+    ${p.code ? `<div class="scan-result-code">код ${esc(p.code)}</div>` : ''}
+    <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>`;
+}
+
 export function scanToSearch(text) {
   const input = $('searchInput');
   input.value = text;

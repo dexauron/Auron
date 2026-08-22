@@ -1405,3 +1405,20 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .ios-nav-btn { min-height: 44px; }
 .seg button { min-height: 36px; }
 .card-code, .code-chip { min-height: 34px; display: inline-flex; align-items: center; }
+/* код товара прямо в ленте «Мои частые» — за ним сотрудник туда и идёт */
+.similar-code { display: inline-block; margin-top: 2px; font-weight: 700; font-size: 15px;
+  color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+
+/* ── Проверка ценника: ответ виден с вытянутой руки ─────────────────────────
+   Сотрудник сверяет ценники на бегу, телефон держит далеко от глаз — поэтому
+   цена набрана крупно, а подробности карточки тут только мешали бы. */
+.scan-result {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 14px 16px; margin: 10px 0 12px; text-align: center;
+}
+.scan-result-name { font-size: 17px; font-weight: 600; line-height: 1.25; }
+.scan-result-price { font-size: 44px; font-weight: 800; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
+.scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.scan-result-miss { font-size: 17px; font-weight: 600; color: var(--warn); }
+.scan-result .btn { margin-top: 10px; }
