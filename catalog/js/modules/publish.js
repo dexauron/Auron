@@ -324,6 +324,7 @@ export function buildFullSnapshot() {
     prices: state.prices || [], sales: state.sales || [], contacts: state.contacts || {},
     competitors: state.competitors || [], compPrices: state.compPrices || [],
     unitCoef: state.unitCoef || {},
+    orders: state.orders || [],                 // заказы поставщикам: кто, у кого, когда придёт
     orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
   };
@@ -501,6 +502,7 @@ function applySnapshot(data, role) {
   state.competitors = data.competitors || [];
   state.compPrices = data.compPrices || [];
   state.unitCoef = data.unitCoef || {};
+  state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
   tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу

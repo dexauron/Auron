@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v88';
+const CACHE = 'wm-catalog-v90';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -12,7 +12,7 @@ const PHOTOS = 'wm-photos-v1';
 // заново качали бы весь каталог.
 const DATA = 'wm-data-v1';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
-  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/config.js', 'vendor/xlsx.min.js',
+  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/config.js', 'vendor/xlsx.min.js',
   'manifest.webmanifest',
   'icons/icon-192.png', 'icons/logo-round.png'];
 

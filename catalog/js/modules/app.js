@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, setRowText, toast, translit } from './core.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
@@ -15,6 +15,8 @@ import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, open
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
+import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -851,6 +853,38 @@ function bindEvents() {
   $('supEditSave').addEventListener('click', saveSupplierEdit);
   $('supEditDelete').addEventListener('click', deleteSupplier);
 
+  // ── Сравнение нескольких товаров ──
+  $('btnCompareAdd').addEventListener('click', () => {
+    if (!ui.currentProduct) return;
+    if (toggleCompare(ui.currentProduct.id)) {
+      $('btnCompareAdd').textContent = inCompare(ui.currentProduct.id) ? 'Убрать из сравнения' : 'К сравнению';
+      toast(inCompare(ui.currentProduct.id) ? 'Товар добавлен к сравнению' : 'Товар убран из сравнения');
+    }
+  });
+  $('compareOpen').addEventListener('click', openCompare);
+  $('compareClear').addEventListener('click', clearCompare);
+  $('compareClear2').addEventListener('click', clearCompare);
+  $('compareBody').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-cmp-rm]');
+    if (rm) removeFromCompare(rm.dataset.cmpRm);
+  });
+
+  // ── Заказы поставщикам ──
+  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
+  $('ordAdd').addEventListener('click', () => openOrderForm(null));
+  $('ordSave').addEventListener('click', saveOrder);
+  $('ordDelete').addEventListener('click', deleteOrder);
+  $('ordReceived').addEventListener('click', markReceived);
+  $('ordShare').addEventListener('click', shareOrders);
+  $('ordersBody').addEventListener('click', (e) => {
+    const wk = e.target.closest('[data-ord-week]');
+    if (wk) { shiftWeek(Number(wk.dataset.ordWeek)); return; }
+    const row = e.target.closest('[data-ord-open]');
+    if (row) { openOrderForm(row.dataset.ordOpen); return; }
+    const day = e.target.closest('[data-ord-day]');
+    if (day) openOrderForm(null, day.dataset.ordDay);
+  });
+
   // Убрать дубли товаров (только админ)
   $('menuDedup').addEventListener('click', () => { closeSheet('adminMenuSheet'); dedupProducts(); });
   $('menuSortCats').addEventListener('click', () => { closeSheet('adminMenuSheet'); sortByInternet(); });
@@ -920,6 +954,7 @@ function bindEvents() {
 /* ── Старт ────────────────────────────────────── */
 
 async function init() {
+  watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
   // них сохранённые данные — владелец видел в поиске каталога свою почту.
@@ -988,7 +1023,7 @@ async function init() {
     }
   } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
-  await refresh();
+  await safely('обновление каталога', refresh)();
   openFromHash(); // если открыли по ссылке на товар — показываем его
 }
 

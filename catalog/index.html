@@ -84,6 +84,12 @@
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
        до низа экрана, а не до шапки. -->
+  <!-- Отобрано для сравнения: полоска над нижней панелью -->
+  <div class="compare-bar" id="compareBar" hidden>
+    <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
+    <button class="btn btn-ghost" id="compareClear">Очистить</button>
+  </div>
+
   <nav class="tabbar" id="tabbar">
     <button class="tab active" data-tab="catalog">
       <span class="tab-ico"><i data-ic="catalog"></i></span><span class="tab-txt">Каталог</span>
@@ -119,6 +125,7 @@
         <div id="sheetPrices"></div>
         <div id="sheetCompetitors"></div>
         <div id="sheetSupplier"></div>
+        <button class="btn btn-secondary btn-block purchase-only" id="btnCompareAdd">К сравнению</button>
         <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
         <div id="sheetSimilar"></div>
         <div class="admin-actions" id="sheetAdminActions" hidden>
@@ -170,6 +177,7 @@
 
         <div class="ios-group">
           <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
+          <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
           <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
           <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
           <button class="ios-row ios-row-link" id="menuPhotoFill"><span class="ios-row-title">Дозаполнить фото</span></button>
@@ -396,6 +404,9 @@
 
         <div class="ios-group-title">Что запомнено</div>
         <div class="ios-group" id="devList"></div>
+
+        <div class="ios-group-title">Сбои приложения</div>
+        <div class="ios-group" id="devErrors"></div>
 
         <div class="ios-group" id="devAuth" style="margin-top:18px"></div>
 
@@ -803,6 +814,74 @@
         <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
         где не потеряете.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Заказы поставщикам: неделя, суммы по дням, список -->
+  <div class="sheet-backdrop" id="ordersSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="ordShare">Передать</button>
+        <h2 class="ios-nav-title">Заказы</h2>
+        <button class="ios-nav-btn strong" data-close="ordersSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="ordersBody"></div>
+      <div class="filter-actions">
+        <button class="btn btn-primary btn-block" id="ordAdd">Новый заказ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Один заказ -->
+  <div class="sheet-backdrop" id="orderFormSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="orderFormSheet">Отмена</button>
+        <h2 class="ios-nav-title" id="ordFormTitle">Новый заказ</h2>
+        <button class="ios-nav-btn strong" id="ordSave">Сохранить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">У кого</span>
+            <select id="ordSupplier" class="ios-inp"></select></div>
+          <div class="ios-row"><span class="ios-row-title">Сумма, ₽</span>
+            <input type="number" id="ordAmount" class="ios-inp" inputmode="decimal" min="0" placeholder="0"></div>
+        </div>
+        <div class="ios-group-title">Сроки</div>
+        <div class="ios-group">
+          <div class="ios-row"><span class="ios-row-title">Заказали</span>
+            <input type="date" id="ordPlaced" class="ios-inp"></div>
+          <div class="ios-row"><span class="ios-row-title">Должен прийти</span>
+            <input type="date" id="ordDue" class="ios-inp"></div>
+        </div>
+        <div class="ios-group-title">Кто заказал</div>
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="ordWho" class="ios-inp ios-inp-wide" maxlength="40" placeholder="имя или смена"></div>
+          <div class="ios-row"><input type="text" id="ordNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="примечание"></div>
+        </div>
+        <div class="form-error" id="ordError" hidden></div>
+        <div class="ios-group" style="margin-top:14px">
+          <button class="ios-row ios-row-action" id="ordReceived"><span class="ios-row-title">Отметить: заказ пришёл</span></button>
+        </div>
+        <div class="ios-group">
+          <button class="ios-row ios-row-danger" id="ordDelete"><span class="ios-row-title">Удалить заказ</span></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Сравнение товаров: цены поставщиков рядом -->
+  <div class="sheet-backdrop" id="compareSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="compareClear2">Очистить</button>
+        <h2 class="ios-nav-title">Сравнение</h2>
+        <button class="ios-nav-btn strong" data-close="compareSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="compareBody"></div>
     </div>
   </div>
 

@@ -1422,3 +1422,44 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .scan-result-miss { font-size: 17px; font-weight: 600; color: var(--warn); }
 .scan-result .btn { margin-top: 10px; }
+
+/* ── Заказы поставщикам: неделя одним взглядом ──────────────────────────────
+   Столбик = сумма поставок за день. Видно, какой день перегружен, а какой
+   пустой, — не читая ни одной цифры. */
+.ord-week { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 0 8px; }
+.ord-week-label { font-size: 15px; font-weight: 600; }
+.ord-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
+.ord-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px;
+  min-height: 96px; padding: 6px 2px 8px; border: none; border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-2); font-family: inherit; cursor: pointer;
+}
+.ord-day.has { color: var(--text); }
+.ord-day.is-today { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ord-bar { width: 60%; border-radius: 4px 4px 0 0; background: var(--accent); margin-bottom: 4px; }
+.ord-dow { font-size: 12px; font-weight: 600; }
+.ord-date { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ord-sum { font-size: 10px; font-variant-numeric: tabular-nums; }
+.ord-total { font-size: 15px; color: var(--text-2); margin: 2px 0 10px; padding: 0 2px; }
+.ord-sub { display: block; font-size: 13px; color: var(--text-2); font-weight: 400; margin-top: 2px; }
+.ord-flag { font-size: 12px; color: var(--warn); font-weight: 600; }
+.ord-done { font-size: 12px; color: var(--pos); font-weight: 600; }
+
+/* ── Сравнение товаров ──────────────────────────────────────────────────── */
+.compare-bar {
+  position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 25;
+  display: flex; gap: 8px; align-items: center; padding: 8px 12px;
+  background: var(--surface); border-top: .5px solid var(--border);
+}
+.compare-bar .btn { flex: 1; height: 44px; margin: 0; }
+.compare-bar .btn-ghost { flex: 0 0 auto; }
+.cmp-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 14px; }
+.cmp th { text-align: left; font-size: 12px; font-weight: 600; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; white-space: nowrap; }
+.cmp td { padding: 10px 8px; border-top: .5px solid var(--border); vertical-align: top; }
+.cmp-name { min-width: 150px; font-weight: 600; }
+.cmp-code { display: block; font-weight: 700; color: var(--brand-ink); font-variant-numeric: tabular-nums; }
+.cmp-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cmp-best { color: var(--pos); font-weight: 700; }
+.cmp-rm { border: none; background: none; color: var(--text-2); font-size: 16px; cursor: pointer; padding: 4px 6px; min-height: 34px; }

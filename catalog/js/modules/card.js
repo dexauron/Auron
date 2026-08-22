@@ -8,6 +8,7 @@ import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './rende
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
+import { inCompare, renderCompareBar } from './compare.js';
 import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
@@ -27,6 +28,8 @@ export function openProduct(p) {
   ui.currentProduct = p;
   pushRecentProduct(p.id);
   trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
+  { const b = $('btnCompareAdd'); if (b) b.textContent = inCompare(p.id) ? 'Убрать из сравнения' : 'К сравнению'; }
+  renderCompareBar();
   renderNewProducts();   // обновляем ленту под шторкой
   updateFavButton(p);
   $('sheetName').textContent = p.name;
@@ -558,7 +561,7 @@ function mainPack(p) {
 // Цена поставщика в двух видах: за базовую единицу и за упаковку.
 // row.unit — единица из прайса. В режиме с базой её нет: тогда считаем, что
 // цена указана за штуку (как работало раньше), а упаковку домножаем сами.
-function priceParts(p, row) {
+export function priceParts(p, row) {
   const raw = row ? Number(row.price) : NaN;
   if (!Number.isFinite(raw) || raw <= 0) return null;
   const rowQty = unitQty(p, row.unit);
