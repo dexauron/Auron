@@ -768,6 +768,8 @@ function bindEvents() {
     const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
   };
   const runScan = () => {
+    // переключатель мог быть спрятан пересчётом — возвращаем его
+    const seg = $('scanModeSeg'); if (seg) seg.hidden = false;
     syncScanMode();
     const m = scanMode();
     if (m === 'price') startScan(scanToPrice, { keepOpen: true });

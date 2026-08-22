@@ -9,11 +9,11 @@
  * заменяет. Задача экрана — показать разницу, а не подменить учёт. */
 
 import { $, state } from './store.js';
-import { closeSheet, esc, openSheet, toast } from './core.js';
+import { esc, openSheet, toast } from './core.js';
 import { fmtDate, fmtNum, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
-import { startScan, stopScan } from './scanner.js';
+import { startScan } from './scanner.js';
 
 const KEY = 'wm_count_v1';
 const MAX = 1000;   // больше тысячи позиций за один заход не считают
@@ -45,7 +45,7 @@ function findProduct(text) {
 
 /* Добавить позицию или прибавить к ней. Одно сканирование = одна штука:
  * сотрудник ведёт камерой по полке, а счёт растёт сам. */
-export function addToCount(p, delta = 1) {
+function addToCount(p, delta = 1) {
   if (!p) return null;
   const sheet = read();
   let row = sheet.items.find((x) => x.id === p.id);
@@ -150,6 +150,10 @@ export function addCountByCode() {
 
 // Сканирование подряд: камера не закрывается, каждый штрихкод — плюс одна штука
 export function startCountScan() {
+  // переключатель режимов сканера («Товар / Ценник / Закончилось») сейчас ни при
+  // чём — камеру открыл пересчёт. Обратно его показывает обычный запуск сканера.
+  const seg = $('scanModeSeg'); if (seg) seg.hidden = true;
+  const res = $('scanResult'); if (res) { res.hidden = true; res.innerHTML = ''; }
   startScan((text) => {
     const box = $('scanResult');
     const p = findProduct(text);
@@ -171,12 +175,6 @@ export function startCountScan() {
       <div class="scan-result-code">${row.stock == null ? 'остатка в базе нет'
     : `в базе ${fmtNum(row.stock)}${d ? ` · разница ${d > 0 ? '+' : '−'}${fmtNum(Math.abs(d))}` : ' · сходится'}`}</div>`;
   }, { keepOpen: true });
-}
-
-export function stopCountScan() {
-  stopScan();
-  closeSheet('scanSheet');
-  renderCount();
 }
 
 // Передать владельцу: пересчёт уходит текстом — расхождения первыми
