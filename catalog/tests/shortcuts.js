@@ -1,5 +1,5 @@
 // Быстрые действия с ярлыка приложения: долгое нажатие на значок на главном
-// экране телефона → «Сканер», «Закончилось», «Пересчёт».
+// экране телефона → «Сканер» и «Закончилось».
 const { chromium, newPage, runner } = require('./helpers');
 const fs = require('fs');
 const path = require('path');
@@ -14,8 +14,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   // 1. Ярлыки объявлены в манифесте — иначе телефон их не покажет
   const man = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.webmanifest'), 'utf8'));
   const urls = (man.shortcuts || []).map((x) => x.url);
-  chk(urls.length === 3, `в манифесте три ярлыка (${urls.length})`);
-  chk(urls.join(' ') === './?do=scan ./?do=restock ./?do=count', `адреса ярлыков на месте (${urls.join(' ')})`);
+  chk(urls.length === 2, `в манифесте два ярлыка (${urls.length})`);
+  chk(urls.join(' ') === './?do=scan ./?do=restock', `адреса ярлыков на месте (${urls.join(' ')})`);
   chk((man.shortcuts || []).every((x) => x.name && x.short_name && (x.icons || []).length),
     'у каждого ярлыка есть название, короткое имя и значок');
 
@@ -36,7 +36,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   }
 
   // 3. С запомненным входом открывается сам список
-  for (const [what, sheet] of [['restock', 'restockSheet'], ['count', 'countSheet']]) {
+  for (const [what, sheet] of [['restock', 'restockSheet']]) {
     const { page } = await newPage(b, { products, groups });
     await page.evaluate(() => localStorage.setItem('wm_sv_auth', JSON.stringify({ pw: 'pw', role: 'owner' })));
     await page.goto(`http://localhost:8123/?do=${what}`, { waitUntil: 'load' });
