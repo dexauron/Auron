@@ -878,6 +878,14 @@
           <div class="ios-row"><span class="ios-row-title">Должен прийти</span>
             <input type="date" id="ordDue" class="ios-inp"></div>
         </div>
+        <div class="ios-group-title">Что заказали <span class="hint">— необязательно</span></div>
+        <div class="ios-group" id="ordItems"></div>
+        <div class="ord-add">
+          <input type="text" id="ordItemName" class="ios-inp ios-inp-wide" placeholder="товар или код" autocomplete="off">
+          <input type="text" id="ordItemQty" class="ios-inp ord-qty" inputmode="decimal" placeholder="шт">
+          <button class="btn btn-secondary" id="ordItemAdd">Добавить</button>
+        </div>
+
         <div class="ios-group-title">Кто заказал</div>
         <div class="ios-group">
           <div class="ios-row"><input type="text" id="ordWho" class="ios-inp ios-inp-wide" maxlength="40" placeholder="имя или смена"></div>

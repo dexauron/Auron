@@ -143,19 +143,16 @@ function rowHtml(x) {
 export function orderFromRestock(supplierId) {
   const items = restockList().filter((x) => (x.supplier_id || '') === supplierId && !x.ordered);
   if (!items.length) return;
-  let note = items.map((x) => x.name).join(', ');
-  if (note.length > 130) {
-    const short = [];
-    for (const x of items) {
-      if ((short.join(', ') + ', ' + x.name).length > 110) break;
-      short.push(x.name);
-    }
-    note = `${short.join(', ')} и ещё ${items.length - short.length}`;
-  }
   closeSheet('restockSheet');
+  // Позициями, а не строчкой в примечании: в заказе их видно списком, можно
+  // проставить количество и убрать лишнее.
   // onSaved: заказ сохранён — эти позиции больше не ждут. Передаём действием,
   // а не импортом, иначе заказы и список пополнения ссылались бы друг на друга.
-  openOrderForm(null, null, { supplier_id: supplierId, note, onSaved: () => markRestockOrdered(supplierId) });
+  openOrderForm(null, null, {
+    supplier_id: supplierId,
+    items: items.map((x) => ({ name: x.name, code: x.code || '', qty: 0 })),
+    onSaved: () => markRestockOrdered(supplierId),
+  });
 }
 
 /* Отметить позиции поставщика как заказанные — вызывается после сохранения

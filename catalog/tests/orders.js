@@ -168,6 +168,54 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   chk(/Просрочено · 1/.test(late.head), `поставка из прошлой недели без отметки «пришёл» видна как просроченная (${late.head})`);
   chk(late.marks >= 1, `в строке стоит пометка «просрочен» (${late.marks})`);
 
+  // ── Что заказали: позиции внутри заказа ──
+  const items = await page.evaluate(async (due) => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    document.getElementById('adminBtn').click();
+    await new Promise((r) => setTimeout(r, 250));
+    document.getElementById('menuOrders').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.getElementById('ordAdd').click();
+    await new Promise((r) => setTimeout(r, 300));
+    const add = async (name, qty) => {
+      document.getElementById('ordItemName').value = name;
+      document.getElementById('ordItemQty').value = qty;
+      document.getElementById('ordItemAdd').click();
+      await new Promise((r) => setTimeout(r, 120));
+    };
+    await add('101', '6');                 // по коду — подставится название из каталога
+    await add('Ящик бананов', '2');        // чего нет в каталоге — как написали
+    await add('Лишнее', '1');
+    document.querySelector('[data-ord-item-rm="2"]').click();
+    await new Promise((r) => setTimeout(r, 150));
+    const rows = [...document.querySelectorAll('#ordItems .ios-row')].map((x) => x.innerText.replace(/\s+/g, ' ').trim());
+    document.getElementById('ordSupplier').value = 's1';
+    document.getElementById('ordAmount').value = '4000';
+    document.getElementById('ordDue').value = due;
+    document.getElementById('ordSave').click();
+    await new Promise((r) => setTimeout(r, 700));
+    // к этому моменту тест уже переключился на сотрудника, поэтому заказ лежит
+    // на телефоне, а не в каталоге — ищем в обоих местах
+    const all = [...window.WM_PUBLISH._state().orders,
+      ...JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]')];
+    const saved = all.find((o) => o.amount === 4000);
+    return { rows, items: saved ? saved.items : [], list: document.getElementById('ordersBody').innerText.replace(/\s+/g, ' ') };
+  }, iso(2));
+  chk(items.rows.length === 2, `лишнюю позицию можно убрать (осталось ${items.rows.length})`);
+  chk(/Молоко/.test(items.rows[0]) && /код 101/.test(items.rows[0]),
+    `по коду подставляется товар из каталога (${items.rows[0]})`);
+  chk(/Ящик бананов/.test(items.rows[1]), `чего нет в каталоге — записывается как есть (${items.rows[1]})`);
+  chk(items.items.length === 2 && items.items[0].qty === 6, `позиции сохраняются в заказе (${JSON.stringify(items.items[0])})`);
+  chk(/2 позиции/.test(items.list), 'в списке заказов видно, сколько позиций');
+
+  const reopened = await page.evaluate(async () => {
+    const btn = [...document.querySelectorAll('#ordersBody [data-ord-open]')].find((b) => /4\s?000/.test(b.innerText.replace(/\s/g, ' ')));
+    btn.click();
+    await new Promise((r) => setTimeout(r, 350));
+    return document.querySelectorAll('#ordItems .ios-row').length;
+  });
+  chk(reopened === 2, `при открытии заказа позиции на месте (${reopened})`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

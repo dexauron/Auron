@@ -91,11 +91,12 @@ const openList = (page) => page.evaluate(async () => {
     return {
       open: !document.getElementById('orderFormSheet').hidden,
       supplier: document.getElementById('ordSupplier').value,
-      note: document.getElementById('ordNote').value,
+      items: [...document.querySelectorAll('#ordItems .ios-row')].map((x) => x.innerText.replace(/\s+/g, ' ').trim()),
     };
   });
   chk(form.open && form.supplier === 's1', `из списка сразу оформляется заказ нужному поставщику (${form.supplier})`);
-  chk(/Молоко/.test(form.note) && /Кефир/.test(form.note), `в примечание попало, что закончилось (${form.note})`);
+  chk(form.items.length === 2 && /Молоко/.test(form.items[0]) && /Кефир/.test(form.items[1]),
+    `в заказ подставлено то, что закончилось (${form.items.join(' | ')})`);
 
   const afterSave = await page.evaluate(async () => {
     document.getElementById('ordAmount').value = '5000';
