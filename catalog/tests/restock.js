@@ -79,7 +79,8 @@ const openList = (page) => page.evaluate(async () => {
   });
   chk(badge === '3', `в меню видно, сколько позиций ждёт заказа (${badge})`);
   chk(view.open && view.rows === 3, `список открылся со всеми позициями (${view.rows})`);
-  chk(view.heads.length === 2 && view.heads.some((h) => /Молзавод · 2/.test(h)) && view.heads.some((h) => /Хлебозавод · 1/.test(h)),
+  // заголовки групп рисуются заглавными (text-transform), поэтому сверяем без учёта регистра
+  chk(view.heads.length === 2 && view.heads.some((h) => /молзавод · 2/i.test(h)) && view.heads.some((h) => /хлебозавод · 1/i.test(h)),
     `позиции разложены по поставщикам (${view.heads.join(' | ')})`);
   chk(/3 позиции ждут заказа/.test(view.total), `итог считается по-русски (${view.total})`);
 
