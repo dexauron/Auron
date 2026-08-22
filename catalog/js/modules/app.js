@@ -17,7 +17,7 @@ import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRo
 import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { deleteOrder, markReceived, openOrderForm, openOrders, saveOrder, shareOrders, shiftWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
-import { clearRestock, inRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
+import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 

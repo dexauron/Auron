@@ -35,11 +35,11 @@ function tidy(list) {
   return list.filter((x) => !(x.ordered && String(x.ordered).slice(0, 10) < edge));
 }
 
-export function restockList() {
+function restockList() {
   const list = tidy(read());
   return list;
 }
-export const restockCount = () => restockList().filter((x) => !x.ordered).length;
+const restockCount = () => restockList().filter((x) => !x.ordered).length;
 export const inRestock = (id) => restockList().some((x) => x.id === id);
 
 /* Отметить/снять отметку. Название и код запоминаем прямо в строке: товар
@@ -152,12 +152,14 @@ export function orderFromRestock(supplierId) {
     note = `${short.join(', ')} и ещё ${items.length - short.length}`;
   }
   closeSheet('restockSheet');
-  openOrderForm(null, null, { supplier_id: supplierId, note });
+  // onSaved: заказ сохранён — эти позиции больше не ждут. Передаём действием,
+  // а не импортом, иначе заказы и список пополнения ссылались бы друг на друга.
+  openOrderForm(null, null, { supplier_id: supplierId, note, onSaved: () => markRestockOrdered(supplierId) });
 }
 
 /* Отметить позиции поставщика как заказанные — вызывается после сохранения
  * заказа. Строки остаются видимыми (серым), чтобы было понятно, что уже сделано. */
-export function markRestockOrdered(supplierId) {
+function markRestockOrdered(supplierId) {
   const list = restockList();
   let n = 0;
   for (const x of list) {

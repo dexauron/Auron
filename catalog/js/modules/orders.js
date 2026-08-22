@@ -23,7 +23,8 @@ const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
 let weekStart = null;      // понедельник показываемой недели (ISO)
 let editingId = null;
-let fromRestock = null;    // поставщик, чей список «закончилось» превращаем в заказ
+let onSaved = null;        // что сделать после сохранения (например, пометить
+                           // заказанным то, что закончилось на полке)
 
 function localOrders() {
   try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch (e) { return []; }
@@ -115,7 +116,7 @@ function orderRow(o) {
  * позиции помечаются заказанными, чтобы их не заказали второй раз. */
 export function openOrderForm(id, dayISO, prefill) {
   editingId = id || null;
-  fromRestock = (prefill && prefill.supplier_id) || null;
+  onSaved = (prefill && prefill.onSaved) || null;
   const o = id ? allOrders().find((x) => x.id === id) : null;
   const sel = $('ordSupplier');
   sel.innerHTML = '<option value="">— выбери поставщика —</option>'
@@ -169,7 +170,7 @@ export async function saveOrder() {
     else state.orders.push({ id: svUuid(), status: 'ordered', ...data });
     closeSheet('orderFormSheet');
     showWeekOf(data.due_at);
-    closeRestockItems(data.supplier_id);
+    afterSaved();
     await svSaveAndPublish('Заказ сохранён');
     return;
   }
@@ -180,17 +181,17 @@ export async function saveOrder() {
   saveLocal(list);
   closeSheet('orderFormSheet');
   showWeekOf(data.due_at);
-  closeRestockItems(data.supplier_id);
+  afterSaved();
   toast('Заказ записан на этом телефоне');
 }
 
-/* Заказ оформлен — значит то, что закончилось у этого поставщика, уже заказано.
- * Модуль подгружаем на месте: списку пополнения нужны заказы, заказам — список,
- * и при обычном импорте два модуля ссылались бы друг на друга по кругу. */
-function closeRestockItems(supplierId) {
-  if (!fromRestock || fromRestock !== supplierId) { fromRestock = null; return; }
-  fromRestock = null;
-  import('./restock.js').then((m) => m.markRestockOrdered(supplierId)).catch(() => {});
+/* Заказ оформлен — сообщаем тому, кто его начал (список «закончилось на полке»
+ * помечает свои позиции заказанными). Обратный вызов вместо импорта: иначе два
+ * модуля ссылались бы друг на друга по кругу. */
+function afterSaved() {
+  const fn = onSaved;
+  onSaved = null;
+  if (fn) { try { fn(); } catch (e) { /* заказ уже сохранён — это не должно мешать */ } }
 }
 
 export async function markReceived() {
