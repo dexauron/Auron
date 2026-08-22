@@ -445,6 +445,7 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
+  renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
 }
 
@@ -588,6 +589,32 @@ function newProducts() {
   return fresh.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 12);
 }
 
+/* «Мои частые товары»: телефон и так считает, что этот сотрудник открывает
+ * чаще всего, но нигде это не показывал. Хот-доги, выпечка и весовое — в одно
+ * касание, без поиска. Список у каждого телефона свой и наружу не уходит. */
+const MY_MIN_VIEWS = 2;   // случайно открытое один раз в ленту не тащим
+function renderMyFrequent() {
+  const box = $('myStrip');
+  if (!box) return;
+  const show = !state.query && !state.favOnly && !anyFilterActive() && state.tab === 'catalog';
+  const pop = state.popularity || {};
+  const top = show
+    ? state.products.filter((p) => (pop[p.id] || 0) >= MY_MIN_VIEWS)
+      .sort((a, b) => (pop[b.id] || 0) - (pop[a.id] || 0)).slice(0, 12)
+    : [];
+  if (top.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `<div class="similar-title">${ic('heart', 'ic-xs')} Мои частые товары</div><div class="similar-row">`
+    + top.map((x) => {
+      const ph = (x.photos || []).find((u) => u && String(u).trim());
+      const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';
+      const code = x.code ? `<span class="similar-code">${esc(x.code)}</span>` : '';
+      return `<button class="similar-card" data-similar="${esc(x.id)}">
+        <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
+        <span class="similar-name">${esc(x.name)}</span>${code}${price}</button>`;
+    }).join('') + '</div>';
+}
+
 export function renderNewProducts() {
   const box = $('newStrip');
   if (!box) return;
@@ -595,7 +622,7 @@ export function renderNewProducts() {
   const top = show ? newProducts() : [];
   if (!top.length) { box.hidden = true; box.innerHTML = ''; return; }
   box.hidden = false;
-  box.innerHTML = '<div class="similar-title">🆕 Новое в магазине</div><div class="similar-row">'
+  box.innerHTML = `<div class="similar-title">${ic('star', 'ic-xs')} Новое в магазине</div><div class="similar-row">`
     + top.map((x) => {
       const ph = (x.photos || []).find((u) => u && String(u).trim());
       const price = (x.retail_price != null && x.retail_price !== '') ? `<span class="similar-price">${esc(fmtRetail(x))}</span>` : '';

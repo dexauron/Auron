@@ -14,7 +14,7 @@ import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, ded
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { scanToSearch, startScan } from './scanner.js';
+import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -750,7 +750,38 @@ function bindEvents() {
   $('productForm').addEventListener('submit', submitForm);
 
   // Сканер: для всех — поиск товара; в форме админа — добавляет штрихкод в список
-  $('scanSearchBtn').addEventListener('click', () => startScan(scanToSearch));
+  /* Сканер работает в двух режимах, и телефон помнит выбранный:
+     «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
+     включённой и на каждый штрихкод крупно показывает цену. */
+  const SCAN_MODE_KEY = 'wm_scan_mode';
+  const scanMode = () => { try { return localStorage.getItem(SCAN_MODE_KEY) === 'price' ? 'price' : 'card'; } catch (e) { return 'card'; } };
+  const syncScanMode = () => {
+    document.querySelectorAll('#scanModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.scanmode === scanMode()));
+    const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
+  };
+  const runScan = () => {
+    syncScanMode();
+    if (scanMode() === 'price') startScan(scanToPrice, { keepOpen: true });
+    else startScan(scanToSearch);
+  };
+  $('scanSearchBtn').addEventListener('click', runScan);
+  $('scanModeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scanmode]');
+    if (!b) return;
+    try { localStorage.setItem(SCAN_MODE_KEY, b.dataset.scanmode); } catch (err) { /* приватный режим */ }
+    stopScan();
+    closeSheet('scanSheet');
+    setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
+  });
+  // «Открыть товар» из крупной проверки ценника
+  $('scanResult').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-open-scanned]');
+    if (!b) return;
+    stopScan();
+    closeSheet('scanSheet');
+    const p = state.products.find((x) => x.id === b.dataset.openScanned);
+    if (p) openProduct(p);
+  });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
     const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
