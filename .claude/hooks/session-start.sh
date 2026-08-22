@@ -24,6 +24,16 @@ restore_autosave() {
   local diff
   diff=$(git diff --name-only HEAD "origin/$SAVE" -- . 2>/dev/null | head -20)
   [ -z "$diff" ] && return 0
+  # копилка старее последнего коммита — значит её работа уже вошла в коммиты
+  # (или это остатки прошлой сессии). Возвращать оттуда файлы нельзя: затрём
+  # свежее старым. Только показываем, где посмотреть.
+  local ts_save ts_head
+  ts_save=$(git log -1 --format=%ct "origin/$SAVE" 2>/dev/null || echo 0)
+  ts_head=$(git log -1 --format=%ct HEAD 2>/dev/null || echo 0)
+  if [ "$ts_save" -le "$ts_head" ]; then
+    echo "Копилка автосохранений старее последнего коммита — не трогаю (git diff HEAD origin/$SAVE)."
+    return 0
+  fi
   if [ -n "$(git status --porcelain | grep -v '^??')" ]; then
     echo "В копилке автосохранений есть работа, которой нет в папке, НО в папке свои несохранённые правки — не трогаю."
     echo "Посмотреть: git diff HEAD origin/$SAVE"
