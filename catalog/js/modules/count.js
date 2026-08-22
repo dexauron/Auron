@@ -138,7 +138,7 @@ function renderCount() {
   }).join('');
 
   box.innerHTML = `
-    <div class="ord-total">Пересчёт от ${fmtDate(sheet.started)} · ${sheet.items.length}
+    <div class="ord-total">${fmtDate(sheet.started)} · ${sheet.items.length}
       ${plural(sheet.items.length, 'позиция', 'позиции', 'позиций')}${withDiff.length
   ? ` · <b class="cnt-minus">расхождений ${withDiff.length}</b>` : ' · всё сходится'}</div>
     <div class="ios-group">${rows}</div>
