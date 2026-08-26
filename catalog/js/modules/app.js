@@ -5,7 +5,7 @@ import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
-import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode } from './device.js';
+import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
@@ -1029,6 +1029,7 @@ function bindEvents() {
 async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
+  watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
   // них сохранённые данные — владелец видел в поиске каталога свою почту.

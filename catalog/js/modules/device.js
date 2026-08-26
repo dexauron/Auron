@@ -33,6 +33,56 @@ function isLowPower() {
   } catch (e) { return false; }
 }
 
+/* ── «Поставить на главный экран» ───────────────────────────────────────────
+ * Каталог открывают ссылкой в браузере. Поставленный на главный экран, он
+ * запускается заметно быстрее (без адресной строки и вкладок браузера), лучше
+ * держит офлайн-копию и получает быстрые действия по долгому нажатию на значок.
+ * Подсказку показываем один раз и тихо: закрыл — больше не появится. */
+const INSTALL_KEY = 'wm_install_hint';
+let installEvent = null;
+
+const installed = () => {
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  } catch (e) { return false; }
+};
+const hintHidden = () => { try { return localStorage.getItem(INSTALL_KEY) === 'off'; } catch (e) { return true; } };
+const hideHint = () => {
+  try { localStorage.setItem(INSTALL_KEY, 'off'); } catch (e) { /* приватный режим */ }
+  const el = $('installBanner'); if (el) el.hidden = true;
+};
+
+export function watchInstall() {
+  const banner = $('installBanner');
+  if (!banner) return;
+  $('installHide').addEventListener('click', hideHint);
+  $('installGo').addEventListener('click', async () => {
+    if (!installEvent) return;
+    banner.hidden = true;
+    try { installEvent.prompt(); await installEvent.userChoice; } catch (e) { /* передумал */ }
+    installEvent = null;
+    hideHint();
+  });
+  window.addEventListener('appinstalled', hideHint);
+
+  // Android: браузер сам предлагает установку — показываем свою кнопку
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    installEvent = e;
+    if (installed() || hintHidden()) return;
+    $('installText').textContent = 'Поставь каталог на главный экран — открывается быстрее и работает без интернета';
+    $('installGo').hidden = false;
+    banner.hidden = false;
+  });
+
+  // iPhone: своего предложения нет, поэтому один раз подсказываем словами
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  if (iOS && !installed() && !hintHidden()) {
+    $('installText').textContent = 'Чтобы каталог открывался быстрее: «Поделиться» → «На экран «Домой»';
+    banner.hidden = false;
+  }
+}
+
 export function applyPowerMode() {
   try { document.documentElement.classList.toggle('low-power', isLowPower()); } catch (e) { /* некритично */ }
 }
