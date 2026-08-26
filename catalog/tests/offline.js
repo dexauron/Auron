@@ -54,6 +54,12 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     .then(() => true).catch(() => false);
   const offlineMs = Date.now() - t;
   chk(opened, `без связи каталог всё равно открывается (${offlineMs} мс)`);
+  // Ждём, пока карточка не только появится, но и наполнится: сразу после
+  // открытия сетка может успеть нарисовать только «заготовки» без текста.
+  await page.waitForFunction(() => {
+    const c = document.querySelector('.grid .card');
+    return c && /Товар номер/.test(c.innerText);
+  }, { timeout: 15000 }).catch(() => {});
   const shown = await page.evaluate(() => ({
     cards: document.querySelectorAll('.grid .card').length,
     text: (document.querySelector('.grid .card') || {}).innerText || '',
