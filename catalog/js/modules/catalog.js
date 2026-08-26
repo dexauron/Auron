@@ -138,30 +138,129 @@ export function dice(a, b) {
   return (2 * hits) / (a.length + b.length);
 }
 
-// Поисковый индекс считается один раз при загрузке данных, а не на каждую букву —
-// иначе на 15 000+ товаров поиск будет тормозить на телефоне
+/* ── Поисковый индекс ────────────────────────────────────────────────────
+ * Раньше при загрузке каталога для КАЖДОГО из 17 000 товаров сразу считались
+ * полтора десятка производных строк (транслит, «пословный» вид, вид без
+ * знаков…). На бюджетном Android это была одна задача почти на три секунды:
+ * приложение открылось, но не отзывалось на нажатия. Плюс лишние сотни
+ * тысяч строк в памяти — телефон начинал тормозить и на прокрутке.
+ *
+ * Теперь производные строки считаются ЛЕНИВО — только для тех товаров, до
+ * которых реально дошёл поиск, и запоминаются до следующей загрузки данных.
+ * «Поколение» (gen) заменяет обход всех товаров: увеличили число — всё
+ * посчитанное раньше считается устаревшим и пересчитается по требованию. */
+let gen = 0;
+let wordIdx = null;         // начало слова → номера товаров
+let wordIdxGen = -1;
+
 export function buildIndex() {
-  for (const p of state.products) delete p._cat;   // категории пересчитаются заново
-  for (const p of state.products) {
+  gen++;
+  wordIdx = null;
+}
+
+// Коды и штрихкоды товара (нужны поиску по цифрам)
+function codeFields(p) {
+  if (p._cgen === gen) return p;
+  p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
+  p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
+  p._cgen = gen;
+  return p;
+}
+
+// Название, группа, примечание во всех видах, нужных сравнению
+function textFields(p) {
+  if (p._tgen === gen) return p;
+  const name = norm(p.name);
+  p._name = name;
+  p._nameT = translit(name);
+  p._nameW = wordy(name);
+  p._nameWT = wordy(p._nameT);
+  p._hasLat = /[a-z]/.test(name);
+  p._nameLoose = stripPunct(name);
+  const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
+  p._sup = norm(sup);
+  p._supT = translit(p._sup);
+  p._grp = norm(groupById(p.group_id)?.name || '');
+  p._grpT = translit(p._grp);
+  p._grpW = wordy(p._grp);
+  p._grpWT = wordy(p._grpT);
+  p._note = norm(p.note || '');
+  p._noteW = wordy(p._note);
+  p._tgen = gen;
+  return p;
+}
+
+/* Указатель «начало слова → товары». Ключ — первые три буквы слова, поэтому
+ * запрос «просток» сразу даёт короткий список кандидатов вместо перебора всех
+ * 17 000 товаров. Кладём и слова названия, и их транслит (чтобы «сникерс»
+ * находил Snickers), и примечание, и коды. Строится один раз на поколение и
+ * только при первом поиске словом — открытие каталога он не задерживает. */
+const KEY = 3;
+function addKey(map, word, i) {
+  if (!word) return;
+  const k = word.slice(0, KEY);
+  let arr = map.get(k);
+  if (!arr) map.set(k, arr = []);
+  if (arr[arr.length - 1] !== i) arr.push(i);
+}
+function wordIndex() {
+  if (wordIdx && wordIdxGen === gen) return wordIdx;
+  const map = new Map();
+  const list = state.products;
+  for (let i = 0; i < list.length; i++) {
+    const p = list[i];
     const name = norm(p.name);
-    p._name = name;
-    p._nameT = translit(name);
-    p._nameW = wordy(name);
-    p._nameWT = wordy(p._nameT);
-    p._hasLat = /[a-z]/.test(name);
-    p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
-    p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
-    p._nameLoose = stripPunct(name);
-    const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
-    p._sup = norm(sup);
-    p._supT = translit(p._sup);
-    p._grp = norm(groupById(p.group_id)?.name || '');
-    p._grpT = translit(p._grp);
-    p._grpW = wordy(p._grp);
-    p._grpWT = wordy(p._grpT);
-    p._note = norm(p.note || '');
-    p._noteW = wordy(p._note);
+    for (const w of name.split(/[^a-zа-я0-9]+/)) {
+      if (!w) continue;
+      addKey(map, w, i);
+      const t = translit(w);
+      if (t !== w) addKey(map, t, i);
+    }
+    if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
+    if (p.code) addKey(map, norm(p.code), i);
+    if (p.article) addKey(map, norm(p.article), i);
+    for (const bc of (p.barcodes || [])) addKey(map, norm(bc), i);
   }
+  wordIdx = map;
+  wordIdxGen = gen;
+  return map;
+}
+
+/* Кандидаты на запрос: товары, у которых есть слово (или код), начинающееся
+ * так же. Короткий запрос (1–2 буквы) собираем по всем подходящим ключам —
+ * их тысячи, а не 17 000 товаров, поэтому это всё равно быстро. */
+function candidates(tokens) {
+  const map = wordIndex();
+  const list = state.products;
+  const out = new Set();
+  for (const t of tokens) {
+    for (const v of t.qVars) {
+      if (!v) continue;
+      if (v.length >= KEY) {
+        const arr = map.get(v.slice(0, KEY));
+        if (arr) for (const i of arr) out.add(list[i]);
+      } else {
+        for (const [k, arr] of map) {
+          if (k.startsWith(v)) for (const i of arr) out.add(list[i]);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Товары групп, чьё название подходит под запрос: по «молочные» находятся
+// товары этой группы, даже если самого слова в названии товара нет.
+function groupCandidates(qVars, out) {
+  const hit = new Set();
+  for (const g of state.groups) {
+    const n = norm(g.name);
+    const nT = translit(n);
+    const w = wordy(n); const wT = wordy(nT);
+    if (matchPre(n, nT, qVars, [45, 42, 0], w, wT, true)) hit.add(g.id);
+  }
+  if (!hit.size) return;
+  for (const p of state.products) if (hit.has(p.group_id)) out.add(p);
 }
 
 // «пословный» вид строки: все знаки (дефисы, точки, скобки) → пробелы,
