@@ -434,7 +434,7 @@ export const QUICK = {
 // сортировка готового списка по выбранному порядку
 function sortList(list, scored) {
   const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
-  const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+  const byName = (a, b) => cmpRu(a.name, b.name);
   // «новые» = позже поступившие (дата из файла цен; если её нет — дата добавления)
   const when = (p) => p.arrival_at || p.created_at || '';
   switch (state.sort) {
@@ -451,7 +451,7 @@ function sortList(list, scored) {
       if (x == null) return 1; if (y == null) return -1;
       return y - x || byName(a, b);
     });
-    case 'new': return list.slice().sort((a, b) => String(when(b)).localeCompare(String(when(a))) || byName(a, b));
+    case 'new': return list.slice().sort((a, b) => cmpStr(String(when(b)), String(when(a))) || byName(a, b));
     case 'popular': {
       // по продажам: порядок из списка популярного (buildPopularIds); нет продаж — по просмотрам
       const rank = new Map((state.popularIds || []).map((id, i) => [id, i]));
@@ -561,7 +561,7 @@ export function visibleProducts() {
     hits = hits.filter((x) => x.s >= floor);
   }
   const scored = hits
-    .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
+    .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
     .map((x) => x.p);
   return sortList(scored, true);
 }
@@ -642,7 +642,7 @@ function searchByCode(list, q) {
   const best = hits.reduce((m, x) => Math.max(m, x.s), 0);
   const floor = Math.max(SEARCH_THRESHOLD, best * RELATIVE_CUTOFF);
   return hits.filter((x) => x.s >= floor)
-    .sort((a2, b2) => b2.s - a2.s || a2.p.name.localeCompare(b2.p.name, 'ru'))
+    .sort((a2, b2) => b2.s - a2.s || cmpRu(a2.p.name, b2.p.name))
     .map((x) => x.p);
 }
 

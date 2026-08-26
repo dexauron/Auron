@@ -1,6 +1,7 @@
 // Загрузка каталога
 
 import { CACHE_KEY, idbGet, idbSet, state } from './store.js';
+import { cmpRu, cmpStr } from './core.js';
 import { buildIndex } from './catalog.js';
 
 /* ── Данные ───────────────────────────────────── */
@@ -34,7 +35,7 @@ export function saveCache() {
   }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
 }
 
-export const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+export const byName = (a, b) => cmpRu(a.name, b.name);
 
 /* ── Уборка памяти ──────────────────────────────────────────────────────────
  * Каждый импорт добавляет строки истории цен и новый отчёт продаж, и со
@@ -60,7 +61,7 @@ export function tidyMemory() {
   if (state.prices && state.prices.length) {
     const seen = new Map();
     const kept = [];
-    const sorted = state.prices.slice().sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
+    const sorted = state.prices.slice().sort((a, b) => cmpStr(String(b.price_date || ''), String(a.price_date || '')));
     for (const r of sorted) {
       const key = r.product_id + '|' + r.supplier_id;
       const n = (seen.get(key) || 0) + 1;
@@ -77,7 +78,7 @@ export function tidyMemory() {
   // продажи: последние периоды
   if (state.sales && state.sales.length) {
     const periods = [...new Set(state.sales.map((s) => (s.period_from || '') + '|' + (s.period_to || '')))]
-      .sort((a, b) => b.localeCompare(a)).slice(0, KEEP_SALES_PERIODS);
+      .sort((a, b) => cmpStr(b, a)).slice(0, KEEP_SALES_PERIODS);
     const keep = new Set(periods);
     state.sales = state.sales.filter((s) => keep.has((s.period_from || '') + '|' + (s.period_to || '')));
   }

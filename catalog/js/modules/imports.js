@@ -174,7 +174,7 @@ function svUploadContacts(list) {
 }
 // После правки в памяти — пересобрать индекс, перерисовать и опубликовать на GitHub.
 export async function svSaveAndPublish(okMsg) {
-  state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  state.products.sort((a, b) => cmpRu(a.name, b.name));
   buildIndex();
   state.popularIds = buildPopularIds();
   renderAll();
@@ -883,7 +883,7 @@ export async function smartRun() {
       setSmartRowStatus(e, 'загружено'); okCount++;
     } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
     }
-    state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    state.products.sort((a, b) => cmpRu(a.name, b.name));
     // Разобранные файлы больше не нужны: это десятки тысяч строк, которые
     // иначе висели бы в памяти телефона до перезагрузки страницы.
     for (const e of ui.smartEntries) { e.parsed = null; e.byKey = null; e.rows = null; }
