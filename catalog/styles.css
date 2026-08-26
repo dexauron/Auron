@@ -1556,3 +1556,10 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
   .sheet, .sheet-backdrop { animation: none !important; }
   * { transition-duration: .01ms !important; }
 }
+/* Подсказка «поставить на главный экран» */
+.banner-install { display: flex; align-items: center; gap: 10px; }
+.banner-install .btn-sm { margin: 0; padding: 8px 14px; min-height: 40px; flex: 0 0 auto; }
+.install-close {
+  border: none; background: none; color: var(--text-2);
+  font-size: 16px; line-height: 1; min-width: 40px; min-height: 40px; cursor: pointer; flex: 0 0 auto;
+}

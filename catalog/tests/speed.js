@@ -99,6 +99,23 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const longest = await page.evaluate(() => Math.max(0, ...window.__long));
   chk(longest < 1500, `нет длинных заморозок (самая долгая ${longest} мс, потолок 1500)`);
 
+  // подсказка «поставить на главный экран»: Android предлагает установку сам,
+  // мы лишь показываем свою кнопку — и только один раз
+  const inst = await page.evaluate(async () => {
+    const ev = new Event('beforeinstallprompt');
+    ev.prompt = () => {}; ev.userChoice = Promise.resolve({ outcome: 'dismissed' });
+    window.dispatchEvent(ev);
+    await new Promise((r) => setTimeout(r, 200));
+    const banner = document.getElementById('installBanner');
+    const shown = !banner.hidden;
+    document.getElementById('installHide').click();
+    await new Promise((r) => setTimeout(r, 150));
+    return { shown, text: document.getElementById('installText').textContent, hiddenNow: banner.hidden,
+      remembered: localStorage.getItem('wm_install_hint') };
+  });
+  chk(inst.shown && /главный экран/.test(inst.text), `подсказка про главный экран появляется (${inst.text.slice(0, 40)})`);
+  chk(inst.hiddenNow && inst.remembered === 'off', 'закрыл подсказку — больше не показывается');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
