@@ -1,6 +1,7 @@
 // Загрузка каталога
 
 import { CACHE_KEY, idbGet, idbSet, state } from './store.js';
+import { cmpRu, cmpStr } from './core.js';
 import { buildIndex } from './catalog.js';
 
 /* ── Данные ───────────────────────────────────── */
@@ -21,7 +22,20 @@ export async function loadCache() {
   return false;
 }
 
+/* Запись каталога в память телефона — это копия 17 000 объектов и несколько
+ * мегабайт: на бюджетном Android почти секунда, в которую приложение не
+ * отвечает на нажатия. Кэш вспомогательный, спешить некуда — пишем в свободную
+ * минуту и один раз на серию вызовов (при загрузке фото их бывает много). */
+let savePlanned = false;
 export function saveCache() {
+  if (savePlanned) return;
+  savePlanned = true;
+  const run = () => { savePlanned = false; writeCache(); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
+  else setTimeout(run, 400);
+}
+
+function writeCache() {
   // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
   const clean = state.products.map((p) => {
     const o = {};
@@ -34,7 +48,18 @@ export function saveCache() {
   }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
 }
 
-export const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+export const byName = (a, b) => cmpRu(a.name, b.name);
+
+/* Сортировка 17 000 названий по-русски — это сотни миллисекунд на телефоне.
+ * А файл витрины пишется уже по алфавиту, то есть почти всегда сортировать
+ * нечего. Проверка «уже по порядку?» стоит один проход и в этом случае
+ * избавляет от сортировки совсем. */
+export function sortByName(list) {
+  for (let i = 1; i < list.length; i++) {
+    if (byName(list[i - 1], list[i]) > 0) return list.sort(byName);
+  }
+  return list;
+}
 
 /* ── Уборка памяти ──────────────────────────────────────────────────────────
  * Каждый импорт добавляет строки истории цен и новый отчёт продаж, и со
@@ -60,7 +85,7 @@ export function tidyMemory() {
   if (state.prices && state.prices.length) {
     const seen = new Map();
     const kept = [];
-    const sorted = state.prices.slice().sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
+    const sorted = state.prices.slice().sort((a, b) => cmpStr(String(b.price_date || ''), String(a.price_date || '')));
     for (const r of sorted) {
       const key = r.product_id + '|' + r.supplier_id;
       const n = (seen.get(key) || 0) + 1;
@@ -77,7 +102,7 @@ export function tidyMemory() {
   // продажи: последние периоды
   if (state.sales && state.sales.length) {
     const periods = [...new Set(state.sales.map((s) => (s.period_from || '') + '|' + (s.period_to || '')))]
-      .sort((a, b) => b.localeCompare(a)).slice(0, KEEP_SALES_PERIODS);
+      .sort((a, b) => cmpStr(b, a)).slice(0, KEEP_SALES_PERIODS);
     const keep = new Set(periods);
     state.sales = state.sales.filter((s) => keep.has((s.period_from || '') + '|' + (s.period_to || '')));
   }
