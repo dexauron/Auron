@@ -41,7 +41,7 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     const shell = names.find((n) => n.startsWith('wm-catalog-'));
     const c = await caches.open(shell);
     const keys = (await c.keys()).map((r) => new URL(r.url).pathname);
-    return { shell, count: keys.length, hasApp: keys.some((k) => k.endsWith('js/modules/app.js')), hasXlsx: keys.some((k) => k.includes('xlsx')) };
+    return { shell, count: keys.length, hasApp: keys.some((k) => k.endsWith('js/modules/app.js')), hasXlsx: keys.some((k) => k.includes('vendor/xlsx.min.js')) };
   });
   chk(cached.hasApp, `оболочка сохранена на телефоне (${cached.count} файлов)`);
   chk(!cached.hasXlsx, 'разборщик Excel не занимает место, пока не понадобился');
