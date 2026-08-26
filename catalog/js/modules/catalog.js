@@ -551,6 +551,12 @@ function candidateList(list, tokens, qVars) {
   return [...set].filter((p) => allowed.has(p));
 }
 
+// название без знаков и пробелов — считается один раз на товар
+function looseName(p) {
+  if (p._nlGen !== gen) { p._nl = stripPunct(norm(p.name)); p._nlGen = gen; }
+  return p._nl;
+}
+
 /* Дешёвая отбраковка перед разбором опечаток: берём буквосочетания запроса и
  * проверяем обычным поиском подстроки. Это в десятки раз дешевле, чем считать
  * похожесть каждому товару. */
@@ -563,7 +569,9 @@ function fuzzyPool(list, q, qVars, seen) {
   const out = [];
   for (const p of list) {
     if (seen.has(p)) continue;
-    const name = p._name || norm(p.name);
+    // сравниваем с названием БЕЗ знаков: «хатдок» ловит «хот-дог» только так —
+    // с дефисом буквосочетание «тд» в названии не встречается
+    const name = looseName(p);
     let m = 0;
     for (const g of grams) if (name.includes(g) && ++m >= 2) break;
     if (m < 2 && gramsT.length) {
