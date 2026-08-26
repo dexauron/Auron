@@ -23,7 +23,7 @@ export const DEV_NAME_KEY = 'wm_device_name';
  * Поэтому на слабых телефонах размытие выключается: фон просто затемняется.
  * Как определяем «слабый»: телефон сам сообщает объём памяти и число ядер.
  * iPhone таких сведений не даёт — там всё остаётся как было. */
-export function isLowPower() {
+function isLowPower() {
   try {
     const mem = navigator.deviceMemory;          // ГБ, только Chrome/Android
     const cpu = navigator.hardwareConcurrency;   // число ядер

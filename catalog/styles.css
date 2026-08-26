@@ -1551,9 +1551,11 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .low-power .card { transition: none; }
 .low-power .chip, .low-power .icon-btn, .low-power .btn, .low-power .tag,
 .low-power .price-row, .low-power .field-row { transition: opacity .12s ease; }
-/* Товары за пределами экрана браузер может не рисовать вовсе — прокрутка
-   длинного списка перестаёт упираться в вёрстку сотен карточек. */
-.card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
+/* Только на слабых телефонах: товары за пределами экрана браузер может не
+   рисовать вовсе — прокрутка длинного списка перестаёт упираться в вёрстку
+   сотен карточек. На обычных телефонах не включаем: выигрыша нет, а поведение
+   страницы (поиск по странице, измерения) чуть меняется. */
+.low-power .card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
 
 /* Человек попросил систему «поменьше движения» — уважаем и это */
 @media (prefers-reduced-motion: reduce) {
