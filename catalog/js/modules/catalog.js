@@ -506,9 +506,26 @@ export function visibleProducts() {
     const wt = translit(w);
     return { q: w, qVars: w === wt ? [w] : [w, wt] };
   });
-  let hits = list
+  /* Считаем не все 17 000 товаров, а только кандидатов из указателя «начало
+     слова → товары». Оценка у кандидата та же, что была, поэтому выдача не
+     меняется — меняется время: на бюджетном Android поиск словом занимал
+     около трёх секунд НА КАЖДУЮ БУКВУ, и каталог казался зависшим. */
+  const pool = candidateList(list, tokens, qVars);
+  let hits = pool
     .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
     .filter((x) => x.s >= SEARCH_THRESHOLD);
+  /* Опечатки. Товар с опечаткой в кандидаты не попадает («хатдок» и «хот-дог»
+     начинаются по-разному), поэтому если по указателю почти ничего не нашлось —
+     проходим по всему списку, но с дешёвой отбраковкой: у названия должны
+     совпасть хотя бы два буквосочетания запроса. Полная (дорогая) оценка
+     достаётся считанным товарам вместо всех. */
+  if (hits.length < 5 && q.length >= 4) {
+    const seen = new Set(hits.map((x) => x.p));
+    for (const p of fuzzyPool(list, q, qVars, seen)) {
+      const sc = scoreProduct(p, q, qVars, tokens);
+      if (sc >= SEARCH_THRESHOLD) hits.push({ p, s: sc });
+    }
+  }
   // Отсекаем «хвост» слабых совпадений: если нашлось что-то хорошее, показывать
   // заодно всё отдалённо похожее — это и есть тот самый мусор в выдаче.
   if (hits.length) {
@@ -520,6 +537,42 @@ export function visibleProducts() {
     .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
     .map((x) => x.p);
   return sortList(scored, true);
+}
+
+/* Кандидаты: товары из указателя плюс товары подходящих групп. Если запрос
+ * ничего не дал (например, ищут только по группе), кандидатов просто нет —
+ * дальше сработает разбор опечаток. Когда список уже сужен фильтрами
+ * (категория, поставщик, цена), кандидатов пересекаем с ним. */
+function candidateList(list, tokens, qVars) {
+  const set = candidates(tokens);
+  groupCandidates(qVars, set);
+  if (list === state.products) return [...set];
+  const allowed = new Set(list);
+  return [...set].filter((p) => allowed.has(p));
+}
+
+/* Дешёвая отбраковка перед разбором опечаток: берём буквосочетания запроса и
+ * проверяем обычным поиском подстроки. Это в десятки раз дешевле, чем считать
+ * похожесть каждому товару. */
+function fuzzyPool(list, q, qVars, seen) {
+  const grams = [];
+  for (let i = 0; i < q.length - 1; i++) grams.push(q.slice(i, i + 2));
+  const gramsT = [];
+  const qT = qVars[1];
+  if (qT) for (let i = 0; i < qT.length - 1; i++) gramsT.push(qT.slice(i, i + 2));
+  const out = [];
+  for (const p of list) {
+    if (seen.has(p)) continue;
+    const name = p._name || norm(p.name);
+    let m = 0;
+    for (const g of grams) if (name.includes(g) && ++m >= 2) break;
+    if (m < 2 && gramsT.length) {
+      m = 0;
+      for (const g of gramsT) if (name.includes(g) && ++m >= 2) break;
+    }
+    if (m >= 2) out.push(p);
+  }
+  return out;
 }
 
 /* Быстрый поиск по цифрам. Оценки берутся те же, что и в общем поиске
