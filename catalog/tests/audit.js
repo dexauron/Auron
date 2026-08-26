@@ -50,8 +50,16 @@ chk(!inHtml.length, `в разметке нет эмодзи${inHtml.length ? ':
 const vendor = fs.existsSync(path.join(root, 'vendor', 'xlsx.min.js'));
 chk(vendor, 'разборщик Excel лежит своей копией в vendor/');
 const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
-chk(sw.includes('vendor/xlsx.min.js'), 'офлайн-кэш знает про разборщик Excel');
 chk(/loadScript\('vendor\/xlsx\.min\.js'\)/.test(all), 'загрузка файлов берёт разборщик из своей копии');
+// 860 КБ разборщика нужны только владельцу и только при загрузке файлов из 1С.
+// В обязательной загрузке их быть не должно: иначе каждый сотрудник при первом
+// заходе качает их на мобильном интернете вместо того, чтобы смотреть цены.
+const shell = (sw.match(/const SHELL = \[[\s\S]*?\];/) || [''])[0];
+chk(!shell.includes('vendor/xlsx.min.js'), 'тяжёлый разборщик не качается при первом заходе всем подряд');
+chk(/caches\.open\(CACHE\)[\s\S]{0,120}c\.put\(e\.request/.test(sw),
+  'скачанное однажды (в т.ч. разборщик) сохраняется в офлайн-копию');
+chk(/cache\.match\(e\.request[\s\S]{0,400}fetch\(new Request\(e\.request, \{ cache: 'reload' \}\)\)/.test(sw),
+  'оболочка отдаётся из офлайн-копии сразу, а свежая версия догружается в фоне');
 
 console.log(fail ? '\n=== АУДИТ РАЗМЕТКИ: ЕСТЬ ОШИБКИ ===' : '\n=== АУДИТ РАЗМЕТКИ: ОК ===');
 process.exit(fail ? 1 : 0);
