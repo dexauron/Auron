@@ -68,7 +68,22 @@ const TR = {
   т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sh',
   ъ: '', ы: 'y', ь: '', э: 'e', ю: 'u', я: 'a',
 };
-export const translit = (s) => s.replace(/[а-я]/g, (ch) => TR[ch] ?? ch);
+/* Перебор символов вместо регулярного выражения с обратным вызовом: то же
+ * самое, но в разы быстрее. Транслитерация зовётся десятки тысяч раз при
+ * сборке указателя поиска, и на бюджетном телефоне это было заметно. Строки
+ * без русских букв возвращаются как есть, без единой лишней склейки. */
+export function translit(s) {
+  const str = String(s);
+  let out = null;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    const rep = TR[ch];
+    if (rep === undefined) { if (out !== null) out += ch; continue; }
+    if (out === null) out = str.slice(0, i);
+    out += rep;
+  }
+  return out === null ? str : out;
+}
 // варианты строки для сравнения: как есть + в латинице
 const variants = (s) => {
   const t = translit(s);
