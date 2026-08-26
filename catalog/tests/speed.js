@@ -81,11 +81,18 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     });
   }, { text, expect });
 
-  const word = await search('молоко просток', 'Простоквашино');
+  // Запросы берём из НАСТОЯЩИХ названий этого набора: иначе можно случайно
+  // спросить то, чего в нём нет, и мерить не скорость, а пустую выдачу.
+  const sample = products[Math.floor(N / 2)];
+  const [w1, w2] = sample.name.split(' ');
+  const word = await search(`${w1} ${w2.slice(0, 5)}`, w2.slice(0, 5));
   chk(word < 2500, `поиск словом отвечает быстро (${word} мс, потолок 2500)`);
-  const word2 = await search('кефир домик', 'Кефир');
+  const other = products[Math.floor(N / 3)];
+  const [o1, o2] = other.name.split(' ');
+  const word2 = await search(`${o1} ${o2.slice(0, 4)}`, o2.slice(0, 4));
   chk(word2 < 2500, `второй поиск словом (${word2} мс, потолок 2500)`);
-  const code = await search('100500', '100500|Молоко|Кефир|Сметана|Творог|Батон|Хлеб|Колбаса|Сыр|Печенье|Конфеты');
+  const byCode = products[7];
+  const code = await search(byCode.code, byCode.name.split(' ')[0]);
   chk(code < 1500, `поиск по коду отвечает быстро (${code} мс, потолок 1500)`);
 
   // самая длинная заминка: во время неё телефон не отвечает на нажатия
