@@ -167,7 +167,7 @@ function codeFields(p) {
 // Название, группа, примечание во всех видах, нужных сравнению
 function textFields(p) {
   if (p._tgen === gen) return p;
-  const name = norm(p.name);
+  const name = nameNorm(p);
   p._name = name;
   p._nameT = translit(name);
   p._nameW = wordy(name);
@@ -202,7 +202,7 @@ function addKey(map, word, i) {
 }
 
 function indexOne(map, p, i) {
-  const name = norm(p.name);
+  const name = nameNorm(p);
   for (const w of name.split(/[^a-zа-я0-9]+/)) {
     if (!w) continue;
     addKey(map, w, i);
@@ -578,9 +578,18 @@ function candidateList(list, tokens, qVars) {
   return [...set].filter((p) => allowed.has(p));
 }
 
+/* Название в нижнем регистре нужно и указателю, и оценке, и разбору опечаток.
+ * Считаем его ОДИН раз на товар: norm() был вторым по расходам в профиле
+ * именно потому, что одно и то же название приводилось к нижнему регистру
+ * по три-четыре раза. */
+function nameNorm(p) {
+  if (p._nGen !== gen) { p._n = norm(p.name); p._nGen = gen; }
+  return p._n;
+}
+
 // название без знаков и пробелов — считается один раз на товар
 function looseName(p) {
-  if (p._nlGen !== gen) { p._nl = stripPunct(norm(p.name)); p._nlGen = gen; }
+  if (p._nlGen !== gen) { p._nl = stripPunct(nameNorm(p)); p._nlGen = gen; }
   return p._nl;
 }
 

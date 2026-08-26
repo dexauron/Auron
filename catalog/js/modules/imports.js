@@ -6,7 +6,7 @@ import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache, tidyMemory } from './data.js';
+import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
@@ -312,7 +312,7 @@ async function refreshStatic({ progressive = false } = {}) {
     try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
     state.competitors = []; state.compPrices = []; // разведка цен — только для вошедших
     state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
-    state.products = products.sort(byName);
+    state.products = sortByName(products);
     buildIndex();
     state.syncMax = '';
     state.lastFetch = Date.now();
