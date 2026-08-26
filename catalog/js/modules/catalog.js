@@ -151,12 +151,8 @@ export function dice(a, b) {
  * «Поколение» (gen) заменяет обход всех товаров: увеличили число — всё
  * посчитанное раньше считается устаревшим и пересчитается по требованию. */
 let gen = 0;
-let wordIdx = null;         // начало слова → номера товаров
-let wordIdxGen = -1;
-
 export function buildIndex() {
-  gen++;
-  wordIdx = null;
+  gen++;      // всё посчитанное раньше устарело, пересчитается по требованию
 }
 
 // Коды и штрихкоды товара (нужны поиску по цифрам)
@@ -204,39 +200,55 @@ function addKey(map, word, i) {
   if (!arr) map.set(k, arr = []);
   if (arr[arr.length - 1] !== i) arr.push(i);
 }
-function wordIndex() {
-  if (wordIdx && wordIdxGen === gen) return wordIdx;
-  const map = new Map();
-  const list = state.products;
-  for (let i = 0; i < list.length; i++) {
-    const p = list[i];
-    const name = norm(p.name);
-    for (const w of name.split(/[^a-zа-я0-9]+/)) {
-      if (!w) continue;
-      addKey(map, w, i);
-      // для ключа хватает начала слова — транслитерировать слово целиком
-      // (а это 85 000 замен на каталог) незачем
-      const head = w.slice(0, KEY + 1);
-      const t = translit(head);
-      if (t !== head) addKey(map, t, i);
-    }
-    if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
-    if (p.code) addKey(map, norm(p.code), i);
-    if (p.article) addKey(map, norm(p.article), i);
-    for (const bc of (p.barcodes || [])) addKey(map, norm(bc), i);
+
+function indexOne(map, p, i) {
+  const name = norm(p.name);
+  for (const w of name.split(/[^a-zа-я0-9]+/)) {
+    if (!w) continue;
+    addKey(map, w, i);
+    // для ключа хватает начала слова — транслитерировать слово целиком
+    // (а это 85 000 замен на каталог) незачем
+    const head = w.slice(0, KEY + 1);
+    const t = translit(head);
+    if (t !== head) addKey(map, t, i);
   }
-  wordIdx = map;
-  wordIdxGen = gen;
-  return map;
+  if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
+  if (p.code) addKey(map, norm(p.code), i);
+  if (p.article) addKey(map, norm(p.article), i);
+  for (const bc of (p.barcodes || [])) addKey(map, norm(bc), i);
+}
+
+/* Указатель строится ПОРЦИЯМИ. Одним куском на 17 000 товаров это была задача
+ * почти на секунду — на бюджетном телефоне заметная заминка. Порция в тысячу
+ * товаров укладывается в сотую долю секунды, и между порциями телефон успевает
+ * отрисовать кадр и ответить на нажатие. */
+let wi = { map: null, gen: -1, done: 0 };
+function indexStep(n) {
+  if (!wi.map || wi.gen !== gen) wi = { map: new Map(), gen, done: 0 };
+  const list = state.products;
+  const end = Math.min(list.length, wi.done + n);
+  for (let i = wi.done; i < end; i++) indexOne(wi.map, list[i], i);
+  wi.done = end;
+  return wi.done >= list.length;
+}
+
+// нужен прямо сейчас — дособираем оставшееся, не дожидаясь свободной минуты
+function wordIndex() {
+  while (!indexStep(4000));
+  return wi.map;
 }
 
 /* Собрать указатель заранее, в свободную минуту. Сам по себе он ленивый и
  * построится при первом поиске, но тогда первое слово ждало бы лишнюю секунду.
  * Зовём после загрузки каталога, когда телефону нечем заняться. */
 export function warmSearchIndex() {
-  const run = () => { try { wordIndex(); } catch (e) { /* построится при поиске */ } };
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 4000 });
-  else setTimeout(run, 1200);
+  const later = (fn) => (typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 60));
+  const step = () => {
+    try { if (indexStep(1000)) return; } catch (e) { return; /* построится при поиске */ }
+    later(step);
+  };
+  later(step);
 }
 
 /* Кандидаты на запрос: товары, у которых есть слово (или код), начинающееся
