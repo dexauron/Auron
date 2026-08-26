@@ -1,7 +1,7 @@
 // Категории товаров и умный поиск
 
 import { $, CFG, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state } from './store.js';
-import { groupById, norm, stripPunct, supplierById, translit } from './core.js';
+import { cmpRu, cmpStr, groupById, norm, stripPunct, supplierById, translit } from './core.js';
 import { CATEGORIES, OTHER_CAT, catCache, ic } from './icons.js';
 import { favorites } from './render.js';
 import { popViews } from './device.js';
@@ -80,7 +80,8 @@ const CAT_NAMES = { has: (n) => (_catNames || (_catNames = new Set([...CATEGORIE
 // правил при каждой отрисовке — заметно. Сбрасывается в buildIndex().
 export function productCategory(p) {
   if (!p) return null;
-  if (p._cat !== undefined) return p._cat;
+  if (p._catGen === gen && p._cat !== undefined) return p._cat;
+  p._catGen = gen;
   // Магазин не продуктовый: своих правил нет, раздел — это группа 1С как есть.
   if (!useNameRules()) {
     const g = p.category ? null : groupById(p.group_id);
@@ -138,30 +139,169 @@ export function dice(a, b) {
   return (2 * hits) / (a.length + b.length);
 }
 
-// Поисковый индекс считается один раз при загрузке данных, а не на каждую букву —
-// иначе на 15 000+ товаров поиск будет тормозить на телефоне
+/* ── Поисковый индекс ────────────────────────────────────────────────────
+ * Раньше при загрузке каталога для КАЖДОГО из 17 000 товаров сразу считались
+ * полтора десятка производных строк (транслит, «пословный» вид, вид без
+ * знаков…). На бюджетном Android это была одна задача почти на три секунды:
+ * приложение открылось, но не отзывалось на нажатия. Плюс лишние сотни
+ * тысяч строк в памяти — телефон начинал тормозить и на прокрутке.
+ *
+ * Теперь производные строки считаются ЛЕНИВО — только для тех товаров, до
+ * которых реально дошёл поиск, и запоминаются до следующей загрузки данных.
+ * «Поколение» (gen) заменяет обход всех товаров: увеличили число — всё
+ * посчитанное раньше считается устаревшим и пересчитается по требованию. */
+let gen = 0;
 export function buildIndex() {
-  for (const p of state.products) delete p._cat;   // категории пересчитаются заново
-  for (const p of state.products) {
-    const name = norm(p.name);
-    p._name = name;
-    p._nameT = translit(name);
-    p._nameW = wordy(name);
-    p._nameWT = wordy(p._nameT);
-    p._hasLat = /[a-z]/.test(name);
-    p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
-    p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
-    p._nameLoose = stripPunct(name);
-    const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
-    p._sup = norm(sup);
-    p._supT = translit(p._sup);
-    p._grp = norm(groupById(p.group_id)?.name || '');
-    p._grpT = translit(p._grp);
-    p._grpW = wordy(p._grp);
-    p._grpWT = wordy(p._grpT);
-    p._note = norm(p.note || '');
-    p._noteW = wordy(p._note);
+  gen++;      // всё посчитанное раньше устарело, пересчитается по требованию
+}
+
+let grpCache = new Map(); let grpCacheGen = -1;
+function groupText(id) {
+  if (grpCacheGen !== gen) { grpCache = new Map(); grpCacheGen = gen; }
+  let v = grpCache.get(id);
+  if (!v) {
+    const n = norm(groupById(id)?.name || '');
+    const t = translit(n);
+    v = { n, t, w: wordy(n), wt: t === n ? wordy(n) : wordy(t) };
+    grpCache.set(id, v);
   }
+  return v;
+}
+
+// Коды и штрихкоды товара (нужны поиску по цифрам)
+function codeFields(p) {
+  if (p._cgen === gen) return p;
+  p._codes = [p.code, p.article, p.department, ...(p.barcodes || [])].map(norm).filter(Boolean);
+  p._codesLoose = p._codes.map(stripPunct).filter(Boolean);
+  p._cgen = gen;
+  return p;
+}
+
+// Название, группа, примечание во всех видах, нужных сравнению
+function textFields(p) {
+  if (p._tgen === gen) return p;
+  const name = nameNorm(p);
+  p._name = name;
+  p._nameT = translit(name);
+  p._nameW = wordy(name);
+  p._nameWT = wordy(p._nameT);
+  p._hasLat = /[a-z]/.test(name);
+  p._nameLoose = stripPunct(name);
+  const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
+  p._sup = norm(sup);
+  p._supT = translit(p._sup);
+  // Названия групп повторяются: групп двести, а товаров семнадцать тысяч.
+  // Считаем виды названия группы один раз на группу и раздаём всем её товарам.
+  const g = groupText(p.group_id);
+  p._grp = g.n; p._grpT = g.t; p._grpW = g.w; p._grpWT = g.wt;
+  p._note = norm(p.note || '');
+  p._noteW = wordy(p._note);
+  p._tgen = gen;
+  return p;
+}
+
+/* Указатель «начало слова → товары». Ключ — первые три буквы слова, поэтому
+ * запрос «просток» сразу даёт короткий список кандидатов вместо перебора всех
+ * 17 000 товаров. Кладём и слова названия, и их транслит (чтобы «сникерс»
+ * находил Snickers), и примечание, и коды. Строится один раз на поколение и
+ * только при первом поиске словом — открытие каталога он не задерживает. */
+const KEY = 3;
+const LETTERS = /[a-zа-яё]/i;
+function addKey(map, word, i) {
+  if (!word) return;
+  const k = word.slice(0, KEY);
+  let arr = map.get(k);
+  if (!arr) map.set(k, arr = []);
+  if (arr[arr.length - 1] !== i) arr.push(i);
+}
+
+function indexOne(map, p, i) {
+  const name = nameNorm(p);
+  for (const w of name.split(/[^a-zа-я0-9]+/)) {
+    if (!w) continue;
+    addKey(map, w, i);
+    // для ключа хватает начала слова — транслитерировать слово целиком
+    // (а это 85 000 замен на каталог) незачем
+    const head = w.slice(0, KEY + 1);
+    const t = translit(head);
+    if (t !== head) addKey(map, t, i);
+  }
+  if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
+  // Коды из одних цифр в указатель не кладём: запрос из цифр идёт по быстрому
+  // пути (searchByCode), а нормализация 34 000 кодов стоит времени на каждой
+  // загрузке. Коды с буквами («арт-88») остаются — их ищут словом.
+  if (p.code && LETTERS.test(p.code)) addKey(map, norm(p.code), i);
+  if (p.article && LETTERS.test(p.article)) addKey(map, norm(p.article), i);
+}
+
+/* Указатель строится ПОРЦИЯМИ. Одним куском на 17 000 товаров это была задача
+ * почти на секунду — на бюджетном телефоне заметная заминка. Порция в тысячу
+ * товаров укладывается в сотую долю секунды, и между порциями телефон успевает
+ * отрисовать кадр и ответить на нажатие. */
+let wi = { map: null, gen: -1, done: 0 };
+function indexStep(n) {
+  if (!wi.map || wi.gen !== gen) wi = { map: new Map(), gen, done: 0 };
+  const list = state.products;
+  const end = Math.min(list.length, wi.done + n);
+  for (let i = wi.done; i < end; i++) indexOne(wi.map, list[i], i);
+  wi.done = end;
+  return wi.done >= list.length;
+}
+
+// нужен прямо сейчас — дособираем оставшееся, не дожидаясь свободной минуты
+function wordIndex() {
+  while (!indexStep(4000));
+  return wi.map;
+}
+
+/* Собрать указатель заранее, в свободную минуту. Сам по себе он ленивый и
+ * построится при первом поиске, но тогда первое слово ждало бы лишнюю секунду.
+ * Зовём после загрузки каталога, когда телефону нечем заняться. */
+export function warmSearchIndex() {
+  const later = (fn) => (typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 60));
+  const step = () => {
+    try { if (indexStep(1000)) return; } catch (e) { return; /* построится при поиске */ }
+    later(step);
+  };
+  later(step);
+}
+
+/* Кандидаты на запрос: товары, у которых есть слово (или код), начинающееся
+ * так же. Короткий запрос (1–2 буквы) собираем по всем подходящим ключам —
+ * их тысячи, а не 17 000 товаров, поэтому это всё равно быстро. */
+function candidates(tokens) {
+  const map = wordIndex();
+  const list = state.products;
+  const out = new Set();
+  for (const t of tokens) {
+    for (const v of t.qVars) {
+      if (!v) continue;
+      if (v.length >= KEY) {
+        const arr = map.get(v.slice(0, KEY));
+        if (arr) for (const i of arr) out.add(list[i]);
+      } else {
+        for (const [k, arr] of map) {
+          if (k.startsWith(v)) for (const i of arr) out.add(list[i]);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Товары групп, чьё название подходит под запрос: по «молочные» находятся
+// товары этой группы, даже если самого слова в названии товара нет.
+function groupCandidates(qVars, out) {
+  const hit = new Set();
+  for (const g of state.groups) {
+    const n = norm(g.name);
+    const nT = translit(n);
+    const w = wordy(n); const wT = wordy(nT);
+    if (matchPre(n, nT, qVars, [45, 42, 0], w, wT, true)) hit.add(g.id);
+  }
+  if (!hit.size) return;
+  for (const p of state.products) if (hit.has(p.group_id)) out.add(p);
 }
 
 // «пословный» вид строки: все знаки (дефисы, точки, скобки) → пробелы,
@@ -219,7 +359,8 @@ function fuzzyScore(name, nameT, qVars) {
 }
 
 // счёт одного слова запроса по товару (имя, коды/штрихкоды, поставщик, группа)
-function scoreToken(p, q, qVars) {
+function scoreToken(p, q, qVars, allowFuzzy = true) {
+  codeFields(p); textFields(p);   // посчитается один раз на товар
   let s = 0;
   for (const c of (p._codes || [])) {
     if (c === q) return 120;
@@ -254,7 +395,7 @@ function scoreToken(p, q, qVars) {
   // На коротких словах похожесть по буквосочетаниям врёт: «рис» так «находил»
   // Rich и Ирис. Длину проверяем, а сам порог похожести оставляем мягким,
   // иначе перестают находиться настоящие опечатки вроде «хатдок» → «хот-дог».
-  if (s < 60 && q.length >= 4) {
+  if (allowFuzzy && s < 60 && q.length >= 4) {
     const fuzzy = fuzzyScore(p._name, useT ? p._nameT : p._name, useT ? qVars : [q]);
     if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
   }
@@ -264,12 +405,15 @@ function scoreToken(p, q, qVars) {
 // умный поиск: либо вся фраза подряд (как раньше), либо КАЖДОЕ слово в любом
 // порядке (напр. «печенье яшкино» найдёт «Яшкино Печенье…»). Берём лучшее —
 // ничего из прежнего поведения не теряем.
-export function scoreProduct(p, q, qVars, tokens) {
-  const whole = scoreToken(p, q, qVars);
+/* allowFuzzy — считать ли похожесть по буквосочетаниям (разбор опечаток).
+ * Она дорогая, и кандидатам из указателя обычно не нужна: они и так совпали
+ * началом слова. Опечатки разбираются отдельным проходом — см. visibleProducts. */
+export function scoreProduct(p, q, qVars, tokens, allowFuzzy = true) {
+  const whole = scoreToken(p, q, qVars, allowFuzzy);
   if (!tokens || tokens.length <= 1) return whole;
   let total = 0;
   for (const tok of tokens) {
-    const s = scoreToken(p, tok.q, tok.qVars);
+    const s = scoreToken(p, tok.q, tok.qVars, allowFuzzy);
     if (s <= 0) { total = 0; break; } // слово не найдено → товар не подходит
     total += s;
   }
@@ -306,7 +450,7 @@ export const QUICK = {
 // сортировка готового списка по выбранному порядку
 function sortList(list, scored) {
   const price = (p) => (hasRetail(p) ? Number(p.retail_price) : null);
-  const byName = (a, b) => a.name.localeCompare(b.name, 'ru');
+  const byName = (a, b) => cmpRu(a.name, b.name);
   // «новые» = позже поступившие (дата из файла цен; если её нет — дата добавления)
   const when = (p) => p.arrival_at || p.created_at || '';
   switch (state.sort) {
@@ -323,7 +467,7 @@ function sortList(list, scored) {
       if (x == null) return 1; if (y == null) return -1;
       return y - x || byName(a, b);
     });
-    case 'new': return list.slice().sort((a, b) => String(when(b)).localeCompare(String(when(a))) || byName(a, b));
+    case 'new': return list.slice().sort((a, b) => cmpStr(String(when(b)), String(when(a))) || byName(a, b));
     case 'popular': {
       // по продажам: порядок из списка популярного (buildPopularIds); нет продаж — по просмотрам
       const rank = new Map((state.popularIds || []).map((id, i) => [id, i]));
@@ -405,9 +549,26 @@ export function visibleProducts() {
     const wt = translit(w);
     return { q: w, qVars: w === wt ? [w] : [w, wt] };
   });
-  let hits = list
-    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
+  /* Считаем не все 17 000 товаров, а только кандидатов из указателя «начало
+     слова → товары». Оценка у кандидата та же, что была, поэтому выдача не
+     меняется — меняется время: на бюджетном Android поиск словом занимал
+     около трёх секунд НА КАЖДУЮ БУКВУ, и каталог казался зависшим. */
+  const pool = candidateList(list, tokens, qVars);
+  let hits = pool
+    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens, false) }))
     .filter((x) => x.s >= SEARCH_THRESHOLD);
+  /* Опечатки. Товар с опечаткой в кандидаты не попадает («хатдок» и «хот-дог»
+     начинаются по-разному), поэтому если по указателю почти ничего не нашлось —
+     проходим по всему списку, но с дешёвой отбраковкой: у названия должны
+     совпасть хотя бы два буквосочетания запроса. Полная (дорогая) оценка
+     достаётся считанным товарам вместо всех. */
+  if (hits.length < 20 && q.length >= 4) {
+    const seen = new Set(hits.map((x) => x.p));
+    for (const p of fuzzyPool(list, q, qVars, seen)) {
+      const sc = scoreProduct(p, q, qVars, tokens);
+      if (sc >= SEARCH_THRESHOLD) hits.push({ p, s: sc });
+    }
+  }
   // Отсекаем «хвост» слабых совпадений: если нашлось что-то хорошее, показывать
   // заодно всё отдалённо похожее — это и есть тот самый мусор в выдаче.
   if (hits.length) {
@@ -416,9 +577,62 @@ export function visibleProducts() {
     hits = hits.filter((x) => x.s >= floor);
   }
   const scored = hits
-    .sort((a, b) => b.s - a.s || a.p.name.localeCompare(b.p.name, 'ru'))
+    .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
     .map((x) => x.p);
   return sortList(scored, true);
+}
+
+/* Кандидаты: товары из указателя плюс товары подходящих групп. Если запрос
+ * ничего не дал (например, ищут только по группе), кандидатов просто нет —
+ * дальше сработает разбор опечаток. Когда список уже сужен фильтрами
+ * (категория, поставщик, цена), кандидатов пересекаем с ним. */
+function candidateList(list, tokens, qVars) {
+  const set = candidates(tokens);
+  groupCandidates(qVars, set);
+  if (list === state.products) return [...set];
+  const allowed = new Set(list);
+  return [...set].filter((p) => allowed.has(p));
+}
+
+/* Название в нижнем регистре нужно и указателю, и оценке, и разбору опечаток.
+ * Считаем его ОДИН раз на товар: norm() был вторым по расходам в профиле
+ * именно потому, что одно и то же название приводилось к нижнему регистру
+ * по три-четыре раза. */
+function nameNorm(p) {
+  if (p._nGen !== gen) { p._n = norm(p.name); p._nGen = gen; }
+  return p._n;
+}
+
+// название без знаков и пробелов — считается один раз на товар
+function looseName(p) {
+  if (p._nlGen !== gen) { p._nl = stripPunct(nameNorm(p)); p._nlGen = gen; }
+  return p._nl;
+}
+
+/* Дешёвая отбраковка перед разбором опечаток: берём буквосочетания запроса и
+ * проверяем обычным поиском подстроки. Это в десятки раз дешевле, чем считать
+ * похожесть каждому товару. */
+function fuzzyPool(list, q, qVars, seen) {
+  const grams = [];
+  for (let i = 0; i < q.length - 1; i++) grams.push(q.slice(i, i + 2));
+  const gramsT = [];
+  const qT = qVars[1];
+  if (qT) for (let i = 0; i < qT.length - 1; i++) gramsT.push(qT.slice(i, i + 2));
+  const out = [];
+  for (const p of list) {
+    if (seen.has(p)) continue;
+    // сравниваем с названием БЕЗ знаков: «хатдок» ловит «хот-дог» только так —
+    // с дефисом буквосочетание «тд» в названии не встречается
+    const name = looseName(p);
+    let m = 0;
+    for (const g of grams) if (name.includes(g) && ++m >= 2) break;
+    if (m < 2 && gramsT.length) {
+      m = 0;
+      for (const g of gramsT) if (name.includes(g) && ++m >= 2) break;
+    }
+    if (m >= 2) out.push(p);
+  }
+  return out;
 }
 
 /* Быстрый поиск по цифрам. Оценки берутся те же, что и в общем поиске
@@ -430,6 +644,7 @@ export function visibleProducts() {
 function searchByCode(list, q) {
   const hits = [];
   for (const p of list) {
+    codeFields(p);
     let s = 0;
     for (const c of (p._codes || [])) {
       if (c === q) { s = 120; break; }
@@ -452,7 +667,7 @@ function searchByCode(list, q) {
   const best = hits.reduce((m, x) => Math.max(m, x.s), 0);
   const floor = Math.max(SEARCH_THRESHOLD, best * RELATIVE_CUTOFF);
   return hits.filter((x) => x.s >= floor)
-    .sort((a2, b2) => b2.s - a2.s || a2.p.name.localeCompare(b2.p.name, 'ru'))
+    .sort((a2, b2) => b2.s - a2.s || cmpRu(a2.p.name, b2.p.name))
     .map((x) => x.p);
 }
 

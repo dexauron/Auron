@@ -3,9 +3,9 @@
 import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts } from './catalog.js';
+import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
-import { DEV_NAME_KEY, openDeviceSheet, resetDevice } from './device.js';
+import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
@@ -1028,6 +1028,7 @@ function bindEvents() {
 
 async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
+  applyPowerMode();    // слабый телефон → без тяжёлого размытия
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
   // них сохранённые данные — владелец видел в поиске каталога свою почту.
@@ -1057,9 +1058,26 @@ async function init() {
     // контроллер появляется впервые — там перезагружать нечего и незачем.
     const hadController = !!navigator.serviceWorker.controller;
     let swReloaded = false;
+    /* Перезагружать страницу под руками у человека нельзя: он может печатать
+       заказ или искать товар — всё введённое пропадёт. Поэтому если он сейчас
+       работает (открыто окно, курсор в поле, что-то набрано в поиске),
+       обновление ждёт: страница обновится, когда каталог свернут или закрыт. */
+    const busyNow = () => {
+      try {
+        if (document.querySelector('.sheet-backdrop:not([hidden])')) return true;
+        const a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return true;
+        return !!($('searchInput') && $('searchInput').value.trim());
+      } catch (e) { return false; }
+    };
+    let pendingReload = false;
+    document.addEventListener('visibilitychange', () => {
+      if (pendingReload && document.hidden) location.reload();
+    });
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController || swReloaded) return;
       swReloaded = true;
+      if (busyNow()) { pendingReload = true; toast('Новая версия готова — обновится, когда закончишь'); return; }
       location.reload();
     });
   }
@@ -1097,6 +1115,7 @@ async function init() {
   } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
   await safely('обновление каталога', refresh)();
+  warmSearchIndex();   // указатель поиска соберётся в свободную минуту
   openFromHash(); // если открыли по ссылке на товар — показываем его
   runQuickActionFromUrl();
 }

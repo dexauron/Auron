@@ -1,12 +1,12 @@
 // Импорт из 1С: разбор файлов и слияние в каталог
 
 import { $, CFG, state, ui } from './store.js';
-import { esc, norm, toast } from './core.js';
+import { esc, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache, tidyMemory } from './data.js';
+import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
@@ -174,7 +174,7 @@ function svUploadContacts(list) {
 }
 // После правки в памяти — пересобрать индекс, перерисовать и опубликовать на GitHub.
 export async function svSaveAndPublish(okMsg) {
-  state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  state.products.sort((a, b) => cmpRu(a.name, b.name));
   buildIndex();
   state.popularIds = buildPopularIds();
   renderAll();
@@ -312,7 +312,7 @@ async function refreshStatic({ progressive = false } = {}) {
     try { state.popularIds = (pop && pop.ok) ? await pop.json() : []; } catch (e) { state.popularIds = []; }
     state.competitors = []; state.compPrices = []; // разведка цен — только для вошедших
     state.suppliers = []; // покупателю поставщики не нужны (и в файле их нет)
-    state.products = products.sort(byName);
+    state.products = sortByName(products);
     buildIndex();
     state.syncMax = '';
     state.lastFetch = Date.now();
@@ -883,7 +883,7 @@ export async function smartRun() {
       setSmartRowStatus(e, 'загружено'); okCount++;
     } catch (err) { setSmartRowStatus(e, 'ошибка: ' + (err.message || err)); }
     }
-    state.products.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+    state.products.sort((a, b) => cmpRu(a.name, b.name));
     // Разобранные файлы больше не нужны: это десятки тысяч строк, которые
     // иначе висели бы в памяти телефона до перезагрузки страницы.
     for (const e of ui.smartEntries) { e.parsed = null; e.byKey = null; e.rows = null; }
