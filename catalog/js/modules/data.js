@@ -22,7 +22,20 @@ export async function loadCache() {
   return false;
 }
 
+/* Запись каталога в память телефона — это копия 17 000 объектов и несколько
+ * мегабайт: на бюджетном Android почти секунда, в которую приложение не
+ * отвечает на нажатия. Кэш вспомогательный, спешить некуда — пишем в свободную
+ * минуту и один раз на серию вызовов (при загрузке фото их бывает много). */
+let savePlanned = false;
 export function saveCache() {
+  if (savePlanned) return;
+  savePlanned = true;
+  const run = () => { savePlanned = false; writeCache(); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
+  else setTimeout(run, 400);
+}
+
+function writeCache() {
   // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
   const clean = state.products.map((p) => {
     const o = {};

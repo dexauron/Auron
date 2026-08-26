@@ -1,7 +1,7 @@
 // Категории товаров и умный поиск
 
 import { $, CFG, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state } from './store.js';
-import { groupById, norm, stripPunct, supplierById, translit } from './core.js';
+import { cmpRu, cmpStr, groupById, norm, stripPunct, supplierById, translit } from './core.js';
 import { CATEGORIES, OTHER_CAT, catCache, ic } from './icons.js';
 import { favorites } from './render.js';
 import { popViews } from './device.js';
