@@ -25,11 +25,11 @@ export const DEV_NAME_KEY = 'wm_device_name';
  * iPhone таких сведений не даёт — там всё остаётся как было. */
 function isLowPower() {
   try {
-    const mem = navigator.deviceMemory;          // ГБ, только Chrome/Android
-    const cpu = navigator.hardwareConcurrency;   // число ядер
-    if (typeof mem === 'number' && mem <= 4) return true;
-    if (typeof cpu === 'number' && cpu <= 4 && typeof mem === 'number') return true;
-    return false;
+    // Объём памяти телефон сообщает сам (Chrome на Android). 4 ГБ и меньше —
+    // это и есть бюджетный телефон, на котором «стекло» дороже, чем красивее.
+    // Число ядер как признак не берём: оно врёт даже на хороших телефонах.
+    const mem = navigator.deviceMemory;
+    return typeof mem === 'number' && mem <= 4;
   } catch (e) { return false; }
 }
 
