@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v96';
+const CACHE = 'wm-catalog-v97';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -11,8 +11,13 @@ const PHOTOS = 'wm-photos-v1';
 // Кэш тоже переживает обновление приложения, иначе после каждой версии люди
 // заново качали бы весь каталог.
 const DATA = 'wm-data-v1';
+/* Разборщик Excel (860 КБ) в этот список НЕ входит специально. Он нужен только
+ * владельцу и только при загрузке файлов из 1С, а раньше скачивался при первом
+ * заходе КАЖДОМУ сотруднику — на мобильном интернете это лишние полминуты
+ * ожидания у человека, который просто хотел посмотреть цену. Теперь он
+ * сохраняется в офлайн-копию при первом настоящем использовании (см. fetch). */
 const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
-  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/config.js', 'vendor/xlsx.min.js',
+  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/config.js',
   'manifest.webmanifest',
   'icons/icon-192.png', 'icons/logo-round.png'];
 
@@ -93,14 +98,34 @@ self.addEventListener('fetch', (e) => {
   }
 
   if (url.origin !== self.location.origin) return;
-  // Оболочку приложения (страница, скрипты, стили) тянем МИМО обычного кэша
-  // браузера: GitHub Pages отдаёт их с запасом на несколько минут, и без этого
-  // «сначала сеть» могло вернуть старый файл — у людей оставалась прежняя версия.
   const isShell = e.request.mode === 'navigate'
     || /\.(html|js|css|webmanifest)$/i.test(url.pathname);
-  const req = isShell ? new Request(e.request, { cache: 'reload' }) : e.request;
+
+  /* Оболочка приложения — «сохранённое сразу, свежее следом».
+   * Было «сначала сеть»: каждый заход ждал ответа сервера по всем двум десяткам
+   * файлов, и на слабом мобильном интернете каталог открывался долго, хотя всё
+   * уже лежало на телефоне. Теперь показываем сохранённое мгновенно, а свежую
+   * версию тихо докачиваем в фоне (мимо обычного кэша браузера, иначе GitHub
+   * Pages отдаёт вчерашнее). Когда новая версия готова, service worker сам
+   * перехватывает управление и страница один раз перезагружается — человек
+   * получает обновление, ничего для этого не делая. */
+  if (isShell) {
+    e.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      const hit = await cache.match(e.request, { ignoreSearch: true });
+      const fresh = fetch(new Request(e.request, { cache: 'reload' }))
+        .then((resp) => { if (resp.ok) cache.put(e.request, resp.clone()); return resp; })
+        .catch(() => null);
+      if (hit) { e.waitUntil(fresh); return hit; }
+      return (await fresh) || Response.error();
+    })());
+    return;
+  }
+
+  // Остальное своё (картинки интерфейса, разборщик Excel) — «сначала сеть»,
+  // с сохранением копии: скачали один раз, дальше работает и без сети.
   e.respondWith(
-    fetch(req)
+    fetch(e.request)
       .then((resp) => {
         if (resp.ok) {
           const copy = resp.clone();
