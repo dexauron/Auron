@@ -1530,3 +1530,33 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 .ord-add .btn { flex: 0 0 auto; margin: 0; height: 44px; }
 /* подсказка в заголовке группы — обычным текстом, заголовок и так капсом */
 .ios-group-title .hint { text-transform: none; letter-spacing: 0; }
+
+/* ── Экономный режим: слабый телефон (см. device.js) ─────────────────────────
+   Размытие «матового стекла» на бюджетном Android пересчитывается каждый кадр:
+   отсюда рывки при прокрутке и дёрганое открытие окон. Здесь оно заменяется
+   обычным затемнением, тени делаются легче, а движение — короче. Внешне почти
+   то же самое, но телефон успевает рисовать кадры и отвечать на нажатия. */
+.low-power .header,
+.low-power .sheet-backdrop,
+.low-power .sheet-backdrop.backdrop-top,
+.low-power .sheet-back,
+.low-power .lightbox {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+.low-power .header { background: var(--bg); }
+.low-power .sheet-backdrop { background: rgba(0, 0, 0, .38); }
+.low-power .sheet-backdrop.backdrop-top { background: rgba(0, 0, 0, .5); }
+.low-power .sheet { box-shadow: 0 -2px 12px rgba(0, 0, 0, .18); animation-duration: .24s; }
+.low-power .card { transition: none; }
+.low-power .chip, .low-power .icon-btn, .low-power .btn, .low-power .tag,
+.low-power .price-row, .low-power .field-row { transition: opacity .12s ease; }
+/* Товары за пределами экрана браузер может не рисовать вовсе — прокрутка
+   длинного списка перестаёт упираться в вёрстку сотен карточек. */
+.card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
+
+/* Человек попросил систему «поменьше движения» — уважаем и это */
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .sheet-backdrop { animation: none !important; }
+  * { transition-duration: .01ms !important; }
+}

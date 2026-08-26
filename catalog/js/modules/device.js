@@ -15,6 +15,28 @@ import { plural } from './competitors.js';
 
 export const DEV_NAME_KEY = 'wm_device_name';
 
+/* ── Экономный режим для слабых телефонов ──────────────────────────────────
+ * Красота интерфейса держится на «матовом стекле»: размытие под шапкой и под
+ * окнами. На iPhone это делает видеочип и не стоит ничего. На бюджетном
+ * Android каждое такое размытие пересчитывается КАЖДЫЙ КАДР — отсюда рывки
+ * при прокрутке и «дёрганое» открытие окон.
+ * Поэтому на слабых телефонах размытие выключается: фон просто затемняется.
+ * Как определяем «слабый»: телефон сам сообщает объём памяти и число ядер.
+ * iPhone таких сведений не даёт — там всё остаётся как было. */
+export function isLowPower() {
+  try {
+    const mem = navigator.deviceMemory;          // ГБ, только Chrome/Android
+    const cpu = navigator.hardwareConcurrency;   // число ядер
+    if (typeof mem === 'number' && mem <= 4) return true;
+    if (typeof cpu === 'number' && cpu <= 4 && typeof mem === 'number') return true;
+    return false;
+  } catch (e) { return false; }
+}
+
+export function applyPowerMode() {
+  try { document.documentElement.classList.toggle('low-power', isLowPower()); } catch (e) { /* некритично */ }
+}
+
 export function deviceName() {
   try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
 }
@@ -27,6 +49,7 @@ function deviceMemory() {
   const themeRaw = get(THEME_KEY);
   const rows = [
     { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
+    { name: 'Экономный режим', val: isLowPower() ? 'включён — телефон послабее, размытие выключено' : 'не нужен' },
     { name: 'Вид списка', val: viewName },
     { name: 'Открытый раздел', val: tabName },
     { name: 'Тема', val: themeRaw === 'dark' ? 'тёмная' : themeRaw === 'light' ? 'светлая' : 'как в телефоне' },
