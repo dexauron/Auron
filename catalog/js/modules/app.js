@@ -1058,9 +1058,26 @@ async function init() {
     // контроллер появляется впервые — там перезагружать нечего и незачем.
     const hadController = !!navigator.serviceWorker.controller;
     let swReloaded = false;
+    /* Перезагружать страницу под руками у человека нельзя: он может печатать
+       заказ или искать товар — всё введённое пропадёт. Поэтому если он сейчас
+       работает (открыто окно, курсор в поле, что-то набрано в поиске),
+       обновление ждёт: страница обновится, когда каталог свернут или закрыт. */
+    const busyNow = () => {
+      try {
+        if (document.querySelector('.sheet-backdrop:not([hidden])')) return true;
+        const a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.tagName === 'SELECT')) return true;
+        return !!($('searchInput') && $('searchInput').value.trim());
+      } catch (e) { return false; }
+    };
+    let pendingReload = false;
+    document.addEventListener('visibilitychange', () => {
+      if (pendingReload && document.hidden) location.reload();
+    });
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (!hadController || swReloaded) return;
       swReloaded = true;
+      if (busyNow()) { pendingReload = true; toast('Новая версия готова — обновится, когда закончишь'); return; }
       location.reload();
     });
   }
