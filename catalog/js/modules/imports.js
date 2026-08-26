@@ -417,7 +417,7 @@ async function readSheet(file) {
     if (Array.isArray(rows)) return rows;
   } catch (e) { /* разберём здесь же, ниже */ }
   const again = await file.arrayBuffer();     // прежний буфер ушёл в поток
-  await ensureXlsx();
+  await loadXlsxLib();
   const wb = window.XLSX.read(again, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
