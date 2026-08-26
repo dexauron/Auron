@@ -214,8 +214,11 @@ function wordIndex() {
     for (const w of name.split(/[^a-zа-я0-9]+/)) {
       if (!w) continue;
       addKey(map, w, i);
-      const t = translit(w);
-      if (t !== w) addKey(map, t, i);
+      // для ключа хватает начала слова — транслитерировать слово целиком
+      // (а это 85 000 замен на каталог) незачем
+      const head = w.slice(0, KEY + 1);
+      const t = translit(head);
+      if (t !== head) addKey(map, t, i);
     }
     if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
     if (p.code) addKey(map, norm(p.code), i);
@@ -319,7 +322,7 @@ function fuzzyScore(name, nameT, qVars) {
 }
 
 // счёт одного слова запроса по товару (имя, коды/штрихкоды, поставщик, группа)
-function scoreToken(p, q, qVars) {
+function scoreToken(p, q, qVars, allowFuzzy = true) {
   codeFields(p); textFields(p);   // посчитается один раз на товар
   let s = 0;
   for (const c of (p._codes || [])) {
@@ -355,7 +358,7 @@ function scoreToken(p, q, qVars) {
   // На коротких словах похожесть по буквосочетаниям врёт: «рис» так «находил»
   // Rich и Ирис. Длину проверяем, а сам порог похожести оставляем мягким,
   // иначе перестают находиться настоящие опечатки вроде «хатдок» → «хот-дог».
-  if (s < 60 && q.length >= 4) {
+  if (allowFuzzy && s < 60 && q.length >= 4) {
     const fuzzy = fuzzyScore(p._name, useT ? p._nameT : p._name, useT ? qVars : [q]);
     if (fuzzy >= 0.4) s = Math.max(s, Math.round(65 * fuzzy));
   }
@@ -365,12 +368,15 @@ function scoreToken(p, q, qVars) {
 // умный поиск: либо вся фраза подряд (как раньше), либо КАЖДОЕ слово в любом
 // порядке (напр. «печенье яшкино» найдёт «Яшкино Печенье…»). Берём лучшее —
 // ничего из прежнего поведения не теряем.
-export function scoreProduct(p, q, qVars, tokens) {
-  const whole = scoreToken(p, q, qVars);
+/* allowFuzzy — считать ли похожесть по буквосочетаниям (разбор опечаток).
+ * Она дорогая, и кандидатам из указателя обычно не нужна: они и так совпали
+ * началом слова. Опечатки разбираются отдельным проходом — см. visibleProducts. */
+export function scoreProduct(p, q, qVars, tokens, allowFuzzy = true) {
+  const whole = scoreToken(p, q, qVars, allowFuzzy);
   if (!tokens || tokens.length <= 1) return whole;
   let total = 0;
   for (const tok of tokens) {
-    const s = scoreToken(p, tok.q, tok.qVars);
+    const s = scoreToken(p, tok.q, tok.qVars, allowFuzzy);
     if (s <= 0) { total = 0; break; } // слово не найдено → товар не подходит
     total += s;
   }
@@ -512,14 +518,14 @@ export function visibleProducts() {
      около трёх секунд НА КАЖДУЮ БУКВУ, и каталог казался зависшим. */
   const pool = candidateList(list, tokens, qVars);
   let hits = pool
-    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens) }))
+    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens, false) }))
     .filter((x) => x.s >= SEARCH_THRESHOLD);
   /* Опечатки. Товар с опечаткой в кандидаты не попадает («хатдок» и «хот-дог»
      начинаются по-разному), поэтому если по указателю почти ничего не нашлось —
      проходим по всему списку, но с дешёвой отбраковкой: у названия должны
      совпасть хотя бы два буквосочетания запроса. Полная (дорогая) оценка
      достаётся считанным товарам вместо всех. */
-  if (hits.length < 5 && q.length >= 4) {
+  if (hits.length < 20 && q.length >= 4) {
     const seen = new Set(hits.map((x) => x.p));
     for (const p of fuzzyPool(list, q, qVars, seen)) {
       const sc = scoreProduct(p, q, qVars, tokens);
