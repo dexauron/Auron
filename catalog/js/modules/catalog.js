@@ -155,6 +155,19 @@ export function buildIndex() {
   gen++;      // всё посчитанное раньше устарело, пересчитается по требованию
 }
 
+let grpCache = new Map(); let grpCacheGen = -1;
+function groupText(id) {
+  if (grpCacheGen !== gen) { grpCache = new Map(); grpCacheGen = gen; }
+  let v = grpCache.get(id);
+  if (!v) {
+    const n = norm(groupById(id)?.name || '');
+    const t = translit(n);
+    v = { n, t, w: wordy(n), wt: t === n ? wordy(n) : wordy(t) };
+    grpCache.set(id, v);
+  }
+  return v;
+}
+
 // Коды и штрихкоды товара (нужны поиску по цифрам)
 function codeFields(p) {
   if (p._cgen === gen) return p;
@@ -177,10 +190,10 @@ function textFields(p) {
   const sup = (p.supplier_ids || []).map((id) => supplierById(id)?.name).filter(Boolean).join(' ');
   p._sup = norm(sup);
   p._supT = translit(p._sup);
-  p._grp = norm(groupById(p.group_id)?.name || '');
-  p._grpT = translit(p._grp);
-  p._grpW = wordy(p._grp);
-  p._grpWT = wordy(p._grpT);
+  // Названия групп повторяются: групп двести, а товаров семнадцать тысяч.
+  // Считаем виды названия группы один раз на группу и раздаём всем её товарам.
+  const g = groupText(p.group_id);
+  p._grp = g.n; p._grpT = g.t; p._grpW = g.w; p._grpWT = g.wt;
   p._note = norm(p.note || '');
   p._noteW = wordy(p._note);
   p._tgen = gen;
@@ -193,6 +206,7 @@ function textFields(p) {
  * находил Snickers), и примечание, и коды. Строится один раз на поколение и
  * только при первом поиске словом — открытие каталога он не задерживает. */
 const KEY = 3;
+const LETTERS = /[a-zа-яё]/i;
 function addKey(map, word, i) {
   if (!word) return;
   const k = word.slice(0, KEY);
@@ -213,9 +227,11 @@ function indexOne(map, p, i) {
     if (t !== head) addKey(map, t, i);
   }
   if (p.note) for (const w of norm(p.note).split(/[^a-zа-я0-9]+/)) addKey(map, w, i);
-  if (p.code) addKey(map, norm(p.code), i);
-  if (p.article) addKey(map, norm(p.article), i);
-  for (const bc of (p.barcodes || [])) addKey(map, norm(bc), i);
+  // Коды из одних цифр в указатель не кладём: запрос из цифр идёт по быстрому
+  // пути (searchByCode), а нормализация 34 000 кодов стоит времени на каждой
+  // загрузке. Коды с буквами («арт-88») остаются — их ищут словом.
+  if (p.code && LETTERS.test(p.code)) addKey(map, norm(p.code), i);
+  if (p.article && LETTERS.test(p.article)) addKey(map, norm(p.article), i);
 }
 
 /* Указатель строится ПОРЦИЯМИ. Одним куском на 17 000 товаров это была задача
