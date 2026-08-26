@@ -80,7 +80,8 @@ const CAT_NAMES = { has: (n) => (_catNames || (_catNames = new Set([...CATEGORIE
 // правил при каждой отрисовке — заметно. Сбрасывается в buildIndex().
 export function productCategory(p) {
   if (!p) return null;
-  if (p._cat !== undefined) return p._cat;
+  if (p._catGen === gen && p._cat !== undefined) return p._cat;
+  p._catGen = gen;
   // Магазин не продуктовый: своих правил нет, раздел — это группа 1С как есть.
   if (!useNameRules()) {
     const g = p.category ? null : groupById(p.group_id);
@@ -319,6 +320,7 @@ function fuzzyScore(name, nameT, qVars) {
 
 // счёт одного слова запроса по товару (имя, коды/штрихкоды, поставщик, группа)
 function scoreToken(p, q, qVars) {
+  codeFields(p); textFields(p);   // посчитается один раз на товар
   let s = 0;
   for (const c of (p._codes || [])) {
     if (c === q) return 120;
@@ -529,6 +531,7 @@ export function visibleProducts() {
 function searchByCode(list, q) {
   const hits = [];
   for (const p of list) {
+    codeFields(p);
     let s = 0;
     for (const c of (p._codes || [])) {
       if (c === q) { s = 120; break; }
