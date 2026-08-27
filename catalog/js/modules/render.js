@@ -139,7 +139,6 @@ export function renderGrid() {
     grid.innerHTML = '';
     const empty = $('emptyState');
     empty.hidden = false;
-    const filtered = anyFilterActive() || state.favOnly;
     if (state.favOnly && !favorites().length) {
       empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('heart'));
       empty.querySelector('.empty-title').textContent = 'В избранном пусто';
