@@ -94,6 +94,12 @@
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
        до низа экрана, а не до шапки. -->
+  <!-- Список покупок покупателя: сколько отмечено и на какую сумму -->
+  <div class="compare-bar shop-bar" id="shopBar" hidden>
+    <button class="btn btn-primary" id="shopOpen">
+      Список: <span id="shopCount">0</span> · <span id="shopTotal">0 ₽</span></button>
+  </div>
+
   <!-- Отобрано для сравнения: полоска над нижней панелью -->
   <div class="compare-bar" id="compareBar" hidden>
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
@@ -145,6 +151,7 @@
         <div id="sheetSupplier"></div>
         <button class="btn btn-secondary btn-block purchase-only" id="btnCompareAdd">К сравнению</button>
         <button class="btn btn-secondary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
+        <button class="btn btn-primary btn-block guest-only" id="btnShopAdd">В список покупок</button>
         <button class="btn btn-secondary btn-block guest-only" id="btnReportPrice">Видел дешевле в другом магазине</button>
         <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
         <div id="sheetSimilar"></div>
@@ -835,6 +842,22 @@
         </form>
         <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
         где не потеряете.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Список покупок (покупатель) -->
+  <div class="sheet-backdrop" id="shopSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="shopShare" hidden>Отправить</button>
+        <h2 class="ios-nav-title">Список покупок</h2>
+        <button class="ios-nav-btn strong" data-close="shopSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="shopBody"></div>
+      <div class="filter-actions">
+        <button class="btn btn-ghost btn-block" id="shopClear">Очистить список</button>
       </div>
     </div>
   </div>
