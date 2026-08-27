@@ -1592,13 +1592,21 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 /* ── Список покупок покупателя ─────────────────────────────────────────────── */
 .shop-bar .btn { flex: 1; }
 .shop-row { align-items: center; gap: 8px; }
+/* Кружок «вычеркнуть»: сам кружок 26 px, но нажимается площадь 40 px —
+   иначе в него не попасть пальцем на ходу. Круг рисуем подложкой, галочку
+   кладём в ту же клетку сетки. */
 .shop-check {
-  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
-  border: 1.5px solid var(--border); background: none; color: var(--pos);
+  flex: 0 0 auto; width: 40px; height: 40px; padding: 0;
+  border: none; background: none; color: var(--pos);
   display: grid; place-items: center; cursor: pointer;
 }
+.shop-check::before {
+  content: ''; grid-area: 1 / 1; width: 26px; height: 26px;
+  border-radius: 50%; border: 1.5px solid var(--border);
+}
+.shop-check .ic { grid-area: 1 / 1; }
 .shop-row.shop-done .ios-row-title, .shop-row.shop-done .ios-row-value { color: var(--text-2); text-decoration: line-through; }
-.shop-row.shop-done .shop-check { border-color: var(--pos); }
+.shop-row.shop-done .shop-check::before { border-color: var(--pos); }
 /* «−  2  +» — счётчик количества. Раньше он одалживал стили у экрана
    инвентаризации; тот убрали, и кнопки остались голыми квадратиками. */
 .qty-step {
