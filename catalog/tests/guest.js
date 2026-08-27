@@ -30,6 +30,9 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(grid.photos === 0, `фотографий в списке нет (${grid.photos})`);
   chk(grid.toggle === 'none', 'переключателя вида нет — покупателю нечего переключать');
   chk(grid.strips === 0, `ленты с фотографиями скрыты (${grid.strips})`);
+  // пустых плашек быть не должно: однажды «что нового» висела пустой белой полосой
+  chk(document.title !== null && await page.evaluate(() => document.getElementById('newsBanner').hidden),
+    'плашка «что нового» не показывается, когда новостей нет');
   chk(/89|75/.test(grid.text), `цена видна (${grid.text.slice(0, 60)})`);
   chk(/101|102/.test(grid.text), 'код товара виден');
   chk(/Есть|Мало|Нет/.test(grid.text), 'видно, есть ли товар в магазине');
