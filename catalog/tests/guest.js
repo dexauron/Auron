@@ -235,7 +235,9 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     // подкладываем свежие товары: пять новых из двадцати — это завоз, а не первая загрузка
     for (let i = 0; i < 5; i++) {
       s2.products.push({ id: 'n' + i, name: 'Новинка ' + i, code: '90' + i, group_id: 'g1',
-        retail_price: 100 + i, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(2) });
+        retail_price: 100 + i, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(2),
+        // у части новинок есть дата завоза — она показывается в строке
+        arrival_at: i % 2 ? iso(1) : '' });
     }
     for (let i = 0; i < 40; i++) {
       s2.products.push({ id: 'o' + i, name: 'Старый товар ' + i, code: '80' + i, group_id: 'g1',
@@ -262,6 +264,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/было 120/.test(newsSheet.body), `и старая цена рядом с новой (${newsSheet.body.slice(0, 90)})`);
   chk(/новое в магазине/i.test(newsSheet.body) && /Новинка 0/.test(newsSheet.body),
     'в списке есть раздел «новое в магазине»');
+  chk(/завоз \d\d\.\d\d/.test(newsSheet.body), `у новинки видно, когда её завезли (${(newsSheet.body.match(/завоз [\d.]+/) || [''])[0]})`);
 
   // ради одних новинок плашка не мозолит глаза каждый день
   const again = await page.evaluate(async () => {

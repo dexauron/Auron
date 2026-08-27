@@ -150,7 +150,7 @@ function openNews() {
     ${news.cheaper.length ? `<div class="ios-group-title">Подешевело</div>
       <div class="ios-group">${news.cheaper.slice(0, 40).map((x) => row(x.p, `было ${fmtPrice(x.was)}`)).join('')}</div>` : ''}
     ${news.fresh.length ? `<div class="ios-group-title">Новое в магазине</div>
-      <div class="ios-group">${news.fresh.map((p) => row(p, p.arrival_at ? `завоз ${esc(fmtDateSafe(p.arrival_at))}` : '')).join('')}</div>` : ''}
+      <div class="ios-group">${news.fresh.map((p) => row(p, p.arrival_at ? `завоз ${esc(fmtDate(p.arrival_at))}` : '')).join('')}</div>` : ''}
     <p class="ios-note">Сравнение с ценами, которые были при твоём прошлом заходе. Считает сам
     телефон — ничего никуда не отправляется.</p>`;
   openSheet('newsSheet');
