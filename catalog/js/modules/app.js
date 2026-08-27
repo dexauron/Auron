@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
@@ -23,6 +23,9 @@ import { clearRestock, openRestock, orderFromRestock, removeRestock, renderResto
 /* ── События ──────────────────────────────────── */
 
 function bindEvents() {
+  // Суммы во всех полях ввода пишутся с разделителями разрядов: 6 000, 1 000 000
+  ['ordAmount', 'compPrice', 'calcPrice', 'priceMin', 'priceMax'].forEach((id) => attachMoneyInput($(id)));
+
   // Поиск
   const input = $('searchInput');
   let debounce;
@@ -146,7 +149,8 @@ function bindEvents() {
   // Диапазон цены — применяется на лету по мере ввода
   let priceDeb;
   const applyPrice = () => {
-    const mn = parseFloat($('priceMin').value); const mx = parseFloat($('priceMax').value);
+    const mn = $('priceMin').value.trim() ? moneyNum($('priceMin').value) : NaN;
+    const mx = $('priceMax').value.trim() ? moneyNum($('priceMax').value) : NaN;
     state.priceMin = Number.isFinite(mn) ? mn : null;
     state.priceMax = Number.isFinite(mx) ? mx : null;
     state.renderLimit = PAGE_SIZE;

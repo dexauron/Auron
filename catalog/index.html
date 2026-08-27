@@ -387,7 +387,7 @@
           <div id="compChosen" class="comp-chosen" hidden></div>
 
           <label class="field-label">Их розничная цена, ₽</label>
-          <input type="number" id="compPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="149.90" required>
+          <input type="text" id="compPrice" class="input money" inputmode="decimal" placeholder="149,90" required>
 
           <div class="form-error" id="compError" hidden></div>
           <button type="submit" class="btn btn-primary btn-block" id="compSubmit">Сохранить цену</button>
@@ -442,7 +442,7 @@
         <p class="muted" id="calcProductName"></p>
 
         <label class="field-label">Какую цену предлагают, ₽</label>
-        <input type="number" id="calcPrice" class="input" inputmode="decimal" step="0.01" min="0" placeholder="1850">
+        <input type="text" id="calcPrice" class="input money" inputmode="decimal" placeholder="1 850">
 
         <label class="field-label">Эта цена — за что?</label>
         <div class="calc-seg" id="calcUnitSeg">
@@ -754,11 +754,11 @@
         <div class="ios-group">
           <div class="ios-row">
             <span class="ios-row-title">От</span>
-            <input type="number" id="priceMin" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+            <input type="text" id="priceMin" class="ios-inp money" inputmode="decimal" placeholder="любая">
           </div>
           <div class="ios-row">
             <span class="ios-row-title">До</span>
-            <input type="number" id="priceMax" class="ios-inp" inputmode="decimal" placeholder="любая" min="0">
+            <input type="text" id="priceMax" class="ios-inp money" inputmode="decimal" placeholder="любая">
           </div>
         </div>
 
@@ -877,7 +877,7 @@
           <div class="ios-row"><span class="ios-row-title">У кого</span>
             <select id="ordSupplier" class="ios-inp"></select></div>
           <div class="ios-row"><span class="ios-row-title">Сумма, ₽</span>
-            <input type="number" id="ordAmount" class="ios-inp" inputmode="decimal" min="0" placeholder="0"></div>
+            <input type="text" id="ordAmount" class="ios-inp money" inputmode="decimal" placeholder="0"></div>
         </div>
         <div class="ios-group-title">Сроки</div>
         <div class="ios-group">
