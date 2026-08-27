@@ -357,14 +357,10 @@ function bindEvents() {
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // «Фото на проверке» — показываем, если в очереди что-то есть
-      $('menuSuggestions').hidden = !(state.suggCount > 0);
-      setRowText('menuSuggestions', `Фото на проверке (${state.suggCount || 0})`);
       // цены магазинов ведут все вошедшие — и владелец, и сотрудник
       $('menuCompStores').hidden = false;
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
       if (state.serverless) {
-        $('menuSuggestions').hidden = true;
         $('menuSuppliers').hidden = true;
         $('menuDedup').hidden = true;
       } else {
