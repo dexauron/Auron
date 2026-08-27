@@ -157,7 +157,32 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(shopSheet.done === 1, 'вычеркнутая строка отмечена');
   chk(/178/.test(shopSheet.barTotal.replace(/\s/g, '')), `вычеркнутое из суммы уходит (${shopSheet.barTotal})`);
 
-  // ── 6. После входа сотрудника всё рабочее возвращается ──
+  // ── 6. Не нашёл товар — можно спросить у магазина ──
+  const ask = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const inp = document.getElementById('searchInput');
+    inp.value = 'шоколадка Милка';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 700));
+    const btn = document.getElementById('emptyAsk');
+    const shown = !btn.hidden;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const text = document.getElementById('askText').value;
+    let opened = '';
+    const real = window.open;
+    window.open = (u) => { opened = u; return null; };
+    document.getElementById('askSend').click();
+    await new Promise((r) => setTimeout(r, 300));
+    window.open = real;
+    return { shown, text, opened };
+  });
+  chk(ask.shown, 'ничего не нашлось — покупателю предложено спросить в магазине');
+  chk(/Милка/.test(ask.text), `запрос подставлен в вопрос (${ask.text})`);
+  chk(/wa\.me\/79640616601/.test(ask.opened) && /Милка/.test(decodeURIComponent(ask.opened)),
+    'вопрос уходит владельцу в WhatsApp готовым текстом');
+
+  // ── 7. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
   await page.waitForTimeout(400);
   const staff = await page.evaluate(() => ({
