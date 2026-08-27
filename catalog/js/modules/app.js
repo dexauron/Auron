@@ -10,7 +10,7 @@ import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, open
 import { loadCache, saveCache, tidyMemory } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
-import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
+import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
@@ -357,8 +357,6 @@ function bindEvents() {
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      const noPhoto = photoCandidates().length;
-      setRowText('menuPhotoFill', noPhoto ? `Дозаполнить фото (${noPhoto})` : 'Дозаполнить фото — всё есть');
       // «Фото на проверке» — показываем, если в очереди что-то есть
       $('menuSuggestions').hidden = !(state.suggCount > 0);
       setRowText('menuSuggestions', `Фото на проверке (${state.suggCount || 0})`);
@@ -366,12 +364,10 @@ function bindEvents() {
       $('menuCompStores').hidden = false;
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
       if (state.serverless) {
-        $('menuPhotoFill').hidden = true;
         $('menuSuggestions').hidden = true;
         $('menuSuppliers').hidden = true;
         $('menuDedup').hidden = true;
       } else {
-        $('menuPhotoFill').hidden = false;
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       openSheet('adminMenuSheet');
@@ -477,21 +473,6 @@ function bindEvents() {
     }
   });
   $('competitorForm').addEventListener('submit', submitCompetitorPrice);
-
-  // «Дозаполнить фото» — режим для сотрудника: снять камерой товары без фото
-  $('menuPhotoFill').addEventListener('click', () => { closeSheet('adminMenuSheet'); openPhotoFill(); });
-  $('photoFillSearch').addEventListener('input', renderPhotoFillList);
-  $('cleanPhotosToggle').addEventListener('change', (e) => {
-    try { localStorage.setItem('wm_clean_photos', e.target.checked ? '1' : '0'); } catch (err) { /* */ }
-    if (e.target.checked) toast('Фото будут с белым фоном. Первое обработается дольше — грузится обрезка.');
-  });
-  $('photoFillList').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-fill-cam]');
-    if (!btn) return;
-    ui.photoFillTarget = state.products.find((x) => x.id === btn.dataset.fillCam) || null;
-    if (ui.photoFillTarget) $('photoFillInput').click();
-  });
-  $('photoFillInput').addEventListener('change', (e) => { photoFillPick(e.target.files[0]); });
 
   // карточка поставщика: «все товары», вход, изменить контакты (звонок/WhatsApp — обычные ссылки)
   $('supViewBody').addEventListener('click', (e) => {
@@ -861,16 +842,6 @@ function bindEvents() {
       renderPhotoManager();
     }
   });
-  $('photoInput').addEventListener('change', async () => {
-    const files = [...$('photoInput').files];
-    $('photoInput').value = '';
-    for (const f of files) {
-      const blob = await compressImage(f);
-      ui.formPhotos.push({ blob, preview: URL.createObjectURL(blob) });
-    }
-    renderPhotoManager();
-  });
-
   // Группы (управление)
   $('menuGroups').addEventListener('click', () => {
     closeSheet('adminMenuSheet');
