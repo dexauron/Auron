@@ -668,6 +668,58 @@ export function renderNewProducts() {
     }).join('') + '</div>';
 }
 
+/* ── «Сегодня привезли» ──────────────────────────────────────────────────
+ * Покупателю важен один вопрос: «что у вас нового?». Раньше ответ на него
+ * лежал в фильтре по дате поступления — то есть нигде. Теперь завоз виден
+ * сразу на главной, без единого нажатия.
+ * Если сегодня ещё не привозили, показываем последний завоз за неделю и
+ * честно называем день: пустой блок «сегодня ничего» никому не нужен, а
+ * «привезли в понедельник» — это по-прежнему свежий товар.
+ * Только покупателю: у сотрудника на главной своя лента новинок с фото,
+ * а завоз он и так видит в заказах. */
+
+const ARR_MAX_DAYS = 7;   // дальше недели «свежим завозом» это уже не назвать
+const ARR_ROWS = 6;       // больше строк — и блок съедает весь первый экран
+
+function arrivalDay() {
+  const today = todayISO();
+  const from = daysAgoISO(ARR_MAX_DAYS);
+  let best = '';
+  for (const p of state.products) {
+    const d = String(p.arrival_at || '').slice(0, 10);
+    if (d && d <= today && d >= from && d > best) best = d;
+  }
+  return best;
+}
+
+export function renderArrivals() {
+  const box = $('arrivalStrip');
+  if (!box) return;
+  const show = !state.session && state.tab === 'catalog'
+    && !state.query && !state.favOnly && !anyFilterActive();
+  const day = show ? arrivalDay() : '';
+  const list = day
+    ? state.products.filter((p) => String(p.arrival_at || '').slice(0, 10) === day)
+    : [];
+  // один товар — это не завоз, а случайность в данных: молчим
+  if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  const title = day === todayISO() ? 'Сегодня привезли'
+    : day === daysAgoISO(1) ? 'Вчера привезли'
+      : 'Привезли ' + fmtDate(day);
+  const rows = list.slice(0, ARR_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
+      <span class="arr-name">${esc(p.name)}</span>
+      <span class="arr-price">${esc(fmtRetail(p))}</span></button>`).join('');
+  const rest = list.length - ARR_ROWS;
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">${esc(title)}</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>
+    ${rest > 0 ? `<button class="arr-more" data-arr-all="${esc(day)}">Показать все ${list.length} \u203a</button>` : ''}`;
+  box.hidden = false;
+}
+
 // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
 
 export function applyTheme(t) {
