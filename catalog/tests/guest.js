@@ -5,10 +5,12 @@ const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers')
 
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3.2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт',
-    photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock: 7, arrival_at: '2026-08-20',
+    photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
     article: 'АРТ-9', department: 'Молочный', note: 'ставить вперёд', supplier_ids: ['s1'] },
+  // у покупателя данные приходят как в настоящей витрине: штрихкоды есть,
+  // а вместо числа остатка — слово «есть / мало / нет»
   { id: 'p2', name: 'Кефир Домик в деревне', code: '102', group_id: 'g1', retail_price: 75, unit: 'шт',
-    photos: [], barcodes: [], stock: 0, arrival_at: '2026-08-25' },
+    photos: [], barcodes: ['4600000000028'], stock_state: 'out', arrival_at: '2026-08-25' },
 ];
 const groups = [{ id: 'g1', name: 'Молочные' }];
 
@@ -38,6 +40,27 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/Есть|Мало|Нет/.test(grid.text), 'видно, есть ли товар в магазине');
   chk(!/без ШК/.test(grid.text), 'служебных пометок для кассы («без ШК») покупателю не видно');
   chk(/завоз 20\.08|завоз 25\.08/.test(grid.text), `в списке видно, когда товар завезли (${(grid.text.match(/завоз [\d.]+/) || [''])[0]})`);
+
+  // ── 1a. Сканер: навёл камеру — нашёл товар ──
+  const scan = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    P._scanSearch('4600000000028');            // как будто считали штрихкод кефира
+    await new Promise((r) => setTimeout(r, 700));
+    const open = !document.getElementById('productSheet').hidden;
+    const name = document.getElementById('sheetName').textContent;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    // и «проверить ценник»: цена крупно, без открытия карточки
+    P._scanPrice('4600000000011');
+    await new Promise((r) => setTimeout(r, 300));
+    const panel = document.getElementById('scanResult').innerText.replace(/\s+/g, ' ');
+    const inp = document.getElementById('searchInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    return { open, name, panel };
+  });
+  chk(scan.open && /Кефир/.test(scan.name), `по штрихкоду покупатель находит товар (${scan.name})`);
+  chk(/Молоко/.test(scan.panel) && /89/.test(scan.panel),
+    `«проверить ценник» показывает название и цену (${scan.panel.slice(0, 50)})`);
 
   // ── 2. Карточка товара: только нужное покупателю ──
   await openProduct(page, 'p1');

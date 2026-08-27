@@ -128,12 +128,29 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   // в интерфейсе оно скрыто — файл скачивается по прямой ссылке
   const leak = await page.evaluate(() => {
     const P = window.WM_PUBLISH;
-    const closed = ['stock', 'stock_qty', 'stock_state', 'supplier_ids', 'barcodes', 'article', 'note', 'department'];
+    /* Что НЕ должно уходить покупателю. Штрихкод и слово о наличии из этого
+       списка убраны намеренно (решение владельца 2026-08-27): без штрихкодов
+       у покупателя не работал сканер, а «есть / мало / нет» — это то же, что
+       видно на полке. Само ЧИСЛО остатка по-прежнему закрыто. */
+    const closed = ['stock', 'stock_qty', 'supplier_ids', 'article', 'note', 'department'];
     const found = new Set();
     for (const o of P.buildPublicProducts()) for (const k of closed) if (k in o) found.add(k);
     return [...found];
   });
   chk(!leak.length, `в открытой витрине нет внутренних полей${leak.length ? ': ' + leak.join(', ') : ''}`);
+  // а нужное покупателю — есть: иначе сканер и наличие у него не работают
+  const open = await page.evaluate(() => {
+    const P = window.WM_PUBLISH;
+    const list = P.buildPublicProducts();
+    return {
+      withBarcodes: list.filter((o) => (o.barcodes || []).length).length,
+      withStock: list.filter((o) => o.stock_state).length,
+      numbers: list.filter((o) => o.stock != null || o.stock_qty != null).length,
+    };
+  });
+  chk(open.withBarcodes > 0, `штрихкоды в витрине есть — по ним покупатель ищет сканером (${open.withBarcodes})`);
+  chk(open.withStock > 0, `наличие словом в витрине есть (${open.withStock})`);
+  chk(open.numbers === 0, `а само число остатка не публикуется (${open.numbers})`);
   /* Покупателю не видны ЦЕНЫ чужих магазинов (это внутренняя разведка), но
      подсказать цену он может — кнопка «Видел дешевле в другом магазине»
      задумана владельцем: так покупатель помогает магазину. */
