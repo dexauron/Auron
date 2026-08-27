@@ -38,7 +38,10 @@ export function renderPhotoManager() {
       <img src="${esc(ph.url || ph.preview)}" alt="">
       <button type="button" class="thumb-x" data-idx="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
     </div>`).join('');
-  $('photoManager').innerHTML = html + `<button type="button" class="photo-add" id="photoAddBtn" aria-label="Добавить фото">${ic('camera')}</button>`;
+  // Кнопки «добавить файлом» нет: без сервера фото негде хранить, и раньше
+  // выбранный файл молча пропадал при сохранении. Фото приходят из интернета.
+  $('photoManager').innerHTML = html
+    || '<p class="muted" style="margin:0">Фото нет. Найти в интернете можно из карточки товара.</p>';
 }
 
 

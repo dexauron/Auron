@@ -833,9 +833,11 @@ function bindEvents() {
     renderFormSupplierTags();
   });
 
-  // Фото в форме
+  /* Фото в форме: показываем и убираем уже имеющиеся. Добавить фото ФАЙЛОМ
+     нельзя — без сервера его негде хранить, а раньше кнопка была и молча
+     ничего не сохраняла. Фото попадают в каталог поиском в интернете
+     (кнопка «Найти фото в интернете» в карточке товара). */
   $('photoManager').addEventListener('click', (e) => {
-    if (e.target.closest('#photoAddBtn')) { $('photoInput').click(); return; }
     const x = e.target.closest('.thumb-x');
     if (x) {
       ui.formPhotos.splice(Number(x.dataset.idx), 1);
