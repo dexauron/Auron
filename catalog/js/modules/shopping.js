@@ -171,6 +171,56 @@ export function syncShopButton(p) {
 /* Обработчики модуль вешает сам: раньше все до одного жили в app.js, и он
  * разросся за предел, который держит проверка «модули». Логика списка покупок
  * и кнопки к ней — это одно целое, им и место рядом. */
+/* ── Смахнуть строку влево — убрать ──────────────────────────────────────
+ * В зале человек держит телефон одной рукой, и попасть в маленький крестик
+ * на ходу трудно. Смахивание — то же движение, что в почте и в заметках:
+ * его не нужно объяснять. Направление определяем по первым восьми точкам
+ * пути: если палец пошёл вниз, это прокрутка списка, и мы отпускаем строку.
+ * Крестик при этом никуда не делся — жест его дополняет, а не заменяет. */
+const SWIPE_OUT = 80;    // столько нужно протянуть, чтобы строка ушла
+
+function enableSwipeRemove(box) {
+  let row = null; let x0 = 0; let y0 = 0; let dx = 0; let axis = '';
+  const release = (animate) => {
+    if (!row) return;
+    const r = row;
+    row = null;
+    r.style.transition = animate ? 'transform .24s cubic-bezier(.32,.72,0,1)' : '';
+    r.style.transform = '';
+    r.classList.remove('swipe-armed');
+    setTimeout(() => { r.style.transition = ''; }, 300);
+  };
+  box.addEventListener('touchstart', (e) => {
+    row = null;
+    const r = e.target.closest('.shop-row');
+    if (!r || e.target.closest('button')) return;   // по кнопкам жест не начинаем
+    row = r; dx = 0; axis = '';
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    r.style.transition = 'none';
+  }, { passive: true });
+  box.addEventListener('touchmove', (e) => {
+    if (!row) return;
+    const x = e.touches[0].clientX; const y = e.touches[0].clientY;
+    if (!axis) {
+      if (Math.abs(x - x0) < 8 && Math.abs(y - y0) < 8) return;
+      axis = Math.abs(x - x0) > Math.abs(y - y0) ? 'x' : 'y';
+      if (axis === 'y') { release(false); return; }   // это прокрутка, не жест
+    }
+    dx = Math.min(0, x - x0);                          // тянем только влево
+    row.style.transform = `translateX(${dx}px)`;
+    row.classList.toggle('swipe-armed', dx < -SWIPE_OUT);
+  }, { passive: true });
+  const finish = () => {
+    if (!row) return;
+    const id = (row.querySelector('[data-shop-rm]') || {}).dataset;
+    const far = dx < -SWIPE_OUT;
+    release(true);
+    if (far && id && id.shopRm) { buzz(12); removeShop(id.shopRm); }
+  };
+  box.addEventListener('touchend', finish);
+  box.addEventListener('touchcancel', () => release(true));
+}
+
 export function bindShopping() {
   $('btnShopAdd').addEventListener('click', () => {
     const p = ui.currentProduct;
@@ -193,5 +243,6 @@ export function bindShopping() {
     const rm = e.target.closest('[data-shop-rm]');
     if (rm) removeShop(rm.dataset.shopRm);
   });
+  enableSwipeRemove($('shopBody'));
   renderShopBar();   // список мог остаться с прошлого захода
 }
