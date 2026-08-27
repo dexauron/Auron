@@ -692,7 +692,7 @@ function arrivalDay() {
   return best;
 }
 
-export function renderArrivals() {
+function renderArrivals() {
   const box = $('arrivalStrip');
   if (!box) return;
   const show = !state.session && state.tab === 'catalog'

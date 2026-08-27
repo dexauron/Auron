@@ -1,4 +1,4 @@
-// Волк Way Market — живой помощник каталога
+// Волк — талисман магазина и живой помощник каталога
 
 /* У магазина есть свой волк в папахе и черкеске. До сих пор он жил только
  * картинкой в переписке; здесь он выходит в каталог и делает три вещи:
@@ -14,7 +14,7 @@
  *      там человек работает, а не развлекается.
  * Выключается одним переключателем в настройках устройства. */
 
-import { $, state } from './store.js';
+import { $, CFG, state } from './store.js';
 import { esc, toast } from './core.js';
 
 const OFF_KEY = 'wm_wolf';       // 'off' — человек выключил волка
@@ -29,7 +29,7 @@ export const mascotOn = () => {
   try { return localStorage.getItem(OFF_KEY) !== 'off'; } catch (e) { return true; }
 };
 
-export function setMascot(on) {
+function setMascot(on) {
   try {
     if (on) localStorage.removeItem(OFF_KEY);
     else localStorage.setItem(OFF_KEY, 'off');
@@ -37,7 +37,7 @@ export function setMascot(on) {
   applyMascot();
 }
 
-export function applyMascot() {
+function applyMascot() {
   const on = mascotOn();
   try { document.documentElement.classList.toggle('no-wolf', !on); } catch (e) { /* */ }
   if (!on) hideBubble();
@@ -88,7 +88,7 @@ export function wolfSay(text, opts) {
 }
 
 // Короткий подскок: волк заметил, что его нажали или что-то произошло
-export function hop() {
+function hop() {
   const img = document.querySelector('#wolfHi .wolf');
   if (!img || !mascotOn()) return;
   img.classList.remove('hop');
@@ -149,8 +149,16 @@ const TIPS_GUEST = [
   'Нет в наличии? Нажми «сообщить, когда появится»',
   'Штрихкод с упаковки можно отсканировать камерой',
   'Видел дешевле в другом магазине? Скажи нам — проверим',
-  'Мы на Мира, 52а, корпус 1. Работаем круглосуточно',
 ];
+
+// адрес и часы — из настроек магазина, а не зашиты в волка:
+// каталог рассчитан на любой магазин, а не только на наш
+function whereTip() {
+  const addr = CFG.STORE_ADDRESS || '';
+  const hours = CFG.STORE_HOURS || '';
+  if (!addr && !hours) return '';
+  return ['Мы ' + (addr ? 'здесь: ' + addr : 'ждём вас'), hours].filter(Boolean).join('. ');
+}
 const TIPS_STAFF = [
   'Товар кончился на полке — отметь, попадёт в заказ',
   'Заказы поставщикам — во вкладке «Работа»',
@@ -159,9 +167,10 @@ const TIPS_STAFF = [
 ];
 
 let tipNo = 0;
-export function wolfTap() {
+function wolfTap() {
   buzz(6);
-  const tips = state.session ? TIPS_STAFF : TIPS_GUEST;
+  const where = whereTip();
+  const tips = state.session ? TIPS_STAFF : (where ? [...TIPS_GUEST, where] : TIPS_GUEST);
   wolfSay(tips[tipNo++ % tips.length], { force: true });
 }
 
