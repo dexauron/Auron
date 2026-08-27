@@ -19,6 +19,7 @@ import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ord
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { applyGuestMode, openPriceReport, openStore, removeReport, savePriceReport, sendReports } from './guest.js';
+import { clearShop, openShop, removeShop, renderShopBar, shareShop, shopDone, shopQty, syncShopButton, toggleShop } from './shopping.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -949,6 +950,28 @@ function bindEvents() {
     if (day) openOrderForm(null, day.dataset.ordDay);
   });
 
+  // ── Покупатель: список покупок ──
+  $('btnShopAdd').addEventListener('click', () => {
+    const p = ui.currentProduct;
+    if (!p) return;
+    const added = toggleShop(p);
+    syncShopButton(p);
+    toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
+  });
+  $('shopOpen').addEventListener('click', openShop);
+  $('shopShare').addEventListener('click', shareShop);
+  $('shopClear').addEventListener('click', clearShop);
+  $('shopBody').addEventListener('click', (e) => {
+    const done = e.target.closest('[data-shop-done]');
+    if (done) { shopDone(done.dataset.shopDone); return; }
+    const minus = e.target.closest('[data-shop-minus]');
+    if (minus) { shopQty(minus.dataset.shopMinus, -1); return; }
+    const plus = e.target.closest('[data-shop-plus]');
+    if (plus) { shopQty(plus.dataset.shopPlus, 1); return; }
+    const rm = e.target.closest('[data-shop-rm]');
+    if (rm) removeShop(rm.dataset.shopRm);
+  });
+
   // ── Покупатель: связь с магазином и подсказки о ценах ──
   $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
   $('repSave').addEventListener('click', savePriceReport);
@@ -1049,6 +1072,7 @@ async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
   applyGuestMode();    // без пароля человек видит каталог как покупатель
+  renderShopBar();     // список покупок мог остаться с прошлого захода
   watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в

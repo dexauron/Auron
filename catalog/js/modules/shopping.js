@@ -86,6 +86,7 @@ export function clearShop() {
 /* Полоска над нижней панелью: сколько отмечено и на какую сумму. Она и есть
  * ответ на вопрос «сколько выйдет» — видно, не открывая список. */
 export function renderShopBar() {
+  ui.renderShopBar = renderShopBar;   // звать из общей перерисовки без встречного импорта
   const bar = $('shopBar');
   if (!bar) return;
   const list = read();
