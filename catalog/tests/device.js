@@ -91,6 +91,9 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
     document.getElementById('deviceSheet').hidden = true;      // экран перекрывает кнопки
   });
   await two.page.waitForTimeout(200);
+  // второй телефон тоже «сотрудник»: у покупателя переключателя вида нет
+  await asOwner(two.page, {});
+  await two.page.waitForTimeout(200);
   await two.page.click('#viewToggleBtn'); await two.page.waitForTimeout(200);
   await openDevice(two.page);
   await two.page.click('#devReset'); await two.page.waitForTimeout(500);
