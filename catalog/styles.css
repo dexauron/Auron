@@ -1740,30 +1740,8 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    Больше узоров каталог бы не выдержал: он про товары, а не про ковёр. */
 .header::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
-  pointer-events: none; opacity: .38;
+  pointer-events: none; opacity: .55;
   background:
     repeating-linear-gradient(45deg, var(--accent) 0 1px, transparent 1px 5px),
     repeating-linear-gradient(-45deg, var(--accent) 0 1px, transparent 1px 5px);
 }
-
-/* Смахивание строки списка покупок влево. Под строкой заранее лежит красная
-   подложка «Убрать» — она проявляется ровно настолько, насколько уехал палец */
-.swipe-wrap { position: relative; overflow: hidden; }
-.swipe-hint {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end;
-  padding-right: 18px; background: var(--neg); color: #fff; font-weight: 600; font-size: 15px;
-}
-.swipe-wrap .shop-row { position: relative; background: var(--surface); will-change: transform; }
-.swipe-wrap .shop-row.swipe-armed { box-shadow: -6px 0 12px rgba(0, 0, 0, .12); }
-
-/* Строка списка покупок на телефоне: название с галочкой и крестиком — сверху,
-   счётчик количества — снизу справа. В одну строку всё это не влезало:
-   «Молоко Простоквашино 3.2%» ломалось на три строки в узкую колонку */
-.swipe-wrap .shop-row {
-  display: grid; grid-template-columns: auto 1fr auto;
-  align-items: center; column-gap: 10px; row-gap: 6px;
-}
-.swipe-wrap .shop-row .shop-check { grid-area: 1 / 1; }
-.swipe-wrap .shop-row .ios-row-title { grid-area: 1 / 2; min-width: 0; }
-.swipe-wrap .shop-row .rst-rm { grid-area: 1 / 3; }
-.swipe-wrap .shop-row .qty-step { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
