@@ -271,9 +271,10 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: {} });
     await P._checkGuestNews();
     await new Promise((r) => setTimeout(r, 250));
-    return document.getElementById('newsBanner').hidden;
+    const el = document.getElementById('newsBanner');
+    return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' '), seen: localStorage.getItem('wm_news_seen') };
   });
-  chk(again, 'посмотрел новинки — сегодня плашка больше не показывается');
+  chk(again.hidden, `посмотрел новинки — сегодня плашка больше не показывается (${again.text} / отметка: ${again.seen})`);
 
   // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
