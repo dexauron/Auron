@@ -1,0 +1,136 @@
+// Новости для покупателя: «появилось то, что ты ждал» и «что подешевело»
+
+/* Сервера нет, значит и push-уведомлений честно быть не может. Но телефон сам
+ * может заметить перемены: он помнит, чего человек ждал и почём товары стоили
+ * в прошлый заход. При следующем открытии каталога сравниваем и показываем
+ * плашку — «появилось» и «подешевело». Ничего никуда не отправляется.
+ *
+ * Снимок цен держим неделю: иначе «подешевело» исчезало бы сразу после
+ * первого же захода, и человек ничего не успевал заметить. */
+
+import { $, idbGet, idbSet, state, ui } from './store.js';
+import { esc, openSheet, toast } from './core.js';
+import { fmtPrice, fmtRetail, todayISO } from './catalog.js';
+import { plural } from './competitors.js';
+import { stockState } from './publish.js';
+
+const WAIT_KEY = 'wm_guest_wait_v1';
+const SNAP_KEY = 'wm_price_snapshot';
+const SNAP_DAYS = 7;            // столько живёт снимок цен
+const DROP_MIN_RUB = 1;         // мелочь в копейках — не новость
+const DROP_MIN_PCT = 3;
+
+let news = { appeared: [], cheaper: [] };
+
+function readWait() {
+  try { return JSON.parse(localStorage.getItem(WAIT_KEY)) || []; } catch (e) { return []; }
+}
+function writeWait(list) {
+  try { localStorage.setItem(WAIT_KEY, JSON.stringify(list.slice(-100))); } catch (e) { /* нет места */ }
+}
+const isWaiting = (id) => readWait().some((x) => x.id === id);
+const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
+
+/* Кнопка «Сообщите, когда появится» — только у покупателя и только когда
+ * товара нет: в остальных случаях она бессмысленна и только мешает. */
+export function syncWaitButton(p) {
+  const b = $('btnWait');
+  if (!b || !p) return;
+  const out = stockState(p, null) === 'out';
+  b.hidden = !!state.session || !out;
+  b.textContent = isWaiting(p.id) ? 'Не сообщать об этом товаре' : 'Сообщить, когда появится';
+}
+
+export function toggleWait(p) {
+  if (!p) return;
+  const list = readWait();
+  const i = list.findIndex((x) => x.id === p.id);
+  if (i >= 0) { list.splice(i, 1); writeWait(list); toast('Больше не слежу за этим товаром'); }
+  else {
+    list.push({ id: p.id, name: p.name || '', code: p.code || '', at: todayISO() });
+    writeWait(list);
+    toast('Хорошо! Скажу, когда он снова появится');
+  }
+  syncWaitButton(p);
+}
+
+/* ── Что изменилось с прошлого захода ─────────────────────────────────── */
+export async function checkGuestNews() {
+  if (state.session || !state.products.length) { hideBanner(); return; }
+  const now = {};
+  for (const p of state.products) { const v = priceOf(p); if (v) now[p.id] = v; }
+
+  let snap = null;
+  try { snap = await idbGet(SNAP_KEY); } catch (e) { snap = null; }
+  const fresh = snap && snap.prices && snap.at
+    && (Date.now() - new Date(snap.at).getTime()) < SNAP_DAYS * 86400000;
+
+  news.cheaper = [];
+  if (fresh) {
+    for (const p of state.products) {
+      const was = snap.prices[p.id];
+      const is = now[p.id];
+      if (!was || !is || is >= was) continue;
+      const diff = was - is;
+      if (diff < DROP_MIN_RUB || (diff / was) * 100 < DROP_MIN_PCT) continue;
+      news.cheaper.push({ p, was, is });
+    }
+    news.cheaper.sort((a, b) => (b.was - b.is) / b.was - (a.was - a.is) / a.was);
+  }
+
+  // то, чего человек ждал, снова в продаже
+  const wait = readWait();
+  news.appeared = [];
+  if (wait.length) {
+    const left = [];
+    for (const w of wait) {
+      const p = state.products.find((x) => x.id === w.id);
+      if (p && stockState(p, null) !== 'out') news.appeared.push({ p });
+      else left.push(w);
+    }
+    if (news.appeared.length) writeWait(left);   // сказали один раз — больше не напоминаем
+  }
+
+  if (!fresh) { try { await idbSet(SNAP_KEY, { at: new Date().toISOString(), prices: now }); } catch (e) { /* не влезло */ } }
+  renderNewsBanner();
+}
+
+function hideBanner() { const el = $('newsBanner'); if (el) el.hidden = true; }
+
+function renderNewsBanner() {
+  const el = $('newsBanner');
+  if (!el) return;
+  const parts = [];
+  if (news.appeared.length) {
+    parts.push(`Появилось: ${esc(news.appeared.slice(0, 2).map((x) => x.p.name).join(', '))}`
+      + (news.appeared.length > 2 ? ` и ещё ${news.appeared.length - 2}` : ''));
+  }
+  if (news.cheaper.length) {
+    parts.push(`подешевело ${news.cheaper.length} ${plural(news.cheaper.length, 'товар', 'товара', 'товаров')}`);
+  }
+  if (!parts.length) { el.hidden = true; return; }
+  el.innerHTML = `${parts.join(' · ')} <span class="banner-go">Посмотреть ›</span>`;
+  el.hidden = false;
+}
+
+export function openNews() {
+  const box = $('newsBody');
+  if (!box) return;
+  const row = (p, extra) => `<button class="ios-row ios-row-link" data-news-open="${esc(p.id)}">
+    <span class="ios-row-title">${esc(p.name)}${extra ? `<span class="ord-sub">${extra}</span>` : ''}</span>
+    <span class="ios-row-value">${esc(fmtRetail(p))}</span></button>`;
+  box.innerHTML = `
+    ${news.appeared.length ? `<div class="ios-group-title">Снова в продаже</div>
+      <div class="ios-group">${news.appeared.map((x) => row(x.p, 'ты просил сообщить')).join('')}</div>` : ''}
+    ${news.cheaper.length ? `<div class="ios-group-title">Подешевело</div>
+      <div class="ios-group">${news.cheaper.slice(0, 40).map((x) => row(x.p, `было ${fmtPrice(x.was)}`)).join('')}</div>` : ''}
+    <p class="ios-note">Сравнение с ценами, которые были при твоём прошлом заходе. Считает сам
+    телефон — ничего никуда не отправляется.</p>`;
+  openSheet('newsSheet');
+}
+
+export function newsProduct(id) {
+  return state.products.find((p) => p.id === id) || null;
+}
+
+export function initNews() { ui.checkGuestNews = checkGuestNews; }
