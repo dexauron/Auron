@@ -70,6 +70,8 @@
     <button class="btn btn-primary btn-sm" id="installGo" hidden>Поставить</button>
     <button class="install-close" id="installHide" aria-label="Скрыть"><i data-ic="close"></i></button>
   </div>
+  <!-- Покупателю: появилось то, что он ждал, и что подешевело -->
+  <button class="banner banner-today" id="newsBanner" hidden></button>
   <!-- Что ждёт сегодня: поставки и просрочка. Видно сразу при входе, тап — к заказам -->
   <button class="banner banner-today" id="todayBanner" hidden></button>
 
@@ -84,6 +86,7 @@
       <div class="empty-title">Ничего не нашлось</div>
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
       <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
+      <button class="btn btn-primary empty-reset" id="emptyAsk" hidden>Спросить в магазине</button>
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
@@ -94,6 +97,12 @@
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
        до низа экрана, а не до шапки. -->
+  <!-- Список покупок покупателя: сколько отмечено и на какую сумму -->
+  <div class="compare-bar shop-bar" id="shopBar" hidden>
+    <button class="btn btn-primary" id="shopOpen">
+      Список: <span id="shopCount">0</span> · <span id="shopTotal">0 ₽</span></button>
+  </div>
+
   <!-- Отобрано для сравнения: полоска над нижней панелью -->
   <div class="compare-bar" id="compareBar" hidden>
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
@@ -145,6 +154,8 @@
         <div id="sheetSupplier"></div>
         <button class="btn btn-secondary btn-block purchase-only" id="btnCompareAdd">К сравнению</button>
         <button class="btn btn-secondary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
+        <button class="btn btn-primary btn-block guest-only" id="btnShopAdd">В список покупок</button>
+        <button class="btn btn-secondary btn-block guest-only" id="btnWait" hidden>Сообщить, когда появится</button>
         <button class="btn btn-secondary btn-block guest-only" id="btnReportPrice">Видел дешевле в другом магазине</button>
         <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
         <div id="sheetSimilar"></div>
@@ -839,6 +850,35 @@
     </div>
   </div>
 
+  <!-- Что изменилось с прошлого захода (покупатель) -->
+  <div class="sheet-backdrop" id="newsSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Что нового</h2>
+        <button class="ios-nav-btn strong" data-close="newsSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="newsBody"></div>
+    </div>
+  </div>
+
+  <!-- Список покупок (покупатель) -->
+  <div class="sheet-backdrop" id="shopSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" id="shopShare" hidden>Отправить</button>
+        <h2 class="ios-nav-title">Список покупок</h2>
+        <button class="ios-nav-btn strong" data-close="shopSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="shopBody"></div>
+      <div class="filter-actions">
+        <button class="btn btn-ghost btn-block" id="shopClear">Очистить список</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Магазин: связь с владельцем и подсказки о ценах (для покупателя) -->
   <div class="sheet-backdrop" id="storeSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
@@ -851,6 +891,26 @@
       <div class="sheet-body" id="storeBody"></div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-block" id="storeSend" hidden>Отправить подсказки в WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Покупатель спрашивает про товар, которого не нашёл -->
+  <div class="sheet-backdrop" id="askSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="askSheet">Отмена</button>
+        <h2 class="ios-nav-title">Спросить про товар</h2>
+        <button class="ios-nav-btn strong" id="askSend">Спросить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="askText" class="ios-inp ios-inp-wide" maxlength="120" placeholder="что ищешь"></div>
+        </div>
+        <div class="form-error" id="askError" hidden></div>
+        <p class="ios-note">Откроется WhatsApp с готовым вопросом — останется отправить.
+        Так магазин узнаёт, чего людям не хватает.</p>
       </div>
     </div>
   </div>

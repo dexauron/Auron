@@ -30,6 +30,9 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(grid.photos === 0, `фотографий в списке нет (${grid.photos})`);
   chk(grid.toggle === 'none', 'переключателя вида нет — покупателю нечего переключать');
   chk(grid.strips === 0, `ленты с фотографиями скрыты (${grid.strips})`);
+  // пустых плашек быть не должно: однажды «что нового» висела пустой белой полосой
+  const emptyBanner = await page.evaluate(() => document.getElementById('newsBanner').hidden);
+  chk(emptyBanner, 'плашка «что нового» не показывается, когда новостей нет');
   chk(/89|75/.test(grid.text), `цена видна (${grid.text.slice(0, 60)})`);
   chk(/101|102/.test(grid.text), 'код товара виден');
   chk(/Есть|Мало|Нет/.test(grid.text), 'видно, есть ли товар в магазине');
@@ -116,7 +119,122 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
   chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
 
-  // ── 5. После входа сотрудника всё рабочее возвращается ──
+  // ── 5. Список покупок: сколько выйдет ──
+  const shop = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    window.location.hash = ''; await new Promise((r) => setTimeout(r, 100));
+    window.location.hash = '#p=p1'; await new Promise((r) => setTimeout(r, 500));
+    const btn = document.getElementById('btnShopAdd');
+    const label = btn.textContent.trim();
+    btn.click(); await new Promise((r) => setTimeout(r, 200));
+    const after = btn.textContent.trim();
+    window.location.hash = ''; await new Promise((r) => setTimeout(r, 100));
+    window.location.hash = '#p=p2'; await new Promise((r) => setTimeout(r, 500));
+    document.getElementById('btnShopAdd').click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const bar = document.getElementById('shopBar');
+    return { label, after, barShown: !bar.hidden,
+      count: document.getElementById('shopCount').textContent,
+      total: document.getElementById('shopTotal').textContent,
+      saved: JSON.parse(localStorage.getItem('wm_shop_v1') || '[]').length };
+  });
+  chk(/В список покупок/.test(shop.label) && /Убрать/.test(shop.after), `кнопка списка переключается (${shop.after})`);
+  chk(shop.saved === 2, `оба товара в списке (${shop.saved})`);
+  chk(shop.barShown && /2 позиции/.test(shop.count), `полоска показывает, сколько отмечено (${shop.count})`);
+  chk(/164/.test(shop.total.replace(/\s/g, '')), `и на какую сумму — 89 + 75 (${shop.total})`);
+
+  const shopSheet = await page.evaluate(async () => {
+    document.getElementById('shopOpen').click();
+    await new Promise((r) => setTimeout(r, 400));
+    document.querySelector('[data-shop-plus="p1"]').click();   // молока — две штуки
+    await new Promise((r) => setTimeout(r, 250));
+    const afterPlus = document.getElementById('shopBody').innerText.replace(/\s+/g, ' ');
+    document.querySelector('[data-shop-done="p2"]').click();   // кефир уже в корзине
+    await new Promise((r) => setTimeout(r, 250));
+    return { afterPlus, done: document.querySelectorAll('#shopBody .shop-done').length,
+      total: document.getElementById('shopBody').innerText.replace(/\s+/g, ' '),
+      barTotal: document.getElementById('shopTotal').textContent };
+  });
+  chk(/253/.test(shopSheet.afterPlus.replace(/\s/g, '')), `количество меняет итог: 89×2 + 75 (${shopSheet.afterPlus.slice(0, 60)})`);
+  chk(shopSheet.done === 1, 'вычеркнутая строка отмечена');
+  chk(/178/.test(shopSheet.barTotal.replace(/\s/g, '')), `вычеркнутое из суммы уходит (${shopSheet.barTotal})`);
+
+  // ── 6. Не нашёл товар — можно спросить у магазина ──
+  const ask = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const inp = document.getElementById('searchInput');
+    inp.value = 'шоколадка Милка';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 700));
+    const btn = document.getElementById('emptyAsk');
+    const shown = !btn.hidden;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 400));
+    const text = document.getElementById('askText').value;
+    let opened = '';
+    const real = window.open;
+    window.open = (u) => { opened = u; return null; };
+    document.getElementById('askSend').click();
+    await new Promise((r) => setTimeout(r, 300));
+    window.open = real;
+    return { shown, text, opened };
+  });
+  chk(ask.shown, 'ничего не нашлось — покупателю предложено спросить в магазине');
+  chk(/Милка/.test(ask.text), `запрос подставлен в вопрос (${ask.text})`);
+  chk(/wa\.me\/79640616601/.test(ask.opened) && /Милка/.test(decodeURIComponent(ask.opened)),
+    'вопрос уходит владельцу в WhatsApp готовым текстом');
+
+  // ── 7. «Сообщить, когда появится» и «что подешевело» ──
+  const wait = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const inp = document.getElementById('searchInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    window.location.hash = '#p=p2';           // кефир, которого нет в наличии
+    await new Promise((r) => setTimeout(r, 600));
+    const btn = document.getElementById('btnWait');
+    const shownOut = !btn.hidden;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 250));
+    const saved = JSON.parse(localStorage.getItem('wm_guest_wait_v1') || '[]');
+    window.location.hash = '';
+    await new Promise((r) => setTimeout(r, 150));
+    window.location.hash = '#p=p1';           // молоко есть — кнопки быть не должно
+    await new Promise((r) => setTimeout(r, 600));
+    return { shownOut, saved, hiddenForInStock: document.getElementById('btnWait').hidden };
+  });
+  chk(wait.shownOut, 'у товара, которого нет, есть кнопка «сообщить, когда появится»');
+  chk(wait.saved.length === 1 && wait.saved[0].id === 'p2', `ожидание запомнено (${wait.saved.length})`);
+  chk(wait.hiddenForInStock, 'у товара, который есть, такой кнопки нет — она там бессмысленна');
+
+  // товар завезли и цену снизили — при следующем заходе это видно
+  const later = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const P = window.WM_PUBLISH; const s2 = P._state();
+    // цены прошлого захода
+    await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: { p1: 120, p2: 75 } });
+    s2.products.find((p) => p.id === 'p2').stock = 5;      // кефир завезли
+    await P._checkGuestNews();
+    await new Promise((r) => setTimeout(r, 300));
+    const banner = document.getElementById('newsBanner');
+    return { shown: !banner.hidden, text: banner.innerText.replace(/\s+/g, ' ') };
+  });
+  chk(later.shown, 'плашка «что нового» появилась');
+  chk(/Появилось/.test(later.text) && /Кефир/.test(later.text), `сказано, что ожидаемое появилось (${later.text})`);
+  chk(/подешевел/.test(later.text), `и что цена упала (89 против 120) (${later.text})`);
+
+  const newsSheet = await page.evaluate(async () => {
+    document.getElementById('newsBanner').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const body = document.getElementById('newsBody').innerText.replace(/\s+/g, ' ');
+    return { open: !document.getElementById('newsSheet').hidden, body };
+  });
+  // заголовки разделов рисуются заглавными — сверяем без учёта регистра
+  chk(newsSheet.open && /снова в продаже/i.test(newsSheet.body), 'в списке есть раздел «снова в продаже»');
+  chk(/было 120/.test(newsSheet.body), `и старая цена рядом с новой (${newsSheet.body.slice(0, 90)})`);
+
+  // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
   await page.waitForTimeout(400);
   const staff = await page.evaluate(() => ({
@@ -124,9 +242,11 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     storeTab: document.querySelector('.tabbar [data-tab="store"]').hidden,
     workTab: document.querySelector('.tabbar [data-tab="work"]').hidden,
     toggle: getComputedStyle(document.getElementById('viewToggleBtn')).display,
+    shopBar: document.getElementById('shopBar').hidden,
   }));
   chk(!staff.guestClass && staff.storeTab && !staff.workTab,
     'после входа каталог снова рабочий: «Магазин» скрыт, «Работа» на месте');
+  chk(staff.shopBar, 'полоска списка покупок сотруднику не мешает');
   chk(staff.toggle !== 'none', 'переключатель вида вернулся сотруднику');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);

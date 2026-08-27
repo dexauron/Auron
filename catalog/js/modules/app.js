@@ -1,6 +1,6 @@
 // Связывание всего вместе и запуск
 
-import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
+import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
@@ -18,7 +18,9 @@ import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
-import { applyGuestMode, openPriceReport, openStore, removeReport, savePriceReport, sendReports } from './guest.js';
+import { bindGuest, openStore } from './guest.js';
+import { bindShopping } from './shopping.js';
+import { bindNews, checkGuestNews } from './news.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -949,15 +951,10 @@ function bindEvents() {
     if (day) openOrderForm(null, day.dataset.ordDay);
   });
 
-  // ── Покупатель: связь с магазином и подсказки о ценах ──
-  $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
-  $('repSave').addEventListener('click', savePriceReport);
-  $('storeSend').addEventListener('click', sendReports);
-  $('storeBody').addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-rep-rm]');
-    if (rm) removeReport(rm.dataset.repRm);
-  });
-  attachMoneyInput($('repPrice'));
+  // ── Покупатель: список покупок, связь с магазином, что нового ──
+  bindShopping();
+  bindGuest();
+  bindNews(openProduct);
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
@@ -1048,7 +1045,6 @@ function bindEvents() {
 async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
-  applyGuestMode();    // без пароля человек видит каталог как покупатель
   watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
@@ -1137,6 +1133,7 @@ async function init() {
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
+  safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
   openFromHash(); // если открыли по ссылке на товар — показываем его
   runQuickActionFromUrl();
 }
@@ -1157,7 +1154,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _ghReason: ghReason };
+    _scanRestock: scanToRestock, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews };
 }
 
 init();

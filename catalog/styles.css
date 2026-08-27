@@ -39,6 +39,11 @@
   --radius-xs: 8px;
 }
 
+/* «Скрыто» должно скрывать. У полос, плашек и вкладок задан свой display
+   (flex/grid), и он перебивал атрибут hidden: пустая полоска списка покупок
+   оставалась на экране и перехватывала нажатия по нижней панели. */
+[hidden] { display: none !important; }
+
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;
@@ -1599,3 +1604,15 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .row-arrived { font-size: 12px; color: var(--text-2); white-space: nowrap; }
 /* строки-ссылки (WhatsApp, звонок) не должны выглядеть как обычные ссылки */
 a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
+
+/* ── Список покупок покупателя ─────────────────────────────────────────────── */
+.shop-bar .btn { flex: 1; }
+.shop-row { align-items: center; gap: 8px; }
+.shop-check {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: none; color: var(--pos);
+  display: grid; place-items: center; cursor: pointer;
+}
+.shop-row.shop-done .ios-row-title, .shop-row.shop-done .ios-row-value { color: var(--text-2); text-decoration: line-through; }
+.shop-row.shop-done .shop-check { border-color: var(--pos); }
+.shop-qty { min-width: 26px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
