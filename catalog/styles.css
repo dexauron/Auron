@@ -1064,9 +1064,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   color: var(--text-2); font-family: inherit;
   font-size: 10px; font-weight: 500; letter-spacing: -.01em;
 }
-/* скрытый раздел (не для этой роли) не должен занимать место: у .tab свой
-   display, и он перебивал обычное «скрыто» — панель тогда переносилась */
-.tabbar .tab[hidden] { display: none; }
 .tabbar .tab .tab-ico { font-size: 20px; line-height: 1; }
 /* подпись не переносится и не расталкивает соседей: длинная — с многоточием */
 .tabbar .tab .tab-txt {
