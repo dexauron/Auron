@@ -382,43 +382,9 @@ export function cellStr(v) {
   return String(v).trim();
 }
 
-/* Разбор файла — в отдельном потоке (js/xlsx-worker.js): файл из 1С на 17 000
- * строк разбирается несколько секунд, и раньше на это время замирал весь
- * экран. Если отдельный поток недоступен (старый браузер, запрет), разбираем
- * как раньше, прямо здесь — лучше подождать, чем не загрузить вовсе. */
-let sheetWorker = null;
-function parseInWorker(buf) {
-  return new Promise((resolve, reject) => {
-    if (typeof Worker === 'undefined') { reject(new Error('нет отдельных потоков')); return; }
-    try {
-      if (!sheetWorker) sheetWorker = new Worker('js/xlsx-worker.js');
-    } catch (e) { reject(e); return; }
-    const done = (fn) => { sheetWorker.onmessage = null; sheetWorker.onerror = null; fn(); };
-    sheetWorker.onmessage = (ev) => {
-      const d = ev.data || {};
-      if (d.error) done(() => reject(new Error(d.error)));
-      else done(() => resolve(d.rows));
-    };
-    sheetWorker.onerror = (err) => {
-      // поток не запустился — дальше разберём обычным способом
-      try { sheetWorker.terminate(); } catch (e) { /* уже мёртв */ }
-      sheetWorker = null;
-      done(() => reject(err));
-    };
-    const vendor = new URL('vendor/xlsx.min.js', location.href).href;
-    sheetWorker.postMessage({ buf, vendor }, [buf]);
-  });
-}
-
 async function readSheet(file) {
   const buf = await file.arrayBuffer();
-  try {
-    const rows = await parseInWorker(buf);
-    if (Array.isArray(rows)) return rows;
-  } catch (e) { /* разберём здесь же, ниже */ }
-  const again = await file.arrayBuffer();     // прежний буфер ушёл в поток
-  await loadXlsxLib();
-  const wb = window.XLSX.read(again, { type: 'array' });
+  const wb = window.XLSX.read(buf, { type: 'array' });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   return window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' });
 }
