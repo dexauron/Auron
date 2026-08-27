@@ -207,10 +207,13 @@ export function renderGrid() {
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
     if (view === 'list') {
+      // покупателю важно, свежий ли завоз — показываем дату прямо в строке
+      const arrived = guest && p.arrival_at
+        ? `<span class="row-arrived">завоз ${esc(fmtDate(p.arrival_at))}</span>` : '';
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
           <div class="card-name">${highlight(p.name, hlTokens)}</div>
-          <div class="row-sub">${price}${tagRow}</div>
+          <div class="row-sub">${price}${tagRow}${arrived}</div>
         </div>
         ${code}
       </article>`;
