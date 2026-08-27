@@ -163,3 +163,30 @@ export function syncShopButton(p) {
   b.textContent = inShop(p.id) ? 'Убрать из списка покупок' : 'В список покупок';
   ui.shopFor = p.id;
 }
+
+/* Обработчики модуль вешает сам: раньше все до одного жили в app.js, и он
+ * разросся за предел, который держит проверка «модули». Логика списка покупок
+ * и кнопки к ней — это одно целое, им и место рядом. */
+export function bindShopping() {
+  $('btnShopAdd').addEventListener('click', () => {
+    const p = ui.currentProduct;
+    if (!p) return;
+    const added = toggleShop(p);
+    syncShopButton(p);
+    toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
+  });
+  $('shopOpen').addEventListener('click', openShop);
+  $('shopShare').addEventListener('click', shareShop);
+  $('shopClear').addEventListener('click', clearShop);
+  $('shopBody').addEventListener('click', (e) => {
+    const done = e.target.closest('[data-shop-done]');
+    if (done) { shopDone(done.dataset.shopDone); return; }
+    const minus = e.target.closest('[data-shop-minus]');
+    if (minus) { shopQty(minus.dataset.shopMinus, -1); return; }
+    const plus = e.target.closest('[data-shop-plus]');
+    if (plus) { shopQty(plus.dataset.shopPlus, 1); return; }
+    const rm = e.target.closest('[data-shop-rm]');
+    if (rm) removeShop(rm.dataset.shopRm);
+  });
+  renderShopBar();   // список мог остаться с прошлого захода
+}

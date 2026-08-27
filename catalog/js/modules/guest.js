@@ -12,7 +12,7 @@
  * копятся у него на телефоне и уходят владельцу одним сообщением. */
 
 import { $, CFG, state, ui } from './store.js';
-import { closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
+import { attachMoneyInput, closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
 import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
@@ -180,4 +180,20 @@ export function applyGuestMode() {
   ui.applyGuestMode = applyGuestMode;   // звать из общей перерисовки без встречного импорта
   try { document.documentElement.classList.toggle('guest', isGuest()); } catch (e) { /* некритично */ }
   renderStoreBadge();
+}
+
+// Обработчики покупательских экранов — здесь же, рядом с их логикой
+export function bindGuest() {
+  $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
+  $('repSave').addEventListener('click', savePriceReport);
+  $('storeSend').addEventListener('click', sendReports);
+  $('askSend').addEventListener('click', sendAsk);
+  $('emptyAsk').addEventListener('click', () => openAsk(state.query));
+  $('storeBody').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rep-rm]');
+    if (rm) { removeReport(rm.dataset.repRm); return; }
+    if (e.target.closest('#storeAsk')) openAsk('');
+  });
+  attachMoneyInput($('repPrice'));
+  applyGuestMode();
 }

@@ -9,7 +9,7 @@
  * первого же захода, и человек ничего не успевал заметить. */
 
 import { $, idbGet, idbSet, state, ui } from './store.js';
-import { esc, openSheet, toast } from './core.js';
+import { closeSheet, esc, openSheet, toast } from './core.js';
 import { fmtPrice, fmtRetail, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { stockState } from './publish.js';
@@ -129,8 +129,18 @@ export function openNews() {
   openSheet('newsSheet');
 }
 
-export function newsProduct(id) {
-  return state.products.find((p) => p.id === id) || null;
+/* openProduct приходит доводом, а не импортом: карточка товара уже знает про
+ * этот модуль (кнопка «сообщить, когда появится»), и встречный импорт замкнул
+ * бы их друг на друга. */
+export function bindNews(openProduct) {
+  ui.checkGuestNews = checkGuestNews;
+  $('newsBanner').addEventListener('click', openNews);
+  $('btnWait').addEventListener('click', () => toggleWait(ui.currentProduct));
+  $('newsBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-news-open]');
+    if (!b) return;
+    closeSheet('newsSheet');
+    const p = state.products.find((x) => x.id === b.dataset.newsOpen);
+    if (p) openProduct(p);
+  });
 }
-
-export function initNews() { ui.checkGuestNews = checkGuestNews; }
