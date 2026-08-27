@@ -293,7 +293,8 @@ export function addBackButtons() {
 // пальцем, фон плавно светлеет, при отпускании — мягкая «пружина» назад,
 // а быстрый флик закрывает даже с небольшого расстояния.
 export function enableSwipeToClose() {
-  const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box';
+  // .shop-row смахивают вбок — сама шторка при этом ездить не должна
+  const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box,.shop-row';
   const SPRING = 'transform .38s cubic-bezier(.32,.72,0,1)';
   document.querySelectorAll('.sheet').forEach((sheet) => {
     const bd = sheet.closest('.sheet-backdrop');

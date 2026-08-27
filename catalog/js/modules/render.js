@@ -7,6 +7,7 @@ import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgo
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
+import { wolfEmpty } from './mascot.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -117,6 +118,8 @@ export function renderCatScreen() {
 }
 
 export function renderGrid() {
+  // поиск перерисовывает только сетку, а лента завоза при поиске не нужна
+  renderArrivals();
   const list = visibleProducts();
   const grid = $('productGrid');
   $('loader').hidden = true;
@@ -136,13 +139,12 @@ export function renderGrid() {
     grid.innerHTML = '';
     const empty = $('emptyState');
     empty.hidden = false;
-    const filtered = anyFilterActive() || state.favOnly;
     if (state.favOnly && !favorites().length) {
-      empty.querySelector('.empty-icon').innerHTML = ic('heart');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('heart'));
       empty.querySelector('.empty-title').textContent = 'В избранном пусто';
       empty.querySelector('.empty-text').textContent = 'Открой товар и нажми на сердечко — товар появится здесь';
     } else if (!state.products.length) {
-      empty.querySelector('.empty-icon').innerHTML = ic('box');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('box'));
       empty.querySelector('.empty-title').textContent = 'Каталог пока пустой';
       empty.querySelector('.empty-text').textContent = state.session
         ? 'Нажми внизу, чтобы добавить первый товар'
@@ -151,18 +153,22 @@ export function renderGrid() {
       // Браузер иногда сам подставляет в поиск сохранённый адрес почты.
       // В каталоге почты нет и быть не может, поэтому не отправляем человека
       // «искать по-другому», а прямо говорим, что случилось.
-      empty.querySelector('.empty-icon').innerHTML = ic('search');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Это адрес почты';
       empty.querySelector('.empty-text').textContent = 'Похоже, браузер подставил его сам. В каталоге почты нет — очисти поиск и введи название или код.';
     } else {
-      empty.querySelector('.empty-icon').innerHTML = ic('search');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
-      empty.querySelector('.empty-text').textContent = filtered
+      /* «Снимите фильтры» человеку, который просто искал словом, — совет ни о
+         чём: никаких фильтров он не включал. Отвечаем по тому, что он сделал. */
+      empty.querySelector('.empty-text').textContent = filtersBesidesQuery()
         ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
         : 'Попробуй написать по-другому или выбери группу';
     }
-    // когда пусто из-за фильтров — предлагаем сбросить одним касанием
-    $('emptyReset').hidden = !(filtered && state.products.length);
+    /* Когда пусто из-за фильтров или поиска — предлагаем сбросить одним
+       касанием. Пустое избранное сюда не относится: сбрасывать там нечего,
+       а кнопка «Сбросить фильтры» просто уводила с раздела. */
+    $('emptyReset').hidden = !(anyFilterActive() && state.products.length);
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
@@ -475,8 +481,17 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
+  renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+}
+
+// включён ли хоть один настоящий фильтр — поиск словом за фильтр не считаем
+function filtersBesidesQuery() {
+  return !!(state.quick.length || state.selCats.length
+    || state.selGroups.length || state.selSuppliers.length
+    || state.priceMin != null || state.priceMax != null
+    || state.selType || state.arrivalFrom || state.arrivalTo);
 }
 
 // есть ли хоть один активный фильтр/поиск
@@ -664,6 +679,64 @@ export function renderNewProducts() {
         <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
+}
+
+/* ── «Сегодня привезли» ──────────────────────────────────────────────────
+ * Покупателю важен один вопрос: «что у вас нового?». Раньше ответ на него
+ * лежал в фильтре по дате поступления — то есть нигде. Теперь завоз виден
+ * сразу на главной, без единого нажатия.
+ * Если сегодня ещё не привозили, показываем последний завоз за неделю и
+ * честно называем день: пустой блок «сегодня ничего» никому не нужен, а
+ * «привезли в понедельник» — это по-прежнему свежий товар.
+ * Только покупателю: у сотрудника на главной своя лента новинок с фото,
+ * а завоз он и так видит в заказах. */
+
+const ARR_MAX_DAYS = 7;   // дальше недели «свежим завозом» это уже не назвать
+const ARR_ROWS = 6;       // больше строк — и блок съедает весь первый экран
+
+/* Ответ не меняется, пока не приехал новый каталог, а товаров бывает
+ * пятнадцать тысяч: считаем один раз на загрузку данных. */
+let arrCache = { src: null, day: '' };
+
+function arrivalDay() {
+  if (arrCache.src === state.products) return arrCache.day;
+  const today = todayISO();
+  const from = daysAgoISO(ARR_MAX_DAYS);
+  let best = '';
+  for (const p of state.products) {
+    const d = String(p.arrival_at || '').slice(0, 10);
+    if (d && d <= today && d >= from && d > best) best = d;
+  }
+  arrCache = { src: state.products, day: best };
+  return best;
+}
+
+function renderArrivals() {
+  const box = $('arrivalStrip');
+  if (!box) return;
+  const show = !state.session && state.tab === 'catalog'
+    && !state.query && !state.favOnly && !anyFilterActive();
+  const day = show ? arrivalDay() : '';
+  const list = day
+    ? state.products.filter((p) => String(p.arrival_at || '').slice(0, 10) === day)
+    : [];
+  // один товар — это не завоз, а случайность в данных: молчим
+  if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
+  list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  const title = day === todayISO() ? 'Сегодня привезли'
+    : day === daysAgoISO(1) ? 'Вчера привезли'
+      : 'Привезли ' + fmtDate(day);
+  const rows = list.slice(0, ARR_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
+      <span class="arr-name">${esc(p.name)}</span>
+      <span class="arr-price">${esc(fmtRetail(p))}</span></button>`).join('');
+  const rest = list.length - ARR_ROWS;
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">${esc(title)}</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>
+    ${rest > 0 ? `<button class="arr-more" data-arr-all="${esc(day)}">Показать все ${list.length} \u203a</button>` : ''}`;
+  box.hidden = false;
 }
 
 // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
