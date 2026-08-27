@@ -1,7 +1,7 @@
 // Фото товаров: поиск в открытых базах, дозаполнение
 
 import { $, state, ui } from './store.js';
-import { esc, norm, openSheet, toast } from './core.js';
+import { esc, norm, toast } from './core.js';
 import { OTHER_CAT, ic } from './icons.js';
 import { bigrams, buildIndex, dice, hasPhoto, productCategory } from './catalog.js';
 import { renderAll, renderGrid } from './render.js';
