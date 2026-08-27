@@ -1,7 +1,7 @@
 // Карточка товара: цены, остаток, калькулятор, поставщики
 
 import { $, state, ui } from './store.js';
-import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast } from './core.js';
+import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
 import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
@@ -228,7 +228,8 @@ export function openPriceCalc(p) {
 
 // Чистый расчёт: что получится из введённого предложения.
 export function calcOffer(raw, perPack, packQty, discount) {
-  const price = Number(raw);
+  // сумма может прийти из поля с разделителями: «1 850» — это 1850
+  const price = typeof raw === 'number' ? raw : moneyNum(raw);
   if (!Number.isFinite(price) || price <= 0) return null;
   const disc = Number(discount);
   const net = price * (1 - (Number.isFinite(disc) && disc > 0 && disc < 100 ? disc / 100 : 0));
