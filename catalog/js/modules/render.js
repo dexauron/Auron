@@ -7,6 +7,7 @@ import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgo
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
+import { wolfEmpty } from './mascot.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -138,11 +139,11 @@ export function renderGrid() {
     empty.hidden = false;
     const filtered = anyFilterActive() || state.favOnly;
     if (state.favOnly && !favorites().length) {
-      empty.querySelector('.empty-icon').innerHTML = ic('heart');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('heart'));
       empty.querySelector('.empty-title').textContent = 'В избранном пусто';
       empty.querySelector('.empty-text').textContent = 'Открой товар и нажми на сердечко — товар появится здесь';
     } else if (!state.products.length) {
-      empty.querySelector('.empty-icon').innerHTML = ic('box');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('box'));
       empty.querySelector('.empty-title').textContent = 'Каталог пока пустой';
       empty.querySelector('.empty-text').textContent = state.session
         ? 'Нажми внизу, чтобы добавить первый товар'
@@ -151,11 +152,11 @@ export function renderGrid() {
       // Браузер иногда сам подставляет в поиск сохранённый адрес почты.
       // В каталоге почты нет и быть не может, поэтому не отправляем человека
       // «искать по-другому», а прямо говорим, что случилось.
-      empty.querySelector('.empty-icon').innerHTML = ic('search');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Это адрес почты';
       empty.querySelector('.empty-text').textContent = 'Похоже, браузер подставил его сам. В каталоге почты нет — очисти поиск и введи название или код.';
     } else {
-      empty.querySelector('.empty-icon').innerHTML = ic('search');
+      empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
       empty.querySelector('.empty-text').textContent = filtered
         ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
@@ -475,6 +476,7 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
+  renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
 }
