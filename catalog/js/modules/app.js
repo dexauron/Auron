@@ -21,6 +21,7 @@ import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openStore } from './guest.js';
 import { bindShopping } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
+import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -289,6 +290,22 @@ function bindEvents() {
     if (p) openProduct(p);
   };
   $('sheetSimilar').addEventListener('click', openSimilar);
+  // те же карточки есть на главной: «мои частые», «новое», «сегодня привезли».
+  // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
+  $('myStrip').addEventListener('click', openSimilar);
+  $('newStrip').addEventListener('click', openSimilar);
+  $('arrivalStrip').addEventListener('click', (e) => {
+    const all = e.target.closest('[data-arr-all]');
+    if (all) {
+      // «Показать все» — это фильтр по дню завоза, к нему у каталога всё есть
+      state.arrivalFrom = all.dataset.arrAll; state.arrivalTo = all.dataset.arrAll;
+      state.renderLimit = PAGE_SIZE;
+      renderAll();
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    openSimilar(e);
+  });
 
   // Точки под фото
   $('sheetPhotos').addEventListener('scroll', () => {
@@ -1103,6 +1120,7 @@ async function init() {
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
   safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
+  greet();        // волк здоровается один раз в день
   openFromHash(); // если открыли по ссылке на товар — показываем его
   runQuickActionFromUrl();
 }
