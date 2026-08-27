@@ -3,7 +3,7 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
@@ -410,8 +410,9 @@ export function renderActiveFilters() {
     items.push(['arrival', '', `${f}–${t}`]);
   }
   if (state.priceMin != null || state.priceMax != null) {
-    const lbl = state.priceMin != null && state.priceMax != null ? `${state.priceMin}–${state.priceMax} ₽`
-      : state.priceMin != null ? `от ${state.priceMin} ₽` : `до ${state.priceMax} ₽`;
+    const m = (n) => fmtPrice(n).replace(' ₽', '');
+    const lbl = state.priceMin != null && state.priceMax != null ? `${m(state.priceMin)}–${fmtPrice(state.priceMax)}`
+      : state.priceMin != null ? `от ${fmtPrice(state.priceMin)}` : `до ${fmtPrice(state.priceMax)}`;
     items.push(['price', '', lbl]);
   }
   for (const k of state.quick) items.push(['quick', k, QUICK_LABEL[k] || k]);
