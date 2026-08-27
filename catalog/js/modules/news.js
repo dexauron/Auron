@@ -41,7 +41,7 @@ export function syncWaitButton(p) {
   b.textContent = isWaiting(p.id) ? 'Не сообщать об этом товаре' : 'Сообщить, когда появится';
 }
 
-export function toggleWait(p) {
+function toggleWait(p) {
   if (!p) return;
   const list = readWait();
   const i = list.findIndex((x) => x.id === p.id);
@@ -113,7 +113,7 @@ function renderNewsBanner() {
   el.hidden = false;
 }
 
-export function openNews() {
+function openNews() {
   const box = $('newsBody');
   if (!box) return;
   const row = (p, extra) => `<button class="ios-row ios-row-link" data-news-open="${esc(p.id)}">

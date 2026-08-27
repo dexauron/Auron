@@ -91,7 +91,7 @@ function renderStore() {
   $('storeSend').hidden = !(list.length && wa);
 }
 
-export function removeReport(i) {
+function removeReport(i) {
   const list = read();
   list.splice(Number(i), 1);
   write(list);
@@ -103,13 +103,13 @@ export function removeReport(i) {
  * Человек не нашёл товар в каталоге. Раньше он просто уходил, и магазин об
  * этом не узнавал. Теперь он одним касанием спрашивает — а владелец видит
  * живой спрос: что искали, но чего у него нет. */
-export function openAsk(query) {
+function openAsk(query) {
   $('askText').value = query || '';
   $('askError').hidden = true;
   openSheet('askSheet');
 }
 
-export function sendAsk() {
+function sendAsk() {
   const what = $('askText').value.trim();
   const err = $('askError');
   if (!what) { err.textContent = 'Напиши, что ищешь.'; err.hidden = false; return; }
@@ -121,7 +121,7 @@ export function sendAsk() {
 }
 
 /* ── «Видел дешевле в другом магазине» ─────────────────────────────────── */
-export function openPriceReport(p) {
+function openPriceReport(p) {
   const prod = p || ui.currentProduct;
   if (!prod) return;
   ui.reportProduct = prod;
@@ -132,7 +132,7 @@ export function openPriceReport(p) {
   openSheet('priceReportSheet');
 }
 
-export function savePriceReport() {
+function savePriceReport() {
   const prod = ui.reportProduct;
   if (!prod) return;
   const price = moneyNum($('repPrice').value);
@@ -151,7 +151,7 @@ export function savePriceReport() {
 
 /* Одним сообщением: владельцу приходит готовый список, ничего переписывать
  * руками не нужно. Отправленное больше не копится. */
-export function sendReports() {
+function sendReports() {
   const list = read();
   const wa = waNumber();
   if (!list.length || !wa) return;
@@ -176,7 +176,7 @@ function renderStoreBadge() {
 /* Разделение «покупатель / сотрудник» на уровне всего оформления: класс на
  * странице. Через него прячется всё рабочее, а каталог показывается списком
  * без фотографий — как решил владелец. */
-export function applyGuestMode() {
+function applyGuestMode() {
   ui.applyGuestMode = applyGuestMode;   // звать из общей перерисовки без встречного импорта
   try { document.documentElement.classList.toggle('guest', isGuest()); } catch (e) { /* некритично */ }
   renderStoreBadge();
