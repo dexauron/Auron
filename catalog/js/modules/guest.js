@@ -49,7 +49,22 @@ function renderStore() {
     <button class="rst-rm" data-rep-rm="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
   </div>`).join('');
 
+  /* Карточка магазина: адрес, часы, маршрут. Спрашивают обычно именно это, а
+   * в каталоге этого не было вовсе. Пустые поля не показываем — другой магазин
+   * поставит свои в js/config.js, и лишних пустых строк у него не будет. */
+  const addr = CFG.STORE_ADDRESS || '';
+  const hours = CFG.STORE_HOURS || '';
+  const map = CFG.STORE_MAP || (addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '');
+  const about = (addr || hours) ? `<div class="ios-group">
+      ${addr ? `<a class="ios-row ios-row-link" id="storeMap" href="${esc(map)}" target="_blank" rel="noopener">
+        <span class="ios-row-title">Адрес<span class="ord-sub">${esc(addr)}</span></span>
+        <span class="ios-row-value">Маршрут</span></a>` : ''}
+      ${hours ? `<div class="ios-row"><span class="ios-row-title">Часы работы</span>
+        <span class="ios-row-value">${esc(hours)}</span></div>` : ''}
+    </div>` : '';
+
   box.innerHTML = `
+    ${about}
     <p class="ios-note">Ошибка в цене, чего-то не хватает на полке, есть пожелание —
     напиши прямо в магазин, ответит владелец.</p>
     <div class="ios-group">
@@ -57,6 +72,12 @@ function renderStore() {
         <span class="ios-row-title">Написать в WhatsApp</span><span class="ios-row-value">${esc(phone)}</span></a>` : ''}
       ${phone ? `<a class="ios-row ios-row-link" id="storeTel" href="tel:${esc(phone.replace(/[^\d+]/g, ''))}">
         <span class="ios-row-title">Позвонить</span><span class="ios-row-value">${esc(phone)}</span></a>` : ''}
+    </div>
+
+    <div class="ios-group">
+      <button class="ios-row ios-row-link" id="storeAsk">
+        <span class="ios-row-title">Спросить про товар<span class="ord-sub">не нашёл в каталоге — спроси, бывает ли он у нас</span></span>
+      </button>
     </div>
 
     <div class="ios-group-title">Цены в других магазинах</div>
@@ -76,6 +97,27 @@ export function removeReport(i) {
   write(list);
   renderStore();
   renderStoreBadge();
+}
+
+/* ── «Спросить про товар» ───────────────────────────────────────────────
+ * Человек не нашёл товар в каталоге. Раньше он просто уходил, и магазин об
+ * этом не узнавал. Теперь он одним касанием спрашивает — а владелец видит
+ * живой спрос: что искали, но чего у него нет. */
+export function openAsk(query) {
+  $('askText').value = query || '';
+  $('askError').hidden = true;
+  openSheet('askSheet');
+}
+
+export function sendAsk() {
+  const what = $('askText').value.trim();
+  const err = $('askError');
+  if (!what) { err.textContent = 'Напиши, что ищешь.'; err.hidden = false; return; }
+  const wa = waNumber();
+  if (!wa) { toast('Магазин не указал номер для связи'); return; }
+  const text = `Здравствуйте! Ищу товар: ${what}. Бывает ли он у вас?`;
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  closeSheet('askSheet');
 }
 
 /* ── «Видел дешевле в другом магазине» ─────────────────────────────────── */

@@ -84,6 +84,7 @@
       <div class="empty-title">Ничего не нашлось</div>
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
       <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
+      <button class="btn btn-primary empty-reset guest-only" id="emptyAsk" hidden>Спросить в магазине</button>
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
@@ -874,6 +875,26 @@
       <div class="sheet-body" id="storeBody"></div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-block" id="storeSend" hidden>Отправить подсказки в WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Покупатель спрашивает про товар, которого не нашёл -->
+  <div class="sheet-backdrop" id="askSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" data-close="askSheet">Отмена</button>
+        <h2 class="ios-nav-title">Спросить про товар</h2>
+        <button class="ios-nav-btn strong" id="askSend">Спросить</button>
+      </div>
+      <div class="sheet-body">
+        <div class="ios-group">
+          <div class="ios-row"><input type="text" id="askText" class="ios-inp ios-inp-wide" maxlength="120" placeholder="что ищешь"></div>
+        </div>
+        <div class="form-error" id="askError" hidden></div>
+        <p class="ios-note">Откроется WhatsApp с готовым вопросом — останется отправить.
+        Так магазин узнаёт, чего людям не хватает.</p>
       </div>
     </div>
   </div>

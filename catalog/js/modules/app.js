@@ -18,7 +18,7 @@ import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
-import { applyGuestMode, openPriceReport, openStore, removeReport, savePriceReport, sendReports } from './guest.js';
+import { applyGuestMode, openAsk, openPriceReport, openStore, removeReport, savePriceReport, sendAsk, sendReports } from './guest.js';
 import { clearShop, openShop, removeShop, renderShopBar, shareShop, shopDone, shopQty, syncShopButton, toggleShop } from './shopping.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
@@ -976,9 +976,12 @@ function bindEvents() {
   $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
   $('repSave').addEventListener('click', savePriceReport);
   $('storeSend').addEventListener('click', sendReports);
+  $('askSend').addEventListener('click', sendAsk);
+  $('emptyAsk').addEventListener('click', () => openAsk(state.query));
   $('storeBody').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-rep-rm]');
-    if (rm) removeReport(rm.dataset.repRm);
+    if (rm) { removeReport(rm.dataset.repRm); return; }
+    if (e.target.closest('#storeAsk')) openAsk('');
   });
   attachMoneyInput($('repPrice'));
 
