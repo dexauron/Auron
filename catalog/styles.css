@@ -1591,7 +1591,7 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 
 /* ── Список покупок покупателя ─────────────────────────────────────────────── */
 .shop-bar .btn { flex: 1; }
-.shop-row { align-items: center; gap: 8px; flex-wrap: wrap; }
+.shop-row { align-items: center; gap: 8px; }
 .shop-check {
   flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
   border: 1.5px solid var(--border); background: none; color: var(--pos);
@@ -1611,6 +1611,7 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 }
 .qty-step > button:active { opacity: .45; }
 .shop-qty { min-width: 30px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
-/* на узком экране название занимает строку целиком, а счётчик и сумма — вторую */
-.shop-row .ios-row-title { flex: 1 1 150px; }
-.shop-row .ios-row-value { font-weight: 700; }
+/* название сжимается, счётчик и крестик держат размер: строка остаётся одной.
+   Сумма ушла под название («2 × 89 ₽ = 178 ₽») — иначе на телефоне не помещалось. */
+.shop-row .ios-row-title { flex: 1 1 auto; min-width: 0; }
+.shop-row .qty-step, .shop-row .rst-rm { flex: 0 0 auto; }
