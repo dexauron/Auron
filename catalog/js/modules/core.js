@@ -189,7 +189,7 @@ const ERR_KEY = 'wm_errors_v1';
 const ERR_KEEP = 20;
 let lastErrAt = 0;
 
-function logError(where, err) {
+export function logError(where, err) {
   const msg = String((err && (err.message || err)) || 'неизвестная ошибка').slice(0, 300);
   try {
     const list = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');

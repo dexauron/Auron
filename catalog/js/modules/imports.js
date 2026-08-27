@@ -1,7 +1,7 @@
 // Импорт из 1С: разбор файлов и слияние в каталог
 
 import { $, CFG, state, ui } from './store.js';
-import { esc, norm, toast, cmpRu } from './core.js';
+import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
@@ -959,7 +959,10 @@ export async function smartRun() {
     smartLog('Сохраняем на GitHub…');
     $('smartMissing').hidden = !ui.lastMissing.length;
     try { await publishFull(ui.secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован`); toast('Каталог обновлён'); }
-    catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('Не удалось опубликовать'); }
+    catch (err) {
+      smartLog('Каталог собран, но не опубликован. ' + (err.friendly || err.message || err));
+      showPublishTrouble(err);
+    }
     btn.disabled = false; btn.hidden = true;
 }
 

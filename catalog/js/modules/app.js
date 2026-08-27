@@ -617,7 +617,7 @@ function bindEvents() {
         closeSheet('staffPassSheet');
         toast('Пароль сотрудника сохранён Теперь сотрудник входит этим паролем');
       } catch (err) {
-        $('staffPassError').textContent = 'Не удалось опубликовать: ' + (err.message || err) + '. Проверь GitHub-ключ.';
+        $('staffPassError').textContent = err.friendly || 'Не удалось опубликовать.';
         $('staffPassError').hidden = false;
       } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
       return;
@@ -645,6 +645,9 @@ function bindEvents() {
   // адрес …/catalog/#publish. Публикация всё равно требует GitHub-ключ, поэтому
   // открывать окно безопасно — без ключа ничего не выложится. Витрину берём из
   // сохранённой копии каталога (state.products), сервер не нужен.
+  // Плашка «не опубликовалось» ведёт туда, где вставляют ключ и жмут «Опубликовать»
+  $('publishBanner').addEventListener('click', () => openPublishSheet());
+
   function maybeOpenPublishByHash() { if (location.hash === '#publish' || location.hash === '#gh') openPublishSheet(); }
   window.addEventListener('hashchange', maybeOpenPublishByHash);
   setTimeout(maybeOpenPublishByHash, 400);
