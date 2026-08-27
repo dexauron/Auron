@@ -15,6 +15,12 @@
 set -uo pipefail
 
 cd "${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null)}" || exit 0
+
+# Журнал: молчаливая защита однажды перестала срабатывать, и заметили это
+# только когда откат унёс полтора часа работы. Теперь каждый запуск оставляет
+# строку, а хук конца ответа смотрит, давно ли был последний снимок.
+LOG=".claude/autosave.log"
+note() { printf '%s %s\n' "$(date '+%d.%m %H:%M:%S')" "$1" >>"$LOG" 2>/dev/null; tail -n 200 "$LOG" >"$LOG.tmp" 2>/dev/null && mv -f "$LOG.tmp" "$LOG" 2>/dev/null; }
 git rev-parse --git-dir >/dev/null 2>&1 || exit 0
 
 BR=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
@@ -50,9 +56,13 @@ PARENT=$(git rev-parse --verify -q "refs/remotes/origin/$SAVE" || git rev-parse 
 # то же содержимое — второй раз не пишем
 [ "$(git rev-parse -q "$PARENT^{tree}" 2>/dev/null)" = "$TREE" ] && exit 0
 COMMIT=$(git commit-tree "$TREE" -p "$PARENT" -m "автосохранение $(date '+%d.%m %H:%M:%S') (ветка $BR)" 2>/dev/null)
-[ -z "$COMMIT" ] && exit 0
+[ -z "$COMMIT" ] && { note "СБОЙ: не удалось создать снимок"; exit 0; }
 
 # в фоне, чтобы не задерживать работу
-( git push -q --force origin "$COMMIT:refs/heads/$SAVE" >/dev/null 2>&1 &&
-  git update-ref "refs/remotes/origin/$SAVE" "$COMMIT" ) >/dev/null 2>&1 &
+( if git push -q --force origin "$COMMIT:refs/heads/$SAVE" >/dev/null 2>&1; then
+    git update-ref "refs/remotes/origin/$SAVE" "$COMMIT" >/dev/null 2>&1
+    note "снимок ${COMMIT:0:7} → $SAVE"
+  else
+    note "СБОЙ: снимок ${COMMIT:0:7} не ушёл на GitHub"
+  fi ) >/dev/null 2>&1 &
 exit 0
