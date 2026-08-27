@@ -1623,3 +1623,121 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    Сумма ушла под название («2 × 89 ₽ = 178 ₽») — иначе на телефоне не помещалось. */
 .shop-row .ios-row-title { flex: 1 1 auto; min-width: 0; }
 .shop-row .qty-step, .shop-row .rst-rm { flex: 0 0 auto; }
+
+/* ═══ Волк Way Market ════════════════════════════════════════════════════
+   Талисман магазина: волк в папахе и черкеске. Он здоровается, подсказывает
+   на пустых экранах и радуется, когда человек что-то отметил. Всё движение —
+   только на transform/opacity: это единственное, что телефон рисует
+   видеочипом, не пересчитывая страницу. На слабых телефонах и при системной
+   настройке «поменьше движения» он замирает, но остаётся на месте.
+   Выключается переключателем в настройках устройства (класс .no-wolf). */
+.wolf-hi {
+  border: none; background: none; padding: 0 6px; margin: 0 auto;
+  display: flex; align-items: flex-end; cursor: pointer;
+  min-height: 40px; -webkit-tap-highlight-color: transparent;
+}
+.wolf-head { width: 38px; height: auto; display: block; transform-origin: 50% 100%; }
+.no-wolf .wolf, .no-wolf .wolf-hi, .no-wolf .wolf-bubble { display: none !important; }
+/* волка показываем только там, где человек смотрит каталог: в рабочих окнах
+   (заказы, «закончилось», пересчёт) ему делать нечего */
+.sheet .wolf-hi { display: none; }
+
+/* Дыхание: чуть заметное покачивание, чтобы он выглядел живым, а не наклейкой */
+@keyframes wolf-breathe { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
+@keyframes wolf-hop {
+  0% { transform: translateY(0) scale(1) }
+  30% { transform: translateY(-6px) scale(1.06) }
+  55% { transform: translateY(0) scale(.98) }
+  75% { transform: translateY(-2px) scale(1.01) }
+  100% { transform: translateY(0) scale(1) }
+}
+.wolf-head { animation: wolf-breathe 4.5s ease-in-out infinite; }
+.wolf-head.hop { animation: wolf-hop .5s cubic-bezier(.34, 1.56, .64, 1); }
+.low-power .wolf-head { animation: none; }
+
+/* Облачко с репликой. Ставится по месту волка из скрипта */
+.wolf-bubble {
+  position: fixed; z-index: 60; max-width: min(280px, calc(100vw - 24px));
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 10px 13px; font-size: 14px; line-height: 1.35;
+  opacity: 0; transform: translateY(-6px) scale(.96); transform-origin: 50% 0;
+  transition: opacity .18s ease, transform .22s cubic-bezier(.34, 1.56, .64, 1);
+  cursor: pointer;
+}
+.wolf-bubble.show { opacity: 1; transform: translateY(0) scale(1); }
+.wolf-bubble::before {
+  content: ''; position: absolute; top: -5px; left: 50%; width: 9px; height: 9px;
+  margin-left: -4.5px; background: var(--surface);
+  border-left: 1px solid var(--border); border-top: 1px solid var(--border);
+  transform: rotate(45deg); border-radius: 2px 0 0 0;
+}
+
+/* Пустой экран: вместо значка — волк. Значок остаётся рядом и показывается,
+   если волка выключили: пустая страница без картинки выглядит поломкой */
+.empty-icon .wolf-empty { width: 108px; height: auto; margin: 0 auto 2px; display: block; }
+.empty-icon .wolf-fallback { display: none; }
+.no-wolf .empty-icon .wolf-fallback { display: block; }
+
+/* ═══ Отклик на касание ══════════════════════════════════════════════════
+   Палец нажал — элемент должен ответить. Без этого интерфейс кажется
+   «мёртвым»: непонятно, попал ты по кнопке или нет. Отклик пружинный и
+   короткий, и живёт на transform — прокрутка от него не страдает. */
+.btn, .tab, .card, .ios-row, .round-btn, .icon-btn, .chip,
+.similar-card, .cat-tile, .grp-row, .qty-step, .wolf-hi {
+  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1);
+}
+.btn:active, .round-btn:active, .icon-btn:active, .chip:active,
+.qty-step:active, .wolf-hi:active { transform: scale(.93); }
+.card:active, .similar-card:active, .cat-tile:active, .grp-row:active { transform: scale(.97); }
+.ios-row:active { transform: scale(.99); }
+.tab:active .tab-ico { transform: scale(.88); }
+.tab-ico { transition: transform .18s cubic-bezier(.34, 1.56, .64, 1); }
+.low-power .btn, .low-power .tab, .low-power .card, .low-power .ios-row,
+.low-power .round-btn, .low-power .icon-btn, .low-power .chip,
+.low-power .similar-card, .low-power .cat-tile, .low-power .grp-row,
+.low-power .tab-ico { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .wolf-head { animation: none !important; }
+  .btn:active, .card:active, .ios-row:active, .round-btn:active, .icon-btn:active,
+  .chip:active, .similar-card:active, .cat-tile:active, .grp-row:active,
+  .qty-step:active, .wolf-hi:active, .tab:active .tab-ico { transform: none; }
+}
+
+/* ═══ Что привезли ═══════════════════════════════════════════════════════
+   Покупателю на главной: что появилось в магазине сегодня (или в последний
+   завоз). Это единственная причина заходить в каталог каждый день, поэтому
+   блок стоит выше всего остального и читается за секунду. */
+.arr-strip { margin: 12px 16px 4px; }
+.arr-head {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+}
+.arr-title { font-size: 15px; font-weight: 700; }
+.arr-when { font-size: 13px; color: var(--text-2); }
+.arr-list { border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.arr-row {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 11px 14px; min-height: 48px; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.arr-row:last-child { border-bottom: none; }
+.arr-name { flex: 1; font-size: 15px; line-height: 1.25; }
+.arr-price { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.arr-more {
+  display: block; width: 100%; margin-top: 8px; padding: 11px;
+  background: none; border: none; color: var(--brand-ink);
+  font: inherit; font-weight: 600; font-size: 14px; cursor: pointer;
+}
+
+/* ═══ Кавказский штрих ═══════════════════════════════════════════════════
+   Ровно один: тонкая полоска-орнамент под шапкой — ромбы, как насечка на
+   поясе. Делается градиентом (никаких картинок) и стоит телефону ноль.
+   Больше узоров каталог бы не выдержал: он про товары, а не про ковёр. */
+.header::after {
+  content: ''; display: block; height: 3px; margin: 8px -16px -8px;
+  background:
+    repeating-linear-gradient(135deg, var(--border) 0 2px, transparent 2px 6px),
+    linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: .5;
+}
