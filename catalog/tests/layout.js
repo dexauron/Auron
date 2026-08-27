@@ -101,6 +101,25 @@ const products = Array.from({ length: 6 }, (_, i) => ({
       return [...new Set(out)].slice(0, 5);
     });
     chk(!small.length, `ширина ${W}px: кнопки не мельче пальца${small.length ? ' — ' + small.join(' | ') : ''}`);
+
+    /* Нижняя панель — ОДНА полоса. Когда разделов стало пять, а раскладка
+       осталась «четыре колонки», пятый («Фильтры») сваливался под панель
+       отдельной строкой: на телефоне это выглядело как поломка. */
+    const bar = await page.evaluate(() => {
+      const tabs = [...document.querySelectorAll('.tabbar .tab')];
+      const tops = new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)));
+      const r = document.querySelector('.tabbar').getBoundingClientRect();
+      const labels = tabs.map((t) => {
+        const el = t.querySelector('.tab-txt');
+        return el ? { text: el.textContent, cut: el.scrollWidth > el.clientWidth + 1 } : null;
+      }).filter(Boolean);
+      return { count: tabs.length, rows: tops.size, height: Math.round(r.height),
+        atBottom: Math.round(r.bottom) >= window.innerHeight - 1, cut: labels.filter((l) => l.cut).map((l) => l.text) };
+    });
+    chk(bar.rows === 1, `ширина ${W}px: все ${bar.count} разделов в одну строку (строк: ${bar.rows})`);
+    chk(bar.height <= 72, `ширина ${W}px: панель одной полосой (${bar.height}px)`);
+    chk(bar.atBottom, `ширина ${W}px: панель прижата к низу экрана`);
+    chk(!bar.cut.length, `ширина ${W}px: подписи разделов помещаются${bar.cut.length ? ' — обрезаны: ' + bar.cut.join(', ') : ''}`);
     chk(!errs.length, `ширина ${W}px: нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
   }

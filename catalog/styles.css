@@ -1046,32 +1046,50 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
    Как в любом продуктовом приложении: разделы внизу, под большим пальцем.
    Раньше единственным способом попасть в категории была кнопка фильтра в
    шапке — с главной страницы каталог просто не просматривался. */
+/* ── Нижняя панель, как в iOS ────────────────────────────────────────────────
+ * Раскладка ГИБКАЯ, а не «четыре колонки»: панель подстраивается под любое
+ * число разделов. Раньше колонок было ровно четыре, а разделов стало пять —
+ * пятый («Фильтры») сваливался под панель отдельной строкой и выглядел как
+ * поломка. Теперь разделы делят ширину поровну и никогда не переносятся.
+ * Пропорции взяты системные: полоса 50 px, значок 25 px, подпись 10 px. */
+:root { --tabbar-h: 50px; }
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  background: var(--surface);
-  border-top: 1px solid var(--border);
+  display: flex; flex-wrap: nowrap; align-items: stretch;
   padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: .5px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
 .tabbar .tab {
   position: relative;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  min-height: 56px; padding: 7px 4px 6px;
+  flex: 1 1 0; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: var(--tabbar-h); padding: 6px 2px 4px;
   border: 0; background: none; cursor: pointer;
-  color: var(--text-2); font-family: inherit; font-size: 11px; font-weight: 600;
+  color: var(--text-2); font-family: inherit;
+  font-size: 10px; font-weight: 500; letter-spacing: -.01em;
 }
 .tabbar .tab .tab-ico { font-size: 20px; line-height: 1; }
-.tabbar .tab.active { color: var(--brand-ink); }
-.tabbar .tab:active { opacity: .6; }
+/* подпись не переносится и не расталкивает соседей: длинная — с многоточием */
+.tabbar .tab .tab-txt {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tabbar .tab.active { color: var(--accent); font-weight: 600; }
+.tabbar .tab:active { opacity: .5; }
+/* Кружок с числом — у правого верхнего угла значка, как в системе */
 .tab-badge {
-  position: absolute; top: 4px; left: 50%; margin-left: 6px;
-  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
-  background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  position: absolute; top: 3px; left: 50%; margin-left: 5px;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--neg); color: #fff; font-size: 10px; font-weight: 700; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 /* панель перекрывает низ страницы — освобождаем место под ней */
-body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
-.fab { bottom: calc(76px + env(safe-area-inset-bottom)); }
+body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)); }
+.fab { bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); }
 
 /* ═══ Экран категорий ══════════════════════════════ */
 .cat-screen { padding: 14px calc(14px + env(safe-area-inset-right)) 8px calc(14px + env(safe-area-inset-left)); }
@@ -1447,7 +1465,7 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
 
 /* ── Сравнение товаров ──────────────────────────────────────────────────── */
 .compare-bar {
-  position: fixed; left: 0; right: 0; bottom: calc(56px + env(safe-area-inset-bottom)); z-index: 25;
+  position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); z-index: 25;
   display: flex; gap: 8px; align-items: center; padding: 8px 12px;
   background: var(--surface); border-top: .5px solid var(--border);
 }
@@ -1537,6 +1555,7 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
    обычным затемнением, тени делаются легче, а движение — короче. Внешне почти
    то же самое, но телефон успевает рисовать кадры и отвечать на нажатия. */
 .low-power .header,
+.low-power .tabbar,
 .low-power .sheet-backdrop,
 .low-power .sheet-backdrop.backdrop-top,
 .low-power .sheet-back,
@@ -1545,6 +1564,7 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
   backdrop-filter: none !important;
 }
 .low-power .header { background: var(--bg); }
+.low-power .tabbar { background: var(--surface); }
 .low-power .sheet-backdrop { background: rgba(0, 0, 0, .38); }
 .low-power .sheet-backdrop.backdrop-top { background: rgba(0, 0, 0, .5); }
 .low-power .sheet { box-shadow: 0 -2px 12px rgba(0, 0, 0, .18); animation-duration: .24s; }
@@ -1563,3 +1583,6 @@ body { padding-bottom: calc(124px + env(safe-area-inset-bottom)); }
   border: none; background: none; color: var(--text-2);
   font-size: 16px; line-height: 1; min-width: 40px; min-height: 40px; cursor: pointer; flex: 0 0 auto;
 }
+/* Плашка «сохранено, но не опубликовано» — на неё нажимают, чтобы починить */
+.banner-publish { display: block; width: 100%; text-align: left; border: none; font: inherit; cursor: pointer; }
+.banner-publish:active { opacity: .6; }

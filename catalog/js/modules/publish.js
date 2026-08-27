@@ -33,9 +33,40 @@ export async function ghApi(path, opts = {}) {
     },
   });
 }
+/* Понятная причина отказа вместо кода и куска ответа сервера.
+ * Владелец — не программист: «401 Bad credentials» ему ничего не говорит, а
+ * действие требуется простое — обновить ключ. Технические подробности всё
+ * равно сохраняются (в журнале ошибок), просто не лезут человеку в глаза. */
+export function ghReason(status, text) {
+  const t = String(text || '');
+  if (status === 401 || /bad credentials/i.test(t)) {
+    return { code: 'token', msg: 'Ключ доступа к GitHub больше не работает — обычно у него просто закончился срок. Нужен новый ключ.' };
+  }
+  if (status === 404) {
+    return { code: 'place', msg: 'GitHub не нашёл, куда публиковать (репозиторий или ветка). Проверь настройки в «Публикация на GitHub».' };
+  }
+  if (status === 403 && /rate limit/i.test(t)) {
+    return { code: 'wait', msg: 'GitHub просит подождать: слишком много запросов подряд. Попробуй через минуту.' };
+  }
+  if (status === 403) {
+    return { code: 'token', msg: 'GitHub не разрешил запись этим ключом. Нужен ключ с правом записи в репозиторий.' };
+  }
+  if (status >= 500) return { code: 'server', msg: 'GitHub сейчас недоступен. Попробуй позже — записанное не потеряется.' };
+  return { code: 'other', msg: 'GitHub отказал (код ' + status + ').' };
+}
+
+function ghFail(status, text, path, method) {
+  const r = ghReason(status, text);
+  const e = new Error(r.msg);
+  e.friendly = r.msg;
+  e.code = r.code;
+  e.tech = `GitHub ${method || 'GET'} ${path} → ${status} ${String(text || '').slice(0, 200)}`;
+  return e;
+}
+
 async function ghJson(path, opts) {
   const r = await ghApi(path, opts);
-  if (!r.ok) throw new Error('GitHub ' + ((opts && opts.method) || 'GET') + ' ' + path + ' → ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  if (!r.ok) throw ghFail(r.status, await r.text(), path, (opts && opts.method) || 'GET');
   return r.json();
 }
 
@@ -46,7 +77,7 @@ async function ghBlob(content, attempt = 0) {
   const r = await ghApi(`${ghRepo()}/git/blobs`, { method: 'POST', body: JSON.stringify({ content, encoding: 'utf-8' }) });
   if (r.ok) return r.json();
   const wait = (r.status === 403 || r.status === 429 || r.status >= 500) && attempt < 3;
-  if (!wait) throw new Error('GitHub POST blob → ' + r.status + ' ' + (await r.text()).slice(0, 200));
+  if (!wait) throw ghFail(r.status, await r.text(), `${ghRepo()}/git/blobs`, 'POST');
   await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
   return ghBlob(content, attempt + 1);
 }
@@ -85,7 +116,7 @@ export async function ghCommit(files, message, opts = {}) {
   const upd = await ghApi(`${ghRepo()}/git/refs/heads/${b}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
   if (!upd.ok) {
     if ((upd.status === 409 || upd.status === 422) && retry) return ghCommit(files, message, { ...opts, retry: false });
-    throw new Error('GitHub PATCH ref → ' + upd.status + ' ' + (await upd.text()).slice(0, 200));
+    throw ghFail(upd.status, await upd.text(), `${ghRepo()}/git/refs/heads/${b}`, 'PATCH');
   }
   return commit.sha;
 }
