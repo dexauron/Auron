@@ -139,6 +139,8 @@ function renderNewsBanner() {
 function openNews() {
   const box = $('newsBody');
   if (!box) return;
+  // посмотрел — сегодня про новинки больше не напоминаем
+  try { localStorage.setItem(SEEN_KEY, todayISO()); } catch (e) { /* приватный режим */ }
   const row = (p, extra) => `<button class="ios-row ios-row-link" data-news-open="${esc(p.id)}">
     <span class="ios-row-title">${esc(p.name)}${extra ? `<span class="ord-sub">${extra}</span>` : ''}</span>
     <span class="ios-row-value">${esc(fmtRetail(p))}</span></button>`;
