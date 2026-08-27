@@ -118,6 +118,8 @@ export function renderCatScreen() {
 }
 
 export function renderGrid() {
+  // поиск перерисовывает только сетку, а лента завоза при поиске не нужна
+  renderArrivals();
   const list = visibleProducts();
   const grid = $('productGrid');
   $('loader').hidden = true;
@@ -681,7 +683,12 @@ export function renderNewProducts() {
 const ARR_MAX_DAYS = 7;   // дальше недели «свежим завозом» это уже не назвать
 const ARR_ROWS = 6;       // больше строк — и блок съедает весь первый экран
 
+/* Ответ не меняется, пока не приехал новый каталог, а товаров бывает
+ * пятнадцать тысяч: считаем один раз на загрузку данных. */
+let arrCache = { src: null, day: '' };
+
 function arrivalDay() {
+  if (arrCache.src === state.products) return arrCache.day;
   const today = todayISO();
   const from = daysAgoISO(ARR_MAX_DAYS);
   let best = '';
@@ -689,10 +696,11 @@ function arrivalDay() {
     const d = String(p.arrival_at || '').slice(0, 10);
     if (d && d <= today && d >= from && d > best) best = d;
   }
+  arrCache = { src: state.products, day: best };
   return best;
 }
 
-export function renderArrivals() {
+function renderArrivals() {
   const box = $('arrivalStrip');
   if (!box) return;
   const show = !state.session && state.tab === 'catalog'
