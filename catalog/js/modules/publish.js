@@ -116,7 +116,7 @@ export async function ghCommit(files, message, opts = {}) {
   const upd = await ghApi(`${ghRepo()}/git/refs/heads/${b}`, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
   if (!upd.ok) {
     if ((upd.status === 409 || upd.status === 422) && retry) return ghCommit(files, message, { ...opts, retry: false });
-    throw new Error('GitHub PATCH ref → ' + upd.status + ' ' + (await upd.text()).slice(0, 200));
+    throw ghFail(upd.status, await upd.text(), `${ghRepo()}/git/refs/heads/${b}`, 'PATCH');
   }
   return commit.sha;
 }
