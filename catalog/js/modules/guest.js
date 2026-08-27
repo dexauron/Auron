@@ -1,0 +1,141 @@
+// Покупатель: что видит человек, зашедший по ссылке без пароля
+
+/* Каталог открыт по ссылке, и заходят в него двое разных людей: сотрудник,
+ * который вот-вот введёт пароль, и обычный покупатель. Раньше им показывали
+ * одно и то же. Теперь без пароля человек видит ровно то, что и так написано
+ * на ценнике в зале: название, код, цену, есть ли товар и когда его завезли.
+ * Всё внутреннее — закупки, поставщики, остаток числом, продажи, рабочие
+ * списки — не просто закрыто правами, а не показывается вовсе.
+ *
+ * И обратная связь: покупатель может написать в магазин (WhatsApp или звонок)
+ * и подсказать цену из другого магазина. Сервера нет, поэтому подсказки
+ * копятся у него на телефоне и уходят владельцу одним сообщением. */
+
+import { $, CFG, state, ui } from './store.js';
+import { closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
+import { fmtDate, fmtPrice, todayISO } from './catalog.js';
+import { plural } from './competitors.js';
+import { ic } from './icons.js';
+
+const KEY = 'wm_guest_prices_v1';
+const MAX = 50;
+
+const isGuest = () => !state.session;
+const waNumber = () => String(CFG.STORE_WHATSAPP || '').replace(/\D/g, '');
+
+function read() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+}
+function write(list) {
+  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+}
+
+/* ── Экран «Магазин» ───────────────────────────────────────────────────── */
+export function openStore() {
+  renderStore();
+  openSheet('storeSheet');
+}
+
+function renderStore() {
+  const box = $('storeBody');
+  if (!box) return;
+  const list = read();
+  const wa = waNumber();
+  const phone = CFG.STORE_PHONE || '';
+  const rows = list.map((x, i) => `<div class="ios-row">
+    <span class="ios-row-title">${esc(x.name)}
+      <span class="ord-sub">${esc(x.store || 'магазин не указан')}${x.code ? ' · код ' + esc(x.code) : ''} · ${fmtDate(x.at)}</span></span>
+    <span class="ios-row-value">${fmtPrice(x.price)}</span>
+    <button class="rst-rm" data-rep-rm="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
+  </div>`).join('');
+
+  box.innerHTML = `
+    <p class="ios-note">Ошибка в цене, чего-то не хватает на полке, есть пожелание —
+    напиши прямо в магазин, ответит владелец.</p>
+    <div class="ios-group">
+      ${wa ? `<a class="ios-row ios-row-link" id="storeWa" href="https://wa.me/${esc(wa)}" target="_blank" rel="noopener">
+        <span class="ios-row-title">Написать в WhatsApp</span><span class="ios-row-value">${esc(phone)}</span></a>` : ''}
+      ${phone ? `<a class="ios-row ios-row-link" id="storeTel" href="tel:${esc(phone.replace(/[^\d+]/g, ''))}">
+        <span class="ios-row-title">Позвонить</span><span class="ios-row-value">${esc(phone)}</span></a>` : ''}
+    </div>
+
+    <div class="ios-group-title">Цены в других магазинах</div>
+    ${list.length
+    ? `<div class="ios-group">${rows}</div>
+       <p class="ios-note">${list.length} ${plural(list.length, 'подсказка', 'подсказки', 'подсказок')} —
+       хранятся только на твоём телефоне, пока не отправишь.</p>`
+    : `<p class="ios-note">Пока пусто. Открой товар и нажми «Видел дешевле в другом магазине» —
+       подсказки соберутся здесь и уйдут владельцу одним сообщением.</p>`}`;
+
+  $('storeSend').hidden = !(list.length && wa);
+}
+
+export function removeReport(i) {
+  const list = read();
+  list.splice(Number(i), 1);
+  write(list);
+  renderStore();
+  renderStoreBadge();
+}
+
+/* ── «Видел дешевле в другом магазине» ─────────────────────────────────── */
+export function openPriceReport(p) {
+  const prod = p || ui.currentProduct;
+  if (!prod) return;
+  ui.reportProduct = prod;
+  $('repName').textContent = prod.name;
+  $('repPrice').value = '';
+  $('repStore').value = '';
+  $('repError').hidden = true;
+  openSheet('priceReportSheet');
+}
+
+export function savePriceReport() {
+  const prod = ui.reportProduct;
+  if (!prod) return;
+  const price = moneyNum($('repPrice').value);
+  const err = $('repError');
+  if (!(price > 0)) { err.textContent = 'Напиши цену, которую видел.'; err.hidden = false; return; }
+  const list = read();
+  list.push({
+    id: prod.id, name: prod.name, code: prod.code || '',
+    price, store: $('repStore').value.trim(), at: todayISO(),
+  });
+  write(list);
+  closeSheet('priceReportSheet');
+  toast('Спасибо! Подсказка сохранена — отправь её в разделе «Магазин»');
+  renderStoreBadge();
+}
+
+/* Одним сообщением: владельцу приходит готовый список, ничего переписывать
+ * руками не нужно. Отправленное больше не копится. */
+export function sendReports() {
+  const list = read();
+  const wa = waNumber();
+  if (!list.length || !wa) return;
+  const text = 'Здравствуйте! Заметил цены в других магазинах:\n'
+    + list.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
+      + (x.store ? `, ${x.store}` : '')).join('\n');
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  write([]);
+  renderStore();
+  renderStoreBadge();
+}
+
+// сколько подсказок ждёт отправки — кружок на вкладке «Магазин»
+function renderStoreBadge() {
+  const el = $('tabStoreCount');
+  if (!el) return;
+  const n = isGuest() ? read().length : 0;
+  el.textContent = n > 99 ? '99+' : n;
+  el.hidden = !n;
+}
+
+/* Разделение «покупатель / сотрудник» на уровне всего оформления: класс на
+ * странице. Через него прячется всё рабочее, а каталог показывается списком
+ * без фотографий — как решил владелец. */
+export function applyGuestMode() {
+  ui.applyGuestMode = applyGuestMode;   // звать из общей перерисовки без встречного импорта
+  try { document.documentElement.classList.toggle('guest', isGuest()); } catch (e) { /* некритично */ }
+  renderStoreBadge();
+}
