@@ -23,6 +23,10 @@
           <div class="brand-sub">Каталог товаров</div>
         </div>
       </div>
+      <!-- Волк Way Market: здоровается и подсказывает. Тап — подсказка -->
+      <button class="wolf-hi" id="wolfHi" type="button" aria-label="Помощник">
+        <img class="wolf wolf-head" src="icons/wolf-sm.png" width="64" height="130" alt="" decoding="async">
+      </button>
       <div class="header-btns">
         <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
           <span id="themeIcon"><i data-ic="auto"></i></span>
@@ -79,6 +83,8 @@
   <main class="content">
     <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
+    <!-- Покупателю: что привезли сегодня (или последний завоз) -->
+    <div class="arr-strip" id="arrivalStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
@@ -90,6 +96,9 @@
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
+
+  <!-- Реплика волка. Живёт поверх страницы: «липкая» шапка её бы обрезала -->
+  <div class="wolf-bubble" id="wolfBubble" hidden></div>
 
   <!-- Кнопка добавления (только админ) -->
   <button class="fab" id="fabAdd" hidden title="Добавить товар" aria-label="Добавить товар"><i data-ic="plus"></i></button>
@@ -430,6 +439,15 @@
           </div>
         </div>
         <p class="ios-note">Чтобы не путать телефоны. Видно только на этом устройстве.</p>
+
+        <div class="ios-group-title">Помощник</div>
+        <div class="ios-group">
+          <label class="ios-row" for="devWolf">
+            <span class="ios-row-title">Волк-помощник
+              <span class="ord-sub">Здоровается, подсказывает и отмечает покупки</span></span>
+            <span class="ios-switch"><input type="checkbox" id="devWolf"><span class="ios-knob"></span></span>
+          </label>
+        </div>
 
         <div class="ios-group-title">Что запомнено</div>
         <div class="ios-group" id="devList"></div>
