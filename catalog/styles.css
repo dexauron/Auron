@@ -1591,7 +1591,7 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 
 /* ── Список покупок покупателя ─────────────────────────────────────────────── */
 .shop-bar .btn { flex: 1; }
-.shop-row { align-items: center; gap: 8px; }
+.shop-row { align-items: center; gap: 8px; flex-wrap: wrap; }
 .shop-check {
   flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
   border: 1.5px solid var(--border); background: none; color: var(--pos);
@@ -1599,4 +1599,18 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 }
 .shop-row.shop-done .ios-row-title, .shop-row.shop-done .ios-row-value { color: var(--text-2); text-decoration: line-through; }
 .shop-row.shop-done .shop-check { border-color: var(--pos); }
-.shop-qty { min-width: 26px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* «−  2  +» — счётчик количества. Раньше он одалживал стили у экрана
+   инвентаризации; тот убрали, и кнопки остались голыми квадратиками. */
+.qty-step {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  border: .5px solid var(--border); border-radius: 10px; background: var(--surface-2);
+}
+.qty-step > button {
+  min-width: 40px; min-height: 40px; border: none; background: none;
+  color: var(--accent); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.qty-step > button:active { opacity: .45; }
+.shop-qty { min-width: 30px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* на узком экране название занимает строку целиком, а счётчик и сумма — вторую */
+.shop-row .ios-row-title { flex: 1 1 150px; }
+.shop-row .ios-row-value { font-weight: 700; }

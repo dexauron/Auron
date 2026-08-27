@@ -122,7 +122,7 @@ function renderShop() {
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
         <span class="ord-sub">${price ? fmtPrice(price) : 'цена не указана'}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
-      <span class="cnt-step">
+      <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
         <span class="shop-qty">${fmtNum(x.qty)}</span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
