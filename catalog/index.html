@@ -212,8 +212,6 @@
           <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
           <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
           <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
-          <button class="ios-row ios-row-link" id="menuPhotoFill"><span class="ios-row-title">Дозаполнить фото</span></button>
-          <button class="ios-row ios-row-link" id="menuSuggestions" hidden><span class="ios-row-title">Фото на проверке</span></button>
         </div>
 
         <div id="menuAdminOnly">
@@ -307,7 +305,6 @@
         <form id="productForm">
           <label class="field-label">Фотографии</label>
           <div class="photo-manager" id="photoManager"></div>
-          <input type="file" id="photoInput" accept="image/*" multiple hidden>
 
           <label class="field-label">Название * <span class="hint">— как в кассе</span></label>
           <input type="text" id="fName" class="input" required placeholder="Хот-дог датский">
@@ -695,28 +692,7 @@
     </div>
   </div>
 
-  <!-- Дозаполнить витрину: товары без фото → снять камерой (для сотрудников) -->
-  <div class="sheet-backdrop" id="photoFillSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Дозаполнить фото</h2>
-        <p class="muted">Товары без фото. Сфотографируй те, что перед тобой на полке —
-        фото сразу появится у всех и в витрине.</p>
-        <label class="check-row" style="border:none;padding:6px 2px 12px">
-          <input type="checkbox" class="check-cb" id="cleanPhotosToggle">
-          <span class="check-text">Чистый белый фон <span class="hint">— вырезать фон (пробно; первый раз грузится дольше)</span></span>
-        </label>
-        <div class="banner banner-info" id="photoFillCount"></div>
-        <input type="search" id="photoFillSearch" class="input" placeholder="Найти товар по названию или коду…" autocomplete="off">
-        <div id="photoFillList"></div>
-        <input type="file" id="photoFillInput" accept="image/*" capture="environment" hidden>
-        <button class="btn btn-ghost sheet-close" data-close="photoFillSheet">Закрыть</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
+<!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
   <div class="sheet-backdrop" id="filterSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" data-no-back>
       <div class="sheet-handle"></div>
