@@ -20,6 +20,7 @@ import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare 
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { applyGuestMode, openAsk, openPriceReport, openStore, removeReport, savePriceReport, sendAsk, sendReports } from './guest.js';
 import { clearShop, openShop, removeShop, renderShopBar, shareShop, shopDone, shopQty, syncShopButton, toggleShop } from './shopping.js';
+import { checkGuestNews, initNews, newsProduct, openNews, toggleWait } from './news.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -959,6 +960,16 @@ function bindEvents() {
     toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
   });
   $('shopOpen').addEventListener('click', openShop);
+  // что изменилось с прошлого захода: появилось нужное, подешевели товары
+  $('newsBanner').addEventListener('click', openNews);
+  $('btnWait').addEventListener('click', () => toggleWait(ui.currentProduct));
+  $('newsBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-news-open]');
+    if (!b) return;
+    closeSheet('newsSheet');
+    const p = newsProduct(b.dataset.newsOpen);
+    if (p) openProduct(p);
+  });
   $('shopShare').addEventListener('click', shareShop);
   $('shopClear').addEventListener('click', clearShop);
   $('shopBody').addEventListener('click', (e) => {
@@ -1076,6 +1087,7 @@ async function init() {
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
   applyGuestMode();    // без пароля человек видит каталог как покупатель
   renderShopBar();     // список покупок мог остаться с прошлого захода
+  initNews();          // сравнение с прошлым заходом (покупателю)
   watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
@@ -1164,6 +1176,7 @@ async function init() {
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
+  safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
   openFromHash(); // если открыли по ссылке на товар — показываем его
   runQuickActionFromUrl();
 }
