@@ -227,7 +227,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     const body = document.getElementById('newsBody').innerText.replace(/\s+/g, ' ');
     return { open: !document.getElementById('newsSheet').hidden, body };
   });
-  chk(newsSheet.open && /Снова в продаже/.test(newsSheet.body), 'в списке есть раздел «снова в продаже»');
+  // заголовки разделов рисуются заглавными — сверяем без учёта регистра
+  chk(newsSheet.open && /снова в продаже/i.test(newsSheet.body), 'в списке есть раздел «снова в продаже»');
   chk(/было 120/.test(newsSheet.body), `и старая цена рядом с новой (${newsSheet.body.slice(0, 90)})`);
 
   // ── 8. После входа сотрудника всё рабочее возвращается ──
