@@ -1,6 +1,6 @@
 // Каждое устройство помнит свои настройки: вид списка, раздел, тему,
 // избранное, фильтры. Ничего не улетает на сервер и не мешает другому телефону.
-const { chromium, newPage, runner } = require('./helpers');
+const { chromium, newPage, asOwner, runner } = require('./helpers');
 
 const products = [...Array(6)].map((_, i) => ({
   id: 'p' + i, name: 'Товар ' + i, code: String(1300 + i), group_id: 'g1',
@@ -14,6 +14,9 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
 
   // ── ПЕРВОЕ устройство: меняем настройки ──
   const one = await newPage(b, { products, groups });
+  // настройки вида — история сотрудника: входим, иначе каталог в режиме
+  // покупателя и переключателя вида там нет
+  await asOwner(one.page, {});
   await one.page.waitForTimeout(400);
   await one.page.click('#viewToggleBtn');                       // плотные
   await one.page.click('#viewToggleBtn'); await one.page.waitForTimeout(300);   // список

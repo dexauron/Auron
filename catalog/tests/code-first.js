@@ -15,6 +15,9 @@ const groups = [{ id: 'g1', name: 'Выпечка и фастфуд', sort_order
   const b = await chromium.launch();
   const { chk, done } = runner('БЫСТРЫЙ ПУТЬ К КОДУ');
   const { page, errs } = await newPage(b, { products, groups });
+  // это проверка про СОТРУДНИКА у кассы: покупателю каталог показывается
+  // списком без переключателя вида, поэтому сначала входим
+  await asOwner(page, {});
   await page.waitForTimeout(400);
 
   const fits = () => page.evaluate(() => [...document.querySelectorAll('#productGrid .card')]
