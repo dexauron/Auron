@@ -1745,3 +1745,13 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
     repeating-linear-gradient(45deg, var(--accent) 0 1px, transparent 1px 5px),
     repeating-linear-gradient(-45deg, var(--accent) 0 1px, transparent 1px 5px);
 }
+
+/* Смахивание строки списка покупок влево. Под строкой заранее лежит красная
+   подложка «Убрать» — она проявляется ровно настолько, насколько уехал палец */
+.swipe-wrap { position: relative; overflow: hidden; }
+.swipe-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 18px; background: var(--neg); color: #fff; font-weight: 600; font-size: 15px;
+}
+.swipe-wrap .shop-row { position: relative; background: var(--surface); will-change: transform; }
+.swipe-wrap .shop-row.swipe-armed { box-shadow: -6px 0 12px rgba(0, 0, 0, .12); }
