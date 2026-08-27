@@ -12,7 +12,7 @@
  * Так сотрудник не остаётся без инструмента, а записи не теряются. */
 
 import { $, state } from './store.js';
-import { closeSheet, esc, moneyNum, moneyText, openSheet, supplierById, toast } from './core.js';
+import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { ic } from './icons.js';
 import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
@@ -282,7 +282,7 @@ export function openOrderForm(id, dayISO, prefill) {
   $('ordPlaced').value = o ? String(o.placed_at || '').slice(0, 10) : todayISO();
   // тап по дню недели — сразу заказ на этот день, без лишней возни
   $('ordDue').value = o ? String(o.due_at || '').slice(0, 10) : (dayISO || addDays(todayISO(), 3));
-  $('ordAmount').value = o && o.amount != null ? moneyText(String(o.amount)) : '';
+  $('ordAmount').value = o ? (o.amount ?? '') : '';
   $('ordWho').value = o ? (o.who || '') : deviceName();
   $('ordNote').value = o ? (o.note || '') : ((prefill && prefill.note) || '');
   renderOrderItems();
@@ -301,7 +301,7 @@ function readForm() {
     supplier_name: (supplierById(supplier_id) || {}).name || '',
     placed_at: $('ordPlaced').value || todayISO(),
     due_at: $('ordDue').value || '',
-    amount: moneyNum($('ordAmount').value),
+    amount: Number(String($('ordAmount').value).replace(',', '.')) || 0,
     who: $('ordWho').value.trim() || deviceName(),
     note: $('ordNote').value.trim(),
     items: formItems.map((x) => ({ ...x })),

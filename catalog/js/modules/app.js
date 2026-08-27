@@ -1,14 +1,14 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason } from './publish.js';
+import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, compressImage, createCompetitor, dedupProducts, findProductPhoto, isOwner, openPhotoFill, photoCandidates, photoFillPick, renderPhotoFillList, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -23,9 +23,6 @@ import { clearRestock, openRestock, orderFromRestock, removeRestock, renderResto
 /* ── События ──────────────────────────────────── */
 
 function bindEvents() {
-  // Суммы во всех полях ввода пишутся с разделителями разрядов: 6 000, 1 000 000
-  ['ordAmount', 'compPrice', 'calcPrice', 'priceMin', 'priceMax'].forEach((id) => attachMoneyInput($(id)));
-
   // Поиск
   const input = $('searchInput');
   let debounce;
@@ -149,8 +146,7 @@ function bindEvents() {
   // Диапазон цены — применяется на лету по мере ввода
   let priceDeb;
   const applyPrice = () => {
-    const mn = $('priceMin').value.trim() ? moneyNum($('priceMin').value) : NaN;
-    const mx = $('priceMax').value.trim() ? moneyNum($('priceMax').value) : NaN;
+    const mn = parseFloat($('priceMin').value); const mx = parseFloat($('priceMax').value);
     state.priceMin = Number.isFinite(mn) ? mn : null;
     state.priceMax = Number.isFinite(mx) ? mx : null;
     state.renderLimit = PAGE_SIZE;
@@ -621,7 +617,7 @@ function bindEvents() {
         closeSheet('staffPassSheet');
         toast('Пароль сотрудника сохранён Теперь сотрудник входит этим паролем');
       } catch (err) {
-        $('staffPassError').textContent = err.friendly || 'Не удалось опубликовать.';
+        $('staffPassError').textContent = 'Не удалось опубликовать: ' + (err.message || err) + '. Проверь GitHub-ключ.';
         $('staffPassError').hidden = false;
       } finally { btn.disabled = false; btn.textContent = 'Сохранить'; }
       return;
@@ -649,9 +645,6 @@ function bindEvents() {
   // адрес …/catalog/#publish. Публикация всё равно требует GitHub-ключ, поэтому
   // открывать окно безопасно — без ключа ничего не выложится. Витрину берём из
   // сохранённой копии каталога (state.products), сервер не нужен.
-  // Плашка «не опубликовалось» ведёт туда, где вставляют ключ и жмут «Опубликовать»
-  $('publishBanner').addEventListener('click', () => openPublishSheet());
-
   function maybeOpenPublishByHash() { if (location.hash === '#publish' || location.hash === '#gh') openPublishSheet(); }
   window.addEventListener('hashchange', maybeOpenPublishByHash);
   setTimeout(maybeOpenPublishByHash, 400);
@@ -1144,7 +1137,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _ghReason: ghReason };
+    _scanRestock: scanToRestock };
 }
 
 init();

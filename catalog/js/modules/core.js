@@ -32,53 +32,6 @@ export const cmpRu = new Intl.Collator('ru').compare;
 // правила языка для цифр не нужны.
 export const cmpStr = (a, b) => (a < b ? -1 : (a > b ? 1 : 0));
 
-/* ── Деньги: разделители тысяч ──────────────────────────────────────────────
- * «100000» и «1000000» на телефоне различаются только длиной, и ошибиться в
- * разряде проще простого. Поэтому суммы и в тексте, и В САМИХ ПОЛЯХ ВВОДА
- * пишутся с пробелом: 100 000, 1 000 000. Пробел неразрывный — сумма никогда
- * не переносится на другую строку посередине.
- * moneyNum — обратное действие: из «1 234,50» получить число 1234.5. */
-const NBSP = '\u00A0';
-export function moneyText(v) {
-  const raw = String(v ?? '').replace(/[^\d.,-]/g, '');
-  if (!raw) return '';
-  const neg = raw.startsWith('-');
-  const body = neg ? raw.slice(1) : raw;
-  const sep = body.search(/[.,]/);
-  const int = (sep === -1 ? body : body.slice(0, sep)).replace(/\D/g, '');
-  const rest = sep === -1 ? '' : body.slice(sep).replace(/[^\d.,]/g, '').replace(/[.,]/g, (m, i, str) => (i === str.search(/[.,]/) ? ',' : ''));
-  const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
-  return (neg ? '-' : '') + grouped + rest;
-}
-export const moneyNum = (v) => {
-  const n = Number(String(v ?? '').replace(/[^\d.,-]/g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : 0;
-};
-
-/* Поле ввода суммы: пока человек печатает, число само разбивается на разряды.
- * Курсор остаётся там же по смыслу — считаем цифры слева от него, а не символы,
- * иначе после вставки пробела курсор прыгает. */
-export function attachMoneyInput(el) {
-  if (!el || el.dataset.money) return;
-  el.dataset.money = '1';
-  const digitsBefore = (str, pos) => { let n = 0; for (let i = 0; i < pos && i < str.length; i++) if (str[i] >= '0' && str[i] <= '9') n++; return n; };
-  const posAfter = (str, n) => {
-    if (n <= 0) return 0;
-    let c = 0;
-    for (let i = 0; i < str.length; i++) if (str[i] >= '0' && str[i] <= '9') { c++; if (c === n) return i + 1; }
-    return str.length;
-  };
-  el.addEventListener('input', () => {
-    const before = el.value;
-    const caret = el.selectionStart == null ? before.length : el.selectionStart;
-    const keep = digitsBefore(before, caret);
-    const after = moneyText(before);
-    if (after === before) return;
-    el.value = after;
-    try { const p2 = posAfter(after, keep); el.setSelectionRange(p2, p2); } catch (e) { /* поле без курсора */ }
-  });
-}
-
 export const norm = (s) => String(s ?? '').toLowerCase().replace(/ё/g, 'е').trim();
 
 // «свободная» нормализация: убирает всё, кроме букв и цифр —
@@ -236,7 +189,7 @@ const ERR_KEY = 'wm_errors_v1';
 const ERR_KEEP = 20;
 let lastErrAt = 0;
 
-export function logError(where, err) {
+function logError(where, err) {
   const msg = String((err && (err.message || err)) || 'неизвестная ошибка').slice(0, 300);
   try {
     const list = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');

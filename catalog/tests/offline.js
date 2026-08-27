@@ -41,7 +41,7 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     const shell = names.find((n) => n.startsWith('wm-catalog-'));
     const c = await caches.open(shell);
     const keys = (await c.keys()).map((r) => new URL(r.url).pathname);
-    return { shell, count: keys.length, hasApp: keys.some((k) => k.endsWith('js/modules/app.js')), hasXlsx: keys.some((k) => k.includes('vendor/xlsx.min.js')) };
+    return { shell, count: keys.length, hasApp: keys.some((k) => k.endsWith('js/modules/app.js')), hasXlsx: keys.some((k) => k.includes('xlsx')) };
   });
   chk(cached.hasApp, `оболочка сохранена на телефоне (${cached.count} файлов)`);
   chk(!cached.hasXlsx, 'разборщик Excel не занимает место, пока не понадобился');
@@ -54,12 +54,6 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     .then(() => true).catch(() => false);
   const offlineMs = Date.now() - t;
   chk(opened, `без связи каталог всё равно открывается (${offlineMs} мс)`);
-  // Ждём, пока карточка не только появится, но и наполнится: сразу после
-  // открытия сетка может успеть нарисовать только «заготовки» без текста.
-  await page.waitForFunction(() => {
-    const c = document.querySelector('.grid .card');
-    return c && /Товар номер/.test(c.innerText);
-  }, { timeout: 15000 }).catch(() => {});
   const shown = await page.evaluate(() => ({
     cards: document.querySelectorAll('.grid .card').length,
     text: (document.querySelector('.grid .card') || {}).innerText || '',
