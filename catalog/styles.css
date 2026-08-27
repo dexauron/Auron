@@ -1072,6 +1072,9 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   color: var(--text-2); font-family: inherit;
   font-size: 10px; font-weight: 500; letter-spacing: -.01em;
 }
+/* скрытый раздел (не для этой роли) не должен занимать место: у .tab свой
+   display, и он перебивал обычное «скрыто» — панель тогда переносилась */
+.tabbar .tab[hidden] { display: none; }
 .tabbar .tab .tab-ico { font-size: 20px; line-height: 1; }
 /* подпись не переносится и не расталкивает соседей: длинная — с многоточием */
 .tabbar .tab .tab-txt {
@@ -1586,3 +1589,9 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 /* Плашка «сохранено, но не опубликовано» — на неё нажимают, чтобы починить */
 .banner-publish { display: block; width: 100%; text-align: left; border: none; font: inherit; cursor: pointer; }
 .banner-publish:active { opacity: .6; }
+
+/* ── Покупатель (зашёл без пароля) ───────────────────────────────────────────
+   Ему каталог показывается списком и без фотографий: нужны название, код,
+   цена, наличие и дата поступления, а не витрина. Всё рабочее прячется. */
+.guest .photo-strip, .guest .photo-dots { display: none !important; }
+.guest #viewToggleBtn { display: none; }   /* вид всегда список — переключать нечего */
