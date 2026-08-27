@@ -58,7 +58,14 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   // Раньше сюда вела вкладка «Ещё», теперь на её месте «Фильтры».
   const openDevice = async (page) => {
     await page.click('#adminBtn'); await page.waitForTimeout(350);
-    await page.click('#loginDevice'); await page.waitForTimeout(450);
+    // без входа кнопка живёт в окне входа, после входа — в меню
+    await page.evaluate(async () => {
+      const btn = document.getElementById('loginSheet').hidden
+        ? document.getElementById('menuDevice') : document.getElementById('loginDevice');
+      btn.click();
+      await new Promise((r) => setTimeout(r, 100));
+    });
+    await page.waitForTimeout(450);
   };
   await openDevice(two.page);
   const dev = await two.page.evaluate(() => ({
