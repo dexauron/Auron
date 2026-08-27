@@ -1,7 +1,7 @@
 // Импорт из 1С: разбор файлов и слияние в каталог
 
 import { $, CFG, state, ui } from './store.js';
-import { esc, norm, toast, cmpRu } from './core.js';
+import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
 import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
@@ -172,6 +172,23 @@ function svUploadContacts(list) {
   state.contacts = state.contacts || {};
   for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
 }
+/* Публикация не удалась. Записанное никуда не делось — оно на телефоне, — но
+ * сказать об этом надо по-человечески и дать понятное действие, а не показывать
+ * код ответа сервера. Плашка держится вверху экрана, пока не опубликуется. */
+function showPublishTrouble(err) {
+  const el = $('publishBanner');
+  if (!el) return;
+  if (!err) { el.hidden = true; return; }
+  logError('публикация', err.tech || err);   // подробности — в журнал, не человеку
+  const why = err.friendly || 'Не получилось опубликовать.';
+  const fix = err.code === 'token' ? ' Нажми, чтобы вставить новый ключ.'
+    : err.code === 'wait' ? ' Нажми, чтобы попробовать ещё раз.'
+      : ' Нажми, чтобы открыть настройки публикации.';
+  el.textContent = 'Сохранено на телефоне, но не опубликовано. ' + why + fix;
+  el.hidden = false;
+  toast('Сохранено на телефоне — опубликовать не вышло');
+}
+
 // После правки в памяти — пересобрать индекс, перерисовать и опубликовать на GitHub.
 export async function svSaveAndPublish(okMsg) {
   state.products.sort((a, b) => cmpRu(a.name, b.name));
@@ -181,8 +198,13 @@ export async function svSaveAndPublish(okMsg) {
   // Каталог уезжает кусками, и их бывает много — показываем ход, чтобы человек
   // не смотрел в неподвижный экран и не думал, что всё зависло.
   const onProgress = (done, total) => { if (total > 3) toast(`Публикую… ${done} из ${total}`); };
-  try { await publishFull(ui.secretPw, { onProgress }); if (okMsg) toast(okMsg); }
-  catch (e) { toast('Сохранено, но опубликовать не удалось: ' + (e.message || e) + '. Проверь GitHub-ключ.'); }
+  try {
+    await publishFull(ui.secretPw, { onProgress });
+    showPublishTrouble(null);
+    if (okMsg) toast(okMsg);
+  } catch (e) {
+    showPublishTrouble(e);
+  }
 }
 
 // Влить справочник штрихкодов: товар ищем по коду/названию, коды ДОБАВЛЯЕМ
@@ -937,7 +959,10 @@ export async function smartRun() {
     smartLog('Сохраняем на GitHub…');
     $('smartMissing').hidden = !ui.lastMissing.length;
     try { await publishFull(ui.secretPw); smartLog(`Готово! Загружено файлов: ${okCount} из ${todo.length}. Каталог обновлён и опубликован`); toast('Каталог обновлён'); }
-    catch (err) { smartLog('Каталог собран, но публикация не удалась: ' + (err.message || err) + '. Проверь GitHub-ключ.'); toast('Не удалось опубликовать'); }
+    catch (err) {
+      smartLog('Каталог собран, но не опубликован. ' + (err.friendly || err.message || err));
+      showPublishTrouble(err);
+    }
     btn.disabled = false; btn.hidden = true;
 }
 
