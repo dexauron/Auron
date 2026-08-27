@@ -1,6 +1,6 @@
 // Связывание всего вместе и запуск
 
-import { $, CFG, PAGE_SIZE, state, ui } from './store.js';
+import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
@@ -18,8 +18,9 @@ import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
-import { applyGuestMode, openAsk, openPriceReport, openStore, removeReport, savePriceReport, sendAsk, sendReports } from './guest.js';
-import { clearShop, openShop, removeShop, renderShopBar, shareShop, shopDone, shopQty, syncShopButton, toggleShop } from './shopping.js';
+import { bindGuest, openStore } from './guest.js';
+import { bindShopping } from './shopping.js';
+import { bindNews, checkGuestNews } from './news.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -950,40 +951,10 @@ function bindEvents() {
     if (day) openOrderForm(null, day.dataset.ordDay);
   });
 
-  // ── Покупатель: список покупок ──
-  $('btnShopAdd').addEventListener('click', () => {
-    const p = ui.currentProduct;
-    if (!p) return;
-    const added = toggleShop(p);
-    syncShopButton(p);
-    toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
-  });
-  $('shopOpen').addEventListener('click', openShop);
-  $('shopShare').addEventListener('click', shareShop);
-  $('shopClear').addEventListener('click', clearShop);
-  $('shopBody').addEventListener('click', (e) => {
-    const done = e.target.closest('[data-shop-done]');
-    if (done) { shopDone(done.dataset.shopDone); return; }
-    const minus = e.target.closest('[data-shop-minus]');
-    if (minus) { shopQty(minus.dataset.shopMinus, -1); return; }
-    const plus = e.target.closest('[data-shop-plus]');
-    if (plus) { shopQty(plus.dataset.shopPlus, 1); return; }
-    const rm = e.target.closest('[data-shop-rm]');
-    if (rm) removeShop(rm.dataset.shopRm);
-  });
-
-  // ── Покупатель: связь с магазином и подсказки о ценах ──
-  $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
-  $('repSave').addEventListener('click', savePriceReport);
-  $('storeSend').addEventListener('click', sendReports);
-  $('askSend').addEventListener('click', sendAsk);
-  $('emptyAsk').addEventListener('click', () => openAsk(state.query));
-  $('storeBody').addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-rep-rm]');
-    if (rm) { removeReport(rm.dataset.repRm); return; }
-    if (e.target.closest('#storeAsk')) openAsk('');
-  });
-  attachMoneyInput($('repPrice'));
+  // ── Покупатель: список покупок, связь с магазином, что нового ──
+  bindShopping();
+  bindGuest();
+  bindNews(openProduct);
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
@@ -1074,8 +1045,6 @@ function bindEvents() {
 async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
-  applyGuestMode();    // без пароля человек видит каталог как покупатель
-  renderShopBar();     // список покупок мог остаться с прошлого захода
   watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
@@ -1164,6 +1133,7 @@ async function init() {
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
+  safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
   openFromHash(); // если открыли по ссылке на товар — показываем его
   runQuickActionFromUrl();
 }
@@ -1184,7 +1154,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _ghReason: ghReason };
+    _scanRestock: scanToRestock, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews };
 }
 
 init();

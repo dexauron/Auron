@@ -39,6 +39,11 @@
   --radius-xs: 8px;
 }
 
+/* «Скрыто» должно скрывать. У полос, плашек и вкладок задан свой display
+   (flex/grid), и он перебивал атрибут hidden: пустая полоска списка покупок
+   оставалась на экране и перехватывала нажатия по нижней панели. */
+[hidden] { display: none !important; }
+
 @media (prefers-color-scheme: light) {
   :root {
     color-scheme: light;

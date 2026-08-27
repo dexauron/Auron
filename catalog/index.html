@@ -70,6 +70,8 @@
     <button class="btn btn-primary btn-sm" id="installGo" hidden>Поставить</button>
     <button class="install-close" id="installHide" aria-label="Скрыть"><i data-ic="close"></i></button>
   </div>
+  <!-- Покупателю: появилось то, что он ждал, и что подешевело -->
+  <button class="banner banner-today" id="newsBanner" hidden></button>
   <!-- Что ждёт сегодня: поставки и просрочка. Видно сразу при входе, тап — к заказам -->
   <button class="banner banner-today" id="todayBanner" hidden></button>
 
@@ -84,7 +86,7 @@
       <div class="empty-title">Ничего не нашлось</div>
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
       <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
-      <button class="btn btn-primary empty-reset guest-only" id="emptyAsk" hidden>Спросить в магазине</button>
+      <button class="btn btn-primary empty-reset" id="emptyAsk" hidden>Спросить в магазине</button>
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
@@ -153,6 +155,7 @@
         <button class="btn btn-secondary btn-block purchase-only" id="btnCompareAdd">К сравнению</button>
         <button class="btn btn-secondary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
         <button class="btn btn-primary btn-block guest-only" id="btnShopAdd">В список покупок</button>
+        <button class="btn btn-secondary btn-block guest-only" id="btnWait" hidden>Сообщить, когда появится</button>
         <button class="btn btn-secondary btn-block guest-only" id="btnReportPrice">Видел дешевле в другом магазине</button>
         <button class="btn btn-secondary btn-block" id="btnShareProduct">Поделиться товаром</button>
         <div id="sheetSimilar"></div>
@@ -844,6 +847,19 @@
         <p class="ios-note">Забытый пароль восстановить некому — запишите новый там,
         где не потеряете.</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Что изменилось с прошлого захода (покупатель) -->
+  <div class="sheet-backdrop" id="newsSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Что нового</h2>
+        <button class="ios-nav-btn strong" data-close="newsSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="newsBody"></div>
     </div>
   </div>
 

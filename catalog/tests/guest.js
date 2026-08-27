@@ -30,6 +30,9 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(grid.photos === 0, `фотографий в списке нет (${grid.photos})`);
   chk(grid.toggle === 'none', 'переключателя вида нет — покупателю нечего переключать');
   chk(grid.strips === 0, `ленты с фотографиями скрыты (${grid.strips})`);
+  // пустых плашек быть не должно: однажды «что нового» висела пустой белой полосой
+  const emptyBanner = await page.evaluate(() => document.getElementById('newsBanner').hidden);
+  chk(emptyBanner, 'плашка «что нового» не показывается, когда новостей нет');
   chk(/89|75/.test(grid.text), `цена видна (${grid.text.slice(0, 60)})`);
   chk(/101|102/.test(grid.text), 'код товара виден');
   chk(/Есть|Мало|Нет/.test(grid.text), 'видно, есть ли товар в магазине');
@@ -182,7 +185,56 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/wa\.me\/79640616601/.test(ask.opened) && /Милка/.test(decodeURIComponent(ask.opened)),
     'вопрос уходит владельцу в WhatsApp готовым текстом');
 
-  // ── 7. После входа сотрудника всё рабочее возвращается ──
+  // ── 7. «Сообщить, когда появится» и «что подешевело» ──
+  const wait = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const inp = document.getElementById('searchInput');
+    inp.value = ''; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    window.location.hash = '#p=p2';           // кефир, которого нет в наличии
+    await new Promise((r) => setTimeout(r, 600));
+    const btn = document.getElementById('btnWait');
+    const shownOut = !btn.hidden;
+    btn.click();
+    await new Promise((r) => setTimeout(r, 250));
+    const saved = JSON.parse(localStorage.getItem('wm_guest_wait_v1') || '[]');
+    window.location.hash = '';
+    await new Promise((r) => setTimeout(r, 150));
+    window.location.hash = '#p=p1';           // молоко есть — кнопки быть не должно
+    await new Promise((r) => setTimeout(r, 600));
+    return { shownOut, saved, hiddenForInStock: document.getElementById('btnWait').hidden };
+  });
+  chk(wait.shownOut, 'у товара, которого нет, есть кнопка «сообщить, когда появится»');
+  chk(wait.saved.length === 1 && wait.saved[0].id === 'p2', `ожидание запомнено (${wait.saved.length})`);
+  chk(wait.hiddenForInStock, 'у товара, который есть, такой кнопки нет — она там бессмысленна');
+
+  // товар завезли и цену снизили — при следующем заходе это видно
+  const later = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    const P = window.WM_PUBLISH; const s2 = P._state();
+    // цены прошлого захода
+    await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: { p1: 120, p2: 75 } });
+    s2.products.find((p) => p.id === 'p2').stock = 5;      // кефир завезли
+    await P._checkGuestNews();
+    await new Promise((r) => setTimeout(r, 300));
+    const banner = document.getElementById('newsBanner');
+    return { shown: !banner.hidden, text: banner.innerText.replace(/\s+/g, ' ') };
+  });
+  chk(later.shown, 'плашка «что нового» появилась');
+  chk(/Появилось/.test(later.text) && /Кефир/.test(later.text), `сказано, что ожидаемое появилось (${later.text})`);
+  chk(/подешевел/.test(later.text), `и что цена упала (89 против 120) (${later.text})`);
+
+  const newsSheet = await page.evaluate(async () => {
+    document.getElementById('newsBanner').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const body = document.getElementById('newsBody').innerText.replace(/\s+/g, ' ');
+    return { open: !document.getElementById('newsSheet').hidden, body };
+  });
+  // заголовки разделов рисуются заглавными — сверяем без учёта регистра
+  chk(newsSheet.open && /снова в продаже/i.test(newsSheet.body), 'в списке есть раздел «снова в продаже»');
+  chk(/было 120/.test(newsSheet.body), `и старая цена рядом с новой (${newsSheet.body.slice(0, 90)})`);
+
+  // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
   await page.waitForTimeout(400);
   const staff = await page.evaluate(() => ({

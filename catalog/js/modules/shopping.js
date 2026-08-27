@@ -37,7 +37,7 @@ function total(list) {
   }, 0);
 }
 
-export function toggleShop(p) {
+function toggleShop(p) {
   if (!p) return false;
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
@@ -48,7 +48,7 @@ export function toggleShop(p) {
   return true;
 }
 
-export function shopQty(id, delta) {
+function shopQty(id, delta) {
   const list = read();
   const row = list.find((x) => x.id === id);
   if (!row) return;
@@ -59,7 +59,7 @@ export function shopQty(id, delta) {
 }
 
 // вычеркнуть: в зале удобно отмечать, что уже положил в корзину
-export function shopDone(id) {
+function shopDone(id) {
   const list = read();
   const row = list.find((x) => x.id === id);
   if (!row) return;
@@ -69,13 +69,13 @@ export function shopDone(id) {
   renderShopBar();
 }
 
-export function removeShop(id) {
+function removeShop(id) {
   write(read().filter((x) => x.id !== id));
   renderShop();
   renderShopBar();
 }
 
-export function clearShop() {
+function clearShop() {
   if (!read().length) return;
   if (!confirm('Очистить список покупок?')) return;
   write([]);
@@ -85,7 +85,7 @@ export function clearShop() {
 
 /* Полоска над нижней панелью: сколько отмечено и на какую сумму. Она и есть
  * ответ на вопрос «сколько выйдет» — видно, не открывая список. */
-export function renderShopBar() {
+function renderShopBar() {
   ui.renderShopBar = renderShopBar;   // звать из общей перерисовки без встречного импорта
   const bar = $('shopBar');
   if (!bar) return;
@@ -98,7 +98,7 @@ export function renderShopBar() {
   }
 }
 
-export function openShop() {
+function openShop() {
   renderShop();
   openSheet('shopSheet');
 }
@@ -141,7 +141,7 @@ function renderShop() {
 }
 
 // отправить список близким: пусть купят по дороге
-export async function shareShop() {
+async function shareShop() {
   const list = read().filter((x) => !x.done);
   if (!list.length) { toast('Список пуст'); return; }
   const text = 'Список покупок:\n' + list.map((x) => {
@@ -162,4 +162,31 @@ export function syncShopButton(p) {
   if (!b || !p) return;
   b.textContent = inShop(p.id) ? 'Убрать из списка покупок' : 'В список покупок';
   ui.shopFor = p.id;
+}
+
+/* Обработчики модуль вешает сам: раньше все до одного жили в app.js, и он
+ * разросся за предел, который держит проверка «модули». Логика списка покупок
+ * и кнопки к ней — это одно целое, им и место рядом. */
+export function bindShopping() {
+  $('btnShopAdd').addEventListener('click', () => {
+    const p = ui.currentProduct;
+    if (!p) return;
+    const added = toggleShop(p);
+    syncShopButton(p);
+    toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
+  });
+  $('shopOpen').addEventListener('click', openShop);
+  $('shopShare').addEventListener('click', shareShop);
+  $('shopClear').addEventListener('click', clearShop);
+  $('shopBody').addEventListener('click', (e) => {
+    const done = e.target.closest('[data-shop-done]');
+    if (done) { shopDone(done.dataset.shopDone); return; }
+    const minus = e.target.closest('[data-shop-minus]');
+    if (minus) { shopQty(minus.dataset.shopMinus, -1); return; }
+    const plus = e.target.closest('[data-shop-plus]');
+    if (plus) { shopQty(plus.dataset.shopPlus, 1); return; }
+    const rm = e.target.closest('[data-shop-rm]');
+    if (rm) removeShop(rm.dataset.shopRm);
+  });
+  renderShopBar();   // список мог остаться с прошлого захода
 }
