@@ -15,6 +15,11 @@ const groups = [{ id: 'g1', name: 'Выпечка и фастфуд', sort_order
   const b = await chromium.launch();
   const { chk, done } = runner('БЫСТРЫЙ ПУТЬ К КОДУ');
   const { page, errs } = await newPage(b, { products, groups });
+  // это проверка про СОТРУДНИКА у кассы: покупателю каталог показывается
+  // списком без переключателя вида, поэтому сначала входим — именно
+  // сотрудником, а не владельцем: ниже проверяется, что админских фильтров
+  // («Без фото», «Без ШК») сотруднику не показывают
+  await page.evaluate(() => { const P = window.WM_PUBLISH; P.applyStaff('pw'); P.renderAll(); });
   await page.waitForTimeout(400);
 
   const fits = () => page.evaluate(() => [...document.querySelectorAll('#productGrid .card')]

@@ -36,7 +36,11 @@ export function openProduct(p) {
   updateFavButton(p);
   $('sheetName').textContent = p.name;
 
-  const photos = (p.photos || []).filter((u) => u && String(u).trim());
+  // Покупателю (тот, кто не вводил пароль) фотографии не показываем: решение
+  // владельца — у него каталог списком, только нужные сведения.
+  const photos = state.session ? (p.photos || []).filter((u) => u && String(u).trim()) : [];
+  $('sheetPhotos').hidden = !state.session;
+  $('sheetDots').hidden = !state.session;
   $('sheetPhotos').innerHTML = photos.length
     ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
     : `<div class="photo-placeholder">${ic('box', 'ic-ph')}</div>`;
@@ -76,6 +80,8 @@ export function openProduct(p) {
   // покупателям без входа их не показываем
   // код товара виден всем — по нему покупатель объяснит кассиру, что берёт
   if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
+  // когда товар завезли — видно всем: покупателю это говорит о свежести
+  if (p.arrival_at) rows.push(fieldRow('Поступил', fmtDate(p.arrival_at)));
   if (state.session) {
     if (p.article) rows.push(fieldRow('Артикул', p.article, false, true));
     // У товара может быть несколько штрихкодов: на штуку, на упаковку, на блок.
@@ -96,7 +102,6 @@ export function openProduct(p) {
       if (list) rows.push(fieldRow('Фасовки', list));
     }
     if (p.department) rows.push(fieldRow('Отдел', p.department));
-    if (p.arrival_at) rows.push(fieldRow('Последнее поступление', fmtDate(p.arrival_at)));
     if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
   }
   if (!rows.length && state.session) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
@@ -134,6 +139,7 @@ export async function shareProduct(p) {
 const nameWords = (n) => norm(n || '').split(/[^0-9a-zа-яё]+/i).filter((w) => w.length >= 3);
 function renderSimilar(p) {
   const box = $('sheetSimilar');
+  if (box && !state.session) { box.innerHTML = ''; return; }   // лента с фото — не для покупателя
   if (!box) return;
   const pw = nameWords(p.name);
   if (!pw.length) { box.innerHTML = ''; return; }

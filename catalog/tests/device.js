@@ -1,6 +1,6 @@
 // Каждое устройство помнит свои настройки: вид списка, раздел, тему,
 // избранное, фильтры. Ничего не улетает на сервер и не мешает другому телефону.
-const { chromium, newPage, runner } = require('./helpers');
+const { chromium, newPage, asOwner, runner } = require('./helpers');
 
 const products = [...Array(6)].map((_, i) => ({
   id: 'p' + i, name: 'Товар ' + i, code: String(1300 + i), group_id: 'g1',
@@ -14,6 +14,9 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
 
   // ── ПЕРВОЕ устройство: меняем настройки ──
   const one = await newPage(b, { products, groups });
+  // настройки вида — история сотрудника: входим, иначе каталог в режиме
+  // покупателя и переключателя вида там нет
+  await asOwner(one.page, {});
   await one.page.waitForTimeout(400);
   await one.page.click('#viewToggleBtn');                       // плотные
   await one.page.click('#viewToggleBtn'); await one.page.waitForTimeout(300);   // список
@@ -55,7 +58,14 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   // Раньше сюда вела вкладка «Ещё», теперь на её месте «Фильтры».
   const openDevice = async (page) => {
     await page.click('#adminBtn'); await page.waitForTimeout(350);
-    await page.click('#loginDevice'); await page.waitForTimeout(450);
+    // без входа кнопка живёт в окне входа, после входа — в меню
+    await page.evaluate(async () => {
+      const btn = document.getElementById('loginSheet').hidden
+        ? document.getElementById('menuDevice') : document.getElementById('loginDevice');
+      btn.click();
+      await new Promise((r) => setTimeout(r, 100));
+    });
+    await page.waitForTimeout(450);
   };
   await openDevice(two.page);
   const dev = await two.page.evaluate(() => ({
@@ -87,6 +97,9 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
     try { localStorage.setItem('wm_catalog', '{"x":1}'); localStorage.setItem('wm_gh_token', 'tok'); } catch (e) { /* */ }
     document.getElementById('deviceSheet').hidden = true;      // экран перекрывает кнопки
   });
+  await two.page.waitForTimeout(200);
+  // второй телефон тоже «сотрудник»: у покупателя переключателя вида нет
+  await asOwner(two.page, {});
   await two.page.waitForTimeout(200);
   await two.page.click('#viewToggleBtn'); await two.page.waitForTimeout(200);
   await openDevice(two.page);
