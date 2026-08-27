@@ -160,12 +160,16 @@ export function renderGrid() {
     } else {
       empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
-      empty.querySelector('.empty-text').textContent = filtered
+      /* «Снимите фильтры» человеку, который просто искал словом, — совет ни о
+         чём: никаких фильтров он не включал. Отвечаем по тому, что он сделал. */
+      empty.querySelector('.empty-text').textContent = filtersBesidesQuery()
         ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
         : 'Попробуй написать по-другому или выбери группу';
     }
-    // когда пусто из-за фильтров — предлагаем сбросить одним касанием
-    $('emptyReset').hidden = !(filtered && state.products.length);
+    /* Когда пусто из-за фильтров или поиска — предлагаем сбросить одним
+       касанием. Пустое избранное сюда не относится: сбрасывать там нечего,
+       а кнопка «Сбросить фильтры» просто уводила с раздела. */
+    $('emptyReset').hidden = !(anyFilterActive() && state.products.length);
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
@@ -481,6 +485,14 @@ export function renderAll() {
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+}
+
+// включён ли хоть один настоящий фильтр — поиск словом за фильтр не считаем
+function filtersBesidesQuery() {
+  return !!(state.quick.length || state.selCats.length
+    || state.selGroups.length || state.selSuppliers.length
+    || state.priceMin != null || state.priceMax != null
+    || state.selType || state.arrivalFrom || state.arrivalTo);
 }
 
 // есть ли хоть один активный фильтр/поиск
