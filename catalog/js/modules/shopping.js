@@ -118,7 +118,8 @@ function renderShop() {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const sum = price * (Number(x.qty) || 1);
-    return `<div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
+    return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
+    <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
@@ -131,14 +132,15 @@ function renderShop() {
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
-    </div>`;
+    </div></div>`;
   }).join('');
   const left = list.filter((x) => !x.done).length;
   box.innerHTML = `
     <div class="ord-total">${left} ${plural(left, 'позиция', 'позиции', 'позиций')} · итого <b>${fmtPrice(total(list))}</b></div>
     <div class="ios-group">${rows}</div>
-    <p class="ios-note">Отметил кружком — вычеркнул: удобно в зале. Сумма считается по сегодняшним
-    ценам магазина и по количеству, которое ты поставил.</p>`;
+    <p class="ios-note">Отметил кружком — вычеркнул: удобно в зале. Строку можно смахнуть влево,
+    чтобы убрать. Сумма считается по сегодняшним ценам магазина и по количеству,
+    которое ты поставил.</p>`;
   $('shopShare').hidden = false;
 }
 
