@@ -1,7 +1,7 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
 import { $, PAGE_SIZE, state, ui } from './store.js';
-import { esc, expectPop, groupById, highlight, openSheet, supplierById } from './core.js';
+import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
@@ -359,8 +359,9 @@ export function syncControls() {
     b.classList.toggle('active', state.arrivalTo === todayISO() && state.arrivalFrom === from);
   });
   const pmin = $('priceMin'); const pmax = $('priceMax');
-  if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? state.priceMin : '';
-  if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? state.priceMax : '';
+  // возвращаем в поля читаемый вид: «100 000», а не «100000»
+  if (pmin && document.activeElement !== pmin) pmin.value = state.priceMin != null ? moneyText(String(state.priceMin)) : '';
+  if (pmax && document.activeElement !== pmax) pmax.value = state.priceMax != null ? moneyText(String(state.priceMax)) : '';
   document.querySelectorAll('#pricePresets [data-pmin]').forEach((b) => {
     const mn = b.dataset.pmin === '' ? null : Number(b.dataset.pmin);
     const mx = b.dataset.pmax === '' ? null : Number(b.dataset.pmax);
