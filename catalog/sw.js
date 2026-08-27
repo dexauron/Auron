@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v100';
+const CACHE = 'wm-catalog-v101';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -17,7 +17,7 @@ const DATA = 'wm-data-v1';
  * ожидания у человека, который просто хотел посмотреть цену. Теперь он
  * сохраняется в офлайн-копию при первом настоящем использовании (см. fetch). */
 const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
-  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/xlsx-worker.js', 'js/config.js',
+  'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/modules/guest.js', 'js/xlsx-worker.js', 'js/config.js',
   'manifest.webmanifest',
   'icons/icon-192.png', 'icons/logo-round.png'];
 

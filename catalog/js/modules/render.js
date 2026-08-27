@@ -18,8 +18,10 @@ import { plural } from './competitors.js';
  * через кнопку фильтра, и с главной страницы каталог не «просматривался». */
 
 // Наличие словами — по живому числу остатка, которое есть только у вошедшего.
+/* Метка наличия видна ВСЕМ, включая покупателя: «есть / мало / нет» — это то
+ * же, что человек и так увидит, дойдя до полки, зато экономит ему дорогу.
+ * Число остатка при этом остаётся внутренним и показывается только своим. */
 export function stockLabel(p) {
-  if (!state.session) return null;      // без входа остатки не показываем вовсе
   const st = stockState(p, null);
   if (st === 'in') return { txt: `${ic('check', 'ic-xs')} Есть в магазине`, cls: 'tag-instock', short: 'Есть' };
   if (st === 'low') return { txt: 'Заканчивается', cls: 'tag-lowstock', short: 'Мало' };
@@ -118,10 +120,15 @@ export function renderGrid() {
   const list = visibleProducts();
   const grid = $('productGrid');
   $('loader').hidden = true;
-  grid.classList.toggle('compact', state.view === 'compact');
-  grid.classList.toggle('list', state.view === 'list');
+  /* Покупателю каталог показывается СПИСКОМ и без фотографий (решение
+     владельца): ему нужны название, код, цена, наличие и дата поступления,
+     а не витрина. Сотруднику вид остаётся тот, который он выбрал. */
+  const guest = !state.session;
+  const view = guest ? 'list' : state.view;
+  grid.classList.toggle('compact', view === 'compact');
+  grid.classList.toggle('list', view === 'list');
   // с заголовками сетка перестаёт быть сеткой: колонки живут внутри разделов
-  grid.classList.toggle('grouped', !!state.query && state.view !== 'list');
+  grid.classList.toggle('grouped', !!state.query && view !== 'list');
   grid.classList.remove('skeleton');
   updateResultsCount(list.length);
 
@@ -173,7 +180,7 @@ export function renderGrid() {
   // те же карточки, разложенные по полкам. Только при поиске: когда листаешь
   // каталог целиком, заголовки мешают. В режиме списка тоже не делим — он и
   // так плотный, а сотруднику там нужен код, а не раскладка.
-  const grouped = !!state.query && state.view !== 'list';
+  const grouped = !!state.query && view !== 'list';
   const catOf = (p) => productCategory(p) || OTHER_CAT.name;
   const catIconOf = (n) => catIcon(n);
   const cards = shown.map((p) => {
@@ -197,7 +204,7 @@ export function renderGrid() {
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
-    if (state.view === 'list') {
+    if (view === 'list') {
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
           <div class="card-name">${highlight(p.name, hlTokens)}</div>
@@ -369,6 +376,9 @@ export function syncControls() {
   });
   // разделы для сотрудников/закупок показываем по роли
   document.querySelectorAll('.emp-only').forEach((el) => { el.hidden = !state.session; });
+  // то, что видит только покупатель (связь с магазином, подсказка о цене)
+  document.querySelectorAll('.guest-only').forEach((el) => { el.hidden = !!state.session; });
+  if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
   // подписи кнопок «Группы» и «Поставщики» — со счётчиком выбранного
   const gBtn = $('filterGroupsBtn');
@@ -601,6 +611,8 @@ const MY_MIN_VIEWS = 2;   // случайно открытое один раз �
 function renderMyFrequent() {
   const box = $('myStrip');
   if (!box) return;
+  // «мои частые» — рабочая память сотрудника; покупателю её не показываем
+  if (!state.session) { box.hidden = true; box.innerHTML = ''; return; }
   const show = !state.query && !state.favOnly && !anyFilterActive() && state.tab === 'catalog';
   const pop = state.popularity || {};
   const top = show
@@ -623,6 +635,8 @@ function renderMyFrequent() {
 export function renderNewProducts() {
   const box = $('newStrip');
   if (!box) return;
+  // ленты с фотографиями покупателю не показываем: у него каталог списком
+  if (!state.session) { box.hidden = true; box.innerHTML = ''; return; }
   const show = !state.query && !state.favOnly && !anyFilterActive();
   const top = show ? newProducts() : [];
   if (!top.length) { box.hidden = true; box.innerHTML = ''; return; }

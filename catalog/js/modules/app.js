@@ -18,6 +18,7 @@ import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
+import { applyGuestMode, openPriceReport, openStore, removeReport, savePriceReport, sendReports } from './guest.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -385,6 +386,7 @@ function bindEvents() {
     if (!b) return;
     // «Работа» — окно с делами смены, сетку товаров под ним не трогаем
     if (b.dataset.tab === 'work') { openWork(); return; }
+    if (b.dataset.tab === 'store') { openStore(); return; }
     switchTab(b.dataset.tab);
   });
   // плашка «сегодня поставка» — прямой путь к заказам
@@ -947,6 +949,16 @@ function bindEvents() {
     if (day) openOrderForm(null, day.dataset.ordDay);
   });
 
+  // ── Покупатель: связь с магазином и подсказки о ценах ──
+  $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
+  $('repSave').addEventListener('click', savePriceReport);
+  $('storeSend').addEventListener('click', sendReports);
+  $('storeBody').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-rep-rm]');
+    if (rm) removeReport(rm.dataset.repRm);
+  });
+  attachMoneyInput($('repPrice'));
+
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
   $('btnRestock').addEventListener('click', () => {
@@ -1036,6 +1048,7 @@ function bindEvents() {
 async function init() {
   watchErrors();       // одна ошибка не должна обрывать работу всего каталога
   applyPowerMode();    // слабый телефон → без тяжёлого размытия
+  applyGuestMode();    // без пароля человек видит каталог как покупатель
   watchInstall();      // подсказка «поставить на главный экран»
   applyBrand();
   // Браузеры (и менеджеры паролей) запоминают поля по имени и подставляют в
