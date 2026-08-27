@@ -96,11 +96,15 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       wa: wa ? wa.getAttribute('href') : '',
       tel: tel ? tel.getAttribute('href') : '',
       body: document.getElementById('storeBody').innerText.replace(/\s+/g, ' '),
+      map: (document.getElementById('storeMap') || {}).href || '',
       canSend: !document.getElementById('storeSend').hidden,
     };
   });
   chk(store.open, 'вкладка «Магазин» открывает свой экран');
   chk(/wa\.me\/79640616601/.test(store.wa), `есть кнопка WhatsApp на номер магазина (${store.wa})`);
+  chk(/Грозный/.test(store.body) && /Круглосуточно/.test(store.body),
+    `видны адрес и часы работы (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
+  chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
   chk(/^tel:\+79640616601$/.test(store.tel), `и кнопка позвонить (${store.tel})`);
   chk(/Молоко/.test(store.body) && /Магнит/.test(store.body), 'подсказка о цене видна в списке');
   chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
