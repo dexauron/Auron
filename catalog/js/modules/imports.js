@@ -175,7 +175,7 @@ function svUploadContacts(list) {
 /* Публикация не удалась. Записанное никуда не делось — оно на телефоне, — но
  * сказать об этом надо по-человечески и дать понятное действие, а не показывать
  * код ответа сервера. Плашка держится вверху экрана, пока не опубликуется. */
-export function showPublishTrouble(err) {
+function showPublishTrouble(err) {
   const el = $('publishBanner');
   if (!el) return;
   if (!err) { el.hidden = true; return; }
