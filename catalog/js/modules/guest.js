@@ -16,6 +16,7 @@ import { attachMoneyInput, closeSheet, esc, moneyNum, openSheet, toast } from '.
 import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
+import { buzz, wolfSay } from './mascot.js';
 
 const KEY = 'wm_guest_prices_v1';
 const MAX = 50;
@@ -145,7 +146,8 @@ function savePriceReport() {
   });
   write(list);
   closeSheet('priceReportSheet');
-  toast('Спасибо! Подсказка сохранена — отправь её в разделе «Магазин»');
+  buzz();
+  wolfSay('Спасибо! Подсказка сохранена — отправь её в разделе «Магазин»', { ms: 4200 });
   renderStoreBadge();
 }
 

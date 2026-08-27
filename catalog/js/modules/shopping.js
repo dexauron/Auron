@@ -12,6 +12,7 @@ import { closeSheet, esc, openSheet, toast } from './core.js';
 import { fmtNum, fmtPrice } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
+import { buzz, wolfSay } from './mascot.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -174,7 +175,8 @@ export function bindShopping() {
     if (!p) return;
     const added = toggleShop(p);
     syncShopButton(p);
-    toast(added ? 'Добавлено в список покупок' : 'Убрано из списка');
+    if (added) { buzz(); wolfSay('Записал в список покупок'); }
+    else toast('Убрано из списка');
   });
   $('shopOpen').addEventListener('click', openShop);
   $('shopShare').addEventListener('click', shareShop);

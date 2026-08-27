@@ -13,6 +13,7 @@ import { closeSheet, esc, openSheet, toast } from './core.js';
 import { daysAgoISO, fmtDate, fmtPrice, fmtRetail, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { stockState } from './publish.js';
+import { buzz, wolfSay } from './mascot.js';
 
 const WAIT_KEY = 'wm_guest_wait_v1';
 const SNAP_KEY = 'wm_price_snapshot';
@@ -56,7 +57,8 @@ function toggleWait(p) {
   else {
     list.push({ id: p.id, name: p.name || '', code: p.code || '', at: todayISO() });
     writeWait(list);
-    toast('Хорошо! Скажу, когда он снова появится');
+    buzz();
+    wolfSay('Хорошо! Скажу, когда он снова появится');
   }
   syncWaitButton(p);
 }
