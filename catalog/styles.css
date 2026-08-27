@@ -1759,8 +1759,11 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 /* Строка списка покупок на телефоне: название с галочкой и крестиком — сверху,
    счётчик количества — снизу справа. В одну строку всё это не влезало:
    «Молоко Простоквашино 3.2%» ломалось на три строки в узкую колонку */
-.swipe-wrap .shop-row { flex-wrap: wrap; row-gap: 6px; }
-.swipe-wrap .shop-row .shop-check { order: 0; }
-.swipe-wrap .shop-row .ios-row-title { order: 1; flex: 1 1 auto; min-width: 0; }
-.swipe-wrap .shop-row .rst-rm { order: 2; }
-.swipe-wrap .shop-row .qty-step { order: 3; margin-left: auto; flex: 0 0 auto; }
+.swipe-wrap .shop-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; column-gap: 10px; row-gap: 6px;
+}
+.swipe-wrap .shop-row .shop-check { grid-area: 1 / 1; }
+.swipe-wrap .shop-row .ios-row-title { grid-area: 1 / 2; min-width: 0; }
+.swipe-wrap .shop-row .rst-rm { grid-area: 1 / 3; }
+.swipe-wrap .shop-row .qty-step { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
