@@ -5,7 +5,8 @@ const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers')
 
 const SHEETS = ['filterSheet', 'adminMenuSheet', 'deviceSheet', 'suppliersManageSheet', 'supplierEditSheet',
   'groupsSheet', 'orderRulesSheet', 'calcSheet', 'topSheet', 'publishSheet', 'formSheet', 'loginSheet',
-  'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'workSheet', 'scanSheet'];
+  'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'workSheet', 'scanSheet',
+  'shopSheet', 'storeSheet', 'newsSheet', 'priceReportSheet', 'askSheet'];
 
 const products = Array.from({ length: 6 }, (_, i) => ({
   id: 'p' + i, name: 'Очень длинное название товара для проверки переноса ' + i,
@@ -75,6 +76,35 @@ const products = Array.from({ length: 6 }, (_, i) => ({
         { id: 'p2', name: long + ' второй', code: '102', supplier_id: '', supplier_name: '', who: '', at: '2026-08-22', ordered: '2026-08-22' },
       ]));
     });
+    /* Покупательские экраны — тоже с настоящим содержимым. Без этого однажды
+       уже проехала поломка: у счётчика «−/+» в списке покупок не стало стилей
+       (они ушли вместе с убранным экраном), и кнопки превратились в точки. */
+    await page.evaluate(() => {
+      localStorage.setItem('wm_shop_v1', JSON.stringify([
+        { id: 'p1', name: 'Молоко Простоквашино отборное 3.2% 930 мл', code: '101', price: 89, qty: 3, done: false },
+        { id: 'p2', name: 'Хлеб', code: '102', price: 45, qty: 1, done: true },
+      ]));
+      localStorage.setItem('wm_guest_prices_v1', JSON.stringify([
+        { id: 'p1', name: 'Молоко Простоквашино отборное 3.2% 930 мл', code: '101', price: 79, store: 'Магнит у дома', at: '2026-08-27' },
+      ]));
+    });
+    await page.evaluate(async () => {
+      document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+      const P = window.WM_PUBLISH; const st = P._state();
+      st.session = null; st.isAdmin = false; st.canPurchase = false; st.canSales = false;   // роль покупателя
+      P.renderAll();
+      await new Promise((r) => setTimeout(r, 300));
+      document.getElementById('shopOpen').click();
+      await new Promise((r) => setTimeout(r, 350));
+    });
+    await scan('shopSheet со списком');
+    await page.evaluate(async () => {
+      document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+      document.querySelector('.tabbar [data-tab="store"]').click();
+      await new Promise((r) => setTimeout(r, 350));
+    });
+    await scan('storeSheet с подсказками');
+
     for (const [id, menu] of [['restockSheet', 'menuRestock']]) {
       await page.evaluate(async (m) => {
         document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
