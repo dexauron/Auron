@@ -3,7 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, translit } from './core.js';
 import { checkMark, ic } from './icons.js';
-import { fmtDate, fmtPrice, telHref, waHref } from './catalog.js';
+import { fmtDate, fmtPrice, telHref, waHref, fmtNum } from './catalog.js';
 import { byName } from './data.js';
 import { renderPhotoManager } from './photos.js';
 import { svSaveAndPublish, svUuid } from './imports.js';
@@ -350,7 +350,9 @@ export async function loadTopProducts() {
   if (!data || !data.length) { box.innerHTML = '<p class="muted">За этот период продаж нет</p>'; return; }
 
   const byId = new Map(state.products.map((p) => [p.id, p]));
-  const rnd = (n) => (n % 1 ? Math.round(n * 10) / 10 : n);
+  // Количества тоже пишем с разделителями: «12 000 шт» читается сразу,
+  // «12000 шт» приходится пересчитывать глазами по цифрам.
+  const rnd = (n) => fmtNum(n % 1 ? Math.round(n * 10) / 10 : n);
   const num = (v) => Number(v) || 0;
   const metric = (r) => (ui.topMode === 'qty' ? num(r.total_qty) : num(r.total_amount));
   // на всякий случай (и для старой базы) сортируем сами по выбранной мере
