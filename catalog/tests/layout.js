@@ -106,7 +106,8 @@ const products = Array.from({ length: 6 }, (_, i) => ({
        осталась «четыре колонки», пятый («Фильтры») сваливался под панель
        отдельной строкой: на телефоне это выглядело как поломка. */
     const bar = await page.evaluate(() => {
-      const tabs = [...document.querySelectorAll('.tabbar .tab')];
+      // считаем только видимые: часть разделов принадлежит другой роли
+      const tabs = [...document.querySelectorAll('.tabbar .tab')].filter((t) => !t.hidden);
       const tops = new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)));
       const r = document.querySelector('.tabbar').getBoundingClientRect();
       const labels = tabs.map((t) => {
