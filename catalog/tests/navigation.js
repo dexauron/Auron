@@ -32,14 +32,15 @@ const groups = [
   const { page, errs } = await newPage(b, { products, groups });
 
   // ── нижняя панель ──
-  const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar .tab')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
+  // видимые разделы: без входа это разделы покупателя, после входа — рабочие
+  const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar .tab')].filter((t) => !t.hidden).map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
   chk(tabs.length === 5, `в нижней панели 5 разделов (${tabs.join(' | ')})`);
   chk(/Каталог/.test(tabs[0]) && /Категории/.test(tabs[1]), 'первые разделы — «Каталог» и «Категории»');
   // «Ещё» заменили на «Фильтры»: до фильтров теперь дотягивается большой палец.
   // «Работа» — дела смены (заказы, «закончилось»), раньше они прятались в меню.
   chk(/Фильтры/.test(tabs[4]) && !tabs.some((t) => /Ещё/.test(t)),
     `последний раздел — «Фильтры», а не «Ещё» (${tabs[4]})`);
-  chk(/Работа/.test(tabs[3]), `рядом с фильтрами — «Работа» (${tabs[3]})`);
+  chk(/Магазин/.test(tabs[3]), `без входа рядом с фильтрами — «Магазин» для покупателя (${tabs[3]})`);
   await page.click('.tabbar [data-tab="filters"]'); await page.waitForTimeout(450);
   const filt = await page.evaluate(() => ({
     open: !document.getElementById('filterSheet').hidden,
@@ -106,6 +107,9 @@ const groups = [
   await page.fill('#searchInput', ''); await page.waitForTimeout(200);
   await page.evaluate(() => { const P = window.WM_PUBLISH; const s = P._state(); s.selGroups = []; s.selCats = []; P.renderAll(); });
   await page.waitForTimeout(300);
+  // раскладка по категориям — для сотрудника: покупателю каталог показывается
+  // простым списком, и заголовки категорий в нём не нужны
+  await asOwner(page, {});
   await page.fill('#searchInput', 'мол'); await page.waitForTimeout(700);
   const search = await page.evaluate(() => ({
     seps: [...document.querySelectorAll('.cat-sep')].map((x) => x.innerText.replace(/\s+/g, ' ').trim()),
@@ -132,10 +136,10 @@ const groups = [
   chk(!fav.hidden && fav.badge === '1', `на «Избранном» счётчик (${fav.badge})`);
   chk(fav.n === 1, `в избранном ровно отмеченный товар (${fav.n})`);
 
-  // ── наличие: без входа его не видно вовсе ──
+  // ── наличие видно и покупателю: это то же, что видно на полке ──
   await page.click('.tabbar [data-tab="catalog"]'); await page.waitForTimeout(500);
   const guest = await page.evaluate(() => document.getElementById('productGrid').innerText);
-  chk(!/Мало|Нет в наличии|Есть в магазине/.test(guest), 'без входа наличие не показывается — каталог для сотрудников, но ссылка публичная');
+  chk(/Мало|Нет|Есть/.test(guest), 'покупателю видно, есть ли товар в магазине');
   // входим сотрудником
   await page.evaluate(() => { const P = window.WM_PUBLISH; P.applyServerless('pw'); P.renderAll(); });
   await page.waitForTimeout(500);

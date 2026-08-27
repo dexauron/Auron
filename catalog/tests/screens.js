@@ -134,8 +134,15 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
     return [...found];
   });
   chk(!leak.length, `в открытой витрине нет внутренних полей${leak.length ? ': ' + leak.join(', ') : ''}`);
-  chk(!/магазин/i.test(buyer.replace(/Есть в магазине|Нет в наличии/g, '')),
-    'покупателю не видны цены чужих магазинов — каталог больше не отправляет его к конкуренту');
+  /* Покупателю не видны ЦЕНЫ чужих магазинов (это внутренняя разведка), но
+     подсказать цену он может — кнопка «Видел дешевле в другом магазине»
+     задумана владельцем: так покупатель помогает магазину. */
+  const comp = await page.evaluate(() => ({
+    block: (document.getElementById('sheetCompetitors') || {}).innerHTML || '',
+    report: !document.getElementById('btnReportPrice').hidden,
+  }));
+  chk(!comp.block.trim(), 'покупателю не видны цены чужих магазинов — это внутренняя разведка');
+  chk(comp.report, 'зато покупатель может подсказать цену из другого магазина');
   // а вошедший сотрудник их видит
   await page.evaluate(() => { const P = window.WM_PUBLISH; P.applyServerless('pw'); P.renderAll(); });
   await page.waitForTimeout(300);

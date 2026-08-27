@@ -194,7 +194,9 @@ export function renderGrid() {
     const sl = stockLabel(p);
     if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
     if (p.is_weighted) tags.push(`<span class="tag">${ic('scale', 'ic-xs')}</span>`);
-    if (!(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
+    // «без ШК» — служебная пометка для кассы (пробивать по коду). Покупателю
+    // она ничего не говорит, поэтому показываем только своим.
+    if (state.session && !(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
     const price = (p.retail_price != null && p.retail_price !== '')
       ? `<div class="card-price">${esc(fmtRetail(p))}</div>` : '';
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
