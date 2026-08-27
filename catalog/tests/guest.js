@@ -237,11 +237,14 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       s2.products.push({ id: 'n' + i, name: 'Новинка ' + i, code: '90' + i, group_id: 'g1',
         retail_price: 100 + i, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(2) });
     }
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 40; i++) {
       s2.products.push({ id: 'o' + i, name: 'Старый товар ' + i, code: '80' + i, group_id: 'g1',
         retail_price: 50, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(400) });
     }
     localStorage.removeItem('wm_news_seen');
+    // возвращаем ожидание: прошлая проверка его «израсходовала» — о появлении
+    // товара напоминают один раз, и это правильно
+    localStorage.setItem('wm_guest_wait_v1', JSON.stringify([{ id: 'p2', name: 'Кефир Домик в деревне', code: '102', at: '2026-08-27' }]));
     await P._checkGuestNews();
     await new Promise((r) => setTimeout(r, 300));
     return document.getElementById('newsBanner').innerText.replace(/\s+/g, ' ');
