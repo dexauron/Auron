@@ -228,6 +228,26 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/Появилось/.test(later.text) && /Кефир/.test(later.text), `сказано, что ожидаемое появилось (${later.text})`);
   chk(/подешевел/.test(later.text), `и что цена упала (89 против 120) (${later.text})`);
 
+  // новинки: что появилось в каталоге за последние недели
+  const fresh = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH; const s2 = P._state();
+    const iso = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+    // подкладываем свежие товары: пять новых из двадцати — это завоз, а не первая загрузка
+    for (let i = 0; i < 5; i++) {
+      s2.products.push({ id: 'n' + i, name: 'Новинка ' + i, code: '90' + i, group_id: 'g1',
+        retail_price: 100 + i, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(2) });
+    }
+    for (let i = 0; i < 15; i++) {
+      s2.products.push({ id: 'o' + i, name: 'Старый товар ' + i, code: '80' + i, group_id: 'g1',
+        retail_price: 50, unit: 'шт', photos: [], barcodes: [], stock: 3, created_at: iso(400) });
+    }
+    localStorage.removeItem('wm_news_seen');
+    await P._checkGuestNews();
+    await new Promise((r) => setTimeout(r, 300));
+    return document.getElementById('newsBanner').innerText.replace(/\s+/g, ' ');
+  });
+  chk(/5 новинок/.test(fresh), `в плашке сказано про новинки (${fresh})`);
+
   const newsSheet = await page.evaluate(async () => {
     document.getElementById('newsBanner').click();
     await new Promise((r) => setTimeout(r, 400));
@@ -237,6 +257,20 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   // заголовки разделов рисуются заглавными — сверяем без учёта регистра
   chk(newsSheet.open && /снова в продаже/i.test(newsSheet.body), 'в списке есть раздел «снова в продаже»');
   chk(/было 120/.test(newsSheet.body), `и старая цена рядом с новой (${newsSheet.body.slice(0, 90)})`);
+  chk(/новое в магазине/i.test(newsSheet.body) && /Новинка 0/.test(newsSheet.body),
+    'в списке есть раздел «новое в магазине»');
+
+  // ради одних новинок плашка не мозолит глаза каждый день
+  const again = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+    localStorage.removeItem('wm_guest_wait_v1');
+    await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: {} });
+    await P._checkGuestNews();
+    await new Promise((r) => setTimeout(r, 250));
+    return document.getElementById('newsBanner').hidden;
+  });
+  chk(again, 'посмотрел новинки — сегодня плашка больше не показывается');
 
   // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
