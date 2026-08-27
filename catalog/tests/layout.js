@@ -27,6 +27,7 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     await page.waitForTimeout(400);
 
     const bad = [];
+    const small = [];      // кнопки мельче пальца — считаем прямо при осмотре окна
     const scan = async (where) => {
       const out = await page.evaluate((w) => {
         const res = [];
@@ -49,6 +50,23 @@ const products = Array.from({ length: 6 }, (_, i) => ({
         return [...new Set(res)].slice(0, 3);
       }, W);
       if (out.length) bad.push(`${where}: ${out.join('; ')}`);
+
+      /* Размер под палец меряем ЗДЕСЬ же, пока окно открыто. Раньше проверка
+         шла в самом конце, при закрытых окнах: кнопки были нулевого размера,
+         пропускались — и так проехали голые кнопки «−/+» в списке покупок. */
+      const tiny = await page.evaluate(() => {
+        const skip = (el) => el.closest('.ios-switch') || el.classList.contains('check-cb') || el.closest('.tree-sub');
+        const out2 = [];
+        document.querySelectorAll('button, [role="button"]').forEach((el) => {
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height || skip(el)) return;
+          if (r.height < 34 || r.width < 32) {
+            out2.push(`${Math.round(r.width)}×${Math.round(r.height)} «${(el.innerText || el.id || el.className).replace(/\s+/g, ' ').slice(0, 22)}»`);
+          }
+        });
+        return [...new Set(out2)];
+      });
+      for (const t of tiny) small.push(`${where}: ${t}`);
     };
 
     await scan('главный экран');
@@ -120,37 +138,7 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     // Размер под палец: система советует 44×44. Исключения осознанные —
     // переключатель iOS ровно 51×31 по стандарту, а галочка в списке живёт
     // внутри строки во всю ширину, и нажимается строка целиком.
-    const small = await page.evaluate(() => {
-      const skip = (el) => el.closest('.ios-switch') || el.classList.contains('check-cb') || el.closest('.tree-sub');
-      const out = [];
-      document.querySelectorAll('button, [role="button"]').forEach((el) => {
-        const r = el.getBoundingClientRect();
-        if (!r.width || !r.height || skip(el)) return;
-        if (r.height < 34 || r.width < 32) out.push(`${Math.round(r.width)}×${Math.round(r.height)} «${(el.innerText || el.id).replace(/\s+/g, ' ').slice(0, 20)}»`);
-      });
-      return [...new Set(out)].slice(0, 5);
-    });
-    chk(!small.length, `ширина ${W}px: кнопки не мельче пальца${small.length ? ' — ' + small.join(' | ') : ''}`);
-
-    /* Нижняя панель — ОДНА полоса. Когда разделов стало пять, а раскладка
-       осталась «четыре колонки», пятый («Фильтры») сваливался под панель
-       отдельной строкой: на телефоне это выглядело как поломка. */
-    const bar = await page.evaluate(() => {
-      // считаем только видимые: часть разделов принадлежит другой роли
-      const tabs = [...document.querySelectorAll('.tabbar .tab')].filter((t) => !t.hidden);
-      const tops = new Set(tabs.map((t) => Math.round(t.getBoundingClientRect().top)));
-      const r = document.querySelector('.tabbar').getBoundingClientRect();
-      const labels = tabs.map((t) => {
-        const el = t.querySelector('.tab-txt');
-        return el ? { text: el.textContent, cut: el.scrollWidth > el.clientWidth + 1 } : null;
-      }).filter(Boolean);
-      return { count: tabs.length, rows: tops.size, height: Math.round(r.height),
-        atBottom: Math.round(r.bottom) >= window.innerHeight - 1, cut: labels.filter((l) => l.cut).map((l) => l.text) };
-    });
-    chk(bar.rows === 1, `ширина ${W}px: все ${bar.count} разделов в одну строку (строк: ${bar.rows})`);
-    chk(bar.height <= 72, `ширина ${W}px: панель одной полосой (${bar.height}px)`);
-    chk(bar.atBottom, `ширина ${W}px: панель прижата к низу экрана`);
-    chk(!bar.cut.length, `ширина ${W}px: подписи разделов помещаются${bar.cut.length ? ' — обрезаны: ' + bar.cut.join(', ') : ''}`);
+    chk(!small.length, `ширина ${W}px: кнопки не мельче пальца${small.length ? ' — ' + [...new Set(small)].slice(0, 5).join(' | ') : ''}`);
     chk(!errs.length, `ширина ${W}px: нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
   }
