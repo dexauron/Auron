@@ -56,6 +56,10 @@ function hideBubble() {
 
 function placeBubble(b, anchor) {
   const r = anchor.getBoundingClientRect();
+  // висит под ВСЕЙ шапкой, а не под самим волком: иначе облачко ложится
+  // прямо на строку поиска и закрывает то, ради чего человек сюда пришёл
+  const head = document.querySelector('.header');
+  const bottom = head ? head.getBoundingClientRect().bottom : r.bottom;
   const pad = 10;
   b.style.visibility = 'hidden';
   b.hidden = false;
@@ -63,7 +67,10 @@ function placeBubble(b, anchor) {
   let left = r.left + r.width / 2 - w / 2;
   left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
   b.style.left = Math.round(left) + 'px';
-  b.style.top = Math.round(r.bottom + 6) + 'px';
+  b.style.top = Math.round(bottom + 8) + 'px';
+  // хвостик облачка смотрит на волка, где бы облачко ни оказалось
+  const arrow = Math.max(14, Math.min(r.left + r.width / 2 - left, w - 14));
+  b.style.setProperty('--wolf-arrow', Math.round(arrow) + 'px');
   b.style.visibility = '';
 }
 
