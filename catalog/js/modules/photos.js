@@ -1,7 +1,7 @@
 // Фото товаров: поиск в открытых базах, дозаполнение
 
 import { $, state, ui } from './store.js';
-import { esc, norm, openSheet, toast } from './core.js';
+import { esc, norm, toast } from './core.js';
 import { OTHER_CAT, ic } from './icons.js';
 import { bigrams, buildIndex, dice, hasPhoto, productCategory } from './catalog.js';
 import { renderAll, renderGrid } from './render.js';
@@ -14,46 +14,8 @@ let suggestions = [];
 /* ── «Дозаполни витрину»: сотрудник быстро фотографирует товары без фото ── */
 const PHOTO_FILL_LIMIT = 60;
 
-export function openPhotoFill() {
-  $('photoFillSearch').value = '';
-  $('cleanPhotosToggle').checked = cleanPhotosOn();
-  renderPhotoFillList();
-  openSheet('photoFillSheet');
-}
 
-export function renderPhotoFillList() {
-  const q = norm($('photoFillSearch').value);
-  const all = photoCandidates();
-  const total = all.length;
-  let list = all;
-  if (q) list = all.filter((p) => (p._name || norm(p.name)).includes(q) || (p._codes || []).some((c) => c.includes(q)));
-  $('photoFillCount').textContent = q ? `Без фото: ${total} · найдено: ${list.length}` : `Осталось без фото: ${total}`;
-  const box = $('photoFillList');
-  if (!list.length) {
-    box.innerHTML = total
-      ? '<p class="muted">Ничего не нашлось. Измени запрос.</p>'
-      : '<p class="muted">У всех товаров есть фото — витрина заполнена!</p>';
-    return;
-  }
-  const shown = list.slice(0, PHOTO_FILL_LIMIT);
-  box.innerHTML = shown.map((p) => {
-    const sub = [p.code ? 'Код ' + esc(p.code) : '', (p.barcodes || [])[0] ? 'ШК ' + esc(p.barcodes[0]) : ''].filter(Boolean).join(' · ');
-    return `<div class="fill-row">
-      <div class="fill-info"><div class="fill-name">${esc(p.name)}</div>${sub ? `<div class="fill-sub">${sub}</div>` : ''}</div>
-      <button class="btn btn-primary fill-cam" data-fill-cam="${esc(p.id)}" aria-label="Снять">${ic('camera', 'ic-xs')}</button>
-    </div>`;
-  }).join('') + (list.length > shown.length
-    ? `<p class="muted" style="text-align:center;margin-top:10px">…и ещё ${list.length - shown.length}. Уточни поиском.</p>` : '');
-}
 
-export async function photoFillPick(file) {
-  const p = ui.photoFillTarget;
-  ui.photoFillTarget = null;
-  $('photoFillInput').value = '';
-  if (!file || !p) return;
-  await addPhotoToProduct(file, p);
-  renderPhotoFillList(); // товар с фото уходит из списка
-}
 
 export async function createCompetitor(name) {
   const rec = { id: svUuid(), name: String(name).trim() };
@@ -76,25 +38,12 @@ export function renderPhotoManager() {
       <img src="${esc(ph.url || ph.preview)}" alt="">
       <button type="button" class="thumb-x" data-idx="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
     </div>`).join('');
-  $('photoManager').innerHTML = html + `<button type="button" class="photo-add" id="photoAddBtn" aria-label="Добавить фото">${ic('camera')}</button>`;
+  // Кнопки «добавить файлом» нет: без сервера фото негде хранить, и раньше
+  // выбранный файл молча пропадал при сохранении. Фото приходят из интернета.
+  $('photoManager').innerHTML = html
+    || '<p class="muted" style="margin:0">Фото нет. Найти в интернете можно из карточки товара.</p>';
 }
 
-export async function compressImage(file, maxSide = 1280, quality = 0.82) {
-  try {
-    const bmp = await createImageBitmap(file);
-    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
-    const w = Math.round(bmp.width * scale);
-    const h = Math.round(bmp.height * scale);
-    const canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
-    bmp.close();
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', quality));
-    return blob || file;
-  } catch (e) {
-    return file; // формат не поддержан — грузим как есть
-  }
-}
 
 // «Чистый белый фон»: вырезаем товар из фона и ставим на белый — фото
 // становятся ровными, как в витрине. Работает на телефоне, «мозг» для обрезки
@@ -121,7 +70,11 @@ function loadChecked() {
   for (const id of Object.keys(o)) if (!(Number(o[id]) > edge)) delete o[id];
   return o;
 }
-export const photoCandidates = () =>
+
+/* Товары без фото — их и ищет поиск фото в интернете. Раньше список был нужен
+ * ещё и экрану «Дозаполнить фото» (снять камерой), но он работал только с
+ * сервером, которого больше нет, и был убран: фото в каталог попадают поиском. */
+const photoCandidates = () =>
   state.products.filter((p) => !hasPhoto(p) && (p.name || (p.barcodes || []).length));
 
 // Открытые бесплатные базы с фото товаров (еда, косметика/бытовая химия,

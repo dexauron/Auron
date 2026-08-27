@@ -91,7 +91,6 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
-[hidden] { display: none !important; }
 
 html { height: 100%; }
 
@@ -270,11 +269,6 @@ mark { background: rgba(94, 92, 230, .28); color: inherit; border-radius: 3px; p
 /* ── Фото на проверке (предложенные покупателями) ── */
 
 /* ── «Дозаполни витрину»: список товаров без фото ── */
-.fill-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-bottom: 8px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
-.fill-info { flex: 1; min-width: 0; }
-.fill-name { font-size: 15px; font-weight: 600; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.fill-sub { font-size: 12px; color: var(--text-2); margin-top: 2px; }
-.fill-cam { flex: 0 0 auto; width: auto; margin: 0; padding: 12px 16px; font-size: 20px; }
 
 /* ── Умный импорт: список распознанных файлов ── */
 .smart-list { margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
@@ -622,13 +616,6 @@ select.input { appearance: none; }
   border-radius: 50%; border: none;
   background: rgba(0, 0, 0, .65); color: #fff;
   font-size: 11px; cursor: pointer;
-}
-.photo-add {
-  width: 76px; height: 76px;
-  border-radius: 12px;
-  border: 1.5px dashed var(--border);
-  background: none; color: var(--text-2);
-  font-size: 24px; cursor: pointer;
 }
 
 /* Группы */
@@ -1077,9 +1064,6 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   color: var(--text-2); font-family: inherit;
   font-size: 10px; font-weight: 500; letter-spacing: -.01em;
 }
-/* скрытый раздел (не для этой роли) не должен занимать место: у .tab свой
-   display, и он перебивал обычное «скрыто» — панель тогда переносилась */
-.tabbar .tab[hidden] { display: none; }
 .tabbar .tab .tab-ico { font-size: 20px; line-height: 1; }
 /* подпись не переносится и не расталкивает соседей: длинная — с многоточием */
 .tabbar .tab .tab-txt {
@@ -1608,11 +1592,34 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 /* ── Список покупок покупателя ─────────────────────────────────────────────── */
 .shop-bar .btn { flex: 1; }
 .shop-row { align-items: center; gap: 8px; }
+/* Кружок «вычеркнуть»: сам кружок 26 px, но нажимается площадь 40 px —
+   иначе в него не попасть пальцем на ходу. Круг рисуем подложкой, галочку
+   кладём в ту же клетку сетки. */
 .shop-check {
-  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%;
-  border: 1.5px solid var(--border); background: none; color: var(--pos);
+  flex: 0 0 auto; width: 40px; height: 40px; padding: 0;
+  border: none; background: none; color: var(--pos);
   display: grid; place-items: center; cursor: pointer;
 }
+.shop-check::before {
+  content: ''; grid-area: 1 / 1; width: 26px; height: 26px;
+  border-radius: 50%; border: 1.5px solid var(--border);
+}
+.shop-check .ic { grid-area: 1 / 1; }
 .shop-row.shop-done .ios-row-title, .shop-row.shop-done .ios-row-value { color: var(--text-2); text-decoration: line-through; }
-.shop-row.shop-done .shop-check { border-color: var(--pos); }
-.shop-qty { min-width: 26px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+.shop-row.shop-done .shop-check::before { border-color: var(--pos); }
+/* «−  2  +» — счётчик количества. Раньше он одалживал стили у экрана
+   инвентаризации; тот убрали, и кнопки остались голыми квадратиками. */
+.qty-step {
+  display: inline-flex; align-items: center; flex: 0 0 auto;
+  border: .5px solid var(--border); border-radius: 10px; background: var(--surface-2);
+}
+.qty-step > button {
+  min-width: 40px; min-height: 40px; border: none; background: none;
+  color: var(--accent); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.qty-step > button:active { opacity: .45; }
+.shop-qty { min-width: 30px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* название сжимается, счётчик и крестик держат размер: строка остаётся одной.
+   Сумма ушла под название («2 × 89 ₽ = 178 ₽») — иначе на телефоне не помещалось. */
+.shop-row .ios-row-title { flex: 1 1 auto; min-width: 0; }
+.shop-row .qty-step, .shop-row .rst-rm { flex: 0 0 auto; }

@@ -121,13 +121,14 @@ function renderShop() {
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
-        <span class="ord-sub">${price ? fmtPrice(price) : 'цена не указана'}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
-      <span class="cnt-step">
+        <span class="ord-sub">${(Number(x.qty) || 1) > 1
+    ? `${fmtNum(x.qty)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
+    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
+      <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
         <span class="shop-qty">${fmtNum(x.qty)}</span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
-      <span class="ios-row-value">${fmtPrice(sum)}</span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
     </div>`;
   }).join('');

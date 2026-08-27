@@ -41,7 +41,7 @@ export async function submitForm(e) {
   btn.textContent = 'Сохраняем…';
   $('formError').hidden = true;
   try {
-    const photos = ui.formPhotos.map((ph) => ph.url).filter(Boolean); // новые фото-файлы пока не грузим
+    const photos = ui.formPhotos.map((ph) => ph.url).filter(Boolean);   // фото хранятся ссылками
     const rec = {
       name: $('fName').value.trim(), group_id: $('fGroup').value || null, supplier_ids: ui.formSupplierIds,
       code: $('fCode').value.trim() || null, article: $('fArticle').value.trim() || null,

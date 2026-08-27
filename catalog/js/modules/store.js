@@ -109,7 +109,6 @@ export const state = {
   selType: '',         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
   arrivalFrom: '',     // диапазон дат поступления (завоза), ISO YYYY-MM-DD; пусто = без границы
   arrivalTo: '',
-  suggCount: 0,        // сколько фото от покупателей ждёт проверки
   favOnly: false,      // показывать только избранные товары (сердечко)
   tab: 'catalog',      // раздел нижней панели: catalog | cats | fav
   popularity: {},      // id товара → сколько раз открывали (для «Популярное»)
