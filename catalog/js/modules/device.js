@@ -6,6 +6,7 @@ import { todayISO } from './catalog.js';
 import { THEME_KEY, applyTheme, countActiveFilters, favorites, renderAll } from './render.js';
 import { GH_TOKEN_KEY, SV_AUTH_KEY, ghToken } from './publish.js';
 import { plural } from './competitors.js';
+import { mascotOn } from './mascot.js';
 
 /* ── Настройки этого устройства ─────────────────────
  * Каталог живёт на десятках телефонов: у кассы, у сотрудников зала, у
@@ -100,6 +101,7 @@ function deviceMemory() {
   const rows = [
     { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
     { name: 'Экономный режим', val: isLowPower() ? 'включён — телефон послабее, размытие выключено' : 'не нужен' },
+    { name: 'Волк-помощник', val: mascotOn() ? 'включён' : 'выключен' },
     { name: 'Вид списка', val: viewName },
     { name: 'Открытый раздел', val: tabName },
     { name: 'Тема', val: themeRaw === 'dark' ? 'тёмная' : themeRaw === 'light' ? 'светлая' : 'как в телефоне' },
@@ -117,6 +119,8 @@ function renderDeviceSheet() {
   box.innerHTML = deviceMemory().map((r) => `<div class="ios-row">
     <span class="ios-row-title">${esc(r.name)}</span><span class="ios-row-value">${esc(r.val)}</span></div>`).join('');
   $('devName').value = deviceName();
+  const wolf = $('devWolf');
+  if (wolf) wolf.checked = mascotOn();
   // Последние сбои — здесь, а не в тайной консоли: если каталог однажды повёл
   // себя странно, владелец видит, что именно случилось, и может это назвать.
   const errs = savedErrors();

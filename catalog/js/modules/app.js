@@ -279,7 +279,8 @@ function bindEvents() {
     if (!ui.currentProduct) return;
     const nowFav = toggleFav(ui.currentProduct.id);
     updateFavButton(ui.currentProduct);
-    toast(nowFav ? 'Добавлено в избранное' : 'Убрано из избранного');
+    if (nowFav) { buzz(); wolfSay('Запомнил — товар в избранном'); }
+    else toast('Убрано из избранного');
     renderAll(); // обновляем чип «Избранное» и, если он включён, — сетку
   });
   // Похожие товары и «Недавно смотрели» — тап открывает другой товар
@@ -941,6 +942,7 @@ function bindEvents() {
   bindShopping();
   bindGuest();
   bindNews(openProduct);
+  bindMascot();
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
