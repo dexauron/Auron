@@ -24,7 +24,7 @@ function write(list) {
 }
 
 const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
-export const inShop = (id) => read().some((x) => x.id === id);
+const inShop = (id) => read().some((x) => x.id === id);
 
 /* Итог считаем по цене, записанной в момент добавления: она могла измениться,
  * но человек планировал бюджет по той, что видел. Если товар ещё в каталоге —
