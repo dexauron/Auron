@@ -124,6 +124,42 @@ function sendAsk() {
   closeSheet('askSheet');
 }
 
+/* ── «Цена на ценнике другая» ───────────────────────────────────────────────
+ * Главная жалоба на все сетевые магазины во всех отзывах: на полке одна цена,
+ * на кассе другая. Ни у одной сети нет способа сказать им об этом на месте —
+ * человек либо ругается на кассе, либо молча уходит.
+ *
+ * У нас человек стоит у полки, сканирует товар и сразу видит нашу цену. Если
+ * она не совпала с бумажным ценником — одна кнопка, и владельцу уходит
+ * сообщение с кодом товара и обеими ценами. Копить такое нельзя: неверный
+ * ценник надо править сегодня, поэтому уходит сразу, а не списком. */
+export function openShelfReport(p) {
+  if (!p) return;
+  ui.shelfFor = p;
+  $('shelfName').textContent = p.name || '';
+  $('shelfOurs').textContent = (p.retail_price != null && p.retail_price !== '')
+    ? fmtPrice(p.retail_price) + (p.is_weighted ? ' за кг' : '') : 'цена не указана';
+  $('shelfPrice').value = '';
+  $('shelfError').hidden = true;
+  openSheet('shelfSheet');
+}
+
+function sendShelfReport() {
+  const p = ui.shelfFor;
+  const err = $('shelfError');
+  if (!p) return;
+  const price = moneyNum($('shelfPrice').value);
+  if (!(price > 0)) { err.textContent = 'Напиши цену с ценника — по ней владелец и проверит.'; err.hidden = false; return; }
+  const wa = waNumber();
+  if (!wa) { toast('Магазин не указал номер для связи'); return; }
+  const ours = (p.retail_price != null && p.retail_price !== '') ? fmtPrice(p.retail_price) : 'нет цены';
+  const text = `Цена на ценнике не совпадает\n${p.name}${p.code ? ` (код ${p.code})` : ''}\n`
+    + `На ценнике: ${fmtPrice(price)}\nВ каталоге: ${ours}`;
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  closeSheet('shelfSheet');
+  toast('Спасибо! Владелец проверит ценник');
+}
+
 /* ── «Видел дешевле в другом магазине» ─────────────────────────────────── */
 function openPriceReport(p) {
   const prod = p || ui.currentProduct;
@@ -189,6 +225,8 @@ function applyGuestMode() {
 
 // Обработчики покупательских экранов — здесь же, рядом с их логикой
 export function bindGuest() {
+  $('shelfSend').addEventListener('click', sendShelfReport);
+  attachMoneyInput($('shelfPrice'));
   $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
   $('repSave').addEventListener('click', savePriceReport);
   $('storeSend').addEventListener('click', sendReports);

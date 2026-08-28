@@ -265,6 +265,25 @@
     </div>
   </div>
 
+  <!-- «Цена на полке другая»: покупатель стоит у полки и видит расхождение -->
+  <div class="sheet-backdrop" id="shelfSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body">
+        <h2 class="sheet-title">Цена на ценнике другая</h2>
+        <p class="muted" id="shelfName"></p>
+        <div class="shelf-ours">В каталоге: <b id="shelfOurs"></b></div>
+        <label class="field-label">Что написано на ценнике</label>
+        <input type="text" id="shelfPrice" class="input money" inputmode="decimal" placeholder="95">
+        <div class="form-error" id="shelfError" hidden></div>
+        <button class="btn btn-primary btn-block" id="shelfSend">Сообщить в магазин</button>
+        <p class="ios-note">Уйдёт владельцу в WhatsApp прямо сейчас. Неверный ценник — это то,
+        что он поправит сегодня же: на кассе должно быть ровно то, что на полке.</p>
+        <button class="btn btn-ghost sheet-close" data-close="shelfSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Покупатель ставит оценку: звёзды, пара слов, уходит в WhatsApp магазину -->
   <div class="sheet-backdrop" id="rateSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
