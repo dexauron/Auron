@@ -3,7 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, waHref } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, unitPriceText, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
@@ -78,7 +78,9 @@ export function openProduct(p) {
   const rows = [];
   // розничная цена (цена на полке) — видна всем, крупно вверху
   if (p.retail_price != null && p.retail_price !== '') {
-    rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span></div>`);
+    const per = unitPriceText(p);
+    rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span>${
+      per ? `<span class="field-hero-per">${esc(per)}</span>` : ''}</div>`);
   }
   // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
   // покупателям без входа их не показываем

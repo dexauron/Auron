@@ -3,7 +3,7 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
+import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, unitPriceText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
@@ -1172,7 +1172,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
-    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh };
+    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText };
 }
 
 init();

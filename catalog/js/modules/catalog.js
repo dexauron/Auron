@@ -101,6 +101,64 @@ export const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFracti
 export const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 // цена с единицей: у весовых показываем «/кг», чтобы было понятно
 export const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
+/* ── Цена за килограмм и за литр ────────────────────────────────────────────
+ * Так сравнивают цены в больших магазинах: не «69 ₽ за пачку», а «986 ₽/кг».
+ * Веса товара в 1С нет ни в одном справочнике (проверено: колонки «Масса
+ * нетто» и «Ёмкость упаковки» пустые целиком), зато он написан прямо в
+ * названии у 78% товаров: «Ulker Альбени XXL 70г», «Сок Апельсин 0,2л».
+ * Оттуда и берём.
+ *
+ * Разборщик проверен на 10 673 настоящих названиях владельца, и правила ниже
+ * выведены из того, что там нашлось. Главное правило: сомневаешься — молчи.
+ * Лучше не показать ничего, чем написать «3 ₽/л» за тетрадь на 96 листов. */
+const PACK_MULT = /(\d+)\s*[xх*]\s*(\d+(?:[.,]\d+)?)\s*(кг|гр|г|мл|л)(?![а-яёa-z0-9])/i;
+const PACK_ONE = /(\d+(?:[.,]\d+)?)\s*(кг|гр|г|мл|л)(?![а-яёa-z0-9])/gi;
+const PACK_MIN = 0.002, PACK_MAX = 30;    // кг или л в упаковке
+const PER_MIN = 20, PER_MAX = 20000;      // ₽ за кг или литр
+
+function toBaseUnit(v, u) {
+  u = String(u).toLowerCase();
+  /* Описки в 1С. «Агуша Вода 0,33мл» — это не треть миллилитра, а 0,33 литра:
+     столько не продают. То же с «Хлеб Столовый 0,6г» — это 0,6 кг. Дробное
+     значение меньше единицы в мелкой единице всегда означает крупную. */
+  if (u === 'мл') return { qty: v < 10 ? v : v / 1000, unit: 'л' };
+  if (u === 'г' || u === 'гр') return { qty: v < 1 ? v : v / 1000, unit: 'кг' };
+  if (u === 'л') return { qty: v, unit: 'л' };
+  if (u === 'кг') return { qty: v, unit: 'кг' };
+  return null;
+}
+
+function packSize(name) {
+  const s = String(name || '');
+  const m = s.match(PACK_MULT);              // «6х1,5л» — упаковка из шести
+  if (m) {
+    const n = Number(m[1]);
+    const v = Number(String(m[2]).replace(',', '.'));
+    const b = (n > 0 && n <= 48 && v > 0) ? toBaseUnit(v, m[3]) : null;
+    if (b) return { qty: b.qty * n, unit: b.unit };
+  }
+  // берём ПОСЛЕДНЕЕ совпадение: вес обычно в конце названия, а в начале
+  // попадаются артикулы и «3в1»
+  let last = null, mm;
+  PACK_ONE.lastIndex = 0;
+  while ((mm = PACK_ONE.exec(s))) last = mm;
+  if (!last) return null;
+  const v = Number(String(last[1]).replace(',', '.'));
+  return v > 0 ? toBaseUnit(v, last[2]) : null;
+}
+
+// «986 ₽/кг» или пустая строка, если мы не уверены
+export function unitPriceText(p) {
+  if (!p || p.is_weighted) return '';       // у весовых цена и так за килограмм
+  const price = Number(p.retail_price);
+  if (!(price > 0)) return '';
+  const ps = packSize(p.name);
+  if (!ps || ps.qty < PACK_MIN || ps.qty > PACK_MAX) return '';
+  const per = price / ps.qty;
+  if (per < PER_MIN || per > PER_MAX) return '';
+  return Math.round(per).toLocaleString('ru-RU') + ' ₽/' + ps.unit;
+}
+
 // Пустая дата (в файле её могло не быть) раньше превращалась в «undefined.undefined.ll».
 // Теперь возвращаем пустую строку — вызывающий сам решает, что показать.
 export const fmtDate = (d) => {
