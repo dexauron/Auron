@@ -257,6 +257,7 @@ export function scanToPrice(text) {
     <div class="pt-rows">${rows.map(([k, v]) => `<div class="pt-row">
       <span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
     <button class="btn btn-primary btn-block" data-shop-scanned="${esc(p.id)}">В список покупок</button>
+    ${state.session ? '' : `<button class="btn btn-secondary btn-block" data-shelf-scanned="${esc(p.id)}">Цена на ценнике другая</button>`}
     <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>
   </div>`;
 }
@@ -278,4 +279,37 @@ export function scanToSearch(text) {
   // включённой под карточкой незачем, да и телефон греется
   if (found) { closeSheet('scanSheet'); openProduct(found.p); }
   else toast('Товар с таким штрихкодом в каталоге не найден');
+}
+
+/* Действия на ценнике: положить в список, сообщить о неверном ценнике,
+ * открыть карточку. Обработчик живёт здесь, рядом с самим ценником: app.js
+ * уже дорос до предела, который держит проверка «модули».
+ * Зависимости приходят доводами, а не импортами: список покупок и связь с
+ * магазином про сканер ничего не знают, и знать им незачем. */
+export function bindScanResult(openProductFn, toggleShopFn, openShelfFn) {
+  $('scanResult').addEventListener('click', (e) => {
+    // «В список покупок» — камеру не закрываем: человек идёт по залу дальше
+    const add = e.target.closest('[data-shop-scanned]');
+    if (add) {
+      const p = state.products.find((x) => x.id === add.dataset.shopScanned);
+      if (!p) return;
+      const added = toggleShopFn(p);
+      add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
+      toast(added ? 'Записал в список покупок' : 'Убрано из списка');
+      return;
+    }
+    // «цена на ценнике другая» — тоже у полки, камеру оставляем включённой
+    const shelf = e.target.closest('[data-shelf-scanned]');
+    if (shelf) {
+      const p = state.products.find((x) => x.id === shelf.dataset.shelfScanned);
+      if (p) openShelfFn(p);
+      return;
+    }
+    const b = e.target.closest('[data-open-scanned]');
+    if (!b) return;
+    stopScan();
+    closeSheet('scanSheet');
+    const p = state.products.find((x) => x.id === b.dataset.openScanned);
+    if (p) openProductFn(p);
+  });
 }

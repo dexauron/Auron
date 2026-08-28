@@ -75,6 +75,10 @@ export async function checkGuestNews() {
     && (Date.now() - new Date(snap.at).getTime()) < SNAP_DAYS * 86400000;
 
   news.cheaper = [];
+  /* Прежняя цена нужна не только этому окну: в строке товара она стоит
+     зачёркнутой рядом с новой — так экономия видна, не открывая ничего.
+     Кладём в общее состояние, чтобы отрисовка не лезла в хранилище сама. */
+  state.priceWas = {};
   if (fresh) {
     for (const p of state.products) {
       const was = snap.prices[p.id];
@@ -83,6 +87,7 @@ export async function checkGuestNews() {
       const diff = was - is;
       if (diff < DROP_MIN_RUB || (diff / was) * 100 < DROP_MIN_PCT) continue;
       news.cheaper.push({ p, was, is });
+      state.priceWas[p.id] = was;
     }
     news.cheaper.sort((a, b) => (b.was - b.is) / b.was - (a.was - a.is) / a.was);
   }
@@ -109,6 +114,7 @@ export async function checkGuestNews() {
 
   if (!fresh) { try { await idbSet(SNAP_KEY, { at: new Date().toISOString(), prices: now }); } catch (e) { /* не влезло */ } }
   renderNewsBanner();
+  if (ui.renderCheaper) ui.renderCheaper();   // полоса «сегодня дешевле» на главной
 }
 
 function hideBanner() { const el = $('newsBanner'); if (el) el.hidden = true; }
