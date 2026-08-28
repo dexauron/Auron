@@ -18,7 +18,7 @@ import { findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from '.
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
-import { bindGuest, openStore } from './guest.js';
+import { bindGuest, openShelfReport, openStore } from './guest.js';
 import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
@@ -848,6 +848,14 @@ function bindEvents() {
       add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
       buzz();
       toast(added ? 'Записал в список покупок' : 'Убрано из списка');
+      return;
+    }
+    // «цена на ценнике другая» — человек стоит у полки, камеру не закрываем:
+    // он мог сканировать подряд
+    const shelf = e.target.closest('[data-shelf-scanned]');
+    if (shelf) {
+      const p = state.products.find((x) => x.id === shelf.dataset.shelfScanned);
+      if (p) openShelfReport(p);
       return;
     }
     const b = e.target.closest('[data-open-scanned]');

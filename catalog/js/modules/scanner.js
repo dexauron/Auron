@@ -257,6 +257,7 @@ export function scanToPrice(text) {
     <div class="pt-rows">${rows.map(([k, v]) => `<div class="pt-row">
       <span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
     <button class="btn btn-primary btn-block" data-shop-scanned="${esc(p.id)}">В список покупок</button>
+    ${state.session ? '' : `<button class="btn btn-secondary btn-block" data-shelf-scanned="${esc(p.id)}">Цена на ценнике другая</button>`}
     <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>
   </div>`;
 }
