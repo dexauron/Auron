@@ -13,7 +13,7 @@
 
 import { $, CFG, state, ui } from './store.js';
 import { attachMoneyInput, closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
-import { fmtDate, fmtPrice, todayISO } from './catalog.js';
+import { fmtDate, fmtPrice, todayISO, updatedText } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
@@ -56,6 +56,7 @@ function renderStore() {
   const addr = CFG.STORE_ADDRESS || '';
   const hours = CFG.STORE_HOURS || '';
   const map = CFG.STORE_MAP || (addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '');
+  const upd = updatedText();
   const about = (addr || hours) ? `<div class="ios-group">
       ${addr ? `<a class="ios-row ios-row-link" id="storeMap" href="${esc(map)}" target="_blank" rel="noopener">
         <span class="ios-row-title">Адрес<span class="ord-sub">${esc(addr)}</span></span>
