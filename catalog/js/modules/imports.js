@@ -1153,7 +1153,9 @@ function parseStaleReport(rows) {
       name,
       date,
       left: cols.left !== undefined ? stockNum(row[cols.left]) : null,
-      sold: cols.sold !== undefined ? stockNum(row[cols.sold]) : null,
+      // пустая клетка в «Продажах» значит «не продавался ни разу» — это ноль,
+      // а не «неизвестно»: именно такие товары и есть залежавшиеся
+      sold: cols.sold !== undefined ? (stockNum(row[cols.sold]) || 0) : null,
     });
   }
   return { recs, periodFrom, periodTo };
