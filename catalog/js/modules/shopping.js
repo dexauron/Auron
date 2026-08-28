@@ -309,5 +309,7 @@ export function bindShopping() {
     if (rm) removeShop(rm.dataset.shopRm);
   });
   enableSwipeRemove($('shopBody'));
+  // ссылку со списком могли открыть, уже находясь в каталоге
+  window.addEventListener('hashchange', shopFromHash);
   renderShopBar();   // список мог остаться с прошлого захода
 }
