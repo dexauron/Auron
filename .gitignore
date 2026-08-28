@@ -6,6 +6,7 @@ __pycache__/
 .claude/*
 !.claude/skills/
 !.claude/hooks/
+!.claude/tools/
 !.claude/settings.json
 node_modules/
 package-lock.json
