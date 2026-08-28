@@ -71,6 +71,31 @@ const prices = [
     `на экране видно, что именно убыточно (${sheet.text.slice(0, 60)})`);
   chk(/закупка 650 ₽ → цена 145 ₽/.test(sheet.text), 'обе цены показаны рядом — понятно без объяснений');
 
+  /* ── 3. «Залежалось» ──
+     Товар на полке, приехал давно и ни разу не продался — это замороженные
+     деньги. Дата поступления приходит из отчёта «Неликвидные товары». */
+  const stale = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state();
+    const old = new Date(Date.now() - 200 * 86400000).toISOString().slice(0, 10);
+    const fresh = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10);
+    s.products = [
+      { id: 'a', name: 'Кукла в джинсах', retail_price: 500, stock: 3, arrival_at: old, sold_qty: 0, photos: [], barcodes: [], supplier_ids: ['s1'] },
+      { id: 'b', name: 'Молоко', retail_price: 89, stock: 12, arrival_at: fresh, sold_qty: 40, photos: [], barcodes: [], supplier_ids: ['s1'] },
+      { id: 'c', name: 'Ёлочные игрушки', retail_price: 300, stock: 0, arrival_at: old, sold_qty: 0, photos: [], barcodes: [], supplier_ids: ['s1'] },
+      { id: 'd', name: 'Пряники давние', retail_price: 120, stock: 5, arrival_at: old, sold_qty: 7, photos: [], barcodes: [], supplier_ids: ['s1'] },
+    ];
+    const names = P._staleItems().map((x) => x.p.name);
+    P._openStale();
+    await new Promise((r) => setTimeout(r, 300));
+    return { names, text: document.getElementById('staleBody').innerText.replace(/\s+/g, ' ') };
+  });
+  chk(stale.names.length === 1 && stale.names[0] === 'Кукла в джинсах',
+    `залежавшийся товар найден (${stale.names.join(', ') || 'никого'})`);
+  chk(!stale.names.includes('Молоко'), 'свежий и продающийся товар не считаем залежавшимся');
+  chk(!stale.names.includes('Ёлочные игрушки'), 'то, чего нет на полке, не залежалось — его просто нет');
+  chk(!stale.names.includes('Пряники давние'), 'давний, но продающийся товар не трогаем');
+  chk(/лежит \d+ дн/.test(stale.text), `на экране написано, сколько дней лежит (${stale.text.slice(0, 60)})`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

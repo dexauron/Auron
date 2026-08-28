@@ -289,6 +289,8 @@ export function svImportRows(rows) {
   else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
   else if (type === 'barcodes') svUploadBarcodes(parseBarcodesReport(rows));
   else if (type === 'units') svUploadUnits(parseUnitsReport(rows));
+  // «Неликвид» разбирает модуль «залежалось» — там же, где его и показывают
+  else if (type === 'stale') { if (!ui.importStale) throw new Error('модуль «залежалось» не загружен'); ui.importStale(rows); }
   else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
   return type;
 }
@@ -808,6 +810,10 @@ function detectReportType(rows) {
   // «Контрагент» + «телефон» — однозначно справочник контактов (в отчётах цен
   // телефона нет). Слово «количество» в служебной шапке не должно мешать.
   if (hasContragent && hasPhone) return 'contacts';
+  /* «Неликвидные товары»: единственный отчёт, где есть НАСТОЯЩАЯ дата
+     последнего поступления товара. Проверяем до остатков: слово «остаток»
+     в его шапке тоже есть, и без этой строки он опознавался как «Остатки». */
+  if (has('дата последнего поступления')) return 'stale';
   if (has('период') && hasQty && !hasStock) return 'sales';
   if (hasStock || (has('розничная цена') && hasQty)) return 'stock';
   if (has('прайс-лист') || has('прайслист') || has('тип цен')) return 'retail';
@@ -826,6 +832,7 @@ const REPORT_LABEL = {
   photo: 'Фото по ссылкам',
   barcodes: 'Штрихкоды',
   units: 'Справочник единиц измерения',
+  stale: 'Неликвидные товары (даты поступления)',
 };
 
 // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
@@ -936,7 +943,7 @@ function findTwins() {
   return out;
 }
 
-export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, stale: 7, contacts: 8 };
 
 export async function smartRun() {
   const btn = $('smartRun');
@@ -1010,7 +1017,7 @@ export async function smartRun() {
 let salesParsed = null;
 
 // дата из ячейки Excel: число-«серийник» или строка «01.07.2026»
-function parseDateCell(v) {
+export function parseDateCell(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'number' && v > 20000 && v < 80000) {
     return new Date(Date.UTC(1899, 11, 30) + v * 86400000).toISOString().slice(0, 10);
@@ -1107,7 +1114,7 @@ let stockParsed = null;
 
 // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
 // как parsePriceNum, но допускает 0 и отрицательные (остаток бывает минусовым)
-function stockNum(v) { return parseCountNum(v); }
+export function stockNum(v) { return parseCountNum(v); }
 
 function parseStockReport(rows) {
   const cols = {};

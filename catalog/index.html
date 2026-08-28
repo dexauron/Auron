@@ -219,6 +219,7 @@
           <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
           <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
           <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
+          <button class="ios-row ios-row-link" id="menuStale"><span class="ios-row-title">Залежалось</span><span class="ios-row-value" id="menuStaleCount"></span></button>
           <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
           <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
         </div>
@@ -265,6 +266,19 @@
         <button class="ios-nav-btn strong" data-close="marginSheet">Готово</button>
       </div>
       <div class="sheet-body" id="marginBody"></div>
+    </div>
+  </div>
+
+  <!-- Залежалось: товар на полке, который давно приехал и не продаётся -->
+  <div class="sheet-backdrop" id="staleSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Залежалось</h2>
+        <button class="ios-nav-btn strong" data-close="staleSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="staleBody"></div>
     </div>
   </div>
 
