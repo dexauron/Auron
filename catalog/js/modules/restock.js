@@ -16,6 +16,7 @@ import { deviceName } from './device.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { openOrderForm } from './orders.js';
+import { findByBarcode } from './scanner.js';
 
 const KEY = 'wm_restock_v1';
 const MAX = 300;          // столько строк уже не список, а склад — дальше не копим
@@ -188,7 +189,10 @@ export async function shareRestock() {
 export function scanToRestock(text) {
   const box = $('scanResult');
   if (!box) return;
-  const p = state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === String(text).trim()));
+  // весовую этикетку тоже понимаем: сотрудник наводит камеру на пустую полку,
+  // а на упаковке от весов обычного штрихкода нет
+  const found = findByBarcode(text);
+  const p = found && found.p;
   box.hidden = false;
   if (!p) {
     box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>

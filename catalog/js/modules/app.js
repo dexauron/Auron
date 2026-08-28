@@ -14,7 +14,7 @@ import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, fin
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
@@ -1174,7 +1174,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
+    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
     _staleItems: staleItems, _openStale: openStale };
