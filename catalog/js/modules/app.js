@@ -808,7 +808,9 @@ function bindEvents() {
     $('scanTitle').textContent = 'Наведи камеру на штрихкод';
     syncScanMode();
     if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
-    else startScan(scanToSearch);
+    // камеру держим открытой: по весовой этикетке сотрудник видит ценник и
+    // сверяет следующую, а обычный штрихкод закроет её сам, открыв карточку
+    else startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
 
