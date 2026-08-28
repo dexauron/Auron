@@ -14,11 +14,12 @@
  * Экран только для того, кто видит закупки (владелец): сотруднику зала эти
  * числа не показываются нигде и никогда. */
 
-import { $, state } from './store.js';
-import { closeSheet, esc, openSheet } from './core.js';
+import { $, state, ui } from './store.js';
+import { closeSheet, esc, norm, openSheet } from './core.js';
 import { fmtPrice, isFreshPrice } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
+import { cellStr, parseDateCell, stockNum } from './imports.js';
 
 const THIN_PCT = 5;        // наценка ниже этой — «почти в ноль»
 const MAX_ROWS = 200;      // длиннее список никто не прочитает
@@ -120,6 +121,7 @@ export function renderMarginBadge() {
 /* Обработчики модуль вешает сам: app.js уже дорос до предела, который держит
  * проверка «модули», и складывать в него ещё и это нельзя. */
 export function bindMargin(openProduct) {
+  ui.importStale = importStale;   // модуль загрузки зовёт разбор через ui, без встречного импорта
   $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
   $('menuStale').addEventListener('click', () => { closeSheet('adminMenuSheet'); openStale(); });
   $('staleBody').addEventListener('click', (e) => {
@@ -183,4 +185,58 @@ export function openStale() {
     : `<p class="ios-note">Залежавшихся товаров не нашлось. Если список пустой сразу после
     установки — загрузи из 1С отчёт «Неликвидные товары»: в нём лежат даты поступления.</p>`;
   openSheet('staleSheet');
+}
+
+/* ── Разбор отчёта «Неликвидные товары» ─────────────────────────────────────
+ * Ради одной колонки: «Дата последнего поступления». Это единственное место
+ * во всех выгрузках 1С, где написано, когда товар РЕАЛЬНО приехал последний
+ * раз. Раньше дату завоза приходилось угадывать по дате цены поставщика — а
+ * цена могла обновиться и без поступления.
+ * Заодно берём продажи за период: из них и складывается «залежалось».
+ * Кода товара в этом отчёте нет — сопоставляем по названию.
+ * Разбор живёт здесь, а не в модуле загрузки: он нужен только этому экрану,
+ * а модуль загрузки и без того дорос до предела, который держит проверка. */
+function parseStaleReport(rows) {
+  const cols = {};
+  for (let r = 0; r < Math.min(rows.length, 16); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const l = cellStr(row[c]).toLowerCase();
+      if (!l) continue;
+      if (cols.name === undefined && (l === 'номенклатура' || l === 'наименование')) cols.name = c;
+      else if (cols.date === undefined && l.includes('дата последнего поступления')) cols.date = c;
+      else if (cols.sold === undefined && l === 'продажи') cols.sold = c;
+    }
+  }
+  if (cols.date === undefined) throw new Error('Не нашёл колонку «Дата последнего поступления»');
+  // название лежит в первой колонке, даже когда его заголовок стоит отдельной строкой
+  if (cols.name === undefined) cols.name = 0;
+  const recs = [];
+  for (const row of rows) {
+    const name = cellStr(row[cols.name]);
+    if (!name || /^основной склад$/i.test(name)) continue;   // итоговая строка склада
+    const date = parseDateCell(row[cols.date]);
+    if (!date) continue;                                     // строки шапки сюда не попадают
+    recs.push({
+      name,
+      date,
+      // пустая клетка в «Продажах» значит «не продавался ни разу» — это ноль,
+      // а не «неизвестно»: именно такие товары и есть залежавшиеся
+      sold: cols.sold !== undefined ? (stockNum(row[cols.sold]) || 0) : null,
+    });
+  }
+  return recs;
+}
+
+function importStale(rows) {
+  const byName = new Map();
+  for (const p of state.products || []) byName.set(norm(p.name), p);
+  for (const rec of parseStaleReport(rows)) {
+    const p = byName.get(norm(rec.name));
+    if (!p) continue;                        // товара нет в каталоге — пропускаем
+    // Эта дата точнее той, что мы угадывали по цене поставщика: ставим её
+    // всегда, а не «только если новее».
+    p.arrival_at = rec.date;
+    if (rec.sold != null) p.sold_qty = rec.sold;
+  }
 }
