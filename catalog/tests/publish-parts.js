@@ -207,6 +207,34 @@ function fakeGithub() {
   chk(!/ownerpw|staffpw|другойпароль|новыйпароль/.test(keysFile) && keysFile.length < 2000,
     `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
 
+  /* ── 8a. Витрина помечена версией приложения ──
+     История: штрихкоды добавили в код, владелец опубликовал — и они не уехали,
+     потому что на его телефоне работала сохранённая старая версия. Публикация
+     выглядела успешной, а покупатели не могли сканировать. Теперь в описи
+     стоит номер версии, и приложение владельца само просит опубликовать
+     заново. Проверяем и номер, и то, ради чего он появился, — штрихкоды. */
+  const idxRaw = gh.fs.get('catalog/data/index.json') || '{}';
+  const idx = JSON.parse(idxRaw);
+  const wantV = await page.evaluate(() => window.WM_PUBLISH._showcaseV);
+  chk(idx.app === wantV, `в описи витрины стоит её версия (app=${idx.app}, ожидали ${wantV})`);
+  const shopPart = JSON.parse(gh.fs.get('catalog/data/p/00.json') || '[]');
+  chk(shopPart.length > 0 && shopPart.every((p) => Array.isArray(p.barcodes) && p.barcodes.length),
+    `штрихкоды покупателю уехали (${shopPart.filter((p) => (p.barcodes || []).length).length} из ${shopPart.length})`);
+
+  // ── 8b. Витрину собрала старая версия — владельцу говорим об этом ──
+  const warn = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    P._state().isAdmin = true;
+    document.getElementById('publishBanner').hidden = true;
+    await P._checkShowcaseFresh();
+    const quiet = document.getElementById('publishBanner').hidden;
+    // теперь как будто витрину собрали до появления номера версии
+    window.__oldIndex = true;
+    await P._checkShowcaseFresh();
+    return { quiet, warned: !document.getElementById('publishBanner').hidden };
+  });
+  chk(warn.quiet, 'свежая витрина владельца не тревожит');
+
   // ── 9. Старый цельный файл всё ещё читается ──
   ['catalog/data/keys.json', 'catalog/data/catalog.enc'].forEach((f) => gh.fs.delete(f));
   const legacy = await page.evaluate(async () => {
