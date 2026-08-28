@@ -15,7 +15,7 @@
  * числа не показываются нигде и никогда. */
 
 import { $, state } from './store.js';
-import { esc, openSheet } from './core.js';
+import { closeSheet, esc, openSheet } from './core.js';
 import { fmtPrice, isFreshPrice } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
@@ -99,4 +99,30 @@ export function openMargin() {
     : `<p class="ios-note">Всё в порядке: товаров, которые продаются дешевле закупки или почти
     в ноль, не нашлось. Список пересчитывается сам после каждой загрузки цен из 1С.</p>`;
   openSheet('marginSheet');
+}
+
+/* Счётчик в меню. Ноль пишем прочерком, а не пустотой: пустое место читается
+ * как «ещё не посчитали», прочерк — как «посчитали, всё в порядке». */
+export function renderMarginBadge() {
+  const row = $('menuMargin');
+  if (!row) return;
+  row.hidden = !state.canPurchase;
+  if (!state.canPurchase) return;
+  const n = marginCount();
+  const el = $('menuMarginCount');
+  el.textContent = n ? String(n) : '—';
+  el.classList.toggle('margin-bad', n > 0);
+}
+
+/* Обработчики модуль вешает сам: app.js уже дорос до предела, который держит
+ * проверка «модули», и складывать в него ещё и это нельзя. */
+export function bindMargin(openProduct) {
+  $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
+  $('marginBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-margin-open]');
+    if (!b) return;
+    closeSheet('marginSheet');
+    const p = (state.products || []).find((x) => x.id === b.dataset.marginOpen);
+    if (p) openProduct(p);
+  });
 }

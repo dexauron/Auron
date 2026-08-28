@@ -22,7 +22,7 @@ import { bindGuest, openStore } from './guest.js';
 import { bindShopping, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
-import { marginCount, marginIssues, openMargin } from './margin.js';
+import { bindMargin, marginCount, marginIssues, openMargin, renderMarginBadge } from './margin.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -385,18 +385,7 @@ function bindEvents() {
       } else {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
-      /* Сколько товаров продаётся в минус — видно, не открывая список.
-         Ноль пишем прочерком, а не пустотой: пустое место читается как
-         «ещё не посчитали», а прочерк — как «посчитали, всё в порядке». */
-      const mBox = $('menuMargin');
-      if (mBox) {
-        mBox.hidden = !state.canPurchase;
-        if (state.canPurchase) {
-          const n = marginCount();
-          $('menuMarginCount').textContent = n ? String(n) : '—';
-          $('menuMarginCount').classList.toggle('margin-bad', n > 0);
-        }
-      }
+      renderMarginBadge();    // сколько товаров продаётся в минус
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
@@ -448,14 +437,6 @@ function bindEvents() {
   $('calcUnitSeg').addEventListener('change', renderCalcResult);
 
   // правила заказа: по ним считается точка заказа и объём закупки
-  $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
-  $('marginBody').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-margin-open]');
-    if (!b) return;
-    closeSheet('marginSheet');
-    const p = state.products.find((x) => x.id === b.dataset.marginOpen);
-    if (p) openProduct(p);
-  });
   $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
   $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
   $('devName').addEventListener('change', () => {
@@ -991,6 +972,7 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
+  bindMargin(openProduct);
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
