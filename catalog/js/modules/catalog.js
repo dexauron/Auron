@@ -147,6 +147,27 @@ function packSize(name) {
   return v > 0 ? toBaseUnit(v, last[2]) : null;
 }
 
+/* Фасовка отдельной строкой — приём из индийского Zepto: там под названием
+ * стоит серое «1 pc (170 ml)», и товар читается с одного взгляда. У нас вес
+ * написан внутри названия, поэтому его оттуда ВЫРЕЗАЕМ и выносим отдельно —
+ * иначе он показывался бы дважды.
+ * Вырезаем только тогда, когда вес стоит в самом конце названия: в середине
+ * он часто часть имени («Кофе 3в1»), и трогать его нельзя. */
+const PACK_TAIL = /[\s,]*(\d+(?:[.,]\d+)?)\s*(кг|гр|г|мл|л)\s*$/i;
+
+export function packText(p) {
+  const m = String((p && p.name) || '').match(PACK_TAIL);
+  if (!m) return '';
+  const u = m[2].toLowerCase() === 'гр' ? 'г' : m[2].toLowerCase();
+  return `${m[1]} ${u}`;
+}
+
+// название без фасовки в конце — её показываем отдельной строкой
+export function nameNoPack(p) {
+  const name = String((p && p.name) || '');
+  return PACK_TAIL.test(name) ? name.replace(PACK_TAIL, '') : name;
+}
+
 // «986 ₽/кг» или пустая строка, если мы не уверены
 export function unitPriceText(p) {
   if (!p || p.is_weighted) return '';       // у весовых цена и так за килограмм
