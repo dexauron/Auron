@@ -19,8 +19,11 @@ import { esc, toast } from './core.js';
 
 const OFF_KEY = 'wm_wolf';       // 'off' — человек выключил волка
 const HI_KEY = 'wm_wolf_hi';     // день, когда здоровались в последний раз
-const SAY_GAP = 2500;            // мин. промежуток между репликами, мс
-const SHOW_MS = 3200;            // сколько висит облачко
+/* «Волк в меру» (слова владельца): реплика не чаще раза в шесть секунд.
+ * Всё, что не влезло в этот промежуток, уходит обычным сообщением внизу —
+ * человек ничего не теряет, а волк не превращается в болтуна. */
+const SAY_GAP = 6000;            // мин. промежуток между репликами, мс
+const SHOW_MS = 2800;            // сколько висит облачко
 
 let lastSay = 0;
 let hideTimer = 0;
@@ -114,7 +117,7 @@ export function buzz(ms) {
  * Волк превращает её из тупика в разговор. Значок остаётся рядом в разметке:
  * если волка выключили, он и покажется вместо картинки. */
 export function wolfEmpty(iconHtml) {
-  return `<img class="wolf wolf-empty" src="icons/wolf.png" width="150" height="305" alt="" decoding="async">`
+  return `<img class="wolf wolf-empty" src="icons/wolf.png" width="150" height="305" alt="" decoding="async" loading="lazy">`
     + `<span class="wolf-fallback">${iconHtml}</span>`;
 }
 
@@ -145,7 +148,7 @@ export function greet(force) {
   const text = state.session
     ? `${hi}! Хорошей смены`
     : `${hi}! Ищи по названию, коду или сканируй штрихкод`;
-  wolfSay(text, { force: true, ms: 4200, quiet: true });
+  wolfSay(text, { force: true, ms: 3600, quiet: true });
 }
 
 /* Тап по волку. Первый раз — здоровается, дальше говорит что-нибудь полезное
