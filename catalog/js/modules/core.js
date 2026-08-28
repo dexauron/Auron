@@ -1,6 +1,6 @@
 // Мелкие помощники: элементы, экранирование, форматы, шторки
 
-import { $, state } from './store.js';
+import { $, state, ui } from './store.js';
 import { ic } from './icons.js';
 import { stopScan } from './scanner.js';
 

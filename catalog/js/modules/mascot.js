@@ -14,7 +14,7 @@
  *      там человек работает, а не развлекается.
  * Выключается одним переключателем в настройках устройства. */
 
-import { $, CFG, state } from './store.js';
+import { $, CFG, state, ui } from './store.js';
 import { esc, toast } from './core.js';
 
 const OFF_KEY = 'wm_wolf';       // 'off' — человек выключил волка
@@ -186,6 +186,7 @@ function wolfTap() {
 
 export function bindMascot() {
   applyMascot();
+  ui.hideWolf = hideBubble;   // окна прячут облачко, не зная про этот модуль
   const btn = $('wolfHi');
   if (btn) btn.addEventListener('click', wolfTap);
   // облачко закрывается тапом по нему и не мешает листать
