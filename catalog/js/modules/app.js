@@ -22,6 +22,7 @@ import { bindGuest, openStore } from './guest.js';
 import { bindShopping, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
+import { marginCount, openMargin } from './margin.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -435,6 +436,14 @@ function bindEvents() {
   $('calcUnitSeg').addEventListener('change', renderCalcResult);
 
   // правила заказа: по ним считается точка заказа и объём закупки
+  $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
+  $('marginBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-margin-open]');
+    if (!b) return;
+    closeSheet('marginSheet');
+    const p = state.products.find((x) => x.id === b.dataset.marginOpen);
+    if (p) openProduct(p);
+  });
   $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
   $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
   $('devName').addEventListener('change', () => {
