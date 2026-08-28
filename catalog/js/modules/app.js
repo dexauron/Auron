@@ -385,6 +385,18 @@ function bindEvents() {
       } else {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
+      /* Сколько товаров продаётся в минус — видно, не открывая список.
+         Ноль пишем прочерком, а не пустотой: пустое место читается как
+         «ещё не посчитали», а прочерк — как «посчитали, всё в порядке». */
+      const mBox = $('menuMargin');
+      if (mBox) {
+        mBox.hidden = !state.canPurchase;
+        if (state.canPurchase) {
+          const n = marginCount();
+          $('menuMarginCount').textContent = n ? String(n) : '—';
+          $('menuMarginCount').classList.toggle('margin-bad', n > 0);
+        }
+      }
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
