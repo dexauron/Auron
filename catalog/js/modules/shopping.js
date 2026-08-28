@@ -161,7 +161,7 @@ function renderShop() {
  * что-то отметить сам, и потерять это из-за чужой ссылки он не должен. */
 const LIST_MAX = 60;      // длиннее в ссылку не влезет, да и не бывает
 
-function shopLink() {
+export function shopLink() {
   const parts = [];
   for (const x of read().filter((y) => !y.done).slice(0, LIST_MAX)) {
     const p = state.products.find((y) => y.id === x.id);
