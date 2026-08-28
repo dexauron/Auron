@@ -2,8 +2,8 @@
 
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
-import { renderActiveFilters, renderGrid } from './render.js';
-import { fmtRetail } from './catalog.js';
+import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
+import { fmtDate, fmtPrice, productCategory } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -183,26 +183,47 @@ async function scanWithLibrary(done) {
   } catch (e) { /* необязательно */ }
 }
 
-// сотрудник отсканировал штрихкод → ищем товар
-/* Проверка ценника: крупно название, цена и код — прямо в окне камеры.
- * Карточку не открываем: при сверке ценников подряд она бы каждый раз
- * перекрывала камеру. Кнопка «Открыть товар» рядом — на случай, когда нужны
- * подробности. */
+/* ── Ценник покупателя ──────────────────────────────────────────────────────
+ * Человек в зале навёл камеру на упаковку — и хочет узнать ровно то, что
+ * написано (или должно быть написано) на ценнике: сколько стоит, есть ли
+ * товар, когда его привезли, что это вообще такое. Раньше это была узкая
+ * проверка для сотрудника: название, цена, код. Владелец решил иначе —
+ * ценник теперь для ПОКУПАТЕЛЯ и показывает всё, что ему интересно, а
+ * сотруднику он не нужен: у того в карточке товара и так есть всё.
+ *
+ * Карточку поверх камеры не открываем: ценник остаётся под видоискателем,
+ * и следующий товар сканируется сразу, без лишних нажатий. */
 export function scanToPrice(text) {
   const box = $('scanResult');
   if (!box) return;
   const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
   box.hidden = false;
   if (!p) {
-    box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>
+    box.innerHTML = `<div class="scan-result-miss">Такого товара у нас нет</div>
       <div class="scan-result-code">${esc(text)}</div>`;
     return;
   }
-  const price = (p.retail_price != null && p.retail_price !== '') ? fmtRetail(p) : 'цена не указана';
-  box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
-    <div class="scan-result-price">${esc(price)}</div>
-    ${p.code ? `<div class="scan-result-code">код ${esc(p.code)}</div>` : ''}
-    <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>`;
+  const has = (v) => v != null && v !== '';
+  const price = has(p.retail_price) ? fmtPrice(p.retail_price) : 'цена не указана';
+  // «за кг» / «за шт» — покупателю важно, с чем он сравнивает цену
+  const per = p.is_weighted ? 'за кг' : (p.unit ? 'за ' + p.unit : '');
+  const st = stockLabel(p);
+  const cat = productCategory(p);
+  const rows = [
+    p.arrival_at ? ['Поступил', fmtDate(p.arrival_at)] : null,
+    cat ? ['Раздел', cat] : null,
+    p.code ? ['Код товара', p.code] : null,
+  ].filter(Boolean);
+  box.innerHTML = `<div class="pt">
+    <div class="pt-name">${esc(p.name)}</div>
+    <div class="pt-price">${esc(price)}${per ? `<span class="pt-per">${esc(per)}</span>` : ''}</div>
+    ${st ? `<div class="tag ${st.cls} pt-stock">${st.txt}</div>` : ''}
+    ${has(p.description) ? `<div class="pt-desc">${esc(p.description)}</div>` : ''}
+    <div class="pt-rows">${rows.map(([k, v]) => `<div class="pt-row">
+      <span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
+    <button class="btn btn-primary btn-block" data-shop-scanned="${esc(p.id)}">В список покупок</button>
+    <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>
+  </div>`;
 }
 
 export function scanToSearch(text) {

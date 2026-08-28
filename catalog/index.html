@@ -694,13 +694,14 @@
     <div class="sheet sheet-small">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
-        <h2 class="sheet-title">Наведи камеру на штрихкод</h2>
-        <!-- Два разных дела: найти товар (открыть карточку) и проверить ценники
-             подряд, не выходя из камеры. Выбор запоминается на телефоне. -->
-        <div class="seg" id="scanModeSeg">
+        <h2 class="sheet-title" id="scanTitle">Наведи камеру на штрихкод</h2>
+        <!-- Переключатель — только вошедшим. У покупателя выбирать нечего:
+             он всегда получает ценник, ради него он камеру и открыл.
+             Режим «Ценник» из этого списка убран по решению владельца:
+             сотруднику он не нужен, у него в карточке и так всё есть. -->
+        <div class="seg emp-only" id="scanModeSeg">
           <button data-scanmode="card">Товар</button>
-          <button data-scanmode="price">Ценник</button>
-          <button data-scanmode="out" class="emp-only">Закончилось</button>
+          <button data-scanmode="out">Закончилось</button>
         </div>
         <div id="scanResult" class="scan-result" hidden></div>
         <div id="scanContainer" class="scan-box"></div>

@@ -38,7 +38,9 @@ function total(list) {
   }, 0);
 }
 
-function toggleShop(p) {
+/* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его
+ * в список, не открывая карточку. */
+export function toggleShop(p) {
   if (!p) return false;
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
