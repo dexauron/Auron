@@ -23,6 +23,7 @@ import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js'
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
+import { bindReviews, openRate, ratingOf, ratingText } from './reviews.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -975,6 +976,9 @@ function bindEvents() {
   bindNews(openProduct);
   bindMascot();
   bindMargin(openProduct);
+  // отзывы: покупатель оценивает, владелец добавляет и сразу публикует
+  bindReviews((msg) => svSaveAndPublish(msg));
+  $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
@@ -1181,7 +1185,8 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
-    _staleItems: staleItems, _openStale: openStale };
+    _staleItems: staleItems, _openStale: openStale,
+    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate };
 }
 
 init();

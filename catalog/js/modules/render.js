@@ -8,6 +8,7 @@ import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
+import { ratingText } from './reviews.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -208,6 +209,8 @@ export function renderGrid() {
     /* «Часто берут» — только покупателю: сотруднику ходовые товары показывает
        отдельный экран с цифрами, а в рабочем списке это лишний шум. */
     if (!state.session && isTopSeller(p)) tags.push('<span class="tag tag-hit">Часто берут</span>');
+    // оценка соседей — покупателю: по ней он и выбирает между двумя похожими
+    if (!state.session) { const rt = ratingText(p); if (rt) tags.push(`<span class="tag tag-rating">★ ${esc(rt)}</span>`); }
     // «без ШК» — служебная пометка для кассы (пробивать по коду). Покупателю
     // она ничего не говорит, поэтому показываем только своим.
     if (state.session && !(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');

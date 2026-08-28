@@ -130,6 +130,9 @@ export async function ghCommit(files, message, opts = {}) {
  * самой упаковке. Артикул, поставщики, закупки и остаток числом остаются
  * закрытыми. */
 const PUBLIC_FIELDS = ['id', 'name', 'code', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+/* Отзывы уезжают отдельно и обрезанными: они и написаны для покупателя, но
+ * витрину качает каждый, и тащить в неё всю переписку незачем. */
+const PUB_REVIEWS = 5;
 
 /* Наличие товара: «есть / мало / нет».
  * История решения. Сначала признак наличия лежал в открытой витрине, потом
@@ -163,6 +166,11 @@ export function buildPublicProducts() {
       // запасная дата: если товар ни разу не попадал в файл цен, «Новее»
       // сортирует хотя бы по дате появления в каталоге
       if (p.created_at) o.created_at = String(p.created_at).slice(0, 10);
+      // отзывы: последние пять, только имя, оценка, слова и дата
+      const rev = (p.reviews || []).slice(-PUB_REVIEWS)
+        .map((x) => ({ n: String(x.n || '').slice(0, 40), r: Number(x.r) || 0, t: String(x.t || '').slice(0, 200), d: String(x.d || '').slice(0, 10) }))
+        .filter((x) => x.r >= 1 && x.r <= 5);
+      if (rev.length) o.reviews = rev;
       // наличие словом, без числа: «есть / мало / нет»
       const st = stockState(p, null);
       if (st) o.stock_state = st;
@@ -203,8 +211,9 @@ export function buildPopularIds() {
  * по-прежнему не могли отсканировать товар. Теперь номер версии уезжает в
  * опись, и приложение владельца само говорит: «витрина собрана старой
  * версией — опубликуй заново».
- * 1 — без номера (до 27.08), 2 — наличие словом, 3 — штрихкоды покупателю. */
-export const SHOWCASE_V = 3;
+ * 1 — без номера (до 27.08), 2 — наличие словом, 3 — штрихкоды покупателю,
+ * 4 — отзывы соседей. */
+export const SHOWCASE_V = 4;
 
 const PUB_PARTS = 16;              // кусков витрины
 const PUB_DIR = 'p';               // папка кусков витрины

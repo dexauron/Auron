@@ -135,6 +135,9 @@ export function openProduct(p) {
   renderProductPrices(p);
   ui.compFilter = { store: '', from: '', to: '' };
   renderCompetitors(p);
+  // отзывы соседей — под всем остальным: сначала цена и наличие, потом слова
+  const rev = $('sheetReviews');
+  if (rev) rev.innerHTML = reviewsHtml(p);
   renderSimilar(p);
   openSheet('productSheet');
 }
