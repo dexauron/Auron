@@ -297,6 +297,7 @@ function bindEvents() {
   // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
   $('myStrip').addEventListener('click', openSimilar);
   $('newStrip').addEventListener('click', openSimilar);
+  $('cheaperStrip').addEventListener('click', openSimilar);
   $('arrivalStrip').addEventListener('click', (e) => {
     const all = e.target.closest('[data-arr-all]');
     if (all) {

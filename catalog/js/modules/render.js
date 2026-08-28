@@ -504,6 +504,7 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
+  renderCheaper();
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
@@ -702,6 +703,41 @@ export function renderNewProducts() {
         <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
+}
+
+/* ── «Сегодня дешевле» ──────────────────────────────────────────────────────
+ * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
+ * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
+ * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
+ * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
+ * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
+ * Только покупателю: сотруднику цены показывает отдельный экран. */
+const CHEAP_ROWS = 5;
+
+function renderCheaper() {
+  ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
+  const box = $('cheaperStrip');
+  if (!box) return;
+  const show = !state.session && state.tab === 'catalog'
+    && !state.query && !state.favOnly && !anyFilterActive();
+  const was = state.priceWas || {};
+  const list = show ? state.products.filter((p) => {
+    const w = Number(was[p.id]); const n = Number(p.retail_price);
+    return w > 0 && n > 0 && w > n;
+  }) : [];
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  // сверху то, где выгода больше в рублях: она и решает
+  list.sort((a, b) => (was[b.id] - b.retail_price) - (was[a.id] - a.retail_price));
+  const rows = list.slice(0, CHEAP_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
+      <span class="arr-name">${esc(p.name)}</span>
+      <span class="arr-price">${esc(fmtRetail(p))}
+        <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">Сегодня дешевле</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>`;
+  box.hidden = false;
 }
 
 /* ── «Сегодня привезли» ──────────────────────────────────────────────────
