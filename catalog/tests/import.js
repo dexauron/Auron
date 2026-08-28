@@ -58,6 +58,9 @@ const { chromium, newPage, runner } = require('./helpers');
       s.products = [
         { id: 'n1', name: 'Кукла в джинсах', code: '900', barcodes: [], photos: [], supplier_ids: [], arrival_at: '2026-01-01' },
         { id: 'n2', name: 'Молоко', code: '901', barcodes: [], photos: [], supplier_ids: [], arrival_at: '2026-01-01' },
+        // у этого товара дата из «Цен поставщиков» СВЕЖЕЕ: отчёт по неликвиду
+        // построен за период и после его конца завозов не видит
+        { id: 'n3', name: 'Хлеб', code: '902', barcodes: [], photos: [], supplier_ids: [], arrival_at: '2026-08-25' },
       ];
       let type = null;
       try { type = P.svImportRows(rr); } catch (e) { return { err: String(e.message || e) }; }
@@ -71,13 +74,17 @@ const { chromium, newPage, runner } = require('./helpers');
       ['Основной склад', '', '', '', '', '367 234,162', '340 469,584', '', '94 160,487', '320 229,262'],
       ['Кукла в джинсах', '', '', '', '', '1', '1', '08.05.2026', '2', ''],
       ['Молоко', '', '', '', '', '40', '40', '20.08.2026', '12', '38'],
+      ['Хлеб', '', '', '', '', '5', '5', '01.08.2026', '2', '3'],
     ]);
     chk(r.type === 'stale', `отчёт опознан как «неликвид» (${r.type || r.err})`);
     const kukla = (r.products || []).find((p) => p.name === 'Кукла в джинсах') || {};
     const moloko = (r.products || []).find((p) => p.name === 'Молоко') || {};
-    chk(kukla.arrival_at === '2026-05-08', `настоящая дата поступления проставлена (${kukla.arrival_at})`);
+    chk(kukla.arrival_at === '2026-05-08', `дата поступления проставлена, когда она новее (${kukla.arrival_at})`);
     chk(moloko.sold_qty === 38, `продажи за период сохранены (${moloko.sold_qty})`);
     chk(kukla.sold_qty === 0, `у непродающегося товара продажи 0, а не пусто (${kukla.sold_qty})`);
+    const hleb = (r.products || []).find((p) => p.name === 'Хлеб') || {};
+    chk(hleb.arrival_at === '2026-08-25',
+      `более свежую дату из «Цен поставщиков» не затираем старой (${hleb.arrival_at})`);
   }
   { // справочник единиц: коэффициенты 1С с тремя знаками
     const r = await page.evaluate((rr) => {
