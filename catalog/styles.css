@@ -1840,3 +1840,26 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .star-off { color: var(--surface-3); }
 .rate-stars .ic { width: 30px; height: 30px; }
 .rate-stars button.on .ic { fill: currentColor; }
+
+/* ── Строка товара: приёмы из индийского Zepto ───────────────────────────────
+   Фасовка отдельной серой строкой, прежняя цена зачёркнутой и выгода рядом.
+   Всё вместе даёт то, чего у нас не было: экономия и размер упаковки читаются
+   за долю секунды, без единого нажатия */
+.row-pack { font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.card-was { font-size: 13px; color: var(--text-2); text-decoration: line-through; margin-left: 8px; font-weight: 500; }
+.card-drop {
+  margin-left: 6px; font-size: 12px; font-weight: 700; color: #fff;
+  background: var(--pos); border-radius: 6px; padding: 1px 6px; vertical-align: 1px;
+}
+
+/* «В каталоге: 89 ₽» — чтобы человек сверял, а не вспоминал */
+.shelf-ours { font-size: 15px; color: var(--text-2); margin: 6px 0 4px; }
+.shelf-ours b { color: var(--text); font-size: 17px; }
+
+/* Обещание магазина в его карточке: спокойно и без восклицаний */
+.store-promise {
+  display: flex; align-items: center; gap: 7px; margin: 12px 16px 0;
+  padding: 11px 14px; border-radius: var(--radius-sm);
+  background: rgba(48, 209, 88, .12); color: var(--pos);
+  font-size: 15px; font-weight: 600;
+}
