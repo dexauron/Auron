@@ -2,10 +2,9 @@
 
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
-import { renderActiveFilters, renderGrid } from './render.js';
-import { fmtDate, fmtPrice, fmtRetail, productCategory } from './catalog.js';
+import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
+import { fmtDate, fmtPrice, productCategory } from './catalog.js';
 import { openProduct } from './card.js';
-import { stockLabel } from './render.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
  * Android/Chrome — встроенный распознаватель (BarcodeDetector).

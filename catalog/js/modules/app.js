@@ -778,7 +778,10 @@ function bindEvents() {
      «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
      включённой и на каждый штрихкод крупно показывает цену. */
   const SCAN_MODE_KEY = 'wm_scan_mode';
-  const MODES = ['card', 'price', 'out'];
+  /* Режим «Ценник» из списка убран: он теперь ЕДИНСТВЕННЫЙ у покупателя и
+     не нужен сотруднику (решение владельца). На телефонах, где сотрудник
+     когда-то выбрал «price», молча возвращаемся к «Товар». */
+  const MODES = ['card', 'out'];
   const scanMode = () => {
     try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
   };
@@ -787,12 +790,22 @@ function bindEvents() {
     const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
   };
   const runScan = () => {
-    // переключатель мог быть спрятан пересчётом — возвращаем его
-    const seg = $('scanModeSeg'); if (seg) seg.hidden = false;
+    const seg = $('scanModeSeg');
+    const res = $('scanResult');
+    /* Покупателю выбирать нечего: он навёл камеру, чтобы узнать цену. Сразу
+       ценник — и камера остаётся включённой, чтобы проверить следующий товар. */
+    if (!state.session) {
+      if (seg) seg.hidden = true;
+      if (res) { res.hidden = true; res.innerHTML = ''; }
+      $('scanTitle').textContent = 'Наведи камеру на штрихкод — покажу цену';
+      startScan(scanToPrice, { keepOpen: true });
+      return;
+    }
+    // переключатель мог быть спрятан пересчётом или режимом покупателя
+    if (seg) seg.hidden = false;
+    $('scanTitle').textContent = 'Наведи камеру на штрихкод';
     syncScanMode();
-    const m = scanMode();
-    if (m === 'price') startScan(scanToPrice, { keepOpen: true });
-    else if (m === 'out') startScan(scanToRestock, { keepOpen: true });
+    if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
     else startScan(scanToSearch);
   };
   $('scanSearchBtn').addEventListener('click', runScan);
