@@ -57,6 +57,10 @@ function renderStore() {
   const hours = CFG.STORE_HOURS || '';
   const map = CFG.STORE_MAP || (addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '');
   const upd = updatedText();
+  /* Обещание магазина. Для Грозного «весь товар халяльный» — не украшение
+     и не реклама, а первое, что человек хочет знать. Сетевые магазины такого
+     не пишут никогда, потому что за всю сеть этого не пообещать. */
+  const promise = CFG.STORE_PROMISE || '';
   const about = (addr || hours) ? `<div class="ios-group">
       ${addr ? `<a class="ios-row ios-row-link" id="storeMap" href="${esc(map)}" target="_blank" rel="noopener">
         <span class="ios-row-title">Адрес<span class="ord-sub">${esc(addr)}</span></span>
@@ -67,6 +71,7 @@ function renderStore() {
 
   box.innerHTML = `
     ${about}
+    ${promise ? `<div class="store-promise">${ic('check', 'ic-xs')} ${esc(promise)}</div>` : ''}
     ${upd ? `<p class="ios-note">Цены и наличие обновлены <b>${esc(upd)}</b>. Данные приходят
       из магазина раз в день — если товар нужен наверняка, лучше позвонить.</p>` : ''}
     <p class="ios-note">Ошибка в цене, чего-то не хватает на полке, есть пожелание —
