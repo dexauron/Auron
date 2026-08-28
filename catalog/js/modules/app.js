@@ -3,7 +3,7 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { buildIndex, categoryOf, daysAgoISO, parseScaleBarcode, productCategory, scoreProduct, todayISO, unitPriceText, visibleProducts, warmSearchIndex } from './catalog.js';
+import { buildIndex, categoryOf, daysAgoISO, parseScaleBarcode, productCategory, scoreProduct, todayISO, unitPriceText, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
@@ -1176,7 +1176,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode,
+    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _updatedText: updatedText,
     _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,

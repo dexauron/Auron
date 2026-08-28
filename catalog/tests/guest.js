@@ -95,6 +95,10 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(!seg.price, 'режим «Ценник» из списка сотрудника убран — ему он не нужен');
 
   // ── 2. Карточка товара: только нужное покупателю ──
+  await page.evaluate(() => {
+    const d = new Date(); d.setHours(17, 40, 0, 0); d.setDate(d.getDate() - 1);
+    window.WM_PUBLISH._state().showcaseAt = d.toISOString();
+  });
   await openProduct(page, 'p1');
   const card = await page.evaluate(() => {
     const t = document.querySelector('#productSheet .sheet-body').innerText.replace(/\s+/g, ' ');
@@ -105,6 +109,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       similar: (document.getElementById('sheetSimilar') || {}).innerHTML || '',
       prices: (document.getElementById('sheetPrices') || {}).innerHTML || '',
       stock: (document.getElementById('sheetStock') || {}).innerHTML || '',
+      badges: document.getElementById('sheetBadges').innerText.replace(/\s+/g, ' '),
       report: !document.getElementById('btnReportPrice').hidden,
       restock: document.getElementById('btnRestock').hidden,
       compare: document.getElementById('btnCompareAdd').hidden,
@@ -118,6 +123,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(!card.similar.trim(), 'лента «похожие» с фотографиями скрыта');
   chk(card.restock && card.compare, 'рабочие кнопки («закончилось», «к сравнению») скрыты');
   chk(card.report, 'зато есть «Видел дешевле в другом магазине»');
+  chk(/Обновлено вчера в 17:40/.test(card.badges),
+    `в карточке видно, когда данные обновились (${(card.badges || '').slice(0, 60)})`);
 
   // ── 3. Подсказка о цене копится на телефоне ──
   const rep = await page.evaluate(async () => {
@@ -348,6 +355,31 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     'после входа каталог снова рабочий: «Магазин» скрыт, «Работа» на месте');
   chk(staff.shopBar, 'полоска списка покупок сотруднику не мешает');
   chk(staff.toggle !== 'none', 'переключатель вида вернулся сотруднику');
+
+  /* ── Когда данные обновились ──
+     Владелец выгружает из 1С и публикует раз в день вечером: утром человек
+     смотрит на вчерашние остатки. Врать нельзя, прятать тоже — пишем прямо. */
+  const when = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state();
+    const d = new Date(); d.setHours(17, 40, 0, 0);
+    s.showcaseAt = d.toISOString();
+    const words = { today: P._updatedText() };
+    const y = new Date(d); y.setDate(y.getDate() - 1);
+    s.showcaseAt = y.toISOString();
+    words.yesterday = P._updatedText();
+    // подпись на ценнике
+    P._scanPrice('4600000000011');
+    await new Promise((r) => setTimeout(r, 250));
+    words.tag = document.getElementById('scanResult').innerText.replace(/\s+/g, ' ');
+    // если даты нет — не выдумываем
+    s.showcaseAt = '';
+    words.none = P._updatedText();
+    return words;
+  });
+  chk(when.today === 'сегодня в 17:40', `«сегодня в 17:40» вместо голой даты (${when.today})`);
+  chk(when.yesterday === 'вчера в 17:40', `вчерашнее так и называется (${when.yesterday})`);
+  chk(/Обновлено вчера в 17:40/.test(when.tag), `на ценнике видно, когда данные обновились (${when.tag.slice(-46)})`);
+  chk(!when.none, 'даты нет — ничего не выдумываем');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);

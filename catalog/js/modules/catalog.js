@@ -159,6 +159,30 @@ export function unitPriceText(p) {
   return Math.round(per).toLocaleString('ru-RU') + ' ₽/' + ps.unit;
 }
 
+/* ── «Обновлено …» ──────────────────────────────────────────────────────────
+ * Покупателю важно не только «есть товар», но и насколько этому можно верить.
+ * Владелец выгружает данные из 1С и публикует раз в день вечером, значит
+ * утром человек смотрит на вчерашние остатки. Врать нельзя, прятать тоже —
+ * поэтому просто пишем, когда данные обновились, и человек решает сам.
+ * Время берём то, что записано в описи витрины при публикации. */
+const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+
+export function updatedText() {
+  const iso = state.showcaseAt;
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  const hhmm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const day = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const diff = Math.round((today - day) / 86400000);
+  if (diff === 0) return `сегодня в ${hhmm}`;
+  if (diff === 1) return `вчера в ${hhmm}`;
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} в ${hhmm}`;
+}
+
 /* ── Штрихкод с магазинных весов ────────────────────────────────────────────
  * Весы печатают этикетку и сами рисуют на ней штрихкод. Внутри магазина он
  * значит «вот этот товар и вот столько граммов», а снаружи он никому не

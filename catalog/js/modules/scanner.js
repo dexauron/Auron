@@ -3,7 +3,7 @@
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
 import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
-import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, unitPriceText } from './catalog.js';
+import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, unitPriceText, updatedText } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -207,6 +207,12 @@ export function findByBarcode(text) {
   return p ? { p, grams: sc.grams } : null;
 }
 
+/* Сумма к оплате — с копейками, как на этикетке весов: «181,50 ₽», а не
+ * «181,5 ₽». Это то самое число, которое человек увидит на кассе, и оно
+ * должно совпадать до копейки. У ровных сумм копейки не дописываем. */
+const fmtMoney = (n) => Number(n).toLocaleString('ru-RU',
+  { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
+
 export function scanToPrice(text) {
   const box = $('scanResult');
   if (!box) return;
@@ -242,10 +248,11 @@ export function scanToPrice(text) {
     <div class="pt-name">${esc(p.name)}</div>
     <div class="pt-price">${esc(price)}${per ? `<span class="pt-per">${esc(per)}</span>` : ''}</div>
     ${perUnit ? `<div class="pt-unitprice">${esc(perUnit)}</div>` : ''}
-    ${sum ? `<div class="pt-sum">К оплате <b>${esc(fmtPrice(sum))}</b>
+    ${sum ? `<div class="pt-sum">К оплате <b>${esc(fmtMoney(sum))}</b>
       <span class="pt-sum-sub">за ${esc(fmtNum(kg))} кг по этикетке</span></div>` : ''}
     ${st ? `<div class="tag ${st.cls} pt-stock">${st.txt}</div>` : ''}
     ${isTopSeller(p) ? '<div class="tag tag-hit pt-stock">Часто берут</div>' : ''}
+    ${updatedText() ? `<div class="pt-when">Обновлено ${esc(updatedText())}</div>` : ''}
     ${has(p.description) ? `<div class="pt-desc">${esc(p.description)}</div>` : ''}
     <div class="pt-rows">${rows.map(([k, v]) => `<div class="pt-row">
       <span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
