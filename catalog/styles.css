@@ -1419,9 +1419,10 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .similar-code { display: inline-block; margin-top: 2px; font-weight: 700; font-size: 15px;
   color: var(--brand-ink); font-variant-numeric: tabular-nums; }
 
-/* ── Проверка ценника: ответ виден с вытянутой руки ─────────────────────────
-   Сотрудник сверяет ценники на бегу, телефон держит далеко от глаз — поэтому
-   цена набрана крупно, а подробности карточки тут только мешали бы. */
+/* ── Ценник покупателя: ответ виден с вытянутой руки ────────────────────────
+   Человек стоит у полки и держит телефон далеко от глаз, поэтому цена набрана
+   крупно. Остальное — то, что он и так ищет глазами на бумажном ценнике:
+   есть ли товар, когда привезли, что это такое. */
 .scan-result {
   background: var(--surface); border-radius: var(--radius);
   padding: 14px 16px; margin: 10px 0 12px; text-align: center;
@@ -1432,6 +1433,27 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .scan-result-miss { font-size: 17px; font-weight: 600; color: var(--warn); }
 .scan-result .btn { margin-top: 10px; }
+
+/* Ценник целиком */
+.pt-name { font-size: 18px; font-weight: 700; line-height: 1.25; }
+.pt-price {
+  font-size: 44px; font-weight: 800; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; margin: 6px 0 2px; line-height: 1;
+}
+.pt-per { font-size: 15px; font-weight: 600; color: var(--text-2); margin-left: 8px; letter-spacing: 0; }
+.pt-stock { display: inline-block; margin: 6px 0 2px; }
+.pt-desc {
+  font-size: 14px; line-height: 1.4; color: var(--text-2);
+  margin: 10px 0 0; text-align: left;
+}
+.pt-rows { margin: 12px 0 2px; }
+.pt-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-top: 1px solid var(--border);
+  font-size: 15px; text-align: left;
+}
+.pt-row span { color: var(--text-2); }
+.pt-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ── Заказы поставщикам: неделя одним взглядом ──────────────────────────────
    Столбик = сумма поставок за день. Видно, какой день перегружен, а какой
