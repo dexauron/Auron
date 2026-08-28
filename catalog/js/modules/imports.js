@@ -7,7 +7,7 @@ import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
 import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
-import { buildPopularIds, publishFull } from './publish.js';
+import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
 import { loadScript } from './scanner.js';
@@ -172,6 +172,29 @@ function svUploadContacts(list) {
   state.contacts = state.contacts || {};
   for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
 }
+/* ── Витрину собрала старая версия приложения ────────────────────────────
+ * Владелец работает с расшифрованным каталогом и открытую витрину не читает —
+ * значит и не видит, что в ней лежит. Один раз это уже стоило покупателям
+ * сканера: штрихкоды добавили в код, но публикация прошла со старой,
+ * сохранённой на телефоне версией, и в витрину они не попали. Проверяем сами
+ * и говорим владельцу словами. Сотруднику не показываем: публиковать может
+ * только владелец, а тревожить человека тем, что он не может исправить,
+ * — плохая привычка. */
+export async function checkShowcaseFresh() {
+  if (!state.isAdmin || !CFG.STATIC_URL) return;
+  const el = $('publishBanner');
+  if (!el || !el.hidden) return;          // уже висит беда посрочнее
+  let meta = null;
+  try {
+    const r = await fetch(`${CFG.STATIC_URL}index.json?t=${Date.now()}`, { cache: 'no-cache' });
+    meta = r.ok ? await r.json() : null;
+  } catch (e) { return; }                 // нет связи — зря не пугаем
+  if (!meta || Number(meta.app) >= SHOWCASE_V) return;
+  el.textContent = 'Витрина на сайте собрана старой версией приложения: '
+    + 'покупатели не видят штрихкоды и наличие. Нажми, чтобы опубликовать заново.';
+  el.hidden = false;
+}
+
 /* Публикация не удалась. Записанное никуда не делось — оно на телефоне, — но
  * сказать об этом надо по-человечески и дать понятное действие, а не показывать
  * код ответа сервера. Плашка держится вверху экрана, пока не опубликуется. */
@@ -280,6 +303,7 @@ async function fetchShowcase(base, onChunk) {
   if (idx && idx.ok) {
     const meta = await idx.json().catch(() => null);
     if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
+      state.showcaseApp = Number(meta.app) || 1;   // чем собрана витрина
       const chunks = [];
       // Куски показываем ПО МЕРЕ ПРИХОДА, а не после последнего: каталог на
       // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
