@@ -128,7 +128,7 @@ function toBaseUnit(v, u) {
   return null;
 }
 
-export function packSize(name) {
+function packSize(name) {
   const s = String(name || '');
   const m = s.match(PACK_MULT);              // «6х1,5л» — упаковка из шести
   if (m) {
