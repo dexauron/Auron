@@ -7,7 +7,7 @@ import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
 import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
-import { buildPopularIds, publishFull , SHOWCASE_V } from './publish.js';
+import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
 import { loadScript } from './scanner.js';
