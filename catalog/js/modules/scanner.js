@@ -3,7 +3,7 @@
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
 import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
-import { fmtDate, fmtPrice, isTopSeller, productCategory, unitPriceText } from './catalog.js';
+import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, unitPriceText } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -193,10 +193,26 @@ async function scanWithLibrary(done) {
  *
  * Карточку поверх камеры не открываем: ценник остаётся под видоискателем,
  * и следующий товар сканируется сразу, без лишних нажатий. */
+/* Найти товар по штрихкоду. Сначала как обычно — по напечатанному на
+ * упаковке коду. Не нашли — пробуем прочитать этикетку магазинных весов:
+ * там внутри лежит код товара и вес. Догадку принимаем, только если код
+ * действительно нашёлся в каталоге: иначе обычный штрихкод, начинающийся с
+ * двойки, мог бы притвориться весовым. */
+export function findByBarcode(text) {
+  const hit = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
+  if (hit) return { p: hit, grams: 0 };
+  const sc = parseScaleBarcode(text);
+  if (!sc) return null;
+  const p = state.products.find((x) => x.code != null && String(x.code) === sc.code);
+  return p ? { p, grams: sc.grams } : null;
+}
+
 export function scanToPrice(text) {
   const box = $('scanResult');
   if (!box) return;
-  const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
+  const found = findByBarcode(text);
+  const p = found && found.p;
+  const grams = found ? found.grams : 0;
   box.hidden = false;
   if (!p) {
     box.innerHTML = `<div class="scan-result-miss">Такого товара у нас нет</div>
@@ -211,7 +227,13 @@ export function scanToPrice(text) {
   const perUnit = unitPriceText(p);
   const st = stockLabel(p);
   const cat = productCategory(p);
+  /* Этикетка с весов: в ней записан вес именно этой упаковки, значит можно
+     сразу сказать, сколько человек заплатит на кассе. Ради этого весовую
+     этикетку и разбираем — иначе он видит только цену за килограмм. */
+  const kg = grams / 1000;
+  const sum = grams && Number(p.retail_price) > 0 ? Number(p.retail_price) * kg : 0;
   const rows = [
+    grams ? ['Вес этой упаковки', fmtNum(kg) + ' кг'] : null,
     p.arrival_at ? ['Поступил', fmtDate(p.arrival_at)] : null,
     cat ? ['Раздел', cat] : null,
     p.code ? ['Код товара', p.code] : null,
@@ -220,6 +242,8 @@ export function scanToPrice(text) {
     <div class="pt-name">${esc(p.name)}</div>
     <div class="pt-price">${esc(price)}${per ? `<span class="pt-per">${esc(per)}</span>` : ''}</div>
     ${perUnit ? `<div class="pt-unitprice">${esc(perUnit)}</div>` : ''}
+    ${sum ? `<div class="pt-sum">К оплате <b>${esc(fmtPrice(sum))}</b>
+      <span class="pt-sum-sub">за ${esc(fmtNum(kg))} кг по этикетке</span></div>` : ''}
     ${st ? `<div class="tag ${st.cls} pt-stock">${st.txt}</div>` : ''}
     ${isTopSeller(p) ? '<div class="tag tag-hit pt-stock">Часто берут</div>' : ''}
     ${has(p.description) ? `<div class="pt-desc">${esc(p.description)}</div>` : ''}
@@ -231,13 +255,17 @@ export function scanToPrice(text) {
 }
 
 export function scanToSearch(text) {
+  const found = findByBarcode(text);
   const input = $('searchInput');
-  input.value = text;
-  state.query = text;
+  /* В строку поиска кладём то, по чему поиск сработает: у весовой этикетки
+     сам штрихкод одноразовый и не найдёт ничего, поэтому пишем код товара.
+     Иначе за карточкой оставалось «ничего не нашлось». */
+  const q = (found && found.grams && found.p.code) ? String(found.p.code) : text;
+  input.value = q;
+  state.query = q;
   $('searchClear').hidden = false;
   renderActiveFilters();
   renderGrid();
-  const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
-  if (p) openProduct(p);
+  if (found) openProduct(found.p);
   else toast('Товар с таким штрихкодом в каталоге не найден');
 }
