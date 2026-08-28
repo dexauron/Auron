@@ -5,6 +5,7 @@ import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, money
 import { ic, warnMark } from './icons.js';
 import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, unitPriceText, updatedText, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
+import { ratingText, reviewsHtml } from './reviews.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
@@ -71,6 +72,9 @@ export function openProduct(p) {
      значит утром человек смотрит на вчерашние остатки. Пишем прямо — пусть
      сам решит, доверять ли наличию. Есть только у покупателя: у вошедшего
      каталог берётся не из витрины, а из своего файла. */
+  // оценка соседей — первой после наличия: по ней выбирают
+  const rt = ratingText(p);
+  if (rt) badges.splice(1, 0, `<span class="tag tag-rating">★ ${esc(rt)}</span>`);
   const upd = updatedText();
   if (upd) badges.push(`<span class="tag tag-when">Обновлено ${esc(upd)}</span>`);
   $('sheetBadges').innerHTML = badges.join('');
