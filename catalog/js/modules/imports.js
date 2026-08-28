@@ -151,6 +151,9 @@ function svUploadStock(parsed) {
     if (rec.unit && !p.unit) p.unit = rec.unit;
     if (rec.unit === 'кг') p.is_weighted = true;
     if (rec.retail != null) p.retail_price = rec.retail;
+    // описание из 1С — на ценник покупателю. Повтор названия описанием не
+    // считаем: колонку «Характеристика» часто заполняют тем же названием
+    if (rec.descr && !p.description && norm(rec.descr) !== norm(rec.name)) p.description = rec.descr;
     p.stock = rec.stock;
     // дата остатка из шапки отчёта («на конец дня: 12.08.2026») — без неё
     // непонятно, насколько число свежее, а устаревает оно за сутки
@@ -1121,6 +1124,8 @@ function parseStockReport(rows) {
       else if (cols.unit === undefined && l.includes('базовая единица')) cols.unit = c;
       else if (cols.stock === undefined && l === 'количество') cols.stock = c;
       else if (cols.retail === undefined && l.includes('розничная цена')) cols.retail = c;
+      // описание — если оно есть в отчёте, покупатель увидит его на ценнике
+      else if (cols.descr === undefined && (l.includes('описание') || l.includes('характеристик'))) cols.descr = c;
     }
     const line = row.map((v) => cellStr(v)).join(' ');
     const m = line.match(/на конец дня:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i) || line.match(/на дату:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i);
@@ -1142,6 +1147,7 @@ function parseStockReport(rows) {
       unit: cols.unit !== undefined ? cellStr(rows[r][cols.unit]).toLowerCase() : '',
       stock: stockNum(rows[r][cols.stock]) || 0,
       retail: retail != null && retail > 0 ? retail : null,
+      descr: cols.descr !== undefined ? cellStr(rows[r][cols.descr]) : '',
     });
   }
   return { recs, stockAt };
