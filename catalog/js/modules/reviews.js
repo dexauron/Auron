@@ -22,7 +22,6 @@ import { plural } from './competitors.js';
 import { ic } from './icons.js';
 
 const MAX_TEXT = 200;        // длиннее никто не читает, а витрина тяжелеет
-export const MAX_PER_PRODUCT = 5;   // столько отзывов уезжает покупателю
 
 const waNumber = () => String(CFG.STORE_WHATSAPP || '').replace(/\D/g, '');
 
@@ -41,7 +40,15 @@ export function ratingText(p) {
   return r ? `${String(r.avg).replace('.', ',')} · ${r.n} ${plural(r.n, 'отзыв', 'отзыва', 'отзывов')}` : '';
 }
 
-const stars = (n) => '★★★★★'.slice(0, Math.round(n)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(n));
+/* Звёзды рисуем значком из набора, а не символом ★: эмодзи и типографские
+ * знаки на Android, iPhone и Windows выглядят по-разному, и правило проекта
+ * их запрещает. Заполненные — цветом, пустые — бледные. */
+const stars = (n) => {
+  const k = Math.round(Number(n) || 0);
+  let out = '<span class="rev-mark">';
+  for (let i = 1; i <= 5; i++) out += ic('star', i <= k ? 'ic-xs star-on' : 'ic-xs star-off');
+  return out + '</span>';
+};
 
 /* Отзывы в карточке товара: имя, когда, оценка и сами слова. */
 export function reviewsHtml(p) {
@@ -49,13 +56,13 @@ export function reviewsHtml(p) {
   if (!list.length) return '';
   const r = ratingOf(p);
   return `<div class="rev-block">
-    <div class="rev-head"><span class="rev-stars">${esc(stars(r.avg))}</span>
+    <div class="rev-head"><span class="rev-stars">${stars(r.avg)}</span>
       <b>${esc(String(r.avg).replace('.', ','))}</b>
       <span class="rev-count">${r.n} ${plural(r.n, 'отзыв', 'отзыва', 'отзывов')}</span></div>
     ${list.map((x) => `<div class="rev-row">
       <div class="rev-who">${esc(x.n || 'Покупатель')}
         <span class="rev-when">${esc(fmtDate(x.d) || '')}</span>
-        <span class="rev-mark">${esc(stars(Number(x.r) || 0))}</span></div>
+        ${stars(x.r)}</div>
       ${x.t ? `<div class="rev-text">${esc(x.t)}</div>` : ''}
     </div>`).join('')}
   </div>`;
@@ -101,7 +108,7 @@ function sendRate() {
 }
 
 /* ── Владелец добавляет отзыв ───────────────────────────────────────────── */
-export function openReviews() {
+function openReviews() {
   renderReviews();
   openSheet('reviewsSheet');
 }
@@ -116,7 +123,7 @@ function renderReviews() {
       const x = p.reviews[i];
       rows.push(`<div class="ios-row">
         <span class="ios-row-title">${esc(p.name)}
-          <span class="ord-sub">${esc(x.n || 'Покупатель')} · ${esc(stars(Number(x.r) || 0))} · ${esc(fmtDate(x.d) || '')}
+          <span class="ord-sub">${esc(x.n || 'Покупатель')} · ${stars(x.r)} · ${esc(fmtDate(x.d) || '')}
           ${x.t ? '— ' + esc(x.t) : ''}</span></span>
         <button class="rst-rm" data-rev-rm="${esc(p.id)}:${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
       </div>`);
@@ -131,7 +138,7 @@ function renderReviews() {
     : '<p class="ios-note">Пока ни одного отзыва.</p>'}`;
 }
 
-export function addReview() {
+function addReview() {
   const code = $('revCode').value.trim();
   const err = $('revError');
   const p = (state.products || []).find((x) => x.code != null && String(x.code) === code)
@@ -152,7 +159,7 @@ export function addReview() {
   return p;
 }
 
-export function removeReview(key) {
+function removeReview(key) {
   const [id, i] = String(key).split(':');
   const p = (state.products || []).find((x) => String(x.id) === id);
   if (!p || !p.reviews) return null;

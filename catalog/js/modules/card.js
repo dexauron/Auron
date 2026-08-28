@@ -74,7 +74,7 @@ export function openProduct(p) {
      каталог берётся не из витрины, а из своего файла. */
   // оценка соседей — первой после наличия: по ней выбирают
   const rt = ratingText(p);
-  if (rt) badges.splice(1, 0, `<span class="tag tag-rating">★ ${esc(rt)}</span>`);
+  if (rt) badges.splice(1, 0, `<span class="tag tag-rating">${ic('star', 'ic-xs')} ${esc(rt)}</span>`);
   const upd = updatedText();
   if (upd) badges.push(`<span class="tag tag-when">Обновлено ${esc(upd)}</span>`);
   $('sheetBadges').innerHTML = badges.join('');
