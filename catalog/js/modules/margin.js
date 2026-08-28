@@ -30,7 +30,7 @@ function bestCost(p) {
   const rows = (state.prices || []).filter((r) => r.product_id === p.id);
   let best = null;
   for (const r of rows) {
-    if (!isFreshPrice(r.price_date)) continue;
+    if (!isFreshPrice(r)) continue;      // строка целиком, дату функция берёт сама
     const q = priceParts(p, r);
     if (q && q.piece > 0 && (best == null || q.piece < best)) best = q.piece;
   }
