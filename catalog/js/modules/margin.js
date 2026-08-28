@@ -107,6 +107,9 @@ export function renderMarginBadge() {
   const row = $('menuMargin');
   if (!row) return;
   row.hidden = !state.canPurchase;
+  // «Залежалось» видит и сотрудник: ему решать, что убрать с полки
+  const se = $('menuStaleCount');
+  if (se) { const st = staleItems().length; se.textContent = st ? String(st) : '—'; }
   if (!state.canPurchase) return;
   const n = marginCount();
   const el = $('menuMarginCount');
@@ -118,6 +121,14 @@ export function renderMarginBadge() {
  * проверка «модули», и складывать в него ещё и это нельзя. */
 export function bindMargin(openProduct) {
   $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
+  $('menuStale').addEventListener('click', () => { closeSheet('adminMenuSheet'); openStale(); });
+  $('staleBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-margin-open]');
+    if (!b) return;
+    closeSheet('staleSheet');
+    const p = (state.products || []).find((x) => x.id === b.dataset.marginOpen);
+    if (p) openProduct(p);
+  });
   $('marginBody').addEventListener('click', (e) => {
     const b = e.target.closest('[data-margin-open]');
     if (!b) return;
