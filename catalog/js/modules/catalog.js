@@ -159,6 +159,23 @@ export function unitPriceText(p) {
   return Math.round(per).toLocaleString('ru-RU') + ' ₽/' + ps.unit;
 }
 
+/* ── «Часто берут» ──────────────────────────────────────────────────────────
+ * Покупателю, который первый раз в магазине, труднее всего выбрать. Отметка
+ * «часто берут» отвечает на это лучше любой рекламы: её оставили не мы, а
+ * соседи, которые уже купили.
+ * Цифры не показываем — решение владельца: сколько чего продаётся, дело
+ * магазина. Список берётся из того же `popular.json`, что и сортировка
+ * «Популярное»: он уже публикуется и никаких оборотов не раскрывает. */
+const HIT_TOP = 20;      // из сорока опубликованных отмечаем только верхушку
+let hitSrc = null; let hitSet = null;
+
+export function isTopSeller(p) {
+  const ids = state.popularIds || [];
+  if (!ids.length || !p) return false;
+  if (hitSrc !== ids) { hitSrc = ids; hitSet = new Set(ids.slice(0, HIT_TOP)); }
+  return hitSet.has(p.id);
+}
+
 // Пустая дата (в файле её могло не быть) раньше превращалась в «undefined.undefined.ll».
 // Теперь возвращаем пустую строку — вызывающий сам решает, что показать.
 export const fmtDate = (d) => {
