@@ -941,7 +941,7 @@ function findTwins() {
   return out;
 }
 
-export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, stale: 7, contacts: 8 };
 
 export async function smartRun() {
   const btn = $('smartRun');
@@ -1113,6 +1113,64 @@ let stockParsed = null;
 // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
 // как parsePriceNum, но допускает 0 и отрицательные (остаток бывает минусовым)
 function stockNum(v) { return parseCountNum(v); }
+
+/* ── «Неликвидные товары» ───────────────────────────────────────────────────
+ * Ради одной колонки: «Дата последнего поступления». Это единственное место
+ * во всех выгрузках, где написано, когда товар РЕАЛЬНО приехал последний раз.
+ * Раньше дату завоза приходилось угадывать по дате цены поставщика — а цена
+ * могла обновиться и без поступления.
+ * Заодно берём остаток и продажи за период: из них считается «залежалось».
+ * Кода товара в этом отчёте нет — сопоставляем по названию. */
+function parseStaleReport(rows) {
+  const cols = {};
+  let periodFrom = null; let periodTo = null;
+  for (let r = 0; r < Math.min(rows.length, 16); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const l = cellStr(row[c]).toLowerCase();
+      if (!l) continue;
+      if (cols.name === undefined && (l === 'номенклатура' || l === 'наименование')) cols.name = c;
+      else if (cols.date === undefined && l.includes('дата последнего поступления')) cols.date = c;
+      else if (cols.left === undefined && l.includes('конечный остаток')) cols.left = c;
+      else if (cols.sold === undefined && l === 'продажи') cols.sold = c;
+    }
+    const line = row.map((v) => cellStr(v)).join(' ');
+    const m = line.match(/период:?\s*(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})/i);
+    if (m && !periodFrom) { periodFrom = parseDateCell(m[1]); periodTo = parseDateCell(m[2]); }
+  }
+  if (cols.date === undefined) throw new Error('Не нашёл колонку «Дата последнего поступления»');
+  // название лежит в первой колонке, даже если заголовок стоит отдельной строкой
+  if (cols.name === undefined) cols.name = 0;
+  const recs = [];
+  for (const row of rows) {
+    const name = cellStr(row[cols.name]);
+    // «Основной склад» — итоговая строка склада, а не товар
+    if (!name || /^основной склад$/i.test(name)) continue;
+    const date = parseDateCell(row[cols.date]);
+    if (!date) continue;                       // строки шапки сюда не попадают
+    recs.push({
+      name,
+      date,
+      left: cols.left !== undefined ? stockNum(row[cols.left]) : null,
+      sold: cols.sold !== undefined ? stockNum(row[cols.sold]) : null,
+    });
+  }
+  return { recs, periodFrom, periodTo };
+}
+
+function svUploadStale(parsed) {
+  const idx = svIndex();
+  for (const rec of parsed.recs) {
+    const p = svMatch(idx, null, [], rec.name);
+    if (!p) continue;                          // товара нет в каталоге — пропускаем
+    // Эта дата точнее той, что мы угадывали по цене поставщика: ставим её
+    // всегда, а не «только если новее».
+    p.arrival_at = rec.date;
+    if (rec.sold != null) p.sold_qty = rec.sold;
+  }
+  state.staleFrom = parsed.periodFrom || null;
+  state.staleTo = parsed.periodTo || null;
+}
 
 function parseStockReport(rows) {
   const cols = {};
