@@ -3,7 +3,7 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, productCategory, queryHlTokens, todayISO, unitPriceText, visibleProducts, fmtPrice } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, unitPriceText, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
@@ -218,8 +218,15 @@ export function renderGrid() {
        Считается из веса в названии товара; когда мы в нём не уверены,
        функция возвращает пустую строку и второй строки просто нет. */
     const per = unitPriceText(p);
+    /* Прежняя цена зачёркнутой и выгода рядом — приём из индийского Zepto:
+       экономия читается за долю секунды, без единого нажатия. Показываем
+       только покупателю: сотруднику важна цена на кассе, а не история. */
+    const was = !state.session ? Number((state.priceWas || {})[p.id]) : 0;
+    const now = Number(p.retail_price);
+    const drop = (was > 0 && now > 0 && was > now)
+      ? `<span class="card-was">${esc(fmtPrice(was))}</span><span class="card-drop">−${esc(fmtPrice(was - now))}</span>` : '';
     const price = (p.retail_price != null && p.retail_price !== '')
-      ? `<div class="card-price">${esc(fmtRetail(p))}${per ? `<span class="card-per">${esc(per)}</span>` : ''}</div>` : '';
+      ? `<div class="card-price${drop ? ' has-drop' : ''}">${esc(fmtRetail(p))}${drop}${per ? `<span class="card-per">${esc(per)}</span>` : ''}</div>` : '';
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
     // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
     // кассой нужен именно код, а не описание товара.
@@ -231,9 +238,15 @@ export function renderGrid() {
       // покупателю важно, свежий ли завоз — показываем дату прямо в строке
       const arrived = guest && p.arrival_at
         ? `<span class="row-arrived">завоз ${esc(fmtDate(p.arrival_at))}</span>` : '';
+      /* Фасовка отдельной серой строкой, а название — без неё: так товар
+         читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
+         полное название: человек мог искать как раз по граммам. */
+      const pack = guest && !state.query ? packText(p) : '';
+      const title = pack ? nameNoPack(p) : p.name;
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
-          <div class="card-name">${highlight(p.name, hlTokens)}</div>
+          <div class="card-name">${highlight(title, hlTokens)}</div>
+          ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
           <div class="row-sub">${price}${tagRow}${arrived}</div>
         </div>
         ${code}
