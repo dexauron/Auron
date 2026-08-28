@@ -3,7 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, unitPriceText, waHref } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, unitPriceText, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
@@ -62,6 +62,8 @@ export function openProduct(p) {
   const sl = stockLabel(p);
   if (sl) badges.unshift(`<span class="tag ${sl.cls}">${sl.txt}</span>`);
   if (p.is_weighted) badges.push(`<span class="tag">${ic('scale', 'ic-xs')} Весовой товар</span>`);
+  // «часто берут» — подсказка покупателю, чем выбирают соседи. Без цифр
+  if (!state.session && isTopSeller(p)) badges.push('<span class="tag tag-hit">Часто берут</span>');
   if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">Продаётся: ${esc(p.unit)}</span>`);
   const barcodes = p.barcodes || [];
   if (state.session && !barcodes.length) badges.push(`<span class="tag tag-nobarcode">${ic('warn', 'ic-xs')} Штрихкода нет — пробивать по коду</span>`);
