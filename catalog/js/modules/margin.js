@@ -126,3 +126,50 @@ export function bindMargin(openProduct) {
     if (p) openProduct(p);
   });
 }
+
+/* ── «Залежалось» ───────────────────────────────────────────────────────────
+ * Товар лежит на полке, приехал давно и не продаётся. Это замороженные
+ * деньги: их уже потратили, а обратно они не возвращаются. Считается из
+ * отчёта «Неликвидные товары» — оттуда берутся настоящая дата последнего
+ * поступления и продажи за период.
+ * Видят и владелец, и сотрудник: сотруднику нужно знать, что убрать с полки.
+ * Но СУММУ замороженных денег показываем только тому, кто видит закупки. */
+const STALE_DAYS = 90;
+
+export function staleItems() {
+  const now = Date.now();
+  const out = [];
+  for (const p of state.products || []) {
+    const left = Number(p.stock);
+    if (!Number.isFinite(left) || left <= 0) continue;      // на полке ничего нет
+    const d = String(p.arrival_at || '').slice(0, 10);
+    if (!d) continue;
+    const days = Math.round((now - new Date(d).getTime()) / 86400000);
+    if (!(days >= STALE_DAYS)) continue;
+    const sold = Number(p.sold_qty);
+    if (Number.isFinite(sold) && sold > 0) continue;         // всё-таки продаётся
+    out.push({ p, days, left, money: (bestCost(p) || 0) * left });
+  }
+  out.sort((a, b) => b.money - a.money || b.days - a.days);  // дорогое и давнее наверх
+  return out;
+}
+
+export function openStale() {
+  const box = $('staleBody');
+  if (!box) return;
+  const list = staleItems();
+  const money = list.reduce((s, x) => s + x.money, 0);
+  const rows = list.slice(0, MAX_ROWS).map((x) => `<button class="ios-row ios-row-link" data-margin-open="${esc(x.p.id)}">
+    <span class="ios-row-title">${esc(x.p.name)}<span class="ord-sub">лежит ${x.days} ${plural(x.days, 'день', 'дня', 'дней')} · остаток ${esc(String(x.left))}</span></span>
+    ${state.canPurchase && x.money ? `<span class="ios-row-value">${esc(fmtPrice(x.money))}</span>` : ''}</button>`).join('');
+  box.innerHTML = list.length ? `
+    <div class="ord-total">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} лежит без движения${
+  state.canPurchase && money ? ` · <b>${esc(fmtPrice(money))}</b>` : ''}</div>
+    <div class="ios-group">${rows}</div>
+    ${list.length > MAX_ROWS ? `<p class="ios-note">Показаны первые ${MAX_ROWS} — самые дорогие.</p>` : ''}
+    <p class="ios-note">Товар есть на полке, приехал больше ${STALE_DAYS} дней назад и за это время
+    не продавался ни разу. Считается по отчёту «Неликвидные товары» из 1С.</p>`
+    : `<p class="ios-note">Залежавшихся товаров не нашлось. Если список пустой сразу после
+    установки — загрузи из 1С отчёт «Неликвидные товары»: в нём лежат даты поступления.</p>`;
+  openSheet('staleSheet');
+}

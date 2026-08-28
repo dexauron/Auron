@@ -289,6 +289,7 @@ export function svImportRows(rows) {
   else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
   else if (type === 'barcodes') svUploadBarcodes(parseBarcodesReport(rows));
   else if (type === 'units') svUploadUnits(parseUnitsReport(rows));
+  else if (type === 'stale') svUploadStale(parseStaleReport(rows));
   else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
   return type;
 }
