@@ -14,7 +14,7 @@ import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, fin
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
@@ -836,35 +836,6 @@ function bindEvents() {
     closeSheet('scanSheet');
     setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
   });
-  // «Открыть товар» из крупной проверки ценника
-  $('scanResult').addEventListener('click', (e) => {
-    // «В список покупок» прямо с ценника — камеру не закрываем: человек
-    // идёт по залу и сканирует дальше
-    const add = e.target.closest('[data-shop-scanned]');
-    if (add) {
-      const p = state.products.find((x) => x.id === add.dataset.shopScanned);
-      if (!p) return;
-      const added = toggleShop(p);
-      add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
-      buzz();
-      toast(added ? 'Записал в список покупок' : 'Убрано из списка');
-      return;
-    }
-    // «цена на ценнике другая» — человек стоит у полки, камеру не закрываем:
-    // он мог сканировать подряд
-    const shelf = e.target.closest('[data-shelf-scanned]');
-    if (shelf) {
-      const p = state.products.find((x) => x.id === shelf.dataset.shelfScanned);
-      if (p) openShelfReport(p);
-      return;
-    }
-    const b = e.target.closest('[data-open-scanned]');
-    if (!b) return;
-    stopScan();
-    closeSheet('scanSheet');
-    const p = state.products.find((x) => x.id === b.dataset.openScanned);
-    if (p) openProduct(p);
-  });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
     const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -986,6 +957,7 @@ function bindEvents() {
   bindNews(openProduct);
   bindMascot();
   bindMargin(openProduct);
+  bindScanResult(openProduct, toggleShop, openShelfReport);
   // отзывы: покупатель оценивает, владелец добавляет и сразу публикует
   bindReviews((msg) => svSaveAndPublish(msg));
   $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));

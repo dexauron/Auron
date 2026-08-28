@@ -280,3 +280,36 @@ export function scanToSearch(text) {
   if (found) { closeSheet('scanSheet'); openProduct(found.p); }
   else toast('Товар с таким штрихкодом в каталоге не найден');
 }
+
+/* Действия на ценнике: положить в список, сообщить о неверном ценнике,
+ * открыть карточку. Обработчик живёт здесь, рядом с самим ценником: app.js
+ * уже дорос до предела, который держит проверка «модули».
+ * Зависимости приходят доводами, а не импортами: список покупок и связь с
+ * магазином про сканер ничего не знают, и знать им незачем. */
+export function bindScanResult(openProductFn, toggleShopFn, openShelfFn) {
+  $('scanResult').addEventListener('click', (e) => {
+    // «В список покупок» — камеру не закрываем: человек идёт по залу дальше
+    const add = e.target.closest('[data-shop-scanned]');
+    if (add) {
+      const p = state.products.find((x) => x.id === add.dataset.shopScanned);
+      if (!p) return;
+      const added = toggleShopFn(p);
+      add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
+      toast(added ? 'Записал в список покупок' : 'Убрано из списка');
+      return;
+    }
+    // «цена на ценнике другая» — тоже у полки, камеру оставляем включённой
+    const shelf = e.target.closest('[data-shelf-scanned]');
+    if (shelf) {
+      const p = state.products.find((x) => x.id === shelf.dataset.shelfScanned);
+      if (p) openShelfFn(p);
+      return;
+    }
+    const b = e.target.closest('[data-open-scanned]');
+    if (!b) return;
+    stopScan();
+    closeSheet('scanSheet');
+    const p = state.products.find((x) => x.id === b.dataset.openScanned);
+    if (p) openProductFn(p);
+  });
+}
