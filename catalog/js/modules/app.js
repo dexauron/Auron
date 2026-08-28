@@ -8,7 +8,7 @@ import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason } from './publish.js';
+import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -1146,7 +1146,8 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews };
+    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
+    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh };
 }
 
 init();

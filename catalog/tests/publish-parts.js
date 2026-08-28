@@ -222,18 +222,23 @@ function fakeGithub() {
     `штрихкоды покупателю уехали (${shopPart.filter((p) => (p.barcodes || []).length).length} из ${shopPart.length})`);
 
   // ── 8b. Витрину собрала старая версия — владельцу говорим об этом ──
-  const warn = await page.evaluate(async () => {
+  const bannerAfterCheck = async () => page.evaluate(async () => {
     const P = window.WM_PUBLISH;
     P._state().isAdmin = true;
-    document.getElementById('publishBanner').hidden = true;
+    const el = document.getElementById('publishBanner');
+    el.hidden = true; el.textContent = '';
     await P._checkShowcaseFresh();
-    const quiet = document.getElementById('publishBanner').hidden;
-    // теперь как будто витрину собрали до появления номера версии
-    window.__oldIndex = true;
-    await P._checkShowcaseFresh();
-    return { quiet, warned: !document.getElementById('publishBanner').hidden };
+    return { hidden: el.hidden, text: el.textContent };
   });
-  chk(warn.quiet, 'свежая витрина владельца не тревожит');
+  const fresh = await bannerAfterCheck();
+  chk(fresh.hidden, 'свежая витрина владельца не тревожит');
+  // подменяем опись на такую, какой её собирала версия без номера
+  const oldIdx = JSON.parse(idxRaw); delete oldIdx.app;
+  gh.fs.set('catalog/data/index.json', JSON.stringify(oldIdx));
+  const stale = await bannerAfterCheck();
+  chk(!stale.hidden && /опубликовать заново/.test(stale.text),
+    `про старую витрину владельцу сказано словами (${stale.text.slice(0, 40)}…)`);
+  gh.fs.set('catalog/data/index.json', idxRaw);
 
   // ── 9. Старый цельный файл всё ещё читается ──
   ['catalog/data/keys.json', 'catalog/data/catalog.enc'].forEach((f) => gh.fs.delete(f));
