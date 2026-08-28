@@ -6,6 +6,7 @@ const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers')
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3.2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт',
     photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
+    description: 'Пастеризованное, жирность 3,2%. Срок годности 10 суток.',
     article: 'АРТ-9', department: 'Молочный', note: 'ставить вперёд', supplier_ids: ['s1'] },
   // у покупателя данные приходят как в настоящей витрине: штрихкоды есть,
   // а вместо числа остатка — слово «есть / мало / нет»
@@ -81,6 +82,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/Поступил/.test(tag.text) && /20\.08/.test(tag.text), 'видно, когда товар привезли');
   chk(/ставить вперёд/.test(tag.text) === false, 'служебная заметка на ценник не попала');
   chk(/Код товара/.test(tag.text) && /101/.test(tag.text), 'виден код товара');
+  chk(/жирность 3,2%/.test(tag.text), 'описание товара показано покупателю');
   chk(tag.shop && tag.open, 'с ценника можно положить в список покупок и открыть карточку');
 
   // ── 1в. Выбирать режим камеры покупателю не нужно ──
