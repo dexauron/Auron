@@ -256,13 +256,14 @@ export function scanToPrice(text) {
 
 export function scanToSearch(text) {
   const found = findByBarcode(text);
+  /* Весовая этикетка у сотрудника: он сверяет, что весы напечатали, — ему
+     нужны вес и сумма, а не карточка товара. Поэтому показываем ценник и
+     не закрываем камеру: этикеток обычно проверяют несколько подряд.
+     Решение владельца: у сотрудника ценника нет, кроме этого случая. */
+  if (found && found.grams) { scanToPrice(text); return; }
   const input = $('searchInput');
-  /* В строку поиска кладём то, по чему поиск сработает: у весовой этикетки
-     сам штрихкод одноразовый и не найдёт ничего, поэтому пишем код товара.
-     Иначе за карточкой оставалось «ничего не нашлось». */
-  const q = (found && found.grams && found.p.code) ? String(found.p.code) : text;
-  input.value = q;
-  state.query = q;
+  input.value = text;
+  state.query = text;
   $('searchClear').hidden = false;
   renderActiveFilters();
   renderGrid();
