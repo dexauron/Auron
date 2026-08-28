@@ -108,6 +108,7 @@ function svUploadPrices(byKey) {
     else { p.supplier_ids = p.supplier_ids || []; p.barcodes = p.barcodes || []; p.photos = p.photos || []; } // товар из витрины мог прийти без этих полей
     if (item.code && !p.code) { p.code = item.code; idx.byCode.set(String(item.code), p); }
     if (item.article && !p.article) p.article = item.article;
+    if (item.descr && !p.description) p.description = item.descr;   // на ценник покупателю
     if (item.group) p.group_id = svGroupId(item.group);
     if (item.unit && !p.unit) p.unit = item.unit;
     if (item.weighted) p.is_weighted = true;
@@ -482,6 +483,9 @@ function detectColumns(rows) {
       const l = (labels[c] || '') + ' ' + (next[c] || '');
       if (!l.trim()) continue;
       if (l.includes('артикул')) cols.article ??= c;
+      // описание товара: если в отчёте 1С такая колонка есть, она уедет
+      // покупателю на ценник. Нет — просто ничего не изменится.
+      else if (l.includes('описание') || l.includes('характеристик')) cols.descr ??= c;
       else if (l.includes('штрих')) cols.barcode ??= c;
       else if (l.includes('код товара') || l.includes('номенклатура.код')) cols.code = c;
       else if (l.includes('код') && cols.code === undefined) cols.code = c;
@@ -563,10 +567,11 @@ function parsePriceReport(rows) {
     const key = code || norm(name);
     let item = byKey.get(key);
     if (!item) {
-      item = { name, code: code || null, article: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, retail: null, prices: new Map() };
+      item = { name, code: code || null, article: null, descr: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, retail: null, prices: new Map() };
       byKey.set(key, item);
     }
     const art = cols.article !== undefined ? cellStr(row[cols.article]) : '';
+    const descr = cols.descr !== undefined ? cellStr(row[cols.descr]) : '';
     const grp = cols.group !== undefined ? cellStr(row[cols.group]) : '';
     const sup = cols.supplier !== undefined ? cellStr(row[cols.supplier]) : '';
     const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
@@ -575,6 +580,10 @@ function parsePriceReport(rows) {
     const retail = cols.retail !== undefined ? parsePriceNum(row[cols.retail]) : null;
     const rowDate = cols.date !== undefined ? parseDateCell(row[cols.date]) : null; // дата последнего поступления
     if (art && !item.article) item.article = art;
+    // описание берём, только если оно не повторяет название: в 1С колонку
+    // «Характеристика» часто заполняют тем же названием, и на ценнике это
+    // выглядело бы как заикание
+    if (descr && !item.descr && norm(descr) !== norm(name)) item.descr = descr;
     if (grp && !item.group) item.group = grp;
     if (retail != null && item.retail == null) item.retail = retail; // розничная цена товара
     if (sup) item.suppliers.add(sup);
