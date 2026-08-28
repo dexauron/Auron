@@ -349,6 +349,39 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(staff.shopBar, 'полоска списка покупок сотруднику не мешает');
   chk(staff.toggle !== 'none', 'переключатель вида вернулся сотруднику');
 
+  /* ── Когда данные обновились ──
+     Владелец выгружает из 1С и публикует раз в день вечером: утром человек
+     смотрит на вчерашние остатки. Врать нельзя, прятать тоже — пишем прямо. */
+  const when = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state();
+    const d = new Date(); d.setHours(17, 40, 0, 0);
+    s.showcaseAt = d.toISOString();
+    const words = { today: P._updatedText() };
+    const y = new Date(d); y.setDate(y.getDate() - 1);
+    s.showcaseAt = y.toISOString();
+    words.yesterday = P._updatedText();
+    // подпись в карточке товара
+    P._ui().currentProduct = null;
+    const p = s.products.find((x) => x.id === 'p1');
+    P._openProduct(p);
+    await new Promise((r) => setTimeout(r, 300));
+    words.card = document.getElementById('sheetBadges').innerText.replace(/\s+/g, ' ');
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    // и на ценнике
+    P._scanPrice('4600000000011');
+    await new Promise((r) => setTimeout(r, 250));
+    words.tag = document.getElementById('scanResult').innerText.replace(/\s+/g, ' ');
+    // если даты нет — не выдумываем
+    s.showcaseAt = '';
+    words.none = P._updatedText();
+    return words;
+  });
+  chk(when.today === 'сегодня в 17:40', `«сегодня в 17:40» вместо голой даты (${when.today})`);
+  chk(when.yesterday === 'вчера в 17:40', `вчерашнее так и называется (${when.yesterday})`);
+  chk(/Обновлено вчера в 17:40/.test(when.card), `в карточке видно, когда данные обновились (${when.card.slice(0, 60)})`);
+  chk(/Обновлено вчера в 17:40/.test(when.tag), `на ценнике тоже (${when.tag.slice(-40)})`);
+  chk(!when.none, 'даты нет — ничего не выдумываем');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
