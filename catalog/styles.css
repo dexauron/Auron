@@ -1813,3 +1813,30 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 /* «Обновлено вчера в 17:40» — не тревога, а честная сноска: негромко и серым */
 .tag-when { background: transparent; border-color: var(--border); color: var(--text-2); font-weight: 400; }
 .pt-when { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+
+/* ── Отзывы соседей ─────────────────────────────────────────────────────────
+   Единственное, чего не было у нас и было у сетей. Написали их не мы, поэтому
+   и выглядят они не как реклама: имя, дата, звёздочки и пара слов */
+.tag-rating { background: rgba(255, 159, 10, .16); color: var(--warn); border-color: transparent; font-weight: 600; }
+.rev-block { margin-top: 18px; }
+.rev-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; font-size: 17px; }
+.rev-stars { color: var(--warn); letter-spacing: 1px; }
+.rev-count { font-size: 14px; color: var(--text-2); }
+.rev-row { padding: 10px 0; border-top: 1px solid var(--border); }
+.rev-who { font-size: 14px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rev-when { font-weight: 400; color: var(--text-2); font-size: 13px; }
+.rev-mark { color: var(--warn); letter-spacing: 1px; font-size: 13px; }
+.rev-text { font-size: 15px; line-height: 1.4; margin-top: 3px; }
+/* Звёзды, которые ставит покупатель: крупные — попасть пальцем с первого раза */
+.rate-stars { display: flex; justify-content: center; gap: 6px; margin: 14px 0 6px; }
+.rate-stars button {
+  border: none; background: none; font-size: 34px; line-height: 1;
+  color: var(--surface-3); cursor: pointer; padding: 4px 6px; min-width: 44px; min-height: 44px;
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1), color .16s ease;
+}
+.rate-stars button.on { color: var(--warn); }
+.rate-stars button:active { transform: scale(1.15); }
+.star-on { color: var(--warn); fill: var(--warn); }
+.star-off { color: var(--surface-3); }
+.rate-stars .ic { width: 30px; height: 30px; }
+.rate-stars button.on .ic { fill: currentColor; }

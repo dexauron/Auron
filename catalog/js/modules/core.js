@@ -1,6 +1,6 @@
 // Мелкие помощники: элементы, экранирование, форматы, шторки
 
-import { $, state } from './store.js';
+import { $, state, ui } from './store.js';
 import { ic } from './icons.js';
 import { stopScan } from './scanner.js';
 
@@ -162,6 +162,9 @@ function restackSheets() {
 }
 
 export function openSheet(id) {
+  /* Облачко волка живёт поверх страницы, и открытое окно оно бы закрыло собой.
+     Прячем его молча: человек уже перешёл к делу, реплика ему не нужна. */
+  if (ui.hideWolf) ui.hideWolf();
   const el = $(id);
   if (!el || !el.hidden) return; // нет элемента или уже открыт
   el.hidden = false;
