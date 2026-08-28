@@ -267,6 +267,8 @@ export function scanToSearch(text) {
   $('searchClear').hidden = false;
   renderActiveFilters();
   renderGrid();
-  if (found) openProduct(found.p);
+  // обычный штрихкод — открываем карточку и камеру закрываем: держать её
+  // включённой под карточкой незачем, да и телефон греется
+  if (found) { closeSheet('scanSheet'); openProduct(found.p); }
   else toast('Товар с таким штрихкодом в каталоге не найден');
 }
