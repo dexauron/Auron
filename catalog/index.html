@@ -235,6 +235,11 @@
             <button class="ios-row ios-row-link" id="menuDedup"><span class="ios-row-title">Убрать дубли товаров</span></button>
           </div>
 
+          <div class="ios-group-title">Деньги</div>
+          <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuMargin"><span class="ios-row-title">Наценка и убыточные товары</span><span class="ios-row-value" id="menuMarginCount"></span></button>
+          </div>
+
           <div class="ios-group-title">Доступ и публикация</div>
           <div class="ios-group">
             <button class="ios-row ios-row-link" id="menuOwnerPass"><span class="ios-row-title">Пароль каталога (ваш)</span></button>
@@ -247,6 +252,19 @@
           <button class="ios-row ios-row-danger" id="menuLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Наценка: где продаём в минус. Только тому, кто видит закупки -->
+  <div class="sheet-backdrop" id="marginSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <span></span>
+        <h2 class="ios-nav-title">Наценка</h2>
+        <button class="ios-nav-btn strong" data-close="marginSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="marginBody"></div>
     </div>
   </div>
 

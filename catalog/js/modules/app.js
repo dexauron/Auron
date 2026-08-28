@@ -22,6 +22,7 @@ import { bindGuest, openStore } from './guest.js';
 import { bindShopping, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
+import { bindMargin, marginCount, marginIssues, openMargin, renderMarginBadge } from './margin.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -384,6 +385,7 @@ function bindEvents() {
       } else {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
+      renderMarginBadge();    // сколько товаров продаётся в минус
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
@@ -970,6 +972,7 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
+  bindMargin(openProduct);
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
@@ -1172,7 +1175,8 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
-    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText };
+    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
+    _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin };
 }
 
 init();

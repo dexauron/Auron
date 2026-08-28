@@ -1794,3 +1794,6 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .card-per { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); margin-top: 1px; }
 .field-hero-per { display: block; font-size: 14px; color: var(--text-2); margin-top: 2px; }
 .pt-unitprice { font-size: 15px; font-weight: 600; color: var(--text-2); margin-top: 2px; }
+
+/* Убыточная наценка — красным: это не «показатель», а «чини сейчас» */
+.margin-bad { color: var(--neg); font-weight: 600; }
