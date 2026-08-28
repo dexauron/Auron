@@ -680,6 +680,7 @@ function bindEvents() {
     try {
       const sha = await publishShowcase({ onProgress: (d, t) => { btn.textContent = `Публикую… ${d} из ${t}`; } });
       toast(sha ? 'Витрина опубликована' : 'Витрина и так свежая — публиковать нечего');
+      $('publishBanner').hidden = true;   // опубликовали — предупреждение снимаем
     } catch (e) {
       $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
       $('publishError').hidden = false;
