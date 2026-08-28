@@ -19,7 +19,7 @@ import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ord
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openStore } from './guest.js';
-import { bindShopping } from './shopping.js';
+import { bindShopping, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
@@ -831,6 +831,18 @@ function bindEvents() {
   });
   // «Открыть товар» из крупной проверки ценника
   $('scanResult').addEventListener('click', (e) => {
+    // «В список покупок» прямо с ценника — камеру не закрываем: человек
+    // идёт по залу и сканирует дальше
+    const add = e.target.closest('[data-shop-scanned]');
+    if (add) {
+      const p = state.products.find((x) => x.id === add.dataset.shopScanned);
+      if (!p) return;
+      const added = toggleShop(p);
+      add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
+      buzz();
+      toast(added ? 'Записал в список покупок' : 'Убрано из списка');
+      return;
+    }
     const b = e.target.closest('[data-open-scanned]');
     if (!b) return;
     stopScan();
