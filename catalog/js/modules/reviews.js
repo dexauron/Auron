@@ -164,6 +164,14 @@ export function removeReview(key) {
 
 /* Обработчики модуль вешает сам: app.js уже дорос до предела, который держит
  * проверка «модули». */
+export function renderReviewsBadge() {
+  const el = $('menuReviewsCount');
+  if (!el) return;
+  let n = 0;
+  for (const p of state.products || []) n += (p.reviews || []).length;
+  el.textContent = n ? String(n) : '—';
+}
+
 export function bindReviews(onSaved) {
   $('rateStars').addEventListener('click', (e) => {
     const b = e.target.closest('[data-star]');

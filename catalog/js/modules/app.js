@@ -23,7 +23,7 @@ import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js'
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
-import { bindReviews, openRate, ratingOf, ratingText } from './reviews.js';
+import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -387,6 +387,7 @@ function bindEvents() {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderMarginBadge();    // сколько товаров продаётся в минус
+      renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
