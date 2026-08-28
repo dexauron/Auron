@@ -3,7 +3,7 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, unitPriceText, visibleProducts, fmtPrice } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, productCategory, queryHlTokens, todayISO, unitPriceText, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
@@ -205,6 +205,9 @@ export function renderGrid() {
     const sl = stockLabel(p);
     if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
     if (p.is_weighted) tags.push(`<span class="tag">${ic('scale', 'ic-xs')}</span>`);
+    /* «Часто берут» — только покупателю: сотруднику ходовые товары показывает
+       отдельный экран с цифрами, а в рабочем списке это лишний шум. */
+    if (!state.session && isTopSeller(p)) tags.push('<span class="tag tag-hit">Часто берут</span>');
     // «без ШК» — служебная пометка для кассы (пробивать по коду). Покупателю
     // она ничего не говорит, поэтому показываем только своим.
     if (state.session && !(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');

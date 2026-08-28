@@ -1797,3 +1797,6 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 
 /* Убыточная наценка — красным: это не «показатель», а «чини сейчас» */
 .margin-bad { color: var(--neg); font-weight: 600; }
+
+/* «Часто берут» — тёплая, но негромкая метка: подсказка, а не реклама */
+.tag-hit { background: rgba(255, 159, 10, .16); color: var(--warn); border-color: transparent; font-weight: 600; }
