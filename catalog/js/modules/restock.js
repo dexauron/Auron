@@ -9,7 +9,7 @@
  * поэтому список лежит на телефоне сотрудника и одной кнопкой уходит владельцу
  * текстом. Так же, как заказы: инструмент есть у всех, записи не теряются. */
 
-import { $, state, ui } from './store.js';
+import { $, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
