@@ -3,7 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, unitPriceText, waHref } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, unitPriceText, updatedText, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
@@ -67,6 +67,12 @@ export function openProduct(p) {
   if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">Продаётся: ${esc(p.unit)}</span>`);
   const barcodes = p.barcodes || [];
   if (state.session && !barcodes.length) badges.push(`<span class="tag tag-nobarcode">${ic('warn', 'ic-xs')} Штрихкода нет — пробивать по коду</span>`);
+  /* Когда данные обновились. Владелец выгружает из 1С раз в день вечером,
+     значит утром человек смотрит на вчерашние остатки. Пишем прямо — пусть
+     сам решит, доверять ли наличию. Есть только у покупателя: у вошедшего
+     каталог берётся не из витрины, а из своего файла. */
+  const upd = updatedText();
+  if (upd) badges.push(`<span class="tag tag-when">Обновлено ${esc(upd)}</span>`);
   $('sheetBadges').innerHTML = badges.join('');
 
   // описание товара (под названием, видно всем — как в витрине магазина)

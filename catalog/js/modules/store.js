@@ -100,6 +100,7 @@ export const state = {
   orderRules: null, // правила заказа: срок доставки, периодичность, страховой запас (в днях)
   lastFetch: 0,
   syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
+  showcaseAt: '',   // когда владелец в последний раз опубликовал витрину
   renderLimit: PAGE_SIZE,
   sort: 'relevance',   // relevance | name | cheap | expensive | new
   view: 'normal',      // normal | compact — размер плиток
