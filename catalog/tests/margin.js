@@ -66,7 +66,8 @@ const prices = [
     return { open: !el.hidden, text: document.getElementById('marginBody').innerText.replace(/\s+/g, ' ') };
   });
   chk(sheet.open, 'экран наценки открывается');
-  chk(/Продаём дешевле закупки/.test(sheet.text) && /Инжир/.test(sheet.text),
+  // заголовки групп рисуются прописными — сравниваем без учёта регистра
+  chk(/продаём дешевле закупки/i.test(sheet.text) && /Инжир/.test(sheet.text),
     `на экране видно, что именно убыточно (${sheet.text.slice(0, 60)})`);
   chk(/закупка 650 ₽ → цена 145 ₽/.test(sheet.text), 'обе цены показаны рядом — понятно без объяснений');
 
