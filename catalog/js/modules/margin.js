@@ -14,11 +14,12 @@
  * Экран только для того, кто видит закупки (владелец): сотруднику зала эти
  * числа не показываются нигде и никогда. */
 
-import { $, state } from './store.js';
-import { closeSheet, esc, openSheet } from './core.js';
+import { $, state, ui } from './store.js';
+import { closeSheet, esc, norm, openSheet } from './core.js';
 import { fmtPrice, isFreshPrice } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
+import { cellStr, parseDateCell, stockNum } from './imports.js';
 
 const THIN_PCT = 5;        // наценка ниже этой — «почти в ноль»
 const MAX_ROWS = 200;      // длиннее список никто не прочитает
@@ -107,6 +108,9 @@ export function renderMarginBadge() {
   const row = $('menuMargin');
   if (!row) return;
   row.hidden = !state.canPurchase;
+  // «Залежалось» видит и сотрудник: ему решать, что убрать с полки
+  const se = $('menuStaleCount');
+  if (se) { const st = staleItems().length; se.textContent = st ? String(st) : '—'; }
   if (!state.canPurchase) return;
   const n = marginCount();
   const el = $('menuMarginCount');
@@ -117,7 +121,16 @@ export function renderMarginBadge() {
 /* Обработчики модуль вешает сам: app.js уже дорос до предела, который держит
  * проверка «модули», и складывать в него ещё и это нельзя. */
 export function bindMargin(openProduct) {
+  ui.importStale = importStale;   // модуль загрузки зовёт разбор через ui, без встречного импорта
   $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
+  $('menuStale').addEventListener('click', () => { closeSheet('adminMenuSheet'); openStale(); });
+  $('staleBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-margin-open]');
+    if (!b) return;
+    closeSheet('staleSheet');
+    const p = (state.products || []).find((x) => x.id === b.dataset.marginOpen);
+    if (p) openProduct(p);
+  });
   $('marginBody').addEventListener('click', (e) => {
     const b = e.target.closest('[data-margin-open]');
     if (!b) return;
@@ -125,4 +138,105 @@ export function bindMargin(openProduct) {
     const p = (state.products || []).find((x) => x.id === b.dataset.marginOpen);
     if (p) openProduct(p);
   });
+}
+
+/* ── «Залежалось» ───────────────────────────────────────────────────────────
+ * Товар лежит на полке, приехал давно и не продаётся. Это замороженные
+ * деньги: их уже потратили, а обратно они не возвращаются. Считается из
+ * отчёта «Неликвидные товары» — оттуда берутся настоящая дата последнего
+ * поступления и продажи за период.
+ * Видят и владелец, и сотрудник: сотруднику нужно знать, что убрать с полки.
+ * Но СУММУ замороженных денег показываем только тому, кто видит закупки. */
+const STALE_DAYS = 90;
+
+export function staleItems() {
+  const now = Date.now();
+  const out = [];
+  for (const p of state.products || []) {
+    const left = Number(p.stock);
+    if (!Number.isFinite(left) || left <= 0) continue;      // на полке ничего нет
+    const d = String(p.arrival_at || '').slice(0, 10);
+    if (!d) continue;
+    const days = Math.round((now - new Date(d).getTime()) / 86400000);
+    if (!(days >= STALE_DAYS)) continue;
+    const sold = Number(p.sold_qty);
+    if (Number.isFinite(sold) && sold > 0) continue;         // всё-таки продаётся
+    out.push({ p, days, left, money: (bestCost(p) || 0) * left });
+  }
+  out.sort((a, b) => b.money - a.money || b.days - a.days);  // дорогое и давнее наверх
+  return out;
+}
+
+export function openStale() {
+  const box = $('staleBody');
+  if (!box) return;
+  const list = staleItems();
+  const money = list.reduce((s, x) => s + x.money, 0);
+  const rows = list.slice(0, MAX_ROWS).map((x) => `<button class="ios-row ios-row-link" data-margin-open="${esc(x.p.id)}">
+    <span class="ios-row-title">${esc(x.p.name)}<span class="ord-sub">лежит ${x.days} ${plural(x.days, 'день', 'дня', 'дней')} · остаток ${esc(String(x.left))}</span></span>
+    ${state.canPurchase && x.money ? `<span class="ios-row-value">${esc(fmtPrice(x.money))}</span>` : ''}</button>`).join('');
+  box.innerHTML = list.length ? `
+    <div class="ord-total">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} лежит без движения${
+  state.canPurchase && money ? ` · <b>${esc(fmtPrice(money))}</b>` : ''}</div>
+    <div class="ios-group">${rows}</div>
+    ${list.length > MAX_ROWS ? `<p class="ios-note">Показаны первые ${MAX_ROWS} — самые дорогие.</p>` : ''}
+    <p class="ios-note">Товар есть на полке, приехал больше ${STALE_DAYS} дней назад и за это время
+    не продавался ни разу. Считается по отчёту «Неликвидные товары» из 1С.</p>`
+    : `<p class="ios-note">Залежавшихся товаров не нашлось. Если список пустой сразу после
+    установки — загрузи из 1С отчёт «Неликвидные товары»: в нём лежат даты поступления.</p>`;
+  openSheet('staleSheet');
+}
+
+/* ── Разбор отчёта «Неликвидные товары» ─────────────────────────────────────
+ * Ради одной колонки: «Дата последнего поступления». Это единственное место
+ * во всех выгрузках 1С, где написано, когда товар РЕАЛЬНО приехал последний
+ * раз. Раньше дату завоза приходилось угадывать по дате цены поставщика — а
+ * цена могла обновиться и без поступления.
+ * Заодно берём продажи за период: из них и складывается «залежалось».
+ * Кода товара в этом отчёте нет — сопоставляем по названию.
+ * Разбор живёт здесь, а не в модуле загрузки: он нужен только этому экрану,
+ * а модуль загрузки и без того дорос до предела, который держит проверка. */
+function parseStaleReport(rows) {
+  const cols = {};
+  for (let r = 0; r < Math.min(rows.length, 16); r++) {
+    const row = rows[r] || [];
+    for (let c = 0; c < row.length; c++) {
+      const l = cellStr(row[c]).toLowerCase();
+      if (!l) continue;
+      if (cols.name === undefined && (l === 'номенклатура' || l === 'наименование')) cols.name = c;
+      else if (cols.date === undefined && l.includes('дата последнего поступления')) cols.date = c;
+      else if (cols.sold === undefined && l === 'продажи') cols.sold = c;
+    }
+  }
+  if (cols.date === undefined) throw new Error('Не нашёл колонку «Дата последнего поступления»');
+  // название лежит в первой колонке, даже когда его заголовок стоит отдельной строкой
+  if (cols.name === undefined) cols.name = 0;
+  const recs = [];
+  for (const row of rows) {
+    const name = cellStr(row[cols.name]);
+    if (!name || /^основной склад$/i.test(name)) continue;   // итоговая строка склада
+    const date = parseDateCell(row[cols.date]);
+    if (!date) continue;                                     // строки шапки сюда не попадают
+    recs.push({
+      name,
+      date,
+      // пустая клетка в «Продажах» значит «не продавался ни разу» — это ноль,
+      // а не «неизвестно»: именно такие товары и есть залежавшиеся
+      sold: cols.sold !== undefined ? (stockNum(row[cols.sold]) || 0) : null,
+    });
+  }
+  return recs;
+}
+
+function importStale(rows) {
+  const byName = new Map();
+  for (const p of state.products || []) byName.set(norm(p.name), p);
+  for (const rec of parseStaleReport(rows)) {
+    const p = byName.get(norm(rec.name));
+    if (!p) continue;                        // товара нет в каталоге — пропускаем
+    // Эта дата точнее той, что мы угадывали по цене поставщика: ставим её
+    // всегда, а не «только если новее».
+    p.arrival_at = rec.date;
+    if (rec.sold != null) p.sold_qty = rec.sold;
+  }
 }
