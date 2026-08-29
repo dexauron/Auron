@@ -372,22 +372,20 @@ function bindEvents() {
       $('menuTitle').textContent = roleName;
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
-      $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
+
       // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
       const noCat = uncategorized().length;
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // цены магазинов ведут все вошедшие — и владелец, и сотрудник
-      $('menuCompStores').hidden = false;
+
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
       if (state.serverless) {
         $('menuSuppliers').hidden = true;
         $('menuDedup').hidden = true;
       } else {
       }
-      renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
-      renderMarginBadge();    // сколько товаров продаётся в минус
+      renderRestockBadge();   // сколько дел ждёт — видно на строке «Работа»
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
       if (!state.serverless) {
@@ -458,11 +456,6 @@ function bindEvents() {
   $('orSave').addEventListener('click', saveOrderRules);
 
   // разведка цен: «Добавить цену магазина» в карточке товара
-  $('menuCompStores').addEventListener('click', () => {
-    closeSheet('adminMenuSheet');
-    renderCompStores();
-    openSheet('compStoresSheet');
-  });
   $('compStoresList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-comp-view]');
     if (b) openCompStoreView(b.dataset.compView);
@@ -983,7 +976,6 @@ function bindEvents() {
   $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
-  $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;
@@ -1005,7 +997,6 @@ function bindEvents() {
   $('menuSortCats').addEventListener('click', () => { closeSheet('adminMenuSheet'); sortByInternet(); });
 
   // Ходовые товары (после входа)
-  $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
   // выбор периода из выпадающего списка
   $('topChips').addEventListener('change', (e) => {
     const sel = e.target.closest('#topPeriodSel');

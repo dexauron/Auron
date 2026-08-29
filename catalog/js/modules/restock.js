@@ -79,12 +79,9 @@ export function clearRestock() {
   renderRestock();
 }
 
-// Счётчик в меню: сколько позиций ждёт заказа, видно не открывая список
+/* Счётчик дел. Сам список живёт во вкладке «Работа», поэтому здесь только
+ * просим её пересчитать значок — строки в меню у него больше нет. */
 export function renderRestockBadge() {
-  const el = $('menuRestockCount');
-  if (!el) { if (ui.renderWorkBadge) ui.renderWorkBadge(); return; }
-  const n = restockCount();
-  el.textContent = n ? String(n) : '';
   if (ui.renderWorkBadge) ui.renderWorkBadge();
 }
 
