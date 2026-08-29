@@ -9,14 +9,13 @@
  * поэтому список лежит на телефоне сотрудника и одной кнопкой уходит владельцу
  * текстом. Так же, как заказы: инструмент есть у всех, записи не теряются. */
 
-import { $, ui } from './store.js';
+import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { openOrderForm } from './orders.js';
-import { findByBarcode } from './scanner.js';
 
 const KEY = 'wm_restock_v1';
 const MAX = 300;          // столько строк уже не список, а склад — дальше не копим
@@ -189,10 +188,7 @@ export async function shareRestock() {
 export function scanToRestock(text) {
   const box = $('scanResult');
   if (!box) return;
-  // весовую этикетку тоже понимаем: сотрудник наводит камеру на пустую полку,
-  // а на упаковке от весов обычного штрихкода нет
-  const found = findByBarcode(text);
-  const p = found && found.p;
+  const p = state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === String(text).trim()));
   box.hidden = false;
   if (!p) {
     box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>
