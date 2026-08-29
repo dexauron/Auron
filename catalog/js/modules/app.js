@@ -1180,6 +1180,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _packText: packText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
     _staleItems: staleItems, _openStale: openStale, _work: runWorkAction,
+    _workRows: () => { openWork(); return $('workBody').innerText.replace(/\s+/g, ' '); },
     _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate };
 }
 

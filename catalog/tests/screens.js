@@ -93,7 +93,8 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   chk(cover.menu.length >= 6, `пункты меню открываются (${cover.menu.length}: ${cover.menu.join(', ')})`);
 
   // ── сортировка и поиск ──
-  await closeAll(page); await page.click('#filterBtn'); await page.waitForTimeout(400);
+  // фильтр открывается вкладкой снизу: кнопку из шапки убрали (29.08)
+  await closeAll(page); await page.click('.tab[data-tab="filters"]'); await page.waitForTimeout(400);
   const sorts = await page.evaluate(() => [...document.querySelectorAll('#filterSheet [data-sort]')].map((x) => x.dataset.sort));
   for (const s of sorts) {
     await page.click(`#filterSheet [data-sort="${s}"]`).catch(() => problems.push(`сортировка «${s}» не нажалась`));

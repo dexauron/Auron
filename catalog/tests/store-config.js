@@ -85,7 +85,8 @@ const OTHER_STORE = {
       `другой магазин: ${other.name} · ${other.sub}`);
     chk(other.letter === 'С', `логотипа нет — показана первая буква названия (${other.letter})`);
     chk(other.accent === '#B3261E', `цвет магазина применён (${other.accent})`);
-    chk(other.compMenu && other.topMenu, 'выключенные возможности исчезли из меню');
+    chk(!/Цены других магазинов/.test(other.work) && !/Ходовые товары/.test(other.work),
+      'выключенные возможности исчезли из вкладки «Работа»');
     chk(other.milk === 'Молочные продукты' && other.screw === 'Крепёж',
       `разделы взяты из групп 1С, а не из продуктовых правил (молоко → ${other.milk}, саморез → ${other.screw})`);
     chk(other.cards === products.length, `товары показываются (${other.cards})`);
