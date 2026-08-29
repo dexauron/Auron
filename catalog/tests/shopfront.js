@@ -83,7 +83,11 @@ const products = [
     'в сообщении обе цены и код — владельцу не надо ничего искать');
   chk(/код 101/.test(shelf.opened), 'код товара в сообщении есть');
 
-  // ── 6. Сотруднику ничего из этого не показывается ──
+  /* ── 6. Вошедшему — то же самое, кроме покупательского ──
+     Решение владельца: зачёркнутая цена и полоса «сегодня дешевле» нужны и
+     сотруднику (его спрашивают у полки), и владельцу (видно, что правка цены
+     доехала). А «цена на ценнике другая» остаётся покупательской: сотрудник
+     этот ценник сам и печатает. */
   await asOwner(page);
   const staff = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
@@ -94,13 +98,15 @@ const products = [
     await new Promise((r) => setTimeout(r, 200));
     return {
       html: document.getElementById('productGrid').innerHTML,
+      grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
       cheap: document.getElementById('cheaperStrip').hidden,
       shelfBtn: !!document.querySelector('[data-shelf-scanned]'),
     };
   });
-  chk(!/card-was/.test(staff.html), 'сотруднику зачёркнутых цен не показываем — ему важна касса');
-  chk(staff.cheap, 'полосы «сегодня дешевле» у сотрудника нет');
-  chk(!staff.shelfBtn, 'кнопки про ценник у сотрудника нет — он сам его и печатает');
+  chk(/card-was/.test(staff.html), 'вошедшему зачёркнутую цену тоже показываем');
+  chk(!staff.cheap, 'и полоса «сегодня дешевле» у него есть');
+  chk(/row-pack/.test(staff.html), 'фасовка отдельной строкой — тоже');
+  chk(!staff.shelfBtn, 'а вот кнопки про ценник у него нет — он сам его и печатает');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
