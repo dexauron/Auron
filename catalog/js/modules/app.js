@@ -935,10 +935,13 @@ function bindEvents() {
   ui.workActions = {
     orders: openOrders,
     restock: openRestock,
+    stale: openStale,
+    margin: openMargin,
+    top: openTopSheet,
+    comp: () => { renderCompStores(); openSheet('compStoresSheet'); },
     compare: openCompare,
     scan: () => runScan(),
   };
-  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
