@@ -435,13 +435,13 @@ export function syncControls() {
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   const n = countActiveFilters();
-  const badge = $('filterBadge');
-  if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
+  // Кнопки фильтра в шапке больше нет (решение владельца 29.08): вход остался
+  // один — вкладкой снизу, где её и ищут большим пальцем. Значок с числом
+  // включённых фильтров живёт теперь только на вкладке.
   // тот же счётчик на вкладке «Фильтры» — видно, что фильтр включён,
   // даже когда шапка ушла вверх при прокрутке
   const tb = $('tabFilterCount');
   if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
-  const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
 }
 
 const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };

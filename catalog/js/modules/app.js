@@ -58,7 +58,6 @@ function bindEvents() {
   });
 
   // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
-  $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
   $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
   $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
   $('filterReset').addEventListener('click', clearAllFilters);

@@ -94,11 +94,15 @@ function renderTodayBanner() {
  * которые закончились. Ноль значка не рисует: пустой кружок только мешает. */
 export function renderWorkBadge() {
   renderTodayBanner();
-  const el = $('tabWorkCount');
-  if (!el) return;
   const n = state.session ? ordersSummary().overdue + restockCount() : 0;
-  el.textContent = n > 99 ? '99+' : n;
-  el.hidden = !n;
+  const el = $('tabWorkCount');
+  if (el) {
+    el.textContent = n > 99 ? '99+' : n;
+    el.hidden = !n;
+  }
+  // та же цифра на строке «Работа» в меню — вход туда есть и оттуда
+  const m = $('menuWorkCount');
+  if (m) m.textContent = n ? String(n) : '';
 }
 
 export function runWorkAction(what) {
