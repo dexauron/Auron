@@ -36,12 +36,14 @@ const OTHER_STORE = {
     const own = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
-      compMenu: !document.getElementById('menuCompStores').hidden,
-      topMenu: !document.getElementById('menuTop').hidden,
+      // «цены магазинов» и «ходовые» живут во вкладке «Работа» (29.08):
+      // раньше они были строками меню, и проверка смотрела туда
+      work: window.WM_PUBLISH._workRows(),
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
     chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
-    chk(own.compMenu && own.topMenu, 'включённые возможности видны в меню');
+    chk(/Цены других магазинов/.test(own.work) && /Ходовые товары/.test(own.work),
+      'включённые возможности видны во вкладке «Работа»');
     chk(own.cat === 'Молочное', `разделы продуктового магазина работают (молоко → ${own.cat})`);
     chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
@@ -74,8 +76,7 @@ const OTHER_STORE = {
       sub: (document.querySelector('.brand-sub') || {}).textContent,
       letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
       accent: document.documentElement.style.getPropertyValue('--brand').trim(),
-      compMenu: document.getElementById('menuCompStores').hidden,
-      topMenu: document.getElementById('menuTop').hidden,
+      work: window.WM_PUBLISH._workRows(),
       milk: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
       screw: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p2')),
       cards: document.querySelectorAll('.card').length,
