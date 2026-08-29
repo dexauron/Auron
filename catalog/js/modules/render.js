@@ -392,7 +392,7 @@ function updateResultsCount(n) {
 }
 
 // синхронизирует окно фильтров и значок с состоянием
-export function syncControls() {
+function syncControls() {
   renderFilterCats();
   { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
