@@ -628,13 +628,22 @@ function bindEvents() {
   });
 
   // ── Публикация на GitHub: окошко ключа ──
+  /* Окно публикации. Кнопку «Опубликовать» раньше ПРЯТАЛИ, пока нет ключа, и
+     владелец однажды открыл этот экран с вопросом «а где кнопка публиковать?».
+     Спрятанная кнопка ничего не объясняет: человек видит пустой экран и не
+     знает, что делать. Теперь она на месте всегда, но без ключа не нажимается
+     и прямо говорит, чего не хватает. */
   function renderPublishStatus() {
     const has = ghConfigured();
     $('publishStatus').innerHTML = has
       ? '<span class="pub-ok">Ключ на месте. Витрина публикуется автоматически после правок.</span>'
-      : '<span class="pub-warn">Ключ ещё не вставлен — витрина на GitHub не обновляется.</span>';
+      : '<span class="pub-warn">Ключа на этом телефоне нет — витрина не обновляется.'
+        + ' Вставь ключ в поле ниже, и кнопка «Опубликовать» заработает.</span>';
     $('ghTokenClear').hidden = !ghToken();
-    $('ghPublishNow').hidden = !has;
+    const pub = $('ghPublishNow');
+    pub.hidden = false;
+    pub.disabled = !has;
+    pub.textContent = has ? 'Опубликовать витрину сейчас' : 'Опубликовать — сначала вставь ключ';
   }
   function openPublishSheet() {
     closeSheet('adminMenuSheet');
@@ -667,6 +676,9 @@ function bindEvents() {
       toast('Ключ сохранён');
       $('ghTokenInput').value = '';
       renderPublishStatus();
+      /* Ключ вставляют не ради самого ключа, а чтобы опубликовать. Не заставляем
+         искать вторую кнопку — публикуем сразу. */
+      $('ghPublishNow').click();
     } catch (e) {
       ghSetToken('');
       $('publishError').textContent = 'Не получилось: ' + (e.message || e);
@@ -683,7 +695,7 @@ function bindEvents() {
     } catch (e) {
       $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
       $('publishError').hidden = false;
-    } finally { btn.disabled = false; btn.textContent = 'Опубликовать витрину сейчас'; }
+    } finally { btn.disabled = false; renderPublishStatus(); }
   });
   $('ghTokenClear').addEventListener('click', () => {
     if (!confirm('Удалить ключ с этого устройства? Витрина перестанет обновляться автоматически, пока не вставишь ключ снова.')) return;
