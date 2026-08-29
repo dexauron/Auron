@@ -3,7 +3,7 @@
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
 import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
-import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, updatedText } from './catalog.js';
+import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, unitPriceText, updatedText } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -229,6 +229,8 @@ export function scanToPrice(text) {
   const price = has(p.retail_price) ? fmtPrice(p.retail_price) : 'цена не указана';
   // «за кг» / «за шт» — покупателю важно, с чем он сравнивает цену
   const per = p.is_weighted ? 'за кг' : (p.unit ? 'за ' + p.unit : '');
+  // «986 ₽/кг» — то, чем человек сравнивает цену с другими магазинами
+  const perUnit = unitPriceText(p);
   const st = stockLabel(p);
   const cat = productCategory(p);
   /* Этикетка с весов: в ней записан вес именно этой упаковки, значит можно
@@ -245,6 +247,7 @@ export function scanToPrice(text) {
   box.innerHTML = `<div class="pt">
     <div class="pt-name">${esc(p.name)}</div>
     <div class="pt-price">${esc(price)}${per ? `<span class="pt-per">${esc(per)}</span>` : ''}</div>
+    ${perUnit ? `<div class="pt-unitprice">${esc(perUnit)}</div>` : ''}
     ${sum ? `<div class="pt-sum">К оплате <b>${esc(fmtMoney(sum))}</b>
       <span class="pt-sum-sub">за ${esc(fmtNum(kg))} кг по этикетке</span></div>` : ''}
     ${st ? `<div class="tag ${st.cls} pt-stock">${st.txt}</div>` : ''}

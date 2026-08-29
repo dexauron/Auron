@@ -1789,6 +1789,11 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .swipe-wrap .shop-row .rst-rm { grid-area: 1 / 3; }
 .swipe-wrap .shop-row .qty-step { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
 
+/* Цена за килограмм/литр. Мелко и серым: главное — цена на полке, а это
+   вторая строка для сравнения с другими магазинами */
+.card-per { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); margin-top: 1px; }
+.field-hero-per { display: block; font-size: 14px; color: var(--text-2); margin-top: 2px; }
+.pt-unitprice { font-size: 15px; font-weight: 600; color: var(--text-2); margin-top: 2px; }
 
 /* Убыточная наценка — красным: это не «показатель», а «чини сейчас» */
 .margin-bad { color: var(--neg); font-weight: 600; }
