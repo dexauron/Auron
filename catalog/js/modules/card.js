@@ -3,8 +3,9 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, priceAgeDays, telHref, waHref } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, unitPriceText, updatedText, waHref } from './catalog.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
+import { ratingText, reviewsHtml } from './reviews.js';
 import { trackView } from './device.js';
 import { ghConfigured } from './publish.js';
 import { plural, renderCompetitors } from './competitors.js';
@@ -62,9 +63,20 @@ export function openProduct(p) {
   const sl = stockLabel(p);
   if (sl) badges.unshift(`<span class="tag ${sl.cls}">${sl.txt}</span>`);
   if (p.is_weighted) badges.push(`<span class="tag">${ic('scale', 'ic-xs')} Весовой товар</span>`);
+  // «часто берут» — подсказка покупателю, чем выбирают соседи. Без цифр
+  if (!state.session && isTopSeller(p)) badges.push('<span class="tag tag-hit">Часто берут</span>');
   if (p.unit && norm(p.unit) !== 'шт') badges.push(`<span class="tag">Продаётся: ${esc(p.unit)}</span>`);
   const barcodes = p.barcodes || [];
   if (state.session && !barcodes.length) badges.push(`<span class="tag tag-nobarcode">${ic('warn', 'ic-xs')} Штрихкода нет — пробивать по коду</span>`);
+  /* Когда данные обновились. Владелец выгружает из 1С раз в день вечером,
+     значит утром человек смотрит на вчерашние остатки. Пишем прямо — пусть
+     сам решит, доверять ли наличию. Есть только у покупателя: у вошедшего
+     каталог берётся не из витрины, а из своего файла. */
+  // оценка соседей — первой после наличия: по ней выбирают
+  const rt = ratingText(p);
+  if (rt) badges.splice(1, 0, `<span class="tag tag-rating">${ic('star', 'ic-xs')} ${esc(rt)}</span>`);
+  const upd = updatedText();
+  if (upd) badges.push(`<span class="tag tag-when">Обновлено ${esc(upd)}</span>`);
   $('sheetBadges').innerHTML = badges.join('');
 
   // описание товара (под названием, видно всем — как в витрине магазина)
@@ -78,7 +90,9 @@ export function openProduct(p) {
   const rows = [];
   // розничная цена (цена на полке) — видна всем, крупно вверху
   if (p.retail_price != null && p.retail_price !== '') {
-    rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span></div>`);
+    const per = unitPriceText(p);
+    rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span>${
+      per ? `<span class="field-hero-per">${esc(per)}</span>` : ''}</div>`);
   }
   // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
   // покупателям без входа их не показываем
@@ -121,6 +135,9 @@ export function openProduct(p) {
   renderProductPrices(p);
   ui.compFilter = { store: '', from: '', to: '' };
   renderCompetitors(p);
+  // отзывы соседей — под всем остальным: сначала цена и наличие, потом слова
+  const rev = $('sheetReviews');
+  if (rev) rev.innerHTML = reviewsHtml(p);
   renderSimilar(p);
   openSheet('productSheet');
 }

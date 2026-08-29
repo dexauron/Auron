@@ -13,8 +13,12 @@ const { chromium, newPage, runner } = require('./helpers');
   const openPub = async (token) => page.evaluate(async (t) => {
     const P = window.WM_PUBLISH;
     P.ghSetToken(t || '');
+    // окно открывается по СМЕНЕ адреса, поэтому сначала уводим его прочь
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    window.location.hash = '';
+    await new Promise((r) => setTimeout(r, 200));
     window.location.hash = '#publish';
-    await new Promise((r) => setTimeout(r, 600));
+    await new Promise((r) => setTimeout(r, 700));
     const pub = document.getElementById('ghPublishNow');
     return {
       status: document.getElementById('publishStatus').innerText.replace(/\s+/g, ' '),

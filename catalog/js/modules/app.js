@@ -3,25 +3,27 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { buildIndex, categoryOf, daysAgoISO, productCategory, scoreProduct, todayISO, visibleProducts, warmSearchIndex } from './catalog.js';
+import { buildIndex, categoryOf, daysAgoISO, parseScaleBarcode, productCategory, scoreProduct, todayISO, unitPriceText, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason } from './publish.js';
+import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
-import { IMPORT_ORDER, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
+import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
 import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
-import { bindGuest, openStore } from './guest.js';
-import { bindShopping } from './shopping.js';
+import { bindGuest, openShelfReport, openStore } from './guest.js';
+import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkGuestNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
+import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
+import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -295,6 +297,7 @@ function bindEvents() {
   // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
   $('myStrip').addEventListener('click', openSimilar);
   $('newStrip').addEventListener('click', openSimilar);
+  $('cheaperStrip').addEventListener('click', openSimilar);
   $('arrivalStrip').addEventListener('click', (e) => {
     const all = e.target.closest('[data-arr-all]');
     if (all) {
@@ -384,6 +387,8 @@ function bindEvents() {
       } else {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
+      renderMarginBadge();    // сколько товаров продаётся в минус
+      renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
@@ -630,9 +635,9 @@ function bindEvents() {
   // ── Публикация на GitHub: окошко ключа ──
   /* Окно публикации. Кнопку «Опубликовать» раньше ПРЯТАЛИ, пока нет ключа, и
      владелец однажды открыл этот экран с вопросом «а где кнопка публиковать?».
-     Спрятанная кнопка ничего не объясняет: человек видит пустой экран и не
-     знает, что делать. Теперь она на месте всегда, но без ключа не нажимается
-     и прямо говорит, чего не хватает. */
+     Спрятанная кнопка ничего не объясняет: человек видит экран без действия и
+     не понимает, что от него хотят. Теперь она на месте всегда, но без ключа
+     не нажимается и прямо говорит, чего не хватает. */
   function renderPublishStatus() {
     const has = ghConfigured();
     $('publishStatus').innerHTML = has
@@ -676,7 +681,7 @@ function bindEvents() {
       toast('Ключ сохранён');
       $('ghTokenInput').value = '';
       renderPublishStatus();
-      /* Ключ вставляют не ради самого ключа, а чтобы опубликовать. Не заставляем
+      /* Ключ вставляют не ради ключа, а чтобы опубликовать. Не заставляем
          искать вторую кнопку — публикуем сразу. */
       $('ghPublishNow').click();
     } catch (e) {
@@ -692,6 +697,7 @@ function bindEvents() {
     try {
       const sha = await publishShowcase({ onProgress: (d, t) => { btn.textContent = `Публикую… ${d} из ${t}`; } });
       toast(sha ? 'Витрина опубликована' : 'Витрина и так свежая — публиковать нечего');
+      $('publishBanner').hidden = true;   // опубликовали — предупреждение снимаем
     } catch (e) {
       $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
       $('publishError').hidden = false;
@@ -726,6 +732,7 @@ function bindEvents() {
         closeSheet('loginSheet');
         btn.disabled = false; btn.textContent = 'Войти';
         toast(role === 'staff' ? 'Вход сотрудника' : 'Вход выполнен');
+        safely('проверка витрины', checkShowcaseFresh)();
         return;
       } catch (err) {
         btn.disabled = false; btn.textContent = 'Войти';
@@ -788,7 +795,10 @@ function bindEvents() {
      «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
      включённой и на каждый штрихкод крупно показывает цену. */
   const SCAN_MODE_KEY = 'wm_scan_mode';
-  const MODES = ['card', 'price', 'out'];
+  /* Режим «Ценник» из списка убран: он теперь ЕДИНСТВЕННЫЙ у покупателя и
+     не нужен сотруднику (решение владельца). На телефонах, где сотрудник
+     когда-то выбрал «price», молча возвращаемся к «Товар». */
+  const MODES = ['card', 'out'];
   const scanMode = () => {
     try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
   };
@@ -797,13 +807,25 @@ function bindEvents() {
     const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
   };
   const runScan = () => {
-    // переключатель мог быть спрятан пересчётом — возвращаем его
-    const seg = $('scanModeSeg'); if (seg) seg.hidden = false;
+    const seg = $('scanModeSeg');
+    const res = $('scanResult');
+    /* Покупателю выбирать нечего: он навёл камеру, чтобы узнать цену. Сразу
+       ценник — и камера остаётся включённой, чтобы проверить следующий товар. */
+    if (!state.session) {
+      if (seg) seg.hidden = true;
+      if (res) { res.hidden = true; res.innerHTML = ''; }
+      $('scanTitle').textContent = 'Наведи камеру на штрихкод — покажу цену';
+      startScan(scanToPrice, { keepOpen: true });
+      return;
+    }
+    // переключатель мог быть спрятан пересчётом или режимом покупателя
+    if (seg) seg.hidden = false;
+    $('scanTitle').textContent = 'Наведи камеру на штрихкод';
     syncScanMode();
-    const m = scanMode();
-    if (m === 'price') startScan(scanToPrice, { keepOpen: true });
-    else if (m === 'out') startScan(scanToRestock, { keepOpen: true });
-    else startScan(scanToSearch);
+    if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
+    // камеру держим открытой: по весовой этикетке сотрудник видит ценник и
+    // сверяет следующую, а обычный штрихкод закроет её сам, открыв карточку
+    else startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
 
@@ -825,15 +847,6 @@ function bindEvents() {
     stopScan();
     closeSheet('scanSheet');
     setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
-  });
-  // «Открыть товар» из крупной проверки ценника
-  $('scanResult').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-open-scanned]');
-    if (!b) return;
-    stopScan();
-    closeSheet('scanSheet');
-    const p = state.products.find((x) => x.id === b.dataset.openScanned);
-    if (p) openProduct(p);
   });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
@@ -955,6 +968,11 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
+  bindMargin(openProduct);
+  bindScanResult(openProduct, toggleShop, openShelfReport);
+  // отзывы: покупатель оценивает, владелец добавляет и сразу публикует
+  bindReviews((msg) => svSaveAndPublish(msg));
+  $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
   $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
@@ -1127,6 +1145,7 @@ async function init() {
       unlockAny(saved.pw).then((role) => {
         if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
         renderAll();
+        safely('проверка витрины', checkShowcaseFresh)();
       }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
     }
   } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
@@ -1136,6 +1155,7 @@ async function init() {
   safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
   greet();        // волк здоровается один раз в день
   openFromHash(); // если открыли по ссылке на товар — показываем его
+  shopFromHash(); // а если прислали ссылку со списком покупок — собираем список
   runQuickActionFromUrl();
 }
 
@@ -1155,7 +1175,12 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews };
+    _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
+    _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
+    _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
+    _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
+    _staleItems: staleItems, _openStale: openStale,
+    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate };
 }
 
 init();

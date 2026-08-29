@@ -7,7 +7,7 @@ import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
 import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
-import { buildPopularIds, publishFull } from './publish.js';
+import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
 import { loadScript } from './scanner.js';
@@ -108,6 +108,7 @@ function svUploadPrices(byKey) {
     else { p.supplier_ids = p.supplier_ids || []; p.barcodes = p.barcodes || []; p.photos = p.photos || []; } // товар из витрины мог прийти без этих полей
     if (item.code && !p.code) { p.code = item.code; idx.byCode.set(String(item.code), p); }
     if (item.article && !p.article) p.article = item.article;
+    if (item.descr && !p.description) p.description = item.descr;   // на ценник покупателю
     if (item.group) p.group_id = svGroupId(item.group);
     if (item.unit && !p.unit) p.unit = item.unit;
     if (item.weighted) p.is_weighted = true;
@@ -150,6 +151,9 @@ function svUploadStock(parsed) {
     if (rec.unit && !p.unit) p.unit = rec.unit;
     if (rec.unit === 'кг') p.is_weighted = true;
     if (rec.retail != null) p.retail_price = rec.retail;
+    // описание из 1С — на ценник покупателю. Повтор названия описанием не
+    // считаем: колонку «Характеристика» часто заполняют тем же названием
+    if (rec.descr && !p.description && norm(rec.descr) !== norm(rec.name)) p.description = rec.descr;
     p.stock = rec.stock;
     // дата остатка из шапки отчёта («на конец дня: 12.08.2026») — без неё
     // непонятно, насколько число свежее, а устаревает оно за сутки
@@ -172,6 +176,29 @@ function svUploadContacts(list) {
   state.contacts = state.contacts || {};
   for (const rec of list) { const sid = svSupplierId(rec.name); state.contacts[sid] = Object.assign({}, state.contacts[sid], { phone: rec.phone || (state.contacts[sid] && state.contacts[sid].phone) || '' }); }
 }
+/* ── Витрину собрала старая версия приложения ────────────────────────────
+ * Владелец работает с расшифрованным каталогом и открытую витрину не читает —
+ * значит и не видит, что в ней лежит. Один раз это уже стоило покупателям
+ * сканера: штрихкоды добавили в код, но публикация прошла со старой,
+ * сохранённой на телефоне версией, и в витрину они не попали. Проверяем сами
+ * и говорим владельцу словами. Сотруднику не показываем: публиковать может
+ * только владелец, а тревожить человека тем, что он не может исправить,
+ * — плохая привычка. */
+export async function checkShowcaseFresh() {
+  if (!state.isAdmin || !CFG.STATIC_URL) return;
+  const el = $('publishBanner');
+  if (!el || !el.hidden) return;          // уже висит беда посрочнее
+  let meta = null;
+  try {
+    const r = await fetch(`${CFG.STATIC_URL}index.json?t=${Date.now()}`, { cache: 'no-cache' });
+    meta = r.ok ? await r.json() : null;
+  } catch (e) { return; }                 // нет связи — зря не пугаем
+  if (!meta || Number(meta.app) >= SHOWCASE_V) return;
+  el.textContent = 'Витрина на сайте собрана старой версией приложения: '
+    + 'покупатели не видят штрихкоды и наличие. Нажми, чтобы опубликовать заново.';
+  el.hidden = false;
+}
+
 /* Публикация не удалась. Записанное никуда не делось — оно на телефоне, — но
  * сказать об этом надо по-человечески и дать понятное действие, а не показывать
  * код ответа сервера. Плашка держится вверху экрана, пока не опубликуется. */
@@ -262,6 +289,8 @@ export function svImportRows(rows) {
   else if (type === 'contacts') svUploadContacts(parseContactsReport(rows));
   else if (type === 'barcodes') svUploadBarcodes(parseBarcodesReport(rows));
   else if (type === 'units') svUploadUnits(parseUnitsReport(rows));
+  // «Неликвид» разбирает модуль «залежалось» — там же, где его и показывают
+  else if (type === 'stale') { if (!ui.importStale) throw new Error('модуль «залежалось» не загружен'); ui.importStale(rows); }
   else throw new Error('тип «' + type + '» пока не поддержан в бесплатном режиме');
   return type;
 }
@@ -280,6 +309,12 @@ async function fetchShowcase(base, onChunk) {
   if (idx && idx.ok) {
     const meta = await idx.json().catch(() => null);
     if (meta && meta.v === 2 && Array.isArray(meta.parts)) {
+      state.showcaseApp = Number(meta.app) || 1;   // чем собрана витрина
+      /* Когда владелец её опубликовал. Он выгружает из 1С и публикует раз в
+         день, поэтому это и есть ответ на вопрос покупателя «а данные-то
+         свежие?». Показываем честно: пусть человек сам решит, доверять ли
+         наличию, которому сутки. */
+      state.showcaseAt = String(meta.savedAt || '');
       const chunks = [];
       // Куски показываем ПО МЕРЕ ПРИХОДА, а не после последнего: каталог на
       // 17 тысяч товаров — это несколько мегабайт, и ждать их целиком перед
@@ -458,6 +493,9 @@ function detectColumns(rows) {
       const l = (labels[c] || '') + ' ' + (next[c] || '');
       if (!l.trim()) continue;
       if (l.includes('артикул')) cols.article ??= c;
+      // описание товара: если в отчёте 1С такая колонка есть, она уедет
+      // покупателю на ценник. Нет — просто ничего не изменится.
+      else if (l.includes('описание') || l.includes('характеристик')) cols.descr ??= c;
       else if (l.includes('штрих')) cols.barcode ??= c;
       else if (l.includes('код товара') || l.includes('номенклатура.код')) cols.code = c;
       else if (l.includes('код') && cols.code === undefined) cols.code = c;
@@ -539,10 +577,11 @@ function parsePriceReport(rows) {
     const key = code || norm(name);
     let item = byKey.get(key);
     if (!item) {
-      item = { name, code: code || null, article: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, retail: null, prices: new Map() };
+      item = { name, code: code || null, article: null, descr: null, group: null, suppliers: new Set(), barcodes: new Set(), weighted: false, unit: null, retail: null, prices: new Map() };
       byKey.set(key, item);
     }
     const art = cols.article !== undefined ? cellStr(row[cols.article]) : '';
+    const descr = cols.descr !== undefined ? cellStr(row[cols.descr]) : '';
     const grp = cols.group !== undefined ? cellStr(row[cols.group]) : '';
     const sup = cols.supplier !== undefined ? cellStr(row[cols.supplier]) : '';
     const bc = cols.barcode !== undefined ? cellStr(row[cols.barcode]) : '';
@@ -551,6 +590,10 @@ function parsePriceReport(rows) {
     const retail = cols.retail !== undefined ? parsePriceNum(row[cols.retail]) : null;
     const rowDate = cols.date !== undefined ? parseDateCell(row[cols.date]) : null; // дата последнего поступления
     if (art && !item.article) item.article = art;
+    // описание берём, только если оно не повторяет название: в 1С колонку
+    // «Характеристика» часто заполняют тем же названием, и на ценнике это
+    // выглядело бы как заикание
+    if (descr && !item.descr && norm(descr) !== norm(name)) item.descr = descr;
     if (grp && !item.group) item.group = grp;
     if (retail != null && item.retail == null) item.retail = retail; // розничная цена товара
     if (sup) item.suppliers.add(sup);
@@ -772,6 +815,10 @@ function detectReportType(rows) {
   // «Контрагент» + «телефон» — однозначно справочник контактов (в отчётах цен
   // телефона нет). Слово «количество» в служебной шапке не должно мешать.
   if (hasContragent && hasPhone) return 'contacts';
+  /* «Неликвидные товары»: единственный отчёт, где есть НАСТОЯЩАЯ дата
+     последнего поступления товара. Проверяем до остатков: слово «остаток»
+     в его шапке тоже есть, и без этой строки он опознавался как «Остатки». */
+  if (has('дата последнего поступления')) return 'stale';
   if (has('период') && hasQty && !hasStock) return 'sales';
   if (hasStock || (has('розничная цена') && hasQty)) return 'stock';
   if (has('прайс-лист') || has('прайслист') || has('тип цен')) return 'retail';
@@ -790,6 +837,7 @@ const REPORT_LABEL = {
   photo: 'Фото по ссылкам',
   barcodes: 'Штрихкоды',
   units: 'Справочник единиц измерения',
+  stale: 'Неликвидные товары (даты поступления)',
 };
 
 // Загрузка прайс-листа розничных цен: находит товар по артикулу/названию,
@@ -900,7 +948,7 @@ function findTwins() {
   return out;
 }
 
-export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, contacts: 7 };
+export const IMPORT_ORDER = { prices: 0, retail: 1, stock: 2, units: 3, barcodes: 4, photo: 5, sales: 6, stale: 7, contacts: 8 };
 
 export async function smartRun() {
   const btn = $('smartRun');
@@ -974,7 +1022,7 @@ export async function smartRun() {
 let salesParsed = null;
 
 // дата из ячейки Excel: число-«серийник» или строка «01.07.2026»
-function parseDateCell(v) {
+export function parseDateCell(v) {
   if (v == null || v === '') return null;
   if (typeof v === 'number' && v > 20000 && v < 80000) {
     return new Date(Date.UTC(1899, 11, 30) + v * 86400000).toISOString().slice(0, 10);
@@ -1071,7 +1119,7 @@ let stockParsed = null;
 
 // число из ячейки 1С: убираем разделители тысяч (запятые) и пробелы
 // как parsePriceNum, но допускает 0 и отрицательные (остаток бывает минусовым)
-function stockNum(v) { return parseCountNum(v); }
+export function stockNum(v) { return parseCountNum(v); }
 
 function parseStockReport(rows) {
   const cols = {};
@@ -1088,6 +1136,8 @@ function parseStockReport(rows) {
       else if (cols.unit === undefined && l.includes('базовая единица')) cols.unit = c;
       else if (cols.stock === undefined && l === 'количество') cols.stock = c;
       else if (cols.retail === undefined && l.includes('розничная цена')) cols.retail = c;
+      // описание — если оно есть в отчёте, покупатель увидит его на ценнике
+      else if (cols.descr === undefined && (l.includes('описание') || l.includes('характеристик'))) cols.descr = c;
     }
     const line = row.map((v) => cellStr(v)).join(' ');
     const m = line.match(/на конец дня:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i) || line.match(/на дату:?\s*(\d{1,2}\.\d{1,2}\.\d{2,4})/i);
@@ -1109,6 +1159,7 @@ function parseStockReport(rows) {
       unit: cols.unit !== undefined ? cellStr(rows[r][cols.unit]).toLowerCase() : '',
       stock: stockNum(rows[r][cols.stock]) || 0,
       retail: retail != null && retail > 0 ? retail : null,
+      descr: cols.descr !== undefined ? cellStr(rows[r][cols.descr]) : '',
     });
   }
   return { recs, stockAt };

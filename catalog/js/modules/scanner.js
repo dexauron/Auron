@@ -2,8 +2,8 @@
 
 import { $, state } from './store.js';
 import { closeSheet, esc, norm, openSheet, toast } from './core.js';
-import { renderActiveFilters, renderGrid } from './render.js';
-import { fmtRetail } from './catalog.js';
+import { renderActiveFilters, renderGrid, stockLabel } from './render.js';
+import { fmtDate, fmtNum, fmtPrice, isTopSeller, parseScaleBarcode, productCategory, unitPriceText, updatedText } from './catalog.js';
 import { openProduct } from './card.js';
 
 /* ── Сканер штрихкода ─────────────────────────────
@@ -183,36 +183,133 @@ async function scanWithLibrary(done) {
   } catch (e) { /* необязательно */ }
 }
 
-// сотрудник отсканировал штрихкод → ищем товар
-/* Проверка ценника: крупно название, цена и код — прямо в окне камеры.
- * Карточку не открываем: при сверке ценников подряд она бы каждый раз
- * перекрывала камеру. Кнопка «Открыть товар» рядом — на случай, когда нужны
- * подробности. */
+/* ── Ценник покупателя ──────────────────────────────────────────────────────
+ * Человек в зале навёл камеру на упаковку — и хочет узнать ровно то, что
+ * написано (или должно быть написано) на ценнике: сколько стоит, есть ли
+ * товар, когда его привезли, что это вообще такое. Раньше это была узкая
+ * проверка для сотрудника: название, цена, код. Владелец решил иначе —
+ * ценник теперь для ПОКУПАТЕЛЯ и показывает всё, что ему интересно, а
+ * сотруднику он не нужен: у того в карточке товара и так есть всё.
+ *
+ * Карточку поверх камеры не открываем: ценник остаётся под видоискателем,
+ * и следующий товар сканируется сразу, без лишних нажатий. */
+/* Найти товар по штрихкоду. Сначала как обычно — по напечатанному на
+ * упаковке коду. Не нашли — пробуем прочитать этикетку магазинных весов:
+ * там внутри лежит код товара и вес. Догадку принимаем, только если код
+ * действительно нашёлся в каталоге: иначе обычный штрихкод, начинающийся с
+ * двойки, мог бы притвориться весовым. */
+export function findByBarcode(text) {
+  const hit = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
+  if (hit) return { p: hit, grams: 0 };
+  const sc = parseScaleBarcode(text);
+  if (!sc) return null;
+  const p = state.products.find((x) => x.code != null && String(x.code) === sc.code);
+  return p ? { p, grams: sc.grams } : null;
+}
+
+/* Сумма к оплате — с копейками, как на этикетке весов: «181,50 ₽», а не
+ * «181,5 ₽». Это то самое число, которое человек увидит на кассе, и оно
+ * должно совпадать до копейки. У ровных сумм копейки не дописываем. */
+const fmtMoney = (n) => Number(n).toLocaleString('ru-RU',
+  { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 }) + ' ₽';
+
 export function scanToPrice(text) {
   const box = $('scanResult');
   if (!box) return;
-  const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
+  const found = findByBarcode(text);
+  const p = found && found.p;
+  const grams = found ? found.grams : 0;
   box.hidden = false;
   if (!p) {
-    box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>
+    box.innerHTML = `<div class="scan-result-miss">Такого товара у нас нет</div>
       <div class="scan-result-code">${esc(text)}</div>`;
     return;
   }
-  const price = (p.retail_price != null && p.retail_price !== '') ? fmtRetail(p) : 'цена не указана';
-  box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
-    <div class="scan-result-price">${esc(price)}</div>
-    ${p.code ? `<div class="scan-result-code">код ${esc(p.code)}</div>` : ''}
-    <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>`;
+  const has = (v) => v != null && v !== '';
+  const price = has(p.retail_price) ? fmtPrice(p.retail_price) : 'цена не указана';
+  // «за кг» / «за шт» — покупателю важно, с чем он сравнивает цену
+  const per = p.is_weighted ? 'за кг' : (p.unit ? 'за ' + p.unit : '');
+  // «986 ₽/кг» — то, чем человек сравнивает цену с другими магазинами
+  const perUnit = unitPriceText(p);
+  const st = stockLabel(p);
+  const cat = productCategory(p);
+  /* Этикетка с весов: в ней записан вес именно этой упаковки, значит можно
+     сразу сказать, сколько человек заплатит на кассе. Ради этого весовую
+     этикетку и разбираем — иначе он видит только цену за килограмм. */
+  const kg = grams / 1000;
+  const sum = grams && Number(p.retail_price) > 0 ? Number(p.retail_price) * kg : 0;
+  const rows = [
+    grams ? ['Вес этой упаковки', fmtNum(kg) + ' кг'] : null,
+    p.arrival_at ? ['Поступил', fmtDate(p.arrival_at)] : null,
+    cat ? ['Раздел', cat] : null,
+    p.code ? ['Код товара', p.code] : null,
+  ].filter(Boolean);
+  box.innerHTML = `<div class="pt">
+    <div class="pt-name">${esc(p.name)}</div>
+    <div class="pt-price">${esc(price)}${per ? `<span class="pt-per">${esc(per)}</span>` : ''}</div>
+    ${perUnit ? `<div class="pt-unitprice">${esc(perUnit)}</div>` : ''}
+    ${sum ? `<div class="pt-sum">К оплате <b>${esc(fmtMoney(sum))}</b>
+      <span class="pt-sum-sub">за ${esc(fmtNum(kg))} кг по этикетке</span></div>` : ''}
+    ${st ? `<div class="tag ${st.cls} pt-stock">${st.txt}</div>` : ''}
+    ${isTopSeller(p) ? '<div class="tag tag-hit pt-stock">Часто берут</div>' : ''}
+    ${updatedText() ? `<div class="pt-when">Обновлено ${esc(updatedText())}</div>` : ''}
+    ${has(p.description) ? `<div class="pt-desc">${esc(p.description)}</div>` : ''}
+    <div class="pt-rows">${rows.map(([k, v]) => `<div class="pt-row">
+      <span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>
+    <button class="btn btn-primary btn-block" data-shop-scanned="${esc(p.id)}">В список покупок</button>
+    ${state.session ? '' : `<button class="btn btn-secondary btn-block" data-shelf-scanned="${esc(p.id)}">Цена на ценнике другая</button>`}
+    <button class="btn btn-secondary btn-block" data-open-scanned="${esc(p.id)}">Открыть товар</button>
+  </div>`;
 }
 
 export function scanToSearch(text) {
+  const found = findByBarcode(text);
+  /* Весовая этикетка у сотрудника: он сверяет, что весы напечатали, — ему
+     нужны вес и сумма, а не карточка товара. Поэтому показываем ценник и
+     не закрываем камеру: этикеток обычно проверяют несколько подряд.
+     Решение владельца: у сотрудника ценника нет, кроме этого случая. */
+  if (found && found.grams) { scanToPrice(text); return; }
   const input = $('searchInput');
   input.value = text;
   state.query = text;
   $('searchClear').hidden = false;
   renderActiveFilters();
   renderGrid();
-  const p = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
-  if (p) openProduct(p);
+  // обычный штрихкод — открываем карточку и камеру закрываем: держать её
+  // включённой под карточкой незачем, да и телефон греется
+  if (found) { closeSheet('scanSheet'); openProduct(found.p); }
   else toast('Товар с таким штрихкодом в каталоге не найден');
+}
+
+/* Действия на ценнике: положить в список, сообщить о неверном ценнике,
+ * открыть карточку. Обработчик живёт здесь, рядом с самим ценником: app.js
+ * уже дорос до предела, который держит проверка «модули».
+ * Зависимости приходят доводами, а не импортами: список покупок и связь с
+ * магазином про сканер ничего не знают, и знать им незачем. */
+export function bindScanResult(openProductFn, toggleShopFn, openShelfFn) {
+  $('scanResult').addEventListener('click', (e) => {
+    // «В список покупок» — камеру не закрываем: человек идёт по залу дальше
+    const add = e.target.closest('[data-shop-scanned]');
+    if (add) {
+      const p = state.products.find((x) => x.id === add.dataset.shopScanned);
+      if (!p) return;
+      const added = toggleShopFn(p);
+      add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
+      toast(added ? 'Записал в список покупок' : 'Убрано из списка');
+      return;
+    }
+    // «цена на ценнике другая» — тоже у полки, камеру оставляем включённой
+    const shelf = e.target.closest('[data-shelf-scanned]');
+    if (shelf) {
+      const p = state.products.find((x) => x.id === shelf.dataset.shelfScanned);
+      if (p) openShelfFn(p);
+      return;
+    }
+    const b = e.target.closest('[data-open-scanned]');
+    if (!b) return;
+    stopScan();
+    closeSheet('scanSheet');
+    const p = state.products.find((x) => x.id === b.dataset.openScanned);
+    if (p) openProductFn(p);
+  });
 }

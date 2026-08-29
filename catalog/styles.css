@@ -1419,9 +1419,10 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .similar-code { display: inline-block; margin-top: 2px; font-weight: 700; font-size: 15px;
   color: var(--brand-ink); font-variant-numeric: tabular-nums; }
 
-/* ── Проверка ценника: ответ виден с вытянутой руки ─────────────────────────
-   Сотрудник сверяет ценники на бегу, телефон держит далеко от глаз — поэтому
-   цена набрана крупно, а подробности карточки тут только мешали бы. */
+/* ── Ценник покупателя: ответ виден с вытянутой руки ────────────────────────
+   Человек стоит у полки и держит телефон далеко от глаз, поэтому цена набрана
+   крупно. Остальное — то, что он и так ищет глазами на бумажном ценнике:
+   есть ли товар, когда привезли, что это такое. */
 .scan-result {
   background: var(--surface); border-radius: var(--radius);
   padding: 14px 16px; margin: 10px 0 12px; text-align: center;
@@ -1432,6 +1433,27 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .scan-result-miss { font-size: 17px; font-weight: 600; color: var(--warn); }
 .scan-result .btn { margin-top: 10px; }
+
+/* Ценник целиком */
+.pt-name { font-size: 18px; font-weight: 700; line-height: 1.25; }
+.pt-price {
+  font-size: 44px; font-weight: 800; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; margin: 6px 0 2px; line-height: 1;
+}
+.pt-per { font-size: 15px; font-weight: 600; color: var(--text-2); margin-left: 8px; letter-spacing: 0; }
+.pt-stock { display: inline-block; margin: 6px 0 2px; }
+.pt-desc {
+  font-size: 14px; line-height: 1.4; color: var(--text-2);
+  margin: 10px 0 0; text-align: left;
+}
+.pt-rows { margin: 12px 0 2px; }
+.pt-row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 9px 0; border-top: 1px solid var(--border);
+  font-size: 15px; text-align: left;
+}
+.pt-row span { color: var(--text-2); }
+.pt-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ── Заказы поставщикам: неделя одним взглядом ──────────────────────────────
    Столбик = сумма поставок за день. Видно, какой день перегружен, а какой
@@ -1640,23 +1662,22 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
   display: flex; align-items: flex-end; cursor: pointer;
   min-height: 40px; -webkit-tap-highlight-color: transparent;
 }
-.wolf-head { width: 38px; height: auto; display: block; transform-origin: 50% 100%; }
+.wolf-head { width: 32px; height: auto; display: block; transform-origin: 50% 100%; }
 .no-wolf .wolf, .no-wolf .wolf-hi, .no-wolf .wolf-bubble { display: none !important; }
 /* волка показываем только там, где человек смотрит каталог: в рабочих окнах
    (заказы, «закончилось», пересчёт) ему делать нечего */
 .sheet .wolf-hi { display: none; }
 
 /* Дыхание: чуть заметное покачивание, чтобы он выглядел живым, а не наклейкой */
-@keyframes wolf-breathe { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-1.5px) } }
+@keyframes wolf-breathe { 0%, 100% { transform: translateY(0) } 50% { transform: translateY(-1px) } }
 @keyframes wolf-hop {
   0% { transform: translateY(0) scale(1) }
-  30% { transform: translateY(-6px) scale(1.06) }
-  55% { transform: translateY(0) scale(.98) }
-  75% { transform: translateY(-2px) scale(1.01) }
+  35% { transform: translateY(-4px) scale(1.03) }
+  70% { transform: translateY(0) scale(.99) }
   100% { transform: translateY(0) scale(1) }
 }
-.wolf-head { animation: wolf-breathe 4.5s ease-in-out infinite; }
-.wolf-head.hop { animation: wolf-hop .5s cubic-bezier(.34, 1.56, .64, 1); }
+.wolf-head { animation: wolf-breathe 6s ease-in-out infinite; }
+.wolf-head.hop { animation: wolf-hop .42s cubic-bezier(.2, .8, .3, 1); }
 .low-power .wolf-head { animation: none; }
 
 /* Облачко с репликой. Ставится по месту волка из скрипта */
@@ -1679,7 +1700,7 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 
 /* Пустой экран: вместо значка — волк. Значок остаётся рядом и показывается,
    если волка выключили: пустая страница без картинки выглядит поломкой */
-.empty-icon .wolf-empty { width: 108px; height: auto; margin: 0 auto 2px; display: block; }
+.empty-icon .wolf-empty { width: 88px; height: auto; margin: 0 auto 2px; display: block; }
 .empty-icon .wolf-fallback { display: none; }
 .no-wolf .empty-icon .wolf-fallback { display: block; }
 
@@ -1689,14 +1710,14 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    короткий, и живёт на transform — прокрутка от него не страдает. */
 .btn, .tab, .card, .ios-row, .round-btn, .icon-btn, .chip,
 .similar-card, .cat-tile, .grp-row, .qty-step, .wolf-hi {
-  transition: transform .18s cubic-bezier(.34, 1.56, .64, 1);
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1);
 }
 .btn:active, .round-btn:active, .icon-btn:active, .chip:active,
-.qty-step:active, .wolf-hi:active { transform: scale(.93); }
-.card:active, .similar-card:active, .cat-tile:active, .grp-row:active { transform: scale(.97); }
-.ios-row:active { transform: scale(.99); }
-.tab:active .tab-ico { transform: scale(.88); }
-.tab-ico { transition: transform .18s cubic-bezier(.34, 1.56, .64, 1); }
+.qty-step:active, .wolf-hi:active { transform: scale(.96); }
+.card:active, .similar-card:active, .cat-tile:active, .grp-row:active { transform: scale(.985); }
+.ios-row:active { transform: scale(.995); }
+.tab:active .tab-ico { transform: scale(.92); }
+.tab-ico { transition: transform .16s cubic-bezier(.2, .8, .3, 1); }
 .low-power .btn, .low-power .tab, .low-power .card, .low-power .ios-row,
 .low-power .round-btn, .low-power .icon-btn, .low-power .chip,
 .low-power .similar-card, .low-power .cat-tile, .low-power .grp-row,
@@ -1740,8 +1761,105 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    Больше узоров каталог бы не выдержал: он про товары, а не про ковёр. */
 .header::after {
   content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
-  pointer-events: none; opacity: .55;
+  pointer-events: none; opacity: .28;
   background:
     repeating-linear-gradient(45deg, var(--accent) 0 1px, transparent 1px 5px),
     repeating-linear-gradient(-45deg, var(--accent) 0 1px, transparent 1px 5px);
+}
+
+/* Смахивание строки списка покупок влево. Под строкой заранее лежит красная
+   подложка «Убрать» — она проявляется ровно настолько, насколько уехал палец */
+.swipe-wrap { position: relative; overflow: hidden; }
+.swipe-hint {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 18px; background: var(--neg); color: #fff; font-weight: 600; font-size: 15px;
+}
+.swipe-wrap .shop-row { position: relative; background: var(--surface); will-change: transform; }
+.swipe-wrap .shop-row.swipe-armed { box-shadow: -6px 0 12px rgba(0, 0, 0, .12); }
+
+/* Строка списка покупок на телефоне: название с галочкой и крестиком — сверху,
+   счётчик количества — снизу справа. В одну строку всё это не влезало:
+   «Молоко Простоквашино 3.2%» ломалось на три строки в узкую колонку */
+.swipe-wrap .shop-row {
+  display: grid; grid-template-columns: auto 1fr auto;
+  align-items: center; column-gap: 10px; row-gap: 6px;
+}
+.swipe-wrap .shop-row .shop-check { grid-area: 1 / 1; }
+.swipe-wrap .shop-row .ios-row-title { grid-area: 1 / 2; min-width: 0; }
+.swipe-wrap .shop-row .rst-rm { grid-area: 1 / 3; }
+.swipe-wrap .shop-row .qty-step { grid-area: 2 / 2 / 3 / 4; justify-self: end; }
+
+/* Цена за килограмм/литр. Мелко и серым: главное — цена на полке, а это
+   вторая строка для сравнения с другими магазинами */
+.card-per { display: block; font-size: 12px; font-weight: 500; color: var(--text-2); margin-top: 1px; }
+.field-hero-per { display: block; font-size: 14px; color: var(--text-2); margin-top: 2px; }
+.pt-unitprice { font-size: 15px; font-weight: 600; color: var(--text-2); margin-top: 2px; }
+
+/* Убыточная наценка — красным: это не «показатель», а «чини сейчас» */
+.margin-bad { color: var(--neg); font-weight: 600; }
+
+/* «Часто берут» — тёплая, но негромкая метка: подсказка, а не реклама */
+.tag-hit { background: rgba(255, 159, 10, .16); color: var(--warn); border-color: transparent; font-weight: 600; }
+
+/* Сумма по этикетке с весов: ради неё весовой штрихкод и разбирается —
+   человек сразу видит, сколько заплатит на кассе именно за эту упаковку */
+.pt-sum {
+  margin: 10px 0 2px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--surface-2); font-size: 16px;
+}
+.pt-sum b { font-size: 22px; font-weight: 800; letter-spacing: -.02em; }
+.pt-sum-sub { display: block; font-size: 13px; color: var(--text-2); margin-top: 2px; }
+
+/* «Обновлено вчера в 17:40» — не тревога, а честная сноска: негромко и серым */
+.tag-when { background: transparent; border-color: var(--border); color: var(--text-2); font-weight: 400; }
+.pt-when { font-size: 13px; color: var(--text-2); margin-top: 6px; }
+
+/* ── Отзывы соседей ─────────────────────────────────────────────────────────
+   Единственное, чего не было у нас и было у сетей. Написали их не мы, поэтому
+   и выглядят они не как реклама: имя, дата, звёздочки и пара слов */
+.tag-rating { background: rgba(255, 159, 10, .16); color: var(--warn); border-color: transparent; font-weight: 600; }
+.rev-block { margin-top: 18px; }
+.rev-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; font-size: 17px; }
+.rev-stars { color: var(--warn); letter-spacing: 1px; }
+.rev-count { font-size: 14px; color: var(--text-2); }
+.rev-row { padding: 10px 0; border-top: 1px solid var(--border); }
+.rev-who { font-size: 14px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.rev-when { font-weight: 400; color: var(--text-2); font-size: 13px; }
+.rev-mark { color: var(--warn); letter-spacing: 1px; font-size: 13px; }
+.rev-text { font-size: 15px; line-height: 1.4; margin-top: 3px; }
+/* Звёзды, которые ставит покупатель: крупные — попасть пальцем с первого раза */
+.rate-stars { display: flex; justify-content: center; gap: 6px; margin: 14px 0 6px; }
+.rate-stars button {
+  border: none; background: none; font-size: 34px; line-height: 1;
+  color: var(--surface-3); cursor: pointer; padding: 4px 6px; min-width: 44px; min-height: 44px;
+  transition: transform .16s cubic-bezier(.2, .8, .3, 1), color .16s ease;
+}
+.rate-stars button.on { color: var(--warn); }
+.rate-stars button:active { transform: scale(1.15); }
+.star-on { color: var(--warn); fill: var(--warn); }
+.star-off { color: var(--surface-3); }
+.rate-stars .ic { width: 30px; height: 30px; }
+.rate-stars button.on .ic { fill: currentColor; }
+
+/* ── Строка товара: приёмы из индийского Zepto ───────────────────────────────
+   Фасовка отдельной серой строкой, прежняя цена зачёркнутой и выгода рядом.
+   Всё вместе даёт то, чего у нас не было: экономия и размер упаковки читаются
+   за долю секунды, без единого нажатия */
+.row-pack { font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.card-was { font-size: 13px; color: var(--text-2); text-decoration: line-through; margin-left: 8px; font-weight: 500; }
+.card-drop {
+  margin-left: 6px; font-size: 12px; font-weight: 700; color: #fff;
+  background: var(--pos); border-radius: 6px; padding: 1px 6px; vertical-align: 1px;
+}
+
+/* «В каталоге: 89 ₽» — чтобы человек сверял, а не вспоминал */
+.shelf-ours { font-size: 15px; color: var(--text-2); margin: 6px 0 4px; }
+.shelf-ours b { color: var(--text); font-size: 17px; }
+
+/* Обещание магазина в его карточке: спокойно и без восклицаний */
+.store-promise {
+  display: flex; align-items: center; gap: 7px; margin: 12px 16px 0;
+  padding: 11px 14px; border-radius: var(--radius-sm);
+  background: rgba(48, 209, 88, .12); color: var(--pos);
+  font-size: 15px; font-weight: 600;
 }
