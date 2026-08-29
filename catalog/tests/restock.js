@@ -14,7 +14,8 @@ const openList = (page) => page.evaluate(async () => {
   document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
   document.getElementById('adminBtn').click();
   await new Promise((r) => setTimeout(r, 250));
-  const badge = document.getElementById('menuRestockCount').textContent;
+  // счётчик дел теперь на строке «Работа» в меню, а не на строке списка
+  const badge = document.getElementById('menuWorkCount').textContent;
   window.WM_PUBLISH._work('restock');
   await new Promise((r) => setTimeout(r, 350));
   return badge;
@@ -117,7 +118,7 @@ const openList = (page) => page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    const badge2 = document.getElementById('menuRestockCount').textContent;
+    const badge2 = document.getElementById('menuWorkCount').textContent;
     window.WM_PUBLISH._work('restock');
     await new Promise((r) => setTimeout(r, 350));
     const box = document.getElementById('restockBody');
