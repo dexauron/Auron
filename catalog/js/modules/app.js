@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, parseScaleBarcode, productCategory, scoreProduct, todayISO, unitPriceText, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
@@ -699,8 +699,12 @@ function bindEvents() {
       toast(sha ? 'Витрина опубликована' : 'Витрина и так свежая — публиковать нечего');
       $('publishBanner').hidden = true;   // опубликовали — предупреждение снимаем
     } catch (e) {
-      $('publishError').textContent = 'Не удалось опубликовать: ' + (e.message || e);
+      /* Показываем и то, что ответил GitHub: по коду одному ничего не понять,
+         а по его же словам причина обычно видна сразу. Подробность уходит
+         ещё и в «Сбои приложения» — оттуда её можно прислать целиком. */
+      $('publishError').textContent = e.friendly || ('Не удалось опубликовать: ' + (e.message || e));
       $('publishError').hidden = false;
+      if (e.tech) logError('публикация', e);
     } finally { btn.disabled = false; renderPublishStatus(); }
   });
   $('ghTokenClear').addEventListener('click', () => {
