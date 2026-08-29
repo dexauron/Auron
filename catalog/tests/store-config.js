@@ -3,7 +3,7 @@
 // магазина, и нигде в коде не осталось зашитого «Way Market».
 const fs = require('fs');
 const path = require('path');
-const { chromium, newPage, runner } = require('./helpers');
+const { chromium, newPage, asOwner, runner } = require('./helpers');
 
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3,2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт', photos: [], created_at: '2026-01-01' },
@@ -33,6 +33,8 @@ const OTHER_STORE = {
   // ── 2. Каталог как есть — это Way Market ──
   {
     const { page, errs } = await newPage(b, { products, groups });
+    // «Работа» — экран вошедшего: без входа там предложение войти
+    await asOwner(page);
     const own = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
@@ -70,6 +72,7 @@ const OTHER_STORE = {
     await page.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
     await page.waitForTimeout(700);
 
+    await asOwner(page);
     const other = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
