@@ -22,7 +22,7 @@ import { bindGuest, openShelfReport, openStore } from './guest.js';
 import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
-import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
+import { bindMargin, marginCount, marginIssues, openMargin, openStale, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
@@ -439,6 +439,7 @@ function bindEvents() {
 
   // правила заказа: по ним считается точка заказа и объём закупки
   $('menuOrderRules').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrderRules(); });
+  $('menuWork').addEventListener('click', () => { closeSheet('adminMenuSheet'); openWork(); });
   $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
   $('devName').addEventListener('change', () => {
     const v = $('devName').value.trim();
