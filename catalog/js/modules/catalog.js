@@ -101,8 +101,7 @@ export const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFracti
 export const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 // цена с единицей: у весовых показываем «/кг», чтобы было понятно
 export const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
-/* ── Цена за килограмм и за литр ────────────────────────────────────────────
- * Так сравнивают цены в больших магазинах: не «69 ₽ за пачку», а «986 ₽/кг».
+/* ── Фасовка из названия ────────────────────────────────────────────────────
  * Веса товара в 1С нет ни в одном справочнике (проверено: колонки «Масса
  * нетто» и «Ёмкость упаковки» пустые целиком), зато он написан прямо в
  * названии у 78% товаров: «Ulker Альбени XXL 70г», «Сок Апельсин 0,2л».
@@ -113,8 +112,6 @@ export const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/к
  * Лучше не показать ничего, чем написать «3 ₽/л» за тетрадь на 96 листов. */
 const PACK_MULT = /(\d+)\s*[xх*]\s*(\d+(?:[.,]\d+)?)\s*(кг|гр|г|мл|л)(?![а-яёa-z0-9])/i;
 const PACK_ONE = /(\d+(?:[.,]\d+)?)\s*(кг|гр|г|мл|л)(?![а-яёa-z0-9])/gi;
-const PACK_MIN = 0.002, PACK_MAX = 30;    // кг или л в упаковке
-const PER_MIN = 20, PER_MAX = 20000;      // ₽ за кг или литр
 
 function toBaseUnit(v, u) {
   u = String(u).toLowerCase();
@@ -166,18 +163,6 @@ export function packText(p) {
 export function nameNoPack(p) {
   const name = String((p && p.name) || '');
   return PACK_TAIL.test(name) ? name.replace(PACK_TAIL, '') : name;
-}
-
-// «986 ₽/кг» или пустая строка, если мы не уверены
-export function unitPriceText(p) {
-  if (!p || p.is_weighted) return '';       // у весовых цена и так за килограмм
-  const price = Number(p.retail_price);
-  if (!(price > 0)) return '';
-  const ps = packSize(p.name);
-  if (!ps || ps.qty < PACK_MIN || ps.qty > PACK_MAX) return '';
-  const per = price / ps.qty;
-  if (per < PER_MIN || per > PER_MAX) return '';
-  return Math.round(per).toLocaleString('ru-RU') + ' ₽/' + ps.unit;
 }
 
 /* ── «Обновлено …» ──────────────────────────────────────────────────────────
