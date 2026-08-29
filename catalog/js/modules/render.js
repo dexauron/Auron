@@ -3,7 +3,7 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, unitPriceText, visibleProducts, fmtPrice } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
@@ -214,10 +214,6 @@ export function renderGrid() {
     // «без ШК» — служебная пометка для кассы (пробивать по коду). Покупателю
     // она ничего не говорит, поэтому показываем только своим.
     if (state.session && !(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
-    /* Цена за килограмм/литр — так сравнивают цены в больших магазинах.
-       Считается из веса в названии товара; когда мы в нём не уверены,
-       функция возвращает пустую строку и второй строки просто нет. */
-    const per = unitPriceText(p);
     /* Прежняя цена зачёркнутой и выгода рядом — приём из индийского Zepto:
        экономия читается за долю секунды, без единого нажатия. По решению
        владельца видно всем: сотрудника у полки спрашивают именно об этом,
@@ -227,7 +223,7 @@ export function renderGrid() {
     const drop = (was > 0 && now > 0 && was > now)
       ? `<span class="card-was">${esc(fmtPrice(was))}</span><span class="card-drop">−${esc(fmtPrice(was - now))}</span>` : '';
     const price = (p.retail_price != null && p.retail_price !== '')
-      ? `<div class="card-price${drop ? ' has-drop' : ''}">${esc(fmtRetail(p))}${drop}${per ? `<span class="card-per">${esc(per)}</span>` : ''}</div>` : '';
+      ? `<div class="card-price${drop ? ' has-drop' : ''}">${esc(fmtRetail(p))}${drop}</div>` : '';
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
     // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
     // кассой нужен именно код, а не описание товара.
