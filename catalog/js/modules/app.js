@@ -1179,7 +1179,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkNews: checkNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _packText: packText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
-    _staleItems: staleItems, _openStale: openStale,
+    _staleItems: staleItems, _openStale: openStale, _work: runWorkAction,
     _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate };
 }
 

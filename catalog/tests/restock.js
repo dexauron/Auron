@@ -15,7 +15,7 @@ const openList = (page) => page.evaluate(async () => {
   document.getElementById('adminBtn').click();
   await new Promise((r) => setTimeout(r, 250));
   const badge = document.getElementById('menuRestockCount').textContent;
-  document.getElementById('menuRestock').click();
+  window.WM_PUBLISH._work('restock');
   await new Promise((r) => setTimeout(r, 350));
   return badge;
 });
@@ -118,7 +118,7 @@ const openList = (page) => page.evaluate(async () => {
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
     const badge2 = document.getElementById('menuRestockCount').textContent;
-    document.getElementById('menuRestock').click();
+    window.WM_PUBLISH._work('restock');
     await new Promise((r) => setTimeout(r, 350));
     const box = document.getElementById('restockBody');
     return {
@@ -151,7 +151,7 @@ const openList = (page) => page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuRestock').click();
+    window.WM_PUBLISH._work('restock');
     await new Promise((r) => setTimeout(r, 350));
     return {
       left: JSON.parse(localStorage.getItem('wm_restock_v1') || '[]').length,
