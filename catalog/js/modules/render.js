@@ -219,9 +219,10 @@ export function renderGrid() {
        функция возвращает пустую строку и второй строки просто нет. */
     const per = unitPriceText(p);
     /* Прежняя цена зачёркнутой и выгода рядом — приём из индийского Zepto:
-       экономия читается за долю секунды, без единого нажатия. Показываем
-       только покупателю: сотруднику важна цена на кассе, а не история. */
-    const was = !state.session ? Number((state.priceWas || {})[p.id]) : 0;
+       экономия читается за долю секунды, без единого нажатия. По решению
+       владельца видно всем: сотрудника у полки спрашивают именно об этом,
+       а владельцу видно, что его правка цены доехала. */
+    const was = Number((state.priceWas || {})[p.id]);
     const now = Number(p.retail_price);
     const drop = (was > 0 && now > 0 && was > now)
       ? `<span class="card-was">${esc(fmtPrice(was))}</span><span class="card-drop">−${esc(fmtPrice(was - now))}</span>` : '';
@@ -234,6 +235,10 @@ export function renderGrid() {
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
+    /* Фасовка отдельной серой строкой, а название — без неё: так товар
+       читается с одного взгляда (приём из Zepto). При поиске оставляем
+       название целиком: человек мог искать как раз по граммам. */
+    const pack = !state.query ? packText(p) : '';
     if (view === 'list') {
       // покупателю важно, свежий ли завоз — показываем дату прямо в строке
       const arrived = guest && p.arrival_at
@@ -241,7 +246,6 @@ export function renderGrid() {
       /* Фасовка отдельной серой строкой, а название — без неё: так товар
          читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
          полное название: человек мог искать как раз по граммам. */
-      const pack = guest && !state.query ? packText(p) : '';
       const title = pack ? nameNoPack(p) : p.name;
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
@@ -255,7 +259,8 @@ export function renderGrid() {
     return `<article class="card" data-id="${esc(p.id)}">
       <div class="${photoCls}">${img}</div>
       <div class="card-body">
-        <div class="card-name">${highlight(p.name, hlTokens)}</div>
+        <div class="card-name">${highlight(pack ? nameNoPack(p) : p.name, hlTokens)}</div>
+        ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
         ${code}
         ${price}
         ${tagRow}
@@ -711,14 +716,15 @@ export function renderNewProducts() {
  * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
  * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
  * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
- * Только покупателю: сотруднику цены показывает отдельный экран. */
+ * Видна всем (решение владельца): сотруднику у полки этот вопрос задают чаще
+ * всего, а владельцу по ней видно, что новая цена доехала до каталога. */
 const CHEAP_ROWS = 5;
 
 function renderCheaper() {
   ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
   const box = $('cheaperStrip');
   if (!box) return;
-  const show = !state.session && state.tab === 'catalog'
+  const show = state.tab === 'catalog'
     && !state.query && !state.favOnly && !anyFilterActive();
   const was = state.priceWas || {};
   const list = show ? state.products.filter((p) => {

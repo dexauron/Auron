@@ -20,7 +20,7 @@ import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare 
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openShelfReport, openStore } from './guest.js';
 import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
-import { bindNews, checkGuestNews } from './news.js';
+import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
@@ -737,6 +737,7 @@ function bindEvents() {
         btn.disabled = false; btn.textContent = 'Войти';
         toast(role === 'staff' ? 'Вход сотрудника' : 'Вход выполнен');
         safely('проверка витрины', checkShowcaseFresh)();
+        safely('что нового', checkNews)();   // у вошедшего свой каталог — сравниваем заново
         return;
       } catch (err) {
         btn.disabled = false; btn.textContent = 'Войти';
@@ -1150,13 +1151,14 @@ async function init() {
         if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
         renderAll();
         safely('проверка витрины', checkShowcaseFresh)();
+        safely('что нового', checkNews)();
       }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
     }
   } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
-  safely('что нового', checkGuestNews)();   // появилось / подешевело — покупателю
+  safely('что нового', checkNews)();   // подешевело — всем, ожидания и новинки — покупателю
   greet();        // волк здоровается один раз в день
   openFromHash(); // если открыли по ссылке на товар — показываем его
   shopFromHash(); // а если прислали ссылку со списком покупок — собираем список
@@ -1180,7 +1182,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
-    _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkGuestNews: checkGuestNews,
+    _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkNews: checkNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _unitPrice: unitPriceText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
     _staleItems: staleItems, _openStale: openStale,
