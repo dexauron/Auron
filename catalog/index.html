@@ -225,17 +225,21 @@
       <div class="sheet-body">
         <p class="muted menu-role" id="adminEmail"></p>
 
+        <!-- Правило (решение владельца 29.08): ДЕЛА — во вкладке «Работа»,
+             НАСТРОЙКИ — здесь. Раньше заказы и «закончилось» открывались из двух
+             мест сразу, а меню разрослось до семнадцати строк, шесть из которых
+             лежали вообще без заголовка. Теперь ни одной строки без группы. -->
         <div class="ios-group">
-          <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
-          <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
-          <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
-          <button class="ios-row ios-row-link" id="menuStale"><span class="ios-row-title">Залежалось</span><span class="ios-row-value" id="menuStaleCount"></span></button>
-          <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
-          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
+          <button class="ios-row ios-row-link" id="menuWork"><span class="ios-row-title">Работа: заказы, полка, цены</span><span class="ios-row-value" id="menuWorkCount"></span></button>
+        </div>
+
+        <div class="ios-group-title">Это устройство</div>
+        <div class="ios-group">
+          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Настройки этого телефона</span></button>
         </div>
 
         <div id="menuAdminOnly">
-          <div class="ios-group-title">Каталог</div>
+          <div class="ios-group-title">Товары</div>
           <div class="ios-group">
             <button class="ios-row ios-row-link" id="menuAddProduct"><span class="ios-row-title">Добавить товар</span></button>
             <button class="ios-row ios-row-link" id="menuImportHub"><span class="ios-row-title">Загрузка из 1С</span></button>
@@ -249,11 +253,6 @@
           <div class="ios-group-title">Покупатели</div>
           <div class="ios-group">
             <button class="ios-row ios-row-link" id="menuReviews"><span class="ios-row-title">Отзывы покупателей</span><span class="ios-row-value" id="menuReviewsCount"></span></button>
-          </div>
-
-          <div class="ios-group-title">Деньги</div>
-          <div class="ios-group">
-            <button class="ios-row ios-row-link" id="menuMargin"><span class="ios-row-title">Наценка и убыточные товары</span><span class="ios-row-value" id="menuMarginCount"></span></button>
           </div>
 
           <div class="ios-group-title">Доступ и публикация</div>
