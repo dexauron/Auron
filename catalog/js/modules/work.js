@@ -13,6 +13,7 @@ import { plural } from './competitors.js';
 import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
 import { compareCount } from './compare.js';
+import { feature } from './brand.js';
 
 export function openWork() {
   renderWork();
@@ -60,8 +61,8 @@ function renderWork() {
     <div class="ios-group-title">Цены</div>
     <div class="ios-group">
       ${state.canPurchase ? row('margin', 'Наценка и убыточные товары', margin ? `${margin} требуют внимания` : 'всё в порядке', margin > 0) : ''}
-      ${state.canSales ? row('top', 'Ходовые товары', '') : ''}
-      ${row('comp', 'Цены других магазинов', '')}
+      ${state.canSales && feature('sales') ? row('top', 'Ходовые товары', '') : ''}
+      ${feature('competitors') ? row('comp', 'Цены других магазинов', '') : ''}
     </div>
 
     <div class="ios-group-title">Инструменты</div>
