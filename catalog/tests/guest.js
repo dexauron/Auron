@@ -281,7 +281,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     // цены прошлого захода
     await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: { p1: 120, p2: 75 } });
     s2.products.find((p) => p.id === 'p2').stock = 5;      // кефир завезли
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 300));
     const banner = document.getElementById('newsBanner');
     return { shown: !banner.hidden, text: banner.innerText.replace(/\s+/g, ' ') };
@@ -309,7 +309,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     // возвращаем ожидание: прошлая проверка его «израсходовала» — о появлении
     // товара напоминают один раз, и это правильно
     localStorage.setItem('wm_guest_wait_v1', JSON.stringify([{ id: 'p2', name: 'Кефир Домик в деревне', code: '102', at: '2026-08-27' }]));
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 300));
     return document.getElementById('newsBanner').innerText.replace(/\s+/g, ' ');
   });
@@ -334,7 +334,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     localStorage.removeItem('wm_guest_wait_v1');
     await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: {} });
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 250));
     const el = document.getElementById('newsBanner');
     return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' '), seen: localStorage.getItem('wm_news_seen') };
