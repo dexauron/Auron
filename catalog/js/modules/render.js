@@ -235,6 +235,10 @@ export function renderGrid() {
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
+    /* Фасовка отдельной серой строкой, а название — без неё: так товар
+       читается с одного взгляда (приём из Zepto). При поиске оставляем
+       название целиком: человек мог искать как раз по граммам. */
+    const pack = !state.query ? packText(p) : '';
     if (view === 'list') {
       // покупателю важно, свежий ли завоз — показываем дату прямо в строке
       const arrived = guest && p.arrival_at
@@ -242,7 +246,6 @@ export function renderGrid() {
       /* Фасовка отдельной серой строкой, а название — без неё: так товар
          читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
          полное название: человек мог искать как раз по граммам. */
-      const pack = !state.query ? packText(p) : '';
       const title = pack ? nameNoPack(p) : p.name;
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
@@ -256,7 +259,8 @@ export function renderGrid() {
     return `<article class="card" data-id="${esc(p.id)}">
       <div class="${photoCls}">${img}</div>
       <div class="card-body">
-        <div class="card-name">${highlight(p.name, hlTokens)}</div>
+        <div class="card-name">${highlight(pack ? nameNoPack(p) : p.name, hlTokens)}</div>
+        ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
         ${code}
         ${price}
         ${tagRow}
