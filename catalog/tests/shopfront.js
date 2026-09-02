@@ -69,7 +69,7 @@ const products = [
     await new Promise((r) => setTimeout(r, 250));
     let opened = '';
     const real = window.open;
-    window.open = (u) => { opened = u; return null; };
+    window.open = (u) => { opened = u; return { closed: false }; };   // настоящий браузер возвращает окно; вернём null — приложение решит, что всплывающие запрещены, и уйдёт по адресу само
     document.getElementById('shelfPrice').value = '95';
     document.getElementById('shelfSend').click();
     await new Promise((r) => setTimeout(r, 200));

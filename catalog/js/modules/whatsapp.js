@@ -22,7 +22,7 @@ export const WA_MAX_LINES = 60;
 /* «8 964 061-66-01», «+7 (964) 061-66-01», «9640616601» — всё это один номер.
  * Российскую восьмёрку меняем на семёрку, у номера без кода страны её
  * дописываем: WhatsApp принимает только полный международный номер. */
-export function waDigits(phone) {
+function waDigits(phone) {
   let d = String(phone == null ? '' : phone).replace(/\D/g, '');
   if (d.length === 11 && d[0] === '8') d = '7' + d.slice(1);
   if (d.length === 10) d = '7' + d;

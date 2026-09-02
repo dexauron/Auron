@@ -54,7 +54,7 @@ const products = [
     const P = window.WM_PUBLISH;
     let opened = '';
     const real = window.open;
-    window.open = (u) => { opened = u; return null; };
+    window.open = (u) => { opened = u; return { closed: false }; };   // настоящий браузер возвращает окно; вернём null — приложение решит, что всплывающие запрещены, и уйдёт по адресу само
     P._openRate(P._state().products.find((x) => x.id === 'p2'));
     await new Promise((r2) => setTimeout(r2, 200));
     document.querySelector('#rateStars [data-star="5"]').click();
