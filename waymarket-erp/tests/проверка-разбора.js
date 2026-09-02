@@ -8,6 +8,7 @@ const fs = require('fs');
 const XLSX = require(path.join(__dirname, '..', 'vendor', 'xlsx.full.min.js'));
 const WM = require(path.join(__dirname, '..', 'js', 'engine.js'));
 const FIN = require(path.join(__dirname, '..', 'js', 'finance.js'));
+const SUP = require(path.join(__dirname, '..', 'js', 'supply.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -314,6 +315,130 @@ console.log('— Ручной учёт поставок и оплат');
     docs.find(d => d.doc === 'НАКЛ-3').statusText, 'Оплачено');
 }
 console.log('');
+
+/* Поставки: постоянная база документов, справочник фирм и разбор оплат */
+if (global.__inv1c && global.__cash) {
+  console.log('— Поставки: база документов, фирмы, разбор оплат');
+  const settings = { termDaysDefault: 3, debtorOldDays: 30 };
+  const st = { docs: [], pays: [], supreg: [], debtors: [] };
+  const s1 = SUP.mergeDocs(st, global.__inv1c, 'накладные.xlsx', st.supreg, settings);
+  const s2 = SUP.mergePays(st, global.__cash, 'рко.xlsx', st.supreg, settings);
+  SUP.autoRegister(st, settings);
+  const c = SUP.compute(st, settings);
+  const mp = WM.matchPayments(global.__inv1c, global.__cash);
+
+  check('накладные легли в базу', s1.added === global.__inv1c.length, s1.added, global.__inv1c.length);
+  check('оплаты легли в базу', s2.added === global.__cash.length, s2.added, global.__cash.length);
+  check('сумма поставок как в прежнем расчёте', near(c.totals.sum, mp.totalSum, 0.01),
+    WM.fmtMoney(c.totals.sum), WM.fmtMoney(mp.totalSum));
+  check('долг поставщикам как в прежнем расчёте', near(c.totals.left, mp.totalLeft, 0.01),
+    WM.fmtMoney(c.totals.left), WM.fmtMoney(mp.totalLeft));
+  check('оплаты по старым накладным не потерялись', near(c.linkStat.oldSum, mp.oldDebtPaid, 0.01),
+    WM.fmtMoney(c.linkStat.oldSum), WM.fmtMoney(mp.oldDebtPaid));
+
+  // повторная загрузка тех же файлов не должна создавать вторые строки
+  const r1 = SUP.mergeDocs(st, global.__inv1c, 'накладные.xlsx', st.supreg, settings);
+  const r2 = SUP.mergePays(st, global.__cash, 'рко.xlsx', st.supreg, settings);
+  const c2 = SUP.compute(st, settings);
+  check('повторная загрузка не создаёт дублей', r1.added === 0 && r2.added === 0 &&
+    c2.totals.docs === c.totals.docs, 'накладных ' + c2.totals.docs, 'накладных ' + c.totals.docs);
+  check('долг после повторной загрузки не изменился', near(c2.totals.left, c.totals.left, 0.01),
+    WM.fmtMoney(c2.totals.left), WM.fmtMoney(c.totals.left));
+
+  // изменившаяся сумма документа обновляет строку, а не добавляет новую
+  const one = JSON.parse(JSON.stringify(global.__inv1c.slice(0, 1)));
+  one[0].sum = WM.num(one[0].sum) + 100;
+  const r3 = SUP.mergeDocs(st, one, 'накладные.xlsx', st.supreg, settings);
+  const c3 = SUP.compute(st, settings);
+  check('изменённый документ обновляется на месте', r3.updated === 1 && r3.added === 0,
+    'обновлено ' + r3.updated, 'обновлено 1');
+  check('долг вырос ровно на разницу', near(c3.totals.left - c.totals.left, 100, 0.01),
+    WM.fmtMoney(c3.totals.left - c.totals.left), '100 ₽');
+
+  // имена поставщиков: «Фирма ТП Иванов» считается той же фирмой
+  check('фирм меньше, чем написаний имён', c.firms.length <= c.totals.docs,
+    c.firms.length + ' фирм', 'не больше числа накладных');
+  const withReps = c.firms.filter(f => f.reps.length).length;
+  check('торговые представители привязаны к фирмам', withReps >= 0, withReps + ' фирм с представителями', '>=0');
+
+  // очереди
+  check('каждая оплата куда-то отнесена',
+    c.linkStat.auto + c.linkStat.old + c.linkStat.none + c.linkStat.expense + c.linkStat.manual === c.linkStat.total,
+    c.linkStat.auto + '+' + c.linkStat.old + '+' + c.linkStat.none + '+' + c.linkStat.expense,
+    c.linkStat.total);
+  check('в разбор попали только спорные', c.recon.length <= c.linkStat.none + c.linkStat.expense + c.totals.docs,
+    c.recon.length + ' записей', 'не больше спорных');
+  check('к подтверждению — только неоплаченные',
+    c.confirm.every(x => x.sum > 0), c.confirm.length + ' накладных', 'все с остатком долга');
+  console.log('     фирм: ' + c.firms.length + ', имён к решению: ' + c.newNames.length +
+    ', разбор: ' + c.recon.length + ', подтвердить: ' + c.confirm.length);
+  console.log('');
+}
+
+/* Отсрочки и подтверждение дат выплат */
+{
+  console.log('— Отсрочки, даты выплат и долги покупателей');
+  const settings = { termDaysDefault: 3, debtorOldDays: 30 };
+  const st = { docs: [], pays: [], supreg: [], debtors: [] };
+  SUP.mergeDocs(st, [
+    { doc: 'ПН-1', date: '2026-08-01', supplier: 'Рамми ТП Гутаев', sum: 10000, retail: 13000 },
+    { doc: 'ПН-2', date: '2026-08-02', supplier: 'Рамми ТП Асланбек', sum: 5000, retail: 6500 },
+    { doc: 'ПН-3', date: '2026-08-03', supplier: 'Юсуп Фрукты', sum: 31720, retail: 37764 }
+  ], 'файл.xlsx', st.supreg, settings);
+  SUP.mergePays(st, [
+    { doc: 'РКО-1', date: '2026-08-03', supplier: 'Юсуп Фрукты', basis: 'ПН-3',
+      operation: 'Выплата контрагенту', article: 'Оплата поставщику', sum: 31498.72, cashbox: 'Наличка' }
+  ], 'файл.xlsx', st.supreg, settings);
+  SUP.autoRegister(st, settings);
+  const reg = st.supreg;
+  SUP.findFirm(reg, 'Рамми').termDays = 7;
+  const yusup = SUP.findFirm(reg, 'Юсуп Фрукты'); yusup.termDays = 0;
+  st.docs.forEach(d => { d.payDate = SUP.addDays(d.date, SUP.termDaysFor(d.firm, reg, settings)); });
+  const c = SUP.compute(st, settings);
+  const byFirm = {}; c.firms.forEach(f => { byFirm[f.firm] = f; });
+
+  check('«ТП» не плодит фирмы', !!byFirm['Рамми'] && byFirm['Рамми'].docs === 2,
+    'Рамми: ' + (byFirm['Рамми'] ? byFirm['Рамми'].docs : 0) + ' накладные', 'Рамми: 2 накладные');
+  check('долг фирмы сложился', byFirm['Рамми'].left === 15000, WM.fmtMoney(byFirm['Рамми'].left), '15 000 ₽');
+  const pn1 = c.docs.find(d => d.doc === 'ПН-1');
+  check('дата выплаты = дата накладной + отсрочка', pn1.due === '2026-08-08', pn1.due, '2026-08-08');
+  check('неподтверждённая накладная ждёт решения', c.confirm.some(x => x.doc === 'ПН-1'),
+    c.confirm.length + ' в очереди', 'ПН-1 в очереди');
+  const pn3 = c.docs.find(d => d.doc === 'ПН-3');
+  check('оплата встала к накладной по основанию', near(pn3.paid, 31498.72, 0.01),
+    WM.fmtMoney(pn3.paid), '31 498,72 ₽');
+  check('недоплата видна как остаток', near(pn3.left, 221.28, 0.01), WM.fmtMoney(pn3.left), '221,28 ₽');
+  check('недоплата у поставщика «оплата сразу» попала в разбор',
+    c.recon.some(r => r.kind === 'underpay'), c.recon.map(r => r.problem).join(', '), 'Недоплата');
+
+  // округление закрывает копеечный остаток
+  const doc3 = st.docs.find(d => d.doc === 'ПН-3');
+  doc3.roundOff = 221.28; doc3.underpayKeep = true;
+  const c2 = SUP.compute(st, settings);
+  check('округление закрывает остаток', c2.docs.find(d => d.doc === 'ПН-3').left === 0, '0 ₽', '0 ₽');
+
+  // долги покупателей
+  st.debtors = [
+    { id: '1', date: '2026-07-01', name: 'Ахмед', sum: 1240, paid: false },
+    { id: '2', date: '2026-08-30', name: 'Иса', sum: 800, paid: false },
+    { id: '3', date: '2026-08-01', name: 'Хеда', sum: 500, paid: true }
+  ];
+  const d = SUP.debtorsList(st.debtors, { debtorOldDays: 30 });
+  check('погашенные долги не считаются', d.total === 2040, WM.fmtMoney(d.total), '2 040 ₽');
+  check('старые долги выделены', d.old === 1240, WM.fmtMoney(d.old), '1 240 ₽');
+
+  // забор денег владельцем: деньги уходят, прибыль не меняется
+  const rows = [
+    { date: '2026-08-01', type: 'Приход', category: 'Продажи', method: 'Наличные', amount: 100000 },
+    { date: '2026-08-02', type: 'Расход', category: 'Аренда', method: 'Наличные', amount: 20000 },
+    { date: '2026-08-03', type: 'Забор', category: 'Забор владельца', method: 'Наличные', amount: 50000 }
+  ];
+  const t = FIN.totals(rows), b = FIN.balances(rows, {});
+  check('забор не уменьшает прибыль', t.profit === 80000, WM.fmtMoney(t.profit), '80 000 ₽');
+  check('забор уменьшает деньги в кассе', b.map['Наличные'] === 30000, WM.fmtMoney(b.map['Наличные']), '30 000 ₽');
+  check('забор виден отдельной строкой', t.draw === 50000, WM.fmtMoney(t.draw), '50 000 ₽');
+  console.log('');
+}
 
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

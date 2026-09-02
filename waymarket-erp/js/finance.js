@@ -11,7 +11,7 @@
 
   var num = E.num, txt = E.txt, norm = E.norm, round = E.safeRound, div = E.div;
 
-  var TYPES = ['Приход', 'Расход', 'Долг'];
+  var TYPES = ['Приход', 'Расход', 'Долг', 'Забор'];
   var METHODS = ['Наличные', 'Карта', 'Перевод'];
   var WEEKDAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
   var PURCHASE = 'Закуп товара';     // закуп: и оплаченный, и взятый в долг
@@ -165,6 +165,8 @@
   function isIncome(r) { return norm(r.type) === 'приход'; }
   function isExpense(r) { return norm(r.type) === 'расход'; }
   function isDebt(r) { return norm(r.type) === 'долг'; }
+  // Забор денег владельцем: деньги из оборота уходят, но это не расход магазина
+  function isDraw(r) { return norm(r.type) === 'забор'; }
   function isPurchase(r) { return norm(r.category).indexOf('закуп') >= 0; }
   function isDebtPay(r) { return norm(r.category).indexOf('оплата тп') >= 0; }
 
@@ -176,7 +178,7 @@
       var r = rows[i], m = txt(r.method) || 'Наличные';
       if (b[m] === undefined) b[m] = 0;
       if (isIncome(r)) b[m] += num(r.amount);
-      else if (isExpense(r)) b[m] -= num(r.amount);
+      else if (isExpense(r) || isDraw(r)) b[m] -= num(r.amount);
       // «Долг» деньги не двигает: товар взят, оплата будет позже
     }
     var total = 0, out = [];
@@ -186,7 +188,7 @@
 
   function totals(rows) {
     var t = { income: 0, expense: 0, debtTaken: 0, debtPaid: 0, purchase: 0, tx: rows.length,
-      diffSum: 0, diffCount: 0, salary: 0, rent: 0, other: 0 };
+      diffSum: 0, diffCount: 0, salary: 0, rent: 0, other: 0, draw: 0 };
     var days = {}, shifts = {}, byDay = {};
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i], a = num(r.amount);
@@ -205,6 +207,9 @@
         if (isDebtPay(r)) t.debtPaid += a;
       } else if (isDebt(r)) {
         t.debtTaken += a;
+      } else if (isDraw(r)) {
+        // изъятие из оборота: прибыль не уменьшает, деньги в кассе — да
+        t.draw += a;
       }
     }
     for (var k in t) t[k] = round(t[k]);
@@ -425,7 +430,7 @@
     TYPES: TYPES, METHODS: METHODS, WEEKDAYS: WEEKDAYS,
     PURCHASE: PURCHASE, DEBT_PAY: DEBT_PAY, SALES: SALES,
     findHeaderRow: findHeaderRow, parseDdsBase: parseDdsBase, parsePayPlan: parsePayPlan, parseFinSettings: parseFinSettings,
-    isIncome: isIncome, isExpense: isExpense, isDebt: isDebt, isPurchase: isPurchase, isDebtPay: isDebtPay,
+    isIncome: isIncome, isExpense: isExpense, isDebt: isDebt, isDraw: isDraw, isPurchase: isPurchase, isDebtPay: isDebtPay,
     balances: balances, totals: totals, group: group,
     byCategory: byCategory, byMethodIncome: byMethodIncome, byShift: byShift,
     byWeekday: byWeekday, byCashier: byCashier,

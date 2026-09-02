@@ -16,6 +16,8 @@
     invoices1c: [], invoicesPeriod: null, cashOrders: [], owner: null, files: []
   };
   var C = {};                 // производные расчёты
+  var SUP = window.WMSupply;  // поставки, оплаты и справочник фирм
+  var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
@@ -239,8 +241,18 @@
     else if (kind === 'units') { r = E.parseUnits(m.matrix); D.units = r.rows; }
     else if (kind === 'writeoffs1c') { r = E.parseWriteoffs1C(m.matrix); D.writeoffs = r.rows; D.writeoffsPeriod = r.period; info.period = r.period; }
     else if (kind === 'returns') { r = E.parseReturns(m.matrix); D.returns = r.rows; D.returnsPeriod = r.period; info.period = r.period; }
-    else if (kind === 'invoices1c') { r = E.parseIncomingInvoices(m.matrix); D.invoices1c = r.rows; D.invoicesPeriod = r.period; info.period = r.period; }
-    else if (kind === 'cashout' || kind === 'cashin') { r = E.parseCashOrders(m.matrix, kind === 'cashin' ? 'in' : 'out'); D.cashOrders = r.rows; info.period = r.period; }
+    else if (kind === 'invoices1c') {
+      r = E.parseIncomingInvoices(m.matrix); D.invoices1c = r.rows; D.invoicesPeriod = r.period; info.period = r.period;
+      var sd = SUP.mergeDocs(S.state, r.rows, name, S.state.supreg, S.settings);
+      S.save(); LAST_IMPORT.push({ name: name, kind: 'Приходные накладные', rows: r.rows.length, stat: sd });
+      info.note = 'новых ' + sd.added + ', обновлено ' + sd.updated + ', дублей ' + sd.same;
+    }
+    else if (kind === 'cashout' || kind === 'cashin') {
+      r = E.parseCashOrders(m.matrix, kind === 'cashin' ? 'in' : 'out'); D.cashOrders = r.rows; info.period = r.period;
+      var sp = SUP.mergePays(S.state, r.rows, name, S.state.supreg, S.settings);
+      S.save(); LAST_IMPORT.push({ name: name, kind: 'Расходные кассовые ордера', rows: r.rows.length, stat: sp });
+      info.note = 'новых ' + sp.added + ', обновлено ' + sp.updated + ', дублей ' + sp.same;
+    }
     else if (kind === 'writeoffs') {
       r = E.parseWriteoffs(m.matrix);
       D.writeoffs = r.rows.map(function (x) {
@@ -296,6 +308,8 @@
     C.balance1c = D.invoices1c.length ? E.supplierBalance(D.invoices1c, D.cashOrders) : null;
     C.cash1c = D.cashOrders.length ? E.cashSummary(D.cashOrders) : null;
     C.ownerAll = D.owner ? E.ownerTotals(D.owner.daily) : null;
+    if (SUP.autoRegister(S.state, S.settings)) S.save();  // новые имена сразу в справочник
+    C.sup = SUP.compute(S.state, S.settings);
     C.bySupplier = {};
     D.prices.forEach(function (p) { var k = E.norm(p.supplier); C.bySupplier[k] = (C.bySupplier[k] || 0) + 1; });
     C.balance = C.balance1c;
@@ -311,8 +325,8 @@
   // Итоговый долг поставщикам: из 1С, если выгрузки есть; иначе из ручного учёта
   function debtNow() {
     var man = E.manualTotals(S.state.invoices || [], S.state.payments || []);
-    if (C.payments1c) {
-      return { value: C.payments1c.totalLeft, source: 'по накладным 1С',
+    if (C.sup && C.sup.totals.docs) {
+      return { value: C.sup.totals.left, source: 'по накладным 1С',
         manual: man.debt, hasBoth: man.debt !== 0 };
     }
     if (D.owner && C.ownerAll && C.ownerAll.debt) {
@@ -327,6 +341,7 @@
       return /\.(xls|xlsx|csv)$/i.test(f.name) && !/^~\$/.test(f.name);
     });
     if (!files.length) { toast('Файлов 1С не нашлось. Нужны .xls, .xlsx или .csv'); return; }
+    LAST_IMPORT = [];
     var b = sheet('Читаю файлы', '<div class="card"><div class="card-pad" id="progText">Подождите…</div></div>');
     var okCount = 0;
     for (var i = 0; i < files.length; i++) {
@@ -633,7 +648,14 @@
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
     fieldRow: fieldRow, pageHead: pageHead, toast: toast, sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
-    go: function (id) { go(id); }, render: function () { render(); }
+    go: function (id) { go(id); }, render: function () { render(); },
+    lastImport: function () { return LAST_IMPORT; },
+    tab: function (key, def) { return TAB[key] || def; },
+    data: function () { return D; }, calc: function () { return C; },
+    openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
+    form: function (id) { return FORMS[id]; },
+    pickFiles: function () { $('filesInput').click(); },
+    recompute: function () { recompute(); }
   };
 
   function quickBar() {
@@ -653,18 +675,14 @@
       if (d.left > 0) out.push({ due: d.due || d.date, supplier: d.supplier, doc: d.doc || '—',
         left: d.left, src: 'мои записи', id: d.id });
     });
-    if (C.payments1c) {
-      var grace = num(S.settings.graceDays);   // сколько дней отсрочки даёт поставщик
-      C.payments1c.docs.forEach(function (d) {
+    if (C.sup) {
+      // в накладной 1С срока оплаты нет: он считается по отсрочке поставщика,
+      // но в план попадает только подтверждённая владельцем дата
+      C.sup.docs.forEach(function (d) {
         if (d.left <= 0) return;
-        // в накладной 1С срока оплаты нет: берём дату поставки плюс отсрочку из настроек,
-        // а если отсрочка не задана — считаем документ «без срока», а не просроченным
-        var due = '';
-        if (grace > 0 && d.date) {
-          due = new Date(new Date(d.date).getTime() + grace * 86400000).toISOString().slice(0, 10);
-        }
-        out.push({ due: due, date: d.date, supplier: d.supplier,
-          doc: d.doc.replace('Приходная накладная ', ''), left: d.left, src: '1С' });
+        out.push({ due: d.confirmed ? d.due : '', date: d.date, supplier: d.firm,
+          doc: d.doc.replace('Приходная накладная ', ''), left: d.left,
+          src: d.confirmed ? '1С' : '1С, дата не подтверждена' });
       });
     }
     return out.sort(function (a, b) { return (a.due || '').localeCompare(b.due || ''); });
@@ -685,6 +703,19 @@
       items.push({ icon: '📅', title: 'Оплатить сегодня', sub: dueToday.map(function (d) { return d.supplier; }).slice(0, 3).join(', '),
         value: '<span class="c-orange private">' + money(dueToday.reduce(function (a, d) { return a + d.left; }, 0)) + '</span>', view: 'suppliers' });
     }
+    if (C.sup && C.sup.confirm.length) items.push({ icon: '✅', title: 'Подтвердите даты выплат',
+      sub: 'дата предложена по отсрочке — в план попадёт после подтверждения',
+      value: C.sup.confirm.length + ' ' + plural(C.sup.confirm.length, 'накладная', 'накладные', 'накладных'),
+      view: 'confirm' });
+    if (C.sup && C.sup.recon.length) items.push({ icon: '🧷', title: 'Оплаты, которые не сошлись',
+      sub: 'недоплата, оплата без накладной или выплата не поставщику',
+      value: '<span class="c-orange">' + C.sup.recon.length + '</span>', view: 'recon' });
+    if (C.sup && C.sup.newNames.length) items.push({ icon: '🔗', title: 'Новые имена поставщиков',
+      sub: 'пока имя не связано с фирмой, долг по нему считается отдельно',
+      value: '<span class="c-orange">' + C.sup.newNames.length + '</span>', view: 'match' });
+    if (C.sup && C.sup.debtors.old > 0) items.push({ icon: '📓', title: 'Старые долги покупателей',
+      sub: 'старше ' + C.sup.debtors.oldDays + ' дней',
+      value: '<span class="c-red private">' + money(C.sup.debtors.old) + '</span>', view: 'debtors' });
     if (D.sales.length && D.stock.length) {
       if (C.ropCount == null) C.ropCount = E.ropList(D.sales, D.stock, D.salesPeriod ? D.salesPeriod.days : 30, S.settings, C.bestPrices).length;
       if (C.ropCount) items.push({ icon: '🚚', title: 'Пора заказать товар',
@@ -1675,8 +1706,12 @@
       var pt = window.WMFin.planTotals(S.state.plans, t);
       if (pt.overdueCount) c.finpay = pt.overdueCount > 99 ? '99+' : pt.overdueCount;
     }
-    var att = 0;
-    if (over) att++;
+    if (C.sup) {
+      if (C.sup.newNames.length) c.match = C.sup.newNames.length > 99 ? '99+' : C.sup.newNames.length;
+      if (C.sup.recon.length) c.recon = C.sup.recon.length > 99 ? '99+' : C.sup.recon.length;
+      if (C.sup.confirm.length) c.confirm = C.sup.confirm.length > 99 ? '99+' : C.sup.confirm.length;
+      if (C.sup.debtors.list.length) c.debtors = C.sup.debtors.list.length > 99 ? '99+' : C.sup.debtors.list.length;
+    }
     return c;
   }
 

@@ -43,10 +43,18 @@
     debtWarn: 200000,       // долг поставщикам: внимание
     debtCrit: 500000,       // долг поставщикам: критично
     dueWarn: 7,             // за сколько дней предупреждать о платеже
-    diffCrit: 1000          // критичное расхождение кассы
+    diffCrit: 1000,         // критичное расхождение кассы
+
+    // Поставки из 1С: отсрочки, разбор оплат, долги покупателей
+    termDaysDefault: 3,     // отсрочка по умолчанию, если у поставщика не задана
+    debtorOldDays: 30,      // с какого возраста долг покупателя считается старым
+    keepBackups: 30         // сколько копий базы хранить в папке «копии»
   };
 
-  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry', 'inventory', 'kvi', 'dds', 'plans'];
+  var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry',
+    'inventory', 'kvi', 'dds', 'plans',
+    // поставки из 1С живут в базе постоянно: документы, оплаты, справочник фирм
+    'docs', 'pays', 'supreg', 'debtors'];
 
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
