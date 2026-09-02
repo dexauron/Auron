@@ -334,7 +334,7 @@ function orderText(d) {
 }
 
 // Кнопка «Отправить заказ поставщику в WhatsApp» в окне заказа
-function sendOrderToSupplier() {
+export function sendOrderToSupplier() {
   const d = readForm();
   const err = $('ordError');
   if (!d.supplier_id) { err.textContent = 'Выбери поставщика — иначе непонятно, кому отправлять.'; err.hidden = false; return; }

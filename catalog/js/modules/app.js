@@ -15,7 +15,7 @@ import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, open
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
-import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
+import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openShelfReport, openStore } from './guest.js';
@@ -943,6 +943,7 @@ function bindEvents() {
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
   $('ordReceived').addEventListener('click', markReceived);
+  $('ordSendWa').addEventListener('click', sendOrderToSupplier);
   $('ordShare').addEventListener('click', shareOrders);
   // позиции заказа: что именно заказали
   $('ordItemAdd').addEventListener('click', addOrderItem);
