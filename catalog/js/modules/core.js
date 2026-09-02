@@ -1,6 +1,6 @@
 // Мелкие помощники: элементы, экранирование, форматы, шторки
 
-import { $, state, ui } from './store.js';
+import { $, state } from './store.js';
 import { ic } from './icons.js';
 import { stopScan } from './scanner.js';
 
@@ -162,9 +162,6 @@ function restackSheets() {
 }
 
 export function openSheet(id) {
-  /* Облачко волка живёт поверх страницы, и открытое окно оно бы закрыло собой.
-     Прячем его молча: человек уже перешёл к делу, реплика ему не нужна. */
-  if (ui.hideWolf) ui.hideWolf();
   const el = $(id);
   if (!el || !el.hidden) return; // нет элемента или уже открыт
   el.hidden = false;
@@ -296,8 +293,7 @@ export function addBackButtons() {
 // пальцем, фон плавно светлеет, при отпускании — мягкая «пружина» назад,
 // а быстрый флик закрывает даже с небольшого расстояния.
 export function enableSwipeToClose() {
-  // .shop-row смахивают вбок — сама шторка при этом ездить не должна
-  const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box,.shop-row';
+  const NO_DRAG = 'button,a,input,textarea,select,label,.photo-strip,.price-history,.scan-box';
   const SPRING = 'transform .38s cubic-bezier(.32,.72,0,1)';
   document.querySelectorAll('.sheet').forEach((sheet) => {
     const bd = sheet.closest('.sheet-backdrop');

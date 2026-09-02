@@ -63,8 +63,8 @@ export function applyBrand() {
   }
 
   // Выключенное в настройках просто исчезает из интерфейса.
-  // «цены магазинов» и «ходовые» переехали во вкладку «Работа» — там их
-  // показ решается теми же feature-флагами при отрисовке экрана
+  if (!feature('competitors')) hide('menuCompStores');
+  if (!feature('sales')) hide('menuTop');
 }
 
 function hide(id) { const el = $(id); if (el) el.hidden = true; }

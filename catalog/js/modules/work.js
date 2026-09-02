@@ -13,7 +13,6 @@ import { plural } from './competitors.js';
 import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
 import { compareCount } from './compare.js';
-import { feature } from './brand.js';
 
 export function openWork() {
   renderWork();
@@ -42,31 +41,12 @@ function renderWork() {
     : 'на этой неделе пусто';
   const rest = restockCount();
   const cmp = compareCount();
-  const stale = ui.staleCount ? ui.staleCount() : 0;
-  const margin = ui.marginCount ? ui.marginCount() : 0;
 
-  /* Всё рабочее собрано здесь (решение владельца 29.08). Раньше заказы и
-     «закончилось» открывались ИЗ ДВУХ мест — отсюда и из меню, — а «залежалось»
-     и наценка только из меню, хотя это тоже работа. Правило теперь читается:
-     дела — во вкладке, настройки — в меню. */
   box.innerHTML = `
-    <div class="ios-group-title">Дела смены</div>
     <div class="ios-group">
       ${row('orders', 'Заказы поставщикам', orders)}
       ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
-      ${row('stale', 'Залежалось', stale ? `${stale} ${plural(stale, 'товар', 'товара', 'товаров')}` : 'пусто')}
-    </div>
-
-    <div class="ios-group-title">Цены</div>
-    <div class="ios-group">
-      ${state.canPurchase ? row('margin', 'Наценка и убыточные товары', margin ? `${margin} требуют внимания` : 'всё в порядке', margin > 0) : ''}
-      ${state.canSales && feature('sales') ? row('top', 'Ходовые товары', '') : ''}
-      ${feature('competitors') ? row('comp', 'Цены других магазинов', '') : ''}
-    </div>
-
-    <div class="ios-group-title">Инструменты</div>
-    <div class="ios-group">
       ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
       ${row('scan', 'Сканировать штрихкод', '')}
     </div>
@@ -95,15 +75,11 @@ function renderTodayBanner() {
  * которые закончились. Ноль значка не рисует: пустой кружок только мешает. */
 export function renderWorkBadge() {
   renderTodayBanner();
-  const n = state.session ? ordersSummary().overdue + restockCount() : 0;
   const el = $('tabWorkCount');
-  if (el) {
-    el.textContent = n > 99 ? '99+' : n;
-    el.hidden = !n;
-  }
-  // та же цифра на строке «Работа» в меню — вход туда есть и оттуда
-  const m = $('menuWorkCount');
-  if (m) m.textContent = n ? String(n) : '';
+  if (!el) return;
+  const n = state.session ? ordersSummary().overdue + restockCount() : 0;
+  el.textContent = n > 99 ? '99+' : n;
+  el.hidden = !n;
 }
 
 export function runWorkAction(what) {

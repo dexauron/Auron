@@ -33,7 +33,7 @@ const spaced = (s) => String(s).replace(/ | /g, ' ');
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    window.WM_PUBLISH._work('orders');
+    document.getElementById('menuOrders').click();
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));

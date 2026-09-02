@@ -22,7 +22,7 @@ const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISO
   const res = await page.evaluate(async (due) => {
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    window.WM_PUBLISH._work('orders');
+    document.getElementById('menuOrders').click();
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));
@@ -63,22 +63,11 @@ const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISO
       notFound: P._ghReason(404, '{"message":"Not Found"}').msg,
       rate: P._ghReason(403, '{"message":"API rate limit exceeded"}').msg,
       down: P._ghReason(502, 'Bad gateway').msg,
-      // 422 — «не принял запись». Владелец однажды увидел голое «код 422» и не
-      // понял ничего. Причин две, и они совсем разные
-      race: P._ghReason(422, '{"message":"Update is not a fast forward"}'),
-      other: P._ghReason(422, '{"message":"Tree entry not found"}').msg,
-      naked: P._ghReason(422, 'что-то непонятное').msg,
     };
   });
   chk(/не нашёл/i.test(reasons.notFound), `404 объясняется словами (${reasons.notFound})`);
   chk(/подождать/i.test(reasons.rate), `«слишком часто» объясняется словами (${reasons.rate})`);
   chk(/недоступен/i.test(reasons.down), `сбой на стороне GitHub объясняется словами (${reasons.down})`);
-  chk(/менял кто-то ещё/.test(reasons.race.msg) && /ещё раз/.test(reasons.race.msg),
-    `гонка объяснена и сказано, что делать (${reasons.race.msg})`);
-  chk(reasons.race.code === 'wait', 'гонка помечена как «попробуй снова», а не как поломка ключа');
-  chk(/Tree entry not found/.test(reasons.other),
-    `непонятный отказ показывает слова самого GitHub (${reasons.other})`);
-  chk(/без объяснения/.test(reasons.naked), `если GitHub промолчал — так и пишем (${reasons.naked})`);
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);

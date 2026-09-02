@@ -3,7 +3,7 @@
 // магазина, и нигде в коде не осталось зашитого «Way Market».
 const fs = require('fs');
 const path = require('path');
-const { chromium, newPage, asOwner, runner } = require('./helpers');
+const { chromium, newPage, runner } = require('./helpers');
 
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3,2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт', photos: [], created_at: '2026-01-01' },
@@ -33,19 +33,15 @@ const OTHER_STORE = {
   // ── 2. Каталог как есть — это Way Market ──
   {
     const { page, errs } = await newPage(b, { products, groups });
-    // «Работа» — экран вошедшего: без входа там предложение войти
-    await asOwner(page);
     const own = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
-      // «цены магазинов» и «ходовые» живут во вкладке «Работа» (29.08):
-      // раньше они были строками меню, и проверка смотрела туда
-      work: window.WM_PUBLISH._workRows(),
+      compMenu: !document.getElementById('menuCompStores').hidden,
+      topMenu: !document.getElementById('menuTop').hidden,
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
     chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
-    chk(/Цены других магазинов/.test(own.work) && /Ходовые товары/.test(own.work),
-      'включённые возможности видны во вкладке «Работа»');
+    chk(own.compMenu && own.topMenu, 'включённые возможности видны в меню');
     chk(own.cat === 'Молочное', `разделы продуктового магазина работают (молоко → ${own.cat})`);
     chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
@@ -72,14 +68,14 @@ const OTHER_STORE = {
     await page.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
     await page.waitForTimeout(700);
 
-    await asOwner(page);
     const other = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
       sub: (document.querySelector('.brand-sub') || {}).textContent,
       letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
       accent: document.documentElement.style.getPropertyValue('--brand').trim(),
-      work: window.WM_PUBLISH._workRows(),
+      compMenu: document.getElementById('menuCompStores').hidden,
+      topMenu: document.getElementById('menuTop').hidden,
       milk: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
       screw: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p2')),
       cards: document.querySelectorAll('.card').length,
@@ -88,8 +84,7 @@ const OTHER_STORE = {
       `другой магазин: ${other.name} · ${other.sub}`);
     chk(other.letter === 'С', `логотипа нет — показана первая буква названия (${other.letter})`);
     chk(other.accent === '#B3261E', `цвет магазина применён (${other.accent})`);
-    chk(!/Цены других магазинов/.test(other.work) && !/Ходовые товары/.test(other.work),
-      'выключенные возможности исчезли из вкладки «Работа»');
+    chk(other.compMenu && other.topMenu, 'выключенные возможности исчезли из меню');
     chk(other.milk === 'Молочные продукты' && other.screw === 'Крепёж',
       `разделы взяты из групп 1С, а не из продуктовых правил (молоко → ${other.milk}, саморез → ${other.screw})`);
     chk(other.cards === products.length, `товары показываются (${other.cards})`);

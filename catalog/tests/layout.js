@@ -82,10 +82,7 @@ const products = Array.from({ length: 6 }, (_, i) => ({
         return true;
       }, id);
       if (!ok) { bad.push(`${id}: окна нет в разметке`); continue; }
-      /* Окно выезжает с анимацией, и первые доли секунды оно ещё уменьшено —
-         замер в этот момент показывает кнопки мельче, чем они есть, и проверка
-         падает через раз. Ждём, пока анимация закончится. */
-      await page.waitForTimeout(450);
+      await page.waitForTimeout(100);
       await scan(id);
     }
     // Список сотрудника — с настоящим содержимым: пустое окно почти ничего не
@@ -126,13 +123,14 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     });
     await scan('storeSheet с подсказками');
 
-    // рабочие списки открываются из вкладки «Работа» (29.08)
-    for (const [id, what] of [['restockSheet', 'restock']]) {
-      await page.evaluate(async (w) => {
+    for (const [id, menu] of [['restockSheet', 'menuRestock']]) {
+      await page.evaluate(async (m) => {
         document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-        window.WM_PUBLISH._work(w);
-        await new Promise((r) => setTimeout(r, 450));
-      }, what);
+        document.getElementById('adminBtn').click();
+        await new Promise((r) => setTimeout(r, 250));
+        document.getElementById(m).click();
+        await new Promise((r) => setTimeout(r, 350));
+      }, menu);
       await scan(`${id} со списком`);
     }
     chk(!bad.length, `ширина ${W}px: ничего не вылезает за край${bad.length ? ' — ' + bad.join(' | ') : ''}`);
