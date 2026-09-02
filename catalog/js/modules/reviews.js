@@ -16,14 +16,12 @@
 
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { CFG } from './store.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
+import { sendWhatsApp, storeWa } from './whatsapp.js';
 
 const MAX_TEXT = 200;        // длиннее никто не читает, а витрина тяжелеет
-
-const waNumber = () => String(CFG.STORE_WHATSAPP || '').replace(/\D/g, '');
 
 /* Оценка товара: среднее и сколько отзывов. Пусто — значит показывать нечего,
  * и никаких «нет оценок» мы не пишем: пустая строка хуже её отсутствия. */
@@ -93,7 +91,7 @@ function sendRate() {
   const err = $('rateError');
   if (!p) return;
   if (!ui.rateStars) { err.textContent = 'Поставь оценку — от одной звезды до пяти.'; err.hidden = false; return; }
-  const wa = waNumber();
+  const wa = storeWa();
   if (!wa) { toast('Магазин не указал номер для связи'); return; }
   const name = $('rateName').value.trim().slice(0, 40);
   const words = $('rateText').value.trim().slice(0, MAX_TEXT);
@@ -102,7 +100,7 @@ function sendRate() {
     + `Оценка: ${ui.rateStars} из 5\n`
     + (name ? `Имя: ${name}\n` : '')
     + (words ? `${words}\n` : '');
-  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  sendWhatsApp(text, wa);
   closeSheet('rateSheet');
   toast('Спасибо! Отзыв ушёл в магазин');
 }
