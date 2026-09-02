@@ -225,9 +225,11 @@
           '<button class="btn btn-sm" data-act="sup-link-own" data-raw="' + raw + '">Отдельный</button>';
       return '<div class="row" style="flex-wrap:wrap">' +
         '<div class="row-main"><div class="row-title">' + esc(n.raw) + '</div>' +
-        '<div class="row-sub">' + (n.docs ? n.docs + ' ' + u.plural(n.docs, 'накладная', 'накладные', 'накладных') : '') +
-        (n.docs && n.pays ? ' · ' : '') + (n.pays ? n.pays + ' ' + u.plural(n.pays, 'оплата', 'оплаты', 'оплат') : '') +
-        ' · <span class="private">' + E.fmtMoney(n.sum) + '</span></div></div>' +
+        '<div class="row-sub">' + [
+          n.docs ? n.docs + ' ' + u.plural(n.docs, 'накладная', 'накладные', 'накладных') : '',
+          n.pays ? n.pays + ' ' + u.plural(n.pays, 'оплата', 'оплаты', 'оплат') : '',
+          '<span class="private">' + E.fmtMoney(n.sum) + '</span>'
+        ].filter(Boolean).join(' · ') + '</div></div>' +
         '<div class="row-main"><div class="row-title c-blue">' + esc(n.firm) + '</div>' +
         '<div class="row-sub">' + esc(n.reason) + '</div></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' + buttons + '</div></div>';
@@ -788,7 +790,8 @@
   /* --- Регистрация экранов --------------------------------------------------- */
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'import', icon: '📥', name: 'Импорт из 1С', group: 'Данные из 1С', render: viewImport, after: 'pricecmp' },
+    // встаём после последнего отчёта, чтобы раздел «Отчёты» не разрывался
+    { id: 'import', icon: '📥', name: 'Импорт из 1С', group: 'Данные из 1С', render: viewImport, after: 'finday' },
     { id: 'match', icon: '🔗', name: 'Сопоставление имён', group: 'Данные из 1С', render: viewMatch, after: 'import' },
     { id: 'recon', icon: '🧷', name: 'Разбор оплат', group: 'Данные из 1С', render: viewRecon, after: 'match' },
     { id: 'confirm', icon: '✅', name: 'Подтверждение выплат', group: 'Данные из 1С', render: viewConfirm, after: 'recon' },
