@@ -18,6 +18,7 @@ import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
 import { plural } from './competitors.js';
 import { svSaveAndPublish, svUuid } from './imports.js';
+import { WA_MAX_LINES, sendWhatsApp } from './whatsapp.js';
 
 const LOCAL_KEY = 'wm_orders_local_v1';   // заказы сотрудника, ещё не у владельца
 const DAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -306,6 +307,40 @@ function readForm() {
     note: $('ordNote').value.trim(),
     items: formItems.map((x) => ({ ...x })),
   };
+}
+
+/* ── Заказ поставщику одним сообщением ──────────────────────────────────────
+ * Раньше сотрудник переписывал позиции из телефона в переписку руками — там и
+ * терялись коды. Теперь заказ уходит готовым текстом: что, сколько, к какому
+ * числу и от кого. Телефон поставщика записан в каталоге — открывается сразу
+ * его переписка; телефона нет — WhatsApp сам спросит, кому отправить. */
+function orderText(d) {
+  const who = (supplierById(d.supplier_id) || {}).name || d.supplier_name || '';
+  const lines = [`*Заказ${who ? ' — ' + who : ''}*`, ''];
+  const items = d.items.slice(0, WA_MAX_LINES);
+  if (items.length) {
+    lines.push(...items.map((x, i) => {
+      const qty = Number(x.qty) > 0 ? ` — ${x.qty}` : '';
+      return `${i + 1}. ${x.name}${x.code ? ` (код ${x.code})` : ''}${qty}`;
+    }));
+    const rest = d.items.length - items.length;
+    if (rest) lines.push(`…и ещё ${rest} ${plural(rest, 'позиция', 'позиции', 'позиций')}`);
+    lines.push('');
+  }
+  if (d.due_at) lines.push(`Нужно к ${fmtDate(d.due_at)}`);
+  if (d.note) lines.push(d.note);
+  if (d.who) lines.push(`Заказал: ${d.who}`);
+  return lines.join('\n');
+}
+
+// Кнопка «Отправить заказ поставщику в WhatsApp» в окне заказа
+export function sendOrderToSupplier() {
+  const d = readForm();
+  const err = $('ordError');
+  if (!d.supplier_id) { err.textContent = 'Выбери поставщика — иначе непонятно, кому отправлять.'; err.hidden = false; return; }
+  if (!d.items.length) { err.textContent = 'Добавь, что заказываем: пустой заказ отправлять нечего.'; err.hidden = false; return; }
+  err.hidden = true;
+  sendWhatsApp(orderText(d), (state.contacts[d.supplier_id] || {}).phone);
 }
 
 /* Показать неделю, в которую попал заказ. Без этого сохранённый заказ на
