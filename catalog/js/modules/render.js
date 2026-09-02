@@ -3,11 +3,12 @@
 import { $, PAGE_SIZE, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
-import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
+import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
 import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
+import { ratingText } from './reviews.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -139,7 +140,6 @@ export function renderGrid() {
     grid.innerHTML = '';
     const empty = $('emptyState');
     empty.hidden = false;
-    const filtered = anyFilterActive() || state.favOnly;
     if (state.favOnly && !favorites().length) {
       empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('heart'));
       empty.querySelector('.empty-title').textContent = 'В избранном пусто';
@@ -160,12 +160,16 @@ export function renderGrid() {
     } else {
       empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
       empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
-      empty.querySelector('.empty-text').textContent = filtered
+      /* «Снимите фильтры» человеку, который просто искал словом, — совет ни о
+         чём: никаких фильтров он не включал. Отвечаем по тому, что он сделал. */
+      empty.querySelector('.empty-text').textContent = filtersBesidesQuery()
         ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
         : 'Попробуй написать по-другому или выбери группу';
     }
-    // когда пусто из-за фильтров — предлагаем сбросить одним касанием
-    $('emptyReset').hidden = !(filtered && state.products.length);
+    /* Когда пусто из-за фильтров или поиска — предлагаем сбросить одним
+       касанием. Пустое избранное сюда не относится: сбрасывать там нечего,
+       а кнопка «Сбросить фильтры» просто уводила с раздела. */
+    $('emptyReset').hidden = !(anyFilterActive() && state.products.length);
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
@@ -202,11 +206,24 @@ export function renderGrid() {
     const sl = stockLabel(p);
     if (sl && sl.cls !== 'tag-instock') tags.push(`<span class="tag ${sl.cls}">${sl.short}</span>`);
     if (p.is_weighted) tags.push(`<span class="tag">${ic('scale', 'ic-xs')}</span>`);
+    /* «Часто берут» — только покупателю: сотруднику ходовые товары показывает
+       отдельный экран с цифрами, а в рабочем списке это лишний шум. */
+    if (!state.session && isTopSeller(p)) tags.push('<span class="tag tag-hit">Часто берут</span>');
+    // оценка соседей — покупателю: по ней он и выбирает между двумя похожими
+    if (!state.session) { const rt = ratingText(p); if (rt) tags.push(`<span class="tag tag-rating">${ic('star', 'ic-xs')} ${esc(rt)}</span>`); }
     // «без ШК» — служебная пометка для кассы (пробивать по коду). Покупателю
     // она ничего не говорит, поэтому показываем только своим.
     if (state.session && !(p.barcodes || []).length) tags.push('<span class="tag tag-nobarcode">без ШК</span>');
+    /* Прежняя цена зачёркнутой и выгода рядом — приём из индийского Zepto:
+       экономия читается за долю секунды, без единого нажатия. По решению
+       владельца видно всем: сотрудника у полки спрашивают именно об этом,
+       а владельцу видно, что его правка цены доехала. */
+    const was = Number((state.priceWas || {})[p.id]);
+    const now = Number(p.retail_price);
+    const drop = (was > 0 && now > 0 && was > now)
+      ? `<span class="card-was">${esc(fmtPrice(was))}</span><span class="card-drop">−${esc(fmtPrice(was - now))}</span>` : '';
     const price = (p.retail_price != null && p.retail_price !== '')
-      ? `<div class="card-price">${esc(fmtRetail(p))}</div>` : '';
+      ? `<div class="card-price${drop ? ' has-drop' : ''}">${esc(fmtRetail(p))}${drop}</div>` : '';
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
     // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
     // кассой нужен именно код, а не описание товара.
@@ -214,13 +231,22 @@ export function renderGrid() {
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
+    /* Фасовка отдельной серой строкой, а название — без неё: так товар
+       читается с одного взгляда (приём из Zepto). При поиске оставляем
+       название целиком: человек мог искать как раз по граммам. */
+    const pack = !state.query ? packText(p) : '';
     if (view === 'list') {
       // покупателю важно, свежий ли завоз — показываем дату прямо в строке
       const arrived = guest && p.arrival_at
         ? `<span class="row-arrived">завоз ${esc(fmtDate(p.arrival_at))}</span>` : '';
+      /* Фасовка отдельной серой строкой, а название — без неё: так товар
+         читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
+         полное название: человек мог искать как раз по граммам. */
+      const title = pack ? nameNoPack(p) : p.name;
       return `<article class="card card-row" data-id="${esc(p.id)}">
         <div class="row-main">
-          <div class="card-name">${highlight(p.name, hlTokens)}</div>
+          <div class="card-name">${highlight(title, hlTokens)}</div>
+          ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
           <div class="row-sub">${price}${tagRow}${arrived}</div>
         </div>
         ${code}
@@ -229,7 +255,8 @@ export function renderGrid() {
     return `<article class="card" data-id="${esc(p.id)}">
       <div class="${photoCls}">${img}</div>
       <div class="card-body">
-        <div class="card-name">${highlight(p.name, hlTokens)}</div>
+        <div class="card-name">${highlight(pack ? nameNoPack(p) : p.name, hlTokens)}</div>
+        ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
         ${code}
         ${price}
         ${tagRow}
@@ -478,9 +505,18 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
+  renderCheaper();
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
+}
+
+// включён ли хоть один настоящий фильтр — поиск словом за фильтр не считаем
+function filtersBesidesQuery() {
+  return !!(state.quick.length || state.selCats.length
+    || state.selGroups.length || state.selSuppliers.length
+    || state.priceMin != null || state.priceMax != null
+    || state.selType || state.arrivalFrom || state.arrivalTo);
 }
 
 // есть ли хоть один активный фильтр/поиск
@@ -668,6 +704,42 @@ export function renderNewProducts() {
         <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
+}
+
+/* ── «Сегодня дешевле» ──────────────────────────────────────────────────────
+ * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
+ * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
+ * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
+ * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
+ * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
+ * Видна всем (решение владельца): сотруднику у полки этот вопрос задают чаще
+ * всего, а владельцу по ней видно, что новая цена доехала до каталога. */
+const CHEAP_ROWS = 5;
+
+function renderCheaper() {
+  ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
+  const box = $('cheaperStrip');
+  if (!box) return;
+  const show = state.tab === 'catalog'
+    && !state.query && !state.favOnly && !anyFilterActive();
+  const was = state.priceWas || {};
+  const list = show ? state.products.filter((p) => {
+    const w = Number(was[p.id]); const n = Number(p.retail_price);
+    return w > 0 && n > 0 && w > n;
+  }) : [];
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  // сверху то, где выгода больше в рублях: она и решает
+  list.sort((a, b) => (was[b.id] - b.retail_price) - (was[a.id] - a.retail_price));
+  const rows = list.slice(0, CHEAP_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
+      <span class="arr-name">${esc(p.name)}</span>
+      <span class="arr-price">${esc(fmtRetail(p))}
+        <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">Сегодня дешевле</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>`;
+  box.hidden = false;
 }
 
 /* ── «Сегодня привезли» ──────────────────────────────────────────────────

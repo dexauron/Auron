@@ -6,6 +6,7 @@ const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers')
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3.2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт',
     photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
+    description: 'Пастеризованное, жирность 3,2%. Срок годности 10 суток.',
     article: 'АРТ-9', department: 'Молочный', note: 'ставить вперёд', supplier_ids: ['s1'] },
   // у покупателя данные приходят как в настоящей витрине: штрихкоды есть,
   // а вместо числа остатка — слово «есть / мало / нет»
@@ -59,10 +60,45 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     return { open, name, panel };
   });
   chk(scan.open && /Кефир/.test(scan.name), `по штрихкоду покупатель находит товар (${scan.name})`);
-  chk(/Молоко/.test(scan.panel) && /89/.test(scan.panel),
-    `«проверить ценник» показывает название и цену (${scan.panel.slice(0, 50)})`);
+
+  /* ── 1b. Ценник покупателя ──
+     Владелец: «чтобы автоматом был ценник и в нём вся информация, которая
+     интересна покупателю». Проверяем, что там действительно всё: цена, за что
+     она (кг/шт), есть ли товар, когда привезли, описание и код. */
+  const tag = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    P._scanPrice('4600000000011');
+    await new Promise((r) => setTimeout(r, 300));
+    const box = document.getElementById('scanResult');
+    return {
+      text: box.innerText.replace(/\s+/g, ' '),
+      shop: !!box.querySelector('[data-shop-scanned]'),
+      open: !!box.querySelector('[data-open-scanned]'),
+    };
+  });
+  chk(/Молоко/.test(tag.text) && /89/.test(tag.text), `на ценнике название и цена (${tag.text.slice(0, 40)})`);
+  chk(/за шт/.test(tag.text), 'видно, за что цена (за шт / за кг)');
+  chk(/Есть|Мало|Нет/.test(tag.text), 'видно, есть ли товар в магазине');
+  chk(/Поступил/.test(tag.text) && /20\.08/.test(tag.text), 'видно, когда товар привезли');
+  chk(/ставить вперёд/.test(tag.text) === false, 'служебная заметка на ценник не попала');
+  chk(/Код товара/.test(tag.text) && /101/.test(tag.text), 'виден код товара');
+  chk(/жирность 3,2%/.test(tag.text), 'описание товара показано покупателю');
+  chk(tag.shop && tag.open, 'с ценника можно положить в список покупок и открыть карточку');
+
+  // ── 1в. Выбирать режим камеры покупателю не нужно ──
+  const seg = await page.evaluate(() => {
+    const el = document.getElementById('scanModeSeg');
+    return { hidden: el.hidden || getComputedStyle(el).display === 'none',
+      price: !!el.querySelector('[data-scanmode="price"]') };
+  });
+  chk(seg.hidden, 'переключателя режимов у покупателя нет — он сразу получает ценник');
+  chk(!seg.price, 'режим «Ценник» из списка сотрудника убран — ему он не нужен');
 
   // ── 2. Карточка товара: только нужное покупателю ──
+  await page.evaluate(() => {
+    const d = new Date(); d.setHours(17, 40, 0, 0); d.setDate(d.getDate() - 1);
+    window.WM_PUBLISH._state().showcaseAt = d.toISOString();
+  });
   await openProduct(page, 'p1');
   const card = await page.evaluate(() => {
     const t = document.querySelector('#productSheet .sheet-body').innerText.replace(/\s+/g, ' ');
@@ -73,6 +109,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       similar: (document.getElementById('sheetSimilar') || {}).innerHTML || '',
       prices: (document.getElementById('sheetPrices') || {}).innerHTML || '',
       stock: (document.getElementById('sheetStock') || {}).innerHTML || '',
+      badges: document.getElementById('sheetBadges').innerText.replace(/\s+/g, ' '),
       report: !document.getElementById('btnReportPrice').hidden,
       restock: document.getElementById('btnRestock').hidden,
       compare: document.getElementById('btnCompareAdd').hidden,
@@ -86,6 +123,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(!card.similar.trim(), 'лента «похожие» с фотографиями скрыта');
   chk(card.restock && card.compare, 'рабочие кнопки («закончилось», «к сравнению») скрыты');
   chk(card.report, 'зато есть «Видел дешевле в другом магазине»');
+  chk(/Обновлено вчера в 17:40/.test(card.badges),
+    `в карточке видно, когда данные обновились (${(card.badges || '').slice(0, 60)})`);
 
   // ── 3. Подсказка о цене копится на телефоне ──
   const rep = await page.evaluate(async () => {
@@ -242,7 +281,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     // цены прошлого захода
     await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: { p1: 120, p2: 75 } });
     s2.products.find((p) => p.id === 'p2').stock = 5;      // кефир завезли
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 300));
     const banner = document.getElementById('newsBanner');
     return { shown: !banner.hidden, text: banner.innerText.replace(/\s+/g, ' ') };
@@ -270,7 +309,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     // возвращаем ожидание: прошлая проверка его «израсходовала» — о появлении
     // товара напоминают один раз, и это правильно
     localStorage.setItem('wm_guest_wait_v1', JSON.stringify([{ id: 'p2', name: 'Кефир Домик в деревне', code: '102', at: '2026-08-27' }]));
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 300));
     return document.getElementById('newsBanner').innerText.replace(/\s+/g, ' ');
   });
@@ -295,7 +334,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     localStorage.removeItem('wm_guest_wait_v1');
     await P._idbSet('wm_price_snapshot', { at: new Date().toISOString(), prices: {} });
-    await P._checkGuestNews();
+    await P._checkNews();
     await new Promise((r) => setTimeout(r, 250));
     const el = document.getElementById('newsBanner');
     return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' '), seen: localStorage.getItem('wm_news_seen') };
@@ -316,6 +355,31 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     'после входа каталог снова рабочий: «Магазин» скрыт, «Работа» на месте');
   chk(staff.shopBar, 'полоска списка покупок сотруднику не мешает');
   chk(staff.toggle !== 'none', 'переключатель вида вернулся сотруднику');
+
+  /* ── Когда данные обновились ──
+     Владелец выгружает из 1С и публикует раз в день вечером: утром человек
+     смотрит на вчерашние остатки. Врать нельзя, прятать тоже — пишем прямо. */
+  const when = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH, s = P._state();
+    const d = new Date(); d.setHours(17, 40, 0, 0);
+    s.showcaseAt = d.toISOString();
+    const words = { today: P._updatedText() };
+    const y = new Date(d); y.setDate(y.getDate() - 1);
+    s.showcaseAt = y.toISOString();
+    words.yesterday = P._updatedText();
+    // подпись на ценнике
+    P._scanPrice('4600000000011');
+    await new Promise((r) => setTimeout(r, 250));
+    words.tag = document.getElementById('scanResult').innerText.replace(/\s+/g, ' ');
+    // если даты нет — не выдумываем
+    s.showcaseAt = '';
+    words.none = P._updatedText();
+    return words;
+  });
+  chk(when.today === 'сегодня в 17:40', `«сегодня в 17:40» вместо голой даты (${when.today})`);
+  chk(when.yesterday === 'вчера в 17:40', `вчерашнее так и называется (${when.yesterday})`);
+  chk(/Обновлено вчера в 17:40/.test(when.tag), `на ценнике видно, когда данные обновились (${when.tag.slice(-46)})`);
+  chk(!when.none, 'даты нет — ничего не выдумываем');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
