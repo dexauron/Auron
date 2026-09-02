@@ -174,7 +174,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   const sent = await page.evaluate(async () => {
     let opened = '';
     const real = window.open;
-    window.open = (u) => { opened = u; return null; };
+    window.open = (u) => { opened = u; return { closed: false }; };   // настоящий браузер возвращает окно; вернём null — приложение решит, что всплывающие запрещены, и уйдёт по адресу само
     document.getElementById('storeSend').click();
     await new Promise((r) => setTimeout(r, 300));
     window.open = real;
@@ -240,7 +240,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     const text = document.getElementById('askText').value;
     let opened = '';
     const real = window.open;
-    window.open = (u) => { opened = u; return null; };
+    window.open = (u) => { opened = u; return { closed: false }; };   // настоящий браузер возвращает окно; вернём null — приложение решит, что всплывающие запрещены, и уйдёт по адресу само
     document.getElementById('askSend').click();
     await new Promise((r) => setTimeout(r, 300));
     window.open = real;

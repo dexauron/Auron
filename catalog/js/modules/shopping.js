@@ -13,6 +13,7 @@ import { fmtNum, fmtPrice } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
+import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -114,6 +115,7 @@ function renderShop() {
     box.innerHTML = `<p class="ios-note">Список пуст. Открой товар и нажми «В список покупок» —
       здесь соберётся, что взять, и сколько это выйдет.</p>`;
     $('shopShare').hidden = true;
+    $('shopWa').hidden = true;
     return;
   }
   const rows = list.map((x) => {
@@ -144,6 +146,7 @@ function renderShop() {
     чтобы убрать. Сумма считается по сегодняшним ценам магазина и по количеству,
     которое ты поставил.</p>`;
   $('shopShare').hidden = false;
+  $('shopWa').hidden = false;
 }
 
 /* ── Список по ссылке ───────────────────────────────────────────────────────
@@ -205,22 +208,55 @@ export function shopFromHash() {
     : 'Этих товаров у нас нет');
 }
 
-// отправить список близким: пусть купят по дороге
-async function shareShop() {
+/* ── Отправить список ───────────────────────────────────────────────────────
+ * Собрал список дома — отправил мужу, матери, в группу «Семья»: пусть купит
+ * тот, кто ближе к магазину. Текст один и тот же, отличается только разметка:
+ * WhatsApp понимает *звёздочки* как жирный шрифт, в остальных местах это
+ * просто мусор на экране.
+ *
+ * Длинный список в сообщение не заталкиваем: после шестидесяти строк это уже
+ * не сообщение, а простыня. Хвост честно назван числом, а весь список целиком
+ * открывается по ссылке. */
+function shopText(wa) {
   const list = read().filter((x) => !x.done);
-  if (!list.length) { toast('Список пуст'); return; }
-  const text = 'Список покупок:\n' + list.map((x) => {
+  const b = (s) => (wa ? `*${s}*` : s);
+  const lines = list.slice(0, WA_MAX_LINES).map((x, i) => {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
-    return `— ${x.name}${(Number(x.qty) || 1) > 1 ? ` × ${fmtNum(x.qty)}` : ''}${price ? ` — ${fmtPrice(price)}` : ''}`;
-  }).join('\n') + `\nИтого: ${fmtPrice(total(read()))}`;
-  const link = shopLink();
+    const qty = Number(x.qty) || 1;
+    let tail = '';
+    if (price && qty > 1) tail = ` — ${fmtNum(qty)} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
+    else if (price) tail = ` — ${fmtPrice(price)}`;
+    else if (qty > 1) tail = ` — ${fmtNum(qty)} шт`;
+    return `${i + 1}. ${x.name}${tail}`;
+  });
+  const rest = list.length - lines.length;
+  const parts = [b('Список покупок'), '', lines.join('\n')];
+  if (rest > 0) parts.push(`…и ещё ${rest} ${plural(rest, 'позиция', 'позиции', 'позиций')} — весь список по ссылке.`);
+  parts.push('', b(`Итого: ${fmtPrice(total(read()))}`));
   // ссылку даём отдельной строкой: текст читается и без неё, а по ссылке
   // список откроется живым — с ценами и галочками
-  const full = link ? `${text}\n\nОткрыть список в каталоге:\n${link}` : text;
+  const link = shopLink();
+  if (link) parts.push('', 'Открыть список в каталоге:', link);
+  const sign = storeSignature();
+  if (sign) parts.push('', sign);
+  return parts.join('\n');
+}
+
+// Кнопка «Отправить в WhatsApp»: контакты покажет сам WhatsApp
+function shopToWhatsApp() {
+  if (!read().some((x) => !x.done)) { toast('Список пуст'); return; }
+  buzz();
+  sendWhatsApp(shopText(true));
+}
+
+// Кнопка «Отправить»: телеграм, почта, СМС — что человек выберет сам
+async function shareShop() {
+  if (!read().some((x) => !x.done)) { toast('Список пуст'); return; }
+  const text = shopText(false);
   try {
-    if (navigator.share) { await navigator.share({ text: full }); return; }
-    await navigator.clipboard.writeText(full);
+    if (navigator.share) { await navigator.share({ text }); return; }
+    await navigator.clipboard.writeText(text);
     toast('Список и ссылка скопированы');
   } catch (e) { toast('Не получилось поделиться'); }
 }
@@ -297,6 +333,7 @@ export function bindShopping() {
   });
   $('shopOpen').addEventListener('click', openShop);
   $('shopShare').addEventListener('click', shareShop);
+  $('shopWa').addEventListener('click', shopToWhatsApp);
   $('shopClear').addEventListener('click', clearShop);
   $('shopBody').addEventListener('click', (e) => {
     const done = e.target.closest('[data-shop-done]');

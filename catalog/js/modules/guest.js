@@ -17,12 +17,12 @@ import { fmtDate, fmtPrice, todayISO, updatedText } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
+import { sendWhatsApp, storeWa } from './whatsapp.js';
 
 const KEY = 'wm_guest_prices_v1';
 const MAX = 50;
 
 const isGuest = () => !state.session;
-const waNumber = () => String(CFG.STORE_WHATSAPP || '').replace(/\D/g, '');
 
 function read() {
   try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
@@ -41,7 +41,7 @@ function renderStore() {
   const box = $('storeBody');
   if (!box) return;
   const list = read();
-  const wa = waNumber();
+  const wa = storeWa();
   const phone = CFG.STORE_PHONE || '';
   const rows = list.map((x, i) => `<div class="ios-row">
     <span class="ios-row-title">${esc(x.name)}
@@ -122,10 +122,10 @@ function sendAsk() {
   const what = $('askText').value.trim();
   const err = $('askError');
   if (!what) { err.textContent = 'Напиши, что ищешь.'; err.hidden = false; return; }
-  const wa = waNumber();
+  const wa = storeWa();
   if (!wa) { toast('Магазин не указал номер для связи'); return; }
   const text = `Здравствуйте! Ищу товар: ${what}. Бывает ли он у вас?`;
-  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  sendWhatsApp(text, wa);
   closeSheet('askSheet');
 }
 
@@ -155,12 +155,12 @@ function sendShelfReport() {
   if (!p) return;
   const price = moneyNum($('shelfPrice').value);
   if (!(price > 0)) { err.textContent = 'Напиши цену с ценника — по ней владелец и проверит.'; err.hidden = false; return; }
-  const wa = waNumber();
+  const wa = storeWa();
   if (!wa) { toast('Магазин не указал номер для связи'); return; }
   const ours = (p.retail_price != null && p.retail_price !== '') ? fmtPrice(p.retail_price) : 'нет цены';
   const text = `Цена на ценнике не совпадает\n${p.name}${p.code ? ` (код ${p.code})` : ''}\n`
     + `На ценнике: ${fmtPrice(price)}\nВ каталоге: ${ours}`;
-  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  sendWhatsApp(text, wa);
   closeSheet('shelfSheet');
   toast('Спасибо! Владелец проверит ценник');
 }
@@ -199,12 +199,12 @@ function savePriceReport() {
  * руками не нужно. Отправленное больше не копится. */
 function sendReports() {
   const list = read();
-  const wa = waNumber();
+  const wa = storeWa();
   if (!list.length || !wa) return;
   const text = 'Здравствуйте! Заметил цены в других магазинах:\n'
     + list.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
       + (x.store ? `, ${x.store}` : '')).join('\n');
-  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  sendWhatsApp(text, wa);
   write([]);
   renderStore();
   renderStoreBadge();

@@ -3,7 +3,8 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, updatedText, waHref } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, updatedText } from './catalog.js';
+import { waHref } from './whatsapp.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { ratingText, reviewsHtml } from './reviews.js';
 import { trackView } from './device.js';
