@@ -259,11 +259,6 @@ export const STALE_PRICE_DAYS = 30;
 export const priceAgeDays = (d) => Math.floor((Date.now() - new Date(String(d).slice(0, 10) + 'T00:00:00').getTime()) / 86400000);
 export const isFreshPrice = (row) => row && priceAgeDays(row.price_date) <= STALE_PRICE_DAYS;
 export const telHref = (phone) => 'tel:' + String(phone).replace(/[^+\d]/g, '');
-export const waHref = (phone) => {
-  let d = String(phone).replace(/\D/g, '');
-  if (d.startsWith('8')) d = '7' + d.slice(1);
-  return 'https://wa.me/' + d;
-};
 
 /* ── Умный поиск ──────────────────────────────── */
 
