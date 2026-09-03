@@ -108,6 +108,7 @@
 
   // Карточка фирмы: отсрочка, чем обычно платим, телефон
   FORMS.supFirm = {
+    editsInPlace: true,
     title: 'Поставщик', icon: '🏢',
     body: function (v) {
       var u = U(); v = v || {};
@@ -138,6 +139,7 @@
 
   // Правка накладной, если в 1С сумма или дата оказались не те
   FORMS.supDoc = {
+    editsInPlace: true,
     title: 'Накладная', icon: '📄',
     body: function (v) {
       var u = U(); v = v || {};
@@ -157,6 +159,34 @@
       if (v.payDate) { d.payDate = v.payDate; d.confirmed = true; }
       S.save(); refresh();
       return { ok: 'Накладная ' + d.doc + ' обновлена.' };
+    }
+  };
+
+  // Правка оплаты из 1С: сумма, дата, к какой накладной относится
+  FORMS.supPay = {
+    editsInPlace: true,
+    title: 'Оплата', icon: '💸',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Документ', 'doc', 'text', v.doc || '') +
+        u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Поставщик', 'firm', 'list', v.firm || '', { options: firmNames() }) +
+        u.fieldRow('Сумма', 'sum', 'number', v.sum || '') +
+        u.fieldRow('Основание (накладная)', 'basis', 'text', v.basis || '') +
+        u.fieldRow('Статья расхода', 'category', 'list', v.category || '', { options: categories() }) +
+        u.fieldRow('Касса', 'cashbox', 'text', v.cashbox || '');
+    },
+    hint: 'Если оплата относится к накладной — впишите её номер в «Основание».',
+    save: function (v) {
+      var p = (S.state.pays || []).filter(function (x) { return x.doc === v.doc; })[0];
+      if (!p) return 'Оплата не найдена.';
+      p.date = v.date || p.date; p.firm = v.firm || p.firm; p.sum = num(v.sum);
+      p.basis = v.basis || ''; p.basisKey = SUP.norm(p.basis);
+      p.category = v.category || ''; p.cashbox = v.cashbox || p.cashbox;
+      if (p.category) { p.linkKind = 'expense'; p.resolved = true; }
+      else if (p.basisKey) { p.linkKind = ''; p.linkKey = ''; p.resolved = false; }
+      S.save(); refresh();
+      return { ok: 'Оплата обновлена: ' + E.fmtMoney(num(v.sum)) };
     }
   };
 
@@ -540,6 +570,131 @@
     return h;
   }
 
+  /* --- Все записи: единый журнал с правкой, удалением и корзиной ------------- */
+
+  // Тип записи → как показать и какой формой править
+  var RECORD_KINDS = [
+    { id: 'all', name: 'Все' },
+    { id: 'dds', name: 'Касса и расходы', coll: 'dds', icon: '💵' },
+    { id: 'docs', name: 'Накладные 1С', coll: 'docs', icon: '📄' },
+    { id: 'pays', name: 'Оплаты 1С', coll: 'pays', icon: '💸' },
+    { id: 'plans', name: 'План выплат', coll: 'plans', icon: '📅' },
+    { id: 'payouts', name: 'Зарплата', coll: 'payouts', icon: '👥' },
+    { id: 'debtors', name: 'Долги покупателей', coll: 'debtors', icon: '📓' },
+    { id: 'inventory', name: 'Списания', coll: 'inventory', icon: '🗑' },
+    { id: 'expiry', name: 'Сроки годности', coll: 'expiry', icon: '⏰' },
+    { id: 'supreg', name: 'Поставщики', coll: 'supreg', icon: '🏢' }
+  ];
+
+  // Одна запись любого журнала в понятном виде
+  function recordRow(coll, r) {
+    var d = { coll: coll, id: r.id, date: r.date || r.due || r.bestBefore || '', title: '', sub: '', sum: 0, form: '', kind: '' };
+    if (coll === 'dds') {
+      d.kind = r.type || 'Расход'; d.title = r.category || '—';
+      d.sub = [r.shift, r.cashier, r.method, r.note].filter(Boolean).join(' · ');
+      d.sum = num(r.amount);
+      d.form = r.type === 'Приход' ? 'ddsIncome' : (r.type === 'Забор' ? 'ownerDraw' : 'ddsExpense');
+    } else if (coll === 'docs') {
+      d.kind = 'Накладная'; d.title = r.firm || r.supplier || '—';
+      d.sub = SUP.shortDoc(r.doc) + (r.confirmed ? ' · дата подтверждена' : ' · дата не подтверждена');
+      d.sum = num(r.sum); d.form = 'supDoc';
+    } else if (coll === 'pays') {
+      d.kind = 'Оплата'; d.title = r.firm || r.supplier || 'Выплата из кассы';
+      d.sub = SUP.shortDoc(r.doc) + (r.basis ? ' · ' + SUP.shortDoc(r.basis) : '') + (r.category ? ' · ' + r.category : '');
+      d.sum = num(r.sum); d.form = 'supPay';
+    } else if (coll === 'plans') {
+      d.kind = 'Выплата'; d.title = r.supplier || '—'; d.sub = [r.doc, r.method, r.status].filter(Boolean).join(' · ');
+      d.sum = num(r.amount); d.form = 'payPlan';
+    } else if (coll === 'payouts') {
+      d.kind = 'Зарплата'; d.title = r.employee || '—'; d.sub = [r.type, r.form, r.note].filter(Boolean).join(' · ');
+      d.sum = num(r.amount); d.form = 'payout';
+    } else if (coll === 'debtors') {
+      d.kind = 'Долг покупателя'; d.title = r.name || '—';
+      d.sub = (r.paid ? 'погашен ' + (dateRu(r.paidDate) || '') : 'обещал ' + (dateRu(r.promise) || '—')) +
+        (r.cashier ? ' · записал ' + r.cashier : '');
+      d.sum = num(r.sum); d.form = 'debtor';
+    } else if (coll === 'inventory') {
+      d.kind = 'Списание'; d.title = r.name || '—'; d.sub = r.reason || '';
+      d.sum = num(r.accounted) * num(r.price); d.form = 'writeoff';
+    } else if (coll === 'expiry') {
+      d.kind = 'Срок'; d.title = r.name || '—'; d.sub = 'годен до ' + (dateRu(r.bestBefore) || '—');
+      d.sum = num(r.qty) * num(r.price); d.form = 'expiryItem';
+    } else if (coll === 'supreg') {
+      d.kind = 'Поставщик'; d.title = r.name || '—';
+      d.sub = (r.termDays == null ? 'отсрочка не задана' : 'отсрочка ' + r.termDays + ' дн.') +
+        ((r.aliases || []).length ? ' · имён в 1С: ' + r.aliases.length : '');
+      d.sum = 0; d.form = 'supFirm';
+    }
+    return d;
+  }
+
+  function allRecords(kind, query) {
+    var out = [], nq = SUP.norm(query || '');
+    RECORD_KINDS.forEach(function (k) {
+      if (!k.coll) return;
+      if (kind !== 'all' && kind !== k.id) return;
+      (S.state[k.coll] || []).forEach(function (r) {
+        var row = recordRow(k.coll, r);
+        if (nq && SUP.norm(row.title + ' ' + row.sub + ' ' + row.kind + ' ' + row.sum).indexOf(nq) < 0) return;
+        out.push(row);
+      });
+    });
+    return out.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+  }
+
+  function viewRecords() {
+    var u = U(), kind = u.tab('records', 'all');
+    var q = (document.getElementById('search') && document.getElementById('search').value || '').trim();
+    var rows = allRecords(kind, q);
+    var trash = (S.state.trash || []).slice().reverse();
+
+    var h = u.pageHead('Все записи', 'Любую запись можно исправить, повторить или удалить — удалённое лежит в корзине',
+      (trash.length ? '<button class="btn" data-act="rec-undo">↩ Вернуть последнее</button> ' : '') +
+      '<button class="btn" data-act="rec-del-selected">✕ Удалить отмеченные</button>');
+
+    h += '<div class="quick">' + RECORD_KINDS.map(function (k) {
+      var n = k.coll ? (S.state[k.coll] || []).length : rows.length;
+      return '<button class="btn btn-sm' + (k.id === kind ? ' btn-primary' : '') + '" data-tab="records:' + k.id + '">' +
+        (k.icon ? k.icon + ' ' : '') + esc(k.name) + ' <b>' + u.nf(n) + '</b></button>';
+    }).join('') + '</div>';
+
+    if (q) h += '<div class="banner blue"><span>🔍</span><span>Показаны записи со словом «' + esc(q) +
+      '». Очистите поиск наверху, чтобы увидеть все.</span></div>';
+
+    h += u.card('Записи', u.table('recT', [
+      { title: '', cls: 'center', fn: function (r) {
+        return '<input type="checkbox" class="rec-pick" data-coll="' + r.coll + '" data-id="' + r.id + '">'; } },
+      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)) || '—'; } },
+      { title: 'Что это', fn: function (r) { return u.badge(r.kind, r.kind === 'Приход' ? 'green' :
+        (r.kind === 'Долг' || r.kind === 'Долг покупателя' ? 'orange' : (r.kind === 'Поставщик' ? 'gray' : 'blue'))); } },
+      { title: 'Кто или за что', fn: function (r) { return esc(r.title); } },
+      { title: 'Подробности', fn: function (r) { return '<span class="c-muted">' + esc(r.sub) + '</span>'; } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-act="q-repeat" data-coll="' + r.coll + '" data-id="' + r.id +
+          '" data-target="' + r.form + '" title="Повторить">↻</button> ' +
+          '<button class="btn btn-sm" data-edit="' + r.coll + ':' + r.id + ':' + r.form + '" title="Исправить">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="' + r.coll + ':' + r.id + '" title="Удалить">✕</button>'; } }
+    ], rows, { step: 50, empty: 'Записей пока нет' }),
+      rows.length + ' ' + u.plural(rows.length, 'запись', 'записи', 'записей'));
+
+    h += u.card('Корзина', u.listOf(trash.slice(0, 20).map(function (t) {
+      var row = recordRow(t.coll, t.rec);
+      return '<div class="row"><div class="row-icon">🗑</div>' +
+        '<div class="row-main"><div class="row-title">' + esc(row.title || row.kind) + '</div>' +
+        '<div class="row-sub">' + esc(row.kind) + ' · ' + esc(dateRu(row.date)) +
+        ' · удалено ' + esc(new Date(t.at).toLocaleString('ru-RU').slice(0, 16)) + '</div></div>' +
+        '<div class="row-value private">' + E.fmtMoney(row.sum) + '</div>' +
+        '<button class="btn btn-sm btn-primary" data-act="rec-restore" data-id="' + t.id + '">Вернуть</button></div>';
+    }), 'Корзина пуста'),
+      trash.length ? '<button class="btn btn-sm btn-danger" data-act="rec-empty-trash">Очистить корзину (' +
+        u.nf(trash.length) + ')</button>' : '');
+
+    h += '<div class="banner"><span>💡</span><span>Удалённое хранится в корзине (последние 200 записей) — ' +
+      'пока не очистите, любую можно вернуть. Документы из 1С вернутся сами при следующей загрузке того же файла.</span></div>';
+    return h;
+  }
+
   /* --- Долги покупателей ---------------------------------------------------- */
   function viewDebtors() {
     var u = U(), c = sup(), d = c.debtors;
@@ -820,6 +975,35 @@
     return 'Долг «' + r.name + '» погашен.';
   };
 
+  A['rec-undo'] = function () {
+    var back = S.undo();
+    refresh();
+    return back ? 'Запись возвращена на место.' : 'Корзина пуста.';
+  };
+  A['rec-restore'] = function (el) {
+    var back = S.restore(el.dataset.id);
+    refresh();
+    return back ? 'Запись возвращена.' : null;
+  };
+  A['rec-empty-trash'] = function () {
+    var n = (S.state.trash || []).length;
+    if (!n) return 'Корзина и так пуста.';
+    if (!confirm('Очистить корзину? ' + n + ' записей удалятся насовсем.')) return null;
+    S.emptyTrash(); refresh();
+    return 'Корзина очищена.';
+  };
+  A['rec-del-selected'] = function () {
+    var picks = document.querySelectorAll('.rec-pick:checked');
+    if (!picks.length) return 'Отметьте галочками записи, которые нужно удалить.';
+    if (!confirm('Удалить отмеченные записи (' + picks.length + ')? Их можно будет вернуть из корзины.')) return null;
+    var n = 0;
+    Array.prototype.forEach.call(picks, function (el) {
+      if (S.remove(el.dataset.coll, el.dataset.id)) n++;
+    });
+    refresh();
+    return 'Удалено записей: ' + n + '. Вернуть можно из корзины.';
+  };
+
   A['sup-book-save'] = function () { U().saveBook(); return null; };
   A['sup-book-read'] = function () { U().readBook(); return null; };
 
@@ -914,7 +1098,8 @@
     { id: 'confirm', icon: '✅', name: 'Подтверждение выплат', group: 'Данные из 1С', render: viewConfirm, after: 'recon' },
     { id: 'terms', icon: '⏱', name: 'Отсрочки поставщиков', group: 'Данные из 1С', render: viewTerms, after: 'confirm' },
     { id: 'manual', icon: '✍️', name: 'Записать', group: 'Ручной ввод', render: viewManual, after: 'terms' },
-    { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'manual' },
+    { id: 'records', icon: '🗂', name: 'Все записи', group: 'Ручной ввод', render: viewRecords, after: 'manual' },
+    { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }
   );
 })();

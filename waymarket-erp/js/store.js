@@ -97,7 +97,9 @@
   var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry',
     'inventory', 'kvi', 'dds', 'plans',
     // поставки из 1С живут в базе постоянно: документы, оплаты, справочник фирм
-    'docs', 'pays', 'supreg', 'debtors'];
+    'docs', 'pays', 'supreg', 'debtors',
+    // корзина: всё удалённое лежит здесь, пока не почистят
+    'trash'];
 
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
@@ -184,13 +186,50 @@
     return null;
   }
 
-  function remove(coll, id) {
+  var TRASH_MAX = 200;      // сколько удалённых записей помним
+
+  // Удаление не стирает запись насовсем: она уезжает в корзину,
+  // откуда её можно вернуть одной кнопкой.
+  function remove(coll, id, forever) {
     var rows = state[coll] || [];
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].id === id) { rows.splice(i, 1); save(); return true; }
+      if (rows[i].id === id) {
+        var rec = rows[i];
+        rows.splice(i, 1);
+        if (!forever && coll !== 'trash') {
+          state.trash = state.trash || [];
+          state.trash.push({ id: uid(), coll: coll, at: new Date().toISOString(), rec: rec });
+          if (state.trash.length > TRASH_MAX) state.trash = state.trash.slice(-TRASH_MAX);
+        }
+        save();
+        return rec;
+      }
     }
-    return false;
+    return null;
   }
+
+  // Вернуть запись из корзины на место
+  function restore(trashId) {
+    var t = state.trash || [];
+    for (var i = 0; i < t.length; i++) {
+      if (t[i].id === trashId) {
+        var item = t.splice(i, 1)[0];
+        state[item.coll] = state[item.coll] || [];
+        state[item.coll].push(item.rec);
+        save();
+        return item;
+      }
+    }
+    return null;
+  }
+
+  // Вернуть последнее удалённое
+  function undo() {
+    var t = state.trash || [];
+    return t.length ? restore(t[t.length - 1].id) : null;
+  }
+
+  function emptyTrash() { state.trash = []; save(); }
 
   function clear(coll) {
     if (coll) state[coll] = []; else state = emptyState();
@@ -222,6 +261,7 @@
     get state() { return state; },
     get settings() { return state.settings; },
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
+    restore: restore, undo: undo, emptyTrash: emptyTrash,
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
     fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll
   };

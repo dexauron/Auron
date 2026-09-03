@@ -2223,7 +2223,11 @@
       }
       if (el.dataset.del) {
         var d = el.dataset.del.split(':');
-        if (confirm('Удалить запись?')) { S.remove(d[0], d[1]); render(); }
+        if (confirm('Удалить запись? Её можно будет вернуть из корзины на экране «Все записи».')) {
+          S.remove(d[0], d[1]);
+          recompute(); render();
+          toast('Удалено. Вернуть можно на экране «Все записи» → Корзина.');
+        }
         return;
       }
       var a = el.dataset.act;
@@ -2278,8 +2282,10 @@
         var res = def.save(formValues(f));
         window.WM_LAST_SAVE = { form: id, ok: typeof res !== 'string' };
         if (typeof res === 'string') { toast(res); return; }
-        // при правке новая запись уже добавлена — убираем старую
-        if (EDIT) { S.remove(EDIT.coll, EDIT.id); EDIT = null; }
+        // При правке форма обычно добавляет новую запись — старую убираем.
+        // Формы с пометкой editsInPlace правят запись сами, их трогать нельзя.
+        if (EDIT && !def.editsInPlace) { S.remove(EDIT.coll, EDIT.id, true); }
+        EDIT = null;
         closeSheet(); render(); toast(res.ok);
       } else if (f.id === 'setForm') {
         var v = formValues(f);

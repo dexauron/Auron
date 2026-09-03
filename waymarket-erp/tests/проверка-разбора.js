@@ -688,5 +688,39 @@ if (global.__dead) {
   console.log('');
 }
 
+/* Корзина: удалённое можно вернуть */
+{
+  console.log('— Правка и удаление записей: корзина');
+  STORE.clear();
+  const a = STORE.add('dds', { date: '2026-09-01', type: 'Расход', category: 'Аренда', amount: 1000 });
+  const b = STORE.add('dds', { date: '2026-09-02', type: 'Расход', category: 'Хозтовары', amount: 500 });
+  check('записи добавлены', (STORE.state.dds || []).length === 2, STORE.state.dds.length, 2);
+
+  const removed = STORE.remove('dds', a.id);
+  check('удаление возвращает саму запись', removed && removed.id === a.id, removed ? 'вернуло' : 'нет', 'вернуло');
+  check('в журнале осталась одна', STORE.state.dds.length === 1, STORE.state.dds.length, 1);
+  check('удалённое попало в корзину', (STORE.state.trash || []).length === 1, STORE.state.trash.length, 1);
+
+  STORE.undo();
+  check('отмена вернула запись', STORE.state.dds.length === 2 && STORE.state.trash.length === 0,
+    STORE.state.dds.length + ' записей, ' + STORE.state.trash.length + ' в корзине', '2 и 0');
+
+  STORE.remove('dds', b.id);
+  const tid = STORE.state.trash[0].id;
+  STORE.restore(tid);
+  check('возврат по кнопке из корзины работает', STORE.state.dds.length === 2, STORE.state.dds.length, 2);
+
+  STORE.remove('dds', b.id, true);
+  check('удаление насовсем корзину не трогает', (STORE.state.trash || []).length === 0 && STORE.state.dds.length === 1,
+    STORE.state.dds.length + ' записей, ' + STORE.state.trash.length + ' в корзине', '1 и 0');
+
+  STORE.remove('dds', a.id);
+  STORE.emptyTrash();
+  check('очистка корзины работает', (STORE.state.trash || []).length === 0, STORE.state.trash.length, 0);
+  check('запись из очищенной корзины не возвращается', STORE.undo() === null, 'не вернулась', 'не вернулась');
+  STORE.clear();
+  console.log('');
+}
+
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
