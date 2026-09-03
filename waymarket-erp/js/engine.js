@@ -174,6 +174,13 @@
         sn.indexOf('накладные_и_выплаты') >= 0) return 'journal_shifts';
     if (sn.indexOf('табель_смен') >= 0 || sn.indexOf('выплаты_и_авансы') >= 0) return 'journal_staff';
 
+    // Отчёт «Неликвидные товары»: что лежит без движения
+    if (sig.indexOf('неликвидные товары') >= 0 ||
+        (sig.indexOf('процент продаж от остатка') >= 0 && sig.indexOf('конечный остаток') >= 0)) return 'deadstock';
+    // Регистр «Общие доходы и расходы»: обороты по статьям и контрагентам.
+    // Проверяем раньше накладных — в нём накладные встречаются как регистраторы
+    if (sig.indexOf('общиедоходыирасходы') >= 0 || sig.indexOf('общие доходы и расходы') >= 0 ||
+        (sig.indexOf('статья доходов') >= 0 && sig.indexOf('статья расходов') >= 0)) return 'incexp1c';
     if (sig.indexOf('текущие цены поставщиков') >= 0) return 'prices';
     if (sig.indexOf('контактная информация') >= 0 && sig.indexOf('контрагент') >= 0) return 'contacts';
     // Кассовые ордера проверяем раньше накладных: в ордерах накладная стоит
@@ -200,6 +207,8 @@
     if (fn.indexOf('прайс') >= 0) return 'pricelist';
     if (fn.indexOf('штрихкод') >= 0 || fn.indexOf('штрих код') >= 0) return 'barcodes';
     if (fn.indexOf('единиц') >= 0) return 'units';
+    if (fn.indexOf('неликвид') >= 0) return 'deadstock';
+    if (fn.indexOf('доходы и расходы') >= 0) return 'incexp1c';
     return 'unknown';
   }
 
@@ -695,6 +704,156 @@
       });
     }
     return { rows: rows, period: parsePeriod(matrix), cols: col };
+  }
+
+  // Отчёт 1С «Неликвидные товары»: приход, продажи и остаток в штуках,
+  // плюс дата последнего поступления — по ней видно, сколько товар лежит.
+  function parseDeadStock(matrix) {
+    var he = findHeaderEnd(matrix, ['неликвидные товары', 'номенклатура', 'конечный остаток', 'продажи', 'склад']);
+    var t = columnTitles(matrix, he);
+    var col = {
+      name: findCol(t, [['номенклатура'], ['склад']], { not: ['артикул', 'код', 'штрих'] }),
+      inSum: findCol(t, [['общий приход']]),
+      income: findCol(t, [['поступление']], { not: ['дата'] }),
+      lastIn: findCol(t, [['дата последнего поступ']]),
+      left: findCol(t, [['конечный остаток']]),
+      sold: findCol(t, [['продажи']], { not: ['процент', 'тип'] }),
+      pctIn: findCol(t, [['процент продаж от поступ'], ['процент продаж от прих']]),
+      pctLeft: findCol(t, [['процент продаж от остатка']])
+    };
+    if (col.name < 0) col.name = 0;
+    var rows = [], i;
+    for (var r = he + 1; r < matrix.length; r++) {
+      var row = matrix[r]; if (!row) continue;
+      var name = txt(row[col.name]);
+      if (!name || isTotalRow(name)) continue;
+      if (norm(name).indexOf('склад') >= 0 && norm(name).length < 20) continue;   // строка склада
+      var left = col.left >= 0 ? num(row[col.left]) : 0;
+      var sold = col.sold >= 0 ? num(row[col.sold]) : 0;
+      var lastIn = col.lastIn >= 0 ? excelDate(row[col.lastIn]) : '';
+      rows.push({
+        name: name, key: norm(name),
+        inSum: col.inSum >= 0 ? num(row[col.inSum]) : 0,
+        income: col.income >= 0 ? num(row[col.income]) : 0,
+        lastIn: lastIn,
+        left: left, sold: sold,
+        pctIn: col.pctIn >= 0 ? num(row[col.pctIn]) : 0,
+        pctLeft: col.pctLeft >= 0 ? num(row[col.pctLeft]) : 0
+      });
+    }
+    return { rows: rows, period: parsePeriod(matrix), cols: col };
+  }
+
+  // Замороженные деньги: что лежит на полке и не продаётся.
+  // Цену берём из «Остатков номенклатуры», давность — по последнему приходу.
+  function deadStockList(rows, stockIdx, settings, todayStr) {
+    settings = settings || {};
+    var maxPct = num(settings.deadSoldPct) || 20;      // продали меньше этого % от остатка
+    var days = num(settings.deadDays) || 60;           // и завозили давно
+    var today = todayStr || new Date().toISOString().slice(0, 10);
+    var out = [], total = 0, noSale = 0;
+    for (var i = 0; i < (rows || []).length; i++) {
+      var r = rows[i];
+      var left = safeRound(r.left);
+      if (left <= 0) continue;                          // на полке ничего нет — не о чем говорить
+      var age = r.lastIn ? Math.round((new Date(today) - new Date(r.lastIn)) / 86400000) : null;
+      var slow = r.sold <= 0 || (r.pctLeft > 0 && r.pctLeft < maxPct);
+      var old = age !== null && age >= days;
+      if (!slow && !old) continue;
+      var st = stockIdx ? stockIdx[r.key] : null;
+      var price = st ? num(st.buyPrice) : 0;
+      var money = safeRound(left * price);
+      total += money;
+      if (r.sold <= 0) noSale++;
+      out.push({
+        name: r.name, key: r.key, left: left, sold: safeRound(r.sold),
+        lastIn: r.lastIn, age: age, price: price, money: money,
+        group: st ? st.group : '',
+        pctLeft: r.pctLeft,
+        reason: r.sold <= 0 ? 'нет продаж' : (old ? 'лежит ' + age + ' дн.' : 'продаётся медленно')
+      });
+    }
+    out.sort(function (a, b) { return b.money - a.money || b.left - a.left; });
+    return { list: out, total: safeRound(total), count: out.length, noSale: noSale };
+  }
+
+  // Регистр 1С «Общие доходы и расходы»: иерархия «вид операции → статья →
+  // контрагент → документ». Уровень определяем по суммам: сумма родителя
+  // равна сумме его строк, поэтому разбираем стеком.
+  // Документ 1С узнаём по номеру вида «ПФ0000040007665» — так надёжнее,
+  // чем список названий: документы бывают самые разные.
+  var DOC_RE = /(ПФ|АА|ЦБ)\d{6,}|№\s*\d+\s+от\s+\d{2}\.\d{2}\.\d{4}/i;
+
+  function parseIncomeExpense(matrix) {
+    var he = findHeaderEnd(matrix, ['вид операции', 'приход', 'расход', 'статья доходов',
+      'статья расходов', 'регистратор', 'количество записей']);
+    var t = columnTitles(matrix, he);
+    var col = {
+      name: 0,
+      income: findCol(t, [['приход']], { not: ['статья', 'вид', 'количество'] }),
+      expense: findCol(t, [['расход']], { not: ['статья', 'вид', 'количество'] }),
+      count: findCol(t, [['количество записей']])
+    };
+    if (col.income < 0) col.income = 5;
+    if (col.expense < 0) col.expense = 7;
+
+    var stack = [], rows = [], totals = null;
+    for (var r = he + 1; r < matrix.length; r++) {
+      var row = matrix[r]; if (!row) continue;
+      var name = txt(row[col.name]);
+      var inc = num(row[col.income]), exp = num(row[col.expense]);
+      var sum = inc + exp;
+      if (!name && !sum) continue;
+      if (isTotalRow(name)) continue;
+      // первая строка без имени — общий итог отчёта
+      if (totals === null && !name && !stack.length) { totals = { income: inc, expense: exp }; continue; }
+
+      // уровень определяем по суммам: сумма родителя равна сумме его строк
+      while (stack.length && stack[stack.length - 1].rest + 0.01 < sum) stack.pop();
+      if (stack.length) stack[stack.length - 1].rest = safeRound(stack[stack.length - 1].rest - sum);
+
+      if (DOC_RE.test(name)) {
+        rows.push({
+          operation: stack[0] ? stack[0].name : '',
+          article: stack[1] ? stack[1].name : '',
+          party: stack[2] ? stack[2].name : '',
+          // самый глубокий заполненный уровень — обычно это контрагент или статья
+          group: (stack[2] && stack[2].name) || (stack[1] && stack[1].name) || '',
+          doc: name, date: docDate(name),
+          income: safeRound(inc), expense: safeRound(exp),
+          count: col.count >= 0 ? num(row[col.count]) : 1
+        });
+      } else {
+        stack.push({ name: name, rest: sum });
+      }
+    }
+    if (!totals) {
+      totals = { income: 0, expense: 0 };
+      rows.forEach(function (x) { totals.income += x.income; totals.expense += x.expense; });
+    }
+    totals.income = safeRound(totals.income); totals.expense = safeRound(totals.expense);
+    return { rows: rows, totals: totals, period: parsePeriod(matrix), cols: col };
+  }
+
+  // Свод: по видам операций, по статьям и по контрагентам
+  function incomeExpenseSummary(rows) {
+    function group(field) {
+      var map = {};
+      (rows || []).forEach(function (r) {
+        var k = r[field] || '—';
+        if (!map[k]) map[k] = { name: k, income: 0, expense: 0, count: 0 };
+        map[k].income += r.income; map[k].expense += r.expense; map[k].count++;
+      });
+      var out = [];
+      for (var k in map) {
+        map[k].income = safeRound(map[k].income); map[k].expense = safeRound(map[k].expense);
+        map[k].net = safeRound(map[k].income - map[k].expense);
+        out.push(map[k]);
+      }
+      return out.sort(function (a, b) { return (b.income + b.expense) - (a.income + a.expense); });
+    }
+    return { byOperation: group('operation'), byArticle: group('article'),
+      byParty: group('party'), byGroup: group('group') };
   }
 
   // Сопоставление накладных и оплат: сколько заплатили сразу, сколько ушло
@@ -1535,6 +1694,8 @@
     parseWriteoffs: parseWriteoffs, parsePeriod: parsePeriod,
     parseWriteoffs1C: parseWriteoffs1C, parseReturns: parseReturns,
     parseIncomingInvoices: parseIncomingInvoices, parseCashOrders: parseCashOrders, docDate: docDate,
+    parseDeadStock: parseDeadStock, deadStockList: deadStockList,
+    parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,
     matchPayments: matchPayments, supplierBalance: supplierBalance, cashSummary: cashSummary,
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
     parseOwnerDaily: parseOwnerDaily, parseOwnerPayments: parseOwnerPayments,

@@ -13,7 +13,8 @@
   var D = {
     sales: [], salesPeriod: null, stock: [], prices: [], contacts: [], pricelist: [],
     barcodes: [], units: [], writeoffs: [], writeoffsPeriod: null, returns: [], returnsPeriod: null,
-    invoices1c: [], invoicesPeriod: null, cashOrders: [], owner: null, files: []
+    invoices1c: [], invoicesPeriod: null, cashOrders: [], owner: null, files: [],
+    dead: [], deadPeriod: null, incexp: null
   };
   var Q = window.WMQuick;     // умный ввод: справочники, подстановки, черновики
   function DICT() { return Q.dicts(S.state, S.settings); }
@@ -259,6 +260,16 @@
     else if (kind === 'pricelist') { r = E.parsePricelist(m.matrix); D.pricelist = r.rows; }
     else if (kind === 'barcodes') { r = E.parseBarcodes(m.matrix); D.barcodes = r.rows; }
     else if (kind === 'units') { r = E.parseUnits(m.matrix); D.units = r.rows; }
+    else if (kind === 'deadstock') {
+      r = E.parseDeadStock(m.matrix); D.dead = r.rows; D.deadPeriod = r.period; info.period = r.period;
+      info.note = 'позиций ' + r.rows.length;
+    }
+    else if (kind === 'incexp1c') {
+      r = E.parseIncomeExpense(m.matrix);
+      D.incexp = { rows: r.rows, totals: r.totals, period: r.period };
+      info.period = r.period;
+      info.note = 'приход ' + money(r.totals.income) + ', расход ' + money(r.totals.expense);
+    }
     else if (kind === 'writeoffs1c') { r = E.parseWriteoffs1C(m.matrix); D.writeoffs = r.rows; D.writeoffsPeriod = r.period; info.period = r.period; }
     else if (kind === 'returns') { r = E.parseReturns(m.matrix); D.returns = r.rows; D.returnsPeriod = r.period; info.period = r.period; }
     else if (kind === 'invoices1c') {
@@ -333,6 +344,8 @@
     C.cash1c = D.cashOrders.length ? E.cashSummary(D.cashOrders) : null;
     C.ownerAll = D.owner ? E.ownerTotals(D.owner.daily) : null;
     if (SUP.autoRegister(S.state, S.settings)) S.save();  // новые имена сразу в справочник
+    C.dead = D.dead.length ? E.deadStockList(D.dead, C.stockIdx, S.settings) : null;
+    C.incexp = D.incexp ? E.incomeExpenseSummary(D.incexp.rows) : null;
     C.sup = SUP.compute(S.state, S.settings);
     C.bySupplier = {};
     D.prices.forEach(function (p) { var k = E.norm(p.supplier); C.bySupplier[k] = (C.bySupplier[k] || 0) + 1; });
@@ -1891,6 +1904,101 @@
       '<button type="submit" class="btn btn-primary btn-lg">Готово</button></div></form>');
   }
 
+  /* --- Неликвиды: что лежит без движения ------------------------------------ */
+  function viewDead() {
+    var h = pageHead('Неликвиды', 'Товар, который лежит и не продаётся — в нём стоят ваши деньги',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+    if (!D.dead.length) {
+      return h + '<div class="card"><div class="empty"><b>Нужен отчёт 1С «Неликвидные товары»</b><br>' +
+        'В нём есть приход, продажи, остаток и дата последнего поступления по каждой позиции.<br>' +
+        'Загрузите его на экране «Импорт из 1С» — программа посчитает, сколько денег стоит на полке.</div></div>';
+    }
+    var d = C.dead || E.deadStockList(D.dead, C.stockIdx, S.settings);
+    var hasPrice = d.list.filter(function (r) { return r.money > 0; }).length;
+
+    h += hero('Заморожено в неликвидах', priv(d.total),
+      nf(d.count) + ' ' + plural(d.count, 'позиция', 'позиции', 'позиций') +
+      ' · без продаж совсем ' + nf(d.noSale) +
+      (hasPrice ? '' : ' · загрузите «Остатки номенклатуры», чтобы увидеть сумму'),
+      d.total > 0 ? 'c-orange' : 'c-green');
+
+    var top = d.list.slice(0, 12);
+    h += '<div class="stat-grid">' +
+      stat('Позиций в отчёте', nf(D.dead.length), D.deadPeriod ? 'за ' + D.deadPeriod.days + ' дн.' : 'из 1С') +
+      stat('Совсем без продаж', nf(d.noSale), 'лежат мёртвым грузом', d.noSale ? 'c-red' : 'c-green') +
+      stat('Топ-12 позиций', priv(top.reduce(function (a, r) { return a + r.money; }, 0)), 'самые дорогие остатки') +
+      stat('Порог', pct(num(S.settings.deadSoldPct)) + ' / ' + nf(S.settings.deadDays) + ' дн.',
+        'продажи от остатка и давность завоза') + '</div>';
+
+    h += card('Что делать с этим товаром', table('deadT', [
+      { title: 'Товар', fn: function (r) { return esc(r.name); } },
+      { title: 'Группа', fn: function (r) { return esc(r.group || '—'); } },
+      { title: 'Остаток', cls: 'num', fn: function (r) { return nf(r.left, 2); } },
+      { title: 'Продано', cls: 'num', fn: function (r) { return nf(r.sold, 2); } },
+      { title: 'Цена закупа', cls: 'num', fn: function (r) { return r.price ? priv(r.price) : '—'; } },
+      { title: 'Денег лежит', cls: 'num', fn: function (r) { return '<span class="c-orange private">' + money(r.money) + '</span>'; } },
+      { title: 'Последний завоз', fn: function (r) { return r.lastIn ? esc(dateRu(r.lastIn)) + (r.age ? ' · ' + r.age + ' дн.' : '') : '—'; } },
+      { title: 'Почему в списке', fn: function (r) { return badge(r.reason, r.sold <= 0 ? 'red' : 'orange'); } }
+    ], d.list, { step: 40, empty: 'Неликвидов нет — весь товар в обороте' }));
+
+    h += '<div class="banner"><span>💡</span><span>Что с этим делать: уценить и поставить на видное место, ' +
+      'вернуть поставщику, добавить в акцию или просто не заказывать снова. ' +
+      'Порог «неликвида» меняется в настройках, раздел «Товар и заказы».</span></div>';
+    return h;
+  }
+
+  /* --- Доходы и расходы по данным 1С ---------------------------------------- */
+  function viewIncExp() {
+    var h = pageHead('Доходы и расходы (1С)', 'Обороты из отчёта «Общие доходы и расходы» — откуда деньги пришли и куда ушли',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+    if (!D.incexp) {
+      return h + '<div class="card"><div class="empty"><b>Нужен отчёт 1С «Общие доходы и расходы»</b><br>' +
+        'Программа разложит его по видам операций, статьям и контрагентам.</div></div>';
+    }
+    var ie = D.incexp, sum = C.incexp || E.incomeExpenseSummary(ie.rows);
+    var net = E.safeRound(ie.totals.income - ie.totals.expense);
+
+    h += '<div class="grid-2">' +
+      hero('Приход', priv(ie.totals.income),
+        (ie.period ? 'за ' + ie.period.days + ' дн. · ' + ie.period.from + ' — ' + ie.period.to : 'по отчёту 1С'), 'c-green') +
+      hero('Расход', priv(ie.totals.expense), nf(ie.rows.length) + ' документов', 'c-red') + '</div>';
+
+    h += '<div class="stat-grid">' +
+      stat('Разница', priv(net), 'приход минус расход', net >= 0 ? 'c-green' : 'c-red') +
+      stat('Видов операций', nf(sum.byOperation.length), 'поступление, продажа, списание…') +
+      stat('Контрагентов и статей', nf(sum.byGroup.length), 'в разрезе отчёта') +
+      stat('Документов', nf(ie.rows.length), 'накладные, ордера, чеки') + '</div>';
+
+    h += card('По видам операций', table('ieOp', [
+      { title: 'Вид операции', fn: function (r) { return esc(r.name || '—'); } },
+      { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? '<span class="c-green private">' + money(r.income) + '</span>' : '—'; } },
+      { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? '<span class="c-red private">' + money(r.expense) + '</span>' : '—'; } },
+      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } }
+    ], sum.byOperation, { step: 20 }));
+
+    h += card('По контрагентам и статьям', table('ieGrp', [
+      { title: 'Кто или за что', fn: function (r) { return esc(r.name || 'не указано'); } },
+      { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? priv(r.income) : '—'; } },
+      { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? priv(r.expense) : '—'; } },
+      { title: 'Итого', cls: 'num', fn: function (r) { return '<span class="' + cls(r.net) + ' private">' + money(r.net) + '</span>'; } },
+      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } }
+    ], sum.byGroup, { step: 30 }));
+
+    var q = ($('search') && $('search').value || '').trim();
+    var docs = ie.rows.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    if (q) { var nq = E.norm(q); docs = docs.filter(function (r) {
+      return E.norm(r.doc).indexOf(nq) >= 0 || E.norm(r.group).indexOf(nq) >= 0 || E.norm(r.operation).indexOf(nq) >= 0; }); }
+    h += card('Документы' + (q ? ' — «' + esc(q) + '»' : ''), table('ieDocs', [
+      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Документ', fn: function (r) { return esc(SUP.shortDoc(r.doc)); } },
+      { title: 'Вид операции', fn: function (r) { return esc(r.operation || '—'); } },
+      { title: 'Кто или за что', fn: function (r) { return esc(r.group || '—'); } },
+      { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? priv(r.income) : '—'; } },
+      { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? priv(r.expense) : '—'; } }
+    ], docs, { step: 40, empty: 'Ничего не найдено' }));
+    return h;
+  }
+
   /* --- Навигация ---------------------------------------------------------------- */
   var VIEWS = [
     { id: 'today', icon: '🏠', name: 'Сегодня', group: 'Главное', render: viewToday },
@@ -1902,10 +2010,12 @@
     { id: 'orders', icon: '🚚', name: 'Заказы', group: 'Товары', render: viewOrders },
     { id: 'expiry', icon: '⏰', name: 'Сроки годности', group: 'Товары', render: viewExpiry },
     { id: 'losses', icon: '🗑', name: 'Списания', group: 'Товары', render: viewLosses },
+    { id: 'dead', icon: '🧊', name: 'Неликвиды', group: 'Товары', render: viewDead },
     { id: 'pnl', icon: '📈', name: 'Прибыль', group: 'Отчёты', render: viewPnl },
     { id: 'bep', icon: '⚖️', name: 'Безубыточность', group: 'Отчёты', render: viewBep },
     { id: 'abc', icon: '🏆', name: 'ABC-анализ', group: 'Отчёты', render: viewAbc },
     { id: 'pricecmp', icon: '🏷', name: 'Цены поставщиков', group: 'Отчёты', render: viewPriceCmp },
+    { id: 'incexp', icon: '📒', name: 'Доходы и расходы (1С)', group: 'Отчёты', render: viewIncExp },
     { id: 'search', icon: '🔍', name: 'Поиск', group: 'Ещё', render: viewSearch },
     { id: 'data', icon: '🗂', name: 'Данные и файлы', group: 'Ещё', render: viewData },
     { id: 'settings', icon: '⚙️', name: 'Настройки', group: 'Ещё', render: viewSettings }

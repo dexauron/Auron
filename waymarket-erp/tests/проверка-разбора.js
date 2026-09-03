@@ -52,6 +52,37 @@ for (const f of files) {
   const kind = WM.detectKind(f, matrix, names);
   console.log('— ' + f + '  [' + kind + ']');
 
+  if (kind === 'deadstock') {
+    const res = WM.parseDeadStock(matrix);
+    check('неликвиды разобраны', res.rows.length > 10, res.rows.length + ' позиций', '>10');
+    check('склад и «Итого» не попали в данные',
+      !res.rows.some(r => WM.isTotalRow(r.name) || WM.norm(r.name) === 'основной склад'), 'нет', 'нет');
+    const withLeft = res.rows.filter(r => r.left > 0);
+    check('остатки прочитаны', withLeft.length > 0, withLeft.length + ' с остатком', '>0');
+    const withDate = res.rows.filter(r => r.lastIn);
+    check('дата последнего поступления прочитана', withDate.length > 0,
+      withDate.length + ' с датой', '>0');
+    global.__dead = res;
+  }
+
+  if (kind === 'incexp1c') {
+    const res = WM.parseIncomeExpense(matrix);
+    const sum = res.rows.reduce((a, r) => ({ i: a.i + r.income, e: a.e + r.expense }), { i: 0, e: 0 });
+    check('документы разобраны', res.rows.length > 10, res.rows.length + ' документов', '>10');
+    check('итог сходится с суммой документов',
+      near(sum.i, res.totals.income, 1) && near(sum.e, res.totals.expense, 1),
+      WM.fmtMoney(sum.i) + ' / ' + WM.fmtMoney(sum.e),
+      WM.fmtMoney(res.totals.income) + ' / ' + WM.fmtMoney(res.totals.expense));
+    check('у документов определён вид операции',
+      res.rows.filter(r => r.operation).length > res.rows.length * 0.9,
+      res.rows.filter(r => r.operation).length + ' из ' + res.rows.length, 'почти у всех');
+    const s2 = WM.incomeExpenseSummary(res.rows);
+    const opSum = s2.byOperation.reduce((a, r) => a + r.income + r.expense, 0);
+    check('свод по видам операций равен обороту', near(opSum, sum.i + sum.e, 1),
+      WM.fmtMoney(opSum), WM.fmtMoney(sum.i + sum.e));
+    console.log('     виды операций: ' + s2.byOperation.map(r => r.name).slice(0, 4).join(', '));
+  }
+
   if (kind === 'sales') {
     const res = WM.parseSales(matrix);
     const t = WM.salesTotals(res.rows);
@@ -77,6 +108,8 @@ for (const f of files) {
     check('количество = «Итого»', near(t.qty, wantQty, 1), WM.fmtNum(t.qty, 2), WM.fmtNum(wantQty, 2));
     check('строка склада-итога отброшена', !res.rows.some(r => WM.norm(r.name) === 'основной склад'), 'да', 'да');
     global.__stock = res;
+    global.__stockIdx = {};
+    res.rows.forEach(r => { global.__stockIdx[r.key] = r; });
   }
   if (kind === 'prices') {
     const res = WM.parsePrices(matrix);
@@ -571,6 +604,27 @@ if (global.__inv1c && global.__cash) {
   const m2 = Q.shiftMath({ zCash: 38400, fCash: 37000, payout: 32000 });
   check('недостача видна до сохранения', m2.status === 'недостача' && m2.diff === -1400,
     m2.status + ' ' + WM.fmtMoney(m2.diff), 'недостача −1 400 ₽');
+  console.log('');
+}
+
+/* Неликвиды: сколько денег лежит на полке без движения */
+if (global.__dead) {
+  console.log('— Неликвиды: замороженные деньги');
+  const dead = WM.deadStockList(global.__dead.rows, global.__stockIdx || null,
+    { deadSoldPct: 20, deadDays: 60 }, '2026-09-03');
+  check('список неликвидов собран', dead.count > 0,
+    dead.count + ' позиций на ' + WM.fmtMoney(dead.total), '>0');
+  check('в списке только товар с остатком', dead.list.every(r => r.left > 0), 'все с остатком', 'все с остатком');
+  check('сумма считается по закупочной цене',
+    dead.list.every(r => near(r.money, r.left * r.price, 0.02)), 'остаток × цена', 'остаток × цена');
+  check('итог равен сумме строк',
+    near(dead.total, dead.list.reduce((a, r) => a + r.money, 0), 1),
+    WM.fmtMoney(dead.total), 'сумма строк');
+  const strict = WM.deadStockList(global.__dead.rows, global.__stockIdx || null,
+    { deadSoldPct: 5, deadDays: 365 }, '2026-09-03');
+  check('строгий порог оставляет меньше позиций', strict.count <= dead.count,
+    strict.count + ' против ' + dead.count, 'меньше или столько же');
+  console.log('     заморожено: ' + WM.fmtMoney(dead.total) + ', совсем без продаж: ' + dead.noSale);
   console.log('');
 }
 
