@@ -21,7 +21,11 @@
   var bookStamp = null;      // отпечаток книги, которую мы сами записали последней
   var bookSaved = null;      // когда книга записана
   var dataStamp = null;      // отпечаток «база.json», записанного нами
-  var state = 'unsupported';   // unsupported | off | needs-permission | ready
+  // unsupported — браузер не умеет | off — папка не подключена
+  // needs-permission — браузер ждёт клика, чтобы снова открыть доступ
+  // lost — папку помним, но её больше нет на месте (переехала, переименована, удалена)
+  // ready — всё в порядке, пишем
+  var state = 'unsupported';
   var lastSaved = null;
   var saveTimer = null;
   var listeners = [];
@@ -32,6 +36,57 @@
 
   function notify() { listeners.forEach(function (fn) { try { fn(state, lastSaved); } catch (e) {} }); }
   function onChange(fn) { listeners.push(fn); }
+
+  /* --- Понятные объяснения вместо английских ошибок браузера ---------------
+     Браузер отвечает вроде «A requested file or directory could not be found»
+     — владельцу это ничего не говорит. Переводим в человеческий язык и заодно
+     переводим саму программу в честное состояние.
+     ---------------------------------------------------------------------- */
+  function errName(e) {
+    if (!e) return '';
+    if (e.name) return e.name;
+    // Firefox иногда отдаёт ошибку без имени — узнаём по тексту
+    var t = String(e.message || e);
+    if (/not be found|no such file|NotFound/i.test(t)) return 'NotFoundError';
+    if (/permission|not allowed/i.test(t)) return 'NotAllowedError';
+    return '';
+  }
+
+  // Папка пропала? Тогда врать «сохраняется в папку» больше нельзя.
+  function markByError(e) {
+    var n = errName(e);
+    if (n === 'NotFoundError') { state = 'lost'; notify(); return 'lost'; }
+    if (n === 'NotAllowedError' || n === 'SecurityError') { state = 'needs-permission'; notify(); return 'needs-permission'; }
+    return state;
+  }
+
+  function humanError(e) {
+    var n = errName(e);
+    if (n === 'AbortError') return '';                 // владелец сам закрыл окно выбора
+    if (n === 'NotFoundError') {
+      return 'Папка, которую программа помнит, не найдена: её переименовали, перенесли или удалили. ' +
+        'Нажмите «Выбрать папку заново» и укажите папку программы — записи не потеряются, ' +
+        'они лежат внутри браузера.';
+    }
+    if (n === 'NotAllowedError' || n === 'SecurityError') {
+      return 'Браузер закрыл доступ к папке. Нажмите «Подключить папку» и разрешите доступ ещё раз.';
+    }
+    if (n === 'NoModificationAllowedError') {
+      return 'Файл занят другой программой. Закройте книгу «Бухгалтерия» в Excel и попробуйте снова.';
+    }
+    if (n === 'QuotaExceededError') return 'На диске не осталось места.';
+    if (n === 'TypeMismatchError') return 'Выбран файл вместо папки. Укажите именно папку программы.';
+    return (e && e.message) ? e.message : 'Неизвестная ошибка.';
+  }
+
+  // Папка ещё на месте? Дешёвая проверка: пробуем заглянуть внутрь.
+  async function alive() {
+    if (!dirHandle) return false;
+    try {
+      await dirHandle.values().next();
+      return true;
+    } catch (e) { markByError(e); return false; }
+  }
 
   /* --- хранение ссылки на папку между запусками --- */
   function idb() {
@@ -71,6 +126,7 @@
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     dirHandle = handle;
     await idbSet(KEY, handle);
+    bookStamp = null; dataStamp = null; lastBackup = null;   // папка новая — отпечатки старой не годятся
     state = 'ready'; notify();
     return handle;
   }
@@ -83,7 +139,10 @@
       if (!handle) { state = 'off'; notify(); return state; }
       dirHandle = handle;
       var perm = await handle.queryPermission({ mode: 'readwrite' });
-      state = perm === 'granted' ? 'ready' : 'needs-permission';
+      if (perm !== 'granted') { state = 'needs-permission'; notify(); return state; }
+      // разрешение есть — но папку могли перенести или удалить, проверяем
+      state = 'ready';
+      if (!(await alive())) return state;   // alive() сам поставит 'lost'
     } catch (e) {
       state = 'off';
     }
@@ -93,10 +152,12 @@
 
   // Повторно запросить разрешение — вызывать только из обработчика клика
   async function reconnect() {
-    if (!dirHandle) return connect();
+    if (!dirHandle || state === 'lost') return connect();
     var perm = await dirHandle.requestPermission({ mode: 'readwrite' });
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     state = 'ready'; notify();
+    // разрешение выдано, но папки может уже не быть — тогда предлагаем выбрать заново
+    if (!(await alive())) return connect();
     return dirHandle;
   }
 
@@ -149,7 +210,7 @@
       bookSaved = new Date();
       notify();
       return true;
-    } catch (e) { return false; }
+    } catch (e) { markByError(e); return false; }
   }
 
   // Книга, изменённая снаружи (владелец правил её в Excel), или null
@@ -239,7 +300,8 @@
       notify();
       return true;
     } catch (e) {
-      state = 'needs-permission'; notify();
+      // пропала папка — это не «нет разрешения», и владельцу надо сказать правду
+      if (markByError(e) === state && state === 'ready') { state = 'needs-permission'; notify(); }
       return false;
     }
   }
@@ -291,7 +353,8 @@
         }
       }
     }
-    await scan(dirHandle, '');
+    try { await scan(dirHandle, ''); }
+    catch (e) { markByError(e); throw e; }
     return out;
   }
 
@@ -301,6 +364,7 @@
     listExports: listExports, writeFile: writeFile, readFile: readFile, onChange: onChange,
     saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
+    humanError: humanError, alive: alive,
     get bookSaved() { return bookSaved; },
     BOOK_FILE: BOOK_FILE,
     get state() { return state; },

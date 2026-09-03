@@ -14,6 +14,7 @@ const Q = require(path.join(__dirname, '..', 'js', 'quick.js'));
 const SET = require(path.join(__dirname, '..', 'js', 'settings.js'));
 const STORE = require(path.join(__dirname, '..', 'js', 'store.js'));
 const FLT = require(path.join(__dirname, '..', 'js', 'filters.js'));
+const FILES = require(path.join(__dirname, '..', 'js', 'filestore.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -946,6 +947,34 @@ console.log('— Окно «Подробнее»');
     DET.btn('firm', '"><script>alert(1)</script>').indexOf('<script') < 0, 'экранировано', 'экранировано');
   check('ссылка-название открывает то же окно',
     DET.link('product', 'хлеб', 'Хлеб').indexOf('data-more="product|хлеб"') > 0, 'есть', 'есть');
+  console.log('');
+}
+
+/* Папка программы: ошибки браузера объясняются по-человечески */
+console.log('— Папка программы: понятные ошибки');
+{
+  const lost = FILES.humanError({ name: 'NotFoundError' });
+  check('пропавшая папка объясняется по-русски',
+    lost.indexOf('не найдена') > 0 && lost.indexOf('записи не потеряются') > 0,
+    lost.slice(0, 60) + '…', 'объяснение и что делать');
+  check('в объяснении нет английского', !/[a-z]{4,}/i.test(lost.replace(/«[^»]*»/g, '')),
+    'по-русски', 'по-русски');
+  const denied = FILES.humanError({ name: 'NotAllowedError' });
+  check('закрытый доступ объясняется', denied.indexOf('Браузер закрыл доступ') === 0,
+    denied.slice(0, 40) + '…', 'про доступ');
+  check('занятый Excel-файл объясняется',
+    FILES.humanError({ name: 'NoModificationAllowedError' }).indexOf('Закройте книгу') > 0,
+    'про Excel', 'про Excel');
+  check('нет места на диске', FILES.humanError({ name: 'QuotaExceededError' }).indexOf('места') > 0,
+    'про место', 'про место');
+  check('владелец сам закрыл окно — молчим', FILES.humanError({ name: 'AbortError' }) === '',
+    'тишина', 'тишина');
+  // Firefox отдаёт ошибку без имени — узнаём по тексту
+  check('ошибка без имени узнаётся по тексту',
+    FILES.humanError({ message: 'A requested file or directory could not be found' }).indexOf('не найдена') > 0,
+    'узнали', 'узнали');
+  check('незнакомая ошибка показывается как есть, а не теряется',
+    FILES.humanError({ message: 'что-то своё' }) === 'что-то своё', 'показана', 'показана');
   console.log('');
 }
 

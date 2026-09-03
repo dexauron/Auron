@@ -429,8 +429,9 @@
       toast('Папка подключена: ' + F.dirName + '\nВсё, что вы записываете, сохраняется в файл ' +
         F.DATA_DIR + '/' + F.DATA_FILE);
     } catch (e) {
-      if (e && e.name === 'AbortError') return;
-      toast('Не получилось: ' + e.message);
+      var why = F.humanError(e);
+      render();
+      if (why) toast(why, 11000);
     }
   }
 
@@ -442,15 +443,28 @@
       await syncFolder(true);
       render();
       toast('Папка снова подключена, данные на месте.');
-    } catch (e) { toast('Не получилось: ' + e.message); }
+    } catch (e) {
+      var why = F.humanError(e);
+      render();
+      if (why) toast(why, 11000);
+    }
   }
 
   // Прочитать выгрузки 1С из подключённой папки (только изменившиеся файлы)
   async function syncFolder(silent) {
     if (F.state !== 'ready') return false;
-    var book = E.norm(S.settings.bookAutoRead) === 'нет' ? null : await F.bookChangedOutside();
-    if (book) await readBook(book, silent);
-    var files = await F.listExports();
+    var book = null, files;
+    try {
+      book = E.norm(S.settings.bookAutoRead) === 'нет' ? null : await F.bookChangedOutside();
+      if (book) await readBook(book, silent);
+      files = await F.listExports();
+    } catch (e) {
+      // папка исчезла посреди работы — объясняем и перерисовываем экран
+      var why = F.humanError(e);
+      render();
+      if (why && !silent) toast(why, 11000);
+      return false;
+    }
     var changed = files.filter(function (f) { return folderStamps[f.name] !== f.stamp; });
     if (!changed.length) { if (!silent) toast('Новых выгрузок в папке нет.'); return false; }
     for (var i = 0; i < changed.length; i++) {
@@ -616,6 +630,8 @@
     if (st === 'ready') {
       return { dot: '', text: 'Сохраняется в папку' + (when ? ' · ' + when.toLocaleTimeString('ru-RU').slice(0, 5) : ''), ok: true };
     }
+    if (st === 'lost') return { dot: 'off', lost: true,
+      text: 'Папка не найдена — записи только в браузере', ok: false };
     if (st === 'needs-permission') return { dot: 'off', text: 'Нажмите, чтобы продолжить сохранение в папку', ok: false };
     if (st === 'unsupported') return { dot: 'off', text: 'Сохранение в файл: только Chrome / Edge', ok: false };
     return { dot: 'off', text: 'Сохранение в папку не подключено', ok: false };
@@ -980,9 +996,18 @@
     if (pl.overdueCount) items.push({ icon: '📅', title: 'Просроченные выплаты по плану',
       sub: pl.overdueCount + ' ' + plural(pl.overdueCount, 'платёж', 'платежа', 'платежей'),
       value: '<span class="c-red private">' + money(pl.overdue) + '</span>', view: 'finpay' });
-    if (F.state !== 'ready') items.push({ icon: '💾', title: 'Данные не сохраняются в файл',
-      sub: F.state === 'unsupported' ? 'Откройте дашборд в Chrome или Edge' : 'Подключите папку — записи будут храниться в файле',
-      value: '<button class="btn btn-sm btn-primary" data-act="' + (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">Подключить</button>' });
+    if (F.state !== 'ready') {
+      items.push({
+        icon: '💾',
+        title: F.state === 'lost' ? 'Папка программы не найдена' : 'Данные не сохраняются в файл',
+        sub: F.state === 'unsupported' ? 'Откройте дашборд в Chrome или Edge'
+          : (F.state === 'lost' ? 'Папку переименовали или перенесли. Записи целы — выберите папку заново'
+            : 'Подключите папку — записи будут храниться в файле'),
+        value: '<button class="btn btn-sm btn-primary" data-act="' +
+          (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">' +
+          (F.state === 'lost' ? 'Выбрать заново' : 'Подключить') + '</button>'
+      });
+    }
     if (!D.sales.length && !D.owner) items.push({ icon: '📂', title: 'Данные 1С не загружены',
       sub: 'Выгрузите отчёты в папку и нажмите «Обновить из 1С»',
       value: '<button class="btn btn-sm" data-act="pick-files">Загрузить</button>' });
@@ -2151,14 +2176,27 @@
     var st = saveState();
     var h = pageHead('Данные и файлы', 'Где хранится ваша база и что загружено из 1С');
 
+    var note, button;
+    if (st.ok) {
+      note = 'Папка: ' + esc(F.dirName) + ' → ' + F.DATA_DIR + '/' + F.DATA_FILE + '. Копия базы сохраняется раз в день.';
+      button = '<button class="btn" data-act="folder-forget">Отключить</button>';
+    } else if (st.lost) {
+      // самая частая история: папку распаковали заново в другое место,
+      // а программа помнит прежнюю. Записи при этом целы — они в браузере.
+      note = 'Папка «' + esc(F.dirName || 'программы') + '», которую программа помнит, переименована, ' +
+        'перенесена или удалена. <b>Ваши записи целы</b> — они хранятся внутри браузера. ' +
+        'Нажмите «Выбрать папку заново» и укажите ту папку, где сейчас лежит программа, — ' +
+        'запись в файл продолжится.';
+      button = '<button class="btn btn-primary" data-act="folder-connect">Выбрать папку заново</button>' +
+        ' <button class="btn" data-act="folder-forget">Больше не искать</button>';
+    } else {
+      note = 'Пока записи хранятся только внутри браузера. Подключите папку — и всё будет лежать файлом рядом с программой.';
+      button = '<button class="btn btn-primary" data-act="' +
+        (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">Подключить папку</button>';
+    }
     h += '<div class="banner ' + (st.ok ? 'green' : '') + '">' +
       '<span>' + (st.ok ? '✅' : '⚠️') + '</span><div><b>' + esc(st.text) + '</b>' +
-      (st.ok ? '<div class="card-note">Папка: ' + esc(F.dirName) + ' → ' + F.DATA_DIR + '/' + F.DATA_FILE +
-        '. Копия базы сохраняется раз в день.</div>'
-        : '<div class="card-note">Пока записи хранятся только внутри браузера. Подключите папку — и всё будет лежать файлом рядом с программой.</div>') +
-      '</div>' + (st.ok ? '<button class="btn" data-act="folder-forget">Отключить</button>'
-        : '<button class="btn btn-primary" data-act="' + (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">Подключить папку</button>') +
-      '</div>';
+      '<div class="card-note">' + note + '</div></div>' + button + '</div>';
 
     h += card('Загрузить выгрузки 1С', listOf([
       listRow({ icon: '📂', title: 'Прочитать папку с выгрузками', sub: 'Файлы .xls, .xlsx, .csv — имена любые',
@@ -2775,6 +2813,7 @@
     $('syncBtn').addEventListener('click', function () {
       if (F.state === 'ready') syncFolder(false);
       else if (F.state === 'needs-permission') reconnectFolder();
+      else if (F.state === 'lost') { go('data'); toast(F.humanError({ name: 'NotFoundError' }), 11000); }
       else $('folderInput').click();
     });
     $('privacyBtn').addEventListener('click', function () {
@@ -2893,6 +2932,13 @@
       await syncFolder(true);
       recompute(); render();
       if (!book) scheduleBook();
+    } else if (st === 'lost') {
+      // папку перенесли или распаковали заново в другое место: говорим сразу,
+      // пока владелец не решил, что записи пропали
+      render();
+      setTimeout(function () {
+        if (F.state === 'lost') toast(F.humanError({ name: 'NotFoundError' }), 12000);
+      }, 1200);
     } else if (st === 'off' && F.supported()) {
       // первый запуск: подскажем один раз, но не мешаем работать
       setTimeout(function () {
