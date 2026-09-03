@@ -268,6 +268,63 @@
     return stat;
   }
 
+  /* --- Записи владельца в той же базе ---------------------------------------
+     Приход и оплата, введённые руками, ложатся туда же, где живут документы
+     1С. Так долг остаётся одной суммой, а не двумя разными в двух местах.
+     Все поля такой записи помечены как «мои»: 1С их не перезапишет.
+     ------------------------------------------------------------------------ */
+  function ownKey(prefix, r) {
+    var base = norm(r.doc) || (prefix + '-' + (r.date || '') + '-' + norm(r.supplier) + '-' + round(num(r.sum)));
+    return base;
+  }
+
+  function addOwnDoc(state, r, settings) {
+    state.docs = state.docs || [];
+    var reg = state.supreg || [];
+    var alias = aliasIndex(reg);
+    var firm = firmOf(r.supplier, alias);
+    var doc = clean(r.doc) || ('Накладная от ' + (r.date || today()));
+    var key = ownKey('нак', { doc: doc, date: r.date, supplier: r.supplier, sum: r.sum });
+    var term = termDaysFor(firm, reg, settings);
+    var rec = {
+      id: uid(), key: key, doc: doc, date: r.date || today(),
+      incomingNo: clean(r.incomingNo), incomingDate: '',
+      supplier: clean(r.supplier) || 'Без контрагента', firm: firm,
+      sum: round(num(r.sum)), retail: round(num(r.retail)),
+      payDate: r.payDate || addDays(r.date, term),
+      confirmed: !!r.payDate,          // владелец сам поставил срок — значит подтвердил
+      roundOff: 0, note: clean(r.note),
+      source: 'мои', file: '', loaded: today(),
+      mine: ['doc', 'date', 'supplier', 'firm', 'sum', 'retail', 'payDate']
+    };
+    state.docs.push(rec);
+    autoRegister(state, settings);
+    return rec;
+  }
+
+  function addOwnPay(state, r, settings) {
+    state.pays = state.pays || [];
+    var reg = state.supreg || [];
+    var alias = aliasIndex(reg);
+    var firm = r.supplier ? firmOf(r.supplier, alias) : '';
+    var doc = clean(r.doc) || ('Оплата от ' + (r.date || today()));
+    var basis = clean(r.basis);
+    var rec = {
+      id: uid(), key: ownKey('опл', { doc: doc, date: r.date, supplier: r.supplier, sum: r.sum }),
+      doc: doc, date: r.date || today(),
+      supplier: clean(r.supplier), firm: firm,
+      basis: basis, basisKey: norm(basis),
+      operation: clean(r.operation), article: '',
+      cashbox: clean(r.cashbox), sum: round(num(r.sum)),
+      linkKey: '', linkKind: '', category: '', resolved: false, note: clean(r.note),
+      source: 'мои', file: '', loaded: today(),
+      mine: ['doc', 'date', 'supplier', 'firm', 'sum', 'basis']
+    };
+    state.pays.push(rec);
+    autoRegister(state, settings);
+    return rec;
+  }
+
   // Расходные кассовые ордера: оплаты поставщикам и прочие выплаты из кассы
   function mergePays(state, rows, file, reg, settings) {
     var idx = {}, stat = { added: 0, updated: 0, same: 0 };
@@ -400,7 +457,10 @@
             settings && settings.payWeekend);
       out.push({
         id: d.id, key: d.key, doc: shortDoc(d.doc), fullDoc: d.doc, date: d.date, supplier: d.supplier, firm: d.firm,
-        incomingNo: d.incomingNo, sum: round(d.sum), retail: round(d.retail),
+        incomingNo: d.incomingNo, incomingDate: d.incomingDate || '',
+        // откуда запись и что в ней поправлено руками — нужно экранам и фильтрам
+        source: d.source || 'мои', mine: d.mine || null, from1c: d.from1c || null,
+        sum: round(d.sum), retail: round(d.retail),
         paid: p, left: left, over: over, roundOff: round(num(d.roundOff)),
         due: due, confirmed: !!d.confirmed, closed: !!d.closedManual, underpayKeep: !!d.underpayKeep,
         term: termDaysFor(d.firm, reg, settings),
@@ -612,6 +672,7 @@
     findFirm: findFirm, linkAlias: linkAlias, firmRecord: firmRecord, mergeFirms: mergeFirms,
     termDaysFor: termDaysFor, termKnown: termKnown, isSupplierPay: isSupplierPay,
     mergeDocs: mergeDocs, mergePays: mergePays, link: link, docsCalc: docsCalc,
+    addOwnDoc: addOwnDoc, addOwnPay: addOwnPay,
     markMine: markMine, isMine: isMine, unmark: unmark, fromSource: fromSource, conflicts: conflicts,
     autoRegister: autoRegister, similarFirms: similarFirms,
     firmDebt: firmDebt, newNames: newNames, reconQueue: reconQueue, confirmQueue: confirmQueue,

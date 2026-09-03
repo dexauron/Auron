@@ -79,6 +79,38 @@
     return '<div class="empty">' + esc(what) + '</div>';
   }
 
+  // Откуда запись и что в ней поправлено руками: владелец должен это видеть,
+  // потому что программа считает по его цифре, а не по выгрузке
+  function sourceLine(rec) {
+    if (!rec) return '';
+    var из1с = rec.source === '1c';
+    var fixed = rec.mine && rec.mine.length;
+    var diff = SUP().conflicts ? SUP().conflicts(rec) : [];
+    var h = '<div class="det-source">' +
+      (из1с ? '<span class="badge b-gray">из 1С</span>' : '<span class="badge b-green">ваша запись</span>') +
+      (fixed ? ' <span class="badge b-orange">исправлено вами</span>' : '') + '</div>';
+    if (diff.length) {
+      h += '<div class="banner blue"><span>&#9995;</span><span>Считаем по вашей цифре, не по 1С:<br>' +
+        diff.map(function (d) {
+          var money = d.field === 'sum' || d.field === 'retail';
+          var fmt = function (v) {
+            if (v === undefined || v === null || v === '') return '—';
+            return money ? money2(v) : (/date$/i.test(d.field) ? dateRu(v) : esc(String(v)));
+          };
+          return '<b>' + esc(FIELD_RU[d.field] || d.field) + '</b>: было в 1С ' + fmt(d.was) +
+            ', у вас ' + fmt(d.now);
+        }).join('<br>') + '</span></div>';
+    }
+    return h;
+  }
+  function money2(v) { return money(num(v)); }
+  var FIELD_RU = {
+    sum: 'Сумма', date: 'Дата', firm: 'Поставщик', supplier: 'Имя в 1С',
+    retail: 'Сумма в рознице', payDate: 'Дата выплаты', basis: 'Основание',
+    incomingNo: 'Входящий номер', incomingDate: 'Дата бумаги поставщика',
+    operation: 'Вид операции', article: 'Статья ДДС', cashbox: 'Касса'
+  };
+
   /* --- Кнопки, которые ставятся в экранах ----------------------------------- */
   function btn(kind, key, label) {
     return '<button class="btn btn-sm" data-more="' + esc(kind) + '|' + esc(key) + '">' +
@@ -177,7 +209,7 @@
     var pays = (S().state.pays || []).filter(function (p) {
       return (p.linkKind === 'auto' || p.linkKind === 'manual') && p.linkKey === d.key;
     });
-    var h = facts([
+    var h = sourceLine(d) + facts([
       ['Поставщик', link('firm', norm(d.firm), d.firm)],
       ['Документ', esc(d.fullDoc || d.doc)],
       ['Дата прихода', esc(dateRu(d.date))],
@@ -217,7 +249,7 @@
     if (!p) return { title: 'Оплата', html: nothing('Оплата не найдена.') };
     var c = C().sup;
     var doc = c && p.linkKey ? c.docs.filter(function (d) { return d.key === p.linkKey; })[0] : null;
-    var h = facts([
+    var h = sourceLine(p) + facts([
       ['Поставщик', p.firm ? link('firm', norm(p.firm), p.firm) : '—'],
       ['Имя в 1С', p.supplier ? esc(p.supplier) : '—'],
       ['Документ', esc(p.doc || '—')],

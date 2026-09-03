@@ -971,6 +971,70 @@ console.log('— Окно «Подробнее»');
   console.log('');
 }
 
+/* Одна база: записи владельца и 1С вместе, правда — за владельцем */
+console.log('— Одна база: ваши записи и 1С');
+{
+  const settings = { termDaysDefault: 3, roundTolerance: 5 };
+  const st = { docs: [], pays: [], supreg: [], debtors: [] };
+
+  // 1. Своя накладная и своя оплата ложатся в ту же базу, что и документы 1С
+  const own = SUP.addOwnDoc(st, { doc: 'МОЯ-1', date: '2026-08-21',
+    supplier: 'Молоко Юг', sum: 30000 }, settings);
+  SUP.addOwnPay(st, { date: '2026-08-21', supplier: 'Молоко Юг', sum: 12000, basis: 'МОЯ-1' }, settings);
+  let c = SUP.compute(st, settings);
+  check('своя накладная попала в общую базу', c.totals.docs === 1 && c.totals.sum === 30000,
+    c.totals.docs + ' шт. на ' + WM.fmtMoney(c.totals.sum), '1 шт. на 30 000 ₽');
+  check('своя оплата привязалась к своей накладной', c.linkStat.auto === 1, c.linkStat.auto, 1);
+  check('долг = поставка − оплата', c.totals.left === 18000, WM.fmtMoney(c.totals.left), '18 000 ₽');
+  check('фирма завелась сама', st.supreg.length === 1 && st.supreg[0].name === 'Молоко Юг',
+    st.supreg.map(f => f.name).join(', '), 'Молоко Юг');
+  check('своя запись помечена как ваша', own.source === 'мои' && own.mine.indexOf('sum') >= 0,
+    own.source + ', поля: ' + own.mine.join(','), 'мои');
+
+  // 2. Документ 1С рядом — долг считается одной суммой
+  SUP.mergeDocs(st, [{ doc: 'ПФ0001 от 20.08.2026', date: '2026-08-20',
+    supplier: 'Пекарня', sum: 5000, retail: 7000 }], 'нак.xlsx', st.supreg, settings);
+  c = SUP.compute(st, settings);
+  check('1С и ваши записи считаются вместе', c.totals.docs === 2 && c.totals.sum === 35000,
+    c.totals.docs + ' документа на ' + WM.fmtMoney(c.totals.sum), '2 на 35 000 ₽');
+  check('видно, где чья запись',
+    c.docs.filter(d => d.source === '1c').length === 1 && c.docs.filter(d => d.source === 'мои').length === 1,
+    'по одной с каждой стороны', 'по одной');
+
+  // 3. Владелец исправляет цифру 1С — и она главнее выгрузки
+  const doc1c = st.docs.find(d => d.source === '1c');
+  doc1c.sum = 5500;                      // «в 1С ошибка, по факту 5 500»
+  SUP.markMine(doc1c, ['sum']);
+  SUP.mergeDocs(st, [{ doc: 'ПФ0001 от 20.08.2026', date: '2026-08-20',
+    supplier: 'Пекарня', sum: 5000, retail: 7000 }], 'нак.xlsx', st.supreg, settings);
+  check('повторная загрузка 1С не затирает вашу цифру', doc1c.sum === 5500,
+    WM.fmtMoney(doc1c.sum), '5 500 ₽');
+  check('что прислала 1С — запомнено', doc1c.from1c && doc1c.from1c.sum === 5000,
+    WM.fmtMoney(doc1c.from1c.sum), '5 000 ₽');
+  const diff = SUP.conflicts(doc1c);
+  check('расхождение видно списком', diff.length === 1 && diff[0].field === 'sum',
+    diff.length ? diff[0].field + ': ' + diff[0].was + ' → ' + diff[0].now : 'нет', 'sum');
+  check('долг считается по вашей цифре', SUP.compute(st, settings).totals.left === 23500,
+    WM.fmtMoney(SUP.compute(st, settings).totals.left), '23 500 ₽');
+
+  // 4. Кнопка «Как в 1С» снимает правку
+  SUP.unmark(doc1c, 'sum');
+  check('«Как в 1С» возвращает значение выгрузки', doc1c.sum === 5000 && SUP.conflicts(doc1c).length === 0,
+    WM.fmtMoney(doc1c.sum), '5 000 ₽');
+
+  // 5. Поля, которые владелец не трогал, 1С обновляет как обычно
+  SUP.mergeDocs(st, [{ doc: 'ПФ0001 от 20.08.2026', date: '2026-08-20',
+    supplier: 'Пекарня', sum: 5000, retail: 9000 }], 'нак.xlsx', st.supreg, settings);
+  check('нетронутые поля 1С обновляет', doc1c.retail === 9000, doc1c.retail, 9000);
+
+  // 6. Удаление данных 1С не трогает записи владельца
+  const before = st.docs.length;
+  st.docs = st.docs.filter(d => d.source !== '1c');
+  check('после удаления данных 1С ваши записи целы',
+    st.docs.length === 1 && st.docs[0].doc === 'МОЯ-1', st.docs.length + ' из ' + before, '1');
+  console.log('');
+}
+
 /* Папка программы: ошибки браузера объясняются по-человечески */
 console.log('— Папка программы: понятные ошибки');
 {

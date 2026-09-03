@@ -335,6 +335,58 @@
     } catch (e) { return null; }
   }
 
+  /* --- копии базы: список и откат на выбранную дату ------------------------
+     Копии лежат в «Данные_дашборда/копии» с именем «база-2026-09-03-14-25.json».
+     Отсюда владелец может вернуть базу такой, какой она была в тот момент.
+     ---------------------------------------------------------------------- */
+  async function listBackups() {
+    if (state !== 'ready') return [];
+    var out = [];
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BACKUP_DIR, { create: true });
+      for await (var entry of dir.values()) {
+        if (entry.kind !== 'file') continue;
+        var m = entry.name.match(/^база-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.json$/i);
+        if (!m) continue;
+        var file = await entry.getFile();
+        out.push({
+          name: entry.name,
+          date: m[1] + '-' + m[2] + '-' + m[3],
+          time: m[4] + ':' + m[5],
+          size: file.size,
+          when: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
+        });
+      }
+    } catch (e) { markByError(e); return []; }
+    // свежие сверху
+    return out.sort(function (a, b) { return b.name.localeCompare(a.name); });
+  }
+
+  // Прочитать копию: возвращает данные или null
+  async function readBackup(name) {
+    if (state !== 'ready') return null;
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BACKUP_DIR, { create: false });
+      var fh = await dir.getFileHandle(name);
+      var obj = JSON.parse(await (await fh.getFile()).text());
+      return obj.data || obj;
+    } catch (e) { markByError(e); return null; }
+  }
+
+  // Копия «прямо сейчас», перед опасным действием: сброс, откат, замена базы
+  async function backupNow(getData, tag) {
+    if (state !== 'ready') return '';
+    try {
+      var stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+      var name = 'база-' + stamp + '.json';
+      await writeFile(name, JSON.stringify({
+        saved: new Date().toISOString(), tag: tag || '', data: getData()
+      }, null, 2), BACKUP_DIR);
+      lastBackup = stamp;
+      return name;
+    } catch (e) { markByError(e); return ''; }
+  }
+
   /* --- чтение выгрузок 1С из подключённой папки --- */
   // Ищем файлы в самой папке и во вложенной «Данные_1С_и_Excel»
   async function listExports() {
@@ -365,6 +417,7 @@
     saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
     humanError: humanError, alive: alive,
+    listBackups: listBackups, readBackup: readBackup, backupNow: backupNow,
     get bookSaved() { return bookSaved; },
     BOOK_FILE: BOOK_FILE,
     get state() { return state; },

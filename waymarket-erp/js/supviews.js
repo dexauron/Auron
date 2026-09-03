@@ -17,6 +17,7 @@
 
   function refresh() { U().recompute(); }
   function FLT() { return window.WMFilter; }
+  function FS() { return window.WMFiles; }      // папка программы и копии базы
   function DET() { return window.WMDetail; }
   function dateBack(days) {
     var d = new Date(today()); d.setDate(d.getDate() - days);
@@ -169,14 +170,23 @@
         u.fieldRow('Платить', 'payDate', 'date', v.payDate || '');
     },
     hint: 'Правка живёт до следующей загрузки этого же документа из 1С.',
+    hint: 'Ваша цифра главнее выгрузки: повторная загрузка того же файла из 1С её не затрёт.',
     save: function (v) {
       var d = (S.state.docs || []).filter(function (x) { return x.doc === v.doc; })[0];
       if (!d) return 'Накладная не найдена.';
-      d.date = v.date || d.date; d.firm = v.firm || d.firm;
-      d.sum = num(v.sum); d.retail = num(v.retail);
-      if (v.payDate) { d.payDate = v.payDate; d.confirmed = true; }
+      // запоминаем, что именно владелец поправил: это и есть правда,
+      // 1С при следующей загрузке эти поля не тронет
+      var mine = [];
+      if (v.date && v.date !== d.date) { d.date = v.date; mine.push('date'); }
+      if (v.firm && v.firm !== d.firm) { d.firm = v.firm; mine.push('firm'); }
+      if (num(v.sum) !== num(d.sum)) { d.sum = num(v.sum); mine.push('sum'); }
+      if (num(v.retail) !== num(d.retail)) { d.retail = num(v.retail); mine.push('retail'); }
+      if (v.payDate) { d.payDate = v.payDate; d.confirmed = true; mine.push('payDate'); }
+      SUP.markMine(d, mine);
       S.save(); refresh();
-      return { ok: 'Накладная ' + d.doc + ' обновлена.' };
+      var diff = SUP.conflicts(d);
+      return { ok: 'Накладная ' + d.doc + ' обновлена.' +
+        (diff.length ? ' Ваша цифра теперь главнее 1С — расхождение видно на экране «Расхождения с 1С».' : '') };
     }
   };
 
@@ -198,6 +208,12 @@
     save: function (v) {
       var p = (S.state.pays || []).filter(function (x) { return x.doc === v.doc; })[0];
       if (!p) return 'Оплата не найдена.';
+      var mine = [];
+      if (v.date && v.date !== p.date) mine.push('date');
+      if (v.firm && v.firm !== p.firm) mine.push('firm');
+      if (num(v.sum) !== num(p.sum)) mine.push('sum');
+      if ((v.basis || '') !== (p.basis || '')) mine.push('basis');
+      SUP.markMine(p, mine);
       p.date = v.date || p.date; p.firm = v.firm || p.firm; p.sum = num(v.sum);
       p.basis = v.basis || ''; p.basisKey = SUP.norm(p.basis);
       p.category = v.category || ''; p.cashbox = v.cashbox || p.cashbox;
@@ -705,7 +721,8 @@
 
   // Одна запись любого журнала в понятном виде
   function recordRow(coll, r) {
-    var d = { coll: coll, id: r.id, date: r.date || r.due || r.bestBefore || '', title: '', sub: '', sum: 0, form: '', kind: '' };
+    var d = { coll: coll, id: r.id, date: r.date || r.due || r.bestBefore || '', title: '', sub: '', sum: 0,
+      form: '', kind: '', source: r.source || 'мои', mine: r.mine || null };
     if (coll === 'dds') {
       d.kind = r.type || 'Расход'; d.title = r.category || '—';
       d.sub = [r.shift, r.cashier, r.method, r.note].filter(Boolean).join(' · ');
@@ -765,6 +782,12 @@
     var allRows = allRecords(kind, q);
     var recDefs = [
       { key: 'kind', name: 'Что это', auto: function (r) { return r.kind; }, limit: 12 },
+      // чтобы данные 1С не мешали видеть свои записи
+      { key: 'src', name: 'Откуда', options: [
+        { v: 'my', name: 'Только мои', test: function (r) { return r.source !== '1c'; } },
+        { v: '1c', name: 'Только из 1С', test: function (r) { return r.source === '1c'; } },
+        { v: 'fixed', name: 'Исправленные мной', test: function (r) { return !!(r.mine && r.mine.length); } }
+      ] },
       { key: 'sum', name: 'Сумма', options: [
         { v: 'big', name: 'От 10 000', test: function (r) { return num(r.sum) >= 10000; } },
         { v: 'mid', name: '1 000 – 10 000', test: function (r) { return num(r.sum) >= 1000 && num(r.sum) < 10000; } },
@@ -802,7 +825,10 @@
       { title: 'Дата', fn: function (r) { return r.date ? DET().link('day', r.date, dateRu(r.date)) : '—'; } },
       { title: 'Что это', fn: function (r) { return u.badge(r.kind, r.kind === 'Приход' ? 'green' :
         (r.kind === 'Долг' || r.kind === 'Долг покупателя' ? 'orange' : (r.kind === 'Поставщик' ? 'gray' : 'blue'))); } },
-      { title: 'Кто или за что', fn: function (r) { return esc(r.title); } },
+      { title: 'Кто или за что', fn: function (r) {
+        return esc(r.title) +
+          (r.source === '1c' ? ' <span class="badge b-gray">1С</span>' : '') +
+          (r.mine && r.mine.length ? ' <span class="badge b-orange">исправлено</span>' : ''); } },
       { title: 'Подробности', fn: function (r) { return '<span class="c-muted">' + esc(r.sub) + '</span>'; } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
       { title: '', cls: 'center', fn: function (r) {
@@ -1164,6 +1190,139 @@
     return 'Удалено записей: ' + n + '. Вернуть можно из корзины.';
   };
 
+  /* --- Сброс и откат базы ---------------------------------------------------
+     Каждое действие сначала кладёт копию в папку, потом делает своё дело.
+     Так «очистить всё» перестаёт быть точкой невозврата.
+     -------------------------------------------------------------------- */
+  async function safetyCopy(tag) {
+    if (FS().state !== 'ready') return '';
+    return await FS().backupNow(function () { return S.state; }, tag);
+  }
+
+  A['base-list-backups'] = function () {
+    if (FS().state !== 'ready') return 'Папка не подключена — копий нет. Подключите её на экране «Данные и файлы».';
+    FS().listBackups().then(function (list) {
+      BACKUPS = list;
+      U().render();
+      U().toast(list.length ? 'Копий найдено: ' + list.length + '. Выберите, на какую откатиться.'
+        : 'Копий пока нет — они появятся после первой записи.');
+    });
+    return null;
+  };
+
+  A['base-rollback'] = function (el) {
+    var name = decodeURIComponent(el.dataset.name || '');
+    if (!name) return null;
+    var human = name.replace(/^база-(\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\.json$/i, '$3.$2.$1 в $4:$5');
+    if (!confirm('Откатить базу на ' + human + '?\n\nВсё, что записано после этого момента, ' +
+      'из базы уйдёт. Прямо сейчас будет сохранена копия сегодняшнего состояния — ' +
+      'на неё можно будет вернуться.')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед откатом на ' + human);
+      var data = await FS().readBackup(name);
+      if (!data) { U().toast('Не получилось прочитать копию ' + name); return; }
+      S.replaceAll(data);
+      refresh(); U().render();
+      U().toast('База откачена на ' + human + '.' +
+        (copy ? ' Прежнее состояние сохранено в копию ' + copy + '.' : ''), 11000);
+    })();
+    return null;
+  };
+
+  A['base-clear-coll'] = function (el) {
+    var coll = el.dataset.coll, name = decodeURIComponent(el.dataset.name || coll);
+    var n = (S.state[coll] || []).length;
+    if (!n) return 'Здесь и так пусто.';
+    if (!confirm('Очистить раздел «' + name + '»? Удалится ' + n + ' записей.\n\n' +
+      'Копия базы будет сохранена — откатиться можно на экране «Сброс и откат базы».')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед очисткой «' + name + '»');
+      S.clear(coll);
+      refresh(); U().render();
+      U().toast('Раздел «' + name + '» очищен.' + (copy ? ' Копия: ' + copy : ''), 9000);
+    })();
+    return null;
+  };
+
+  A['base-drop-1c'] = function () {
+    var count = 0;
+    ['docs', 'pays'].forEach(function (c) {
+      count += (S.state[c] || []).filter(function (r) { return r.source === '1c'; }).length;
+    });
+    if (!count) return 'Данных из 1С в базе нет.';
+    if (!confirm('Убрать из базы всё, что пришло из 1С (' + count + ' записей)?\n\n' +
+      'Ваши собственные записи останутся на месте. Выгрузки можно будет загрузить заново.\n' +
+      'Копия базы будет сохранена.')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед удалением данных 1С');
+      ['docs', 'pays'].forEach(function (c) {
+        S.state[c] = (S.state[c] || []).filter(function (r) { return r.source !== '1c'; });
+      });
+      // фирмы, которые программа завела сама под имена из 1С и по которым
+      // не осталось ни одного документа, тоже убираем — иначе справочник зарастает
+      var used = {};
+      (S.state.docs || []).concat(S.state.pays || []).forEach(function (r) {
+        if (r.firm) used[SUP.norm(r.firm)] = 1;
+      });
+      S.state.supreg = (S.state.supreg || []).filter(function (f) {
+        return f.source !== 'auto' || used[SUP.norm(f.name)];
+      });
+      S.save(); refresh(); U().render();
+      U().toast('Данные 1С убраны: ' + count + ' записей. Ваши записи на месте.' +
+        (copy ? ' Копия: ' + copy : ''), 11000);
+    })();
+    return null;
+  };
+
+  A['base-clear-all'] = function () {
+    var total = 0;
+    S.COLLECTIONS.forEach(function (c) { total += (S.state[c] || []).length; });
+    if (!confirm('Очистить всю базу? Удалится ' + total + ' записей и сбросятся настройки.\n\n' +
+      'Копия базы будет сохранена в папку — на неё можно откатиться.')) return null;
+    if (!confirm('Точно очистить? Это последнее предупреждение.')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед полной очисткой базы');
+      S.clear();
+      refresh(); U().render();
+      U().toast('База очищена.' + (copy ? ' Всё прежнее лежит в копии ' + copy +
+        ' — откатиться можно здесь же.' : ' Копия не сохранена: папка не подключена.'), 13000);
+    })();
+    return null;
+  };
+
+  A['conf-revert'] = function (el) {
+    var rec = (S.state[el.dataset.coll] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!rec) return 'Запись не найдена.';
+    var diff = SUP.conflicts(rec);
+    if (!diff.length) return 'Здесь и так всё как в 1С.';
+    if (!confirm('Вернуть значения из 1С по документу ' + SUP.shortDoc(rec.doc) + '?\n\n' +
+      diff.map(function (d) { return fieldRu(d.field) + ': ' + valRu(d.field, d.now) +
+        ' → ' + valRu(d.field, d.was); }).join('\n'))) return null;
+    diff.forEach(function (d) { SUP.unmark(rec, d.field); });
+    if (rec.basis !== undefined) rec.basisKey = SUP.norm(rec.basis);
+    S.save(); refresh();
+    return 'Значения вернулись как в 1С.';
+  };
+
+  A['conf-revert-all'] = function () {
+    var list = conflictList();
+    if (!list.length) return 'Расхождений нет.';
+    if (!confirm('Вернуть как в 1С все ' + list.length + ' исправлений?\n\n' +
+      'Ваши правки по этим документам будут сняты. Копия базы сохранится.')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед возвратом всех значений к 1С');
+      list.forEach(function (c) {
+        var rec = (S.state[c.coll] || []).filter(function (x) { return x.id === c.id; })[0];
+        if (!rec) return;
+        c.diff.forEach(function (d) { SUP.unmark(rec, d.field); });
+        if (rec.basis !== undefined) rec.basisKey = SUP.norm(rec.basis);
+      });
+      S.save(); refresh(); U().render();
+      U().toast('Все значения вернулись как в 1С.' + (copy ? ' Копия ваших правок: ' + copy : ''), 10000);
+    })();
+    return null;
+  };
+
   A['sup-book-save'] = function () { U().saveBook(); return null; };
   A['sup-book-read'] = function () { U().readBook(); return null; };
 
@@ -1249,6 +1408,213 @@
   }, true);
 
   /* --- Регистрация экранов --------------------------------------------------- */
+
+
+  /* --- Расхождения с 1С -----------------------------------------------------
+     Владелец говорит: «в 1С долг и выплата одни, а по факту другие — в 1С
+     есть ошибки». Значит, правда — это его цифра. Программа считает по ней,
+     а здесь честно показывает, где именно она разошлась с выгрузкой, и даёт
+     вернуть «как в 1С», если владелец передумал.
+     -------------------------------------------------------------------- */
+  var FIELD_RU = {
+    sum: 'Сумма', date: 'Дата', firm: 'Поставщик', supplier: 'Имя в 1С',
+    retail: 'Сумма в рознице', payDate: 'Дата выплаты', basis: 'Основание',
+    incomingNo: 'Входящий номер', incomingDate: 'Дата бумаги поставщика',
+    operation: 'Вид операции', article: 'Статья ДДС', cashbox: 'Касса'
+  };
+  function fieldRu(f) { return FIELD_RU[f] || f; }
+  function valRu(field, v) {
+    if (v === undefined || v === null || v === '') return '—';
+    if (field === 'sum' || field === 'retail') return E.fmtMoney(num(v));
+    if (/date$/i.test(field)) return dateRu(v);
+    return String(v);
+  }
+
+  // Все расхождения одним списком: и по накладным, и по оплатам
+  function conflictList() {
+    var out = [];
+    [['docs', 'Накладная', 'supDoc', 'doc'], ['pays', 'Оплата', 'supPay', 'pay']].forEach(function (t) {
+      (S.state[t[0]] || []).forEach(function (r) {
+        var diff = SUP.conflicts(r);
+        if (!diff.length) return;
+        out.push({
+          coll: t[0], kind: t[1], form: t[2], more: t[3], id: r.id,
+          doc: SUP.shortDoc(r.doc), firm: r.firm || r.supplier || '—',
+          date: r.date, diff: diff,
+          money: diff.reduce(function (a, d) {
+            return d.field === 'sum' ? a + (num(d.now) - num(d.was)) : a;
+          }, 0)
+        });
+      });
+    });
+    return out.sort(function (a, b) {
+      return Math.abs(b.money) - Math.abs(a.money) || (b.date || '').localeCompare(a.date || '');
+    });
+  }
+
+  function viewConflicts() {
+    var u = U();
+    var all = conflictList();
+    var money = all.reduce(function (a, c) { return a + c.money; }, 0);
+
+    var h = u.pageHead('Расхождения с 1С',
+      'Где ваша цифра отличается от выгрузки. Программа считает по вашей');
+
+    h += '<div class="banner blue"><span>&#9995;</span><span>Главное правило: <b>правда — то, что ввели вы</b>. ' +
+      'Повторная загрузка того же файла из 1С не затирает исправленные вами поля. ' +
+      'Здесь видно, что именно разошлось, и можно вернуть «как в 1С», если ошиблись вы, а не 1С.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Исправлено вами', u.nf(all.length),
+        all.length ? 'документов отличаются от 1С' : 'расхождений нет', all.length ? 'c-orange' : 'c-green') +
+      u.stat('Разница в деньгах', u.priv(Math.abs(money)),
+        money > 0 ? 'у вас больше, чем в 1С' : (money < 0 ? 'у вас меньше, чем в 1С' : 'по суммам сходится'),
+        money ? 'c-orange' : 'c-green') +
+      u.stat('По накладным', u.nf(all.filter(function (c) { return c.coll === 'docs'; }).length), 'приход товара') +
+      u.stat('По оплатам', u.nf(all.filter(function (c) { return c.coll === 'pays'; }).length), 'расходные ордера') +
+      '</div>';
+
+    var defs = [
+      { key: 'what', name: 'Что расходится', options: [
+        { v: 'sum', name: 'Сумма', test: function (c) { return c.diff.some(function (d) { return d.field === 'sum'; }); } },
+        { v: 'date', name: 'Дата', test: function (c) { return c.diff.some(function (d) { return /date$/i.test(d.field); }); } },
+        { v: 'firm', name: 'Поставщик', test: function (c) { return c.diff.some(function (d) { return d.field === 'firm' || d.field === 'basis'; }); } }
+      ] },
+      { key: 'kind', name: 'Где', options: [
+        { v: 'docs', name: 'Накладные', test: function (c) { return c.coll === 'docs'; } },
+        { v: 'pays', name: 'Оплаты', test: function (c) { return c.coll === 'pays'; } }
+      ] },
+      { key: 'firm', name: 'Поставщик', auto: function (c) { return c.firm; }, limit: 12 }
+    ];
+    var rows = FLT().apply('conflicts', all, defs, function (c) { return c.firm + ' ' + c.doc; });
+    if (all.length) h += FLT().bar('conflicts', defs, all, { search: 'поставщик или документ' });
+
+    h += u.card('Где ваша цифра не совпала с 1С',
+      FLT().note(rows.length, all.length) + u.table('conflT', [
+      { title: 'Дата', fn: function (c) { return esc(dateRu(c.date)) || '—'; } },
+      { title: 'Что', fn: function (c) { return u.badge(c.kind, c.coll === 'docs' ? 'blue' : 'green'); } },
+      { title: 'Документ', fn: function (c) { return DET().link(c.more, c.id, c.doc || '—'); } },
+      { title: 'Поставщик', fn: function (c) { return DET().link('firm', E.norm(c.firm), c.firm); } },
+      { title: 'Поле', fn: function (c) {
+        return c.diff.map(function (d) { return esc(fieldRu(d.field)); }).join(', '); } },
+      { title: 'Было в 1С', cls: 'num', fn: function (c) {
+        return c.diff.map(function (d) { return '<span class="c-muted">' + esc(valRu(d.field, d.was)) + '</span>'; }).join('<br>'); } },
+      { title: 'Стало у вас', cls: 'num', fn: function (c) {
+        return c.diff.map(function (d) { return '<b>' + esc(valRu(d.field, d.now)) + '</b>'; }).join('<br>'); } },
+      { title: '', cls: 'center', fn: function (c) {
+        return DET().btn(c.more, c.id, 'Подробнее') +
+          ' <button class="btn btn-sm" data-edit="' + c.coll + ':' + c.id + ':' + c.form + '">&#9998;</button>' +
+          ' <button class="btn btn-sm" data-act="conf-revert" data-coll="' + c.coll + '" data-id="' + c.id +
+          '" title="Вернуть значения из 1С">Как в 1С</button>'; } }
+    ], rows, { step: 40,
+      empty: all.length ? 'Под фильтр ничего не подошло'
+        : 'Расхождений нет: всё, что в базе, совпадает с выгрузкой 1С.' }),
+      all.length ? '<button class="btn btn-sm" data-act="conf-revert-all">Вернуть всё как в 1С</button>' : '');
+
+    h += '<div class="banner"><span>&#128161;</span><span>Как исправлять: откройте накладную или оплату кнопкой &#9998;, ' +
+      'впишите верную цифру и сохраните. Программа запомнит, что это ваше значение, и будет считать долг ' +
+      'по нему. Кнопка «Как в 1С» снимает вашу правку с документа.</span></div>';
+    return h;
+  }
+
+
+  /* --- Сброс и откат базы ---------------------------------------------------
+     Три кнопки, которых не хватало: вернуть настройки, очистить лишнее и
+     откатить базу на любой момент, когда программа делала копию.
+     Перед каждым опасным действием пишется свежая копия — вернуться можно
+     всегда, даже если передумали через минуту.
+     -------------------------------------------------------------------- */
+  var BACKUPS = null;          // список копий, подгружается по кнопке
+
+  // Что и сколько лежит в базе — чтобы владелец видел, что именно чистит
+  function baseCounts() {
+    var map = [
+      ['dds', 'Касса и расходы'], ['docs', 'Накладные'], ['pays', 'Оплаты'],
+      ['supreg', 'Поставщики'], ['plans', 'План выплат'], ['payouts', 'Зарплата'],
+      ['timesheet', 'Табель'], ['debtors', 'Долги покупателей'],
+      ['inventory', 'Списания'], ['expiry', 'Сроки годности'], ['trash', 'Корзина']
+    ];
+    return map.map(function (m) {
+      var rows = S.state[m[0]] || [];
+      var own = rows.filter(function (r) { return r.source !== '1c'; }).length;
+      return { coll: m[0], name: m[1], all: rows.length, own: own, from1c: rows.length - own };
+    });
+  }
+
+  function viewReset() {
+    var u = U();
+    var counts = baseCounts();
+    var total = counts.reduce(function (a, c) { return a + c.all; }, 0);
+    var from1c = counts.reduce(function (a, c) { return a + c.from1c; }, 0);
+
+    var h = u.pageHead('Сброс и откат базы',
+      'Вернуть настройки, убрать лишнее или откатить базу на нужный день');
+
+    h += '<div class="banner blue"><span>🛟</span><span>Перед каждым действием на этой странице ' +
+      'программа сама сохраняет копию базы. Если передумаете — откатитесь на неё ' +
+      'в разделе «Откатить базу на дату» ниже.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Всего записей в базе', u.nf(total), 'вместе с корзиной') +
+      u.stat('Ваших записей', u.nf(total - from1c), 'введены руками') +
+      u.stat('Пришло из 1С', u.nf(from1c), 'накладные, оплаты, справочник') +
+      u.stat('Копий в папке', BACKUPS === null ? '—' : u.nf(BACKUPS.length),
+        BACKUPS === null ? 'нажмите «Показать копии»' : 'можно откатиться на любую') +
+      '</div>';
+
+    h += u.card('Что в базе сейчас', u.table('baseCnt', [
+      { title: 'Раздел', fn: function (r) { return esc(r.name); } },
+      { title: 'Всего', cls: 'num', fn: function (r) { return u.nf(r.all); } },
+      { title: 'Ваших', cls: 'num', fn: function (r) { return u.nf(r.own); } },
+      { title: 'Из 1С', cls: 'num', fn: function (r) { return r.from1c ? u.nf(r.from1c) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.all ? '<button class="btn btn-sm btn-danger" data-act="base-clear-coll" data-coll="' +
+          r.coll + '" data-name="' + encodeURIComponent(r.name) + '">Очистить</button>' : ''; } }
+    ], counts, { step: 20 }));
+
+    h += u.card('Сброс', u.listOf([
+      u.listRow({ icon: '⚙️', title: 'Вернуть настройки к стандартным',
+        sub: 'Налоги, смены, отсрочки, справочники, внешний вид. Записи не тронутся',
+        value: '<button class="btn btn-sm" data-act="settings-reset">Сбросить настройки</button>' }),
+      u.listRow({ icon: '📥', title: 'Убрать всё, что пришло из 1С',
+        sub: u.nf(from1c) + ' ' + u.plural(from1c, 'запись', 'записи', 'записей') +
+          ' — накладные, оплаты и автосозданные фирмы. Ваши записи останутся',
+        value: '<button class="btn btn-sm btn-danger" data-act="base-drop-1c">Убрать данные 1С</button>' }),
+      u.listRow({ icon: '🗑', title: 'Очистить корзину',
+        sub: u.nf((S.state.trash || []).length) + ' удалённых записей ждут возврата',
+        value: '<button class="btn btn-sm" data-act="rec-empty-trash">Очистить корзину</button>' }),
+      u.listRow({ icon: '💣', title: 'Очистить всю базу',
+        sub: 'Удалит все записи и вернёт настройки. Останется только копия в папке',
+        value: '<button class="btn btn-sm btn-danger" data-act="base-clear-all">Очистить всё</button>' })
+    ], ''));
+
+    h += u.card('Откатить базу на дату',
+      (BACKUPS === null
+        ? '<div class="card-pad"><button class="btn btn-primary" data-act="base-list-backups">Показать копии</button>' +
+          '<div class="card-note" style="margin-top:8px">Копии лежат в папке ' +
+          esc(FS().DATA_DIR) + '/копии и создаются при каждой записи, но не чаще раза в минуту.</div></div>'
+        : (BACKUPS.length
+          ? u.table('backupsT', [
+            { title: 'Когда', fn: function (r) { return esc(dateRu(r.date)) + ' · ' + esc(r.time); } },
+            { title: 'День недели', fn: function (r) {
+              return esc(r.when.toLocaleDateString('ru-RU', { weekday: 'long' })); } },
+            { title: 'Размер', cls: 'num', fn: function (r) { return u.nf(Math.round(r.size / 1024)) + ' КБ'; } },
+            { title: 'Файл', fn: function (r) { return '<span class="c-muted">' + esc(r.name) + '</span>'; } },
+            { title: '', cls: 'center', fn: function (r) {
+              return '<button class="btn btn-sm btn-primary" data-act="base-rollback" data-name="' +
+                encodeURIComponent(r.name) + '">Откатить сюда</button>'; } }
+          ], BACKUPS, { step: 30 })
+          : '<div class="empty">Копий пока нет. Они появятся, как только вы что-нибудь запишете ' +
+            'при подключённой папке.</div>')),
+      BACKUPS !== null ? '<button class="btn btn-sm" data-act="base-list-backups">Обновить список</button>' : '');
+
+    if (FS().state !== 'ready') {
+      h += '<div class="banner"><span>⚠️</span><span>Папка не подключена, поэтому копии не пишутся ' +
+        'и откатиться некуда. Подключите папку на экране «Данные и файлы» — и программа начнёт ' +
+        'хранить историю базы сама.</span><button class="btn" data-go="data">Данные и файлы</button></div>';
+    }
+    return h;
+  }
 
   /* --- Сверка с поставщиком -------------------------------------------------
      Тот самый акт сверки, который привозит представитель: долг на начало,
@@ -1362,6 +1728,8 @@
     { id: 'manual', icon: '✍️', name: 'Записать', group: 'Ручной ввод', render: viewManual, after: 'reconcile' },
     { id: 'records', icon: '🗂', name: 'Все записи', group: 'Ручной ввод', render: viewRecords, after: 'manual' },
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
-    { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }
+    { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' },
+    { id: 'conflicts', icon: '⚖️', name: 'Расхождения с 1С', group: 'Данные из 1С', render: viewConflicts, after: 'reconcile' },
+    { id: 'reset', icon: '♻️', name: 'Сброс и откат базы', group: 'Ручной ввод', render: viewReset, after: 'sheets' }
   );
 })();

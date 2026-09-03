@@ -17,7 +17,7 @@ const CORPUS = process.argv[2] || path.join(HERE, '..', 'Данные_1С_и_Exc
 const SCREENS = ['today', 'suppliers', 'cash', 'dds', 'staff', 'stock', 'orders', 'expiry',
   'losses', 'dead', 'pnl', 'bep', 'abc', 'pricecmp', 'incexp', 'search', 'data', 'settings',
   'pulse', 'findash', 'finbase', 'finpay', 'finreport', 'finday', 'import', 'match', 'recon',
-  'confirm', 'terms', 'reconcile', 'manual', 'records', 'debtors', 'sheets'];
+  'confirm', 'terms', 'reconcile', 'conflicts', 'manual', 'records', 'debtors', 'sheets', 'reset'];
 
 // строка, которая пытается выполниться, если её вставят в страницу как разметку
 const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';

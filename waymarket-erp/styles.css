@@ -309,3 +309,5 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
 @media (max-width: 700px) {
   .filter-name { flex-basis: 100%; padding-top: 0; }
 }
+
+.detail .det-source { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }

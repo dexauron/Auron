@@ -378,11 +378,17 @@
   }
 
   // Итоговый долг поставщикам: из 1С, если выгрузки есть; иначе из ручного учёта
+  // Долг всегда один — по общей базе документов. Ваши записи и выгрузки 1С
+  // лежат в ней вместе, поэтому двух разных цифр больше не бывает.
   function debtNow() {
     var man = E.manualTotals(S.state.invoices || [], S.state.payments || []);
     if (C.sup && C.sup.totals.docs) {
-      return { value: C.sup.totals.left, source: 'по накладным 1С',
-        manual: man.debt, hasBoth: man.debt !== 0 };
+      var own = C.sup.docs.filter(function (d) { return d.source !== '1c'; }).length;
+      var from1c = C.sup.totals.docs - own;
+      var src = own && from1c ? 'по вашим записям и накладным 1С'
+        : (own ? 'по вашим записям' : 'по накладным 1С');
+      return { value: C.sup.totals.left, source: src, own: own, from1c: from1c,
+        over: C.sup.totals.over, manual: 0, hasBoth: false };
     }
     if (D.owner && C.ownerAll && C.ownerAll.debt) {
       return { value: C.ownerAll.debt, source: 'по вашей книге ДДС на ' + dateRu(C.ownerAll.debtDate),
@@ -672,12 +678,22 @@
           fieldRow('Отдали сразу наличными', 'paidCash', 'number', v.paidCash || 0) +
           fieldRow('Оплатить до', 'due', 'date', v.due || '');
       },
-      hint: 'Остаток в долг = сумма накладной − отдали сразу.',
+      hint: 'Остаток в долг = сумма накладной − отдали сразу. Ваша запись ложится в ту же базу, ' +
+        'что и накладные из 1С, — долг считается одной суммой.',
       save: function (v) {
         if (!v.total) return 'Укажите сумму накладной.';
         if (!v.supplier) return 'Укажите поставщика.';
         learn({ suppliers: v.supplier });
-        S.add('invoices', v);
+        var rec = SUP.addOwnDoc(S.state, {
+          doc: v.doc, date: v.date, supplier: v.supplier, sum: num(v.total),
+          payDate: v.due, note: v.goods
+        }, S.settings);
+        // «отдали сразу» — это оплата по этой же накладной, а не отдельная жизнь
+        if (num(v.paidCash) > 0) {
+          SUP.addOwnPay(S.state, { date: v.date, supplier: v.supplier,
+            sum: num(v.paidCash), basis: rec.doc, note: 'отдали сразу при приёмке' }, S.settings);
+        }
+        S.save(); recompute();
         var left = Math.max(0, num(v.total) - num(v.paidCash));
         return { ok: 'Записано. Остаётся долг ' + money(left) + ' перед «' + v.supplier + '»' };
       }
@@ -696,15 +712,21 @@
           fieldRow('По накладной №', 'doc', 'text', v.doc || '', { placeholder: 'если известна' }) +
           fieldRow('Заметка', 'note', 'text', v.note || '');
       },
-      hint: 'Оплата уменьшает долг перед поставщиком.',
+      hint: 'Оплата уменьшает долг перед поставщиком. Запись попадает в ту же базу, ' +
+        'что и расходные ордера из 1С.',
       save: function (v) {
         if (!v.supplier) return 'Укажите поставщика.';
         if (!v.amount) return 'Укажите сумму.';
         learn({ suppliers: v.supplier });
-        S.add('payments', v);
-        var bal = E.manualBalance(S.state.invoices || [], S.state.payments || [])
-          .filter(function (b) { return E.norm(b.supplier) === E.norm(v.supplier); })[0];
-        return { ok: 'Оплата записана. Долг перед «' + v.supplier + '»: ' + money(bal ? bal.debt : 0) };
+        SUP.addOwnPay(S.state, {
+          date: v.date, supplier: v.supplier, sum: num(v.amount),
+          basis: v.doc, cashbox: v.form, note: v.note,
+          operation: v.kind
+        }, S.settings);
+        S.save(); recompute();
+        var c = SUP.compute(S.state, S.settings);
+        var f = c.firms.filter(function (b) { return E.norm(b.firm) === E.norm(v.supplier); })[0];
+        return { ok: 'Оплата записана. Долг перед «' + v.supplier + '»: ' + money(f ? f.left : 0) };
       }
     },
     expense: {
@@ -1165,7 +1187,8 @@
   /* --- Экран «Поставщики» ------------------------------------------------------- */
   function viewSuppliers() {
     var man = manual();
-    var tab = TAB.suppliers || (C.sup && C.sup.totals.docs ? '1c' : 'my');
+    // одна база вместо двух вкладок: «мои» и «из 1С» — теперь обычный фильтр
+    var tab = C.sup && C.sup.totals.docs ? '1c' : 'my';
     var debt = debtNow();
     var docs = dueDocs();
     var t = today();
@@ -1189,22 +1212,27 @@
       '<button class="btn btn-primary" data-form="invoice">📥 Записать приход</button>' +
       '<button class="btn" data-form="payment">💸 Записать оплату</button></div>';
 
-    if (C.sup && C.sup.totals.docs) {
-      h += '<div class="segmented"><button class="' + (tab === 'my' ? 'active' : '') + '" data-tab="suppliers:my">Мои записи</button>' +
-        '<button class="' + (tab === '1c' ? 'active' : '') + '" data-tab="suppliers:1c">Из 1С</button></div>';
-    }
-
     if (tab === '1c' && C.sup && C.sup.totals.docs) {
       var sp = C.sup, tt = sp.totals;
+      var ownDocs = sp.docs.filter(function (d) { return d.source !== '1c'; }).length;
       h += '<div class="stat-grid">' +
-        stat('Поставки в базе', priv(tt.sum), nf(tt.docs) + ' ' + plural(tt.docs, 'накладная', 'накладные', 'накладных')) +
-        stat('Оплачено по ним', priv(tt.paid), 'расходные ордера 1С') +
-        stat('Долг сейчас', priv(tt.left), 'по всем накладным', tt.left > 0 ? 'c-red' : 'c-green') +
+        stat('Поставки в базе', priv(tt.sum), nf(tt.docs) + ' ' + plural(tt.docs, 'накладная', 'накладные', 'накладных') +
+          (ownDocs ? ' · ваших ' + nf(ownDocs) : '')) +
+        stat('Оплачено по ним', priv(tt.paid), 'ваши записи и ордера 1С вместе') +
+        stat('Долг сейчас', priv(tt.left), 'одна сумма по всей базе', tt.left > 0 ? 'c-red' : 'c-green') +
         stat('Погашено старых долгов', priv(sp.linkStat.oldSum), 'по накладным вне выгрузок', 'c-green') +
         // переплата не гасит долг по другим накладным — показываем её отдельно,
         // иначе лишние деньги молча «съедали» бы чужой долг
         (tt.over > 0 ? stat('Переплата', priv(tt.over), 'заплатили больше, чем в накладной', 'c-orange') : '') +
         '</div>';
+
+      var fixed = sp.docs.filter(function (d) { return d.mine && d.mine.length; }).length;
+      if (fixed) {
+        h += '<div class="banner blue"><span>✋</span><span>' + nf(fixed) + ' ' +
+          plural(fixed, 'накладная исправлена', 'накладные исправлены', 'накладных исправлено') +
+          ' вами вручную — долг считается по вашим цифрам, а не по 1С.</span>' +
+          '<button class="btn" data-go="conflicts">Показать расхождения</button></div>';
+      }
 
       if (sp.confirm.length) {
         h += '<div class="banner"><span>✅</span><span>' + sp.confirm.length + ' ' +
@@ -1225,6 +1253,12 @@
           { v: 'plus', name: 'С переплатой', test: function (r) { return r.over > 0; } }
         ] },
         { key: 'firm', name: 'Поставщик', auto: function (r) { return r.firm; }, limit: 14 },
+        // «Данные 1С мешают видеть чистую картину» — вот кнопки, чтобы их убрать
+        { key: 'src', name: 'Откуда запись', options: [
+          { v: 'my', name: 'Только мои', test: function (r) { return r.source !== '1c'; } },
+          { v: '1c', name: 'Только из 1С', test: function (r) { return r.source === '1c'; } },
+          { v: 'fixed', name: 'Исправленные мной', test: function (r) { return !!(r.mine && r.mine.length); } }
+        ] },
         whenDefs('date', 'Когда привезли')
       ];
       var docsF = FLT.apply('sup1c', sp.docs, docDefs, function (r) {
@@ -1265,7 +1299,10 @@
         table('inv1c', [
         { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
         { title: 'Поставщик', fn: function (r) { return DET.link('firm', E.norm(r.firm), r.firm); } },
-        { title: 'Документ', fn: function (r) { return DET.link('doc', r.id, r.doc); } },
+        { title: 'Документ', fn: function (r) {
+          return DET.link('doc', r.id, r.doc) +
+            (r.source !== '1c' ? ' ' + badge('моя', 'green') : '') +
+            (r.mine && r.mine.length ? ' ' + badge('исправлена', 'orange') : ''); } },
         { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } },
         { title: 'Оплачено', cls: 'num', fn: function (r) { return priv(r.paid); } },
         { title: 'Долг', cls: 'num', fn: function (r) { return '<span class="' + (r.left > 0 ? 'c-red' : 'c-green') + ' private">' + money(r.left) + '</span>'; } },
@@ -2868,6 +2905,34 @@
     return moved;
   }
 
+  // Прежние ручные накладные и оплаты жили отдельно от документов 1С — из-за
+  // этого долг показывался двумя разными числами. Переносим их в общую базу:
+  // одна база — один долг. Поля помечаются как ваши, 1С их не перезапишет.
+  function migrateSupply() {
+    if (S.state.migratedSupply) return 0;
+    var moved = 0;
+    (S.state.invoices || []).forEach(function (r) {
+      var rec = SUP.addOwnDoc(S.state, {
+        doc: r.doc, date: r.date, supplier: r.supplier, sum: num(r.total),
+        payDate: r.due, note: r.goods
+      }, S.settings);
+      moved++;
+      if (num(r.paidCash) > 0) {
+        SUP.addOwnPay(S.state, { date: r.date, supplier: r.supplier, sum: num(r.paidCash),
+          basis: rec.doc, note: 'отдали сразу при приёмке' }, S.settings);
+        moved++;
+      }
+    });
+    (S.state.payments || []).forEach(function (r) {
+      SUP.addOwnPay(S.state, { date: r.date, supplier: r.supplier, sum: num(r.amount),
+        basis: r.doc, cashbox: r.form, operation: r.kind, note: r.note }, S.settings);
+      moved++;
+    });
+    S.state.migratedSupply = true;
+    S.save();
+    return moved;
+  }
+
   /* --- Запуск -------------------------------------------------------------------------- */
   async function init() {
     if (typeof XLSX === 'undefined' || typeof S === 'undefined') {
@@ -2898,7 +2963,10 @@
     if (pd) PERIOD = pd;
 
     var moved = migrateToLedger();
+    var movedSup = migrateSupply();
     recompute(); bind(); render();
+    if (movedSup) toast('Ваши накладные и оплаты перенесены в общую базу: ' + movedSup +
+      '. Теперь долг поставщикам считается одной суммой — и по вашим записям, и по 1С.', 9000);
     if (moved) toast('Прежние записи о кассе и расходах перенесены в базу операций: ' + moved + '.', 7000);
 
     // сохранение в файл: подписываемся на любые изменения журналов
