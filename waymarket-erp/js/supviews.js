@@ -1249,6 +1249,107 @@
   }, true);
 
   /* --- Регистрация экранов --------------------------------------------------- */
+
+  /* --- Сверка с поставщиком -------------------------------------------------
+     Тот самый акт сверки, который привозит представитель: долг на начало,
+     что привезли, что оплатили, долг на конец. Считается по нашим данным —
+     остаётся сравнить строку в строку и найти, где расхождение.
+     -------------------------------------------------------------------- */
+  function reconcileData(firmKey, from, to) {
+    var c = sup();
+    var docs = c.docs.filter(function (d) { return E.norm(d.firm) === firmKey; });
+    var pays = (S.state.pays || []).filter(function (p) { return E.norm(p.firm) === firmKey; });
+    function before(list, field) {
+      return SUP.round(list.filter(function (r) { return r.date && r.date < from; })
+        .reduce(function (a, r) { return a + num(r[field]); }, 0));
+    }
+    function inside(list) {
+      return list.filter(function (r) { return r.date && r.date >= from && r.date <= to; });
+    }
+    var startDocs = before(docs, 'sum'), startPays = before(pays, 'sum');
+    var perDocs = inside(docs), perPays = inside(pays);
+    var comeSum = SUP.round(perDocs.reduce(function (a, d) { return a + num(d.sum); }, 0));
+    var paidSum = SUP.round(perPays.reduce(function (a, p) { return a + num(p.sum); }, 0));
+    // одна лента движений: приход увеличивает долг, оплата уменьшает
+    var moves = perDocs.map(function (d) {
+      return { date: d.date, kind: 'Приход товара', doc: d.doc, id: d.id, more: 'doc',
+        debit: num(d.sum), credit: 0 };
+    }).concat(perPays.map(function (p) {
+      return { date: p.date, kind: 'Оплата', doc: SUP.shortDoc(p.doc), id: p.id, more: 'pay',
+        debit: 0, credit: num(p.sum) };
+    })).sort(function (a, b) { return (a.date || '').localeCompare(b.date || '') || a.kind.localeCompare(b.kind); });
+    var run = SUP.round(startDocs - startPays);
+    moves.forEach(function (m) { run = SUP.round(run + m.debit - m.credit); m.balance = run; });
+    return {
+      firm: (docs[0] || pays[0] || {}).firm || '',
+      start: SUP.round(startDocs - startPays), come: comeSum, paid: paidSum,
+      end: SUP.round(startDocs - startPays + comeSum - paidSum),
+      moves: moves, docs: perDocs.length, pays: perPays.length,
+      allDocs: docs.length, allPays: pays.length
+    };
+  }
+
+  function viewReconcile() {
+    var u = U(), c = sup();
+    var range = u.periodRange();
+    var firms = c.firms.slice().sort(function (a, b) { return b.sum - a.sum; });
+    // имя фирмы приезжает из кнопки закодированным — раскодируем обратно
+    var pick = decodeURIComponent(u.tab('reconcile', firms.length ? encodeURIComponent(E.norm(firms[0].firm)) : ''));
+
+    var h = u.pageHead('Сверка с поставщиком',
+      'Долг на начало · что привезли · что оплатили · долг на конец — как в акте сверки',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (!firms.length) {
+      return h + '<div class="card"><div class="empty"><b>Нет накладных из 1С</b><br>' +
+        'Загрузите «Приходные накладные» и «Расходные кассовые ордера» на экране «Импорт из 1С».</div></div>';
+    }
+
+    // выбор фирмы теми же кнопками, что и обычные фильтры
+    h += '<div class="filters"><div class="filter-head"><span>Выберите поставщика</span></div>' +
+      '<div class="filter-line"><span class="filter-name">Поставщик</span><div class="chips">' +
+      firms.slice(0, 40).map(function (f) {
+        return '<button class="chip' + (E.norm(f.firm) === pick ? ' active' : '') +
+          '" data-tab="reconcile:' + encodeURIComponent(E.norm(f.firm)) + '">' + esc(f.firm) + '</button>';
+      }).join('') + '</div></div></div>';
+
+    var r = reconcileData(pick, range.from, range.to);
+
+    h += '<div class="banner blue"><span>📅</span><span>Период: <b>' + esc(dateRu(range.from)) +
+      ' — ' + esc(dateRu(range.to)) + '</b> (меняется переключателем периода наверху). ' +
+      'Всего по этой фирме в базе: ' + r.allDocs + ' ' + u.plural(r.allDocs, 'накладная', 'накладные', 'накладных') +
+      ' и ' + r.allPays + ' ' + u.plural(r.allPays, 'оплата', 'оплаты', 'оплат') + '.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Долг на начало', u.priv(r.start), 'что было должны до ' + dateRu(range.from),
+        r.start > 0 ? 'c-orange' : 'c-green') +
+      u.stat('Привезли за период', u.priv(r.come), r.docs + ' ' + u.plural(r.docs, 'накладная', 'накладные', 'накладных')) +
+      u.stat('Оплатили за период', u.priv(r.paid), r.pays + ' ' + u.plural(r.pays, 'оплата', 'оплаты', 'оплат'), 'c-green') +
+      u.stat('Долг на конец', u.priv(r.end), 'начало + приход − оплата', r.end > 0 ? 'c-red' : 'c-green') +
+      '</div>';
+
+    h += u.card('Движения по счёту — ' + esc(r.firm || '—'), u.table('recAct', [
+      { title: 'Дата', fn: function (m) { return DET().link('day', m.date, dateRu(m.date)); } },
+      { title: 'Операция', fn: function (m) { return u.badge(m.kind, m.kind === 'Оплата' ? 'green' : 'orange'); } },
+      { title: 'Документ', fn: function (m) { return DET().link(m.more, m.id, m.doc || '—'); } },
+      { title: 'Долг вырос', cls: 'num', fn: function (m) { return m.debit ? u.priv(m.debit) : '—'; } },
+      { title: 'Долг погашен', cls: 'num', fn: function (m) { return m.credit ? u.priv(m.credit) : '—'; } },
+      { title: 'Остаток долга', cls: 'num', fn: function (m) {
+        return '<span class="' + (m.balance > 0 ? 'c-red' : 'c-green') + ' private">' +
+          E.fmtMoney(m.balance) + '</span>'; } },
+      { title: '', cls: 'center', fn: function (m) { return DET().btn(m.more, m.id, 'Подробнее'); } }
+    ], r.moves, { step: 50, empty: 'За этот период движений не было — смените период наверху',
+      total: [{ html: 'Итого за период', span: 3 },
+        { html: E.fmtMoney(r.come), cls: 'num' }, { html: E.fmtMoney(r.paid), cls: 'num' },
+        { html: '<b>' + E.fmtMoney(r.end) + '</b>', cls: 'num' }, { html: '' }] }),
+      DET().btn('firm', pick, 'Всё о поставщике'));
+
+    h += '<div class="banner"><span>💡</span><span>Если ваша цифра не сходится с бумагой поставщика — ' +
+      'ищите строку, которой нет у вас (не загружена накладная) или лишнюю оплату. ' +
+      'Нажмите «Подробнее» на строке, чтобы увидеть весь документ.</span></div>';
+    return h;
+  }
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     // встаём после последнего отчёта, чтобы раздел «Отчёты» не разрывался
@@ -1257,7 +1358,8 @@
     { id: 'recon', icon: '🧷', name: 'Разбор оплат', group: 'Данные из 1С', render: viewRecon, after: 'match' },
     { id: 'confirm', icon: '✅', name: 'Подтверждение выплат', group: 'Данные из 1С', render: viewConfirm, after: 'recon' },
     { id: 'terms', icon: '⏱', name: 'Отсрочки поставщиков', group: 'Данные из 1С', render: viewTerms, after: 'confirm' },
-    { id: 'manual', icon: '✍️', name: 'Записать', group: 'Ручной ввод', render: viewManual, after: 'terms' },
+    { id: 'reconcile', icon: '⚖️', name: 'Сверка с поставщиком', group: 'Данные из 1С', render: viewReconcile, after: 'terms' },
+    { id: 'manual', icon: '✍️', name: 'Записать', group: 'Ручной ввод', render: viewManual, after: 'reconcile' },
     { id: 'records', icon: '🗂', name: 'Все записи', group: 'Ручной ввод', render: viewRecords, after: 'manual' },
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }

@@ -25,7 +25,13 @@
   function D() { return u().data ? u().data() : {}; }
   function C() { return u().calc ? u().calc() : {}; }
 
-  function esc(s) { return u().esc ? u().esc(s) : String(s == null ? '' : s); }
+  // экранирование своё, а не из интерфейса: кнопка должна быть безопасной
+  // даже когда модуль вызывают отдельно (например, в проверках)
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
   function money(v) { return u().money ? u().money(v) : String(v); }
   function priv(v) { return u().priv ? u().priv(v) : money(v); }
   function nf(v) { return u().nf ? u().nf(v) : String(v); }

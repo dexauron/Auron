@@ -13,6 +13,8 @@ const BOOK = require(path.join(__dirname, '..', 'js', 'book.js'));
 const Q = require(path.join(__dirname, '..', 'js', 'quick.js'));
 const SET = require(path.join(__dirname, '..', 'js', 'settings.js'));
 const STORE = require(path.join(__dirname, '..', 'js', 'store.js'));
+const FLT = require(path.join(__dirname, '..', 'js', 'filters.js'));
+const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -869,6 +871,81 @@ console.log('— Математика: сходимость расчётов');
       FIN.taxAmount({ taxMode: 'УСН 15% (доходы минус расходы)', taxRate: 15 }, 100, 900).sum === 0, '0 ₽', '0 ₽');
     check('копейки не расползаются', WM.safeRound(0.1 + 0.2) === 0.3, WM.safeRound(0.1 + 0.2), 0.3);
   }
+  console.log('');
+}
+
+/* Фильтры: одни и те же кнопки на всех экранах */
+console.log('— Фильтры на экранах');
+{
+  const rows = [
+    { firm: 'Молоко Юг', left: 5000, sum: 10000, date: '2026-09-01' },
+    { firm: 'Молоко Юг', left: 0, sum: 4000, date: '2026-08-01' },
+    { firm: 'Пекарня', left: 300, sum: 300, date: '2026-09-02' }
+  ];
+  const defs = [
+    { key: 'st', name: 'Состояние', options: [
+      { v: 'debt', name: 'В долг', test: r => r.left > 0 },
+      { v: 'paid', name: 'Оплачено', test: r => r.left <= 0 }
+    ] },
+    { key: 'firm', name: 'Поставщик', auto: r => r.firm }
+  ];
+  FLT.clearAll();
+  check('без фильтров показаны все строки', FLT.apply('t', rows, defs).length === 3, 3, 3);
+  FLT.set('t', 'st', 'debt');
+  check('кнопка отбирает строки', FLT.apply('t', rows, defs).length === 2, 2, 2);
+  FLT.set('t', 'firm', 'Пекарня');
+  check('две кнопки работают вместе', FLT.apply('t', rows, defs).length === 1, 1, 1);
+  FLT.set('t', 'firm', 'Пекарня');
+  check('повторное нажатие снимает фильтр', FLT.apply('t', rows, defs).length === 2, 2, 2);
+  FLT.setText('t', 'молоко');
+  check('поиск внутри фильтра сужает список',
+    FLT.apply('t', rows, defs, r => r.firm).length === 1, 1, 1);
+  check('счётчик выбранных фильтров', FLT.active('t') === 2, FLT.active('t'), 2);
+  FLT.clear('t');
+  check('сброс возвращает все строки', FLT.apply('t', rows, defs).length === 3 && FLT.active('t') === 0, 3, 3);
+
+  // кнопки строятся по данным и показывают, сколько строк под них попадает
+  const opts = FLT.optionsOf(defs[0], rows);
+  check('на кнопке видно число строк', opts[0].count === 2 && opts[1].count === 1,
+    opts[0].count + ' и ' + opts[1].count, '2 и 1');
+  const auto = FLT.optionsOf(defs[1], rows);
+  check('кнопки собираются сами из данных, частые — первыми',
+    auto[0].v === 'Молоко Юг' && auto.length === 2, auto.map(o => o.v).join(', '), 'Молоко Юг, Пекарня');
+  check('исчезнувшая кнопка не режет список',
+    (FLT.set('t', 'st', 'нет-такой'), FLT.apply('t', rows, defs).length) === 3, 3, 3);
+  FLT.clearAll();
+
+  const bar = FLT.bar('t', defs, rows);
+  check('панель фильтров рисуется', bar.indexOf('data-filter="t|st|debt"') > 0, 'есть кнопки', 'есть кнопки');
+  check('в кнопки не пролезает разметка',
+    FLT.bar('x', [{ key: 'a', name: 'A', auto: r => r.firm }],
+      [{ firm: '<img src=x onerror=alert(1)>' }]).indexOf('<img') < 0, 'экранировано', 'экранировано');
+  check('строка «показано N из M»', FLT.note(2, 3).indexOf('Показано 2 из 3') > 0, 'есть', 'есть');
+  check('когда фильтров нет — строки нет', FLT.note(3, 3) === '', 'пусто', 'пусто');
+  console.log('');
+}
+
+/* Окно «Подробнее»: открывается для любого вида и не падает на пустых данных */
+console.log('— Окно «Подробнее»');
+{
+  const kinds = Object.keys(DET.kinds);
+  check('видов подробностей', kinds.length >= 15, kinds.length + ' видов', '>=15');
+  let broken = [];
+  kinds.forEach(k => {
+    const d = DET.build(k, 'чего-то-нет');
+    if (!d || !d.title || typeof d.html !== 'string') broken.push(k);
+    if (d && d.html.indexOf('Не получилось собрать') >= 0) broken.push(k + ' (ошибка)');
+  });
+  check('каждый вид открывается на пустой базе', broken.length === 0,
+    broken.length ? broken.join(', ') : 'все ' + kinds.length, 'все');
+  check('незнакомый вид не ломает программу',
+    DET.build('такого-нет', '1').html.indexOf('пока нет') > 0, 'подсказка', 'подсказка');
+  check('кнопка «Подробнее» ставится одной строкой',
+    DET.btn('firm', 'молоко').indexOf('data-more="firm|молоко"') > 0, 'есть', 'есть');
+  check('в кнопку не пролезает разметка',
+    DET.btn('firm', '"><script>alert(1)</script>').indexOf('<script') < 0, 'экранировано', 'экранировано');
+  check('ссылка-название открывает то же окно',
+    DET.link('product', 'хлеб', 'Хлеб').indexOf('data-more="product|хлеб"') > 0, 'есть', 'есть');
   console.log('');
 }
 
