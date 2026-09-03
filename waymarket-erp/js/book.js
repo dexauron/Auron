@@ -7,11 +7,11 @@
    ========================================================================== */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./supply.js'), require('./finance.js'));
+    module.exports = factory(require('./supply.js'), require('./finance.js'), require('./settings.js'));
   } else {
-    root.WMBook = factory(root.WMSupply, root.WMFin);
+    root.WMBook = factory(root.WMSupply, root.WMFin, root.WMSettings);
   }
-})(typeof self !== 'undefined' ? self : this, function (SUP, FIN) {
+})(typeof self !== 'undefined' ? self : this, function (SUP, FIN, CAT) {
   'use strict';
 
   var FILE = 'Бухгалтерия.xlsx';
@@ -101,8 +101,8 @@
         ['Цена', 'price', 'num'], ['Годен_до', 'bestBefore', 'date']] },
 
     { name: 'Настройки', settings: true, edit: true,
-      about: 'Отсрочка по умолчанию, ставки, постоянные расходы, справочники.',
-      cols: [['Параметр', 'key'], ['Значение', 'value']] },
+      about: 'Все правила магазина: налоги, смены, отсрочки, цели, справочники.',
+      cols: [['Параметр', 'key'], ['Значение', 'value'], ['Что это', 'label']] },
 
     { name: 'Отчёт_по_месяцам', calc: 'months',
       about: 'Считается сам: выручка, расходы, прибыль, приход товара и долг по месяцам.',
@@ -220,7 +220,9 @@
         });
       } else if (sh.settings) {
         var s = settings || {};
-        rows = Object.keys(s).map(function (k) { return [k, s[k]]; });
+        rows = Object.keys(s).map(function (k) {
+          return [k, s[k], CAT ? CAT.label(k) : ''];
+        });
       } else if (sh.calc === 'months') rows = months(state);
       else if (sh.calc === 'kudir') rows = kudir(state);
       else if (sh.calc === 'debt') rows = debtSheet(state, settings);

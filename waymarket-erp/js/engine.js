@@ -1428,11 +1428,20 @@
   }
 
   // Точка перезаказа: ROP = среднесуточный спрос × плечо + страховой запас
+  // Розничная цена по наценке владельца, округлённая по его же правилу
+  function priceFor(buy, markupPct, step) {
+    var raw = num(buy) * (1 + num(markupPct) / 100);
+    var st = num(step) || 1;
+    if (!raw) return 0;
+    return safeRound(Math.ceil(raw / st) * st);
+  }
+
   function ropList(sales, stock, days, settings, bestPrices) {
     var stockIdx = {}, i;
     for (i = 0; i < stock.length; i++) stockIdx[stock[i].key] = stock[i];
     var lead = num(settings.leadDays) || 2;
     var safetyPct = num(settings.safetyPct) || 30;
+    var cover = num(settings.coverDays) || 0;      // на сколько дней держим запас
     var d = num(days) || 30;
     var out = [];
     for (i = 0; i < sales.length; i++) {
@@ -1444,7 +1453,8 @@
       var rop = safeRound(demand * lead + safety);
       var have = st ? st.qty : 0;
       if (have > rop) continue;
-      var order = Math.ceil(rop + demand * lead - have);
+      // заказываем столько, чтобы хватило и на плечо поставки, и на нужное покрытие
+      var order = Math.ceil(Math.max(rop + demand * lead, demand * (lead + cover)) - have);
       if (order <= 0) continue;
       var bp = bestPrices ? bestPrices[s.key] : null;
       out.push({
@@ -1538,6 +1548,6 @@
     invoiceCalc: invoiceCalc, invoicesTotals: invoicesTotals, debtBySupplier: debtBySupplier,
     timesheetCalc: timesheetCalc, payrollSummary: payrollSummary,
     manualDocs: manualDocs, manualBalance: manualBalance, manualTotals: manualTotals, paymentsFor: paymentsFor,
-    bep: bep, pnl: pnl, ropList: ropList, fefoStatus: fefoStatus, search: search
+    bep: bep, pnl: pnl, ropList: ropList, priceFor: priceFor, fefoStatus: fefoStatus, search: search
   };
 });

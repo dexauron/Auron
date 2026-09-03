@@ -170,6 +170,19 @@
   function isPurchase(r) { return norm(r.category).indexOf('закуп') >= 0; }
   function isDebtPay(r) { return norm(r.category).indexOf('оплата тп') >= 0; }
 
+  // Налог по выбранной в настройках системе. Считается от денег, а не от
+  // начислений: УСН «доходы» — от выручки, «доходы минус расходы» — от прибыли.
+  function taxAmount(settings, income, expense) {
+    settings = settings || {};
+    var mode = norm(settings.taxMode || ''), rate = num(settings.taxRate) / 100;
+    var base = 0, name = settings.taxMode || '';
+    if (mode.indexOf('патент') >= 0) return { sum: round(num(settings.patentMonth)), base: 0, name: 'Патент' };
+    if (mode.indexOf('не считать') >= 0 || !mode) return { sum: 0, base: 0, name: 'Налог не считается' };
+    if (mode.indexOf('минус расход') >= 0) base = Math.max(0, num(income) - num(expense));
+    else base = num(income);                       // УСН «доходы» и НПД — с выручки
+    return { sum: round(base * rate), base: round(base), rate: num(settings.taxRate), name: name };
+  }
+
   // Остатки денег по способам оплаты: приход минус расход
   function balances(rows, opening) {
     opening = opening || {};
@@ -431,7 +444,7 @@
     PURCHASE: PURCHASE, DEBT_PAY: DEBT_PAY, SALES: SALES,
     findHeaderRow: findHeaderRow, parseDdsBase: parseDdsBase, parsePayPlan: parsePayPlan, parseFinSettings: parseFinSettings,
     isIncome: isIncome, isExpense: isExpense, isDebt: isDebt, isDraw: isDraw, isPurchase: isPurchase, isDebtPay: isDebtPay,
-    balances: balances, totals: totals, group: group,
+    balances: balances, totals: totals, group: group, taxAmount: taxAmount,
     byCategory: byCategory, byMethodIncome: byMethodIncome, byShift: byShift,
     byWeekday: byWeekday, byCashier: byCashier,
     monthReport: monthReport, dayReport: dayReport, prevMonth: prevMonth, monthName: monthName,

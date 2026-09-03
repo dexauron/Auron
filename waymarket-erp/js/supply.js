@@ -34,6 +34,23 @@
   }
   function today() { return new Date().toISOString().slice(0, 10); }
 
+  // Срок выпал на выходной: платить как есть, раньше (в пятницу) или позже (в понедельник)
+  function shiftWeekend(date, rule) {
+    if (!date || !rule || /как есть/i.test(rule)) return date;
+    var d = new Date(date + 'T00:00:00');
+    if (isNaN(d.getTime())) return date;
+    var day = d.getDay();                    // 0 — воскресенье, 6 — суббота
+    if (day !== 0 && day !== 6) return date;
+    var back = /пятниц/i.test(rule);
+    var step = back ? -1 : 1;
+    while (true) {
+      d = new Date(d.getTime() + step * DAY);
+      var w = d.getDay();
+      if (w !== 0 && w !== 6) break;
+    }
+    return d.toISOString().slice(0, 10);
+  }
+
   // «Приходная накладная ПФ0000040006441 от 01.08.2026 10:21:25» → «ПФ0000040006441»
   function shortDoc(doc) {
     var s = clean(doc)
@@ -313,7 +330,9 @@
     (docs || []).forEach(function (d) {
       var p = round(paid[d.key] || 0);
       var left = d.closedManual ? 0 : Math.max(0, round(num(d.sum) - p - num(d.roundOff)));
-      var due = d.confirmed ? (d.payDate || '') : (d.payDate || addDays(d.date, termDaysFor(d.firm, reg, settings)));
+      var due = d.confirmed ? (d.payDate || '')
+        : shiftWeekend(d.payDate || addDays(d.date, termDaysFor(d.firm, reg, settings)),
+            settings && settings.payWeekend);
       out.push({
         id: d.id, key: d.key, doc: shortDoc(d.doc), fullDoc: d.doc, date: d.date, supplier: d.supplier, firm: d.firm,
         incomingNo: d.incomingNo, sum: round(d.sum), retail: round(d.retail),
@@ -401,12 +420,14 @@
 
     (calc.docs || []).forEach(function (d) {
       if (d.underpayKeep || d.closed) return;
-      if (d.paid > 0 && d.left > 0 && d.term === 0 && d.termKnown) {
+      var tol = num(settings && settings.roundTolerance);
+      if (d.paid > 0 && d.left > 0 && (d.term === 0 && d.termKnown || (tol && d.left <= tol))) {
         out.push({
           kind: 'underpay', tone: 'orange', problem: 'Недоплата', id: d.id, key: d.key,
           title: d.firm + ' · накладная ' + shortDoc(d.doc),
           sub: 'накладная ' + round(d.sum) + ' ₽, оплачено ' + d.paid + ' ₽ — остаток ' + d.left + ' ₽',
-          sum: d.left
+          sum: d.left,
+          roundable: !!(tol && d.left <= tol)
         });
       }
     });
@@ -520,6 +541,7 @@
   return {
     clean: clean, norm: norm, num: num, round: round, uid: uid,
     addDays: addDays, today: today, daysBetween: daysBetween, shortDoc: shortDoc, bareName: bareName,
+    shiftWeekend: shiftWeekend,
     splitRep: splitRep, aliasIndex: aliasIndex, firmOf: firmOf, guessFirm: guessFirm,
     findFirm: findFirm, linkAlias: linkAlias, firmRecord: firmRecord, mergeFirms: mergeFirms,
     termDaysFor: termDaysFor, termKnown: termKnown, isSupplierPay: isSupplierPay,

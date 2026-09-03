@@ -174,7 +174,9 @@
   var LIST_N = 0;
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
-    var h = '<div class="form-row"><label>' + esc(label) + '</label>';
+    var h = '<div class="form-row"><label>' + esc(label) +
+      (opts.hint ? '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' + esc(opts.hint) + '</small>' : '') +
+      '</label>';
     if (type === 'list') {
       // свой список: можно выбрать из своих значений, а можно вписать новое —
       // новое слово программа запомнит в справочнике
@@ -262,6 +264,10 @@
     else if (kind === 'invoices1c') {
       r = E.parseIncomingInvoices(m.matrix); D.invoices1c = r.rows; D.invoicesPeriod = r.period; info.period = r.period;
       var sd = SUP.mergeDocs(S.state, r.rows, name, S.state.supreg, S.settings);
+      // если владелец попросил не подтверждать каждую накладную вручную
+      if (E.norm(S.settings.autoConfirm) === 'да') {
+        (S.state.docs || []).forEach(function (d) { if (!d.confirmed) d.confirmed = true; });
+      }
       S.save(); LAST_IMPORT.push({ name: name, kind: 'Приходные накладные', rows: r.rows.length, stat: sd });
       info.note = 'новых ' + sd.added + ', обновлено ' + sd.updated + ', дублей ' + sd.same;
     }
@@ -411,7 +417,7 @@
   // Прочитать выгрузки 1С из подключённой папки (только изменившиеся файлы)
   async function syncFolder(silent) {
     if (F.state !== 'ready') return false;
-    var book = await F.bookChangedOutside();
+    var book = E.norm(S.settings.bookAutoRead) === 'нет' ? null : await F.bookChangedOutside();
     if (book) await readBook(book, silent);
     var files = await F.listExports();
     var changed = files.filter(function (f) { return folderStamps[f.name] !== f.stamp; });
@@ -449,6 +455,7 @@
   }
   function scheduleBook() {
     if (F.state !== 'ready') return;
+    if (E.norm(S.settings.bookAutoSave) === 'нет') return;   // владелец отключил автозапись
     if (bookTimer) clearTimeout(bookTimer);
     bookTimer = setTimeout(function () {
       try { F.saveBook(bookBytes()); } catch (e) { /* книга не должна ломать работу */ }
@@ -487,6 +494,15 @@
       toast('Не получилось прочитать книгу: ' + e.message);
       return false;
     }
+  }
+
+  // Внешний вид по настройкам: тема, крупный шрифт
+  function applyLook() {
+    var s = S.settings, t = E.norm(s.theme || '');
+    var mode = t.indexOf('тем') >= 0 ? 'dark' : (t.indexOf('свет') >= 0 ? 'light' : '');
+    if (mode) document.documentElement.setAttribute('data-theme', mode);
+    else document.documentElement.removeAttribute('data-theme');
+    document.body.classList.toggle('big', E.norm(s.bigText) === 'да');
   }
 
   function saveState() {
@@ -632,7 +648,7 @@
           fieldRow('Сотрудник', 'employee', 'text', v.employee || '', { list: 'dl-staff' }) +
           fieldRow('Должность', 'position', 'text', v.position || 'Кассир') +
           fieldRow('Смена', 'shift', 'select', v.shift || 'Дневная', { options: ['Дневная', 'Ночная', 'Суточная'] }) +
-          fieldRow('Часов', 'hours', 'number', v.hours || 12) +
+          fieldRow('Часов', 'hours', 'number', v.hours || S.settings.shiftHours || 12) +
           fieldRow('Ставка за час', 'rate', 'number', v.rate || S.settings.rateDay) +
           fieldRow('Штраф', 'penalty', 'number', v.penalty || 0) +
           fieldRow('Премия', 'bonus', 'number', v.bonus || 0);
@@ -795,6 +811,35 @@
       items.push({ icon: '📅', title: 'Оплатить сегодня', sub: dueToday.map(function (d) { return d.supplier; }).slice(0, 3).join(', '),
         value: '<span class="c-orange private">' + money(dueToday.reduce(function (a, d) { return a + d.left; }, 0)) + '</span>', view: 'suppliers' });
     }
+    // много наличных в кассе — пора инкассировать
+    var cashLimit = num(S.settings.cashLimit);
+    var bal = window.WMFin.balances(S.state.dds || [], {
+      cash: num(S.settings.openCashStart), card: num(S.settings.openCardStart), transfer: num(S.settings.openTransferStart)
+    });
+    if (cashLimit > 0 && bal.map['Наличные'] > cashLimit) {
+      items.push({ icon: '🏦', title: 'Много наличных в кассе',
+        sub: 'больше вашего порога ' + money(cashLimit) + ' — пора инкассировать',
+        value: '<span class="c-orange private">' + money(bal.map['Наличные']) + '</span>', view: 'cash' });
+    }
+    // списания выше нормы, которую вы задали
+    var normPct = num(S.settings.writeoffNormPct);
+    var ledPeriod = (S.state.dds || []).filter(function (r) { return inPeriod(r.date); });
+    var incomePeriod = window.WMFin.totals(ledPeriod).income;
+    if (normPct > 0 && C.writeoffSum > 0 && incomePeriod > 0) {
+      var lossPct = C.writeoffSum / incomePeriod * 100;
+      if (lossPct > normPct) {
+        items.push({ icon: '🗑', title: 'Списания выше нормы',
+          sub: pct(lossPct) + ' от выручки при вашей норме ' + pct(normPct),
+          value: '<span class="c-red private">' + money(C.writeoffSum) + '</span>', view: 'losses' });
+      }
+    }
+    // дни аванса и зарплаты
+    var dayNum = new Date().getDate();
+    if (num(S.settings.advanceDay) === dayNum) items.push({ icon: '💰', title: 'Сегодня день аванса',
+      sub: 'вы поставили эту дату в настройках', value: '', view: 'staff' });
+    if (num(S.settings.salaryDay) === dayNum) items.push({ icon: '💰', title: 'Сегодня день зарплаты',
+      sub: 'вы поставили эту дату в настройках', value: '', view: 'staff' });
+
     if (C.sup && C.sup.confirm.length) items.push({ icon: '✅', title: 'Подтвердите даты выплат',
       sub: 'дата предложена по отсрочке — в план попадёт после подтверждения',
       value: C.sup.confirm.length + ' ' + plural(C.sup.confirm.length, 'накладная', 'накладные', 'накладных'),
@@ -882,6 +927,27 @@
       stat('Куплено товара', priv(man.totals.supplies || (C.payments1c ? C.payments1c.totalSum : 0)),
         man.totals.docs ? man.totals.docs + ' ' + plural(man.totals.docs, 'накладная', 'накладные', 'накладных') + ' за ' + periodName().toLowerCase() : 'По накладным 1С') +
       '</div>';
+
+    // выполнение плана месяца, если вы его задали в настройках
+    var planRev = num(S.settings.planRevenue), planProf = num(S.settings.planProfit);
+    if (planRev > 0 || planProf > 0) {
+      var mStart = today().slice(0, 8) + '01';
+      var mRows = ledger.filter(function (r) { return (r.date || '') >= mStart; });
+      var mt = Fin.totals(mRows);
+      var dayNo = new Date().getDate(), daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+      var passed = dayNo / daysInMonth;
+      function goalRow(name, fact, plan) {
+        if (plan <= 0) return '';
+        var done = E.div(fact, plan) * 100;
+        var ahead = done >= passed * 100;
+        return listRow({ icon: ahead ? '🎯' : '⏳', title: esc(name) + ': ' + pct(done) + ' плана',
+          sub: 'прошло ' + pct(passed * 100) + ' месяца · план ' + money(plan) +
+            (ahead ? ' · идём с опережением' : ' · отстаём'),
+          value: '<span class="' + (ahead ? 'c-green' : 'c-orange') + ' private">' + money(fact) + '</span>' });
+      }
+      var goals = [goalRow('Выручка', mt.income, planRev), goalRow('Прибыль', mt.profit, planProf)].filter(Boolean);
+      if (goals.length) h += card('Цели месяца', listOf(goals, ''), 'из ваших настроек');
+    }
 
     if (att.length) {
       h += card('Требует внимания', listOf(att.map(function (a) {
@@ -1279,6 +1345,17 @@
       stat('Осталось выплатить', priv(accrued - paid), 'Долг перед сотрудниками', accrued - paid > 0 ? 'c-orange' : 'c-green') +
       stat('Людей в табеле', nf(sum.length), 'За ' + periodName().toLowerCase()) + '</div>';
 
+    // премия процентом от выручки — если задали в настройках
+    var bonusPct = num(S.settings.bonusPercent);
+    if (bonusPct > 0) {
+      var led = (S.state.dds || []).filter(function (r) { return inPeriod(r.date); });
+      var rev = window.WMFin.totals(led).income;
+      h += '<div class="banner blue"><span>🎁</span><span>Премия <b>' + pct(bonusPct) + '</b> от выручки за ' +
+        periodName().toLowerCase() + ': <b class="private">' + money(E.safeRound(rev * bonusPct / 100)) +
+        '</b> на всех. Ставка смены — ' + nf(S.settings.shiftHours) + ' ч по ' +
+        money(S.settings.rateDay) + '/час днём и ' + money(S.settings.rateNight) + '/час ночью.</span></div>';
+    }
+
     h += card('По сотрудникам', listOf(sum.map(function (r) {
       return listRow({ icon: '👤', title: esc(r.employee),
         sub: (r.position || 'сотрудник') + ' · ' + nf(r.hours, 0) + ' ч · начислено ' + money(r.accrued) + ' · выдано ' + money(r.paid),
@@ -1329,6 +1406,19 @@
         stat('В розничных ценах', priv(C.stock.retailSum), 'Если продать всё') +
         stat('Наценка', pct(E.div(C.stock.retailSum - C.stock.buySum, C.stock.buySum) * 100), 'В среднем по складу') +
         stat('Закончилось', nf(C.stock.zeroSku), 'Позиций с нулевым остатком', C.stock.zeroSku ? 'c-orange' : '') + '</div>';
+
+      // оборачиваемость: за сколько раз в год «прокручивается» товар на полке
+      if (C.sales && C.sales.cogs && C.stock.buySum) {
+        var daysS = D.salesPeriod ? D.salesPeriod.days : 30;
+        var turns = E.safeRound(C.sales.cogs / daysS * 365 / C.stock.buySum);
+        var good = num(S.settings.turnoverGood) || 20;
+        var daysOnShelf = turns ? Math.round(365 / turns) : 0;
+        h += '<div class="banner ' + (turns >= good ? 'green' : '') + '"><span>' + (turns >= good ? '✅' : '🐢') + '</span>' +
+          '<span>Оборачиваемость <b>' + nf(turns, 1) + ' раз в год</b> — товар лежит на полке в среднем ' +
+          daysOnShelf + ' ' + plural(daysOnShelf, 'день', 'дня', 'дней') + '. ' +
+          (turns >= good ? 'Это лучше вашей планки ' + nf(good) + '.'
+            : 'Ваша планка — ' + nf(good) + ' раз в год: деньги застревают в товаре.') + '</span></div>';
+      }
 
       var q = ($('search') && $('search').value || '').trim();
       var rows = D.stock;
@@ -1412,8 +1502,18 @@
   }
 
   function pageHead(title, sub, right) {
-    return '<div class="page-head"><div><div class="page-title">' + esc(title) + '</div>' +
+    return printHead() + '<div class="page-head"><div><div class="page-title">' + esc(title) + '</div>' +
       (sub ? '<div class="page-sub">' + esc(sub) + '</div>' : '') + '</div>' + (right || '') + '</div>';
+  }
+
+  // Шапка для печати: реквизиты из настроек. На экране не видна.
+  function printHead() {
+    var s = S.settings;
+    var line = [s.legalName, s.inn ? 'ИНН ' + s.inn : '', s.address, s.phone].filter(Boolean).join(' · ');
+    if (!line && !s.storeName) return '';
+    return '<div class="print-head">' + esc(s.storeName || '') +
+      (line ? '<div class="print-sub">' + esc(line) + '</div>' : '') +
+      '<div class="print-sub">Напечатано ' + new Date().toLocaleString('ru-RU').slice(0, 16) + '</div></div>';
   }
 
   /* --- Сроки годности --------------------------------------------------------------- */
@@ -1514,14 +1614,19 @@
       srcNote = 'по вашей книге ДДС, наценка принята 25% (как у вас в файле)';
     }
 
+    // налог считается по выбранной системе налогообложения
+    var preTaxCosts = num(S.settings.rent) + num(S.settings.utilities) + num(S.settings.taxes) +
+      num(S.settings.other) + writeMonth + E.safeRound(expMonth) + (accrued > 0 ? accrued : num(S.settings.fot));
+    var tax = window.WMFin.taxAmount(S.settings, revenue, cogs + preTaxCosts);
     var costs = [
       { name: 'Зарплата', v: accrued > 0 ? accrued : num(S.settings.fot) },
       { name: 'Аренда', v: num(S.settings.rent) },
       { name: 'Коммунальные', v: num(S.settings.utilities) },
-      { name: 'Налоги', v: num(S.settings.taxes) },
+      { name: 'Прочие налоги и взносы', v: num(S.settings.taxes) },
       { name: 'Прочие постоянные', v: num(S.settings.other) },
       { name: 'Списания и потери', v: writeMonth },
-      { name: 'Мои записанные расходы', v: E.safeRound(expMonth) }
+      { name: 'Мои записанные расходы', v: E.safeRound(expMonth) },
+      { name: tax.name + (tax.rate ? ' · ' + nf(tax.rate) + '% от ' + money(tax.base) : ''), v: tax.sum }
     ].filter(function (x) { return x.v > 0; });
     var costSum = costs.reduce(function (a, c) { return a + c.v; }, 0);
     var net = E.safeRound(gross - costSum);
@@ -1611,6 +1716,12 @@
   }
 
   /* --- Цены поставщиков ---------------------------------------------------------- */
+  // Красивая цена: закуп + наценка, округлённые по вашему правилу
+  function suggestPrice(buy) {
+    return E.priceFor(buy, S.settings.markupDefault,
+      parseFloat(String(S.settings.priceRound || '1').replace(',', '.')));
+  }
+
   function viewPriceCmp() {
     var h = pageHead('Цены поставщиков', 'Где дешевле купить',
       '<button class="btn" data-form="kvi">＋ Товар-маркер</button>');
@@ -1634,6 +1745,7 @@
         { title: 'У кого', fn: function (r) { return esc(r.bestSupplier) + (r.bestPhone ? ' · <a class="phone" href="tel:' + esc(r.bestPhone) + '">' + esc(r.bestPhone) + '</a>' : ''); } },
         { title: 'Дороже всего', cls: 'num', fn: function (r) { return priv(r.max); } },
         { title: 'Разница', cls: 'num', fn: function (r) { return r.spread ? '<span class="c-green private">' + money(r.spread) + '</span>' : '—'; } },
+        { title: 'Ставить в зал', cls: 'num', fn: function (r) { return priv(suggestPrice(r.min)); } },
         { title: 'Предложений', cls: 'center', fn: function (r) { return nf(r.suppliers); } }
       ], rows, { step: 40, empty: 'Ничего не найдено' }));
     }
@@ -1721,49 +1833,62 @@
   }
 
   /* --- Настройки --------------------------------------------------------------------- */
-  function viewSettings() {
-    var s = S.settings;
-    var h = pageHead('Настройки', 'Расходы магазина и правила расчёта');
-    h += '<form id="setForm"><div class="form-list">' +
-      fieldRow('Название магазина', 'storeName', 'text', s.storeName) +
-      fieldRow('Зарплата в месяц', 'fot', 'number', s.fot) +
-      fieldRow('Аренда в месяц', 'rent', 'number', s.rent) +
-      fieldRow('Коммунальные', 'utilities', 'number', s.utilities) +
-      fieldRow('Налоги', 'taxes', 'number', s.taxes) +
-      fieldRow('Прочие постоянные', 'other', 'number', s.other) +
-      fieldRow('Маржинальность вручную, %', 'marginManual', 'text', s.marginManual) +
-      '</div><div class="form-hint">Постоянные расходы сейчас: ' + money(S.fixedMonthly()) + ' в месяц.</div>' +
-      '<div class="form-list" style="margin-top:16px">' +
-      fieldRow('Ставка день, ₽/час', 'rateDay', 'number', s.rateDay) +
-      fieldRow('Ставка ночь, ₽/час', 'rateNight', 'number', s.rateNight) +
-      fieldRow('Разменные деньги в кассе', 'openCash', 'number', s.openCash) +
-      fieldRow('Доставка поставщика, дней', 'leadDays', 'number', s.leadDays) +
-      fieldRow('Отсрочка оплаты поставщику, дней', 'graceDays', 'number', s.graceDays) +
-      fieldRow('Страховой запас, %', 'safetyPct', 'number', s.safetyPct) +
-      fieldRow('Срочная уценка при, дней', 'fefoCrit', 'number', s.fefoCrit) +
-      fieldRow('Предупреждать за, дней', 'fefoWarn', 'number', s.fefoWarn) +
-      fieldRow('Скидка срочная, %', 'discountCrit', 'number', s.discountCrit) +
-      fieldRow('Скидка обычная, %', 'discountWarn', 'number', s.discountWarn) +
-      '</div>' +
-      '<div class="form-hint" style="margin-top:16px">Справочники финансового учёта — через запятую. ' +
-      'Они подставляются в формах ввода.</div><div class="form-list">' +
-      fieldRow('Статьи расходов', 'finCategories', 'text', s.finCategories) +
-      fieldRow('Кассиры', 'finCashiers', 'text', s.finCashiers) +
-      fieldRow('Смены', 'finShifts', 'text', s.finShifts) +
-      fieldRow('Поставщики', 'finSuppliers', 'text', s.finSuppliers) +
-      '</div><div class="form-list" style="margin-top:16px">' +
-      fieldRow('Начальный остаток наличных', 'openCashStart', 'number', s.openCashStart) +
-      fieldRow('Начальный остаток на карте', 'openCardStart', 'number', s.openCardStart) +
-      fieldRow('Начальный остаток на счёте', 'openTransferStart', 'number', s.openTransferStart) +
-      fieldRow('Долг: предупреждать от, ₽', 'debtWarn', 'number', s.debtWarn) +
-      fieldRow('Долг: критично от, ₽', 'debtCrit', 'number', s.debtCrit) +
-      fieldRow('Расхождение кассы: критично от, ₽', 'diffCrit', 'number', s.diffCrit) +
-      '</div><div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">Сохранить</button></div></form>';
+  // Тип из каталога → тип поля ввода
+  function setInput(item, value) {
+    var t = item.type, opts = { hint: item.hint };
+    if (t === 'select') { opts.options = item.options || []; return fieldRow(item.label, item.key, 'select', value, opts); }
+    if (t === 'yesno') { opts.options = ['да', 'нет']; return fieldRow(item.label, item.key, 'select', value || 'нет', opts); }
+    if (t === 'money' || t === 'percent' || t === 'days' || t === 'number') return fieldRow(item.label, item.key, 'number', value, opts);
+    if (t === 'time') return fieldRow(item.label, item.key, 'time', value, opts);
+    return fieldRow(item.label, item.key, 'text', value, opts);
+  }
 
-    h += card('О программе', '<div class="card-body">Вай Маркет — учёт магазина 24/7. Работает без интернета: ' +
+  function viewSettings() {
+    var s = S.settings, SET = window.WMSettings;
+    var h = pageHead('Настройки', 'Настройте программу под свой магазин — считать она будет по этим правилам',
+      '<button class="btn" data-act="settings-wizard">🧭 Быстрая настройка</button> ' +
+      '<button class="btn" data-act="settings-reset">Сбросить всё</button>');
+
+    h += '<div class="banner blue"><span>💡</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
+      'на листе «Настройки» — можно править и там.</span></div>';
+
+    h += '<form id="setForm">';
+    SET.GROUPS.forEach(function (g) {
+      h += card(g.icon + '  ' + g.name,
+        (g.note ? '<div class="form-hint">' + esc(g.note) + '</div>' : '') +
+        '<div class="form-list">' + g.items.map(function (it) {
+          var item = { key: it[0], label: it[1], type: it[2], hint: it[3] || '', options: it[4] || null };
+          return setInput(item, s[item.key]);
+        }).join('') + '</div>');
+    });
+    h += '<div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">Сохранить настройки</button></div></form>';
+
+    h += card('Что получилось', '<div class="card-body">' +
+      'Постоянные расходы: <b>' + money(S.fixedMonthly()) + '</b> в месяц.<br>' +
+      'Налог: <b>' + esc(String(s.taxMode)) + '</b>' +
+      (E.norm(s.taxMode).indexOf('усн') >= 0 ? ' по ставке ' + nf(s.taxRate) + '%' : '') + '.<br>' +
+      'Отсрочка по умолчанию: <b>' + nf(s.termDaysDefault) + ' дн.</b>, ' +
+      'смены: день с ' + esc(s.dayStart) + ', ночь с ' + esc(s.nightStart) + '.' +
+      '</div>');
+
+    h += card('О программе', '<div class="card-body">Вай Маркет — учёт магазина. Работает без интернета: ' +
       'папку можно скопировать на флешку и открыть на любом компьютере.<br>' +
-      'Записи хранятся в файле ' + F.DATA_DIR + '/' + F.DATA_FILE + ' внутри подключённой папки.</div>');
+      'Записи хранятся в книге ' + F.BOOK_FILE + ' и в файле ' + F.DATA_DIR + '/' + F.DATA_FILE + '.</div>');
     return h;
+  }
+
+  // Быстрая настройка: несколько вопросов, чтобы программа сразу считала верно
+  function settingsWizard() {
+    var SET = window.WMSettings, s = S.settings;
+    var rows = SET.WIZARD.map(function (key) {
+      var it = SET.byKey(key);
+      return it ? setInput(it, s[key]) : '';
+    }).join('');
+    sheet('Быстрая настройка',
+      '<form id="setForm"><div class="form-hint">Ответьте на несколько вопросов — остальное можно оставить как есть ' +
+      'и поправить позже в «Настройках».</div><div class="form-list">' + rows + '</div>' +
+      '<div class="form-actions"><button type="button" class="btn" data-act="close-sheet">Позже</button>' +
+      '<button type="submit" class="btn btn-primary btn-lg">Готово</button></div></form>');
   }
 
   /* --- Навигация ---------------------------------------------------------------- */
@@ -2010,6 +2135,14 @@
         }
       }
       else if (a === 'print-labels') printLabels();
+      else if (a === 'settings-wizard') settingsWizard();
+      else if (a === 'settings-reset') {
+        if (confirm('Вернуть все настройки к стандартным? Записи и документы не тронутся.')) {
+          Object.keys(S.DEFAULT_SETTINGS).forEach(function (k) { S.setSetting(k, S.DEFAULT_SETTINGS[k]); });
+          applyLook(); recompute(); render();
+          toast('Настройки сброшены к стандартным.');
+        }
+      }
       else if (window.WM_EXTRA_ACTIONS && window.WM_EXTRA_ACTIONS[a]) {
         var msg = window.WM_EXTRA_ACTIONS[a](el);
         render();
@@ -2041,7 +2174,8 @@
       } else if (f.id === 'setForm') {
         var v = formValues(f);
         Object.keys(v).forEach(function (k) { S.setSetting(k, v[k]); });
-        render(); toast('Настройки сохранены. Постоянные расходы: ' + money(S.fixedMonthly()) + ' в месяц.');
+        closeSheet(); applyLook(); recompute(); render();
+        toast('Настройки сохранены. Постоянные расходы: ' + money(S.fixedMonthly()) + ' в месяц.');
       }
     });
 
@@ -2150,7 +2284,20 @@
         'Рядом с файлом «Дашборд_ВайМаркет.html» должны лежать папки js и vendor и файл styles.css.</div></div>';
       return;
     }
-    try { if (localStorage.getItem('wm_priv') === '1') { document.body.classList.add('priv'); $('privacyBtn').textContent = '🙈'; } } catch (e) {}
+    applyLook();
+    var privSaved = null;
+    try { privSaved = localStorage.getItem('wm_priv'); } catch (e) {}
+    var privOn = privSaved === null ? E.norm(S.settings.privacyDefault) === 'да' : privSaved === '1';
+    if (privOn) { document.body.classList.add('priv'); $('privacyBtn').textContent = '🙈'; }
+
+    // экран и период, с которых начинаем — из настроек
+    var startMap = { 'сегодня': 'today', 'пульт': 'finpulse', 'поставщики': 'suppliers',
+      'записать': 'manual', 'касса и смены': 'cash', 'склад': 'stock' };
+    var periodMap = { 'сегодня': 'today', 'неделя': 'week', 'месяц': 'month', 'квартал': 'quarter', 'все': 'all' };
+    var sv = startMap[E.norm(S.settings.startView)];
+    if (sv) VIEW = sv;
+    var pd = periodMap[E.norm(S.settings.defaultPeriod)];
+    if (pd) PERIOD = pd;
 
     var moved = migrateToLedger();
     recompute(); bind(); render();

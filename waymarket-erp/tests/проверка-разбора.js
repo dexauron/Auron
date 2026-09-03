@@ -11,6 +11,8 @@ const FIN = require(path.join(__dirname, '..', 'js', 'finance.js'));
 const SUP = require(path.join(__dirname, '..', 'js', 'supply.js'));
 const BOOK = require(path.join(__dirname, '..', 'js', 'book.js'));
 const Q = require(path.join(__dirname, '..', 'js', 'quick.js'));
+const SET = require(path.join(__dirname, '..', 'js', 'settings.js'));
+const STORE = require(path.join(__dirname, '..', 'js', 'store.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -569,6 +571,66 @@ if (global.__inv1c && global.__cash) {
   const m2 = Q.shiftMath({ zCash: 38400, fCash: 37000, payout: 32000 });
   check('недостача видна до сохранения', m2.status === 'недостача' && m2.diff === -1400,
     m2.status + ' ' + WM.fmtMoney(m2.diff), 'недостача −1 400 ₽');
+  console.log('');
+}
+
+/* Настройки: каждый магазин настраивает правила под себя */
+{
+  console.log('— Настройки: налоги, отсрочки, заказы, цены, смены');
+  const cat = SET.all().map(x => x.key);
+  const def = STORE.DEFAULT_SETTINGS;
+  check('у каждой настройки есть значение по умолчанию',
+    cat.every(k => k in def), cat.filter(k => !(k in def)).join(', ') || 'все на месте', 'все на месте');
+  check('каждая настройка показана на экране',
+    Object.keys(def).every(k => cat.indexOf(k) >= 0),
+    Object.keys(def).filter(k => cat.indexOf(k) < 0).join(', ') || 'все показаны', 'все показаны');
+  check('настройки разложены по разделам', SET.GROUPS.length >= 10, SET.GROUPS.length + ' разделов', '>=10');
+  check('мастер спрашивает только главное', SET.WIZARD.length <= 12 && SET.WIZARD.every(k => SET.byKey(k)),
+    SET.WIZARD.length + ' вопросов', '<=12');
+
+  // налог по выбранной системе
+  const t6 = FIN.taxAmount({ taxMode: 'УСН 6% (доходы)', taxRate: 6 }, 1000000, 800000);
+  const t15 = FIN.taxAmount({ taxMode: 'УСН 15% (доходы минус расходы)', taxRate: 15 }, 1000000, 800000);
+  const tp = FIN.taxAmount({ taxMode: 'Патент', patentMonth: 12000 }, 1000000, 800000);
+  const tn = FIN.taxAmount({ taxMode: 'Не считать' }, 1000000, 800000);
+  check('УСН «доходы» считается от выручки', t6.sum === 60000, WM.fmtMoney(t6.sum), '60 000 ₽');
+  check('УСН «доходы минус расходы» — от прибыли', t15.sum === 30000, WM.fmtMoney(t15.sum), '30 000 ₽');
+  check('патент берётся суммой в месяц', tp.sum === 12000, WM.fmtMoney(tp.sum), '12 000 ₽');
+  check('«не считать» даёт ноль', tn.sum === 0, WM.fmtMoney(tn.sum), '0 ₽');
+
+  // перенос даты выплаты с выходного
+  check('срок с субботы уезжает на понедельник',
+    SUP.shiftWeekend('2026-09-05', 'Перенести на понедельник') === '2026-09-07',
+    SUP.shiftWeekend('2026-09-05', 'Перенести на понедельник'), '2026-09-07');
+  check('срок с воскресенья можно двигать назад, на пятницу',
+    SUP.shiftWeekend('2026-09-06', 'Перенести на пятницу') === '2026-09-04',
+    SUP.shiftWeekend('2026-09-06', 'Перенести на пятницу'), '2026-09-04');
+  check('будний день не двигается',
+    SUP.shiftWeekend('2026-09-03', 'Перенести на понедельник') === '2026-09-03', 'не сдвинулся', 'не сдвинулся');
+
+  // заказ с запасом на N дней
+  const sales = [{ key: 'a', name: 'Молоко', qty: 300, buyPrice: 60 }];
+  const stock = [{ key: 'a', name: 'Молоко', qty: 10, group: 'Молочка', buyPrice: 60 }];
+  const r0 = WM.ropList(sales, stock, 30, { leadDays: 2, safetyPct: 30, coverDays: 0 })[0];
+  const r7 = WM.ropList(sales, stock, 30, { leadDays: 2, safetyPct: 30, coverDays: 7 })[0];
+  check('запас на неделю увеличивает заказ', r7.order > r0.order, r0.order + ' → ' + r7.order, 'больше');
+
+  // цена по наценке и округлению
+  check('цена по наценке 30% округляется вверх', WM.priceFor(68.4, 30, 1) === 89, WM.priceFor(68.4, 30, 1), 89);
+  check('округление до 5 ₽ работает', WM.priceFor(68.4, 30, 5) === 90, WM.priceFor(68.4, 30, 5), 90);
+  check('без закупочной цены цены нет', WM.priceFor(0, 30, 1) === 0, WM.priceFor(0, 30, 1), 0);
+
+  // смена по времени суток берёт границы из настроек
+  check('часы читаются из настроек', Q.hourOf('21:00', 0) === 21 && Q.hourOf('', 9) === 9,
+    Q.hourOf('21:00', 0) + ' и ' + Q.hourOf('', 9), '21 и 9');
+
+  // книга Excel показывает понятные подписи настроек
+  const sheets = BOOK.build({ dds: [], docs: [], pays: [], supreg: [], debtors: [], plans: [],
+    payouts: [], timesheet: [], expiry: [] }, def, { stock: [] });
+  const setSheet = sheets.filter(x => x.name === 'Настройки')[0];
+  check('в книге у настроек есть колонка «Что это»',
+    setSheet.aoa[0][2] === 'Что это' && setSheet.aoa[1][2],
+    setSheet.aoa[1].join(' | '), 'параметр, значение и подпись');
   console.log('');
 }
 

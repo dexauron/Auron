@@ -301,7 +301,8 @@
       var id = r.id, btns = '';
       if (r.kind === 'underpay') {
         btns = '<button class="btn btn-sm btn-primary" data-act="sup-underpay-debt" data-id="' + id + '">Оставить долгом</button>' +
-          '<button class="btn btn-sm" data-act="sup-underpay-round" data-id="' + id + '">Считать округлением</button>' +
+          '<button class="btn btn-sm' + (r.roundable ? ' btn-primary' : '') + '" data-act="sup-underpay-round" data-id="' + id +
+          '">Считать округлением' + (r.roundable ? ' (до ' + E.fmtMoney(num(S.settings.roundTolerance)) + ')' : '') + '</button>' +
           '<button class="btn btn-sm" data-act="sup-doc-edit" data-id="' + id + '">Изменить сумму</button>';
       } else if (r.kind === 'nobasis') {
         btns = '<button class="btn btn-sm btn-primary" data-act="sup-pay-pick" data-id="' + id + '">Выбрать накладную</button>' +

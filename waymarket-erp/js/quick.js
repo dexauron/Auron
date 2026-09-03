@@ -113,10 +113,16 @@
     return '';
   }
 
-  // Смена по времени суток: до 9 утра и после 21:00 — ночная
-  function shiftNow(dicts_) {
+  // Смена по времени суток: границы задаются в настройках («день с», «ночь с»)
+  function hourOf(time, def) {
+    var m = String(time || '').match(/^(\d{1,2})/);
+    return m ? +m[1] : def;
+  }
+  function shiftNow(dicts_, settings) {
     var h = new Date().getHours();
-    var night = h >= 21 || h < 9;
+    var dayStart = hourOf(settings && settings.dayStart, 9);
+    var nightStart = hourOf(settings && settings.nightStart, 21);
+    var night = nightStart > dayStart ? (h >= nightStart || h < dayStart) : (h >= nightStart && h < dayStart);
     var list = (dicts_ && dicts_.shifts) || [];
     for (var i = 0; i < list.length; i++) {
       var n = norm(list[i]);
@@ -131,7 +137,7 @@
     var d = dicts(state, settings);
     var base = { date: today() };
     if (form === 'cashShift') {
-      base.shift = shiftNow(d);
+      base.shift = shiftNow(d, settings);
       base.cashier = last(state, 'cashier');
     } else if (form === 'ddsExpense' || form === 'freeOp') {
       base.category = last(state, 'category') || d.categories[0] || '';
@@ -215,7 +221,7 @@
 
   return {
     txt: txt, norm: norm, num: num, today: today, splitDict: splitDict,
-    dicts: dicts, learn: learn, last: last, shiftNow: shiftNow, defaults: defaults,
+    dicts: dicts, learn: learn, last: last, shiftNow: shiftNow, hourOf: hourOf, defaults: defaults,
     duplicate: duplicate, warnings: warnings, shiftMath: shiftMath,
     saveDraft: saveDraft, loadDraft: loadDraft, clearDraft: clearDraft,
     DICT_SETTING: DICT_SETTING
