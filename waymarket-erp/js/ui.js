@@ -651,6 +651,7 @@
     go: function (id) { go(id); }, render: function () { render(); },
     lastImport: function () { return LAST_IMPORT; },
     tab: function (key, def) { return TAB[key] || def; },
+    page: function (id, step) { return PAGE[id] || step; },
     data: function () { return D; }, calc: function () { return C; },
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
     form: function (id) { return FORMS[id]; },
@@ -869,7 +870,7 @@
   /* --- Экран «Поставщики» ------------------------------------------------------- */
   function viewSuppliers() {
     var man = manual();
-    var tab = TAB.suppliers || (C.payments1c ? '1c' : 'my');
+    var tab = TAB.suppliers || (C.sup && C.sup.totals.docs ? '1c' : 'my');
     var debt = debtNow();
     var docs = dueDocs();
     var t = today();
@@ -893,35 +894,56 @@
       '<button class="btn btn-primary" data-form="invoice">📥 Записать приход</button>' +
       '<button class="btn" data-form="payment">💸 Записать оплату</button></div>';
 
-    if (C.payments1c) {
+    if (C.sup && C.sup.totals.docs) {
       h += '<div class="segmented"><button class="' + (tab === 'my' ? 'active' : '') + '" data-tab="suppliers:my">Мои записи</button>' +
         '<button class="' + (tab === '1c' ? 'active' : '') + '" data-tab="suppliers:1c">Из 1С</button></div>';
     }
 
-    if (tab === '1c' && C.payments1c) {
-      var p1 = C.payments1c;
+    if (tab === '1c' && C.sup && C.sup.totals.docs) {
+      var sp = C.sup, tt = sp.totals;
       h += '<div class="stat-grid">' +
-        stat('Поставки за период', priv(p1.totalSum), nf(p1.docs.length) + ' накладных') +
-        stat('Оплачено по ним', priv(p1.totalPaid), 'Расходные ордера 1С') +
-        stat('Остаток в долг', priv(p1.totalLeft), 'По этим накладным', 'c-red') +
-        stat('Погашено старых долгов', priv(p1.oldDebtPaid), 'По накладным прошлых периодов', 'c-green') + '</div>';
+        stat('Поставки в базе', priv(tt.sum), nf(tt.docs) + ' ' + plural(tt.docs, 'накладная', 'накладные', 'накладных')) +
+        stat('Оплачено по ним', priv(tt.paid), 'расходные ордера 1С') +
+        stat('Долг сейчас', priv(tt.left), 'по всем накладным', tt.left > 0 ? 'c-red' : 'c-green') +
+        stat('Погашено старых долгов', priv(sp.linkStat.oldSum), 'по накладным вне выгрузок', 'c-green') + '</div>';
 
-      h += card('Долг по поставщикам (1С)', listOf((C.balance1c || []).slice(0, 200).map(function (b) {
-        return listRow({ icon: b.debt > 0 ? '🔴' : '🟢', title: esc(b.supplier),
-          sub: (phoneLink(b.supplier) ? phoneLink(b.supplier) + ' · ' : '') + 'поставки ' + money(b.sum) + ' · оплачено ' + money(b.paid),
-          value: '<span class="' + (b.debt > 0 ? 'c-red' : 'c-green') + ' private">' + money(b.debt) + '</span>' +
-            '<small><button class="btn btn-sm" data-form="payment" data-supplier="' + esc(b.supplier) + '">Оплатить</button></small>' });
-      }), 'Нет данных'));
+      if (sp.confirm.length) {
+        h += '<div class="banner"><span>✅</span><span>' + sp.confirm.length + ' ' +
+          plural(sp.confirm.length, 'накладная ждёт', 'накладные ждут', 'накладных ждут') +
+          ' подтверждения даты выплаты — до этого они не попадают в план.</span>' +
+          '<button class="btn" data-go="confirm">Подтвердить</button></div>';
+      }
 
-      h += card('Накладные 1С', table('inv1c', [
+      // долг считается по фирме: все написания имени из 1С сложены вместе
+      h += card('Долг по поставщикам', listOf(sp.firms.filter(function (f) { return f.left > 0 || f.overdue > 0; })
+        .slice(0, 200).map(function (f) {
+          var sub = [];
+          if (f.phone || phoneLink(f.firm)) sub.push(f.phone ? '<a class="phone" href="tel:' + esc(f.phone) + '">' + esc(phoneFmt(f.phone)) + '</a>' : phoneLink(f.firm));
+          sub.push(f.docs + ' ' + plural(f.docs, 'накладная', 'накладные', 'накладных'));
+          if (f.reps.length) sub.push(f.reps.length + ' ' + plural(f.reps.length, 'имя', 'имени', 'имён') + ' в 1С');
+          sub.push(f.term === null ? 'отсрочка не задана' : 'отсрочка ' + f.term + ' дн.');
+          if (f.due) sub.push('ближайший срок ' + dateRu(f.due));
+          else if (f.awaiting) sub.push(f.awaiting + ' ' + plural(f.awaiting, 'накладная ждёт', 'накладные ждут', 'накладных ждут') + ' подтверждения');
+          return listRow({ icon: f.overdue > 0 ? '🔴' : (f.left > 0 ? '🟠' : '🟢'), title: esc(f.firm),
+            sub: sub.join(' · '),
+            value: '<span class="' + (f.overdue > 0 ? 'c-red' : '') + ' private">' + money(f.left) + '</span>' +
+              (f.overdue > 0 ? '<small class="c-red private">просрочено ' + money(f.overdue) + '</small>'
+                : (f.awaiting ? '<small class="c-muted">ждут подтверждения</small>' : '')) });
+        }), 'Долгов нет — всё оплачено'), '<button class="btn btn-sm" data-go="terms">Отсрочки</button>');
+
+      h += card('Накладные из 1С', table('inv1c', [
         { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-        { title: 'Поставщик', fn: function (r) { return esc(r.supplier); } },
-        { title: 'Документ', fn: function (r) { return esc(r.doc.replace('Приходная накладная ', '')); } },
+        { title: 'Поставщик', fn: function (r) { return esc(r.firm); } },
+        { title: 'Документ', fn: function (r) { return esc(r.doc); } },
         { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } },
         { title: 'Оплачено', cls: 'num', fn: function (r) { return priv(r.paid); } },
         { title: 'Долг', cls: 'num', fn: function (r) { return '<span class="' + (r.left > 0 ? 'c-red' : 'c-green') + ' private">' + money(r.left) + '</span>'; } },
+        { title: 'Платить', fn: function (r) {
+          if (r.left <= 0) return '—';
+          if (!r.confirmed) return '<span class="c-muted">' + esc(dateRu(r.due)) + ' (не подтв.)</span>';
+          return '<span class="' + (r.overdue ? 'c-red' : '') + '">' + esc(dateRu(r.due)) + '</span>'; } },
         { title: '', cls: 'center', fn: function (r) { return badge(r.statusText, r.status === 'paid' ? 'green' : (r.status === 'part' ? 'orange' : 'red')); } }
-      ], p1.docs, { step: 40 }));
+      ], sp.docs, { step: 40 }));
       return h;
     }
 

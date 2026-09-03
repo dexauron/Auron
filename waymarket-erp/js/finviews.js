@@ -445,9 +445,21 @@
   }
 
   /* --- 4. Выплаты поставщикам ------------------------------------------------ */
+  // Подтверждённые накладные 1С встают в тот же план выплат, что и ручные записи:
+  // владелец видит один список и один календарь, а не два.
+  function docPlans() {
+    var c = (U().calc() || {}).sup;
+    if (!c) return [];
+    return c.docs.filter(function (d) { return d.confirmed && d.left > 0; }).map(function (d) {
+      return { id: 'doc:' + d.id, docId: d.id, due: d.due, supplier: d.firm, doc: d.doc,
+        amount: d.left, method: '', source: '1c' };
+    });
+  }
+
   function viewFinPay() {
     var u = U(), t = today();
-    var plans = plansAll().slice().sort(function (a, b) { return (a.due || '').localeCompare(b.due || ''); });
+    var plans = plansAll().concat(docPlans())
+      .sort(function (a, b) { return (a.due || '').localeCompare(b.due || ''); });
     var pt = F.planTotals(plans, t);
     var ym = (S.settings.payMonth || t.slice(0, 7));
     var cal = F.calendarMonth(plans, ym, t);
@@ -488,7 +500,8 @@
         var st = F.planStatus(r, t);
         return '<span class="' + (st === 'overdue' ? 'c-red' : '') + '">' + u.esc(u.dateRu(r.due)) + '</span>'; } },
       { title: 'Поставщик', fn: function (r) { return u.esc(r.supplier); } },
-      { title: 'Накладная', fn: function (r) { return u.esc(r.doc || '—'); } },
+      { title: 'Накладная', fn: function (r) {
+        return u.esc(r.doc || '—') + (r.source === '1c' ? ' ' + u.badge('из 1С', 'blue') : ''); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.amount); } },
       { title: 'Оплата', fn: function (r) { return u.esc(r.method || '—'); } },
       { title: 'Статус', cls: 'center', fn: function (r) {
@@ -498,6 +511,10 @@
       { title: 'Оплачено', fn: function (r) { return r.paidAt ? u.esc(u.dateRu(r.paidAt)) : '—'; } },
       { title: '', cls: 'center', fn: function (r) {
         var st = F.planStatus(r, t);
+        if (r.source === '1c') {
+          return '<button class="btn btn-sm btn-primary" data-act="sup-doc-paid" data-id="' + r.docId + '">Оплатил</button> ' +
+            '<button class="btn btn-sm" data-act="sup-doc-edit" data-id="' + r.docId + '" title="Исправить">✎</button>';
+        }
         return (st === 'paid' ? '' : '<button class="btn btn-sm btn-primary" data-act="fin-pay" data-id="' + r.id + '">Оплатил</button> ') +
           '<button class="btn btn-sm" data-edit="plans:' + r.id + ':payPlan" title="Исправить">✎</button> ' +
           '<button class="btn btn-sm btn-danger" data-del="plans:' + r.id + '">✕</button>'; } }

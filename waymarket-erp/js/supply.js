@@ -321,8 +321,11 @@
         due: due, confirmed: !!d.confirmed, closed: !!d.closedManual, underpayKeep: !!d.underpayKeep,
         term: termDaysFor(d.firm, reg, settings),
         termKnown: termKnown(d.firm, reg),
-        overdue: left > 0 && due && due < t,
-        dueToday: left > 0 && due === t,
+        // просроченной считается только подтверждённая дата — иначе программа
+        // ругалась бы на срок, который владелец ещё не утверждал
+        overdue: left > 0 && !!d.confirmed && !!due && due < t,
+        dueToday: left > 0 && !!d.confirmed && due === t,
+        awaiting: left > 0 && !d.confirmed,
         status: left === 0 ? 'paid' : (p > 0 ? 'part' : 'debt'),
         statusText: d.closedManual ? 'Закрыто вручную' : (left === 0 ? 'Оплачено' : (p > 0 ? 'Частично' : 'В долг'))
       });
@@ -336,11 +339,13 @@
     var map = {};
     (calc.docs || []).forEach(function (d) {
       var k = norm(d.firm);
-      if (!map[k]) map[k] = { firm: d.firm, docs: 0, sum: 0, paid: 0, left: 0, overdue: 0, due: '', names: {} };
+      if (!map[k]) map[k] = { firm: d.firm, docs: 0, sum: 0, paid: 0, left: 0, overdue: 0,
+        awaiting: 0, awaitingSum: 0, due: '', names: {} };
       var m = map[k];
       m.docs++; m.sum += d.sum; m.paid += d.paid; m.left += d.left;
       if (d.overdue) m.overdue += d.left;
-      if (d.left > 0 && d.due && (!m.due || d.due < m.due)) m.due = d.due;
+      if (d.awaiting) { m.awaiting++; m.awaitingSum += d.left; }
+      if (d.left > 0 && d.confirmed && d.due && (!m.due || d.due < m.due)) m.due = d.due;
       if (d.supplier) m.names[d.supplier] = 1;
     });
     var out = [];
@@ -348,6 +353,7 @@
       var v = map[k];
       var f = findFirm(reg, v.firm);
       v.sum = round(v.sum); v.paid = round(v.paid); v.left = round(v.left); v.overdue = round(v.overdue);
+      v.awaitingSum = round(v.awaitingSum);
       v.left = Math.max(0, round(v.left - ((calc.advance || {})[k] || 0)));
       v.reps = Object.keys(v.names).filter(function (n) { return norm(n) !== norm(v.firm); });
       v.term = f && f.termDays !== null && f.termDays !== '' && f.termDays !== undefined ? +f.termDays : null;

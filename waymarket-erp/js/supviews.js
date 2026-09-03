@@ -299,7 +299,8 @@
     h += '<div class="banner blue"><span>💡</span><span>' + q.length + ' из ' + c.docs.length +
       ' ждут решения · ' + done + ' уже в календаре выплат. Ничего не платится автоматически.</span></div>';
 
-    h += q.map(function (d) {
+    var limit = u.page('confirmQ', 40);
+    h += q.slice(0, limit).map(function (d) {
       var tone = d.tone < 0 ? 'b-red' : (d.tone > 0 ? 'b-orange' : 'b-blue');
       return '<div class="card"><div class="card-pad">' +
         '<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start">' +
@@ -321,6 +322,10 @@
         '</span></div></div></div>';
     }).join('');
 
+    if (q.length > limit) {
+      h += '<div class="more"><button class="btn" data-act="more" data-id="confirmQ" data-step="40">' +
+        'Показать ещё (' + u.nf(q.length - limit) + ')</button></div>';
+    }
     if (!q.length) h += u.card('Всё подтверждено', '<div class="empty">Новых накладных без даты выплаты нет.</div>');
     return h;
   }
