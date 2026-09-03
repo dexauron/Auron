@@ -181,6 +181,8 @@
       ['Поставщик', link('firm', norm(d.firm), d.firm)],
       ['Документ', esc(d.fullDoc || d.doc)],
       ['Дата прихода', esc(dateRu(d.date))],
+      ['Дата на бумаге поставщика', d.incomingDate && d.incomingDate !== d.date
+        ? esc(dateRu(d.incomingDate)) : '—'],
       ['Входящий номер', d.incomingNo ? esc(d.incomingNo) : '—'],
       ['Сумма закупа', priv(d.sum)],
       ['Сумма в рознице', d.retail ? priv(d.retail) : '—'],

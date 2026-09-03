@@ -170,6 +170,27 @@ for (const f of files) {
     check('причины возврата сгруппированы', reasons.length >= 1, reasons.map(r => r.reason).join(', '), '>=1');
   }
   if (kind === 'invoices1c') {
+    // Дата прихода должна быть датой самого документа 1С, а не бумаги поставщика:
+    // иначе приход падает в другой день, а то и в прошлый месяц, и долг
+    // перестаёт сходиться с оплатами (те датируются документом).
+    {
+      const res0 = WM.parseIncomingInvoices(matrix);
+      const per = WM.parsePeriod(matrix);
+      const iso = d => d.split('.').reverse().join('-');
+      const outside = per ? res0.rows.filter(r => r.date && (r.date < iso(per.from) || r.date > iso(per.to))).length : 0;
+      check('приход датирован документом, а не бумагой поставщика', outside === 0,
+        outside ? outside + ' накладных вне периода отчёта' : 'все в периоде отчёта', 'все в периоде');
+      const byName = res0.rows.filter(r => {
+        const m = String(r.doc).match(/от\s+(\d{2})\.(\d{2})\.(\d{4})/);
+        return m && r.date !== m[3] + '-' + m[2] + '-' + m[1];
+      }).length;
+      check('дата совпадает с датой в названии документа', byName === 0,
+        byName ? byName + ' расхождений' : 'все совпадают', 'все совпадают');
+      const пар = res0.rows.filter(r => r.incomingDate && r.incomingDate !== r.date).length;
+      check('дата бумаги поставщика сохранена отдельно', пар >= 0,
+        пар + ' накладных, где поставщик выписал раньше', 'сохранена');
+    }
+
     const res = WM.parseIncomingInvoices(matrix);
     const tr = totalRow(matrix);
     const want = WM.num(tr[res.cols.sum]);

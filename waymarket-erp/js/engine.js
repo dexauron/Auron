@@ -622,7 +622,11 @@
     var t = columnTitles(matrix, he);
     var col = {
       doc: findCol(t, [['приходная накладная']]),
-      date: findCol(t, [['входящая дата документа'], ['дата документа']]),
+      // «Дата документа» — когда товар пришёл в магазин.
+      // «Входящая дата документа» — дата на бумаге поставщика, она другая:
+      // поставщик выписал накладную 30 июля, а привёз 1 августа.
+      date: findCol(t, [['дата документа']], { not: ['входящ'] }),
+      incomingDate: findCol(t, [['входящая дата документа']]),
       incomingNo: findCol(t, [['входящий номер документа']]),
       supplier: findCol(t, [['контрагент']]),
       contract: findCol(t, [['договор']], { not: ['спецификация'] }),
@@ -639,12 +643,19 @@
       var row = matrix[r]; if (!row) continue;
       var doc = txt(row[col.doc]);
       if (!doc || isTotalRow(doc)) continue;
-      var date = col.date >= 0 ? excelDate(row[col.date]) : '';
+      // Дата прихода — дата самого документа 1С (она стоит в его названии
+      // «…от 01.08.2026»). По ней считаются день, месяц и отсрочка платежа.
+      // Раньше бралась входящая дата поставщика — из-за этого приход
+      // попадал в другой день, а то и в прошлый месяц.
+      var date = docDate(doc) || (col.date >= 0 ? excelDate(row[col.date]) : '');
+      var incoming = col.incomingDate >= 0 ? excelDate(row[col.incomingDate]) : '';
+      if (!date) date = incoming;
       rows.push({
         id: uid(),
         doc: doc,
         key: norm(doc),
-        date: date || docDate(doc),
+        date: date,
+        incomingDate: incoming,
         incomingNo: col.incomingNo >= 0 ? txt(row[col.incomingNo]) : '',
         supplier: (col.supplier >= 0 ? txt(row[col.supplier]) : '') || 'Без контрагента',
         contract: col.contract >= 0 ? txt(row[col.contract]) : '',

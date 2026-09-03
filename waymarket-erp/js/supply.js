@@ -172,8 +172,58 @@
 
   /* --- Загрузка документов в базу ------------------------------------------- */
 
+  /* --- Что исправил владелец, то и правда -----------------------------------
+     В 1С бывают ошибки: сумма не та, дата не та, оплата проведена не по той
+     накладной. Владелец исправляет цифру руками — и это исправление главнее
+     выгрузки. Поэтому у каждой записи есть список полей `mine`: их владелец
+     задал сам, и повторная загрузка того же файла из 1С их не трогает.
+     Что при этом сказала 1С, помним в `from1c` — чтобы показать расхождение
+     и дать вернуть «как было в 1С» одной кнопкой.
+     ------------------------------------------------------------------------ */
+
+  // Пометить поля, которые владелец задал руками
+  function markMine(rec, fields) {
+    if (!rec) return rec;
+    var mine = rec.mine || [];
+    (fields || []).forEach(function (f) { if (mine.indexOf(f) < 0) mine.push(f); });
+    rec.mine = mine;
+    return rec;
+  }
+  function isMine(rec, field) {
+    return !!(rec && rec.mine && rec.mine.indexOf(field) >= 0);
+  }
+  // Снять свою правку с поля — вернуть значение из 1С
+  function unmark(rec, field) {
+    if (!rec || !rec.mine) return rec;
+    rec.mine = rec.mine.filter(function (f) { return f !== field; });
+    if (rec.from1c && rec.from1c[field] !== undefined) rec[field] = rec.from1c[field];
+    return rec;
+  }
+  // Записать, что принесла 1С, не меняя того, что исправил владелец
+  function fromSource(rec, field, value) {
+    if (!rec) return;
+    rec.from1c = rec.from1c || {};
+    rec.from1c[field] = value;
+    if (!isMine(rec, field)) rec[field] = value;
+  }
+  // Где 1С и владелец расходятся: список полей с обеими цифрами
+  function conflicts(rec) {
+    var out = [];
+    if (!rec || !rec.from1c || !rec.mine) return out;
+    rec.mine.forEach(function (f) {
+      if (rec.from1c[f] === undefined) return;
+      var a = rec.from1c[f], b = rec[f];
+      if (typeof a === 'number' || typeof b === 'number') {
+        if (round(num(a)) === round(num(b))) return;
+      } else if (String(a || '') === String(b || '')) return;
+      out.push({ field: f, was: a, now: b });
+    });
+    return out;
+  }
+
   // Накладные 1С. Ключ документа — его номер: тот же файл, загруженный второй
-  // раз, обновляет строку на месте. Подтверждённая дата выплаты не сбивается.
+  // раз, обновляет строку на месте. Подтверждённая дата выплаты не сбивается,
+  // и всё, что владелец исправил руками, остаётся как он написал.
   function mergeDocs(state, rows, file, reg, settings) {
     var idx = {}, stat = { added: 0, updated: 0, same: 0 };
     state.docs = state.docs || [];
@@ -188,7 +238,8 @@
       var old = idx[key];
       if (!old) {
         var rec = {
-          id: uid(), key: key, doc: clean(r.doc), date: r.date || '', incomingNo: clean(r.incomingNo),
+          id: uid(), key: key, doc: clean(r.doc), date: r.date || '',
+          incomingNo: clean(r.incomingNo), incomingDate: r.incomingDate || '',
           supplier: clean(r.supplier) || 'Без контрагента', firm: firm,
           sum: round(num(r.sum)), retail: round(num(r.retail)),
           payDate: addDays(r.date, term), confirmed: false, roundOff: 0,
@@ -199,13 +250,19 @@
       }
       var changed = round(num(r.sum)) !== old.sum || (r.date || '') !== old.date ||
         clean(r.supplier) !== old.supplier;
-      old.doc = clean(r.doc); old.date = r.date || old.date;
-      old.incomingNo = clean(r.incomingNo) || old.incomingNo;
-      old.supplier = clean(r.supplier) || old.supplier;
-      old.firm = firmOf(old.supplier, alias);
-      old.sum = round(num(r.sum)); old.retail = round(num(r.retail));
+      old.doc = clean(r.doc);
+      // каждое поле кладём через fromSource: правку владельца не затираем
+      if (r.date) fromSource(old, 'date', r.date);
+      if (clean(r.incomingNo)) fromSource(old, 'incomingNo', clean(r.incomingNo));
+      if (r.incomingDate) fromSource(old, 'incomingDate', r.incomingDate);
+      if (clean(r.supplier)) fromSource(old, 'supplier', clean(r.supplier));
+      if (!isMine(old, 'firm')) old.firm = firmOf(old.supplier, alias);
+      fromSource(old, 'sum', round(num(r.sum)));
+      fromSource(old, 'retail', round(num(r.retail)));
       old.file = file || old.file;
-      if (!old.confirmed) old.payDate = addDays(old.date, termDaysFor(old.firm, reg || state.supreg || [], settings));
+      if (!old.confirmed && !isMine(old, 'payDate')) {
+        old.payDate = addDays(old.date, termDaysFor(old.firm, reg || state.supreg || [], settings));
+      }
       if (changed) stat.updated++; else stat.same++;
     });
     return stat;
@@ -237,14 +294,15 @@
         return;
       }
       var changed = round(num(r.sum)) !== old.sum || norm(r.basis) !== old.basisKey;
-      old.date = r.date || old.date;
-      old.supplier = clean(r.supplier) || old.supplier;
-      old.firm = old.supplier ? firmOf(old.supplier, alias) : '';
-      old.basis = clean(r.basis) || old.basis; old.basisKey = norm(old.basis);
-      old.operation = clean(r.operation) || old.operation;
-      old.article = clean(r.article) || old.article;
-      old.cashbox = clean(r.cashbox) || old.cashbox;
-      old.sum = round(num(r.sum)); old.file = file || old.file;
+      if (r.date) fromSource(old, 'date', r.date);
+      if (clean(r.supplier)) fromSource(old, 'supplier', clean(r.supplier));
+      if (!isMine(old, 'firm')) old.firm = old.supplier ? firmOf(old.supplier, alias) : '';
+      if (clean(r.basis)) { fromSource(old, 'basis', clean(r.basis)); old.basisKey = norm(old.basis); }
+      if (clean(r.operation)) fromSource(old, 'operation', clean(r.operation));
+      if (clean(r.article)) fromSource(old, 'article', clean(r.article));
+      if (clean(r.cashbox)) fromSource(old, 'cashbox', clean(r.cashbox));
+      fromSource(old, 'sum', round(num(r.sum)));
+      old.file = file || old.file;
       if (changed) stat.updated++; else stat.same++;
     });
     return stat;
@@ -554,6 +612,7 @@
     findFirm: findFirm, linkAlias: linkAlias, firmRecord: firmRecord, mergeFirms: mergeFirms,
     termDaysFor: termDaysFor, termKnown: termKnown, isSupplierPay: isSupplierPay,
     mergeDocs: mergeDocs, mergePays: mergePays, link: link, docsCalc: docsCalc,
+    markMine: markMine, isMine: isMine, unmark: unmark, fromSource: fromSource, conflicts: conflicts,
     autoRegister: autoRegister, similarFirms: similarFirms,
     firmDebt: firmDebt, newNames: newNames, reconQueue: reconQueue, confirmQueue: confirmQueue,
     termsTable: termsTable, debtorsList: debtorsList, compute: compute
