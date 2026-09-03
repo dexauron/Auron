@@ -912,7 +912,7 @@
     { id: 'recon', icon: '🧷', name: 'Разбор оплат', group: 'Данные из 1С', render: viewRecon, after: 'match' },
     { id: 'confirm', icon: '✅', name: 'Подтверждение выплат', group: 'Данные из 1С', render: viewConfirm, after: 'recon' },
     { id: 'terms', icon: '⏱', name: 'Отсрочки поставщиков', group: 'Данные из 1С', render: viewTerms, after: 'confirm' },
-    { id: 'manual', icon: '✍️', name: 'Ручные записи', group: 'Ручной ввод', render: viewManual, after: 'terms' },
+    { id: 'manual', icon: '✍️', name: 'Записать', group: 'Ручной ввод', render: viewManual, after: 'terms' },
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'manual' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }
   );
