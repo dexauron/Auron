@@ -268,3 +268,44 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
   .card, .list, .stat, .hero { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
   .priv .private { filter: none; }
 }
+
+/* --- Фильтры: одинаковые кнопки на всех экранах ----------------------------- */
+.filters { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow);
+  padding: 12px 16px 14px; margin-bottom: 14px; }
+.filter-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; font-weight: 650; color: var(--label-2); margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: .3px; }
+.filter-line { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; flex-wrap: wrap; }
+.filter-name { flex: 0 0 110px; font-size: 13.5px; color: var(--label-2); padding-top: 6px; font-weight: 550; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 240px; }
+.chip { border: none; background: var(--fill-2); color: var(--label); cursor: pointer;
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13.5px; font-weight: 550;
+  line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip:hover { background: var(--fill); }
+.chip.active { background: var(--blue); color: #fff; }
+.chip small { opacity: .65; font-weight: 500; margin-left: 3px; }
+.chip.active small { opacity: .8; }
+.filter-input { flex: 1 1 240px; height: 34px; border: 1px solid var(--separator);
+  background: var(--bg-inset); color: var(--label); border-radius: var(--r-inner);
+  padding: 0 12px; font-size: 14px; font-family: inherit; }
+.filter-note { font-size: 13px; color: var(--label-2); padding: 8px 20px 0; }
+
+/* --- Окно «Подробнее» ------------------------------------------------------- */
+.detail .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px; margin-bottom: 18px; }
+.detail .fact { background: var(--bg-inset); border-radius: var(--r-inner); padding: 10px 12px; }
+.detail .fact-label { font-size: 12.5px; color: var(--label-2); margin-bottom: 3px; }
+.detail .fact-value { font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
+.detail .det-block { margin-bottom: 18px; }
+.detail .det-block h4 { font-size: 14px; font-weight: 650; color: var(--label-2);
+  margin: 0 0 8px; text-transform: uppercase; letter-spacing: .3px; }
+.detail .det-block .table-wrap { border: 1px solid var(--separator); border-radius: var(--r-inner); }
+.detail .note-box { background: var(--bg-inset); border-radius: var(--r-inner);
+  padding: 10px 12px; font-size: 14px; }
+.more-link { color: var(--blue); text-decoration: none; cursor: pointer; font-weight: 550; }
+.more-link:hover { text-decoration: underline; }
+.btn-ghost { background: none; box-shadow: none; color: var(--label-2); font-size: 17px;
+  padding: 0 8px; min-width: 28px; }
+@media (max-width: 700px) {
+  .filter-name { flex-basis: 100%; padding-top: 0; }
+}

@@ -9,6 +9,8 @@
   var E = window.WM, S = window.WMStore, F = window.WMFin, Q = window.WMQuick;
 
   function U() { return window.WMUI; }              // помощники интерфейса
+  function FLT() { return window.WMFilter; }        // кнопки фильтров
+  function DET() { return window.WMDetail; }        // окно «Подробнее»
   function ddsAll() { return S.state.dds || []; }
   function plansAll() { return S.state.plans || []; }
   function today() { return new Date().toISOString().slice(0, 10); }
@@ -226,15 +228,17 @@
     var h = u.pageHead('Пульт', 'Деньги, продажи и платежи — ' + (sel.whole ? 'все данные' : u.periodName().toLowerCase()));
     h += noteBanner(sel);
     h += '<div class="stat-grid">' +
-      u.stat('Наличные', u.priv(bal.map['Наличные']), 'В кассе и сейфе') +
-      u.stat('Карта', u.priv(bal.map['Карта']), 'Поступления минус траты') +
-      u.stat('Перевод', u.priv(bal.map['Перевод']), 'Расчётный счёт') +
+      u.stat('Наличные', u.priv(bal.map['Наличные']), 'В кассе и сейфе ' + DET().btn('method', 'Наличные', 'подробнее')) +
+      u.stat('Карта', u.priv(bal.map['Карта']), 'Поступления минус траты ' + DET().btn('method', 'Карта', 'подробнее')) +
+      u.stat('Перевод', u.priv(bal.map['Перевод']), 'Расчётный счёт ' + DET().btn('method', 'Перевод', 'подробнее')) +
       u.stat('Всего денег', u.priv(bal.total), 'Остаток по всем способам', bal.total >= 0 ? 'c-green' : 'c-red') +
       '</div>';
 
     h += quick();
 
     h += u.card('Сегодня', u.listOf([
+      u.listRow({ icon: '📅', title: 'Смотреть весь день', sub: u.dateRu(today()),
+        value: DET().btn('day', today(), 'Подробнее') }),
       u.listRow({ icon: '🧾', title: 'Записей за сегодня', value: u.nf(td.tx) }),
       u.listRow({ icon: '💰', title: 'Выручка', value: u.priv(td.income) }),
       u.listRow({ icon: '💸', title: 'Расход', value: u.priv(td.expense) }),
@@ -281,11 +285,22 @@
       return u.pageHead('Дашборд', 'Полная аналитика') +
         '<div class="card"><div class="empty">Записей пока нет. Начните с «Касса за смену» или загрузите свою таблицу.</div></div>';
     }
+    var allRows = rows.slice();
+    var dashDefs = [
+      { key: 'type', name: 'Операция', auto: function (r) { return r.type; }, limit: 8 },
+      { key: 'method', name: 'Оплата', auto: function (r) { return r.method; }, limit: 8 },
+      { key: 'cashier', name: 'Кассир', auto: function (r) { return r.cashier; }, limit: 12 },
+      { key: 'shift', name: 'Смена', auto: function (r) { return r.shift; }, limit: 6 },
+      { key: 'category', name: 'Категория', auto: function (r) { return r.category; }, limit: 14 }
+    ];
+    rows = FLT().apply('findash', rows, dashDefs, function (r) { return (r.category || '') + ' ' + (r.note || ''); });
     var t = F.totals(rows), meth = F.byMethodIncome(rows), cats = F.byCategory(rows);
     var pt = F.planTotals(plansAll(), today());
 
     var h = u.pageHead('Дашборд', 'Полная аналитика — ' + (sel.whole ? 'все данные' : u.periodName().toLowerCase()));
     h += noteBanner(sel);
+    h += FLT().bar('findash', dashDefs, allRows, { search: 'категория или комментарий' });
+    h += FLT().note(rows.length, allRows.length);
 
     h += '<div class="stat-grid">' +
       u.stat('Выручка всего', u.priv(t.income), u.nf(t.tx) + ' операций') +
@@ -318,23 +333,26 @@
       '<div class="chart-box"><canvas id="finChartCats"></canvas></div></div>';
 
     h += u.card('Расходы по категориям', u.listOf(cats.map(function (c) {
-      return u.listRow({ icon: '🧾', title: c.name, sub: c.count + ' записей · ' + u.pct(c.share) + ' расходов',
-        value: u.priv(c.sum) });
+      return u.listRow({ icon: '🧾', title: DET().link('category', c.name, c.name),
+        sub: c.count + ' записей · ' + u.pct(c.share) + ' расходов',
+        value: u.priv(c.sum) + '<small>' + DET().btn('category', c.name) + '</small>' });
     }), 'Расходов нет'));
 
     h += '<div class="grid-2">' +
       u.card('Выручка по сменам', u.listOf(F.byShift(rows).map(function (s) {
         return u.listRow({ icon: s.name === 'Ночная' ? '🌙' : (s.name === 'Утро' ? '🌅' : '🌆'),
-          title: s.name, sub: u.pct(s.share) + ' выручки', value: u.priv(s.sum) });
+          title: s.name, sub: u.pct(s.share) + ' выручки · ' + s.count + ' записей', value: u.priv(s.sum) });
       }), '')) +
       u.card('Выручка по дням недели', u.listOf(F.byWeekday(rows).map(function (d) {
         return u.listRow({ icon: '📅', title: d.name, sub: u.pct(d.share), value: u.priv(d.sum) });
       }), '')) + '</div>';
 
     h += u.card('Расхождения по кассирам', u.listOf(F.byCashier(rows).filter(function (c) { return c.name !== '—'; }).map(function (c) {
-      return u.listRow({ icon: c.diff === 0 ? '🟢' : (c.diff < 0 ? '🔴' : '🟠'), title: c.name,
+      return u.listRow({ icon: c.diff === 0 ? '🟢' : (c.diff < 0 ? '🔴' : '🟠'),
+        title: DET().link('employee', c.name, c.name),
         sub: c.shiftCount + ' смен · выручка ' + E.fmtMoney(c.income) + ' · расхождений ' + c.diffCount,
-        value: '<span class="' + u.cls(c.diff) + ' private">' + E.fmtMoney(c.diff) + '</span>' });
+        value: '<span class="' + u.cls(c.diff) + ' private">' + E.fmtMoney(c.diff) + '</span>' +
+          '<small>' + DET().btn('employee', c.name) + '</small>' });
     }), 'Кассиры не указаны'));
 
     h += u.card('Эффективность', u.listOf([
@@ -387,17 +405,26 @@
   }
 
   /* --- 3. База операций ------------------------------------------------------ */
-  var filt = { type: '', category: '', method: '', cashier: '', q: '' };
-
   function viewFinBase() {
     var u = U(), sel = pick();
     var rows = sel.rows.slice().sort(function (a, b) {
       return (b.date || '').localeCompare(a.date || '') || (b.id || '').localeCompare(a.id || '');
     });
-    if (filt.type) rows = rows.filter(function (r) { return r.type === filt.type; });
-    if (filt.category) rows = rows.filter(function (r) { return r.category === filt.category; });
-    if (filt.method) rows = rows.filter(function (r) { return r.method === filt.method; });
-    if (filt.cashier) rows = rows.filter(function (r) { return r.cashier === filt.cashier; });
+    var allRows = rows.slice();
+    var defs = [
+      { key: 'type', name: 'Операция', auto: function (r) { return r.type; }, limit: 8 },
+      { key: 'category', name: 'Категория', auto: function (r) { return r.category; }, limit: 14 },
+      { key: 'method', name: 'Оплата', auto: function (r) { return r.method; }, limit: 8 },
+      { key: 'cashier', name: 'Кассир', auto: function (r) { return r.cashier; }, limit: 12 },
+      { key: 'shift', name: 'Смена', auto: function (r) { return r.shift; }, limit: 6 },
+      { key: 'flag', name: 'Отметки', options: [
+        { v: 'diff', name: 'С расхождением', test: function (r) { return E.num(r.diff) !== 0; } },
+        { v: 'note', name: 'С комментарием', test: function (r) { return !!r.note; } }
+      ] }
+    ];
+    rows = FLT().apply('finbase', rows, defs, function (r) {
+      return (r.note || '') + ' ' + (r.category || '') + ' ' + (r.cashier || '') + ' ' + (r.supplier || '');
+    });
     var q = E.norm(document.getElementById('search') ? document.getElementById('search').value : '');
     if (q) rows = rows.filter(function (r) {
       return E.norm(r.note).indexOf(q) >= 0 || E.norm(r.category).indexOf(q) >= 0 ||
@@ -415,37 +442,28 @@
       u.stat('Итого записей', u.nf(rows.length), 'Отобрано из ' + u.nf(ddsAll().length)) +
       '</div>';
 
-    var sel = function (name, value, options, label) {
-      return '<select class="fin-filter" data-filter="' + name + '" style="background:var(--fill);border:none;border-radius:9px;padding:8px 12px;font-size:14px">' +
-        '<option value="">' + label + '</option>' +
-        options.map(function (o) { return '<option value="' + u.esc(o) + '"' + (value === o ? ' selected' : '') + '>' + u.esc(o) + '</option>'; }).join('') +
-        '</select>';
-    };
-    h += '<div class="quick">' +
-      sel('type', filt.type, F.TYPES, 'Все операции') +
-      sel('category', filt.category, uniq(ddsAll().map(function (r) { return r.category; })), 'Все категории') +
-      sel('method', filt.method, F.METHODS, 'Любая оплата') +
-      sel('cashier', filt.cashier, cashiers(), 'Все кассиры') +
-      (filt.type || filt.category || filt.method || filt.cashier ? '<button class="btn btn-sm" data-act="fin-filter-clear">Сбросить</button>' : '') +
-      '</div>';
+    h += FLT().bar('finbase', defs, allRows, { search: 'категория, кассир, комментарий' });
 
-    h += u.card('Записи', u.table('finBaseT', [
-      { title: 'Дата', fn: function (r) { return u.esc(u.dateRu(r.date)); } },
-      { title: 'Смена', fn: function (r) { return u.esc(r.shift || '—'); } },
-      { title: 'Кассир', fn: function (r) { return u.esc(r.cashier || '—'); } },
+    h += u.card('Записи', FLT().note(rows.length, allRows.length,
+      'приход ' + E.fmtMoney(t.income) + ', расход ' + E.fmtMoney(t.expense)) +
+      u.table('finBaseT', [
+      { title: 'Дата', fn: function (r) { return DET().link('day', r.date, u.dateRu(r.date)); } },
+      { title: 'Смена', fn: function (r) { return r.shift ? DET().link('shift', r.date + '~' + r.shift, r.shift) : '—'; } },
+      { title: 'Кассир', fn: function (r) { return r.cashier ? DET().link('employee', r.cashier, r.cashier) : '—'; } },
       { title: 'Тип', fn: function (r) {
         return u.badge(r.type, F.isIncome(r) ? 'green' : (F.isDebt(r) ? 'orange' : 'red')); } },
-      { title: 'Категория', fn: function (r) { return u.esc(r.category); } },
-      { title: 'Оплата', fn: function (r) { return u.esc(r.method); } },
+      { title: 'Категория', fn: function (r) { return r.category ? DET().link('category', r.category, r.category) : '—'; } },
+      { title: 'Оплата', fn: function (r) { return r.method ? DET().link('method', r.method, r.method) : '—'; } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.amount); } },
       { title: 'Расхожд.', cls: 'num', fn: function (r) {
         return r.diff ? '<span class="' + u.cls(r.diff) + ' private">' + E.fmtMoney(r.diff) + '</span>' : '—'; } },
       { title: 'Комментарий', fn: function (r) { return u.esc(r.note || ''); } },
       { title: '', cls: 'center', fn: function (r) {
         var form = F.isIncome(r) ? 'ddsIncome' : 'ddsExpense';
-        return '<button class="btn btn-sm" data-edit="dds:' + r.id + ':' + form + '" title="Исправить">✎</button> ' +
+        return DET().btn('day', r.date, '👁') +
+          ' <button class="btn btn-sm" data-edit="dds:' + r.id + ':' + form + '" title="Исправить">✎</button> ' +
           '<button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
-    ], rows, { step: 50, empty: 'Записей нет' }));
+    ], rows, { step: 50, empty: FLT().active('finbase') ? 'Под фильтр ничего не подошло' : 'Записей нет' }));
     return h;
   }
   function uniq(list) {
@@ -505,13 +523,38 @@
     h += u.card('Календарь · ' + cal.title, cells,
       '<span class="card-note">🔴 просрочено · 🟠 ждёт оплаты · 🟢 оплачено</span>');
 
-    h += u.card('Список выплат', u.table('planT', [
+    var pDefs = [
+      { key: 'st', name: 'Состояние', options: [
+        { v: 'overdue', name: 'Просрочено', test: function (r) { return F.planStatus(r, t) === 'overdue'; } },
+        { v: 'planned', name: 'Запланировано', test: function (r) { return F.planStatus(r, t) === 'planned'; } },
+        { v: 'paid', name: 'Оплачено', test: function (r) { return F.planStatus(r, t) === 'paid'; } },
+        { v: 'today', name: 'Платить сегодня', test: function (r) { return r.due === t && F.planStatus(r, t) !== 'paid'; } }
+      ] },
+      { key: 'src', name: 'Откуда', options: [
+        { v: '1c', name: 'Из 1С', test: function (r) { return r.source === '1c'; } },
+        { v: 'my', name: 'Мои записи', test: function (r) { return r.source !== '1c'; } }
+      ] },
+      { key: 'sup', name: 'Поставщик', auto: function (r) { return r.supplier; }, limit: 14 },
+      { key: 'sum', name: 'Сумма', options: [
+        { v: 'big', name: 'От 20 000', test: function (r) { return E.num(r.amount) >= 20000; } },
+        { v: 'mid', name: 'До 20 000', test: function (r) { return E.num(r.amount) < 20000; } }
+      ] }
+    ];
+    var allPlans = plans.slice();
+    plans = FLT().apply('finpay', plans, pDefs, function (r) { return (r.supplier || '') + ' ' + (r.doc || ''); });
+    h += FLT().bar('finpay', pDefs, allPlans, { search: 'поставщик или накладная' });
+
+    h += u.card('Список выплат', FLT().note(plans.length, allPlans.length,
+      'на ' + E.fmtMoney(plans.reduce(function (a, r) { return a + E.num(r.amount); }, 0))) +
+      u.table('planT', [
       { title: 'Дата плана', fn: function (r) {
         var st = F.planStatus(r, t);
         return '<span class="' + (st === 'overdue' ? 'c-red' : '') + '">' + u.esc(u.dateRu(r.due)) + '</span>'; } },
-      { title: 'Поставщик', fn: function (r) { return u.esc(r.supplier); } },
+      { title: 'Поставщик', fn: function (r) { return r.supplier ? DET().link('firm', E.norm(r.supplier), r.supplier) : '—'; } },
       { title: 'Накладная', fn: function (r) {
-        return u.esc(r.doc || '—') + (r.source === '1c' ? ' ' + u.badge('из 1С', 'blue') : ''); } },
+        var name = u.esc(r.doc || '—');
+        return (r.docId ? DET().link('doc', r.docId, r.doc || '—') : name) +
+          (r.source === '1c' ? ' ' + u.badge('из 1С', 'blue') : ''); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.amount); } },
       { title: 'Оплата', fn: function (r) { return u.esc(r.method || '—'); } },
       { title: 'Статус', cls: 'center', fn: function (r) {
@@ -526,9 +569,10 @@
             '<button class="btn btn-sm" data-act="sup-doc-edit" data-id="' + r.docId + '" title="Исправить">✎</button>';
         }
         return (st === 'paid' ? '' : '<button class="btn btn-sm btn-primary" data-act="fin-pay" data-id="' + r.id + '">Оплатил</button> ') +
+          (r.supplier ? DET().btn('firm', E.norm(r.supplier), '👁') + ' ' : '') +
           '<button class="btn btn-sm" data-edit="plans:' + r.id + ':payPlan" title="Исправить">✎</button> ' +
           '<button class="btn btn-sm btn-danger" data-del="plans:' + r.id + '">✕</button>'; } }
-    ], plans, { step: 40, empty: 'Выплат пока нет. Нажмите «＋ Выплата».' }));
+    ], plans, { step: 40, empty: FLT().active('finpay') ? 'Под фильтр ничего не подошло' : 'Выплат пока нет. Нажмите «＋ Выплата».' }));
     return h;
   }
 
@@ -572,7 +616,16 @@
 
     h += tableOf('repFin', '1. Финансовая сводка', rep.finance);
     h += tableOf('repMeth', '2. Выручка по способам оплаты', rep.methods);
-    h += tableOf('repCat', '3. Расходы по категориям', rep.categories);
+    h += u.card('3. Расходы по категориям', u.table('repCat', [
+      { title: 'Показатель', fn: function (r) { return DET().link('category', r.name, r.name); } },
+      { title: rep.title, cls: 'num', fn: function (r) { return u.priv(r.cur); } },
+      { title: 'Доля', cls: 'num', fn: function (r) { return r.share == null ? '—' : u.pct(r.share); } },
+      { title: rep.prevTitle, cls: 'num', fn: function (r) { return u.priv(r.prev); } },
+      { title: 'Разница', cls: 'num', fn: function (r) {
+        return '<span class="' + u.cls(r.delta) + ' private">' + (r.delta > 0 ? '+' : '') + E.fmtMoney(r.delta) + '</span>'; } },
+      { title: '', cls: 'center', fn: function (r) { return DET().btn('category', r.name, 'Подробнее'); } }
+    ], rep.categories, { step: 30 }),
+      DET().btn('month', ym, '🗓 Весь месяц подробно'));
     h += tableOf('repStat', '4. Операционная статистика', rep.stats, false);
     return h;
   }
@@ -603,6 +656,9 @@
       u.stat('Денежный поток', u.priv(d.flow), 'Приход минус расход', d.flow >= 0 ? 'c-green' : 'c-red') +
       u.stat('Взято в долг', u.priv(d.totals.debtTaken), 'Товар без оплаты') +
       '</div>';
+
+    h += '<div class="quick">' + DET().btn('day', date, '📅 Всё, что было в этот день') + ' ' +
+      DET().btn('month', date.slice(0, 7), '🗓 Итоги месяца') + '</div>';
 
     h += u.card('Остатки денег на конец дня', u.listOf(
       d.balances.list.map(function (b) {
@@ -657,10 +713,10 @@
       var p = window.WM_MARK_PAID(el.dataset.id);
       return p ? 'Оплачено: ' + p.supplier + ' — ' + E.fmtMoney(p.amount) + '. Запись добавлена в расходы.' : null;
     },
-    'fin-filter-clear': function () { filt = { type: '', category: '', method: '', cashier: '', q: '' }; return null; }
+    'fin-filter-clear': function () { FLT().clear('finbase'); return null; }
   };
   window.WM_EXTRA_CHANGE = function (el) {
-    if (el.classList && el.classList.contains('fin-filter')) { filt[el.dataset.filter] = el.value; return true; }
+    if (el.classList && el.classList.contains('fin-filter')) { FLT().set('finbase', el.dataset.filter, el.value); return true; }
     if (el.id === 'repMonth') { S.setSetting('reportMonth', el.value); return true; }
     if (el.id === 'dayDate') { S.setSetting('dayReportDate', el.value); return true; }
     return false;

@@ -16,6 +16,24 @@
   function esc(s) { return U().esc(s); }
 
   function refresh() { U().recompute(); }
+  function FLT() { return window.WMFilter; }
+  function DET() { return window.WMDetail; }
+  function dateBack(days) {
+    var d = new Date(today()); d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  }
+  // Какое окно «Подробнее» открывать для записи из общего списка
+  var MORE_BY_COLL = { docs: 'doc', pays: 'pay', supreg: 'firm', debtors: 'debtor',
+    dds: 'day', payouts: 'employee', plans: 'firm', inventory: 'product', expiry: 'product' };
+  function moreFor(r) {
+    var kind = MORE_BY_COLL[r.coll];
+    if (!kind) return '';
+    var key = r.id;
+    if (kind === 'day') key = r.date;
+    else if (kind === 'firm' || kind === 'product' || kind === 'employee') key = E.norm(r.title);
+    if (!key) return '';
+    return DET().btn(kind, key, '👁');
+  }
 
   function categories() {
     var v = S.settings.finCategories;
@@ -281,7 +299,21 @@
       h += '<div class="banner green"><span>✅</span><span>Все имена из выгрузок связаны с фирмами.</span></div>';
     }
 
-    h += u.card('Новые имена', u.listOf(c.newNames.map(function (n) {
+    var nnDefs = [
+      { key: 'kind', name: 'Что предлагаем', auto: function (n) { return n.reason; }, limit: 10 },
+      { key: 'has', name: 'Где встречается', options: [
+        { v: 'docs', name: 'В накладных', test: function (n) { return n.docs > 0; } },
+        { v: 'pays', name: 'В оплатах', test: function (n) { return n.pays > 0; } }
+      ] },
+      { key: 'sum', name: 'Сумма', options: [
+        { v: 'big', name: 'От 50 000', test: function (n) { return n.sum >= 50000; } },
+        { v: 'mid', name: 'До 50 000', test: function (n) { return n.sum < 50000; } }
+      ] }
+    ];
+    var newNames = FLT().apply('match', c.newNames, nnDefs, function (n) { return n.raw + ' ' + n.firm; });
+    if (c.newNames.length) h += FLT().bar('match', nnDefs, c.newNames, { search: 'имя из 1С' });
+
+    h += u.card('Новые имена', u.listOf(newNames.map(function (n) {
       var raw = encodeURIComponent(n.raw), firm = encodeURIComponent(n.firm);
       var buttons = n.kind === 'empty'
         ? '<button class="btn btn-sm btn-primary" data-act="sup-empty-pick">Выбрать поставщика</button>'
@@ -298,20 +330,41 @@
         '<div class="row-main"><div class="row-title c-blue">' + esc(n.firm) + '</div>' +
         '<div class="row-sub">' + esc(n.reason) + '</div></div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap">' + buttons + '</div></div>';
-    }), 'Новых имён нет'), 'программа предлагает — вы подтверждаете');
+    }), FLT().active('match') ? 'Под фильтр ничего не подошло' : 'Новых имён нет'),
+      'программа предлагает — вы подтверждаете');
 
-    h += u.card('Фирмы и торговые представители', u.listOf(c.firms.map(function (f) {
+    var fDefs = [
+      { key: 'debt', name: 'Долг', options: [
+        { v: 'yes', name: 'Есть долг', test: function (f) { return f.left > 0; } },
+        { v: 'no', name: 'Нет долга', test: function (f) { return f.left <= 0; } }
+      ] },
+      { key: 'reps', name: 'Имена в 1С', options: [
+        { v: 'many', name: 'Несколько имён', test: function (f) { return f.reps.length > 0; } },
+        { v: 'one', name: 'Одно имя', test: function (f) { return f.reps.length === 0; } }
+      ] },
+      { key: 'term', name: 'Отсрочка', options: [
+        { v: 'none', name: 'Не задана', test: function (f) { return f.term === null; } },
+        { v: 'set', name: 'Задана', test: function (f) { return f.term !== null; } }
+      ] }
+    ];
+    var firms = FLT().apply('matchFirms', c.firms, fDefs, function (f) { return f.firm + ' ' + f.reps.join(' '); });
+    h += FLT().bar('matchFirms', fDefs, c.firms, { search: 'фирма или представитель' });
+    h += FLT().note(firms.length, c.firms.length);
+
+    h += u.card('Фирмы и торговые представители', u.listOf(firms.map(function (f) {
       var reps = f.reps.map(function (r) { return '<span class="badge b-gray">' + esc(r) + '</span>'; }).join(' ');
       return '<div class="row" style="align-items:flex-start">' +
         '<div class="row-icon">🏢</div>' +
-        '<div class="row-main"><div class="row-title">' + esc(f.firm) + '</div>' +
+        '<div class="row-main"><div class="row-title">' + DET().link('firm', E.norm(f.firm), f.firm) + '</div>' +
         '<div class="row-sub">' + f.docs + ' ' + u.plural(f.docs, 'накладная', 'накладные', 'накладных') +
         ' · ' + (f.term === null ? 'отсрочка не задана' : 'отсрочка ' + f.term + ' дн.') + '</div>' +
         (reps ? '<div style="margin-top:7px">' + reps + '</div>' : '') + '</div>' +
         '<div class="row-value private">' + E.fmtMoney(f.left) + '</div>' +
+        DET().btn('firm', E.norm(f.firm)) + ' ' +
         '<button class="btn btn-sm" data-act="sup-firm-edit" data-firm="' + encodeURIComponent(f.firm) + '">✎</button>' +
         '</div>';
-    }), 'Накладных ещё нет'), 'долг считается по фирме');
+    }), FLT().active('matchFirms') ? 'Под фильтр ничего не подошло' : 'Накладных ещё нет'),
+      'долг считается по фирме');
     return h;
   }
 
@@ -327,7 +380,22 @@
       u.stat('Не по поставщикам', u.nf(st.expense), 'нужна статья расхода') +
       '</div>';
 
-    h += u.card('Разберите вручную', u.listOf(c.recon.map(function (r) {
+    var recDefs = [
+      { key: 'kind', name: 'Что не сошлось', options: [
+        { v: 'underpay', name: 'Недоплата', test: function (r) { return r.kind === 'underpay'; } },
+        { v: 'nobasis', name: 'Без основания', test: function (r) { return r.kind === 'nobasis'; } },
+        { v: 'other', name: 'Не поставщик', test: function (r) { return r.kind !== 'underpay' && r.kind !== 'nobasis'; } },
+        { v: 'round', name: 'Похоже на округление', test: function (r) { return !!r.roundable; } }
+      ] },
+      { key: 'size', name: 'Сумма', options: [
+        { v: 'big', name: 'От 5 000', test: function (r) { return num(r.sum) >= 5000; } },
+        { v: 'small', name: 'До 5 000', test: function (r) { return num(r.sum) < 5000; } }
+      ] }
+    ];
+    var recon = FLT().apply('recon', c.recon, recDefs, function (r) { return (r.title || '') + ' ' + (r.sub || ''); });
+    h += FLT().bar('recon', recDefs, c.recon, { search: 'поставщик или документ' });
+
+    h += u.card('Разберите вручную', u.listOf(recon.map(function (r) {
       var id = r.id, btns = '';
       if (r.kind === 'underpay') {
         btns = '<button class="btn btn-sm btn-primary" data-act="sup-underpay-debt" data-id="' + id + '">Оставить долгом</button>' +
@@ -350,20 +418,46 @@
         '<div class="row-main"><div class="row-title">' + esc(r.title) + '</div>' +
         '<div class="row-sub">' + esc(r.sub) + '</div>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">' + btns + '</div></div>' +
-        '<div class="row-value private">' + E.fmtMoney(r.sum) + '</div></div>';
-    }), 'Всё сошлось — разбирать нечего'), c.recon.length + ' ' + u.plural(c.recon.length, 'запись', 'записи', 'записей'));
+        '<div class="row-value private">' + E.fmtMoney(r.sum) + '</div>' +
+        // у недоплаты id — это накладная, у остальных — оплата
+        DET().btn(r.kind === 'underpay' ? 'doc' : 'pay', r.id) + '</div>';
+    }), FLT().active('recon') ? 'Под фильтр ничего не подошло' : 'Всё сошлось — разбирать нечего'),
+      recon.length + ' из ' + c.recon.length + ' ' + u.plural(c.recon.length, 'запись', 'записи', 'записей'));
     return h;
   }
 
   /* --- Подтверждение выплат -------------------------------------------------- */
   function viewConfirm() {
-    var u = U(), c = sup(), q = c.confirm;
+    var u = U(), c = sup(), all = c.confirm;
     var h = u.pageHead('Подтверждение выплат', 'Дата предложена по отсрочке поставщика — подтвердите каждую накладную',
-      q.length ? '<button class="btn btn-primary" data-act="sup-confirm-all">Подтвердить все</button>' : '');
+      all.length ? '<button class="btn btn-primary" data-act="sup-confirm-all">Подтвердить все</button>' : '');
 
     var done = c.docs.filter(function (d) { return d.confirmed; }).length;
-    h += '<div class="banner blue"><span>💡</span><span>' + q.length + ' из ' + c.docs.length +
+    h += '<div class="banner blue"><span>💡</span><span>' + all.length + ' из ' + c.docs.length +
       ' ждут решения · ' + done + ' уже в календаре выплат. Ничего не платится автоматически.</span></div>';
+
+    var cfDefs = [
+      { key: 'firm', name: 'Поставщик', auto: function (d) { return d.supplier || d.firm; }, limit: 14 },
+      { key: 'term', name: 'Отсрочка', options: [
+        { v: 'known', name: 'Задана', test: function (d) { return d.termKnown; } },
+        { v: 'unknown', name: 'Не задана', test: function (d) { return !d.termKnown; } }
+      ] },
+      { key: 'due', name: 'Срок', options: [
+        { v: 'past', name: 'Уже прошёл', test: function (d) { return d.due && d.due < today(); } },
+        { v: 'today', name: 'Сегодня', test: function (d) { return d.due === today(); } },
+        { v: 'soon', name: 'Ближайшая неделя', test: function (d) {
+          if (!d.due) return false;
+          var w = new Date(today()); w.setDate(w.getDate() + 7);
+          return d.due > today() && d.due <= w.toISOString().slice(0, 10); } }
+      ] },
+      { key: 'sum', name: 'Сумма', options: [
+        { v: 'big', name: 'От 20 000', test: function (d) { return d.sum >= 20000; } },
+        { v: 'mid', name: 'До 20 000', test: function (d) { return d.sum < 20000; } }
+      ] }
+    ];
+    var q = FLT().apply('confirm', all, cfDefs, function (d) { return (d.supplier || '') + ' ' + (d.doc || '') + ' ' + (d.incomingNo || ''); });
+    h += FLT().bar('confirm', cfDefs, all, { search: 'поставщик или номер' });
+    h += FLT().note(q.length, all.length, 'на сумму ' + E.fmtMoney(q.reduce(function (a, d) { return a + d.sum; }, 0)));
 
     var limit = u.page('confirmQ', 40);
     h += q.slice(0, limit).map(function (d) {
@@ -385,6 +479,7 @@
         '<button class="btn btn-sm" data-act="sup-confirm-date" data-id="' + d.id + '">Другая дата</button>' +
         '<button class="btn btn-sm" data-act="sup-doc-paid" data-id="' + d.id + '">Уже оплачено</button>' +
         '<button class="btn btn-sm btn-primary" data-act="sup-confirm" data-id="' + d.id + '">Подтвердить</button>' +
+        DET().btn('doc', d.id, 'Подробнее') +
         '</span></div></div></div>';
     }).join('');
 
@@ -392,7 +487,9 @@
       h += '<div class="more"><button class="btn" data-act="more" data-id="confirmQ" data-step="40">' +
         'Показать ещё (' + u.nf(q.length - limit) + ')</button></div>';
     }
-    if (!q.length) h += u.card('Всё подтверждено', '<div class="empty">Новых накладных без даты выплаты нет.</div>');
+    if (!q.length) h += u.card(all.length ? 'Под фильтр ничего не подошло' : 'Всё подтверждено',
+      '<div class="empty">' + (all.length ? 'Снимите фильтры, чтобы увидеть остальные накладные.'
+        : 'Новых накладных без даты выплаты нет.') + '</div>');
     return h;
   }
 
@@ -402,8 +499,27 @@
     var h = u.pageHead('Отсрочки поставщиков', 'Задаётся один раз. Дата выплаты = дата накладной + отсрочка',
       '<button class="btn btn-primary" data-form="supFirm">＋ Поставщик</button>');
 
-    h += u.card('Поставщики', u.table('supTerms', [
-      { title: 'Поставщик', fn: function (r) { return esc(r.firm); } },
+    var tDefs = [
+      { key: 'term', name: 'Отсрочка', options: [
+        { v: 'none', name: 'Не задана', test: function (r) { return r.term === null || r.term === undefined; } },
+        { v: 'now', name: 'Оплата сразу', test: function (r) { return r.termShown === 0; } },
+        { v: 'set', name: 'Задана', test: function (r) { return r.term !== null && r.term !== undefined && r.termShown > 0; } }
+      ] },
+      { key: 'debt', name: 'Долг', options: [
+        { v: 'yes', name: 'Есть долг', test: function (r) { return r.left > 0; } },
+        { v: 'over', name: 'Просрочен', test: function (r) { return r.overdue > 0; } },
+        { v: 'no', name: 'Нет долга', test: function (r) { return r.left <= 0; } }
+      ] },
+      { key: 'freq', name: 'Как часто возит', options: [
+        { v: 'often', name: 'Чаще раза в неделю', test: function (r) { return r.freq >= 4; } },
+        { v: 'rare', name: 'Редко', test: function (r) { return r.freq < 1; } }
+      ] }
+    ];
+    var terms = FLT().apply('terms', c.terms, tDefs, function (r) { return r.firm; });
+    h += FLT().bar('terms', tDefs, c.terms, { search: 'название фирмы' });
+
+    h += u.card('Поставщики', FLT().note(terms.length, c.terms.length) + u.table('supTerms', [
+      { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.firm), r.firm); } },
       { title: 'Отсрочка, дней', cls: 'num', fn: function (r) {
         return '<input class="term-input" type="number" min="0" step="1" style="width:74px;text-align:right" ' +
           'data-firm="' + encodeURIComponent(r.firm) + '" value="' + r.termShown + '">'; } },
@@ -414,8 +530,9 @@
         return '<span class="' + (r.overdue > 0 ? 'c-red' : (r.left > 0 ? '' : 'c-muted')) + ' private">' +
           E.fmtMoney(r.left) + '</span>'; } },
       { title: '', cls: 'center', fn: function (r) {
-        return '<button class="btn btn-sm" data-act="sup-firm-edit" data-firm="' + encodeURIComponent(r.firm) + '">✎</button>'; } }
-    ], c.terms, { step: 40, empty: 'Накладных из 1С ещё нет' }) +
+        return DET().btn('firm', E.norm(r.firm), 'Подробнее') +
+          ' <button class="btn btn-sm" data-act="sup-firm-edit" data-firm="' + encodeURIComponent(r.firm) + '">✎</button>'; } }
+    ], terms, { step: 40, empty: FLT().active('terms') ? 'Под фильтр ничего не подошло' : 'Накладных из 1С ещё нет' }) +
       '<div class="form-actions" style="padding:14px 20px"><button class="btn btn-primary" data-act="sup-terms-save">Сохранить и пересчитать даты</button></div>',
       'по умолчанию ' + (+S.settings.termDaysDefault || 0) + ' дн.');
 
@@ -645,7 +762,23 @@
   function viewRecords() {
     var u = U(), kind = u.tab('records', 'all');
     var q = (document.getElementById('search') && document.getElementById('search').value || '').trim();
-    var rows = allRecords(kind, q);
+    var allRows = allRecords(kind, q);
+    var recDefs = [
+      { key: 'kind', name: 'Что это', auto: function (r) { return r.kind; }, limit: 12 },
+      { key: 'sum', name: 'Сумма', options: [
+        { v: 'big', name: 'От 10 000', test: function (r) { return num(r.sum) >= 10000; } },
+        { v: 'mid', name: '1 000 – 10 000', test: function (r) { return num(r.sum) >= 1000 && num(r.sum) < 10000; } },
+        { v: 'small', name: 'До 1 000', test: function (r) { return num(r.sum) > 0 && num(r.sum) < 1000; } },
+        { v: 'none', name: 'Без суммы', test: function (r) { return !num(r.sum); } }
+      ] },
+      { key: 'when', name: 'Когда', options: [
+        { v: 'd', name: 'Сегодня', test: function (r) { return r.date === today(); } },
+        { v: 'w', name: 'Неделя', test: function (r) { return r.date >= dateBack(7); } },
+        { v: 'm', name: 'Месяц', test: function (r) { return r.date >= dateBack(30); } },
+        { v: 'q', name: 'Три месяца', test: function (r) { return r.date >= dateBack(90); } }
+      ] }
+    ];
+    var rows = FLT().apply('records', allRows, recDefs, function (r) { return r.title + ' ' + r.sub; });
     var trash = (S.state.trash || []).slice().reverse();
 
     var h = u.pageHead('Все записи', 'Любую запись можно исправить, повторить или удалить — удалённое лежит в корзине',
@@ -661,22 +794,26 @@
     if (q) h += '<div class="banner blue"><span>🔍</span><span>Показаны записи со словом «' + esc(q) +
       '». Очистите поиск наверху, чтобы увидеть все.</span></div>';
 
+    h += FLT().bar('records', recDefs, allRows, { search: 'кто, за что, сумма' });
+
     h += u.card('Записи', u.table('recT', [
       { title: '', cls: 'center', fn: function (r) {
         return '<input type="checkbox" class="rec-pick" data-coll="' + r.coll + '" data-id="' + r.id + '">'; } },
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)) || '—'; } },
+      { title: 'Дата', fn: function (r) { return r.date ? DET().link('day', r.date, dateRu(r.date)) : '—'; } },
       { title: 'Что это', fn: function (r) { return u.badge(r.kind, r.kind === 'Приход' ? 'green' :
         (r.kind === 'Долг' || r.kind === 'Долг покупателя' ? 'orange' : (r.kind === 'Поставщик' ? 'gray' : 'blue'))); } },
       { title: 'Кто или за что', fn: function (r) { return esc(r.title); } },
       { title: 'Подробности', fn: function (r) { return '<span class="c-muted">' + esc(r.sub) + '</span>'; } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
       { title: '', cls: 'center', fn: function (r) {
-        return '<button class="btn btn-sm" data-act="q-repeat" data-coll="' + r.coll + '" data-id="' + r.id +
+        return moreFor(r) +
+          ' <button class="btn btn-sm" data-act="q-repeat" data-coll="' + r.coll + '" data-id="' + r.id +
           '" data-target="' + r.form + '" title="Повторить">↻</button> ' +
           '<button class="btn btn-sm" data-edit="' + r.coll + ':' + r.id + ':' + r.form + '" title="Исправить">✎</button> ' +
           '<button class="btn btn-sm btn-danger" data-del="' + r.coll + ':' + r.id + '" title="Удалить">✕</button>'; } }
-    ], rows, { step: 50, empty: 'Записей пока нет' }),
-      rows.length + ' ' + u.plural(rows.length, 'запись', 'записи', 'записей'));
+    ], rows, { step: 50, empty: FLT().active('records') ? 'Под фильтр ничего не подошло' : 'Записей пока нет' }),
+      FLT().note(rows.length, allRows.length) ||
+      (rows.length + ' ' + u.plural(rows.length, 'запись', 'записи', 'записей')));
 
     h += u.card('Корзина', u.listOf(trash.slice(0, 20).map(function (t) {
       var row = recordRow(t.coll, t.rec);
@@ -706,7 +843,29 @@
       ' · старше ' + d.oldDays + ' дней <b class="c-red private">' + E.fmtMoney(d.old) + '</b>',
       d.total ? 'c-orange' : 'c-green');
 
-    h += u.card('Кто должен', u.listOf(d.list.map(function (r) {
+    var dbDefs = [
+      { key: 'age', name: 'Давность', options: [
+        { v: 'old', name: 'Старые (' + d.oldDays + '+ дн.)', test: function (r) { return r.age >= d.oldDays; } },
+        { v: 'week', name: 'Больше недели', test: function (r) { return r.age >= 7; } },
+        { v: 'new', name: 'Свежие', test: function (r) { return r.age < 7; } }
+      ] },
+      { key: 'promise', name: 'Обещание', options: [
+        { v: 'broken', name: 'Срок обещания прошёл', test: function (r) { return r.promise && r.promise < today(); } },
+        { v: 'has', name: 'Обещал вернуть', test: function (r) { return !!r.promise; } },
+        { v: 'none', name: 'Без обещания', test: function (r) { return !r.promise; } }
+      ] },
+      { key: 'who', name: 'Кто записал', auto: function (r) { return r.cashier; }, limit: 10 },
+      { key: 'sum', name: 'Сумма', options: [
+        { v: 'big', name: 'От 1 000', test: function (r) { return r.sum >= 1000; } },
+        { v: 'small', name: 'До 1 000', test: function (r) { return r.sum < 1000; } }
+      ] }
+    ];
+    var debtRows = FLT().apply('debtors', d.list, dbDefs, function (r) { return r.name + ' ' + (r.phone || ''); });
+    h += FLT().bar('debtors', dbDefs, d.list, { search: 'имя или телефон' });
+    h += FLT().note(debtRows.length, d.list.length,
+      'на ' + E.fmtMoney(debtRows.reduce(function (a, r) { return a + r.sum; }, 0)));
+
+    h += u.card('Кто должен', u.listOf(debtRows.map(function (r) {
       return '<div class="row"><div class="row-icon">📓</div>' +
         '<div class="row-main"><div class="row-title">' + esc(r.name) +
         (r.phone ? ' <a class="phone" href="tel:' + esc(r.phone) + '">' + esc(r.phone) + '</a>' : '') + '</div>' +
@@ -714,9 +873,10 @@
         (r.promise ? ' · обещал ' + esc(dateRu(r.promise)) : '') + '</div></div>' +
         u.badge(r.ageText, r.tone) +
         '<div class="row-value private">' + E.fmtMoney(r.sum) + '</div>' +
+        DET().btn('debtor', r.id) +
         '<button class="btn btn-sm btn-primary" data-act="sup-debtor-paid" data-id="' + r.id + '">Погасил</button>' +
         '<button class="btn btn-sm btn-danger" data-del="debtors:' + r.id + '">✕</button></div>';
-    }), 'Долгов нет — тетрадка пустая'), 'сначала самые старые');
+    }), FLT().active('debtors') ? 'Под фильтр ничего не подошло' : 'Долгов нет — тетрадка пустая'), 'сначала самые старые');
 
     var paid = (S.state.debtors || []).filter(function (r) { return r.paid; });
     if (paid.length) {

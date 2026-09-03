@@ -25,6 +25,8 @@
   }
   var C = {};                 // производные расчёты
   var SUP = window.WMSupply;  // поставки, оплаты и справочник фирм
+  var FLT = window.WMFilter;  // кнопки фильтров, одинаковые на всех экранах
+  var DET = window.WMDetail;  // окно «Подробнее» для любой цифры
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
   var VIEW = 'today';
   var PERIOD = 'month';
@@ -44,6 +46,22 @@
   function nf(x, d) { return E.fmtNum(x, d); }
   function pct(x, d) { return E.fmtPct(x, d); }
   function today() { return new Date().toISOString().slice(0, 10); }
+  // дата «столько-то дней назад» — для фильтров «за месяц», «за три месяца»
+  function addDaysStr(days) {
+    var d = new Date(today()); d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+  // Готовый набор кнопок «когда» для любого экрана: поле с датой задаётся снаружи
+  function whenDefs(field, name) {
+    function v(r) { return r[field] || ''; }
+    return { key: 'when', name: name || 'Когда', options: [
+      { v: 'd', name: 'Сегодня', test: function (r) { return v(r) === today(); } },
+      { v: 'w', name: 'Неделя', test: function (r) { return v(r) >= addDaysStr(-7); } },
+      { v: 'm', name: 'Месяц', test: function (r) { return v(r) >= addDaysStr(-30); } },
+      { v: 'q', name: 'Три месяца', test: function (r) { return v(r) >= addDaysStr(-90); } },
+      { v: 'y', name: 'Год', test: function (r) { return v(r) >= addDaysStr(-365); } }
+    ] };
+  }
   function cls(x) { return x > 0 ? 'c-green' : (x < 0 ? 'c-red' : 'c-muted'); }
   function badge(text, kind) { return '<span class="badge b-' + kind + '">' + esc(text) + '</span>'; }
   function plural(n, one, few, many) {
@@ -816,6 +834,7 @@
 
   function openForm(id, prefill, edit) {
     var f = FORMS[id]; if (!f) return;
+    DET.reset();               // форма открывается поверх «Подробнее» — след стираем
     EDIT = edit || null;
     var lists = datalist('dl-sup', supplierNames()) +
       datalist('dl-staff', staffNames()) +
@@ -1005,6 +1024,10 @@
 
     h += quickBar();
 
+    h += '<div class="quick">' + DET.btn('day', today(), '📅 Что было сегодня') + ' ' +
+      DET.btn('month', today().slice(0, 7), '🗓 Итоги месяца') + ' ' +
+      (lastDate && lastDate !== today() ? DET.btn('day', lastDate, '📅 Последний день с записями') : '') + '</div>';
+
     h += '<div class="stat-grid">' +
       stat('Наличные в кассе', priv(cashNow), ledger.length ? 'На ' + dateRu(lastDate) + ' по базе операций' : 'Запишите кассу за смену') +
       stat('Выручка', priv(fin.income || (ownerT && ownerT.revenue) || t.revenue),
@@ -1048,10 +1071,11 @@
     var topDebt = (C.balance1c || man.balance).filter(function (b) { return b.debt > 0; }).slice(0, 6);
     if (topDebt.length) {
       h += card('Кому платить в первую очередь', listOf(topDebt.map(function (b) {
-        return listRow({ icon: '🤝', title: esc(b.supplier),
+        return listRow({ icon: '🤝', title: DET.link('firm', E.norm(b.supplier), b.supplier),
           sub: (phoneLink(b.supplier) || 'телефон не найден') + ' · поставки на ' + money(b.sum),
           value: '<span class="c-red private">' + money(b.debt) + '</span>' +
-            '<small><button class="btn btn-sm" data-form="payment" data-supplier="' + esc(b.supplier) + '">Оплатить</button></small>' });
+            '<small><button class="btn btn-sm" data-form="payment" data-supplier="' + esc(b.supplier) + '">Оплатить</button> ' +
+            DET.btn('firm', E.norm(b.supplier)) + '</small>' });
       }), 'Долгов нет'), '<button class="btn btn-sm" data-go="suppliers">Все поставщики</button>');
     }
 
@@ -1164,8 +1188,32 @@
           '<button class="btn" data-go="confirm">Подтвердить</button></div>';
       }
 
+      // фильтры работают сразу и на список фирм, и на таблицу накладных
+      var docDefs = [
+        { key: 'st', name: 'Состояние', options: [
+          { v: 'debt', name: 'В долг', test: function (r) { return r.left > 0; } },
+          { v: 'part', name: 'Частично', test: function (r) { return r.status === 'part'; } },
+          { v: 'paid', name: 'Оплачено', test: function (r) { return r.left <= 0; } },
+          { v: 'over', name: 'Просрочено', test: function (r) { return r.overdue; } },
+          { v: 'today', name: 'Платить сегодня', test: function (r) { return r.dueToday; } },
+          { v: 'wait', name: 'Ждут подтверждения', test: function (r) { return r.awaiting; } },
+          { v: 'plus', name: 'С переплатой', test: function (r) { return r.over > 0; } }
+        ] },
+        { key: 'firm', name: 'Поставщик', auto: function (r) { return r.firm; }, limit: 14 },
+        whenDefs('date', 'Когда привезли')
+      ];
+      var docsF = FLT.apply('sup1c', sp.docs, docDefs, function (r) {
+        return (r.firm || '') + ' ' + (r.doc || '') + ' ' + (r.supplier || '') + ' ' + (r.incomingNo || '');
+      });
+      h += FLT.bar('sup1c', docDefs, sp.docs, { search: 'фирма, номер накладной' });
+
+      // фирмы пересчитываются по отфильтрованным накладным — цифры честные
+      var firmsF = FLT.active('sup1c')
+        ? SUP.firmDebt({ docs: docsF, advance: sp.calc.advance }, sp.reg)
+        : sp.firms;
+
       // долг считается по фирме: все написания имени из 1С сложены вместе
-      h += card('Долг по поставщикам', listOf(sp.firms.filter(function (f) { return f.left > 0 || f.overdue > 0; })
+      h += card('Долг по поставщикам', listOf(firmsF.filter(function (f) { return f.left > 0 || f.overdue > 0; })
         .slice(0, 200).map(function (f) {
           var sub = [];
           if (f.phone || phoneLink(f.firm)) sub.push(f.phone ? '<a class="phone" href="tel:' + esc(f.phone) + '">' + esc(phoneFmt(f.phone)) + '</a>' : phoneLink(f.firm));
@@ -1174,17 +1222,25 @@
           sub.push(f.term === null ? 'отсрочка не задана' : 'отсрочка ' + f.term + ' дн.');
           if (f.due) sub.push('ближайший срок ' + dateRu(f.due));
           else if (f.awaiting) sub.push(f.awaiting + ' ' + plural(f.awaiting, 'накладная ждёт', 'накладные ждут', 'накладных ждут') + ' подтверждения');
-          return listRow({ icon: f.overdue > 0 ? '🔴' : (f.left > 0 ? '🟠' : '🟢'), title: esc(f.firm),
+          if (f.over > 0) sub.push('<span class="c-orange">переплата ' + money(f.over) + '</span>');
+          return listRow({ icon: f.overdue > 0 ? '🔴' : (f.left > 0 ? '🟠' : '🟢'),
+            title: DET.link('firm', E.norm(f.firm), f.firm),
             sub: sub.join(' · '),
             value: '<span class="' + (f.overdue > 0 ? 'c-red' : '') + ' private">' + money(f.left) + '</span>' +
               (f.overdue > 0 ? '<small class="c-red private">просрочено ' + money(f.overdue) + '</small>'
-                : (f.awaiting ? '<small class="c-muted">ждут подтверждения</small>' : '')) });
-        }), 'Долгов нет — всё оплачено'), '<button class="btn btn-sm" data-go="terms">Отсрочки</button>');
+                : (f.awaiting ? '<small class="c-muted">ждут подтверждения</small>' : '')) +
+              '<small>' + DET.btn('firm', E.norm(f.firm)) + '</small>' });
+        }), FLT.active('sup1c') ? 'Под фильтр ничего не подошло' : 'Долгов нет — всё оплачено'),
+        '<button class="btn btn-sm" data-go="terms">Отсрочки</button>');
 
-      h += card('Накладные из 1С', table('inv1c', [
+      h += card('Накладные из 1С' + (FLT.active('sup1c') ? ' — отобрано ' + nf(docsF.length) : ''),
+        FLT.note(docsF.length, sp.docs.length,
+          'на сумму ' + money(docsF.reduce(function (a, d) { return a + d.sum; }, 0)) +
+          ', долг ' + money(docsF.reduce(function (a, d) { return a + d.left; }, 0))) +
+        table('inv1c', [
         { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-        { title: 'Поставщик', fn: function (r) { return esc(r.firm); } },
-        { title: 'Документ', fn: function (r) { return esc(r.doc); } },
+        { title: 'Поставщик', fn: function (r) { return DET.link('firm', E.norm(r.firm), r.firm); } },
+        { title: 'Документ', fn: function (r) { return DET.link('doc', r.id, r.doc); } },
         { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } },
         { title: 'Оплачено', cls: 'num', fn: function (r) { return priv(r.paid); } },
         { title: 'Долг', cls: 'num', fn: function (r) { return '<span class="' + (r.left > 0 ? 'c-red' : 'c-green') + ' private">' + money(r.left) + '</span>'; } },
@@ -1192,8 +1248,9 @@
           if (r.left <= 0) return '—';
           if (!r.confirmed) return '<span class="c-muted">' + esc(dateRu(r.due)) + ' (не подтв.)</span>';
           return '<span class="' + (r.overdue ? 'c-red' : '') + '">' + esc(dateRu(r.due)) + '</span>'; } },
-        { title: '', cls: 'center', fn: function (r) { return badge(r.statusText, r.status === 'paid' ? 'green' : (r.status === 'part' ? 'orange' : 'red')); } }
-      ], sp.docs, { step: 40 }));
+        { title: '', cls: 'center', fn: function (r) { return badge(r.statusText, r.status === 'paid' ? 'green' : (r.status === 'part' ? 'orange' : 'red')); } },
+        { title: '', cls: 'center', fn: function (r) { return DET.btn('doc', r.id, 'Подробнее'); } }
+      ], docsF, { step: 40, empty: 'Под фильтр ничего не подошло' }));
       return h;
     }
 
@@ -1205,7 +1262,7 @@
       stat('Средний чек накладной', priv(mt.docs ? mt.supplies / mt.docs : 0), 'За ' + periodName().toLowerCase()) + '</div>';
 
     h += card('Долг по поставщикам', listOf(man.balance.map(function (b) {
-      return listRow({ icon: b.debt > 0 ? '🔴' : '🟢', title: esc(b.supplier),
+      return listRow({ icon: b.debt > 0 ? '🔴' : '🟢', title: DET.link('firm', E.norm(b.supplier), b.supplier),
         sub: (phoneLink(b.supplier) ? phoneLink(b.supplier) + ' · ' : '') + 'привезли ' + money(b.sum) + ' · оплатили ' + money(b.paid),
         value: '<span class="' + (b.debt > 0 ? 'c-red' : 'c-green') + ' private">' + money(b.debt) + '</span>' +
           '<small><button class="btn btn-sm" data-form="payment" data-supplier="' + esc(b.supplier) + '">Оплатить</button></small>' });
@@ -1213,7 +1270,7 @@
 
     h += card('Накладные', table('manDocs', [
       { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-      { title: 'Поставщик', fn: function (r) { return esc(r.supplier); } },
+      { title: 'Поставщик', fn: function (r) { return DET.link('firm', E.norm(r.supplier), r.supplier); } },
       { title: '№', fn: function (r) { return esc(r.doc || '—'); } },
       { title: 'Товар', fn: function (r) { return esc(r.goods || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } },
@@ -1275,7 +1332,20 @@
   }
 
   function viewCash() {
-    var rows = shiftsFromLedger();
+    var all = shiftsFromLedger();
+    // фильтры стоят до подсчёта итогов: отобрали ночные смены — итоги стали по ночным
+    var defs = [
+      { key: 'shift', name: 'Смена', auto: function (r) { return r.shift; }, limit: 8 },
+      { key: 'cashier', name: 'Кассир', auto: function (r) { return r.cashier; }, limit: 12 },
+      { key: 'diff', name: 'Касса', options: [
+        { v: 'ok', name: 'Сходится', test: function (r) { return r.diff === 0; } },
+        { v: 'short', name: 'Недостача', test: function (r) { return r.diff < 0; } },
+        { v: 'over', name: 'Излишек', test: function (r) { return r.diff > 0; } },
+        { v: 'pay', name: 'Были выплаты', test: function (r) { return r.payouts > 0; } }
+      ] },
+      whenDefs('date', 'Когда')
+    ];
+    var rows = FLT.apply('cash', all, defs, function (r) { return r.cashier + ' ' + r.shift + ' ' + r.date; });
     var t = { count: rows.length, zCash: 0, factCash: 0, payouts: 0, diff: 0, terminal: 0, short: 0, over: 0 };
     rows.forEach(function (g) {
       t.zCash += g.cash; t.terminal += g.card + g.transfer; t.payouts += g.payouts;
@@ -1299,6 +1369,8 @@
       '<div class="page-sub">День 09:00–21:00 · ночь 21:00–09:00</div></div>' +
       '<button class="btn btn-primary" data-form="cashShift">＋ Закрыть смену</button></div>';
 
+    h += FLT.bar('cash', defs, all, { search: 'кассир, смена или дата' });
+
     h += '<div class="stat-grid">' +
       stat('Выручка за смены', priv(t.revenue), t.count + ' ' + plural(t.count, 'смена', 'смены', 'смен') +
         ' · наличными ' + money(t.zCash)) +
@@ -1313,14 +1385,16 @@
         return listRow({ icon: p.diff === 0 ? '🟢' : (p.diff < 0 ? '🔴' : '🟠'), title: esc(p.name),
           sub: p.shifts + ' ' + plural(p.shifts, 'смена', 'смены', 'смен') + ' · сдал ' + money(p.z),
           value: '<span class="' + cls(p.diff) + ' private">' + money(p.diff) + '</span>' +
-            '<small>' + (p.diff === 0 ? 'всё сходится' : (p.diff < 0 ? 'недостача' : 'излишек')) + '</small>' });
+            '<small>' + (p.diff === 0 ? 'всё сходится' : (p.diff < 0 ? 'недостача' : 'излишек')) + '</small>' +
+            '<small>' + DET.btn('employee', p.name) + '</small>' });
       }), 'Нет закрытых смен'));
     }
 
-    h += card('Журнал смен', table('shiftsT', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-      { title: 'Смена', fn: function (r) { return esc(r.shift); } },
-      { title: 'Кассир', fn: function (r) { return esc(r.cashier); } },
+    h += card('Журнал смен', FLT.note(rows.length, all.length, 'выручка ' + money(t.revenue)) +
+      table('shiftsT', [
+      { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
+      { title: 'Смена', fn: function (r) { return DET.link('shift', r.date + '~' + (r.shift === '—' ? '' : r.shift), r.shift); } },
+      { title: 'Кассир', fn: function (r) { return DET.link('employee', r.cashier, r.cashier); } },
       { title: 'Наличные', cls: 'num', fn: function (r) { return priv(r.cash); } },
       { title: 'Карта', cls: 'num', fn: function (r) { return priv(r.card); } },
       { title: 'Перевод', cls: 'num', fn: function (r) { return priv(r.transfer); } },
@@ -1329,8 +1403,9 @@
       { title: 'Факт', cls: 'num', fn: function (r) { return priv(r.fact); } },
       { title: 'Расхождение', cls: 'num', fn: function (r) { return '<span class="' + cls(r.diff) + ' private">' + money(r.diff) + '</span>'; } },
       { title: '', cls: 'center', fn: function (r) {
-        return '<button class="btn btn-sm btn-danger" data-act="del-shift" data-ids="' + r.ids.join(',') + '">✕</button>'; } }
-    ], rows, { step: 30, empty: 'Смен за период нет. Нажмите «Закрыть смену».',
+        return DET.btn('shift', r.date + '~' + (r.shift === '—' ? '' : r.shift), 'Подробнее') + ' ' +
+          '<button class="btn btn-sm btn-danger" data-act="del-shift" data-ids="' + r.ids.join(',') + '">✕</button>'; } }
+    ], rows, { step: 30, empty: FLT.active('cash') ? 'Под фильтр ничего не подошло' : 'Смен за период нет. Нажмите «Закрыть смену».',
       total: [{ html: 'Итого', span: 3 }, { html: money(t.zCash), cls: 'num' },
         { html: money(rows.reduce(function (a, r) { return a + r.card; }, 0)), cls: 'num' },
         { html: money(rows.reduce(function (a, r) { return a + r.transfer; }, 0)), cls: 'num' },
@@ -1345,7 +1420,20 @@
     var Fin = window.WMFin;
     var ledger = (S.state.dds || []).filter(function (r) { return inPeriod(r.date) && Fin.isExpense(r); });
     if (!ledger.length) ledger = (S.state.dds || []).filter(Fin.isExpense);
-    var exp = ledger.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var allExp = ledger.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var defs = [
+      { key: 'cat', name: 'Статья', auto: function (r) { return r.category || 'Прочее'; }, limit: 14 },
+      { key: 'method', name: 'Чем платили', auto: function (r) { return r.method || '—'; }, limit: 8 },
+      { key: 'size', name: 'Размер', options: [
+        { v: 'big', name: 'Крупные (от 10 000)', test: function (r) { return num(r.amount) >= 10000; } },
+        { v: 'mid', name: '1 000 – 10 000', test: function (r) { return num(r.amount) >= 1000 && num(r.amount) < 10000; } },
+        { v: 'small', name: 'До 1 000', test: function (r) { return num(r.amount) < 1000; } }
+      ] },
+      whenDefs('date', 'Когда')
+    ];
+    var exp = FLT.apply('dds', allExp, defs, function (r) {
+      return (r.category || '') + ' ' + (r.note || '') + ' ' + (r.method || '');
+    });
     var byCat = {};
     exp.forEach(function (e) { byCat[e.category || 'Прочее'] = (byCat[e.category || 'Прочее'] || 0) + num(e.amount); });
     var cats = Object.keys(byCat).map(function (k) { return { name: k, sum: E.safeRound(byCat[k]) }; })
@@ -1357,6 +1445,8 @@
       '<div class="page-sub">Куда уходят деньги магазина</div></div>' +
       '<button class="btn btn-primary" data-form="ddsExpense">＋ Записать расход</button></div>';
 
+    h += FLT.bar('dds', defs, allExp, { search: 'статья, заметка' });
+
     h += '<div class="stat-grid">' +
       stat('Расходы за период', priv(expSum), exp.length + ' ' + plural(exp.length, 'запись', 'записи', 'записей')) +
       stat('Постоянные расходы в месяц', priv(S.fixedMonthly()), 'Аренда, зарплата, налоги — из настроек') +
@@ -1366,19 +1456,24 @@
 
     if (cats.length) {
       h += card('По статьям', listOf(cats.map(function (c) {
-        return listRow({ icon: '🧾', title: esc(c.name), sub: pct(E.div(c.sum, expSum) * 100) + ' от расходов',
-          value: priv(c.sum) });
+        return listRow({ icon: '🧾', title: DET.link('category', c.name, c.name),
+          sub: pct(E.div(c.sum, expSum) * 100) + ' от расходов',
+          value: priv(c.sum) + '<small>' + DET.btn('category', c.name) + '</small>' });
       }), ''));
     }
 
-    h += card('Записи расходов', table('expT', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-      { title: 'Статья', fn: function (r) { return esc(r.category); } },
-      { title: 'Чем платили', fn: function (r) { return esc(r.method || '—'); } },
+    h += card('Записи расходов', FLT.note(exp.length, allExp.length, 'на сумму ' + money(expSum)) +
+      table('expT', [
+      { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
+      { title: 'Статья', fn: function (r) { return DET.link('category', r.category, r.category); } },
+      { title: 'Чем платили', fn: function (r) { return r.method ? DET.link('method', r.method, r.method) : '—'; } },
       { title: 'Заметка', fn: function (r) { return esc(r.note || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.amount); } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
-    ], exp, { step: 30, empty: 'Расходов пока не записано' }));
+      { title: '', cls: 'center', fn: function (r) {
+        return DET.btn('day', r.date, 'Подробнее') +
+          ' <button class="btn btn-sm" data-edit="dds:' + r.id + ':ddsExpense">✎</button>' +
+          ' <button class="btn btn-sm btn-danger" data-del="dds:' + r.id + '">✕</button>'; } }
+    ], exp, { step: 30, empty: FLT.active('dds') ? 'Под фильтр ничего не подошло' : 'Расходов пока не записано' }));
 
     if (!D.owner) return h;
 
@@ -1398,7 +1493,7 @@
       '<button class="btn btn-sm" data-act="owner-to-settings">Перенести в настройки</button>');
 
     h += card('Движение денег по сменам', table('ddsT', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
       { title: 'Смена', fn: function (r) { return esc(r.shift); } },
       { title: 'Наличная', cls: 'num', fn: function (r) { return priv(r.cash); } },
       { title: 'Онлайн', cls: 'num', fn: function (r) { return priv(r.online); } },
@@ -1422,7 +1517,29 @@
 
   /* --- Зарплата ------------------------------------------------------------------- */
   function viewStaff() {
-    var ts = jrn('timesheet'), po = jrn('payouts');
+    var tsAll = jrn('timesheet'), poAll = jrn('payouts');
+    var defs = [
+      { key: 'emp', name: 'Сотрудник', auto: function (r) { return r.employee; }, limit: 14 },
+      { key: 'shift', name: 'Смена', auto: function (r) { return r.shift; }, limit: 8 },
+      { key: 'mark', name: 'Отметки', options: [
+        { v: 'bonus', name: 'С премией', test: function (r) { return num(r.bonus) > 0; } },
+        { v: 'pen', name: 'Со штрафом', test: function (r) { return num(r.penalty) > 0; } }
+      ] },
+      whenDefs('date', 'Когда')
+    ];
+    // фильтр по сотруднику должен убирать его выплаты тоже, иначе свод врёт
+    var ts = FLT.apply('staff', tsAll, defs, function (r) { return (r.employee || '') + ' ' + (r.shift || ''); });
+    var empPick = FLT.get('staff', 'emp');
+    var po = poAll.filter(function (r) {
+      if (empPick && E.norm(r.employee) !== E.norm(empPick)) return false;
+      var w = FLT.get('staff', 'when');
+      if (w) {
+        var days = { d: 0, w: 7, m: 30, q: 90, y: 365 }[w];
+        if (days === 0) return r.date === today();
+        if (days) return (r.date || '') >= addDaysStr(-days);
+      }
+      return true;
+    });
     var sum = E.payrollSummary(ts, po);
     var accrued = sum.reduce(function (a, r) { return a + r.accrued; }, 0);
     var paid = sum.reduce(function (a, r) { return a + r.paid; }, 0);
@@ -1431,6 +1548,8 @@
       '<div class="page-sub">Смены, начисления и выплаты</div></div>' +
       '<div><button class="btn" data-form="timesheet">＋ Смена</button> ' +
       '<button class="btn btn-primary" data-form="payout">＋ Выплата</button></div></div>';
+
+    h += FLT.bar('staff', defs, tsAll, { search: 'сотрудник или смена' });
 
     h += '<div class="stat-grid">' +
       stat('Начислено', priv(accrued), ts.length + ' ' + plural(ts.length, 'смена', 'смены', 'смен') + ' за ' + periodName().toLowerCase()) +
@@ -1450,10 +1569,11 @@
     }
 
     h += card('По сотрудникам', listOf(sum.map(function (r) {
-      return listRow({ icon: '👤', title: esc(r.employee),
+      return listRow({ icon: '👤', title: DET.link('employee', r.employee, r.employee),
         sub: (r.position || 'сотрудник') + ' · ' + nf(r.hours, 0) + ' ч · начислено ' + money(r.accrued) + ' · выдано ' + money(r.paid),
         value: '<span class="' + (r.left > 0 ? 'c-orange' : 'c-green') + ' private">' + money(r.left) + '</span>' +
-          '<small><button class="btn btn-sm" data-form="payout" data-employee="' + esc(r.employee) + '">Выдать</button></small>' });
+          '<small><button class="btn btn-sm" data-form="payout" data-employee="' + esc(r.employee) + '">Выдать</button> ' +
+          DET.btn('employee', r.employee) + '</small>' });
     }), 'Табель пуст — нажмите «＋ Смена»'));
 
     if (D.owner && D.owner.payroll.length) {
@@ -1463,26 +1583,32 @@
       }), ''));
     }
 
-    h += card('Табель', table('tsT', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-      { title: 'Сотрудник', fn: function (r) { return esc(r.employee); } },
+    h += card('Табель', FLT.note(ts.length, tsAll.length) + table('tsT', [
+      { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
+      { title: 'Сотрудник', fn: function (r) { return DET.link('employee', r.employee, r.employee); } },
       { title: 'Смена', fn: function (r) { return esc(r.shift); } },
       { title: 'Часы', cls: 'num', fn: function (r) { return nf(r.hours, 1); } },
       { title: 'Ставка', cls: 'num', fn: function (r) { return priv(r.rate); } },
       { title: 'Штраф', cls: 'num', fn: function (r) { return priv(r.penalty); } },
       { title: 'Премия', cls: 'num', fn: function (r) { return priv(r.bonus); } },
       { title: 'Начислено', cls: 'num', fn: function (r) { return priv(E.timesheetCalc(r)); } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="timesheet:' + r.id + '">✕</button>'; } }
-    ], ts.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }), { step: 30, empty: 'Смен нет' }));
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="timesheet:' + r.id + ':timesheet">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="timesheet:' + r.id + '">✕</button>'; } }
+    ], ts.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }),
+      { step: 30, empty: FLT.active('staff') ? 'Под фильтр ничего не подошло' : 'Смен нет' }));
 
-    h += card('Выплаты', table('poT', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-      { title: 'Сотрудник', fn: function (r) { return esc(r.employee); } },
+    h += card('Выплаты', FLT.note(po.length, poAll.length) + table('poT', [
+      { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
+      { title: 'Сотрудник', fn: function (r) { return DET.link('employee', r.employee, r.employee); } },
       { title: 'Что', fn: function (r) { return esc(r.type); } },
       { title: 'Чем', fn: function (r) { return esc(r.form); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.amount); } },
-      { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="payouts:' + r.id + '">✕</button>'; } }
-    ], po.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }), { step: 30, empty: 'Выплат нет' }));
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="payouts:' + r.id + ':payout">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="payouts:' + r.id + '">✕</button>'; } }
+    ], po.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }),
+      { step: 30, empty: FLT.active('staff') ? 'Под фильтр ничего не подошло' : 'Выплат нет' }));
     return h;
   }
 
@@ -1517,18 +1643,44 @@
       var rows = D.stock;
       if (q) { var nq = E.norm(q); rows = rows.filter(function (r) {
         return r.key.indexOf(nq) >= 0 || (r.barcode && r.barcode.indexOf(nq) >= 0) || E.norm(r.article).indexOf(nq) >= 0; }); }
-      rows = rows.slice().sort(function (a, b) { return b.buySum - a.buySum; });
 
-      h += card('Остатки' + (q ? ' — «' + esc(q) + '»' : ''), table('stockT', [
-        { title: 'Товар', fn: function (r) { return esc(r.name); } },
-        { title: 'Группа', fn: function (r) { return esc(r.group); } },
+      var stDefs = [
+        { key: 'group', name: 'Группа', auto: function (r) { return r.group; }, limit: 16 },
+        { key: 'qty', name: 'Остаток', options: [
+          { v: 'zero', name: 'Закончилось', test: function (r) { return r.qty <= 0; } },
+          { v: 'low', name: 'Мало (до 3)', test: function (r) { return r.qty > 0 && r.qty < 3; } },
+          { v: 'ok', name: 'Есть', test: function (r) { return r.qty >= 3; } }
+        ] },
+        { key: 'mk', name: 'Наценка', options: [
+          { v: 'no', name: 'Нет наценки', test: function (r) { return r.buyPrice > 0 && r.retailPrice <= r.buyPrice; } },
+          { v: 'lo', name: 'До 20%', test: function (r) { return r.buyPrice > 0 && r.retailPrice / r.buyPrice - 1 < 0.2 && r.retailPrice > r.buyPrice; } },
+          { v: 'hi', name: 'Больше 40%', test: function (r) { return r.buyPrice > 0 && r.retailPrice / r.buyPrice - 1 > 0.4; } },
+          { v: 'noprice', name: 'Без цены закупа', test: function (r) { return !r.buyPrice; } }
+        ] },
+        { key: 'money', name: 'Денег на полке', options: [
+          { v: 'big', name: 'От 10 000', test: function (r) { return r.buySum >= 10000; } },
+          { v: 'mid', name: '1 000 – 10 000', test: function (r) { return r.buySum >= 1000 && r.buySum < 10000; } }
+        ] }
+      ];
+      var allStock = rows.slice();
+      rows = FLT.apply('stock', rows, stDefs, function (r) { return r.name + ' ' + (r.barcode || '') + ' ' + (r.article || ''); })
+        .sort(function (a, b) { return b.buySum - a.buySum; });
+      h += FLT.bar('stock', stDefs, allStock, { search: 'товар, штрихкод, артикул' });
+
+      h += card('Остатки' + (q ? ' — «' + esc(q) + '»' : ''),
+        FLT.note(rows.length, allStock.length,
+          'на ' + money(rows.reduce(function (a, r) { return a + r.buySum; }, 0)) + ' в закупе') +
+        table('stockT', [
+        { title: 'Товар', fn: function (r) { return DET.link('product', r.key, r.name); } },
+        { title: 'Группа', fn: function (r) { return r.group ? DET.link('group', r.group, r.group) : '—'; } },
         { title: 'Штрихкод', fn: function (r) { return esc(r.barcode || '—'); } },
         { title: 'Остаток', cls: 'num', fn: function (r) {
           return '<span class="' + (r.qty <= 0 ? 'c-red' : (r.qty < 3 ? 'c-orange' : '')) + '">' + nf(r.qty, 2) + ' ' + esc(r.unit) + '</span>'; } },
         { title: 'Закупка', cls: 'num', fn: function (r) { return priv(r.buyPrice); } },
         { title: 'Розница', cls: 'num', fn: function (r) { return priv(r.retailPrice); } },
         { title: 'Наценка', cls: 'num', fn: function (r) { return r.buyPrice > 0 ? pct(E.div(r.retailPrice - r.buyPrice, r.buyPrice) * 100) : '—'; } },
-        { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.buySum); } }
+        { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.buySum); } },
+        { title: '', cls: 'center', fn: function (r) { return DET.btn('product', r.key, 'Подробнее'); } }
       ], rows, { step: 50, empty: 'Ничего не найдено' }));
     }
 
@@ -1536,8 +1688,8 @@
       var lost = 0, extra = 0;
       inv.forEach(function (r) { var d = (num(r.fact) - num(r.accounted)) * num(r.price); if (d < 0) lost += d; else extra += d; });
       h += card('Пересчёты и списания', table('invT', [
-        { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
-        { title: 'Товар', fn: function (r) { return esc(r.name); } },
+        { title: 'Дата', fn: function (r) { return DET.link('day', r.date, dateRu(r.date)); } },
+        { title: 'Товар', fn: function (r) { return DET.link('product', E.norm(r.name), r.name); } },
         { title: 'Учёт', cls: 'num', fn: function (r) { return nf(r.accounted, 2); } },
         { title: 'Факт', cls: 'num', fn: function (r) { return nf(r.fact, 2); } },
         { title: 'Разница', cls: 'num', fn: function (r) {
@@ -1547,7 +1699,10 @@
           var d = (num(r.fact) - num(r.accounted)) * num(r.price);
           return '<span class="' + cls(d) + ' private">' + money(d) + '</span>'; } },
         { title: 'Причина', fn: function (r) { return esc(r.reason || '—'); } },
-        { title: '', cls: 'center', fn: function (r) { return '<button class="btn btn-sm btn-danger" data-del="inventory:' + r.id + '">✕</button>'; } }
+        { title: '', cls: 'center', fn: function (r) {
+          return DET.btn('product', E.norm(r.name), 'Подробнее') +
+            ' <button class="btn btn-sm" data-edit="inventory:' + r.id + ':inventory">✎</button>' +
+            ' <button class="btn btn-sm btn-danger" data-del="inventory:' + r.id + '">✕</button>'; } }
       ], inv.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }), { step: 30 }),
         '<span class="card-note">недостача ' + money(lost) + ' · излишки ' + money(extra) + '</span>');
     }
@@ -1561,7 +1716,20 @@
         '<div class="card"><div class="empty"><b>Нужны отчёты 1С</b><br>«Продажи» и «Остатки номенклатуры» — по ним видно, что заканчивается.</div></div>';
     }
     var days = D.salesPeriod ? D.salesPeriod.days : 30;
-    var rows = E.ropList(D.sales, D.stock, days, S.settings, C.bestPrices);
+    var allRop = E.ropList(D.sales, D.stock, days, S.settings, C.bestPrices);
+    var ropDefs = [
+      { key: 'sup', name: 'Поставщик', auto: function (r) { return r.supplier || 'не указан'; }, limit: 14 },
+      { key: 'group', name: 'Группа', auto: function (r) { return r.group; }, limit: 14 },
+      { key: 'urg', name: 'Срочность', options: [
+        { v: 'zero', name: 'Уже кончилось', test: function (r) { return r.critical; } },
+        { v: 'soon', name: 'Хватит на 1–3 дня', test: function (r) { return !r.critical && r.demand > 0 && r.stock / r.demand <= 3; } }
+      ] },
+      { key: 'sum', name: 'Сумма заказа', options: [
+        { v: 'big', name: 'От 5 000', test: function (r) { return r.sum >= 5000; } },
+        { v: 'mid', name: '1 000 – 5 000', test: function (r) { return r.sum >= 1000 && r.sum < 5000; } }
+      ] }
+    ];
+    var rows = FLT.apply('orders', allRop, ropDefs, function (r) { return r.name + ' ' + (r.supplier || ''); });
     var sum = rows.reduce(function (a, r) { return a + r.sum; }, 0);
     var bySup = {};
     rows.forEach(function (r) {
@@ -1577,20 +1745,25 @@
       hero('Уже закончилось', nf(rows.filter(function (r) { return r.critical; }).length),
         'Позиций с нулевым остатком при живом спросе', 'c-red') + '</div>';
 
+    h += FLT.bar('orders', ropDefs, allRop, { search: 'товар или поставщик' });
+
     h += card('Кому звонить', listOf(sups.slice(0, 12).map(function (s) {
-      return listRow({ icon: '📞', title: esc(s.name), sub: phoneLink(s.name) || 'телефон не найден',
-        value: priv(s.sum) + '<small>' + s.items + ' ' + plural(s.items, 'позиция', 'позиции', 'позиций') + '</small>' });
+      return listRow({ icon: '📞', title: DET.link('firm', E.norm(s.name), s.name),
+        sub: phoneLink(s.name) || 'телефон не найден',
+        value: priv(s.sum) + '<small>' + s.items + ' ' + plural(s.items, 'позиция', 'позиции', 'позиций') +
+          ' ' + DET.btn('firm', E.norm(s.name)) + '</small>' });
     }), ''));
 
-    h += card('Список заказа', table('ropT', [
-      { title: 'Товар', fn: function (r) { return esc(r.name); } },
+    h += card('Список заказа', FLT.note(rows.length, allRop.length, 'на ' + money(sum)) + table('ropT', [
+      { title: 'Товар', fn: function (r) { return DET.link('product', r.key, r.name); } },
       { title: 'Осталось', cls: 'num', fn: function (r) { return '<span class="' + (r.critical ? 'c-red' : '') + '">' + nf(r.stock, 1) + '</span>'; } },
       { title: 'Продаём в день', cls: 'num', fn: function (r) { return nf(r.demand, 1); } },
       { title: 'Заказать', cls: 'num', fn: function (r) { return '<b>' + nf(r.order) + '</b>'; } },
       { title: 'Цена', cls: 'num', fn: function (r) { return priv(r.price); } },
-      { title: 'Поставщик', fn: function (r) { return esc(r.supplier || '—'); } },
-      { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } }
-    ], rows, { step: 40, empty: 'Всё в наличии' }));
+      { title: 'Поставщик', fn: function (r) { return r.supplier ? DET.link('firm', E.norm(r.supplier), r.supplier) : '—'; } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.sum); } },
+      { title: '', cls: 'center', fn: function (r) { return DET.btn('product', r.key, 'Подробнее'); } }
+    ], rows, { step: 40, empty: FLT.active('orders') ? 'Под фильтр ничего не подошло' : 'Всё в наличии' }));
     return h;
   }
 
@@ -1611,14 +1784,30 @@
 
   /* --- Сроки годности --------------------------------------------------------------- */
   function viewExpiry() {
-    var rows = (S.state.expiry || []).map(function (r) {
+    var allRows = (S.state.expiry || []).map(function (r) {
       return { r: r, f: E.fefoStatus(r.bestBefore, S.settings) };
     }).sort(function (a, b) { return (a.r.bestBefore || '').localeCompare(b.r.bestBefore || ''); });
+    var defs = [
+      { key: 'lvl', name: 'Срочность', options: [
+        { v: 'exp', name: 'Просрочено', test: function (x) { return x.f.level === 'expired'; } },
+        { v: 'crit', name: 'Уценить срочно', test: function (x) { return x.f.level === 'crit'; } },
+        { v: 'warn', name: 'Скоро', test: function (x) { return x.f.level === 'warn'; } },
+        { v: 'ok', name: 'В порядке', test: function (x) { return x.f.level === 'ok'; } }
+      ] },
+      { key: 'group', name: 'Группа', auto: function (x) { return x.r.group; }, limit: 12 },
+      { key: 'money', name: 'Денег в партии', options: [
+        { v: 'big', name: 'От 3 000', test: function (x) { return num(x.r.qty) * num(x.r.price) >= 3000; } },
+        { v: 'mid', name: 'До 3 000', test: function (x) { return num(x.r.qty) * num(x.r.price) < 3000; } }
+      ] }
+    ];
+    var rows = FLT.apply('expiry', allRows, defs, function (x) { return x.r.name + ' ' + (x.r.group || ''); });
     var crit = rows.filter(function (x) { return x.f.level === 'crit' || x.f.level === 'expired'; });
 
     var h = pageHead('Сроки годности', 'Что уценить сегодня',
       '<div><button class="btn" data-act="print-labels">🖨 Ценники</button> ' +
       '<button class="btn btn-primary" data-form="expiryItem">＋ Товар</button></div>');
+
+    h += FLT.bar('expiry', defs, allRows, { search: 'товар или группа' });
 
     h += '<div class="stat-grid">' +
       stat('Уценить срочно', nf(crit.length), 'До ' + S.settings.fefoCrit + ' дн. — скидка ' + pct(S.settings.discountCrit, 0), crit.length ? 'c-red' : 'c-green') +
@@ -1628,15 +1817,17 @@
       stat('Денег в этих партиях', priv(rows.reduce(function (a, x) { return a + num(x.r.qty) * num(x.r.price); }, 0)), '') +
       '</div>';
 
-    h += card('Партии', listOf(rows.map(function (x) {
+    h += FLT.note(rows.length, allRows.length) + card('Партии', listOf(rows.map(function (x) {
       var kind = x.f.level === 'ok' ? 'green' : (x.f.level === 'warn' ? 'orange' : 'red');
       return listRow({ icon: x.f.level === 'ok' ? '🟢' : (x.f.level === 'warn' ? '🟠' : '🔴'),
-        title: esc(x.r.name),
+        title: DET.link('product', E.norm(x.r.name), x.r.name),
         sub: esc(x.f.action) + ' · годен до ' + dateRu(x.r.bestBefore),
         value: badge(x.f.days == null ? '—' : (x.f.days < 0 ? 'просрочено' : x.f.days + ' ' + plural(x.f.days, 'день', 'дня', 'дней')), kind) +
           '<small>' + (x.f.discount ? 'скидка ' + x.f.discount + '% → ' + money(num(x.r.price) * (100 - x.f.discount) / 100) : money(x.r.price)) +
+          ' ' + DET.btn('product', E.norm(x.r.name)) +
+          ' <button class="btn btn-sm" data-edit="expiry:' + x.r.id + ':expiryItem">✎</button>' +
           ' <button class="btn btn-sm btn-danger" data-del="expiry:' + x.r.id + '">✕</button></small>' });
-    }), 'Пока пусто. Добавьте товар с коротким сроком при приёмке.'));
+    }), FLT.active('expiry') ? 'Под фильтр ничего не подошло' : 'Пока пусто. Добавьте товар с коротким сроком при приёмке.'));
     return h;
   }
 
@@ -1657,17 +1848,31 @@
         D.writeoffsPeriod ? dateRu(D.writeoffsPeriod.from.split('.').reverse().join('-')) + ' – ' + dateRu(D.writeoffsPeriod.to.split('.').reverse().join('-')) + ' · ' + wDays + ' дн.' : '', 'c-red') +
       hero('В месяц', priv(perMonth), 'Это ' + pct(share) + ' от оборота', share > 2 ? 'c-red' : 'c-green') + '</div>';
 
-    h += card('Причины списаний', listOf(E.byReason(D.writeoffs).map(function (r) {
+    var lossDefs = [
+      { key: 'reason', name: 'Причина', auto: function (r) { return r.reason; }, limit: 12 },
+      { key: 'size', name: 'Сумма', options: [
+        { v: 'big', name: 'От 1 000', test: function (r) { return num(r.cost) >= 1000; } },
+        { v: 'mid', name: 'До 1 000', test: function (r) { return num(r.cost) < 1000; } }
+      ] }
+    ];
+    var woAll = D.writeoffs;
+    var wo = FLT.apply('losses', woAll, lossDefs, function (r) { return (r.name || '') + ' ' + (r.reason || ''); });
+    h += FLT.bar('losses', lossDefs, woAll, { search: 'товар или причина' });
+
+    h += card('Причины списаний', listOf(E.byReason(wo).map(function (r) {
       return listRow({ icon: '🗑', title: esc(r.reason), sub: nf(r.docs) + ' ' + plural(r.docs, 'запись', 'записи', 'записей') + ' · ' + pct(r.share) + ' от потерь',
         value: priv(r.cost) });
-    }), ''));
+    }), 'Под фильтр ничего не подошло'));
 
-    h += card('Больше всего теряем на этом', table('woTop', [
-      { title: 'Товар', fn: function (r) { return esc(r.name); } },
+    h += card('Больше всего теряем на этом',
+      FLT.note(wo.length, woAll.length, 'на ' + money(wo.reduce(function (a, r) { return a + num(r.cost); }, 0))) +
+      table('woTop', [
+      { title: 'Товар', fn: function (r) { return DET.link('product', E.norm(r.name), r.name); } },
       { title: 'Количество', cls: 'num', fn: function (r) { return nf(r.qty, 2); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return priv(r.cost); } },
-      { title: 'Причины', fn: function (r) { return esc(r.reason); } }
-    ], E.topByCost(D.writeoffs, 40), { step: 20 }));
+      { title: 'Причины', fn: function (r) { return esc(r.reason); } },
+      { title: '', cls: 'center', fn: function (r) { return DET.btn('product', E.norm(r.name), 'Подробнее'); } }
+    ], E.topByCost(wo, 40), { step: 20 }));
 
     if (D.returns.length) {
       h += card('Возвраты поставщикам', listOf(E.byReason(D.returns).map(function (r) {
@@ -1734,8 +1939,10 @@
        listRow({ icon: '📦', title: 'Себестоимость проданного', sub: 'Сколько стоил проданный товар', value: '<span class="c-red private">−' + money(cogs) + '</span>' }),
        listRow({ icon: '📈', title: 'Валовая прибыль', sub: 'Выручка минус себестоимость', value: '<b class="private">' + money(gross) + '</b>' })]
         .concat(costs.map(function (c) {
-          return listRow({ icon: '🧾', title: esc(c.name), sub: pct(E.div(c.v, revenue) * 100) + ' от выручки',
-            value: '<span class="c-red private">−' + money(c.v) + '</span>' });
+          return listRow({ icon: '🧾', title: DET.link('category', c.name, c.name),
+            sub: pct(E.div(c.v, revenue) * 100) + ' от выручки',
+            value: '<span class="c-red private">−' + money(c.v) + '</span>' +
+              '<small>' + DET.btn('category', c.name) + '</small>' });
         }))
         .concat([listRow({ icon: net >= 0 ? '✅' : '⚠️', title: 'Чистая прибыль', sub: 'Что осталось владельцу',
           value: '<b class="' + (net >= 0 ? 'c-green' : 'c-red') + ' private">' + money(net) + '</b>' })]), ''));
@@ -1788,23 +1995,43 @@
   function viewAbc() {
     if (!D.sales.length) return pageHead('ABC-анализ', 'Что приносит деньги') +
       '<div class="card"><div class="empty"><b>Нужен отчёт 1С «Продажи»</b></div></div>';
-    var rows = C.abc, sum = { A: 0, B: 0, C: 0 }, cnt = { A: 0, B: 0, C: 0 };
+    var defs = [
+      { key: 'cls', name: 'Класс', options: [
+        { v: 'A', name: 'A — главные', test: function (r) { return r.abc === 'A'; } },
+        { v: 'B', name: 'B — средние', test: function (r) { return r.abc === 'B'; } },
+        { v: 'C', name: 'C — хвост', test: function (r) { return r.abc === 'C'; } }
+      ] },
+      { key: 'group', name: 'Группа', auto: function (r) { return C.groupIdx[r.key]; }, limit: 16 },
+      { key: 'marg', name: 'Прибыльность', options: [
+        { v: 'loss', name: 'В минус', test: function (r) { return r.profit < 0; } },
+        { v: 'low', name: 'Маржа до 15%', test: function (r) { return r.revenue > 0 && r.profit / r.revenue < 0.15 && r.profit >= 0; } },
+        { v: 'high', name: 'Маржа от 30%', test: function (r) { return r.revenue > 0 && r.profit / r.revenue >= 0.3; } }
+      ] }
+    ];
+    var all = C.abc;
+    var rows = FLT.apply('abc', all, defs, function (r) { return r.name; });
+    var sum = { A: 0, B: 0, C: 0 }, cnt = { A: 0, B: 0, C: 0 };
     rows.forEach(function (r) { sum[r.abc] += r.revenue; cnt[r.abc]++; });
     var h = pageHead('ABC-анализ', 'Какие товары дают выручку');
+    h += FLT.bar('abc', defs, all, { search: 'название товара' });
     h += '<div class="stat-grid">' +
       stat('A — главные', nf(cnt.A) + ' поз.', money(sum.A) + ' · 80% выручки', 'c-green') +
       stat('B — средние', nf(cnt.B) + ' поз.', money(sum.B) + ' · до 95%', 'c-orange') +
       stat('C — хвост', nf(cnt.C) + ' поз.', money(sum.C) + ' · последние 5%', 'c-muted') +
       stat('Всего в продаже', nf(rows.length) + ' поз.', 'За ' + (D.salesPeriod ? D.salesPeriod.days + ' дн.' : 'период отчёта')) + '</div>';
-    h += card('Список', table('abcT', [
+    h += card('Список',
+      FLT.note(rows.length, all.length, 'выручка ' + money(rows.reduce(function (a, r) { return a + r.revenue; }, 0))) +
+      table('abcT', [
       { title: '№', cls: 'num', fn: function (r, i) { return nf(i + 1); } },
-      { title: 'Товар', fn: function (r) { return esc(r.name); } },
-      { title: 'Группа', fn: function (r) { return esc(C.groupIdx[r.key] || '—'); } },
+      { title: 'Товар', fn: function (r) { return DET.link('product', r.key, r.name); } },
+      { title: 'Группа', fn: function (r) { return C.groupIdx[r.key] ? DET.link('group', C.groupIdx[r.key], C.groupIdx[r.key]) : '—'; } },
       { title: 'Продано', cls: 'num', fn: function (r) { return nf(r.qty, 1); } },
       { title: 'Выручка', cls: 'num', fn: function (r) { return priv(r.revenue); } },
+      { title: 'Доля', cls: 'num', fn: function (r) { return r.share + '%'; } },
       { title: 'Прибыль', cls: 'num', fn: function (r) { return priv(r.profit); } },
-      { title: 'Класс', cls: 'center', fn: function (r) { return badge(r.abc, r.abc === 'A' ? 'green' : (r.abc === 'B' ? 'orange' : 'gray')); } }
-    ], rows, { step: 50 }));
+      { title: 'Класс', cls: 'center', fn: function (r) { return badge(r.abc, r.abc === 'A' ? 'green' : (r.abc === 'B' ? 'orange' : 'gray')); } },
+      { title: '', cls: 'center', fn: function (r) { return DET.btn('product', r.key, 'Подробнее'); } }
+    ], rows, { step: 50, empty: 'Под фильтр ничего не подошло' }));
     return h;
   }
 
@@ -1826,20 +2053,36 @@
       var q = ($('search') && $('search').value || '').trim();
       var rows = C.cmp;
       if (q) { var nq = E.norm(q); rows = rows.filter(function (r) { return r.key.indexOf(nq) >= 0; }); }
+      var cmpDefs = [
+        { key: 'choice', name: 'Выбор', options: [
+          { v: 'multi', name: 'Есть из кого выбрать', test: function (r) { return r.suppliers > 1; } },
+          { v: 'one', name: 'Один поставщик', test: function (r) { return r.suppliers === 1; } }
+        ] },
+        { key: 'save', name: 'Экономия', options: [
+          { v: 'big', name: 'Больше 10 ₽', test: function (r) { return r.spread > 10; } },
+          { v: 'any', name: 'Любая', test: function (r) { return r.spread > 0; } }
+        ] },
+        { key: 'best', name: 'Где дешевле', auto: function (r) { return r.bestSupplier; }, limit: 12 }
+      ];
+      var allCmp = rows.slice();
+      rows = FLT.apply('pricecmp', rows, cmpDefs, function (r) { return r.name + ' ' + (r.bestSupplier || ''); });
       var multi = C.cmp.filter(function (r) { return r.suppliers > 1; });
       h += '<div class="stat-grid">' +
         stat('Цен в базе', nf(D.prices.length), 'Поставщиков: ' + nf(Object.keys(C.bySupplier).length)) +
         stat('Есть выбор', nf(multi.length), 'Товаров с 2+ поставщиками') +
         stat('Можно сэкономить', priv(multi.reduce(function (a, r) { return a + r.spread; }, 0)), 'Если брать по лучшей цене') +
         stat('Телефонов', nf(D.contacts.filter(function (c) { return c.phone; }).length), 'Звонок прямо из таблицы') + '</div>';
-      h += card('Сравнение цен' + (q ? ' — «' + esc(q) + '»' : ''), table('cmpT', [
-        { title: 'Товар', fn: function (r) { return esc(r.name); } },
+      h += FLT.bar('pricecmp', cmpDefs, allCmp, { search: 'товар или поставщик' });
+      h += card('Сравнение цен' + (q ? ' — «' + esc(q) + '»' : ''),
+        FLT.note(rows.length, allCmp.length) + table('cmpT', [
+        { title: 'Товар', fn: function (r) { return DET.link('product', r.key, r.name); } },
         { title: 'Дешевле всего', cls: 'num', fn: function (r) { return '<span class="c-green private">' + money(r.min) + '</span>'; } },
-        { title: 'У кого', fn: function (r) { return esc(r.bestSupplier) + (r.bestPhone ? ' · <a class="phone" href="tel:' + esc(r.bestPhone) + '">' + esc(r.bestPhone) + '</a>' : ''); } },
+        { title: 'У кого', fn: function (r) { return DET.link('firm', E.norm(r.bestSupplier), r.bestSupplier) + (r.bestPhone ? ' · <a class="phone" href="tel:' + esc(r.bestPhone) + '">' + esc(r.bestPhone) + '</a>' : ''); } },
         { title: 'Дороже всего', cls: 'num', fn: function (r) { return priv(r.max); } },
         { title: 'Разница', cls: 'num', fn: function (r) { return r.spread ? '<span class="c-green private">' + money(r.spread) + '</span>' : '—'; } },
         { title: 'Ставить в зал', cls: 'num', fn: function (r) { return priv(suggestPrice(r.min)); } },
-        { title: 'Предложений', cls: 'center', fn: function (r) { return nf(r.suppliers); } }
+        { title: 'Предложений', cls: 'center', fn: function (r) { return nf(r.suppliers); } },
+        { title: '', cls: 'center', fn: function (r) { return DET.btn('product', r.key, 'Подробнее'); } }
       ], rows, { step: 40, empty: 'Ничего не найдено' }));
     }
 
@@ -1852,7 +2095,8 @@
     });
     if (kvi.length) {
       h += card('Товары-маркеры: наши цены против соседей', listOf(kvi.map(function (r) {
-        return listRow({ icon: r.diff == null ? '⚪️' : (r.diff <= 0 ? '🟢' : '🔴'), title: esc(r.name),
+        return listRow({ icon: r.diff == null ? '⚪️' : (r.diff <= 0 ? '🟢' : '🔴'),
+          title: DET.link('product', E.norm(r.name), r.name),
           sub: 'себестоимость ' + money(r.cost) + ' · наша ' + money(r.our) + (r.comp ? ' · у соседей ' + money(r.comp) : ''),
           value: (r.diff == null ? '<span class="c-muted">нет цены соседей</span>'
             : '<span class="' + (r.diff <= 0 ? 'c-green' : 'c-red') + '">' + (r.diff > 0 ? 'дороже на ' : 'дешевле на ') + money(Math.abs(r.diff)) + '</span>') +
@@ -1867,9 +2111,17 @@
     var q = ($('search') && $('search').value || '').trim();
     var h = pageHead('Поиск', 'По товарам, поставщикам, штрихкодам и телефонам');
     if (!q) return h + '<div class="card"><div class="empty">Введите запрос в строке поиска сверху</div></div>';
-    var res = E.search(q, D, 'all', 300);
-    h += card('Найдено: ' + nf(res.length), listOf(res.slice(0, 120).map(function (r) {
-      return listRow({ icon: '🔎', title: esc(r.name), sub: esc(r.type) + ' · ' + r.cols.filter(Boolean).join(' · ') });
+    var resAll = E.search(q, D, 'all', 300);
+    var sDefs = [{ key: 'type', name: 'Где нашли', auto: function (r) { return r.type; }, limit: 10 }];
+    var res = FLT.apply('search', resAll, sDefs, function (r) { return r.name; });
+    h += FLT.bar('search', sDefs, resAll);
+    h += card('Найдено: ' + nf(res.length) + (res.length !== resAll.length ? ' из ' + nf(resAll.length) : ''),
+      listOf(res.slice(0, 120).map(function (r) {
+      // товар открывается карточкой товара, поставщик — карточкой фирмы
+      var kind = E.norm(r.type).indexOf('поставщ') >= 0 || E.norm(r.type).indexOf('контрагент') >= 0 ? 'firm' : 'product';
+      return listRow({ icon: '🔎', title: DET.link(kind, E.norm(r.name), r.name),
+        sub: esc(r.type) + ' · ' + r.cols.filter(Boolean).join(' · '),
+        value: DET.btn(kind, E.norm(r.name)) });
     }), 'Ничего не нашлось'));
     return h;
   }
@@ -1904,13 +2156,22 @@
         value: '<button class="btn btn-sm" data-act="folder-sync">Обновить</button>' }) : ''
     ].filter(Boolean), ''));
 
-    h += card('Загруженные файлы', table('filesT', [
+    var fDefs = [
+      { key: 'kind', name: 'Что это', auto: function (r) { return KINDS[r.kind] || r.kind; }, limit: 14 },
+      { key: 'ok', name: 'Разобрано', options: [
+        { v: 'yes', name: 'Программа поняла', test: function (r) { return r.kind !== 'unknown'; } },
+        { v: 'no', name: 'Не поняла', test: function (r) { return r.kind === 'unknown'; } }
+      ] }
+    ];
+    var files = FLT.apply('files', D.files, fDefs, function (r) { return r.name; });
+    h += FLT.bar('files', fDefs, D.files, { search: 'имя файла' });
+    h += card('Загруженные файлы', FLT.note(files.length, D.files.length) + table('filesT', [
       { title: 'Файл', fn: function (r) { return esc(r.name); } },
       { title: 'Что это', fn: function (r) { return esc(KINDS[r.kind] || r.kind); } },
       { title: 'Строк', cls: 'num', fn: function (r) { return nf(r.rows); } },
       { title: 'Период', fn: function (r) { return r.period ? esc(r.period.from + ' – ' + r.period.to) : '—'; } },
       { title: '', cls: 'center', fn: function (r) { return r.kind === 'unknown' ? badge('не понял', 'red') : badge('готово', 'green'); } }
-    ], D.files, { step: 30, empty: 'Пока ничего не загружено' }));
+    ], files, { step: 30, empty: FLT.active('files') ? 'Под фильтр ничего не подошло' : 'Пока ничего не загружено' }));
 
     h += card('Сохранить и перенести', listOf([
       listRow({ icon: '📊', title: 'Выгрузить всё в Excel', sub: 'Смены, накладные, оплаты, зарплата, заказы',
@@ -1993,8 +2254,25 @@
         'В нём есть приход, продажи, остаток и дата последнего поступления по каждой позиции.<br>' +
         'Загрузите его на экране «Импорт из 1С» — программа посчитает, сколько денег стоит на полке.</div></div>';
     }
-    var d = C.dead || E.deadStockList(D.dead, C.stockIdx, S.settings);
+    var d0 = C.dead || E.deadStockList(D.dead, C.stockIdx, S.settings);
+    var defs = [
+      { key: 'why', name: 'Почему в списке', options: [
+        { v: 'nosale', name: 'Совсем не продавался', test: function (r) { return r.sold <= 0; } },
+        { v: 'slow', name: 'Продаётся плохо', test: function (r) { return r.sold > 0; } },
+        { v: 'old', name: 'Давно не завозили', test: function (r) { return r.age >= num(S.settings.deadDays); } }
+      ] },
+      { key: 'group', name: 'Группа', auto: function (r) { return r.group; }, limit: 14 },
+      { key: 'money', name: 'Сколько денег лежит', options: [
+        { v: 'big', name: 'От 5 000', test: function (r) { return r.money >= 5000; } },
+        { v: 'mid', name: '1 000 – 5 000', test: function (r) { return r.money >= 1000 && r.money < 5000; } },
+        { v: 'small', name: 'До 1 000', test: function (r) { return r.money < 1000; } }
+      ] }
+    ];
+    var deadRows = FLT.apply('dead', d0.list, defs, function (r) { return r.name + ' ' + (r.group || ''); });
+    var d = { list: deadRows, total: E.safeRound(deadRows.reduce(function (a, r) { return a + r.money; }, 0)),
+      count: deadRows.length, noSale: deadRows.filter(function (r) { return r.sold <= 0; }).length };
     var hasPrice = d.list.filter(function (r) { return r.money > 0; }).length;
+    h += FLT.bar('dead', defs, d0.list, { search: 'товар или группа' });
 
     h += hero('Заморожено в неликвидах', priv(d.total),
       nf(d.count) + ' ' + plural(d.count, 'позиция', 'позиции', 'позиций') +
@@ -2010,16 +2288,18 @@
       stat('Порог', pct(num(S.settings.deadSoldPct)) + ' / ' + nf(S.settings.deadDays) + ' дн.',
         'продажи от остатка и давность завоза') + '</div>';
 
-    h += card('Что делать с этим товаром', table('deadT', [
-      { title: 'Товар', fn: function (r) { return esc(r.name); } },
-      { title: 'Группа', fn: function (r) { return esc(r.group || '—'); } },
+    h += card('Что делать с этим товаром',
+      FLT.note(d.list.length, d0.list.length, 'на ' + money(d.total)) + table('deadT', [
+      { title: 'Товар', fn: function (r) { return DET.link('product', r.key, r.name); } },
+      { title: 'Группа', fn: function (r) { return r.group ? DET.link('group', r.group, r.group) : '—'; } },
       { title: 'Остаток', cls: 'num', fn: function (r) { return nf(r.left, 2); } },
       { title: 'Продано', cls: 'num', fn: function (r) { return nf(r.sold, 2); } },
       { title: 'Цена закупа', cls: 'num', fn: function (r) { return r.price ? priv(r.price) : '—'; } },
       { title: 'Денег лежит', cls: 'num', fn: function (r) { return '<span class="c-orange private">' + money(r.money) + '</span>'; } },
       { title: 'Последний завоз', fn: function (r) { return r.lastIn ? esc(dateRu(r.lastIn)) + (r.age ? ' · ' + r.age + ' дн.' : '') : '—'; } },
-      { title: 'Почему в списке', fn: function (r) { return badge(r.reason, r.sold <= 0 ? 'red' : 'orange'); } }
-    ], d.list, { step: 40, empty: 'Неликвидов нет — весь товар в обороте' }));
+      { title: 'Почему в списке', fn: function (r) { return badge(r.reason, r.sold <= 0 ? 'red' : 'orange'); } },
+      { title: '', cls: 'center', fn: function (r) { return DET.btn('product', r.key, 'Подробнее'); } }
+    ], d.list, { step: 40, empty: FLT.active('dead') ? 'Под фильтр ничего не подошло' : 'Неликвидов нет — весь товар в обороте' }));
 
     h += '<div class="banner"><span>💡</span><span>Что с этим делать: уценить и поставить на видное место, ' +
       'вернуть поставщику, добавить в акцию или просто не заказывать снова. ' +
@@ -2050,29 +2330,48 @@
       stat('Документов', nf(ie.rows.length), 'накладные, ордера, чеки') + '</div>';
 
     h += card('По видам операций', table('ieOp', [
-      { title: 'Вид операции', fn: function (r) { return esc(r.name || '—'); } },
+      { title: 'Вид операции', fn: function (r) { return r.name ? DET.link('operation', r.name, r.name) : '—'; } },
       { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? '<span class="c-green private">' + money(r.income) + '</span>' : '—'; } },
       { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? '<span class="c-red private">' + money(r.expense) + '</span>' : '—'; } },
-      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } }
+      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } },
+      { title: '', cls: 'center', fn: function (r) { return r.name ? DET.btn('operation', r.name, 'Подробнее') : ''; } }
     ], sum.byOperation, { step: 20 }));
 
     h += card('По контрагентам и статьям', table('ieGrp', [
-      { title: 'Кто или за что', fn: function (r) { return esc(r.name || 'не указано'); } },
+      { title: 'Кто или за что', fn: function (r) { return r.name ? DET.link('party', r.name, r.name) : 'не указано'; } },
       { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? priv(r.income) : '—'; } },
       { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? priv(r.expense) : '—'; } },
       { title: 'Итого', cls: 'num', fn: function (r) { return '<span class="' + cls(r.net) + ' private">' + money(r.net) + '</span>'; } },
-      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } }
+      { title: 'Документов', cls: 'num', fn: function (r) { return nf(r.count); } },
+      { title: '', cls: 'center', fn: function (r) { return r.name ? DET.btn('party', r.name, 'Подробнее') : ''; } }
     ], sum.byGroup, { step: 30 }));
 
     var q = ($('search') && $('search').value || '').trim();
     var docs = ie.rows.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
     if (q) { var nq = E.norm(q); docs = docs.filter(function (r) {
       return E.norm(r.doc).indexOf(nq) >= 0 || E.norm(r.group).indexOf(nq) >= 0 || E.norm(r.operation).indexOf(nq) >= 0; }); }
-    h += card('Документы' + (q ? ' — «' + esc(q) + '»' : ''), table('ieDocs', [
-      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+    var ieDefs = [
+      { key: 'side', name: 'Сторона', options: [
+        { v: 'in', name: 'Только приход', test: function (r) { return r.income > 0; } },
+        { v: 'out', name: 'Только расход', test: function (r) { return r.expense > 0; } }
+      ] },
+      { key: 'op', name: 'Вид операции', auto: function (r) { return r.operation; }, limit: 12 },
+      { key: 'party', name: 'Кто или за что', auto: function (r) { return r.group; }, limit: 14 },
+      whenDefs('date', 'Когда')
+    ];
+    var allDocs = docs.slice();
+    docs = FLT.apply('incexp', docs, ieDefs,
+      function (r) { return (r.doc || '') + ' ' + (r.group || '') + ' ' + (r.operation || ''); });
+    h += FLT.bar('incexp', ieDefs, allDocs, { search: 'документ, контрагент, операция' });
+    h += card('Документы' + (q ? ' — «' + esc(q) + '»' : ''),
+      FLT.note(docs.length, allDocs.length,
+        'приход ' + money(docs.reduce(function (a, r) { return a + r.income; }, 0)) +
+        ', расход ' + money(docs.reduce(function (a, r) { return a + r.expense; }, 0))) +
+      table('ieDocs', [
+      { title: 'Дата', fn: function (r) { return r.date ? DET.link('day', r.date, dateRu(r.date)) : '—'; } },
       { title: 'Документ', fn: function (r) { return esc(SUP.shortDoc(r.doc)); } },
-      { title: 'Вид операции', fn: function (r) { return esc(r.operation || '—'); } },
-      { title: 'Кто или за что', fn: function (r) { return esc(r.group || '—'); } },
+      { title: 'Вид операции', fn: function (r) { return r.operation ? DET.link('operation', r.operation, r.operation) : '—'; } },
+      { title: 'Кто или за что', fn: function (r) { return r.group ? DET.link('party', r.group, r.group) : '—'; } },
       { title: 'Приход', cls: 'num', fn: function (r) { return r.income ? priv(r.income) : '—'; } },
       { title: 'Расход', cls: 'num', fn: function (r) { return r.expense ? priv(r.expense) : '—'; } }
     ], docs, { step: 40, empty: 'Ничего не найдено' }));
@@ -2279,8 +2578,21 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear]');
       if (!el) return;
+      // «Подробнее»: одно окно для любой цифры — что с ней связано
+      if (el.dataset.more) {
+        e.preventDefault();
+        var mp = el.dataset.more.split('|');
+        DET.open(mp[0], mp.slice(1).join('|'));
+        return;
+      }
+      if (el.dataset.filter !== undefined && el.dataset.filter !== '') {
+        var fp = el.dataset.filter.split('|');
+        FLT.set(fp[0], fp[1], fp.slice(2).join('|'));
+        PAGE = {}; render(); return;
+      }
+      if (el.dataset.filterClear) { FLT.clear(el.dataset.filterClear); PAGE = {}; render(); return; }
       if (el.dataset.go) { closeSheet(); go(el.dataset.go); return; }
       if (el.dataset.period) { PERIOD = el.dataset.period; PAGE = {}; render(); return; }
       if (el.dataset.tab) { var p = el.dataset.tab.split(':'); TAB[p[0]] = p[1]; render(); return; }
@@ -2298,6 +2610,8 @@
         var pre = {};
         if (el.dataset.supplier) pre.supplier = el.dataset.supplier;
         if (el.dataset.employee) pre.employee = el.dataset.employee;
+        if (el.dataset.moreName) pre.name = el.dataset.moreName;
+        if (el.dataset.moreFirm) { pre.name = el.dataset.moreFirm; pre.firm = el.dataset.moreFirm; }
         openForm(el.dataset.form, pre);
         return;
       }
@@ -2311,7 +2625,8 @@
         return;
       }
       var a = el.dataset.act;
-      if (a === 'close-sheet') closeSheet();
+      if (a === 'close-sheet') { DET.reset(); closeSheet(); }
+      else if (a === 'more-back') DET.back();
       else if (a === 'pick-files' || a === 'backup') { closeSheet(); if (a === 'backup') backup(); else $('filesInput').click(); }
       else if (a === 'more') { PAGE[el.dataset.id] = (PAGE[el.dataset.id] || +el.dataset.step) + (+el.dataset.step) * 3; render(); }
       else if (a === 'pick-folder') $('folderInput').click();
@@ -2393,6 +2708,21 @@
       if (window.WM_EXTRA_CHANGE && window.WM_EXTRA_CHANGE(e.target)) { render(); }
     });
 
+    // поиск внутри фильтров: печатаем — список сужается, курсор остаётся на месте
+    var fTimer = null;
+    document.addEventListener('input', function (e) {
+      var box = e.target;
+      if (!box.dataset || !box.dataset.filterText) return;
+      var id = box.dataset.filterText, pos = box.selectionStart;
+      FLT.setText(id, box.value);
+      clearTimeout(fTimer);
+      fTimer = setTimeout(function () {
+        PAGE = {}; render();
+        var again = document.querySelector('[data-filter-text="' + id + '"]');
+        if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (err) {} }
+      }, 260);
+    });
+
     var timer = null;
     $('search').addEventListener('input', function () {
       clearTimeout(timer);
@@ -2441,7 +2771,7 @@
     });
     $('filesInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
     $('folderInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSheet(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { DET.reset(); closeSheet(); } });
   }
 
   // Разовый перенос: смены и расходы, записанные раньше, переезжают
