@@ -409,6 +409,9 @@
     return { title: 'Статья: ' + name, html: h };
   }
 
+  // средняя выручка за день: без дней с выручкой делить не на что
+  function avgDay(total, days) { return days > 0 ? priv(round(total / days)) : '—'; }
+
   function monthRu(m) {
     var mon = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
       'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
@@ -492,7 +495,7 @@
       ['Прибыль', priv(sum(inc, 'amount') - sum(exp, 'amount')),
         sum(inc, 'amount') - sum(exp, 'amount') >= 0 ? 'c-green' : 'c-red'],
       ['Дней с выручкой', nf(dayList.filter(function (d) { return d.income > 0; }).length)],
-      ['Средний день', dayList.length ? priv(sum(inc, 'amount') / dayList.filter(function (d) { return d.income > 0; }).length || 0) : '—'],
+      ['Средний день', avgDay(sum(inc, 'amount'), dayList.filter(function (d) { return d.income > 0; }).length)],
       ['Приход товара', priv(sum(docs, 'sum'))],
       ['Оплачено поставщикам', priv(sum(pays, 'sum'))]
     ]);
@@ -583,7 +586,8 @@
 
   /* Смена (дата + название смены) */
   function shiftDetail(key) {
-    var p = String(key).split('~'), date = p[0], name = p[1] || '';
+    // ключ смены — «дата~название»; в названии тоже может встретиться «~»
+    var p = String(key).split('~'), date = p[0], name = p.slice(1).join('~');
     var rows = (S().state.dds || []).filter(function (r) {
       return r.date === date && (!name || norm(r.shift) === norm(name));
     });

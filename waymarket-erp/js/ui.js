@@ -1667,6 +1667,19 @@
         .sort(function (a, b) { return b.buySum - a.buySum; });
       h += FLT.bar('stock', stDefs, allStock, { search: 'товар, штрихкод, артикул' });
 
+      // минусовой остаток в 1С — это проданное, но не оприходованное:
+      // деньги за товар пришли, а прихода нет. Про это лучше знать сразу.
+      var minus = allStock.filter(function (r) { return r.qty < 0; });
+      if (minus.length) {
+        var minusSum = E.safeRound(minus.reduce(function (a, r) { return a + r.buySum; }, 0));
+        h += '<div class="banner"><span>⚠️</span><span>В 1С <b>' + nf(minus.length) + '</b> ' +
+          plural(minus.length, 'позиция стоит', 'позиции стоят', 'позиций стоят') +
+          ' с минусовым остатком на <b class="private">' + money(Math.abs(minusSum)) + '</b>. ' +
+          'Обычно это значит: товар продали, а приход не провели — не хватает накладной. ' +
+          'Нажмите «Закончилось», чтобы посмотреть список.</span>' +
+          '<button class="btn" data-filter="stock|qty|zero">Показать</button></div>';
+      }
+
       h += card('Остатки' + (q ? ' — «' + esc(q) + '»' : ''),
         FLT.note(rows.length, allStock.length,
           'на ' + money(rows.reduce(function (a, r) { return a + r.buySum; }, 0)) + ' в закупе') +

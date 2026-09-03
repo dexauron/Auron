@@ -341,10 +341,11 @@
     h += '<div class="grid-2">' +
       u.card('Выручка по сменам', u.listOf(F.byShift(rows).map(function (s) {
         return u.listRow({ icon: s.name === 'Ночная' ? '🌙' : (s.name === 'Утро' ? '🌅' : '🌆'),
-          title: s.name, sub: u.pct(s.share) + ' выручки · ' + s.count + ' записей', value: u.priv(s.sum) });
+          title: DET().link('shift', '~' + s.name, s.name),
+          sub: u.pct(s.share) + ' выручки · ' + s.count + ' записей', value: u.priv(s.sum) });
       }), '')) +
       u.card('Выручка по дням недели', u.listOf(F.byWeekday(rows).map(function (d) {
-        return u.listRow({ icon: '📅', title: d.name, sub: u.pct(d.share), value: u.priv(d.sum) });
+        return u.listRow({ icon: '📅', title: u.esc(d.name), sub: u.pct(d.share), value: u.priv(d.sum) });
       }), '')) + '</div>';
 
     h += u.card('Расхождения по кассирам', u.listOf(F.byCashier(rows).filter(function (c) { return c.name !== '—'; }).map(function (c) {
@@ -663,7 +664,8 @@
     h += u.card('Остатки денег на конец дня', u.listOf(
       d.balances.list.map(function (b) {
         return u.listRow({ icon: b.name === 'Наличные' ? '💵' : (b.name === 'Карта' ? '💳' : '🏦'),
-          title: b.name, value: '<span class="' + (b.sum >= 0 ? '' : 'c-red') + ' private">' + E.fmtMoney(b.sum) + '</span>' });
+          title: DET().link('method', b.name, b.name),
+          value: '<span class="' + (b.sum >= 0 ? '' : 'c-red') + ' private">' + E.fmtMoney(b.sum) + '</span>' });
       }).concat([
         u.listRow({ icon: '💰', title: 'Всего денег', value: '<b class="private">' + E.fmtMoney(d.balances.total) + '</b>' }),
         u.listRow({ icon: '💼', title: 'Общий долг поставщикам', sub: 'Накоплено на эту дату',
@@ -672,16 +674,18 @@
 
     h += '<div class="grid-2">' +
       u.card('Приход по сменам', u.listOf(d.byShift.map(function (s) {
-        return u.listRow({ icon: '🕒', title: s.name, sub: u.pct(s.share), value: u.priv(s.sum) });
+        return u.listRow({ icon: '🕒', title: DET().link('shift', date + '~' + s.name, s.name),
+          sub: u.pct(s.share), value: u.priv(s.sum) });
       }), 'Смен не было')) +
       u.card('Приход по способу оплаты', u.listOf(d.byMethod.map(function (m) {
         return u.listRow({ icon: m.name === 'Наличные' ? '💵' : (m.name === 'Карта' ? '💳' : '🏦'),
-          title: m.name, sub: u.pct(m.share), value: u.priv(m.sum) });
+          title: DET().link('method', m.name, m.name), sub: u.pct(m.share), value: u.priv(m.sum) });
       }), '')) + '</div>';
 
     if (d.byCategory.length) {
       h += u.card('Расходы за день', u.listOf(d.byCategory.map(function (c) {
-        return u.listRow({ icon: '🧾', title: c.name, sub: c.count + ' записей', value: u.priv(c.sum) });
+        return u.listRow({ icon: '🧾', title: DET().link('category', c.name, c.name),
+          sub: c.count + ' записей', value: u.priv(c.sum) + '<small>' + DET().btn('category', c.name) + '</small>' });
       }), ''));
     }
 
@@ -712,11 +716,9 @@
     'fin-pay': function (el) {
       var p = window.WM_MARK_PAID(el.dataset.id);
       return p ? 'Оплачено: ' + p.supplier + ' — ' + E.fmtMoney(p.amount) + '. Запись добавлена в расходы.' : null;
-    },
-    'fin-filter-clear': function () { FLT().clear('finbase'); return null; }
+    }
   };
   window.WM_EXTRA_CHANGE = function (el) {
-    if (el.classList && el.classList.contains('fin-filter')) { FLT().set('finbase', el.dataset.filter, el.value); return true; }
     if (el.id === 'repMonth') { S.setSetting('reportMonth', el.value); return true; }
     if (el.id === 'dayDate') { S.setSetting('dayReportDate', el.value); return true; }
     return false;
