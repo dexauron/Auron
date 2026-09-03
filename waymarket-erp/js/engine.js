@@ -1273,7 +1273,8 @@
       acc += sorted[i].revenue;
       var share = div(acc, total);
       sorted[i].abc = share <= 0.8 ? 'A' : (share <= 0.95 ? 'B' : 'C');
-      sorted[i].shareCum = safeRound(share * 100);
+      sorted[i].share = safeRound(div(sorted[i].revenue, total) * 100);   // доля позиции в обороте
+      sorted[i].shareCum = safeRound(share * 100);                        // накопленная доля
     }
     return sorted;
   }

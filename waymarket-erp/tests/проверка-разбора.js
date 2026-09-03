@@ -722,6 +722,156 @@ if (global.__dead) {
   console.log('');
 }
 
+/* Математика: цифры должны сходиться сами с собой.
+   Здесь не сверка с 1С, а внутренние равенства: сумма частей = целому,
+   доля = часть/целое, остаток = приход − расход. Если такое равенство
+   ломается, значит где-то потерялась или задвоилась строка. */
+console.log('— Математика: сходимость расчётов');
+{
+  // --- продажи, ABC, группы -------------------------------------------------
+  if (global.__sales) {
+    const rows = global.__sales.rows, t = WM.salesTotals(rows);
+    const rev = rows.reduce((a, r) => a + r.revenue, 0);
+    const cogs = rows.reduce((a, r) => a + r.cogs, 0);
+    check('выручка = сумма строк', near(t.revenue, rev, 1), WM.fmtMoney(t.revenue), WM.fmtMoney(rev));
+    check('валовая прибыль = выручка − себестоимость', near(t.gross, t.revenue - t.cogs, 1),
+      WM.fmtMoney(t.gross), WM.fmtMoney(t.revenue - t.cogs));
+    check('себестоимость = сумма строк', near(t.cogs, cogs, 1), WM.fmtMoney(t.cogs), WM.fmtMoney(cogs));
+    check('маржа = прибыль / выручка', near(t.margin, t.gross / t.revenue * 100, 0.05),
+      WM.fmtPct(t.margin), WM.fmtPct(t.gross / t.revenue * 100));
+    check('наценка = прибыль / себестоимость', near(t.markup, t.gross / t.cogs * 100, 0.05),
+      WM.fmtPct(t.markup), WM.fmtPct(t.gross / t.cogs * 100));
+
+    const abc = WM.abcClassify(rows.slice());
+    check('ABC не теряет выручку', near(abc.reduce((a, r) => a + r.revenue, 0), t.revenue, 1),
+      abc.length + ' позиций', WM.fmtMoney(t.revenue));
+    // доли округлены до сотых процента, поэтому у тысяч позиций сумма чуть меньше 100
+    const shareSum = abc.reduce((a, r) => a + r.share, 0);
+    check('доли позиций в сумме дают 100%', near(shareSum, 100, abc.length * 0.005 + 0.5),
+      shareSum.toFixed(2) + '%', '100%');
+    check('накопленная доля последней позиции = 100%', near(abc[abc.length - 1].shareCum, 100, 0.01),
+      abc[abc.length - 1].shareCum + '%', '100%');
+    check('класс A — около 80% оборота',
+      abc.filter(r => r.abc === 'A').reduce((a, r) => a + r.revenue, 0) / t.revenue > 0.7,
+      WM.fmtPct(abc.filter(r => r.abc === 'A').reduce((a, r) => a + r.revenue, 0) / t.revenue * 100), '>70%');
+  }
+
+  // --- склад ----------------------------------------------------------------
+  if (global.__stock) {
+    const st = WM.stockTotals(global.__stock.rows);
+    check('склад в закупе = сумма строк',
+      near(st.buySum, global.__stock.rows.reduce((a, r) => a + r.buySum, 0), 1),
+      WM.fmtMoney(st.buySum), 'сумма строк');
+    check('склад в рознице не меньше закупа', st.retailSum >= st.buySum,
+      WM.fmtMoney(st.retailSum), '>= ' + WM.fmtMoney(st.buySum));
+  }
+
+  // --- поставки: долг, переплаты, разрез по фирмам ---------------------------
+  if (global.__inv1c && global.__cash) {
+    const settings = { termDaysDefault: 3, debtorOldDays: 30, roundTolerance: 5, payWeekend: 'Платить как есть' };
+    const st = { docs: [], pays: [], supreg: [], debtors: [] };
+    SUP.mergeDocs(st, global.__inv1c, 'i', st.supreg, settings);
+    SUP.mergePays(st, global.__cash, 'p', st.supreg, settings);
+    SUP.autoRegister(st, settings);
+    const c = SUP.compute(st, settings);
+    const roundSum = c.docs.reduce((a, d) => a + d.roundOff, 0);
+    check('долг − переплата = поставки − оплаченное − округления',
+      near(c.totals.left - c.totals.over, c.totals.sum - c.totals.paid - roundSum, 1),
+      WM.fmtMoney(c.totals.left) + ' (переплат ' + WM.fmtMoney(c.totals.over) + ')',
+      WM.fmtMoney(c.totals.sum - c.totals.paid - roundSum));
+    check('по каждому документу равенство точное',
+      c.docs.every(d => d.closed || Math.abs((d.left - d.over) - (d.sum - d.paid - d.roundOff)) < 0.01),
+      'все ' + c.docs.length, 'все');
+    check('поставки по фирмам = общая сумма',
+      near(c.firms.reduce((a, f) => a + f.sum, 0), c.totals.sum, 1), 'сходится', 'сходится');
+    check('оплаты по фирмам = оплачено',
+      near(c.firms.reduce((a, f) => a + f.paid, 0), c.totals.paid, 1), 'сходится', 'сходится');
+    check('переплаты по фирмам = общая переплата',
+      near(c.firms.reduce((a, f) => a + f.over, 0), c.totals.over, 1),
+      WM.fmtMoney(c.totals.over), 'сходится');
+    check('просрочено не больше долга', c.totals.overdue <= c.totals.left + 0.01,
+      WM.fmtMoney(c.totals.overdue), '<= ' + WM.fmtMoney(c.totals.left));
+    check('каждая оплата отнесена в одну корзину',
+      c.linkStat.auto + c.linkStat.old + c.linkStat.none + c.linkStat.expense + c.linkStat.manual === c.linkStat.total,
+      c.linkStat.total + ' оплат', c.linkStat.total);
+  }
+
+  // --- деньги владельца: приход, расход, остатки, разрезы --------------------
+  {
+    const dds = [
+      { date: '2026-09-01', type: 'Приход', category: 'Выручка', method: 'Наличные', amount: 30000 },
+      { date: '2026-09-01', type: 'Приход', category: 'Выручка', method: 'Карта', amount: 20000 },
+      { date: '2026-09-01', type: 'Расход', category: 'Закуп товара', method: 'Наличные', amount: 12000 },
+      { date: '2026-09-02', type: 'Расход', category: 'Аренда', method: 'Перевод', amount: 8000 },
+      { date: '2026-09-02', type: 'Расход', category: 'ЗП', method: 'Наличные', amount: 5000 }
+    ];
+    const t = FIN.totals(dds);
+    check('приход = сумма приходных строк', t.income === 50000, WM.fmtMoney(t.income), '50 000 ₽');
+    check('расход = сумма расходных строк', t.expense === 25000, WM.fmtMoney(t.expense), '25 000 ₽');
+    check('прибыль = приход − расход', t.profit === t.income - t.expense, WM.fmtMoney(t.profit), '25 000 ₽');
+    check('рентабельность = прибыль / приход', near(t.profitability, 50, 0.01), WM.fmtPct(t.profitability), '50%');
+    const cats = FIN.byCategory(dds);
+    check('расходы по статьям = общий расход',
+      near(cats.reduce((a, x) => a + x.sum, 0), t.expense, 0.01),
+      WM.fmtMoney(cats.reduce((a, x) => a + x.sum, 0)), WM.fmtMoney(t.expense));
+    check('доли статей дают 100%', near(cats.reduce((a, x) => a + x.share, 0), 100, 0.05),
+      cats.reduce((a, x) => a + x.share, 0) + '%', '100%');
+    const b = FIN.balances(dds, { cash: 0, card: 0, transfer: 0 });
+    check('наличные = приход наличными − расход наличными', near(b.map['Наличные'], 30000 - 17000, 0.01),
+      WM.fmtMoney(b.map['Наличные']), '13 000 ₽');
+    check('итог остатков = сумма по способам',
+      near(b.total, Object.keys(b.map).reduce((a, k) => a + b.map[k], 0), 0.01),
+      WM.fmtMoney(b.total), 'сходится');
+  }
+
+  // --- зарплата -------------------------------------------------------------
+  {
+    const ts = [
+      { date: '2026-09-01', employee: 'Марина', hours: 12, rate: 200, bonus: 500, penalty: 0 },
+      { date: '2026-09-02', employee: 'Марина', hours: 12, rate: 200, bonus: 0, penalty: 300 },
+      { date: '2026-09-01', employee: 'Артём', hours: 12, rate: 220, bonus: 0, penalty: 0 }
+    ];
+    const pr = WM.payrollSummary(ts, [{ date: '2026-09-03', employee: 'Марина', amount: 2000 }]);
+    const m = pr.find(r => r.employee === 'Марина');
+    check('начислено = часы × ставка + премия − штраф', m.accrued === 12 * 200 + 500 + 12 * 200 - 300,
+      WM.fmtMoney(m.accrued), '5 000 ₽');
+    check('к выплате = начислено − выданное', m.left === m.accrued - 2000, WM.fmtMoney(m.left), '3 000 ₽');
+    check('часы сложились', m.hours === 24, m.hours, 24);
+    // штраф, введённый в дашборде, должен пережить поездку в Excel и обратно
+    const wb = XLSX.utils.book_new();
+    BOOK.build({ timesheet: ts.map((r, i) => Object.assign({ id: 'ts' + i }, r)) }, {}, {})
+      .forEach(sh => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.aoa), sh.name.slice(0, 31)));
+    const back = XLSX.read(XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }), { type: 'buffer', cellDates: true });
+    const mats = {};
+    back.SheetNames.forEach(n => { mats[n] = XLSX.utils.sheet_to_json(back.Sheets[n], { header: 1, raw: true, defval: '' }); });
+    const st2 = { timesheet: [] };
+    BOOK.parse(n => mats[n] || null, st2, {});
+    const row = (st2.timesheet || []).find(r => WM.num(r.penalty) === 300);
+    check('штраф не теряется при записи в Excel', !!row, row ? 'штраф 300 ₽ на месте' : 'потерялся', 'на месте');
+  }
+
+  // --- точка заказа, цены, налоги -------------------------------------------
+  {
+    const rop = WM.ropList([{ key: 'a', name: 'X', qty: 300, buyPrice: 60 }],
+      [{ key: 'a', name: 'X', qty: 10, group: '', buyPrice: 60 }], 30,
+      { leadDays: 2, safetyPct: 30, coverDays: 0 });
+    const r0 = rop[0];
+    check('расход в день = продано / дней', near(r0.demand, 10, 0.01), r0.demand, 10);
+    check('точка заказа = расход × плечо + страховой запас', near(r0.rop, 20 + 6, 0.01), r0.rop, 26);
+    check('сколько заказать = точка заказа + расход × плечо − остаток',
+      r0.order === Math.ceil(26 + 20 - 10), r0.order, Math.ceil(36));
+    check('сумма заказа = количество × цена', near(r0.sum, r0.order * r0.price, 0.01), r0.sum, r0.order * r0.price);
+    check('цена = закуп × (1 + наценка), округление вверх до шага', WM.priceFor(100, 30, 1) === 130,
+      WM.priceFor(100, 30, 1), 130);
+    check('УСН 6% = 6% от выручки',
+      FIN.taxAmount({ taxMode: 'УСН 6% (доходы)', taxRate: 6 }, 1000000, 900000).sum === 60000, '60 000 ₽', '60 000 ₽');
+    check('УСН 15% при убытке = 0',
+      FIN.taxAmount({ taxMode: 'УСН 15% (доходы минус расходы)', taxRate: 15 }, 100, 900).sum === 0, '0 ₽', '0 ₽');
+    check('копейки не расползаются', WM.safeRound(0.1 + 0.2) === 0.3, WM.safeRound(0.1 + 0.2), 0.3);
+  }
+  console.log('');
+}
+
 /* Безопасность и защита от кривых данных */
 {
   console.log('— Безопасность: прототип, длинные имена, даты, суммы');

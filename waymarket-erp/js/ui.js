@@ -1151,7 +1151,11 @@
         stat('Поставки в базе', priv(tt.sum), nf(tt.docs) + ' ' + plural(tt.docs, 'накладная', 'накладные', 'накладных')) +
         stat('Оплачено по ним', priv(tt.paid), 'расходные ордера 1С') +
         stat('Долг сейчас', priv(tt.left), 'по всем накладным', tt.left > 0 ? 'c-red' : 'c-green') +
-        stat('Погашено старых долгов', priv(sp.linkStat.oldSum), 'по накладным вне выгрузок', 'c-green') + '</div>';
+        stat('Погашено старых долгов', priv(sp.linkStat.oldSum), 'по накладным вне выгрузок', 'c-green') +
+        // переплата не гасит долг по другим накладным — показываем её отдельно,
+        // иначе лишние деньги молча «съедали» бы чужой долг
+        (tt.over > 0 ? stat('Переплата', priv(tt.over), 'заплатили больше, чем в накладной', 'c-orange') : '') +
+        '</div>';
 
       if (sp.confirm.length) {
         h += '<div class="banner"><span>✅</span><span>' + sp.confirm.length + ' ' +

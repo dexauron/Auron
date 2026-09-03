@@ -333,13 +333,17 @@
     (docs || []).forEach(function (d) {
       var p = round(paid[d.key] || 0);
       var left = d.closedManual ? 0 : Math.max(0, round(num(d.sum) - p - num(d.roundOff)));
+      // переплата по документу: заплатили больше, чем в накладной.
+      // Долг по документу не бывает отрицательным, поэтому лишнее считаем отдельно,
+      // иначе переплата молча уменьшала бы долг по другим накладным.
+      var over = d.closedManual ? 0 : Math.max(0, round(p + num(d.roundOff) - num(d.sum)));
       var due = d.confirmed ? (d.payDate || '')
         : shiftWeekend(d.payDate || addDays(d.date, termDaysFor(d.firm, reg, settings)),
             settings && settings.payWeekend);
       out.push({
         id: d.id, key: d.key, doc: shortDoc(d.doc), fullDoc: d.doc, date: d.date, supplier: d.supplier, firm: d.firm,
         incomingNo: d.incomingNo, sum: round(d.sum), retail: round(d.retail),
-        paid: p, left: left, roundOff: round(num(d.roundOff)),
+        paid: p, left: left, over: over, roundOff: round(num(d.roundOff)),
         due: due, confirmed: !!d.confirmed, closed: !!d.closedManual, underpayKeep: !!d.underpayKeep,
         term: termDaysFor(d.firm, reg, settings),
         termKnown: termKnown(d.firm, reg),
@@ -361,10 +365,10 @@
     var map = {};
     (calc.docs || []).forEach(function (d) {
       var k = norm(d.firm);
-      if (!map[k]) map[k] = { firm: d.firm, docs: 0, sum: 0, paid: 0, left: 0, overdue: 0,
+      if (!map[k]) map[k] = { firm: d.firm, docs: 0, sum: 0, paid: 0, left: 0, over: 0, overdue: 0,
         awaiting: 0, awaitingSum: 0, due: '', names: {} };
       var m = map[k];
-      m.docs++; m.sum += d.sum; m.paid += d.paid; m.left += d.left;
+      m.docs++; m.sum += d.sum; m.paid += d.paid; m.left += d.left; m.over += d.over;
       if (d.overdue) m.overdue += d.left;
       if (d.awaiting) { m.awaiting++; m.awaitingSum += d.left; }
       if (d.left > 0 && d.confirmed && d.due && (!m.due || d.due < m.due)) m.due = d.due;
@@ -375,6 +379,7 @@
       var v = map[k];
       var f = findFirm(reg, v.firm);
       v.sum = round(v.sum); v.paid = round(v.paid); v.left = round(v.left); v.overdue = round(v.overdue);
+      v.over = round(v.over);
       v.awaitingSum = round(v.awaitingSum);
       v.left = Math.max(0, round(v.left - ((calc.advance || {})[k] || 0)));
       v.reps = Object.keys(v.names).filter(function (n) { return norm(n) !== norm(v.firm); });
@@ -522,9 +527,9 @@
     var calc = docsCalc(docs, pays, reg, settings);
     var firms = firmDebt(calc, reg);
     var t = today();
-    var totals = { sum: 0, paid: 0, left: 0, overdue: 0, dueToday: 0, docs: calc.docs.length };
+    var totals = { sum: 0, paid: 0, left: 0, over: 0, overdue: 0, dueToday: 0, docs: calc.docs.length };
     calc.docs.forEach(function (d) {
-      totals.sum += d.sum; totals.paid += d.paid; totals.left += d.left;
+      totals.sum += d.sum; totals.paid += d.paid; totals.left += d.left; totals.over += d.over;
       if (d.overdue) totals.overdue += d.left;
       if (d.dueToday) totals.dueToday += d.left;
     });
