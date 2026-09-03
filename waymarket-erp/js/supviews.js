@@ -6,7 +6,7 @@
    ========================================================================== */
 (function () {
   'use strict';
-  var E = window.WM, S = window.WMStore, SUP = window.WMSupply, F = window.WMFin;
+  var E = window.WM, S = window.WMStore, SUP = window.WMSupply, F = window.WMFin, Q = window.WMQuick;
 
   function U() { return window.WMUI; }
   function sup() { return U().calc().sup || SUP.compute(S.state, S.settings); }
@@ -25,6 +25,12 @@
   function firmNames() {
     return (S.state.supreg || []).map(function (f) { return f.name; }).sort();
   }
+  function dict() { return Q.dicts(S.state, S.settings); }
+  function learn(map) {
+    var changed = false;
+    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d])) changed = true; });
+    if (changed) S.save();
+  }
 
   /* --- Формы ---------------------------------------------------------------- */
   var FORMS = window.WM_EXTRA_FORMS = window.WM_EXTRA_FORMS || {};
@@ -36,7 +42,7 @@
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-        u.fieldRow('Откуда', 'method', 'select', v.method || 'Наличные', { options: ['Наличные', 'Карта', 'Перевод'] }) +
+        u.fieldRow('Откуда', 'method', 'list', v.method || 'Наличные', { options: dict().methods }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '', { placeholder: 'личные нужды' });
     },
     hint: 'Не попадает в расходы и не уменьшает прибыль — только уменьшает деньги в обороте.',
@@ -58,16 +64,45 @@
         u.fieldRow('Телефон', 'phone', 'text', v.phone || '', { placeholder: '+7 …' }) +
         u.fieldRow('Сумма', 'sum', 'number', v.sum || '') +
         u.fieldRow('Обещал вернуть', 'promise', 'date', v.promise || '') +
-        u.fieldRow('Кто записал', 'cashier', 'text', v.cashier || '', { list: 'dl-staff' });
+        u.fieldRow('Кто записал', 'cashier', 'list', v.cashier || Q.last(S.state, 'cashier'), { options: dict().cashiers });
     },
     hint: 'Пока долг не погашен, он не считается выручкой — иначе касса не сойдётся.',
     save: function (v) {
       if (!v.name) return 'Укажите имя.';
       if (!num(v.sum)) return 'Укажите сумму.';
+      learn({ cashiers: v.cashier });
       S.add('debtors', { date: v.date || today(), name: v.name, phone: v.phone || '',
         sum: num(v.sum), promise: v.promise || '', cashier: v.cashier || '', paid: false });
       refresh();
       return { ok: 'Записано. Долг «' + v.name + '» — ' + E.fmtMoney(num(v.sum)) + '.' };
+    }
+  };
+
+  // Своя операция: когда ни одна готовая форма не подходит
+  FORMS.freeOp = {
+    title: 'Своя операция', icon: '✳️',
+    body: function (v) {
+      var u = U(); v = v || {}; var pre = Q.defaults(S.state, S.settings, 'freeOp');
+      return u.fieldRow('Дата', 'date', 'date', v.date || pre.date) +
+        u.fieldRow('Что это', 'type', 'list', v.type || 'Расход',
+          { options: ['Приход', 'Расход', 'Долг', 'Забор'] }) +
+        u.fieldRow('Статья', 'category', 'list', v.category || pre.category, { options: dict().categories, placeholder: 'своё название' }) +
+        u.fieldRow('Способ', 'method', 'list', v.method || pre.method, { options: dict().methods }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Смена', 'shift', 'list', v.shift || '', { options: dict().shifts }) +
+        u.fieldRow('Кто вносит', 'cashier', 'list', v.cashier || pre.cashier, { options: dict().cashiers }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Приход — деньги пришли · Расход — ушли · Долг — товар взяли без оплаты · Забор — деньги вынули из оборота.',
+    save: function (v) {
+      if (!num(v.amount)) return 'Укажите сумму.';
+      if (!v.category) return 'Напишите статью — за что это.';
+      learn({ categories: v.category, methods: v.method, cashiers: v.cashier, shifts: v.shift });
+      S.add('dds', { date: v.date || today(), type: v.type || 'Расход', category: v.category,
+        method: v.method || 'Наличные', amount: num(v.amount), shift: v.shift || '',
+        cashier: v.cashier || '', diff: 0, note: v.note || '' });
+      refresh();
+      return { ok: 'Записано: ' + v.type + ' · ' + v.category + ' — ' + E.fmtMoney(num(v.amount)) };
     }
   };
 
@@ -360,70 +395,147 @@
 
   /* --- Ручные записи -------------------------------------------------------- */
   var MANUAL_TABS = [
-    { key: 'cashShift', icon: '💵', name: 'Касса за смену' },
-    { key: 'ddsExpense', icon: '🧾', name: 'Расход' },
-    { key: 'payout', icon: '👥', name: 'Зарплата или аванс' },
-    { key: 'ownerDraw', icon: '🏦', name: 'Забор владельцем' },
-    { key: 'writeoff', icon: '🗑', name: 'Списание' },
-    { key: 'debtor', icon: '📓', name: 'Долг покупателя' }
+    { key: 'cashShift', icon: '💵', name: 'Касса за смену', main: 'zCash' },
+    { key: 'ddsExpense', icon: '🧾', name: 'Расход', main: 'amount' },
+    { key: 'payout', icon: '👥', name: 'Зарплата и аванс', main: 'amount' },
+    { key: 'ownerDraw', icon: '🏦', name: 'Забор владельцем', main: 'amount' },
+    { key: 'writeoff', icon: '🗑', name: 'Списание', main: 'cost' },
+    { key: 'debtor', icon: '📓', name: 'Долг покупателя', main: 'sum' },
+    { key: 'freeOp', icon: '✳️', name: 'Своя операция', main: 'amount' }
   ];
+  function tabDef(key) {
+    for (var i = 0; i < MANUAL_TABS.length; i++) if (MANUAL_TABS[i].key === key) return MANUAL_TABS[i];
+    return MANUAL_TABS[0];
+  }
 
+  // Последние ручные записи — из всех журналов, свежие сверху
   function manualLog() {
     var rows = [];
     (S.state.dds || []).forEach(function (r) {
-      if (r.source === '1c') return;
+      if (r.src === 'импорт') return;
       rows.push({ date: r.date, kind: r.type === 'Забор' ? 'Забор' : r.type,
         tone: r.type === 'Приход' ? 'green' : (r.type === 'Долг' ? 'orange' : (r.type === 'Забор' ? 'gray' : 'red')),
-        title: r.category || '—', sub: (r.shift ? r.shift + ' · ' : '') + (r.cashier || r.note || ''),
+        title: r.category || '—', sub: [r.shift, r.cashier, r.note].filter(Boolean).join(' · '),
         sum: num(r.amount), sign: r.type === 'Приход' ? 1 : -1, coll: 'dds', id: r.id,
-        form: r.type === 'Приход' ? 'ddsIncome' : 'ddsExpense' });
+        form: r.type === 'Приход' ? 'ddsIncome' : (r.type === 'Забор' ? 'ownerDraw' : 'ddsExpense') });
     });
     (S.state.payouts || []).forEach(function (r) {
       rows.push({ date: r.date, kind: 'Зарплата', tone: 'blue', title: r.employee || '—',
-        sub: r.kind || 'выплата', sum: num(r.amount), sign: -1, coll: 'payouts', id: r.id, form: 'payout' });
+        sub: [r.type, r.form, r.note].filter(Boolean).join(' · '), sum: num(r.amount), sign: -1,
+        coll: 'payouts', id: r.id, form: 'payout' });
     });
     (S.state.debtors || []).forEach(function (r) {
       rows.push({ date: r.date, kind: 'Долг покупателя', tone: r.paid ? 'green' : 'orange',
         title: r.name || '—', sub: r.paid ? 'погашен' : ('обещал ' + (dateRu(r.promise) || '—')),
         sum: num(r.sum), sign: 0, coll: 'debtors', id: r.id, form: 'debtor' });
     });
+    (S.state.inventory || []).forEach(function (r) {
+      rows.push({ date: r.date, kind: 'Списание', tone: 'red', title: r.name || '—',
+        sub: r.reason || '', sum: num(r.accounted) * num(r.price), sign: -1,
+        coll: 'inventory', id: r.id, form: 'writeoff' });
+    });
     (S.state.expiry || []).forEach(function (r) {
       rows.push({ date: r.date || '', kind: 'Срок', tone: 'orange', title: r.name || '—',
-        sub: 'до ' + (dateRu(r.bestBefore) || '—'), sum: num(r.qty), sign: 0,
+        sub: 'годен до ' + (dateRu(r.bestBefore) || '—'), sum: num(r.qty) * num(r.price), sign: 0,
         coll: 'expiry', id: r.id, form: 'expiryItem' });
     });
-    return rows.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 20);
+    return rows.sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); }).slice(0, 15);
+  }
+
+  // Живая подсказка под формой: считает то, что важно, ещё до сохранения
+  function liveHint(tab, v) {
+    var u = U();
+    if (tab === 'cashShift') {
+      var m = Q.shiftMath(v);
+      if (!m.revenue) return 'Впишите Z-отчёт — программа сама посчитает выручку, расхождение и остаток наличных.';
+      var tone = m.status === 'сходится' ? 'c-green' : (m.status === 'нет факта' ? 'c-muted' : 'c-red');
+      return 'Выручка за смену <b class="private">' + E.fmtMoney(m.revenue) + '</b>' +
+        (!m.hasFact ? ' · впишите факт, чтобы увидеть расхождение'
+          : ' · <b class="' + tone + '">' + m.status +
+            (m.diff ? ' ' + E.fmtMoney(Math.abs(m.diff)) : '') + '</b>') +
+        (m.payout ? ' · выдано из кассы ' + E.fmtMoney(m.payout) +
+          ', наличных останется <b class="' + (m.cash < 0 ? 'c-red' : '') + ' private">' +
+          E.fmtMoney(m.cash) + '</b>' : '');
+    }
+    var amount = num(v.amount || v.sum || v.cost);
+    if (!amount) return '';
+    var parts = ['Сумма <b class="private">' + E.fmtMoney(amount) + '</b>'];
+    if (tab === 'ownerDraw') parts.push('прибыль не изменится — уменьшатся деньги в обороте');
+    if (tab === 'debtor') parts.push('в выручку попадёт только после погашения');
+    if (tab === 'writeoff') parts.push('уменьшит прибыль этого месяца');
+    var coll = tab === 'debtor' ? 'debtors' : (tab === 'payout' ? 'payouts' : (tab === 'writeoff' ? 'inventory' : 'dds'));
+    var dup = Q.duplicate(S.state, coll, { date: v.date, amount: amount, category: v.category,
+      name: v.name, employee: v.employee });
+    if (dup) parts.push('<b class="c-orange">такая запись за этот день уже есть — не задвойте</b>');
+    var warn = Q.warnings({ date: v.date, amount: amount });
+    if (warn.length) parts.push('<b class="c-orange">' + u.esc(warn.join(', ')) + '</b>');
+    return parts.join(' · ');
+  }
+
+  function formValues(form) {
+    var out = {};
+    if (!form) return out;
+    Array.prototype.forEach.call(form.querySelectorAll('input,select,textarea'), function (i) {
+      if (i.name) out[i.name] = i.value;
+    });
+    return out;
   }
 
   function viewManual() {
-    var u = U(), tab = u.tab('manual', 'cashShift');
-    var def = u.form(tab) || window.WM_EXTRA_FORMS[tab] || {};
-    var h = u.pageHead('Ручные записи', 'Касса, зарплата, аренда, забор денег — то, чего нет в выгрузках 1С');
+    var u = U(), tab = u.tab('manual', 'cashShift'), def = tabDef(tab);
+    var f = u.form(tab) || window.WM_EXTRA_FORMS[tab] || {};
+    var draft = Q.loadDraft(tab) || {};
+    var h = u.pageHead('Записать', 'Всё, чего нет в выгрузках 1С: касса, расходы, зарплата, списания, долги');
 
     h += '<div class="stat-grid">' + MANUAL_TABS.map(function (t) {
-      return '<div class="stat' + (t.key === tab ? '' : '') + '" data-tab="manual:' + t.key + '" ' +
+      return '<div class="stat" data-tab="manual:' + t.key + '" ' +
         'style="cursor:pointer;align-items:center;text-align:center;gap:7px' +
         (t.key === tab ? ';background:var(--blue);color:#fff' : '') + '">' +
         '<div style="font-size:20px">' + t.icon + '</div>' +
         '<div style="font-weight:600;font-size:14px">' + esc(t.name) + '</div></div>';
     }).join('') + '</div>';
 
-    h += '<div class="card"><div class="card-head"><div class="card-title">' + esc(def.title || 'Запись') + '</div>' +
-      '<div class="card-note">' + esc(def.hint || '') + '</div></div>' +
-      '<form id="wmForm" data-fid="' + tab + '"><div class="form-list">' + (def.body ? def.body({}) : '') + '</div>' +
+    h += '<div class="card"><div class="card-head">' +
+      '<div class="card-title">' + esc(f.title || 'Запись') + '</div>' +
+      '<div class="card-note">' + (Object.keys(draft).length ? 'черновик сохранён — можно продолжить' : 'заполните и нажмите «Записать»') + '</div></div>' +
+      '<form id="wmForm" data-fid="' + tab + '"><div class="form-list">' + (f.body ? f.body(draft) : '') + '</div>' +
+      '<div class="form-hint" id="quickHint">' + (liveHint(tab, draft) || esc(f.hint || '')) + '</div>' +
+      '<div class="quick" style="padding:12px 20px 0">' +
+      [100, 500, 1000, 5000].map(function (n) {
+        return '<button type="button" class="btn btn-sm" data-act="q-add" data-add="' + n +
+          '" data-field="' + def.main + '">+' + u.nf(n) + '</button>';
+      }).join('') +
+      '<button type="button" class="btn btn-sm" data-act="q-add" data-add="0" data-field="' + def.main + '">Очистить сумму</button>' +
+      '</div>' +
       '<div class="form-actions" style="padding:14px 20px">' +
-      '<button type="reset" class="btn">Очистить</button>' +
+      '<button type="button" class="btn" data-act="q-clear">Стереть черновик</button>' +
       '<button type="submit" class="btn btn-primary btn-lg">Записать</button></div></form></div>';
 
-    h += u.card('Последние ручные записи', u.listOf(manualLog().map(function (r) {
+    h += u.card('Последние записи', u.listOf(manualLog().map(function (r) {
       return '<div class="row">' + u.badge(r.kind, r.tone) +
         '<div class="row-main"><div class="row-title">' + esc(r.title) + '</div>' +
         '<div class="row-sub">' + esc(dateRu(r.date)) + (r.sub ? ' · ' + esc(r.sub) : '') + '</div></div>' +
         '<div class="row-value"><span class="' + (r.sign > 0 ? 'c-green' : (r.sign < 0 ? 'c-red' : '')) + ' private">' +
         E.fmtMoney(r.sum) + '</span></div>' +
+        '<button class="btn btn-sm" data-act="q-repeat" data-coll="' + r.coll + '" data-id="' + r.id +
+        '" data-target="' + r.form + '" title="Записать такую же">↻</button>' +
         '<button class="btn btn-sm" data-edit="' + r.coll + ':' + r.id + ':' + r.form + '">✎</button>' +
         '<button class="btn btn-sm btn-danger" data-del="' + r.coll + ':' + r.id + '">✕</button></div>';
-    }), 'Ручных записей ещё нет'), 'можно исправить или удалить');
+    }), 'Ручных записей ещё нет'), '↻ повторить · ✎ исправить · ✕ удалить');
+
+    var d = dict();
+    h += u.card('Ваши справочники', u.listOf([
+      ['🧾', 'Статьи расходов', d.categories], ['👤', 'Кассиры', d.cashiers],
+      ['🕘', 'Смены', d.shifts], ['💳', 'Способы оплаты', d.methods],
+      ['👥', 'Сотрудники', d.employees], ['🗑', 'Причины списания', d.reasons]
+    ].map(function (row) {
+      return u.listRow({ icon: row[0], title: esc(row[1]),
+        sub: row[2].length ? row[2].slice(0, 8).map(esc).join(' · ') + (row[2].length > 8 ? ' …' : '') : 'пока пусто — впишите своё слово в форме',
+        value: '<span class="c-muted">' + row[2].length + '</span>' });
+    }), ''), '<button class="btn btn-sm" data-go="settings">Изменить</button>');
+
+    h += '<div class="banner blue"><span>💡</span><span>В полях со списком можно выбрать своё значение или вписать новое — ' +
+      'программа его запомнит и в следующий раз предложит.</span></div>';
     return h;
   }
 
@@ -715,7 +827,63 @@
     catch (e) { return 'Не получилось собрать книгу: ' + e.message; }
   };
 
+  /* --- Живой ввод: подсказка, черновик, быстрые суммы ------------------------- */
+  function currentTab() { return U().tab('manual', 'cashShift'); }
+
+  // пока печатаете — пересчитываем подсказку и держим черновик
+  document.addEventListener('input', function (e) {
+    var form = e.target.closest && e.target.closest('#wmForm');
+    if (!form) return;
+    var tab = form.dataset.fid;
+    if (!tabDef(tab) || tabDef(tab).key !== tab) return;
+    var v = formValues(form);
+    Q.saveDraft(tab, v);
+    var hint = document.getElementById('quickHint');
+    if (hint) {
+      var text = liveHint(tab, v);
+      if (text) hint.innerHTML = text;
+    }
+  });
+
+  A['q-add'] = function (el) {
+    var form = document.getElementById('wmForm'); if (!form) return null;
+    var field = form.querySelector('[name="' + el.dataset.field + '"]');
+    if (!field) return null;
+    var add = num(el.dataset.add);
+    field.value = add ? SUP.round(num(field.value) + add) : '';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    return null;
+  };
+  A['q-clear'] = function () {
+    Q.clearDraft(currentTab());
+    return 'Черновик стёрт.';
+  };
+  A['q-repeat'] = function (el) {
+    var rec = (S.state[el.dataset.coll] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!rec) return null;
+    var copy = JSON.parse(JSON.stringify(rec));
+    delete copy.id;
+    copy.date = today();
+    if (copy.paid) { copy.paid = false; copy.paidDate = ''; }
+    U().openForm(el.dataset.target, copy);
+    return null;
+  };
+
   /* --- Формы внутри окон ----------------------------------------------------- */
+  document.addEventListener('submit', function (e) {
+    var f0 = e.target;
+    if (f0 && f0.id === 'wmForm' && tabDef(f0.dataset.fid).key === f0.dataset.fid) {
+      var tab = f0.dataset.fid;
+      // черновик стираем, только если запись действительно сохранилась
+      setTimeout(function () {
+        if (window.WM_LAST_SAVE && window.WM_LAST_SAVE.form === tab && window.WM_LAST_SAVE.ok) {
+          Q.clearDraft(tab);
+          U().render();
+        }
+      }, 30);
+    }
+  }, true);
+
   document.addEventListener('submit', function (e) {
     var f = e.target;
     if (f.id === 'supDate') {

@@ -15,6 +15,13 @@
     barcodes: [], units: [], writeoffs: [], writeoffsPeriod: null, returns: [], returnsPeriod: null,
     invoices1c: [], invoicesPeriod: null, cashOrders: [], owner: null, files: []
   };
+  var Q = window.WMQuick;     // умный ввод: справочники, подстановки, черновики
+  function DICT() { return Q.dicts(S.state, S.settings); }
+  function learn(map) {
+    var changed = false;
+    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d])) changed = true; });
+    if (changed) S.save();
+  }
   var C = {};                 // производные расчёты
   var SUP = window.WMSupply;  // поставки, оплаты и справочник фирм
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
@@ -164,10 +171,20 @@
     return h + '</tbody></table></div>';
   }
 
+  var LIST_N = 0;
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
     var h = '<div class="form-row"><label>' + esc(label) + '</label>';
-    if (type === 'select') {
+    if (type === 'list') {
+      // свой список: можно выбрать из своих значений, а можно вписать новое —
+      // новое слово программа запомнит в справочнике
+      var lid = 'dl-' + name + '-' + (++LIST_N);
+      h += '<input type="text" name="' + name + '" value="' + esc(value == null ? '' : value) + '" list="' + lid + '"' +
+        (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
+        '<datalist id="' + lid + '">' + (opts.options || []).map(function (o) {
+          return '<option value="' + esc(o) + '">';
+        }).join('') + '</datalist>';
+    } else if (type === 'select') {
       h += '<select name="' + name + '">' + (opts.options || []).map(function (o) {
         var v = typeof o === 'string' ? o : o.value, t = typeof o === 'string' ? o : o.text;
         return '<option value="' + esc(v) + '"' + (String(value) === String(v) ? ' selected' : '') + '>' + esc(t) + '</option>';
@@ -195,6 +212,7 @@
   }
   function supplierNames() {
     var set = {};
+    (S.state.supreg || []).forEach(function (f) { set[f.name] = 1; });   // фирмы из справочника
     D.contacts.forEach(function (c) { set[c.name] = 1; });
     (C.balance || []).forEach(function (b) { set[b.supplier] = 1; });
     (S.state.invoices || []).forEach(function (i) { if (i.supplier) set[i.supplier] = 1; });
@@ -509,7 +527,7 @@
       body: function (v) {
         v = v || {};
         return fieldRow('Дата', 'date', 'date', v.date || today()) +
-          fieldRow('Поставщик', 'supplier', 'text', v.supplier || '', { placeholder: 'название', list: 'dl-sup' }) +
+          fieldRow('Поставщик', 'supplier', 'list', v.supplier || '', { placeholder: 'название', options: supplierNames() }) +
           fieldRow('Номер накладной', 'doc', 'text', v.doc || '', { placeholder: 'например 412' }) +
           fieldRow('Что привезли', 'goods', 'text', v.goods || '', { placeholder: 'молочка, хлеб…' }) +
           fieldRow('Сумма накладной', 'total', 'number', v.total || '') +
@@ -520,6 +538,7 @@
       save: function (v) {
         if (!v.total) return 'Укажите сумму накладной.';
         if (!v.supplier) return 'Укажите поставщика.';
+        learn({ suppliers: v.supplier });
         S.add('invoices', v);
         var left = Math.max(0, num(v.total) - num(v.paidCash));
         return { ok: 'Записано. Остаётся долг ' + money(left) + ' перед «' + v.supplier + '»' };
@@ -530,7 +549,7 @@
       body: function (v) {
         v = v || {};
         return fieldRow('Дата', 'date', 'date', v.date || today()) +
-          fieldRow('Поставщик', 'supplier', 'text', v.supplier || '', { placeholder: 'название', list: 'dl-sup' }) +
+          fieldRow('Поставщик', 'supplier', 'list', v.supplier || '', { placeholder: 'название', options: supplierNames() }) +
           fieldRow('Сумма', 'amount', 'number', v.amount || '') +
           fieldRow('За что', 'kind', 'select', v.kind || 'погашение долга',
             { options: ['погашение долга', 'оплата сразу при приёмке', 'предоплата'] }) +
@@ -543,6 +562,7 @@
       save: function (v) {
         if (!v.supplier) return 'Укажите поставщика.';
         if (!v.amount) return 'Укажите сумму.';
+        learn({ suppliers: v.supplier });
         S.add('payments', v);
         var bal = E.manualBalance(S.state.invoices || [], S.state.payments || [])
           .filter(function (b) { return E.norm(b.supplier) === E.norm(v.supplier); })[0];
@@ -572,14 +592,16 @@
       body: function (v) {
         v = v || {};
         return fieldRow('Дата', 'date', 'date', v.date || today()) +
-          fieldRow('Товар', 'name', 'text', v.name || '', { list: 'dl-goods' }) +
+          fieldRow('Товар или группа', 'name', 'text', v.name || '', { list: 'dl-goods', placeholder: 'молочка, хлеб…' }) +
           fieldRow('Количество', 'qty', 'number', v.qty || '') +
           fieldRow('Сумма по себестоимости', 'cost', 'number', v.cost || '') +
-          fieldRow('Причина', 'reason', 'select', v.reason || 'Просрочка',
-            { options: ['Просрочка', 'Бой, порча', 'Кража', 'Пересортица', 'Потери при инвентаризации', 'Другое'] });
+          fieldRow('Причина', 'reason', 'list', v.reason || DICT().reasons[0], { options: DICT().reasons });
       },
+      hint: 'Списание уменьшает прибыль. Причины можно добавлять свои — они запоминаются.',
       save: function (v) {
         if (!v.name) return 'Укажите товар.';
+        if (!num(v.cost)) return 'Укажите сумму по себестоимости.';
+        learn({ reasons: v.reason });
         S.add('inventory', { date: v.date, name: v.name, group: '', accounted: num(v.qty), fact: 0,
           price: num(v.qty) ? num(v.cost) / num(v.qty) : 0, reason: 'Списание: ' + v.reason });
         return { ok: 'Списание записано: ' + v.name + ' на ' + money(v.cost) };
@@ -625,16 +647,19 @@
       title: 'Выплата сотруднику', icon: '💰',
       body: function (v) {
         v = v || {};
-        return fieldRow('Дата', 'date', 'date', v.date || today()) +
-          fieldRow('Сотрудник', 'employee', 'text', v.employee || '', { list: 'dl-staff' }) +
-          fieldRow('Что выдаём', 'type', 'select', v.type || 'Аванс', { options: ['Аванс', 'Зарплата', 'Премия', 'Прочее'] }) +
+        var pre = Q.defaults(S.state, S.settings, 'payout');
+        return fieldRow('Дата', 'date', 'date', v.date || pre.date) +
+          fieldRow('Сотрудник', 'employee', 'list', v.employee || pre.employee, { options: DICT().employees }) +
+          fieldRow('Что выдаём', 'type', 'list', v.type || 'Аванс', { options: ['Аванс', 'Зарплата', 'Премия', 'Прочее'] }) +
           fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-          fieldRow('Чем', 'form', 'select', v.form || 'Наличные из кассы',
+          fieldRow('Чем', 'form', 'list', v.form || pre.form,
             { options: ['Наличные из кассы', 'Перевод СБП', 'Банковский перевод'] }) +
           fieldRow('Основание', 'note', 'text', v.note || '');
       },
+      hint: 'Аванс уменьшает сумму к выплате в конце месяца.',
       save: function (v) {
         if (!v.employee || !v.amount) return 'Нужны сотрудник и сумма.';
+        learn({ employees: v.employee });
         S.add('payouts', v);
         return { ok: 'Выплата записана: ' + v.employee + ' — ' + money(v.amount) };
       }
@@ -2008,6 +2033,7 @@
       if (f.id === 'wmForm') {
         var id = f.dataset.fid, def = FORMS[id];
         var res = def.save(formValues(f));
+        window.WM_LAST_SAVE = { form: id, ok: typeof res !== 'string' };
         if (typeof res === 'string') { toast(res); return; }
         // при правке новая запись уже добавлена — убираем старую
         if (EDIT) { S.remove(EDIT.coll, EDIT.id); EDIT = null; }

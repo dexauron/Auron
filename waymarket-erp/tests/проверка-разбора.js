@@ -10,6 +10,7 @@ const WM = require(path.join(__dirname, '..', 'js', 'engine.js'));
 const FIN = require(path.join(__dirname, '..', 'js', 'finance.js'));
 const SUP = require(path.join(__dirname, '..', 'js', 'supply.js'));
 const BOOK = require(path.join(__dirname, '..', 'js', 'book.js'));
+const Q = require(path.join(__dirname, '..', 'js', 'quick.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -514,6 +515,60 @@ if (global.__inv1c && global.__cash) {
   BOOK.parse(n => mats2[n] || null, st3, {});
   check('пустой лист не стирает журнал', st3.debtors.length === 1, st3.debtors.length, 1);
   console.log('     листов: ' + sheets.length + ', строк прочитано: ' + rep.rows);
+  console.log('');
+}
+
+/* Ручной ввод: справочники, подстановки и подсказки */
+{
+  console.log('— Ручной ввод: справочники, подстановки, подсказки');
+  const settings = { finCategories: 'Аренда, ЗП', finCashiers: '', finShifts: 'День 09:00–21:00, Ночь 21:00–09:00',
+    finMethods: 'Наличные, Карта, Перевод', finEmployees: '', finReasons: 'Просрочка' };
+  const state = {
+    dds: [
+      { date: '2026-08-01', type: 'Расход', category: 'Аренда', method: 'Перевод', amount: 168000, cashier: 'Марина', shift: 'День 09:00–21:00' },
+      { date: '2026-08-02', type: 'Расход', category: 'Хозтовары', method: 'Наличные', amount: 1200, cashier: 'Марина' },
+      { date: '2026-08-03', type: 'Расход', category: 'Хозтовары', method: 'Наличные', amount: 900, cashier: 'Артём' }
+    ],
+    payouts: [{ date: '2026-08-02', employee: 'Артём', amount: 15000, form: 'Наличные из кассы' }],
+    debtors: [], supreg: [{ name: 'Рамми' }], plans: [], timesheet: [], inventory: []
+  };
+  const d = Q.dicts(state, settings);
+  check('справочник собрал и настройки, и записанное',
+    d.categories.includes('Аренда') && d.categories.includes('Хозтовары'),
+    d.categories.slice(0, 4).join(', '), 'Аренда и Хозтовары внутри');
+  check('частое значение стоит первым', d.categories[0] === 'Хозтовары', d.categories[0], 'Хозтовары');
+  check('кассиры собрались из записей', d.cashiers.includes('Марина') && d.cashiers.includes('Артём'),
+    d.cashiers.join(', '), 'Марина, Артём');
+  check('сотрудники собрались из выплат', d.employees.includes('Артём'), d.employees.join(', '), 'Артём');
+  check('поставщики собрались из справочника фирм', d.suppliers.includes('Рамми'), d.suppliers.join(', '), 'Рамми');
+
+  const s2 = JSON.parse(JSON.stringify(settings));
+  check('новое слово запоминается', Q.learn(s2, 'categories', 'Вывоз мусора') && s2.finCategories.includes('Вывоз мусора'),
+    s2.finCategories, 'с «Вывоз мусора»');
+  check('дважды одно и то же не добавляется', Q.learn(s2, 'categories', 'аренда') === false,
+    'нет', 'нет');
+
+  const pre = Q.defaults(state, settings, 'ddsExpense');
+  check('подставляется последняя категория', pre.category === 'Хозтовары', pre.category, 'Хозтовары');
+  check('подставляется последний способ оплаты', pre.method === 'Наличные', pre.method, 'Наличные');
+  check('подставляется сегодняшняя дата', pre.date === new Date().toISOString().slice(0, 10), pre.date, 'сегодня');
+  const preP = Q.defaults(state, settings, 'payout');
+  check('в зарплате подставляется последний сотрудник', preP.employee === 'Артём', preP.employee, 'Артём');
+
+  const dup = Q.duplicate(state, 'dds', { date: '2026-08-02', amount: 1200, category: 'Хозтовары' });
+  check('похожая запись за день находится', !!dup, dup ? 'нашлась' : 'нет', 'нашлась');
+  check('другая сумма — не дубль', !Q.duplicate(state, 'dds', { date: '2026-08-02', amount: 1300, category: 'Хозтовары' }),
+    'не дубль', 'не дубль');
+  check('дата в будущем предупреждает', Q.warnings({ date: '2099-01-01', amount: 100 }).length === 1,
+    Q.warnings({ date: '2099-01-01', amount: 100 }).join(', '), 'дата в будущем');
+
+  const m = Q.shiftMath({ zCash: 38400, fCash: 38400, zCard: 61100, fCard: 61100, payout: 32000 });
+  check('выручка смены = все способы', m.revenue === 99500, WM.fmtMoney(m.revenue), '99 500 ₽');
+  check('касса сходится при равных Z и факте', m.status === 'сходится' && m.diff === 0, m.status, 'сходится');
+  check('наличных останется = факт − выдано', m.cash === 6400, WM.fmtMoney(m.cash), '6 400 ₽');
+  const m2 = Q.shiftMath({ zCash: 38400, fCash: 37000, payout: 32000 });
+  check('недостача видна до сохранения', m2.status === 'недостача' && m2.diff === -1400,
+    m2.status + ' ' + WM.fmtMoney(m2.diff), 'недостача −1 400 ₽');
   console.log('');
 }
 

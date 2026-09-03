@@ -6,7 +6,7 @@
    ========================================================================== */
 (function () {
   'use strict';
-  var E = window.WM, S = window.WMStore, F = window.WMFin;
+  var E = window.WM, S = window.WMStore, F = window.WMFin, Q = window.WMQuick;
 
   function U() { return window.WMUI; }              // помощники интерфейса
   function ddsAll() { return S.state.dds || []; }
@@ -22,19 +22,21 @@
     if (typeof v === 'string' && v.trim()) return v.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
     return fallback;
   }
-  function categories() { return dict('finCategories', ['Закуп товара', 'ЗП', 'Аренда', 'Налоги', 'Коммуналка', 'Интернет', 'Оплата ТП', 'Реклама', 'Другое']); }
-  function cashiers() {
-    var set = {};
-    dict('finCashiers', []).forEach(function (c) { set[c] = 1; });
-    ddsAll().forEach(function (r) { if (r.cashier) set[r.cashier] = 1; });
-    return Object.keys(set);
-  }
-  function shiftNames() { return dict('finShifts', ['Утро', 'Вечер', 'Ночная']); }
-  function suppliers() {
-    var set = {};
-    dict('finSuppliers', []).forEach(function (c) { set[c] = 1; });
-    plansAll().forEach(function (p) { if (p.supplier) set[p.supplier] = 1; });
-    return Object.keys(set);
+  function D() { return Q.dicts(S.state, S.settings); }
+  function categories() { return D().categories; }
+  function cashiers() { return D().cashiers; }
+  function shiftNames() { return D().shifts; }
+  function methods() { return D().methods; }
+  function suppliers() { return D().suppliers; }
+
+  // Новое слово, вписанное в форму, попадает в справочник — второй раз его
+  // уже можно выбрать из списка.
+  function learn(map) {
+    var changed = false;
+    Object.keys(map).forEach(function (dictName) {
+      if (Q.learn(S.settings, dictName, map[dictName])) changed = true;
+    });
+    if (changed) S.save();
   }
 
   /* --- Формы ввода ---------------------------------------------------------- */
@@ -44,22 +46,24 @@
       title: 'Касса за смену', icon: '💵',
       body: function (v) {
         var u = U(); v = v || {};
-        return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-          u.fieldRow('Смена', 'shift', 'select', v.shift || shiftNames()[0], { options: shiftNames() }) +
-          u.fieldRow('Кассир', 'cashier', 'text', v.cashier || '', { list: 'dl-fin-cashier' }) +
-          u.fieldRow('Наличные по Z-отчёту', 'zCash', 'number', v.zCash || '') +
-          u.fieldRow('Наличные по факту', 'fCash', 'number', v.fCash || '') +
-          u.fieldRow('Карта по Z-отчёту', 'zCard', 'number', v.zCard || 0) +
-          u.fieldRow('Карта по факту', 'fCard', 'number', v.fCard || 0) +
-          u.fieldRow('Перевод по Z-отчёту', 'zTrans', 'number', v.zTrans || 0) +
-          u.fieldRow('Перевод по факту', 'fTrans', 'number', v.fTrans || 0) +
-          u.fieldRow('Выплата из кассы', 'payout', 'number', v.payout || 0) +
-          u.fieldRow('Комментарий', 'note', 'text', v.note || '') +
-          '<datalist id="dl-fin-cashier">' + cashiers().map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>';
+        var pre = Q.defaults(S.state, S.settings, 'cashShift');
+        return u.fieldRow('Дата', 'date', 'date', v.date || pre.date) +
+          u.fieldRow('Смена', 'shift', 'list', v.shift || pre.shift, { options: shiftNames() }) +
+          u.fieldRow('Кассир', 'cashier', 'list', v.cashier || pre.cashier, { options: cashiers(), placeholder: 'кто сдаёт' }) +
+          u.fieldRow('Наличные: Z-отчёт', 'zCash', 'number', v.zCash || '') +
+          u.fieldRow('Наличные: факт выручки', 'fCash', 'number', v.fCash || '') +
+          u.fieldRow('Карта: Z-отчёт', 'zCard', 'number', v.zCard || 0) +
+          u.fieldRow('Карта: факт', 'fCard', 'number', v.fCard || 0) +
+          u.fieldRow('Перевод: Z-отчёт', 'zTrans', 'number', v.zTrans || 0) +
+          u.fieldRow('Перевод: факт', 'fTrans', 'number', v.fTrans || 0) +
+          u.fieldRow('Выдано из кассы за смену', 'payout', 'number', v.payout || 0) +
+          u.fieldRow('Комментарий', 'note', 'text', v.note || '');
       },
-      hint: 'Расхождение считается по каждому способу: факт минус Z-отчёт.',
+      hint: '«Факт» — сколько денег пришло на самом деле, до выплат из кассы. ' +
+        'Расхождение = факт − Z-отчёт по каждому способу.',
       save: function (v) {
         if (!v.zCash && !v.zCard && !v.zTrans && !v.fCash) return 'Заполните хотя бы наличные.';
+        learn({ shifts: v.shift, cashiers: v.cashier });
         var base = { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
           category: F.SALES, note: v.note, src: 'касса' };
         var group = S.uid();
@@ -89,18 +93,19 @@
       title: 'Расход', icon: '🧾',
       body: function (v) {
         var u = U(); v = v || {};
-        return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-          u.fieldRow('Категория', 'category', 'select', v.category || categories()[0], { options: categories() }) +
-          u.fieldRow('Способ оплаты', 'method', 'select', v.method || 'Наличные', { options: F.METHODS }) +
+        var pre = Q.defaults(S.state, S.settings, 'ddsExpense');
+        return u.fieldRow('Дата', 'date', 'date', v.date || pre.date) +
+          u.fieldRow('Категория', 'category', 'list', v.category || pre.category, { options: categories(), placeholder: 'за что платим' }) +
+          u.fieldRow('Способ оплаты', 'method', 'list', v.method || pre.method, { options: methods() }) +
           u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
           u.fieldRow('Это товар в долг', 'debt', 'select', v.debt || 'нет', { options: ['нет', 'да'] }) +
-          u.fieldRow('Кто вносит', 'cashier', 'text', v.cashier || '', { list: 'dl-fin-cashier' }) +
-          u.fieldRow('Комментарий', 'note', 'text', v.note || '', { placeholder: 'поставщик, за что' }) +
-          '<datalist id="dl-fin-cashier">' + cashiers().map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>';
+          u.fieldRow('Кто вносит', 'cashier', 'list', v.cashier || pre.cashier, { options: cashiers() }) +
+          u.fieldRow('Комментарий', 'note', 'text', v.note || '', { placeholder: 'поставщик, за что' });
       },
       hint: '«Товар в долг» — деньги не платили, долг поставщику вырос.',
       save: function (v) {
         if (!E.num(v.amount)) return 'Укажите сумму.';
+        learn({ categories: v.category, methods: v.method, cashiers: v.cashier });
         var debt = String(v.debt) === 'да';
         S.add('dds', { date: v.date, shift: '', cashier: v.cashier, type: debt ? 'Долг' : 'Расход',
           category: v.category, method: v.method, amount: E.num(v.amount), diff: 0,
@@ -114,16 +119,16 @@
       body: function (v) {
         var u = U(); v = v || {};
         return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-          u.fieldRow('Категория', 'category', 'text', v.category || F.SALES) +
-          u.fieldRow('Способ оплаты', 'method', 'select', v.method || 'Наличные', { options: F.METHODS }) +
+          u.fieldRow('Категория', 'category', 'list', v.category || F.SALES, { options: categories() }) +
+          u.fieldRow('Способ оплаты', 'method', 'list', v.method || 'Наличные', { options: methods() }) +
           u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-          u.fieldRow('Смена', 'shift', 'select', v.shift || '', { options: [''].concat(shiftNames()) }) +
-          u.fieldRow('Кассир', 'cashier', 'text', v.cashier || '', { list: 'dl-fin-cashier' }) +
-          u.fieldRow('Комментарий', 'note', 'text', v.note || '') +
-          '<datalist id="dl-fin-cashier">' + cashiers().map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>';
+          u.fieldRow('Смена', 'shift', 'list', v.shift || '', { options: shiftNames() }) +
+          u.fieldRow('Кассир', 'cashier', 'list', v.cashier || '', { options: cashiers() }) +
+          u.fieldRow('Комментарий', 'note', 'text', v.note || '');
       },
       save: function (v) {
         if (!E.num(v.amount)) return 'Укажите сумму.';
+        learn({ categories: v.category, methods: v.method, cashiers: v.cashier, shifts: v.shift });
         S.add('dds', { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
           category: v.category || F.SALES, method: v.method, amount: E.num(v.amount), diff: 0,
           note: v.note, src: 'приход' });
@@ -136,18 +141,18 @@
       body: function (v) {
         var u = U(); v = v || {};
         return u.fieldRow('Дата оплаты (план)', 'due', 'date', v.due || today()) +
-          u.fieldRow('Поставщик', 'supplier', 'text', v.supplier || '', { list: 'dl-fin-sup' }) +
+          u.fieldRow('Поставщик', 'supplier', 'list', v.supplier || '', { options: suppliers(), placeholder: 'кому платим' }) +
           u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
           u.fieldRow('Накладная', 'doc', 'text', v.doc || '') +
-          u.fieldRow('Способ оплаты', 'method', 'select', v.method || 'Наличные', { options: F.METHODS }) +
+          u.fieldRow('Способ оплаты', 'method', 'list', v.method || 'Наличные', { options: methods() }) +
           u.fieldRow('Статус', 'status', 'select', v.status || 'Запланировано', { options: ['Запланировано', 'Оплачено'] }) +
-          u.fieldRow('Примечание', 'note', 'text', v.note || '') +
-          '<datalist id="dl-fin-sup">' + suppliers().map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>';
+          u.fieldRow('Примечание', 'note', 'text', v.note || '');
       },
       hint: 'Когда оплатите — нажмите «Оплачено» в списке: запись сама попадёт в расходы.',
       save: function (v) {
         if (!v.supplier) return 'Укажите поставщика.';
         if (!E.num(v.amount)) return 'Укажите сумму.';
+        learn({ suppliers: v.supplier, methods: v.method });
         var paid = E.norm(v.status).indexOf('оплач') >= 0;
         var already = paid && (S.state.dds || []).some(function (r) {
           // расход по этой оплате уже мог быть записан раньше — не дублируем
