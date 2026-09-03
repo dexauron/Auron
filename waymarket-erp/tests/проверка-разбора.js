@@ -722,5 +722,54 @@ if (global.__dead) {
   console.log('');
 }
 
+/* Безопасность и защита от кривых данных */
+{
+  console.log('— Безопасность: прототип, длинные имена, даты, суммы');
+  STORE.clear();
+  STORE.importJSON(JSON.stringify({ data: {
+    '__proto__': { hacked: true }, constructor: { bad: 1 },
+    settings: { '__proto__': { x: 1 }, storeName: 'Тест' },
+    dds: [{ id: 'a', date: '2026-09-01', type: 'Расход', category: 'Аренда', amount: 100 }]
+  } }));
+  check('чужой ключ не попал в прототип', ({}).hacked === undefined, 'чисто', 'чисто');
+  check('прототип базы не подменён', Object.getPrototypeOf(STORE.state) === Object.prototype, 'штатный', 'штатный');
+  check('обычные данные при этом загрузились', (STORE.state.dds || []).length === 1 && STORE.settings.storeName === 'Тест',
+    STORE.state.dds.length + ' запись, магазин «' + STORE.settings.storeName + '»', '1 и «Тест»');
+  STORE.clear();
+
+  // длинное имя контрагента не должно вешать разбор
+  const longName = 'Контрагент' + ' . '.repeat(3000);
+  const t0 = Date.now();
+  const parts = SUP.splitRep(longName);
+  const ms = Date.now() - t0;
+  check('длинное имя разбирается мгновенно', ms < 200, ms + ' мс', '<200 мс');
+  check('длинное имя обрезается', parts.firm.length <= 200, parts.firm.length + ' символов', '<=200');
+
+  // даты Excel дальше 2064 года
+  check('дата 2099 года читается', WM.excelDate(73050) === '2099-12-31', WM.excelDate(73050), '2099-12-31');
+  check('дата 2064 года читается', WM.excelDate(60000) === '2064-04-08', WM.excelDate(60000), '2064-04-08');
+  check('в книге даты Excel читаются так же', BOOK.toDate(73050) === '2099-12-31', BOOK.toDate(73050), '2099-12-31');
+
+  // проверка сумм в формах
+  check('пустая сумма не проходит', !!Q.checkAmount(''), Q.checkAmount(''), 'ошибка');
+  check('буквы вместо суммы не проходят', !!Q.checkAmount('abc'), Q.checkAmount('abc'), 'ошибка');
+  check('минус не проходит', !!Q.checkAmount('-500'), Q.checkAmount('-500'), 'ошибка');
+  check('«1e100» не проходит', !!Q.checkAmount('1e100'), Q.checkAmount('1e100'), 'ошибка');
+  check('миллиард с лишним не проходит', !!Q.checkAmount('2000000000'), Q.checkAmount('2000000000'), 'ошибка');
+  check('нормальная сумма проходит', Q.checkAmount('1 500,50') === null, 'ок', 'ок');
+  check('ноль разрешаем там, где он уместен', Q.checkAmount('0', { allowZero: true }) === null, 'ок', 'ок');
+
+  // числа из выгрузок не превращаются в NaN и Infinity
+  ['', 'abc', null, undefined, '—', '1 234,56 ₽'].forEach(v => {
+    const n = WM.num(v);
+    if (!isFinite(n)) failed++;
+  });
+  check('мусор в числовых колонках даёт 0, а не NaN',
+    [undefined, null, '', 'abc', '—'].every(v => WM.num(v) === 0), 'все нули', 'все нули');
+  check('деление на ноль не ломает расчёт', WM.div(100, 0) === 0 && isFinite(WM.div(0, 0)),
+    WM.div(100, 0), 0);
+  console.log('');
+}
+
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

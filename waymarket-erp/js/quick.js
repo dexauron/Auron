@@ -173,6 +173,22 @@
     return null;
   }
 
+  // Проверка суммы перед записью: пусто, буквы, минус, «1e100» — всё это ошибки.
+  // Возвращает текст ошибки или null, если сумма нормальная.
+  var MAX_MONEY = 1000000000;      // миллиард рублей — верхняя граница здравого смысла
+  function checkAmount(value, opts) {
+    opts = opts || {};
+    var raw = txt(value);
+    if (!raw) return opts.allowEmpty ? null : 'Укажите сумму.';
+    if (!/^-?[\d\s.,]+$/.test(raw)) return 'Сумма должна быть числом, а не текстом.';
+    var n = num(raw);
+    if (!isFinite(n)) return 'Сумма не похожа на число.';
+    if (n < 0 && !opts.allowNegative) return 'Сумма не может быть отрицательной.';
+    if (Math.abs(n) > MAX_MONEY) return 'Сумма слишком большая — проверьте, не лишний ли ноль.';
+    if (!n && !opts.allowZero) return 'Сумма не может быть нулевой.';
+    return null;
+  }
+
   // Понятные предупреждения: не ошибка, но стоит взглянуть
   function warnings(rec) {
     var out = [], t = today();
@@ -223,6 +239,7 @@
     txt: txt, norm: norm, num: num, today: today, splitDict: splitDict,
     dicts: dicts, learn: learn, last: last, shiftNow: shiftNow, hourOf: hourOf, defaults: defaults,
     duplicate: duplicate, warnings: warnings, shiftMath: shiftMath,
+    checkAmount: checkAmount, MAX_MONEY: MAX_MONEY,
     saveDraft: saveDraft, loadDraft: loadDraft, clearDraft: clearDraft,
     DICT_SETTING: DICT_SETTING
   };

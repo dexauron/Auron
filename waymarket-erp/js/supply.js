@@ -73,6 +73,9 @@
   function splitRep(raw) {
     var name = clean(raw);
     if (!name) return { firm: '', rep: '' };
+    // имя контрагента длиннее 200 символов — это мусор из выгрузки, обрезаем:
+    // заодно регулярному выражению не на чем перебирать варианты
+    if (name.length > 200) name = name.slice(0, 200);
     var m = name.match(/^(.*?)[\s,.]+ТП[\s.]+(.+)$/i);
     if (m && clean(m[1])) return { firm: clean(m[1]), rep: clean(m[2]) };
     var head = name.match(/^ТП[\s.]+(.+)$/i);

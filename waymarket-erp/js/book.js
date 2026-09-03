@@ -34,7 +34,7 @@
     if (iso) return iso[0];
     var ru = s.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
     if (ru) return ru[3] + '-' + ('0' + ru[2]).slice(-2) + '-' + ('0' + ru[1]).slice(-2);
-    if (typeof v === 'number' && v > 20000 && v < 60000) {          // серийная дата Excel
+    if (typeof v === 'number' && v > 20000 && v < 2958466) {        // серийная дата Excel
       var d = new Date(Date.UTC(1899, 11, 30) + v * 86400000);
       return d.toISOString().slice(0, 10);
     }

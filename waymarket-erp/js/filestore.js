@@ -20,6 +20,7 @@
   var dirHandle = null;
   var bookStamp = null;      // отпечаток книги, которую мы сами записали последней
   var bookSaved = null;      // когда книга записана
+  var dataStamp = null;      // отпечаток «база.json», записанного нами
   var state = 'unsupported';   // unsupported | off | needs-permission | ready
   var lastSaved = null;
   var saveTimer = null;
@@ -178,15 +179,61 @@
     saveTimer = setTimeout(function () { saveNow(getData); }, 900);
   }
 
-  async function saveNow(getData) {
+  // Сколько копий храним (из настроек программы, по умолчанию 30)
+  var keepBackups = 30;
+  function setKeepBackups(n) { keepBackups = Math.max(1, +n || 30); }
+
+  // Старые копии удаляем сами, чтобы папка не разрасталась
+  async function trimBackups() {
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BACKUP_DIR, { create: true });
+      var names = [];
+      for await (var entry of dir.values()) {
+        if (entry.kind === 'file' && /^база-.*\.json$/i.test(entry.name)) names.push(entry.name);
+      }
+      names.sort();
+      while (names.length > keepBackups) {
+        var old = names.shift();
+        try { await dir.removeEntry(old); } catch (e) { break; }
+      }
+    } catch (e) { /* чистка не должна мешать сохранению */ }
+  }
+
+  // Проверка перед записью: не менял ли базу кто-то ещё (вторая вкладка,
+  // другой компьютер, ручная правка файла). Возвращает содержимое чужой версии.
+  async function foreignChange() {
+    if (state !== 'ready') return null;
+    try {
+      var dir = await dataDir();
+      var fh = await dir.getFileHandle(DATA_FILE);
+      var f = await fh.getFile();
+      var stamp = f.lastModified + ':' + f.size;
+      if (!dataStamp || stamp === dataStamp) return null;
+      return { stamp: stamp, text: await f.text() };
+    } catch (e) { return null; }
+  }
+
+  async function saveNow(getData, force) {
     if (state !== 'ready') return false;
     try {
+      // если файл изменил кто-то другой — не затираем молча
+      if (!force) {
+        var other = await foreignChange();
+        if (other) {
+          listeners.forEach(function (fn) { try { fn(state, lastSaved, other); } catch (e) {} });
+          return false;
+        }
+      }
+      var stampTime = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
       var payload = JSON.stringify({ saved: new Date().toISOString(), data: getData() }, null, 2);
-      await writeFile(DATA_FILE, payload);
-      var today = new Date().toISOString().slice(0, 10);
-      if (lastBackup !== today) {   // одна страховочная копия в день
-        await writeFile('база-' + today + '.json', payload, BACKUP_DIR);
-        lastBackup = today;
+      var st = await writeFileStamped(DATA_FILE, payload);
+      dataStamp = st;
+      // копия с датой и временем: перезагрузка страницы больше не затирает
+      // сегодняшнюю копию, а лишние удаляются по настройке
+      if (lastBackup !== stampTime) {
+        await writeFile('база-' + stampTime + '.json', payload, BACKUP_DIR);
+        lastBackup = stampTime;
+        await trimBackups();
       }
       lastSaved = new Date();
       notify();
@@ -198,6 +245,17 @@
   }
   var lastBackup = null;
 
+  // Запись с возвратом отпечатка файла — по нему видно чужие изменения
+  async function writeFileStamped(name, content) {
+    var dir = await dataDir();
+    var fh = await dir.getFileHandle(name, { create: true });
+    var w = await fh.createWritable();
+    await w.write(content);
+    await w.close();
+    var f = await fh.getFile();
+    return f.lastModified + ':' + f.size;
+  }
+
   async function loadSaved() {
     if (state !== 'ready') return null;
     var text = await readFile(DATA_FILE);
@@ -205,6 +263,11 @@
     try {
       var obj = JSON.parse(text);
       lastSaved = obj.saved ? new Date(obj.saved) : null;
+      // запоминаем отпечаток прочитанного файла: с ним сверяемся перед записью
+      try {
+        var f = await (await (await dataDir()).getFileHandle(DATA_FILE)).getFile();
+        dataStamp = f.lastModified + ':' + f.size;
+      } catch (e) { dataStamp = null; }
       notify();
       return obj.data || obj;
     } catch (e) { return null; }
@@ -237,6 +300,7 @@
     scheduleSave: scheduleSave, saveNow: saveNow, loadSaved: loadSaved,
     listExports: listExports, writeFile: writeFile, readFile: readFile, onChange: onChange,
     saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
+    foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
     get bookSaved() { return bookSaved; },
     BOOK_FILE: BOOK_FILE,
     get state() { return state; },

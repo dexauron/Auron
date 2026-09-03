@@ -47,7 +47,7 @@
     },
     hint: 'Не попадает в расходы и не уменьшает прибыль — только уменьшает деньги в обороте.',
     save: function (v) {
-      if (!num(v.amount)) return 'Укажите сумму.';
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
       S.add('dds', { date: v.date || today(), type: 'Забор', category: 'Забор владельца',
         method: v.method || 'Наличные', amount: num(v.amount), note: v.note || '' });
       return { ok: 'Записано: из оборота ушло ' + E.fmtMoney(num(v.amount)) + '.' };
@@ -69,7 +69,7 @@
     hint: 'Пока долг не погашен, он не считается выручкой — иначе касса не сойдётся.',
     save: function (v) {
       if (!v.name) return 'Укажите имя.';
-      if (!num(v.sum)) return 'Укажите сумму.';
+      var badSum = Q.checkAmount(v.sum); if (badSum) return badSum;
       learn({ cashiers: v.cashier });
       S.add('debtors', { date: v.date || today(), name: v.name, phone: v.phone || '',
         sum: num(v.sum), promise: v.promise || '', cashier: v.cashier || '', paid: false });
@@ -95,7 +95,7 @@
     },
     hint: 'Приход — деньги пришли · Расход — ушли · Долг — товар взяли без оплаты · Забор — деньги вынули из оборота.',
     save: function (v) {
-      if (!num(v.amount)) return 'Укажите сумму.';
+      var badAmount = Q.checkAmount(v.amount); if (badAmount) return badAmount;
       if (!v.category) return 'Напишите статью — за что это.';
       learn({ categories: v.category, methods: v.method, cashiers: v.cashier, shifts: v.shift });
       S.add('dds', { date: v.date || today(), type: v.type || 'Расход', category: v.category,

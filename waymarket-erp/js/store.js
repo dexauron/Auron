@@ -91,7 +91,10 @@
     // Внешний вид и поведение
     theme: 'Авто', bigText: 'нет', privacyDefault: 'нет',
     startView: 'Сегодня', defaultPeriod: 'Месяц',
-    bookAutoSave: 'да', bookAutoRead: 'да'
+    bookAutoSave: 'да', bookAutoRead: 'да',
+
+    // Доступ: пароль хранится не здесь, а на самом компьютере (localStorage)
+    askPin: 'нет', lockMinutes: 0
   };
 
   var COLLECTIONS = ['shifts', 'invoices', 'payments', 'expenses', 'timesheet', 'payouts', 'expiry',
@@ -120,10 +123,14 @@
     return state;
   }
 
+  // Ключи, которыми можно подменить прототип объекта: в базе им не место
+  function unsafeKey(k) { return k === '__proto__' || k === 'constructor' || k === 'prototype'; }
+
   function merge(base, patch) {
     for (var k in patch) {
+      if (unsafeKey(k) || !Object.prototype.hasOwnProperty.call(patch, k)) continue;
       if (k === 'settings') {
-        for (var s in patch.settings) base.settings[s] = patch.settings[s];
+        for (var s in patch.settings) { if (!unsafeKey(s)) base.settings[s] = patch.settings[s]; }
       } else if (Object.prototype.toString.call(patch[k]) === '[object Array]') {
         base[k] = patch[k];
       } else if (patch[k] !== null && typeof patch[k] === 'object') {

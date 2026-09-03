@@ -962,7 +962,8 @@
   function excelDate(v) {
     if (v == null || v === '') return '';
     if (v instanceof Date && !isNaN(v)) return v.toISOString().slice(0, 10);
-    if (typeof v === 'number' && v > 20000 && v < 60000) {
+    // 2958465 — 31.12.9999 по календарю Excel: раньше предел был 2064 год
+    if (typeof v === 'number' && v > 20000 && v < 2958466) {
       var ms = Math.round((v - 25569) * 86400000);
       return new Date(ms).toISOString().slice(0, 10);
     }

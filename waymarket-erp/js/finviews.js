@@ -63,6 +63,11 @@
         'Расхождение = факт − Z-отчёт по каждому способу.',
       save: function (v) {
         if (!v.zCash && !v.zCard && !v.zTrans && !v.fCash) return 'Заполните хотя бы наличные.';
+        var fields = ['zCash', 'fCash', 'zCard', 'fCard', 'zTrans', 'fTrans', 'payout'];
+        for (var fi = 0; fi < fields.length; fi++) {
+          var badF = Q.checkAmount(v[fields[fi]], { allowEmpty: true, allowZero: true });
+          if (badF) return 'Поле «' + fields[fi] + '»: ' + badF;
+        }
         learn({ shifts: v.shift, cashiers: v.cashier });
         var base = { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
           category: F.SALES, note: v.note, src: 'касса' };
@@ -104,7 +109,7 @@
       },
       hint: '«Товар в долг» — деньги не платили, долг поставщику вырос.',
       save: function (v) {
-        if (!E.num(v.amount)) return 'Укажите сумму.';
+        var bad = Q.checkAmount(v.amount); if (bad) return bad;
         learn({ categories: v.category, methods: v.method, cashiers: v.cashier });
         var debt = String(v.debt) === 'да';
         S.add('dds', { date: v.date, shift: '', cashier: v.cashier, type: debt ? 'Долг' : 'Расход',
@@ -127,7 +132,7 @@
           u.fieldRow('Комментарий', 'note', 'text', v.note || '');
       },
       save: function (v) {
-        if (!E.num(v.amount)) return 'Укажите сумму.';
+        var bad = Q.checkAmount(v.amount); if (bad) return bad;
         learn({ categories: v.category, methods: v.method, cashiers: v.cashier, shifts: v.shift });
         S.add('dds', { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
           category: v.category || F.SALES, method: v.method, amount: E.num(v.amount), diff: 0,
@@ -151,7 +156,7 @@
       hint: 'Когда оплатите — нажмите «Оплачено» в списке: запись сама попадёт в расходы.',
       save: function (v) {
         if (!v.supplier) return 'Укажите поставщика.';
-        if (!E.num(v.amount)) return 'Укажите сумму.';
+        var badSum = Q.checkAmount(v.amount); if (badSum) return badSum;
         learn({ suppliers: v.supplier, methods: v.method });
         var paid = E.norm(v.status).indexOf('оплач') >= 0;
         var already = paid && (S.state.dds || []).some(function (r) {

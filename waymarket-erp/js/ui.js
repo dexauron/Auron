@@ -509,6 +509,63 @@
     }
   }
 
+  /* --- Замок: пароль из 4 цифр от посторонних за этим компьютером -----------
+     Это не шифрование: файл базы и книга Excel остаются обычными файлами.
+     Пароль хранится только на этом компьютере, в базу и в книгу не попадает. */
+  var PIN_KEY = 'wm_pin', lockTimer = null;
+
+  function pinHash(code) {
+    var h = 5381, s = 'wm:' + String(code || '');
+    for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return String(h);
+  }
+  function pinSaved() {
+    try { return localStorage.getItem(PIN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function pinSet(code) {
+    try { localStorage.setItem(PIN_KEY, pinHash(code)); } catch (e) {}
+  }
+  function pinOn() { return E.norm(S.settings.askPin) === 'да' && !!pinSaved(); }
+
+  function lockScreen(askNew) {
+    var box = document.createElement('div');
+    box.className = 'backdrop lock-screen';
+    box.innerHTML = '<div class="sheet" style="max-width:360px;text-align:center">' +
+      '<div class="sheet-body" style="padding:26px 22px 22px">' +
+      '<div style="font-size:40px">🔒</div>' +
+      '<div class="sheet-title" style="margin-top:8px">' + esc(S.settings.storeName || 'Вай Маркет') + '</div>' +
+      '<div class="card-note" style="margin:6px 0 16px">' +
+      (askNew ? 'Придумайте пароль из 4 цифр' : 'Введите пароль') + '</div>' +
+      '<input id="pinInput" type="password" inputmode="numeric" maxlength="4" ' +
+      'style="font-size:28px;letter-spacing:10px;text-align:center;width:150px;border:none;' +
+      'border-bottom:2px solid var(--separator);background:none;outline:none">' +
+      '<div id="pinMsg" class="card-note" style="min-height:18px;margin-top:10px"></div>' +
+      '<button class="btn btn-primary btn-lg" id="pinOk" style="margin-top:12px;width:100%">' +
+      (askNew ? 'Сохранить' : 'Войти') + '</button></div></div>';
+    document.body.appendChild(box);
+    var input = box.querySelector('#pinInput'), msg = box.querySelector('#pinMsg');
+    setTimeout(function () { input.focus(); }, 80);
+    function done() {
+      var v = input.value.trim();
+      if (!/^\d{4}$/.test(v)) { msg.textContent = 'Нужны ровно 4 цифры.'; return; }
+      if (askNew) { pinSet(v); box.remove(); toast('Пароль задан. Он хранится только на этом компьютере.'); return; }
+      if (pinHash(v) !== pinSaved()) { msg.textContent = 'Пароль не подошёл.'; input.value = ''; return; }
+      box.remove();
+    }
+    box.querySelector('#pinOk').addEventListener('click', done);
+    input.addEventListener('keydown', function (e) { if (e.key === 'Enter') done(); });
+  }
+
+  // Автоблокировка по простою
+  function armLock() {
+    var mins = num(S.settings.lockMinutes);
+    if (lockTimer) clearTimeout(lockTimer);
+    if (!pinOn() || mins <= 0) return;
+    lockTimer = setTimeout(function () {
+      if (!document.querySelector('.lock-screen')) lockScreen(false);
+    }, mins * 60000);
+  }
+
   // Внешний вид по настройкам: тема, крупный шрифт
   function applyLook() {
     var s = S.settings, t = E.norm(s.theme || '');
@@ -516,6 +573,24 @@
     if (mode) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     document.body.classList.toggle('big', E.norm(s.bigText) === 'да');
+  }
+
+  // Файл базы изменил кто-то ещё (вторая вкладка или другой компьютер).
+  // Молча затирать нельзя — спрашиваем владельца.
+  var conflictShown = false;
+  function conflictAsk(other) {
+    if (conflictShown) return;
+    conflictShown = true;
+    var when = '';
+    try { when = new Date(JSON.parse(other.text).saved).toLocaleString('ru-RU').slice(0, 16); } catch (e) {}
+    sheet('База изменилась не в этой вкладке',
+      '<div class="card"><div class="card-pad">Файл <b>' + esc(F.DATA_FILE) + '</b> в папке новее того, ' +
+      'что открыто здесь' + (when ? ' (там запись от ' + esc(when) + ')' : '') + '.<br><br>' +
+      'Так бывает, если программа открыта в двух вкладках или на двух компьютерах. ' +
+      'Выберите, что оставить.</div></div>' +
+      '<div class="form-actions">' +
+      '<button class="btn" data-act="conflict-mine">Оставить моё и записать</button>' +
+      '<button class="btn btn-primary" data-act="conflict-theirs">Взять из файла</button></div>');
   }
 
   function saveState() {
@@ -629,7 +704,7 @@
       hint: 'Списание уменьшает прибыль. Причины можно добавлять свои — они запоминаются.',
       save: function (v) {
         if (!v.name) return 'Укажите товар.';
-        if (!num(v.cost)) return 'Укажите сумму по себестоимости.';
+        var badCost = Q.checkAmount(v.cost); if (badCost) return badCost;
         learn({ reasons: v.reason });
         S.add('inventory', { date: v.date, name: v.name, group: '', accounted: num(v.qty), fact: 0,
           price: num(v.qty) ? num(v.cost) / num(v.qty) : 0, reason: 'Списание: ' + v.reason });
@@ -687,7 +762,8 @@
       },
       hint: 'Аванс уменьшает сумму к выплате в конце месяца.',
       save: function (v) {
-        if (!v.employee || !v.amount) return 'Нужны сотрудник и сумма.';
+        if (!v.employee) return 'Укажите сотрудника.';
+        var badPay = Q.checkAmount(v.amount); if (badPay) return badPay;
         learn({ employees: v.employee });
         S.add('payouts', v);
         return { ok: 'Выплата записана: ' + v.employee + ' — ' + money(v.amount) };
@@ -2249,6 +2325,18 @@
         }
       }
       else if (a === 'print-labels') printLabels();
+      else if (a === 'conflict-theirs') {
+        closeSheet(); conflictShown = false;
+        F.loadSaved().then(function (data) {
+          if (data) { S.replaceAll(data); recompute(); render(); toast('Взяли версию из файла.'); }
+        });
+      }
+      else if (a === 'conflict-mine') {
+        closeSheet(); conflictShown = false;
+        F.saveNow(function () { return S.state; }, true).then(function () {
+          toast('Записали вашу версию поверх файла. Прежняя лежит в копиях.');
+        });
+      }
       else if (a === 'settings-wizard') settingsWizard();
       else if (a === 'settings-reset') {
         if (confirm('Вернуть все настройки к стандартным? Записи и документы не тронутся.')) {
@@ -2290,7 +2378,9 @@
       } else if (f.id === 'setForm') {
         var v = formValues(f);
         Object.keys(v).forEach(function (k) { S.setSetting(k, v[k]); });
-        closeSheet(); applyLook(); recompute(); render();
+        closeSheet(); applyLook(); F.setKeepBackups(S.settings.keepBackups); recompute(); render();
+        if (E.norm(S.settings.askPin) === 'да' && !pinSaved()) lockScreen(true);
+        armLock();
         toast('Настройки сохранены. Постоянные расходы: ' + money(S.fixedMonthly()) + ' в месяц.');
       }
     });
@@ -2401,6 +2491,12 @@
       return;
     }
     applyLook();
+    // пароль спрашиваем до того, как показать цифры
+    if (E.norm(S.settings.askPin) === 'да') lockScreen(!pinSaved());
+    ['click', 'keydown', 'input'].forEach(function (ev) {
+      document.addEventListener(ev, armLock, true);
+    });
+    armLock();
     var privSaved = null;
     try { privSaved = localStorage.getItem('wm_priv'); } catch (e) {}
     var privOn = privSaved === null ? E.norm(S.settings.privacyDefault) === 'да' : privSaved === '1';
@@ -2424,7 +2520,21 @@
       F.scheduleSave(function () { return S.state; });
       scheduleBook();
     });
-    F.onChange(function () { renderNav(); });
+    F.onChange(function (st, when, other) {
+      renderNav();
+      if (other) conflictAsk(other);
+    });
+    F.setKeepBackups(S.settings.keepBackups);
+
+    // вторая вкладка той же программы: подхватываем её записи
+    window.addEventListener('storage', function (e) {
+      if (e.key !== S.KEY || !e.newValue) return;
+      try {
+        S.replaceAll(JSON.parse(e.newValue));
+        recompute(); render();
+        toast('Данные обновились: запись сделана в другой вкладке.');
+      } catch (err) { /* повреждённое значение игнорируем */ }
+    });
 
     var st = await F.restore();
     if (st === 'ready') {
