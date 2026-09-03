@@ -393,6 +393,8 @@
   // Прочитать выгрузки 1С из подключённой папки (только изменившиеся файлы)
   async function syncFolder(silent) {
     if (F.state !== 'ready') return false;
+    var book = await F.bookChangedOutside();
+    if (book) await readBook(book, silent);
     var files = await F.listExports();
     var changed = files.filter(function (f) { return folderStamps[f.name] !== f.stamp; });
     if (!changed.length) { if (!silent) toast('Новых выгрузок в папке нет.'); return false; }
@@ -405,6 +407,68 @@
     recompute();
     if (!silent) { render(); toast('Обновлено файлов: ' + changed.length); }
     return true;
+  }
+
+  /* --- Книга «Бухгалтерия.xlsx»: она же база ---------------------------------
+     Пишем её после каждой записи, читаем обратно, если владелец правил в Excel. */
+  var BOOK = window.WMBook, bookTimer = null;
+
+  function bookWorkbook() {
+    var sheets = BOOK.build(S.state, S.settings, { stock: D.stock });
+    var wb = XLSX.utils.book_new();
+    sheets.forEach(function (sh) {
+      var ws = XLSX.utils.aoa_to_sheet(sh.aoa);
+      ws['!cols'] = (sh.aoa[0] || []).map(function (t) {
+        return { wch: Math.min(34, Math.max(11, String(t).length + 3)) };
+      });
+      ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+      XLSX.utils.book_append_sheet(wb, ws, sh.name.slice(0, 31));
+    });
+    return wb;
+  }
+  function bookBytes() {
+    return XLSX.write(bookWorkbook(), { bookType: 'xlsx', type: 'array' });
+  }
+  function scheduleBook() {
+    if (F.state !== 'ready') return;
+    if (bookTimer) clearTimeout(bookTimer);
+    bookTimer = setTimeout(function () {
+      try { F.saveBook(bookBytes()); } catch (e) { /* книга не должна ломать работу */ }
+    }, 1200);
+  }
+  async function saveBookNow() {
+    if (F.state !== 'ready') { toast('Сначала подключите папку на экране «Данные и файлы».'); return false; }
+    var ok = await F.saveBook(bookBytes());
+    toast(ok ? 'Книга сохранена: ' + F.dirName + '/' + F.BOOK_FILE : 'Не получилось записать книгу.');
+    renderNav();
+    return ok;
+  }
+
+  // Прочитать книгу из папки: правки владельца в Excel возвращаются в программу
+  async function readBook(file, silent) {
+    var f = file || await F.rootFile(F.BOOK_FILE);
+    if (!f) { if (!silent) toast('Книги «' + F.BOOK_FILE + '» в папке ещё нет — она появится после первой записи.'); return false; }
+    try {
+      var wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: 'array', cellDates: true });
+      var mats = {};
+      wb.SheetNames.forEach(function (n) {
+        mats[n] = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' });
+      });
+      // страховка: перед тем как принять правки, кладём копию нынешней базы
+      await F.writeFile('база-до-чтения-книги.json',
+        JSON.stringify({ saved: new Date().toISOString(), data: S.state }, null, 2), 'копии');
+      var rep = BOOK.parse(function (n) { return mats[n] || null; }, S.state, S.settings);
+      S.save();
+      recompute(); render();
+      if (!silent || rep.rows) {
+        toast('Прочитал книгу: ' + rep.sheets.map(function (x) { return x.name + ' — ' + x.rows; }).join(', ') +
+          (rep.skipped.length ? '\nПропущено: ' + rep.skipped.join('; ') : ''), 7000);
+      }
+      return true;
+    } catch (e) {
+      toast('Не получилось прочитать книгу: ' + e.message);
+      return false;
+    }
   }
 
   function saveState() {
@@ -656,6 +720,8 @@
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
     form: function (id) { return FORMS[id]; },
     pickFiles: function () { $('filesInput').click(); },
+    saveBook: function () { return saveBookNow(); },
+    readBook: function () { return readBook(); },
     recompute: function () { recompute(); }
   };
 
@@ -2065,15 +2131,22 @@
     if (moved) toast('Прежние записи о кассе и расходах перенесены в базу операций: ' + moved + '.', 7000);
 
     // сохранение в файл: подписываемся на любые изменения журналов
-    S.onChange(function () { F.scheduleSave(function () { return S.state; }); });
+    S.onChange(function () {
+      F.scheduleSave(function () { return S.state; });
+      scheduleBook();
+    });
     F.onChange(function () { renderNav(); });
 
     var st = await F.restore();
     if (st === 'ready') {
       var saved = await F.loadSaved();
       if (saved) S.replaceAll(saved);
+      // книгу, изменённую в Excel после последнего сохранения, читаем сразу
+      var book = await F.bookChangedOutside();
+      if (book && (!F.lastSaved || book.lastModified > F.lastSaved.getTime())) await readBook(book, true);
       await syncFolder(true);
       recompute(); render();
+      if (!book) scheduleBook();
     } else if (st === 'off' && F.supported()) {
       // первый запуск: подскажем один раз, но не мешаем работать
       setTimeout(function () {

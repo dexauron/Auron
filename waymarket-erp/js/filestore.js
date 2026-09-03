@@ -15,8 +15,11 @@
   var DATA_DIR = 'Данные_дашборда';
   var DATA_FILE = 'база.json';
   var BACKUP_DIR = 'копии';
+  var BOOK_FILE = 'Бухгалтерия.xlsx';   // книга лежит на виду, в корне рабочей папки
 
   var dirHandle = null;
+  var bookStamp = null;      // отпечаток книги, которую мы сами записали последней
+  var bookSaved = null;      // когда книга записана
   var state = 'unsupported';   // unsupported | off | needs-permission | ready
   var lastSaved = null;
   var saveTimer = null;
@@ -118,6 +121,46 @@
     return true;
   }
 
+  /* --- книга «Бухгалтерия.xlsx» в корне рабочей папки --- */
+  async function writeRoot(name, content) {
+    if (!dirHandle) throw new Error('Папка не подключена');
+    var fh = await dirHandle.getFileHandle(name, { create: true });
+    var w = await fh.createWritable();
+    await w.write(content);
+    await w.close();
+    var f = await fh.getFile();
+    return f.lastModified + ':' + f.size;
+  }
+
+  async function rootFile(name) {
+    if (!dirHandle) return null;
+    try {
+      var fh = await dirHandle.getFileHandle(name);
+      return await fh.getFile();
+    } catch (e) { return null; }
+  }
+
+  // Записать книгу; отпечаток запоминаем, чтобы отличить свою запись от правки владельца
+  async function saveBook(bytes) {
+    if (state !== 'ready') return false;
+    try {
+      bookStamp = await writeRoot(BOOK_FILE, bytes);
+      bookSaved = new Date();
+      notify();
+      return true;
+    } catch (e) { return false; }
+  }
+
+  // Книга, изменённая снаружи (владелец правил её в Excel), или null
+  async function bookChangedOutside() {
+    var f = await rootFile(BOOK_FILE);
+    if (!f) return null;
+    var stamp = f.lastModified + ':' + f.size;
+    if (bookStamp && stamp === bookStamp) return null;
+    bookStamp = stamp;
+    return f;
+  }
+
   async function readFile(name) {
     var dir = await dataDir();
     try {
@@ -176,6 +219,7 @@
       for await (var entry of handle.values()) {
         if (entry.kind === 'file') {
           if (!/\.(xls|xlsx|csv)$/i.test(entry.name) || /^~\$/.test(entry.name)) continue;
+          if (entry.name === BOOK_FILE) continue;   // это наша книга, а не выгрузка 1С
           var file = await entry.getFile();
           out.push({ name: prefix + entry.name, file: file, stamp: file.lastModified + ':' + file.size });
         } else if (entry.kind === 'directory' && /данные|выгруз|1с|excel/i.test(entry.name) && prefix.length < 40) {
@@ -192,6 +236,9 @@
     supported: supported, connect: connect, restore: restore, reconnect: reconnect, forget: forget,
     scheduleSave: scheduleSave, saveNow: saveNow, loadSaved: loadSaved,
     listExports: listExports, writeFile: writeFile, readFile: readFile, onChange: onChange,
+    saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
+    get bookSaved() { return bookSaved; },
+    BOOK_FILE: BOOK_FILE,
     get state() { return state; },
     get lastSaved() { return lastSaved; },
     get dirName() { return dirHandle ? dirHandle.name : ''; },

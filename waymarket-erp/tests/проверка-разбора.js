@@ -9,6 +9,7 @@ const XLSX = require(path.join(__dirname, '..', 'vendor', 'xlsx.full.min.js'));
 const WM = require(path.join(__dirname, '..', 'js', 'engine.js'));
 const FIN = require(path.join(__dirname, '..', 'js', 'finance.js'));
 const SUP = require(path.join(__dirname, '..', 'js', 'supply.js'));
+const BOOK = require(path.join(__dirname, '..', 'js', 'book.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
 if (!fs.existsSync(dir)) {
@@ -437,6 +438,82 @@ if (global.__inv1c && global.__cash) {
   check('забор не уменьшает прибыль', t.profit === 80000, WM.fmtMoney(t.profit), '80 000 ₽');
   check('забор уменьшает деньги в кассе', b.map['Наличные'] === 30000, WM.fmtMoney(b.map['Наличные']), '30 000 ₽');
   check('забор виден отдельной строкой', t.draw === 50000, WM.fmtMoney(t.draw), '50 000 ₽');
+  console.log('');
+}
+
+/* Книга «Бухгалтерия.xlsx»: база уезжает в Excel и возвращается без потерь */
+if (global.__inv1c && global.__cash) {
+  console.log('— Книга «Бухгалтерия»: запись в Excel и чтение обратно');
+  const settings = { termDaysDefault: 3, debtorOldDays: 30, storeName: 'ВАЙ МАРКЕТ', fot: 280000 };
+  const st = { docs: [], pays: [], supreg: [], debtors: [], dds: [], plans: [], payouts: [], timesheet: [], expiry: [] };
+  SUP.mergeDocs(st, global.__inv1c, 'накладные.xlsx', st.supreg, settings);
+  SUP.mergePays(st, global.__cash, 'рко.xlsx', st.supreg, settings);
+  SUP.autoRegister(st, settings);
+  st.supreg[0].termDays = 7;
+  st.dds = [
+    { id: 'd1', date: '2026-08-01', shift: 'День', cashier: 'Марина', type: 'Приход',
+      category: 'Продажи', method: 'Наличные', amount: 38400, diff: 0, note: '' },
+    { id: 'd2', date: '2026-08-01', type: 'Расход', category: 'Аренда', method: 'Перевод', amount: 168000 },
+    { id: 'd3', date: '2026-08-02', type: 'Забор', category: 'Забор владельца', method: 'Наличные', amount: 50000 }
+  ];
+  st.debtors = [{ id: 'x1', date: '2026-08-01', name: 'Ахмед', sum: 1240, paid: false }];
+  const before = SUP.compute(st, settings);
+
+  // пишем настоящий xlsx и читаем его обратно
+  const wb = XLSX.utils.book_new();
+  const sheets = BOOK.build(st, settings, { stock: global.__stock ? global.__stock.rows : [] });
+  sheets.forEach(sh => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.aoa), sh.name.slice(0, 31)));
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' });
+  const back = XLSX.read(buf, { type: 'buffer', cellDates: true });
+  const mats = {};
+  back.SheetNames.forEach(n => { mats[n] = XLSX.utils.sheet_to_json(back.Sheets[n], { header: 1, raw: true, defval: '' }); });
+
+  const st2 = { docs: [], pays: [], supreg: [], debtors: [], dds: [], plans: [], payouts: [], timesheet: [], expiry: [] };
+  const settings2 = { termDaysDefault: 0, debtorOldDays: 0, storeName: '', fot: 0 };
+  const rep = BOOK.parse(n => mats[n] || null, st2, settings2);
+  const after = SUP.compute(st2, settings2);
+
+  check('в книге все листы на месте', back.SheetNames.length === sheets.length,
+    back.SheetNames.length + ' листов', sheets.length + ' листов');
+  check('накладные вернулись все', st2.docs.length === st.docs.length, st2.docs.length, st.docs.length);
+  check('оплаты вернулись все', st2.pays.length === st.pays.length, st2.pays.length, st2.pays.length);
+  check('операции кассы вернулись', st2.dds.length === st.dds.length, st2.dds.length, st.dds.length);
+  check('долг после круга через Excel не изменился', near(after.totals.left, before.totals.left, 0.01),
+    WM.fmtMoney(after.totals.left), WM.fmtMoney(before.totals.left));
+  check('оплаты снова привязались к накладным', after.linkStat.auto === before.linkStat.auto,
+    after.linkStat.auto, before.linkStat.auto);
+  check('очередь разбора та же', after.recon.length === before.recon.length, after.recon.length, before.recon.length);
+  check('очередь подтверждения та же', after.confirm.length === before.confirm.length,
+    after.confirm.length, before.confirm.length);
+  check('заданная отсрочка пережила запись', SUP.findFirm(st2.supreg, st.supreg[0].name).termDays === 7,
+    SUP.findFirm(st2.supreg, st.supreg[0].name).termDays, 7);
+  check('незаданная отсрочка не превратилась в ноль',
+    st2.supreg.filter(f => f.termDays === null).length === st.supreg.filter(f => f.termDays === null).length,
+    st2.supreg.filter(f => f.termDays === null).length + ' без отсрочки',
+    st.supreg.filter(f => f.termDays === null).length + ' без отсрочки');
+  check('настройки прочитались из книги', settings2.termDaysDefault === 3 && settings2.storeName === 'ВАЙ МАРКЕТ',
+    settings2.termDaysDefault + ' / ' + settings2.storeName, '3 / ВАЙ МАРКЕТ');
+  check('долг покупателя вернулся', st2.debtors.length === 1 && st2.debtors[0].sum === 1240,
+    WM.fmtMoney(st2.debtors[0] ? st2.debtors[0].sum : 0), '1 240 ₽');
+  check('забор владельца не стал расходом', FIN.totals(st2.dds).draw === 50000,
+    WM.fmtMoney(FIN.totals(st2.dds).draw), '50 000 ₽');
+
+  // расчётные листы
+  const monthsSheet = mats['Отчёт_по_месяцам'] || [];
+  const kudirSheet = mats['Доходы_и_расходы'] || [];
+  check('лист «Отчёт по месяцам» заполнен', monthsSheet.length > 1, monthsSheet.length - 1 + ' строк', '>0');
+  const total = kudirSheet[kudirSheet.length - 1] || [];
+  check('в «Доходы и расходы» есть итог', String(total[1]) === 'ИТОГО', total[1], 'ИТОГО');
+  check('доход в итоге совпадает с кассой', near(WM.num(total[3]), FIN.totals(st.dds).income, 0.01),
+    WM.fmtMoney(WM.num(total[3])), WM.fmtMoney(FIN.totals(st.dds).income));
+
+  // пустой лист не должен стирать данные
+  const mats2 = JSON.parse(JSON.stringify(mats));
+  mats2['Долги_покупателей'] = [mats2['Долги_покупателей'][0]];
+  const st3 = JSON.parse(JSON.stringify(st2));
+  BOOK.parse(n => mats2[n] || null, st3, {});
+  check('пустой лист не стирает журнал', st3.debtors.length === 1, st3.debtors.length, 1);
+  console.log('     листов: ' + sheets.length + ', строк прочитано: ' + rep.rows);
   console.log('');
 }
 

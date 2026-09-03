@@ -464,101 +464,43 @@
     return h;
   }
 
-  /* --- Шаблон Excel --------------------------------------------------------- */
-  var SHEETS = [
-    { name: 'Поставщики', src: 'справочник · вручную', tone: 'gray',
-      purpose: 'Один поставщик — одна строка. Здесь же отсрочка и все написания имён из 1С.',
-      cols: ['Поставщик', 'Отсрочка_дней', 'Обычная_оплата', 'Телефон', 'Имена_в_1С', 'Комментарий'],
-      rows: function () {
-        return (S.state.supreg || []).map(function (f) {
-          return [f.name, f.termDays == null ? '' : f.termDays, f.method || '', f.phone || '',
-            (f.aliases || []).join('; '), f.note || ''];
-        });
-      } },
-    { name: 'Накладные', src: 'из 1С · автоматически', tone: 'blue',
-      purpose: 'Каждая приходная накладная. Дата выплаты ставится по отсрочке и подтверждается вручную.',
-      cols: ['Документ', 'Дата', 'Поставщик', 'Вх_номер', 'Сумма_закуп', 'Сумма_розница', 'Дата_выплаты', 'Подтверждена', 'Оплачено', 'Остаток_долга'],
-      rows: function () {
-        return sup().docs.map(function (d) {
-          return [d.doc, d.date, d.firm, d.incomingNo, d.sum, d.retail, d.due,
-            d.confirmed ? 'да' : 'нет', d.paid, d.left];
-        });
-      } },
-    { name: 'Оплаты', src: 'из 1С · автоматически', tone: 'blue',
-      purpose: 'РКО. Привязка к накладной берётся из документа-основания, спорные попадают в «Разбор оплат».',
-      cols: ['Документ', 'Дата', 'Поставщик', 'Накладная', 'Касса', 'Сумма', 'Статус_привязки'],
-      rows: function () {
-        var st = { auto: 'по основанию', manual: 'вручную', none: 'не привязана',
-          other: 'расход магазина', expense: 'расход магазина', advance: 'аванс' };
-        return (S.state.pays || []).map(function (p) {
-          return [p.doc, p.date, p.firm || p.supplier, p.basis, p.cashbox, p.sum, st[p.linkKind] || '—'];
-        });
-      } },
-    { name: 'Касса', src: 'вручную · кассир', tone: 'orange',
-      purpose: 'Одна строка на смену. Расхождение считается формулой, вручную не правится.',
-      cols: ['Дата', 'Смена', 'Кассир', 'Тип', 'Способ', 'Сумма', 'Расхождение', 'Комментарий'],
-      rows: function () {
-        return (S.state.dds || []).filter(function (r) { return F.isIncome(r); }).map(function (r) {
-          return [r.date, r.shift || '', r.cashier || '', r.type, r.method, num(r.amount), num(r.diff), r.note || ''];
-        });
-      } },
-    { name: 'Расходы', src: 'вручную · владелец', tone: 'orange',
-      purpose: 'Аренда, зарплата, коммуналка, налоги, забор денег владельцем — с типом операции.',
-      cols: ['Дата', 'Категория', 'Тип', 'Способ', 'Сумма', 'Комментарий'],
-      rows: function () {
-        return (S.state.dds || []).filter(function (r) { return !F.isIncome(r); }).map(function (r) {
-          return [r.date, r.category || '', r.type, r.method || '', num(r.amount), r.note || ''];
-        });
-      } },
-    { name: 'Товар', src: 'из 1С · автоматически', tone: 'blue',
-      purpose: 'Остатки для наценки, заказов и ABC.',
-      cols: ['Штрихкод', 'Наименование', 'Группа', 'Остаток', 'Цена_закуп', 'Цена_розница'],
-      rows: function () {
-        return U().data().stock.slice(0, 20000).map(function (r) {
-          return [r.barcode || '', r.name, r.group || '', num(r.qty), num(r.buyPrice), num(r.retailPrice)];
-        });
-      } },
-    { name: 'Долги покупателей', src: 'вручную · кассир', tone: 'orange',
-      purpose: 'Тетрадка у кассы. В выручку попадает только после погашения.',
-      cols: ['Дата', 'Имя', 'Телефон', 'Сумма', 'Обещал_вернуть', 'Погашено', 'Дата_погашения'],
-      rows: function () {
-        return (S.state.debtors || []).map(function (r) {
-          return [r.date, r.name, r.phone || '', num(r.sum), r.promise || '', r.paid ? 'да' : 'нет', r.paidDate || ''];
-        });
-      } },
-    { name: 'Настройки', src: 'вручную · один раз', tone: 'gray',
-      purpose: 'Отсрочка по умолчанию, ставки зарплаты, плечо поставки, страховой запас, категории расходов.',
-      cols: ['Параметр', 'Значение'],
-      rows: function () {
-        var s = S.settings, out = [];
-        for (var k in s) out.push([k, s[k]]);
-        return out;
-      } }
-  ];
-
+  /* --- Книга «Бухгалтерия» --------------------------------------------------- */
   var RULES = [
-    ['🔑', 'Ключ документа — его номер', 'Повторная загрузка того же файла обновляет строку, а не добавляет вторую.'],
-    ['🔒', 'Автоматические листы не правятся руками', 'Накладные, Оплаты и Товар перезаписываются при импорте. Исправлять нужно на листах «Поставщики» и «Настройки».'],
-    ['🧮', 'Считаемые поля видно целиком', 'Остаток долга, расхождение по кассе и оплаченная сумма выгружаются вместе с исходными — видно, откуда взялась цифра.'],
-    ['📅', 'Дата выплаты живёт в двух состояниях', 'Предложенная программой и подтверждённая вами. В календарь попадает только подтверждённая.'],
-    ['💾', 'Копия перед каждым импортом', 'База копируется в папку «Данные_дашборда/копии» с датой — можно вернуться на день назад.']
+    ['💾', 'Книга — это и есть база', 'После каждой записи в программе файл «Бухгалтерия.xlsx» перезаписывается. Отдельно ничего сохранять не нужно.'],
+    ['✏️', 'Правьте прямо в Excel', 'Закройте файл после правки — программа увидит изменения и перечитает их. Строку узнаёт по колонке ID; новая строка без ID тоже примется.'],
+    ['🧮', 'Листы-отчёты не правятся', 'Отчёт по месяцам, Доходы и расходы, Долг поставщикам и Товар программа пересобирает сама при каждом сохранении.'],
+    ['🔑', 'Дублей не будет', 'Накладные и оплаты сверяются по номеру документа: повторная загрузка того же файла из 1С обновляет строку.'],
+    ['🛟', 'Копия перед чтением правок', 'Прежняя база уходит в «Данные_дашборда/копии» — если правка в Excel окажется неудачной, есть куда вернуться.']
   ];
 
   function viewSheets() {
-    var u = U();
-    var h = u.pageHead('Шаблон Excel', 'Одна книга «Бухгалтерия.xlsx» с листами — открывается и правится в обычном Excel',
-      '<button class="btn btn-primary" data-act="sup-template">⬇ Скачать книгу</button>');
+    var u = U(), B = window.WMBook, F = window.WMFiles;
+    var built = B.build(S.state, S.settings, { stock: u.data().stock });
+    var ready = F.state === 'ready';
+    var where = ready ? (F.dirName + '/' + F.BOOK_FILE) : 'папка не подключена';
 
-    h += SHEETS.map(function (sh) {
-      var n = 0;
-      try { n = sh.rows().length; } catch (e) { n = 0; }
+    var h = u.pageHead('Книга «Бухгалтерия»', 'Вся база лежит в одном файле Excel рядом с программой',
+      '<button class="btn" data-act="sup-template">⬇ Скачать копию</button> ' +
+      '<button class="btn" data-act="sup-book-read">📖 Прочитать правки</button> ' +
+      '<button class="btn btn-primary" data-act="sup-book-save">💾 Сохранить сейчас</button>');
+
+    h += ready
+      ? '<div class="banner green"><span>💾</span><span>Книга пишется сама после каждой записи: <b>' +
+        esc(where) + '</b>' + (F.bookSaved ? ' · сохранена в ' + F.bookSaved.toLocaleTimeString('ru-RU').slice(0, 5) : '') +
+        '. Правьте её в Excel — программа подхватит изменения.</span></div>'
+      : '<div class="banner"><span>📂</span><span>Чтобы книга сохранялась в папку, подключите папку программы.</span>' +
+        '<button class="btn" data-act="folder-connect">Подключить папку</button></div>';
+
+    h += built.map(function (sh) {
       return '<div class="card"><div class="card-pad">' +
         '<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
-        u.badge(sh.src, sh.tone) + '<span class="card-title">' + esc(sh.name) + '</span>' +
-        '<span class="card-note" style="margin-left:auto">' + u.nf(n) + ' ' + u.plural(n, 'строка', 'строки', 'строк') + '</span></div>' +
-        '<div class="card-note" style="margin-top:4px">' + esc(sh.purpose) + '</div>' +
+        u.badge(sh.edit ? 'правится вручную' : 'считается сама', sh.edit ? 'orange' : 'blue') +
+        '<span class="card-title">' + esc(sh.name) + '</span>' +
+        '<span class="card-note" style="margin-left:auto">' + u.nf(sh.count) + ' ' +
+        u.plural(sh.count, 'строка', 'строки', 'строк') + '</span></div>' +
+        '<div class="card-note" style="margin-top:4px">' + esc(sh.about || '') + '</div>' +
         '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:11px">' +
-        sh.cols.map(function (c) { return '<span class="badge b-gray" style="border-radius:7px">' + esc(c) + '</span>'; }).join('') +
+        (sh.aoa[0] || []).map(function (c) { return '<span class="badge b-gray" style="border-radius:7px">' + esc(c) + '</span>'; }).join('') +
         '</div></div></div>';
     }).join('');
 
@@ -568,13 +510,11 @@
     return h;
   }
 
-  function downloadTemplate() {
+  // Скачать книгу копией — когда папка не подключена или нужна копия «на память»
+  function downloadBook() {
     var wb = XLSX.utils.book_new();
-    SHEETS.forEach(function (sh) {
-      var rows = [];
-      try { rows = sh.rows(); } catch (e) { rows = []; }
-      var ws = XLSX.utils.aoa_to_sheet([sh.cols].concat(rows));
-      XLSX.utils.book_append_sheet(wb, ws, sh.name.slice(0, 31));
+    window.WMBook.build(S.state, S.settings, { stock: U().data().stock }).forEach(function (sh) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(sh.aoa), sh.name.slice(0, 31));
     });
     XLSX.writeFile(wb, 'Бухгалтерия_' + today() + '.xlsx');
   }
@@ -767,8 +707,11 @@
     return 'Долг «' + r.name + '» погашен.';
   };
 
+  A['sup-book-save'] = function () { U().saveBook(); return null; };
+  A['sup-book-read'] = function () { U().readBook(); return null; };
+
   A['sup-template'] = function () {
-    try { downloadTemplate(); return 'Книга «Бухгалтерия» сохранена.'; }
+    try { downloadBook(); return 'Копия книги «Бухгалтерия» скачана.'; }
     catch (e) { return 'Не получилось собрать книгу: ' + e.message; }
   };
 
@@ -803,6 +746,6 @@
     { id: 'terms', icon: '⏱', name: 'Отсрочки поставщиков', group: 'Данные из 1С', render: viewTerms, after: 'confirm' },
     { id: 'manual', icon: '✍️', name: 'Ручные записи', group: 'Ручной ввод', render: viewManual, after: 'terms' },
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'manual' },
-    { id: 'sheets', icon: '📗', name: 'Шаблон Excel', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }
+    { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' }
   );
 })();
