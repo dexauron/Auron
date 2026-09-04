@@ -313,6 +313,88 @@
   function setSetting(key, value) { state.settings[key] = value; save(); }
 
   // Резервная копия: журналы и настройки одним файлом
+  /* --- 126. Работа на двух компьютерах: примирение изменений ------------------
+     Дома записали расход, в магазине — смену. Раньше выбор был «оставить моё»
+     или «взять из файла», и одна из работ пропадала. Теперь записи
+     объединяются: у каждой свой номер, поэтому пропасть ничего не может.
+     Если одну и ту же запись правили в обоих местах — берём ту, что из более
+     позднего файла, и говорим, сколько таких было. Удаления не теряются:
+     корзина помнит, что и когда удалили.
+     ------------------------------------------------------------------------ */
+  function reconcile(mine, theirs, opts) {
+    opts = opts || {};
+    mine = mine || {}; theirs = theirs || {};
+    // чей файл записан позже — тот и главный в спорных записях
+    var mineNewer = !opts.theirsSaved || (opts.mineSaved && opts.mineSaved >= opts.theirsSaved);
+    var out = emptyState();
+    var res = { added: 0, kept: 0, conflicts: 0, removed: 0, collections: {} };
+
+    // что удалено на каждой стороне — по корзине
+    function deletedIds(st) {
+      var map = {};
+      (st.trash || []).forEach(function (t) {
+        if (t && t.rec && t.rec.id) map[t.rec.id] = t.at || '';
+      });
+      return map;
+    }
+    var delMine = deletedIds(mine), delTheirs = deletedIds(theirs);
+
+    for (var ci = 0; ci < COLLECTIONS.length; ci++) {
+      var coll = COLLECTIONS[ci];
+      if (coll === 'trash') continue;                 // корзину сливаем отдельно
+      var a = mine[coll] || [], b = theirs[coll] || [];
+      var byId = {}, order = [], stats = { added: 0, conflicts: 0, removed: 0 };
+
+      function put(rec, fromMine) {
+        if (!rec || typeof rec !== 'object') return;
+        var id = rec.id;
+        if (!id) { id = uid(); rec.id = id; }
+        // запись, удалённая на другой стороне, не воскресает
+        if (fromMine ? delTheirs[id] : delMine[id]) { stats.removed++; return; }
+        if (!byId[id]) { byId[id] = rec; order.push(id); if (!fromMine) stats.added++; return; }
+        var was = JSON.stringify(byId[id]), now = JSON.stringify(rec);
+        if (was === now) return;                       // одинаковые — спорить не о чем
+        stats.conflicts++;
+        // побеждает та сторона, чей файл записан позже
+        if (fromMine ? mineNewer : !mineNewer) byId[id] = rec;
+      }
+      for (var i = 0; i < a.length; i++) put(a[i], true);
+      for (var j = 0; j < b.length; j++) put(b[j], false);
+
+      out[coll] = order.map(function (id) { return byId[id]; });
+      res.added += stats.added; res.conflicts += stats.conflicts; res.removed += stats.removed;
+      if (stats.added || stats.conflicts || stats.removed) res.collections[coll] = stats;
+    }
+
+    // корзина: объединяем, чтобы удаления с обеих сторон помнились
+    var trash = {}, tOrder = [];
+    [(mine.trash || []), (theirs.trash || [])].forEach(function (list) {
+      list.forEach(function (t) {
+        if (!t || !t.id || trash[t.id]) return;
+        trash[t.id] = t; tOrder.push(t.id);
+      });
+    });
+    out.trash = tOrder.map(function (id) { return trash[id]; }).slice(-TRASH_MAX);
+
+    // настройки берём у того, чей файл новее: это про один магазин, а не про
+    // две разные базы, и мешать половинки настроек — хуже, чем взять целиком
+    out.settings = merge(emptyState().settings,
+      (mineNewer ? mine.settings : theirs.settings) || {});
+    res.settingsFrom = mineNewer ? 'этот компьютер' : 'файл в папке';
+    res.total = COLLECTIONS.reduce(function (n, c) { return n + (out[c] || []).length; }, 0);
+    return { state: out, report: res };
+  }
+
+  // Примирить и сразу применить: возвращает отчёт для показа владельцу
+  function reconcileWith(otherText, otherSaved) {
+    var obj = typeof otherText === 'string' ? JSON.parse(otherText) : otherText;
+    var data = obj.data || obj;
+    var r = reconcile(state, data, { mineSaved: state.savedAt || '', theirsSaved: obj.saved || otherSaved || '' });
+    state = r.state;
+    save();
+    return r.report;
+  }
+
   function exportJSON() {
     return JSON.stringify({ exported: new Date().toISOString(), data: state }, null, 2);
   }
@@ -332,6 +414,7 @@
 
   return {
     KEY: KEY, DEFAULT_SETTINGS: DEFAULT_SETTINGS, COLLECTIONS: COLLECTIONS,
+    reconcile: reconcile, reconcileWith: reconcileWith,
     get state() { return state; },
     get settings() { return state.settings; },
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,

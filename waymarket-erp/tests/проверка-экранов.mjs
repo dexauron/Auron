@@ -336,6 +336,61 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
   console.log('');
 }
 
+/* 8. Режим показа проверяющим и отправка отчёта в мессенджер */
+{
+  console.log('— Режим показа и отправка отчёта');
+  const { page, errs } = await open(false);
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { date: '2026-09-01', type: 'Расход', category: 'ЗП', method: 'Наличные', amount: 100 });
+    window.WMUI.recompute();
+    window.WMUI.go('reset');
+  });
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  await page.click('[data-act="readonly-on"]');
+  await page.waitForTimeout(400);
+  const roOn = await page.evaluate(() => !!document.querySelector('.ro-bar') &&
+    document.body.classList.contains('readonly'));
+  check('режим показа включается', roOn, 'включён', 'включён');
+
+  await page.evaluate(() => { const b = document.querySelector('[data-form]'); if (b) b.click(); });
+  await page.waitForTimeout(300);
+  const noForm = await page.evaluate(() => !document.getElementById('wmForm'));
+  check('в режиме показа форма записи не открывается', noForm, 'не открылась', 'не открылась');
+
+  await page.evaluate(() => { const g = document.querySelector('[data-go="today"]'); if (g) g.click(); });
+  await page.waitForTimeout(400);
+  const nav = await page.evaluate(() =>
+    (document.querySelector('.page-title') || { textContent: '' }).textContent.trim());
+  check('в режиме показа по экранам ходить можно', nav === 'Сегодня', nav, 'Сегодня');
+
+  await page.evaluate(() => { const b = document.querySelector('[data-act="readonly-off"]'); if (b) b.click(); });
+  await page.waitForTimeout(400);
+  const roOff = await page.evaluate(() => !document.querySelector('.ro-bar'));
+  check('режим показа выключается', roOff, 'выключен', 'выключен');
+  const after = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  check('за режим показа база не изменилась', after === before, before + ' → ' + after, 'без изменений');
+
+  // 134: текст отчёта для мессенджера
+  await page.evaluate(() => window.WMUI.go('finpulse'));
+  await page.waitForTimeout(400);
+  await page.click('[data-act="share-screen"]');
+  await page.waitForTimeout(400);
+  const share = await page.evaluate(() => {
+    const t = document.getElementById('shareText');
+    return { has: !!t, len: t ? t.value.length : 0, head: t ? t.value.split('\n')[0] : '' };
+  });
+  check('текст отчёта для мессенджера собрался', share.has && share.len > 40,
+    share.head, 'название и экран');
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(200);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

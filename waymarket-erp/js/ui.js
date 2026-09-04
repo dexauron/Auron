@@ -996,20 +996,56 @@
 
   // Файл базы изменил кто-то ещё (вторая вкладка или другой компьютер).
   // Молча затирать нельзя — спрашиваем владельца.
-  var conflictShown = false;
+  var conflictShown = false, conflictOther = null;
   function conflictAsk(other) {
     if (conflictShown) return;
     conflictShown = true;
-    var when = '';
-    try { when = new Date(JSON.parse(other.text).saved).toLocaleString('ru-RU').slice(0, 16); } catch (e) {}
+    conflictOther = other;
+    var when = '', theirCount = 0;
+    try {
+      var o = JSON.parse(other.text);
+      when = new Date(o.saved).toLocaleString('ru-RU').slice(0, 16);
+      var d = o.data || o;
+      S.COLLECTIONS.forEach(function (c) { theirCount += (d[c] || []).length; });
+    } catch (e) {}
+    var myCount = S.COLLECTIONS.reduce(function (n, c) { return n + (S.state[c] || []).length; }, 0);
     sheet('База изменилась не в этой вкладке',
       '<div class="card"><div class="card-pad">Файл <b>' + esc(F.DATA_FILE) + '</b> в папке новее того, ' +
       'что открыто здесь' + (when ? ' (там запись от ' + esc(when) + ')' : '') + '.<br><br>' +
-      'Так бывает, если программа открыта в двух вкладках или на двух компьютерах. ' +
-      'Выберите, что оставить.</div></div>' +
+      'Так бывает, когда программа открыта в двух вкладках или на двух компьютерах: ' +
+      'дома записали расход, в магазине — смену.<br><br>' +
+      'Здесь <b>' + nf(myCount) + '</b> ' + plural(myCount, 'запись', 'записи', 'записей') +
+      ', в файле — <b>' + nf(theirCount) + '</b>.<br><br>' +
+      '<b>Объединить</b> — самый безопасный выбор: у каждой записи свой номер, ' +
+      'поэтому ничего не пропадёт. Записи, которых нет здесь, добавятся; ' +
+      'удалённые не воскреснут. Если одну и ту же запись правили в обоих местах — ' +
+      'останется версия из более позднего файла, и программа скажет, сколько таких было.' +
+      '</div></div>' +
       '<div class="form-actions">' +
-      '<button class="btn" data-act="conflict-mine">Оставить моё и записать</button>' +
-      '<button class="btn btn-primary" data-act="conflict-theirs">Взять из файла</button></div>');
+      '<button class="btn" data-act="conflict-mine">Оставить только моё</button>' +
+      '<button class="btn" data-act="conflict-theirs">Взять только из файла</button>' +
+      '<button class="btn btn-primary" data-act="conflict-merge">Объединить</button></div>');
+  }
+
+  /* --- 125. Собрать базу заново из книги «Бухгалтерия.xlsx» --------------------
+     Файл базы — служебный, его легко удалить не глядя. Книга лежит на виду и
+     в ней те же записи: из неё базу можно собрать обратно.
+     -------------------------------------------------------------------- */
+  function offerBookRestore(bookFile) {
+    var when = bookFile && bookFile.lastModified
+      ? new Date(bookFile.lastModified).toLocaleString('ru-RU').slice(0, 16) : '';
+    setTimeout(function () {
+      sheet('Записей нет, а книга есть',
+        '<div class="card"><div class="card-pad">В папке не нашлось файла базы <b>' +
+        esc(F.DATA_FILE) + '</b>, зато лежит книга <b>' + esc(F.BOOK_FILE) + '</b>' +
+        (when ? ' (изменена ' + esc(when) + ')' : '') + '.<br><br>' +
+        'В книге те же записи, что и в базе: смены, расходы, накладные, оплаты. ' +
+        'Программа может собрать базу обратно из неё — ничего не потеряется, ' +
+        'кроме того, что вы в книгу не записывали.</div></div>' +
+        '<div class="form-actions">' +
+        '<button class="btn" data-act="close-sheet">Не сейчас</button>' +
+        '<button class="btn btn-primary" data-act="book-restore">Собрать базу из книги</button></div>');
+    }, 900);
   }
 
   function saveState() {
@@ -3037,7 +3073,8 @@
     var html;
     try { html = v.render(); }
     catch (e) { html = pageHead('Ошибка', e.message) + '<div class="card"><div class="empty">Что-то пошло не так на этом экране.<br>' + esc(e.message) + '</div></div>'; }
-    $('page').innerHTML = html;
+    $('page').innerHTML = readOnlyBar() + html;
+    document.body.classList.toggle('readonly', readOnly());
     renderNav(); renderPeriods();
     if (VIEW === 'today') drawChart();
     var cur = VIEWS.filter(function (x) { return x.id === VIEW; })[0];
@@ -3100,6 +3137,127 @@
     }
     XLSX.writeFile(wb, 'WayMarket_' + today() + '.xlsx');
     toast('Файл Excel сохранён.');
+  }
+
+  /* --- 133. Режим «только чтение» ---------------------------------------------
+     Приходит проверяющий — программу надо показать, но не дать в ней ничего
+     нажать. В этом режиме видно всё, а кнопки записи, правки и удаления не
+     работают. Режим держится в памяти вкладки: закрыл окно — он снялся, так
+     что запереть себя навсегда нельзя. Если задан PIN — выход по PIN.
+     -------------------------------------------------------------------- */
+  var RO_KEY = 'wm_readonly';
+  function readOnly() {
+    try { return sessionStorage.getItem(RO_KEY) === '1'; } catch (e) { return false; }
+  }
+  function setReadOnly(on) {
+    try { sessionStorage.setItem(RO_KEY, on ? '1' : '0'); } catch (e) {}
+    document.body.classList.toggle('readonly', !!on);
+    render();
+  }
+  // Что можно нажимать в режиме показа: только смотреть, печатать и выгружать
+  var RO_ALLOWED = {
+    'print': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
+    'close-sheet': 1, 'more-back': 1, 'readonly-off': 1, 'share-copy': 1,
+    'share-whatsapp': 1, 'share-telegram': 1
+  };
+  function roBlock(el) {
+    if (!readOnly()) return false;
+    var d = el.dataset;
+    if (d.go !== undefined || d.period !== undefined || d.tab !== undefined ||
+        d.more !== undefined || d.filter !== undefined || d.filterClear !== undefined ||
+        d.filterset !== undefined) return false;
+    if (d.act && RO_ALLOWED[d.act]) return false;
+    toast('Включён режим показа: смотреть можно, менять — нет. ' +
+      'Выключить — кнопка «Выйти из режима показа» наверху.', 7000);
+    return true;
+  }
+  function readOnlyBar() {
+    if (!readOnly()) return '';
+    return '<div class="ro-bar"><span>🔒 Режим показа: записи видны, менять ничего нельзя</span>' +
+      '<button class="btn btn-sm" data-act="readonly-off">Выйти из режима показа</button></div>';
+  }
+  function readOnlyOff() {
+    if (pinOn()) {
+      var v = prompt('Введите PIN, чтобы выйти из режима показа:');
+      if (v === null) return;
+      if (pinHash(String(v)) !== pinSaved()) { toast('PIN не подошёл.'); return; }
+    }
+    setReadOnly(false);
+    toast('Режим показа выключен — снова можно записывать.');
+  }
+
+  /* --- 134. Отправить отчёт в WhatsApp или Telegram ----------------------------
+     Собираем короткий текст из того, что на экране, и открываем мессенджер с
+     готовым сообщением. Для этого нужен интернет — программа сама работает
+     без него, поэтому если интернета нет, текст можно просто скопировать.
+     -------------------------------------------------------------------- */
+  function screenText() {
+    var page = $('page');
+    var title = (page.querySelector('.page-title') || { textContent: 'Отчёт' }).textContent.trim();
+    var sub = (page.querySelector('.page-sub') || { textContent: '' }).textContent.trim();
+    var lines = [(S.settings.storeName || 'Магазин') + ' — ' + title];
+    if (sub) lines.push(sub);
+    lines.push('');
+    Array.prototype.forEach.call(page.querySelectorAll('.stat'), function (st) {
+      var lab = st.querySelector('.stat-label'), val = st.querySelector('.stat-value');
+      if (lab && val) lines.push(lab.textContent.trim() + ': ' + val.textContent.replace(/\s+/g, ' ').trim());
+    });
+    // если карточек-цифр нет, берём первые строки первой таблицы
+    if (lines.length <= 3) {
+      var tbl = page.querySelector('table.data');
+      if (tbl) {
+        Array.prototype.forEach.call(tbl.querySelectorAll('tbody tr'), function (tr, i) {
+          if (i >= 10) return;
+          var cells = Array.prototype.map.call(tr.querySelectorAll('td'), function (td) {
+            return td.textContent.replace(/\s+/g, ' ').trim();
+          }).filter(Boolean);
+          if (cells.length) lines.push('• ' + cells.slice(0, 3).join(' — '));
+        });
+      }
+    }
+    lines.push('');
+    lines.push(new Date().toLocaleString('ru-RU').slice(0, 16));
+    return lines.join('\n');
+  }
+  function shareSheet() {
+    var text = screenText();
+    if (document.body.classList.contains('priv')) {
+      toast('Сейчас включён режим «спрятать суммы» — в сообщение попадут те же цифры, ' +
+        'что на экране. Проверьте текст перед отправкой.', 8000);
+    }
+    sheet('Отправить отчёт',
+      '<div class="card"><div class="card-pad">' +
+      '<textarea id="shareText" rows="12" style="width:100%;border:.5px solid var(--separator);' +
+      'border-radius:10px;padding:10px;background:var(--bg-inset);resize:vertical">' +
+      esc(text) + '</textarea>' +
+      '<div class="card-note" style="margin-top:8px">Текст можно поправить перед отправкой. ' +
+      'WhatsApp и Telegram открываются в браузере — для этого нужен интернет. ' +
+      'Без интернета нажмите «Скопировать» и вставьте в мессенджер на телефоне.</div>' +
+      '</div></div>' +
+      '<div class="form-actions">' +
+      '<button class="btn" data-act="share-copy">📋 Скопировать</button>' +
+      '<button class="btn" data-act="share-telegram">✈️ Telegram</button>' +
+      '<button class="btn btn-primary" data-act="share-whatsapp">💬 WhatsApp</button>' +
+      '</div>');
+  }
+  function shareVia(where) {
+    var box = $('shareText');
+    var text = box ? box.value : screenText();
+    if (where === 'copy') {
+      var done = function () { toast('Текст скопирован — вставьте его в мессенджер.'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {
+          if (box) { box.select(); toast('Нажмите Ctrl+C — текст уже выделен.'); }
+        });
+      } else if (box) { box.select(); toast('Нажмите Ctrl+C — текст уже выделен.'); }
+      return;
+    }
+    var url = where === 'telegram'
+      ? 'https://t.me/share/url?url=&text=' + encodeURIComponent(text)
+      : 'https://wa.me/?text=' + encodeURIComponent(text);
+    var win = window.open(url, '_blank', 'noopener');
+    if (!win) toast('Браузер не дал открыть окно. Нажмите «Скопировать» и вставьте текст сами.');
+    else toast('Открываю ' + (where === 'telegram' ? 'Telegram' : 'WhatsApp') + '. Нужен интернет.');
   }
 
   /* --- 114. Скачать в Excel то, что на экране --------------------------------
@@ -3372,6 +3530,7 @@
       }
       var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice],[data-menu]');
       if (!el) return;
+      if (roBlock(el)) { e.preventDefault(); return; }
       // «Подробнее»: одно окно для любой цифры — что с ней связано
       if (el.dataset.more) {
         e.preventDefault();
@@ -3461,13 +3620,58 @@
       }
       else if (a === 'print-labels') printLabels();
       else if (a === 'conflict-theirs') {
-        closeSheet(); conflictShown = false;
+        closeSheet(); conflictShown = false; conflictOther = null;
         F.loadSaved().then(function (data) {
           if (data) { S.replaceAll(data); recompute(); render(); toast('Взяли версию из файла.'); }
         });
       }
-      else if (a === 'conflict-mine') {
+      else if (a === 'readonly-on') {
+        setReadOnly(true);
+        toast('Режим показа включён: смотреть можно, менять — нет. ' +
+          'Он снимется сам, когда закроете это окно браузера.', 9000);
+      }
+      else if (a === 'readonly-off') readOnlyOff();
+      else if (a === 'share-screen') shareSheet();
+      else if (a === 'share-copy') shareVia('copy');
+      else if (a === 'share-telegram') shareVia('telegram');
+      else if (a === 'share-whatsapp') shareVia('whatsapp');
+      else if (a === 'book-restore') {
+        closeSheet();
+        (async function () {
+          var had = S.COLLECTIONS.reduce(function (n, c) { return n + (S.state[c] || []).length; }, 0);
+          if (had && !confirm('В базе уже есть ' + nf(had) + ' записей. Собрать её заново из книги? ' +
+            'Нынешняя база сохранится в копиях.')) return;
+          var ok = await readBook(null, false);
+          if (!ok) return;
+          var now = S.COLLECTIONS.reduce(function (n, c) { return n + (S.state[c] || []).length; }, 0);
+          await F.saveNow(function () { return S.state; }, true);
+          recompute(); render();
+          toast('База собрана из книги: ' + nf(now) + ' ' +
+            plural(now, 'запись', 'записи', 'записей') + '.', 9000);
+        })();
+      }
+      else if (a === 'conflict-merge') {
         closeSheet(); conflictShown = false;
+        if (!conflictOther) { toast('Чужая версия не прочиталась — попробуйте ещё раз.'); return; }
+        try {
+          var rep = S.reconcileWith(conflictOther.text);
+          conflictOther = null;
+          F.saveNow(function () { return S.state; }, true).then(function () {
+            recompute(); render();
+            var bits = ['Объединили: всего ' + nf(rep.total) + ' ' +
+              plural(rep.total, 'запись', 'записи', 'записей')];
+            if (rep.added) bits.push('добавлено из файла ' + nf(rep.added));
+            if (rep.conflicts) bits.push('спорных ' + nf(rep.conflicts) +
+              ' — взяли версию из более позднего файла');
+            if (rep.removed) bits.push('удалённых не вернули ' + nf(rep.removed));
+            toast(bits.join(' · ') + '.', 12000);
+          });
+        } catch (err) {
+          toast('Не получилось объединить: ' + err.message + '. Файл в папке не тронут.');
+        }
+      }
+      else if (a === 'conflict-mine') {
+        closeSheet(); conflictShown = false; conflictOther = null;
         F.saveNow(function () { return S.state; }, true).then(function () {
           toast('Записали вашу версию поверх файла. Прежняя лежит в копиях.');
         });
@@ -3852,6 +4056,13 @@
     if (st === 'ready') {
       var saved = await F.loadSaved();
       if (saved) S.replaceAll(saved);
+      // 125. Базы нет, а книга есть — предлагаем собрать базу из книги.
+      // Так бывает, когда файл базы случайно удалили или почистили папку:
+      // книга «Бухгалтерия.xlsx» лежит на виду и её удаляют реже.
+      else if (!S.COLLECTIONS.some(function (c) { return (S.state[c] || []).length; })) {
+        var bookFile = await F.rootFile(F.BOOK_FILE);
+        if (bookFile) offerBookRestore(bookFile);
+      }
       // книгу, изменённую в Excel после последнего сохранения, читаем сразу
       var book = await F.bookChangedOutside();
       if (book && (!F.lastSaved || book.lastModified > F.lastSaved.getTime())) await readBook(book, true);

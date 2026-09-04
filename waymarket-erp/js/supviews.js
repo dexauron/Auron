@@ -1220,6 +1220,52 @@
     return null;
   };
 
+  /* 124. Проверка копий: программа сама пробует их прочитать. Копия, которую
+     не открыть, — это не копия, а спокойствие на пустом месте. */
+  A['base-check-backups'] = function () {
+    if (FS().state !== 'ready') return 'Папка не подключена — проверять нечего.';
+    U().toast('Проверяю копии — читаю их так же, как читала бы при откате…');
+    FS().verifyBackups(5).then(function (res) {
+      CHECKED = res;
+      U().render();
+      var bad = res.filter(function (r) { return !r.ok; });
+      U().toast(bad.length
+        ? 'Проверено ' + res.length + ', не открылись: ' + bad.length +
+          '. Смотрите список — там написано, что не так.'
+        : 'Проверено ' + res.length + ' — все открываются, записи на месте.', 10000);
+    });
+    return null;
+  };
+
+  /* 127. История версий книги «Бухгалтерия»: рядом с базой лежат её
+     датированные копии — можно вернуться ко вчерашней книге. */
+  A['book-copies'] = function () {
+    if (FS().state !== 'ready') return 'Папка не подключена — истории книги нет.';
+    FS().listBookCopies().then(function (list) {
+      BOOKCOPIES = list;
+      U().render();
+      U().toast(list.length ? 'Версий книги найдено: ' + list.length + '.'
+        : 'Версий пока нет — они появятся после первой записи книги.');
+    });
+    return null;
+  };
+
+  A['book-open-copy'] = function (el) {
+    var name = decodeURIComponent(el.dataset.name || '');
+    if (!name) return null;
+    (async function () {
+      var bytes = await FS().readBookCopy(name);
+      if (!bytes) { U().toast('Не получилось прочитать ' + name); return; }
+      var blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = name;
+      a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      U().toast('Скачиваю ' + name + ' — откройте в Excel и сравните с нынешней книгой.', 9000);
+    })();
+    return null;
+  };
+
   A['base-rollback'] = function (el) {
     var name = decodeURIComponent(el.dataset.name || '');
     if (!name) return null;
@@ -3445,6 +3491,8 @@
      всегда, даже если передумали через минуту.
      -------------------------------------------------------------------- */
   var BACKUPS = null;          // список копий, подгружается по кнопке
+  var CHECKED = null;          // результат проверки копий (124)
+  var BOOKCOPIES = null;       // версии книги «Бухгалтерия» (127)
 
   // Что и сколько лежит в базе — чтобы владелец видел, что именно чистит
   function baseCounts() {
@@ -3527,6 +3575,67 @@
           : '<div class="empty">Копий пока нет. Они появятся, как только вы что-нибудь запишете ' +
             'при подключённой папке.</div>')),
       BACKUPS !== null ? '<button class="btn btn-sm" data-act="base-list-backups">Обновить список</button>' : '');
+
+    // 124. Проверка копий: не «есть файл», а «файл читается»
+    h += u.card('Проверить копии',
+      (CHECKED === null
+        ? '<div class="card-pad"><button class="btn btn-primary" data-act="base-check-backups">' +
+          'Проверить последние 5 копий</button>' +
+          '<div class="card-note" style="margin-top:8px">Программа откроет каждую копию так же, ' +
+          'как открывала бы при откате, и посчитает записи. Копия, которую нельзя открыть, — ' +
+          'это не копия, а спокойствие на пустом месте.</div></div>'
+        : u.table('checkT', [
+          { title: 'Файл', fn: function (r) { return '<span class="c-muted">' + esc(r.name) + '</span>'; } },
+          { title: 'Открывается', fn: function (r) {
+            return r.ok ? u.badge('да, читается', 'green') : u.badge('нет', 'red'); } },
+          { title: 'Записей внутри', cls: 'num', fn: function (r) {
+            return r.ok ? u.nf(r.records) : '—'; } },
+          { title: 'Разделов', cls: 'num', fn: function (r) { return r.ok ? u.nf(r.collections) : '—'; } },
+          { title: 'Что не так', fn: function (r) {
+            return r.ok ? '<span class="c-green">всё в порядке</span>'
+              : '<span class="c-red">' + esc(r.why) + '</span>'; } }
+        ], CHECKED, { step: 10 })),
+      CHECKED !== null ? '<button class="btn btn-sm" data-act="base-check-backups">Проверить ещё раз</button>' : '');
+
+    // 127. История версий самой книги «Бухгалтерия.xlsx»
+    h += u.card('История книги «' + esc(FS().BOOK_FILE) + '»',
+      (BOOKCOPIES === null
+        ? '<div class="card-pad"><button class="btn btn-primary" data-act="book-copies">' +
+          'Показать версии книги</button>' +
+          '<div class="card-note" style="margin-top:8px">Раз в час рядом с базой сохраняется копия ' +
+          'самой книги — в папке ' + esc(FS().DATA_DIR) + '/' + esc(FS().BOOK_DIR) + '. ' +
+          'Если формула в книге случайно испортилась или лист удалён, можно скачать вчерашнюю ' +
+          'книгу и посмотреть, как было.</div></div>'
+        : (BOOKCOPIES.length
+          ? u.table('bookCopT', [
+            { title: 'Когда', fn: function (r) { return esc(dateRu(r.date)) + ' · ' + esc(r.time); } },
+            { title: 'День недели', fn: function (r) {
+              return esc(r.when.toLocaleDateString('ru-RU', { weekday: 'long' })); } },
+            { title: 'Размер', cls: 'num', fn: function (r) { return u.nf(Math.round(r.size / 1024)) + ' КБ'; } },
+            { title: '', cls: 'center', fn: function (r) {
+              return '<button class="btn btn-sm" data-act="book-open-copy" data-name="' +
+                encodeURIComponent(r.name) + '">Скачать</button>'; } }
+          ], BOOKCOPIES, { step: 20 })
+          : '<div class="empty">Версий книги пока нет. Они появятся после первой записи книги ' +
+            'при подключённой папке.</div>')),
+      BOOKCOPIES !== null ? '<button class="btn btn-sm" data-act="book-copies">Обновить</button>' : '');
+
+    // 125. Собрать базу заново из книги, если файл базы потерялся
+    h += u.card('Если файл базы потерялся', u.listOf([
+      u.listRow({ icon: '📗', title: 'Собрать базу заново из книги «' + esc(FS().BOOK_FILE) + '»',
+        sub: 'В книге те же записи: смены, расходы, накладные, оплаты. ' +
+          'Нынешняя база сначала уйдёт в копию',
+        value: '<button class="btn btn-sm" data-act="book-restore">Собрать из книги</button>' })
+    ], ''), 'Файл базы служебный, его легко удалить не глядя — книга лежит на виду');
+
+    // 133. Режим показа проверяющим
+    h += u.card('Показать программу проверяющему', u.listOf([
+      u.listRow({ icon: '🔒', title: 'Включить режим показа',
+        sub: 'Видно всё, но записать, поправить или удалить нельзя. ' +
+          'Снимается кнопкой наверху или закрытием окна браузера' +
+          (E.norm(S.settings.askPin) === 'да' ? '; выход по PIN' : ''),
+        value: '<button class="btn btn-sm btn-primary" data-act="readonly-on">Включить</button>' })
+    ], ''));
 
     // вторая папка: флешка или облачный диск
     var bs = FS().backupState;

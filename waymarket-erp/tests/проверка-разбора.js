@@ -1810,6 +1810,48 @@ console.log('— Папка программы: понятные ошибки');
   check('изменил фильтр — набор больше не «тот же»', !FLT.sameAs('stock', snap), 'да', 'да');
   FLT.clearAll();
 
+  // --- Работа на двух компьютерах: примирение изменений ----------------------
+  const mineSt = { dds: [{ id: 'a', amount: 1 }, { id: 'b', amount: 2 }], trash: [] };
+  const theirSt = { dds: [{ id: 'a', amount: 1 }, { id: 'c', amount: 3 }], trash: [] };
+  const rec1 = STORE.reconcile(mineSt, theirSt, { mineSaved: '2026-09-01', theirsSaved: '2026-09-02' });
+  check('слияние: ни одна запись не пропала',
+    rec1.state.dds.map(r => r.id).join(',') === 'a,b,c', rec1.state.dds.map(r => r.id).join(','), 'a,b,c');
+  check('слияние: чужие записи посчитаны', rec1.report.added === 1, rec1.report.added, 1);
+  check('слияние: одинаковые записи не спорят', rec1.report.conflicts === 0, rec1.report.conflicts, 0);
+
+  const rec2 = STORE.reconcile(
+    { dds: [{ id: 'a', amount: 1 }], trash: [] },
+    { dds: [{ id: 'a', amount: 99 }], trash: [] },
+    { mineSaved: '2026-09-01', theirsSaved: '2026-09-02' });
+  check('спорную запись берём из более позднего файла',
+    rec2.state.dds[0].amount === 99 && rec2.report.conflicts === 1, rec2.state.dds[0].amount, 99);
+  const rec3 = STORE.reconcile(
+    { dds: [{ id: 'a', amount: 1 }], trash: [] },
+    { dds: [{ id: 'a', amount: 99 }], trash: [] },
+    { mineSaved: '2026-09-03', theirsSaved: '2026-09-02' });
+  check('если позже мой файл — остаётся моё', rec3.state.dds[0].amount === 1, rec3.state.dds[0].amount, 1);
+
+  const rec4 = STORE.reconcile(
+    { dds: [{ id: 'a' }, { id: 'z' }], trash: [] },
+    { dds: [{ id: 'a' }], trash: [{ id: 't1', at: '2026-09-02', rec: { id: 'z' } }] },
+    { mineSaved: '2026-09-01', theirsSaved: '2026-09-02' });
+  check('удалённая на другом компьютере запись не воскресает',
+    rec4.state.dds.map(r => r.id).join(',') === 'a' && rec4.report.removed === 1,
+    rec4.state.dds.map(r => r.id).join(','), 'a');
+  check('корзина после слияния помнит удаление', (rec4.state.trash || []).length === 1,
+    (rec4.state.trash || []).length, 1);
+  const rec5 = STORE.reconcile(
+    { dds: [], settings: { storeName: 'Моё' } },
+    { dds: [], settings: { storeName: 'Из файла' } },
+    { mineSaved: '2026-09-01', theirsSaved: '2026-09-02' });
+  check('настройки берутся у более позднего файла целиком',
+    rec5.state.settings.storeName === 'Из файла', rec5.state.settings.storeName, 'Из файла');
+  check('запись без номера получает свой при слиянии',
+    STORE.reconcile({ dds: [{ amount: 5 }] }, { dds: [] }, {}).state.dds[0].id.length > 2, 'есть', 'есть');
+  check('слияние считает записи',
+    rec1.report.total === 3, rec1.report.total, 3);
+
+
   console.log('');
 }
 

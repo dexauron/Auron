@@ -203,14 +203,72 @@
   }
 
   // Записать книгу; отпечаток запоминаем, чтобы отличить свою запись от правки владельца
+  /* 127. История версий книги: рядом с базой храним датированные копии
+     самой книги «Бухгалтерия.xlsx». Если владелец случайно испортил формулу
+     или удалил лист — можно вернуться ко вчерашней книге, а не только к базе. */
+  var BOOK_DIR = 'копии книги';
+  var lastBookCopy = null;
   async function saveBook(bytes) {
     if (state !== 'ready') return false;
     try {
       bookStamp = await writeRoot(BOOK_FILE, bytes);
       bookSaved = new Date();
+      // одна копия в час: чаще — бессмысленно, реже — можно потерять день работы
+      var hourStamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 13);
+      if (lastBookCopy !== hourStamp) {
+        try {
+          await writeFile('Бухгалтерия-' + hourStamp + '.xlsx', bytes, BOOK_DIR);
+          lastBookCopy = hourStamp;
+          await trimBookCopies();
+        } catch (e) { /* копия книги не должна мешать записи самой книги */ }
+      }
       notify();
       return true;
     } catch (e) { markByError(e); return false; }
+  }
+  async function trimBookCopies() {
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BOOK_DIR, { create: true });
+      var names = [];
+      for await (var entry of dir.values()) {
+        if (entry.kind === 'file' && /^Бухгалтерия-.*\.xlsx$/i.test(entry.name)) names.push(entry.name);
+      }
+      names.sort();
+      while (names.length > keepBackups) {
+        var old = names.shift();
+        try { await dir.removeEntry(old); } catch (e) { break; }
+      }
+    } catch (e) { /* чистка не критична */ }
+  }
+  async function listBookCopies() {
+    if (state !== 'ready') return [];
+    var out = [];
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BOOK_DIR, { create: true });
+      for await (var entry of dir.values()) {
+        if (entry.kind !== 'file') continue;
+        var m = entry.name.match(/^Бухгалтерия-(\d{4})-(\d{2})-(\d{2})-(\d{2})\.xlsx$/i);
+        if (!m) continue;
+        var file = await entry.getFile();
+        out.push({ name: entry.name, date: m[1] + '-' + m[2] + '-' + m[3], time: m[4] + ':00',
+          size: file.size, when: new Date(+m[1], +m[2] - 1, +m[3], +m[4]) });
+      }
+    } catch (e) { markByError(e); return []; }
+    return out.sort(function (a, b) { return b.when - a.when; });
+  }
+  // Байты одной копии книги — чтобы открыть её или вернуть на место
+  async function readBookCopy(name) {
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BOOK_DIR, { create: true });
+      var f = await (await dir.getFileHandle(name)).getFile();
+      return new Uint8Array(await f.arrayBuffer());
+    } catch (e) { return null; }
+  }
+  // Книга из корня папки — для восстановления базы, если json потерялся (125)
+  async function readBookBytes() {
+    var f = await rootFile(BOOK_FILE);
+    if (!f) return null;
+    return new Uint8Array(await f.arrayBuffer());
   }
 
   // Книга, изменённая снаружи (владелец правил её в Excel), или null
@@ -339,6 +397,47 @@
      Копии лежат в «Данные_дашборда/копии» с именем «база-2026-09-03-14-25.json».
      Отсюда владелец может вернуть базу такой, какой она была в тот момент.
      ---------------------------------------------------------------------- */
+  /* --- 124. Проверка копии: программа сама пробует её прочитать ---------------
+     Копия, которую нельзя открыть, — это не копия, а спокойствие на пустом
+     месте. Поэтому после записи файл читается обратно и разбирается: если
+     что-то не так, владелец узнаёт сразу, а не в день беды.
+     ------------------------------------------------------------------------ */
+  function countRecords(data) {
+    var n = 0;
+    Object.keys(data || {}).forEach(function (k) {
+      if (Array.isArray(data[k])) n += data[k].length;
+    });
+    return n;
+  }
+  // Прочитать один файл копии и сказать, живой он или нет
+  async function verifyBackup(name) {
+    try {
+      var dir = await (await dataDir()).getDirectoryHandle(BACKUP_DIR, { create: true });
+      var fh = await dir.getFileHandle(name);
+      var f = await fh.getFile();
+      if (!f.size) return { name: name, ok: false, why: 'файл пустой' };
+      var text = await f.text();
+      var obj = JSON.parse(text);
+      var data = obj.data || obj;
+      var n = countRecords(data);
+      if (!n) return { name: name, ok: false, why: 'в файле нет ни одной записи' };
+      return { name: name, ok: true, records: n, size: f.size,
+        saved: obj.saved || '', collections: Object.keys(data).filter(function (k) {
+          return Array.isArray(data[k]) && data[k].length; }).length };
+    } catch (e) {
+      return { name: name, ok: false,
+        why: e && e.name === 'SyntaxError' ? 'файл повреждён — не читается как база' : humanError(e) };
+    }
+  }
+  // Проверить сразу несколько последних копий
+  async function verifyBackups(howMany) {
+    var list = await listBackups();
+    var take = list.slice(0, Math.max(1, howMany || 3));
+    var out = [];
+    for (var i = 0; i < take.length; i++) out.push(await verifyBackup(take[i].name));
+    return out;
+  }
+
   async function listBackups() {
     if (state !== 'ready') return [];
     var out = [];
@@ -491,6 +590,9 @@
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
     humanError: humanError, alive: alive,
     listBackups: listBackups, readBackup: readBackup, backupNow: backupNow,
+    verifyBackup: verifyBackup, verifyBackups: verifyBackups, countRecords: countRecords,
+    listBookCopies: listBookCopies, readBookCopy: readBookCopy, readBookBytes: readBookBytes,
+    BOOK_DIR: BOOK_DIR,
     connectBackup: connectBackup, restoreBackupDir: restoreBackupDir, forgetBackup: forgetBackup,
     copyToBackup: copyToBackup, backupDue: backupDue, markCopied: markCopied,
     get backupState() { return backupState; },
