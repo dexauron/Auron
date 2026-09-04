@@ -387,6 +387,79 @@
     } catch (e) { markByError(e); return ''; }
   }
 
+  /* --- Вторая папка для копий: флешка или облачный диск ---------------------
+     Папка программы может пропасть вместе с компьютером. Поэтому копию можно
+     класть ещё и во вторую папку — на флешку или в папку Яндекс.Диска.
+     Ссылка на неё живёт рядом с основной и переживает перезапуск.
+     ---------------------------------------------------------------------- */
+  var KEY2 = 'backupdir';
+  var backupHandle = null;
+  var backupState = 'off';     // off | needs-permission | ready | lost
+  var lastCopy = null;
+
+  async function connectBackup() {
+    if (!supported()) throw new Error('Браузер не умеет сохранять в папку.');
+    var handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'waymarket-backup' });
+    var perm = await handle.requestPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
+    backupHandle = handle;
+    await idbSet(KEY2, handle);
+    backupState = 'ready'; notify();
+    return handle;
+  }
+  async function restoreBackupDir() {
+    if (!supported()) { backupState = 'off'; return backupState; }
+    try {
+      var handle = await idbGet(KEY2);
+      if (!handle) { backupState = 'off'; return backupState; }
+      backupHandle = handle;
+      var perm = await handle.queryPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') { backupState = 'needs-permission'; return backupState; }
+      try { await handle.values().next(); backupState = 'ready'; }
+      catch (e) { backupState = errName(e) === 'NotFoundError' ? 'lost' : 'needs-permission'; }
+    } catch (e) { backupState = 'off'; }
+    return backupState;
+  }
+  function forgetBackup() {
+    backupHandle = null; backupState = 'off';
+    idbSet(KEY2, null).catch(function () {});
+    notify();
+  }
+
+  // Копия во вторую папку: имя с датой, чтобы на флешке была история
+  async function copyToBackup(getData, tag) {
+    if (backupState !== 'ready' || !backupHandle) return '';
+    try {
+      var stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
+      var name = 'ВайМаркет-база-' + stamp + '.json';
+      var fh = await backupHandle.getFileHandle(name, { create: true });
+      var w = await fh.createWritable();
+      await w.write(JSON.stringify({ saved: new Date().toISOString(), tag: tag || '', data: getData() }, null, 2));
+      await w.close();
+      lastCopy = new Date();
+      notify();
+      return name;
+    } catch (e) {
+      if (errName(e) === 'NotFoundError') backupState = 'lost';
+      notify();
+      return '';
+    }
+  }
+
+  // Пора ли копировать: раз в заданное число часов, но не чаще
+  var LAST_COPY_KEY = 'wm_last_backup_copy';
+  function backupDue(hours) {
+    var h = Math.max(1, +hours || 24);
+    try {
+      var last = localStorage.getItem(LAST_COPY_KEY);
+      if (!last) return true;
+      return (Date.now() - +last) / 3600000 >= h;
+    } catch (e) { return true; }
+  }
+  function markCopied() {
+    try { localStorage.setItem(LAST_COPY_KEY, String(Date.now())); } catch (e) {}
+  }
+
   /* --- чтение выгрузок 1С из подключённой папки --- */
   // Ищем файлы в самой папке и во вложенной «Данные_1С_и_Excel»
   async function listExports() {
@@ -418,6 +491,11 @@
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
     humanError: humanError, alive: alive,
     listBackups: listBackups, readBackup: readBackup, backupNow: backupNow,
+    connectBackup: connectBackup, restoreBackupDir: restoreBackupDir, forgetBackup: forgetBackup,
+    copyToBackup: copyToBackup, backupDue: backupDue, markCopied: markCopied,
+    get backupState() { return backupState; },
+    get backupDirName() { return backupHandle ? backupHandle.name : ''; },
+    get lastCopy() { return lastCopy; },
     get bookSaved() { return bookSaved; },
     BOOK_FILE: BOOK_FILE,
     get state() { return state; },

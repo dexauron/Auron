@@ -29,7 +29,28 @@
   var DET = window.WMDetail;  // окно «Подробнее» для любой цифры
   var NUM = window.WMNum;     // счёт в поле, разряды и понятные даты
   var AL = window.WMAlerts;   // что горит прямо сейчас
+  var IN = window.WMInput;    // сканер, голос, шаблоны, горячие клавиши
+  var X = window.WMExtra;     // сравнения, спарклайны, ведомости
+
+  // «412 000 ₽ ▲ 31 000 (8%)» — цифра рядом с тем, как было раньше
+  function delta(now, was, asMoney) {
+    if (!X) return '';
+    var d = X.delta(num(now), num(was));
+    if (!d.has || d.dir === 'flat') return '';
+    return '<span class="delta ' + d.dir + '">' + (d.dir === 'up' ? '▲' : '▼') + ' ' +
+      (asMoney === false ? nf(Math.abs(d.diff)) : money(Math.abs(d.diff))) +
+      (d.pct === null ? '' : ' (' + Math.abs(d.pct) + '%)') + '</span>';
+  }
+
+  // Итоги за такой же период перед нынешним — чтобы было с чем сравнивать
+  function prevTotals() {
+    if (!X) return null;
+    var r = periodRange(), p = X.prevRange(r.from, r.to);
+    var rows = (S.state.dds || []).filter(function (x) { return x.date >= p.from && x.date <= p.to; });
+    return window.WMFin.totals(rows);
+  }
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
+  var AGAIN = false;          // после сохранения открыть такую же форму (Ctrl+Enter)
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
@@ -110,6 +131,80 @@
     var first = b.querySelector('input,select,textarea');
     if (first) setTimeout(function () { first.focus(); }, 60);
     return b;
+  }
+
+  // Вставить шаблон в открытую форму
+  function applyTemplate(tplId) {
+    var t = (S.state.templates || []).filter(function (x) { return x.id === tplId; })[0];
+    var form = document.getElementById('wmForm');
+    if (!t || !form) return;
+    Object.keys(t.values).forEach(function (k) {
+      var el = form.querySelector('[name="' + k + '"]');
+      if (!el) return;
+      el.value = t.values[k];
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    t.used = (t.used || 0) + 1;
+    S.save();
+    toast('Шаблон «' + t.name + '» вставлен. Проверьте и сохраните.');
+  }
+
+  function saveTemplate(formId) {
+    var form = document.getElementById('wmForm');
+    if (!form) return;
+    var v = formValues(form);
+    var name = prompt('Название шаблона:', IN.templateName(v));
+    if (name === null) return;
+    var t = IN.templateFrom(formId, v, String(name).trim() || IN.templateName(v));
+    S.add('templates', t);
+    render();
+    toast('Шаблон «' + t.name + '» сохранён. В следующий раз вставится одной кнопкой.');
+  }
+
+  function manageTemplates(formId) {
+    var list = IN.templatesFor(S.state.templates || [], formId);
+    sheet('Шаблоны', '<div class="detail">' + listOf(list.map(function (t) {
+      return listRow({ icon: '☆', title: esc(t.name),
+        sub: 'вставляли ' + nf(t.used || 0) + ' ' + plural(t.used || 0, 'раз', 'раза', 'раз'),
+        value: '<button class="btn btn-sm btn-danger" data-del="templates:' + esc(t.id) + '">Убрать</button>' });
+    }), 'Шаблонов пока нет') + '</div>');
+  }
+
+  /* --- Голосовой ввод суммы --------------------------------------------------
+     Браузер распознаёт речь не сам — ему нужен интернет. Поэтому кнопка
+     появляется, только если браузер умеет, и честно предупреждает.
+     ------------------------------------------------------------------------ */
+  function startVoice(fieldName) {
+    var field = document.querySelector('[name="' + fieldName + '"]');
+    if (!field) return;
+    var R = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!R) { toast('Этот браузер не умеет распознавать речь. Попробуйте Chrome или Яндекс.Браузер.'); return; }
+    var rec = new R();
+    rec.lang = 'ru-RU'; rec.interimResults = false; rec.maxAlternatives = 3;
+    var btn = document.querySelector('[data-voice="' + fieldName + '"]');
+    if (btn) btn.classList.add('voice-on');
+    toast('Говорите сумму — например «три тысячи двести».', 3000);
+    rec.onresult = function (ev) {
+      var said = '';
+      for (var i = 0; i < ev.results[0].length && !said; i++) {
+        var text = ev.results[0][i].transcript;
+        if (IN.wordsToNumber(text) !== null) said = text;
+      }
+      said = said || ev.results[0][0].transcript;
+      var val = IN.wordsToNumber(said);
+      if (val === null) { toast('Не разобрал: «' + said + '». Попробуйте ещё раз или впишите руками.'); return; }
+      field.value = val;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      toast('Услышал: ' + money(val));
+    };
+    rec.onerror = function (ev) {
+      toast(ev.error === 'network'
+        ? 'Для распознавания речи нужен интернет — сейчас его нет. Впишите сумму руками.'
+        : 'Не получилось послушать: ' + ev.error);
+    };
+    rec.onend = function () { if (btn) btn.classList.remove('voice-on'); };
+    try { rec.start(); } catch (e) { toast('Микрофон занят или запрещён браузером.'); }
   }
 
   /* --- Калькулятор с крупными кнопками --------------------------------------
@@ -355,6 +450,8 @@
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
         '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">🧮</button>' +
+        (IN && IN.voiceReady() ? '<button type="button" class="btn btn-sm num-calc" data-voice="' +
+          esc(name) + '" title="Продиктовать сумму">🎤</button>' : '') +
         '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
     } else if (type === 'date') {
       h += '<input type="date" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
@@ -763,8 +860,17 @@
   function applyLook() {
     var s = S.settings, t = E.norm(s.theme || '');
     var mode = t.indexOf('тем') >= 0 ? 'dark' : (t.indexOf('свет') >= 0 ? 'light' : '');
+    // «по расписанию»: днём светлая, вечером тёмная — границы из настроек
+    if (t.indexOf('распис') >= 0) {
+      var hour = new Date().getHours();
+      var dayFrom = Q.hourOf(s.themeDayFrom, 7), nightFrom = Q.hourOf(s.themeNightFrom, 20);
+      var night = nightFrom > dayFrom ? (hour >= nightFrom || hour < dayFrom)
+        : (hour >= nightFrom && hour < dayFrom);
+      mode = night ? 'dark' : 'light';
+    }
     if (mode) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
+    // «Крупный режим» — одна настройка на всё: буквы, кнопки, поля, таблицы
     document.body.classList.toggle('big', E.norm(s.bigText) === 'да');
   }
 
@@ -1025,6 +1131,25 @@
 
   var EDIT = null;    // что правим: {coll, id}
 
+  /* --- Шаблоны частых записей ------------------------------------------------
+     «Аренда 168 000, 5 числа» вбивается раз в месяц одинаково. Сохранили
+     шаблон — дальше вставляется одной кнопкой, дата всегда сегодняшняя.
+     ------------------------------------------------------------------------ */
+  function tplBar(formId) {
+    var list = IN.templatesFor(S.state.templates || [], formId);
+    var h = '<div class="tpl-bar">';
+    if (list.length) {
+      h += '<span class="tpl-label">Готовые:</span>' + list.slice(0, 8).map(function (t) {
+        return '<button type="button" class="chip" data-tpl="' + esc(t.id) + '">' + esc(t.name) +
+          '</button>';
+      }).join('');
+    }
+    h += '<button type="button" class="btn btn-sm tpl-save" data-tpl-save="' + esc(formId) +
+      '" title="Запомнить как шаблон">☆ В шаблоны</button>';
+    if (list.length) h += '<button type="button" class="btn btn-sm" data-tpl-manage="' + esc(formId) + '">Убрать лишние</button>';
+    return h + '</div>';
+  }
+
   function openForm(id, prefill, edit) {
     var f = FORMS[id]; if (!f) return;
     DET.reset();               // форма открывается поверх «Подробнее» — след стираем
@@ -1033,6 +1158,7 @@
       datalist('dl-staff', staffNames()) +
       datalist('dl-goods', D.stock.slice(0, 900).map(function (r) { return r.name; }));
     sheet(f.title,
+      tplBar(id) +
       '<form id="wmForm" data-fid="' + id + '"><div class="form-list">' + f.body(prefill) + '</div>' +
       (f.hint ? '<div class="form-hint">' + esc(f.hint) + '</div>' : '') + lists +
       '<div class="form-actions"><button type="button" class="btn" data-act="close-sheet">Отмена</button>' +
@@ -1070,6 +1196,8 @@
   function quickBar() {
     return '<div class="quick">' +
       '<button class="btn btn-primary" data-form="cashShift">💵 Касса за смену</button>' +
+      '<button class="btn" data-act="repeat-shift">↻ Как в прошлый раз</button>' +
+      '<button class="btn" data-form="cashCount">🧾 Пересчитать кассу</button>' +
       '<button class="btn" data-form="ddsExpense">🧾 Расход</button>' +
       '<button class="btn" data-form="payPlan">📅 Выплата поставщику</button>' +
       '<button class="btn" data-form="invoice">📥 Приход товара</button>' +
@@ -1226,17 +1354,37 @@
 
     h += quickBar();
 
+    if (X && (S.state.dds || []).length) {
+      var daily = X.dailyRevenue(S.state.dds, 30, window.WMFin.isIncome);
+      var sums = daily.map(function (d) { return d.sum; });
+      var best = daily.slice().sort(function (a, b) { return b.sum - a.sum; })[0];
+      var lastDay = daily[daily.length - 1];
+      if (sums.some(function (v) { return v > 0; })) {
+        h += card('Выручка за 30 дней по ' + dateRu(lastDay.date), '<div class="card-pad" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">' +
+          X.spark(sums, 320, 54) +
+          '<div><div class="card-note">лучший день — ' + esc(dateRu(best.date)) + ': <b class="private">' +
+          money(best.sum) + '</b></div>' +
+          '<div class="card-note">в среднем <b class="private">' +
+          money(sums.reduce(function (a, v) { return a + v; }, 0) / Math.max(1, sums.filter(function (v) { return v > 0; }).length)) +
+          '</b> в день, когда была выручка</div></div></div>',
+          DET.btn('month', today().slice(0, 7), 'Итоги месяца'));
+      }
+    }
+
     h += '<div class="quick">' + DET.btn('day', today(), '📅 Что было сегодня') + ' ' +
       DET.btn('month', today().slice(0, 7), '🗓 Итоги месяца') + ' ' +
       (lastDate && lastDate !== today() ? DET.btn('day', lastDate, '📅 Последний день с записями') : '') + '</div>';
 
+    var prev = prevTotals();
     h += '<div class="stat-grid">' +
       stat('Наличные в кассе', priv(cashNow), ledger.length ? 'На ' + dateRu(lastDate) + ' по базе операций' : 'Запишите кассу за смену') +
       stat('Выручка', priv(fin.income || (ownerT && ownerT.revenue) || t.revenue),
-        fin.income ? 'По базе операций · ' + fin.days + ' ' + plural(fin.days, 'день', 'дня', 'дней')
+        (fin.income ? 'По базе операций · ' + fin.days + ' ' + plural(fin.days, 'день', 'дня', 'дней')
           : (ownerT && ownerT.revenue ? 'По вашей книге, ' + ownerT.dayCount + ' дн.' : 'По отчёту 1С')) +
+        (prev ? ' ' + delta(fin.income, prev.income) : '')) +
       stat('Прибыль', priv(fin.income ? fin.profit : t.gross),
-        fin.income ? 'Рентабельность ' + pct(fin.profitability) : (t.revenue ? 'Маржа ' + pct(t.margin) : 'Нужны данные'),
+        (fin.income ? 'Рентабельность ' + pct(fin.profitability) : (t.revenue ? 'Маржа ' + pct(t.margin) : 'Нужны данные')) +
+        (prev ? ' ' + delta(fin.profit, prev.profit) : ''),
         (fin.income ? fin.profit : t.gross) >= 0 ? 'c-green' : 'c-red') +
       stat('Куплено товара', priv(man.totals.supplies || (C.payments1c ? C.payments1c.totalSum : 0)),
         man.totals.docs ? man.totals.docs + ' ' + plural(man.totals.docs, 'накладная', 'накладные', 'накладных') + ' за ' + periodName().toLowerCase() : 'По накладным 1С') +
@@ -2424,7 +2572,10 @@
       listRow({ icon: '📥', title: 'Загрузить базу из копии', sub: 'Заменит текущие записи',
         value: '<button class="btn btn-sm" data-act="restore">Выбрать файл</button>' }),
       listRow({ icon: '🖨', title: 'Распечатать текущий экран', sub: 'В окне печати выберите «Сохранить как PDF»',
-        value: '<button class="btn btn-sm" data-act="print">Печать</button>' })
+        value: '<button class="btn btn-sm" data-act="print">Печать</button>' }),
+      listRow({ icon: '🧑‍💼', title: 'Файл для бухгалтера',
+        sub: 'Один Excel за выбранный период: сводка, дни, статьи, поставщики, зарплата, налог',
+        value: '<button class="btn btn-sm btn-primary" data-act="export-buh">Скачать</button>' })
     ], ''));
     return h;
   }
@@ -2728,6 +2879,7 @@
   }
 
   function render() {
+    applyLook();          // тема и крупный режим могли поменяться в настройках
     var v = VIEWS.filter(function (x) { return x.id === VIEW; })[0] || VIEWS[0];
     C.ropCount = null; C.cmp = C.cmp || null;
     var html;
@@ -2842,7 +2994,7 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice]');
       if (!el) return;
       // «Подробнее»: одно окно для любой цифры — что с ней связано
       if (el.dataset.more) {
@@ -2858,6 +3010,10 @@
       }
       if (el.dataset.filterClear) { FLT.clear(el.dataset.filterClear); PAGE = {}; render(); return; }
       if (el.dataset.calc) { openCalc(el.dataset.calc); return; }
+      if (el.dataset.tpl) { applyTemplate(el.dataset.tpl); return; }
+      if (el.dataset.tplSave) { saveTemplate(el.dataset.tplSave); return; }
+      if (el.dataset.tplManage) { manageTemplates(el.dataset.tplManage); return; }
+      if (el.dataset.voice) { startVoice(el.dataset.voice); return; }
       if (el.dataset.go) { closeSheet(); go(el.dataset.go); return; }
       if (el.dataset.period) { PERIOD = el.dataset.period; PAGE = {}; render(); return; }
       if (el.dataset.tab) { var p = el.dataset.tab.split(':'); TAB[p[0]] = p[1]; render(); return; }
@@ -2958,7 +3114,11 @@
         // Формы с пометкой editsInPlace правят запись сами, их трогать нельзя.
         if (EDIT && !def.editsInPlace) { S.remove(EDIT.coll, EDIT.id, true); }
         EDIT = null;
+        Q.clearDraft(id);
         closeSheet(); render(); toast(res.ok);
+        // Ctrl+Enter: сохранили — и сразу такая же пустая форма,
+        // чтобы забивать накладные или расходы подряд
+        if (AGAIN === id) { AGAIN = false; setTimeout(function () { openForm(id); }, 120); }
       } else if (f.id === 'setForm') {
         var v = formValues(f);
         Object.keys(v).forEach(function (k) { S.setSetting(k, v[k]); });
@@ -2985,6 +3145,66 @@
         if (dh) dh.textContent = NUM.dateFull(el.value);
       }
     });
+
+    /* --- Горячие клавиши -----------------------------------------------------
+       Ctrl+S — сохранить форму, Ctrl+Enter — сохранить и сразу открыть такую же
+       (подряд забивать накладные или расходы), Ctrl+K — поиск.
+       ---------------------------------------------------------------------- */
+    document.addEventListener('keydown', function (e) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      var key = (e.key || '').toLowerCase();
+      var form = document.getElementById('wmForm');
+      if ((key === 's' || key === 'ы') && form) {
+        e.preventDefault();
+        AGAIN = false;
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      } else if (key === 'enter' && form) {
+        e.preventDefault();
+        AGAIN = form.dataset.fid;          // после сохранения откроем такую же
+        form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      } else if (key === 'k' || key === 'л') {
+        e.preventDefault();
+        $('search').focus(); $('search').select();
+      }
+    });
+
+    /* --- Сканер штрихкодов ---------------------------------------------------
+       Сканер печатает код за доли секунды и жмёт Enter — по скорости и
+       отличаем его от человека. Код ищем в остатках и прайсах.
+       ---------------------------------------------------------------------- */
+    var onScan = IN.scanner(function (code) {
+      var found = IN.findByCode(code, D.stock, D.prices);
+      var field = document.querySelector('#wmForm input[name="name"]');
+      if (field) {
+        // форма открыта — подставляем товар прямо в неё
+        field.value = found ? found.name : code;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        toast(found ? 'Сканер: ' + found.name : 'Сканер: код ' + code + ' в базе не найден');
+        var qty = document.querySelector('#wmForm .num-input[name="qty"]');
+        if (qty) qty.focus();
+        return;
+      }
+      if (!found) { toast('Штрихкод ' + code + ' в базе не найден.'); return; }
+      DET.open('product', E.norm(found.name));     // иначе показываем карточку товара
+    }, { minLen: 6 });
+
+    document.addEventListener('keydown', function (e) {
+      // в обычных полях не мешаем: сканер узнаётся по скорости, а Enter
+      // в открытой форме и так отправляет её
+      if (e.target && /input|textarea|select/i.test(e.target.tagName) &&
+        !e.target.classList.contains('scan-here')) {
+        if (e.key !== 'Enter') { onScan(e); return; }
+        return;
+      }
+      if (onScan(e)) e.preventDefault();
+    });
+
+    // черновик формы сохраняется сам, а не только при вводе
+    setInterval(function () {
+      var f = document.getElementById('wmForm');
+      if (!f || !f.dataset.fid) return;
+      try { Q.saveDraft(f.dataset.fid, formValues(f)); } catch (err) {}
+    }, 3000);
 
     // калькулятор: 🧮 у поля, а также «=» прямо в поле
     document.addEventListener('keydown', function (e) {
@@ -3204,7 +3424,23 @@
       await syncFolder(true);
       recompute(); render();
       if (!book) scheduleBook();
-    } else if (st === 'lost') {
+    }
+
+    // вторая папка (флешка, облачный диск): кладём копию по расписанию
+    try {
+      var bs = await F.restoreBackupDir();
+      if (bs === 'ready' && F.backupDue(S.settings.backupEveryHours)) {
+        var copied = await F.copyToBackup(function () { return S.state; }, 'по расписанию');
+        if (copied) {
+          F.markCopied();
+          setTimeout(function () {
+            toast('Копия базы положена во вторую папку: ' + copied, 7000);
+          }, 2500);
+        }
+      }
+    } catch (e) { /* вторая папка — приятное дополнение, а не обязанность */ }
+
+    if (st === 'lost') {
       // папку перенесли или распаковали заново в другое место: говорим сразу,
       // пока владелец не решил, что записи пропали
       render();

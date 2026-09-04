@@ -370,3 +370,40 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
 .spark { display: inline-block; vertical-align: middle; }
 .spark path { fill: none; stroke: var(--blue); stroke-width: 1.6; }
 .spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }
+
+/* --- Шаблоны и голос --------------------------------------------------------- */
+.tpl-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding-bottom: 12px; margin-bottom: 2px; border-bottom: .5px solid var(--separator); }
+.tpl-label { font-size: 13px; color: var(--label-2); font-weight: 550; }
+.tpl-save { margin-left: auto; }
+.voice-on { background: var(--red) !important; color: #fff !important;
+  animation: voicePulse 1s ease-in-out infinite; }
+@keyframes voicePulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* --- Сравнение с прошлым периодом ------------------------------------------- */
+.delta { font-size: 12.5px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.delta.up { color: var(--green); }
+.delta.down { color: var(--red); }
+.delta.flat { color: var(--label-3); }
+
+/* --- Ведомость и печать ------------------------------------------------------ */
+.sign-line { display: inline-block; width: 110px; border-bottom: 1px solid var(--label-3); height: 15px; }
+.print-sign { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  font-size: 14.5px; padding-top: 22px; }
+
+/* --- Крупный режим: для телефона и для тех, кому мелко ----------------------- */
+body.big { font-size: 17px; }
+body.big .row-title { font-size: 17.5px; }
+body.big .row-sub, body.big .card-note { font-size: 14.5px; }
+body.big .stat-value { font-size: 26px; }
+body.big .hero-value { font-size: 40px; }
+body.big table.data { font-size: 15.5px; }
+body.big .btn { height: 44px; font-size: 16px; }
+body.big .btn-sm { height: 36px; font-size: 14.5px; }
+body.big .chip { font-size: 15px; padding: 8px 14px; }
+body.big .nav-item { padding: 12px 14px; font-size: 16px; }
+body.big .form-row input, body.big .form-row select { height: 46px; font-size: 17px; }
+@media (max-width: 700px) {
+  body.big .grid-2, body.big .stat-grid { grid-template-columns: 1fr; }
+  body.big .table-wrap { font-size: 15px; }
+}

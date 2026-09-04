@@ -16,6 +16,9 @@ const STORE = require(path.join(__dirname, '..', 'js', 'store.js'));
 const FLT = require(path.join(__dirname, '..', 'js', 'filters.js'));
 const FILES = require(path.join(__dirname, '..', 'js', 'filestore.js'));
 const NUM = require(path.join(__dirname, '..', 'js', 'numpad.js'));
+const ALR = require(path.join(__dirname, '..', 'js', 'alerts.js'));
+const INP = require(path.join(__dirname, '..', 'js', 'input.js'));
+const EXT = require(path.join(__dirname, '..', 'js', 'extras.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1074,6 +1077,103 @@ console.log('— Счёт прямо в поле и разделение раз�
   const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   check('вчерашняя дата подписана «вчера»', NUM.dateFull(y).indexOf('вчера') > 0, NUM.dateFull(y), 'вчера');
   check('пустая дата не ломает подпись', NUM.dateFull('') === '' && NUM.dateFull('чепуха') === '', 'пусто', 'пусто');
+  console.log('');
+}
+
+/* Что горит прямо сейчас: тревоги, проверка базы, странные суммы */
+console.log('— Тревоги и проверка базы');
+{
+  const t = new Date().toISOString().slice(0, 10);
+  // накладная сильно дороже обычной — ловим лишний ноль
+  const docs = [];
+  for (let i = 0; i < 6; i++) docs.push({ id: 'd' + i, firm: 'Молоко Юг', sum: 1000 + i * 20, date: t });
+  docs.push({ id: 'big', firm: 'Молоко Юг', sum: 60000, doc: 'ПФ1', date: t });
+  const odd = ALR.oddDocs(docs, {});
+  check('лишний ноль в накладной виден', odd.length === 1 && odd[0].id === 'big',
+    odd.length ? odd[0].sum + ' при обычных ' + odd[0].usual : 'не нашли', 'нашли одну');
+  check('обычные накладные не тревожат', ALR.oddDocs(docs.slice(0, 6), {}).length === 0, 0, 0);
+  check('мало данных — не судим', ALR.oddDocs([{ firm: 'A', sum: 1 }, { firm: 'A', sum: 900 }], {}).length === 0, 0, 0);
+  check('обычная сумма считается медианой, а не средним',
+    ALR.median([1000, 1020, 1040, 1060, 90000]) === 1040, ALR.median([1000, 1020, 1040, 1060, 90000]), 1040);
+
+  // проверка базы находит именно то, что сломано
+  const bad = ALR.checkBase({
+    docs: [{ id: 'a', firm: '', sum: 0, date: 'чепуха', key: 'k1' },
+           { id: 'b', firm: 'X', sum: 10, date: '2026-09-01', key: 'k2' },
+           { id: 'c', firm: 'Y', sum: 20, date: '2026-09-01', key: 'k2' }],
+    dds: [{ id: 'f', date: '2099-01-01' }],
+    supreg: [{ id: 's', name: '' }]
+  });
+  const kinds = bad.map(b => b.kind);
+  ['docs-no-firm', 'no-date', 'docs-zero', 'docs-dup', 'dds-future', 'firm-no-name'].forEach(k => {
+    check('проверка находит: ' + k, kinds.indexOf(k) >= 0, kinds.indexOf(k) >= 0 ? 'да' : 'нет', 'да');
+  });
+  check('здоровая база проходит проверку',
+    ALR.checkBase({ docs: [{ id: 'a', firm: 'X', sum: 100, date: '2026-09-01', key: 'k' }], dds: [], supreg: [] }).length === 0,
+    'чисто', 'чисто');
+  console.log('');
+}
+
+/* Быстрый ввод: сканер, голос, шаблоны */
+console.log('— Быстрый ввод');
+{
+  const stock = [{ name: 'Хлеб', barcode: '4600000012345' }, { name: 'Молоко', article: 'М-77' }];
+  check('товар находится по штрихкоду', (INP.findByCode('4600000012345', stock, []) || {}).name === 'Хлеб', 'Хлеб', 'Хлеб');
+  check('ведущие нули не мешают', (INP.findByCode('04600000012345', stock, []) || {}).name === 'Хлеб', 'Хлеб', 'Хлеб');
+  check('чужой код не подставляет товар', INP.findByCode('999', stock, []) === null, 'null', 'null');
+
+  [['три тысячи двести', 3200], ['пятьсот', 500], ['12500', 12500],
+   ['двадцать одна тысяча', 21000], ['два миллиона', 2000000]].forEach(([say, want]) => {
+    check('на слух «' + say + '»', INP.wordsToNumber(say) === want, INP.wordsToNumber(say), want);
+  });
+  check('непонятная речь не превращается в сумму',
+    INP.wordsToNumber('абракадабра') === null && INP.wordsToNumber('') === null, 'null', 'null');
+
+  const tpl = INP.templateFrom('ddsExpense', { date: '2026-09-04', category: 'Аренда', amount: 168000 }, '');
+  check('шаблон не запоминает дату', tpl.values.date === undefined, 'без даты', 'без даты');
+  check('шаблон помнит остальное', tpl.values.category === 'Аренда' && tpl.values.amount === 168000,
+    tpl.values.category + ' ' + tpl.values.amount, 'Аренда 168000');
+  check('имя шаблона понятное', INP.templateName({ category: 'Аренда', amount: 168000 }).indexOf('Аренда') === 0,
+    INP.templateName({ category: 'Аренда', amount: 168000 }), 'начинается со статьи');
+  console.log('');
+}
+
+/* Сравнения, наценка, ведомость */
+console.log('— Сравнения и ведомости');
+{
+  const d = EXT.delta(412000, 381000);
+  check('рост считается в рублях и процентах', d.diff === 31000 && d.pct === 8.14 && d.dir === 'up',
+    d.diff + ' (' + d.pct + '%)', '31000 (8.14%)');
+  check('падение видно', EXT.delta(100, 200).dir === 'down', EXT.delta(100, 200).dir, 'down');
+  check('деление на ноль в сравнении не ломает', EXT.delta(100, 0).pct === null, 'null', 'null');
+  const pr = EXT.prevRange('2026-08-01', '2026-08-31');
+  check('прошлый период такой же длины', pr.days === 31 && pr.from === '2026-07-01' && pr.to === '2026-07-31',
+    pr.from + '–' + pr.to, '2026-07-01–2026-07-31');
+
+  const mk = EXT.markupByFirm([
+    { firm: 'Молоко Юг', sum: 1000, retail: 1400, left: 0 },
+    { firm: 'Молоко Юг', sum: 2000, retail: 2600, left: 100 },
+    { firm: 'Пекарня', sum: 500, retail: 600, left: 0 }
+  ]);
+  check('наценка по фирме = (розница − закуп) / закуп',
+    mk[0].firm === 'Молоко Юг' && mk[0].gross === 1000 && mk[0].markup === 33.33,
+    mk[0].firm + ': ' + mk[0].gross + ' ₽, ' + mk[0].markup + '%', 'Молоко Юг: 1000 ₽, 33.33%');
+  check('фирмы отсортированы по заработку', mk[0].gross >= mk[1].gross,
+    mk.map(m => m.gross).join(' > '), 'по убыванию');
+  check('без розничной суммы фирма не показывается',
+    EXT.markupByFirm([{ firm: 'X', sum: 100, retail: 0 }]).length === 0, 0, 0);
+
+  const sheet = EXT.payrollSheet([
+    { employee: 'Марина', accrued: 5000, paid: 2000, left: 3000, hours: 24, shifts: 2 },
+    { employee: 'Артём', accrued: 2640, paid: 0, left: 2640, hours: 12, shifts: 1 }
+  ]);
+  check('в ведомости итог сходится с суммой строк',
+    sheet.total.accrued === 7640 && sheet.total.left === 5640,
+    sheet.total.accrued + ' / ' + sheet.total.left, '7640 / 5640');
+
+  const spark = EXT.spark([1, 5, 3, 8, 2]);
+  check('спарклайн рисуется', spark.indexOf('<svg') === 0 && spark.indexOf('path') > 0, 'есть', 'есть');
+  check('из одной точки график не строится', EXT.spark([5]) === '', 'пусто', 'пусто');
   console.log('');
 }
 

@@ -1391,6 +1391,107 @@
     return 'Отменено. Запись вернулась к прежнему виду.';
   };
 
+  A['backup2-connect'] = function () {
+    FS().connectBackup().then(function () {
+      return FS().copyToBackup(function () { return S.state; }, 'первая копия');
+    }).then(function (name) {
+      FS().markCopied(); U().render();
+      U().toast(name ? 'Папка подключена, копия положена: ' + name : 'Папка подключена.', 9000);
+    }).catch(function (e) {
+      var why = FS().humanError(e);
+      if (why) U().toast(why, 10000);
+    });
+    return null;
+  };
+  A['backup2-now'] = function () {
+    FS().copyToBackup(function () { return S.state; }, 'по кнопке').then(function (name) {
+      FS().markCopied(); U().render();
+      U().toast(name ? 'Копия положена: ' + name : 'Не получилось записать во вторую папку.', 9000);
+    });
+    return null;
+  };
+  A['backup2-forget'] = function () {
+    if (!confirm('Больше не класть копии во вторую папку?')) return null;
+    FS().forgetBackup(); U().render();
+    return 'Вторая папка отключена.';
+  };
+
+  /* --- Файл для бухгалтера ---------------------------------------------------
+     Один xlsx со всем, что обычно просят: доходы и расходы по дням, статьи,
+     поставщики, зарплата и налог за период.
+     -------------------------------------------------------------------- */
+  A['export-buh'] = function () {
+    var range = U().periodRange();
+    var d = window.WMExtra.accountantData(S.state, S.settings, F, sup(), range.from, range.to);
+    var wb = XLSX.utils.book_new();
+    function add(name, aoa) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), name.slice(0, 31));
+    }
+    add('Сводка', [
+      ['Магазин', S.settings.storeName || ''],
+      ['ИНН', S.settings.inn || ''],
+      ['Период', dateRu(d.from) + ' — ' + dateRu(d.to)],
+      [],
+      ['Показатель', 'Сумма'],
+      ['Приход', d.totals.income],
+      ['Расход', d.totals.expense],
+      ['Прибыль', d.totals.profit],
+      ['Закуп товара', d.totals.purchase],
+      ['Зарплата', d.totals.salary],
+      ['Аренда', d.totals.rent],
+      ['Взято в долг', d.totals.debtTaken],
+      ['Погашено долга', d.totals.debtPaid],
+      [],
+      ['Налог', d.tax.name],
+      ['База', d.tax.base],
+      ['Ставка, %', d.tax.rate],
+      ['Сумма налога', d.tax.sum]
+    ]);
+    add('По дням', [['Дата', 'Приход', 'Расход', 'Прибыль']].concat(
+      d.days.map(function (r) { return [r.date, r.income, r.expense, r.profit]; })));
+    add('Статьи расходов', [['Статья', 'Сумма', 'Доля %', 'Записей']].concat(
+      d.categories.map(function (c) { return [c.name, c.sum, c.share, c.count]; })));
+    add('Способы оплаты', [['Способ', 'Сумма', 'Доля %']].concat(
+      d.methods.map(function (m) { return [m.name, m.sum, m.share]; })));
+    add('Поставщики', [['Дата', 'Поставщик', 'Документ', 'Сумма закуп', 'Оплачено', 'Долг']].concat(
+      d.docs.map(function (r) { return [r.date, r.firm, r.doc, r.sum, r.paid, r.left]; })));
+    add('Оплаты', [['Дата', 'Поставщик', 'Документ', 'Сумма', 'Касса']].concat(
+      d.pays.map(function (r) { return [r.date, r.firm || r.supplier, r.doc, num(r.sum), r.cashbox]; })));
+    add('Зарплата', [['Дата', 'Сотрудник', 'Что', 'Сумма', 'Чем']].concat(
+      d.payouts.map(function (r) { return [r.date, r.employee, r.type, num(r.amount), r.form]; })));
+    add('Табель', [['Дата', 'Сотрудник', 'Смена', 'Часы', 'Ставка', 'Премия', 'Штраф', 'Начислено']].concat(
+      d.timesheet.map(function (r) {
+        return [r.date, r.employee, r.shift, num(r.hours), num(r.rate), num(r.bonus), num(r.penalty),
+          E.timesheetCalc(r)]; })));
+
+    var name = 'Для-бухгалтера-' + d.from + '_' + d.to + '.xlsx';
+    XLSX.writeFile(wb, name);
+    return 'Файл «' + name + '» скачан: 8 листов за ' + dateRu(d.from) + ' — ' + dateRu(d.to) + '.';
+  };
+
+  /* --- Повторить вчерашнюю смену --------------------------------------------
+     Смены в магазине похожи одна на другую. Открываем форму, заполненную
+     вчерашними цифрами: остаётся поправить суммы.
+     -------------------------------------------------------------------- */
+  A['repeat-shift'] = function () {
+    var rows = (S.state.dds || []).filter(function (r) {
+      return F.isIncome(r) && r.date && (r.shift || r.cashier);
+    }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    if (!rows.length) return 'Прошлых смен ещё нет — запишите первую.';
+    var last = rows[0].date;
+    var same = rows.filter(function (r) { return r.date === last; });
+    var pre = { date: today(), shift: same[0].shift, cashier: same[0].cashier };
+    same.forEach(function (r) {
+      var m = SUP.norm(r.method);
+      if (m.indexOf('нал') >= 0) pre.zCash = num(r.amount);
+      else if (m.indexOf('карт') >= 0) pre.zCard = num(r.amount);
+      else pre.zTrans = num(r.amount);
+    });
+    U().openForm('cashShift', pre);
+    U().toast('Взято со смены ' + dateRu(last) + ' — поправьте суммы и сохраните.', 7000);
+    return null;
+  };
+
   A['sup-book-save'] = function () { U().saveBook(); return null; };
   A['sup-book-read'] = function () { U().readBook(); return null; };
 
@@ -1679,6 +1780,201 @@
 
 
 
+
+  /* --- Сравнение периодов, ведомость, наценка, файл бухгалтеру ---------------- */
+  function X() { return window.WMExtra; }
+
+  function deltaHtml(now, was, moneyFmt) {
+    var d = X().delta(now, was);
+    if (!d.has) return '';
+    var arrow = d.dir === 'up' ? '▲' : (d.dir === 'down' ? '▼' : '=');
+    var txt = (moneyFmt === false ? U().nf(Math.abs(d.diff)) : E.fmtMoney(Math.abs(d.diff)));
+    return '<span class="delta ' + d.dir + '">' + arrow + ' ' + txt +
+      (d.pct === null ? '' : ' (' + Math.abs(d.pct) + '%)') + '</span>';
+  }
+
+  function viewCompare() {
+    var u = U(), all = S.state.dds || [];
+    var range = u.periodRange();
+    function pick(from, to) {
+      return all.filter(function (r) { return r.date >= from && r.date <= to; });
+    }
+    // если в выбранном периоде записей нет, сравниваем последний месяц,
+    // где они есть: иначе экран показывал бы два пустых столбца
+    var moved = false;
+    if (!pick(range.from, range.to).length && all.length) {
+      var last = '';
+      all.forEach(function (r) { if (r.date && r.date > last) last = r.date; });
+      var days = Math.max(1, Math.round((new Date(range.to) - new Date(range.from)) / 86400000) + 1);
+      range = { from: X().addDays(last, -days + 1), to: last };
+      moved = true;
+    }
+    var prev = X().prevRange(range.from, range.to);
+    var now = pick(range.from, range.to), was = pick(prev.from, prev.to);
+    var tn = F.totals(now), tw = F.totals(was);
+
+    var h = u.pageHead('Сравнение периодов',
+      'Что изменилось: ' + dateRu(range.from) + '–' + dateRu(range.to) +
+      ' против ' + dateRu(prev.from) + '–' + dateRu(prev.to),
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (moved) {
+      h += '<div class="banner"><span>📅</span><span>В выбранном наверху периоде записей нет, поэтому ' +
+        'показан последний период с данными: ' + esc(dateRu(range.from)) + ' — ' + esc(dateRu(range.to)) +
+        '.</span></div>';
+    }
+    h += '<div class="banner blue"><span>📐</span><span>Период берётся из переключателя наверху, ' +
+      'а сравнивается с таким же по длине перед ним: ' + prev.days + ' ' +
+      u.plural(prev.days, 'день', 'дня', 'дней') + '.</span></div>';
+
+    var lines = [
+      ['Выручка', tn.income, tw.income],
+      ['Расходы', tn.expense, tw.expense],
+      ['Прибыль', tn.profit, tw.profit],
+      ['Закуп товара', tn.purchase, tw.purchase],
+      ['Зарплата', tn.salary, tw.salary],
+      ['Аренда', tn.rent, tw.rent],
+      ['Взято в долг', tn.debtTaken, tw.debtTaken],
+      ['Погашено долга', tn.debtPaid, tw.debtPaid],
+      ['Средний день', tn.avgDay, tw.avgDay],
+      ['Средняя смена', tn.avgShift, tw.avgShift],
+      ['Расхождения кассы', tn.diffSum, tw.diffSum]
+    ];
+    h += '<div class="stat-grid">' +
+      u.stat('Выручка', u.priv(tn.income), 'было ' + E.fmtMoney(tw.income) + ' ' + deltaHtml(tn.income, tw.income)) +
+      u.stat('Расходы', u.priv(tn.expense), 'было ' + E.fmtMoney(tw.expense) + ' ' + deltaHtml(tn.expense, tw.expense)) +
+      u.stat('Прибыль', u.priv(tn.profit), 'было ' + E.fmtMoney(tw.profit) + ' ' + deltaHtml(tn.profit, tw.profit),
+        tn.profit >= tw.profit ? 'c-green' : 'c-red') +
+      u.stat('Рентабельность', u.pct(tn.profitability), 'было ' + u.pct(tw.profitability)) +
+      '</div>';
+
+    h += u.card('Строка в строку', u.table('cmpPer', [
+      { title: 'Показатель', fn: function (r) { return esc(r[0]); } },
+      { title: 'Сейчас', cls: 'num', fn: function (r) { return u.priv(r[1]); } },
+      { title: 'Раньше', cls: 'num', fn: function (r) { return u.priv(r[2]); } },
+      { title: 'Разница', cls: 'num', fn: function (r) { return deltaHtml(r[1], r[2]); } }
+    ], lines, { step: 30 }));
+
+    // по статьям расходов: где именно стали тратить больше
+    var cn = {}, cw = {};
+    F.byCategory(now).forEach(function (c) { cn[c.name] = c.sum; });
+    F.byCategory(was).forEach(function (c) { cw[c.name] = c.sum; });
+    var names = {};
+    Object.keys(cn).concat(Object.keys(cw)).forEach(function (n) { names[n] = 1; });
+    var cats = Object.keys(names).map(function (n) {
+      return { name: n, now: cn[n] || 0, was: cw[n] || 0, diff: (cn[n] || 0) - (cw[n] || 0) };
+    }).sort(function (a, b) { return Math.abs(b.diff) - Math.abs(a.diff); });
+
+    h += u.card('Где изменились расходы', u.table('cmpCat', [
+      { title: 'Статья', fn: function (r) { return DET().link('category', r.name, r.name); } },
+      { title: 'Сейчас', cls: 'num', fn: function (r) { return u.priv(r.now); } },
+      { title: 'Раньше', cls: 'num', fn: function (r) { return u.priv(r.was); } },
+      { title: 'Разница', cls: 'num', fn: function (r) { return deltaHtml(r.now, r.was); } },
+      { title: '', cls: 'center', fn: function (r) { return DET().btn('category', r.name, 'Подробнее'); } }
+    ], cats, { step: 30, empty: 'Расходов в этих периодах нет' }));
+    return h;
+  }
+
+  /* --- Наценка по поставщикам ------------------------------------------------ */
+  function viewMarkup() {
+    var u = U(), c = sup();
+    var rows = X().markupByFirm(c.docs || []);
+    var h = u.pageHead('Кто зарабатывает магазину',
+      'Наценка по каждому поставщику: сколько принесёт его товар, если продать всё',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (!rows.length) {
+      return h + '<div class="card"><div class="empty"><b>Нужны накладные с розничной суммой</b><br>' +
+        'В выгрузке 1С «Приходные накладные» есть колонка «Сумма документа розница» — по ней и считается наценка.</div></div>';
+    }
+    var buy = rows.reduce(function (a, r) { return a + r.buy; }, 0);
+    var gross = rows.reduce(function (a, r) { return a + r.gross; }, 0);
+
+    h += '<div class="stat-grid">' +
+      u.stat('Завезли в закупе', u.priv(buy), rows.length + ' поставщиков') +
+      u.stat('Заработаем на этом', u.priv(gross), 'если продать всё по розничной цене', 'c-green') +
+      u.stat('Средняя наценка', u.pct(buy ? gross / buy * 100 : 0), 'по всем поставкам') +
+      u.stat('Лучший поставщик', esc(rows[0].firm.slice(0, 22)), 'принесёт ' + E.fmtMoney(rows[0].gross), 'c-green') +
+      '</div>';
+
+    var defs = [
+      { key: 'mk', name: 'Наценка', options: [
+        { v: 'low', name: 'Меньше 15%', test: function (r) { return r.markup < 15; } },
+        { v: 'mid', name: '15–30%', test: function (r) { return r.markup >= 15 && r.markup < 30; } },
+        { v: 'hi', name: 'Больше 30%', test: function (r) { return r.markup >= 30; } }
+      ] },
+      { key: 'debt', name: 'Долг', options: [
+        { v: 'yes', name: 'Есть долг', test: function (r) { return r.left > 0; } },
+        { v: 'no', name: 'Нет долга', test: function (r) { return r.left <= 0; } }
+      ] }
+    ];
+    var list = FLT().apply('markup', rows, defs, function (r) { return r.firm; });
+    h += FLT().bar('markup', defs, rows, { search: 'поставщик' });
+
+    h += u.card('Поставщики по заработку', FLT().note(list.length, rows.length) + u.table('mkT', [
+      { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.firm), r.firm); } },
+      { title: 'Накладных', cls: 'num', fn: function (r) { return u.nf(r.docs); } },
+      { title: 'Завезли (закуп)', cls: 'num', fn: function (r) { return u.priv(r.buy); } },
+      { title: 'В рознице', cls: 'num', fn: function (r) { return u.priv(r.retail); } },
+      { title: 'Заработаем', cls: 'num', fn: function (r) { return '<span class="c-green private">' + E.fmtMoney(r.gross) + '</span>'; } },
+      { title: 'Наценка', cls: 'num', fn: function (r) {
+        return '<span class="' + (r.markup < 15 ? 'c-red' : (r.markup >= 30 ? 'c-green' : '')) + '">' +
+          u.pct(r.markup) + '</span>'; } },
+      { title: 'Долг ему', cls: 'num', fn: function (r) { return r.left ? u.priv(r.left) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) { return DET().btn('firm', E.norm(r.firm), 'Подробнее'); } }
+    ], list, { step: 40, empty: 'Под фильтр ничего не подошло' }));
+
+    h += '<div class="banner"><span>💡</span><span>Наценка ниже 15% — повод поговорить о цене: ' +
+      'этот поставщик занимает деньги и место на полке, а приносит мало.</span></div>';
+    return h;
+  }
+
+  /* --- Ведомость зарплаты на печать ------------------------------------------ */
+  function viewPayroll() {
+    var u = U();
+    var range = u.periodRange();
+    function inR(d) { return d >= range.from && d <= range.to; }
+    var ts = (S.state.timesheet || []).filter(function (r) { return inR(r.date); });
+    var po = (S.state.payouts || []).filter(function (r) { return inR(r.date); });
+    var rows = E.payrollSummary(ts, po);
+    var sheet = X().payrollSheet(rows, dateRu(range.from) + ' — ' + dateRu(range.to));
+
+    var h = u.pageHead('Ведомость на зарплату',
+      'За ' + sheet.period + ' · подпишите и выдайте',
+      '<button class="btn btn-primary" data-act="print">🖨 Печать ведомости</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Начислено', u.priv(sheet.total.accrued), u.nf(sheet.total.shifts) + ' смен, ' + u.nf(sheet.total.hours) + ' ч') +
+      u.stat('Уже выдано', u.priv(sheet.total.paid), 'авансы и выплаты') +
+      u.stat('К выдаче', u.priv(sheet.total.left), 'остаток по ведомости',
+        sheet.total.left > 0 ? 'c-orange' : 'c-green') +
+      u.stat('Человек', u.nf(rows.length), 'в ведомости') +
+      '</div>';
+
+    h += u.card('Ведомость', u.table('payrollT', [
+      { title: '№', cls: 'num', fn: function (r, i) { return i + 1; } },
+      { title: 'Сотрудник', fn: function (r) { return DET().link('employee', r.employee, r.employee); } },
+      { title: 'Должность', fn: function (r) { return esc(r.position || '—'); } },
+      { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shifts); } },
+      { title: 'Часов', cls: 'num', fn: function (r) { return u.nf(r.hours); } },
+      { title: 'Начислено', cls: 'num', fn: function (r) { return u.priv(r.accrued); } },
+      { title: 'Премии', cls: 'num', fn: function (r) { return r.bonus ? u.priv(r.bonus) : '—'; } },
+      { title: 'Штрафы', cls: 'num', fn: function (r) { return r.penalty ? '<span class="c-red private">' + E.fmtMoney(r.penalty) + '</span>' : '—'; } },
+      { title: 'Выдано', cls: 'num', fn: function (r) { return u.priv(r.paid); } },
+      { title: 'К выдаче', cls: 'num', fn: function (r) { return '<b class="private">' + E.fmtMoney(r.left) + '</b>'; } },
+      { title: 'Подпись', fn: function () { return '<span class="sign-line"></span>'; } }
+    ], rows, { step: 60, empty: 'В этом периоде смен не записано',
+      total: [{ html: 'Итого', span: 5 },
+        { html: E.fmtMoney(sheet.total.accrued), cls: 'num' }, { html: '' }, { html: '' },
+        { html: E.fmtMoney(sheet.total.paid), cls: 'num' },
+        { html: '<b>' + E.fmtMoney(sheet.total.left) + '</b>', cls: 'num' }, { html: '' }] }));
+
+    h += '<div class="card"><div class="card-pad print-sign">' +
+      '<div>Выдал: ______________________ / ' + esc(S.settings.ownerName || '') + '</div>' +
+      '<div>Дата: ______________</div></div></div>';
+    return h;
+  }
+
   /* --- Проверка базы и журнал действий ---------------------------------------
      Программа сама смотрит, что в базе сломано: накладные без поставщика,
      документы без даты, дубли номеров, записи будущим числом. И ведёт журнал:
@@ -1829,6 +2125,24 @@
             'при подключённой папке.</div>')),
       BACKUPS !== null ? '<button class="btn btn-sm" data-act="base-list-backups">Обновить список</button>' : '');
 
+    // вторая папка: флешка или облачный диск
+    var bs = FS().backupState;
+    h += u.card('Вторая копия — на флешку или в облачную папку', u.listOf([
+      u.listRow({ icon: '💽',
+        title: bs === 'ready' ? 'Копии уходят в папку «' + esc(FS().backupDirName) + '»'
+          : (bs === 'lost' ? 'Вторая папка не найдена'
+            : (bs === 'needs-permission' ? 'Нужно подтвердить доступ ко второй папке'
+              : 'Вторая папка не выбрана')),
+        sub: bs === 'ready'
+          ? 'Копия кладётся раз в ' + (+S.settings.backupEveryHours || 24) + ' ч при запуске программы' +
+            (FS().lastCopy ? ' · последняя ' + FS().lastCopy.toLocaleString('ru-RU').slice(0, 16) : '')
+          : 'Выберите флешку или папку Яндекс.Диска — программа сама будет класть туда копию базы',
+        value: (bs === 'ready'
+          ? '<button class="btn btn-sm" data-act="backup2-now">Скопировать сейчас</button> ' +
+            '<button class="btn btn-sm" data-act="backup2-forget">Отключить</button>'
+          : '<button class="btn btn-sm btn-primary" data-act="backup2-connect">Выбрать папку</button>') })
+    ], ''));
+
     if (FS().state !== 'ready') {
       h += '<div class="banner"><span>⚠️</span><span>Папка не подключена, поэтому копии не пишутся ' +
         'и откатиться некуда. Подключите папку на экране «Данные и файлы» — и программа начнёт ' +
@@ -1951,6 +2265,9 @@
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' },
     { id: 'conflicts', icon: '⚖️', name: 'Расхождения с 1С', group: 'Данные из 1С', render: viewConflicts, after: 'reconcile' },
+    { id: 'compare', icon: '📐', name: 'Сравнение периодов', group: 'Отчёты', render: viewCompare, after: 'finreport' },
+    { id: 'markup', icon: '💹', name: 'Кто зарабатывает', group: 'Отчёты', render: viewMarkup, after: 'compare' },
+    { id: 'payroll', icon: '🧾', name: 'Ведомость зарплаты', group: 'Отчёты', render: viewPayroll, after: 'markup' },
     { id: 'check', icon: '🩺', name: 'Проверка базы', group: 'Ручной ввод', render: viewCheck, after: 'sheets' },
     { id: 'reset', icon: '♻️', name: 'Сброс и откат базы', group: 'Ручной ввод', render: viewReset, after: 'check' }
   );
