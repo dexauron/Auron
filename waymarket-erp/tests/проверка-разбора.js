@@ -20,6 +20,7 @@ const ALR = require(path.join(__dirname, '..', 'js', 'alerts.js'));
 const INP = require(path.join(__dirname, '..', 'js', 'input.js'));
 const EXT = require(path.join(__dirname, '..', 'js', 'extras.js'));
 const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
+const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1250,6 +1251,68 @@ console.log('— Запись одной строкой');
   check('на отмену берётся последнее неотменённое с историей',
     ENT.lastUndoable(log).id === '1', ENT.lastUndoable(log).id, '1');
   check('когда отменять нечего — не падаем', ENT.lastUndoable([]) === null, 'null', 'null');
+  console.log('');
+}
+
+/* Касса, сейф, точки, кассиры, эквайринг */
+console.log('— Касса, сейф и кассиры');
+{
+  const set = { openCashStart: 0, openCardStart: 0, openTransferStart: 0,
+    payoutLimit: 20000, acquiringFee: 2, mainCashName: 'Касса', cashPlaces: 'Сейф' };
+  const t = new Date().toISOString().slice(0, 10);
+  const st = { dds: [
+    { date: '2026-09-01', type: 'Приход', method: 'Наличные', amount: 50000, cashier: 'Марина', diff: -500, shift: 'День' },
+    { date: '2026-09-01', type: 'Приход', method: 'Карта', amount: 20000, cashier: 'Марина', shift: 'День' },
+    { date: '2026-09-02', type: 'Забор', method: 'Наличные', amount: 10000 },
+    { date: t, type: 'Расход', method: 'Наличные', amount: 25000, category: 'Закуп', cashier: 'Артём' }
+  ], cashcount: [{ cashier: 'Артём', diff: -1200 }] };
+
+  // перекладывание денег не меняет их количество
+  const before = CSH.ownerSplit(st, set).shop;
+  CSH.moveRecords({ amount: 15000, from: 'Касса', to: 'Сейф' }, set).forEach(r => st.dds.push(r));
+  const after = CSH.ownerSplit(st, set);
+  check('инкассация не меняет деньги магазина', after.shop === before,
+    WM.fmtMoney(after.shop), WM.fmtMoney(before));
+  const places = CSH.byPlace(st, set);
+  const safe = places.find(p => p.place === 'Сейф');
+  check('в сейфе появились переложенные деньги', safe.cash === 15000, WM.fmtMoney(safe.cash), '15 000 ₽');
+  const cash = places.find(p => p.place === 'Касса');
+  check('из кассы они ушли', cash.cash === 50000 - 10000 - 25000 - 15000,
+    WM.fmtMoney(cash.cash), WM.fmtMoney(0));
+
+  // забор владельца: из магазина ушло, в кармане прибавилось
+  check('забор владельца уходит в его карман', after.pocket === 10000, WM.fmtMoney(after.pocket), '10 000 ₽');
+  check('деньги магазина считаются без кармана', after.shop === 15000 + 0 + 20000,
+    WM.fmtMoney(after.shop), WM.fmtMoney(35000));
+  check('видно, сколько забрали из оборота', after.drawn === 10000, WM.fmtMoney(after.drawn), '10 000 ₽');
+
+  // лимит выдачи за смену
+  const w = CSH.payoutWatch(st, set, t);
+  check('превышение лимита выдачи замечено', w.over === true && w.spent === 25000,
+    WM.fmtMoney(w.spent) + ' при лимите ' + WM.fmtMoney(w.limit), 'превышено');
+  check('перемещение денег не считается выдачей',
+    CSH.payoutWatch({ dds: [{ date: t, type: 'Расход', method: 'Наличные', amount: 99999,
+      category: 'Перемещение денег' }] }, set, t).spent === 0, 0, 0);
+  check('без лимита не тревожим', CSH.payoutWatch(st, { payoutLimit: 0 }, t).over === false, 'тихо', 'тихо');
+
+  // кассиры
+  const sc = CSH.cashierScore(st, set);
+  const marina = sc.find(r => r.name === 'Марина');
+  const artem = sc.find(r => r.name === 'Артём');
+  check('недостача кассира посчитана', marina.short === 500, WM.fmtMoney(marina.short), '500 ₽');
+  check('пересчёт по купюрам тоже идёт в рейтинг', artem.short === 1200, WM.fmtMoney(artem.short), '1 200 ₽');
+  check('недостача на 1000 ₽ выручки', marina.perThousand === 7.14, marina.perThousand, 7.14);
+  check('у кассира без выручки не делим на ноль', artem.perThousand === 0, artem.perThousand, 0);
+
+  // эквайринг с комиссией
+  const acq = CSH.acquiringCheck(st, [{ date: '2026-09-01', amount: 19600 }], set);
+  check('банк зачислил ровно за вычетом комиссии', acq.rows[0].ok === true,
+    WM.fmtMoney(acq.rows[0].bank) + ' при ожидаемых ' + WM.fmtMoney(acq.rows[0].expect), 'сошлось');
+  const acq2 = CSH.acquiringCheck(st, [{ date: '2026-09-01', amount: 15000 }], set);
+  check('недоплата банка видна', acq2.badDays === 1 && acq2.rows[0].diff === -4600,
+    WM.fmtMoney(acq2.rows[0].diff), '−4 600 ₽');
+  const acq3 = CSH.acquiringCheck(st, [], set);
+  check('день без зачисления помечен', acq3.rows[0].missing === true, 'помечен', 'помечен');
   console.log('');
 }
 

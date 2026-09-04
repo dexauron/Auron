@@ -1401,6 +1401,55 @@
     return 'Отменено. Запись вернулась к прежнему виду.';
   };
 
+  /* --- Загрузка банковской выписки для сверки эквайринга --------------------- */
+  A['bank-load'] = function () {
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.accept = '.xls,.xlsx,.csv';
+    inp.addEventListener('change', function () {
+      var f = inp.files && inp.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var wb = XLSX.read(new Uint8Array(rd.result), { type: 'array', cellDates: true });
+          var m = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
+          var rows = readBankRows(m);
+          if (!rows.length) { U().toast('В файле не нашлось пары «дата — сумма». Проверьте выписку.'); return; }
+          S.state.bank = rows;
+          S.save(); refresh(); U().render();
+          U().toast('Выписка загружена: ' + rows.length + ' ' +
+            U().plural(rows.length, 'зачисление', 'зачисления', 'зачислений') + '.', 8000);
+        } catch (e) { U().toast('Не получилось прочитать файл: ' + e.message); }
+      };
+      rd.readAsArrayBuffer(f);
+    });
+    inp.click();
+    return null;
+  };
+
+  // Ищем в выписке колонки с датой и суммой — названия у банков разные
+  function readBankRows(matrix) {
+    var head = -1, dateCol = -1, sumCol = -1;
+    for (var r = 0; r < Math.min(matrix.length, 25) && head < 0; r++) {
+      var row = (matrix[r] || []).map(function (c) { return SUP.norm(c); });
+      row.forEach(function (c, i) {
+        if (dateCol < 0 && /дата|день/.test(c)) dateCol = i;
+        if (sumCol < 0 && /(сумма|зачислен|поступлен|кредит|приход)/.test(c) && !/комисс/.test(c)) sumCol = i;
+      });
+      if (dateCol >= 0 && sumCol >= 0) head = r;
+      else { dateCol = -1; sumCol = -1; }
+    }
+    if (head < 0) return [];
+    var out = [];
+    for (var i = head + 1; i < matrix.length; i++) {
+      var row2 = matrix[i] || [];
+      var d = E.excelDate(row2[dateCol]), v = num(row2[sumCol]);
+      if (!d || !v) continue;
+      out.push({ date: d, amount: v });
+    }
+    return out;
+  }
+
   A['backup2-connect'] = function () {
     FS().connectBackup().then(function () {
       return FS().copyToBackup(function () { return S.state; }, 'первая копия');
@@ -1615,6 +1664,193 @@
 
 
 
+
+
+  /* --- Касса, сейф, точки, кассиры, эквайринг --------------------------------- */
+  function CH() { return window.WMCash; }
+
+  function placeOptions() { return CH().places(S.state, S.settings); }
+
+  // 46/48 — инкассация и перекладывание денег между местами
+  FORMS.cashMove = {
+    title: 'Переложить деньги', icon: '🏦',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var ps = placeOptions();
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Откуда', 'from', 'list', v.from || ps[0] || CH().MAIN, { options: ps }) +
+        u.fieldRow('Куда', 'to', 'list', v.to || CH().SAFE, { options: ps.concat(['Банк', 'Инкассация']) }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: ['Наличные', 'Карта', 'Перевод'] }) +
+        u.fieldRow('Кто забрал или сдал', 'who', 'text', v.who || '', { placeholder: 'инкассатор, кассир' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Деньги магазина не меняются: они просто переезжают из одного места в другое. ' +
+      'Так видно, сколько лежит в ящике, а сколько в сейфе.',
+    save: function (v) {
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (SUP.norm(v.from) === SUP.norm(v.to)) return 'Откуда и куда — одно и то же место.';
+      var recs = CH().moveRecords(v, S.settings);
+      if (!recs) return 'Укажите сумму.';
+      recs.forEach(function (r) { S.add('dds', r); });
+      refresh();
+      return { ok: E.fmtMoney(v.amount) + ': ' + v.from + ' → ' + v.to +
+        (v.who ? ' (' + v.who + ')' : '') };
+    }
+  };
+
+  function viewCashPlaces() {
+    var u = U();
+    var rows = CH().byPlace(S.state, S.settings);
+    var split = CH().ownerSplit(S.state, S.settings);
+    var watch = CH().payoutWatch(S.state, S.settings);
+    var moves = (S.state.dds || []).filter(function (r) { return CH().isMove(r) && r.moveTo; })
+      .sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+
+    var h = u.pageHead('Где лежат деньги', 'Касса, сейф, точки и ваш карман — по отдельности',
+      '<div><button class="btn btn-primary" data-form="cashMove">🏦 Переложить деньги</button> ' +
+      '<button class="btn" data-form="cashCount">🧾 Пересчитать кассу</button></div>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Деньги магазина', u.priv(split.shop), 'во всех местах вместе', 'c-green') +
+      u.stat('Ваш карман', u.priv(split.pocket), 'забрали из оборота ' + E.fmtMoney(split.drawn)) +
+      u.stat('Мест хранения', u.nf(rows.length), 'касса, сейф, точки') +
+      (watch.limit > 0
+        ? u.stat('Выдано из кассы сегодня', u.priv(watch.spent),
+            'лимит ' + E.fmtMoney(watch.limit) + ', осталось ' + E.fmtMoney(Math.max(0, watch.left)),
+            watch.over ? 'c-red' : (watch.near ? 'c-orange' : 'c-green'))
+        : u.stat('Лимит выдачи', 'не задан', 'настройки → «Лимит выдачи из кассы за смену»')) +
+      '</div>';
+
+    if (watch.over) {
+      h += '<div class="banner"><span>&#9888;</span><span>Сегодня из кассы выдали <b class="private">' +
+        E.fmtMoney(watch.spent) + '</b> — больше вашего лимита ' + E.fmtMoney(watch.limit) +
+        ' на <b class="private">' + E.fmtMoney(-watch.left) + '</b>.</span></div>';
+    }
+
+    h += u.card('Сколько где лежит', u.table('placesT', [
+      { title: 'Место', fn: function (r) {
+        var icon = SUP.norm(r.place) === SUP.norm(CH().SAFE) ? '🔐'
+          : (SUP.norm(r.place) === SUP.norm(CH().POCKET) ? '👤' : '💵');
+        return icon + ' ' + esc(r.place); } },
+      { title: 'Наличные', cls: 'num', fn: function (r) { return u.priv(r.cash); } },
+      { title: 'Карта', cls: 'num', fn: function (r) { return r.card ? u.priv(r.card) : '—'; } },
+      { title: 'Перевод', cls: 'num', fn: function (r) { return r.transfer ? u.priv(r.transfer) : '—'; } },
+      { title: 'Всего', cls: 'num', fn: function (r) {
+        return '<b class="' + (r.total < 0 ? 'c-red' : '') + ' private">' + E.fmtMoney(r.total) + '</b>'; } }
+    ], rows, { step: 20 }),
+      '<button class="btn btn-sm" data-go="settings">Добавить точку</button>');
+
+    h += u.card('Перемещения денег', u.table('movesT', [
+      { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+      { title: 'Откуда', fn: function (r) { return esc(r.place); } },
+      { title: 'Куда', fn: function (r) { return esc(r.moveTo); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(num(r.amount)); } },
+      { title: 'Кто', fn: function (r) { return esc((r.note || '').replace(/.*сдали:\s*/, '')) || '—'; } },
+      { title: '', cls: 'center', fn: function (r) { return U().rowMenu('dds', r.id, { form: 'cashMove' }); } }
+    ], moves, { step: 30, empty: 'Денег пока не перекладывали' }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>Инкассация, сейф и вторая точка — это одно и то же ' +
+      'действие «переложить деньги»: из ящика ушло, в другое место пришло. Денег у магазина не убавилось.</span></div>';
+    return h;
+  }
+
+  /* --- 50. Кассиры: кто чаще ошибается ---------------------------------------- */
+  function viewCashiers() {
+    var u = U();
+    var rows = CH().cashierScore(S.state, S.settings);
+    var h = u.pageHead('Кассиры и расхождения', 'Кто сдаёт кассу точно, а у кого деньги не сходятся',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (!rows.length) {
+      return h + '<div class="card"><div class="empty"><b>Кассиры не указаны</b><br>' +
+        'Впишите имя кассира при записи смены — и здесь появится, у кого касса сходится, а у кого нет.</div></div>';
+    }
+    var short = rows.reduce(function (a, r) { return a + r.short; }, 0);
+    var worst = rows[0];
+
+    h += '<div class="stat-grid">' +
+      u.stat('Недостач всего', u.priv(short), 'по всем кассирам', short ? 'c-red' : 'c-green') +
+      u.stat('Кассиров', u.nf(rows.length), 'с записанными сменами') +
+      u.stat('Больше всех недостач', esc(worst.name.slice(0, 20)), E.fmtMoney(worst.short) +
+        ' за ' + u.nf(worst.shiftCount) + ' смен', worst.short ? 'c-orange' : 'c-green') +
+      u.stat('Случаев расхождения', u.nf(rows.reduce(function (a, r) { return a + r.cases; }, 0)),
+        'смен и пересчётов, где не сошлось') +
+      '</div>';
+
+    h += u.card('Рейтинг', u.table('cashiersT', [
+      { title: 'Кассир', fn: function (r) { return DET().link('employee', r.name, r.name); } },
+      { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shiftCount); } },
+      { title: 'Сдал выручки', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
+      { title: 'Недостачи', cls: 'num', fn: function (r) {
+        return r.short ? '<span class="c-red private">' + E.fmtMoney(r.short) + '</span>' : '—'; } },
+      { title: 'Излишки', cls: 'num', fn: function (r) {
+        return r.over ? '<span class="c-orange private">' + E.fmtMoney(r.over) + '</span>' : '—'; } },
+      { title: 'Случаев', cls: 'num', fn: function (r) { return u.nf(r.cases); } },
+      { title: 'На смену', cls: 'num', fn: function (r) {
+        return r.perShift ? '<span class="c-red private">' + E.fmtMoney(r.perShift) + '</span>' : '—'; } },
+      { title: 'На 1000 ₽ выручки', cls: 'num', fn: function (r) {
+        return r.perThousand ? '<span class="' + (r.perThousand > 3 ? 'c-red' : 'c-orange') + '">' +
+          E.fmtMoney(r.perThousand) + '</span>' : '<span class="c-green">чисто</span>'; } },
+      { title: '', cls: 'center', fn: function (r) { return DET().btn('employee', r.name, 'Подробнее'); } }
+    ], rows, { step: 30 }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>«На 1000 ₽ выручки» честнее, чем просто сумма: ' +
+      'кассир с большой выручкой и парой ошибок аккуратнее того, у кого выручка маленькая, ' +
+      'а недостачи те же.</span></div>';
+    return h;
+  }
+
+  /* --- 66. Сверка с эквайрингом ------------------------------------------------ */
+  var BANK_ROWS = null;
+
+  function viewAcquiring() {
+    var u = U();
+    var res = CH().acquiringCheck(S.state, BANK_ROWS || (S.state.bank || []), S.settings);
+    var h = u.pageHead('Сверка с эквайрингом',
+      'Что пробили по карте против того, что зачислил банк',
+      '<div><button class="btn btn-primary" data-act="bank-load">📄 Загрузить выписку</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="banner blue"><span>🏦</span><span>Выгрузите из банка выписку по эквайрингу в Excel или CSV ' +
+      '(нужны колонки «дата» и «сумма») и загрузите сюда. Комиссия банка берётся из настроек: <b>' +
+      u.pct(res.fee) + '</b>.</span></div>';
+
+    if (!res.rows.length) {
+      return h + '<div class="card"><div class="empty">Пока нечего сверять: нет ни выручки по карте, ни выписки.</div></div>';
+    }
+
+    h += '<div class="stat-grid">' +
+      u.stat('Пробито по карте', u.priv(res.shopTotal), 'по вашим записям') +
+      u.stat('Зачислил банк', u.priv(res.bankTotal), 'по выписке') +
+      u.stat('Разница', u.priv(res.diffTotal), res.diffTotal === 0 ? 'всё сошлось' : 'с учётом комиссии',
+        Math.abs(res.diffTotal) < 1 ? 'c-green' : 'c-red') +
+      u.stat('Дней с расхождением', u.nf(res.badDays), 'из ' + u.nf(res.rows.length),
+        res.badDays ? 'c-orange' : 'c-green') +
+      '</div>';
+
+    var defs = [{ key: 'st', name: 'Дни', options: [
+      { v: 'bad', name: 'С расхождением', test: function (r) { return !r.ok; } },
+      { v: 'miss', name: 'Банк не зачислил', test: function (r) { return r.missing; } },
+      { v: 'ok', name: 'Сошлось', test: function (r) { return r.ok; } }
+    ] }];
+    var list = FLT().apply('acq', res.rows, defs);
+    h += FLT().bar('acq', defs, res.rows);
+
+    h += u.card('По дням', FLT().note(list.length, res.rows.length) + u.table('acqT', [
+      { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+      { title: 'Пробито по карте', cls: 'num', fn: function (r) { return u.priv(r.shop); } },
+      { title: 'Должен зачислить', cls: 'num', fn: function (r) { return u.priv(r.expect); } },
+      { title: 'Зачислил банк', cls: 'num', fn: function (r) { return r.bank ? u.priv(r.bank) : '—'; } },
+      { title: 'Разница', cls: 'num', fn: function (r) {
+        return r.ok ? '<span class="c-green">сошлось</span>'
+          : '<span class="c-red private">' + E.fmtMoney(r.diff) + '</span>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.missing ? U().badge('банк не зачислил', 'red')
+          : (r.ok ? '' : U().badge('проверить', 'orange')); } }
+    ], list, { step: 40 }));
+    return h;
+  }
 
   /* --- Быстрая строка и массовый ввод -----------------------------------------
      31 — «аренда 168000 переводом» одной строкой, без полей.
@@ -2393,6 +2629,9 @@
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' },
     { id: 'conflicts', icon: '⚖️', name: 'Расхождения с 1С', group: 'Данные из 1С', render: viewConflicts, after: 'reconcile' },
+    { id: 'places', icon: '🏦', name: 'Где лежат деньги', group: 'Деньги', render: viewCashPlaces, after: 'cash' },
+    { id: 'cashiers', icon: '🧑‍💼', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers, after: 'places' },
+    { id: 'acquiring', icon: '🏧', name: 'Сверка с эквайрингом', group: 'Деньги', render: viewAcquiring, after: 'cashiers' },
     { id: 'compare', icon: '📐', name: 'Сравнение периодов', group: 'Отчёты', render: viewCompare, after: 'finreport' },
     { id: 'markup', icon: '💹', name: 'Кто зарабатывает', group: 'Отчёты', render: viewMarkup, after: 'compare' },
     { id: 'payroll', icon: '🧾', name: 'Ведомость зарплаты', group: 'Отчёты', render: viewPayroll, after: 'markup' },
