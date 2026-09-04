@@ -1402,6 +1402,29 @@
   };
 
   /* --- Загрузка банковской выписки для сверки эквайринга --------------------- */
+  A['task-done'] = function (el) {
+    var t = (S.state.tasks || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!t) return 'Задача не найдена.';
+    t.done = !t.done;
+    t.doneAt = t.done ? today() : '';
+    // повторяющаяся задача сразу заводит следующую
+    if (t.done && t.repeat && t.repeat !== 'нет') {
+      var step = { 'каждый день': 1, 'каждую неделю': 7, 'каждый месяц': 30 }[t.repeat] || 0;
+      if (step) {
+        S.add('tasks', { what: t.what, employee: t.employee, level: t.level, repeat: t.repeat,
+          note: t.note, done: false, due: ST().hourNum ? nextDue(t.due, step) : t.due,
+          at: new Date().toISOString() });
+      }
+    }
+    S.save(); refresh();
+    return t.done ? 'Отмечено: сделано.' : 'Вернули в работу.';
+  };
+  function nextDue(due, step) {
+    var d = new Date(due || today());
+    d.setDate(d.getDate() + step);
+    return d.toISOString().slice(0, 10);
+  }
+
   A['price-snap'] = function () {
     var D = U().data();
     if (!D.prices || !D.prices.length) return 'Сначала загрузите отчёт «Текущие цены поставщиков».';
@@ -1687,6 +1710,386 @@
 
 
 
+
+
+  /* --- Люди: график, табель, схемы оплаты, отпуска, задачи --------------------- */
+  function ST() { return window.WMStaff; }
+
+  function staffList() {
+    var names = {};
+    (S.state.staff || []).forEach(function (p) { names[SUP.norm(p.name)] = p.name; });
+    (S.state.timesheet || []).forEach(function (r) { if (r.employee) names[SUP.norm(r.employee)] = r.employee; });
+    (S.state.payouts || []).forEach(function (r) { if (r.employee) names[SUP.norm(r.employee)] = r.employee; });
+    return Object.keys(names).map(function (k) { return names[k]; }).sort();
+  }
+
+  // 91 — карточка сотрудника со схемой оплаты
+  FORMS.staffCard = {
+    editsInPlace: true,
+    title: 'Сотрудник', icon: '👤',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Имя', 'name', 'text', v.name || '') +
+        u.fieldRow('Должность', 'position', 'list', v.position || '',
+          { options: ['Продавец', 'Старший продавец', 'Кассир', 'Грузчик', 'Уборщица', 'Администратор'] }) +
+        u.fieldRow('Как считаем зарплату', 'scheme', 'select', v.scheme || ST().SCHEMES[0],
+          { options: ST().SCHEMES }) +
+        u.fieldRow('Ставка за час', 'rate', 'number', v.rate || '') +
+        u.fieldRow('Оклад за месяц', 'salary', 'number', v.salary || '') +
+        u.fieldRow('Норма смен в месяц', 'normShifts', 'number', v.normShifts || 15) +
+        u.fieldRow('Процент с выручки', 'percent', 'number', v.percent || '') +
+        u.fieldRow('Телефон', 'phone', 'text', v.phone || '') +
+        u.fieldRow('Когда принят', 'hired', 'date', v.hired || '') +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Схему можно смешивать: «Оклад + процент» считает и то, и другое. ' +
+      'Переработка идёт по полуторной ставке.',
+    save: function (v) {
+      if (!v.name) return 'Впишите имя.';
+      var reg = S.state.staff = S.state.staff || [];
+      var old = reg.filter(function (p) { return SUP.norm(p.name) === SUP.norm(v.name); })[0];
+      if (old) { Object.keys(v).forEach(function (k) { old[k] = v[k]; }); }
+      else S.add('staff', v);
+      S.save(); refresh();
+      return { ok: 'Сотрудник «' + v.name + '» сохранён: ' + v.scheme.toLowerCase() + '.' };
+    }
+  };
+
+  // 89 — плановая смена
+  FORMS.shiftPlan = {
+    title: 'Поставить в график', icon: '🗓',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Сотрудник', 'employee', 'list', v.employee || '', { options: staffList() }) +
+        u.fieldRow('Смена', 'shift', 'list', v.shift || '', { options: dict().shifts }) +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    save: function (v) {
+      if (!v.employee) return 'Выберите сотрудника.';
+      var busy = ST().busyOn(S.state.absences || [], v.employee, v.date);
+      if (busy && !confirm(v.employee + ' в этот день: ' + busy.kind + '. Всё равно поставить в график?')) {
+        return 'Не поставили.';
+      }
+      S.add('shiftplan', { date: v.date, employee: v.employee, shift: v.shift, note: v.note });
+      refresh();
+      return { ok: v.employee + ' поставлен на ' + dateRu(v.date) + (v.shift ? ' · ' + v.shift : '') };
+    }
+  };
+
+  // 95 — отпуск, больничный, отгул
+  FORMS.absence = {
+    title: 'Отпуск или больничный', icon: '🌴',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Сотрудник', 'employee', 'list', v.employee || '', { options: staffList() }) +
+        u.fieldRow('Что', 'kind', 'select', v.kind || 'Отпуск', { options: ST().ABSENCE }) +
+        u.fieldRow('С какого дня', 'from', 'date', v.from || today()) +
+        u.fieldRow('По какой день', 'to', 'date', v.to || today()) +
+        u.fieldRow('Оплачивается', 'paid', 'select', v.paid ? 'да' : 'нет', { options: ['да', 'нет'] }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    save: function (v) {
+      if (!v.employee) return 'Выберите сотрудника.';
+      if (v.to < v.from) return 'Дата «по» раньше даты «с».';
+      S.add('absences', { employee: v.employee, kind: v.kind, from: v.from, to: v.to,
+        paid: v.paid === 'да', note: v.note });
+      refresh();
+      var d = ST().absenceDays({ from: v.from, to: v.to });
+      return { ok: v.employee + ': ' + v.kind.toLowerCase() + ' на ' + d + ' ' +
+        U().plural(d, 'день', 'дня', 'дней') };
+    }
+  };
+
+  // 97 — задача сотруднику
+  FORMS.task = {
+    title: 'Задача сотруднику', icon: '✅',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Что сделать', 'what', 'text', v.what || '', { placeholder: 'проверить сроки в холодильнике' }) +
+        u.fieldRow('Кому', 'employee', 'list', v.employee || '', { options: staffList() }) +
+        u.fieldRow('До какого числа', 'due', 'date', v.due || today()) +
+        u.fieldRow('Насколько важно', 'level', 'select', v.level || 'обычная',
+          { options: ['обычная', 'важная', 'срочная'] }) +
+        u.fieldRow('Повторять', 'repeat', 'select', v.repeat || 'нет',
+          { options: ['нет', 'каждый день', 'каждую неделю', 'каждый месяц'] }) +
+        u.fieldRow('Подробности', 'note', 'text', v.note || '');
+    },
+    save: function (v) {
+      if (!v.what) return 'Напишите, что сделать.';
+      S.add('tasks', { what: v.what, employee: v.employee, due: v.due, level: v.level,
+        repeat: v.repeat, note: v.note, done: false, at: new Date().toISOString() });
+      refresh();
+      return { ok: 'Задача записана' + (v.employee ? ' для ' + v.employee : '') + '.' };
+    }
+  };
+
+  /* --- Экран «График смен» ------------------------------------------------------ */
+  function viewSchedule() {
+    var u = U();
+    var all = (S.state.timesheet || []).concat(S.state.shiftplan || []);
+    var ym = u.tab('sched', (all.length
+      ? all.map(function (r) { return r.date; }).sort().pop() : today()).slice(0, 7));
+    var sc = ST().schedule(S.state.shiftplan || [], S.state.timesheet || [], ym, S.state.staff || []);
+    var abs = S.state.absences || [];
+
+    var months = {};
+    all.forEach(function (r) { if (r.date) months[r.date.slice(0, 7)] = 1; });
+    months[today().slice(0, 7)] = 1; months[ym] = 1;
+    var monthList = Object.keys(months).sort().reverse();
+
+    var h = u.pageHead('График смен', 'Кто когда работает — на месяц вперёд',
+      '<div><button class="btn btn-primary" data-form="shiftPlan">🗓 Поставить в график</button> ' +
+      '<button class="btn" data-form="absence">🌴 Отпуск</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="filters"><div class="filter-line"><span class="filter-name">Месяц</span>' +
+      '<div class="chips">' + monthList.map(function (m) {
+        return '<button class="chip' + (m === ym ? ' active' : '') + '" data-tab="sched:' + m + '">' +
+          esc(F.monthName(m)) + '</button>';
+      }).join('') + '</div></div></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Дней без смен', u.nf(sc.gaps), 'в этом месяце некому работать',
+        sc.gaps ? 'c-red' : 'c-green') +
+      u.stat('Людей в графике', u.nf(sc.people.length), 'записаны в табеле или карточках') +
+      u.stat('Смен запланировано', u.nf(sc.days.reduce(function (a, d) { return a + d.planned; }, 0)), 'на месяц') +
+      u.stat('Смен отработано', u.nf(sc.days.reduce(function (a, d) { return a + d.worked; }, 0)), 'уже в табеле') +
+      '</div>';
+
+    // календарь месяца
+    var head = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    var first = (new Date(sc.days[0].date).getDay() + 6) % 7;
+    var cells = '<div class="sched-grid">' +
+      head.map(function (d) { return '<div class="sched-head">' + d + '</div>'; }).join('') +
+      new Array(first).fill('<div></div>').join('') +
+      sc.days.map(function (d) {
+        var busy = abs.filter(function (a) { return a.from <= d.date && a.to >= d.date; });
+        return '<div class="sched-cell' + (d.weekend ? ' weekend' : '') +
+          (d.empty ? ' empty' : '') + (d.date === today() ? ' now' : '') + '">' +
+          '<div class="sched-day">' + d.day + '</div>' +
+          d.people.slice(0, 4).map(function (x) {
+            return '<div class="sched-who' + (x.fact ? ' fact' : '') + '">' +
+              esc(String(x.who || '—').split(' ')[0]) + '</div>';
+          }).join('') +
+          (d.people.length > 4 ? '<div class="sched-more">+' + (d.people.length - 4) + '</div>' : '') +
+          busy.map(function (a) {
+            return '<div class="sched-abs">' + esc(String(a.employee).split(' ')[0]) + ': ' +
+              esc(String(a.kind).toLowerCase().slice(0, 5)) + '</div>';
+          }).join('') +
+          '</div>';
+      }).join('') + '</div>';
+    h += u.card('Календарь на ' + F.monthName(ym), cells,
+      '<span class="card-note">серым — план, синим — отработано</span>');
+
+    if (abs.length) {
+      h += u.card('Отпуска и больничные', u.table('absT', [
+        { title: 'Сотрудник', fn: function (r) { return DET().link('employee', r.employee, r.employee); } },
+        { title: 'Что', fn: function (r) { return u.badge(r.kind, r.kind === 'Прогул' ? 'red' :
+          (r.kind === 'Больничный' ? 'orange' : 'blue')); } },
+        { title: 'С', fn: function (r) { return esc(dateRu(r.from)); } },
+        { title: 'По', fn: function (r) { return esc(dateRu(r.to)); } },
+        { title: 'Дней', cls: 'num', fn: function (r) { return u.nf(ST().absenceDays(r)); } },
+        { title: 'Оплачен', cls: 'center', fn: function (r) {
+          return r.paid ? u.badge('да', 'green') : u.badge('нет', 'gray'); } },
+        { title: '', cls: 'center', fn: function (r) { return U().rowMenu('absences', r.id, { form: 'absence' }); } }
+      ], abs.slice().sort(function (a, b) { return (b.from || '').localeCompare(a.from || ''); }),
+        { step: 20 }));
+    }
+    return h;
+  }
+
+  /* --- Экран «Сотрудники»: схемы оплаты, аванс, табель с опозданиями ------------ */
+  function viewStaffCards() {
+    var u = U();
+    var people = staffList();
+    var range = u.periodRange();
+    function inR(d) { return d >= range.from && d <= range.to; }
+    var revenue = F.totals((S.state.dds || []).filter(function (r) { return inR(r.date); })).income;
+    var parts = ST().payParts(S.settings, range.from.slice(0, 7));
+
+    var rows = people.map(function (name) {
+      var person = ST().personOf(S.state.staff || [], name) || { name: name, scheme: 'Ставка за час' };
+      var shifts = (S.state.timesheet || []).filter(function (r) {
+        return SUP.norm(r.employee) === SUP.norm(name) && inR(r.date);
+      });
+      var paid = (S.state.payouts || []).filter(function (r) {
+        return SUP.norm(r.employee) === SUP.norm(name) && inR(r.date);
+      }).reduce(function (a, r) { return a + num(r.amount); }, 0);
+      var acc = ST().accrue(person, shifts, revenue / Math.max(1, people.length), 30);
+      var stats = ST().timesheetStats(shifts, S.settings);
+      var split = ST().splitPay(acc.total, S.settings, paid);
+      return { name: name, person: person, acc: acc, stats: stats, paid: SUP.round(paid), split: split,
+        absent: ST().absencesFor(S.state.absences || [], name, range.from, range.to).length };
+    });
+
+    var h = u.pageHead('Сотрудники', 'Схемы оплаты, опоздания и что кому выдать',
+      '<div><button class="btn btn-primary" data-form="staffCard">👤 Добавить сотрудника</button> ' +
+      '<button class="btn" data-form="task">✅ Задача</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="banner blue"><span>💰</span><span>Аванс — <b>' + dateRu(parts.advanceDate) +
+      '</b> (' + u.pct(parts.advancePct) + ' от начисленного), окончательный расчёт — <b>' +
+      dateRu(parts.finalDate) + '</b>. Даты и доля аванса задаются в настройках.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Начислено за период', u.priv(rows.reduce(function (a, r) { return a + r.acc.total; }, 0)),
+        u.nf(people.length) + ' ' + u.plural(people.length, 'человек', 'человека', 'человек')) +
+      u.stat('Выдано', u.priv(rows.reduce(function (a, r) { return a + r.paid; }, 0)), 'авансы и выплаты') +
+      u.stat('Осталось выдать', u.priv(rows.reduce(function (a, r) { return a + r.split.leftTotal; }, 0)),
+        'до окончательного расчёта', 'c-orange') +
+      u.stat('Опозданий', u.nf(rows.reduce(function (a, r) { return a + r.stats.late; }, 0)),
+        'смен с опозданием больше ' + (num(S.settings.lateGrace) || 5) + ' мин') +
+      '</div>';
+
+    h += u.card('Кому сколько', u.table('staffT', [
+      { title: 'Сотрудник', fn: function (r) { return DET().link('employee', r.name, r.name); } },
+      { title: 'Как считаем', fn: function (r) {
+        return u.badge(r.person.scheme || 'Ставка за час', 'gray') +
+          '<div class="c-muted" style="font-size:12px">' + esc(r.acc.how) + '</div>'; } },
+      { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.acc.shifts); } },
+      { title: 'Часов', cls: 'num', fn: function (r) { return u.nf(r.acc.hours); } },
+      { title: 'Опоздания', cls: 'num', fn: function (r) {
+        return r.stats.late ? '<span class="c-orange">' + r.stats.late + ' раз · ' +
+          Math.round(r.stats.lateMin) + ' мин</span>' : '<span class="c-green">нет</span>'; } },
+      { title: 'Переработка', cls: 'num', fn: function (r) {
+        return r.acc.overtime ? u.nf(r.acc.overtime) + ' ч (+' + E.fmtMoney(r.acc.overtimePay) + ')' : '—'; } },
+      { title: 'Начислено', cls: 'num', fn: function (r) { return u.priv(r.acc.total); } },
+      { title: 'Выдано', cls: 'num', fn: function (r) { return u.priv(r.paid); } },
+      { title: 'Аванс', cls: 'num', fn: function (r) {
+        return r.split.leftAdvance ? '<span class="c-orange private">' + E.fmtMoney(r.split.leftAdvance) + '</span>'
+          : '<span class="c-green">выдан</span>'; } },
+      { title: 'К выдаче', cls: 'num', fn: function (r) {
+        return '<b class="private">' + E.fmtMoney(r.split.leftTotal) + '</b>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm btn-primary" data-form="payout" data-employee="' + esc(r.name) +
+          '">Выдать</button> ' + DET().btn('employee', r.name, '👁'); } }
+    ], rows, { step: 40, empty: 'Сотрудников пока нет — нажмите «Добавить сотрудника»' }));
+
+    // 93 — личный кабинет: что видит сам сотрудник
+    var pick = u.tab('staffOne', rows.length ? rows[0].name : '');
+    if (rows.length) {
+      h += '<div class="filters"><div class="filter-line"><span class="filter-name">Показать по человеку</span>' +
+        '<div class="chips">' + rows.map(function (r) {
+          return '<button class="chip' + (r.name === pick ? ' active' : '') + '" data-tab="staffOne:' +
+            encodeURIComponent(r.name) + '">' + esc(r.name) + '</button>';
+        }).join('') + '</div></div></div>';
+      var one = rows.filter(function (r) { return r.name === decodeURIComponent(pick); })[0] || rows[0];
+      var myShifts = (S.state.timesheet || []).filter(function (r) {
+        return SUP.norm(r.employee) === SUP.norm(one.name) && inR(r.date);
+      }).sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+      var myTasks = ST().tasksFor(S.state.tasks || [], one.name);
+
+      h += u.card('Личный лист: ' + esc(one.name), u.listOf([
+        u.listRow({ icon: '📅', title: 'Смен за период', value: u.nf(one.acc.shifts) }),
+        u.listRow({ icon: '⏱', title: 'Часов', sub: one.acc.overtime ? 'из них переработка ' + one.acc.overtime + ' ч' : '',
+          value: u.nf(one.acc.hours) }),
+        u.listRow({ icon: '💰', title: 'Начислено', sub: one.acc.how, value: u.priv(one.acc.total) }),
+        u.listRow({ icon: '🎁', title: 'Премии', value: one.acc.bonus ? u.priv(one.acc.bonus) : '—' }),
+        u.listRow({ icon: '⚠️', title: 'Штрафы',
+          value: one.acc.penalty ? '<span class="c-red private">' + E.fmtMoney(one.acc.penalty) + '</span>' : '—' }),
+        u.listRow({ icon: '✅', title: 'Выдано', value: u.priv(one.paid) }),
+        u.listRow({ icon: '📆', title: 'Пунктуальность',
+          sub: one.stats.late ? one.stats.late + ' опозданий' : 'без опозданий',
+          value: u.pct(one.stats.punctual) }),
+        u.listRow({ icon: '🌴', title: 'Отпуска и больничные за период', value: u.nf(one.absent) })
+      ], ''), '<b class="private">к выдаче ' + E.fmtMoney(one.split.leftTotal) + '</b>');
+
+      h += u.card('Смены ' + esc(one.name), u.table('oneShifts', [
+        { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+        { title: 'Смена', fn: function (r) { return esc(r.shift || '—'); } },
+        { title: 'Пришёл', fn: function (r) { return esc(r.factIn || '—'); } },
+        { title: 'Ушёл', fn: function (r) { return esc(r.factOut || '—'); } },
+        { title: 'Часы', cls: 'num', fn: function (r) { return u.nf(num(r.hours)); } },
+        { title: 'Опоздание', cls: 'num', fn: function (r) {
+          var tm = ST().shiftTiming(r, S.settings);
+          return tm.lateMin ? '<span class="c-orange">' + Math.round(tm.lateMin) + ' мин</span>' : '—'; } },
+        { title: 'Начислено', cls: 'num', fn: function (r) { return u.priv(E.timesheetCalc(r)); } },
+        { title: '', cls: 'center', fn: function (r) { return U().rowMenu('timesheet', r.id, { form: 'timesheet' }); } }
+      ], myShifts, { step: 30, empty: 'Смен за период нет' }));
+
+      if (myTasks.length) {
+        h += u.card('Задачи ' + esc(one.name), u.listOf(myTasks.map(function (t) {
+          return u.listRow({ icon: t.done ? '✅' : (t.due < today() ? '🔴' : '⬜️'),
+            title: esc(t.what), sub: (t.due ? 'до ' + dateRu(t.due) : '') + (t.level !== 'обычная' ? ' · ' + t.level : ''),
+            value: t.done ? '<span class="c-green">сделано</span>'
+              : '<button class="btn btn-sm" data-act="task-done" data-id="' + esc(t.id) + '">Готово</button>' });
+        }), ''));
+      }
+    }
+    return h;
+  }
+
+  /* --- 96/97. Задачи и кто был на смене ----------------------------------------- */
+  function viewTasks() {
+    var u = U();
+    var tasks = ST().tasksFor(S.state.tasks || []);
+    var t = ST().taskStats(tasks);
+    var cases = ST().shortageCases(S.state, num(S.settings.shortageMin) || 100);
+
+    var h = u.pageHead('Задачи и разбор недостач',
+      'Что поручено сотрудникам и кто был на смене, когда деньги не сошлись',
+      '<div><button class="btn btn-primary" data-form="task">✅ Новая задача</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Задач всего', u.nf(t.all), 'за всё время') +
+      u.stat('Сделано', u.nf(t.done), u.pct(t.share) + ' от всех', 'c-green') +
+      u.stat('В работе', u.nf(t.open), 'ждут выполнения', t.open ? 'c-orange' : 'c-green') +
+      u.stat('Просрочено', u.nf(t.late), 'срок прошёл', t.late ? 'c-red' : 'c-green') +
+      '</div>';
+
+    var defs = [
+      { key: 'st', name: 'Состояние', options: [
+        { v: 'open', name: 'В работе', test: function (x) { return !x.done; } },
+        { v: 'late', name: 'Просрочены', test: function (x) { return !x.done && x.due && x.due < today(); } },
+        { v: 'done', name: 'Сделаны', test: function (x) { return !!x.done; } }
+      ] },
+      { key: 'who', name: 'Кому', auto: function (x) { return x.employee; }, limit: 12 },
+      { key: 'lvl', name: 'Важность', auto: function (x) { return x.level; }, limit: 4 }
+    ];
+    var list = FLT().apply('tasks', tasks, defs, function (x) { return x.what + ' ' + (x.employee || ''); });
+    if (tasks.length) h += FLT().bar('tasks', defs, tasks, { search: 'задача или человек' });
+
+    h += u.card('Задачи', FLT().note(list.length, tasks.length) + u.table('taskT', [
+      { title: '', cls: 'center', fn: function (x) {
+        return x.done ? '✅' : '<button class="btn btn-sm" data-act="task-done" data-id="' + esc(x.id) + '">Готово</button>'; } },
+      { title: 'Что сделать', fn: function (x) {
+        return (x.done ? '<s>' : '') + esc(x.what) + (x.done ? '</s>' : ''); } },
+      { title: 'Кому', fn: function (x) {
+        return x.employee ? DET().link('employee', x.employee, x.employee) : '—'; } },
+      { title: 'До', fn: function (x) {
+        var late = !x.done && x.due && x.due < today();
+        return '<span class="' + (late ? 'c-red' : '') + '">' + esc(dateRu(x.due)) + '</span>'; } },
+      { title: 'Важность', cls: 'center', fn: function (x) {
+        return x.level === 'обычная' ? '' : u.badge(x.level, x.level === 'срочная' ? 'red' : 'orange'); } },
+      { title: 'Повтор', fn: function (x) { return x.repeat && x.repeat !== 'нет' ? esc(x.repeat) : '—'; } },
+      { title: '', cls: 'center', fn: function (x) { return U().rowMenu('tasks', x.id, { form: 'task' }); } }
+    ], list, { step: 40, empty: 'Задач пока нет' }));
+
+    // 96 — кто был на смене, когда деньги не сошлись
+    h += u.card('Когда деньги не сошлись', u.table('shortT', [
+      { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+      { title: 'Где', fn: function (r) { return u.badge(r.kind, r.kind === 'пересчёт' ? 'orange' : 'blue'); } },
+      { title: 'Смена', fn: function (r) { return esc(r.shift || '—'); } },
+      { title: 'Расхождение', cls: 'num', fn: function (r) {
+        return '<span class="' + (r.diff < 0 ? 'c-red' : 'c-orange') + ' private">' +
+          E.fmtMoney(r.diff) + '</span>'; } },
+      { title: 'Кассир', fn: function (r) {
+        return r.cashier ? DET().link('employee', r.cashier, r.cashier) : '—'; } },
+      { title: 'Кто ещё был на смене', fn: function (r) {
+        return r.who.length
+          ? r.who.map(function (w) { return DET().link('employee', w.who, w.who); }).join(', ')
+          : '<span class="c-muted">никто не отмечен в табеле</span>'; } }
+    ], cases, { step: 30, empty: 'Деньги всегда сходились' }),
+      cases.length ? u.nf(cases.length) + ' ' + u.plural(cases.length, 'случай', 'случая', 'случаев') : '');
+
+    if (cases.length) {
+      h += '<div class="banner"><span>&#128161;</span><span>Чтобы в этой таблице было видно всех, кто работал, ' +
+        'записывайте смены в табель — тогда программа знает, кто был рядом с кассой, а не только кто её сдавал.</span></div>';
+    }
+    return h;
+  }
 
   /* --- Цены, сезонность, полки, возвраты поставщику ---------------------------- */
   function GD() { return window.WMGoods; }
@@ -3238,6 +3641,9 @@
     { id: 'compare', icon: '📐', name: 'Сравнение периодов', group: 'Отчёты', render: viewCompare, after: 'finreport' },
     { id: 'markup', icon: '💹', name: 'Кто зарабатывает', group: 'Отчёты', render: viewMarkup, after: 'compare' },
     { id: 'payroll', icon: '🧾', name: 'Ведомость зарплаты', group: 'Отчёты', render: viewPayroll, after: 'markup' },
+    { id: 'sched', icon: '🗓', name: 'График смен', group: 'Деньги', render: viewSchedule, after: 'staff' },
+    { id: 'staffcards', icon: '👤', name: 'Сотрудники', group: 'Деньги', render: viewStaffCards, after: 'sched' },
+    { id: 'tasks', icon: '✅', name: 'Задачи и недостачи', group: 'Деньги', render: viewTasks, after: 'staffcards' },
     { id: 'pricelog', icon: '📸', name: 'История цен', group: 'Товары', render: viewPriceLog, after: 'pricecmp' },
     { id: 'seasons', icon: '🗓', name: 'Сезонность', group: 'Товары', render: viewSeasons, after: 'pricelog' },
     { id: 'shelf', icon: '🧱', name: 'Полки: что окупает место', group: 'Товары', render: viewShelf, after: 'seasons' },

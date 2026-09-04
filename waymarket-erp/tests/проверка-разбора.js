@@ -23,6 +23,7 @@ const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
 const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
 const FRC = require(path.join(__dirname, '..', 'js', 'forecast.js'));
 const GDS = require(path.join(__dirname, '..', 'js', 'goods.js'));
+const STF = require(path.join(__dirname, '..', 'js', 'staff.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1493,6 +1494,93 @@ console.log('— Цены, сезонность и полки');
   check('возвраты сложились', rt.sum === 4000 && rt.count === 2, WM.fmtMoney(rt.sum), '4 000 ₽');
   check('непринятые возвраты видны отдельно', rt.waiting === 1 && rt.waitingSum === 1500,
     WM.fmtMoney(rt.waitingSum), '1 500 ₽');
+  console.log('');
+}
+
+/* Люди: график, схемы оплаты, опоздания, отпуска, задачи */
+console.log('— Сотрудники: график, оплата, опоздания');
+{
+  const set = { dayStart: '09:00', nightStart: '21:00', lateGrace: 5,
+    advanceDay: 25, salaryDay: 10, advancePct: 40 };
+
+  // опоздания и переработки
+  const late = STF.shiftTiming({ planIn: '09:00', factIn: '09:25', planOut: '21:00', factOut: '22:30' }, set);
+  check('опоздание считается в минутах', late.lateMin === 25, late.lateMin, 25);
+  check('переработка считается в часах', late.overtime === 1.5, late.overtime, 1.5);
+  const ok = STF.shiftTiming({ factIn: '09:03', factOut: '21:00' }, set);
+  check('три минуты — не опоздание', ok.lateMin === 0 && ok.onTime === true, 'вовремя', 'вовремя');
+  check('ранний уход виден',
+    STF.shiftTiming({ factIn: '09:00', factOut: '20:00' }, set).earlyMin === 60,
+    STF.shiftTiming({ factIn: '09:00', factOut: '20:00' }, set).earlyMin, 60);
+
+  // схемы оплаты
+  const shifts = [{ hours: 12, rate: 200, bonus: 500, penalty: 0, overtime: 1.5 }, { hours: 12, rate: 200 }];
+  const byHour = STF.accrue({ scheme: 'Ставка за час', rate: 200 }, shifts, 0, 30);
+  check('оплата по часам: часы × ставка + переработка ×1,5 + премия',
+    byHour.total === 24 * 200 + 1.5 * 200 * 1.5 + 500, WM.fmtMoney(byHour.total), '5 750 ₽');
+  const bySalary = STF.accrue({ scheme: 'Оклад за месяц', salary: 40000, normShifts: 15 }, shifts, 0, 30);
+  check('оклад делится пропорционально отработанным сменам',
+    bySalary.base === 5333.33, WM.fmtMoney(bySalary.base), '5 333,33 ₽');
+  const both = STF.accrue({ scheme: 'Оклад + процент', salary: 30000, normShifts: 2, percent: 1 },
+    shifts, 500000, 30);
+  check('«оклад + процент» складывает обе части',
+    both.base === 30000 && both.percent === 5000, WM.fmtMoney(both.total), '35 950 ₽');
+  check('полная норма смен даёт полный оклад', both.base === 30000, WM.fmtMoney(both.base), '30 000 ₽');
+
+  // аванс и окончательный расчёт
+  const parts = STF.payParts(set, '2026-09');
+  check('аванс и расчёт стоят на своих датах',
+    parts.advanceDate === '2026-09-25' && parts.finalDate === '2026-10-10',
+    parts.advanceDate + ' и ' + parts.finalDate, '25.09 и 10.10');
+  const split = STF.splitPay(50000, set, 10000);
+  check('аванс — доля от начисленного', split.advance === 20000, WM.fmtMoney(split.advance), '20 000 ₽');
+  check('видно, сколько ещё выдать', split.leftTotal === 40000, WM.fmtMoney(split.leftTotal), '40 000 ₽');
+
+  // отпуска
+  check('дни отпуска считаются включительно',
+    STF.absenceDays({ from: '2026-09-01', to: '2026-09-14' }) === 14, 14, 14);
+  const abs = [{ employee: 'Артём', kind: 'Отпуск', from: '2026-09-12', to: '2026-09-20' }];
+  check('занятость в отпускной день видна',
+    !!STF.busyOn(abs, 'Артём', '2026-09-15'), 'занят', 'занят');
+  check('вне отпуска человек свободен',
+    STF.busyOn(abs, 'Артём', '2026-09-25') === null, 'свободен', 'свободен');
+
+  // график смен
+  const sc = STF.schedule(
+    [{ date: '2026-09-01', employee: 'Артём', shift: 'Ночь' }],
+    [{ date: '2026-09-01', employee: 'Марина', shift: 'День', hours: 12 }],
+    '2026-09', [{ name: 'Марина' }, { name: 'Артём' }]);
+  check('в месяце столько дней, сколько есть', sc.daysIn === 30, sc.daysIn, 30);
+  check('день с людьми не считается дырой', sc.days[0].empty === false, 'занят', 'занят');
+  check('дни без смен посчитаны', sc.gaps === 29, sc.gaps, 29);
+  check('план и факт различаются',
+    sc.days[0].planned === 1 && sc.days[0].worked === 1, '1 план / 1 факт', '1 / 1');
+
+  // кто был на смене, когда деньги не сошлись
+  const st = {
+    dds: [{ date: '2026-09-07', type: 'Приход', amount: 40000, cashier: 'Марина', shift: 'День', diff: -800 },
+          { date: '2026-09-08', type: 'Приход', amount: 40000, cashier: 'Марина', shift: 'День', diff: -50 }],
+    timesheet: [{ date: '2026-09-07', employee: 'Марина', shift: 'День', hours: 12 },
+                { date: '2026-09-07', employee: 'Артём', shift: 'День', hours: 6 }],
+    cashcount: []
+  };
+  const cases = STF.shortageCases(st, 100);
+  check('мелкие расхождения в разбор не идут', cases.length === 1, cases.length, 1);
+  check('видно всех, кто был на смене', cases[0].who.length === 2,
+    cases[0].who.map(w => w.who).join(', '), 'Марина, Артём');
+
+  // задачи
+  const tasks = [
+    { id: '1', what: 'Сроки', employee: 'Марина', due: '2020-01-01', done: false },
+    { id: '2', what: 'Витрина', employee: 'Артём', due: '2030-01-01', done: true },
+    { id: '3', what: 'Полы', employee: 'Марина', due: '2030-01-01', done: false }
+  ];
+  const ts = STF.taskStats(tasks);
+  check('задачи посчитаны', ts.all === 3 && ts.done === 1 && ts.open === 2,
+    ts.done + ' из ' + ts.all, '1 из 3');
+  check('просроченная задача видна', ts.late === 1, ts.late, 1);
+  check('сделанные уходят вниз списка',
+    STF.tasksFor(tasks)[2].done === true, 'внизу', 'внизу');
   console.log('');
 }
 

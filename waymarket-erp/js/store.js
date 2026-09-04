@@ -67,7 +67,7 @@
 
     // Смены и касса
     dayStart: '09:00', nightStart: '21:00', shiftHours: 12,
-    cashLimit: 0, mainCashName: 'Касса', cashPlaces: 'Сейф', payoutLimit: 0, acquiringFee: 2, debtInterest: 0, rentDay: 5, salaryDay: 10, utilitiesDay: 15, legalForm: 'ИП', ipFixed: 53658, patentSum: 0, priceJumpPct: 5,           // предупреждать, если наличных в кассе больше
+    cashLimit: 0, mainCashName: 'Касса', cashPlaces: 'Сейф', payoutLimit: 0, acquiringFee: 2, debtInterest: 0, rentDay: 5, salaryDay: 10, utilitiesDay: 15, legalForm: 'ИП', ipFixed: 53658, patentSum: 0, priceJumpPct: 5, lateGrace: 5, advanceDay: 25, advancePct: 40, shortageMin: 100,           // предупреждать, если наличных в кассе больше
     diffCritPct: 0,         // либо если расхождение больше % от выручки
 
     // Зарплата
@@ -103,6 +103,7 @@
     'docs', 'pays', 'supreg', 'debtors',
     // пересчёты кассы по купюрам и журнал действий владельца
     'cashcount', 'log', 'templates', 'bank', 'offsets', 'returns2', 'pricelog',
+    'staff', 'shiftplan', 'absences', 'tasks',
     // корзина: всё удалённое лежит здесь, пока не почистят
     'trash'];
 

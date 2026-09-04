@@ -444,3 +444,18 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 /* --- Полоска доли в таблице --------------------------------------------------- */
 .bar-line { background: var(--fill-2); border-radius: 4px; height: 8px; width: 120px; overflow: hidden; }
 .bar-line span { display: block; height: 100%; border-radius: 4px; }
+
+/* --- График смен -------------------------------------------------------------- */
+.sched-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 0 18px 18px; }
+.sched-head { font-size: 12px; color: var(--label-2); text-align: center; padding: 4px 0; font-weight: 600; }
+.sched-cell { border-radius: 10px; background: var(--fill-2); padding: 6px 7px; min-height: 74px; }
+.sched-cell.weekend { background: color-mix(in srgb, var(--orange) 8%, var(--fill-2)); }
+.sched-cell.empty { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.sched-cell.now { outline: 2px solid var(--blue); }
+.sched-day { font-size: 12px; color: var(--label-2); margin-bottom: 3px; }
+.sched-who { font-size: 12px; padding: 2px 5px; border-radius: 5px; background: var(--fill);
+  margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-who.fact { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); font-weight: 600; }
+.sched-abs { font-size: 11px; color: var(--orange); margin-top: 2px; }
+.sched-more { font-size: 11px; color: var(--label-3); }
+@media (max-width: 700px) { .sched-cell { min-height: 58px; padding: 4px; } .sched-who { font-size: 10.5px; } }
