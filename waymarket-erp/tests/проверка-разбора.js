@@ -19,6 +19,7 @@ const NUM = require(path.join(__dirname, '..', 'js', 'numpad.js'));
 const ALR = require(path.join(__dirname, '..', 'js', 'alerts.js'));
 const INP = require(path.join(__dirname, '..', 'js', 'input.js'));
 const EXT = require(path.join(__dirname, '..', 'js', 'extras.js'));
+const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1174,6 +1175,81 @@ console.log('— Сравнения и ведомости');
   const spark = EXT.spark([1, 5, 3, 8, 2]);
   check('спарклайн рисуется', spark.indexOf('<svg') === 0 && spark.indexOf('path') > 0, 'есть', 'есть');
   check('из одной точки график не строится', EXT.spark([5]) === '', 'пусто', 'пусто');
+  console.log('');
+}
+
+/* Запись строкой: «аренда 168000 переводом» раскладывается по полям */
+console.log('— Запись одной строкой');
+{
+  const d = { categories: ['Аренда', 'Закуп товара', 'ЗП', 'Коммуналка', 'Хозтовары'],
+    suppliers: ['Молоко Юг', 'Пекарня'], employees: ['Марина'] };
+  const t = new Date().toISOString().slice(0, 10);
+  const yest = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  function line(text) { return ENT.parseLine(text, d); }
+  let p = line('аренда 168000 переводом');
+  check('«аренда 168000 переводом»',
+    p.amount === 168000 && p.category === 'Аренда' && p.method === 'Перевод' && p.type === 'Расход',
+    p.amount + ' · ' + p.category + ' · ' + p.method, '168000 · Аренда · Перевод');
+
+  p = line('вчера закуп товара 45000 наличными');
+  check('«вчера» превращается во вчерашнюю дату', p.date === yest, p.date, yest);
+  check('способ оплаты понят', p.method === 'Наличные', p.method, 'Наличные');
+
+  p = line('5 тыс коммуналка');
+  check('«5 тыс» — это 5 000, а не 5', p.amount === 5000, p.amount, 5000);
+  p = line('15к аренда');
+  check('«15к» — это 15 000', p.amount === 15000, p.amount, 15000);
+  p = line('хозтовары 1 250,50 налом');
+  check('разряды с пробелом читаются как одна сумма', p.amount === 1250.5, p.amount, 1250.5);
+
+  p = line('коммуналка 3000');
+  check('«коммуНАЛка» не становится «наличными»', !p.method, p.method || 'способ не выбран', 'способ не выбран');
+  p = line('картошка 500');
+  check('«КАРТошка» не становится «картой»', !p.method, p.method || 'способ не выбран', 'способ не выбран');
+
+  p = line('молоко юг 12500 в долг');
+  check('поставщик из двух слов найден', p.supplier === 'Молоко Юг', p.supplier, 'Молоко Юг');
+  check('«в долг» — это долг, а не расход', p.type === 'Долг', p.type, 'Долг');
+  check('имя поставщика не осталось в комментарии', !p.note, p.note || 'пусто', 'пусто');
+
+  p = line('марине зп 15000');
+  check('сотрудник узнаётся по корню слова', p.employee === 'Марина', p.employee, 'Марина');
+
+  p = line('приход 25000 наличными');
+  check('«приход» — это приход', p.type === 'Приход' && p.amount === 25000,
+    p.type + ' ' + p.amount, 'Приход 25000');
+
+  p = line('12.09 пекарня 3200 картой');
+  check('дата числом читается', p.date.slice(5) === '09-12', p.date, '…-09-12');
+  check('число рядом со словом «картой» не раздувается', p.amount === 3200, p.amount, 3200);
+
+  check('строка без суммы не сохраняется', line('мусор без цифр').__ok === false, 'не сохранится', 'не сохранится');
+  check('пустая строка ничего не ломает', ENT.parseLine('', d) === null, 'null', 'null');
+
+  const bulk = ENT.parseBulk('аренда 168000 переводом\n\nхлам\nзп 15000 наличными', d);
+  check('массовый ввод: пустые строки пропускаются', bulk.length === 3, bulk.length, 3);
+  check('массовый ввод: непонятная строка помечена', bulk.filter(r => !r.ok).length === 1,
+    bulk.filter(r => !r.ok).length, 1);
+  check('массовый ввод: номера строк сохраняются', bulk[2].no === 4, bulk[2].no, 4);
+
+  // буфер записи
+  ENT.clearClip();
+  ENT.copy({ id: 'x', key: 'k', date: '2026-09-01', category: 'Аренда', amount: 1000, __tmp: 1 }, 'dds');
+  const c = ENT.clip();
+  check('в буфер не попадают id и служебные поля',
+    c.values.id === undefined && c.values.key === undefined && c.values.__tmp === undefined,
+    Object.keys(c.values).join(','), 'без id и key');
+  check('в буфере остаётся суть записи', c.values.category === 'Аренда' && c.values.amount === 1000,
+    c.values.category + ' ' + c.values.amount, 'Аренда 1000');
+
+  // отмена последнего действия
+  const log = [{ id: '1', what: 'правка', before: { a: 1 } },
+    { id: '2', what: 'удаление', before: { a: 2 }, undone: true },
+    { id: '3', what: 'добавление', before: null }];
+  check('на отмену берётся последнее неотменённое с историей',
+    ENT.lastUndoable(log).id === '1', ENT.lastUndoable(log).id, '1');
+  check('когда отменять нечего — не падаем', ENT.lastUndoable([]) === null, 'null', 'null');
   console.log('');
 }
 

@@ -651,6 +651,13 @@
     var draft = Q.loadDraft(tab) || {};
     var h = u.pageHead('Записать', 'Всё, чего нет в выгрузках 1С: касса, расходы, зарплата, списания, долги');
 
+    h += '<div class="quick">' +
+      '<button class="btn btn-primary" data-form="quickLine">⌨️ Записать строкой</button>' +
+      '<button class="btn" data-form="bulkLines">📋 Много записей сразу</button>' +
+      '<button class="btn" data-act="repeat-shift">↻ Как в прошлый раз</button>' +
+      (EN().clip() ? '<button class="btn" data-act="rec-paste">📎 Вставить скопированное</button>' : '') +
+      '</div>';
+
     h += '<div class="stat-grid">' + MANUAL_TABS.map(function (t) {
       return '<div class="stat" data-tab="manual:' + t.key + '" ' +
         'style="cursor:pointer;align-items:center;text-align:center;gap:7px' +
@@ -832,11 +839,14 @@
       { title: 'Подробности', fn: function (r) { return '<span class="c-muted">' + esc(r.sub) + '</span>'; } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
       { title: '', cls: 'center', fn: function (r) {
-        return moreFor(r) +
-          ' <button class="btn btn-sm" data-act="q-repeat" data-coll="' + r.coll + '" data-id="' + r.id +
-          '" data-target="' + r.form + '" title="Повторить">↻</button> ' +
-          '<button class="btn btn-sm" data-edit="' + r.coll + ':' + r.id + ':' + r.form + '" title="Исправить">✎</button> ' +
-          '<button class="btn btn-sm btn-danger" data-del="' + r.coll + ':' + r.id + '" title="Удалить">✕</button>'; } }
+        // все действия в одном меню: смотреть, изменить, повторить, копировать, удалить
+        var mk = MORE_BY_COLL[r.coll];
+        var moreKey = mk === 'day' ? r.date
+          : (mk === 'firm' || mk === 'product' || mk === 'employee' ? E.norm(r.title) : r.id);
+        return U().rowMenu(r.coll, r.id, {
+          form: r.form,
+          more: mk && moreKey ? { kind: mk, key: moreKey } : null
+        }); } }
     ], rows, { step: 50, empty: FLT().active('records') ? 'Под фильтр ничего не подошло' : 'Записей пока нет' }),
       FLT().note(rows.length, allRows.length) ||
       (rows.length + ' ' + u.plural(rows.length, 'запись', 'записи', 'записей')));
@@ -1604,6 +1614,124 @@
   /* --- Регистрация экранов --------------------------------------------------- */
 
 
+
+
+  /* --- Быстрая строка и массовый ввод -----------------------------------------
+     31 — «аренда 168000 переводом» одной строкой, без полей.
+     29 — та же строка, но много: таблица вместо формы на каждую запись.
+     -------------------------------------------------------------------- */
+  function EN() { return window.WMEntry; }
+
+  function parsedRow(p) {
+    if (!p) return '';
+    var bits = [];
+    bits.push(esc(dateRu(p.date)));
+    bits.push(u2b(p.type));
+    if (p.amount) bits.push('<b class="private">' + E.fmtMoney(p.amount) + '</b>');
+    if (p.category) bits.push(esc(p.category));
+    if (p.method) bits.push(esc(p.method));
+    if (p.supplier) bits.push(esc(p.supplier));
+    if (p.employee) bits.push(esc(p.employee));
+    return bits.join(' · ');
+  }
+  function u2b(type) {
+    return U().badge(type, type === 'Приход' ? 'green' : (type === 'Долг' ? 'orange' :
+      (type === 'Забор' ? 'blue' : 'red')));
+  }
+
+  FORMS.quickLine = {
+    title: 'Записать строкой', icon: '⌨️',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return '<div class="form-row"><label>Напишите как думаете' +
+        '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' +
+        'Программа сама разложит по полям: дату, сумму, статью, способ оплаты.</small></label>' +
+        '<input type="text" name="line" class="quick-line" value="' + esc(v.line || '') + '" ' +
+        'placeholder="аренда 168000 переводом">' +
+        '<div class="quick-parsed" id="quickParsed"></div></div>' +
+        '<div class="banner blue"><span>&#128161;</span><span>Так тоже понимает: ' +
+        '«вчера закуп товара 45000 наличными», «5 тыс коммуналка», «12.09 пекарня 3200 картой», ' +
+        '«молоко юг 12500 в долг».</span></div>';
+    },
+    save: function (v) {
+      var p = EN().parseLine(v.line, dict());
+      if (!p || !p.__ok) return 'Не нашлась сумма. Напишите, сколько денег, — например «аренда 168000 переводом».';
+      learn({ categories: p.category, methods: p.method, suppliers: p.supplier, employees: p.employee });
+      S.add('dds', {
+        date: p.date, shift: '', cashier: '', type: p.type,
+        category: p.category || 'Другое', method: p.method || 'Наличные',
+        amount: p.amount, diff: 0, note: p.note || '', src: 'строкой'
+      });
+      refresh();
+      return { ok: 'Записано: ' + p.type.toLowerCase() + ' ' + E.fmtMoney(p.amount) +
+        (p.category ? ' · ' + p.category : '') };
+    }
+  };
+
+  FORMS.bulkLines = {
+    title: 'Много записей сразу', icon: '📋',
+    body: function (v) {
+      v = v || {};
+      return '<div class="form-row"><label>По одной записи в строке' +
+        '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' +
+        'Можно вставить из блокнота или Excel. Пустые строки пропускаются.</small></label>' +
+        '<textarea name="lines" class="bulk-lines" rows="9" ' +
+        'placeholder="аренда 168000 переводом&#10;вчера закуп товара 45000 наличными&#10;5 тыс коммуналка">' +
+        esc(v.lines || '') + '</textarea>' +
+        '<div class="bulk-preview" id="bulkPreview"></div></div>';
+    },
+    hint: 'Строки, где не нашлась сумма, подсвечены красным — они не сохранятся.',
+    save: function (v) {
+      var rows = EN().parseBulk(v.lines, dict());
+      var good = rows.filter(function (r) { return r.ok; });
+      if (!good.length) return 'Ни одной понятной строки. В каждой должна быть сумма.';
+      var bad = rows.length - good.length;
+      good.forEach(function (r) {
+        var p = r.parsed;
+        learn({ categories: p.category, methods: p.method, suppliers: p.supplier, employees: p.employee });
+        S.add('dds', {
+          date: p.date, shift: '', cashier: '', type: p.type,
+          category: p.category || 'Другое', method: p.method || 'Наличные',
+          amount: p.amount, diff: 0, note: p.note || '', src: 'списком'
+        });
+      });
+      refresh();
+      var sum = good.reduce(function (a, r) { return a + r.parsed.amount; }, 0);
+      return { ok: 'Записано ' + good.length + ' ' + U().plural(good.length, 'строка', 'строки', 'строк') +
+        ' на ' + E.fmtMoney(sum) + (bad ? '. Пропущено непонятных: ' + bad : '') };
+    }
+  };
+
+  // Живая раскладка: печатаете — под полем видно, что поняла программа
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (el.classList && el.classList.contains('quick-line')) {
+      var box = document.getElementById('quickParsed');
+      if (!box) return;
+      var p = EN().parseLine(el.value, dict());
+      box.innerHTML = !el.value.trim() ? ''
+        : (p && p.__ok ? '<span class="c-green">Поняла:</span> ' + parsedRow(p)
+          : '<span class="c-red">Не вижу суммы</span> — напишите, сколько денег');
+      return;
+    }
+    if (el.classList && el.classList.contains('bulk-lines')) {
+      var pv = document.getElementById('bulkPreview');
+      if (!pv) return;
+      var rows = EN().parseBulk(el.value, dict());
+      if (!rows.length) { pv.innerHTML = ''; return; }
+      var okN = rows.filter(function (r) { return r.ok; }).length;
+      var sum = rows.filter(function (r) { return r.ok; })
+        .reduce(function (a, r) { return a + r.parsed.amount; }, 0);
+      pv.innerHTML = '<div class="bulk-head">Поняла ' + okN + ' из ' + rows.length +
+        ' · на <b class="private">' + E.fmtMoney(sum) + '</b></div>' +
+        rows.map(function (r) {
+          return '<div class="bulk-row' + (r.ok ? '' : ' bad') + '">' +
+            '<span class="bulk-no">' + r.no + '</span>' +
+            (r.ok ? parsedRow(r.parsed)
+              : '<span class="c-red">' + esc(r.raw) + ' — ' + esc(r.why) + '</span>') + '</div>';
+        }).join('');
+    }
+  });
 
   /* --- Пересчёт кассы по купюрам --------------------------------------------
      Кассир не считает в уме: вбивает, сколько каких купюр в ящике, программа

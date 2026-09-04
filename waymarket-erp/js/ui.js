@@ -31,6 +31,50 @@
   var AL = window.WMAlerts;   // что горит прямо сейчас
   var IN = window.WMInput;    // сканер, голос, шаблоны, горячие клавиши
   var X = window.WMExtra;     // сравнения, спарклайны, ведомости
+  var EN = window.WMEntry;    // разбор строки, буфер, массовый ввод, отмена
+
+  /* --- 44. Меню «⋮» у строки: все действия в одном месте ---------------------- */
+  function rowMenu(coll, id, opts) {
+    opts = opts || {};
+    var acts = EN.rowMenu({ more: opts.more, form: opts.form, extra: opts.extra });
+    return '<span class="row-menu"><button class="row-menu-btn" data-menu="' +
+      esc(coll) + ':' + esc(id) + ':' + esc(opts.form || '') + ':' +
+      esc(opts.more ? opts.more.kind + '|' + opts.more.key : '') + '" title="Действия">⋮</button></span>';
+  }
+
+  function openRowMenu(btn) {
+    closeRowMenu();
+    var p = btn.dataset.menu.split(':');
+    var coll = p[0], id = p[1], form = p[2], more = p[3];
+    var rec = (S.state[coll] || []).filter(function (x) { return x.id === id; })[0];
+    var items = [];
+    if (more) items.push(['more', '👁', 'Подробнее', 'data-more="' + esc(more) + '"']);
+    if (form) items.push(['edit', '✎', 'Изменить', 'data-edit="' + esc(coll + ':' + id + ':' + form) + '"']);
+    if (form) items.push(['repeat', '↻', 'Повторить сегодня',
+      'data-act="q-repeat" data-coll="' + esc(coll) + '" data-id="' + esc(id) + '" data-target="' + esc(form) + '"']);
+    items.push(['copy', '⧉', 'Копировать', 'data-act="rec-copy" data-coll="' + esc(coll) + '" data-id="' + esc(id) + '"']);
+    if (EN.clip()) items.push(['paste', '📋', 'Вставить скопированное',
+      'data-act="rec-paste" data-form="' + esc(form) + '"']);
+    items.push(['del', '🗑', 'Удалить', 'data-del="' + esc(coll + ':' + id) + '"', true]);
+
+    var box = document.createElement('div');
+    box.className = 'row-menu-list';
+    box.innerHTML = items.map(function (i) {
+      return '<button ' + i[3] + (i[4] ? ' class="danger"' : '') + '>' +
+        '<span>' + i[1] + '</span><span>' + esc(i[2]) + '</span></button>';
+    }).join('');
+    document.body.appendChild(box);
+    var r = btn.getBoundingClientRect();
+    var top = r.bottom + 6, left = Math.min(r.left, window.innerWidth - 210);
+    if (top + box.offsetHeight > window.innerHeight - 10) top = Math.max(10, r.top - box.offsetHeight - 6);
+    box.style.top = top + 'px'; box.style.left = Math.max(10, left) + 'px';
+    setTimeout(function () { document.addEventListener('click', closeRowMenu, { once: true }); }, 0);
+    if (rec) box.dataset.rec = id;
+  }
+  function closeRowMenu() {
+    var m = document.querySelector('.row-menu-list');
+    if (m) m.remove();
+  }
 
   // «412 000 ₽ ▲ 31 000 (8%)» — цифра рядом с тем, как было раньше
   function delta(now, was, asMoney) {
@@ -51,6 +95,7 @@
   }
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
   var AGAIN = false;          // после сохранения открыть такую же форму (Ctrl+Enter)
+  var DRAFT_BACK = null;      // незаконченная запись, оставшаяся с прошлого раза
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
@@ -131,6 +176,41 @@
     var first = b.querySelector('input,select,textarea');
     if (first) setTimeout(function () { first.focus(); }, 60);
     return b;
+  }
+
+  /* --- 28. Вставить скопированную запись в форму ------------------------------ */
+  function pasteClip(formId) {
+    var c = EN.clip();
+    if (!c) { toast('Сначала скопируйте запись кнопкой «⋮» → «Копировать».'); return; }
+    var form = document.getElementById('wmForm');
+    if (!form) {
+      if (!formId) { toast('Откройте форму, куда вставлять.'); return; }
+      openForm(formId);
+      setTimeout(function () { pasteClip(); }, 150);
+      return;
+    }
+    var n = 0;
+    Object.keys(c.values).forEach(function (k) {
+      var el = form.querySelector('[name="' + k + '"]');
+      if (!el || k === 'date') return;
+      el.value = c.values[k];
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      n++;
+    });
+    toast(n ? 'Вставлено полей: ' + n + '. Проверьте и сохраните.'
+      : 'В этой форме нет таких полей — скопированное сюда не подходит.');
+  }
+
+  /* --- 35. Отмена последнего действия (Ctrl+Z) -------------------------------- */
+  function undoLast() {
+    var row = EN.lastUndoable(S.state.log || []);
+    if (!row) { toast('Отменять нечего — последние действия уже отменены.'); return; }
+    var what = row.what + ' · ' + row.collName + (row.title ? ' · ' + row.title : '');
+    if (!confirm('Отменить последнее действие?\n\n' + what)) return;
+    S.logUndo(row.id);
+    recompute(); render();
+    toast('Отменено: ' + what + '. Вернуть обратно можно на экране «Проверка базы».', 8000);
   }
 
   // Вставить шаблон в открытую форму
@@ -1183,6 +1263,8 @@
     go: function (id) { go(id); }, render: function () { render(); },
     lastImport: function () { return LAST_IMPORT; },
     tab: function (key, def) { return TAB[key] || def; },
+    rowMenu: function (coll, id, opts) { return rowMenu(coll, id, opts); },
+    pasteClip: function (formId) { pasteClip(formId); },
     page: function (id, step) { return PAGE[id] || step; },
     data: function () { return D; }, calc: function () { return C; },
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
@@ -2994,7 +3076,7 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice],[data-menu]');
       if (!el) return;
       // «Подробнее»: одно окно для любой цифры — что с ней связано
       if (el.dataset.more) {
@@ -3010,6 +3092,7 @@
       }
       if (el.dataset.filterClear) { FLT.clear(el.dataset.filterClear); PAGE = {}; render(); return; }
       if (el.dataset.calc) { openCalc(el.dataset.calc); return; }
+      if (el.dataset.menu) { e.stopPropagation(); openRowMenu(el); return; }
       if (el.dataset.tpl) { applyTemplate(el.dataset.tpl); return; }
       if (el.dataset.tplSave) { saveTemplate(el.dataset.tplSave); return; }
       if (el.dataset.tplManage) { manageTemplates(el.dataset.tplManage); return; }
@@ -3048,6 +3131,23 @@
       var a = el.dataset.act;
       if (a === 'close-sheet') askClose();
       else if (a === 'more-back') DET.back();
+      else if (a === 'rec-copy') {
+        var src = (S.state[el.dataset.coll] || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+        if (!src) { toast('Запись не найдена.'); return; }
+        EN.copy(src, el.dataset.coll);
+        toast('Скопировано. Откройте любую форму и нажмите «Вставить» — поля заполнятся.');
+      }
+      else if (a === 'rec-paste') { pasteClip(el.dataset.form); }
+      else if (a === 'undo-last') { undoLast(); }
+      else if (a === 'draft-open') {
+        var b = document.querySelector('.draft-bar'); if (b) b.remove();
+        if (DRAFT_BACK) openForm(DRAFT_BACK.id, DRAFT_BACK.values);
+      }
+      else if (a === 'draft-drop') {
+        var b2 = document.querySelector('.draft-bar'); if (b2) b2.remove();
+        if (DRAFT_BACK) Q.clearDraft(DRAFT_BACK.id);
+        DRAFT_BACK = null;
+      }
       else if (a === 'pick-files' || a === 'backup') { closeSheet(); if (a === 'backup') backup(); else $('filesInput').click(); }
       else if (a === 'more') { PAGE[el.dataset.id] = (PAGE[el.dataset.id] || +el.dataset.step) + (+el.dataset.step) * 3; render(); }
       else if (a === 'pick-folder') $('folderInput').click();
@@ -3165,6 +3265,14 @@
       } else if (key === 'k' || key === 'л') {
         e.preventDefault();
         $('search').focus(); $('search').select();
+      } else if ((key === 'z' || key === 'я') && !form) {
+        // в форме Ctrl+Z — это отмена набора текста, туда не лезем
+        e.preventDefault();
+        undoLast();
+      } else if ((key === 'v' || key === 'м') && form && EN.clip() &&
+        !/input|textarea/i.test((e.target || {}).tagName || '')) {
+        e.preventDefault();
+        pasteClip();
       }
     });
 
@@ -3198,6 +3306,33 @@
       }
       if (onScan(e)) e.preventDefault();
     });
+
+    /* --- 27. Недописанная форма возвращается после закрытия программы --------
+       Черновик лежит в браузере и переживает перезапуск. При старте
+       предлагаем вернуться к нему, а не молча забываем.
+       -------------------------------------------------------------------- */
+    setTimeout(function () {
+      var found = null;
+      Object.keys(FORMS).forEach(function (id) {
+        if (found) return;
+        var d = Q.loadDraft(id);
+        if (!d) return;
+        var filled = Object.keys(d).filter(function (k) {
+          return k !== 'date' && String(d[k] || '').trim();
+        });
+        if (filled.length >= 2) found = { id: id, values: d, filled: filled.length };
+      });
+      if (!found) return;
+      var name = (FORMS[found.id] || {}).title || found.id;
+      var bar = document.createElement('div');
+      bar.className = 'draft-bar';
+      bar.innerHTML = '<span>📝 Осталась незаконченная запись: <b>' + esc(name) + '</b> — ' +
+        found.filled + ' ' + plural(found.filled, 'поле заполнено', 'поля заполнено', 'полей заполнено') + '</span>' +
+        '<button class="btn btn-sm btn-primary" data-act="draft-open">Продолжить</button>' +
+        '<button class="btn btn-sm" data-act="draft-drop">Не нужно</button>';
+      document.body.appendChild(bar);
+      DRAFT_BACK = found;
+    }, 2200);
 
     // черновик формы сохраняется сам, а не только при вводе
     setInterval(function () {
