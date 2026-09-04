@@ -360,10 +360,20 @@
     if (m === 0) { y--; m = 12; }
     return y + '-' + (m < 10 ? '0' + m : m);
   }
+  // «сентября 2026» — так месяц пишется в середине фразы: «за сентября»…
+  // нет, правильнее «за сентябрь», поэтому есть две формы: эта — для
+  // оборотов «против сентября 2026», а monthTitle — для заголовков.
   function monthName(ym) {
     var names = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
     var m = +ym.slice(5, 7);
     return names[m - 1] + ' ' + ym.slice(0, 4);
+  }
+  // «Сентябрь 2026» — для заголовков экранов и выбора месяца в списке
+  function monthTitle(ym) {
+    var names = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль',
+      'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+    var m = +String(ym).slice(5, 7);
+    return (names[m - 1] || '') + ' ' + String(ym).slice(0, 4);
   }
 
   // Отчёт руководителя: текущий месяц против прошлого
@@ -377,7 +387,7 @@
         share: ofRevenue && a.income ? round(div(x, a.income) * 100) : null };
     }
     return {
-      ym: ym, title: monthName(ym), prevTitle: monthName(prevMonth(ym)),
+      ym: ym, title: monthTitle(ym), prevTitle: monthName(prevMonth(ym)),
       cur: a, prev: b,
       finance: [
         line('Выручка (все поступления)', a.income, b.income),
@@ -487,7 +497,7 @@
     while (cells.length % 7) cells.push(null);
     var weeks = [];
     for (var w = 0; w < cells.length; w += 7) weeks.push(cells.slice(w, w + 7));
-    return { weeks: weeks, ym: ym, title: monthName(ym) };
+    return { weeks: weeks, ym: ym, title: monthTitle(ym) };
   }
 
   return {
@@ -499,7 +509,8 @@
     balances: balances, totals: totals, group: group, taxAmount: taxAmount,
     byCategory: byCategory, byMethodIncome: byMethodIncome, byShift: byShift,
     byWeekday: byWeekday, byCashier: byCashier,
-    monthReport: monthReport, dayReport: dayReport, prevMonth: prevMonth, monthName: monthName,
+    monthReport: monthReport, dayReport: dayReport, prevMonth: prevMonth,
+    monthName: monthName, monthTitle: monthTitle,
     planStatus: planStatus, planTotals: planTotals, calendarMonth: calendarMonth
   };
 });

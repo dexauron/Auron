@@ -23,6 +23,7 @@ const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
 const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
 const FRC = require(path.join(__dirname, '..', 'js', 'forecast.js'));
 const GDS = require(path.join(__dirname, '..', 'js', 'goods.js'));
+const REP = require(path.join(__dirname, '..', 'js', 'reports.js'));
 const STF = require(path.join(__dirname, '..', 'js', 'staff.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
@@ -1689,6 +1690,87 @@ console.log('— Папка программы: понятные ошибки');
   const sbpLine = ENT.parseLine('выручка 500 сбп', { categories: [], methods: FIN.METHODS, cashiers: [], shifts: [], suppliers: [] });
   check('в быстрой строке «сбп» — это способ оплаты',
     sbpLine && sbpLine.method === 'СБП', sbpLine && sbpLine.method, 'СБП');
+
+  // --- Отчёты для владельца ---------------------------------------------------
+  const rDds = [];
+  for (let d = 1; d <= 20; d++) {
+    const dd = String(d).padStart(2, '0');
+    rDds.push({ date: '2026-09-' + dd, type: 'Приход', category: 'Продажи', method: 'Наличные',
+      amount: 50000, diff: d === 3 ? -800 : 0, checks: 200, group: 'g' + dd });
+    rDds.push({ date: '2025-09-' + dd, type: 'Приход', category: 'Продажи', method: 'Наличные',
+      amount: 40000, diff: 0, checks: 180, group: 'p' + dd });
+  }
+  rDds.push({ date: '2026-09-05', type: 'Расход', category: 'Аренда', method: 'Перевод', amount: 168000 });
+  rDds.push({ date: '2026-09-10', type: 'Расход', category: 'ЗП', method: 'Наличные', amount: 240000 });
+  rDds.push({ date: '2026-09-11', type: 'Расход', category: 'Закуп товара', method: 'Наличные', amount: 400000 });
+  rDds.push({ date: '2026-09-13', type: 'Забор', category: 'Забор владельца', method: 'Наличные', amount: 100000 });
+
+  const flow = REP.moneyFlow(rDds, '2026-09');
+  check('водопад: выручка за месяц', flow.income === 1000000, flow.income, 1000000);
+  check('водопад: расходы собраны', flow.expense === 808000, flow.expense, 808000);
+  check('водопад: забор владельца отдельно', flow.draw === 100000, flow.draw, 100000);
+  check('водопад: остаток сходится',
+    flow.left === flow.income - flow.expense - flow.draw, flow.left, 92000);
+  check('водопад: первая полоса — выручка, последняя — остаток',
+    flow.steps[0].kind === 'start' && flow.steps[flow.steps.length - 1].kind === 'end', 'да', 'да');
+
+  const ac = REP.avgCheck(rDds.filter(r => r.date >= '2026-09-01' && r.date <= '2026-09-30'));
+  check('средний чек = выручка ÷ чеки', ac.avg === 250, ac.avg, 250);
+  check('чеки не считаются трижды за одну смену', ac.checks === 4000, ac.checks, 4000);
+  const acNo = REP.avgCheck([{ date: '2026-09-01', type: 'Приход', amount: 1000 }]);
+  check('без числа чеков средний чек не выдумывается', acNo.avg === 0 && acNo.checks === 0, acNo.avg, 0);
+
+  const ya = REP.yearAgo(rDds, '2026-09');
+  check('год назад: месяц найден', ya.prevYm === '2025-09' && ya.has, ya.prevYm, '2025-09');
+  check('год назад: выручка сравнилась',
+    ya.lines[0].cur === 1000000 && ya.lines[0].prev === 800000, ya.lines[0].prev, 800000);
+  check('год назад: рост посчитан в процентах', ya.lines[0].pct === 25, ya.lines[0].pct, 25);
+
+  const pace = REP.monthPace(rDds, '2026-09', '2026-09-20');
+  check('прогноз: заработано за месяц', pace.done === 1000000, pace.done, 1000000);
+  check('прогноз: обычный день по медиане', pace.median === 50000, pace.median, 50000);
+  check('прогноз: до конца месяца', pace.forecast === 1500000, pace.forecast, 1500000);
+  check('прогноз: осталось дней', pace.left === 10, pace.left, 10);
+
+  check('1 января — праздник', REP.dayKind('2026-01-01') === 'праздник', REP.dayKind('2026-01-01'), 'праздник');
+  check('31 декабря — праздник', REP.isHoliday('2026-12-31'), 'да', 'да');
+  check('7 марта — канун праздника', REP.dayKind('2026-03-07') === 'канун праздника',
+    REP.dayKind('2026-03-07'), 'канун праздника');
+  const cal = REP.calendarEffect(rDds);
+  check('календарь: дни разложены по видам', cal.rows.length >= 2, cal.rows.length, '>=2');
+
+  const pr = REP.topProblems({ dds: rDds, ym: '2026-09', writeoffSum: 45000, overdue: 12000, overdueCount: 2 });
+  check('проблемы: самая дорогая сверху', pr.top[0].what === 'Списанный товар', pr.top[0].what, 'Списанный товар');
+  check('проблемы: недостача найдена',
+    pr.all.some(x => x.what === 'Недостачи в кассе' && x.sum === 800), 'да', 'да');
+  check('проблемы: показываем только три главные', pr.top.length === 3, pr.top.length, 3);
+
+  const gp = REP.groupProfit([
+    { group: 'Сигареты', revenue: 500000, gross: 25000, margin: 5, items: 40 },
+    { group: 'Молочка', revenue: 300000, gross: 90000, margin: 30, items: 60 }
+  ]);
+  check('группы: доля в прибыли, а не в выручке',
+    gp.rows[0].group === 'Молочка' && gp.rows[0].profitShare > gp.rows[0].revShare, gp.rows[0].group, 'Молочка');
+  check('группы: «продаём много, зарабатываем мало» помечено',
+    gp.rows[1].gap < 0, gp.rows[1].gap, '<0');
+
+  const ip = REP.itemProfit([
+    { name: 'Сигареты', key: 's', qty: 100, revenue: 200000, cogs: 190000 },
+    { name: 'Кофе', key: 'k', qty: 50, revenue: 100000, cogs: 40000 }
+  ]);
+  check('рейтинг: сверху тот, кто приносит деньги', ip.byProfit[0].name === 'Кофе', ip.byProfit[0].name, 'Кофе');
+  check('рейтинг: по выручке порядок другой', ip.byRevenue[0].name === 'Сигареты', ip.byRevenue[0].name, 'Сигареты');
+
+  const pe = REP.profitEaters({ dds: rDds, ym: '2026-09', writeoffSum: 45000 });
+  check('едоки: валовая прибыль = выручка минус закуп', pe.gross === 600000, pe.gross, 600000);
+  check('едоки: зарплата самая крупная', pe.eaters[0].name === 'Зарплата', pe.eaters[0].name, 'Зарплата');
+  check('едоки: списания попали в разбор',
+    pe.eaters.some(x => x.name === 'Списанный товар' && x.sum === 45000), 'да', 'да');
+  check('едоки: остаток = валовая минус съеденное',
+    pe.left === pe.gross - pe.eaten, pe.left, pe.gross - pe.eaten);
+
+  check('месяц в заголовке — именительный', FIN.monthTitle('2026-09') === 'Сентябрь 2026',
+    FIN.monthTitle('2026-09'), 'Сентябрь 2026');
 
   console.log('');
 }

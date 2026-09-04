@@ -18,7 +18,9 @@ const SCREENS = ['today', 'suppliers', 'cash', 'dds', 'staff', 'stock', 'orders'
   'losses', 'dead', 'pnl', 'bep', 'abc', 'pricecmp', 'incexp', 'search', 'data', 'settings',
   'pulse', 'findash', 'finbase', 'finpay', 'finreport', 'finday', 'import', 'match', 'recon',
   'confirm', 'terms', 'reconcile', 'conflicts', 'compare', 'markup', 'payroll',
-  'manual', 'records', 'debtors', 'sheets', 'check', 'reset'];
+  'manual', 'records', 'debtors', 'sheets', 'check', 'reset',
+  'flow', 'problems', 'eaters', 'pace', 'yearago', 'avgcheck', 'calend',
+  'groupprofit', 'itemprofit'];
 
 // строка, которая пытается выполниться, если её вставят в страницу как разметку
 const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';

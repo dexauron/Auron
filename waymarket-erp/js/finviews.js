@@ -66,6 +66,8 @@
             { hint: 'сколько денег в ящике до выплат' }) +
           u.fieldRow('Факт: карта', 'fCard', 'number', v.fCard || 0) +
           u.fieldRow('Факт: СБП', 'fSbp', 'number', v.fSbp || 0) +
+          u.fieldRow('Чеков по Z-отчёту', 'checks', 'number', v.checks || '',
+            { hint: 'сколько покупок пробито — из этого считается средний чек' }) +
           u.fieldRow('Выплаты из кассы', 'pay', 'pairs', null,
             { options: categories(), rows: payRows, placeholders: ['за что выдали', 'сумма'] }) +
           u.fieldRow('Комментарий', 'note', 'text', v.note || '');
@@ -87,7 +89,7 @@
         learn({ shifts: v.shift, cashiers: v.cashier,
           categories: pays.map(function (p) { return p.name; }).filter(Boolean) });
         var base = { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
-          category: F.SALES, note: v.note, src: 'касса' };
+          category: F.SALES, note: v.note, src: 'касса', checks: E.num(v.checks) };
         var group = S.uid();
         var pairs = [['Наличные', v.zCash, v.fCash], ['Карта', v.zCard, v.fCard], ['СБП', v.zSbp, v.fSbp]];
         var added = 0, diffTotal = 0;
@@ -109,7 +111,9 @@
         });
         var total = E.num(v.zCash) + E.num(v.zCard) + E.num(v.zSbp);
         var transit = E.num(v.zCard) + E.num(v.zSbp);
+        var chk = E.num(v.checks);
         return { ok: 'Смена записана: выручка ' + E.fmtMoney(total) +
+          (chk ? ', средний чек ' + E.fmtMoney(E.safeRound(total / chk)) : '') +
           (diffTotal ? ', расхождение ' + E.fmtMoney(diffTotal) : ', касса сходится') +
           (payTotal ? ', выдано из кассы ' + E.fmtMoney(payTotal) : '') +
           (transit ? '. В пути от банка: ' + E.fmtMoney(transit) : '') };
@@ -623,9 +627,9 @@
     var ym = S.settings.reportMonth && months.indexOf(S.settings.reportMonth) >= 0 ? S.settings.reportMonth : months[0];
     var rep = F.monthReport(all, ym);
 
-    var h = u.pageHead('Отчёт за месяц', rep.title + ' · сравнение с ' + rep.prevTitle,
+    var h = u.pageHead('Отчёт за месяц', rep.title + ' — против ' + rep.prevTitle,
       '<select id="repMonth" style="background:var(--fill);border:none;border-radius:9px;padding:9px 12px;font-size:14px">' +
-      months.map(function (m) { return '<option value="' + m + '"' + (m === ym ? ' selected' : '') + '>' + F.monthName(m) + '</option>'; }).join('') +
+      months.map(function (m) { return '<option value="' + m + '"' + (m === ym ? ' selected' : '') + '>' + F.monthTitle(m) + '</option>'; }).join('') +
       '</select>');
 
     h += '<div class="stat-grid">' +
