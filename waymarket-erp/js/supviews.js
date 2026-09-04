@@ -1402,6 +1402,26 @@
   };
 
   /* --- Загрузка банковской выписки для сверки эквайринга --------------------- */
+  A['price-snap'] = function () {
+    var D = U().data();
+    if (!D.prices || !D.prices.length) return 'Сначала загрузите отчёт «Текущие цены поставщиков».';
+    var changed = keepPrices();
+    U().render();
+    return changed ? 'Цены на сегодня запомнены: ' + D.prices.length + ' позиций.'
+      : 'Снимок за сегодня уже есть — он обновлён.';
+  };
+
+  A['ret-accept'] = function (el) {
+    var r = (S.state.returns2 || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!r) return 'Возврат не найден.';
+    r.accepted = true;
+    (S.state.offsets || []).forEach(function (o) {
+      if (o.fromReturn && o.doc === r.doc && SUP.norm(o.firm) === SUP.norm(r.firm)) o.used = true;
+    });
+    S.save(); refresh();
+    return 'Отмечено: ' + r.firm + ' принял возврат на ' + E.fmtMoney(r.sum) + '.';
+  };
+
   A['bank-load'] = function () {
     var inp = document.createElement('input');
     inp.type = 'file'; inp.accept = '.xls,.xlsx,.csv';
@@ -1666,6 +1686,303 @@
 
 
 
+
+
+  /* --- Цены, сезонность, полки, возвраты поставщику ---------------------------- */
+  function GD() { return window.WMGoods; }
+
+  // Снимок цен делаем при каждой загрузке прайса — из него растёт история
+  function keepPrices() {
+    var D = U().data();
+    if (!D.prices || !D.prices.length) return false;
+    var snap = GD().snapshot(D.prices);
+    var was = (S.state.pricelog || []).length;
+    S.state.pricelog = GD().addSnapshot(S.state.pricelog || [], snap);
+    S.save();
+    return S.state.pricelog.length !== was;
+  }
+
+  function viewPriceLog() {
+    var u = U();
+    var hist = S.state.pricelog || [];
+    var jumps = GD().priceJumps(hist, num(S.settings.priceJumpPct) || 5);
+
+    var h = u.pageHead('История цен поставщиков',
+      'Кто и на сколько поднял цену между поставками',
+      '<div><button class="btn btn-primary" data-act="price-snap">📸 Запомнить цены сегодня</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    if (hist.length < 2) {
+      h += '<div class="banner blue"><span>📸</span><span>Программа запоминает цены при каждой загрузке ' +
+        'прайса из 1С. Сейчас снимков: <b>' + hist.length + '</b>. Как только их станет два, ' +
+        'здесь появится, что подорожало.</span></div>';
+      if (!hist.length) {
+        return h + '<div class="card"><div class="empty">Загрузите отчёт «Текущие цены поставщиков» ' +
+          'и нажмите «Запомнить цены сегодня».</div></div>';
+      }
+    }
+
+    if (hist.length >= 2) {
+      h += '<div class="stat-grid">' +
+        u.stat('Подорожало', u.nf(jumps.up), 'позиций с прошлого снимка', jumps.up ? 'c-red' : 'c-green') +
+        u.stat('Подешевело', u.nf(jumps.down), 'позиций', 'c-green') +
+        u.stat('Сравниваем', esc(dateRu(jumps.from)), 'с ' + dateRu(jumps.to)) +
+        u.stat('Снимков цен', u.nf(hist.length), 'храним последние 60') +
+        '</div>';
+
+      var defs = [
+        { key: 'dir', name: 'Куда', options: [
+          { v: 'up', name: 'Подорожало', test: function (r) { return r.up; } },
+          { v: 'down', name: 'Подешевело', test: function (r) { return !r.up; } }
+        ] },
+        { key: 'sup', name: 'Поставщик', auto: function (r) { return r.supplier; }, limit: 12 },
+        { key: 'big', name: 'Насколько', options: [
+          { v: '20', name: 'Больше 20%', test: function (r) { return Math.abs(r.pct) >= 20; } },
+          { v: '10', name: '10–20%', test: function (r) { return Math.abs(r.pct) >= 10 && Math.abs(r.pct) < 20; } }
+        ] }
+      ];
+      var list = FLT().apply('pricelog', jumps.rows, defs, function (r) { return r.name + ' ' + r.supplier; });
+      h += FLT().bar('pricelog', defs, jumps.rows, { search: 'товар или поставщик' });
+
+      h += u.card('Что изменилось в цене', FLT().note(list.length, jumps.rows.length) + u.table('jumpT', [
+        { title: 'Товар', fn: function (r) { return DET().link('product', r.key, r.name); } },
+        { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.supplier), r.supplier || '—'); } },
+        { title: 'Было', cls: 'num', fn: function (r) { return u.priv(r.was); } },
+        { title: 'Стало', cls: 'num', fn: function (r) { return u.priv(r.now); } },
+        { title: 'Разница', cls: 'num', fn: function (r) {
+          return '<span class="' + (r.up ? 'c-red' : 'c-green') + ' private">' +
+            (r.up ? '+' : '') + E.fmtMoney(r.diff) + '</span>'; } },
+        { title: 'На сколько', cls: 'num', fn: function (r) {
+          return '<span class="' + (r.up ? 'c-red' : 'c-green') + '">' +
+            (r.up ? '▲ ' : '▼ ') + Math.abs(r.pct) + '%</span>'; } },
+        { title: '', cls: 'center', fn: function (r) { return DET().btn('product', r.key, 'Подробнее'); } }
+      ], list, { step: 40, empty: 'Цены не менялись' }));
+    }
+
+    h += u.card('Снимки цен', u.table('snapT', [
+      { title: 'Когда', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Позиций в прайсе', cls: 'num', fn: function (r) { return u.nf(r.count); } }
+    ], hist.slice().reverse(), { step: 20 }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>Порог «считать подорожанием» задаётся в настройках. ' +
+      'Сейчас показываем изменения от <b>' + u.pct(num(S.settings.priceJumpPct) || 5) + '</b>.</span></div>';
+    return h;
+  }
+
+  /* --- 74/75. Сезонность и что везут вместе ------------------------------------ */
+  function viewSeasons() {
+    var u = U(), c = sup();
+    var sez = GD().seasons(S.state.dds || [], F.isIncome);
+    var pairs = GD().together(c.docs || [], 3);
+
+    var h = u.pageHead('Сезонность', 'В какие месяцы магазин зарабатывает больше',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (!sez.monthsWithData) {
+      return h + '<div class="card"><div class="empty"><b>Пока нечего сравнивать</b><br>' +
+        'Сезонность считается по выручке за месяцы. Запишите кассу хотя бы за пару месяцев.</div></div>';
+    }
+
+    var best = sez.months.slice().sort(function (a, b) { return b.sum - a.sum; })[0];
+    var worst = sez.months.filter(function (m) { return m.sum > 0; })
+      .sort(function (a, b) { return a.sum - b.sum; })[0];
+
+    h += '<div class="stat-grid">' +
+      u.stat('Лучший месяц', esc(best.name), E.fmtMoney(best.sum) + ' · на ' + u.pct(best.vsAvg) + ' выше обычного', 'c-green') +
+      u.stat('Худший месяц', esc(worst.name), E.fmtMoney(worst.sum) + ' · на ' + u.pct(Math.abs(worst.vsAvg)) + ' ниже', 'c-orange') +
+      u.stat('Обычный месяц', u.priv(sez.avg), 'среднее по месяцам с данными') +
+      u.stat('Месяцев с данными', u.nf(sez.monthsWithData), 'из 12') +
+      '</div>';
+
+    h += u.card('Выручка по месяцам', u.table('sezT', [
+      { title: 'Месяц', fn: function (r) { return esc(r.name); } },
+      { title: 'Выручка', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
+      { title: 'Доля года', cls: 'num', fn: function (r) { return r.sum ? u.pct(r.share) : '—'; } },
+      { title: 'К обычному месяцу', cls: 'num', fn: function (r) {
+        if (!r.sum) return '—';
+        return '<span class="' + (r.vsAvg > 0 ? 'c-green' : 'c-red') + '">' +
+          (r.vsAvg > 0 ? '+' : '') + r.vsAvg + '%</span>'; } },
+      { title: '', fn: function (r) {
+        if (!r.sum) return '';
+        var w = Math.min(100, r.share * 4);
+        return '<div class="bar-line"><span style="width:' + w + '%;background:var(--' +
+          (r.kind === 'сезон' ? 'green' : (r.kind === 'затишье' ? 'orange' : 'blue')) + ')"></span></div>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.sum ? u.badge(r.kind, r.kind === 'сезон' ? 'green' :
+          (r.kind === 'затишье' ? 'orange' : 'gray')) : ''; } }
+    ], sez.months, { step: 12 }));
+
+    if (pairs.length) {
+      h += u.card('Кто приезжает в один день', u.table('pairT', [
+        { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.a), r.a); } },
+        { title: 'и', fn: function (r) { return DET().link('firm', E.norm(r.b), r.b); } },
+        { title: 'Совпало дней', cls: 'num', fn: function (r) { return u.nf(r.days); } }
+      ], pairs, { step: 20 }),
+        '<span class="card-note">чтобы планировать приёмку</span>');
+      h += '<div class="banner"><span>&#128161;</span><span>Настоящих чеков в выгрузках 1С нет, поэтому ' +
+        '«что покупают вместе» посчитать не из чего. Зато видно, какие поставщики приезжают в один день — ' +
+        'это помогает не ставить две приёмки на одно утро.</span></div>';
+    }
+    return h;
+  }
+
+  /* --- 76. Мёртвые полки -------------------------------------------------------- */
+  // «0,14 ₽ с рубля» читается, а «0 ₽» — нет
+  function perRub(v) {
+    var n = num(v);
+    if (!n) return '0 ₽';
+    return (Math.round(n * 100) / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2 }) + ' ₽';
+  }
+
+  function viewShelf() {
+    var u = U(), c = U().calc(), D = U().data();
+    var sv = GD().shelfValue(D.stock || [], D.sales || [], c.groupIdx || {});
+
+    var h = u.pageHead('Полки: что окупает место',
+      'Сколько прибыли приносит каждый рубль, замороженный в группе товаров',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (!sv.totalStock) {
+      return h + '<div class="card"><div class="empty"><b>Нужны остатки и продажи из 1С</b><br>' +
+        'Загрузите «Остатки номенклатуры» и «Продажи» — программа посчитает, какая группа окупает полку.</div></div>';
+    }
+
+    h += '<div class="stat-grid">' +
+      u.stat('Заморожено в товаре', u.priv(sv.totalStock), 'по всем группам') +
+      u.stat('Приносит прибыли', u.priv(sv.totalProfit), 'за период продаж', 'c-green') +
+      u.stat('С рубля на полке', perRub(sv.avgPerRuble), 'прибыли приносит каждый вложенный рубль') +
+      u.stat('Мёртвых групп', u.nf(sv.deadCount), 'в них ' + E.fmtMoney(sv.deadMoney),
+        sv.deadCount ? 'c-red' : 'c-green') +
+      '</div>';
+
+    if (sv.deadCount) {
+      h += '<div class="banner"><span>&#9888;</span><span>В группах, которые почти не приносят прибыли, ' +
+        'лежит <b class="private">' + E.fmtMoney(sv.deadMoney) + '</b>. Это место на полке и деньги, ' +
+        'которые можно вложить в то, что продаётся.</span></div>';
+    }
+
+    var defs = [
+      { key: 'st', name: 'Как работает', options: [
+        { v: 'dead', name: 'Не окупает место', test: function (r) { return r.dead; } },
+        { v: 'good', name: 'Лучше среднего', test: function (r) { return r.vsAvg > 0; } },
+        { v: 'nosale', name: 'Есть непроданные', test: function (r) { return r.deadSku > 0; } }
+      ] },
+      { key: 'money', name: 'Денег в группе', options: [
+        { v: 'big', name: 'От 100 000', test: function (r) { return r.stockSum >= 100000; } },
+        { v: 'mid', name: '10 000 – 100 000', test: function (r) { return r.stockSum >= 10000 && r.stockSum < 100000; } }
+      ] }
+    ];
+    var list = FLT().apply('shelf', sv.rows, defs, function (r) { return r.group; });
+    h += FLT().bar('shelf', defs, sv.rows, { search: 'группа товаров' });
+
+    h += u.card('Группы: от худших к лучшим', FLT().note(list.length, sv.rows.length) + u.table('shelfT', [
+      { title: 'Группа', fn: function (r) { return DET().link('group', r.group, r.group); } },
+      { title: 'Позиций', cls: 'num', fn: function (r) { return u.nf(r.sku); } },
+      { title: 'Заморожено', cls: 'num', fn: function (r) { return u.priv(r.stockSum); } },
+      { title: 'Доля склада', cls: 'num', fn: function (r) { return u.pct(r.share); } },
+      { title: 'Прибыль', cls: 'num', fn: function (r) { return r.profit ? u.priv(r.profit) : '—'; } },
+      { title: 'С рубля', cls: 'num', fn: function (r) {
+        if (r.perRuble === null) return '—';
+        return '<span class="' + (r.dead ? 'c-red' : (r.vsAvg > 0 ? 'c-green' : '')) + ' private">' +
+          perRub(r.perRuble) + '</span>'; } },
+      { title: 'К среднему', cls: 'num', fn: function (r) {
+        if (r.vsAvg === null) return '—';
+        return '<span class="' + (r.vsAvg >= 0 ? 'c-green' : 'c-red') + '">' +
+          (r.vsAvg > 0 ? '+' : '') + r.vsAvg + '%</span>'; } },
+      { title: 'Не продавалось', cls: 'num', fn: function (r) {
+        return r.deadSku ? '<span class="c-orange">' + u.nf(r.deadSku) + '</span>' : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.dead ? u.badge('не окупает', 'red') : DET().btn('group', r.group, 'Подробнее'); } }
+    ], list, { step: 40, empty: 'Под фильтр ничего не подошло' }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>«С рубля» — сколько прибыли принёс каждый рубль, ' +
+      'вложенный в товар этой группы. Группа с 100 000 ₽ на полке и 1 000 ₽ прибыли работает в 20 раз хуже ' +
+      'группы с 10 000 ₽ и 2 000 ₽ прибыли, хотя по прибыли они рядом.</span></div>';
+    return h;
+  }
+
+  /* --- 84. Возврат поставщику ---------------------------------------------------- */
+  FORMS.supReturn = {
+    title: 'Возврат поставщику', icon: '↩️',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Поставщик', 'firm', 'list', v.firm || '', { options: firmNames() }) +
+        u.fieldRow('Номер акта', 'doc', 'text', v.doc || '', { placeholder: 'если есть' }) +
+        u.fieldRow('Что возвращаем', 'goods', 'text', v.goods || '', { list: 'dl-goods' }) +
+        u.fieldRow('Количество', 'qty', 'number', v.qty || '') +
+        u.fieldRow('Сумма возврата', 'sum', 'number', v.sum || '') +
+        u.fieldRow('Причина', 'reason', 'list', v.reason || 'Брак',
+          { options: ['Брак', 'Просрочка', 'Пересорт', 'Недовоз', 'Не продаётся', 'Бой при перевозке'] }) +
+        u.fieldRow('По накладной', 'basis', 'text', v.basis || '', { placeholder: 'номер прихода' }) +
+        u.fieldRow('Поставщик принял', 'accepted', 'select', v.accepted ? 'да' : 'нет', { options: ['нет', 'да'] }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Пока поставщик не принял возврат — сумма висит как «он должен нам» ' +
+      'и уменьшает долг ему на экране «Долги по срокам».',
+    save: function (v) {
+      if (!v.firm) return 'Укажите поставщика.';
+      var bad = Q.checkAmount(v.sum); if (bad) return bad;
+      var rec = GD().returnDoc(v);
+      S.add('returns2', rec);
+      // возврат — это долг поставщика перед нами, пока он его не принял
+      S.add('offsets', { date: rec.date, firm: rec.firm, amount: rec.sum,
+        reason: 'Возврат: ' + rec.reason, doc: rec.doc, used: rec.accepted,
+        note: rec.goods, fromReturn: true });
+      refresh();
+      return { ok: 'Возврат записан: ' + rec.firm + ' на ' + E.fmtMoney(rec.sum) +
+        '. Долг ему уменьшился на эту сумму.' };
+    }
+  };
+
+  function viewReturns() {
+    var u = U();
+    var rows = (S.state.returns2 || []).slice()
+      .sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var t = GD().returnTotals(rows);
+
+    var h = u.pageHead('Возвраты поставщикам', 'Что вернули, за что и кто ещё не принял',
+      '<div><button class="btn btn-primary" data-form="supReturn">↩️ Записать возврат</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Возвращено всего', u.priv(t.sum), u.nf(t.count) + ' ' +
+        u.plural(t.count, 'возврат', 'возврата', 'возвратов')) +
+      u.stat('Ждут приёмки', u.priv(t.waitingSum), u.nf(t.waiting) + ' не принято поставщиком',
+        t.waiting ? 'c-orange' : 'c-green') +
+      u.stat('Принято', u.priv(t.sum - t.waitingSum), 'зачтено или возвращено деньгами', 'c-green') +
+      u.stat('Средний возврат', u.priv(t.count ? t.sum / t.count : 0), 'на один акт') +
+      '</div>';
+
+    var defs = [
+      { key: 'st', name: 'Состояние', options: [
+        { v: 'wait', name: 'Не принят', test: function (r) { return !r.accepted; } },
+        { v: 'ok', name: 'Принят', test: function (r) { return !!r.accepted; } }
+      ] },
+      { key: 'why', name: 'Причина', auto: function (r) { return r.reason; }, limit: 10 },
+      { key: 'firm', name: 'Поставщик', auto: function (r) { return r.firm; }, limit: 12 }
+    ];
+    var list = FLT().apply('returns2', rows, defs, function (r) { return r.firm + ' ' + r.goods; });
+    if (rows.length) h += FLT().bar('returns2', defs, rows, { search: 'поставщик или товар' });
+
+    h += u.card('Акты возврата', FLT().note(list.length, rows.length) + u.table('ret2T', [
+      { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+      { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.firm), r.firm); } },
+      { title: 'Акт', fn: function (r) { return esc(r.doc || '—'); } },
+      { title: 'Товар', fn: function (r) { return esc(r.goods || '—'); } },
+      { title: 'Кол-во', cls: 'num', fn: function (r) { return r.qty ? u.nf(r.qty) : '—'; } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
+      { title: 'Причина', fn: function (r) { return u.badge(r.reason, r.reason === 'Брак' ? 'red' : 'orange'); } },
+      { title: 'Принял', cls: 'center', fn: function (r) {
+        return r.accepted ? u.badge('да', 'green')
+          : '<button class="btn btn-sm" data-act="ret-accept" data-id="' + esc(r.id) + '">Принял</button>'; } },
+      { title: '', cls: 'center', fn: function (r) { return U().rowMenu('returns2', r.id, { form: 'supReturn' }); } }
+    ], list, { step: 40, empty: 'Возвратов пока не было' }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>Возврат сразу становится долгом поставщика перед вами: ' +
+      'на экране «Долги по срокам» он уменьшает сумму к оплате этой фирме.</span></div>';
+    return h;
+  }
 
   /* --- Прогноз денег, долги по срокам, налоги ---------------------------------- */
   function FC() { return window.WMForecast; }
@@ -2921,6 +3238,10 @@
     { id: 'compare', icon: '📐', name: 'Сравнение периодов', group: 'Отчёты', render: viewCompare, after: 'finreport' },
     { id: 'markup', icon: '💹', name: 'Кто зарабатывает', group: 'Отчёты', render: viewMarkup, after: 'compare' },
     { id: 'payroll', icon: '🧾', name: 'Ведомость зарплаты', group: 'Отчёты', render: viewPayroll, after: 'markup' },
+    { id: 'pricelog', icon: '📸', name: 'История цен', group: 'Товары', render: viewPriceLog, after: 'pricecmp' },
+    { id: 'seasons', icon: '🗓', name: 'Сезонность', group: 'Товары', render: viewSeasons, after: 'pricelog' },
+    { id: 'shelf', icon: '🧱', name: 'Полки: что окупает место', group: 'Товары', render: viewShelf, after: 'seasons' },
+    { id: 'returns2', icon: '↩️', name: 'Возвраты поставщикам', group: 'Товары', render: viewReturns, after: 'shelf' },
     { id: 'bepdays', icon: '📈', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays, after: 'bep' },
     { id: 'taxes', icon: '⚖️', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxes, after: 'bepdays' },
     { id: 'check', icon: '🩺', name: 'Проверка базы', group: 'Ручной ввод', render: viewCheck, after: 'sheets' },

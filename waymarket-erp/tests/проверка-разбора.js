@@ -22,6 +22,7 @@ const EXT = require(path.join(__dirname, '..', 'js', 'extras.js'));
 const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
 const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
 const FRC = require(path.join(__dirname, '..', 'js', 'forecast.js'));
+const GDS = require(path.join(__dirname, '..', 'js', 'goods.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1411,6 +1412,87 @@ console.log('— Хватит ли денег и когда платить');
   check('1% свыше 300 тысяч — 1 июля следующего года', dates.indexOf('2027-07-01') >= 0, 'есть', 'есть');
   check('платежи идут по возрастанию даты',
     dates.join() === dates.slice().sort().join(), 'по порядку', 'по порядку');
+  console.log('');
+}
+
+/* Товар: цены, сезонность, полки, возвраты */
+console.log('— Цены, сезонность и полки');
+{
+  // история цен и подорожание
+  let hist = [];
+  hist = GDS.addSnapshot(hist, GDS.snapshot([
+    { key: 'хлеб', name: 'Хлеб', supplier: 'Пекарня', price: 20 },
+    { key: 'молоко', name: 'Молоко', supplier: 'Юг', price: 60 }], '2026-08-01'));
+  hist = GDS.addSnapshot(hist, GDS.snapshot([
+    { key: 'хлеб', name: 'Хлеб', supplier: 'Пекарня', price: 24 },
+    { key: 'молоко', name: 'Молоко', supplier: 'Юг', price: 58 }], '2026-09-01'));
+  check('снимки цен копятся по датам', hist.length === 2, hist.length, 2);
+  hist = GDS.addSnapshot(hist, GDS.snapshot([{ key: 'хлеб', name: 'Хлеб', supplier: 'Пекарня', price: 25 }], '2026-09-01'));
+  check('снимок за тот же день перезаписывается, а не дублируется', hist.length === 2, hist.length, 2);
+
+  const j = GDS.priceJumps(hist, 5);
+  check('подорожание найдено', j.rows.length === 1 && j.rows[0].pct === 25,
+    j.rows.length ? j.rows[0].name + ' +' + j.rows[0].pct + '%' : 'нет', 'Хлеб +25%');
+  check('мелкие изменения не тревожат',
+    GDS.priceJumps(hist, 50).rows.length === 0, 0, 0);
+  check('история одного товара собирается',
+    GDS.priceHistory(hist, 'хлеб').length === 2, GDS.priceHistory(hist, 'хлеб').length, 2);
+  check('одного снимка мало для сравнения',
+    GDS.priceJumps([hist[0]], 5).rows.length === 0, 0, 0);
+
+  // сезонность
+  const dds = [
+    { date: '2026-01-05', type: 'Приход', amount: 100000 },
+    { date: '2026-07-05', type: 'Приход', amount: 300000 },
+    { date: '2026-12-05', type: 'Приход', amount: 200000 }
+  ];
+  const sez = GDS.seasons(dds, r => r.type === 'Приход');
+  const july = sez.months[6], jan = sez.months[0];
+  check('месяц с высокой выручкой помечен сезоном', july.kind === 'сезон', july.kind, 'сезон');
+  check('месяц с низкой — затишьем', jan.kind === 'затишье', jan.kind, 'затишье');
+  check('месяцы без данных не портят среднее', sez.monthsWithData === 3, sez.monthsWithData, 3);
+  check('доли месяцев дают 100%',
+    Math.abs(sez.months.reduce((a, m) => a + m.share, 0) - 100) < 0.1,
+    sez.months.reduce((a, m) => a + m.share, 0), 100);
+
+  // кто приезжает вместе
+  const docs = [];
+  for (let i = 1; i <= 3; i++) {
+    docs.push({ date: '2026-09-0' + i, firm: 'Молоко Юг' });
+    docs.push({ date: '2026-09-0' + i, firm: 'Пекарня' });
+  }
+  const pairs = GDS.together(docs, 3);
+  check('поставщики, приезжающие в один день, найдены',
+    pairs.length === 1 && pairs[0].days === 3, pairs.length ? pairs[0].days + ' дн.' : 'нет', '3 дн.');
+  check('случайное совпадение одного дня не считается',
+    GDS.together([{ date: '2026-09-01', firm: 'A' }, { date: '2026-09-01', firm: 'B' }], 3).length === 0, 0, 0);
+
+  // полки
+  const sv = GDS.shelfValue(
+    [{ group: 'Вода', buySum: 100000 }, { group: 'Хлеб', buySum: 10000 }],
+    [{ key: 'a', revenue: 5000, profit: 1000, qty: 10 }, { key: 'b', revenue: 50000, profit: 20000, qty: 100 }],
+    { a: 'Вода', b: 'Хлеб' });
+  const voda = sv.rows.find(r => r.group === 'Вода');
+  const hleb = sv.rows.find(r => r.group === 'Хлеб');
+  check('прибыль с рубля считается по группе', voda.perRuble === 0.01 && hleb.perRuble === 2,
+    voda.perRuble + ' и ' + hleb.perRuble, '0.01 и 2');
+  check('группа, не окупающая место, помечена', voda.dead === true && hleb.dead === false,
+    'Вода не окупает', 'Вода не окупает');
+  check('деньги в мёртвых группах посчитаны', sv.deadMoney === 100000,
+    WM.fmtMoney(sv.deadMoney), '100 000 ₽');
+  check('доли склада дают 100%',
+    Math.abs(sv.rows.reduce((a, r) => a + r.share, 0) - 100) < 0.1,
+    sv.rows.reduce((a, r) => a + r.share, 0), 100);
+
+  // возвраты поставщику
+  const rets = [
+    GDS.returnDoc({ date: '2026-09-01', firm: 'Пекарня', sum: 1500, reason: 'Брак', accepted: false }),
+    GDS.returnDoc({ date: '2026-09-02', firm: 'Юг', sum: 2500, reason: 'Просрочка', accepted: true })
+  ];
+  const rt = GDS.returnTotals(rets);
+  check('возвраты сложились', rt.sum === 4000 && rt.count === 2, WM.fmtMoney(rt.sum), '4 000 ₽');
+  check('непринятые возвраты видны отдельно', rt.waiting === 1 && rt.waitingSum === 1500,
+    WM.fmtMoney(rt.waitingSum), '1 500 ₽');
   console.log('');
 }
 
