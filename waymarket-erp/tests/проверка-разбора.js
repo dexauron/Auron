@@ -1772,6 +1772,44 @@ console.log('— Папка программы: понятные ошибки');
   check('месяц в заголовке — именительный', FIN.monthTitle('2026-09') === 'Сентябрь 2026',
     FIN.monthTitle('2026-09'), 'Сентябрь 2026');
 
+  // --- Свои показатели: формула словами, без выполнения чужого кода ----------
+  const kv = REP.kpiValues({ dds: rDds.filter(r => r.date >= '2026-09-01' && r.date <= '2026-09-30') });
+  check('в формуле есть выручка', kv['выручка'] === 1000000, kv['выручка'], 1000000);
+  check('в формуле есть средний чек', kv['средний_чек'] === 250, kv['средний_чек'], 250);
+  check('формула «выручка - закуп - зп» считается',
+    REP.kpiEval('выручка - закуп - зп', kv).value === 360000,
+    REP.kpiEval('выручка - закуп - зп', kv).value, 360000);
+  check('скобки и проценты работают',
+    REP.kpiEval('(выручка - закуп) / выручка * 100', kv).value === 60,
+    REP.kpiEval('(выручка - закуп) / выручка * 100', kv).value, 60);
+  check('«средний_чек» не распадается на «чеки»',
+    REP.kpiEval('средний_чек * 2', kv).value === 500, REP.kpiEval('средний_чек * 2', kv).value, 500);
+  check('непонятное слово даёт понятную ошибку',
+    /Не понимаю слово/.test(REP.kpiEval('выручка - шоколадка', kv).error || ''),
+    REP.kpiEval('выручка - шоколадка', kv).error, 'ошибка про слово');
+  check('чужой код в формуле не выполняется',
+    !!REP.kpiEval('alert(1)', kv).error, REP.kpiEval('alert(1)', kv).error, 'ошибка');
+  check('кривая формула не роняет расчёт',
+    !!REP.kpiEval('выручка - ', kv).error, REP.kpiEval('выручка - ', kv).error, 'ошибка');
+
+  // --- Сохранённые наборы фильтров ------------------------------------------
+  FLT.clearAll();
+  FLT.set('stock', 'group', 'Соки');
+  FLT.setText('stock', 'сок');
+  const snap = FLT.snapshot('stock');
+  check('набор фильтров снимается', snap.state.group === 'Соки' && snap.text === 'сок',
+    snap.state.group + '/' + snap.text, 'Соки/сок');
+  FLT.clear('stock');
+  check('после сброса фильтров ничего не осталось', FLT.active('stock') === 0, FLT.active('stock'), 0);
+  FLT.restore('stock', snap);
+  check('набор возвращается одной кнопкой',
+    FLT.get('stock', 'group') === 'Соки' && FLT.text('stock') === 'сок',
+    FLT.get('stock', 'group'), 'Соки');
+  check('программа видит, что набор уже применён', FLT.sameAs('stock', snap), 'да', 'да');
+  FLT.set('stock', 'group', 'Вода');
+  check('изменил фильтр — набор больше не «тот же»', !FLT.sameAs('stock', snap), 'да', 'да');
+  FLT.clearAll();
+
   console.log('');
 }
 

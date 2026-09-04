@@ -24,6 +24,7 @@
 
   var STATE = {};             // { screenId: { key: value } }
   var TEXT = {};              // { screenId: 'строка поиска' }
+  var SETS = null;            // откуда брать сохранённые наборы («мой понедельник»)
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -51,6 +52,35 @@
     for (k in b) if (b[k]) n++;
     if (text(id)) n++;
     return n;
+  }
+
+  /* --- 116. Сохранённые наборы фильтров -------------------------------------
+     Владелец каждый понедельник ставит одни и те же три фильтра. Пусть
+     поставит один раз, назовёт «мой понедельник» и дальше жмёт одну кнопку.
+     Сам список наборов хранит программа (js/ui.js) — сюда он приходит
+     готовым, чтобы файл фильтров ни от чего не зависел.
+     ---------------------------------------------------------------------- */
+  function snapshot(id) {
+    var b = bag(id), out = {};
+    for (var k in b) if (b[k]) out[k] = b[k];
+    return { state: out, text: text(id) };
+  }
+  function restore(id, snap) {
+    snap = snap || {};
+    STATE[id] = {};
+    var st = snap.state || {};
+    for (var k in st) STATE[id][k] = st[k];
+    TEXT[id] = snap.text || '';
+  }
+  // ui.js передаёт сюда функцию, которая по экрану отдаёт список наборов
+  function useSets(fn) { SETS = typeof fn === 'function' ? fn : null; }
+  function sameAs(id, snap) {
+    var a = snapshot(id), b = snap || {};
+    if ((a.text || '') !== (b.text || '')) return false;
+    var x = a.state, y = b.state || {}, k;
+    for (k in x) if (norm(x[k]) !== norm(y[k])) return false;
+    for (k in y) if (norm(x[k] || '') !== norm(y[k])) return false;
+    return true;
   }
 
   /* --- Список кнопок по данным --------------------------------------------- */
@@ -136,8 +166,25 @@
         esc(text(id)) + '" placeholder="' + esc(opts.search) + '"></div>';
     }
     if (!h) return '';
+    // Сохранённые наборы — своя строка кнопок над остальными.
+    // Кнопка «запомнить» живёт в шапке, а не среди кнопок-фильтров: она не
+    // фильтрует, а сохраняет, и путать их нельзя.
+    var saved = SETS ? (SETS(id) || []) : [];
+    if (saved.length) {
+      var line = '<div class="filter-line"><span class="filter-name">Мои наборы</span><div class="chips">';
+      saved.forEach(function (st) {
+        line += '<button class="chip' + (sameAs(id, st) ? ' active' : '') +
+          '" data-filterset="' + esc(id) + '|' + esc(st.id) + '">⭐ ' + esc(st.name) +
+          '<small data-filterset-del="' + esc(st.id) + '" title="Убрать набор">✕</small></button>';
+      });
+      h = line + '</div></div>' + h;
+    }
     var head = '<div class="filter-head"><span>Фильтры' + (any ? ' · выбрано ' + any : '') + '</span>' +
-      (any ? '<button class="btn btn-sm" data-filter-clear="' + esc(id) + '">Сбросить</button>' : '') + '</div>';
+      '<span class="filter-acts">' +
+      (any && SETS ? '<button class="btn btn-sm" data-filterset-save="' + esc(id) +
+        '">⭐ Запомнить набор</button> ' : '') +
+      (any ? '<button class="btn btn-sm" data-filter-clear="' + esc(id) + '">Сбросить</button>' : '') +
+      '</span></div>';
     return '<div class="filters">' + head + h + '</div>';
   }
 
@@ -151,6 +198,7 @@
   return {
     get: get, set: set, text: text, setText: setText, clear: clear, clearAll: clearAll,
     active: active, apply: apply, bar: bar, note: note,
+    snapshot: snapshot, restore: restore, useSets: useSets, sameAs: sameAs,
     autoOptions: autoOptions, optionsOf: optionsOf, norm: norm
   };
 });

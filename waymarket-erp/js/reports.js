@@ -7,9 +7,9 @@
    ========================================================================== */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('./engine.js'), require('./finance.js'));
-  } else root.WMReports = factory(root.WM, root.WMFin);
-})(typeof self !== 'undefined' ? self : this, function (E, F) {
+    module.exports = factory(require('./engine.js'), require('./finance.js'), require('./numpad.js'));
+  } else root.WMReports = factory(root.WM, root.WMFin, root.WMNum);
+})(typeof self !== 'undefined' ? self : this, function (E, F, NUM) {
   'use strict';
 
   var num = E.num, txt = E.txt, norm = E.norm, round = E.safeRound, div = E.div;
@@ -373,7 +373,60 @@
       left: round(gross - eaten), income: t.income, purchase: t.purchase };
   }
 
+  /* --- 117. Свои показатели --------------------------------------------------
+     Владелец пишет формулу словами: «выручка - закуп - зп» — и цифра встаёт
+     на главный экран рядом с остальными. Никакого eval: слова заменяются на
+     числа, а дальше считает тот же разборщик, что и в числовых полях.
+     ---------------------------------------------------------------------- */
+  // Слова, которые можно писать в формуле. Ключ — как пишет владелец.
+  var KPI_WORDS = [
+    'выручка', 'расход', 'прибыль', 'закуп', 'зп', 'аренда', 'налог',
+    'долг', 'чеки', 'средний_чек', 'наличные', 'карта', 'сбп', 'перевод',
+    'списания', 'недостачи', 'дней', 'смен', 'деньги', 'впути'
+  ];
+  function kpiValues(opts) {
+    opts = opts || {};
+    var rows = opts.dds || [];
+    var t = F.totals(rows);
+    var bal = F.balances(rows, opts.opening || {});
+    var ac = avgCheck(rows);
+    var short = 0;
+    rows.forEach(function (r) { if (num(r.diff) < 0) short += Math.abs(num(r.diff)); });
+    var tr = F.inTransit(rows, opts.bank || [], opts.settings || {});
+    return {
+      'выручка': t.income, 'расход': t.expense, 'прибыль': t.profit,
+      'закуп': t.purchase, 'зп': t.salary, 'аренда': t.rent,
+      'налог': num(opts.tax), 'долг': t.debtNow,
+      'чеки': ac.checks, 'средний_чек': ac.avg,
+      'наличные': bal.map['Наличные'] || 0, 'карта': bal.map['Карта'] || 0,
+      'сбп': bal.map['СБП'] || 0, 'перевод': bal.map['Перевод'] || 0,
+      'списания': num(opts.writeoffSum), 'недостачи': round(short),
+      'дней': t.days, 'смен': t.shifts,
+      'деньги': bal.total, 'впути': tr.sum
+    };
+  }
+  // Считаем формулу. Возвращаем { value } или { error: 'что не так' }.
+  function kpiEval(formula, values) {
+    var src = String(formula || '').toLowerCase().replace(/ё/g, 'е');
+    if (!src.trim()) return { error: 'Формула пустая.' };
+    // сначала длинные слова, иначе «средний_чек» распадётся на «чеки»
+    var words = KPI_WORDS.slice().sort(function (a, b) { return b.length - a.length; });
+    words.forEach(function (w) {
+      src = src.split(w).join('(' + num(values[w]) + ')');
+    });
+    var left = src.match(/[а-я_]+/g);
+    if (left && left.length) {
+      return { error: 'Не понимаю слово «' + left[0] + '». Можно писать: ' + KPI_WORDS.join(', ') + '.' };
+    }
+    var calc = NUM && NUM.calc ? NUM.calc : null;
+    if (!calc) return { error: 'Калькулятор недоступен.' };
+    var v = calc(src);
+    if (v === null || !isFinite(v)) return { error: 'В формуле ошибка — проверьте скобки и знаки.' };
+    return { value: round(v) };
+  }
+
   return {
+    KPI_WORDS: KPI_WORDS, kpiValues: kpiValues, kpiEval: kpiEval,
     moneyFlow: moneyFlow, avgCheck: avgCheck, yearAgo: yearAgo, yearAgoYm: yearAgoYm,
     monthPace: monthPace, calendarEffect: calendarEffect, dayKind: dayKind, isHoliday: isHoliday,
     topProblems: topProblems, groupProfit: groupProfit, itemProfit: itemProfit,

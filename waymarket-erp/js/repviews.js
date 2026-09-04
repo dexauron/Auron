@@ -83,7 +83,8 @@
         ? '<b class="private">' + E.fmtMoney(st.left) + '</b>'
         : '<span class="private">−' + E.fmtMoney(st.sum) + '</span>' +
           '<small class="c-muted"> · осталось ' + E.fmtMoney(st.left) + '</small>';
-      return '<div class="flow-row"><div class="flow-name">' + esc(st.name) +
+      return '<div class="flow-row" data-sum="' + (st.kind === 'start' || st.kind === 'end' ? st.left : st.sum) +
+        '" data-left="' + st.left + '"><div class="flow-name">' + esc(st.name) +
         (st.share ? ' <small class="c-muted">' + u.pct(st.share) + '</small>' : '') + '</div>' +
         '<div class="flow-track"><div class="flow-bar ' + cls + '" style="width:' + w.toFixed(1) + '%"></div></div>' +
         '<div class="flow-sum">' + right + '</div></div>';
@@ -511,6 +512,260 @@
     return h;
   }
 
+  /* --- 117. Свои показатели ------------------------------------------------------
+     Экран, где владелец заводит свою цифру: имя, формула словами, единица.
+     ---------------------------------------------------------------------- */
+  function kpiCtx() {
+    var u = U();
+    var rows = dds().filter(function (r) { return u.inPeriod(r.date); });
+    if (!rows.length) rows = dds();
+    var t = F.totals(rows);
+    return {
+      dds: rows, bank: S.state.bank || [], settings: S.settings,
+      opening: { cash: num(S.settings.openCashStart), card: num(S.settings.openCardStart),
+        sbp: num(S.settings.openSbpStart), transfer: num(S.settings.openTransferStart) },
+      writeoffSum: u.calc().writeoffSum || 0,
+      tax: F.taxAmount(S.settings, t.income, t.expense).sum
+    };
+  }
+  function viewKpi() {
+    var u = U();
+    var vals = R.kpiValues(kpiCtx());
+    var list = S.state.kpis || [];
+    var h = u.pageHead('Свои показатели', 'Задайте формулу — цифра встанет на «Сегодня»',
+      '<button class="btn btn-primary" data-form="kpiCard">＋ Новый показатель</button>');
+
+    h += u.card('Ваши показатели', u.table('kpiT', [
+      { title: 'Название', fn: function (r) { return esc(r.name); } },
+      { title: 'Формула', fn: function (r) { return '<code>' + esc(r.formula) + '</code>'; } },
+      { title: 'Сейчас', cls: 'num', fn: function (r) {
+        var res = R.kpiEval(r.formula, vals);
+        if (res.error) return '<span class="c-orange">' + esc(res.error.slice(0, 45)) + '</span>';
+        return r.unit === '%' ? u.pct(res.value)
+          : r.unit === 'штук' ? u.nf(res.value) : u.priv(res.value); } },
+      { title: 'Хочу, чтобы было', fn: function (r) {
+        return r.good && r.good !== 'просто показывать'
+          ? esc(r.good) + ' ' + u.nf(num(r.target)) : '<span class="c-muted">просто показывать</span>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="kpis:' + r.id + ':kpiCard">✎</button> ' +
+          '<button class="btn btn-sm btn-danger" data-del="kpis:' + r.id + '">✕</button>'; } }
+    ], list, { step: 20, empty: 'Пока ни одного. Нажмите «Новый показатель».' }));
+
+    var words = R.KPI_WORDS.map(function (w) {
+      var v = vals[w];
+      return '<tr><td><code>' + esc(w) + '</code></td><td class="num private">' +
+        E.fmtMoney(v) + '</td></tr>';
+    }).join('');
+    h += u.card('Какие слова можно писать в формуле',
+      '<div class="table-wrap"><table class="data"><thead><tr><th>Слово</th>' +
+      '<th class="num">Сейчас, за ' + esc(u.periodName().toLowerCase()) + '</th></tr></thead>' +
+      '<tbody>' + words + '</tbody></table></div>',
+      'Плюс, минус, умножить, разделить и скобки — как на калькуляторе');
+
+    h += '<div class="banner"><span>💡</span><span>Примеры: <code>выручка - закуп - зп - аренда</code> — ' +
+      'сколько остаётся после главного; <code>(выручка - закуп) / выручка * 100</code> — маржа; ' +
+      '<code>выручка / дней</code> — сколько в среднем в день; <code>списания / выручка * 100</code> — ' +
+      'какую долю выручки съедает порча.</span></div>';
+    return h;
+  }
+
+  /* --- 105. Отчёт собственнику на одну страницу ----------------------------------
+     Всё главное за месяц одним листом: деньги, продажи, долги, потери,
+     люди и три проблемы. Чтобы распечатать и положить в папку.
+     ---------------------------------------------------------------------- */
+  function viewOwnerPage() {
+    var u = U(), ym = pickedYm();
+    if (!ym) return noData('Отчёт собственнику', 'Всё главное за месяц на одну страницу');
+    var C = u.calc();
+    var all = dds();
+    var per = all.filter(function (r) { return String(r.date).slice(0, 7) === ym; });
+    var t = F.totals(per), tAll = F.totals(all);
+    var prevYm = F.prevMonth(ym);
+    var prev = F.totals(all.filter(function (r) { return String(r.date).slice(0, 7) === prevYm; }));
+    var bal = F.balances(all, { cash: num(S.settings.openCashStart), card: num(S.settings.openCardStart),
+      sbp: num(S.settings.openSbpStart), transfer: num(S.settings.openTransferStart) });
+    var tr = F.inTransit(all, S.state.bank || [], S.settings);
+    var pt = F.planTotals(S.state.plans || [], today());
+    var ac = R.avgCheck(per);
+    var pace = R.monthPace(all, ym, today());
+    var tax = F.taxAmount(S.settings, t.income, t.expense);
+    var probs = R.topProblems({ dds: all, ym: ym, writeoffSum: C.writeoffSum,
+      returnSum: C.returnSum, overdue: pt.overdue, overdueCount: pt.overdueCount,
+      deadMoney: C.dead ? num(C.dead.total) : 0,
+      marginPrev: prev.income ? prev.margin : null });
+
+    var h = u.pageHead('Отчёт собственнику', F.monthTitle(ym) + ' — всё главное на одну страницу',
+      monthSelect() + ' <button class="btn btn-primary" data-act="print">🖨 Печать</button>');
+
+    function dlt(now, was) {
+      if (!was) return 'в прошлом месяце данных нет';
+      var d = E.safeRound(now - was), p = E.safeRound(d / Math.abs(was) * 100);
+      return (d >= 0 ? '+' : '') + E.fmtMoney(d) + ' (' + (p >= 0 ? '+' : '') + u.pct(p) + ') к ' + F.monthName(prevYm);
+    }
+
+    h += '<div class="stat-grid">' +
+      u.stat('Выручка', u.priv(t.income), dlt(t.income, prev.income)) +
+      u.stat('Расход', u.priv(t.expense), dlt(t.expense, prev.expense)) +
+      u.stat('Прибыль', u.priv(t.profit), dlt(t.profit, prev.profit),
+        t.profit >= 0 ? 'c-green' : 'c-red') +
+      u.stat('Маржа', u.pct(t.margin), 'в прошлом месяце ' + u.pct(prev.margin)) +
+      '</div>';
+
+    h += '<div class="grid-2">' +
+      u.card('Деньги на сегодня', u.listOf([
+        u.listRow({ icon: '💵', title: 'Наличные', value: u.priv(bal.map['Наличные']) }),
+        u.listRow({ icon: '💳', title: 'Карта и СБП',
+          value: u.priv(E.safeRound((bal.map['Карта'] || 0) + (bal.map['СБП'] || 0))) }),
+        u.listRow({ icon: '🏦', title: 'На счёте', value: u.priv(bal.map['Перевод']) }),
+        u.listRow({ icon: '🚚', title: 'В пути от банка', sub: 'пробили, банк ещё не зачислил',
+          value: '<span class="c-orange private">' + E.fmtMoney(tr.sum) + '</span>' }),
+        u.listRow({ icon: '✅', title: 'Доступно сейчас', sub: 'всё минус деньги в пути',
+          value: '<b class="private">' + E.fmtMoney(E.safeRound(bal.total - tr.sum)) + '</b>' })
+      ], ''), '') +
+      u.card('Долги и платежи', u.listOf([
+        u.listRow({ icon: '💼', title: 'Должны поставщикам',
+          value: '<span class="' + (tAll.debtNow > 0 ? 'c-red' : 'c-green') + ' private">' +
+            E.fmtMoney(tAll.debtNow) + '</span>' }),
+        u.listRow({ icon: '🔴', title: 'Просрочено', sub: pt.overdueCount + ' платежей',
+          value: '<span class="c-red private">' + E.fmtMoney(pt.overdue) + '</span>' }),
+        u.listRow({ icon: '📅', title: 'Запланировано к выплате', value: u.priv(pt.planned) }),
+        u.listRow({ icon: '⚖️', title: 'Налог за месяц', sub: tax.name, value: u.priv(tax.sum) })
+      ], ''), '') +
+      '</div>';
+
+    h += '<div class="grid-2">' +
+      u.card('Как торгуем', u.listOf([
+        u.listRow({ icon: '📅', title: 'В среднем в день', sub: t.days + ' дней с записями',
+          value: u.priv(t.avgDay) }),
+        u.listRow({ icon: '🕒', title: 'В среднем за смену', sub: t.shifts + ' смен',
+          value: u.priv(t.avgShift) }),
+        u.listRow({ icon: '🧾', title: 'Средний чек',
+          sub: ac.checks ? u.nf(ac.checks) + ' чеков' : 'число чеков не заполнено',
+          value: ac.avg ? u.priv(ac.avg) : '—' }),
+        u.listRow({ icon: '🔮', title: 'Будет к концу месяца',
+          sub: pace.left ? 'осталось ' + pace.left + ' дней' : 'месяц закончился',
+          value: u.priv(pace.forecast) })
+      ], ''), '') +
+      u.card('Что теряем', u.listOf([
+        u.listRow({ icon: '🗑', title: 'Списано товара', sub: 'по данным 1С',
+          value: u.priv(C.writeoffSum || 0) }),
+        u.listRow({ icon: '⚠️', title: 'Недостачи в кассе',
+          value: '<span class="c-red private">' + E.fmtMoney(Math.abs(t.diffSum < 0 ? t.diffSum : 0)) + '</span>' }),
+        u.listRow({ icon: '🧊', title: 'Денег стоит в неликвиде',
+          value: u.priv(C.dead ? num(C.dead.total) : 0) }),
+        u.listRow({ icon: '👛', title: 'Забрал владелец', value: u.priv(t.draw) })
+      ], ''), '') +
+      '</div>';
+
+    if (probs.top.length) {
+      h += u.card('Три главные проблемы месяца', u.listOf(probs.top.map(function (x, i) {
+        return u.listRow({ icon: ['🥇', '🥈', '🥉'][i] || '•', title: esc(x.what),
+          sub: esc(x.why) + ' · ' + esc(x.fix),
+          value: '<span class="c-red private">' + E.fmtMoney(x.sum) + '</span>' });
+      }), ''), '<button class="btn btn-sm" data-go="problems">Подробнее</button>');
+    }
+
+    h += '<div class="banner"><span>🖨</span><span>Эта страница сделана, чтобы её распечатать: ' +
+      'нажмите «Печать» — суммы печатаются как есть, даже если включён режим «спрятать суммы».</span></div>';
+    return h;
+  }
+
+  /* --- 115. Готовые отчёты по кнопке ---------------------------------------------
+     Бумаги, которые время от времени нужны: товарный отчёт ТОРГ-29,
+     ведомость зарплаты, акт сверки с поставщиком, кассовая книга.
+     ---------------------------------------------------------------------- */
+  function torg29(ym) {
+    // ТОРГ-29 «Товарный отчёт»: остаток на начало, приход, расход, остаток
+    // на конец. Приход берём из накладных, расход — из продаж и списаний.
+    var u = U(), C = u.calc(), D = u.data();
+    var docs = (S.state.docs || []).filter(function (d) { return String(d.date).slice(0, 7) === ym; });
+    var come = docs.reduce(function (a, d) { return a + num(d.sum); }, 0);
+    var sold = C.sales ? num(C.sales.cogs) : 0;         // по себестоимости
+    var lost = num(C.writeoffSum);
+    var endStock = C.stock ? num(C.stock.buySum) : 0;
+    return {
+      ym: ym, docs: docs.length, come: E.safeRound(come), sold: E.safeRound(sold),
+      lost: E.safeRound(lost), end: E.safeRound(endStock),
+      // остаток на начало восстанавливаем обратным счётом: конец + расход − приход
+      begin: E.safeRound(endStock + sold + lost - come),
+      hasStock: !!(D.stock && D.stock.length), hasSales: !!(D.sales && D.sales.length)
+    };
+  }
+  function viewReadyReports() {
+    var u = U(), ym = pickedYm() || today().slice(0, 7);
+    var t29 = torg29(ym);
+    var h = u.pageHead('Готовые отчёты', 'Бумаги, которые иногда нужны — по кнопке',
+      monthSelect() + ' <button class="btn" data-act="print">🖨 Печать</button>');
+
+    h += u.card('Куда идти за каждой бумагой', u.listOf([
+      u.listRow({ icon: '🧾', title: 'Ведомость зарплаты',
+        sub: 'кому сколько начислено и выдано, с подписями', tap: true, attrs: ' data-go="payroll"' }),
+      u.listRow({ icon: '⚖️', title: 'Акт сверки с поставщиком',
+        sub: 'долг на начало, приход, оплаты, долг на конец', tap: true, attrs: ' data-go="reconcile"' }),
+      u.listRow({ icon: '📓', title: 'Кассовая книга',
+        sub: 'приход и расход наличных по дням', tap: true, attrs: ' data-go="finbase"' }),
+      u.listRow({ icon: '📋', title: 'Отчёт собственнику',
+        sub: 'всё главное за месяц на одну страницу', tap: true, attrs: ' data-go="ownerpage"' }),
+      u.listRow({ icon: '🏧', title: 'Сверка с эквайрингом',
+        sub: 'что пробили против того, что зачислил банк', tap: true, attrs: ' data-go="acquiring"' })
+    ], ''), 'Любую из них можно скачать в Excel кнопкой ⤓ наверху');
+
+    h += u.card('ТОРГ-29 — товарный отчёт за ' + esc(F.monthTitle(ym)), u.table('t29', [
+      { title: 'Строка', fn: function (r) { return esc(r.name); } },
+      { title: 'Сумма, ₽', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
+      { title: 'Откуда цифра', fn: function (r) { return '<span class="c-muted">' + esc(r.src) + '</span>'; } }
+    ], [
+      { name: 'Остаток на начало месяца', sum: t29.begin, src: 'посчитан обратным счётом' },
+      { name: 'Приход товара за месяц', sum: t29.come, src: t29.docs + ' накладных из 1С' },
+      { name: 'Итого с остатком', sum: E.safeRound(t29.begin + t29.come), src: 'начало + приход' },
+      { name: 'Продано (по себестоимости)', sum: t29.sold, src: 'отчёт 1С «Продажи»' },
+      { name: 'Списано и испорчено', sum: t29.lost, src: 'отчёт 1С «Причины списания»' },
+      { name: 'Итого расход', sum: E.safeRound(t29.sold + t29.lost), src: 'продано + списано' },
+      { name: 'Остаток на конец месяца', sum: t29.end, src: 'отчёт 1С «Остатки номенклатуры»' }
+    ], { step: 10 }));
+
+    if (!t29.hasStock || !t29.hasSales) {
+      h += '<div class="banner orange"><span>⚠️</span><span>Для честного ТОРГ-29 нужны оба отчёта 1С: ' +
+        '<b>«Остатки номенклатуры»</b>' + (t29.hasStock ? ' ✓' : ' — не загружен') +
+        ' и <b>«Продажи»</b>' + (t29.hasSales ? ' ✓' : ' — не загружен') +
+        '. Без них строки будут неполными.</span></div>';
+    }
+    h += '<div class="banner"><span>💡</span><span>Остаток на начало программа считает обратным счётом: ' +
+      'остаток на конец плюс всё, что ушло, минус всё, что пришло. Если 1С даёт остаток на начало ' +
+      'прямо — сверьтесь с ним: расхождение означает, что какой-то приход или списание не попали в учёт.</span></div>';
+    return h;
+  }
+
+  /* --- Формы --------------------------------------------------------------------- */
+  var FORMS = window.WM_EXTRA_FORMS = window.WM_EXTRA_FORMS || {};
+  FORMS.kpiCard = {
+    title: 'Свой показатель', icon: '🎯',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Название', 'name', 'text', v.name || '',
+        { placeholder: 'например: остаётся после главного' }) +
+        u.fieldRow('Формула', 'formula', 'text', v.formula || '',
+          { placeholder: 'выручка - закуп - зп - аренда' }) +
+        u.fieldRow('В чём измеряем', 'unit', 'select', v.unit || 'рублях',
+          { options: ['рублях', '%', 'штук'] }) +
+        u.fieldRow('Хочу, чтобы было', 'good', 'select', v.good || 'просто показывать',
+          { options: ['просто показывать', 'больше', 'меньше'] }) +
+        u.fieldRow('Порог', 'target', 'number', v.target || 0,
+          { hint: 'если задан — цифра будет зелёной или оранжевой' });
+    },
+    hint: 'Слова, которые понимает программа: ' + (R ? R.KPI_WORDS.join(', ') : '') +
+      '. Плюс, минус, умножить, разделить и скобки — как на калькуляторе.',
+    save: function (v) {
+      if (!String(v.name || '').trim()) return 'Дайте показателю название.';
+      var res = R.kpiEval(v.formula, R.kpiValues(kpiCtx()));
+      if (res.error) return res.error;
+      S.add('kpis', { name: String(v.name).trim(), formula: String(v.formula).trim(),
+        unit: v.unit === 'рублях' ? '₽' : v.unit, good: v.good, target: E.num(v.target) });
+      return { ok: 'Показатель «' + v.name + '» добавлен: сейчас ' + E.fmtMoney(res.value) +
+        '. Он появился на экране «Сегодня».' };
+    }
+  };
+
   /* --- Регистрация экранов ------------------------------------------------------- */
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
@@ -522,6 +777,9 @@
     { id: 'avgcheck', icon: '🧾', name: 'Средний чек', group: 'Отчёты', render: viewAvgCheck, after: 'yearago' },
     { id: 'calend', icon: '🎄', name: 'Праздники и выходные', group: 'Отчёты', render: viewCalendarEffect, after: 'avgcheck' },
     { id: 'groupprofit', icon: '📦', name: 'Группы товаров', group: 'Товары', render: viewGroupProfit, after: 'abc' },
-    { id: 'itemprofit', icon: '🏆', name: 'Рейтинг по прибыли', group: 'Товары', render: viewItemProfit, after: 'groupprofit' }
+    { id: 'itemprofit', icon: '🏆', name: 'Рейтинг по прибыли', group: 'Товары', render: viewItemProfit, after: 'groupprofit' },
+    { id: 'ownerpage', icon: '📋', name: 'Отчёт собственнику', group: 'Отчёты', render: viewOwnerPage, after: 'finreport' },
+    { id: 'ready', icon: '🖨', name: 'Готовые отчёты', group: 'Отчёты', render: viewReadyReports, after: 'calend' },
+    { id: 'kpi', icon: '🎯', name: 'Свои показатели', group: 'Отчёты', render: viewKpi, after: 'ready' }
   );
 })();

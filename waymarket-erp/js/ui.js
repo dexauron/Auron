@@ -99,6 +99,7 @@
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
+  var EXPORT_ALL = false;     // на время выгрузки в Excel показываем таблицы целиком
   var TAB = {};               // выбранные вкладки внутри экранов
   var CHARTS = {};
 
@@ -462,7 +463,7 @@
   // Таблица для больших данных
   function table(id, cols, rows, opts) {
     opts = opts || {};
-    var step = opts.step || 40, limit = PAGE[id] || step;
+    var step = opts.step || 40, limit = EXPORT_ALL ? rows.length : (PAGE[id] || step);
     var h = '<div class="table-wrap"><table class="data"><thead><tr>';
     cols.forEach(function (c) { h += '<th class="' + (c.cls || '') + '">' + esc(c.title) + '</th>'; });
     h += '</tr></thead><tbody>';
@@ -1024,7 +1025,29 @@
   }
 
   /* --- Формы ручного ввода ---------------------------------------------------- */
+  var FILTERSET_VIEW = '';    // для какого экрана сейчас сохраняем набор фильтров
+  // Человеческое имя экрана по его коду — для подписей в формах и сообщениях
+  function viewName(id) {
+    var v = (VIEWS || []).filter(function (x) { return x.id === id; })[0];
+    return v ? v.name : id;
+  }
+
   var FORMS = {
+    // Имя сохранённого набора фильтров спрашиваем своей формой, а не окном
+    // браузера: системное окно выглядит чужеродно и в части браузеров
+    // блокируется, а здесь всё как в остальной программе.
+    filterSetName: {
+      title: 'Запомнить набор фильтров', icon: '⭐',
+      body: function (v) {
+        v = v || {};
+        return fieldRow('Название набора', 'name', 'text', v.name || '',
+          { placeholder: 'мой понедельник',
+            hint: 'для экрана «' + esc(viewName(FILTERSET_VIEW)) + '»' });
+      },
+      hint: 'Набор запомнит и выбранные кнопки, и период сверху. ' +
+        'Потом одна кнопка над фильтрами вернёт всё как было.',
+      save: function (v) { return saveFilterSet(FILTERSET_VIEW, v.name); }
+    },
     shift: {
       title: 'Смена и касса', icon: '💵',
       body: function (v) {
@@ -1272,6 +1295,8 @@
   function openForm(id, prefill, edit) {
     var f = FORMS[id]; if (!f) return;
     DET.reset();               // форма открывается поверх «Подробнее» — след стираем
+    // полоска «осталась незаконченная запись» не должна закрывать кнопку «Сохранить»
+    var oldBar = document.querySelector('.draft-bar'); if (oldBar) oldBar.remove();
     EDIT = edit || null;
     var lists = datalist('dl-sup', supplierNames()) +
       datalist('dl-staff', staffNames()) +
@@ -1474,6 +1499,7 @@
       '</div>';
 
     h += quickBar();
+    h += kpiCards();
 
     if (X && (S.state.dds || []).length) {
       var daily = X.dailyRevenue(S.state.dds, 30, window.WMFin.isIncome);
@@ -3076,6 +3102,113 @@
     toast('Файл Excel сохранён.');
   }
 
+  /* --- 114. Скачать в Excel то, что на экране --------------------------------
+     Работает на любом экране и не требует отдельного кода под каждый: берём
+     то, что уже нарисовано — карточки-цифры и все таблицы. На время выгрузки
+     таблицы разворачиваются целиком, иначе в файл попали бы только первые
+     сорок строк, которые видно на экране.
+     -------------------------------------------------------------------- */
+  function tableToRows(tbl) {
+    var head = [], rows = [];
+    var ths = tbl.querySelectorAll('thead th');
+    Array.prototype.forEach.call(ths, function (th, i) {
+      head.push(th.textContent.trim() || ('Столбец ' + (i + 1)));
+    });
+    Array.prototype.forEach.call(tbl.querySelectorAll('tbody tr'), function (tr) {
+      var tds = tr.querySelectorAll('td');
+      if (!tds.length || tds.length === 1) return;         // строка «пока пусто»
+      var o = {}, empty = true;
+      Array.prototype.forEach.call(tds, function (td, i) {
+        var v = td.textContent.replace(/\s+/g, ' ').trim();
+        if (v) empty = false;
+        o[head[i] || ('Столбец ' + (i + 1))] = numOrText(v);
+      });
+      if (!empty) rows.push(o);
+    });
+    return rows;
+  }
+  // «168 000 ₽» в Excel должно попасть числом, иначе по нему не посчитать сумму
+  function numOrText(v) {
+    if (!v) return '';
+    var s = v.replace(/[\s\u00A0]/g, '').replace('₽', '').replace(',', '.');
+    if (/^-?\d+(\.\d+)?%$/.test(s)) return v;
+    if (/^-?\d+(\.\d+)?$/.test(s) && s.length < 15) return parseFloat(s);
+    return v;
+  }
+  function uniqueSheet(wb, name) {
+    var base = (name || 'Лист').replace(/[\\\/\?\*\[\]:]/g, ' ').trim().slice(0, 28) || 'Лист';
+    var n = base, i = 2;
+    while (wb.SheetNames.indexOf(n) >= 0) n = (base.slice(0, 26) + ' ' + i++).slice(0, 31);
+    return n;
+  }
+  function exportScreen() {
+    if (typeof XLSX === 'undefined') { toast('Excel-библиотека не загрузилась — перезапустите программу.'); return; }
+    EXPORT_ALL = true;
+    try { render(); } finally { EXPORT_ALL = false; }
+    var page = $('page');
+    var title = (page.querySelector('.page-title') || { textContent: 'Экран' }).textContent.trim();
+    var wb = XLSX.utils.book_new(), sheets = 0;
+
+    // карточки с цифрами — отдельным листом «Главное»
+    var stats = [];
+    Array.prototype.forEach.call(page.querySelectorAll('.stat'), function (st) {
+      var lab = st.querySelector('.stat-label'), val = st.querySelector('.stat-value'),
+        sub = st.querySelector('.stat-sub');
+      if (!lab || !val) return;
+      stats.push({ Показатель: lab.textContent.trim(),
+        Значение: numOrText(val.textContent.replace(/\s+/g, ' ').trim()),
+        Пояснение: sub ? sub.textContent.replace(/\s+/g, ' ').trim() : '' });
+    });
+    if (stats.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stats), uniqueSheet(wb, 'Главное'));
+      sheets++;
+    }
+    // все таблицы экрана — по листу на таблицу, имя берём из заголовка карточки
+    Array.prototype.forEach.call(page.querySelectorAll('table.data'), function (tbl, i) {
+      var rows = tableToRows(tbl);
+      if (!rows.length) return;
+      var card = tbl.closest('.card'), ct = card ? card.querySelector('.card-title') : null;
+      var name = ct ? ct.textContent.trim() : (title + ' ' + (i + 1));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), uniqueSheet(wb, name));
+      sheets++;
+    });
+    // полосы «куда ушли деньги» — тоже данные, просто нарисованы не таблицей
+    var flow = [];
+    Array.prototype.forEach.call(page.querySelectorAll('.flow-row'), function (fr) {
+      var n = fr.querySelector('.flow-name'), v = fr.querySelector('.flow-sum');
+      if (!n) return;
+      flow.push({ Строка: n.textContent.replace(/\s+/g, ' ').trim(),
+        Сумма: fr.dataset.sum !== undefined ? num(fr.dataset.sum)
+          : (v ? v.textContent.replace(/\s+/g, ' ').trim() : ''),
+        Осталось: fr.dataset.left !== undefined ? num(fr.dataset.left) : '' });
+    });
+    if (flow.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flow), uniqueSheet(wb, 'Куда ушли деньги'));
+      sheets++;
+    }
+    // строки-списки собираем в один лист, с указанием, из какой они карточки
+    var list = [];
+    Array.prototype.forEach.call(page.querySelectorAll('.list .row'), function (r) {
+      var t = r.querySelector('.row-title'), sb = r.querySelector('.row-sub'), v = r.querySelector('.row-value');
+      if (!t) return;
+      var card = r.closest('.card'), ct = card ? card.querySelector('.card-title') : null;
+      list.push({ Раздел: ct ? ct.textContent.trim() : '',
+        Что: t.textContent.replace(/\s+/g, ' ').trim(),
+        Пояснение: sb ? sb.textContent.replace(/\s+/g, ' ').trim() : '',
+        Значение: v ? numOrText(v.textContent.replace(/\s+/g, ' ').trim()) : '' });
+    });
+    if (list.length) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(list), uniqueSheet(wb, 'Списки'));
+      sheets++;
+    }
+    render();                                    // вернули обычный вид со «Показать ещё»
+    if (!sheets) { toast('На этом экране нечего выгружать — здесь нет ни таблиц, ни цифр.'); return; }
+    var stamp = today();
+    XLSX.writeFile(wb, (title + ' ' + stamp).replace(/[\\\/\?\*\[\]:]/g, ' ') + '.xlsx');
+    toast('Экран «' + title + '» сохранён в Excel: ' + sheets + ' ' +
+      plural(sheets, 'лист', 'листа', 'листов') + '.');
+  }
+
   function backup() {
     var blob = new Blob([S.exportJSON()], { type: 'application/json' });
     var a = document.createElement('a');
@@ -3117,9 +3250,109 @@
     setTimeout(function () { w.print(); }, 300);
   }
 
+  /* --- 117. Свои показатели на главном экране ---------------------------------
+     Владелец сам задаёт формулу словами — «выручка - закуп - зп» — и цифра
+     встаёт рядом с остальными. Считается тем же разборщиком, что и суммы в
+     полях: никакого выполнения чужого кода.
+     -------------------------------------------------------------------- */
+  function kpiContext() {
+    var Fin = window.WMFin;
+    var ledger = (S.state.dds || []).filter(function (r) { return inPeriod(r.date); });
+    if (!ledger.length) ledger = S.state.dds || [];
+    var tot = Fin.totals(ledger);
+    return {
+      dds: ledger, bank: S.state.bank || [], settings: S.settings,
+      opening: { cash: num(S.settings.openCashStart), card: num(S.settings.openCardStart),
+        sbp: num(S.settings.openSbpStart), transfer: num(S.settings.openTransferStart) },
+      writeoffSum: C.writeoffSum || 0,
+      tax: Fin.taxAmount(S.settings, tot.income, tot.expense).sum
+    };
+  }
+  function kpiUnit(v, unit) {
+    if (unit === '%') return pct(v);
+    if (unit === 'штук') return nf(v);
+    return priv(v);
+  }
+  function kpiCards() {
+    var list = (S.state.kpis || []).filter(function (k) { return k.name && k.formula; });
+    if (!list.length) return '';
+    var R = window.WMReports;
+    if (!R) return '';
+    var vals = R.kpiValues(kpiContext());
+    var cards = list.map(function (k) {
+      var res = R.kpiEval(k.formula, vals);
+      if (res.error) {
+        return stat(k.name, '—', 'формула не считается: ' + esc(res.error).slice(0, 60), 'c-orange');
+      }
+      return stat(k.name, kpiUnit(res.value, k.unit), esc(k.formula) +
+        ' · ' + periodName().toLowerCase(),
+        k.good === 'больше' ? (res.value >= num(k.target) ? 'c-green' : 'c-orange')
+          : k.good === 'меньше' ? (res.value <= num(k.target) ? 'c-green' : 'c-orange') : '');
+    }).join('');
+    return '<div class="stat-grid">' + cards + '</div>';
+  }
+
+  /* --- 116. Сохранённые наборы фильтров ---------------------------------------
+     «Мой понедельник»: выбрал фильтры один раз, назвал — дальше одна кнопка.
+     Вместе с фильтрами запоминается и период сверху, иначе набор бы врал.
+     -------------------------------------------------------------------- */
+  function filterSets(view) {
+    return (S.state.filtersets || []).filter(function (f) { return f.view === view; });
+  }
+  FLT.useSets(filterSets);
+
+  function saveFilterSet(view, rawName) {
+    var name = String(rawName == null ? '' : rawName).trim();
+    if (!name) return 'Дайте набору название — например «мой понедельник».';
+    if (!view) return 'Не понял, для какого экрана сохранять набор.';
+    var snap = FLT.snapshot(view);
+    var same = filterSets(view).filter(function (f) { return E.norm(f.name) === E.norm(name); })[0];
+    if (same) {
+      same.state = snap.state; same.text = snap.text; same.period = PERIOD;
+      S.save();
+      return { ok: 'Набор «' + name + '» перезаписан.' };
+    }
+    S.add('filtersets', { view: view, name: name, state: snap.state, text: snap.text, period: PERIOD });
+    S.save();
+    return { ok: 'Набор «' + name + '» сохранён. Теперь он кнопкой над фильтрами.' };
+  }
+  function applyFilterSet(view, id) {
+    var st = filterSets(view).filter(function (f) { return f.id === id; })[0];
+    if (!st) return;
+    if (FLT.sameAs(view, st)) { FLT.clear(view); toast('Набор снят — показываю всё.'); }
+    else {
+      FLT.restore(view, st);
+      if (st.period) PERIOD = st.period;
+      toast('Набор «' + st.name + '» применён.');
+    }
+    PAGE = {}; render();
+  }
+
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
+      var fsDel = e.target.closest('[data-filterset-del]');
+      if (fsDel) {
+        e.stopPropagation();
+        var fsName = (S.state.filtersets || []).filter(function (f) { return f.id === fsDel.dataset.filtersetDel; })[0];
+        if (fsName && confirm('Убрать набор «' + fsName.name + '»? Сами фильтры останутся.')) {
+          S.remove('filtersets', fsDel.dataset.filtersetDel);
+          render(); toast('Набор убран.');
+        }
+        return;
+      }
+      var fsApply = e.target.closest('[data-filterset]');
+      if (fsApply) {
+        var fp2 = fsApply.dataset.filterset.split('|');
+        applyFilterSet(fp2[0], fp2.slice(1).join('|'));
+        return;
+      }
+      var fsSave = e.target.closest('[data-filterset-save]');
+      if (fsSave) {
+        FILTERSET_VIEW = fsSave.dataset.filtersetSave;
+        openForm('filterSetName');
+        return;
+      }
       var pAdd = e.target.closest('[data-pairadd]'), pDel = e.target.closest('[data-pairdel]');
       if (pAdd) {
         var box = document.querySelector('[data-pairs="' + pAdd.dataset.pairadd + '"]');
@@ -3217,6 +3450,7 @@
       else if (a === 'folder-sync') syncFolder(false);
       else if (a === 'folder-forget') { if (confirm('Отключить папку? Записи останутся в браузере и в уже сохранённом файле.')) { F.forget(); render(); } }
       else if (a === 'export-excel') exportExcel();
+      else if (a === 'export-screen') exportScreen();
       else if (a === 'restore') restore();
       else if (a === 'print') window.print();
       else if (a === 'del-shift') {
@@ -3373,6 +3607,9 @@
        предлагаем вернуться к нему, а не молча забываем.
        -------------------------------------------------------------------- */
     setTimeout(function () {
+      // Пока открыта форма, полоску не показываем: она стоит внизу по центру
+      // и накрывает собой кнопку «Сохранить».
+      if (document.getElementById('wmForm')) return;
       var found = null;
       Object.keys(FORMS).forEach(function (id) {
         if (found) return;

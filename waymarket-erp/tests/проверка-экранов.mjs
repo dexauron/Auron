@@ -20,7 +20,7 @@ const SCREENS = ['today', 'suppliers', 'cash', 'dds', 'staff', 'stock', 'orders'
   'confirm', 'terms', 'reconcile', 'conflicts', 'compare', 'markup', 'payroll',
   'manual', 'records', 'debtors', 'sheets', 'check', 'reset',
   'flow', 'problems', 'eaters', 'pace', 'yearago', 'avgcheck', 'calend',
-  'groupprofit', 'itemprofit'];
+  'groupprofit', 'itemprofit', 'ownerpage', 'ready', 'kpi'];
 
 // строка, которая пытается выполниться, если её вставят в страницу как разметку
 const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
@@ -264,6 +264,74 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
   check('на Пульте видно СБП и деньги в пути',
     pulse.includes('СБП') && pulse.includes('Деньги в пути'), 'видно', 'видно');
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' / ') || 'чисто', 'чисто');
+  await page.close();
+  console.log('');
+}
+
+/* 7. Свои показатели, сохранённые наборы фильтров и выгрузка экрана в Excel */
+{
+  console.log('— Свои показатели и наборы фильтров');
+  const { page, errs } = await open(true);
+
+  // 117: свой показатель формулой словами
+  await page.evaluate(() => window.WMUI.openForm('kpiCard'));
+  await page.waitForTimeout(250);
+  await page.fill('.sheet input[name="name"]', 'Остаётся после главного');
+  await page.fill('.sheet input[name="formula"]', 'выручка - закуп - зп - аренда');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const kpiCount = await page.evaluate(() => (window.WMStore.state.kpis || []).length);
+  check('свой показатель сохранился', kpiCount === 1, kpiCount, 1);
+
+  await page.evaluate(() => window.WMUI.go('today'));
+  await page.waitForTimeout(400);
+  const todayTxt = await page.textContent('#page');
+  check('показатель встал на экран «Сегодня»',
+    todayTxt.indexOf('Остаётся после главного') >= 0, 'виден', 'виден');
+
+  await page.evaluate(() => window.WMUI.openForm('kpiCard'));
+  await page.waitForTimeout(250);
+  await page.fill('.sheet input[name="name"]', 'Ерунда');
+  await page.fill('.sheet input[name="formula"]', 'выручка - шоколадка');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(300);
+  const stillOne = await page.evaluate(() => (window.WMStore.state.kpis || []).length);
+  check('непонятное слово в формуле не сохраняется', stillOne === 1, stillOne, 1);
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(250);
+
+  // 116: набор фильтров «мой понедельник»
+  await page.evaluate(() => window.WMUI.go('stock'));
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { const c = document.querySelector('.chip:not(.active)'); if (c) c.click(); });
+  await page.waitForTimeout(300);
+  const canSave = await page.evaluate(() => !!document.querySelector('[data-filterset-save]'));
+  check('кнопка «Запомнить набор» появляется при активном фильтре', canSave, 'есть', 'есть');
+  await page.click('[data-filterset-save]');
+  await page.waitForTimeout(300);
+  await page.fill('.sheet input[name="name"]', 'мой понедельник');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(400);
+  const savedSets = await page.evaluate(() => (window.WMStore.state.filtersets || []).length);
+  check('набор фильтров сохранён', savedSets === 1, savedSets, 1);
+  await page.evaluate(() => { document.querySelectorAll('[data-filter-clear]').forEach(b => b.click()); });
+  await page.waitForTimeout(300);
+  await page.click('[data-filterset]');
+  await page.waitForTimeout(400);
+  const back = await page.evaluate(() => window.WMFilter.active('stock'));
+  check('набор возвращается одной кнопкой', back > 0, back + ' фильтр(ов)', '>0');
+
+  // 114: выгрузка того экрана, который открыт
+  await page.evaluate(() => window.WMUI.go('suppliers'));
+  await page.waitForTimeout(500);
+  const dl = await Promise.all([
+    page.waitForEvent('download', { timeout: 25000 }).catch(() => null),
+    page.click('[data-act="export-screen"]')
+  ]).then(r => r[0]);
+  check('экран выгружается в Excel одной кнопкой', !!dl,
+    dl ? 'файл получен' : 'файл не пришёл', 'файл получен');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close();
   console.log('');
 }
