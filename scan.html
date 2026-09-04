@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0E7A5F">
+<title>Auron — сканер штрихкода</title>
+<!--
+  Сканер штрихкода для Auron.
+
+  Почему это ОТДЕЛЬНАЯ страница, а не часть приложения:
+  приложение живёт внутри рамки (iframe) Google Apps Script, а его песочница
+  не даёт доступ к камере — getUserMedia там блокируется, и разрешения на
+  рамке не помогают. Поэтому сканер открывается со своего домена
+  (GitHub Pages), где камера работает штатно, и возвращает код обратно.
+
+  Как работает на разных устройствах:
+    Android/Chrome  — встроенный распознаватель браузера (BarcodeDetector);
+    iPhone/Safari   — библиотека html5-qrcode (Safari BarcodeDetector не умеет);
+    что угодно ещё  — ручной ввод, он доступен всегда.
+-->
+<style>
+  :root{
+    --bg:#0B120F; --surface:#131C18; --surface-2:#1a241f; --line:#212E27;
+    --ink:#E9F0EB; --ink-2:#A4B1AB; --muted:#6C7A73;
+    --brand:#2FC898; --neg:#F87264;
+    --font:-apple-system,BlinkMacSystemFont,system-ui,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{
+    font-family:var(--font);background:var(--bg);color:var(--ink);
+    min-height:100dvh;display:flex;flex-direction:column;
+    padding:calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 18px);
+  }
+  .top{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
+  .top h1{font-size:17px;font-weight:800;letter-spacing:-.02em;flex:1;}
+  .x{width:36px;height:36px;border-radius:11px;border:1px solid var(--line);
+     background:var(--surface-2);color:var(--ink);font-size:18px;cursor:pointer;
+     display:grid;place-items:center;flex-shrink:0;}
+
+  /* Окно камеры. Соотношение 3:4 — удобно ловить штрихкод на полке. */
+  .stage{position:relative;width:100%;max-width:520px;margin:0 auto;
+    aspect-ratio:3/4;background:#000;border-radius:20px;overflow:hidden;
+    border:1px solid var(--line);}
+  .stage video,.stage canvas{width:100%;height:100%;object-fit:cover;display:block;}
+  /* Рамка прицела: показывает, куда наводить */
+  .aim{position:absolute;inset:0;pointer-events:none;display:grid;place-items:center;}
+  .aim-box{width:76%;height:34%;border-radius:14px;
+    box-shadow:0 0 0 100vmax rgba(0,0,0,.42);border:2px solid rgba(255,255,255,.9);}
+  .aim-line{position:absolute;left:12%;right:12%;height:2px;background:var(--brand);
+    box-shadow:0 0 12px var(--brand);animation:sweep 2s ease-in-out infinite;}
+  @keyframes sweep{0%,100%{transform:translateY(-52px);}50%{transform:translateY(52px);}}
+  @media(prefers-reduced-motion:reduce){.aim-line{animation:none;}}
+
+  .hint{text-align:center;font-size:13px;color:var(--ink-2);margin:14px 0 0;line-height:1.5;}
+  .row{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap;justify-content:center;}
+  button.b{flex:1;min-width:132px;padding:13px 14px;border-radius:13px;border:1px solid var(--line);
+    background:var(--surface-2);color:var(--ink);font-family:var(--font);font-size:14px;
+    font-weight:700;cursor:pointer;transition:transform .12s ease;}
+  button.b:active{transform:scale(.97);}
+  button.b.main{background:var(--brand);color:#06231a;border-color:transparent;}
+  button.b[hidden]{display:none;}
+
+  .msg{border-radius:14px;padding:14px 16px;font-size:13.5px;line-height:1.6;margin-top:14px;}
+  .msg.bad{background:color-mix(in srgb,var(--neg) 14%,transparent);color:var(--neg);}
+  .msg.ok{background:color-mix(in srgb,var(--brand) 13%,transparent);color:var(--brand);}
+
+  .manual{margin-top:16px;}
+  .manual label{display:block;font-size:12px;font-weight:700;color:var(--ink-2);margin-bottom:6px;}
+  .manual input{width:100%;padding:14px;border-radius:13px;border:1.5px solid var(--line);
+    background:var(--surface);color:var(--ink);font-size:17px;font-family:var(--font);
+    letter-spacing:.03em;}
+  .manual input:focus{outline:none;border-color:var(--brand);}
+  .found{font-size:22px;font-weight:800;letter-spacing:.04em;text-align:center;
+    padding:14px;background:var(--surface-2);border-radius:13px;margin-top:12px;}
+  select.cam{width:100%;margin-top:10px;padding:11px 12px;border-radius:12px;
+    border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+    font-family:var(--font);font-size:13px;}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <h1>Сканер штрихкода</h1>
+  <button class="x" id="close" title="Закрыть" aria-label="Закрыть">✕</button>
+</div>
+
+<div class="stage" id="stage">
+  <div class="aim"><div class="aim-box"></div><div class="aim-line"></div></div>
+</div>
+
+<select class="cam" id="cams" hidden aria-label="Выбор камеры"></select>
+
+<p class="hint" id="hint">Наведите штрихкод в рамку. Держите телефон ровно, 10–15 см от кода.</p>
+
+<div class="row">
+  <button class="b" id="torch" hidden>🔦 Подсветка</button>
+  <button class="b" id="retry" hidden>↻ Попробовать снова</button>
+</div>
+
+<div id="out"></div>
+
+<div class="manual">
+  <label for="code">Или введите штрихкод вручную</label>
+  <input id="code" type="text" inputmode="numeric" autocomplete="off"
+         placeholder="например 4603290002882" enterkeyhint="done">
+  <div class="row"><button class="b main" id="send">Готово</button></div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+
+  var $ = function(id){ return document.getElementById(id); };
+  var stage = $('stage'), out = $('out'), hint = $('hint');
+
+  // Кому разрешено получать результат. Открывающая страница — приложение
+  // внутри рамки Apps Script, поэтому конкретный origin заранее не известен;
+  // но мы отправляем ТОЛЬКО штрихкод (не персональные данные), а принимающая
+  // сторона проверяет, что сообщение пришло с нашего домена.
+  var PARENT_TARGET = '*';
+
+  // Магазинные штрихкоды. Сужаем список — распознаётся точнее и быстрее,
+  // чем если разрешить все форматы включая QR и матричные.
+  var FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','codabar'];
+
+  var stopFn = null, finished = false, stream = null;
+
+  function say(kind, html){
+    out.innerHTML = '<div class="msg ' + kind + '">' + html + '</div>';
+  }
+
+  // Проверка штрихкода: только цифры/буквы, разумная длина.
+  // Так случайный мусор от распознавателя не уйдёт в приложение.
+  function valid(code){
+    var c = String(code || '').trim();
+    return /^[0-9A-Za-z\-]{4,32}$/.test(c) ? c : '';
+  }
+
+  function stopAll(){
+    try { if (stopFn) stopFn(); } catch(e){}
+    stopFn = null;
+    try {
+      if (stream) stream.getTracks().forEach(function(t){ t.stop(); });
+    } catch(e){}
+    stream = null;
+  }
+
+  // Нашли код — отдаём приложению и закрываем окно.
+  function done(code){
+    var c = valid(code);
+    if (!c || finished) return;
+    finished = true;
+    stopAll();
+    stage.style.display = 'none';
+    $('cams').hidden = true;
+    $('torch').hidden = true;
+    hint.textContent = 'Готово — код передан в приложение.';
+    out.innerHTML = '<div class="found">' + c.replace(/[<>&]/g,'') + '</div>';
+    try { if (navigator.vibrate) navigator.vibrate(60); } catch(e){}
+    var sent = false;
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ auronScan: c }, PARENT_TARGET);
+        sent = true;
+      }
+    } catch(e){}
+    if (!sent) {
+      // Окно открыли напрямую, без приложения — покажем код, чтобы можно
+      // было скопировать, и не будем закрываться молча.
+      say('ok', 'Скопируйте код и вставьте в приложение — окно открыто не из Auron.');
+      return;
+    }
+    setTimeout(function(){ try { window.close(); } catch(e){} }, 420);
+  }
+
+  // ── Подсветка (вспышка): помогает на тёмной полке ──────────────────
+  function setupTorch(track){
+    var btn = $('torch'); btn.hidden = true;
+    if (!track || !track.getCapabilities) return;
+    var caps;
+    try { caps = track.getCapabilities(); } catch(e){ return; }
+    if (!caps || !caps.torch) return;   // камера не умеет — кнопку не показываем
+    var on = false;
+    btn.hidden = false;
+    btn.onclick = function(){
+      on = !on;
+      track.applyConstraints({ advanced:[{ torch:on }] }).then(function(){
+        btn.textContent = on ? '🔦 Выключить' : '🔦 Подсветка';
+      }).catch(function(){
+        btn.hidden = true;
+      });
+    };
+  }
+
+  // ── Список камер: на телефонах их несколько (широкая, теле, фронтальная) ──
+  function listCameras(currentId){
+    if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(function(devs){
+      var cams = devs.filter(function(d){ return d.kind === 'videoinput'; });
+      var sel = $('cams');
+      if (cams.length < 2) { sel.hidden = true; return; }
+      sel.innerHTML = cams.map(function(d, i){
+        var name = d.label || ('Камера ' + (i + 1));
+        return '<option value="' + d.deviceId + '"' +
+               (d.deviceId === currentId ? ' selected' : '') + '>' + name + '</option>';
+      }).join('');
+      sel.hidden = false;
+      sel.onchange = function(){ restart(sel.value); };
+    }).catch(function(){});
+  }
+
+  // ── Запуск камеры ──────────────────────────────────────────────────
+  function openCamera(deviceId){
+    var video = { facingMode:{ ideal:'environment' },
+                  width:{ ideal:1920 }, height:{ ideal:1080 } };
+    if (deviceId) { video.deviceId = { exact: deviceId }; delete video.facingMode; }
+    // Постоянная фокусировка — мелкие и потёртые штрихкоды читаются резче.
+    video.advanced = [{ focusMode:'continuous' }];
+    return navigator.mediaDevices.getUserMedia({ video: video, audio: false });
+  }
+
+  // ── Путь 1: встроенный распознаватель браузера (Android/Chrome) ─────
+  function scanNative(deviceId){
+    return openCamera(deviceId).then(function(s){
+      stream = s;
+      var track = s.getVideoTracks()[0];
+      var video = document.createElement('video');
+      video.setAttribute('playsinline','');   // iOS: иначе откроется на весь экран
+      video.muted = true;
+      video.srcObject = s;
+      stage.insertBefore(video, stage.firstChild);
+      setupTorch(track);
+      try { listCameras(track.getSettings ? track.getSettings().deviceId : ''); } catch(e){}
+      return video.play().then(function(){ return { video: video, track: track }; });
+    }).then(function(ctx){
+      // Оставляем только те форматы, что браузер реально умеет
+      var mk = function(formats){
+        try { return formats ? new window.BarcodeDetector({ formats: formats })
+                             : new window.BarcodeDetector(); }
+        catch(e){ return new window.BarcodeDetector(); }
+      };
+      var ready = window.BarcodeDetector.getSupportedFormats
+        ? window.BarcodeDetector.getSupportedFormats().then(function(sup){
+            var f = FORMATS.filter(function(x){ return sup.indexOf(x) >= 0; });
+            return mk(f.length ? f : null);
+          }).catch(function(){ return mk(null); })
+        : Promise.resolve(mk(FORMATS));
+
+      return ready.then(function(det){
+        var active = true;
+        stopFn = function(){ active = false; };
+        var canvas = document.createElement('canvas');
+        var cx = canvas.getContext('2d', { willReadFrequently:true });
+        var frame = 0;
+
+        function tick(){
+          if (!active || finished) return;
+          det.detect(ctx.video).then(function(codes){
+            if (codes && codes.length && codes[0].rawValue) { done(codes[0].rawValue); return; }
+            // Каждый второй кадр пробуем инверсию: так читаются и светлые
+            // коды на тёмном фоне, и тёмные на светлом при плохом свете.
+            if (ctx.video.videoWidth && (frame++ % 2 === 0)) {
+              var w = Math.min(960, ctx.video.videoWidth);
+              var h = Math.round(ctx.video.videoHeight * (w / ctx.video.videoWidth));
+              canvas.width = w; canvas.height = h;
+              cx.drawImage(ctx.video, 0, 0, w, h);
+              var img = cx.getImageData(0, 0, w, h), d = img.data;
+              for (var i = 0; i < d.length; i += 4){
+                d[i] = 255 - d[i]; d[i+1] = 255 - d[i+1]; d[i+2] = 255 - d[i+2];
+              }
+              cx.putImageData(img, 0, 0);
+              return det.detect(canvas).then(function(inv){
+                if (inv && inv.length && inv[0].rawValue) { done(inv[0].rawValue); return; }
+                setTimeout(tick, 150);
+              }).catch(function(){ setTimeout(tick, 150); });
+            }
+            setTimeout(tick, 150);
+          }).catch(function(){ setTimeout(tick, 200); });
+        }
+        tick();
+      });
+    });
+  }
+
+  // ── Путь 2: библиотека (iPhone/Safari и всё, где нет BarcodeDetector) ──
+  function loadScript(src){
+    return new Promise(function(res, rej){
+      var s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = function(){ rej(new Error('no-lib')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function scanLibrary(){
+    hint.textContent = 'Включаем сканер…';
+    var ready = window.Html5Qrcode ? Promise.resolve()
+      : loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
+    return ready.then(function(){
+      var box = document.createElement('div');
+      box.id = 'libbox';
+      box.style.cssText = 'position:absolute;inset:0;';
+      stage.insertBefore(box, stage.firstChild);
+      var formats;
+      try {
+        var F = window.Html5QrcodeSupportedFormats;
+        formats = [F.EAN_13,F.EAN_8,F.UPC_A,F.UPC_E,F.CODE_128,F.CODE_39,F.ITF,F.CODABAR]
+                  .filter(function(x){ return x != null; });
+      } catch(e){ formats = undefined; }
+      var sc = new window.Html5Qrcode('libbox', formats ? { formatsToSupport: formats } : undefined);
+      stopFn = function(){ try { sc.stop().then(function(){ sc.clear(); }).catch(function(){}); } catch(e){} };
+      return sc.start({ facingMode:'environment' },
+        { fps:14, qrbox:{ width:264, height:168 }, aspectRatio:1.4 },
+        function(text){ done(text); },
+        function(){ /* кадр не считался — это нормально */ }
+      ).then(function(){
+        hint.textContent = 'Наведите штрихкод в рамку. Держите телефон ровно, 10–15 см от кода.';
+        // Подсветка через трек библиотеки, если получится добраться
+        try {
+          var v = stage.querySelector('video');
+          var st = v && v.srcObject;
+          var tr = st && st.getVideoTracks && st.getVideoTracks()[0];
+          if (tr) setupTorch(tr);
+        } catch(e){}
+      });
+    });
+  }
+
+  // ── Понятные объяснения вместо технических ошибок ──────────────────
+  function explain(err){
+    var name = (err && err.name) || '';
+    var msg = (err && err.message) || '';
+    if (name === 'NotAllowedError' || /denied|permission/i.test(msg)) {
+      return 'Доступ к камере запрещён. Разрешите камеру для этого сайта в настройках браузера ' +
+             '(в адресной строке — значок замка → Камера → Разрешить) и нажмите «Попробовать снова».';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      return 'Камера не найдена. Если устройство без камеры — введите штрихкод вручную ниже.';
+    }
+    if (name === 'NotReadableError') {
+      return 'Камера занята другим приложением. Закройте другие программы, использующие камеру, ' +
+             'и нажмите «Попробовать снова».';
+    }
+    if (msg === 'no-lib' || /Html5Qrcode/.test(msg)) {
+      return 'Не удалось загрузить сканер (нет интернета?). Введите штрихкод вручную ниже.';
+    }
+    if (!window.isSecureContext) {
+      return 'Камера работает только по защищённому соединению (https). Введите код вручную.';
+    }
+    return 'Не удалось включить камеру. Введите штрихкод вручную ниже.';
+  }
+
+  function start(deviceId){
+    finished = false;
+    out.innerHTML = '';
+    $('retry').hidden = true;
+    stage.style.display = '';
+    // убираем прошлое видео, оставляя рамку прицела
+    Array.prototype.slice.call(stage.children).forEach(function(el){
+      if (!el.classList.contains('aim')) stage.removeChild(el);
+    });
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      say('bad', 'Этот браузер не умеет работать с камерой. Введите штрихкод вручную ниже.');
+      stage.style.display = 'none';
+      return;
+    }
+
+    var run = ('BarcodeDetector' in window) ? scanNative(deviceId) : scanLibrary();
+    run.catch(function(err){
+      stopAll();
+      // Если встроенный распознаватель есть, но сорвался — пробуем библиотеку
+      if (('BarcodeDetector' in window) && !finished && (err && err.name !== 'NotAllowedError')) {
+        scanLibrary().catch(function(e2){
+          stage.style.display = 'none';
+          say('bad', explain(e2));
+          $('retry').hidden = false;
+        });
+        return;
+      }
+      stage.style.display = 'none';
+      say('bad', explain(err));
+      $('retry').hidden = false;
+    });
+  }
+
+  function restart(deviceId){ stopAll(); start(deviceId); }
+
+  // ── Ручной ввод: работает всегда, на любом устройстве ──────────────
+  $('send').onclick = function(){
+    var c = valid($('code').value);
+    if (!c) { say('bad', 'Введите штрихкод — от 4 до 32 цифр или букв.'); return; }
+    done(c);
+  };
+  $('code').addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); $('send').click(); }
+  });
+  $('retry').onclick = function(){ restart(''); };
+  $('close').onclick = function(){ stopAll(); try { window.close(); } catch(e){} };
+
+  // Камеру отпускаем, когда окно уходит из вида — иначе на телефоне
+  // остаётся горящий индикатор и садится батарея.
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) stopAll();
+  });
+  window.addEventListener('pagehide', stopAll);
+
+  start('');
+})();
+</script>
+</body>
+</html>
