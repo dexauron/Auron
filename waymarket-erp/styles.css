@@ -339,3 +339,34 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
 .calc-eq { background: var(--blue); color: #fff; }
 .calc-back-key { font-size: 18px; }
 @media (max-width: 480px) { .calc-key { height: 52px; font-size: 19px; } }
+
+/* --- Тревожная строка под шапкой: видна с любого экрана --------------------- */
+.alert-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 24px; font-size: 14px; font-weight: 550;
+  background: color-mix(in srgb, var(--red) 12%, var(--bg));
+  color: var(--label); border-bottom: .5px solid var(--separator); }
+.alert-bar.warn { background: color-mix(in srgb, var(--orange) 14%, var(--bg)); }
+.alert-bar.info { background: color-mix(in srgb, var(--blue) 12%, var(--bg)); }
+.alert-bar .alert-item { display: flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 3px 10px; border-radius: var(--r-pill); background: var(--bg-elev);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.alert-bar .alert-item:hover { background: var(--fill-2); }
+.alert-bar .alert-more { margin-left: auto; color: var(--label-2); font-weight: 500; font-size: 13px; }
+@media (max-width: 700px) { .alert-bar { padding: 9px 16px; font-size: 13px; } }
+
+/* --- Купюры и пересчёт кассы ------------------------------------------------ */
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.note-cell { background: var(--bg-inset); border-radius: var(--r-inner); padding: 9px 11px; }
+.note-cell label { display: block; font-size: 12.5px; color: var(--label-2); margin-bottom: 4px; }
+.note-cell input { width: 100%; border: 1px solid var(--separator); background: var(--bg-elev);
+  color: var(--label); border-radius: 9px; padding: 6px 9px; font-size: 15px;
+  font-family: inherit; text-align: right; }
+.note-cell .note-sum { font-size: 12px; color: var(--label-2); text-align: right; margin-top: 3px; min-height: 15px; }
+.notes-total { display: flex; justify-content: space-between; align-items: baseline;
+  padding: 12px 14px; background: var(--bg-inset); border-radius: var(--r-inner); margin-top: 10px; }
+.notes-total b { font-size: 22px; letter-spacing: -.4px; }
+
+/* --- Спарклайн в строке ------------------------------------------------------ */
+.spark { display: inline-block; vertical-align: middle; }
+.spark path { fill: none; stroke: var(--blue); stroke-width: 1.6; }
+.spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }

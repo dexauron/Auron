@@ -101,6 +101,8 @@
     'inventory', 'kvi', 'dds', 'plans',
     // поставки из 1С живут в базе постоянно: документы, оплаты, справочник фирм
     'docs', 'pays', 'supreg', 'debtors',
+    // пересчёты кассы по купюрам и журнал действий владельца
+    'cashcount', 'log',
     // корзина: всё удалённое лежит здесь, пока не почистят
     'trash'];
 
@@ -166,10 +168,48 @@
 
   function uid() { return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 
+  /* --- Журнал действий -------------------------------------------------------
+     Каждая правка, добавление и удаление оставляют след: что было до, что
+     стало после. Отсюда «Отменить» возвращает одну запись, не трогая базу
+     целиком, и видно, кто что менял.
+     ------------------------------------------------------------------------ */
+  var LOG_MAX = 500;
+  var COLL_RU = {
+    dds: 'Касса и расходы', docs: 'Накладные', pays: 'Оплаты', supreg: 'Поставщики',
+    plans: 'План выплат', payouts: 'Зарплата', timesheet: 'Табель',
+    debtors: 'Долги покупателей', inventory: 'Списания', expiry: 'Сроки годности',
+    cashcount: 'Пересчёт кассы', kvi: 'Товары-маркеры', invoices: 'Накладные (старые)',
+    payments: 'Оплаты (старые)', shifts: 'Смены (старые)', expenses: 'Расходы (старые)'
+  };
+  // Как записать строку в журнал, чтобы через месяц было понятно
+  function logTitle(rec) {
+    if (!rec) return '';
+    return String(rec.name || rec.firm || rec.supplier || rec.employee ||
+      rec.category || rec.doc || rec.title || '').slice(0, 60);
+  }
+  function logSum(rec) {
+    if (!rec) return 0;
+    var v = rec.amount != null ? rec.amount : (rec.sum != null ? rec.sum : rec.counted);
+    var n = parseFloat(v);
+    return isFinite(n) ? n : 0;
+  }
+  function writeLog(what, coll, rec, before) {
+    if (coll === 'log' || coll === 'trash') return;
+    state.log = state.log || [];
+    state.log.push({
+      id: uid(), at: new Date().toISOString(), what: what, coll: coll,
+      collName: COLL_RU[coll] || coll, recId: rec && rec.id,
+      title: logTitle(rec), sum: logSum(rec),
+      before: before ? JSON.parse(JSON.stringify(before)) : null
+    });
+    if (state.log.length > LOG_MAX) state.log = state.log.slice(-LOG_MAX);
+  }
+
   function add(coll, item) {
     if (!state[coll]) state[coll] = [];
     if (!item.id) item.id = uid();
     state[coll].push(item);
+    writeLog('добавление', coll, item, null);
     save();
     return item;
   }
@@ -188,7 +228,12 @@
   function update(coll, id, patch) {
     var rows = state[coll] || [];
     for (var i = 0; i < rows.length; i++) {
-      if (rows[i].id === id) { for (var k in patch) rows[i][k] = patch[k]; save(); return rows[i]; }
+      if (rows[i].id === id) {
+        var before = JSON.parse(JSON.stringify(rows[i]));
+        for (var k in patch) rows[i][k] = patch[k];
+        writeLog('правка', coll, rows[i], before);
+        save(); return rows[i];
+      }
     }
     return null;
   }
@@ -203,6 +248,7 @@
       if (rows[i].id === id) {
         var rec = rows[i];
         rows.splice(i, 1);
+        writeLog('удаление', coll, rec, rec);
         if (!forever && coll !== 'trash') {
           state.trash = state.trash || [];
           state.trash.push({ id: uid(), coll: coll, at: new Date().toISOString(), rec: rec });
@@ -243,6 +289,23 @@
     save();
   }
 
+  // Отменить одно действие из журнала: вернуть запись, какой она была до
+  function logUndo(logId) {
+    var log = state.log || [];
+    var row = null;
+    for (var i = 0; i < log.length; i++) if (log[i].id === logId) row = log[i];
+    if (!row || !row.before) return null;
+    var rows = state[row.coll] = state[row.coll] || [];
+    var found = false;
+    for (var j = 0; j < rows.length; j++) {
+      if (rows[j].id === row.before.id) { rows[j] = JSON.parse(JSON.stringify(row.before)); found = true; break; }
+    }
+    if (!found) rows.push(JSON.parse(JSON.stringify(row.before)));   // удалённую возвращаем на место
+    row.undone = true;
+    save();
+    return row.before;
+  }
+
   function setSetting(key, value) { state.settings[key] = value; save(); }
 
   // Резервная копия: журналы и настройки одним файлом
@@ -268,7 +331,7 @@
     get state() { return state; },
     get settings() { return state.settings; },
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
-    restore: restore, undo: undo, emptyTrash: emptyTrash,
+    restore: restore, undo: undo, emptyTrash: emptyTrash, logUndo: logUndo, COLL_RU: COLL_RU,
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
     fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll
   };

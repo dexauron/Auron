@@ -1323,6 +1323,74 @@
     return null;
   };
 
+  /* --- Проверка базы и журнал ------------------------------------------------ */
+  A['check-again'] = function () {
+    var n = (window.WMAlerts ? window.WMAlerts.checkBase(S.state) : [])
+      .reduce(function (a, p) { return a + p.count; }, 0);
+    U().render();
+    return n ? 'Проверено: сломанных записей — ' + n + '.' : 'Проверено: база в порядке.';
+  };
+
+  A['check-show'] = function (el) {
+    var kind = el.dataset.kind;
+    var p = (window.WMAlerts ? window.WMAlerts.checkBase(S.state) : [])
+      .filter(function (x) { return x.kind === kind; })[0];
+    if (!p) return 'Такой проблемы больше нет.';
+    var u = U();
+    // ищем сами записи по всей базе: одна проблема бывает в разных списках
+    var rows = [];
+    S.COLLECTIONS.forEach(function (coll) {
+      (S.state[coll] || []).forEach(function (r) {
+        if (p.ids.indexOf(r.id) >= 0) rows.push({ coll: coll, rec: r });
+      });
+    });
+    u.sheet(p.text.charAt(0).toUpperCase() + p.text.slice(1) + ' — ' + p.count,
+      '<div class="detail">' +
+      '<div class="banner"><span>&#9888;</span><span>' + esc(CHECK_HELP[kind] || '') + '</span></div>' +
+      u.table('checkRows', [
+        { title: 'Где', fn: function (r) { return esc(S.COLL_RU[r.coll] || r.coll); } },
+        { title: 'Дата', fn: function (r) { return esc(dateRu(r.rec.date)) || '<span class="c-red">нет</span>'; } },
+        { title: 'Кто или что', fn: function (r) {
+          return esc(r.rec.firm || r.rec.supplier || r.rec.name || r.rec.category || r.rec.doc || '—'); } },
+        { title: 'Документ', fn: function (r) { return esc(SUP.shortDoc(r.rec.doc || '')) || '—'; } },
+        { title: 'Сумма', cls: 'num', fn: function (r) {
+          return E.fmtMoney(num(r.rec.sum != null ? r.rec.sum : r.rec.amount)); } },
+        { title: '', cls: 'center', fn: function (r) {
+          return '<button class="btn btn-sm btn-danger" data-del="' + r.coll + ':' + r.rec.id + '">Удалить</button>'; } }
+      ], rows, { step: 60 }) + '</div>');
+    return null;
+  };
+
+  A['check-drop'] = function (el) {
+    var kind = el.dataset.kind;
+    var p = (window.WMAlerts ? window.WMAlerts.checkBase(S.state) : [])
+      .filter(function (x) { return x.kind === kind; })[0];
+    if (!p || !p.coll) return 'Тут нечего удалять автоматически — посмотрите список.';
+    if (!confirm('Удалить ' + p.count + ' ' + u2('запись', 'записи', 'записей', p.count) +
+      ' («' + p.text + '»)?\n\nОни уедут в корзину, вернуть можно на экране «Все записи». ' +
+      'Копия базы тоже сохранится.')) return null;
+    (async function () {
+      var copy = await safetyCopy('перед удалением: ' + p.text);
+      p.ids.forEach(function (id) { S.remove(p.coll, id); });
+      refresh(); U().render();
+      U().toast('Удалено записей: ' + p.count + '. Вернуть можно из корзины.' +
+        (copy ? ' Копия: ' + copy : ''), 9000);
+    })();
+    return null;
+  };
+  function u2(one, few, many, n) { return U().plural(n, one, few, many); }
+
+  A['log-undo'] = function (el) {
+    var row = (S.state.log || []).filter(function (r) { return r.id === el.dataset.id; })[0];
+    if (!row) return 'Действие не найдено.';
+    if (!confirm('Отменить это действие?\n\n' + row.what + ' · ' + row.collName +
+      (row.title ? ' · ' + row.title : '') + '\n\nЗапись вернётся такой, какой была до него.')) return null;
+    var back = S.logUndo(row.id);
+    if (!back) return 'Это действие отменить нельзя: программа не помнит, что было до него.';
+    refresh();
+    return 'Отменено. Запись вернулась к прежнему виду.';
+  };
+
   A['sup-book-save'] = function () { U().saveBook(); return null; };
   A['sup-book-read'] = function () { U().readBook(); return null; };
 
@@ -1333,6 +1401,31 @@
 
   /* --- Живой ввод: подсказка, черновик, быстрые суммы ------------------------- */
   function currentTab() { return U().tab('manual', 'cashShift'); }
+
+  // купюры: пока вбиваете количество — итог считается на глазах
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el.classList || !el.classList.contains('note-input')) return;
+    var form = el.closest('#wmForm'); if (!form) return;
+    var total = 0;
+    Array.prototype.forEach.call(form.querySelectorAll('.note-input'), function (i) {
+      var n = num(i.dataset.note), cnt = num(i.value);
+      var cell = i.parentNode.querySelector('[data-note-sum="' + i.dataset.note + '"]');
+      if (cell) cell.textContent = cnt ? window.WMNum.money(n * cnt) : '';
+      total += n * cnt;
+    });
+    var box = document.getElementById('notesTotal');
+    if (box) box.textContent = window.WMNum.money(total);
+    var expected = window.WMAlerts ? window.WMAlerts.cashNow(S.state, S.settings, F).cash : 0;
+    var diffBox = document.getElementById('notesDiff');
+    if (diffBox) {
+      var d = SUP.round(total - expected);
+      diffBox.querySelector('b').innerHTML = !total ? '—'
+        : '<span class="' + (d === 0 ? 'c-green' : (d > 0 ? 'c-orange' : 'c-red')) + '">' +
+          (d === 0 ? 'сходится' : (d > 0 ? 'излишек ' : 'недостача ') +
+            window.WMNum.money(Math.abs(d))) + '</span>';
+    }
+  });
 
   // пока печатаете — пересчитываем подсказку и держим черновик
   document.addEventListener('input', function (e) {
@@ -1409,6 +1502,73 @@
 
   /* --- Регистрация экранов --------------------------------------------------- */
 
+
+
+  /* --- Пересчёт кассы по купюрам --------------------------------------------
+     Кассир не считает в уме: вбивает, сколько каких купюр в ящике, программа
+     складывает сама и сразу говорит, сходится ли с тем, что должно быть.
+     -------------------------------------------------------------------- */
+  var NOTES = [5000, 2000, 1000, 500, 200, 100, 50, 10, 5, 2, 1];
+
+  function notesTotal(v) {
+    var sum = 0;
+    NOTES.forEach(function (n) { sum += num(v['n' + n]) * n; });
+    return SUP.round(sum);
+  }
+
+  FORMS.cashCount = {
+    title: 'Пересчёт кассы по купюрам', icon: '🧾',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var expected = window.WMAlerts
+        ? window.WMAlerts.cashNow(S.state, S.settings, F).cash : 0;
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Кассир', 'cashier', 'list', v.cashier || '', { options: dict().cashiers }) +
+        '<div class="form-row"><label>Сколько каких купюр в ящике' +
+        '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' +
+        'Пишите количество, а не сумму. Программа сложит сама.</small></label>' +
+        '<div class="notes-grid">' + NOTES.map(function (n) {
+          return '<div class="note-cell"><label>' + window.WMNum.group(n) + ' ₽</label>' +
+            '<input type="text" inputmode="numeric" class="note-input" name="n' + n + '" ' +
+            'data-note="' + n + '" value="' + esc(v['n' + n] || '') + '" placeholder="0">' +
+            '<div class="note-sum" data-note-sum="' + n + '"></div></div>';
+        }).join('') + '</div>' +
+        '<div class="notes-total"><span>Насчитали в ящике</span>' +
+        '<b class="private" id="notesTotal">0 ₽</b></div>' +
+        '<div class="notes-total"><span>Должно быть по программе</span>' +
+        '<b class="private">' + E.fmtMoney(expected) + '</b></div>' +
+        '<div class="notes-total" id="notesDiff"><span>Расхождение</span><b>—</b></div>' +
+        '</div>' +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Расхождение записывается как излишек или недостача по кассе — ' +
+      'и попадает в отчёт по кассирам.',
+    save: function (v) {
+      var counted = notesTotal(v);
+      if (!counted) return 'Впишите хотя бы одну купюру.';
+      var expected = window.WMAlerts
+        ? window.WMAlerts.cashNow(S.state, S.settings, F).cash : 0;
+      var diff = SUP.round(counted - expected);
+      S.add('cashcount', {
+        date: v.date, cashier: v.cashier, counted: counted, expected: SUP.round(expected),
+        diff: diff, note: v.note,
+        notes: NOTES.map(function (n) { return n + '×' + (num(v['n' + n]) || 0); })
+          .filter(function (x) { return !/×0$/.test(x); }).join(', ')
+      });
+      // расхождение — это настоящие деньги, поэтому оно идёт в кассу записью
+      if (diff !== 0) {
+        S.add('dds', { date: v.date, cashier: v.cashier, shift: '',
+          type: diff > 0 ? 'Приход' : 'Расход',
+          category: diff > 0 ? 'Излишек по кассе' : 'Недостача по кассе',
+          method: 'Наличные', amount: Math.abs(diff), diff: diff,
+          note: 'пересчёт по купюрам' + (v.note ? ': ' + v.note : ''), src: 'пересчёт' });
+      }
+      refresh();
+      return { ok: 'Насчитано ' + E.fmtMoney(counted) + '. ' +
+        (diff === 0 ? 'Касса сходится.' :
+          (diff > 0 ? 'Излишек ' + E.fmtMoney(diff) : 'Недостача ' + E.fmtMoney(-diff))) };
+    }
+  };
 
   /* --- Расхождения с 1С -----------------------------------------------------
      Владелец говорит: «в 1С долг и выплата одни, а по факту другие — в 1С
@@ -1517,6 +1677,67 @@
     return h;
   }
 
+
+
+  /* --- Проверка базы и журнал действий ---------------------------------------
+     Программа сама смотрит, что в базе сломано: накладные без поставщика,
+     документы без даты, дубли номеров, записи будущим числом. И ведёт журнал:
+     кто что менял, чтобы можно было отмотать одну запись, а не всю базу.
+     -------------------------------------------------------------------- */
+  var CHECK_HELP = {
+    'docs-no-firm': 'Программа не знает, кому вы должны по этим накладным — они не попадут в долг ни одной фирме.',
+    'no-date': 'Без даты документ не встанет ни в один период и не попадёт в отчёт за месяц.',
+    'docs-zero': 'Накладная на ноль обычно значит, что сумма не прочиталась из файла.',
+    'dds-future': 'Запись будущим числом ломает остаток в кассе: деньги «уже пришли», хотя их ещё нет.',
+    'docs-dup': 'Один и тот же номер дважды — долг по нему посчитается два раза.',
+    'firm-no-name': 'Фирма без названия не показывается в списках и мешает сопоставлению имён.'
+  };
+
+  function viewCheck() {
+    var u = U();
+    var problems = window.WMAlerts ? window.WMAlerts.checkBase(S.state) : [];
+    var total = problems.reduce(function (a, p) { return a + p.count; }, 0);
+    var log = (S.state.log || []).slice().reverse();
+
+    var h = u.pageHead('Проверка базы', 'Что в базе сломано и что вы меняли в последнее время',
+      '<button class="btn" data-act="check-again">Проверить заново</button>');
+
+    h += total
+      ? '<div class="banner"><span>&#9888;</span><span>Нашлось <b>' + u.nf(total) + '</b> ' +
+        u.plural(total, 'проблемная запись', 'проблемные записи', 'проблемных записей') +
+        '. Ничего страшного не произошло — просто эти строки считаются неправильно. ' +
+        'Нажмите «Показать», чтобы разобраться.</span></div>'
+      : '<div class="banner green"><span>&#9989;</span><span>База в порядке: ни одной сломанной записи ' +
+        'не нашлось.</span></div>';
+
+    if (problems.length) {
+      h += u.card('Что нашлось', u.listOf(problems.map(function (p) {
+        return u.listRow({ icon: '&#9888;', title: esc(p.text) + ' — ' + u.nf(p.count),
+          sub: esc(CHECK_HELP[p.kind] || ''),
+          value: '<button class="btn btn-sm" data-act="check-show" data-kind="' + esc(p.kind) + '">Показать</button>' +
+            (p.coll ? ' <button class="btn btn-sm btn-danger" data-act="check-drop" data-kind="' + esc(p.kind) +
+              '">Удалить их</button>' : '') });
+      }), ''));
+    }
+
+    h += u.card('Журнал действий', u.table('logT', [
+      { title: 'Когда', fn: function (r) {
+        return esc(new Date(r.at).toLocaleString('ru-RU').slice(0, 16)); } },
+      { title: 'Что сделали', fn: function (r) { return u.badge(r.what, r.what === 'удаление' ? 'red' :
+        (r.what === 'правка' ? 'orange' : 'green')); } },
+      { title: 'Где', fn: function (r) { return esc(r.collName || r.coll); } },
+      { title: 'Запись', fn: function (r) { return esc(r.title || '—'); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.before ? '<button class="btn btn-sm" data-act="log-undo" data-id="' + esc(r.id) +
+          '">&#8617; Отменить</button>' : ''; } }
+    ], log, { step: 40, empty: 'Журнал пуст — здесь появится всё, что вы измените' }),
+      log.length ? u.nf(log.length) + ' ' + u.plural(log.length, 'запись', 'записи', 'записей') : '');
+
+    h += '<div class="banner"><span>&#128161;</span><span>Журнал хранит последние 500 действий и живёт в базе, ' +
+      'то есть переезжает вместе с папкой. «Отменить» возвращает запись такой, какой она была до правки.</span></div>';
+    return h;
+  }
 
   /* --- Сброс и откат базы ---------------------------------------------------
      Три кнопки, которых не хватало: вернуть настройки, очистить лишнее и
@@ -1730,6 +1951,7 @@
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' },
     { id: 'conflicts', icon: '⚖️', name: 'Расхождения с 1С', group: 'Данные из 1С', render: viewConflicts, after: 'reconcile' },
-    { id: 'reset', icon: '♻️', name: 'Сброс и откат базы', group: 'Ручной ввод', render: viewReset, after: 'sheets' }
+    { id: 'check', icon: '🩺', name: 'Проверка базы', group: 'Ручной ввод', render: viewCheck, after: 'sheets' },
+    { id: 'reset', icon: '♻️', name: 'Сброс и откат базы', group: 'Ручной ввод', render: viewReset, after: 'check' }
   );
 })();

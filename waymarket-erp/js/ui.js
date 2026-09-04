@@ -28,6 +28,7 @@
   var FLT = window.WMFilter;  // кнопки фильтров, одинаковые на всех экранах
   var DET = window.WMDetail;  // окно «Подробнее» для любой цифры
   var NUM = window.WMNum;     // счёт в поле, разряды и понятные даты
+  var AL = window.WMAlerts;   // что горит прямо сейчас
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
   var VIEW = 'today';
   var PERIOD = 'month';
@@ -2696,6 +2697,27 @@
     $('brandName').textContent = S.settings.storeName || 'Вай Маркет';
     var st = saveState();
     $('saveState').innerHTML = '<span class="saved-dot ' + st.dot + '"></span><span>' + esc(st.text) + '</span>';
+    renderAlerts();
+  }
+
+  // Строка под шапкой: что горит прямо сейчас. Видна с любого экрана,
+  // поэтому просроченную оплату нельзя не заметить, чем бы вы ни занимались.
+  function renderAlerts() {
+    var bar = $('alertBar'); if (!bar || !AL) return;
+    var a;
+    try {
+      a = AL.build({ state: S.state, settings: S.settings, sup: C.sup, FIN: window.WMFin });
+    } catch (e) { bar.hidden = true; return; }
+    if (!a.items.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.className = 'alert-bar ' + a.level;
+    bar.innerHTML = a.items.map(function (i) {
+      return '<span class="alert-item"' +
+        (i.form ? ' data-form="' + esc(i.form) + '"' : (i.go ? ' data-go="' + esc(i.go) + '"' : '')) + '>' +
+        i.icon + ' ' + esc(i.text) +
+        (i.money ? ' <b class="private">' + money(i.money) + '</b>' : '') + '</span>';
+    }).join('') +
+      '<span class="alert-more">в кассе сейчас <b class="private">' + money(a.cash.cash) + '</b></span>';
   }
 
   function renderPeriods() {
