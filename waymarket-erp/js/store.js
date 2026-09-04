@@ -67,7 +67,7 @@
 
     // Смены и касса
     dayStart: '09:00', nightStart: '21:00', shiftHours: 12,
-    cashLimit: 0, mainCashName: 'Касса', cashPlaces: 'Сейф', payoutLimit: 0, acquiringFee: 2,           // предупреждать, если наличных в кассе больше
+    cashLimit: 0, mainCashName: 'Касса', cashPlaces: 'Сейф', payoutLimit: 0, acquiringFee: 2, debtInterest: 0, rentDay: 5, salaryDay: 10, utilitiesDay: 15, legalForm: 'ИП', ipFixed: 53658, patentSum: 0,           // предупреждать, если наличных в кассе больше
     diffCritPct: 0,         // либо если расхождение больше % от выручки
 
     // Зарплата
@@ -102,7 +102,7 @@
     // поставки из 1С живут в базе постоянно: документы, оплаты, справочник фирм
     'docs', 'pays', 'supreg', 'debtors',
     // пересчёты кассы по купюрам и журнал действий владельца
-    'cashcount', 'log', 'templates', 'bank',
+    'cashcount', 'log', 'templates', 'bank', 'offsets',
     // корзина: всё удалённое лежит здесь, пока не почистят
     'trash'];
 

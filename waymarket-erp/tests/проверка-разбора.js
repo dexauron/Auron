@@ -21,6 +21,7 @@ const INP = require(path.join(__dirname, '..', 'js', 'input.js'));
 const EXT = require(path.join(__dirname, '..', 'js', 'extras.js'));
 const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
 const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
+const FRC = require(path.join(__dirname, '..', 'js', 'forecast.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1313,6 +1314,103 @@ console.log('— Касса, сейф и кассиры');
     WM.fmtMoney(acq2.rows[0].diff), '−4 600 ₽');
   const acq3 = CSH.acquiringCheck(st, [], set);
   check('день без зачисления помечен', acq3.rows[0].missing === true, 'помечен', 'помечен');
+  console.log('');
+}
+
+/* Прогноз денег, долги по срокам, налоги */
+console.log('— Хватит ли денег и когда платить');
+{
+  const t = new Date().toISOString().slice(0, 10);
+  const isInc = r => r.type === 'Приход', isExp = r => r.type === 'Расход';
+  const dds = [];
+  for (let i = 1; i <= 30; i++) {
+    const d = '2026-08-' + String(i).padStart(2, '0');
+    dds.push({ date: d, type: 'Приход', amount: 40000 });
+    dds.push({ date: d, type: 'Расход', amount: 20000 });
+  }
+  // один праздничный день с двойной выручкой не должен задирать прогноз
+  dds.push({ date: '2026-08-31', type: 'Приход', amount: 400000 });
+  const pace = FRC.dayPace(dds, isInc, isExp, 400);
+  check('обычный день считается по середине, а не по среднему',
+    pace.income === 40000, WM.fmtMoney(pace.income), '40 000 ₽');
+
+  // кассовый разрыв
+  const due = FRC.addDays(t, 3);
+  const cal = FRC.calendar({ cashNow: 50000, pace: { income: 0, expense: 0 },
+    docs: [{ left: 200000, confirmed: true, due: due, firm: 'Молоко Юг' }], days: 10 });
+  check('кассовый разрыв найден', cal.gap && cal.gap.date === due, cal.gap && cal.gap.date, due);
+  check('видно, сколько денег не хватит', cal.needed === 150000, WM.fmtMoney(cal.needed), '150 000 ₽');
+  const ok = FRC.calendar({ cashNow: 500000, pace: { income: 0, expense: 0 },
+    docs: [{ left: 200000, confirmed: true, due: due }], days: 10 });
+  check('когда денег хватает — разрыва нет', ok.gap === null, 'нет', 'нет');
+  check('неподтверждённая накладная в календарь не лезет',
+    FRC.calendar({ cashNow: 0, pace: { income: 0, expense: 0 },
+      docs: [{ left: 999999, confirmed: false, due: due }], days: 5 }).gap === null, 'нет', 'нет');
+
+  // долги по срокам
+  const bk = FRC.debtBuckets([
+    { left: 1000, confirmed: true, due: FRC.addDays(t, -5) },
+    { left: 2000, confirmed: true, due: FRC.addDays(t, 3) },
+    { left: 3000, confirmed: true, due: FRC.addDays(t, 20) },
+    { left: 500, confirmed: false }
+  ], t);
+  const names = bk.buckets.map(b => b.name);
+  check('долги разложены по срокам', bk.total === 6500 && names.indexOf('Просрочено') === 0,
+    names.join(' / '), 'просрочено первым');
+  check('доли в сумме дают 100%',
+    Math.abs(bk.buckets.reduce((a, b) => a + b.share, 0) - 100) < 0.1,
+    bk.buckets.reduce((a, b) => a + b.share, 0), 100);
+  check('неподтверждённый срок вынесен отдельно',
+    names.indexOf('Срок не подтверждён') >= 0, 'да', 'да');
+
+  // проценты за просрочку
+  const wi = FRC.withInterest({ left: 100000, due: '2026-08-04', confirmed: true }, 20, '2026-09-04');
+  check('пеня считается за дни просрочки', wi.days === 31 && wi.interest === 1698.63,
+    wi.days + ' дн. → ' + WM.fmtMoney(wi.interest), '31 дн. → 1 698,63 ₽');
+  check('без просрочки пени нет',
+    FRC.withInterest({ left: 1000, due: FRC.addDays(t, 5), confirmed: true }, 20, t).interest === 0, 0, 0);
+
+  // взаимозачёт уменьшает долг фирме
+  const net = FRC.netDebt([{ firm: 'Молоко Юг', left: 30000 }],
+    { offsets: [{ firm: 'Молоко Юг', amount: 12000, used: false }] });
+  check('возврат поставщику уменьшает долг ему', net[0].net === 18000,
+    WM.fmtMoney(net[0].net), '18 000 ₽');
+  check('уже проведённый зачёт второй раз не считается',
+    FRC.netDebt([{ firm: 'A', left: 100 }], { offsets: [{ firm: 'A', amount: 50, used: true }] })[0].net === 100,
+    100, 100);
+
+  // частичные оплаты
+  const dp = FRC.docPayments({ key: 'k1', sum: 10000 },
+    [{ linkKind: 'auto', linkKey: 'k1', sum: 4000, date: '2026-09-01' },
+     { linkKind: 'auto', linkKey: 'k1', sum: 3000, date: '2026-09-03' }]);
+  check('история частичных оплат ведётся', dp.rows.length === 2 && dp.left === 3000,
+    dp.rows.map(r => WM.fmtMoney(r.left)).join(' → '), 'остаток 3 000 ₽');
+
+  // безубыточность по дням
+  const bd = FRC.bepDays(dds, isInc, 300000, 25, '2026-08');
+  check('выход в ноль по дням посчитан', bd.rows.length === 31, bd.rows.length, 31);
+  check('накопление растёт от дня к дню', bd.rows[10].acc > bd.rows[5].acc,
+    WM.fmtMoney(bd.rows[10].acc) + ' > ' + WM.fmtMoney(bd.rows[5].acc), 'растёт');
+  check('день выхода в ноль найден', !!bd.passed, bd.passed ? bd.passed.day + '-е число' : 'нет', 'найден');
+
+  // настоящая маржа
+  const rm = FRC.realMargin({ revenue: 1000000, cogs: 750000 }, 30000, 5000);
+  check('маржа после списаний ниже бумажной',
+    rm.marginBook === 25 && rm.marginReal === 21.5,
+    rm.marginBook + '% → ' + rm.marginReal + '%', '25% → 21,5%');
+  check('видно, сколько прибыли съели потери', rm.lossShare === 14, rm.lossShare + '%', '14%');
+
+  // налоговый календарь
+  const tax = FRC.taxCalendar({ taxMode: 'УСН 6% (доходы)', taxRate: 6, legalForm: 'ИП', ipFixed: 53658 },
+    2026, (s2, i) => ({ sum: i * 0.06 }), 6000000, 4000000);
+  const dates = tax.map(r => r.date);
+  check('авансы по УСН стоят на 28 число', dates.indexOf('2026-04-28') >= 0 &&
+    dates.indexOf('2026-07-28') >= 0 && dates.indexOf('2026-10-28') >= 0,
+    '28.04 / 28.07 / 28.10', 'все три');
+  check('взносы ИП за себя — 28 декабря', dates.indexOf('2026-12-28') >= 0, 'есть', 'есть');
+  check('1% свыше 300 тысяч — 1 июля следующего года', dates.indexOf('2027-07-01') >= 0, 'есть', 'есть');
+  check('платежи идут по возрастанию даты',
+    dates.join() === dates.slice().sort().join(), 'по порядку', 'по порядку');
   console.log('');
 }
 

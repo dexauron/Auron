@@ -440,3 +440,7 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   background: var(--bg-elev); border-radius: 14px; box-shadow: 0 10px 34px rgba(0,0,0,.22);
   padding: 12px 16px; font-size: 14px; max-width: min(560px, calc(100% - 32px)); }
+
+/* --- Полоска доли в таблице --------------------------------------------------- */
+.bar-line { background: var(--fill-2); border-radius: 4px; height: 8px; width: 120px; overflow: hidden; }
+.bar-line span { display: block; height: 100%; border-radius: 4px; }

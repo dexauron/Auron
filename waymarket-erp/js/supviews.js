@@ -1666,6 +1666,290 @@
 
 
 
+
+  /* --- Прогноз денег, долги по срокам, налоги ---------------------------------- */
+  function FC() { return window.WMForecast; }
+
+  function moneyNow() {
+    var sp = CH().ownerSplit(S.state, S.settings);
+    return sp.shop;
+  }
+
+  // Постоянные платежи из настроек ложатся в календарь наравне с накладными
+  function fixedPayments(days) {
+    var out = [], s = S.settings;
+    var items = [
+      ['Аренда', num(s.rent), num(s.rentDay) || 5],
+      ['Зарплата', num(s.fot), num(s.salaryDay) || 10],
+      ['Коммунальные', num(s.utilities), num(s.utilitiesDay) || 15]
+    ];
+    var t = today();
+    for (var i = 0; i < (days || 60); i++) {
+      var d = FC().addDays(t, i), day = +d.slice(8, 10);
+      items.forEach(function (it) {
+        if (it[1] > 0 && day === it[2]) out.push({ date: d, sum: it[1], what: 'постоянный', who: it[0] });
+      });
+    }
+    return out;
+  }
+
+  function viewForecast() {
+    var u = U(), c = sup();
+    var pace = FC().dayPace(S.state.dds || [], F.isIncome, F.isExpense, 60);
+    var cal = FC().calendar({
+      cashNow: moneyNow(), pace: pace, days: 45,
+      docs: c.docs || [], plans: S.state.plans || [], fixed: fixedPayments(45)
+    });
+
+    var h = u.pageHead('Хватит ли денег', 'Что придёт, что надо отдать и сколько останется в кассе',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    if (cal.gap) {
+      h += '<div class="banner"><span>&#9888;</span><span><b>Денег не хватит ' +
+        esc(dateRu(cal.gap.date)) + '</b> — через ' + cal.gap.day + ' ' +
+        u.plural(cal.gap.day, 'день', 'дня', 'дней') + '. Нужно найти <b class="private">' +
+        E.fmtMoney(cal.needed) + '</b> или перенести выплаты.</span>' +
+        '<button class="btn" data-go="finpay">План выплат</button></div>';
+    } else {
+      h += '<div class="banner green"><span>&#9989;</span><span>Денег хватает на все 45 дней вперёд. ' +
+        'Самый низкий остаток — <b class="private">' + E.fmtMoney(cal.min.balance) + '</b> ' +
+        esc(dateRu(cal.min.date)) + '.</span></div>';
+    }
+
+    h += '<div class="stat-grid">' +
+      u.stat('Денег сейчас', u.priv(cal.cashNow), 'во всех местах магазина') +
+      u.stat('Обычный день приносит', u.priv(pace.income),
+        'по ' + u.nf(pace.daysWithData) + ' дням, взята середина') +
+      u.stat('Обычный день тратит', u.priv(pace.expense), 'без выплат поставщикам') +
+      u.stat('Отдать за 45 дней', u.priv(cal.rows.reduce(function (a, r) { return a + r.payOut; }, 0)),
+        'накладные, план и постоянные расходы', 'c-orange') +
+      '</div>';
+
+    // 54 — график «сколько денег будет»
+    var vals = cal.rows.map(function (r) { return r.balance; });
+    h += u.card('Сколько денег будет', '<div class="card-pad">' +
+      window.WMExtra.spark(vals, 640, 90) +
+      '<div class="card-note" style="margin-top:8px">от <b class="private">' +
+      E.fmtMoney(Math.min.apply(null, vals)) + '</b> до <b class="private">' +
+      E.fmtMoney(Math.max.apply(null, vals)) + '</b> · линия ниже нуля — кассовый разрыв</div></div>');
+
+    // 53 — календарь по дням
+    var rows = cal.rows.filter(function (r) { return r.payOut > 0 || r.day === 0 || r.balance < 0; });
+    h += u.card('Календарь денег', u.table('calT', [
+      { title: 'Когда', fn: function (r) {
+        return DET().link('day', r.date, dateRu(r.date)) +
+          (r.day === 0 ? ' <span class="c-muted">сегодня</span>' : ' <span class="c-muted">+' + r.day + ' дн.</span>'); } },
+      { title: 'Придёт', cls: 'num', fn: function (r) { return r.income ? u.priv(r.income) : '—'; } },
+      { title: 'Надо отдать', cls: 'num', fn: function (r) {
+        return r.payOut ? '<span class="c-red private">' + E.fmtMoney(r.payOut) + '</span>' : '—'; } },
+      { title: 'Кому', fn: function (r) {
+        return r.pays.length
+          ? r.pays.slice(0, 3).map(function (p) { return esc(p.who || p.what); }).join(', ') +
+            (r.pays.length > 3 ? ' и ещё ' + (r.pays.length - 3) : '')
+          : '—'; } },
+      { title: 'Останется', cls: 'num', fn: function (r) {
+        return '<b class="' + (r.balance < 0 ? 'c-red' : 'c-green') + ' private">' +
+          E.fmtMoney(r.balance) + '</b>'; } }
+    ], rows, { step: 40, empty: 'Выплат впереди нет' }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>Обычный день считается по середине последних дней, ' +
+      'а не по среднему: один праздник с двойной выручкой не рисует слишком радужный прогноз.</span></div>';
+    return h;
+  }
+
+  /* --- 118. Долги по срокам + 55 проценты + 57 взаимозачёт --------------------- */
+  function viewDebtAge() {
+    var u = U(), c = sup();
+    var bk = FC().debtBuckets(c.docs || []);
+    var rate = num(S.settings.debtInterest);
+    var interest = rate > 0 ? FC().overdueInterest(c.docs || [], rate) : { rows: [], total: 0 };
+    var firms = FC().netDebt(c.firms || [], S.state).filter(function (f) { return f.left > 0 || f.offset > 0; });
+
+    var h = u.pageHead('Долги по срокам', 'Что горит, что подождёт и кто должен нам',
+      '<div><button class="btn" data-form="offsetRec">↔ Записать взаимозачёт</button> ' +
+      '<button class="btn" data-act="print">🖨 Печать</button></div>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Всего должны', u.priv(bk.total), u.nf((c.docs || []).filter(function (d) { return d.left > 0; }).length) +
+        ' накладных', bk.total ? 'c-red' : 'c-green') +
+      (bk.buckets[0] && bk.buckets[0].name === 'Просрочено'
+        ? u.stat('Просрочено', u.priv(bk.buckets[0].sum), u.pct(bk.buckets[0].share) + ' долга', 'c-red')
+        : u.stat('Просрочено', u.priv(0), 'ничего не горит', 'c-green')) +
+      (rate > 0
+        ? u.stat('Набежало процентов', u.priv(interest.total),
+            'по ставке ' + u.pct(rate) + ' годовых', interest.total ? 'c-red' : 'c-green')
+        : u.stat('Проценты за просрочку', 'не считаем', 'задайте ставку в настройках')) +
+      u.stat('Нам должны', u.priv(FC().offsets(S.state).total), 'возвраты и пересорт', 'c-green') +
+      '</div>';
+
+    h += u.card('Когда платить', u.table('bkT', [
+      { title: 'Срок', fn: function (r) { return u.badge(r.name, r.tone); } },
+      { title: 'Накладных', cls: 'num', fn: function (r) { return u.nf(r.count); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
+      { title: 'Доля', cls: 'num', fn: function (r) { return u.pct(r.share); } },
+      { title: '', fn: function (r) {
+        return '<div class="bar-line"><span style="width:' + Math.min(100, r.share) +
+          '%;background:var(--' + (r.tone === 'red' ? 'red' : (r.tone === 'orange' ? 'orange' : 'blue')) +
+          ')"></span></div>'; } }
+    ], bk.buckets, { step: 10, empty: 'Долгов нет' }));
+
+    if (interest.rows.length) {
+      h += u.card('Просрочка стоит денег', u.table('intT', [
+        { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.doc.firm), r.doc.firm); } },
+        { title: 'Документ', fn: function (r) { return DET().link('doc', r.doc.id, r.doc.doc); } },
+        { title: 'Просрочка', cls: 'num', fn: function (r) {
+          return r.days + ' ' + u.plural(r.days, 'день', 'дня', 'дней'); } },
+        { title: 'Долг', cls: 'num', fn: function (r) { return u.priv(r.doc.left); } },
+        { title: 'Проценты', cls: 'num', fn: function (r) {
+          return '<span class="c-red private">' + E.fmtMoney(r.interest) + '</span>'; } },
+        { title: 'Итого отдать', cls: 'num', fn: function (r) { return '<b class="private">' + E.fmtMoney(r.total) + '</b>'; } }
+      ], interest.rows, { step: 30 }),
+        'ставка ' + u.pct(rate) + ' годовых из настроек');
+    }
+
+    h += u.card('Долг по фирмам с учётом взаимозачёта', u.table('netT', [
+      { title: 'Поставщик', fn: function (r) { return DET().link('firm', E.norm(r.firm), r.firm); } },
+      { title: 'Должны ему', cls: 'num', fn: function (r) { return u.priv(r.left); } },
+      { title: 'Он должен нам', cls: 'num', fn: function (r) {
+        return r.offset ? '<span class="c-green private">' + E.fmtMoney(r.offset) + '</span>' : '—'; } },
+      { title: 'К оплате', cls: 'num', fn: function (r) {
+        return '<b class="' + (r.net > 0 ? 'c-red' : 'c-green') + ' private">' + E.fmtMoney(r.net) + '</b>'; } },
+      { title: '', cls: 'center', fn: function (r) { return DET().btn('firm', E.norm(r.firm), 'Подробнее'); } }
+    ], firms, { step: 40, empty: 'Долгов нет' }));
+    return h;
+  }
+
+  // 57 — запись взаимозачёта
+  FORMS.offsetRec = {
+    title: 'Поставщик должен нам', icon: '↔',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Поставщик', 'firm', 'list', v.firm || '', { options: firmNames() }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('За что', 'reason', 'list', v.reason || 'Возврат товара',
+          { options: ['Возврат товара', 'Пересорт', 'Брак', 'Недовоз', 'Скидка задним числом', 'Штраф поставщику'] }) +
+        u.fieldRow('Документ', 'doc', 'text', v.doc || '', { placeholder: 'акт, накладная на возврат' }) +
+        u.fieldRow('Уже зачтено', 'used', 'select', v.used ? 'да' : 'нет', { options: ['нет', 'да'] }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Пока зачёт не проведён, эта сумма уменьшает долг фирме на экране «Долги по срокам».',
+    save: function (v) {
+      if (!v.firm) return 'Укажите поставщика.';
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      S.add('offsets', { date: v.date, firm: v.firm, amount: num(v.amount), reason: v.reason,
+        doc: v.doc, used: v.used === 'да', note: v.note });
+      refresh();
+      return { ok: v.firm + ' должен нам ' + E.fmtMoney(v.amount) + ' — учтено в долге.' };
+    }
+  };
+
+  /* --- 61/63. Безубыточность по дням и настоящая маржа -------------------------- */
+  function viewBepDays() {
+    var u = U();
+    var all = S.state.dds || [];
+    var month = (all.length ? all.map(function (r) { return r.date; }).sort().pop() : today()).slice(0, 7);
+    var margin = num(S.settings.marginManual) || (U().calc().sales ? U().calc().sales.margin : 25);
+    var bep = FC().bepDays(all, F.isIncome, S.fixedMonthly(), margin, month);
+    var c = U().calc();
+    var real = FC().realMargin(c.sales, c.writeoffSum, c.returnSum);
+
+    var h = u.pageHead('Когда магазин выходит в ноль',
+      'Накопленная прибыль против постоянных расходов — по дням месяца',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Надо покрыть за месяц', u.priv(bep.need), 'аренда, зарплата, налоги') +
+      u.stat('Накопили прибыли', u.priv(bep.acc), 'за ' + F.monthName(bep.month),
+        bep.acc >= bep.need ? 'c-green' : 'c-orange') +
+      (bep.passed
+        ? u.stat('Вышли в ноль', esc(dateRu(bep.passed.date)), bep.passed.day + '-го числа', 'c-green')
+        : u.stat('В ноль пока не вышли', u.priv(bep.need - bep.acc), 'осталось покрыть', 'c-red')) +
+      u.stat('Маржа в расчёте', u.pct(bep.margin), num(S.settings.marginManual) > 0 ? 'задана вручную' : 'по продажам 1С') +
+      '</div>';
+
+    // 63 — настоящая маржа после списаний
+    if (real.revenue) {
+      h += u.card('Настоящая маржа: что остаётся после потерь', u.listOf([
+        u.listRow({ icon: '💰', title: 'Выручка', value: u.priv(real.revenue) }),
+        u.listRow({ icon: '📦', title: 'Себестоимость проданного',
+          value: '<span class="c-red private">−' + E.fmtMoney(real.cogs) + '</span>' }),
+        u.listRow({ icon: '📈', title: 'Валовая прибыль «по бумаге»',
+          sub: 'маржа ' + u.pct(real.marginBook), value: '<b class="private">' + E.fmtMoney(real.gross) + '</b>' }),
+        u.listRow({ icon: '🗑', title: 'Списания и возвраты',
+          sub: 'это ' + u.pct(real.lossShare) + ' от валовой прибыли',
+          value: '<span class="c-red private">−' + E.fmtMoney(real.losses) + '</span>' }),
+        u.listRow({ icon: real.real >= 0 ? '✅' : '⚠️', title: 'Настоящая валовая прибыль',
+          sub: 'реальная маржа ' + u.pct(real.marginReal) + ' вместо ' + u.pct(real.marginBook),
+          value: '<b class="' + (real.real >= 0 ? 'c-green' : 'c-red') + ' private">' +
+            E.fmtMoney(real.real) + '</b>' })
+      ], ''), '<span class="card-note">потери съедают ' + u.pct(real.lossShare) + ' прибыли</span>');
+    }
+
+    var vals = bep.rows.map(function (r) { return r.ahead; });
+    h += u.card('Насколько идём с опережением', '<div class="card-pad">' +
+      window.WMExtra.spark(vals, 640, 80) +
+      '<div class="card-note" style="margin-top:8px">линия выше нуля — прибыль обгоняет расходы, ниже — отстаём</div></div>');
+
+    h += u.card('По дням месяца', u.table('bepT', [
+      { title: 'День', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
+      { title: 'Выручка', cls: 'num', fn: function (r) { return r.revenue ? u.priv(r.revenue) : '—'; } },
+      { title: 'Прибыль дня', cls: 'num', fn: function (r) { return r.gross ? u.priv(r.gross) : '—'; } },
+      { title: 'Накоплено', cls: 'num', fn: function (r) { return u.priv(r.acc); } },
+      { title: 'Надо было', cls: 'num', fn: function (r) { return u.priv(r.need); } },
+      { title: 'Отставание', cls: 'num', fn: function (r) {
+        return '<span class="' + (r.ahead >= 0 ? 'c-green' : 'c-red') + ' private">' +
+          (r.ahead > 0 ? '+' : '') + E.fmtMoney(r.ahead) + '</span>'; } }
+    ], bep.rows, { step: 31 }));
+    return h;
+  }
+
+  /* --- 65. Налоговый календарь -------------------------------------------------- */
+  function viewTaxes() {
+    var u = U();
+    var all = S.state.dds || [];
+    var year = +((all.length ? all.map(function (r) { return r.date; }).sort().pop() : today()).slice(0, 4));
+    var t = F.totals(all.filter(function (r) { return String(r.date).slice(0, 4) === String(year); }));
+    var rows = FC().taxCalendar(S.settings, year, F.taxAmount, t.income, t.expense);
+    var next = rows.filter(function (r) { return !r.past && r.sum > 0; })[0];
+
+    var h = u.pageHead('Налоговый календарь',
+      'Когда и сколько платить государству · ' + year + ' год',
+      '<button class="btn" data-act="print">🖨 Печать</button>');
+
+    h += '<div class="banner blue"><span>&#9878;</span><span>Считается по вашей системе налогообложения из ' +
+      'настроек: <b>' + esc(String(S.settings.taxMode)) + '</b>. Суммы прикидочные — по вашим записям за ' +
+      year + ' год. Точные цифры даст бухгалтер, здесь важно <b>не пропустить срок</b>.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Доход за год', u.priv(t.income), 'по базе операций') +
+      u.stat('Расход за год', u.priv(t.expense), 'по базе операций') +
+      (next
+        ? u.stat('Ближайший платёж', u.priv(next.sum), esc(next.name) + ' · ' + dateRu(next.date),
+            next.soon ? 'c-red' : 'c-orange')
+        : u.stat('Ближайший платёж', 'нет', 'в этом году больше нечего платить', 'c-green')) +
+      u.stat('Всего за год', u.priv(rows.reduce(function (a, r) { return a + r.sum; }, 0)),
+        u.nf(rows.length) + ' платежей') +
+      '</div>';
+
+    h += u.card('Что и когда платить', u.table('taxT', [
+      { title: 'Срок', fn: function (r) {
+        return '<span class="' + (r.past ? 'c-muted' : (r.soon ? 'c-red' : '')) + '">' +
+          esc(dateRu(r.date)) + '</span>'; } },
+      { title: 'Что платим', fn: function (r) { return esc(r.name); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return r.sum ? u.priv(r.sum) : '—'; } },
+      { title: 'Пояснение', fn: function (r) { return '<span class="c-muted">' + esc(r.note) + '</span>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return r.past ? u.badge('прошёл', 'gray')
+          : (r.soon ? u.badge('скоро', 'red') : u.badge('впереди', 'blue')); } }
+    ], rows, { step: 20, empty: 'Система налогообложения не задана — укажите её в настройках' }));
+
+    h += '<div class="banner"><span>&#128161;</span><span>Даты по Налоговому кодексу: авансы по УСН — ' +
+      '28 апреля, 28 июля и 28 октября; налог за год — 28 марта (ООО) или 28 апреля (ИП); ' +
+      'взносы ИП за себя — 28 декабря, 1% свыше 300 000 ₽ — 1 июля следующего года.</span></div>';
+    return h;
+  }
+
   /* --- Касса, сейф, точки, кассиры, эквайринг --------------------------------- */
   function CH() { return window.WMCash; }
 
@@ -2629,12 +2913,16 @@
     { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Ручной ввод', render: viewDebtors, after: 'records' },
     { id: 'sheets', icon: '📗', name: 'Книга Бухгалтерия', group: 'Ручной ввод', render: viewSheets, after: 'debtors' },
     { id: 'conflicts', icon: '⚖️', name: 'Расхождения с 1С', group: 'Данные из 1С', render: viewConflicts, after: 'reconcile' },
+    { id: 'forecast', icon: '🔮', name: 'Хватит ли денег', group: 'Деньги', render: viewForecast, after: 'suppliers' },
+    { id: 'debtage', icon: '⏳', name: 'Долги по срокам', group: 'Деньги', render: viewDebtAge, after: 'forecast' },
     { id: 'places', icon: '🏦', name: 'Где лежат деньги', group: 'Деньги', render: viewCashPlaces, after: 'cash' },
     { id: 'cashiers', icon: '🧑‍💼', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers, after: 'places' },
     { id: 'acquiring', icon: '🏧', name: 'Сверка с эквайрингом', group: 'Деньги', render: viewAcquiring, after: 'cashiers' },
     { id: 'compare', icon: '📐', name: 'Сравнение периодов', group: 'Отчёты', render: viewCompare, after: 'finreport' },
     { id: 'markup', icon: '💹', name: 'Кто зарабатывает', group: 'Отчёты', render: viewMarkup, after: 'compare' },
     { id: 'payroll', icon: '🧾', name: 'Ведомость зарплаты', group: 'Отчёты', render: viewPayroll, after: 'markup' },
+    { id: 'bepdays', icon: '📈', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays, after: 'bep' },
+    { id: 'taxes', icon: '⚖️', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxes, after: 'bepdays' },
     { id: 'check', icon: '🩺', name: 'Проверка базы', group: 'Ручной ввод', render: viewCheck, after: 'sheets' },
     { id: 'reset', icon: '♻️', name: 'Сброс и откат базы', group: 'Ручной ввод', render: viewReset, after: 'check' }
   );
