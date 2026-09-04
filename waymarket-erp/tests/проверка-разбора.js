@@ -15,6 +15,7 @@ const SET = require(path.join(__dirname, '..', 'js', 'settings.js'));
 const STORE = require(path.join(__dirname, '..', 'js', 'store.js'));
 const FLT = require(path.join(__dirname, '..', 'js', 'filters.js'));
 const FILES = require(path.join(__dirname, '..', 'js', 'filestore.js'));
+const NUM = require(path.join(__dirname, '..', 'js', 'numpad.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
 const dir = process.argv[2] || path.join(__dirname, '..', 'Данные_1С_и_Excel');
@@ -1032,6 +1033,47 @@ console.log('— Одна база: ваши записи и 1С');
   st.docs = st.docs.filter(d => d.source !== '1c');
   check('после удаления данных 1С ваши записи целы',
     st.docs.length === 1 && st.docs[0].doc === 'МОЯ-1', st.docs.length + ' из ' + before, '1');
+  console.log('');
+}
+
+/* Калькулятор в поле, разделение разрядов и понятные даты */
+console.log('— Счёт прямо в поле и разделение разрядов');
+{
+  const cases = [
+    ['1250*3+400', 4150, 'три ящика по 1250 плюс 400'],
+    ['200-10%', 180, 'минус 10 процентов'],
+    ['1000+5%', 1050, 'плюс 5 процентов'],
+    ['200*15%', 30, '15 процентов от 200'],
+    ['(100+50)*2', 300, 'скобки'],
+    ['1 250,50+2', 1252.5, 'пробелы и запятая'],
+    ['12', 12, 'просто число'],
+    ['100/4', 25, 'деление']
+  ];
+  cases.forEach(([expr, want, why]) => {
+    check('«' + expr + '» — ' + why, NUM.calc(expr) === want, NUM.calc(expr), want);
+  });
+  ['5/0', 'абв', '', '1+', '((1+2)', '1e9*1e9', 'alert(1)'].forEach(bad => {
+    check('«' + bad + '» не считается и не ломает программу', NUM.calc(bad) === null, NUM.calc(bad), null);
+  });
+  check('чужой код в поле не выполняется',
+    NUM.calc('window.__pwned=1') === null && NUM.calc('1;alert(1)') === null, 'не выполнился', 'не выполнился');
+
+  const NBSP = '\u00A0';
+  check('разряды разделяются неразрывным пробелом',
+    NUM.group(1234567) === '1' + NBSP + '234' + NBSP + '567', NUM.group(1234567), '1 234 567');
+  check('копейки на месте', NUM.group(1234.5) === '1' + NBSP + '234,50', NUM.group(1234.5), '1 234,50');
+  check('минус виден', NUM.group(-4500) === '\u2212' + '4' + NBSP + '500', NUM.group(-4500), 'минус 4 500');
+  check('сумма прописью', NUM.words(72500) === 'семьдесят две тысячи пятьсот', NUM.words(72500), 'семьдесят две тысячи пятьсот');
+  check('тысяча в женском роде', NUM.words(21000) === 'двадцать одна тысяча', NUM.words(21000), 'двадцать одна тысяча');
+  check('ноль прописью', NUM.words(0) === 'ноль', NUM.words(0), 'ноль');
+  check('миллион прописью', NUM.words(1000000) === 'один миллион', NUM.words(1000000), 'один миллион');
+
+  const t = new Date().toISOString().slice(0, 10);
+  check('дата подписана днём недели и «сегодня»',
+    NUM.dateFull(t).indexOf('сегодня') > 0 && /^[а-я]+,/.test(NUM.dateFull(t)), NUM.dateFull(t), 'день недели + сегодня');
+  const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  check('вчерашняя дата подписана «вчера»', NUM.dateFull(y).indexOf('вчера') > 0, NUM.dateFull(y), 'вчера');
+  check('пустая дата не ломает подпись', NUM.dateFull('') === '' && NUM.dateFull('чепуха') === '', 'пусто', 'пусто');
   console.log('');
 }
 

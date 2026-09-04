@@ -27,6 +27,7 @@
   var SUP = window.WMSupply;  // поставки, оплаты и справочник фирм
   var FLT = window.WMFilter;  // кнопки фильтров, одинаковые на всех экранах
   var DET = window.WMDetail;  // окно «Подробнее» для любой цифры
+  var NUM = window.WMNum;     // счёт в поле, разряды и понятные даты
   var LAST_IMPORT = [];       // что распознали в последней загрузке файлов
   var VIEW = 'today';
   var PERIOD = 'month';
@@ -91,11 +92,130 @@
     b.innerHTML = '<div class="sheet"><div class="sheet-head"><div class="sheet-title">' + esc(title) +
       '</div><button class="btn btn-sm" data-act="close-sheet">Закрыть</button></div>' +
       '<div class="sheet-body">' + bodyHtml + '</div></div>';
-    b.addEventListener('click', function (e) { if (e.target === b) closeSheet(); });
+
+    // Окно закрывается по щелчку мимо него — но ТОЛЬКО если и нажали мимо.
+    // Раньше хватало отпустить кнопку мыши за пределами формы (выделяли текст
+    // в поле и увели курсор за край окна) — и наполовину заполненная форма
+    // исчезала вместе с введённым.
+    var pressedOutside = false;
+    b.addEventListener('mousedown', function (e) { pressedOutside = e.target === b; });
+    b.addEventListener('touchstart', function (e) { pressedOutside = e.target === b; }, { passive: true });
+    b.addEventListener('click', function (e) {
+      if (e.target !== b || !pressedOutside) { pressedOutside = false; return; }
+      pressedOutside = false;
+      askClose();
+    });
     document.body.appendChild(b);
     var first = b.querySelector('input,select,textarea');
     if (first) setTimeout(function () { first.focus(); }, 60);
     return b;
+  }
+
+  /* --- Калькулятор с крупными кнопками --------------------------------------
+     Открывается кнопкой 🧮 у любого числового поля. Считает то же самое, что
+     и поле, но пальцем по большим клавишам — и не закрывает форму под собой.
+     ---------------------------------------------------------------------- */
+  function openCalc(fieldName) {
+    var field = document.querySelector('.num-input[name="' + fieldName + '"]');
+    if (!field) return;
+    var label = '';
+    var row = field.closest('.form-row');
+    if (row && row.querySelector('label')) label = row.querySelector('label').childNodes[0].textContent.trim();
+
+    var box = document.createElement('div');
+    box.className = 'backdrop calc-back';
+    box.innerHTML = '<div class="sheet calc-sheet">' +
+      '<div class="sheet-head"><div class="sheet-title">🧮 ' + esc(label || 'Калькулятор') + '</div>' +
+      '<button class="btn btn-sm" data-calc-act="close">Закрыть</button></div>' +
+      '<div class="sheet-body">' +
+      '<div class="calc-screen"><input id="calcLine" type="text" inputmode="decimal" value="' +
+        esc(field.value) + '"><div class="calc-result" id="calcRes"></div></div>' +
+      '<div class="calc-quick">' + NUM.QUICK.map(function (q) {
+        return '<button class="btn btn-sm" data-calc-add="' + q + '">+' + NUM.group(q) + '</button>';
+      }).join('') + '<button class="btn btn-sm" data-calc-act="clear">Стереть</button></div>' +
+      '<div class="calc-pad">' + NUM.KEYS.map(function (rowKeys) {
+        return rowKeys.map(function (k) {
+          var cls = k === '=' ? ' calc-eq' : (/[÷×−+]/.test(k) ? ' calc-op' : '');
+          return '<button class="calc-key' + cls + '" data-calc-key="' + esc(k) + '">' + esc(k) + '</button>';
+        }).join('');
+      }).join('') + '<button class="calc-key calc-back-key" data-calc-act="back">⌫</button>' +
+      '<button class="calc-key" data-calc-key="(">(</button>' +
+      '<button class="calc-key" data-calc-key=")">)</button>' +
+      '<button class="calc-key" data-calc-key="%">%</button></div>' +
+      '<div class="form-actions"><button class="btn" data-calc-act="close">Отмена</button>' +
+      '<button class="btn btn-primary btn-lg" data-calc-act="use">Подставить в поле</button></div>' +
+      '</div></div>';
+    document.body.appendChild(box);
+
+    var line = box.querySelector('#calcLine'), res = box.querySelector('#calcRes');
+    function show() {
+      var v = NUM.calc(line.value);
+      res.innerHTML = !line.value.trim() ? '<span class="c-muted">введите сумму</span>'
+        : (v === null ? '<span class="c-red">не получается посчитать</span>'
+          : '<b>' + esc(NUM.money(v)) + '</b>' +
+            (Math.abs(v) >= 1000 ? '<small>' + esc(NUM.words(v)) + '</small>' : ''));
+    }
+    function put(t) { line.value += t; show(); line.focus(); }
+    show();
+    setTimeout(function () { line.focus(); line.select(); }, 60);
+
+    box.addEventListener('click', function (e) {
+      var k = e.target.closest('[data-calc-key],[data-calc-act],[data-calc-add]');
+      if (!k) { if (e.target === box) box.remove(); return; }
+      if (k.dataset.calcKey === '=') {
+        var v = NUM.calc(line.value);
+        if (v !== null) line.value = v;
+        show(); return;
+      }
+      if (k.dataset.calcKey) { put(k.dataset.calcKey); return; }
+      if (k.dataset.calcAdd) {
+        var cur = NUM.calc(line.value);
+        line.value = (cur === null ? 0 : cur) + +k.dataset.calcAdd;
+        show(); return;
+      }
+      var a = k.dataset.calcAct;
+      if (a === 'close') box.remove();
+      else if (a === 'clear') { line.value = ''; show(); }
+      else if (a === 'back') { line.value = line.value.slice(0, -1); show(); }
+      else if (a === 'use') {
+        var val = NUM.calc(line.value);
+        if (val === null) { toast('Не получается посчитать — проверьте выражение.'); return; }
+        field.value = val;
+        field.dispatchEvent(new Event('input', { bubbles: true }));
+        box.remove();
+        field.focus();
+      }
+    });
+    line.addEventListener('input', show);
+    line.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        box.querySelector('[data-calc-act="use"]').click();
+      }
+    });
+  }
+
+  // Что-нибудь уже введено в открытой форме?
+  function sheetHasInput() {
+    var f = document.getElementById('wmForm');
+    if (!f) return false;
+    var dirty = false;
+    Array.prototype.forEach.call(f.querySelectorAll('input,textarea'), function (i) {
+      if (i.type === 'hidden' || i.type === 'checkbox' || i.type === 'radio') return;
+      // дата и подставленные значения не считаются: они стоят там сами
+      // подставленное программой (дата, кассир, категория) правкой не считается
+      if ((i.dataset.prefilled || '') === (i.value || '')) return;
+      if (String(i.value || '').trim()) dirty = true;
+    });
+    return dirty;
+  }
+
+  // Закрыть окно, спросив, если владелец уже что-то написал
+  function askClose() {
+    if (sheetHasInput() && !confirm('Закрыть форму? Введённое не сохранится.')) return false;
+    DET.reset();
+    closeSheet();
+    return true;
   }
   function closeSheet() { var b = document.querySelector('.backdrop'); if (b) b.remove(); }
 
@@ -191,6 +311,20 @@
   }
 
   var LIST_N = 0;
+
+  // Что написать под числовым полем: сумму с пробелами и прописью,
+  // а для выражения — ещё и результат счёта
+  function numHint(raw) {
+    var txt = String(raw == null ? '' : raw).trim();
+    if (!txt) return '';
+    var v = NUM.calc(txt);
+    if (v === null) return '<span class="c-red">не получается посчитать</span>';
+    var out = '<b>' + esc(NUM.money(v)) + '</b>';
+    if (NUM.isExpr(txt)) out = esc(txt) + ' = ' + out;
+    if (Math.abs(v) >= 1000) out += ' <span class="c-muted">' + esc(NUM.words(v)) + '</span>';
+    return out;
+  }
+
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
     var h = '<div class="form-row"><label>' + esc(label) +
@@ -201,6 +335,7 @@
       // новое слово программа запомнит в справочнике
       var lid = 'dl-' + name + '-' + (++LIST_N);
       h += '<input type="text" name="' + name + '" value="' + esc(value == null ? '' : value) + '" list="' + lid + '"' +
+        ' data-prefilled="' + esc(value == null ? '' : value) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
         '<datalist id="' + lid + '">' + (opts.options || []).map(function (o) {
           return '<option value="' + esc(o) + '">';
@@ -210,11 +345,25 @@
         var v = typeof o === 'string' ? o : o.value, t = typeof o === 'string' ? o : o.text;
         return '<option value="' + esc(v) + '"' + (String(value) === String(v) ? ' selected' : '') + '>' + esc(t) + '</option>';
       }).join('') + '</select>';
+    } else if (type === 'number') {
+      // Числовое поле принимает и выражение: «1250*3+400». Считается на месте,
+      // под полем сразу видно сумму с разделением разрядов и прописью.
+      var start = value == null || value === '' ? '' : String(value);
+      h += '<div class="num-field">' +
+        '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
+        ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
+        (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
+        '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">🧮</button>' +
+        '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
+    } else if (type === 'date') {
+      h += '<input type="date" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
+        ' data-prefilled="' + esc(value == null ? '' : value) + '">' +
+        '<div class="num-hint" data-hint-for="' + esc(name) + '">' + esc(NUM.dateFull(value)) + '</div>';
     } else {
       h += '<input type="' + type + '" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
+        ' data-prefilled="' + esc(value == null ? '' : value) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') +
-        (opts.list ? ' list="' + opts.list + '"' : '') +
-        (type === 'number' ? ' step="0.01" inputmode="decimal"' : '') + '>';
+        (opts.list ? ' list="' + opts.list + '"' : '') + '>';
     }
     return h + '</div>';
   }
@@ -222,7 +371,12 @@
     var out = {};
     Array.prototype.forEach.call(form.querySelectorAll('input,select,textarea'), function (i) {
       if (!i.name) return;
-      out[i.name] = i.type === 'number' ? num(i.value) : i.value.trim();
+      if (i.classList && i.classList.contains('num-input')) {
+        // «1250*3+400» превращается в 4150 ровно здесь, при сохранении
+        var v = NUM.calc(i.value);
+        out[i.name] = v === null ? num(i.value) : v;
+      } else if (i.type === 'number') out[i.name] = num(i.value);
+      else out[i.name] = i.value.trim();
     });
     return out;
   }
@@ -2666,7 +2820,7 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc]');
       if (!el) return;
       // «Подробнее»: одно окно для любой цифры — что с ней связано
       if (el.dataset.more) {
@@ -2681,6 +2835,7 @@
         PAGE = {}; render(); return;
       }
       if (el.dataset.filterClear) { FLT.clear(el.dataset.filterClear); PAGE = {}; render(); return; }
+      if (el.dataset.calc) { openCalc(el.dataset.calc); return; }
       if (el.dataset.go) { closeSheet(); go(el.dataset.go); return; }
       if (el.dataset.period) { PERIOD = el.dataset.period; PAGE = {}; render(); return; }
       if (el.dataset.tab) { var p = el.dataset.tab.split(':'); TAB[p[0]] = p[1]; render(); return; }
@@ -2713,7 +2868,7 @@
         return;
       }
       var a = el.dataset.act;
-      if (a === 'close-sheet') { DET.reset(); closeSheet(); }
+      if (a === 'close-sheet') askClose();
       else if (a === 'more-back') DET.back();
       else if (a === 'pick-files' || a === 'backup') { closeSheet(); if (a === 'backup') backup(); else $('filesInput').click(); }
       else if (a === 'more') { PAGE[el.dataset.id] = (PAGE[el.dataset.id] || +el.dataset.step) + (+el.dataset.step) * 3; render(); }
@@ -2796,6 +2951,33 @@
       if (window.WM_EXTRA_CHANGE && window.WM_EXTRA_CHANGE(e.target)) { render(); }
     });
 
+    // пока печатаем в числовом поле — под ним пересчитывается сумма
+    document.addEventListener('input', function (e) {
+      var el = e.target;
+      if (!el.classList) return;
+      if (el.classList.contains('num-input')) {
+        var hint = document.querySelector('[data-hint-for="' + el.name + '"]');
+        if (hint) hint.innerHTML = numHint(el.value);
+      } else if (el.type === 'date' && el.name) {
+        var dh = document.querySelector('[data-hint-for="' + el.name + '"]');
+        if (dh) dh.textContent = NUM.dateFull(el.value);
+      }
+    });
+
+    // калькулятор: 🧮 у поля, а также «=» прямо в поле
+    document.addEventListener('keydown', function (e) {
+      var el = e.target;
+      if (!el.classList || !el.classList.contains('num-input')) return;
+      if (e.key === '=' || (e.key === 'Enter' && NUM.isExpr(el.value))) {
+        var v = NUM.calc(el.value);
+        if (v !== null) {
+          e.preventDefault();
+          el.value = v;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      }
+    });
+
     // поиск внутри фильтров: печатаем — список сужается, курсор остаётся на месте
     var fTimer = null;
     document.addEventListener('input', function (e) {
@@ -2860,7 +3042,7 @@
     });
     $('filesInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
     $('folderInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { DET.reset(); closeSheet(); } });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') askClose(); });
   }
 
   // Разовый перенос: смены и расходы, записанные раньше, переезжают
