@@ -17,7 +17,8 @@
 
   function opening() {
     var s = S.settings;
-    return { cash: E.num(s.openCashStart), card: E.num(s.openCardStart), transfer: E.num(s.openTransferStart) };
+    return { cash: E.num(s.openCashStart), card: E.num(s.openCardStart),
+      sbp: E.num(s.openSbpStart), transfer: E.num(s.openTransferStart) };
   }
   function dict(name, fallback) {
     var v = S.settings[name];
@@ -43,38 +44,52 @@
 
   /* --- Формы ввода ---------------------------------------------------------- */
   window.WM_EXTRA_FORMS = {
-    // Ввод кассы: Z-отчёт против фактических денег по трём способам оплаты
+    /* Ввод кассы: как в Auron Finance — Z-отчёт против фактических денег по
+       трём способам (наличные, карта, СБП) и список выплат из кассы: не одна
+       сумма «выдано», а строка на каждую выплату — потом видно, куда ушло.
+       Карта и СБП попадают в «деньги в пути»: покупатель заплатил, а банк
+       зачислит через день-два и удержит комиссию (в 1С это счёт 57.03). */
     cashShift: {
       title: 'Касса за смену', icon: '💵',
       body: function (v) {
         var u = U(); v = v || {};
         var pre = Q.defaults(S.state, S.settings, 'cashShift');
+        var payRows = v.payRows || (E.num(v.payout) > 0
+          ? [{ name: 'Выплата из кассы', sum: E.num(v.payout) }] : []);
         return u.fieldRow('Дата', 'date', 'date', v.date || pre.date) +
           u.fieldRow('Смена', 'shift', 'list', v.shift || pre.shift, { options: shiftNames() }) +
           u.fieldRow('Кассир', 'cashier', 'list', v.cashier || pre.cashier, { options: cashiers(), placeholder: 'кто сдаёт' }) +
-          u.fieldRow('Наличные: Z-отчёт', 'zCash', 'number', v.zCash || '') +
-          u.fieldRow('Наличные: факт выручки', 'fCash', 'number', v.fCash || '') +
-          u.fieldRow('Карта: Z-отчёт', 'zCard', 'number', v.zCard || 0) +
-          u.fieldRow('Карта: факт', 'fCard', 'number', v.fCard || 0) +
-          u.fieldRow('Перевод: Z-отчёт', 'zTrans', 'number', v.zTrans || 0) +
-          u.fieldRow('Перевод: факт', 'fTrans', 'number', v.fTrans || 0) +
-          u.fieldRow('Выдано из кассы за смену', 'payout', 'number', v.payout || 0) +
+          u.fieldRow('Z-отчёт: наличные', 'zCash', 'number', v.zCash || '') +
+          u.fieldRow('Z-отчёт: карта', 'zCard', 'number', v.zCard || 0) +
+          u.fieldRow('Z-отчёт: СБП', 'zSbp', 'number', v.zSbp || 0) +
+          u.fieldRow('Факт: наличные', 'fCash', 'number', v.fCash || '',
+            { hint: 'сколько денег в ящике до выплат' }) +
+          u.fieldRow('Факт: карта', 'fCard', 'number', v.fCard || 0) +
+          u.fieldRow('Факт: СБП', 'fSbp', 'number', v.fSbp || 0) +
+          u.fieldRow('Выплаты из кассы', 'pay', 'pairs', null,
+            { options: categories(), rows: payRows, placeholders: ['за что выдали', 'сумма'] }) +
           u.fieldRow('Комментарий', 'note', 'text', v.note || '');
       },
       hint: '«Факт» — сколько денег пришло на самом деле, до выплат из кассы. ' +
-        'Расхождение = факт − Z-отчёт по каждому способу.',
+        'Расхождение = факт − Z-отчёт по каждому способу. ' +
+        'Выплаты пишите строками: «Ване на такси 300», «за воду 250» — потом видно, за что ушло.',
       save: function (v) {
-        if (!v.zCash && !v.zCard && !v.zTrans && !v.fCash) return 'Заполните хотя бы наличные.';
-        var fields = ['zCash', 'fCash', 'zCard', 'fCard', 'zTrans', 'fTrans', 'payout'];
+        var pays = U().pairValues(v, 'pay');
+        if (!v.zCash && !v.zCard && !v.zSbp && !v.fCash) return 'Заполните хотя бы наличные.';
+        var fields = ['zCash', 'fCash', 'zCard', 'fCard', 'zSbp', 'fSbp'];
         for (var fi = 0; fi < fields.length; fi++) {
           var badF = Q.checkAmount(v[fields[fi]], { allowEmpty: true, allowZero: true });
           if (badF) return 'Поле «' + fields[fi] + '»: ' + badF;
         }
-        learn({ shifts: v.shift, cashiers: v.cashier });
+        for (var pi = 0; pi < pays.length; pi++) {
+          if (pays[pi].sum <= 0) return 'Выплата «' + (pays[pi].name || 'без названия') + '»: сумма должна быть больше нуля.';
+        }
+        learn({ shifts: v.shift, cashiers: v.cashier,
+          categories: pays.map(function (p) { return p.name; }).filter(Boolean) });
         var base = { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Приход',
           category: F.SALES, note: v.note, src: 'касса' };
         var group = S.uid();
-        var pairs = [['Наличные', v.zCash, v.fCash], ['Карта', v.zCard, v.fCard], ['Перевод', v.zTrans, v.fTrans]];
+        var pairs = [['Наличные', v.zCash, v.fCash], ['Карта', v.zCard, v.fCard], ['СБП', v.zSbp, v.fSbp]];
         var added = 0, diffTotal = 0;
         pairs.forEach(function (p) {
           var z = E.num(p[1]), f = E.num(p[2]);
@@ -84,15 +99,20 @@
           S.add('dds', Object.assign({}, base, { method: p[0], amount: z, diff: diff, group: group }));
           added++;
         });
-        if (E.num(v.payout) > 0) {
+        var payTotal = 0;
+        pays.forEach(function (p) {
+          payTotal += p.sum;
           S.add('dds', { date: v.date, shift: v.shift, cashier: v.cashier, type: 'Расход',
-            category: 'Выплата из кассы', method: 'Наличные', amount: E.num(v.payout),
+            category: p.name || 'Выплата из кассы', method: 'Наличные', amount: p.sum,
             diff: 0, note: v.note, src: 'касса', group: group });
           added++;
-        }
-        var total = E.num(v.zCash) + E.num(v.zCard) + E.num(v.zTrans);
+        });
+        var total = E.num(v.zCash) + E.num(v.zCard) + E.num(v.zSbp);
+        var transit = E.num(v.zCard) + E.num(v.zSbp);
         return { ok: 'Смена записана: выручка ' + E.fmtMoney(total) +
-          (diffTotal ? ', расхождение ' + E.fmtMoney(diffTotal) : ', касса сходится') };
+          (diffTotal ? ', расхождение ' + E.fmtMoney(diffTotal) : ', касса сходится') +
+          (payTotal ? ', выдано из кассы ' + E.fmtMoney(payTotal) : '') +
+          (transit ? '. В пути от банка: ' + E.fmtMoney(transit) : '') };
       }
     },
     // Расход: обычная трата или закуп товара в долг
@@ -227,12 +247,26 @@
 
     var h = u.pageHead('Пульт', 'Деньги, продажи и платежи — ' + (sel.whole ? 'все данные' : u.periodName().toLowerCase()));
     h += noteBanner(sel);
-    h += '<div class="stat-grid">' +
-      u.stat('Наличные', u.priv(bal.map['Наличные']), 'В кассе и сейфе ' + DET().btn('method', 'Наличные', 'подробнее')) +
-      u.stat('Карта', u.priv(bal.map['Карта']), 'Поступления минус траты ' + DET().btn('method', 'Карта', 'подробнее')) +
-      u.stat('Перевод', u.priv(bal.map['Перевод']), 'Расчётный счёт ' + DET().btn('method', 'Перевод', 'подробнее')) +
-      u.stat('Всего денег', u.priv(bal.total), 'Остаток по всем способам', bal.total >= 0 ? 'c-green' : 'c-red') +
-      '</div>';
+    // Деньги в пути: по карте и СБП уже пробили, а банк ещё не зачислил.
+    // Такие деньги в остатке есть, но потратить их сегодня нельзя.
+    var tr = F.inTransit(all, S.state.bank || [], S.settings);
+    var cards = [
+      u.stat('Наличные', u.priv(bal.map['Наличные']), 'В кассе и сейфе ' + DET().btn('method', 'Наличные', 'подробнее')),
+      u.stat('Карта', u.priv(bal.map['Карта']), 'Поступления минус траты ' + DET().btn('method', 'Карта', 'подробнее')),
+      u.stat('СБП', u.priv(bal.map['СБП']), 'Переводы по QR ' + DET().btn('method', 'СБП', 'подробнее'))
+    ];
+    if (bal.map['Перевод']) {
+      cards.push(u.stat('Перевод', u.priv(bal.map['Перевод']), 'Расчётный счёт ' + DET().btn('method', 'Перевод', 'подробнее')));
+    }
+    if (tr.sum > 0) {
+      cards.push(u.stat('Деньги в пути', u.priv(tr.sum),
+        'Банк ещё не зачислил ' + (tr.oldest ? 'с ' + u.dateRu(tr.oldest) : ''), 'c-orange'));
+      cards.push(u.stat('Доступно сейчас', u.priv(E.safeRound(bal.total - tr.sum)),
+        'Всего ' + E.fmtMoney(bal.total) + ' минус деньги в пути'));
+    } else {
+      cards.push(u.stat('Всего денег', u.priv(bal.total), 'Остаток по всем способам', bal.total >= 0 ? 'c-green' : 'c-red'));
+    }
+    h += '<div class="stat-grid">' + cards.join('') + '</div>';
 
     h += quick();
 

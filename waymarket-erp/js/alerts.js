@@ -40,7 +40,7 @@
     var rows = state.dds || [];
     var open = {
       cash: num(settings.openCashStart), card: num(settings.openCardStart),
-      transfer: num(settings.openTransferStart)
+      sbp: num(settings.openSbpStart), transfer: num(settings.openTransferStart)
     };
     var bal = FIN.balances(rows, open);
     var t = today();
@@ -49,6 +49,7 @@
     return {
       cash: bal.map['Наличные'] || 0,
       card: bal.map['Карта'] || 0,
+      sbp: bal.map['СБП'] || 0,
       transfer: bal.map['Перевод'] || 0,
       total: bal.total,
       todayIn: tt.income, todayOut: tt.expense,

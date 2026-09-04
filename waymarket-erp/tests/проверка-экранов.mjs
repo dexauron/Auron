@@ -207,6 +207,65 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
   console.log('');
 }
 
+/* 6. Ввод кассы: три способа оплаты и список выплат из ящика.
+      Форма скопирована с Auron Finance, поэтому проверяем именно её:
+      Z и факт по наличным, карте и СБП, выплаты строками, деньги в пути. */
+{
+  console.log('— Касса за смену');
+  const { page, errs } = await open(false);
+  await page.evaluate(() => window.WMUI.openForm('cashShift'));
+  await page.waitForTimeout(300);
+  const names = await page.$$eval('.sheet input,.sheet select', els => els.map(e => e.name).filter(Boolean));
+  check('в форме есть Z-отчёт и факт по СБП', names.includes('zSbp') && names.includes('fSbp'),
+    names.join(', '), 'zSbp и fSbp');
+  check('список выплат начинается с одной строки', names.includes('pay_n0') && names.includes('pay_a0'),
+    'есть', 'есть');
+  await page.click('[data-pairadd="pay"]');
+  await page.click('[data-pairadd="pay"]');
+  await page.waitForTimeout(150);
+  const rowCount = await page.$$eval('.pair-list .pair-row', e => e.length);
+  check('кнопка «+ ещё строка» добавляет выплаты', rowCount === 3, rowCount + ' строки', 3);
+
+  const fill = async (n, v) => page.fill('.sheet [name="' + n + '"]', v);
+  await fill('date', '2026-09-01');
+  await fill('zCash', '10000'); await fill('fCash', '10200');
+  await fill('zCard', '50000'); await fill('fCard', '50000');
+  await fill('zSbp', '20000'); await fill('fSbp', '20000');
+  await fill('pay_n0', 'Такси Ване'); await fill('pay_a0', '300');
+  await fill('pay_n1', 'Вода'); await fill('pay_a1', '250*2');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+
+  const r = await page.evaluate(() => {
+    const S = window.WMStore, F = window.WMFin;
+    const day = (S.state.dds || []).filter(x => x.date === '2026-09-01');
+    return {
+      count: day.length,
+      sbp: day.filter(x => x.method === 'СБП').length,
+      pays: day.filter(x => F.isExpense(x)).map(x => x.category + '=' + x.amount).sort().join(' | '),
+      diff: day.filter(x => F.isIncome(x)).reduce((a, x) => a + (x.diff || 0), 0),
+      transit: F.inTransit(S.state.dds || [], [], S.settings).sum,
+      cash: F.balances(S.state.dds || [], {}).map['Наличные']
+    };
+  });
+  check('смена записалась: 3 прихода и 2 выплаты', r.count === 5, r.count + ' записей', 5);
+  check('выручка по СБП попала отдельной строкой', r.sbp === 1, r.sbp, 1);
+  check('выплаты записаны по названиям, «250*2» посчиталось',
+    r.pays === 'Вода=500 | Такси Ване=300', r.pays, 'Вода=500 | Такси Ване=300');
+  check('расхождение по наличным посчиталось', r.diff === 200, r.diff, 200);
+  check('наличные в кассе = выручка минус выплаты', r.cash === 9200, r.cash, 9200);
+  check('карта и СБП ушли в «деньги в пути»', r.transit === 68600, r.transit, 68600);
+
+  await page.evaluate(() => window.WMUI.go('finpulse'));
+  await page.waitForTimeout(500);
+  const pulse = await page.textContent('#page');
+  check('на Пульте видно СБП и деньги в пути',
+    pulse.includes('СБП') && pulse.includes('Деньги в пути'), 'видно', 'видно');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' / ') || 'чисто', 'чисто');
+  await page.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

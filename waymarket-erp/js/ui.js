@@ -501,6 +501,33 @@
     return out;
   }
 
+  /* Одна строка списка «за что + сколько». Так устроен список выплат из кассы
+     за смену: «Ване на такси 300», «за воду 250» — сколько строк нужно,
+     столько и добавляем, а не одна общая сумма без объяснения. */
+  function pairRow(name, i, it, dlid, ph) {
+    it = it || {};
+    return '<div class="pair-row">' +
+      '<input type="text" name="' + esc(name) + '_n' + i + '" value="' + esc(it.name == null ? '' : it.name) + '"' +
+      (dlid ? ' list="' + dlid + '"' : '') + ' placeholder="' + esc((ph && ph[0]) || 'за что') + '">' +
+      '<input type="text" inputmode="decimal" class="num-input" name="' + esc(name) + '_a' + i + '"' +
+      ' value="' + esc(it.sum == null || it.sum === '' ? '' : it.sum) + '" placeholder="' + esc((ph && ph[1]) || 'сумма') + '">' +
+      '<button type="button" class="btn btn-sm pair-del" data-pairdel="1" title="Убрать строку">✕</button>' +
+      '</div>';
+  }
+
+  // Собрать список пар обратно из значений формы
+  function pairValues(v, name) {
+    var out = [];
+    for (var i = 0; i < 60; i++) {
+      var n = v[name + '_n' + i], a = v[name + '_a' + i];
+      if (n === undefined && a === undefined) continue;
+      var sum = num(a);
+      if (!String(n || '').trim() && !sum) continue;
+      out.push({ name: String(n || '').trim(), sum: sum });
+    }
+    return out;
+  }
+
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
     var h = '<div class="form-row"><label>' + esc(label) +
@@ -533,6 +560,18 @@
         (IN && IN.voiceReady() ? '<button type="button" class="btn btn-sm num-calc" data-voice="' +
           esc(name) + '" title="Продиктовать сумму">🎤</button>' : '') +
         '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
+    } else if (type === 'pairs') {
+      var plid = (opts.options && opts.options.length) ? 'dl-' + name + '-' + (++LIST_N) : '';
+      var items = (opts.rows && opts.rows.length) ? opts.rows : [{ name: '', sum: '' }];
+      h += '<div class="pair-box">' +
+        '<div class="pair-list" data-pairs="' + esc(name) + '"' +
+        (plid ? ' data-plist="' + plid + '"' : '') + '>' +
+        items.map(function (it, i) { return pairRow(name, i, it, plid, opts.placeholders); }).join('') +
+        '</div>' +
+        (plid ? '<datalist id="' + plid + '">' + (opts.options || []).map(function (o) {
+          return '<option value="' + esc(o) + '">'; }).join('') + '</datalist>' : '') +
+        '<button type="button" class="btn btn-sm" data-pairadd="' + esc(name) + '">+ ещё строка</button>' +
+        '</div>';
     } else if (type === 'date') {
       h += '<input type="date" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
         ' data-prefilled="' + esc(value == null ? '' : value) + '">' +
@@ -1258,7 +1297,7 @@
     esc: esc, money: money, priv: priv, nf: nf, pct: pct, num: num, cls: cls, badge: badge,
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
-    fieldRow: fieldRow, pageHead: pageHead, toast: toast, sheet: sheet, closeSheet: closeSheet,
+    fieldRow: fieldRow, pairValues: pairValues, pageHead: pageHead, toast: toast, sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
     go: function (id) { go(id); }, render: function () { render(); },
     lastImport: function () { return LAST_IMPORT; },
@@ -1755,15 +1794,18 @@
     rows.forEach(function (r) {
       var key = r.date + '|' + (r.shift || '') + '|' + (r.cashier || '');
       if (!map[key]) map[key] = { date: r.date, shift: r.shift || '—', cashier: r.cashier || '—',
-        z: 0, diff: 0, payouts: 0, cash: 0, card: 0, transfer: 0, ids: [] };
+        z: 0, diff: 0, payouts: 0, cash: 0, card: 0, sbp: 0, transfer: 0, ids: [] };
       var g = map[key];
       g.ids.push(r.id);
       if (Fin.isIncome(r)) {
         g.z += num(r.amount); g.diff += num(r.diff);
         if (r.method === 'Наличные') g.cash += num(r.amount);
         else if (r.method === 'Карта') g.card += num(r.amount);
+        else if (r.method === 'СБП') g.sbp += num(r.amount);
         else g.transfer += num(r.amount);
-      } else if (Fin.isExpense(r) && E.norm(r.category).indexOf('выплата из кассы') >= 0) {
+      } else if (Fin.isExpense(r) && (E.norm(r.src) === 'касса' ||
+          E.norm(r.category).indexOf('выплата из кассы') >= 0)) {
+        // всё, что выдали из ящика в смену: хоть «на такси», хоть «за воду»
         g.payouts += num(r.amount);
       }
     });
@@ -1795,7 +1837,7 @@
     var rows = FLT.apply('cash', all, defs, function (r) { return r.cashier + ' ' + r.shift + ' ' + r.date; });
     var t = { count: rows.length, zCash: 0, factCash: 0, payouts: 0, diff: 0, terminal: 0, short: 0, over: 0 };
     rows.forEach(function (g) {
-      t.zCash += g.cash; t.terminal += g.card + g.transfer; t.payouts += g.payouts;
+      t.zCash += g.cash; t.terminal += g.card + g.sbp + g.transfer; t.payouts += g.payouts;
       t.diff += g.diff; t.factCash += g.fact;
       if (g.diff < 0) t.short += Math.abs(g.diff); else t.over += g.diff;
     });
@@ -1844,6 +1886,7 @@
       { title: 'Кассир', fn: function (r) { return DET.link('employee', r.cashier, r.cashier); } },
       { title: 'Наличные', cls: 'num', fn: function (r) { return priv(r.cash); } },
       { title: 'Карта', cls: 'num', fn: function (r) { return priv(r.card); } },
+      { title: 'СБП', cls: 'num', fn: function (r) { return priv(r.sbp); } },
       { title: 'Перевод', cls: 'num', fn: function (r) { return priv(r.transfer); } },
       { title: 'Выручка смены', cls: 'num', fn: function (r) { return priv(r.z); } },
       { title: 'Выдано', cls: 'num', fn: function (r) { return priv(r.payouts); } },
@@ -1855,6 +1898,7 @@
     ], rows, { step: 30, empty: FLT.active('cash') ? 'Под фильтр ничего не подошло' : 'Смен за период нет. Нажмите «Закрыть смену».',
       total: [{ html: 'Итого', span: 3 }, { html: money(t.zCash), cls: 'num' },
         { html: money(rows.reduce(function (a, r) { return a + r.card; }, 0)), cls: 'num' },
+        { html: money(rows.reduce(function (a, r) { return a + r.sbp; }, 0)), cls: 'num' },
         { html: money(rows.reduce(function (a, r) { return a + r.transfer; }, 0)), cls: 'num' },
         { html: money(t.revenue), cls: 'num' }, { html: money(t.payouts), cls: 'num' },
         { html: money(t.factCash), cls: 'num' },
@@ -3076,6 +3120,23 @@
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
+      var pAdd = e.target.closest('[data-pairadd]'), pDel = e.target.closest('[data-pairdel]');
+      if (pAdd) {
+        var box = document.querySelector('[data-pairs="' + pAdd.dataset.pairadd + '"]');
+        if (box) {
+          box.insertAdjacentHTML('beforeend',
+            pairRow(pAdd.dataset.pairadd, box.children.length, null, box.dataset.plist || ''));
+          var fresh = box.lastElementChild.querySelector('input');
+          if (fresh) fresh.focus();
+        }
+        return;
+      }
+      if (pDel) {
+        var prow = pDel.closest('.pair-row'), pbox = prow && prow.parentNode;
+        if (pbox && pbox.children.length > 1) prow.remove();
+        else if (prow) Array.prototype.forEach.call(prow.querySelectorAll('input'), function (i) { i.value = ''; });
+        return;
+      }
       var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice],[data-menu]');
       if (!el) return;
       // «Подробнее»: одно окно для любой цифры — что с ней связано
@@ -3449,8 +3510,9 @@
     });
     var methodOf = function (form) {
       var f = E.norm(form);
+      if (f === 'сбп' || f.indexOf('сбп') >= 0 || f.indexOf('qr') >= 0) return 'СБП';
       if (f.indexOf('перевод') >= 0) return 'Перевод';
-      if (f.indexOf('карт') >= 0) return 'Карта';
+      if (f.indexOf('карт') >= 0 || f.indexOf('эквайр') >= 0) return 'Карта';
       return 'Наличные';
     };
     (S.state.expenses || []).forEach(function (e) {

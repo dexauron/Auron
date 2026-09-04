@@ -70,23 +70,26 @@
 
   function byPlace(state, settings, upto) {
     var map = {}, list = places(state, settings);
-    list.forEach(function (p) { map[norm(p)] = { place: p, cash: 0, card: 0, transfer: 0, total: 0 }; });
+    list.forEach(function (p) { map[norm(p)] = { place: p, cash: 0, card: 0, sbp: 0, transfer: 0, total: 0 }; });
     function cell(p) {
       var k = norm(p);
-      if (!map[k]) map[k] = { place: p, cash: 0, card: 0, transfer: 0, total: 0 };
+      if (!map[k]) map[k] = { place: p, cash: 0, card: 0, sbp: 0, transfer: 0, total: 0 };
       return map[k];
     }
     // начальные остатки — на главной кассе
     var main = cell((settings && settings.mainCashName) || MAIN);
     main.cash += num(settings && settings.openCashStart);
     main.card += num(settings && settings.openCardStart);
+    main.sbp += num(settings && settings.openSbpStart);
     main.transfer += num(settings && settings.openTransferStart);
 
     (state.dds || []).forEach(function (r) {
       if (upto && r.date > upto) return;
       var c = cell(placeOf(r, settings));
       var m = norm(r.method);
-      var field = m.indexOf('карт') >= 0 ? 'card' : (m.indexOf('перевод') >= 0 ? 'transfer' : 'cash');
+      var field = m === 'сбп' ? 'sbp'
+        : (m.indexOf('карт') >= 0 || m.indexOf('эквайр') >= 0) ? 'card'
+        : m.indexOf('перевод') >= 0 ? 'transfer' : 'cash';
       var v = num(r.amount);
       if (isIncomeRec(r)) c[field] += v;
       else if (isOutRec(r)) c[field] -= v;
@@ -97,8 +100,9 @@
     var out = [];
     Object.keys(map).forEach(function (k) {
       var c = map[k];
-      c.cash = round(c.cash); c.card = round(c.card); c.transfer = round(c.transfer);
-      c.total = round(c.cash + c.card + c.transfer);
+      c.cash = round(c.cash); c.card = round(c.card);
+      c.sbp = round(c.sbp); c.transfer = round(c.transfer);
+      c.total = round(c.cash + c.card + c.sbp + c.transfer);
       out.push(c);
     });
     return out.sort(function (a, b) { return b.total - a.total; });
@@ -191,10 +195,14 @@
      пробито по карте, и показываем разницу по дням.
      ---------------------------------------------------------------------- */
   function acquiringCheck(state, bankRows, settings) {
-    var byDay = {};
+    var byDay = {}, kinds = {};
     (state.dds || []).forEach(function (r) {
-      if (!isIncomeRec(r) || norm(r.method).indexOf('карт') < 0) return;
+      var m = norm(r.method);
+      var card = m.indexOf('карт') >= 0 || m.indexOf('эквайр') >= 0, sbp = m === 'сбп';
+      if (!isIncomeRec(r) || (!card && !sbp)) return;
       byDay[r.date] = (byDay[r.date] || 0) + num(r.amount);
+      if (!kinds[r.date]) kinds[r.date] = { card: 0, sbp: 0 };
+      kinds[r.date][card ? 'card' : 'sbp'] += num(r.amount);
     });
     var bank = {};
     (bankRows || []).forEach(function (b) {
@@ -209,7 +217,11 @@
       var shop = round(byDay[d] || 0), got = round(bank[d] || 0);
       var expect = round(shop * (1 - fee / 100));
       var diff = round(got - expect);
+      var k = kinds[d] || { card: 0, sbp: 0 };
       return { date: d, shop: shop, bank: got, expect: expect, diff: diff,
+        card: round(k.card), sbp: round(k.sbp),
+        // комиссия банка — это расход магазина, а не «просто разница»
+        commission: round(shop - expect),
         ok: Math.abs(diff) < 1, missing: got === 0 && shop > 0 };
     });
     return {
@@ -218,6 +230,10 @@
       bankTotal: round(out.reduce(function (a, r) { return a + r.bank; }, 0)),
       diffTotal: round(out.reduce(function (a, r) { return a + r.diff; }, 0)),
       badDays: out.filter(function (r) { return !r.ok; }).length,
+      commissionTotal: round(out.reduce(function (a, r) { return a + r.commission; }, 0)),
+      // сколько ещё «в пути»: пробили, а банк не зачислил
+      transitTotal: round(out.reduce(function (a, r) {
+        return a + (r.bank === 0 && r.shop > 0 ? r.expect : 0); }, 0)),
       fee: fee
     };
   }

@@ -132,6 +132,7 @@
     { id: 'start', icon: '🏁', name: 'Начальные остатки', note: 'Сколько денег было, когда начали вести учёт.', items: [
       ['openCashStart', 'Наличные, ₽', 'money', ''],
       ['openCardStart', 'На карте, ₽', 'money', ''],
+      ['openSbpStart', 'По СБП, ₽', 'money', ''],
       ['openTransferStart', 'На счёте, ₽', 'money', '']
     ] },
 

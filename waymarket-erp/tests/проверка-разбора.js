@@ -1658,6 +1658,38 @@ console.log('— Папка программы: понятные ошибки');
     [undefined, null, '', 'abc', '—'].every(v => WM.num(v) === 0), 'все нули', 'все нули');
   check('деление на ноль не ломает расчёт', WM.div(100, 0) === 0 && isFinite(WM.div(0, 0)),
     WM.div(100, 0), 0);
+  // --- Числа в смешанном формате (нашли, сверяясь с каталогом) ---------------
+  check('«1 234 567,89» — русский формат', WM.num('1 234 567,89') === 1234567.89, WM.num('1 234 567,89'), 1234567.89);
+  check('«1,234.56» — английский формат', WM.num('1,234.56') === 1234.56, WM.num('1,234.56'), 1234.56);
+  check('«1.234,56» — европейский формат', WM.num('1.234,56') === 1234.56, WM.num('1.234,56'), 1234.56);
+  check('«2,500» — это 2,5 кг, а не 2500', WM.num('2,500') === 2.5, WM.num('2,500'), 2.5);
+  check('«48,000» — это 48, а не 48 тысяч', WM.num('48,000') === 48, WM.num('48,000'), 48);
+
+  // --- СБП и деньги в пути (счёт 57.03 в 1С) ---------------------------------
+  check('СБП есть в способах оплаты', FIN.METHODS.indexOf('СБП') >= 0, FIN.METHODS.join(', '), 'со СБП');
+  check('карта и СБП — деньги в пути', FIN.isTransit('Карта') && FIN.isTransit('СБП') && !FIN.isTransit('Наличные'),
+    'да', 'да');
+  const trRows = [
+    { date: '2025-01-10', type: 'Приход', method: 'Наличные', amount: 10000 },
+    { date: '2025-01-10', type: 'Приход', method: 'Карта', amount: 50000 },
+    { date: '2025-01-11', type: 'Приход', method: 'СБП', amount: 20000 }
+  ];
+  const trBal = FIN.balances(trRows, {});
+  check('СБП попадает в остатки отдельной строкой', trBal.map['СБП'] === 20000, trBal.map['СБП'], 20000);
+  const tr1 = FIN.inTransit(trRows, [], { acquiringFee: 2 });
+  check('пока выписки нет — всё безналичное в пути', tr1.sum === 68600, tr1.sum, 68600);
+  check('комиссия банка посчиталась', tr1.commission === 1400, tr1.commission, 1400);
+  check('видно, с какого дня деньги висят', tr1.oldest === '2025-01-10', tr1.oldest, '2025-01-10');
+  const tr2 = FIN.inTransit(trRows, [{ date: '2025-01-10', amount: 49000 }], { acquiringFee: 2 });
+  check('зачисленный день уходит из «в пути»', tr2.sum === 19600, tr2.sum, 19600);
+  const acq = CSH.acquiringCheck({ dds: trRows }, [{ date: '2025-01-10', amount: 49000 }], { acquiringFee: 2 });
+  check('сверка видит и карту, и СБП', acq.shopTotal === 70000, acq.shopTotal, 70000);
+  check('сверка считает комиссию за период', acq.commissionTotal === 1400, acq.commissionTotal, 1400);
+  check('день без выписки помечен «в пути»', acq.transitTotal === 19600, acq.transitTotal, 19600);
+  const sbpLine = ENT.parseLine('выручка 500 сбп', { categories: [], methods: FIN.METHODS, cashiers: [], shifts: [], suppliers: [] });
+  check('в быстрой строке «сбп» — это способ оплаты',
+    sbpLine && sbpLine.method === 'СБП', sbpLine && sbpLine.method, 'СБП');
+
   console.log('');
 }
 

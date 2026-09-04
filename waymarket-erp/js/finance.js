@@ -12,7 +12,15 @@
   var num = E.num, txt = E.txt, norm = E.norm, round = E.safeRound, div = E.div;
 
   var TYPES = ['Приход', 'Расход', 'Долг', 'Забор'];
-  var METHODS = ['Наличные', 'Карта', 'Перевод'];
+  var METHODS = ['Наличные', 'Карта', 'СБП', 'Перевод'];
+  // Способы, по которым деньги приходят не сразу: покупатель заплатил сегодня,
+  // а банк зачислит завтра-послезавтра и удержит комиссию. В 1С это отдельный
+  // счёт 57.03 «переводы в пути» — до выписки деньги есть, но их ещё нет.
+  var TRANSIT = ['Карта', 'СБП'];
+  function isTransit(method) {
+    var m = norm(method);
+    return m.indexOf('карт') >= 0 || m === 'сбп' || m.indexOf('эквайр') >= 0;
+  }
   var WEEKDAYS = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
   var PURCHASE = 'Закуп товара';     // закуп: и оплаченный, и взятый в долг
   var DEBT_PAY = 'Оплата ТП';        // погашение долга поставщику
@@ -186,7 +194,8 @@
   // Остатки денег по способам оплаты: приход минус расход
   function balances(rows, opening) {
     opening = opening || {};
-    var b = { 'Наличные': num(opening.cash), 'Карта': num(opening.card), 'Перевод': num(opening.transfer) };
+    var b = { 'Наличные': num(opening.cash), 'Карта': num(opening.card),
+      'СБП': num(opening.sbp), 'Перевод': num(opening.transfer) };
     for (var i = 0; i < rows.length; i++) {
       var r = rows[i], m = txt(r.method) || 'Наличные';
       if (b[m] === undefined) b[m] = 0;
@@ -197,6 +206,48 @@
     var total = 0, out = [];
     for (var k in b) { b[k] = round(b[k]); total += b[k]; out.push({ name: k, sum: b[k] }); }
     return { list: out, map: b, total: round(total) };
+  }
+
+  /* Деньги в пути: пробили по карте и СБП, а банк ещё не зачислил.
+     Так это устроено в 1С: выручка эквайринга сначала висит на счёте 57.03
+     «переводы в пути» и только с выпиской попадает на расчётный счёт — уже
+     за вычетом комиссии банка. Пока выписки нет, деньги считаются, но
+     потратить их нельзя: на них нельзя рассчитывать при планировании платежей.
+     bankRows — строки загруженной выписки: { date, amount }. */
+  function inTransit(rows, bankRows, settings) {
+    var fee = num(settings && settings.acquiringFee);
+    var byDay = {}, order = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!isIncome(r) || !isTransit(r.method)) continue;
+      var d = txt(r.date);
+      if (byDay[d] === undefined) { byDay[d] = 0; order.push(d); }
+      byDay[d] += num(r.amount);
+    }
+    var got = {};
+    (bankRows || []).forEach(function (b) {
+      if (!b || !b.date) return;
+      got[txt(b.date)] = (got[txt(b.date)] || 0) + num(b.amount);
+    });
+    order.sort();
+    var sum = 0, days = [], oldest = '';
+    for (var j = 0; j < order.length; j++) {
+      var day = order[j], shop = round(byDay[day]);
+      var expect = round(shop * (1 - fee / 100));       // столько должен зачислить банк
+      var left = round(expect - round(got[day] || 0));
+      if (left <= 0.5) continue;                        // выписка пришла, всё сошлось
+      sum += left;
+      if (!oldest) oldest = day;
+      days.push({ date: day, shop: shop, expect: expect, got: round(got[day] || 0), left: left });
+    }
+    // Комиссия банка — это настоящий расход (в 1С проводка Дт 90.03 Кт 57.03),
+    // а не «просто разница». Показываем её отдельной цифрой за период.
+    var turnover = 0;
+    for (var k in byDay) turnover += byDay[k];
+    return {
+      sum: round(sum), days: days, oldest: oldest, fee: fee,
+      turnover: round(turnover), commission: round(turnover * fee / 100)
+    };
   }
 
   function totals(rows) {
@@ -440,7 +491,8 @@
   }
 
   return {
-    TYPES: TYPES, METHODS: METHODS, WEEKDAYS: WEEKDAYS,
+    TYPES: TYPES, METHODS: METHODS, TRANSIT: TRANSIT, WEEKDAYS: WEEKDAYS,
+    isTransit: isTransit, inTransit: inTransit,
     PURCHASE: PURCHASE, DEBT_PAY: DEBT_PAY, SALES: SALES,
     findHeaderRow: findHeaderRow, parseDdsBase: parseDdsBase, parsePayPlan: parsePayPlan, parseFinSettings: parseFinSettings,
     isIncome: isIncome, isExpense: isExpense, isDebt: isDebt, isDraw: isDraw, isPurchase: isPurchase, isDebtPay: isDebtPay,

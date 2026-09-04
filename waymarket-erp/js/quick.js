@@ -73,10 +73,11 @@
     }
 
     out.categories = merge(settings.finCategories, cat, 'category',
-      ['Закуп товара', 'Оплата ТП', 'ЗП', 'Аренда', 'Коммуналка', 'Налоги', 'Хозтовары', 'Другое']);
+      ['Закуп товара', 'Оплата ТП', 'ЗП', 'Аренда', 'Коммуналка', 'Налоги',
+        'Хозрасходы', 'Реклама', 'Комиссия банка', 'Выплата из кассы', 'Другое']);
     out.cashiers = merge(settings.finCashiers, cash, 'cashier', []);
     out.shifts = merge(settings.finShifts, shift, 'shift', ['День 09:00–21:00', 'Ночь 21:00–09:00']);
-    out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'Перевод']);
+    out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'СБП', 'Перевод']);
     out.employees = merge(settings.finEmployees, emp, 'employee', []);
     out.suppliers = merge(settings.finSuppliers, sup, 'supplier', []);
     out.reasons = merge(settings.finReasons, reason, 'reason',

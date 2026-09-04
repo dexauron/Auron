@@ -1445,6 +1445,24 @@
     return 'Отмечено: ' + r.firm + ' принял возврат на ' + E.fmtMoney(r.sum) + '.';
   };
 
+  /* Комиссия банка одной строкой расхода за период.
+     В 1С это проводка Дт 90.03 Кт 57.03: банк зачислил меньше, чем пробили,
+     и разница — настоящая трата магазина. Без этой записи прибыль завышена. */
+  A['acq-fee'] = function () {
+    var res = CH().acquiringCheck(S.state, S.state.bank || [], S.settings);
+    if (!res.commissionTotal) return 'Комиссия за период нулевая — записывать нечего.';
+    var last = res.rows.length ? res.rows[res.rows.length - 1].date : today();
+    var было = (S.state.dds || []).filter(function (r) {
+      return SUP.norm(r.category) === 'комиссия банка' && r.date === last;
+    })[0];
+    if (было) return 'Комиссия за ' + dateRu(last) + ' уже записана. Удалите старую запись, если считаете заново.';
+    S.add('dds', { date: last, shift: '', cashier: '', type: 'Расход',
+      category: 'Комиссия банка', method: 'Карта', amount: res.commissionTotal, diff: 0,
+      note: 'Эквайринг ' + res.fee + '% с ' + E.fmtMoney(res.shopTotal), src: 'сверка' });
+    S.save(); refresh(); U().render();
+    return 'Комиссия банка записана расходом: ' + E.fmtMoney(res.commissionTotal) + '.';
+  };
+
   A['bank-load'] = function () {
     var inp = document.createElement('input');
     inp.type = 'file'; inp.accept = '.xls,.xlsx,.csv';
@@ -2390,9 +2408,13 @@
   /* --- Прогноз денег, долги по срокам, налоги ---------------------------------- */
   function FC() { return window.WMForecast; }
 
+  /* Сколько денег у магазина прямо сейчас — для планирования платежей.
+     Из остатка вычитаем «деньги в пути»: по карте и СБП уже пробили, но банк
+     ещё не зачислил. Планировать платёж на эти деньги нельзя — их пока нет. */
   function moneyNow() {
     var sp = CH().ownerSplit(S.state, S.settings);
-    return sp.shop;
+    var tr = F.inTransit(S.state.dds || [], S.state.bank || [], S.settings);
+    return E.safeRound(sp.shop - tr.sum);
   }
 
   // Постоянные платежи из настроек ложатся в календарь наравне с накладными
@@ -2437,7 +2459,7 @@
     }
 
     h += '<div class="stat-grid">' +
-      u.stat('Денег сейчас', u.priv(cal.cashNow), 'во всех местах магазина') +
+      u.stat('Денег сейчас', u.priv(cal.cashNow), 'доступно магазину, без денег в пути') +
       u.stat('Обычный день приносит', u.priv(pace.income),
         'по ' + u.nf(pace.daysWithData) + ' дням, взята середина') +
       u.stat('Обычный день тратит', u.priv(pace.expense), 'без выплат поставщикам') +
@@ -2685,7 +2707,7 @@
         u.fieldRow('Откуда', 'from', 'list', v.from || ps[0] || CH().MAIN, { options: ps }) +
         u.fieldRow('Куда', 'to', 'list', v.to || CH().SAFE, { options: ps.concat(['Банк', 'Инкассация']) }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: ['Наличные', 'Карта', 'Перевод'] }) +
+        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: ['Наличные', 'Карта', 'СБП', 'Перевод'] }) +
         u.fieldRow('Кто забрал или сдал', 'who', 'text', v.who || '', { placeholder: 'инкассатор, кассир' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -2739,6 +2761,7 @@
         return icon + ' ' + esc(r.place); } },
       { title: 'Наличные', cls: 'num', fn: function (r) { return u.priv(r.cash); } },
       { title: 'Карта', cls: 'num', fn: function (r) { return r.card ? u.priv(r.card) : '—'; } },
+      { title: 'СБП', cls: 'num', fn: function (r) { return r.sbp ? u.priv(r.sbp) : '—'; } },
       { title: 'Перевод', cls: 'num', fn: function (r) { return r.transfer ? u.priv(r.transfer) : '—'; } },
       { title: 'Всего', cls: 'num', fn: function (r) {
         return '<b class="' + (r.total < 0 ? 'c-red' : '') + ' private">' + E.fmtMoney(r.total) + '</b>'; } }
@@ -2825,13 +2848,23 @@
     }
 
     h += '<div class="stat-grid">' +
-      u.stat('Пробито по карте', u.priv(res.shopTotal), 'по вашим записям') +
+      u.stat('Пробито картой и СБП', u.priv(res.shopTotal), 'по вашим записям') +
       u.stat('Зачислил банк', u.priv(res.bankTotal), 'по выписке') +
+      u.stat('Деньги в пути', u.priv(res.transitTotal),
+        res.transitTotal ? 'банк ещё не зачислил' : 'всё зачислено',
+        res.transitTotal ? 'c-orange' : 'c-green') +
+      u.stat('Комиссия банка', u.priv(res.commissionTotal), 'за период, ' + u.pct(res.fee), 'c-red') +
       u.stat('Разница', u.priv(res.diffTotal), res.diffTotal === 0 ? 'всё сошлось' : 'с учётом комиссии',
         Math.abs(res.diffTotal) < 1 ? 'c-green' : 'c-red') +
       u.stat('Дней с расхождением', u.nf(res.badDays), 'из ' + u.nf(res.rows.length),
         res.badDays ? 'c-orange' : 'c-green') +
       '</div>';
+
+    h += '<div class="banner"><span>&#128176;</span><span>Комиссия банка — это <b>расход магазина</b>, ' +
+      'а не «просто разница». Пока она нигде не записана, прибыль выглядит больше настоящей. ' +
+      'Кнопка ниже запишет её одной строкой расхода за период.' +
+      (res.commissionTotal ? ' <button class="btn btn-sm" data-act="acq-fee">Записать комиссию ' +
+        E.fmtMoney(res.commissionTotal) + ' расходом</button>' : '') + '</span></div>';
 
     var defs = [{ key: 'st', name: 'Дни', options: [
       { v: 'bad', name: 'С расхождением', test: function (r) { return !r.ok; } },
@@ -2843,7 +2876,9 @@
 
     h += u.card('По дням', FLT().note(list.length, res.rows.length) + u.table('acqT', [
       { title: 'Дата', fn: function (r) { return DET().link('day', r.date, dateRu(r.date)); } },
-      { title: 'Пробито по карте', cls: 'num', fn: function (r) { return u.priv(r.shop); } },
+      { title: 'Карта', cls: 'num', fn: function (r) { return r.card ? u.priv(r.card) : '—'; } },
+      { title: 'СБП', cls: 'num', fn: function (r) { return r.sbp ? u.priv(r.sbp) : '—'; } },
+      { title: 'Комиссия', cls: 'num', fn: function (r) { return u.priv(r.commission); } },
       { title: 'Должен зачислить', cls: 'num', fn: function (r) { return u.priv(r.expect); } },
       { title: 'Зачислил банк', cls: 'num', fn: function (r) { return r.bank ? u.priv(r.bank) : '—'; } },
       { title: 'Разница', cls: 'num', fn: function (r) {
