@@ -226,17 +226,22 @@
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Чем выдали', 'method', 'select', v.method || 'Наличные',
           { options: ['Наличные', 'Карта', 'СБП', 'Перевод'] }) +
+        u.fieldRow('Откуда деньги', 'source', 'select', v.source || 'Из ящика',
+          { options: E.MONEY_SOURCES,
+            hint: 'из ящика — сумма должна попасть в «выплаты из ящика» той смены' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Эта запись только фиксирует, что деньги отданы. Кассу она не двигает: ' +
-      'если наличные брали из ящика, они уже посчитаны в «Выплатах из ящика» при сверке смены.',
+    hint: 'Эта запись фиксирует, что деньги отданы. Кассу она не двигает: наличные из ящика ' +
+      'уже посчитаны в «выплатах» при сверке смены. Но в сверку «на что ушли деньги из ящика» ' +
+      'зарплата теперь входит — раньше её там не хватало.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (!E.txt(v.employee)) return 'Укажите, кому выдали.';
       learn({ employees: v.employee });
       var ed = U().editing();
       var rec = { date: v.date, employee: E.txt(v.employee), kind: E.txt(v.kind),
-        amount: num(v.amount), method: E.txt(v.method), note: E.txt(v.note) };
+        amount: num(v.amount), method: E.txt(v.method), source: E.txt(v.source),
+        note: E.txt(v.note) };
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('payouts', rec);
       S.save(); refresh();
       var row = board(String(rec.date).slice(0, 7))

@@ -155,6 +155,9 @@
           { hint: 'сколько отдали поставщикам по старым долгам' }) +
         u.fieldRow('Взят новый товар в долг', 'debtTaken', 'number', v.debtTaken || 0,
           { hint: 'привезли, деньги не платили — долг вырос' }) +
+        u.fieldRow('Откуда платили', 'source', 'select', v.source || 'Из ящика',
+          { options: E.MONEY_SOURCES,
+            hint: 'обычно из ящика — тогда сумма должна попасть в «выплаты» смены' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Эта форма про товар и долги, а не про кассу: деньги за товар уже ушли ' +
@@ -173,7 +176,8 @@
       if (same) return 'Итоги за ' + dateRu(v.date) + ' уже записаны. ' +
         'Поправьте ту запись на экране «База операций», чтобы не задвоить.';
       S.add('dds', { type: E.T_DAY, date: v.date, goodsCash: num(v.goodsCash),
-        debtPaid: num(v.debtPaid), debtTaken: num(v.debtTaken), note: v.note });
+        debtPaid: num(v.debtPaid), debtTaken: num(v.debtTaken),
+        source: E.txt(v.source) || 'Из ящика', note: v.note });
       S.save(); refresh();
       var d = E.supplierDebt(dds(), S.settings);
       return { ok: 'Итоги дня записаны. Долг поставщикам теперь ' + money(d.debt) + '.' };
@@ -258,24 +262,29 @@
           { options: cashiers(), placeholder: 'необязательно' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Деньги переложили, а не потратили: прибыль от инкассации не меняется ' +
-      'ни на рубль. Уменьшается только наличный остаток там, откуда увезли.',
+    hint: 'Деньги переложили, а не потратили: прибыль от инкассации не меняется ни на рубль. ' +
+      'Из кассы они уходят через «выплаты из ящика» той смены, где их вынули, — ' +
+      'поэтому здесь остаток ящика второй раз не уменьшается, а сейф пополняется.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (E.norm(v.from) === E.norm(v.to)) return 'Откуда и куда — одно и то же место.';
       var cash = E.cashOnHand(dds(), S.settings);
-      if (E.norm(v.from) === 'касса' && num(v.amount) > cash + 0.5) {
-        return 'В кассе сейчас ' + money(cash) + ' — увезти ' + money(v.amount) +
-          ' не получится. Проверьте сумму или сначала закройте смену.';
+      if (E.norm(v.from) === 'сейф' && num(v.amount) > E.safeOnHand(dds(), S.settings) + 0.5) {
+        return 'В сейфе сейчас ' + money(E.safeOnHand(dds(), S.settings)) +
+          ' — увезти ' + money(v.amount) + ' не получится.';
       }
       var rec = { type: E.T_MOVE, date: v.date, from: v.from, to: v.to,
         amount: num(v.amount), cashier: v.who, note: v.note };
       var ed = U().editing();
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
-      return { ok: 'Инкассация записана: ' + money(v.amount) + ' из «' + v.from +
-        '» в «' + v.to + '». В кассе осталось ' + money(E.cashOnHand(dds(), S.settings)) +
-        '. Прибыль не изменилась — деньги не потрачены.' };
+      var msg = 'Инкассация записана: ' + money(v.amount) + ' из «' + v.from +
+        '» в «' + v.to + '». Прибыль не изменилась — деньги не потрачены, а переложены.';
+      if (E.norm(v.from) === 'касса') {
+        msg += ' Проверьте, что эти ' + money(v.amount) +
+          ' кассир записал в «выплаты из ящика» за смену — иначе касса не сойдётся.';
+      }
+      return { ok: msg };
     }
   };
 
@@ -287,17 +296,26 @@
         u.fieldRow('Откуда', 'category', 'list', v.category || 'Прочий приход',
           { options: categories().concat(['Прочий приход', 'Вернули долг', 'Внёс владелец']) }) +
         u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Куда положили', 'source', 'select', v.source || 'Из ящика',
+          { options: ['Из ящика', 'Из сейфа', 'Со счёта'],
+            hint: '«Из ящика» значит в ящик — кассир пересчитает их вместе со сменой' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Выручку сюда писать не нужно — она приходит из сверки смены.',
+    hint: 'Выручку сюда писать не нужно — она приходит из сверки смены. Наличные, ' +
+      'положенные в ящик, остаток не увеличивают: их пересчитают при закрытии смены, ' +
+      'и они попадут в факт. Иначе те же деньги посчитались бы дважды.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       learn({ categories: v.category, methods: v.method });
       S.add('dds', { type: E.T_IN, date: v.date, category: v.category || 'Прочий приход',
-        method: v.method, amount: num(v.amount), note: v.note });
+        method: v.method, source: E.txt(v.source) || 'Из ящика',
+        amount: num(v.amount), note: v.note });
       S.save(); refresh();
-      return { ok: 'Приход записан: ' + money(v.amount) };
+      var where = E.moneyFrom({ source: v.source, method: v.method });
+      return { ok: 'Приход записан: ' + money(v.amount) +
+        (where === 'сейф' ? '. В сейфе стало ' + money(E.safeOnHand(dds(), S.settings)) + '.'
+          : where === 'ящик' ? '. Кассир пересчитает их вместе со сменой.' : '.') };
     }
   };
 
@@ -484,12 +502,15 @@
 
     /* Из ящика выдали больше, чем расписали по статьям: деньги брали, а на
        что — не записали. Без этой сверки расходы месяца выходят неполными. */
-    var chk = E.tillPayoutCheck(sel.rows);
+    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [] });
     if (chk.left > 0.5) {
+      var parts = Object.keys(chk.parts).map(function (k) {
+        return k + ' ' + money(chk.parts[k]);
+      }).join(', ');
       h += '<div class="banner orange"><span>🧾</span><span>Из ящика за период выдали ' +
-        esc(money(chk.payouts)) + ', а расписано по статьям только ' +
-        esc(money(chk.explained)) + '. Не хватает объяснения на <b>' +
-        esc(money(chk.left)) + '</b> — эти деньги нигде не учтены как расход, ' +
+        esc(money(chk.payouts)) + ', а расписано ' + esc(money(chk.explained)) +
+        (parts ? ' (' + esc(parts) + ')' : '') + '. Не хватает объяснения на <b>' +
+        esc(money(chk.left)) + '</b> — эти деньги нигде не учтены, ' +
         'и прибыль за месяц выглядит выше настоящей.</span></div>';
     } else if (chk.over) {
       h += '<div class="banner red"><span>⚠️</span><span>Расходов «из ящика» записано на ' +

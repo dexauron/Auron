@@ -378,26 +378,148 @@ console.log('\n— Две оси: трата или движение денег,
   check('«Из сейфа» распознаётся', WM.moneyFrom({ source: 'Из сейфа' }) === 'сейф',
     WM.moneyFrom({ source: 'Из сейфа' }), 'сейф');
 
-  // 3. Сейф живёт отдельно от ящика
+  /* 3. Сейф живёт отдельно от ящика.
+     Кассир вынул 200 000 и записал их в «выплаты из ящика» — факт смены это
+     уже учёл. Поэтому инкассация ящик второй раз не уменьшает, а сейф
+     пополняет. Вычесть её ещё раз значило бы потерять деньги дважды. */
   const safe = [
-    { type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 300000, zCashless: 0,
-      payouts: 0, factCash: 300000 },
+    { type: 'Смена', date: '2026-09-02', openCash: 0, zCash: 300000, zCashless: 0,
+      payouts: 200000, factCash: 100000 },
     { type: 'Перемещение', date: '2026-09-02', from: 'Касса', to: 'Сейф', amount: 200000 },
     { type: 'Расход', date: '2026-09-03', category: 'Расходники', method: 'Наличные',
       source: 'Из сейфа', amount: 5000 }
   ];
-  check('инкассация уменьшает ящик', WM.cashOnHand(safe, { openCashStart: 0 }) === 100000,
+  check('ИНКАССАЦИЯ НЕ ВЫЧИТАЕТСЯ ИЗ ЯЩИКА ДВАЖДЫ',
+    WM.cashOnHand(safe, { openCashStart: 0 }) === 100000,
     WM.cashOnHand(safe, { openCashStart: 0 }), 100000);
   check('и увеличивает сейф', WM.safeOnHand(safe, { openSafeStart: 0 }) === 195000,
     WM.safeOnHand(safe, { openSafeStart: 0 }), 195000);
   check('ИНКАССАЦИЯ ПРИБЫЛЬ НЕ УМЕНЬШАЕТ',
     WM.pnl({ rows: safe }).net === 300000 - 5000,
     WM.pnl({ rows: safe }).net, 295000);
+  check('и она расшифровывает выплату из ящика',
+    WM.tillPayoutCheck(safe).left === 0, WM.tillPayoutCheck(safe).left, 0);
 
   // 4. Сверка: сколько из ящика выдали и сколько расписали
   const chk = WM.tillPayoutCheck(rows);
   check('видно, что из выплат не расписано', chk.payouts === 10000 &&
     chk.explained === 5000 && chk.left === 5000, chk.left, 5000);
+}
+
+console.log('\n— Рабочий день магазина: две кассы, деньги из обеих');
+{
+  /* Как оно есть на самом деле: за день из двух ящиков вынули 40 000 и
+     раздали на всё сразу — товар, долги поставщикам, зарплату, обед,
+     инкассацию. Все пять должны сойтись с выплатами по сменам. */
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День', cashier: 'Аня',
+      openCash: 5000, zCash: 40000, zCashless: 12000, payouts: 25000, factCash: 20000 },
+    { type: 'Смена', date: '2026-09-01', till: 'Касса 2', shift: 'День', cashier: 'Пётр',
+      openCash: 5000, zCash: 30000, zCashless: 8000, payouts: 15000, factCash: 20000 },
+    { type: 'День', date: '2026-09-01', goodsCash: 12000, debtPaid: 8000, debtTaken: 0 },
+    { type: 'Расход', date: '2026-09-01', category: 'Обед', method: 'Наличные',
+      source: 'Из ящика', amount: 3000 },
+    { type: 'Перемещение', date: '2026-09-01', from: 'Касса', to: 'Сейф', amount: 2000 }
+  ];
+  const salary = [{ date: '2026-09-01', employee: 'Аня', kind: 'Аванс',
+    amount: 15000, method: 'Наличные', source: 'Из ящика' }];
+  const set = { openCashStart: 10000, openSafeStart: 0 };
+
+  check('обе смены сошлись', rows.filter(r => r.type === 'Смена')
+    .every(r => WM.shiftCalc(r).ok), 'сошлись', 'сошлись');
+  check('НАЛИЧНЫЕ ПО ДВУМ КАССАМ СЧИТАЮТСЯ ВЕРНО',
+    WM.cashOnHand(rows, set) === 40000, WM.cashOnHand(rows, set), 40000);
+  check('инкассация легла в сейф', WM.safeOnHand(rows, set) === 2000,
+    WM.safeOnHand(rows, set), 2000);
+
+  const chk = WM.tillPayoutCheck(rows, null, { payouts: salary });
+  check('из ящика выдали столько, сколько записали кассиры', chk.payouts === 40000,
+    chk.payouts, 40000);
+  check('ВСЕ ПЯТЬ ТРАТ ПОПАЛИ В РАСШИФРОВКУ', chk.explained === 40000,
+    chk.explained, 40000);
+  check('ложной тревоги «не расписано» нет', chk.left === 0 && !chk.over, chk.left, 0);
+  check('видно, на что именно ушли деньги из ящика',
+    ['товар', 'долги поставщикам', 'зарплата', 'расходы', 'инкассация']
+      .every(k => chk.parts[k] > 0), Object.keys(chk.parts).join(', '), 'все пять');
+
+  // Зарплата: начисление в затратах, выдача — только движение денег
+  const p = WM.pnl({ rows, payroll: 15000 });
+  check('выручка обеих касс с безналом', p.revenue === 90000, p.revenue, 90000);
+  check('закуп = товар за наличные', p.purchase === 12000, p.purchase, 12000);
+  check('в затратах ФОТ и обед, без долгов и инкассации',
+    p.costTotal === 18000, p.costTotal, 18000);
+  check('ПОГАШЕНИЕ ДОЛГА ТП В ЗАТРАТЫ НЕ ПОПАЛО', p.debtPaid === 8000 &&
+    p.costs.every(c => c.sum !== 8000), 'не попало', 'не попало');
+  check('инкассация в затраты не попала', p.moved === 2000 &&
+    p.costs.every(c => c.sum !== 2000), 'не попала', 'не попала');
+  check('чистая прибыль = 90000 − 12000 − 18000', p.net === 60000, p.net, 60000);
+}
+
+console.log('\n— Зарплата: один источник ФОТ, но всегда какой-то есть');
+{
+  const rows = [{ type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 500000,
+    zCashless: 0, payouts: 200000, factCash: 300000 }];
+  const fot = p => p.costs.find(c => c.key === 'fot');
+
+  // Табеля нет, статьи «ЗП» нет — берём то, что реально выдали на руки
+  const paid = WM.pnl({ rows, payroll: 0, salaryPaid: 200000 });
+  check('ЗАРПЛАТА БЕЗ ТАБЕЛЯ ВСЁ РАВНО ПОПАДАЕТ В ЗАТРАТЫ',
+    fot(paid).sum === 200000 && fot(paid).source === 'выдано на руки',
+    fot(paid).sum + ' (' + fot(paid).source + ')', '200000 (выдано на руки)');
+  check('и прибыль перестала быть завышенной', paid.net === 300000, paid.net, 300000);
+
+  // Табель главнее выплат — не складываем
+  const both = WM.pnl({ rows, payroll: 180000, salaryPaid: 200000 });
+  check('ТАБЕЛЬ И ВЫПЛАТЫ НЕ СКЛАДЫВАЮТСЯ', fot(both).sum === 180000,
+    fot(both).sum, 180000);
+  check('и источник назван честно', fot(both).source === 'табель', fot(both).source, 'табель');
+
+  // Статья «ЗП» главнее выплат
+  const art = WM.pnl({ rows: rows.concat([{ type: 'Расход', date: '2026-09-01',
+    category: 'ЗП', method: 'Наличные', source: 'Из ящика', amount: 150000 }]),
+    payroll: 0, salaryPaid: 200000 });
+  check('статья «ЗП» главнее выданного', fot(art).sum === 150000, fot(art).sum, 150000);
+}
+
+console.log('\n— Деньги из сейфа и деньги в ящик');
+{
+  // Товар оплатили из сейфа: ящик не трогали, сейф уменьшился
+  const fromSafe = [
+    { type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 20000, zCashless: 0,
+      payouts: 0, factCash: 20000 },
+    { type: 'День', date: '2026-09-01', source: 'Из сейфа', goodsCash: 50000,
+      debtPaid: 0, debtTaken: 0 }
+  ];
+  check('товар из сейфа ящик не трогает',
+    WM.cashOnHand(fromSafe, { openCashStart: 0 }) === 20000,
+    WM.cashOnHand(fromSafe, { openCashStart: 0 }), 20000);
+  check('СЕЙФ УМЕНЬШИЛСЯ НА СУММУ ЗАКУПА',
+    WM.safeOnHand(fromSafe, { openSafeStart: 200000 }) === 150000,
+    WM.safeOnHand(fromSafe, { openSafeStart: 200000 }), 150000);
+  check('и сверка ящика не ругается', !WM.tillPayoutCheck(fromSafe).over,
+    'молчит', 'молчит');
+  check('в прибыли закуп всё равно учтён',
+    WM.pnl({ rows: fromSafe }).purchase === 50000,
+    WM.pnl({ rows: fromSafe }).purchase, 50000);
+
+  // Владелец доложил наличных в ящик — кассир пересчитал их вместе со сменой
+  const cashIn = [
+    { type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 20000, zCashless: 0,
+      payouts: 0, factCash: 30000 },
+    { type: 'Приход', date: '2026-09-01', category: 'Внёс владелец',
+      method: 'Наличные', source: 'Из ящика', amount: 10000 }
+  ];
+  check('ВНЕСЁННЫЕ В ЯЩИК ДЕНЬГИ НЕ СЧИТАЮТСЯ ДВАЖДЫ',
+    WM.cashOnHand(cashIn, { openCashStart: 0 }) === 30000,
+    WM.cashOnHand(cashIn, { openCashStart: 0 }), 30000);
+
+  const toSafe = [{ type: 'Приход', date: '2026-09-01', method: 'Наличные',
+    source: 'Из сейфа', amount: 10000 }];
+  check('внесённое в сейф увеличивает сейф',
+    WM.safeOnHand(toSafe, { openSafeStart: 0 }) === 10000,
+    WM.safeOnHand(toSafe, { openSafeStart: 0 }), 10000);
+  check('и не увеличивает ящик', WM.cashOnHand(toSafe, { openCashStart: 0 }) === 0,
+    WM.cashOnHand(toSafe, { openCashStart: 0 }), 0);
 }
 
 console.log('\n— Что тратой НЕ является: закуп, долг, инкассация');

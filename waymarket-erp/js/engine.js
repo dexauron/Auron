@@ -278,10 +278,18 @@
         var c = shiftCalc(r);
         cash += c.zCash - c.payouts + c.diff;
       } else if (isIncome(r) && isCash(r.method)) {
-        cash += safeRound(r.amount);
+        /* Наличные, положенные в ящик при кассире, уже сидят в факте смены:
+           ящик пересчитали вместе с ними. Прибавить их ещё раз значит показать
+           денег больше, чем лежит. А деньги, убранные сразу в сейф, в ящик и
+           не попадали. Поэтому наличный приход остаток ящика не меняет:
+           ящиком правит факт пересчёта. */
       } else if (isMove(r)) {
-        // Инкассация: из ящика в сейф или банк — и обратно, если разменивали
-        if (norm(r.from) === 'касса') cash -= safeRound(r.amount);
+        /* Инкассация из кассы ящик НЕ уменьшает: деньги вынули при кассире, и
+           он записал их в «выплаты из ящика» той смены — там они уже учтены.
+           Вычесть ещё раз значит потерять их дважды.
+           Если же деньги увезли мимо кассира, смена не сойдётся и покажет
+           недостачу — и ящик уменьшится через расхождение, как и должен.
+           Обратное движение (привезли размен в кассу) ящик пополняет. */
         if (norm(r.to) === 'касса') cash += safeRound(r.amount);
       } else if ((isExpense(r) || isDraw(r)) && hitsTill(r)) {
         // hitsTill отсекает то, что уже ушло через «выплаты из ящика» смены
@@ -304,6 +312,11 @@
         if (norm(r.from) === 'сейф') safe -= safeRound(r.amount);
       } else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'сейф') {
         safe -= safeRound(r.amount);
+      } else if (isDay(r) && moneyFrom(r) === 'сейф') {
+        // товар и долги поставщикам, оплаченные не из ящика, а из сейфа
+        safe -= safeRound(num(r.goodsCash) + num(r.debtPaid));
+      } else if (isIncome(r) && isCash(r.method) && moneyFrom(r) === 'сейф') {
+        safe += safeRound(r.amount);
       }
     });
     return safeRound(safe);
@@ -312,30 +325,68 @@
   /* Сверка «выплаты из ящика ↔ расшифровка». За день из ящика выдали столько-то
      (сумма payouts по сменам), а расшифровано расходами «из ящика» — столько.
      Разница показывает, что деньги брали, а на что — не записали. */
-  function tillPayoutCheck(rows, ym) {
+  /* Сверка «выплаты из ящика ↔ на что они ушли».
+
+     Из ящика деньги уходят на пять вещей, и все пять обязаны попасть в
+     «выплаты из ящика» той смены:
+       • товар за наличные и погашение долга поставщику (Итоги дня);
+       • зарплата, выданная наличными;
+       • расходы магазина, оплаченные из ящика;
+       • забор владельца;
+       • инкассация в сейф или банк.
+     Если сумма расшифровок меньше выплат — деньги брали, а на что, не
+     записали: расходы за месяц окажутся неполными, а прибыль — завышенной.
+     Если больше — где-то лишняя запись. */
+  function tillPayoutCheck(rows, ym, opts) {
+    opts = opts || {};
     var byDay = {};
     function day(d) {
-      if (!byDay[d]) byDay[d] = { date: d, payouts: 0, explained: 0 };
+      if (!byDay[d]) byDay[d] = { date: d, payouts: 0, explained: 0, parts: {} };
       return byDay[d];
+    }
+    function add(d, what, sum) {
+      if (!sum) return;
+      var x = day(d);
+      x.explained += safeRound(sum);
+      x.parts[what] = safeRound((x.parts[what] || 0) + safeRound(sum));
     }
     (rows || []).forEach(function (r) {
       var d = txt(r.date); if (!d) return;
       if (ym && ymOf(d) !== ym) return;
       if (isShift(r)) day(d).payouts += shiftCalc(r).payouts;
-      else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'ящик') {
-        day(d).explained += safeRound(r.amount);
+      else if (isDay(r)) {
+        // товар за наличные и отданные долги — деньги из ящика, если владелец
+        // не указал, что платил из сейфа или со счёта
+        var w = moneyFrom(r);
+        if (w !== 'сейф' && w !== 'счёт') {
+          add(d, 'товар', num(r.goodsCash));
+          add(d, 'долги поставщикам', num(r.debtPaid));
+        }
+      } else if (isMove(r) && norm(r.from) === 'касса') {
+        add(d, 'инкассация', num(r.amount));
+      } else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'ящик') {
+        add(d, isDraw(r) ? 'забрал владелец' : 'расходы', num(r.amount));
       }
     });
-    var rows2 = [], totalPayouts = 0, totalExplained = 0;
+    // Зарплата лежит в своём журнале, но берут её из того же ящика
+    (opts.payouts || []).forEach(function (p) {
+      var d = txt(p.date); if (!d) return;
+      if (ym && ymOf(d) !== ym) return;
+      if (!isCash(p.method)) return;
+      if (moneyFrom(p) === 'сейф' || moneyFrom(p) === 'счёт') return;
+      add(d, 'зарплата', num(p.amount));
+    });
+    var rows2 = [], totalPayouts = 0, totalExplained = 0, allParts = {};
     Object.keys(byDay).sort().forEach(function (d) {
       var x = byDay[d];
       x.payouts = safeRound(x.payouts); x.explained = safeRound(x.explained);
       x.left = safeRound(x.payouts - x.explained);
+      for (var k in x.parts) allParts[k] = safeRound((allParts[k] || 0) + x.parts[k]);
       totalPayouts += x.payouts; totalExplained += x.explained;
       if (x.payouts || x.explained) rows2.push(x);
     });
     return { rows: rows2, payouts: safeRound(totalPayouts),
-      explained: safeRound(totalExplained),
+      explained: safeRound(totalExplained), parts: allParts,
       left: safeRound(totalPayouts - totalExplained),
       // расшифровали больше, чем вообще выдали, — где-то лишняя запись
       over: totalExplained > totalPayouts + 0.5 };
@@ -616,9 +667,18 @@
     });
     Object.keys(byKind).forEach(function (k) { byKind[k] = safeRound(byKind[k]); sources[k] = 'записи'; });
 
-    // ФОТ: если ведётся табель — берём начисленное по нему, иначе статью «ЗП».
-    // Складывать нельзя: одни и те же деньги попадут в затраты дважды.
+    /* ФОТ берётся из ОДНОГО источника, по старшинству:
+         1) табель — если его ведут, это самое точное;
+         2) статья «ЗП» в расходах — если табеля нет, но расход записан;
+         3) фактически выданная зарплата — если нет ни того, ни другого.
+       Складывать нельзя: одни и те же деньги попадут в затраты дважды.
+       Третий пункт важен для магазина, где зарплату просто выдают из кассы:
+       без него прибыль выглядела бы выше настоящей на весь фонд оплаты. */
     if (num(opts.payroll) > 0) { byKind.fot = safeRound(opts.payroll); sources.fot = 'табель'; }
+    else if (!byKind.fot && num(opts.salaryPaid) > 0) {
+      byKind.fot = safeRound(opts.salaryPaid);
+      sources.fot = 'выдано на руки';
+    }
     // Списания: если загружен отчёт 1С — берём себестоимость оттуда
     if (num(opts.writeoff1c) > 0) { byKind.writeoff = safeRound(opts.writeoff1c); sources.writeoff = '1С'; }
     // Налог: если своей записи нет, показываем расчётный
@@ -699,7 +759,7 @@
         : 'расхождение за месяц ' + fmtMoney(t.diff), 'cashiers', false);
 
     // 3. Выплаты из ящика расшифрованы
-    var chk = tillPayoutCheck(rows, ym);
+    var chk = tillPayoutCheck(rows, ym, { payouts: opts.salaryPaid || [] });
     item('payouts', 'Выплаты из ящика расшифрованы',
       Math.abs(chk.left) < 0.5 && !chk.over,
       chk.over ? 'расшифровано больше, чем выдавали, на ' + fmtMoney(-chk.left) +

@@ -474,22 +474,34 @@ console.log('Страница: ' + PAGE + '\n');
     const E = window.WM, S = window.WMStore;
     return { cash: E.cashOnHand(S.state.dds, S.settings),
       safe: E.safeOnHand(S.state.dds, S.settings),
-      net: E.pnl({ rows: S.state.dds }).net };
+      net: E.pnl({ rows: S.state.dds }).net,
+      chk: E.tillPayoutCheck(S.state.dds, null, { payouts: S.state.payouts || [] }) };
   });
-  check('инкассация уменьшила кассу', c2.cash === 6467, c2.cash, 6467);
+  /* Кассир вынул деньги при закрытии смены и записал их в «выплаты из ящика»
+     (10 000), а факт это учёл. Значит инкассация ящик второй раз уменьшать
+     не должна — иначе те же деньги пропадут дважды. */
+  check('ИНКАССАЦИЯ НЕ ВЫЧИТАЕТСЯ ИЗ ЯЩИКА ДВАЖДЫ', c2.cash === 16467, c2.cash, 16467);
   check('и положила деньги в сейф', c2.safe === 10000, c2.safe, 10000);
   check('ИНКАССАЦИЯ ПРИБЫЛЬ НЕ ИЗМЕНИЛА', c2.net === before, c2.net, before);
+  check('она попала в расшифровку выплат из ящика',
+    c2.chk.parts['инкассация'] === 10000, c2.chk.parts['инкассация'], 10000);
+  /* В этих данных расшифровок нарочно больше, чем выплат: смена выдала
+     10 000, а записаны расход 5 000 и инкассация 10 000. Программа обязана
+     это заметить — иначе лишняя запись прошла бы незамеченной. */
+  check('ЛИШНЮЮ РАСШИФРОВКУ ПРОГРАММА ЗАМЕЧАЕТ', c2.chk.over && c2.chk.left === -5000,
+    'перебор на ' + (-c2.chk.left), 'перебор на 5000');
 
-  // Больше денег, чем есть в ящике, увезти нельзя
+  // Из сейфа нельзя увезти больше, чем в нём лежит
   await page.evaluate(() => window.WMUI.openForm('moveCash'));
   await page.waitForTimeout(350);
+  await pick('from', 'Сейф');
+  await pick('to', 'Банк');
   await fill('amount', '999999');
   await page.click('.sheet .btn-primary');
   await page.waitForTimeout(500);
   const over = await page.evaluate(() => ({
-    moves: (window.WMStore.state.dds || []).filter(r => r.type === 'Перемещение').length,
-    toast: (document.querySelector('.toast') || {}).textContent || '' }));
-  check('нельзя увезти больше, чем лежит в ящике', over.moves === 1,
+    moves: (window.WMStore.state.dds || []).filter(r => r.type === 'Перемещение').length }));
+  check('нельзя увезти из сейфа больше, чем в нём есть', over.moves === 1,
     over.moves + ' перемещений', 1);
   await page.evaluate(() => window.WMUI.closeSheet());
   await page.waitForTimeout(300);

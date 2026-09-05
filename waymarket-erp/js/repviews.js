@@ -69,13 +69,21 @@
     return E.payrollTotals(list).accrued;
   }
 
+  // Сколько зарплаты фактически выдали за месяц — запасной источник ФОТ,
+  // если табель не ведут
+  function salaryPaidOf(m) {
+    var sum = 0;
+    (S.state.payouts || []).forEach(function (r) { if (inYm(r, m)) sum += num(r.amount); });
+    return E.safeRound(sum);
+  }
+
   function pnlOf(m) {
     m = m || ym();
     var rows = rowsOf(m);
     var t = E.totals(rows);
     var tax = F.taxAmount(S.settings, t.revenue, t.expense);
     return E.pnl({ rows: rows, payroll: payrollOf(m), writeoff1c: writeoff1c(m),
-      taxAmount: tax.sum });
+      salaryPaid: salaryPaidOf(m), taxAmount: tax.sum });
   }
 
   /* ==========================================================================
@@ -220,6 +228,7 @@
       S.state.staff || [], S.settings, { dds: rowsOf(m) }));
     var mc = E.monthClose({ rows: dds(), ym: m, settings: S.settings,
       payrollRow: pay, cashcount: S.state.cashcount || [], pnl: pnlOf(m),
+      salaryPaid: S.state.payouts || [],
       debtChecked: (S.settings.debtChecked || {})[m] });
     var p = mc.pnl;
 
@@ -269,13 +278,18 @@
       h += u.card('Выплаты из ящика по дням', u.table('mcP', [
         { title: 'День', fn: function (r) { return esc(dateRu(r.date)); } },
         { title: 'Выдали из ящика', cls: 'num', fn: function (r) { return u.priv(r.payouts); } },
-        { title: 'Расписано по статьям', cls: 'num', fn: function (r) { return u.priv(r.explained); } },
+        { title: 'Расписано', cls: 'num', fn: function (r) {
+          var parts = Object.keys(r.parts || {}).map(function (k) {
+            return k + ' ' + money(r.parts[k]); }).join(', ');
+          return u.priv(r.explained) +
+            (parts ? '<br><small class="c-muted">' + esc(parts) + '</small>' : ''); } },
         { title: 'Не объяснено', cls: 'num', fn: function (r) {
           return r.left > 0.5 ? '<b class="c-orange">' + u.priv(r.left) + '</b>'
             : r.left < -0.5 ? '<b class="c-red">' + u.priv(r.left) + '</b>' : '—'; } }
       ], chk.rows.filter(function (r) { return Math.abs(r.left) > 0.5; }), { step: 31,
         empty: 'Все выплаты расписаны' }),
-        'всего выдали ' + money(chk.payouts) + ', расписано ' + money(chk.explained));
+        'всего выдали ' + money(chk.payouts) + ', расписано ' + money(chk.explained) +
+        ' — сюда входят товар за наличные, долги поставщикам, зарплата, расходы и инкассация');
     }
 
     h += u.card('Сверка долга с поставщиками', '<div class="card-pad">' +
