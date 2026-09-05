@@ -6,12 +6,19 @@
 (function () {
   'use strict';
 
-  var E = window.WM, S = window.WMStore, F = window.WMFiles;
+  var E = window.WM, S = window.WMStore, F = window.WMFiles, BOOK = window.WMBook;
   S.load();
 
   /* --- Данные выгрузок (в памяти) ----------------------------------------- */
-  // Что программа держит в памяти сверх базы: ничего товарного тут больше нет
-  var D = { files: [] };
+  /* КОНТУР 2: данные из 1С. Живут только в памяти браузера, пока открыта
+     программа. В базу оперативных записей и в книгу «Бухгалтерия.xlsx» они
+     не попадают — ручной учёт и товарная аналитика не смешиваются. */
+  var D = {
+    sales: [], salesPeriod: null, stock: [], prices: [], contacts: [], pricelist: [],
+    barcodes: [], units: [], writeoffs: [], writeoffsPeriod: null, returns: [], returnsPeriod: null,
+    invoices1c: [], invoicesPeriod: null, cashOrders: [], dead: [], deadPeriod: null,
+    incexp: null, files: []
+  };
   var Q = window.WMQuick;     // умный ввод: справочники, подстановки, черновики
   function DICT() { return Q.dicts(S.state, S.settings); }
   function learn(map) {
@@ -551,16 +558,127 @@
       return '<option value="' + esc(v) + '">';
     }).join('') + '</datalist>';
   }
-  /* Пересчёт после каждой записи. Считать «заранее» тут больше нечего:
-     вся математика живёт в js/engine.js и вызывается прямо из экранов. */
-  function recompute() { C = {}; }
 
-  /* Раньше здесь читались выгрузки 1С. Программа больше не работает с ними:
-     единственный файл, который она читает и пишет, — своя книга
-     «Бухгалтерия.xlsx». Кнопка выбора файлов оставлена для загрузки копии базы. */
+  function readWorkbook(buffer) {
+    var wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+    return { wb: wb, names: wb.SheetNames,
+      matrix: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' }) };
+  }
+  function sheetOf(wb, name) {
+    return wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' }) : null;
+  }
+
+
+  /* Прочитать один файл 1С. Данные ложатся ТОЛЬКО в память (D) — в базу
+     оперативных записей и в книгу «Бухгалтерия.xlsx» они не попадают.
+     Закрыли программу — товарная аналитика ушла, ручной учёт остался. */
+  function ingest(name, buffer, size) {
+    var m = readWorkbook(buffer);
+    var kind = E.detectKind(name, m.matrix, m.names);
+    var info = { name: name, kind: kind, rows: 0, size: size || 0, period: null, note: '' };
+    var r;
+    if (kind === 'sales') { r = E.parseSales(m.matrix); D.sales = r.rows; D.salesPeriod = r.period; info.period = r.period; }
+    else if (kind === 'stock') { r = E.parseStock(m.matrix); D.stock = r.rows; }
+    else if (kind === 'prices') { r = E.parsePrices(m.matrix); D.prices = r.rows; }
+    else if (kind === 'contacts') { r = E.parseContacts(m.matrix); D.contacts = r.rows; }
+    else if (kind === 'pricelist') { r = E.parsePricelist(m.matrix); D.pricelist = r.rows; }
+    else if (kind === 'barcodes') { r = E.parseBarcodes(m.matrix); D.barcodes = r.rows; }
+    else if (kind === 'units') { r = E.parseUnits(m.matrix); D.units = r.rows; }
+    else if (kind === 'deadstock') {
+      r = E.parseDeadStock(m.matrix); D.dead = r.rows; D.deadPeriod = r.period; info.period = r.period;
+      info.note = 'позиций ' + r.rows.length;
+    }
+    else if (kind === 'incexp1c') {
+      r = E.parseIncomeExpense(m.matrix);
+      D.incexp = { rows: r.rows, totals: r.totals, period: r.period };
+      info.period = r.period;
+      info.note = 'приход ' + money(r.totals.income) + ', расход ' + money(r.totals.expense);
+    }
+    else if (kind === 'writeoffs1c') {
+      // Синхронизация, а не «загрузить поверх»: за свой период файл главный,
+      // за прошлые месяцы уже посчитанные списания остаются на месте.
+      r = E.parseWriteoffs1C(m.matrix);
+      var sync = E.syncWriteoffs(D.writeoffs, r.rows, r.period);
+      D.writeoffs = sync.rows;
+      D.writeoffsPeriod = r.period;
+      info.period = r.period;
+      info.note = 'обновлено ' + sync.stats.updated + ', добавлено ' + sync.stats.added +
+        (sync.stats.removed ? ', убрано из аналитики ' + sync.stats.removed : '');
+    }
+    else if (kind === 'returns') { r = E.parseReturns(m.matrix); D.returns = r.rows; D.returnsPeriod = r.period; info.period = r.period; }
+    else if (kind === 'invoices1c') {
+      r = E.parseIncomingInvoices(m.matrix); D.invoices1c = r.rows; D.invoicesPeriod = r.period; info.period = r.period;
+      info.note = 'накладных ' + r.rows.length;
+    }
+    else if (kind === 'cashout' || kind === 'cashin') {
+      r = E.parseCashOrders(m.matrix, kind === 'cashin' ? 'in' : 'out'); D.cashOrders = r.rows; info.period = r.period;
+      info.note = 'ордеров ' + r.rows.length;
+    }
+    else if (kind === 'writeoffs') {
+      r = E.parseWriteoffs(m.matrix);
+      D.writeoffs = r.rows.map(function (x) {
+        return { name: x.name, reason: x.reason || 'Без причины', qty: x.qty, cost: x.sum, retail: 0, key: E.norm(x.name) };
+      });
+    } else { info.note = 'формат не распознан'; }
+    info.rows = r && r.rows ? r.rows.length : 0;
+    D.files = D.files.filter(function (f) { return f.name !== name; });
+    D.files.push(info);
+    return info;
+  }
+
+  async function syncFolder(silent) {
+    if (F.state !== 'ready') return false;
+    var book = null, files;
+    try {
+      book = E.norm(S.settings.bookAutoRead) === 'нет' ? null : await F.bookChangedOutside();
+      if (book) await readBook(book, silent);
+      files = await F.listExports();
+    } catch (e) {
+      // папка исчезла посреди работы — объясняем и перерисовываем экран
+      var why = F.humanError(e);
+      render();
+      if (why && !silent) toast(why, 11000);
+      return false;
+    }
+    var changed = files.filter(function (f) { return folderStamps[f.name] !== f.stamp; });
+    if (!changed.length) { if (!silent) toast('Новых выгрузок в папке нет.'); return false; }
+    for (var i = 0; i < changed.length; i++) {
+      try {
+        ingest(changed[i].name.split('/').pop(), await changed[i].file.arrayBuffer(), changed[i].file.size);
+        folderStamps[changed[i].name] = changed[i].stamp;
+      } catch (e) { /* пропускаем */ }
+    }
+    recompute();
+    if (!silent) { render(); toast('Обновлено файлов: ' + changed.length); }
+    return true;
+  }
+
+  /* Пересчёт: ручной учёт считается на лету в js/engine.js, а здесь готовим
+     товарную аналитику из того, что лежит в памяти после загрузки файлов 1С. */
+  function recompute() {
+    C = {};
+    C.sales = E.salesTotals(D.sales);
+    C.stock = E.stockTotals(D.stock);
+    C.groupIdx = E.groupIndex(D.stock, D.prices);
+    C.byGroup = E.salesByGroup(D.sales, C.groupIdx);
+    C.contactsIdx = E.contactsIndex(D.contacts);
+    C.bestPrices = E.bestPriceIndex(D.prices);
+    C.stockIdx = {}; D.stock.forEach(function (r) { C.stockIdx[r.key] = r; });
+    C.abc = E.abcClassify(D.sales.slice());
+    C.writeoffSum = E.safeRound(D.writeoffs.reduce(function (a, r) { return a + num(r.cost); }, 0));
+    C.returnSum = E.safeRound(D.returns.reduce(function (a, r) { return a + num(r.cost); }, 0));
+    C.dead = D.dead.length ? E.deadStockList(D.dead, C.stockIdx, S.settings) : null;
+    C.incexp = D.incexp ? E.incomeExpenseSummary(D.incexp.rows) : null;
+    C.supplies = D.invoices1c.length ? E.supplierBalance(D.invoices1c, D.cashOrders) : null;
+    C.bySupplier = {};
+    D.prices.forEach(function (p) { var k = E.norm(p.supplier); C.bySupplier[k] = (C.bySupplier[k] || 0) + 1; });
+  }
+
+  /* Загрузка выгрузок 1С. Всё, что прочитали, ложится в память (D):
+     товарная аналитика оживает, ручной учёт при этом не меняется ни на рубль. */
   async function loadFiles(list) {
-    var files = Array.prototype.slice.call(list || []);
-    var json = files.filter(function (f) { return /\.json$/i.test(f.name); })[0];
+    var all = Array.prototype.slice.call(list || []);
+    var json = all.filter(function (f) { return /\.json$/i.test(f.name); })[0];
     if (json) {
       var fr = new FileReader();
       fr.onload = function () {
@@ -570,9 +688,30 @@
       fr.readAsText(json);
       return;
     }
-    var book = files.filter(function (f) { return /\.xlsx?$/i.test(f.name); })[0];
-    if (book) { await readBook(book); return; }
-    toast('Программа читает только свою книгу «' + BOOK.FILE + '» и копии базы .json.');
+    var files = all.filter(function (f) {
+      return /\.(xls|xlsx|csv)$/i.test(f.name) && !/^~\$/.test(f.name) &&
+        E.norm(f.name).indexOf(E.norm(BOOK.FILE)) < 0;
+    });
+    if (!files.length) { toast('Файлов 1С не нашлось. Нужны .xls, .xlsx или .csv'); return; }
+    var b = sheet('Читаю файлы', '<div class="card"><div class="card-pad" id="progText">Подождите…</div></div>');
+    var okCount = 0;
+    for (var i = 0; i < files.length; i++) {
+      var t = $('progText');
+      if (t) t.textContent = (i + 1) + ' из ' + files.length + ': ' + files[i].name;
+      try {
+        var info = ingest(files[i].name, await files[i].arrayBuffer(), files[i].size);
+        if (info.kind !== 'unknown') okCount++;
+      } catch (e) {
+        // Один битый файл не должен остановить остальные, но и молчать нельзя:
+        // иначе владелец решит, что отчёт загрузился, а его нет.
+        D.files = D.files.filter(function (f) { return f.name !== files[i].name; });
+        D.files.push({ name: files[i].name, kind: 'unknown', rows: 0, size: files[i].size,
+          note: 'не прочитался: ' + e.message });
+      }
+    }
+    closeSheet(); recompute(); render();
+    toast('Прочитано файлов: ' + okCount + ' из ' + files.length +
+      '. Товарная аналитика обновлена; касса и зарплаты не тронуты.', 9000);
   }
 
   function bookWorkbook() {
@@ -877,6 +1016,15 @@
   /* --- Данные и копии --------------------------------------------------------
      Раньше здесь загружались выгрузки 1С. Теперь у программы один файл —
      своя книга «Бухгалтерия.xlsx» плюс копии базы. */
+  var KINDS_1C = {
+    sales: 'Продажи', stock: 'Остатки номенклатуры', prices: 'Цены поставщиков',
+    contacts: 'Контакты поставщиков', pricelist: 'Прайс-лист', barcodes: 'Штрихкоды',
+    units: 'Единицы измерения', writeoffs1c: 'Причины списания', writeoffs: 'Списания',
+    returns: 'Причины возвратов', invoices1c: 'Приходные накладные',
+    cashout: 'Расходные ордера', cashin: 'Приходные ордера',
+    deadstock: 'Неликвидные товары', incexp1c: 'Доходы и расходы',
+    unknown: 'Не распознан'
+  };
   function viewData() {
     var st = saveState();
     var h = pageHead('Данные и копии', 'Где лежит ваша база и как сделать копию');
@@ -905,6 +1053,31 @@
     var counts = S.COLLECTIONS.filter(function (c) { return S.COLL_RU[c]; }).map(function (c) {
       return { name: S.COLL_RU[c], coll: c, n: (S.state[c] || []).length };
     }).filter(function (x) { return x.n; });
+    h += card('Аналитика из 1С', listOf([
+      listRow({ icon: '📂', title: 'Прочитать папку с выгрузками',
+        sub: 'Продажи, Остатки, Цены, Контакты, Накладные, Причины списания — имена любые',
+        value: '<button class="btn btn-sm btn-primary" data-act="pick-folder">Выбрать папку</button>' }),
+      listRow({ icon: '📄', title: 'Загрузить отдельные файлы', sub: 'если нужно обновить один отчёт',
+        value: '<button class="btn btn-sm" data-act="pick-files">Выбрать файлы</button>' }),
+      F.state === 'ready' ? listRow({ icon: '🔄', title: 'Перечитать подключённую папку',
+        sub: 'берёт только изменившиеся файлы',
+        value: '<button class="btn btn-sm" data-act="folder-sync">Обновить</button>' }) : ''
+    ].filter(Boolean), ''),
+      D.files.length ? 'Загружено файлов: ' + D.files.length : '');
+
+    if (D.files.length) {
+      h += card('Что прочитано из 1С', table('filesT', [
+        { title: 'Файл', fn: function (r) { return esc(r.name); } },
+        { title: 'Что это', fn: function (r) { return esc(KINDS_1C[r.kind] || r.kind); } },
+        { title: 'Строк', cls: 'num', fn: function (r) { return nf(r.rows); } },
+        { title: 'Период', fn: function (r) { return r.period ? esc(r.period.from + ' – ' + r.period.to) : '—'; } },
+        { title: '', cls: 'center', fn: function (r) {
+          return r.kind === 'unknown' ? badge('не понял', 'red') : badge('готово', 'green'); } }
+      ], D.files, { step: 30 }),
+        'Эти данные живут в памяти и пропадут при закрытии программы — ' +
+        'касса, зарплаты и долг они не трогают');
+    }
+
     h += card('Что в базе', listOf(counts.map(function (x) {
       return listRow({ icon: '📄', title: esc(x.name), value: nf(x.n) });
     }), 'База пока пуста'));
@@ -991,6 +1164,8 @@
     pasteClip: function (formId) { pasteClip(formId); },
     page: function (id, step) { return PAGE[id] || step; },
     editing: function () { return EDIT; },
+    // Контур 2 живёт в памяти: экраны товаров читают его отсюда
+    data: function () { return D; }, calc: function () { return C; },
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
     form: function (id) { return FORMS[id]; },
     pickFiles: function () { $('filesInput').click(); },
@@ -1021,7 +1196,7 @@
      каком экраны встали выше. Без этой сортировки экран товаров, поставленный
      рядом с отчётом, разрывал список — и «Товары» в меню появлялись дважды.
      Сначала то, чем пользуются каждый день, служебное — в конце. */
-  var GROUP_ORDER = ['Каждый день', 'Деньги', 'Ещё'];
+  var GROUP_ORDER = ['Каждый день', 'Деньги', 'Люди', 'Товары', 'Отчёты', 'Ещё'];
   VIEWS = VIEWS.map(function (v, i) { return { v: v, i: i }; })
     .sort(function (a, b) {
       var ga = GROUP_ORDER.indexOf(a.v.group), gb = GROUP_ORDER.indexOf(b.v.group);

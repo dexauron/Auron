@@ -686,3 +686,38 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 @media (hover: none) {
   .row.tappable:hover, table.data tr:hover td { background: none; }
 }
+
+/* ============================================================================
+   График смен: календарь месяца. На телефоне колонок меньше — иначе
+   в клетку не влезает ни одно имя.
+   ========================================================================== */
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px; padding: 14px 16px 18px; }
+.cal-dow { font-size: 12px; font-weight: 650; color: var(--label-2);
+  text-align: center; text-transform: uppercase; letter-spacing: .3px; padding-bottom: 2px; }
+.cal-cell { min-height: 74px; border-radius: var(--r-inner); background: var(--fill-2);
+  padding: 6px 7px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.cal-cell.empty { background: transparent; min-height: 0; }
+.cal-cell.weekend { background: var(--fill); }
+.cal-cell.gap { box-shadow: inset 0 0 0 1px rgba(255,149,0,.45); }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-day { font-size: 12.5px; font-weight: 700; color: var(--label-2); }
+.cal-who { font-size: 12px; line-height: 1.25; color: var(--label);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-none { font-size: 12px; color: var(--label-3); }
+.sub-title { font-size: 13px; font-weight: 650; color: var(--label-2);
+  padding: 14px 20px 4px; text-transform: uppercase; letter-spacing: .3px; }
+.inline-label { display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; color: var(--label-2); font-weight: 550; }
+.inline-label select { height: 34px; border-radius: var(--r-inner);
+  border: 1px solid var(--separator); background: var(--bg-inset);
+  color: var(--label); padding: 0 10px; font-size: 14px; }
+
+@media (max-width: 700px) {
+  /* На телефоне неделя не помещается: показываем календарь в две колонки
+     по дням — так видно и число, и кто выходил. */
+  .cal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cal-dow { display: none; }
+  .cal-cell.empty { display: none; }
+  .cal-cell { min-height: 60px; }
+}

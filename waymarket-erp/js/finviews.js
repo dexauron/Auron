@@ -101,6 +101,8 @@
           { hint: 'что брали из кассы за смену: поставщикам, на хознужды' }) +
         u.fieldRow('Факт в ящике', 'factCash', 'number', v.factCash || '',
           { hint: 'сколько денег пересчитали руками' }) +
+        u.fieldRow('Чеков за смену', 'checks', 'number', v.checks || '',
+          { hint: 'из Z-отчёта — нужно только для среднего чека, на кассу не влияет' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Расчётный остаток = размен + Z-наличные − выплаты. ' +
@@ -120,7 +122,7 @@
       var rec = { type: E.T_SHIFT, date: v.date, till: v.till, shift: v.shift,
         cashier: v.cashier, openCash: num(v.openCash), zCash: num(v.zCash),
         zCashless: num(v.zCashless), payouts: num(v.payouts),
-        factCash: num(v.factCash), note: v.note };
+        factCash: num(v.factCash), checks: num(v.checks), note: v.note };
       var c = E.shiftCalc(rec);
       rec.diff = c.diff;
       S.add('dds', rec);

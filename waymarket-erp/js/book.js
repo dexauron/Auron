@@ -25,22 +25,30 @@
   /* --- Описание листов ------------------------------------------------------
      [Заголовок, поле, тип]: text · num · date · bool                        */
   var SHEETS = [
-    { name: 'Касса_и_деньги', coll: 'dds', edit: true,
-      about: 'Всё движение денег: закрытые смены, итоги дня, приходы и расходы. ' +
-        'Тип строки: Смена · День · Приход · Расход · Забор.',
+    /* Смены отдельным листом: это самый частый лист, и мешать его с
+       расходами неудобно — в нём своя шапка и своя арифметика. */
+    { name: 'Касса_и_Смены', coll: 'dds', edit: true, only: 'Смена',
+      about: 'Закрытые смены: размен, Z-отчёт наличными и безналом, выплаты из ящика, ' +
+        'факт и расхождение. Безнал в ящик не попадает — в расчётный остаток он не входит.',
       cols: [['ID', 'id'], ['Тип', 'type'], ['Дата', 'date', 'date'],
         ['Касса', 'till'], ['Смена', 'shift'], ['Кассир', 'cashier'],
         ['Размен_на_начало', 'openCash', 'num'],
         ['Z_наличные', 'zCash', 'num'], ['Z_безнал', 'zCashless', 'num'],
         ['Выплаты_из_ящика', 'payouts', 'num'], ['Факт_в_ящике', 'factCash', 'num'],
-        ['Расхождение', 'diff', 'num'],
-        ['Товар_за_наличные', 'goodsCash', 'num'],
-        ['Погашено_долга_ТП', 'debtPaid', 'num'],
-        ['Взято_в_долг', 'debtTaken', 'num'],
-        ['Категория', 'category'], ['Способ', 'method'], ['Сумма', 'amount', 'num'],
+        ['Расхождение', 'diff', 'num'], ['Чеков', 'checks', 'num'],
         ['Комментарий', 'note']] },
 
-    { name: 'План_выплат', coll: 'plans', edit: true,
+    { name: 'ДДС_Операции', coll: 'dds', edit: true, not: 'Смена',
+      about: 'Итоги дня (товар за наличные, погашение и новый долг), приходы, ' +
+        'расходы и заборы владельца. Тип строки: День · Приход · Расход · Забор.',
+      cols: [['ID', 'id'], ['Тип', 'type'], ['Дата', 'date', 'date'],
+        ['Товар_за_наличные', 'goodsCash', 'num'],
+        ['Погашено_долга', 'debtPaid', 'num'],
+        ['Взято_в_долг', 'debtTaken', 'num'],
+        ['Статья', 'category'], ['Способ', 'method'], ['Сумма', 'amount', 'num'],
+        ['Из_ящика', 'fromTill', 'bool'], ['Комментарий', 'note']] },
+
+    { name: 'План_Выплат', coll: 'plans', edit: true,
       about: 'Кому и когда платить. Отметка «Оплачена» долг сама не уменьшает — ' +
         'сумму погашения впишите в «Итоги дня», иначе долг посчитается дважды.',
       cols: [['ID', 'id'], ['Дата_выплаты', 'due', 'date'], ['Кому', 'supplier'],
@@ -48,13 +56,26 @@
         ['Чем_платим', 'method'], ['Оплачено_когда', 'paidAt', 'date'],
         ['Комментарий', 'note']] },
 
-    { name: 'Кассиры', coll: 'staff', edit: true,
-      about: 'Кто работает за кассой: ставка, телефон, когда принят и уволен. ' +
+    { name: 'Сотрудники', coll: 'staff', edit: true,
+      about: 'Кто работает: ставка за час, оклад, телефон, когда принят и уволен. ' +
         'Уволенный не предлагается в формах, но его смены остаются в отчётах.',
       cols: [['ID', 'id'], ['Имя', 'name'], ['Должность', 'position'],
         ['Ставка_за_час', 'rate', 'num'], ['Оклад_за_месяц', 'salary', 'num'],
         ['Телефон', 'phone'], ['Принят', 'hired', 'date'], ['Уволен', 'fired', 'date'],
         ['Заметка', 'note']] },
+
+    { name: 'Табель_Зарплаты', coll: 'timesheet', edit: true,
+      about: 'Отработанные смены: часы днём и ночью, премия и удержание. ' +
+        'Из этого листа считается начисление в ведомости ФОТ.',
+      cols: [['ID', 'id'], ['Дата', 'date', 'date'], ['Сотрудник', 'employee'],
+        ['Смена', 'shift'], ['Часы_день', 'hoursDay', 'num'], ['Часы_ночь', 'hoursNight', 'num'],
+        ['Ставка_за_час', 'rate', 'num'], ['Премия', 'bonus', 'num'],
+        ['Удержание', 'fine', 'num'], ['Комментарий', 'note']] },
+
+    { name: 'Выплаты_Зарплаты', coll: 'payouts', edit: true,
+      about: 'Что уже выдали на руки: аванс и окончательный расчёт.',
+      cols: [['ID', 'id'], ['Дата', 'date', 'date'], ['Сотрудник', 'employee'],
+        ['Вид', 'kind'], ['Сумма', 'amount', 'num'], ['Чем', 'method'], ['Комментарий', 'note']] },
 
     { name: 'Долги_покупателей', coll: 'debtors', edit: true,
       about: 'Бывшая тетрадка у кассы. Пока долг не погашен, выручкой он не считается.',
@@ -68,6 +89,33 @@
         ['Кассир', 'cashier'], ['Насчитали', 'sum', 'num'],
         ['Должно_быть', 'expected', 'num'], ['Расхождение', 'diff', 'num'],
         ['Комментарий', 'note']] }
+  ];
+
+  /* Какие настройки показываем в книге и что каждая значит */
+  var SETTING_HELP = [
+    ['storeName', 'Название магазина'],
+    ['tills', 'Денежные ящики через запятую'],
+    ['shiftNames', 'Названия смен через запятую'],
+    ['openCashStart', 'Наличных в кассах на день начала учёта, ₽'],
+    ['openDebtStart', 'Долг поставщикам на день начала учёта, ₽'],
+    ['diffCrit', 'Крупное расхождение кассы, ₽'],
+    ['cashLimit', 'Наличных в кассе больше этого — предупредить, ₽'],
+    ['debtWarn', 'Долг поставщикам: внимание, ₽'],
+    ['debtCrit', 'Долг поставщикам: критично, ₽'],
+    ['rateDay', 'Ставка дневной смены, ₽/час'],
+    ['rateNight', 'Ставка ночной смены, ₽/час'],
+    ['advanceDay', 'Какого числа аванс'],
+    ['advancePct', 'Доля аванса от начисленного, %'],
+    ['salaryDay', 'Какого числа окончательный расчёт'],
+    ['taxMode', 'Система налогообложения'],
+    ['taxRate', 'Ставка налога, %'],
+    ['fot', 'Плановый ФОТ в месяц, ₽'],
+    ['rent', 'Аренда в месяц, ₽'],
+    ['utilities', 'Коммуналка в месяц, ₽'],
+    ['taxes', 'Налоги в месяц, ₽'],
+    ['other', 'Прочие постоянные расходы, ₽'],
+    ['marginManual', 'Наценка для расчёта безубыточности, %'],
+    ['planRevenue', 'План выручки в месяц, ₽']
   ];
 
   function sheetByName(name) {
@@ -145,7 +193,12 @@
   function build(state, settings) {
     var out = [];
     SHEETS.forEach(function (sh) {
-      var rows = (state[sh.coll] || []).map(function (r) {
+      var src = (state[sh.coll] || []).filter(function (r) {
+        if (sh.only) return txt(r.type) === sh.only;
+        if (sh.not) return txt(r.type) !== sh.not;
+        return true;
+      });
+      var rows = src.map(function (r) {
         return sh.cols.map(function (c) { return cellOut(r, c); });
       });
       out.push({ name: sh.name, edit: true, about: sh.about,
@@ -177,6 +230,15 @@
         .concat(debtSheet(state, settings).map(function (d) {
           return [d.ym, d.taken, d.paid, d.left];
         })) });
+
+    // Настройки отдельным листом: с колонкой «Что это», чтобы было понятно,
+    // на что влияет каждая строка
+    var st = (settings || {});
+    out.push({ name: 'Настройки', edit: true,
+      about: 'Правится и здесь, и в программе.',
+      aoa: [['Ключ', 'Значение', 'Что это']].concat(
+        SETTING_HELP.filter(function (h) { return st[h[0]] !== undefined; })
+          .map(function (h) { return [h[0], st[h[0]], h[1]]; })) });
 
     return out;
   }
@@ -213,7 +275,12 @@
         seen[rec.id] = 1;
         rows.push(rec);
       }
-      if (!rows.length && (state[sh.coll] || []).length) {
+      var kept = (state[sh.coll] || []).filter(function (r) {
+        if (sh.only) return txt(r.type) !== sh.only;      // чужая половина коллекции
+        if (sh.not) return txt(r.type) === sh.not;
+        return false;
+      });
+      if (!rows.length && (state[sh.coll] || []).length > kept.length) {
         report.skipped.push(sh.name + ': лист пуст, прежние записи оставлены');
         return;
       }
@@ -228,14 +295,28 @@
         for (var k2 in rec) merged[k2] = rec[k2];
         return merged;
       });
-      state[sh.coll] = rows;
+      state[sh.coll] = kept.concat(rows);
       report.sheets.push({ name: sh.name, rows: rows.length });
       report.rows += rows.length;
     });
+    // лист настроек
+    var sm = matrixOf('Настройки');
+    if (sm && sm.length > 1 && state.settings) {
+      var changed = 0;
+      for (var r2 = 1; r2 < sm.length; r2++) {
+        var key = txt(sm[r2] && sm[r2][0]);
+        if (!key || state.settings[key] === undefined) continue;
+        var was = state.settings[key], now = sm[r2][1];
+        if (typeof was === 'number') now = round(now);
+        else now = txt(now);
+        if (String(was) !== String(now)) { state.settings[key] = now; changed++; }
+      }
+      if (changed) report.sheets.push({ name: 'Настройки', rows: changed });
+    }
     return report;
   }
 
-  return { FILE: FILE, SHEETS: SHEETS, sheetByName: sheetByName,
+  return { FILE: FILE, SHEETS: SHEETS, SETTING_HELP: SETTING_HELP, sheetByName: sheetByName,
     build: build, parse: parse, toDate: toDate,
     months: months, cashiers: cashiers, debtSheet: debtSheet };
 });

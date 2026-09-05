@@ -209,17 +209,18 @@ console.log('\n— Числа, даты и мелочи');
   check('чужой код в поле не выполняется', NUM.calc('alert(1)') === null, NUM.calc('alert(1)'), 'null');
 }
 
-console.log('\n— База: пять коллекций, журнал и корзина');
+console.log('\n— База: журналы ручного учёта, журнал правок и корзина');
 {
-  check('коллекций ровно пять рабочих',
-    ['dds', 'plans', 'staff', 'debtors', 'cashcount'].every(c => STORE.COLLECTIONS.indexOf(c) >= 0),
-    STORE.COLLECTIONS.join(', '), 'пять рабочих');
-  check('от 1С в базе не осталось ничего',
-    ['docs', 'pays', 'supreg', 'inventory', 'expiry', 'kvi', 'invoices', 'timesheet', 'payouts']
-      .every(c => STORE.COLLECTIONS.indexOf(c) < 0), 'чисто', 'чисто');
-  check('в ядре нет разбора выгрузок 1С',
-    Object.keys(WM).filter(k => /^parse/.test(k)).length === 0,
-    Object.keys(WM).filter(k => /^parse/.test(k)).join(',') || 'нет', 'нет');
+  check('все рабочие журналы на месте',
+    ['dds', 'plans', 'staff', 'timesheet', 'payouts', 'debtors', 'cashcount']
+      .every(c => STORE.COLLECTIONS.indexOf(c) >= 0),
+    STORE.COLLECTIONS.join(', '), 'семь рабочих');
+  check('ТОВАРНЫХ ЖУРНАЛОВ В БАЗЕ НЕТ — аналитика 1С живёт в памяти',
+    ['docs', 'pays', 'supreg', 'inventory', 'expiry', 'kvi', 'invoices', 'sales', 'stock',
+      'writeoffs', 'prices'].every(c => STORE.COLLECTIONS.indexOf(c) < 0), 'чисто', 'чисто');
+  check('разбор выгрузок 1С в ядре есть — это контур 2',
+    ['parseSales', 'parseStock', 'parseWriteoffs1C', 'parsePrices'].every(k => typeof WM[k] === 'function'),
+    Object.keys(WM).filter(k => /^parse/.test(k)).length + ' разборщиков', 'есть');
 
   const a = { dds: [{ id: 'a', zCash: 1 }, { id: 'b', zCash: 2 }], trash: [] };
   const b = { dds: [{ id: 'a', zCash: 1 }, { id: 'c', zCash: 3 }], trash: [] };
@@ -239,8 +240,11 @@ console.log('\n— Книга «Бухгалтерия.xlsx»');
     plans: [], staff: [], debtors: [], cashcount: []
   };
   const sheets = BOOK.build(st, { openDebtStart: 100000 });
-  check('листов восемь', sheets.length === 8, sheets.length, 8);
-  check('первый лист — движение денег', sheets[0].name === 'Касса_и_деньги', sheets[0].name, 'Касса_и_деньги');
+  const names = sheets.map(s => s.name);
+  check('в книге есть все листы ручного учёта',
+    ['Касса_и_Смены', 'ДДС_Операции', 'План_Выплат', 'Табель_Зарплаты', 'Настройки']
+      .every(n => names.includes(n)), names.join(', '), 'все пять');
+  check('первый лист — касса и смены', sheets[0].name === 'Касса_и_Смены', sheets[0].name, 'Касса_и_Смены');
   check('листов 1С в книге нет',
     !sheets.some(s => /накладн|номенклатур|остатк|склад/i.test(s.name)), 'нет', 'нет');
   const m = BOOK.months(st)[0];
@@ -248,17 +252,130 @@ console.log('\n— Книга «Бухгалтерия.xlsx»');
   const d = BOOK.debtSheet(st, { openDebtStart: 100000 });
   check('долг по месяцам считается от начального', d[0].left === 109000, d[0].left, 109000);
 
+  // Смены и остальные операции лежат на разных листах одной коллекции
+  const cash = sheets.find(s => s.name === 'Касса_и_Смены');
+  const ops = sheets.find(s => s.name === 'ДДС_Операции');
+  check('смена ушла на лист кассы, итоги дня — на лист операций',
+    cash.aoa.length === 2 && ops.aoa.length === 2, cash.aoa.length + '/' + ops.aoa.length, '2/2');
+
   // читаем правку обратно: строка узнаётся по ID
-  const back = { dds: [], plans: [], staff: [], debtors: [], cashcount: [] };
-  const aoa = sheets[0].aoa.map(r => r.slice());
+  const back = { dds: [], plans: [], staff: [], timesheet: [], payouts: [], debtors: [], cashcount: [] };
+  const aoa = cash.aoa.map(r => r.slice());
   aoa[1][10] = 15000;                                  // поправили факт в ящике
-  const rep = BOOK.parse(n => (n === 'Касса_и_деньги' ? aoa : null), back);
-  check('правка из книги прочиталась', rep.rows === 2, rep.rows, 2);
+  const rep = BOOK.parse(n => (n === 'Касса_и_Смены' ? aoa : null), back);
+  check('правка из книги прочиталась', rep.rows === 1, rep.rows, 1);
   check('и поменяла именно то поле', back.dds[0].factCash === 15000, back.dds[0].factCash, 15000);
   check('ID сохранился', back.dds[0].id === 's1', back.dds[0].id, 's1');
-  const empt = { dds: [{ id: 'x' }] };
-  BOOK.parse(n => (n === 'Касса_и_деньги' ? [sheets[0].aoa[0]] : null), empt);
+  const empt = { dds: [{ id: 'x', type: 'Смена' }] };
+  BOOK.parse(n => (n === 'Касса_и_Смены' ? [cash.aoa[0]] : null), empt);
   check('пустой лист не стирает базу', empt.dds.length === 1, empt.dds.length, 1);
+
+  // Правка одного листа не должна стирать вторую половину коллекции
+  const both = { dds: JSON.parse(JSON.stringify(st.dds)), plans: [], staff: [],
+    timesheet: [], payouts: [], debtors: [], cashcount: [] };
+  BOOK.parse(n => (n === 'Касса_и_Смены' ? cash.aoa : null), both);
+  check('правка кассы не стёрла итоги дня',
+    both.dds.filter(r => r.type === 'День').length === 1,
+    both.dds.map(r => r.type).join(','), 'День на месте');
+}
+
+console.log('\n— Зарплата: табель и ведомость ФОТ');
+{
+  const staff = [
+    { name: 'Аня', position: 'Кассир', rate: 220, rateNight: 250 },
+    { name: 'Борис', position: 'Администратор', salary: 60000 }
+  ];
+  const ts = [
+    { date: '2026-09-01', employee: 'Аня', shift: 'День', hoursDay: 12, hoursNight: 0 },
+    { date: '2026-09-02', employee: 'Аня', shift: 'Ночь', hoursDay: 0, hoursNight: 12,
+      bonus: 1000, fine: 500 },
+    { date: '2026-09-01', employee: 'Борис', shift: 'День', hoursDay: 8 }
+  ];
+  const po = [{ date: '2026-09-25', employee: 'Аня', kind: 'Аванс', amount: 2000 }];
+  const set = { rateDay: 200, rateNight: 220 };
+
+  const c1 = WM.timesheetCalc(ts[0], staff[0], set);
+  check('дневная смена: часы × ставку из карточки', c1.total === 2640, c1.total, 2640);
+  const c2 = WM.timesheetCalc(ts[1], staff[0], set);
+  check('ночь считается по своей, более дорогой ставке', c2.pay === 3000, c2.pay, 3000);
+  check('премия прибавляется, удержание вычитается', c2.total === 3500, c2.total, 3500);
+  const c3 = WM.timesheetCalc({ hoursDay: 12 }, null, set);
+  check('без карточки ставка берётся из настроек', c3.total === 2400, c3.total, 2400);
+  const c4 = WM.timesheetCalc({ hoursDay: 10, rate: 300 }, staff[0], set);
+  check('ставка, вписанная в смену, главнее карточки', c4.total === 3000, c4.total, 3000);
+
+  const board = WM.payrollSummary(ts, po, staff, set);
+  const anya = board.find(r => r.employee === 'Аня');
+  const boris = board.find(r => r.employee === 'Борис');
+  check('начислено по часам = смены минус удержания', anya.accrued === 6140, anya.accrued, 6140);
+  check('аванс уменьшает остаток к выдаче', anya.left === 4140 && anya.advance === 2000,
+    anya.left, 4140);
+  check('ОКЛАД НЕ СКЛАДЫВАЕТСЯ С ЧАСАМИ — двойной оплаты нет',
+    boris.accrued === 60000 && boris.scheme === 'оклад', boris.accrued, 60000);
+  check('часы окладника всё равно видны в табеле', boris.hours === 8, boris.hours, 8);
+
+  const tot = WM.payrollTotals(board);
+  check('ФОТ месяца — сумма начислений', tot.accrued === 66140, tot.accrued, 66140);
+  check('остаток к выдаче = начислено − выдано', tot.left === 64140, tot.left, 64140);
+  check('уволенный в подсказки не идёт',
+    WM.activeStaff(staff.concat([{ name: 'Старый', fired: '2026-01-01' }])).length === 2,
+    WM.activeStaff(staff.concat([{ name: 'Старый', fired: '2026-01-01' }])).length, 2);
+}
+
+console.log('\n— Прибыль (P&L): один источник для каждой суммы');
+{
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', zCash: 26467, zCashless: 29743,
+      payouts: 10000, factCash: 16467, openCash: 0 },
+    { type: 'День', date: '2026-09-01', goodsCash: 5000, debtPaid: 3000, debtTaken: 12000 },
+    { type: 'Расход', date: '2026-09-02', category: 'Аренда', method: 'Наличные', amount: 110000 },
+    { type: 'Расход', date: '2026-09-03', category: 'Обед', method: 'Наличные', amount: 3000 },
+    { type: 'Забор', date: '2026-09-04', method: 'Наличные', amount: 7000 }
+  ];
+  const p = WM.pnl({ rows, payroll: 280000, writeoff1c: 12000 });
+  check('выручка = наличные + безнал', p.revenue === 56210, p.revenue, 56210);
+  check('ЗАКУП = за наличные + взятое в долг, погашение долга не считается',
+    p.purchase === 17000, p.purchase, 17000);
+  check('валовая прибыль = выручка − закуп', p.gross === 39210, p.gross, 39210);
+  const fot = p.costs.find(c => c.key === 'fot');
+  check('ФОТ берётся из табеля', fot.sum === 280000 && fot.source === 'табель', fot.source, 'табель');
+  const wo = p.costs.find(c => c.key === 'writeoff');
+  check('списания берутся из 1С', wo.sum === 12000 && wo.source === '1С', wo.source, '1С');
+  check('чистая = валовая − все затраты', p.net === WM.safeRound(p.gross - p.costTotal), p.net, p.gross - p.costTotal);
+  check('ВЫПЛАТЫ ИЗ ЯЩИКА В ЗАТРАТЫ НЕ ВХОДЯТ',
+    p.costs.every(c => c.sum !== 10000) && p.payouts === 10000, p.payouts, 10000);
+  check('забор владельца показан отдельно от затрат', p.draw === 7000, p.draw, 7000);
+  check('погашение долга затратой не стало', p.debtPaid === 3000 &&
+    p.costTotal === WM.safeRound(280000 + 110000 + 3000 + 12000), p.costTotal, 405000);
+}
+
+console.log('\n— Списания из 1С: синхронизация файла (Upsert)');
+{
+  const p1 = { from: '01.09.2026', to: '30.09.2026' };
+  const mk = (name, batch, qty, cost) => ({ id: 'n' + name + batch, name, key: WM.norm(name),
+    warehouse: 'Основной', batch, reason: 'Просрочка', qty, cost, retail: 0 });
+
+  const a = WM.syncWriteoffs([], [mk('Молоко', 'П1', 2, 300), mk('Хлеб', 'П2', 1, 40)], p1);
+  check('первая выгрузка просто загрузилась', a.stats.added === 2 && a.rows.length === 2,
+    a.rows.length, 2);
+  check('дата для отчётов взята из периода выгрузки', a.rows[0].date === '2026-09-30',
+    a.rows[0].date, '2026-09-30');
+
+  const b = WM.syncWriteoffs(a.rows, [mk('Молоко', 'П1', 3, 450), mk('Кефир', 'П3', 1, 90)], p1);
+  check('совпавшая строка ОБНОВИЛАСЬ', b.stats.updated === 1 &&
+    b.rows.find(r => r.name === 'Молоко').cost === 450, b.stats.updated, 1);
+  check('новая строка ДОБАВИЛАСЬ', b.stats.added === 1 &&
+    !!b.rows.find(r => r.name === 'Кефир'), b.stats.added, 1);
+  check('пропавшая из файла строка СТЁРЛАСЬ из аналитики',
+    b.stats.removed === 1 && !b.rows.find(r => r.name === 'Хлеб'), b.stats.removed, 1);
+  check('номер строки сохранился — история не рвётся',
+    b.rows.find(r => r.name === 'Молоко').id === a.rows.find(r => r.name === 'Молоко').id,
+    'сохранился', 'сохранился');
+
+  const p2 = { from: '01.10.2026', to: '31.10.2026' };
+  const c = WM.syncWriteoffs(b.rows, [mk('Сыр', 'П4', 1, 500)], p2);
+  check('ВЫГРУЗКА ЗА ДРУГОЙ МЕСЯЦ НЕ СТИРАЕТ ПРОШЛЫЙ',
+    c.rows.length === 3 && c.stats.kept === 2, c.rows.length, 3);
 }
 
 console.log('\n— Справочники');

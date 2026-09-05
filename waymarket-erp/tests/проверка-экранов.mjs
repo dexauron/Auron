@@ -60,10 +60,31 @@ console.log('Страница: ' + PAGE + '\n');
   for (const id of ids) { await page.evaluate(v => window.WMUI.go(v), id); await page.waitForTimeout(110); }
   check('все ' + ids.length + ' экранов открываются', errs.length === 0 && ids.length >= 10,
     errs.slice(0, 3).join(' | ') || ids.join(', '), 'без ошибок');
-  check('экранов 1С в меню нет',
-    !ids.some(id => ['stock', 'orders', 'expiry', 'losses', 'dead', 'abc', 'pricecmp',
-      'incexp', 'import', 'match', 'recon', 'suppliers'].includes(id)),
-    'чисто', 'чисто');
+  // Контур 1 (ручной учёт) и контур 2 (аналитика 1С) — оба на месте
+  const need1 = ['pulse', 'morning', 'evening', 'finpay', 'ledger', 'cashiers', 'debtors',
+    'timesheet', 'sched', 'payroll', 'staffcards', 'pnl', 'bep', 'bepdays', 'taxcal',
+    'findash', 'owner', 'moneyflow', 'avgcheck', 'earners', 'ready', 'dicts', 'reset'];
+  const need2 = ['suppliers', 'stock', 'orders', 'expiry', 'losses', 'dead', 'groups',
+    'itemprofit', 'shelf', 'returns', 'abc', 'pricecmp'];
+  const miss1 = need1.filter(id => !ids.includes(id));
+  const miss2 = need2.filter(id => !ids.includes(id));
+  check('все экраны ручного учёта на месте', miss1.length === 0, miss1.join(', ') || 'все', 'все');
+  check('все экраны товарной аналитики на месте', miss2.length === 0, miss2.join(', ') || 'все', 'все');
+
+  // Разделение контуров: данные 1С живут в памяти и в базу не пишутся
+  const sep = await page.evaluate(() => {
+    const S = window.WMStore, U = window.WMUI;
+    const before = S.COLLECTIONS.reduce((n, c) => n + (S.state[c] || []).length, 0);
+    const d = U.data();
+    d.writeoffs = [{ name: 'Молоко', qty: 2, cost: 300, reason: 'Просрочка', date: '2026-09-01' }];
+    d.sales = [{ key: 'k1', name: 'Молоко', qty: 10, revenue: 1000, cogs: 700 }];
+    U.recompute();
+    const after = S.COLLECTIONS.reduce((n, c) => n + (S.state[c] || []).length, 0);
+    return { before, after, writeoffSum: U.calc().writeoffSum };
+  });
+  check('аналитика 1С не пишется в служебную базу',
+    sep.before === sep.after && sep.writeoffSum === 300,
+    'записей ' + sep.before + '→' + sep.after + ', списаний ' + sep.writeoffSum, 'база не выросла');
   await page.close(); await ctx.close();
   console.log('');
 }
@@ -298,6 +319,140 @@ console.log('Страница: ' + PAGE + '\n');
 
   check('в консоли чисто на всех устройствах', allErrs.length === 0,
     allErrs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  console.log('');
+}
+
+/* 5б. Зарплата: табель → ведомость → выдача остатка */
+{
+  console.log('— Зарплата от табеля до выдачи');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('staff', { name: 'Аня', position: 'Кассир', rate: 220, rateNight: 250, normShifts: 15 });
+    S.add('staff', { name: 'Борис', position: 'Администратор', salary: 60000 });
+    S.setSetting('payrollMonth', '2026-09');
+    S.setSetting('reportMonth', '2026-09');
+    S.save(); window.WMUI.recompute();
+  });
+
+  await page.evaluate(() => window.WMUI.openForm('timesheetRow'));
+  await page.waitForTimeout(350);
+  const fill = (n, v) => page.fill('.sheet [name="' + n + '"]', v);
+  await fill('date', '2026-09-01');
+  await fill('employee', 'Аня');
+  await fill('hoursDay', '0');
+  await fill('hoursNight', '12');
+  await fill('bonus', '1000');
+  await fill('fine', '500');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+
+  const t = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    const row = S.state.timesheet[0];
+    const c = E.timesheetCalc(row, S.state.staff[0], S.settings);
+    const b = E.payrollSummary(S.state.timesheet, S.state.payouts, S.state.staff, S.settings);
+    const anya = b.find(r => r.employee === 'Аня');
+    const boris = b.find(r => r.employee === 'Борис');
+    return { total: c.total, left: anya.left, who: anya.employee,
+      borisAccrued: boris ? boris.accrued : 0 };
+  });
+  check('ночная смена посчиталась по своей ставке', t.total === 3500, t.total, 3500);
+  check('в ведомости появился остаток к выдаче', t.left === 3500 && t.who === 'Аня', t.left, 3500);
+  check('ОКЛАД БЕЗ СМЕН НЕ НАЧИСЛЯЕТСЯ', t.borisAccrued === 0, t.borisAccrued, 0);
+
+  await page.evaluate(() => window.WMUI.go('payroll'));
+  await page.waitForTimeout(400);
+  const pay = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+  check('на «Ведомости» видно начисление и остаток',
+    pay.includes('Аня') && pay.includes('3 500'),
+    pay.includes('3 500') ? 'видно' : 'суммы нет', 'видно');
+
+  // кнопка «Выдать остаток» подставляет сумму
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-act="pay-rest"]')][0];
+    if (b) b.click();
+  });
+  await page.waitForTimeout(400);
+  const amount = await page.evaluate(() => {
+    const el = document.querySelector('.sheet [name="amount"]');
+    return el ? el.value : '';
+  });
+  check('«Выдать остаток» подставляет ровно остаток', String(amount).replace(/\s/g, '') === '3500',
+    amount, 3500);
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+  const after = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    const b = E.payrollSummary(S.state.timesheet, S.state.payouts, S.state.staff, S.settings)
+      .find(r => r.employee === 'Аня');
+    return { left: b.left, paid: b.paid };
+  });
+  check('после выдачи остаток обнулился', after.left === 0 && after.paid === 3500, after.left, 0);
+
+  // ФОТ из табеля должен встать в P&L
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 26467, zCashless: 29743, payouts: 10000, factCash: 16467 });
+    S.add('dds', { type: 'День', date: '2026-09-01', goodsCash: 5000, debtPaid: 3000, debtTaken: 12000 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('pnl');
+  });
+  await page.waitForTimeout(500);
+  const pnl = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+  check('в P&L валовая прибыль = выручка − закуп', pnl.includes('39 210'),
+    pnl.includes('39 210') ? 'видно' : 'суммы нет', '39 210');
+  check('ФОТ в P&L помечен как «табель»', pnl.includes('табель'), 'помечен', 'табель');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 5в. Отчёты открываются на живых данных */
+{
+  console.log('— Отчёты на живых данных');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.setSetting('reportMonth', '2026-09');
+    S.setSetting('openDebtStart', 100000);
+    for (let i = 1; i <= 20; i++) {
+      const dd = String(i).padStart(2, '0');
+      S.add('dds', { type: 'Смена', date: '2026-09-' + dd, till: 'Касса 1',
+        shift: i % 2 ? 'День' : 'Ночь', cashier: i % 3 ? 'Аня' : 'Пётр',
+        openCash: 5000, zCash: 20000 + i * 100, zCashless: 15000, payouts: 3000,
+        factCash: 22000 + i * 100, checks: 300 + i });
+      S.add('dds', { type: 'День', date: '2026-09-' + dd, goodsCash: 8000, debtPaid: 2000, debtTaken: 9000 });
+    }
+    S.add('dds', { type: 'Расход', date: '2026-09-05', category: 'Аренда', method: 'Перевод', amount: 110000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-06', category: 'Коммунальные', method: 'Перевод', amount: 35000 });
+    S.add('staff', { name: 'Аня', rate: 220, rateNight: 250 });
+    S.add('timesheet', { date: '2026-09-01', employee: 'Аня', shift: 'День', hoursDay: 12 });
+    S.save(); window.WMUI.recompute();
+  });
+  const REPORTS = ['findash', 'owner', 'moneyflow', 'avgcheck', 'earners', 'ready',
+    'pnl', 'bep', 'bepdays', 'taxcal', 'payroll', 'timesheet', 'sched', 'staffcards', 'reset'];
+  const empty = [];
+  for (const id of REPORTS) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(200);
+    const txt = await page.textContent('#page');
+    if (!txt || txt.length < 200) empty.push(id);
+  }
+  check('все ' + REPORTS.length + ' отчётов показали содержимое', empty.length === 0,
+    empty.join(', ') || 'все с данными', 'все с данными');
+
+  await page.evaluate(() => window.WMUI.go('avgcheck'));
+  await page.waitForTimeout(300);
+  const ac = await page.textContent('#page');
+  check('средний чек посчитался из числа чеков', !ac.includes('Нет числа чеков'), 'посчитался', 'посчитался');
+
+  await page.evaluate(() => window.WMUI.go('moneyflow'));
+  await page.waitForTimeout(300);
+  const mf = await page.textContent('#page');
+  check('«Куда ушли деньги» начинается с выручки', mf.includes('Выручка'), 'да', 'да');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
   console.log('');
 }
 
