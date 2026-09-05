@@ -99,6 +99,7 @@
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
+  var SEARCH_T = null;        // пауза перед поиском, пока владелец печатает
   var EXPORT_ALL = false;     // на время выгрузки в Excel показываем таблицы целиком
   var TAB = {};               // выбранные вкладки внутри экранов
   var CHARTS = {};
@@ -426,27 +427,36 @@
   }
 
   // Таблица для больших данных
+  /* Таблица. На компьютере и планшете это обычная таблица, а на телефоне
+     каждая строка превращается в карточку «подпись — значение»: восемь
+     столбцов на экран шириной 39 мм всё равно не помещаются, а крутить
+     таблицу вбок и гадать, чья это цифра, — мучение. Название столбца
+     кладём в data-подпись каждой ячейки, дальше всё делает разметка. */
   function table(id, cols, rows, opts) {
     opts = opts || {};
     var step = opts.step || 40, limit = EXPORT_ALL ? rows.length : (PAGE[id] || step);
     var h = '<div class="table-wrap"><table class="data"><thead><tr>';
     cols.forEach(function (c) { h += '<th class="' + (c.cls || '') + '">' + esc(c.title) + '</th>'; });
     h += '</tr></thead><tbody>';
-    if (!rows.length) h += '<tr><td colspan="' + cols.length + '"><div class="empty">' + (opts.empty || 'Пока пусто') + '</div></td></tr>';
+    if (!rows.length) h += '<tr class="plain"><td colspan="' + cols.length + '"><div class="empty">' + (opts.empty || 'Пока пусто') + '</div></td></tr>';
     rows.slice(0, limit).forEach(function (r, i) {
       h += '<tr>';
-      cols.forEach(function (c) { h += '<td class="' + (c.cls || '') + '">' + (c.fn ? c.fn(r, i) : esc(r[c.key])) + '</td>'; });
+      cols.forEach(function (c) {
+        h += '<td class="' + (c.cls || '') + '" data-label="' + esc(c.title) + '">' +
+          (c.fn ? c.fn(r, i) : esc(r[c.key])) + '</td>';
+      });
       h += '</tr>';
     });
     if (opts.total) {
       h += '<tr class="total">';
       opts.total.forEach(function (c) {
-        h += '<td class="' + (c.cls || '') + '"' + (c.span ? ' colspan="' + c.span + '"' : '') + '>' + (c.html || '') + '</td>';
+        h += '<td class="' + (c.cls || '') + '"' + (c.span ? ' colspan="' + c.span + '"' : '') +
+          ' data-label="' + esc(c.label || '') + '">' + (c.html || '') + '</td>';
       });
       h += '</tr>';
     }
     if (rows.length > limit) {
-      h += '<tr><td colspan="' + cols.length + '"><div class="more"><button class="btn btn-sm" data-act="more" data-id="' +
+      h += '<tr class="plain"><td colspan="' + cols.length + '"><div class="more"><button class="btn btn-sm" data-act="more" data-id="' +
         esc(id) + '" data-step="' + step + '">Показать ещё (' + nf(rows.length - limit) + ')</button></div></td></tr>';
     }
     return h + '</tbody></table></div>';
@@ -2639,7 +2649,13 @@
   function viewSearch() {
     var q = ($('search') && $('search').value || '').trim();
     var h = pageHead('Поиск', 'По товарам, поставщикам, штрихкодам и телефонам');
-    if (!q) return h + '<div class="card"><div class="empty">Введите запрос в строке поиска сверху</div></div>';
+    // Своё поле прямо на экране: на телефоне строки поиска сверху нет,
+    // там её место заняла нижняя панель.
+    h += '<div class="card"><div class="card-pad"><div class="search page-search">' +
+      '<span>🔍</span><input type="search" id="pageSearch" value="' + esc(q) +
+      '" placeholder="Товар, поставщик, штрихкод, телефон"></div></div></div>';
+    if (!q) return h + '<div class="card"><div class="empty">Впишите, что ищете — ' +
+      'товар, поставщика, штрихкод или телефон.</div></div>';
     var resAll = E.search(q, D, 'all', 300);
     var sDefs = [{ key: 'type', name: 'Где нашли', auto: function (r) { return r.type; }, limit: 10 }];
     var res = FLT.apply('search', resAll, sDefs, function (r) { return r.name; });
@@ -3036,6 +3052,14 @@
       '<span class="alert-more">в кассе сейчас <b class="private">' + money(a.cash.cash) + '</b></span>';
   }
 
+  // Нижняя панель на телефоне: подсвечиваем вкладку того экрана, где стоим
+  function renderTabbar() {
+    var bar = $('tabbar'); if (!bar) return;
+    Array.prototype.forEach.call(bar.querySelectorAll('.tab'), function (t) {
+      t.classList.toggle('active', t.dataset.go === VIEW);
+    });
+  }
+
   function renderPeriods() {
     var html = PERIODS.map(function (p) {
       return '<button class="' + (p.id === PERIOD ? 'active' : '') + '" data-period="' + p.id + '">' + esc(p.name) + '</button>';
@@ -3052,7 +3076,7 @@
     catch (e) { html = pageHead('Ошибка', e.message) + '<div class="card"><div class="empty">Что-то пошло не так на этом экране.<br>' + esc(e.message) + '</div></div>'; }
     $('page').innerHTML = readOnlyBar() + html;
     document.body.classList.toggle('readonly', readOnly());
-    renderNav(); renderPeriods();
+    renderNav(); renderPeriods(); renderTabbar();
     if (VIEW === 'today') drawChart();
     var cur = VIEWS.filter(function (x) { return x.id === VIEW; })[0];
     if (cur && cur.onDraw) { try { cur.onDraw(); } catch (e) { /* график не критичен */ } }
@@ -3463,6 +3487,39 @@
     PAGE = {}; render();
   }
 
+
+  /* --- Меню экранов и «Что записать?» --------------------------------------
+     Одни и те же списки открываются и с кнопки сверху, и с нижней панели
+     на телефоне, поэтому вынесены в отдельные функции.
+     -------------------------------------------------------------------- */
+  function openMenuSheet() {
+    var group = '', rows = [];
+    VIEWS.forEach(function (v) {
+      if (v.group !== group) { group = v.group; rows.push('<div class="nav-group">' + esc(group) + '</div>'); }
+      rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true, attrs: ' data-go="' + v.id + '"' }));
+    });
+    var actions = [
+      listRow({ icon: '📂', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
+      listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
+    ];
+    sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
+      '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
+  }
+  function openAddSheet() {
+    sheet('Что записать?', listOf([
+      listRow({ icon: '💵', title: 'Касса за смену', sub: 'Z-отчёт и фактические деньги', tap: true, attrs: ' data-form="cashShift"' }),
+      listRow({ icon: '🧾', title: 'Расход', sub: 'закуп, аренда, ЗП, прочее', tap: true, attrs: ' data-form="ddsExpense"' }),
+      listRow({ icon: '💰', title: 'Приход денег', sub: 'прочие поступления', tap: true, attrs: ' data-form="ddsIncome"' }),
+      listRow({ icon: '📅', title: 'Выплата поставщику', sub: 'план платежа и оплата', tap: true, attrs: ' data-form="payPlan"' }),
+      listRow({ icon: '📥', title: 'Приход товара', sub: 'накладная от поставщика', tap: true, attrs: ' data-form="invoice"' }),
+      listRow({ icon: '💸', title: 'Оплата поставщику', sub: 'наличными или переводом', tap: true, attrs: ' data-form="payment"' }),
+      listRow({ icon: '🗑', title: 'Списание товара', sub: 'просрочка, бой, потери', tap: true, attrs: ' data-form="writeoff"' }),
+      listRow({ icon: '⏰', title: 'Товар с коротким сроком', sub: 'чтобы вовремя уценить', tap: true, attrs: ' data-form="expiryItem"' }),
+      listRow({ icon: '👤', title: 'Смена сотрудника', sub: 'часы и ставка', tap: true, attrs: ' data-form="timesheet"' }),
+      listRow({ icon: '💰', title: 'Выплата сотруднику', sub: 'аванс или зарплата', tap: true, attrs: ' data-form="payout"' })
+    ], ''));
+  }
+
   /* --- Обработчики ------------------------------------------------------------------ */
   function bind() {
     document.addEventListener('click', function (e) {
@@ -3601,6 +3658,8 @@
           if (data) { S.replaceAll(data); recompute(); render(); toast('Взяли версию из файла.'); }
         });
       }
+      else if (a === 'add-record') openAddSheet();
+      else if (a === 'open-menu') openMenuSheet();
       else if (a === 'readonly-on') {
         setReadOnly(true);
         toast('Режим показа включён: смотреть можно, менять — нет. ' +
@@ -3849,6 +3908,19 @@
     });
 
     var timer = null;
+    // поле поиска на самом экране «Поиск» пишет в ту же строку
+    document.addEventListener('input', function (e) {
+      if (!e.target || e.target.id !== 'pageSearch') return;
+      var box = $('search');
+      if (box) { box.value = e.target.value; }
+      clearTimeout(SEARCH_T);
+      SEARCH_T = setTimeout(function () {
+        var pos = e.target.selectionStart;
+        render();
+        var again = $('pageSearch');
+        if (again) { again.focus(); try { again.setSelectionRange(pos, pos); } catch (err) {} }
+      }, 280);
+    });
     $('search').addEventListener('input', function () {
       clearTimeout(timer);
       timer = setTimeout(function () {
@@ -3857,33 +3929,8 @@
         else if (q.length >= 2) go('search');
       }, 280);
     });
-    $('menuBtn').addEventListener('click', function () {
-      var group = '', rows = [];
-      VIEWS.forEach(function (v) {
-        if (v.group !== group) { group = v.group; rows.push('<div class="nav-group">' + esc(group) + '</div>'); }
-        rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true, attrs: ' data-go="' + v.id + '"' }));
-      });
-      var actions = [
-        listRow({ icon: '📂', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
-        listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
-      ];
-      sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
-        '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
-    });
-    $('addBtn').addEventListener('click', function () {
-      sheet('Что записать?', listOf([
-        listRow({ icon: '💵', title: 'Касса за смену', sub: 'Z-отчёт и фактические деньги', tap: true, attrs: ' data-form="cashShift"' }),
-        listRow({ icon: '🧾', title: 'Расход', sub: 'закуп, аренда, ЗП, прочее', tap: true, attrs: ' data-form="ddsExpense"' }),
-        listRow({ icon: '💰', title: 'Приход денег', sub: 'прочие поступления', tap: true, attrs: ' data-form="ddsIncome"' }),
-        listRow({ icon: '📅', title: 'Выплата поставщику', sub: 'план платежа и оплата', tap: true, attrs: ' data-form="payPlan"' }),
-        listRow({ icon: '📥', title: 'Приход товара', sub: 'накладная от поставщика', tap: true, attrs: ' data-form="invoice"' }),
-        listRow({ icon: '💸', title: 'Оплата поставщику', sub: 'наличными или переводом', tap: true, attrs: ' data-form="payment"' }),
-        listRow({ icon: '🗑', title: 'Списание товара', sub: 'просрочка, бой, потери', tap: true, attrs: ' data-form="writeoff"' }),
-        listRow({ icon: '⏰', title: 'Товар с коротким сроком', sub: 'чтобы вовремя уценить', tap: true, attrs: ' data-form="expiryItem"' }),
-        listRow({ icon: '👤', title: 'Смена сотрудника', sub: 'часы и ставка', tap: true, attrs: ' data-form="timesheet"' }),
-        listRow({ icon: '💰', title: 'Выплата сотруднику', sub: 'аванс или зарплата', tap: true, attrs: ' data-form="payout"' })
-      ], ''));
-    });
+    $('menuBtn').addEventListener('click', openMenuSheet);
+    $('addBtn').addEventListener('click', openAddSheet);
     $('syncBtn').addEventListener('click', function () {
       if (F.state === 'ready') syncFolder(false);
       else if (F.state === 'needs-permission') reconnectFolder();

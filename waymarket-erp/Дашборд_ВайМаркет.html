@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Вай Маркет">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
 <title>Вай Маркет</title>
 <link rel="stylesheet" href="styles.css">
@@ -41,6 +47,16 @@
     <div class="page" id="page"></div>
   </div>
 </main>
+
+<!-- Нижняя панель: на телефоне это главная навигация, как в приложениях на iPhone.
+     На планшете и компьютере она скрыта — там есть меню слева и кнопки сверху. -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab" data-go="today"><span class="tab-icon">🏠</span><span class="tab-name">Сегодня</span></button>
+  <button class="tab" data-go="finpulse"><span class="tab-icon">📊</span><span class="tab-name">Пульт</span></button>
+  <button class="tab tab-add" data-act="add-record"><span class="tab-icon">＋</span><span class="tab-name">Записать</span></button>
+  <button class="tab" data-go="search"><span class="tab-icon">🔍</span><span class="tab-name">Поиск</span></button>
+  <button class="tab" data-act="open-menu"><span class="tab-icon">☰</span><span class="tab-name">Ещё</span></button>
+</nav>
 
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/chart.umd.min.js"></script>

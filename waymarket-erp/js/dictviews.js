@@ -23,7 +23,7 @@
   }));
 
   function tabBar(cur) {
-    return '<div class="chips" style="margin-bottom:4px">' + TABS.map(function (t) {
+    return '<div class="tabs">' + TABS.map(function (t) {
       return '<button class="chip' + (t.id === cur ? ' active' : '') +
         '" data-tab="dicts:' + t.id + '">' + t.icon + ' ' + esc(t.name) + '</button>';
     }).join('') + '</div>';

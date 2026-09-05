@@ -527,6 +527,121 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
   console.log('');
 }
 
+/* 10. Как программа выглядит на телефоне, планшете и компьютере.
+      Проверяем не «красиво», а то, что можно проверить: не уезжает ли что-то
+      за край экрана, есть ли нижняя панель там, где ей место, видно ли меню,
+      и не мельче ли кнопки пальца. */
+{
+  console.log('— Телефон, планшет и компьютер');
+  const DEVICES = [
+    { name: 'iPhone SE', w: 375, h: 667, kind: 'phone' },
+    { name: 'iPhone 15 Pro', w: 393, h: 852, kind: 'phone' },
+    { name: 'iPhone Pro Max', w: 430, h: 932, kind: 'phone' },
+    { name: 'iPad mini', w: 744, h: 1133, kind: 'tablet' },
+    { name: 'iPad Pro книжно', w: 834, h: 1194, kind: 'tablet' },
+    { name: 'iPad Pro лёжа', w: 1194, h: 834, kind: 'desktop' },
+    { name: 'ноутбук', w: 1440, h: 900, kind: 'desktop' },
+    { name: 'большой монитор', w: 1920, h: 1080, kind: 'desktop' }
+  ];
+  const LOOK = ['today', 'finpulse', 'stock', 'dicts', 'suppliers', 'flow', 'settings'];
+  let wide = [], badLayout = [];
+  const errs = [];
+
+  for (const d of DEVICES) {
+    const ctx = await browser.newContext({ viewport: { width: d.w, height: d.h },
+      hasTouch: d.kind !== 'desktop', isMobile: d.kind === 'phone' });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errs.push(d.name + ': ' + e.message));
+    page.on('console', m => { if (m.type() === 'error') errs.push(d.name + ': ' + m.text()); });
+    await page.goto(PAGE);
+    await page.waitForTimeout(700);
+    if (fs.existsSync(CORPUS)) {
+      const files = fs.readdirSync(CORPUS).filter(f => /\.(xls|xlsx|csv)$/i.test(f)).map(f => path.join(CORPUS, f));
+      if (files.length) { await page.setInputFiles('#filesInput', files); await page.waitForTimeout(9000); }
+    }
+    // раскладка соответствует размеру экрана
+    const layout = await page.evaluate(() => {
+      const vis = el => !!el && getComputedStyle(el).display !== 'none';
+      return { sidebar: vis(document.querySelector('.sidebar')),
+        tabbar: vis(document.getElementById('tabbar')),
+        menuBtn: vis(document.getElementById('menuBtn')) };
+    });
+    const want = d.kind === 'phone' ? (!layout.sidebar && layout.tabbar)
+      : d.kind === 'tablet' ? (!layout.sidebar && !layout.tabbar && layout.menuBtn)
+      : (layout.sidebar && !layout.tabbar);
+    if (!want) badLayout.push(d.name + ' (' + JSON.stringify(layout) + ')');
+
+    for (const v of LOOK) {
+      await page.evaluate(x => window.WMUI.go(x), v);
+      await page.waitForTimeout(220);
+      const over = await page.evaluate(() => document.body.scrollWidth - document.body.clientWidth);
+      if (over > 2) wide.push(d.name + ' / ' + v + ': +' + over + 'px');
+    }
+    await page.close(); await ctx.close();
+  }
+
+  check('ни на одном экране ничего не уезжает вбок', wide.length === 0,
+    wide.slice(0, 4).join(' | ') || 'нигде', 'нигде');
+  check('раскладка своя для телефона, планшета и компьютера', badLayout.length === 0,
+    badLayout.join(' | ') || 'у всех верная', 'у всех верная');
+
+  // на телефоне таблица читается карточками, а не уезжает вбок
+  {
+    const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+    const page = await ctx.newPage();
+    await page.goto(PAGE); await page.waitForTimeout(700);
+    if (fs.existsSync(CORPUS)) {
+      const files = fs.readdirSync(CORPUS).filter(f => /\.(xls|xlsx|csv)$/i.test(f)).map(f => path.join(CORPUS, f));
+      if (files.length) { await page.setInputFiles('#filesInput', files); await page.waitForTimeout(9000); }
+    }
+    await page.evaluate(() => window.WMUI.go('stock'));
+    await page.waitForTimeout(600);
+    const t = await page.evaluate(() => {
+      const td = document.querySelector('table.data tbody tr td:nth-child(2)');
+      if (!td) return null;
+      return { block: getComputedStyle(td).display !== 'table-cell',
+        label: td.getAttribute('data-label') || '',
+        headHidden: getComputedStyle(document.querySelector('table.data thead')).display === 'none' };
+    });
+    check('на телефоне строка таблицы становится карточкой',
+      !!t && t.block && t.headHidden && !!t.label, t ? 'подпись «' + t.label + '»' : 'нет таблицы',
+      'карточка с подписями');
+
+    // кнопки не мельче пальца: 44 px — граница удобного нажатия
+    await page.evaluate(() => window.WMUI.go('today'));
+    await page.waitForTimeout(400);
+    const small = await page.evaluate(() => {
+      const bad = [];
+      document.querySelectorAll('#tabbar .tab, .page .btn').forEach(b => {
+        const r = b.getBoundingClientRect();
+        if (r.height && r.height < 40) bad.push(b.textContent.trim().slice(0, 18) + ' ' + Math.round(r.height));
+      });
+      return bad;
+    });
+    check('кнопки на телефоне не мельче пальца', small.length === 0,
+      small.slice(0, 3).join(' | ') || 'все крупные', 'все от 40 px');
+
+    // форма на телефоне: поля во всю ширину и шрифт 16 px, иначе Safari зумит
+    await page.evaluate(() => window.WMUI.openForm('ddsExpense'));
+    await page.waitForTimeout(400);
+    const form = await page.evaluate(() => {
+      const inp = document.querySelector('.sheet .form-row input');
+      if (!inp) return null;
+      const cs = getComputedStyle(inp);
+      const sheet = document.querySelector('.sheet').getBoundingClientRect();
+      return { size: parseFloat(cs.fontSize), wide: inp.getBoundingClientRect().width > sheet.width * 0.6 };
+    });
+    check('в форме на телефоне поля крупные и во всю ширину',
+      !!form && form.size >= 16 && form.wide,
+      form ? form.size + 'px, широкое: ' + form.wide : 'формы нет', '16px и шире половины');
+    await page.close(); await ctx.close();
+  }
+
+  check('в консоли чисто на всех устройствах', errs.length === 0,
+    errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
