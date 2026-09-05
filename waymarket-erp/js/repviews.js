@@ -480,7 +480,9 @@
     var margin = p.grossPct || num(S.settings.marginManual) || 25;
     var b = E.bep(fixed, margin, p.revenue);
 
-    var h = u.pageHead('Безубыточность', 'Сколько надо продать, чтобы выйти в ноль');
+    var h = u.pageHead('Безубыточность', 'Сколько надо продать, чтобы выйти в ноль',
+      '<button class="btn" data-act="costs-to-settings">↧ Взять расходы из ' +
+      esc(monthRu(m)) + '</button>');
     h += monthPicker();
     h += u.hero(b.profitable ? 'Порог пройден' : 'До нуля осталось',
       u.priv(b.profitable ? p.revenue - b.month : b.month - p.revenue),
@@ -741,6 +743,28 @@
     a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
   }
+
+  /* Перенести фактические затраты месяца в настройки постоянных расходов.
+     Безубыточность считается от них, и пока их вбивают руками, она отстаёт
+     от жизни: аренда выросла, а порог остался прежним. */
+  A['costs-to-settings'] = function () {
+    var m = ym(), p = pnlOf(m);
+    if (!p.costTotal) return 'За ' + monthRu(m) + ' затрат не записано — переносить нечего.';
+    function sum(key) {
+      var c = p.costs.filter(function (x) { return x.key === key; })[0];
+      return c ? Math.round(c.sum) : 0;
+    }
+    S.setSetting('fot', sum('fot'));
+    S.setSetting('rent', sum('rent'));
+    S.setSetting('utilities', sum('utilities'));
+    S.setSetting('taxes', sum('taxes'));
+    // остальное складываем в «прочее»: отдельных полей под них в настройках нет
+    S.setSetting('other', ['bank', 'lunch', 'fuel', 'supplies', 'writeoff', 'other']
+      .reduce(function (a, k) { return a + sum(k); }, 0));
+    U().recompute();
+    return 'Перенесено из ' + monthRu(m) + ': постоянные расходы теперь ' +
+      money(S.fixedMonthly()) + ' в месяц. Безубыточность пересчитана.';
+  };
 
   A['reset-backup'] = function () {
     downloadBackup();

@@ -644,6 +644,63 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 5г-2. Правка записи не должна её терять или задваивать */
+{
+  console.log('— Правка записи во всех формах');
+  const { page, ctx, errs } = await open();
+  const cases = [
+    ['dds', 'shiftClose', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 20000, zCashless: 0, payouts: 0, factCash: 20000 },
+      'factCash', '19000'],
+    ['dds', 'dayTotals', { type: 'День', date: '2026-09-01', goodsCash: 1000, debtPaid: 0,
+      debtTaken: 0 }, 'goodsCash', '2000'],
+    ['dds', 'moneyOut', { type: 'Расход', date: '2026-09-01', category: 'Аренда',
+      method: 'Наличные', source: 'Из ящика', amount: 5000 }, 'amount', '7000'],
+    ['dds', 'moveCash', { type: 'Перемещение', date: '2026-09-01', from: 'Касса', to: 'Сейф',
+      amount: 2000 }, 'amount', '3000'],
+    ['dds', 'moneyIn', { type: 'Приход', date: '2026-09-01', category: 'Прочий приход',
+      method: 'Наличные', amount: 500 }, 'amount', '900'],
+    ['dds', 'moneyDraw', { type: 'Забор', date: '2026-09-01', method: 'Наличные',
+      amount: 3000 }, 'amount', '4000'],
+    ['staff', 'staffCard', { name: 'Аня', rate: 220 }, 'rate', '250'],
+    ['timesheet', 'timesheetRow', { date: '2026-09-01', employee: 'Аня', shift: 'День',
+      hoursDay: 12 }, 'hoursDay', '8'],
+    ['payouts', 'payoutRow', { date: '2026-09-01', employee: 'Аня', kind: 'Аванс',
+      amount: 2000, method: 'Наличные' }, 'amount', '2500'],
+    ['debtors', 'debtor', { date: '2026-09-01', name: 'Сосед', sum: 500, paid: 0 }, 'sum', '800'],
+    ['plans', 'payPlan', { due: '2026-09-01', supplier: 'Рамми', amount: 15000,
+      status: 'Запланирована' }, 'amount', '17000']
+  ];
+  const lost = [], doubled = [], notApplied = [];
+  for (const [coll, form, seed, field, val] of cases) {
+    const r = await page.evaluate(async ([coll, form, seed, field, val]) => {
+      const S = window.WMStore, U = window.WMUI;
+      S.state[coll] = []; S.save();
+      const rec = S.add(coll, seed); S.save(); U.recompute();
+      U.openForm(form, JSON.parse(JSON.stringify(rec)), { coll, id: rec.id });
+      await new Promise(r2 => setTimeout(r2, 350));
+      const el = document.querySelector('#wmForm [name="' + field + '"]');
+      if (el) el.value = val;
+      document.querySelector('#wmForm')
+        .dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      await new Promise(r2 => setTimeout(r2, 450));
+      const list = S.state[coll] || [];
+      return { n: list.length, value: list[0] ? String(list[0][field]) : null };
+    }, [coll, form, seed, field, val]);
+    if (r.n === 0) lost.push(form);
+    else if (r.n > 1) doubled.push(form);
+    else if (r.value !== String(val)) notApplied.push(form + ' (' + r.value + ')');
+  }
+  check('ПРАВКА НЕ УДАЛЯЕТ ЗАПИСЬ', lost.length === 0, lost.join(', ') || 'ни одной', 'ни одной');
+  check('ПРАВКА НЕ ЗАДВАИВАЕТ ЗАПИСЬ', doubled.length === 0, doubled.join(', ') || 'ни одной',
+    'ни одной');
+  check('и новое значение действительно сохраняется', notApplied.length === 0,
+    notApplied.join(', ') || 'все ' + cases.length, 'все ' + cases.length);
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 /* 5д. Ни байта не теряем при резком закрытии окна */
 {
   console.log('— Закрыли окно сразу после ввода');

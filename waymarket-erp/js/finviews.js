@@ -80,6 +80,7 @@
      этих денег в ящике не было. */
   FORMS.shiftClose = {
     title: 'Сверка кассы за смену', icon: '🧮',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       var till = v.till || tills()[0];
@@ -110,6 +111,8 @@
       'Расхождение = факт − расчётный. Безнал в этой формуле не участвует: ' +
       'карта и СБП в ящик не попадают.',
     save: function (v) {
+      var badDate = Q.checkDate(v.date);
+      if (badDate) return badDate;
       var bad = Q.checkAmount(v.zCash, { allowZero: true });
       if (bad) return 'Z-отчёт наличные: ' + bad;
       if (!E.txt(v.factCash) && v.factCash !== 0) return 'Впишите, сколько денег пересчитали в ящике.';
@@ -120,13 +123,14 @@
         if (b) return 'Поле «' + fields[i] + '»: ' + b;
       }
       learn({ cashiers: v.cashier });
+      var edS = U().editing();
       var rec = { type: E.T_SHIFT, date: v.date, till: v.till, shift: v.shift,
         cashier: v.cashier, openCash: num(v.openCash), zCash: num(v.zCash),
         zCashless: num(v.zCashless), payouts: num(v.payouts),
         factCash: num(v.factCash), checks: num(v.checks), note: v.note };
       var c = E.shiftCalc(rec);
       rec.diff = c.diff;
-      S.add('dds', rec);
+      if (edS) S.update(edS.coll, edS.id, rec); else S.add('dds', rec);
       S.save(); refresh();
 
       var msg = 'Смена записана. Расчётный остаток ' + money(c.expected) + ', в ящике ' +
@@ -146,6 +150,7 @@
      ящика» в сверке смены. Здесь — товарные обороты и долг поставщикам. */
   FORMS.dayTotals = {
     title: 'Итоги дня', icon: '🌙',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
@@ -164,6 +169,8 @@
       'из ящика и посчитаны в «Выплатах» при сверке смены. Если вычесть их ещё раз, ' +
       'одни и те же деньги уйдут дважды.',
     save: function (v) {
+      var badDay = Q.checkDate(v.date);
+      if (badDay) return badDay;
       var f = ['goodsCash', 'debtPaid', 'debtTaken'];
       for (var i = 0; i < f.length; i++) {
         var b = Q.checkAmount(v[f[i]], { allowEmpty: true, allowZero: true });
@@ -172,12 +179,19 @@
       if (!num(v.goodsCash) && !num(v.debtPaid) && !num(v.debtTaken)) {
         return 'Все три поля пустые — записывать нечего.';
       }
-      var same = dds().filter(function (r) { return E.isDay(r) && r.date === v.date; })[0];
+      /* Защита от двойных итогов за один день. Саму правку она блокировать
+         не должна: когда исправляют уже записанный день, «одинаковая» запись —
+         это он сам. Раньше из-за этого итоги дня нельзя было исправить вовсе. */
+      var ed = U().editing();
+      var same = dds().filter(function (r) {
+        return E.isDay(r) && r.date === v.date && (!ed || r.id !== ed.id);
+      })[0];
       if (same) return 'Итоги за ' + dateRu(v.date) + ' уже записаны. ' +
         'Поправьте ту запись на экране «База операций», чтобы не задвоить.';
-      S.add('dds', { type: E.T_DAY, date: v.date, goodsCash: num(v.goodsCash),
+      var rec = { type: E.T_DAY, date: v.date, goodsCash: num(v.goodsCash),
         debtPaid: num(v.debtPaid), debtTaken: num(v.debtTaken),
-        source: E.txt(v.source) || 'Из ящика', note: v.note });
+        source: E.txt(v.source) || 'Из ящика', note: v.note };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
       var d = E.supplierDebt(dds(), S.settings);
       return { ok: 'Итоги дня записаны. Долг поставщикам теперь ' + money(d.debt) + '.' };
@@ -195,6 +209,7 @@
      которые тратой не являются. */
   FORMS.moneyOut = {
     title: 'Расход', icon: '🧾',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       var cash = E.norm(v.method || 'Наличные') === 'наличные';
@@ -214,6 +229,7 @@
     hint: 'Расход уменьшает прибыль. Остаток наличных он уменьшает, только если ' +
       'деньги взяли не из ящика: то, что вынули из ящика, уже сидит в «выплатах» смены.',
     save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (!E.txt(v.category)) return 'Укажите статью — иначе непонятно, за что ушли деньги.';
       // Ловим статью, которая тратой не является: иначе прибыль занизится
@@ -249,6 +265,7 @@
      записать только расходом, и месяц закрывался с ложным убытком. */
   FORMS.moveCash = {
     title: 'Инкассация', icon: '🚛',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       var cash = E.cashOnHand(dds(), S.settings);
@@ -266,6 +283,7 @@
       'Из кассы они уходят через «выплаты из ящика» той смены, где их вынули, — ' +
       'поэтому здесь остаток ящика второй раз не уменьшается, а сейф пополняется.',
     save: function (v) {
+      var badM = Q.checkDate(v.date); if (badM) return badM;
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (E.norm(v.from) === E.norm(v.to)) return 'Откуда и куда — одно и то же место.';
       var cash = E.cashOnHand(dds(), S.settings);

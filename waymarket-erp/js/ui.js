@@ -1890,16 +1890,6 @@
         render();
         if (msg) toast(msg);
       }
-      else if (a === 'owner-to-settings') {
-        var t = E.ownerTotals(ownerRows().rows);
-        if (!t.dayCount) { toast('В книге нет заполненных дней.'); return; }
-        var k = 30 / t.dayCount;
-        S.setSetting('fot', Math.round(t.salary * k)); S.setSetting('rent', Math.round(t.rent * k));
-        S.setSetting('utilities', Math.round(t.utilities * k)); S.setSetting('taxes', Math.round(t.tax * k));
-        S.setSetting('other', Math.round((t.lunch + t.fuel + t.supplies + t.bankFee) * k));
-        render();
-        toast('Расходы перенесены в настройки: ' + money(S.fixedMonthly()) + ' в месяц.');
-      }
     });
 
     document.addEventListener('submit', function (e) {

@@ -105,6 +105,7 @@
   /* --- Карточка сотрудника ---------------------------------------------------- */
   FORMS.staffCard = {
     title: 'Сотрудник', icon: '👤',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Имя', 'name', 'text', v.name || '', { placeholder: 'как зовёте в магазине' }) +
@@ -154,6 +155,7 @@
      Часы днём и ночью — раздельно: ночью ставка выше. */
   FORMS.timesheetRow = {
     title: 'Смена в табеле', icon: '🗒',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       var p = personOf(v.employee);
@@ -181,6 +183,7 @@
     hint: 'Начислено = часы днём × дневную ставку + часы ночью × ночную + премия − удержание. ' +
       'Эта запись зарплату только начисляет — выданные деньги записываются отдельно.',
     save: function (v) {
+      var badT = Q.checkDate(v.date); if (badT) return badT;
       if (!E.txt(v.employee)) return 'Укажите, кто работал.';
       var f = ['hoursDay', 'hoursNight', 'rate', 'bonus', 'fine'];
       for (var i = 0; i < f.length; i++) {
@@ -213,6 +216,7 @@
   /* --- Выдача денег ----------------------------------------------------------- */
   FORMS.payoutRow = {
     title: 'Выдача зарплаты', icon: '💵',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
       var row = board().filter(function (r) { return E.norm(r.employee) === E.norm(v.employee); })[0];
@@ -235,6 +239,7 @@
       'уже посчитаны в «выплатах» при сверке смены. Но в сверку «на что ушли деньги из ящика» ' +
       'зарплата теперь входит — раньше её там не хватало.',
     save: function (v) {
+      var badP = Q.checkDate(v.date); if (badP) return badP;
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (!E.txt(v.employee)) return 'Укажите, кому выдали.';
       learn({ employees: v.employee });

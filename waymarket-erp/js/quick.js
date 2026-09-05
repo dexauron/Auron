@@ -215,6 +215,30 @@
   // Проверка суммы перед записью: пусто, буквы, минус, «1e100» — всё это ошибки.
   // Возвращает текст ошибки или null, если сумма нормальная.
   var MAX_MONEY = 1000000000;      // миллиард рублей — верхняя граница здравого смысла
+  /* Проверка даты. Опечатка в годе («2027» вместо «2026») раньше проходила
+     молча: запись улетала в будущий месяц, пропадала из отчётов и при этом
+     двигала остаток наличных. Ошибку такого рода владелец находит через
+     полгода, когда сходится не то. */
+  function checkDate(value, opts) {
+    opts = opts || {};
+    var d = txt(value);
+    if (!d) return opts.allowEmpty ? null : 'Укажите дату.';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return 'Дата непонятная — выберите её в календаре.';
+    var today = new Date().toISOString().slice(0, 10);
+    var ahead = Math.round((new Date(d) - new Date(today)) / 86400000);
+    var days = opts.aheadDays == null ? 1 : opts.aheadDays;
+    if (ahead > days) {
+      return 'Дата ' + d.split('-').reverse().join('.') + ' — это ' +
+        (ahead > 400 ? 'больше года вперёд' : ahead + ' дн. вперёд') +
+        '. Проверьте год: запись за будущий месяц в отчёты за этот не попадёт.';
+    }
+    if (ahead < -1100) {
+      return 'Дата ' + d.split('-').reverse().join('.') + ' — это больше трёх лет назад. ' +
+        'Проверьте год.';
+    }
+    return null;
+  }
+
   function checkAmount(value, opts) {
     opts = opts || {};
     var raw = txt(value);
@@ -278,7 +302,7 @@
     txt: txt, norm: norm, num: num, today: today, splitDict: splitDict,
     dicts: dicts, learn: learn, last: last, shiftNow: shiftNow, hourOf: hourOf, defaults: defaults,
     duplicate: duplicate, warnings: warnings, shiftMath: shiftMath,
-    checkAmount: checkAmount, MAX_MONEY: MAX_MONEY,
+    checkAmount: checkAmount, checkDate: checkDate, MAX_MONEY: MAX_MONEY,
     saveDraft: saveDraft, loadDraft: loadDraft, clearDraft: clearDraft,
     DICT_SETTING: DICT_SETTING
   };
