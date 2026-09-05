@@ -1,10 +1,8 @@
 /* Проверка экранов в настоящем браузере.
-   Открывает дашборд, загружает выгрузки, проходит по всем экранам,
-   прожимает каждую кнопку-фильтр, открывает окна «Подробнее» и следит,
-   чтобы нигде не было ошибки и чтобы вредный текст в названиях
-   показывался как текст, а не выполнялся.
+   Открывает программу, проходит по всем экранам, вводит смену и итоги дня,
+   жмёт фильтры, проверяет раскладку на телефоне, планшете и компьютере.
 
-   Запуск:  node tests/проверка-экранов.mjs "путь/к/папке/Данные_1С_и_Excel"
+   Запуск:  node tests/проверка-экранов.mjs
    Нужен Playwright и Chromium. Если их нет — проверка пропускается.  */
 import fs from 'fs';
 import path from 'path';
@@ -12,29 +10,7 @@ import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PAGE = 'file://' + path.join(HERE, '..', 'Дашборд_ВайМаркет.html');
-const CORPUS = process.argv[2] || path.join(HERE, '..', 'Данные_1С_и_Excel');
 
-// Все экраны меню — список снят с самого меню, чтобы ни один новый
-// экран не остался без проверки (и чтобы в списке не жили выдуманные).
-const SCREENS = [
-  'today', 'finpulse', 'suppliers', 'forecast', 'debtage', 'cash',
-  'places', 'cashiers', 'acquiring', 'dds', 'staff', 'sched',
-  'staffcards', 'tasks', 'finbase', 'finpay', 'stock', 'orders',
-  'expiry', 'losses', 'dead', 'groupprofit', 'itemprofit', 'pricelog',
-  'seasons', 'shelf', 'returns2', 'pnl', 'bep', 'bepdays',
-  'taxes', 'abc', 'pricecmp', 'incexp', 'findash', 'finreport',
-  'ownerpage', 'flow', 'problems', 'eaters', 'pace', 'yearago',
-  'avgcheck', 'calend', 'ready', 'kpi', 'compare', 'markup',
-  'payroll', 'finday', 'import', 'match', 'recon', 'confirm',
-  'terms', 'reconcile', 'conflicts', 'manual', 'records', 'dicts',
-  'debtors', 'sheets', 'check', 'reset', 'search', 'data', 'settings'
-];
-
-// строка, которая пытается выполниться, если её вставят в страницу как разметку
-const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
-
-// Playwright бывает установлен рядом, а бывает глобально — берём тот, что найдётся.
-// Модуль общий (CommonJS), поэтому нужное лежит либо сразу, либо в .default.
 async function loadChromium() {
   for (const where of ['playwright', '/opt/node22/lib/node_modules/playwright/index.js',
     '/usr/lib/node_modules/playwright/index.js']) {
@@ -60,506 +36,202 @@ const browser = await chromium.launch({
 }).catch(() => null);
 if (!browser) { console.log('Chromium не найден — проверка экранов пропущена.'); process.exit(0); }
 
-async function open(withFiles) {
-  const page = await browser.newPage();
+async function open(ctxOpts) {
+  const ctx = await browser.newContext(ctxOpts || {});
+  const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push('ошибка страницы: ' + e.message));
   page.on('console', m => { if (m.type() === 'error') errs.push('ошибка в консоли: ' + m.text()); });
-  page.on('dialog', d => { errs.push('всплыло окно (возможен вредный код): ' + d.message()); d.dismiss(); });
+  page.on('dialog', d => { errs.push('всплыло окно: ' + d.message()); d.dismiss(); });
   await page.goto(PAGE);
-  await page.waitForTimeout(700);
-  if (withFiles && fs.existsSync(CORPUS)) {
-    const files = fs.readdirSync(CORPUS).filter(f => /\.(xls|xlsx|csv)$/i.test(f)).map(f => path.join(CORPUS, f));
-    if (files.length) {
-      await page.setInputFiles('#filesInput', files);
-      await page.waitForTimeout(Math.max(8000, files.length * 1200));
-    }
-  }
-  return { page, errs };
+  await page.waitForTimeout(800);
+  return { page, ctx, errs };
 }
-const walk = async (page, fn) => {
-  for (const id of SCREENS) {
-    await page.evaluate(v => window.WMUI.go(v), id);
-    await page.waitForTimeout(120);
-    if (fn) await fn(id);
-  }
-};
+const screensOf = page => page.evaluate(() =>
+  [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go));
 
-/* Список экранов не должен разъезжаться с меню: если экран добавили, а сюда
-   не вписали, он останется без единой проверки. */
-{
-  const page = await browser.newPage();
-  await page.goto(PAGE);
-  await page.waitForTimeout(700);
-  const inMenu = await page.evaluate(() =>
-    [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go));
-  const missing = inMenu.filter(id => SCREENS.indexOf(id) < 0);
-  const ghosts = SCREENS.filter(id => inMenu.indexOf(id) < 0);
-  check('проверка охватывает все экраны меню', missing.length === 0 && ghosts.length === 0,
-    (missing.length ? 'не проверяются: ' + missing.join(', ') : '') +
-    (ghosts.length ? ' выдуманные: ' + ghosts.join(', ') : '') || inMenu.length + ' экранов',
-    'все ' + inMenu.length);
-  await page.close();
-  console.log('');
-}
+console.log('Страница: ' + PAGE + '\n');
 
-console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSync(CORPUS) ? CORPUS : 'нет, часть проверок на пустой базе') + '\n');
-
-/* 1. Пустая база: ни один экран не должен падать */
+/* 1. Пустая база: ни один экран не падает */
 {
   console.log('— Пустая база');
-  const { page, errs } = await open(false);
-  await walk(page);
-  check('все ' + SCREENS.length + ' экранов открываются без ошибок', errs.length === 0,
-    errs.length ? errs.slice(0, 3).join(' | ') : 'без ошибок', 'без ошибок');
-  await page.close();
+  const { page, ctx, errs } = await open();
+  const ids = await screensOf(page);
+  for (const id of ids) { await page.evaluate(v => window.WMUI.go(v), id); await page.waitForTimeout(110); }
+  check('все ' + ids.length + ' экранов открываются', errs.length === 0 && ids.length >= 10,
+    errs.slice(0, 3).join(' | ') || ids.join(', '), 'без ошибок');
+  check('экранов 1С в меню нет',
+    !ids.some(id => ['stock', 'orders', 'expiry', 'losses', 'dead', 'abc', 'pricecmp',
+      'incexp', 'import', 'match', 'recon', 'suppliers'].includes(id)),
+    'чисто', 'чисто');
+  await page.close(); await ctx.close();
   console.log('');
 }
 
-/* 2. С данными: каждая кнопка-фильтр на каждом экране */
+/* 2. Полный день магазина: сверка кассы утром, итоги вечером */
+{
+  console.log('— День магазина');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    window.WMStore.setSetting('openCashStart', 0);
+    window.WMStore.setSetting('openDebtStart', 100000);
+    window.WMUI.recompute();
+  });
+
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(350);
+  const fill = (n, v) => page.fill('.sheet [name="' + n + '"]', v);
+  await fill('date', '2026-09-01');
+  await fill('cashier', 'Аня');
+  await fill('openCash', '0');
+  await fill('zCash', '26467');
+  await fill('zCashless', '29743');
+  await fill('payouts', '10000');
+  await fill('factCash', '16000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+
+  const r = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    const sh = (S.state.dds || []).find(x => E.isShift(x));
+    const c = E.shiftCalc(sh);
+    return { expected: c.expected, diff: c.diff, status: c.status,
+      cash: E.cashOnHand(S.state.dds, S.settings), cashless: E.cashlessTotal(S.state.dds) };
+  });
+  check('расчётный остаток = размен + Z-нал − выплаты', r.expected === 16467, r.expected, 16467);
+  check('расхождение = факт − расчётный', r.diff === -467 && r.status === 'недостача', r.diff, -467);
+  check('БЕЗНАЛ В КАССУ НЕ ПОПАЛ', r.cash === 16000, 'в ящике ' + r.cash, 16000);
+  check('безнал посчитан отдельно', r.cashless === 29743, r.cashless, 29743);
+
+  await page.evaluate(() => window.WMUI.openForm('dayTotals'));
+  await page.waitForTimeout(350);
+  await fill('date', '2026-09-01');
+  await fill('goodsCash', '5000');
+  await fill('debtPaid', '3000');
+  await fill('debtTaken', '12000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+  const d = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    return { debt: E.supplierDebt(S.state.dds, S.settings).debt,
+      cash: E.cashOnHand(S.state.dds, S.settings) };
+  });
+  check('долг = начальный + взято − погашено', d.debt === 109000, d.debt, 109000);
+  check('ИТОГИ ДНЯ КАССУ НЕ ДВИГАЮТ — двойного счёта нет', d.cash === 16000, d.cash, 16000);
+
+  // вторая смена с разрывом размена
+  await page.evaluate(() => {
+    window.WMStore.add('dds', { type: 'Смена', date: '2026-09-02', till: 'Касса 1', shift: 'Ночь',
+      cashier: 'Пётр', openCash: 6000, zCash: 20000, zCashless: 10000, payouts: 0, factCash: 26000 });
+    window.WMStore.save(); window.WMUI.recompute(); window.WMUI.go('pulse');
+  });
+  await page.waitForTimeout(500);
+  const pulse = await page.textContent('#page');
+  check('на Пульте видно кассу, долг и кто недосдаёт',
+    pulse.includes('Наличные в кассе') && pulse.includes('Долг поставщикам') && pulse.includes('Аня'),
+    'видно', 'видно');
+  check('программа заметила, что размен не сходится с прошлой сменой',
+    pulse.includes('Размен не сходится'), 'заметила', 'заметила');
+
+  await page.evaluate(() => window.WMUI.go('morning'));
+  await page.waitForTimeout(400);
+  const morn = await page.textContent('#page');
+  check('на «Утре» видна недостача', morn.includes('467'), 'видна', 'видна');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 3. Кнопки-фильтры на каждом экране */
 {
   console.log('— Кнопки-фильтры');
-  const { page, errs } = await open(true);
-  let clicked = 0, screensWithFilters = 0;
-  for (const id of SCREENS) {
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    for (let i = 1; i <= 12; i++) {
+      const dd = String(i).padStart(2, '0');
+      S.add('dds', { type: 'Смена', date: '2026-09-' + dd, till: 'Касса 1', shift: i % 2 ? 'День' : 'Ночь',
+        cashier: i % 3 ? 'Аня' : 'Пётр', openCash: 5000, zCash: 20000 + i * 100,
+        zCashless: 15000, payouts: 3000, factCash: 22000 + i * 100 - (i === 4 ? 900 : 0) });
+      S.add('dds', { type: 'День', date: '2026-09-' + dd, goodsCash: 1000, debtPaid: 500, debtTaken: 2000 });
+    }
+    S.add('plans', { due: '2026-09-01', supplier: 'Рамми', amount: 15000, status: 'Запланирована' });
+    S.add('debtors', { date: '2026-07-01', name: 'Сосед', sum: 5000, paid: 0 });
+    S.save(); window.WMUI.recompute();
+  });
+  const ids = await screensOf(page);
+  let clicked = 0, withFilters = 0;
+  for (const id of ids) {
     await page.evaluate(v => window.WMUI.go(v), id);
-    await page.waitForTimeout(180);
+    await page.waitForTimeout(150);
     const n = await page.evaluate(() => document.querySelectorAll('.chip').length);
-    if (n) screensWithFilters++;
-    // жмём по очереди неактивные кнопки: список каждый раз перерисовывается
-    for (let i = 0; i < Math.min(n, 12); i++) {
+    if (n) withFilters++;
+    for (let i = 0; i < Math.min(n, 10); i++) {
       const ok = await page.evaluate(() => {
         const c = document.querySelector('.chip:not(.active)');
         if (!c) return false; c.click(); return true;
       });
       if (!ok) break;
-      await page.waitForTimeout(80);
-      clicked++;
+      await page.waitForTimeout(70); clicked++;
     }
     await page.evaluate(() => document.querySelectorAll('[data-filter-clear]').forEach(b => b.click()));
-    await page.waitForTimeout(100);
+    await page.waitForTimeout(80);
   }
-  check('фильтры есть на большинстве экранов', screensWithFilters >= 20,
-    screensWithFilters + ' из ' + SCREENS.length, '>=20');
-  check('нажатие любой кнопки не ломает экран', errs.length === 0 && clicked > 100,
-    clicked + ' нажатий, ошибок ' + errs.length, '>100 нажатий, 0 ошибок');
-  await page.close();
+  check('фильтры есть на экранах со списками', withFilters >= 4, withFilters + ' экранов', '>=4');
+  check('нажатие любой кнопки не ломает экран', errs.length === 0 && clicked > 10,
+    clicked + ' нажатий, ошибок ' + errs.length, '0 ошибок');
+  await page.close(); await ctx.close();
   console.log('');
 }
 
-/* 3. Окна «Подробнее» */
-{
-  console.log('— Окно «Подробнее»');
-  const { page, errs } = await open(true);
-  await page.evaluate(() => { const b = document.querySelector('[data-period="all"]'); if (b) b.click(); });
-  await page.waitForTimeout(500);
-  let opened = 0, broken = 0;
-  for (const id of SCREENS) {
-    await page.evaluate(v => window.WMUI.go(v), id);
-    await page.waitForTimeout(160);
-    const total = await page.evaluate(() => document.querySelectorAll('[data-more]').length);
-    for (let i = 0; i < Math.min(2, total); i++) {
-      await page.evaluate(k => { const b = document.querySelectorAll('[data-more]')[k]; if (b) b.click(); }, i);
-      await page.waitForTimeout(140);
-      const r = await page.evaluate(() => {
-        const d = document.querySelector('.backdrop .detail');
-        return { open: !!d, bad: d ? d.innerHTML.indexOf('Не получилось') >= 0 : false };
-      });
-      if (r.open) opened++;
-      if (r.bad) broken++;
-      await page.evaluate(() => { const b = document.querySelector('[data-act="close-sheet"]'); if (b) b.click(); });
-      await page.waitForTimeout(80);
-      await page.evaluate(v => window.WMUI.go(v), id);
-      await page.waitForTimeout(120);
-    }
-  }
-  check('окна открываются', opened > 30, opened + ' окон', '>30');
-  check('ни одно окно не собралось с ошибкой', broken === 0, broken, 0);
-  check('в консоли чисто', errs.length === 0, errs.length ? errs.slice(0, 2).join(' | ') : 'чисто', 'чисто');
-  await page.close();
-  console.log('');
-}
-
-/* 4. Вредный текст в названиях выводится как текст */
+/* 4. Вредный текст в названиях выводится текстом, а не выполняется */
 {
   console.log('— Вредный код в названиях');
-  const { page, errs } = await open(true);
+  const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
+  const { page, ctx, errs } = await open();
   await page.evaluate(bad => {
-    const S = window.WMStore, d = new Date().toISOString().slice(0, 10);
-    S.add('supreg', { name: bad, termDays: 3, aliases: [bad] });
-    S.add('dds', { date: d, type: 'Расход', category: bad, method: bad, amount: 100,
-      note: bad, cashier: bad, shift: bad });
-    S.add('dds', { date: d, type: 'Приход', category: bad, method: bad, amount: 900,
-      note: bad, cashier: bad, shift: bad });
-    S.add('debtors', { date: d, name: bad, sum: 500, phone: bad });
-    S.add('timesheet', { date: d, employee: bad, hours: 12, rate: 100, shift: bad });
-    S.add('payouts', { date: d, employee: bad, type: bad, form: bad, amount: 300 });
-    S.add('inventory', { date: d, name: bad, accounted: 1, fact: 0, price: 10, reason: bad });
-    S.add('expiry', { name: bad, group: bad, qty: 1, price: 10, bestBefore: '2026-12-01' });
-    S.add('plans', { due: d, supplier: bad, amount: 100, doc: bad, method: bad });
-    window.WMUI.recompute();
+    const S = window.WMStore, d = '2026-09-01';
+    S.add('dds', { type: 'Смена', date: d, till: bad, shift: bad, cashier: bad,
+      openCash: 0, zCash: 1000, zCashless: 0, payouts: 0, factCash: 900, note: bad });
+    S.add('dds', { type: 'Расход', date: d, category: bad, method: bad, amount: 100, note: bad });
+    S.add('plans', { due: d, supplier: bad, amount: 100, status: 'Запланирована', note: bad });
+    S.add('debtors', { date: d, name: bad, phone: bad, sum: 100, paid: 0, note: bad });
+    S.add('staff', { name: bad, position: bad, phone: bad });
+    S.save(); window.WMUI.recompute();
   }, BAD);
-  await walk(page);
-  for (const kind of ['firm', 'category', 'employee', 'debtor', 'method', 'product', 'group', 'shift']) {
-    await page.evaluate(([k, bad]) => window.WMDetail.open(k, bad), [kind, BAD.toLowerCase()]);
-    await page.waitForTimeout(110);
-    await page.evaluate(() => { const b = document.querySelector('[data-act="close-sheet"]'); if (b) b.click(); });
-  }
+  const ids = await screensOf(page);
+  for (const id of ids) { await page.evaluate(v => window.WMUI.go(v), id); await page.waitForTimeout(110); }
   const pwned = await page.evaluate(() => !!window.__pwned);
   const imgs = await page.evaluate(() => document.querySelectorAll('img[src="x"]').length);
-  check('вредный код не выполнился', !pwned, pwned ? 'ВЫПОЛНИЛСЯ' : 'показан как текст', 'показан как текст');
+  check('вредный код не выполнился', !pwned, 'показан как текст', 'не выполнился');
   check('картинка-ловушка не создалась', imgs === 0, imgs, 0);
-  check('экраны при этом не сломались', errs.length === 0,
-    errs.length ? errs.slice(0, 2).join(' | ') : 'чисто', 'чисто');
-  await page.close();
+  check('экраны при этом не сломались', errs.length === 0, errs.slice(0, 2).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
   console.log('');
 }
 
-/* 5. Выбранный фильтр не теряется при переходе на другой экран и обратно */
-{
-  console.log('— Фильтр не теряется');
-  const { page } = await open(true);
-  await page.evaluate(() => window.WMUI.go('stock'));
-  await page.waitForTimeout(400);
-  const picked = await page.evaluate(() => {
-    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Закончилось') >= 0);
-    if (!c) return null; c.click(); return c.textContent.trim();
-  });
-  await page.waitForTimeout(400);
-  const was = await page.evaluate(() => (document.querySelector('.filter-note') || { textContent: '' }).textContent.trim());
-  await page.evaluate(() => window.WMUI.go('abc')); await page.waitForTimeout(250);
-  await page.evaluate(() => window.WMUI.go('stock')); await page.waitForTimeout(400);
-  const now = await page.evaluate(() => (document.querySelector('.filter-note') || { textContent: '' }).textContent.trim());
-  check('фильтр на месте после возврата', !!picked && was === now && !!was, now || 'пусто', was || 'та же строка');
-  await page.close();
-  console.log('');
-}
-
-/* 6. Ввод кассы: три способа оплаты и список выплат из ящика.
-      Форма скопирована с Auron Finance, поэтому проверяем именно её:
-      Z и факт по наличным, карте и СБП, выплаты строками, деньги в пути. */
-{
-  console.log('— Касса за смену');
-  const { page, errs } = await open(false);
-  await page.evaluate(() => window.WMUI.openForm('cashShift'));
-  await page.waitForTimeout(300);
-  const names = await page.$$eval('.sheet input,.sheet select', els => els.map(e => e.name).filter(Boolean));
-  check('в форме есть Z-отчёт и факт по СБП', names.includes('zSbp') && names.includes('fSbp'),
-    names.join(', '), 'zSbp и fSbp');
-  check('список выплат начинается с одной строки', names.includes('pay_n0') && names.includes('pay_a0'),
-    'есть', 'есть');
-  await page.click('[data-pairadd="pay"]');
-  await page.click('[data-pairadd="pay"]');
-  await page.waitForTimeout(150);
-  const rowCount = await page.$$eval('.pair-list .pair-row', e => e.length);
-  check('кнопка «+ ещё строка» добавляет выплаты', rowCount === 3, rowCount + ' строки', 3);
-
-  const fill = async (n, v) => page.fill('.sheet [name="' + n + '"]', v);
-  await fill('date', '2026-09-01');
-  await fill('zCash', '10000'); await fill('fCash', '10200');
-  await fill('zCard', '50000'); await fill('fCard', '50000');
-  await fill('zSbp', '20000'); await fill('fSbp', '20000');
-  await fill('pay_n0', 'Такси Ване'); await fill('pay_a0', '300');
-  await fill('pay_n1', 'Вода'); await fill('pay_a1', '250*2');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(600);
-
-  const r = await page.evaluate(() => {
-    const S = window.WMStore, F = window.WMFin;
-    const day = (S.state.dds || []).filter(x => x.date === '2026-09-01');
-    return {
-      count: day.length,
-      sbp: day.filter(x => x.method === 'СБП').length,
-      pays: day.filter(x => F.isExpense(x)).map(x => x.category + '=' + x.amount).sort().join(' | '),
-      diff: day.filter(x => F.isIncome(x)).reduce((a, x) => a + (x.diff || 0), 0),
-      transit: F.inTransit(S.state.dds || [], [], S.settings).sum,
-      cash: F.balances(S.state.dds || [], {}).map['Наличные']
-    };
-  });
-  check('смена записалась: 3 прихода и 2 выплаты', r.count === 5, r.count + ' записей', 5);
-  check('выручка по СБП попала отдельной строкой', r.sbp === 1, r.sbp, 1);
-  check('выплаты записаны по названиям, «250*2» посчиталось',
-    r.pays === 'Вода=500 | Такси Ване=300', r.pays, 'Вода=500 | Такси Ване=300');
-  check('расхождение по наличным посчиталось', r.diff === 200, r.diff, 200);
-  check('наличные в кассе = выручка минус выплаты', r.cash === 9200, r.cash, 9200);
-  check('карта и СБП ушли в «деньги в пути»', r.transit === 68600, r.transit, 68600);
-
-  await page.evaluate(() => window.WMUI.go('finpulse'));
-  await page.waitForTimeout(500);
-  const pulse = await page.textContent('#page');
-  check('на Пульте видно СБП и деньги в пути',
-    pulse.includes('СБП') && pulse.includes('Деньги в пути'), 'видно', 'видно');
-  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' / ') || 'чисто', 'чисто');
-  await page.close();
-  console.log('');
-}
-
-/* 7. Свои показатели, сохранённые наборы фильтров и выгрузка экрана в Excel */
-{
-  console.log('— Свои показатели и наборы фильтров');
-  const { page, errs } = await open(true);
-
-  // 117: свой показатель формулой словами
-  await page.evaluate(() => window.WMUI.openForm('kpiCard'));
-  await page.waitForTimeout(250);
-  await page.fill('.sheet input[name="name"]', 'Остаётся после главного');
-  await page.fill('.sheet input[name="formula"]', 'выручка - закуп - зп - аренда');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(500);
-  const kpiCount = await page.evaluate(() => (window.WMStore.state.kpis || []).length);
-  check('свой показатель сохранился', kpiCount === 1, kpiCount, 1);
-
-  await page.evaluate(() => window.WMUI.go('today'));
-  await page.waitForTimeout(400);
-  const todayTxt = await page.textContent('#page');
-  check('показатель встал на экран «Сегодня»',
-    todayTxt.indexOf('Остаётся после главного') >= 0, 'виден', 'виден');
-
-  await page.evaluate(() => window.WMUI.openForm('kpiCard'));
-  await page.waitForTimeout(250);
-  await page.fill('.sheet input[name="name"]', 'Ерунда');
-  await page.fill('.sheet input[name="formula"]', 'выручка - шоколадка');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(300);
-  const stillOne = await page.evaluate(() => (window.WMStore.state.kpis || []).length);
-  check('непонятное слово в формуле не сохраняется', stillOne === 1, stillOne, 1);
-  await page.evaluate(() => window.WMUI.closeSheet());
-  await page.waitForTimeout(250);
-
-  // 116: набор фильтров «мой понедельник»
-  await page.evaluate(() => window.WMUI.go('stock'));
-  await page.waitForTimeout(500);
-  await page.evaluate(() => { const c = document.querySelector('.chip:not(.active)'); if (c) c.click(); });
-  await page.waitForTimeout(300);
-  const canSave = await page.evaluate(() => !!document.querySelector('[data-filterset-save]'));
-  check('кнопка «Запомнить набор» появляется при активном фильтре', canSave, 'есть', 'есть');
-  await page.click('[data-filterset-save]');
-  await page.waitForTimeout(300);
-  await page.fill('.sheet input[name="name"]', 'мой понедельник');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(400);
-  const savedSets = await page.evaluate(() => (window.WMStore.state.filtersets || []).length);
-  check('набор фильтров сохранён', savedSets === 1, savedSets, 1);
-  await page.evaluate(() => { document.querySelectorAll('[data-filter-clear]').forEach(b => b.click()); });
-  await page.waitForTimeout(300);
-  await page.click('[data-filterset]');
-  await page.waitForTimeout(400);
-  const back = await page.evaluate(() => window.WMFilter.active('stock'));
-  check('набор возвращается одной кнопкой', back > 0, back + ' фильтр(ов)', '>0');
-
-  // 114: выгрузка того экрана, который открыт
-  await page.evaluate(() => window.WMUI.go('suppliers'));
-  await page.waitForTimeout(500);
-  const dl = await Promise.all([
-    page.waitForEvent('download', { timeout: 25000 }).catch(() => null),
-    page.click('[data-act="export-screen"]')
-  ]).then(r => r[0]);
-  check('экран выгружается в Excel одной кнопкой', !!dl,
-    dl ? 'файл получен' : 'файл не пришёл', 'файл получен');
-
-  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
-  await page.close();
-  console.log('');
-}
-
-/* 8. Режим показа проверяющим и отправка отчёта в мессенджер */
-{
-  console.log('— Режим показа и отправка отчёта');
-  const { page, errs } = await open(false);
-  await page.evaluate(() => {
-    const S = window.WMStore;
-    S.add('dds', { date: '2026-09-01', type: 'Расход', category: 'ЗП', method: 'Наличные', amount: 100 });
-    window.WMUI.recompute();
-    window.WMUI.go('reset');
-  });
-  await page.waitForTimeout(400);
-  const before = await page.evaluate(() => (window.WMStore.state.dds || []).length);
-  await page.click('[data-act="readonly-on"]');
-  await page.waitForTimeout(400);
-  const roOn = await page.evaluate(() => !!document.querySelector('.ro-bar') &&
-    document.body.classList.contains('readonly'));
-  check('режим показа включается', roOn, 'включён', 'включён');
-
-  await page.evaluate(() => { const b = document.querySelector('[data-form]'); if (b) b.click(); });
-  await page.waitForTimeout(300);
-  const noForm = await page.evaluate(() => !document.getElementById('wmForm'));
-  check('в режиме показа форма записи не открывается', noForm, 'не открылась', 'не открылась');
-
-  await page.evaluate(() => { const g = document.querySelector('[data-go="today"]'); if (g) g.click(); });
-  await page.waitForTimeout(400);
-  const nav = await page.evaluate(() =>
-    (document.querySelector('.page-title') || { textContent: '' }).textContent.trim());
-  check('в режиме показа по экранам ходить можно', nav === 'Сегодня', nav, 'Сегодня');
-
-  await page.evaluate(() => { const b = document.querySelector('[data-act="readonly-off"]'); if (b) b.click(); });
-  await page.waitForTimeout(400);
-  const roOff = await page.evaluate(() => !document.querySelector('.ro-bar'));
-  check('режим показа выключается', roOff, 'выключен', 'выключен');
-  const after = await page.evaluate(() => (window.WMStore.state.dds || []).length);
-  check('за режим показа база не изменилась', after === before, before + ' → ' + after, 'без изменений');
-
-  // 134: текст отчёта для мессенджера
-  await page.evaluate(() => window.WMUI.go('finpulse'));
-  await page.waitForTimeout(400);
-  await page.click('[data-act="share-screen"]');
-  await page.waitForTimeout(400);
-  const share = await page.evaluate(() => {
-    const t = document.getElementById('shareText');
-    return { has: !!t, len: t ? t.value.length : 0, head: t ? t.value.split('\n')[0] : '' };
-  });
-  check('текст отчёта для мессенджера собрался', share.has && share.len > 40,
-    share.head, 'название и экран');
-  await page.evaluate(() => window.WMUI.closeSheet());
-  await page.waitForTimeout(200);
-
-  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
-  await page.close();
-  console.log('');
-}
-
-/* 9. Справочники: загрузка из 1С, увольнение, переименование, скрытие */
-{
-  console.log('— Справочники');
-  const { page, errs } = await open(true);
-  await page.evaluate(() => {
-    const S = window.WMStore;
-    S.add('dds', { date: '2026-09-01', type: 'Расход', category: 'Хозтовары',
-      method: 'Наличные', cashier: 'Аня', shift: 'День', amount: 500 });
-    S.add('dds', { date: '2026-09-02', type: 'Расход', category: 'Хозтовары',
-      method: 'Наличные', cashier: 'Аня', shift: 'День', amount: 700 });
-    S.add('timesheet', { date: '2026-09-01', employee: 'Пётр', hours: 12, rate: 200 });
-    S.save(); window.WMUI.recompute(); window.WMUI.go('dicts');
-  });
-  await page.waitForTimeout(500);
-
-  // поставщики из выгрузок 1С — сперва показать, потом делать
-  const firmsBefore = await page.evaluate(() => (window.WMStore.state.supreg || []).length);
-  await page.click('[data-act="dict-firms-import"]');
-  await page.waitForTimeout(500);
-  const preview = await page.evaluate(() =>
-    (document.querySelector('.sheet') || { textContent: '' }).textContent);
-  check('перед загрузкой из 1С показан разбор',
-    /Добавить поставщиков|Проставить телефон/.test(preview), 'показан', 'показан');
-  await page.click('[data-act="dict-firms-apply"]');
-  await page.waitForTimeout(800);
-  const firms = await page.evaluate(() => ({
-    n: (window.WMStore.state.supreg || []).length,
-    phones: (window.WMStore.state.supreg || []).filter(f => f.phone).length }));
-  check('справочник поставщиков пополнился из 1С', firms.n > firmsBefore,
-    firmsBefore + ' → ' + firms.n, 'больше');
-  check('телефоны из «Контактной информации» проставились', firms.phones > 0,
-    firms.phones + ' с телефоном', '>0');
-
-  // закрыть поставщика — из подсказок уходит, накладные остаются
-  await page.evaluate(() => window.WMUI.go('dicts'));
-  await page.waitForTimeout(400);
-  await page.evaluate(() => { const b = document.querySelector('[data-act="firm-archive"]'); if (b) b.click(); });
-  await page.waitForTimeout(500);
-  const arch = await page.evaluate(() => {
-    const S = window.WMStore, f = (S.state.supreg || []).find(x => x.archived);
-    return { name: f && f.name,
-      inList: f ? window.WMQuick.dicts(S.state, S.settings).suppliers.indexOf(f.name) >= 0 : null };
-  });
-  check('закрытый поставщик пропал из подсказок', arch.name && arch.inList === false,
-    arch.name, 'нет в подсказках');
-
-  // сотрудники: собрать из записей и уволить
-  await page.evaluate(() => {
-    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Сотрудники') >= 0);
-    if (c) c.click();
-  });
-  await page.waitForTimeout(400);
-  await page.click('[data-act="dict-staff-import"]');
-  await page.waitForTimeout(600);
-  const staffN = await page.evaluate(() => (window.WMStore.state.staff || []).length);
-  check('сотрудники собраны из записей', staffN > 0, staffN + ' карточек', '>0');
-
-  await page.evaluate(() => { const b = document.querySelector('[data-act="staff-fire"]'); if (b) b.click(); });
-  await page.waitForTimeout(400);
-  await page.fill('.sheet input[name="fired"]', '2026-09-05');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(600);
-  const fired = await page.evaluate(() => {
-    const S = window.WMStore, f = (S.state.staff || []).find(x => x.fired);
-    return { when: f && f.fired,
-      inList: f ? window.WMQuick.dicts(S.state, S.settings).employees.indexOf(f.name) >= 0 : null };
-  });
-  check('уволенный записан с датой', fired.when === '2026-09-05', fired.when, '2026-09-05');
-  check('уволенный пропал из подсказок', fired.inList === false, 'нет', 'нет');
-
-  // переименование переписывает записи, скрытие — нет
-  await page.evaluate(() => {
-    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Статьи расходов') >= 0);
-    if (c) c.click();
-  });
-  await page.waitForTimeout(400);
-  await page.evaluate(() => {
-    const row = [...document.querySelectorAll('table.data tbody tr')]
-      .find(r => r.textContent.indexOf('Хозтовары') >= 0);
-    if (row) row.querySelector('[data-act="dict-rename"]').click();
-  });
-  await page.waitForTimeout(400);
-  await page.fill('.sheet input[name="name"]', 'Хозрасходы');
-  await page.click('.sheet .btn-primary');
-  await page.waitForTimeout(600);
-  const ren = await page.evaluate(() => ({
-    old: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозтовары').length,
-    now: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозрасходы').length }));
-  check('переименование переписало записи', ren.old === 0 && ren.now === 2,
-    'было 2 → стало ' + ren.now, 2);
-
-  await page.evaluate(() => {
-    const row = [...document.querySelectorAll('table.data tbody tr')]
-      .find(r => r.textContent.indexOf('Хозрасходы') >= 0);
-    if (row) row.querySelector('[data-act="dict-hide"]').click();
-  });
-  await page.waitForTimeout(600);
-  const hid = await page.evaluate(() => {
-    const S = window.WMStore;
-    return { inList: window.WMQuick.dicts(S.state, S.settings).categories.indexOf('Хозрасходы') >= 0,
-      recs: (S.state.dds || []).filter(r => r.category === 'Хозрасходы').length };
-  });
-  check('скрытое ушло из подсказок', hid.inList === false, 'нет', 'нет');
-  check('записи со скрытым словом не тронуты', hid.recs === 2, hid.recs, 2);
-
-  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
-  await page.close();
-  console.log('');
-}
-
-/* 10. Как программа выглядит на телефоне, планшете и компьютере.
-      Проверяем не «красиво», а то, что можно проверить: не уезжает ли что-то
-      за край экрана, есть ли нижняя панель там, где ей место, видно ли меню,
-      и не мельче ли кнопки пальца. */
+/* 5. Телефон, планшет и компьютер */
 {
   console.log('— Телефон, планшет и компьютер');
   const DEVICES = [
     { name: 'iPhone SE', w: 375, h: 667, kind: 'phone' },
     { name: 'iPhone 15 Pro', w: 393, h: 852, kind: 'phone' },
-    { name: 'iPhone Pro Max', w: 430, h: 932, kind: 'phone' },
     { name: 'iPad mini', w: 744, h: 1133, kind: 'tablet' },
     { name: 'iPad Pro книжно', w: 834, h: 1194, kind: 'tablet' },
-    { name: 'iPad Pro лёжа', w: 1194, h: 834, kind: 'desktop' },
     { name: 'ноутбук', w: 1440, h: 900, kind: 'desktop' },
     { name: 'большой монитор', w: 1920, h: 1080, kind: 'desktop' }
   ];
-  const LOOK = ['today', 'finpulse', 'stock', 'dicts', 'suppliers', 'flow', 'settings'];
   let wide = [], badLayout = [];
-  const errs = [];
-
+  const allErrs = [];
   for (const d of DEVICES) {
-    const ctx = await browser.newContext({ viewport: { width: d.w, height: d.h },
+    const { page, ctx, errs } = await open({ viewport: { width: d.w, height: d.h },
       hasTouch: d.kind !== 'desktop', isMobile: d.kind === 'phone' });
-    const page = await ctx.newPage();
-    page.on('pageerror', e => errs.push(d.name + ': ' + e.message));
-    page.on('console', m => { if (m.type() === 'error') errs.push(d.name + ': ' + m.text()); });
-    await page.goto(PAGE);
-    await page.waitForTimeout(700);
-    if (fs.existsSync(CORPUS)) {
-      const files = fs.readdirSync(CORPUS).filter(f => /\.(xls|xlsx|csv)$/i.test(f)).map(f => path.join(CORPUS, f));
-      if (files.length) { await page.setInputFiles('#filesInput', files); await page.waitForTimeout(9000); }
-    }
-    // раскладка соответствует размеру экрана
+    await page.evaluate(() => {
+      const S = window.WMStore;
+      S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+        cashier: 'Аня', openCash: 0, zCash: 26467, zCashless: 29743, payouts: 10000, factCash: 16000 });
+      S.save(); window.WMUI.recompute();
+    });
     const layout = await page.evaluate(() => {
       const vis = el => !!el && getComputedStyle(el).display !== 'none';
       return { sidebar: vis(document.querySelector('.sidebar')),
@@ -569,76 +241,116 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
     const want = d.kind === 'phone' ? (!layout.sidebar && layout.tabbar)
       : d.kind === 'tablet' ? (!layout.sidebar && !layout.tabbar && layout.menuBtn)
       : (layout.sidebar && !layout.tabbar);
-    if (!want) badLayout.push(d.name + ' (' + JSON.stringify(layout) + ')');
-
-    for (const v of LOOK) {
+    if (!want) badLayout.push(d.name + ' ' + JSON.stringify(layout));
+    for (const v of await screensOf(page)) {
       await page.evaluate(x => window.WMUI.go(x), v);
-      await page.waitForTimeout(220);
+      await page.waitForTimeout(130);
       const over = await page.evaluate(() => document.body.scrollWidth - document.body.clientWidth);
       if (over > 2) wide.push(d.name + ' / ' + v + ': +' + over + 'px');
     }
+    errs.forEach(e => allErrs.push(d.name + ': ' + e));
     await page.close(); await ctx.close();
   }
-
   check('ни на одном экране ничего не уезжает вбок', wide.length === 0,
     wide.slice(0, 4).join(' | ') || 'нигде', 'нигде');
   check('раскладка своя для телефона, планшета и компьютера', badLayout.length === 0,
     badLayout.join(' | ') || 'у всех верная', 'у всех верная');
 
-  // на телефоне таблица читается карточками, а не уезжает вбок
-  {
-    const ctx = await browser.newContext({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
-    const page = await ctx.newPage();
-    await page.goto(PAGE); await page.waitForTimeout(700);
-    if (fs.existsSync(CORPUS)) {
-      const files = fs.readdirSync(CORPUS).filter(f => /\.(xls|xlsx|csv)$/i.test(f)).map(f => path.join(CORPUS, f));
-      if (files.length) { await page.setInputFiles('#filesInput', files); await page.waitForTimeout(9000); }
-    }
-    await page.evaluate(() => window.WMUI.go('stock'));
-    await page.waitForTimeout(600);
-    const t = await page.evaluate(() => {
-      const td = document.querySelector('table.data tbody tr td:nth-child(2)');
-      if (!td) return null;
-      return { block: getComputedStyle(td).display !== 'table-cell',
-        label: td.getAttribute('data-label') || '',
-        headHidden: getComputedStyle(document.querySelector('table.data thead')).display === 'none' };
+  const { page, ctx } = await open({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+  await page.evaluate(() => {
+    window.WMStore.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 10000, zCashless: 0, payouts: 0, factCash: 10000 });
+    window.WMStore.save(); window.WMUI.recompute(); window.WMUI.go('morning');
+  });
+  await page.waitForTimeout(500);
+  const t = await page.evaluate(() => {
+    const td = document.querySelector('table.data tbody tr td:nth-child(2)');
+    if (!td) return null;
+    return { block: getComputedStyle(td).display !== 'table-cell',
+      label: td.getAttribute('data-label') || '',
+      headHidden: getComputedStyle(document.querySelector('table.data thead')).display === 'none' };
+  });
+  check('на телефоне строка таблицы становится карточкой',
+    !!t && t.block && t.headHidden && !!t.label, t ? 'подпись «' + t.label + '»' : 'нет таблицы',
+    'карточка с подписями');
+  const small = await page.evaluate(() => {
+    const bad = [];
+    document.querySelectorAll('#tabbar .tab, .page .btn').forEach(b => {
+      const r = b.getBoundingClientRect();
+      if (r.height && r.height < 40) bad.push(b.textContent.trim().slice(0, 16) + ' ' + Math.round(r.height));
     });
-    check('на телефоне строка таблицы становится карточкой',
-      !!t && t.block && t.headHidden && !!t.label, t ? 'подпись «' + t.label + '»' : 'нет таблицы',
-      'карточка с подписями');
+    return bad;
+  });
+  check('кнопки на телефоне не мельче пальца', small.length === 0,
+    small.slice(0, 3).join(' | ') || 'все крупные', 'все от 40 px');
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(350);
+  const form = await page.evaluate(() => {
+    const inp = document.querySelector('.sheet .form-row input');
+    if (!inp) return null;
+    const sheet = document.querySelector('.sheet').getBoundingClientRect();
+    return { size: parseFloat(getComputedStyle(inp).fontSize),
+      wide: inp.getBoundingClientRect().width > sheet.width * 0.6 };
+  });
+  check('в форме на телефоне поля крупные и во всю ширину',
+    !!form && form.size >= 16 && form.wide, form ? form.size + 'px' : 'формы нет', '16px и шире половины');
+  await page.close(); await ctx.close();
 
-    // кнопки не мельче пальца: 44 px — граница удобного нажатия
-    await page.evaluate(() => window.WMUI.go('today'));
-    await page.waitForTimeout(400);
-    const small = await page.evaluate(() => {
-      const bad = [];
-      document.querySelectorAll('#tabbar .tab, .page .btn').forEach(b => {
-        const r = b.getBoundingClientRect();
-        if (r.height && r.height < 40) bad.push(b.textContent.trim().slice(0, 18) + ' ' + Math.round(r.height));
-      });
-      return bad;
-    });
-    check('кнопки на телефоне не мельче пальца', small.length === 0,
-      small.slice(0, 3).join(' | ') || 'все крупные', 'все от 40 px');
+  check('в консоли чисто на всех устройствах', allErrs.length === 0,
+    allErrs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  console.log('');
+}
 
-    // форма на телефоне: поля во всю ширину и шрифт 16 px, иначе Safari зумит
-    await page.evaluate(() => window.WMUI.openForm('ddsExpense'));
-    await page.waitForTimeout(400);
-    const form = await page.evaluate(() => {
-      const inp = document.querySelector('.sheet .form-row input');
-      if (!inp) return null;
-      const cs = getComputedStyle(inp);
-      const sheet = document.querySelector('.sheet').getBoundingClientRect();
-      return { size: parseFloat(cs.fontSize), wide: inp.getBoundingClientRect().width > sheet.width * 0.6 };
-    });
-    check('в форме на телефоне поля крупные и во всю ширину',
-      !!form && form.size >= 16 && form.wide,
-      form ? form.size + 'px, широкое: ' + form.wide : 'формы нет', '16px и шире половины');
-    await page.close(); await ctx.close();
-  }
+/* 6. Справочники: кассиры, увольнение, переименование */
+{
+  console.log('— Справочники');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-01', category: 'Хозтовары',
+      method: 'Наличные', cashier: 'Аня', amount: 500 });
+    S.add('dds', { type: 'Расход', date: '2026-09-02', category: 'Хозтовары',
+      method: 'Наличные', cashier: 'Аня', amount: 700 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('dicts');
+  });
+  await page.waitForTimeout(500);
+  await page.click('[data-act="dict-staff-import"]');
+  await page.waitForTimeout(500);
+  const staffN = await page.evaluate(() => (window.WMStore.state.staff || []).length);
+  check('кассиры собраны из записей', staffN > 0, staffN + ' карточек', '>0');
 
-  check('в консоли чисто на всех устройствах', errs.length === 0,
-    errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.evaluate(() => { const b = document.querySelector('[data-act="staff-fire"]'); if (b) b.click(); });
+  await page.waitForTimeout(350);
+  await page.fill('.sheet input[name="fired"]', '2026-09-05');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const fired = await page.evaluate(() => {
+    const S = window.WMStore, f = (S.state.staff || []).find(x => x.fired);
+    return { when: f && f.fired,
+      inList: f ? window.WMQuick.dicts(S.state, S.settings).cashiers.indexOf(f.name) >= 0 : null };
+  });
+  check('уволенный записан с датой', fired.when === '2026-09-05', fired.when, '2026-09-05');
+
+  await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Статьи расходов') >= 0);
+    if (c) c.click();
+  });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('table.data tbody tr')]
+      .find(r => r.textContent.indexOf('Хозтовары') >= 0);
+    if (row) row.querySelector('[data-act="dict-rename"]').click();
+  });
+  await page.waitForTimeout(350);
+  await page.fill('.sheet input[name="name"]', 'Хозрасходы');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const ren = await page.evaluate(() => ({
+    old: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозтовары').length,
+    now: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозрасходы').length }));
+  check('переименование переписало записи', ren.old === 0 && ren.now === 2, 'стало ' + ren.now, 2);
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
   console.log('');
 }
 

@@ -5,87 +5,23 @@
    ========================================================================== */
 (function () {
   'use strict';
-  var E = window.WM, S = window.WMStore, SUP = window.WMSupply, DI = window.WMDicts;
+  var E = window.WM, S = window.WMStore, DI = window.WMDicts;
 
   function U() { return window.WMUI; }
-  function DET() { return window.WMDetail; }
   function esc(s) { return U().esc(s); }
   function dateRu(d) { return U().dateRu(d); }
   function num(v) { return E.num(v); }
   function today() { return new Date().toISOString().slice(0, 10); }
   function refresh() { U().recompute(); }
 
-  var TABS = [
-    { id: 'firms', icon: '🏢', name: 'Поставщики' },
-    { id: 'staff', icon: '👤', name: 'Сотрудники' }
-  ].concat(DI.KINDS.map(function (k) {
-    return { id: k.key, icon: k.icon, name: k.name };
-  }));
+  var TABS = [{ id: 'staff', icon: '👤', name: 'Кассиры' }].concat(
+    DI.KINDS.map(function (k) { return { id: k.key, icon: k.icon, name: k.name }; }));
 
   function tabBar(cur) {
     return '<div class="tabs">' + TABS.map(function (t) {
       return '<button class="chip' + (t.id === cur ? ' active' : '') +
         '" data-tab="dicts:' + t.id + '">' + t.icon + ' ' + esc(t.name) + '</button>';
     }).join('') + '</div>';
-  }
-
-  /* --- Поставщики -------------------------------------------------------------- */
-  function viewFirms() {
-    var u = U();
-    var all = S.state.supreg || [];
-    var live = DI.firmsActive(S.state), gone = DI.firmsArchived(S.state);
-    var noPhone = live.filter(function (f) { return !f.phone; }).length;
-    var noTerm = live.filter(function (f) { return f.termDays == null; }).length;
-
-    var h = '<div class="stat-grid">' +
-      u.stat('Поставщиков', u.nf(live.length), gone.length ? 'ещё ' + gone.length + ' закрыто' : 'все работают') +
-      u.stat('Без телефона', u.nf(noPhone), noPhone ? 'некому позвонить о поставке' : 'у всех есть',
-        noPhone ? 'c-orange' : 'c-green') +
-      u.stat('Без отсрочки', u.nf(noTerm), noTerm ? 'дата выплаты считается по общему правилу' : 'у всех задана',
-        noTerm ? 'c-orange' : 'c-green') +
-      '</div>';
-
-    h += '<div class="quick">' +
-      '<button class="btn btn-primary" data-form="supFirm">＋ Добавить поставщика</button> ' +
-      '<button class="btn" data-act="dict-firms-import">📥 Загрузить из 1С</button> ' +
-      '<button class="btn" data-go="terms">⏱ Отсрочки списком</button></div>';
-
-    h += '<div class="banner blue"><span>📥</span><span>«Загрузить из 1С» соберёт поставщиков из ' +
-      'накладных, цен и «Контактной информации»: имена — в справочник, телефоны — в карточки. ' +
-      'Программа сначала покажет, что собирается добавить, и ничего не сделает без вашего согласия.</span></div>';
-
-    function firmTable(id, rows, archived) {
-      return u.table(id, [
-        { title: 'Фирма', fn: function (r) { return DET().link('firm', E.norm(r.name), r.name); } },
-        { title: 'Отсрочка', cls: 'num', fn: function (r) {
-          return r.termDays == null ? '<span class="c-muted">не задана</span>' : r.termDays + ' дн.'; } },
-        { title: 'Чем платим', fn: function (r) { return esc(r.method || '—'); } },
-        { title: 'Телефон', fn: function (r) {
-          return r.phone ? '<a href="tel:' + esc(r.phone) + '">' + esc(r.phone) + '</a>'
-            : '<span class="c-muted">нет</span>'; } },
-        { title: 'Имена в 1С', fn: function (r) {
-          var a = r.aliases || [];
-          return a.length ? '<span class="c-muted">' + esc(a.slice(0, 3).join(', ')) +
-            (a.length > 3 ? ' и ещё ' + (a.length - 3) : '') + '</span>' : '—'; } },
-        { title: 'Записей', cls: 'num', fn: function (r) { return u.nf(DI.firmUsage(S.state, r.name)); } },
-        { title: '', cls: 'center', fn: function (r) {
-          var used = DI.firmUsage(S.state, r.name);
-          return '<button class="btn btn-sm" data-edit="supreg:' + r.id + ':supFirm">✎</button> ' +
-            (archived
-              ? '<button class="btn btn-sm" data-act="firm-restore" data-id="' + r.id + '">Вернуть</button>'
-              : '<button class="btn btn-sm" data-act="firm-archive" data-id="' + r.id + '">Больше не возит</button>') +
-            (used ? '' : ' <button class="btn btn-sm btn-danger" data-act="firm-del" data-id="' + r.id + '">✕</button>'); } }
-      ], rows, { step: 40, empty: archived ? 'Закрытых поставщиков нет'
-        : 'Поставщиков пока нет. Загрузите из 1С или добавьте руками.' });
-    }
-
-    h += u.card('Работают', firmTable('dfLive', live, false),
-      'Кнопка «Больше не возит» убирает поставщика из подсказок, накладные остаются');
-    if (gone.length) {
-      h += u.card('Больше не возят', firmTable('dfGone', gone, true),
-        'В формах не предлагаются, в отчётах видны');
-    }
-    return h;
   }
 
   /* --- Сотрудники -------------------------------------------------------------- */
@@ -120,7 +56,7 @@
 
     function staffTable(id, rows, fired) {
       return u.table(id, [
-        { title: 'Имя', fn: function (r) { return DET().link('employee', E.norm(r.name), r.name); } },
+        { title: 'Имя', fn: function (r) { return esc(r.name); } },
         { title: 'Должность', fn: function (r) { return esc(r.position || '—'); } },
         { title: 'Как считаем', fn: function (r) { return esc(r.scheme || '—'); } },
         { title: 'Ставка / оклад', cls: 'num', fn: function (r) {
@@ -203,7 +139,7 @@
   /* --- Экран целиком ------------------------------------------------------------- */
   function viewDicts() {
     var u = U();
-    var tab = u.tab('dicts', 'firms');
+    var tab = u.tab('dicts', 'staff');
     if (!TABS.filter(function (t) { return t.id === tab; }).length) tab = 'firms';
 
     var h = u.pageHead('Справочники',
@@ -211,8 +147,7 @@
       '<button class="btn" data-act="print">🖨 Печать</button>');
     h += tabBar(tab);
 
-    if (tab === 'firms') h += viewFirms();
-    else if (tab === 'staff') h += viewStaff();
+    if (tab === 'staff') h += viewStaff();
     else h += viewSimple(tab);
     return h;
   }
@@ -310,54 +245,6 @@
     return res.ok;
   };
 
-  /* Сбор поставщиков из выгрузок 1С. Сначала показываем, что собираемся
-     сделать, и только потом делаем — молча базу не меняем. */
-  function importOpts() {
-    var D = U().data();
-    return { contacts: D.contacts || [], prices: D.prices || [] };
-  }
-  A['dict-firms-import'] = function () {
-    var res = DI.firmsFromData(S.state, importOpts());
-    if (!res.add.length && !res.update.length) {
-      return 'Новых поставщиков не нашлось — все уже в справочнике. ' +
-        'Если ждали больше, загрузите выгрузки 1С на экране «Импорт из 1С».';
-    }
-    var u = U();
-    var body = '<div class="card"><div class="card-pad">' +
-      'Программа посмотрела накладные, цены и «Контактную информацию» из 1С.<br><br>' +
-      (res.add.length ? '<b>Добавить поставщиков: ' + res.add.length + '</b><br>' +
-        '<span class="c-muted">' + esc(res.add.slice(0, 12).map(function (a) { return a.name; }).join(', ')) +
-        (res.add.length > 12 ? ' и ещё ' + (res.add.length - 12) : '') + '</span><br><br>' : '') +
-      (res.update.length ? '<b>Проставить телефон: ' + res.update.length + '</b><br>' +
-        '<span class="c-muted">' + esc(res.update.slice(0, 12).map(function (a) { return a.name; }).join(', ')) +
-        (res.update.length > 12 ? ' и ещё ' + (res.update.length - 12) : '') + '</span><br><br>' : '') +
-      'Отсрочку и «чем платим» программа не выдумывает — их вы проставите сами ' +
-      'на экране «Отсрочки поставщиков» или в карточке.' +
-      '</div></div>' +
-      '<div class="form-actions">' +
-      '<button class="btn" data-act="close-sheet">Не сейчас</button>' +
-      '<button class="btn btn-primary" data-act="dict-firms-apply">Добавить в справочник</button></div>';
-    u.sheet('Поставщики из 1С', body);
-    return null;
-  };
-  A['dict-firms-apply'] = function () {
-    var res = DI.firmsFromData(S.state, importOpts());
-    var reg = S.state.supreg = S.state.supreg || [];
-    res.add.forEach(function (a) {
-      var f = SUP.firmRecord(a.name);
-      if (a.phone) f.phone = a.phone;
-      reg.push(f);
-    });
-    res.update.forEach(function (up) {
-      var f = SUP.findFirm(reg, up.name);
-      if (f && !f.phone) f.phone = up.phone;
-    });
-    S.save(); refresh(); U().closeSheet(); U().render();
-    return 'Справочник поставщиков пополнен: добавлено ' + res.add.length +
-      (res.update.length ? ', телефонов проставлено ' + res.update.length : '') +
-      '. Отсрочки задайте на экране «Отсрочки поставщиков».';
-  };
-
   A['dict-staff-import'] = function () {
     var found = DI.staffFromRecords(S.state);
     if (!found.length) return 'Все, кто встречается в записях, уже заведены.';
@@ -392,31 +279,7 @@
     return 'Карточка удалена. Вернуть можно из корзины.';
   };
 
-  A['firm-archive'] = function (el) {
-    var f = (S.state.supreg || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-    if (!f) return 'Поставщик не найден.';
-    f.archived = true;
-    S.save(); refresh(); U().render();
-    return '«' + f.name + '» убран из подсказок. Накладные и оплаты по нему остались.';
-  };
-  A['firm-restore'] = function (el) {
-    var f = (S.state.supreg || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-    if (!f) return 'Поставщик не найден.';
-    f.archived = false;
-    S.save(); refresh(); U().render();
-    return '«' + f.name + '» снова в работе.';
-  };
-  A['firm-del'] = function (el) {
-    var f = (S.state.supreg || []).filter(function (x) { return x.id === el.dataset.id; })[0];
-    if (!f) return 'Поставщик не найден.';
-    if (DI.firmUsage(S.state, f.name)) return 'По этому поставщику есть записи — его можно только закрыть.';
-    if (!confirm('Удалить «' + f.name + '» из справочника? Записей по нему нет.')) return null;
-    S.remove('supreg', f.id);
-    refresh(); U().render();
-    return 'Удалено. Вернуть можно из корзины.';
-  };
-
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
-  VIEWS.push({ id: 'dicts', icon: '📚', name: 'Справочники', group: 'Ручной ввод',
-    render: viewDicts, after: 'records' });
+  VIEWS.push({ id: 'dicts', icon: '📚', name: 'Справочники', group: 'Ещё',
+    render: viewDicts, after: 'data' });
 })();

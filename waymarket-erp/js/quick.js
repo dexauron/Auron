@@ -39,7 +39,7 @@
   function dicts(state, settings) {
     state = state || {}; settings = settings || {};
     var dds = state.dds || [], out = {}, counts = {
-      category: {}, cashier: {}, shift: {}, method: {}, employee: {}, supplier: {}, reason: {}
+      category: {}, cashier: {}, shift: {}, method: {}, employee: {}, supplier: {}
     };
     function put(bag, key, value) {
       var v = txt(value); if (!v) return;
@@ -47,7 +47,7 @@
       bag[norm(v)].n++;
       counts[key][norm(v)] = (counts[key][norm(v)] || 0) + 1;
     }
-    var cat = {}, cash = {}, shift = {}, meth = {}, emp = {}, sup = {}, reason = {};
+    var cat = {}, cash = {}, shift = {}, meth = {}, emp = {}, sup = {};
 
     dds.forEach(function (r) {
       put(cat, 'category', r.category);
@@ -55,13 +55,10 @@
       put(shift, 'shift', r.shift);
       put(meth, 'method', r.method);
     });
-    (state.payouts || []).forEach(function (r) { put(emp, 'employee', r.employee); });
-    (state.timesheet || []).forEach(function (r) { put(emp, 'employee', r.employee); });
-    (state.staff || []).forEach(function (r) { if (!r.fired) put(emp, 'employee', r.name); });
     (state.debtors || []).forEach(function (r) { put(cash, 'cashier', r.cashier); });
-    (state.supreg || []).forEach(function (r) { if (!r.archived) put(sup, 'supplier', r.name); });
+    (state.cashcount || []).forEach(function (r) { put(cash, 'cashier', r.cashier); });
+    (state.staff || []).forEach(function (r) { if (!r.fired) put(emp, 'employee', r.name); });
     (state.plans || []).forEach(function (r) { put(sup, 'supplier', r.supplier); });
-    (state.inventory || []).forEach(function (r) { put(reason, 'reason', r.reason); });
 
     // Скрытые значения справочника в подсказки не идут: владелец их убрал
     // намеренно, а старые записи с ними остались как были.
@@ -85,7 +82,7 @@
       ['Закуп товара', 'Оплата ТП', 'ЗП', 'Аренда', 'Коммуналка', 'Налоги',
         'Хозрасходы', 'Реклама', 'Комиссия банка', 'Выплата из кассы', 'Другое'], 'categories');
     out.cashiers = merge(settings.finCashiers, cash, 'cashier', [], 'cashiers');
-    out.shifts = merge(settings.finShifts, shift, 'shift', ['День 09:00–21:00', 'Ночь 21:00–09:00'], 'shifts');
+    out.shifts = merge(settings.finShifts, shift, 'shift', ['День', 'Ночь'], 'shifts');
     out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'СБП', 'Перевод'], 'methods');
     // уволенных и поставщиков, которые больше не возят, в подсказках нет
     var goneEmp = {}, goneSup = {};
@@ -95,16 +92,13 @@
       .filter(function (v) { return !goneEmp[norm(v)]; });
     out.suppliers = merge(settings.finSuppliers, sup, 'supplier', [], 'suppliers')
       .filter(function (v) { return !goneSup[norm(v)]; });
-    out.reasons = merge(settings.finReasons, reason, 'reason',
-      ['Просрочка', 'Бой и порча', 'Недостача', 'Дегустация', 'Своё потребление'], 'reasons');
     return out;
   }
 
   // Настройка-справочник, куда дописывать новое слово
   var DICT_SETTING = {
     categories: 'finCategories', cashiers: 'finCashiers', shifts: 'finShifts',
-    methods: 'finMethods', employees: 'finEmployees', suppliers: 'finSuppliers',
-    reasons: 'finReasons'
+    methods: 'finMethods', employees: 'finEmployees', suppliers: 'finSuppliers'
   };
 
   /* Запомнить новое значение в справочнике настроек (true, если что-то изменилось).

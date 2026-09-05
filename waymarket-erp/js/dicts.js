@@ -35,13 +35,13 @@
       where: [['dds', 'method'], ['plans', 'method']] },
     { key: 'shifts', name: 'Смены', icon: '🕒', setting: 'finShifts',
       one: 'смену', hint: 'Как называете смены: день, ночь, сутки.',
-      where: [['dds', 'shift'], ['shifts', 'shift'], ['timesheet', 'shift'], ['shiftplan', 'shift']] },
+      where: [['dds', 'shift']] },
     { key: 'cashiers', name: 'Кассиры', icon: '🧑‍💼', setting: 'finCashiers',
       one: 'кассира', hint: 'Кто сдаёт кассу. Это подсказка в форме; полная карточка — в «Сотрудниках».',
-      where: [['dds', 'cashier'], ['shifts', 'cashier'], ['debtors', 'cashier']] },
-    { key: 'reasons', name: 'Причины списания', icon: '🗑', setting: 'finReasons',
-      one: 'причину', hint: 'Почему товар ушёл не через кассу: просрочка, бой, недостача.',
-      where: [['inventory', 'reason']] }
+      where: [['dds', 'cashier'], ['debtors', 'cashier'], ['cashcount', 'cashier']] },
+    { key: 'suppliers', name: 'Поставщики', icon: '🏢', setting: 'finSuppliers',
+      one: 'поставщика', hint: 'Кому платим: имена подставляются в плане выплат.',
+      where: [['plans', 'supplier']] }
   ];
   function kindOf(key) {
     for (var i = 0; i < KINDS.length; i++) if (KINDS[i].key === key) return KINDS[i];
@@ -187,40 +187,22 @@
   function staffFired(state) {
     return ((state && state.staff) || []).filter(function (p) { return !!p.fired; });
   }
-  function firmsActive(state) {
-    return ((state && state.supreg) || []).filter(function (f) { return !f.archived; });
-  }
-  function firmsArchived(state) {
-    return ((state && state.supreg) || []).filter(function (f) { return !!f.archived; });
-  }
 
   // Сколько записей связано с человеком — чтобы не удалить того, у кого история
   function staffUsage(state, name) {
     var n = norm(name), c = 0;
-    [['timesheet', 'employee'], ['payouts', 'employee'], ['dds', 'cashier'],
-      ['shifts', 'cashier'], ['shiftplan', 'employee'], ['absences', 'employee'],
-      ['tasks', 'employee']].forEach(function (p) {
+    [['dds', 'cashier'], ['debtors', 'cashier'], ['cashcount', 'cashier']].forEach(function (p) {
       ((state && state[p[0]]) || []).forEach(function (r) { if (norm(r[p[1]]) === n) c++; });
     });
     return c;
   }
-  function firmUsage(state, name) {
-    var n = norm(name), c = 0;
-    [['docs', 'firm'], ['pays', 'firm'], ['plans', 'supplier'],
-      ['payments', 'supplier'], ['invoices', 'supplier']].forEach(function (p) {
-      ((state && state[p[0]]) || []).forEach(function (r) { if (norm(r[p[1]]) === n) c++; });
-    });
-    return c;
-  }
-
   /* Собрать сотрудников из того, что уже записано: имена в табеле, выплатах,
      сменах и кассе. Программа не выдумывает людей — только собирает тех, кто
      в записях уже есть, но карточки не имеет. */
   function staffFromRecords(state) {
     var have = {}, found = {};
     ((state && state.staff) || []).forEach(function (p) { have[norm(p.name)] = 1; });
-    [['timesheet', 'employee'], ['payouts', 'employee'], ['dds', 'cashier'],
-      ['shifts', 'cashier']].forEach(function (p) {
+    [['dds', 'cashier'], ['debtors', 'cashier'], ['cashcount', 'cashier']].forEach(function (p) {
       ((state && state[p[0]]) || []).forEach(function (r) {
         var v = txt(r[p[1]]);
         if (!v || have[norm(v)]) return;
@@ -232,54 +214,13 @@
       .sort(function (a, b) { return b.seen - a.seen; });
   }
 
-  /* Собрать поставщиков из выгрузок 1С: имена из накладных и цен, телефоны из
-     «Контактной информации». Возвращает, что добавить и что дополнить —
-     показать владельцу до того, как что-то менять. */
-  function firmsFromData(state, opts) {
-    opts = opts || {};
-    var reg = (state && state.supreg) || [];
-    var byName = {};
-    reg.forEach(function (f) { byName[norm(f.name)] = f; });
-
-    var phones = {};
-    (opts.contacts || []).forEach(function (c) {
-      var n = norm(c.name || c.firm);
-      if (n && c.phone && !phones[n]) phones[n] = c.phone;
-    });
-
-    var seen = {};
-    function note(name) {
-      var v = txt(name); if (!v) return;
-      if (!seen[norm(v)]) seen[norm(v)] = { name: v, docs: 0 };
-      seen[norm(v)].docs++;
-    }
-    ((state && state.docs) || []).forEach(function (d) { note(d.firm); });
-    ((state && state.plans) || []).forEach(function (p) { note(p.supplier); });
-    (opts.prices || []).forEach(function (p) { note(p.supplier); });
-    (opts.contacts || []).forEach(function (c) { note(c.name || c.firm); });
-
-    var add = [], update = [];
-    Object.keys(seen).forEach(function (k) {
-      var it = seen[k], f = byName[k], phone = phones[k] || '';
-      if (!f) {
-        add.push({ name: it.name, docs: it.docs, phone: phone });
-      } else if (phone && !f.phone) {
-        update.push({ name: f.name, phone: phone });
-      }
-    });
-    add.sort(function (a, b) { return b.docs - a.docs || a.name.localeCompare(b.name, 'ru'); });
-    update.sort(function (a, b) { return a.name.localeCompare(b.name, 'ru'); });
-    return { add: add, update: update, have: reg.length };
-  }
-
   return {
     KINDS: KINDS, kindOf: kindOf,
     list: list, usage: usage, isHidden: isHidden, hiddenMap: hiddenMap,
     add: add, rename: rename, hide: hide, show: show, remove: remove,
     staffActive: staffActive, staffFired: staffFired,
-    firmsActive: firmsActive, firmsArchived: firmsArchived,
-    staffUsage: staffUsage, firmUsage: firmUsage,
-    staffFromRecords: staffFromRecords, firmsFromData: firmsFromData,
+    staffUsage: staffUsage,
+    staffFromRecords: staffFromRecords,
     split: split, norm: norm
   };
 });
