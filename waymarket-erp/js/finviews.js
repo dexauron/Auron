@@ -180,28 +180,101 @@
   };
 
   /* --- Расход и приход денег -------------------------------------------------- */
+  /* --- Расход ----------------------------------------------------------------
+     Две вещи, из-за которых расход раньше врал:
+       1) наличные вычитались из ящика второй раз, если эти же деньги уже
+          прошли выплатой при сверке смены;
+       2) статьи «Закуп товара» и «Оплата ТП» резали прибыль, хотя закуп
+          считается из итогов дня, а погашение долга — вообще не трата.
+     Теперь форма спрашивает, ОТКУДА взяли деньги, и не принимает статьи,
+     которые тратой не являются. */
   FORMS.moneyOut = {
     title: 'Расход', icon: '🧾',
     body: function (v) {
       var u = U(); v = v || {};
+      var cash = E.norm(v.method || 'Наличные') === 'наличные';
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Статья', 'category', 'list', v.category || '',
-          { options: categories(), placeholder: 'за что платим' }) +
+          { options: categories(), placeholder: 'за что платим',
+            hint: 'закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Откуда деньги', 'source', 'select',
+          v.source || (cash ? 'Из ящика' : 'Со счёта'),
+          { options: E.MONEY_SOURCES,
+            hint: 'из ящика — эти деньги уже посчитаны в «выплатах» при сверке смены, ' +
+              'второй раз их не вычтут' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Наличными — уменьшает деньги в ящике. Картой или переводом — только счёт. ' +
-      'Если эти деньги уже прошли как «выплата из ящика» в сверке смены, второй раз ' +
-      'их записывать не нужно.',
+    hint: 'Расход уменьшает прибыль. Остаток наличных он уменьшает, только если ' +
+      'деньги взяли не из ящика: то, что вынули из ящика, уже сидит в «выплатах» смены.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (!E.txt(v.category)) return 'Укажите статью — иначе непонятно, за что ушли деньги.';
+      // Ловим статью, которая тратой не является: иначе прибыль занизится
+      var not = E.notACost(v.category);
+      if (not) {
+        if (not.key === 'purchase') {
+          return 'Закуп товара расходом не записывают: впишите сумму в «Итоги дня» → ' +
+            '«Товар за наличные». Иначе один и тот же товар уменьшит прибыль дважды.';
+        }
+        if (not.key === 'debt') {
+          return 'Погашение долга поставщику — не расход, а возврат денег. ' +
+            'Впишите сумму в «Итоги дня» → «Погашение долгов ТП».';
+        }
+        return 'Перемещение денег расходом не записывают — прибыль от этого не меняется. ' +
+          'Для инкассации есть своя кнопка «Инкассация».';
+      }
       learn({ categories: v.category, methods: v.method });
-      S.add('dds', { type: E.T_OUT, date: v.date, category: v.category,
-        method: v.method, amount: num(v.amount), note: v.note });
+      var rec = { type: E.T_OUT, date: v.date, category: v.category,
+        method: v.method, source: v.source, amount: num(v.amount), note: v.note };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
-      return { ok: 'Расход записан: ' + v.category + ' — ' + money(v.amount) };
+      var where = E.moneyFrom(rec);
+      return { ok: 'Расход записан: ' + v.category + ' — ' + money(v.amount) +
+        (where === 'ящик' ? '. Кассу не трогаем: эти деньги уже в «выплатах» смены.'
+          : where === 'сейф' ? '. Сейф уменьшился.' : '.') };
+    }
+  };
+
+  /* --- Инкассация: перемещение денег, а не трата ------------------------------
+     Увезли выручку в сейф или в банк — деньги не потрачены, они лежат в другом
+     месте. Касса уменьшается, прибыль НЕ меняется. Раньше это можно было
+     записать только расходом, и месяц закрывался с ложным убытком. */
+  FORMS.moveCash = {
+    title: 'Инкассация', icon: '🚛',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var cash = E.cashOnHand(dds(), S.settings);
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Откуда', 'from', 'select', v.from || 'Касса',
+          { options: ['Касса', 'Сейф'], hint: 'в кассе сейчас ' + money(cash) }) +
+        u.fieldRow('Куда', 'to', 'select', v.to || S.settings.collectTo || 'Сейф',
+          { options: ['Сейф', 'Банк', 'Касса'] }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Кто повёз', 'who', 'list', v.who || '',
+          { options: cashiers(), placeholder: 'необязательно' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Деньги переложили, а не потратили: прибыль от инкассации не меняется ' +
+      'ни на рубль. Уменьшается только наличный остаток там, откуда увезли.',
+    save: function (v) {
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (E.norm(v.from) === E.norm(v.to)) return 'Откуда и куда — одно и то же место.';
+      var cash = E.cashOnHand(dds(), S.settings);
+      if (E.norm(v.from) === 'касса' && num(v.amount) > cash + 0.5) {
+        return 'В кассе сейчас ' + money(cash) + ' — увезти ' + money(v.amount) +
+          ' не получится. Проверьте сумму или сначала закройте смену.';
+      }
+      var rec = { type: E.T_MOVE, date: v.date, from: v.from, to: v.to,
+        amount: num(v.amount), cashier: v.who, note: v.note };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      return { ok: 'Инкассация записана: ' + money(v.amount) + ' из «' + v.from +
+        '» в «' + v.to + '». В кассе осталось ' + money(E.cashOnHand(dds(), S.settings)) +
+        '. Прибыль не изменилась — деньги не потрачены.' };
     }
   };
 
@@ -232,7 +305,10 @@
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-        u.fieldRow('Откуда', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Откуда деньги', 'source', 'select', v.source || 'Из ящика',
+          { options: E.MONEY_SOURCES,
+            hint: 'из ящика — уже посчитано в «выплатах» смены, второй раз не вычтем' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -240,7 +316,7 @@
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       S.add('dds', { type: E.T_DRAW, date: v.date, category: 'Забор владельца',
-        method: v.method, amount: num(v.amount), note: v.note });
+        method: v.method, source: v.source, amount: num(v.amount), note: v.note });
       S.save(); refresh();
       return { ok: 'Записано: из оборота ушло ' + money(v.amount) };
     }
@@ -355,6 +431,7 @@
       '<button class="btn btn-primary" data-form="shiftClose">🧮 Сверка кассы</button>' +
       '<button class="btn" data-form="dayTotals">🌙 Итоги дня</button>' +
       '<button class="btn" data-form="moneyOut">🧾 Расход</button>' +
+      '<button class="btn" data-form="moveCash">🚛 Инкассация</button>' +
       '<button class="btn" data-form="payPlan">📅 Выплата</button></div>';
   }
 
@@ -381,9 +458,12 @@
     var debtColor = debt.debt >= num(S.settings.debtCrit) ? 'c-red'
       : (debt.debt >= num(S.settings.debtWarn) ? 'c-orange' : 'c-green');
 
+    var safe = E.safeOnHand(all, S.settings);
     h += '<div class="stat-grid">' +
       u.stat('Наличные в кассе', u.priv(cash), 'в ящиках прямо сейчас',
-        cash < 0 ? 'c-red' : '') +
+        cash < 0 ? 'c-red' : (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)
+          ? 'c-orange' : '')) +
+      u.stat('В сейфе', u.priv(safe), 'увезено инкассацией') +
       u.stat('Долг поставщикам', u.priv(debt.debt),
         'взято ' + money(debt.taken) + ' · отдано ' + money(debt.paid), debtColor) +
       u.stat('Безнал за период', u.priv(t.zCashless),
@@ -392,6 +472,29 @@
         t.badShifts ? t.badShifts + ' смен из ' + t.shifts + ' не сошлись' : 'все смены сошлись',
         t.short ? 'c-red' : 'c-green') +
       '</div>';
+
+    // В ящике скопилось больше, чем вы считаете безопасным
+    if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
+      h += '<div class="banner orange"><span>🚛</span><span>В ящике ' +
+        esc(money(cash)) + ' — больше вашего порога ' + esc(money(S.settings.cashLimit)) +
+        '. Пора увезти в сейф: это перемещение, прибыль оно не меняет. ' +
+        '<button class="btn btn-sm" data-form="moveCash">Записать инкассацию</button></span></div>';
+    }
+
+    /* Из ящика выдали больше, чем расписали по статьям: деньги брали, а на
+       что — не записали. Без этой сверки расходы месяца выходят неполными. */
+    var chk = E.tillPayoutCheck(sel.rows);
+    if (chk.left > 0.5) {
+      h += '<div class="banner orange"><span>🧾</span><span>Из ящика за период выдали ' +
+        esc(money(chk.payouts)) + ', а расписано по статьям только ' +
+        esc(money(chk.explained)) + '. Не хватает объяснения на <b>' +
+        esc(money(chk.left)) + '</b> — эти деньги нигде не учтены как расход, ' +
+        'и прибыль за месяц выглядит выше настоящей.</span></div>';
+    } else if (chk.over) {
+      h += '<div class="banner red"><span>⚠️</span><span>Расходов «из ящика» записано на ' +
+        esc(money(-chk.left)) + ' больше, чем вообще выдавали из ящика. ' +
+        'Где-то лишняя запись — посмотрите «Базу операций».</span></div>';
+    }
 
     h += wholeNote(sel);
     h += quickBar();

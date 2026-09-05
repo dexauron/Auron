@@ -132,14 +132,84 @@
   var TILLS = ['Касса 1', 'Касса 2'];
   var SHIFTS = ['День', 'Ночь'];
   // Как называются записи в общей базе движения денег
-  var T_SHIFT = 'Смена', T_DAY = 'День', T_IN = 'Приход', T_OUT = 'Расход', T_DRAW = 'Забор';
+  var T_SHIFT = 'Смена', T_DAY = 'День', T_IN = 'Приход', T_OUT = 'Расход',
+    T_DRAW = 'Забор', T_MOVE = 'Перемещение';
 
   function isShift(r) { return txt(r && r.type) === T_SHIFT; }
   function isDay(r) { return txt(r && r.type) === T_DAY; }
   function isIncome(r) { return txt(r && r.type) === T_IN; }
   function isExpense(r) { return txt(r && r.type) === T_OUT; }
   function isDraw(r) { return txt(r && r.type) === T_DRAW; }
+  function isMove(r) { return txt(r && r.type) === T_MOVE; }
   function isCash(method) { return norm(method) === 'наличные' || !txt(method); }
+
+  /* ==========================================================================
+     ДВЕ ОСИ, НА КОТОРЫХ ДЕРЖИТСЯ ВЕСЬ УЧЁТ
+
+     Ось 1 — ЧТО ЭТО ЗА ДЕНЬГИ. Три разные вещи, которые нельзя мешать:
+       • трата           — аренда, ЗП, ГСМ: уменьшает прибыль;
+       • перемещение     — инкассация в сейф или банк, забор владельца:
+                           деньги не потрачены, они лежат в другом месте,
+                           прибыль НЕ уменьшается;
+       • товар и долги   — закуп и погашение долга поставщику: закуп входит
+                           в прибыль через себестоимость, а погашение долга
+                           не расход вовсе — это возврат чужих денег.
+
+     Ось 2 — ОТКУДА ФИЗИЧЕСКИ УШЛИ ДЕНЬГИ:
+       • из ящика (fromTill) — эти деньги УЖЕ посчитаны в «выплатах из ящика»
+                           при сверке смены, второй раз кассу уменьшать нельзя;
+       • из сейфа        — уменьшает сейф, ящик не трогает;
+       • со счёта/картой — наличные не трогает вовсе.
+
+     Каждая формула ниже читает ровно одну ось и не лезет в чужую. Именно
+     смешение этих осей и давало двойной счёт.
+     ====================================================================== */
+
+  // Статьи, которые НЕ являются тратой магазина: их место в других формулах
+  var NOT_A_COST = [
+    { key: 'purchase', name: 'Закуп товара', why: 'уже входит в себестоимость',
+      cats: ['закуп', 'товар за наличные', 'закупка'] },
+    { key: 'debt', name: 'Погашение долга поставщику', why: 'возврат денег, а не трата',
+      cats: ['оплата тп', 'погашение долга', 'долг поставщик', 'оплата поставщик'] },
+    { key: 'move', name: 'Перемещение денег', why: 'деньги не потрачены, а переложены',
+      cats: ['инкассация', 'в сейф', 'из сейфа', 'в банк', 'перемещение', 'выплата из кассы'] }
+  ];
+  /* Статья не является тратой? Вернём, какая именно и почему. Нужно, чтобы
+     старые записи с такими статьями не резали прибыль молча. */
+  function notACost(category) {
+    var c = norm(category);
+    if (!c) return null;
+    for (var i = 0; i < NOT_A_COST.length; i++) {
+      for (var j = 0; j < NOT_A_COST[i].cats.length; j++) {
+        if (c.indexOf(NOT_A_COST[i].cats[j]) >= 0) return NOT_A_COST[i];
+      }
+    }
+    return null;
+  }
+
+  /* Уменьшает ли эта наличная запись остаток в ящике.
+     Ключевое правило: расход, оплаченный ИЗ ЯЩИКА, кассу второй раз не
+     уменьшает — он уже сидит в «выплатах из ящика» той смены. Расход из
+     сейфа ящик тоже не трогает. Уменьшает ящик только то, что взяли из него
+     помимо смены. */
+  // Откуда взяли деньги: 'ящик' | 'сейф' | 'счёт' | '' (не сказано)
+  function moneyFrom(r) {
+    var src = norm(r && (r.source || r.from));
+    if (r && r.fromTill === true) return 'ящик';
+    if (src.indexOf('ящик') >= 0 || src.indexOf('касс') >= 0) return 'ящик';
+    if (src.indexOf('сейф') >= 0) return 'сейф';
+    if (src.indexOf('счёт') >= 0 || src.indexOf('счет') >= 0 || src.indexOf('банк') >= 0) return 'счёт';
+    return '';
+  }
+  function hitsTill(r) {
+    if (!isCash(r.method)) return false;         // карта, СБП, перевод — не ящик
+    var w = moneyFrom(r);
+    // из ящика — уже в выплатах смены; из сейфа или со счёта — ящик не трогают
+    return w === '';
+  }
+  // Место, откуда берут деньги, по умолчанию — ящик: так безопаснее,
+  // потому что ошибка «не вычли» видна сразу, а «вычли дважды» — нет.
+  var MONEY_SOURCES = ['Из ящика', 'Из сейфа', 'Со счёта'];
 
   /* Сверка одной смены. Единственное место, где считается расхождение.
      Безнал (карта, СБП, QR) в расчётный остаток НЕ входит: этих денег в
@@ -189,11 +259,66 @@
         cash += c.zCash - c.payouts + c.diff;
       } else if (isIncome(r) && isCash(r.method)) {
         cash += safeRound(r.amount);
-      } else if ((isExpense(r) || isDraw(r)) && isCash(r.method)) {
+      } else if (isMove(r)) {
+        // Инкассация: из ящика в сейф или банк — и обратно, если разменивали
+        if (norm(r.from) === 'касса') cash -= safeRound(r.amount);
+        if (norm(r.to) === 'касса') cash += safeRound(r.amount);
+      } else if ((isExpense(r) || isDraw(r)) && hitsTill(r)) {
+        // hitsTill отсекает то, что уже ушло через «выплаты из ящика» смены
         cash -= safeRound(r.amount);
       }
     });
     return safeRound(cash);
+  }
+
+  /* Сколько денег в сейфе. Сейф пополняется инкассацией из кассы и тратится
+     на расходы, помеченные «из сейфа». В прибыли сейф не участвует вовсе:
+     переложить деньги — не значит их потратить. */
+  function safeOnHand(rows, settings, upto) {
+    settings = settings || {};
+    var safe = safeRound(settings.openSafeStart);
+    (rows || []).forEach(function (r) {
+      if (upto && txt(r.date) > upto) return;
+      if (isMove(r)) {
+        if (norm(r.to) === 'сейф') safe += safeRound(r.amount);
+        if (norm(r.from) === 'сейф') safe -= safeRound(r.amount);
+      } else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'сейф') {
+        safe -= safeRound(r.amount);
+      }
+    });
+    return safeRound(safe);
+  }
+
+  /* Сверка «выплаты из ящика ↔ расшифровка». За день из ящика выдали столько-то
+     (сумма payouts по сменам), а расшифровано расходами «из ящика» — столько.
+     Разница показывает, что деньги брали, а на что — не записали. */
+  function tillPayoutCheck(rows, ym) {
+    var byDay = {};
+    function day(d) {
+      if (!byDay[d]) byDay[d] = { date: d, payouts: 0, explained: 0 };
+      return byDay[d];
+    }
+    (rows || []).forEach(function (r) {
+      var d = txt(r.date); if (!d) return;
+      if (ym && ymOf(d) !== ym) return;
+      if (isShift(r)) day(d).payouts += shiftCalc(r).payouts;
+      else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'ящик') {
+        day(d).explained += safeRound(r.amount);
+      }
+    });
+    var rows2 = [], totalPayouts = 0, totalExplained = 0;
+    Object.keys(byDay).sort().forEach(function (d) {
+      var x = byDay[d];
+      x.payouts = safeRound(x.payouts); x.explained = safeRound(x.explained);
+      x.left = safeRound(x.payouts - x.explained);
+      totalPayouts += x.payouts; totalExplained += x.explained;
+      if (x.payouts || x.explained) rows2.push(x);
+    });
+    return { rows: rows2, payouts: safeRound(totalPayouts),
+      explained: safeRound(totalExplained),
+      left: safeRound(totalPayouts - totalExplained),
+      // расшифровали больше, чем вообще выдали, — где-то лишняя запись
+      over: totalExplained > totalPayouts + 0.5 };
   }
 
   /* Безналичная выручка: карта, СБП, QR. В кассу не попадает — идёт на счёт.
@@ -304,7 +429,8 @@
   function totals(rows, settings) {
     var t = { zCash: 0, zCashless: 0, revenue: 0, payouts: 0, short: 0, over: 0,
       diff: 0, shifts: 0, badShifts: 0, expense: 0, income: 0, draw: 0,
-      goodsCash: 0, debtTaken: 0, debtPaid: 0, days: {}, byCategory: {} };
+      goodsCash: 0, debtTaken: 0, debtPaid: 0, moved: 0, collected: 0,
+      notCost: 0, explained: 0, days: {}, byCategory: {} };
     (rows || []).forEach(function (r) {
       if (isShift(r)) {
         var c = shiftCalc(r);
@@ -320,24 +446,34 @@
       } else if (isIncome(r)) {
         t.income += safeRound(r.amount);
       } else if (isExpense(r)) {
-        t.expense += safeRound(r.amount);
         var cat = txt(r.category) || 'Без статьи';
         t.byCategory[cat] = safeRound((t.byCategory[cat] || 0) + safeRound(r.amount));
+        // Закуп, погашение долга и инкассация расходом магазина не являются
+        if (notACost(r.category)) t.notCost += safeRound(r.amount);
+        else t.expense += safeRound(r.amount);
+        if (isCash(r.method) && moneyFrom(r) === 'ящик') t.explained += safeRound(r.amount);
       } else if (isDraw(r)) {
         t.draw += safeRound(r.amount);
+      } else if (isMove(r)) {
+        t.moved += safeRound(r.amount);
+        if (norm(r.to) === 'сейф' || norm(r.to) === 'банк') t.collected += safeRound(r.amount);
       }
     });
     t.revenue = safeRound(t.zCash + t.zCashless);
     ['zCash', 'zCashless', 'payouts', 'short', 'over', 'diff', 'expense',
-      'income', 'draw', 'goodsCash', 'debtTaken', 'debtPaid'].forEach(function (k) {
-      t[k] = safeRound(t[k]);
-    });
+      'income', 'draw', 'goodsCash', 'debtTaken', 'debtPaid', 'moved', 'collected',
+      'notCost', 'explained'].forEach(function (k) { t[k] = safeRound(t[k]); });
     t.dayCount = Object.keys(t.days).length;
     t.avgDay = safeRound(div(t.revenue, t.dayCount));
     t.avgShift = safeRound(div(t.revenue, t.shifts));
     t.cashlessShare = safeRound(div(t.zCashless, t.revenue) * 100);
-    // Все траты магазина: выплаты из ящика плюс отдельные расходы
-    t.spent = safeRound(t.payouts + t.expense);
+    /* Сколько денег ушло из ящика: это и есть выплаты по сменам. Складывать
+       их с расходами нельзя — расходы чаще всего и есть расшифровка этих
+       выплат, и сумма получилась бы вдвое больше настоящей. Отдельно считаем
+       то, что взяли помимо ящика. */
+    t.spentFromTill = t.payouts;
+    t.spentElsewhere = safeRound(t.expense - t.explained > 0 ? t.expense - t.explained : 0);
+    t.spent = safeRound(t.payouts + t.spentElsewhere);
     return t;
   }
 
@@ -440,10 +576,22 @@
     var purchase = safeRound(t.goodsCash + t.debtTaken);
     var gross = safeRound(revenue - purchase);
 
-    var byKind = {}, sources = {};
+    var byKind = {}, sources = {}, excluded = {};
     COST_KINDS.forEach(function (k) { byKind[k.key] = 0; });
     rows.forEach(function (r) {
       if (!isExpense(r)) return;
+      /* Записи, которые тратой не являются, в затраты не идут ни при каких
+         условиях: закуп уже сидит в себестоимости, погашение долга — возврат
+         чужих денег, инкассация — перекладывание своих. Раньше они падали в
+         «прочие расходы» и молча срезали прибыль. */
+      var not = notACost(r.category);
+      if (not) {
+        if (!excluded[not.key]) excluded[not.key] = { key: not.key, name: not.name,
+          why: not.why, sum: 0, count: 0 };
+        excluded[not.key].sum = safeRound(excluded[not.key].sum + safeRound(r.amount));
+        excluded[not.key].count++;
+        return;
+      }
       byKind[costKindOf(r.category)] += safeRound(r.amount);
     });
     Object.keys(byKind).forEach(function (k) { byKind[k] = safeRound(byKind[k]); sources[k] = 'записи'; });
@@ -465,6 +613,9 @@
     });
     var costTotal = safeRound(costs.reduce(function (a, c) { return a + c.sum; }, 0));
     var net = safeRound(gross - costTotal);
+    var exList = [];
+    for (var ek in excluded) exList.push(excluded[ek]);
+
     return {
       revenue: revenue, purchase: purchase, gross: gross,
       grossPct: revenue ? safeRound(div(gross, revenue) * 100) : 0,
@@ -473,8 +624,125 @@
       draw: t.draw,
       // выплаты из ящика показываем отдельно и подписываем, что это не затрата
       payouts: t.payouts,
-      debtPaid: t.debtPaid, debtTaken: t.debtTaken, goodsCash: t.goodsCash
+      debtPaid: t.debtPaid, debtTaken: t.debtTaken, goodsCash: t.goodsCash,
+      // перемещения денег: инкассация в сейф и банк — прибыль не трогают
+      moved: t.moved,
+      // записи, которые тратой не являются и в затраты не вошли
+      excluded: exList,
+      excludedTotal: safeRound(exList.reduce(function (a, x) { return a + x.sum; }, 0))
     };
+  }
+
+  /* ==========================================================================
+     ЗАКРЫТИЕ МЕСЯЦА
+
+     Список того, что должно сойтись, прежде чем считать месяц закрытым.
+     Каждый пункт — это конкретная дыра, через которую в отчёт попадает
+     неправда. Пункт либо сходится, либо говорит, где именно смотреть.
+     ====================================================================== */
+  function monthClose(opts) {
+    opts = opts || {};
+    var all = opts.rows || [], ym = opts.ym || '';
+    var rows = ym ? all.filter(function (r) { return ymOf(r.date) === ym; }) : all;
+    var settings = opts.settings || {};
+    var t = totals(rows);
+    var items = [];
+
+    function item(key, name, ok, said, go, hard) {
+      items.push({ key: key, name: name, ok: !!ok, said: said, go: go || '',
+        hard: hard !== false });
+    }
+
+    // 1. Все ли смены закрыты: дни месяца без единой смены
+    var daysIn = ym ? new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate() : 0;
+    var withShift = {};
+    rows.forEach(function (r) { if (isShift(r)) withShift[txt(r.date)] = true; });
+    var lastDay = ym === ymOf(today()) ? +today().slice(8, 10) : daysIn;
+    var gaps = [];
+    for (var d = 1; d <= lastDay; d++) {
+      var date = ym + '-' + ('0' + d).slice(-2);
+      if (!withShift[date]) gaps.push(date);
+    }
+    item('shifts', 'Смены закрыты за каждый день', gaps.length === 0,
+      gaps.length ? 'нет смен за ' + gaps.length + ' дн.: ' +
+        gaps.slice(0, 5).map(dateRuShort).join(', ') + (gaps.length > 5 ? '…' : '')
+        : 'закрыто смен: ' + t.shifts, 'morning');
+
+    // 2. Расхождения по кассе разобраны
+    var crit = num(settings.diffCrit) || 1000;
+    var bad = rows.filter(function (r) {
+      return isShift(r) && Math.abs(shiftCalc(r).diff) >= crit;
+    });
+    item('diff', 'Крупные расхождения разобраны', bad.length === 0,
+      bad.length ? bad.length + ' смен с расхождением от ' + fmtMoney(crit) +
+        ', всего ' + fmtMoney(t.diff)
+        : 'расхождение за месяц ' + fmtMoney(t.diff), 'cashiers', false);
+
+    // 3. Выплаты из ящика расшифрованы
+    var chk = tillPayoutCheck(rows, ym);
+    item('payouts', 'Выплаты из ящика расшифрованы',
+      Math.abs(chk.left) < 0.5 && !chk.over,
+      chk.over ? 'расшифровано больше, чем выдавали, на ' + fmtMoney(-chk.left) +
+        ' — где-то лишняя запись'
+        : chk.left > 0 ? 'не расписано ' + fmtMoney(chk.left) + ' из ' + fmtMoney(chk.payouts)
+        : 'всё сошлось: ' + fmtMoney(chk.payouts), 'ledger', false);
+
+    // 4. Зарплата начислена и выдана
+    var pay = opts.payrollRow || { accrued: 0, paid: 0, left: 0, people: 0 };
+    item('payroll', 'Зарплата начислена и выдана',
+      pay.accrued > 0 && Math.abs(pay.left) < 0.5,
+      !pay.accrued ? 'табель за месяц пуст — ФОТ считаться не с чего'
+        : pay.left > 0 ? 'не выдано ' + fmtMoney(pay.left) + ' по ' + pay.people + ' чел.'
+        : 'начислено и выдано ' + fmtMoney(pay.accrued), 'payroll');
+
+    // 5. Долг поставщикам сверен с реальностью
+    var debt = supplierDebt(all, settings, ym ? ym + '-31' : '');
+    item('debt', 'Долг поставщикам сверен', num(opts.debtChecked) > 0 ?
+      Math.abs(num(opts.debtChecked) - debt.debt) < 0.5 : false,
+      num(opts.debtChecked) > 0
+        ? (Math.abs(num(opts.debtChecked) - debt.debt) < 0.5
+          ? 'сходится: ' + fmtMoney(debt.debt)
+          : 'по программе ' + fmtMoney(debt.debt) + ', вы вписали ' +
+            fmtMoney(opts.debtChecked) + ' — разница ' +
+            fmtMoney(Math.abs(debt.debt - num(opts.debtChecked))))
+        : 'по программе ' + fmtMoney(debt.debt) + ' — сверьте с поставщиками',
+      'suppliers', false);
+
+    // 6. Наличные сходятся с последним пересчётом ящика
+    var cash = cashOnHand(all, settings, ym ? ym + '-31' : '');
+    var counts = (opts.cashcount || []).filter(function (c) {
+      return !ym || ymOf(c.date) === ym;
+    }).sort(function (a, b) { return txt(b.date).localeCompare(txt(a.date)); });
+    var lastCount = counts[0];
+    item('cash', 'Наличные сверены с пересчётом',
+      !!lastCount && Math.abs(num(lastCount.sum) - cash) < 0.5,
+      !lastCount ? 'в этом месяце ящик не пересчитывали'
+        : Math.abs(num(lastCount.sum) - cash) < 0.5
+        ? 'сходится: ' + fmtMoney(cash)
+        : 'по программе ' + fmtMoney(cash) + ', насчитали ' + fmtMoney(lastCount.sum),
+      'ledger', false);
+
+    // 7. Записи, которые тратой не являются, но попали в расходы
+    var p = opts.pnl || pnl({ rows: rows });
+    item('clean', 'В расходах нет закупа и инкассации',
+      !p.excluded || !p.excluded.length,
+      p.excluded && p.excluded.length
+        ? p.excluded.map(function (x) { return x.name + ' ' + fmtMoney(x.sum); }).join(', ') +
+          ' — в затраты не вошли, но записи лучше поправить'
+        : 'чисто', 'ledger', false);
+
+    var hardLeft = items.filter(function (i) { return !i.ok && i.hard; }).length;
+    var softLeft = items.filter(function (i) { return !i.ok && !i.hard; }).length;
+    return { items: items, ym: ym, ready: hardLeft === 0,
+      hardLeft: hardLeft, softLeft: softLeft,
+      done: items.filter(function (i) { return i.ok; }).length, total: items.length,
+      pnl: p, cash: cash, safe: safeOnHand(all, settings, ym ? ym + '-31' : ''),
+      debt: debt.debt, payouts: chk };
+  }
+
+  function dateRuShort(iso) {
+    var m = txt(iso).match(/(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[3] + '.' + m[2] : txt(iso);
   }
 
   /* Точка безубыточности: сколько надо продать, чтобы выйти в ноль */
@@ -1654,6 +1922,30 @@
     };
   }
 
+  /* Недостачи и излишки кассира за период. Нужны ведомости ФОТ: недостачу
+     принято удерживать из зарплаты. Сама по себе эта сумма зарплату НЕ
+     трогает — она лишь показывает, сколько можно удержать. Удержание
+     становится настоящим только когда владелец впишет его в табель:
+     иначе одна и та же недостача уменьшила бы и кассу, и ФОТ автоматически,
+     а сотрудник об этом бы не знал. */
+  function cashierShortages(rows) {
+    var map = {}, order = [];
+    (rows || []).forEach(function (r) {
+      if (!isShift(r)) return;
+      var c = shiftCalc(r);
+      if (c.ok) return;
+      var name = txt(r.cashier) || '—', k = norm(name);
+      if (!map[k]) { map[k] = { cashier: name, short: 0, over: 0, shifts: 0 }; order.push(k); }
+      map[k].short += c.short; map[k].over += c.over; map[k].shifts++;
+    });
+    return order.map(function (k) {
+      var m = map[k];
+      m.short = safeRound(m.short); m.over = safeRound(m.over);
+      m.net = safeRound(m.short - m.over);          // чистая недостача за период
+      return m;
+    }).sort(function (a, b) { return b.net - a.net; });
+  }
+
   // Ведомость ФОТ: начислено по табелю (или оклад) − выданное = остаток к выдаче
   function payrollSummary(timesheet, payouts, staff, settings, opts) {
     opts = opts || {};
@@ -1679,6 +1971,10 @@
     }
 
     (staff || []).forEach(function (p) { if (!txt(p.fired)) idx(p.name); });
+
+    // Сколько у человека недостач по кассе за тот же период — справочно
+    var shortByName = {};
+    cashierShortages(opts.dds || []).forEach(function (c) { shortByName[norm(c.cashier)] = c; });
 
     for (i = 0; i < (timesheet || []).length; i++) {
       var t = timesheet[i];
@@ -1718,6 +2014,13 @@
       r.scheme = r.salary > 0 ? 'оклад' : 'по часам';
       r.accrued = safeRound(base + r.bonus - r.fine);
       r.left = safeRound(r.accrued - r.paid);
+      /* Недостачи по кассе — отдельно от начисления. Показываем, сколько
+         недостач числится и сколько из них уже удержано в табеле, чтобы
+         одну недостачу не удержать дважды. */
+      var sh = shortByName[order[k]];
+      r.shortage = sh ? sh.net : 0;
+      r.withheld = r.fine;
+      r.canWithhold = safeRound(Math.max(0, r.shortage - r.fine));
       out.push(r);
     }
     if (!opts.keepEmpty) out = out.filter(function (r) { return r.shifts || r.accrued || r.paid; });
@@ -1727,16 +2030,16 @@
   // Итог ведомости одной строкой
   function payrollTotals(list) {
     var t = { people: 0, shifts: 0, hours: 0, accrued: 0, paid: 0, advance: 0,
-      left: 0, bonus: 0, fine: 0 };
+      left: 0, bonus: 0, fine: 0, shortage: 0, canWithhold: 0 };
     (list || []).forEach(function (r) {
       t.people++; t.shifts += r.shifts; t.hours += r.hours;
       t.accrued += r.accrued; t.paid += r.paid; t.advance += r.advance;
       t.bonus += r.bonus; t.fine += r.fine;
+      t.shortage += num(r.shortage); t.canWithhold += num(r.canWithhold);
     });
     t.left = safeRound(t.accrued - t.paid);
-    ['hours', 'accrued', 'paid', 'advance', 'bonus', 'fine'].forEach(function (f) {
-      t[f] = safeRound(t[f]);
-    });
+    ['hours', 'accrued', 'paid', 'advance', 'bonus', 'fine', 'shortage',
+      'canWithhold'].forEach(function (f) { t[f] = safeRound(t[f]); });
     return t;
   }
 
@@ -1882,6 +2185,9 @@
 
     TILLS: TILLS, SHIFTS: SHIFTS, PLAN_STATUS: PLAN_STATUS, NOMINALS: NOMINALS,
     T_SHIFT: T_SHIFT, T_DAY: T_DAY, T_IN: T_IN, T_OUT: T_OUT, T_DRAW: T_DRAW,
+    T_MOVE: T_MOVE, isMove: isMove, hitsTill: hitsTill, moneyFrom: moneyFrom, notACost: notACost,
+    NOT_A_COST: NOT_A_COST, MONEY_SOURCES: MONEY_SOURCES,
+    safeOnHand: safeOnHand, tillPayoutCheck: tillPayoutCheck,
     isShift: isShift, isDay: isDay, isIncome: isIncome, isExpense: isExpense,
     isDraw: isDraw, isCash: isCash,
 
@@ -1913,6 +2219,7 @@
     contactsIndex: contactsIndex, priceFor: priceFor, ropList: ropList,
     fefoStatus: fefoStatus, search: search, bep: bep,
     timesheetCalc: timesheetCalc, payrollSummary: payrollSummary,
-    payrollTotals: payrollTotals, activeStaff: activeStaff, rateOf: rateOf
+    payrollTotals: payrollTotals, activeStaff: activeStaff, rateOf: rateOf,
+    cashierShortages: cashierShortages, monthClose: monthClose
   };
 });

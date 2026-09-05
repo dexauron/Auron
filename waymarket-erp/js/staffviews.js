@@ -78,7 +78,9 @@
     return E.payrollSummary(
       timesheet().filter(function (r) { return inYm(r, m); }),
       payouts().filter(function (r) { return inYm(r, m); }),
-      staff(), S.settings, { keepEmpty: true });
+      staff(), S.settings,
+      // недостачи по кассе за тот же месяц — чтобы было видно, что можно удержать
+      { keepEmpty: true, dds: dds().filter(function (r) { return inYm(r, m); }) });
   }
 
   /* Зарплата не должна попасть в затраты дважды: и табелем, и статьёй «ЗП» */
@@ -384,6 +386,13 @@
       u.stat('Премии / удержания', u.priv(tot.bonus) + ' / ' + u.priv(tot.fine), 'за месяц') +
       '</div>';
     h += doubleWarn(m);
+    if (tot.shortage > 0) {
+      h += '<div class="banner orange"><span>⚖️</span><span>За месяц недостач по кассе на <b>' +
+        esc(money(tot.shortage)) + '</b>' +
+        (tot.fine ? ', из них удержано ' + esc(money(tot.fine)) : ', пока ничего не удержано') +
+        '. Удержание уменьшает зарплату — деньги в кассу оно не возвращает: ' +
+        'недостача уже уменьшила остаток в ящике, когда смена не сошлась.</span></div>';
+    }
     h += '<div class="banner blue"><span>📅</span><span>Аванс по настройкам — ' +
       esc(dateRu(parts.advanceDate)) + ' (' + u.pct(parts.advancePct) + ' от начисленного), ' +
       'окончательный расчёт — ' + esc(dateRu(parts.finalDate)) + '.</span></div>';
@@ -399,19 +408,30 @@
       { title: 'Начислено', cls: 'num', fn: function (r) { return u.priv(r.accrued); } },
       { title: 'Аванс', cls: 'num', fn: function (r) { return r.advance ? u.priv(r.advance) : '—'; } },
       { title: 'Выдано всего', cls: 'num', fn: function (r) { return u.priv(r.paid); } },
+      { title: 'Недостачи по кассе', cls: 'num', fn: function (r) {
+        if (!r.shortage) return '—';
+        return '<span class="c-red">' + u.priv(r.shortage) + '</span>' +
+          (r.withheld ? '<br><small class="c-muted">удержано ' + u.priv(r.withheld) + '</small>' : ''); } },
       { title: 'К выдаче', cls: 'num', fn: function (r) {
         return '<b class="' + (r.left > 0 ? 'c-orange' : 'c-green') + '">' + u.priv(r.left) + '</b>'; } },
       { title: '', cls: 'center', fn: function (r) {
-        return r.left > 0
+        var btn = '';
+        if (r.canWithhold > 0) {
+          btn += '<button class="btn btn-sm" data-act="withhold" data-employee="' +
+            esc(r.employee) + '">Удержать недостачу</button> ';
+        }
+        btn += r.left > 0
           ? '<button class="btn btn-sm" data-act="pay-rest" data-employee="' + esc(r.employee) +
             '">Выдать остаток</button>'
           : '<button class="btn btn-sm" data-form="payoutRow" data-employee="' + esc(r.employee) +
-            '">＋</button>'; } }
+            '">＋</button>';
+        return btn; } }
     ], rows, { step: 40, empty: 'За ' + monthRu(m) + ' ни смен, ни выплат',
       total: [{ span: 5, html: 'Итого', label: '' },
         { cls: 'num', html: u.priv(tot.accrued), label: 'Начислено' },
         { cls: 'num', html: u.priv(tot.advance), label: 'Аванс' },
         { cls: 'num', html: u.priv(tot.paid), label: 'Выдано' },
+        { cls: 'num', html: u.priv(tot.shortage), label: 'Недостачи' },
         { cls: 'num', html: '<b>' + u.priv(tot.left) + '</b>', label: 'К выдаче' },
         { html: '' }] }),
       'Начислено берётся из табеля (или из оклада), выдано — из журнала выплат');
@@ -497,6 +517,19 @@
      ДЕЙСТВИЯ
      ========================================================================== */
   var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
+
+  /* Удержать недостачу. Записью в табеле, а не молча: сотрудник должен видеть
+     за что, а владелец — иметь возможность передумать и удалить строку.
+     Дважды одну недостачу не удержим: canWithhold считает уже удержанное. */
+  A['withhold'] = function (el) {
+    var who = el.dataset.employee, m = ym();
+    var row = board(m).filter(function (r) { return E.norm(r.employee) === E.norm(who); })[0];
+    if (!row || row.canWithhold <= 0) return 'Удерживать нечего: недостачи уже удержаны.';
+    U().openForm('timesheetRow', { date: today(), employee: row.employee,
+      shift: shiftNames()[0], hoursDay: 0, hoursNight: 0, fine: row.canWithhold,
+      note: 'удержание недостачи по кассе за ' + monthRu(m) });
+    return null;
+  };
 
   A['pay-rest'] = function (el) {
     var who = el.dataset.employee;

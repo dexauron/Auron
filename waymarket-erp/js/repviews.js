@@ -17,6 +17,7 @@
     FC = window.WMForecast, ST = window.WMStaff;
 
   function U() { return window.WMUI; }
+  function Q() { return window.WMQuick; }
   function D() { return U().data(); }
   function C() { return U().calc(); }
   function esc(s) { return U().esc(s); }
@@ -182,10 +183,106 @@
         { cls: 'num', html: u.pct(p.revenue ? E.safeRound(E.div(p.costTotal, p.revenue) * 100) : 0) }] }),
       'ФОТ берётся из табеля, если он ведётся; списания — из 1С, если файл загружен');
 
-    h += '<div class="banner blue"><span>💵</span><span>Из ящика за месяц выдано ' +
-      '<b>' + esc(money(p.payouts)) + '</b>, поставщикам по долгам отдано ' +
-      '<b>' + esc(money(p.debtPaid)) + '</b>. В прибыль эти суммы не входят: ' +
-      'первое — способ оплаты, второе — возврат старого долга.</span></div>';
+    /* Записи, которые тратой не являются. Молча выкидывать их нельзя:
+       владелец должен видеть, что они есть и почему не в затратах. */
+    if (p.excluded && p.excluded.length) {
+      h += u.card('Не вошло в затраты — и правильно', u.table('pnlX', [
+        { title: 'Что это', fn: function (r) { return esc(r.name); } },
+        { title: 'Почему не затрата', fn: function (r) { return esc(r.why); } },
+        { title: 'Записей', cls: 'num', fn: function (r) { return u.nf(r.count); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } }
+      ], p.excluded, { step: 10 }),
+        'на ' + money(p.excludedTotal) + ' прибыль занижена НЕ была');
+      h += '<div class="banner orange"><span>✏️</span><span>Эти записи лучше переделать: ' +
+        'закуп — в «Итоги дня», погашение долга — туда же, инкассацию — кнопкой ' +
+        '«Инкассация». Пока они лежат расходами, их видно в базе, но в прибыль ' +
+        'они не идут.</span></div>';
+    }
+
+    h += '<div class="banner blue"><span>💵</span><span>Мимо прибыли за месяц прошли: ' +
+      'выплаты из ящика <b>' + esc(money(p.payouts)) + '</b> (способ оплаты, а не трата), ' +
+      'погашение долгов поставщикам <b>' + esc(money(p.debtPaid)) + '</b> (возврат чужих денег), ' +
+      'инкассация <b>' + esc(money(p.moved)) + '</b> (деньги переложили, а не потратили) ' +
+      'и забор владельца <b>' + esc(money(p.draw)) + '</b> (это уже из прибыли, а не до неё).' +
+      '</span></div>';
+    return h;
+  }
+
+  /* ==========================================================================
+     ЗАКРЫТИЕ МЕСЯЦА
+     Один экран, который отвечает на вопрос «можно ли верить цифрам за месяц».
+     ========================================================================== */
+  function viewMonthClose() {
+    var u = U(), m = ym();
+    var pay = E.payrollTotals(E.payrollSummary(
+      (S.state.timesheet || []).filter(function (r) { return inYm(r, m); }),
+      (S.state.payouts || []).filter(function (r) { return inYm(r, m); }),
+      S.state.staff || [], S.settings, { dds: rowsOf(m) }));
+    var mc = E.monthClose({ rows: dds(), ym: m, settings: S.settings,
+      payrollRow: pay, cashcount: S.state.cashcount || [], pnl: pnlOf(m),
+      debtChecked: (S.settings.debtChecked || {})[m] });
+    var p = mc.pnl;
+
+    var h = u.pageHead('Закрытие месяца', monthRu(m) + ' — что должно сойтись',
+      '<button class="btn" data-act="print">🖨 Напечатать</button> ' +
+      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+    h += monthPicker();
+
+    h += u.hero(mc.ready ? 'Месяц можно закрывать' : 'Месяц закрывать рано',
+      u.nf(mc.done) + ' из ' + u.nf(mc.total),
+      mc.ready ? 'важное сошлось' + (mc.softLeft ? ', ещё ' + mc.softLeft + ' на ваше усмотрение' : '')
+        : 'осталось важного: ' + mc.hardLeft,
+      mc.ready ? 'c-green' : 'c-orange');
+
+    h += u.card('Что проверяем', u.listOf(mc.items.map(function (i) {
+      return u.listRow({ icon: i.ok ? '✅' : (i.hard ? '⛔️' : '⚠️'),
+        title: esc(i.name), sub: esc(i.said),
+        value: i.go && !i.ok ? '<button class="btn btn-sm" data-go="' + esc(i.go) +
+          '">Открыть</button>' : '',
+        tap: false });
+    }), ''), '⛔️ — без этого месяц считать нельзя, ⚠️ — стоит посмотреть');
+
+    // Деньги на конец месяца: три места, где они лежат
+    h += u.card('Где деньги на конец месяца', u.listOf([
+      u.listRow({ icon: '💵', title: 'В ящиках', value: u.priv(mc.cash) }),
+      u.listRow({ icon: '🔐', title: 'В сейфе', sub: 'увезено инкассацией',
+        value: u.priv(mc.safe) }),
+      u.listRow({ icon: '🤝', title: 'Должны поставщикам', sub: 'общей суммой по магазину',
+        value: u.priv(mc.debt) })
+    ], ''), 'Инкассация деньги не тратит — она их перекладывает');
+
+    h += u.card('Прибыль за месяц', u.listOf([
+      u.listRow({ icon: '＋', title: 'Выручка', value: u.priv(p.revenue) }),
+      u.listRow({ icon: '−', title: 'Закуп товара', sub: 'наличными и в долг',
+        value: u.priv(p.purchase) }),
+      u.listRow({ icon: '=', title: '<b>Валовая прибыль</b>',
+        value: '<b>' + u.priv(p.gross) + '</b>' }),
+      u.listRow({ icon: '−', title: 'Затраты магазина', sub: 'ФОТ, аренда и остальное',
+        value: u.priv(p.costTotal) }),
+      u.listRow({ icon: '=', title: '<b>Чистая прибыль</b>',
+        value: '<b class="' + (p.net >= 0 ? 'c-green' : 'c-red') + '">' + u.priv(p.net) + '</b>' })
+    ], ''), '<button class="btn btn-sm" data-go="pnl">Подробно</button>');
+
+    // Сверка выплат из ящика по дням — самое частое место, где теряются расходы
+    var chk = mc.payouts;
+    if (chk.rows.length) {
+      h += u.card('Выплаты из ящика по дням', u.table('mcP', [
+        { title: 'День', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Выдали из ящика', cls: 'num', fn: function (r) { return u.priv(r.payouts); } },
+        { title: 'Расписано по статьям', cls: 'num', fn: function (r) { return u.priv(r.explained); } },
+        { title: 'Не объяснено', cls: 'num', fn: function (r) {
+          return r.left > 0.5 ? '<b class="c-orange">' + u.priv(r.left) + '</b>'
+            : r.left < -0.5 ? '<b class="c-red">' + u.priv(r.left) + '</b>' : '—'; } }
+      ], chk.rows.filter(function (r) { return Math.abs(r.left) > 0.5; }), { step: 31,
+        empty: 'Все выплаты расписаны' }),
+        'всего выдали ' + money(chk.payouts) + ', расписано ' + money(chk.explained));
+    }
+
+    h += u.card('Сверка долга с поставщиками', '<div class="card-pad">' +
+      'Программа считает долг ' + money(mc.debt) + '. Позвоните поставщикам, ' +
+      'узнайте их цифру и впишите — если сойдётся, месяц можно закрывать спокойно.' +
+      '<br><br><button class="btn btn-primary" data-form="debtCheck">🤝 Вписать долг по сверке</button>' +
+      '</div>');
     return h;
   }
 
@@ -578,6 +675,44 @@
   }
 
   /* ==========================================================================
+     ФОРМЫ
+     ========================================================================== */
+  var FORMS = window.WM_EXTRA_FORMS = window.WM_EXTRA_FORMS || {};
+
+  /* Сверка долга поставщикам. Цифру называют поставщики, программа её только
+     запоминает и сравнивает — сам долг она не меняет: у долга один источник,
+     это «Итоги дня». Иначе сверка стала бы вторым источником и они разошлись бы. */
+  FORMS.debtCheck = {
+    title: 'Долг по сверке с поставщиками', icon: '🤝',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var m = ym();
+      var mine = E.supplierDebt(dds(), S.settings, m + '-31').debt;
+      return u.fieldRow('За месяц', 'ym', 'text', m, { hint: 'меняется наверху экрана' }) +
+        u.fieldRow('По программе', 'mine', 'text', money(mine), { hint: 'менять не нужно' }) +
+        u.fieldRow('Назвали поставщики', 'sum', 'number', v.sum || '',
+          { hint: 'общая сумма долга магазина на конец месяца' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Сверка ничего не пересчитывает: она только показывает, сошлось или нет. ' +
+      'Если расходится — ищите пропущенный день в «Итогах дня», а не правьте долг руками.',
+    save: function (v) {
+      var bad = Q().checkAmount(v.sum, { allowZero: true }); if (bad) return bad;
+      var m = ym();
+      var map = JSON.parse(JSON.stringify(S.settings.debtChecked || {}));
+      map[m] = num(v.sum);
+      S.setSetting('debtChecked', map);
+      U().recompute();
+      var mine = E.supplierDebt(dds(), S.settings, m + '-31').debt;
+      var d = E.safeRound(num(v.sum) - mine);
+      return { ok: Math.abs(d) < 0.5
+        ? 'Сошлось: ' + money(mine) + '. Долг сверен.'
+        : 'Расходится на ' + money(Math.abs(d)) + ': по программе ' + money(mine) +
+          ', у поставщиков ' + money(v.sum) + '. Проверьте, все ли дни занесены в «Итоги дня».' };
+    }
+  };
+
+  /* ==========================================================================
      ДЕЙСТВИЯ
      ========================================================================== */
   var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
@@ -674,6 +809,7 @@
     { id: 'bep', icon: '⚖️', name: 'Безубыточность', group: 'Отчёты', render: viewBep },
     { id: 'bepdays', icon: '🗓', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays },
     { id: 'taxcal', icon: '🏛', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxCal },
+    { id: 'monthclose', icon: '🔒', name: 'Закрытие месяца', group: 'Отчёты', render: viewMonthClose },
     { id: 'reset', icon: '🛟', name: 'Сброс и откат базы', group: 'Ещё', render: viewReset }
   );
 })();

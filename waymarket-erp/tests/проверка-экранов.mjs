@@ -408,6 +408,105 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 5б-2. Касса, инкассация и защита от двойного счёта — в живом браузере */
+{
+  console.log('— Инкассация и защита от двойного счёта');
+  const { page, ctx, errs } = await open();
+  const fill = (n, v) => page.fill('.sheet [name="' + n + '"]', v);
+  const pick = (n, v) => page.selectOption('.sheet [name="' + n + '"]', v);
+
+  await page.evaluate(() => {
+    window.WMStore.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1',
+      shift: 'День', cashier: 'Аня', openCash: 0, zCash: 26467, zCashless: 29743,
+      payouts: 10000, factCash: 16467 });
+    window.WMStore.setSetting('reportMonth', '2026-09');
+    window.WMStore.save(); window.WMUI.recompute();
+  });
+
+  // Расшифровываем выплату из ящика — касса меняться не должна
+  await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await page.waitForTimeout(350);
+  await fill('date', '2026-09-01');
+  await fill('category', 'Аренда');
+  await pick('source', 'Из ящика');
+  await fill('amount', '5000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+
+  const c1 = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    return { cash: E.cashOnHand(S.state.dds, S.settings),
+      rent: E.pnl({ rows: S.state.dds }).costs.find(c => c.key === 'rent').sum };
+  });
+  check('РАСХОД ИЗ ЯЩИКА КАССУ НЕ ТРОНУЛ', c1.cash === 16467, c1.cash, 16467);
+  check('но в затраты месяца вошёл', c1.rent === 5000, c1.rent, 5000);
+
+  // Закуп расходом записать нельзя — форма объясняет, куда его писать
+  await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await page.waitForTimeout(350);
+  await fill('category', 'Закуп товара');
+  await fill('amount', '10000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const blocked = await page.evaluate(() => {
+    const S = window.WMStore;
+    return { saved: (S.state.dds || []).some(r => /закуп/i.test(r.category || '')),
+      toast: (document.querySelector('.toast') || {}).textContent || '' };
+  });
+  check('ЗАКУП РАСХОДОМ НЕ ЗАПИСАЛСЯ', !blocked.saved, blocked.saved ? 'записался' : 'отклонён',
+    'отклонён');
+  check('и программа сказала, куда его писать',
+    /Итоги дня/.test(blocked.toast), blocked.toast.slice(0, 60), 'подсказка про Итоги дня');
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(300);
+
+  // Инкассация: касса вниз, сейф вверх, прибыль без изменений
+  const before = await page.evaluate(() => window.WM.pnl({ rows: window.WMStore.state.dds }).net);
+  await page.evaluate(() => window.WMUI.openForm('moveCash'));
+  await page.waitForTimeout(350);
+  await fill('date', '2026-09-02');
+  await pick('from', 'Касса');
+  await pick('to', 'Сейф');
+  await fill('amount', '10000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+  const c2 = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    return { cash: E.cashOnHand(S.state.dds, S.settings),
+      safe: E.safeOnHand(S.state.dds, S.settings),
+      net: E.pnl({ rows: S.state.dds }).net };
+  });
+  check('инкассация уменьшила кассу', c2.cash === 6467, c2.cash, 6467);
+  check('и положила деньги в сейф', c2.safe === 10000, c2.safe, 10000);
+  check('ИНКАССАЦИЯ ПРИБЫЛЬ НЕ ИЗМЕНИЛА', c2.net === before, c2.net, before);
+
+  // Больше денег, чем есть в ящике, увезти нельзя
+  await page.evaluate(() => window.WMUI.openForm('moveCash'));
+  await page.waitForTimeout(350);
+  await fill('amount', '999999');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const over = await page.evaluate(() => ({
+    moves: (window.WMStore.state.dds || []).filter(r => r.type === 'Перемещение').length,
+    toast: (document.querySelector('.toast') || {}).textContent || '' }));
+  check('нельзя увезти больше, чем лежит в ящике', over.moves === 1,
+    over.moves + ' перемещений', 1);
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(300);
+
+  // Экран закрытия месяца показывает несведённые выплаты
+  await page.evaluate(() => window.WMUI.go('monthclose'));
+  await page.waitForTimeout(500);
+  const mc = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+  check('«Закрытие месяца» открылось', mc.includes('Что проверяем'), 'открылось', 'открылось');
+  check('видно, где лежат деньги', mc.includes('В сейфе') && mc.includes('В ящиках'),
+    'видно', 'видно');
+  check('видно недорасписанные выплаты из ящика', mc.includes('5 000'), 'видно', '5 000');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 /* 5в. Отчёты открываются на живых данных */
 {
   console.log('— Отчёты на живых данных');
@@ -431,7 +530,8 @@ console.log('Страница: ' + PAGE + '\n');
     S.save(); window.WMUI.recompute();
   });
   const REPORTS = ['findash', 'owner', 'moneyflow', 'avgcheck', 'earners', 'ready',
-    'pnl', 'bep', 'bepdays', 'taxcal', 'payroll', 'timesheet', 'sched', 'staffcards', 'reset'];
+    'pnl', 'bep', 'bepdays', 'taxcal', 'monthclose', 'payroll', 'timesheet', 'sched',
+    'staffcards', 'reset'];
   const empty = [];
   for (const id of REPORTS) {
     await page.evaluate(v => window.WMUI.go(v), id);

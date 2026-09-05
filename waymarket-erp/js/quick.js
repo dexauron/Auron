@@ -5,11 +5,15 @@
    — подставляются последние значения: дата, смена, кассир, способ оплаты;
    — недописанная форма не теряется, а похожая запись за день — предупреждает.
    ========================================================================== */
+/* Ядро нужно, чтобы не предлагать статьи, которые тратой не являются. */
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.WMQuick = factory();
-})(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./engine.js'));
+  else root.WMQuick = factory(root.WM);
+})(typeof self !== 'undefined' ? self : this, function (E) {
   'use strict';
+
+  // Статья, которая тратой не является (закуп, долг, инкассация)
+  function E_NOT_A_COST(v) { return !!(E && E.notACost && E.notACost(v)); }
 
   function txt(v) { return v == null ? '' : String(v).trim(); }
   function norm(v) { return txt(v).toLowerCase().replace(/ё/g, 'е'); }
@@ -78,9 +82,15 @@
       return byUse(list, counts[key]);
     }
 
+    /* Подсказки статей расхода. Закупа, оплаты поставщикам и «выплаты из
+       кассы» здесь нет намеренно: закуп вводится в «Итогах дня», долги — там
+       же, а «выплата из кассы» — это способ оплаты, а не статья. Стоило им
+       появиться в списке — и владелец выбирал их, а прибыль занижалась на
+       ту же сумму дважды. */
     out.categories = merge(settings.finCategories, cat, 'category',
-      ['Закуп товара', 'Оплата ТП', 'ЗП', 'Аренда', 'Коммуналка', 'Налоги',
-        'Хозрасходы', 'Реклама', 'Комиссия банка', 'Выплата из кассы', 'Другое'], 'categories');
+      ['ЗП', 'Аренда', 'Коммунальные', 'Налоги', 'Комиссия банка', 'Обед',
+        'ГСМ', 'Расходники', 'Списания', 'Реклама', 'Прочее'], 'categories')
+      .filter(function (v) { return !E_NOT_A_COST(v); });
     out.cashiers = merge(settings.finCashiers, cash, 'cashier', [], 'cashiers');
     out.shifts = merge(settings.finShifts, shift, 'shift', ['День', 'Ночь'], 'shifts');
     out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'СБП', 'Перевод'], 'methods');

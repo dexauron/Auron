@@ -349,6 +349,146 @@ console.log('\n— Прибыль (P&L): один источник для каж
     p.costTotal === WM.safeRound(280000 + 110000 + 3000 + 12000), p.costTotal, 405000);
 }
 
+console.log('\n— Две оси: трата или движение денег, из ящика или из сейфа');
+{
+  // 1. Расшифровка выплаты из ящика НЕ должна вычитать наличные второй раз
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', till: 'Касса 1', openCash: 0, zCash: 26467,
+      zCashless: 29743, payouts: 10000, factCash: 16467 },
+    { type: 'Расход', date: '2026-09-01', category: 'Аренда', method: 'Наличные',
+      source: 'Из ящика', amount: 5000 }
+  ];
+  check('РАСХОД ИЗ ЯЩИКА КАССУ ВТОРОЙ РАЗ НЕ УМЕНЬШАЕТ',
+    WM.cashOnHand(rows, { openCashStart: 0 }) === 16467,
+    WM.cashOnHand(rows, { openCashStart: 0 }), 16467);
+  check('но в прибыль эта трата входит',
+    WM.pnl({ rows }).costs.find(c => c.key === 'rent').sum === 5000,
+    WM.pnl({ rows }).costs.find(c => c.key === 'rent').sum, 5000);
+
+  // Расход помимо ящика — уменьшает наличные, как и должен
+  const own = rows.concat([{ type: 'Расход', date: '2026-09-02', category: 'ГСМ',
+    method: 'Наличные', amount: 1000 }]);
+  check('расход, взятый не из ящика, наличные уменьшает',
+    WM.cashOnHand(own, { openCashStart: 0 }) === 15467,
+    WM.cashOnHand(own, { openCashStart: 0 }), 15467);
+
+  // 2. Откуда деньги — читается из человеческих слов формы
+  check('«Из ящика» распознаётся', WM.moneyFrom({ source: 'Из ящика' }) === 'ящик',
+    WM.moneyFrom({ source: 'Из ящика' }), 'ящик');
+  check('«Из сейфа» распознаётся', WM.moneyFrom({ source: 'Из сейфа' }) === 'сейф',
+    WM.moneyFrom({ source: 'Из сейфа' }), 'сейф');
+
+  // 3. Сейф живёт отдельно от ящика
+  const safe = [
+    { type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 300000, zCashless: 0,
+      payouts: 0, factCash: 300000 },
+    { type: 'Перемещение', date: '2026-09-02', from: 'Касса', to: 'Сейф', amount: 200000 },
+    { type: 'Расход', date: '2026-09-03', category: 'Расходники', method: 'Наличные',
+      source: 'Из сейфа', amount: 5000 }
+  ];
+  check('инкассация уменьшает ящик', WM.cashOnHand(safe, { openCashStart: 0 }) === 100000,
+    WM.cashOnHand(safe, { openCashStart: 0 }), 100000);
+  check('и увеличивает сейф', WM.safeOnHand(safe, { openSafeStart: 0 }) === 195000,
+    WM.safeOnHand(safe, { openSafeStart: 0 }), 195000);
+  check('ИНКАССАЦИЯ ПРИБЫЛЬ НЕ УМЕНЬШАЕТ',
+    WM.pnl({ rows: safe }).net === 300000 - 5000,
+    WM.pnl({ rows: safe }).net, 295000);
+
+  // 4. Сверка: сколько из ящика выдали и сколько расписали
+  const chk = WM.tillPayoutCheck(rows);
+  check('видно, что из выплат не расписано', chk.payouts === 10000 &&
+    chk.explained === 5000 && chk.left === 5000, chk.left, 5000);
+}
+
+console.log('\n— Что тратой НЕ является: закуп, долг, инкассация');
+{
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 100000, zCashless: 0,
+      payouts: 0, factCash: 100000 },
+    { type: 'День', date: '2026-09-01', goodsCash: 30000, debtPaid: 20000, debtTaken: 0 },
+    // так владелец мог записать раньше — и прибыль занижалась на 50 000
+    { type: 'Расход', date: '2026-09-01', category: 'Закуп товара', method: 'Наличные', amount: 30000 },
+    { type: 'Расход', date: '2026-09-01', category: 'Оплата ТП', method: 'Наличные', amount: 20000 },
+    { type: 'Расход', date: '2026-09-02', category: 'Инкассация', method: 'Наличные', amount: 40000 }
+  ];
+  const p = WM.pnl({ rows });
+  check('ЗАКУП НЕ СЧИТАЕТСЯ ДВАЖДЫ', p.purchase === 30000, p.purchase, 30000);
+  check('ЧИСТАЯ ПРИБЫЛЬ НЕ ЗАНИЖЕНА', p.net === 70000, p.net, 70000);
+  check('затрат по этим записям нет вовсе', p.costTotal === 0, p.costTotal, 0);
+  check('но владельцу показано, что записи есть', p.excluded.length === 3 &&
+    p.excludedTotal === 90000, p.excluded.map(x => x.key).join(','), 'purchase,debt,move');
+  check('погашение долга — не расход',
+    !!p.excluded.find(x => x.key === 'debt'), 'отделено', 'отделено');
+
+  // Справочник больше не предлагает статьи-ловушки
+  const cats = Q.dicts({ dds: [{ type: 'Расход', category: 'Закуп товара' }] }, {}).categories;
+  check('ФОРМА БОЛЬШЕ НЕ ПРЕДЛАГАЕТ «ЗАКУП ТОВАРА»', cats.indexOf('Закуп товара') < 0,
+    cats.join(','), 'без закупа');
+  check('и не предлагает «Оплата ТП»', cats.indexOf('Оплата ТП') < 0, 'нет', 'нет');
+  check('обычные статьи на месте', cats.indexOf('Аренда') >= 0 && cats.indexOf('ГСМ') >= 0,
+    'на месте', 'на месте');
+}
+
+console.log('\n— Недостачи кассира и удержание из зарплаты');
+{
+  const dds = [
+    { type: 'Смена', date: '2026-09-01', cashier: 'Аня', openCash: 0, zCash: 20000,
+      zCashless: 0, payouts: 0, factCash: 19500 },
+    { type: 'Смена', date: '2026-09-02', cashier: 'Аня', openCash: 0, zCash: 20000,
+      zCashless: 0, payouts: 0, factCash: 20000 }
+  ];
+  const staff = [{ name: 'Аня', rate: 220 }];
+  const sh = WM.cashierShortages(dds);
+  check('недостачи собраны по кассиру', sh[0].cashier === 'Аня' && sh[0].net === 500,
+    sh[0].net, 500);
+
+  const before = WM.payrollSummary([{ date: '2026-09-01', employee: 'Аня', hoursDay: 12 }],
+    [], staff, {}, { dds })[0];
+  check('в ведомости видно, сколько можно удержать', before.canWithhold === 500,
+    before.canWithhold, 500);
+  check('сама по себе недостача зарплату не трогает', before.accrued === 2640,
+    before.accrued, 2640);
+
+  const after = WM.payrollSummary([{ date: '2026-09-01', employee: 'Аня', hoursDay: 12, fine: 500 }],
+    [], staff, {}, { dds })[0];
+  check('удержание уменьшило начисление', after.accrued === 2140, after.accrued, 2140);
+  check('ДВАЖДЫ ОДНУ НЕДОСТАЧУ НЕ УДЕРЖИМ', after.canWithhold === 0, after.canWithhold, 0);
+}
+
+console.log('\n— Закрытие месяца: что должно сойтись');
+{
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', cashier: 'Аня', openCash: 0, zCash: 20000,
+      zCashless: 0, payouts: 5000, factCash: 15000 },
+    { type: 'Расход', date: '2026-09-01', category: 'Аренда', method: 'Наличные',
+      source: 'Из ящика', amount: 3000 },
+    { type: 'Расход', date: '2026-09-02', category: 'Закуп товара', method: 'Наличные', amount: 1000 }
+  ];
+  const mc = WM.monthClose({ rows, ym: '2026-09', settings: { diffCrit: 1000 } });
+  const by = k => mc.items.find(i => i.key === k);
+  check('чек-лист собран', mc.items.length === 7, mc.items.length, 7);
+  const saidPay = by('payouts').said.replace(/[\u00a0\u202f]/g, ' ');
+  check('видит недорасписанные выплаты', !by('payouts').ok && saidPay.indexOf('2 000') >= 0,
+    saidPay, 'не расписано 2 000 ₽');
+  check('видит пустой табель', !by('payroll').ok, by('payroll').said, 'табель пуст');
+  check('видит закуп, записанный расходом', !by('clean').ok, by('clean').said, 'нашёл');
+  check('месяц закрывать рано', mc.ready === false, mc.ready, false);
+
+  // всё поправили — месяц сходится
+  const good = WM.monthClose({
+    rows: [{ type: 'Смена', date: '2026-09-01', cashier: 'Аня', openCash: 0, zCash: 20000,
+      zCashless: 0, payouts: 5000, factCash: 20000 },
+      { type: 'Расход', date: '2026-09-01', category: 'Аренда', method: 'Наличные',
+        source: 'Из ящика', amount: 5000 }],
+    ym: '2026-09', settings: { diffCrit: 1000 },
+    payrollRow: { accrued: 50000, paid: 50000, left: 0, people: 1 }
+  });
+  check('важные пункты сошлись', good.hardLeft === 1, good.hardLeft + ' (дни без смен)', 1);
+  check('выплаты расписаны полностью', good.items.find(i => i.key === 'payouts').ok,
+    'сошлось', 'сошлось');
+  check('зарплата закрыта', good.items.find(i => i.key === 'payroll').ok, 'закрыта', 'закрыта');
+}
+
 console.log('\n— Списания из 1С: синхронизация файла (Upsert)');
 {
   const p1 = { from: '01.09.2026', to: '30.09.2026' };

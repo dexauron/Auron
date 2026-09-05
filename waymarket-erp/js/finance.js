@@ -54,6 +54,15 @@
           method: '', amount: num(r.debtTaken), src: 'итоги дня', id: r.id });
         if (num(r.debtPaid)) out.push({ date: r.date, type: 'Оплата долга', category: 'Оплата ТП',
           method: '', amount: num(r.debtPaid), src: 'итоги дня', id: r.id, noCash: true });
+      } else if (E.isMove(r)) {
+        /* Перемещение денег отчётам не отдаём вовсе: в «куда ушли деньги» и
+           в прибыли ему места нет — деньги не потрачены, а переложены.
+           Наличный остаток считает cashOnHand, он смотрит саму запись. */
+        return;
+      } else if (E.isExpense(r) && E.notACost(r.category)) {
+        // Старые записи с закупом или долгом в статье расхода: в отчёты о
+        // прибыли они не идут, иначе те же деньги вычтутся дважды
+        return;
       } else {
         out.push(r);
       }
@@ -65,7 +74,8 @@
   function byKind(rows, kind) {
     var sum = 0;
     (rows || []).forEach(function (r) {
-      if (E.isExpense(r) && E.costKindOf(r.category) === kind) sum += num(r.amount);
+      if (!E.isExpense(r) || E.notACost(r.category)) return;
+      if (E.costKindOf(r.category) === kind) sum += num(r.amount);
     });
     return round(sum);
   }
@@ -131,11 +141,13 @@
     var cashless = E.cashlessTotal(rows || []);
     var map = { 'Наличные': cash, 'Карта': 0, 'СБП': 0, 'Перевод': 0, 'Безнал': cashless };
     (rows || []).forEach(function (r) {
-      if (!E.isExpense(r)) return;
+      if (!E.isExpense(r) || E.notACost(r.category)) return;
       var m = txt(r.method);
       if (m && m !== 'Наличные' && map[m] !== undefined) map[m] = round(map[m] - num(r.amount));
     });
-    return { map: map, cash: cash, cashless: cashless, total: round(cash + cashless) };
+    map['Сейф'] = E.safeOnHand(rows || [], { openSafeStart: num(opening['Сейф']) });
+    return { map: map, cash: cash, cashless: cashless, safe: map['Сейф'],
+      total: round(cash + cashless + map['Сейф']) };
   }
 
   /* Деньги «в пути» — эквайринг, который банк ещё не зачислил. В ручном учёте
