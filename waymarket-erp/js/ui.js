@@ -1207,6 +1207,12 @@
     editing: function () { return EDIT; },
     // Контур 2 живёт в памяти: экраны товаров читают его отсюда
     data: function () { return D; }, calc: function () { return C; },
+    // Полный список экранов — независимо от того, что сейчас в меню
+    views: function () {
+      return VIEWS.map(function (v) {
+        return { id: v.id, name: v.name, group: v.group, main: isMain(v) };
+      });
+    },
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
     form: function (id) { return FORMS[id]; },
     pickFiles: function () { $('filesInput').click(); },
@@ -1264,14 +1270,55 @@
     if (bad) c.cashiers = bad > 99 ? '99+' : bad;
     return c;
   }
+  /* ==========================================================================
+     РАБОЧИЙ НАБОР ЭКРАНОВ
+
+     Экранов в программе сорок, а магазином управляют полутора десятками.
+     Остальные — отчёты «на посмотреть» и товарная аналитика, которая нужна
+     раз в месяц. Держать их все в меню значит каждый день пролистывать
+     тридцать пунктов ради четырёх.
+
+     Поэтому меню показывает рабочий набор, а всё остальное — за одной
+     кнопкой внизу. Ничего не удалено: экран открывается и по прямой ссылке,
+     и через поиск, и счётчик дел на нём считается как раньше.
+     ====================================================================== */
+  var MAIN_VIEWS = {
+    pulse: 1, morning: 1, evening: 1, finpay: 1,            // каждый день
+    ledger: 1, cashiers: 1, debtors: 1, suppliers: 1,       // деньги
+    timesheet: 1, payroll: 1,                               // люди
+    pnl: 1, monthclose: 1, owner: 1,                        // отчёты
+    data: 1, dicts: 1, settings: 1                          // служебное
+  };
+  function showAll() { return E.norm(S.settings.showAllViews) === 'да'; }
+  function isMain(v) { return !!MAIN_VIEWS[v.id]; }
+
   function renderNav() {
     var c = counters(), group = '', html = '';
-    VIEWS.forEach(function (v) {
+    var all = showAll();
+    var shown = VIEWS.filter(function (v) { return all || isMain(v) || v.id === VIEW; });
+    var hidden = VIEWS.length - shown.length;
+
+    shown.forEach(function (v) {
       if (v.group !== group) { group = v.group; html += '<div class="nav-group">' + esc(group) + '</div>'; }
       html += '<div class="nav-item' + (v.id === VIEW ? ' active' : '') + '" data-go="' + v.id + '">' +
         '<span class="nav-icon">' + v.icon + '</span><span>' + esc(v.name) + '</span>' +
         (c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '') + '</div>';
     });
+
+    // Красный кружок на скрытом экране виден и в свёрнутом виде: дело не
+    // должно потеряться только потому, что экран убран из меню
+    var hiddenCount = 0;
+    VIEWS.forEach(function (v) { if (!all && !isMain(v) && c[v.id]) hiddenCount++; });
+
+    if (hidden > 0) {
+      html += '<div class="nav-item nav-more" data-act="views-all">' +
+        '<span class="nav-icon">⋯</span><span>Показать все экраны</span>' +
+        '<span class="nav-count' + (hiddenCount ? '' : ' nav-count-quiet') + '">' +
+        (hiddenCount ? hiddenCount : hidden) + '</span></div>';
+    } else if (all) {
+      html += '<div class="nav-item nav-more" data-act="views-main">' +
+        '<span class="nav-icon">⌃</span><span>Оставить только рабочие</span></div>';
+    }
     $('nav').innerHTML = html;
     $('brandName').textContent = S.settings.storeName || 'Вай Маркет';
     var st = saveState();
@@ -1637,12 +1684,32 @@
      Одни и те же списки открываются и с кнопки сверху, и с нижней панели
      на телефоне, поэтому вынесены в отдельные функции.
      -------------------------------------------------------------------- */
+  /* Меню на телефоне. Тот же рабочий набор, что и слева на компьютере:
+     листать сорок пунктов пальцем — худшее, что можно предложить человеку,
+     который зашёл записать смену. */
   function openMenuSheet() {
-    var group = '', rows = [];
-    VIEWS.forEach(function (v) {
+    var c = counters(), all = showAll(), group = '', rows = [];
+    var shown = VIEWS.filter(function (v) { return all || isMain(v); });
+    var hidden = VIEWS.length - shown.length;
+
+    shown.forEach(function (v) {
       if (v.group !== group) { group = v.group; rows.push('<div class="nav-group">' + esc(group) + '</div>'); }
-      rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true, attrs: ' data-go="' + v.id + '"' }));
+      rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true,
+        value: c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '',
+        attrs: ' data-go="' + v.id + '"' }));
     });
+
+    if (hidden > 0) {
+      rows.push('<div class="nav-group">Остальное</div>');
+      rows.push(listRow({ icon: '⋯', title: 'Показать все экраны',
+        sub: 'ещё ' + hidden + ' — отчёты и товарная аналитика', tap: true,
+        attrs: ' data-act="views-all"' }));
+    } else if (all) {
+      rows.push('<div class="nav-group">Меню</div>');
+      rows.push(listRow({ icon: '⌃', title: 'Оставить только рабочие',
+        sub: 'чтобы не листать лишнее', tap: true, attrs: ' data-act="views-main"' }));
+    }
+
     var actions = [
       listRow({ icon: '📂', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
       listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
@@ -1823,6 +1890,15 @@
         closeRowMenu();
         openForm(form2, copy);
         toast('Дата поставлена сегодняшняя — проверьте суммы и сохраните.');
+      }
+      else if (a === 'views-all' || a === 'views-main') {
+        var onSheet = !!document.querySelector('.sheet');
+        S.setSetting('showAllViews', a === 'views-all' ? 'да' : 'нет');
+        renderNav();
+        if (onSheet) { closeSheet(); openMenuSheet(); }
+        toast(a === 'views-all'
+          ? 'Показаны все ' + VIEWS.length + ' экранов. Свернуть обратно — кнопка внизу меню.'
+          : 'В меню остались рабочие экраны. Остальные — за кнопкой «Показать все».');
       }
       else if (a === 'add-record') openAddSheet();
       else if (a === 'open-menu') openMenuSheet();

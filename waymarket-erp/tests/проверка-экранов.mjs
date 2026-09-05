@@ -47,8 +47,11 @@ async function open(ctxOpts) {
   await page.waitForTimeout(800);
   return { page, ctx, errs };
 }
+/* Все зарегистрированные экраны, а не только показанные в меню: меню теперь
+   держит рабочий набор, но проверять надо каждый экран. */
 const screensOf = page => page.evaluate(() =>
-  [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go));
+  (window.WMUI.views ? window.WMUI.views().map(v => v.id)
+    : [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go)));
 
 console.log('Страница: ' + PAGE + '\n');
 
@@ -563,6 +566,82 @@ console.log('Страница: ' + PAGE + '\n');
   await page.waitForTimeout(300);
   const mf = await page.textContent('#page');
   check('«Куда ушли деньги» начинается с выручки', mf.includes('Выручка'), 'да', 'да');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 5в-2. Меню не должно быть списком из сорока пунктов */
+{
+  console.log('— Рабочий набор экранов в меню');
+  const { page, ctx, errs } = await open();
+  const nav = () => page.evaluate(() =>
+    [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go).filter(Boolean));
+
+  const main = await nav();
+  const total = await page.evaluate(() => document.querySelectorAll('.nav-item').length);
+  check('в меню рабочий набор, а не всё подряд', main.length >= 12 && main.length <= 20,
+    main.length + ' экранов', '12–20');
+  check('каждодневное на месте',
+    ['pulse', 'morning', 'evening', 'finpay'].every(id => main.includes(id)),
+    'на месте', 'на месте');
+  check('деньги и люди на месте',
+    ['ledger', 'cashiers', 'debtors', 'suppliers', 'timesheet', 'payroll']
+      .every(id => main.includes(id)), 'на месте', 'на месте');
+  check('главные отчёты на месте',
+    ['pnl', 'monthclose', 'owner'].every(id => main.includes(id)), 'на месте', 'на месте');
+  check('товарная аналитика убрана с глаз',
+    !main.includes('abc') && !main.includes('shelf') && !main.includes('seasons'),
+    'убрана', 'убрана');
+  check('есть кнопка «Показать все экраны»',
+    await page.evaluate(() => !!document.querySelector('[data-act="views-all"]')),
+    'есть', 'есть');
+
+  // СКРЫТЫЙ ЭКРАН НЕ ПОТЕРЯН: открывается и работает
+  await page.evaluate(() => window.WMUI.go('abc'));
+  await page.waitForTimeout(250);
+  const hiddenWorks = await page.evaluate(() =>
+    (document.querySelector('#page') || {}).textContent.length > 100);
+  check('СКРЫТЫЙ ЭКРАН ВСЁ РАВНО ОТКРЫВАЕТСЯ', hiddenWorks, 'открылся', 'открылся');
+
+  // Разворачиваем и сворачиваем обратно
+  await page.evaluate(() => document.querySelector('[data-act="views-all"]').click());
+  await page.waitForTimeout(350);
+  const allShown = await nav();
+  check('«Показать все» открывает все сорок', allShown.length >= 38,
+    allShown.length + ' экранов', '>=38');
+  await page.evaluate(() => document.querySelector('[data-act="views-main"]').click());
+  await page.waitForTimeout(350);
+  const backToMain = await nav();
+  check('и сворачивается обратно', backToMain.length <= 20,
+    backToMain.length + ' экранов', '<=20');
+  check('выбор запомнился',
+    await page.evaluate(() => window.WMStore.settings.showAllViews) === 'нет',
+    'запомнился', 'нет');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 5в-3. То же меню на телефоне */
+{
+  console.log('— Меню на телефоне');
+  const { page, ctx, errs } = await open({ viewport: { width: 393, height: 852 },
+    hasTouch: true, isMobile: true });
+  await page.evaluate(() => document.querySelector('[data-act="open-menu"]').click());
+  await page.waitForTimeout(400);
+  const items = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet [data-go]')].map(e => e.dataset.go));
+  check('на телефоне тоже рабочий набор', items.length >= 12 && items.length <= 20,
+    items.length + ' пунктов', '12–20');
+  check('и кнопка развернуть',
+    await page.evaluate(() => !!document.querySelector('.sheet [data-act="views-all"]')),
+    'есть', 'есть');
+  await page.evaluate(() => document.querySelector('.sheet [data-act="views-all"]').click());
+  await page.waitForTimeout(450);
+  const expanded = await page.evaluate(() =>
+    [...document.querySelectorAll('.sheet [data-go]')].map(e => e.dataset.go).length);
+  check('разворачивается прямо в открытом меню', expanded >= 38, expanded + ' пунктов', '>=38');
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
   console.log('');

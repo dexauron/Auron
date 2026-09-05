@@ -721,3 +721,9 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
   .cal-cell.empty { display: none; }
   .cal-cell { min-height: 60px; }
 }
+
+/* Кнопка «Показать все экраны» в меню: та же строка, но приглушённая —
+   это не экран, а переключатель, и путать их не нужно. */
+.nav-item.nav-more { color: var(--label-2); font-weight: 550; margin-top: 4px; }
+.nav-item.nav-more .nav-icon { opacity: .6; }
+.nav-count.nav-count-quiet { background: var(--fill-2); color: var(--label-2); }
