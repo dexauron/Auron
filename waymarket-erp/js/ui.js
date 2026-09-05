@@ -2982,7 +2982,7 @@
     { id: 'settings', icon: '⚙️', name: 'Настройки', group: 'Ещё', render: viewSettings }
   ];
 
-  // Экраны финансового учёта встают рядом со своими разделами
+  // Экраны финансового учёта встают рядом со своими соседями
   if (window.WM_EXTRA_VIEWS) {
     window.WM_EXTRA_VIEWS.forEach(function (v) {
       var idx = VIEWS.length;
@@ -2994,6 +2994,20 @@
       VIEWS.splice(idx, 0, v);
     });
   }
+  /* Порядок разделов в меню задаём явно, а внутри раздела оставляем тот, в
+     каком экраны встали выше. Без этой сортировки экран товаров, поставленный
+     рядом с отчётом, разрывал список — и «Товары» в меню появлялись дважды.
+     Сначала то, чем пользуются каждый день, служебное — в конце. */
+  var GROUP_ORDER = ['Главное', 'Деньги', 'Товары', 'Отчёты',
+    'Данные из 1С', 'Ручной ввод', 'Ещё'];
+  VIEWS = VIEWS.map(function (v, i) { return { v: v, i: i }; })
+    .sort(function (a, b) {
+      var ga = GROUP_ORDER.indexOf(a.v.group), gb = GROUP_ORDER.indexOf(b.v.group);
+      if (ga < 0) ga = GROUP_ORDER.length;          // незнакомый раздел — в конец
+      if (gb < 0) gb = GROUP_ORDER.length;
+      return ga - gb || a.i - b.i;
+    })
+    .map(function (x) { return x.v; });
 
   function counters() {
     var c = {}, t = today();

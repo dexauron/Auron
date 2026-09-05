@@ -14,13 +14,21 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PAGE = 'file://' + path.join(HERE, '..', 'Дашборд_ВайМаркет.html');
 const CORPUS = process.argv[2] || path.join(HERE, '..', 'Данные_1С_и_Excel');
 
-const SCREENS = ['today', 'suppliers', 'cash', 'dds', 'staff', 'stock', 'orders', 'expiry',
-  'losses', 'dead', 'pnl', 'bep', 'abc', 'pricecmp', 'incexp', 'search', 'data', 'settings',
-  'pulse', 'findash', 'finbase', 'finpay', 'finreport', 'finday', 'import', 'match', 'recon',
-  'confirm', 'terms', 'reconcile', 'conflicts', 'compare', 'markup', 'payroll',
-  'manual', 'records', 'debtors', 'sheets', 'check', 'reset',
-  'flow', 'problems', 'eaters', 'pace', 'yearago', 'avgcheck', 'calend',
-  'groupprofit', 'itemprofit', 'ownerpage', 'ready', 'kpi'];
+// Все экраны меню — список снят с самого меню, чтобы ни один новый
+// экран не остался без проверки (и чтобы в списке не жили выдуманные).
+const SCREENS = [
+  'today', 'finpulse', 'suppliers', 'forecast', 'debtage', 'cash',
+  'places', 'cashiers', 'acquiring', 'dds', 'staff', 'sched',
+  'staffcards', 'tasks', 'finbase', 'finpay', 'stock', 'orders',
+  'expiry', 'losses', 'dead', 'groupprofit', 'itemprofit', 'pricelog',
+  'seasons', 'shelf', 'returns2', 'pnl', 'bep', 'bepdays',
+  'taxes', 'abc', 'pricecmp', 'incexp', 'findash', 'finreport',
+  'ownerpage', 'flow', 'problems', 'eaters', 'pace', 'yearago',
+  'avgcheck', 'calend', 'ready', 'kpi', 'compare', 'markup',
+  'payroll', 'finday', 'import', 'match', 'recon', 'confirm',
+  'terms', 'reconcile', 'conflicts', 'manual', 'records', 'debtors',
+  'sheets', 'check', 'reset', 'search', 'data', 'settings'
+];
 
 // строка, которая пытается выполниться, если её вставят в страницу как разметку
 const BAD = '<img src=x onerror="window.__pwned=1"><script>window.__pwned=1</script>';
@@ -76,6 +84,24 @@ const walk = async (page, fn) => {
     if (fn) await fn(id);
   }
 };
+
+/* Список экранов не должен разъезжаться с меню: если экран добавили, а сюда
+   не вписали, он останется без единой проверки. */
+{
+  const page = await browser.newPage();
+  await page.goto(PAGE);
+  await page.waitForTimeout(700);
+  const inMenu = await page.evaluate(() =>
+    [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go));
+  const missing = inMenu.filter(id => SCREENS.indexOf(id) < 0);
+  const ghosts = SCREENS.filter(id => inMenu.indexOf(id) < 0);
+  check('проверка охватывает все экраны меню', missing.length === 0 && ghosts.length === 0,
+    (missing.length ? 'не проверяются: ' + missing.join(', ') : '') +
+    (ghosts.length ? ' выдуманные: ' + ghosts.join(', ') : '') || inMenu.length + ' экранов',
+    'все ' + inMenu.length);
+  await page.close();
+  console.log('');
+}
 
 console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSync(CORPUS) ? CORPUS : 'нет, часть проверок на пустой базе') + '\n');
 
