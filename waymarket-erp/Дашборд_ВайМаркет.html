@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Вай Маркет">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="color-scheme" content="light dark">
+<title>Вай Маркет</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-name" id="brandName">Вай Маркет</div>
+    <div class="brand-sub">Магазин 24/7</div>
+  </div>
+  <nav class="nav" id="nav"></nav>
+  <div class="sidebar-foot">
+    <div class="sync-line" id="saveState"><span class="saved-dot off"></span><span>Сохранение не настроено</span></div>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="topbar">
+    <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню">☰</button>
+    <div class="search">
+      <span>🔍</span>
+      <input type="text" id="search" placeholder="Товар, поставщик, штрихкод, телефон">
+    </div>
+    <div class="segmented" id="periods"></div>
+    <button class="btn btn-primary" id="addBtn">＋ Записать</button>
+    <button class="btn hide-mobile" id="syncBtn">📂 Обновить из 1С</button>
+    <button class="btn btn-icon hide-mobile" data-act="export-screen" title="Скачать этот экран в Excel">⤓</button>
+    <button class="btn btn-icon hide-mobile" data-act="share-screen" title="Отправить этот экран в WhatsApp или Telegram">📤</button>
+    <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы">👁</button>
+    <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv" hidden>
+    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+  </div>
+  <div class="alert-bar" id="alertBar" hidden></div>
+  <div class="scroll" id="scroll">
+    <div class="page" id="page"></div>
+  </div>
+</main>
+
+<!-- Нижняя панель: на телефоне это главная навигация, как в приложениях на iPhone.
+     На планшете и компьютере она скрыта — там есть меню слева и кнопки сверху. -->
+<nav class="tabbar" id="tabbar">
+  <button class="tab" data-go="pulse"><span class="tab-icon">📊</span><span class="tab-name">Пульт</span></button>
+  <button class="tab" data-go="morning"><span class="tab-icon">🧮</span><span class="tab-name">Касса</span></button>
+  <button class="tab tab-add" data-act="add-record"><span class="tab-icon">＋</span><span class="tab-name">Записать</span></button>
+  <button class="tab" data-go="finpay"><span class="tab-icon">📅</span><span class="tab-name">Выплаты</span></button>
+  <button class="tab" data-act="open-menu"><span class="tab-icon">☰</span><span class="tab-name">Ещё</span></button>
+</nav>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/store.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/quick.js"></script>
+<script src="js/numpad.js"></script>
+<script src="js/input.js"></script>
+<script src="js/entry.js"></script>
+<script src="js/dicts.js"></script>
+<script src="js/filters.js"></script>
+<script src="js/finance.js"></script>
+<script src="js/goods.js"></script>
+<script src="js/staff.js"></script>
+<script src="js/forecast.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/finviews.js"></script>
+<script src="js/goodsviews.js"></script>
+<script src="js/staffviews.js"></script>
+<script src="js/repviews.js"></script>
+<script src="js/book.js"></script>
+<script src="js/dictviews.js"></script>
+<script src="js/filestore.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
