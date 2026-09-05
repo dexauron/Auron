@@ -20,7 +20,7 @@
   function DICT() { return Q.dicts(S.state, S.settings); }
   function learn(map) {
     var changed = false;
-    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d])) changed = true; });
+    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d], S.state)) changed = true; });
     if (changed) S.save();
   }
   var C = {};                 // производные расчёты
@@ -29,7 +29,7 @@
   var DET = window.WMDetail;  // окно «Подробнее» для любой цифры
   var NUM = window.WMNum;     // счёт в поле, разряды и понятные даты
   var AL = window.WMAlerts;   // что горит прямо сейчас
-  var IN = window.WMInput;    // сканер, голос, шаблоны, горячие клавиши
+  var IN = window.WMInput;    // сканер штрихкодов, шаблоны, горячие клавиши
   var X = window.WMExtra;     // сравнения, спарклайны, ведомости
   var EN = window.WMEntry;    // разбор строки, буфер, массовый ввод, отмена
 
@@ -252,41 +252,6 @@
     }), 'Шаблонов пока нет') + '</div>');
   }
 
-  /* --- Голосовой ввод суммы --------------------------------------------------
-     Браузер распознаёт речь не сам — ему нужен интернет. Поэтому кнопка
-     появляется, только если браузер умеет, и честно предупреждает.
-     ------------------------------------------------------------------------ */
-  function startVoice(fieldName) {
-    var field = document.querySelector('[name="' + fieldName + '"]');
-    if (!field) return;
-    var R = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!R) { toast('Этот браузер не умеет распознавать речь. Попробуйте Chrome или Яндекс.Браузер.'); return; }
-    var rec = new R();
-    rec.lang = 'ru-RU'; rec.interimResults = false; rec.maxAlternatives = 3;
-    var btn = document.querySelector('[data-voice="' + fieldName + '"]');
-    if (btn) btn.classList.add('voice-on');
-    toast('Говорите сумму — например «три тысячи двести».', 3000);
-    rec.onresult = function (ev) {
-      var said = '';
-      for (var i = 0; i < ev.results[0].length && !said; i++) {
-        var text = ev.results[0][i].transcript;
-        if (IN.wordsToNumber(text) !== null) said = text;
-      }
-      said = said || ev.results[0][0].transcript;
-      var val = IN.wordsToNumber(said);
-      if (val === null) { toast('Не разобрал: «' + said + '». Попробуйте ещё раз или впишите руками.'); return; }
-      field.value = val;
-      field.dispatchEvent(new Event('input', { bubbles: true }));
-      toast('Услышал: ' + money(val));
-    };
-    rec.onerror = function (ev) {
-      toast(ev.error === 'network'
-        ? 'Для распознавания речи нужен интернет — сейчас его нет. Впишите сумму руками.'
-        : 'Не получилось послушать: ' + ev.error);
-    };
-    rec.onend = function () { if (btn) btn.classList.remove('voice-on'); };
-    try { rec.start(); } catch (e) { toast('Микрофон занят или запрещён браузером.'); }
-  }
 
   /* --- Калькулятор с крупными кнопками --------------------------------------
      Открывается кнопкой 🧮 у любого числового поля. Считает то же самое, что
@@ -558,8 +523,6 @@
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
         '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">🧮</button>' +
-        (IN && IN.voiceReady() ? '<button type="button" class="btn btn-sm num-calc" data-voice="' +
-          esc(name) + '" title="Продиктовать сумму">🎤</button>' : '') +
         '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
     } else if (type === 'pairs') {
       var plid = (opts.options && opts.options.length) ? 'dl-' + name + '-' + (++LIST_N) : '';
@@ -3542,7 +3505,7 @@
         else if (prow) Array.prototype.forEach.call(prow.querySelectorAll('input'), function (i) { i.value = ''; });
         return;
       }
-      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-voice],[data-menu]');
+      var el = e.target.closest('[data-go],[data-period],[data-act],[data-form],[data-tab],[data-del],[data-edit],[data-more],[data-filter],[data-filter-clear],[data-calc],[data-tpl],[data-tpl-save],[data-tpl-manage],[data-menu]');
       if (!el) return;
       if (roBlock(el)) { e.preventDefault(); return; }
       // «Подробнее»: одно окно для любой цифры — что с ней связано
@@ -3563,7 +3526,6 @@
       if (el.dataset.tpl) { applyTemplate(el.dataset.tpl); return; }
       if (el.dataset.tplSave) { saveTemplate(el.dataset.tplSave); return; }
       if (el.dataset.tplManage) { manageTemplates(el.dataset.tplManage); return; }
-      if (el.dataset.voice) { startVoice(el.dataset.voice); return; }
       if (el.dataset.go) { closeSheet(); go(el.dataset.go); return; }
       if (el.dataset.period) { PERIOD = el.dataset.period; PAGE = {}; render(); return; }
       if (el.dataset.tab) { var p = el.dataset.tab.split(':'); TAB[p[0]] = p[1]; render(); return; }

@@ -24,6 +24,7 @@ const CSH = require(path.join(__dirname, '..', 'js', 'cash.js'));
 const FRC = require(path.join(__dirname, '..', 'js', 'forecast.js'));
 const GDS = require(path.join(__dirname, '..', 'js', 'goods.js'));
 const REP = require(path.join(__dirname, '..', 'js', 'reports.js'));
+const DIC = require(path.join(__dirname, '..', 'js', 'dicts.js'));
 const STF = require(path.join(__dirname, '..', 'js', 'staff.js'));
 const DET = require(path.join(__dirname, '..', 'js', 'detail.js'));
 
@@ -1128,13 +1129,6 @@ console.log('— Быстрый ввод');
   check('ведущие нули не мешают', (INP.findByCode('04600000012345', stock, []) || {}).name === 'Хлеб', 'Хлеб', 'Хлеб');
   check('чужой код не подставляет товар', INP.findByCode('999', stock, []) === null, 'null', 'null');
 
-  [['три тысячи двести', 3200], ['пятьсот', 500], ['12500', 12500],
-   ['двадцать одна тысяча', 21000], ['два миллиона', 2000000]].forEach(([say, want]) => {
-    check('на слух «' + say + '»', INP.wordsToNumber(say) === want, INP.wordsToNumber(say), want);
-  });
-  check('непонятная речь не превращается в сумму',
-    INP.wordsToNumber('абракадабра') === null && INP.wordsToNumber('') === null, 'null', 'null');
-
   const tpl = INP.templateFrom('ddsExpense', { date: '2026-09-04', category: 'Аренда', amount: 168000 }, '');
   check('шаблон не запоминает дату', tpl.values.date === undefined, 'без даты', 'без даты');
   check('шаблон помнит остальное', tpl.values.category === 'Аренда' && tpl.values.amount === 168000,
@@ -1850,6 +1844,100 @@ console.log('— Папка программы: понятные ошибки');
     STORE.reconcile({ dds: [{ amount: 5 }] }, { dds: [] }, {}).state.dds[0].id.length > 2, 'есть', 'есть');
   check('слияние считает записи',
     rec1.report.total === 3, rec1.report.total, 3);
+
+  // --- Справочники ------------------------------------------------------------
+  const dSt = {
+    dds: [{ category: 'Хозтовары', method: 'Наличные', cashier: 'Аня', shift: 'День' },
+      { category: 'Хозтовары', method: 'Наличные', cashier: 'Аня', shift: 'День' },
+      { category: 'Аренда', method: 'Перевод', cashier: 'Аня', shift: 'День' }],
+    staff: [{ id: 's1', name: 'Аня' }, { id: 's2', name: 'Пётр', fired: '2026-08-01' }],
+    supreg: [{ id: 'f1', name: 'Рамми' }, { id: 'f2', name: 'Старый ТП', archived: true }],
+    timesheet: [{ employee: 'Пётр' }], docs: [{ firm: 'Рамми' }], dictoff: []
+  };
+  const dSet = { finCategories: 'Хозтовары, Аренда, Ненужное' };
+
+  check('справочник считает, где стоит слово',
+    DIC.usage(dSt, 'categories', 'Хозтовары') === 2, DIC.usage(dSt, 'categories', 'Хозтовары'), 2);
+  const dList = DIC.list(dSt, dSet, 'categories');
+  check('в справочнике видно всё: и заданное, и вписанное',
+    dList.length === 3, dList.map(r => r.name).join(', '), 3);
+  check('неиспользуемое видно отдельно',
+    dList.filter(r => !r.used).map(r => r.name).join() === 'Ненужное',
+    dList.filter(r => !r.used).map(r => r.name).join(), 'Ненужное');
+
+  check('добавить новое слово можно',
+    !!DIC.add(dSt, dSet, 'categories', 'Реклама').ok, dSet.finCategories, 'с рекламой');
+  check('дважды одно и то же не добавится',
+    !!DIC.add(dSt, dSet, 'categories', 'реклама').error, 'ошибка', 'ошибка');
+  check('запятая в названии не принимается',
+    !!DIC.add(dSt, dSet, 'categories', 'плохо, с запятой').error, 'ошибка', 'ошибка');
+
+  const ren = DIC.rename(dSt, dSet, 'categories', 'Хозтовары', 'Хозрасходы', true);
+  check('переименование переписало записи', ren.records === 2, ren.records, 2);
+  check('после переименования старого слова в записях нет',
+    dSt.dds.filter(r => r.category === 'Хозтовары').length === 0, 0, 0);
+  check('новое слово попало в справочник',
+    dSet.finCategories.indexOf('Хозрасходы') >= 0, dSet.finCategories, 'с Хозрасходами');
+  const renNo = DIC.rename(dSt, dSet, 'categories', 'Аренда', 'Помещение', false);
+  check('можно переименовать только в списке, не трогая записи',
+    renNo.records === 0 && dSt.dds.filter(r => r.category === 'Аренда').length === 1,
+    renNo.records, 0);
+
+  check('используемое удалить нельзя',
+    !!DIC.remove(dSt, dSet, 'categories', 'Хозрасходы').error, 'ошибка', 'ошибка');
+  check('неиспользуемое удалить можно',
+    !!DIC.remove(dSt, dSet, 'categories', 'Ненужное').ok, 'удалено', 'удалено');
+
+  DIC.hide(dSt, 'categories', 'Хозрасходы');
+  check('скрытое помечено', DIC.isHidden(dSt, 'categories', 'Хозрасходы'), 'да', 'да');
+  check('записи со скрытым словом не тронуты',
+    dSt.dds.filter(r => r.category === 'Хозрасходы').length === 2, 2, 2);
+  check('скрытое не предлагается в формах',
+    Q.dicts(dSt, dSet).categories.indexOf('Хозрасходы') < 0, 'нет в списке', 'нет в списке');
+  DIC.show(dSt, 'categories', 'Хозрасходы');
+  check('скрытое возвращается',
+    Q.dicts(dSt, dSet).categories.indexOf('Хозрасходы') >= 0, 'снова есть', 'снова есть');
+
+  // уволенные и закрытые поставщики
+  check('уволенный не предлагается в формах',
+    Q.dicts(dSt, {}).employees.indexOf('Пётр') < 0, 'нет', 'нет');
+  check('работающий предлагается',
+    Q.dicts(dSt, {}).employees.indexOf('Аня') >= 0, 'есть', 'есть');
+  check('закрытый поставщик не предлагается',
+    Q.dicts(dSt, {}).suppliers.indexOf('Старый ТП') < 0, 'нет', 'нет');
+  check('уволенных видно отдельным списком',
+    DIC.staffFired(dSt).length === 1 && DIC.staffActive(dSt).length === 1, '1 и 1', '1 и 1');
+  check('у сотрудника с историей считаются записи',
+    DIC.staffUsage(dSt, 'Пётр') === 1, DIC.staffUsage(dSt, 'Пётр'), 1);
+
+  // сбор из записей и из выгрузок 1С
+  const dSt2 = { staff: [{ name: 'Аня' }], timesheet: [{ employee: 'Марат' }, { employee: 'Марат' }],
+    payouts: [{ employee: 'Ольга' }], dds: [{ cashier: 'Аня' }] };
+  const found = DIC.staffFromRecords(dSt2);
+  check('находит людей без карточки',
+    found.map(f => f.name).sort().join(', ') === 'Марат, Ольга',
+    found.map(f => f.name).sort().join(', '), 'Марат, Ольга');
+  check('заведённых заново не предлагает',
+    found.every(f => f.name !== 'Аня'), 'Ани нет', 'Ани нет');
+
+  const imp = DIC.firmsFromData(
+    { supreg: [{ name: 'Рамми', phone: '' }], docs: [{ firm: 'Рамми' }, { firm: 'Новый ТП' }] },
+    { contacts: [{ name: 'Рамми', phone: '+7 928 111-22-33' }], prices: [{ supplier: 'Ещё один' }] });
+  check('из 1С видно, кого добавить',
+    imp.add.map(a => a.name).sort().join(', ') === 'Ещё один, Новый ТП',
+    imp.add.map(a => a.name).sort().join(', '), 'Ещё один, Новый ТП');
+  check('и кому проставить телефон',
+    imp.update.length === 1 && imp.update[0].name === 'Рамми', imp.update.length, 1);
+
+  // «вписал в форме» возвращает скрытое слово
+  const backSt = { dictoff: [{ kind: 'categories', name: 'Вода' }] }, backSet = { finCategories: 'Вода' };
+  Q.learn(backSet, 'categories', 'Вода', backSt);
+  check('вписанное в форме слово возвращается из скрытых',
+    backSt.dictoff.length === 0, backSt.dictoff.length, 0);
+  const manySet = { finCategories: 'Аренда' };
+  Q.learn(manySet, 'categories', ['Вода', 'Такси'], {});
+  check('список названий запоминается по одному, а не строкой',
+    manySet.finCategories === 'Аренда, Вода, Такси', manySet.finCategories, 'Аренда, Вода, Такси');
 
 
   console.log('');

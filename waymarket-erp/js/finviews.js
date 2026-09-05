@@ -37,7 +37,7 @@
   function learn(map) {
     var changed = false;
     Object.keys(map).forEach(function (dictName) {
-      if (Q.learn(S.settings, dictName, map[dictName])) changed = true;
+      if (Q.learn(S.settings, dictName, map[dictName], S.state)) changed = true;
     });
     if (changed) S.save();
   }

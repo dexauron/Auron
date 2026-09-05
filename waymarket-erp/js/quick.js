@@ -57,16 +57,25 @@
     });
     (state.payouts || []).forEach(function (r) { put(emp, 'employee', r.employee); });
     (state.timesheet || []).forEach(function (r) { put(emp, 'employee', r.employee); });
+    (state.staff || []).forEach(function (r) { if (!r.fired) put(emp, 'employee', r.name); });
     (state.debtors || []).forEach(function (r) { put(cash, 'cashier', r.cashier); });
-    (state.supreg || []).forEach(function (r) { put(sup, 'supplier', r.name); });
+    (state.supreg || []).forEach(function (r) { if (!r.archived) put(sup, 'supplier', r.name); });
     (state.plans || []).forEach(function (r) { put(sup, 'supplier', r.supplier); });
     (state.inventory || []).forEach(function (r) { put(reason, 'reason', r.reason); });
 
-    function merge(fromSettings, bag, key, fallback) {
+    // Скрытые значения справочника в подсказки не идут: владелец их убрал
+    // намеренно, а старые записи с ними остались как были.
+    var off = {};
+    (state.dictoff || []).forEach(function (r) {
+      if (!r || !r.name) return;
+      off[r.kind + '|' + norm(r.name)] = true;
+    });
+    function merge(fromSettings, bag, key, fallback, offKey) {
       var seen = {}, list = [];
       splitDict(fromSettings).concat(Object.keys(bag).map(function (k) { return bag[k].name; }))
         .concat(fallback || []).forEach(function (v) {
           if (!v || seen[norm(v)]) return;
+          if (offKey && off[offKey + '|' + norm(v)]) return;
           seen[norm(v)] = 1; list.push(v);
         });
       return byUse(list, counts[key]);
@@ -74,14 +83,20 @@
 
     out.categories = merge(settings.finCategories, cat, 'category',
       ['Закуп товара', 'Оплата ТП', 'ЗП', 'Аренда', 'Коммуналка', 'Налоги',
-        'Хозрасходы', 'Реклама', 'Комиссия банка', 'Выплата из кассы', 'Другое']);
-    out.cashiers = merge(settings.finCashiers, cash, 'cashier', []);
-    out.shifts = merge(settings.finShifts, shift, 'shift', ['День 09:00–21:00', 'Ночь 21:00–09:00']);
-    out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'СБП', 'Перевод']);
-    out.employees = merge(settings.finEmployees, emp, 'employee', []);
-    out.suppliers = merge(settings.finSuppliers, sup, 'supplier', []);
+        'Хозрасходы', 'Реклама', 'Комиссия банка', 'Выплата из кассы', 'Другое'], 'categories');
+    out.cashiers = merge(settings.finCashiers, cash, 'cashier', [], 'cashiers');
+    out.shifts = merge(settings.finShifts, shift, 'shift', ['День 09:00–21:00', 'Ночь 21:00–09:00'], 'shifts');
+    out.methods = merge(settings.finMethods, meth, 'method', ['Наличные', 'Карта', 'СБП', 'Перевод'], 'methods');
+    // уволенных и поставщиков, которые больше не возят, в подсказках нет
+    var goneEmp = {}, goneSup = {};
+    (state.staff || []).forEach(function (r) { if (r.fired) goneEmp[norm(r.name)] = 1; });
+    (state.supreg || []).forEach(function (r) { if (r.archived) goneSup[norm(r.name)] = 1; });
+    out.employees = merge(settings.finEmployees, emp, 'employee', [], 'employees')
+      .filter(function (v) { return !goneEmp[norm(v)]; });
+    out.suppliers = merge(settings.finSuppliers, sup, 'supplier', [], 'suppliers')
+      .filter(function (v) { return !goneSup[norm(v)]; });
     out.reasons = merge(settings.finReasons, reason, 'reason',
-      ['Просрочка', 'Бой и порча', 'Недостача', 'Дегустация', 'Своё потребление']);
+      ['Просрочка', 'Бой и порча', 'Недостача', 'Дегустация', 'Своё потребление'], 'reasons');
     return out;
   }
 
@@ -92,12 +107,31 @@
     reasons: 'finReasons'
   };
 
-  // Запомнить новое значение в справочнике настроек (возвращает true, если добавили)
-  function learn(settings, dict, value) {
-    var key = DICT_SETTING[dict], v = txt(value);
-    if (!key || !v || !settings) return false;
+  /* Запомнить новое значение в справочнике настроек (true, если что-то изменилось).
+     Принимает и одно слово, и список — в форме кассы выплат бывает несколько,
+     и раньше они склеивались в одну строку через запятую.
+     Если слово было скрыто, а владелец вписал его снова — значит, оно снова
+     нужно: снимаем пометку, иначе в подсказках оно так и не появится. */
+  function learn(settings, dict, value, state) {
+    var key = DICT_SETTING[dict];
+    if (!key || !settings || value == null) return false;
+    if (Object.prototype.toString.call(value) === '[object Array]') {
+      var any = false;
+      for (var j = 0; j < value.length; j++) if (learn(settings, dict, value[j], state)) any = true;
+      return any;
+    }
+    var v = txt(value);
+    if (!v || v.indexOf(',') >= 0) return false;   // запятая ломает список — такое не запоминаем
+    var changed = false;
+    if (state && state.dictoff) {
+      var before = state.dictoff.length;
+      state.dictoff = state.dictoff.filter(function (r) {
+        return !(r && r.kind === dict && norm(r.name) === norm(v));
+      });
+      if (state.dictoff.length !== before) changed = true;
+    }
     var list = splitDict(settings[key]);
-    for (var i = 0; i < list.length; i++) if (norm(list[i]) === norm(v)) return false;
+    for (var i = 0; i < list.length; i++) if (norm(list[i]) === norm(v)) return changed;
     list.push(v);
     settings[key] = list.join(', ');
     return true;

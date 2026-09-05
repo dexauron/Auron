@@ -47,7 +47,7 @@
   function dict() { return Q.dicts(S.state, S.settings); }
   function learn(map) {
     var changed = false;
-    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d])) changed = true; });
+    Object.keys(map).forEach(function (d) { if (Q.learn(S.settings, d, map[d], S.state)) changed = true; });
     if (changed) S.save();
   }
 
@@ -138,6 +138,8 @@
         u.fieldRow('Телефон', 'phone', 'text', v.phone || '') +
         u.fieldRow('Имена в 1С (через запятую)', 'aliases', 'text',
           (v.aliases || []).join ? (v.aliases || []).join(', ') : (v.aliases || '')) +
+        u.fieldRow('Больше не возит', 'archived', 'select', v.archived ? 'да' : 'нет',
+          { options: ['нет', 'да'], hint: 'в формах не предлагается, накладные остаются' }) +
         u.fieldRow('Заметка', 'note', 'text', v.note || '');
     },
     hint: 'Отсрочка 0 — «оплата сразу». Дата выплаты = дата накладной + отсрочка.',
@@ -148,6 +150,7 @@
       if (!f) { f = SUP.firmRecord(v.name); reg.push(f); }
       f.termDays = v.termDays === '' || v.termDays == null ? null : num(v.termDays);
       f.method = v.method || ''; f.phone = v.phone || ''; f.note = v.note || '';
+      f.archived = String(v.archived) === 'да';
       if (typeof v.aliases === 'string') {
         f.aliases = v.aliases.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
       }
@@ -1804,6 +1807,8 @@
         u.fieldRow('Процент с выручки', 'percent', 'number', v.percent || '') +
         u.fieldRow('Телефон', 'phone', 'text', v.phone || '') +
         u.fieldRow('Когда принят', 'hired', 'date', v.hired || '') +
+        u.fieldRow('Когда уволен', 'fired', 'date', v.fired || '',
+          { hint: 'пусто — работает; с этой даты не предлагается в формах' }) +
         u.fieldRow('Заметка', 'note', 'text', v.note || '');
     },
     hint: 'Схему можно смешивать: «Оклад + процент» считает и то, и другое. ' +
@@ -1815,7 +1820,9 @@
       if (old) { Object.keys(v).forEach(function (k) { old[k] = v[k]; }); }
       else S.add('staff', v);
       S.save(); refresh();
-      return { ok: 'Сотрудник «' + v.name + '» сохранён: ' + v.scheme.toLowerCase() + '.' };
+      return { ok: 'Сотрудник «' + v.name + '» сохранён: ' +
+        String(v.scheme || 'схема не выбрана').toLowerCase() +
+        (v.fired ? '. Уволен с ' + dateRu(v.fired) : '') + '.' };
     }
   };
 

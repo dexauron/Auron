@@ -26,8 +26,8 @@ const SCREENS = [
   'ownerpage', 'flow', 'problems', 'eaters', 'pace', 'yearago',
   'avgcheck', 'calend', 'ready', 'kpi', 'compare', 'markup',
   'payroll', 'finday', 'import', 'match', 'recon', 'confirm',
-  'terms', 'reconcile', 'conflicts', 'manual', 'records', 'debtors',
-  'sheets', 'check', 'reset', 'search', 'data', 'settings'
+  'terms', 'reconcile', 'conflicts', 'manual', 'records', 'dicts',
+  'debtors', 'sheets', 'check', 'reset', 'search', 'data', 'settings'
 ];
 
 // строка, которая пытается выполниться, если её вставят в страницу как разметку
@@ -411,6 +411,116 @@ console.log('Страница: ' + PAGE + '\nВыгрузки: ' + (fs.existsSyn
     share.head, 'название и экран');
   await page.evaluate(() => window.WMUI.closeSheet());
   await page.waitForTimeout(200);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close();
+  console.log('');
+}
+
+/* 9. Справочники: загрузка из 1С, увольнение, переименование, скрытие */
+{
+  console.log('— Справочники');
+  const { page, errs } = await open(true);
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { date: '2026-09-01', type: 'Расход', category: 'Хозтовары',
+      method: 'Наличные', cashier: 'Аня', shift: 'День', amount: 500 });
+    S.add('dds', { date: '2026-09-02', type: 'Расход', category: 'Хозтовары',
+      method: 'Наличные', cashier: 'Аня', shift: 'День', amount: 700 });
+    S.add('timesheet', { date: '2026-09-01', employee: 'Пётр', hours: 12, rate: 200 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('dicts');
+  });
+  await page.waitForTimeout(500);
+
+  // поставщики из выгрузок 1С — сперва показать, потом делать
+  const firmsBefore = await page.evaluate(() => (window.WMStore.state.supreg || []).length);
+  await page.click('[data-act="dict-firms-import"]');
+  await page.waitForTimeout(500);
+  const preview = await page.evaluate(() =>
+    (document.querySelector('.sheet') || { textContent: '' }).textContent);
+  check('перед загрузкой из 1С показан разбор',
+    /Добавить поставщиков|Проставить телефон/.test(preview), 'показан', 'показан');
+  await page.click('[data-act="dict-firms-apply"]');
+  await page.waitForTimeout(800);
+  const firms = await page.evaluate(() => ({
+    n: (window.WMStore.state.supreg || []).length,
+    phones: (window.WMStore.state.supreg || []).filter(f => f.phone).length }));
+  check('справочник поставщиков пополнился из 1С', firms.n > firmsBefore,
+    firmsBefore + ' → ' + firms.n, 'больше');
+  check('телефоны из «Контактной информации» проставились', firms.phones > 0,
+    firms.phones + ' с телефоном', '>0');
+
+  // закрыть поставщика — из подсказок уходит, накладные остаются
+  await page.evaluate(() => window.WMUI.go('dicts'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { const b = document.querySelector('[data-act="firm-archive"]'); if (b) b.click(); });
+  await page.waitForTimeout(500);
+  const arch = await page.evaluate(() => {
+    const S = window.WMStore, f = (S.state.supreg || []).find(x => x.archived);
+    return { name: f && f.name,
+      inList: f ? window.WMQuick.dicts(S.state, S.settings).suppliers.indexOf(f.name) >= 0 : null };
+  });
+  check('закрытый поставщик пропал из подсказок', arch.name && arch.inList === false,
+    arch.name, 'нет в подсказках');
+
+  // сотрудники: собрать из записей и уволить
+  await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Сотрудники') >= 0);
+    if (c) c.click();
+  });
+  await page.waitForTimeout(400);
+  await page.click('[data-act="dict-staff-import"]');
+  await page.waitForTimeout(600);
+  const staffN = await page.evaluate(() => (window.WMStore.state.staff || []).length);
+  check('сотрудники собраны из записей', staffN > 0, staffN + ' карточек', '>0');
+
+  await page.evaluate(() => { const b = document.querySelector('[data-act="staff-fire"]'); if (b) b.click(); });
+  await page.waitForTimeout(400);
+  await page.fill('.sheet input[name="fired"]', '2026-09-05');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+  const fired = await page.evaluate(() => {
+    const S = window.WMStore, f = (S.state.staff || []).find(x => x.fired);
+    return { when: f && f.fired,
+      inList: f ? window.WMQuick.dicts(S.state, S.settings).employees.indexOf(f.name) >= 0 : null };
+  });
+  check('уволенный записан с датой', fired.when === '2026-09-05', fired.when, '2026-09-05');
+  check('уволенный пропал из подсказок', fired.inList === false, 'нет', 'нет');
+
+  // переименование переписывает записи, скрытие — нет
+  await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.chip')].find(x => x.textContent.indexOf('Статьи расходов') >= 0);
+    if (c) c.click();
+  });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('table.data tbody tr')]
+      .find(r => r.textContent.indexOf('Хозтовары') >= 0);
+    if (row) row.querySelector('[data-act="dict-rename"]').click();
+  });
+  await page.waitForTimeout(400);
+  await page.fill('.sheet input[name="name"]', 'Хозрасходы');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(600);
+  const ren = await page.evaluate(() => ({
+    old: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозтовары').length,
+    now: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозрасходы').length }));
+  check('переименование переписало записи', ren.old === 0 && ren.now === 2,
+    'было 2 → стало ' + ren.now, 2);
+
+  await page.evaluate(() => {
+    const row = [...document.querySelectorAll('table.data tbody tr')]
+      .find(r => r.textContent.indexOf('Хозрасходы') >= 0);
+    if (row) row.querySelector('[data-act="dict-hide"]').click();
+  });
+  await page.waitForTimeout(600);
+  const hid = await page.evaluate(() => {
+    const S = window.WMStore;
+    return { inList: window.WMQuick.dicts(S.state, S.settings).categories.indexOf('Хозрасходы') >= 0,
+      recs: (S.state.dds || []).filter(r => r.category === 'Хозрасходы').length };
+  });
+  check('скрытое ушло из подсказок', hid.inList === false, 'нет', 'нет');
+  check('записи со скрытым словом не тронуты', hid.recs === 2, hid.recs, 2);
 
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close();

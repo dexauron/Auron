@@ -420,14 +420,11 @@ body.readonly .quick .btn { opacity: .45; }
 .spark path { fill: none; stroke: var(--blue); stroke-width: 1.6; }
 .spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }
 
-/* --- Шаблоны и голос --------------------------------------------------------- */
+/* --- Шаблоны частых записей -------------------------------------------------- */
 .tpl-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
   padding-bottom: 12px; margin-bottom: 2px; border-bottom: .5px solid var(--separator); }
 .tpl-label { font-size: 13px; color: var(--label-2); font-weight: 550; }
 .tpl-save { margin-left: auto; }
-.voice-on { background: var(--red) !important; color: #fff !important;
-  animation: voicePulse 1s ease-in-out infinite; }
-@keyframes voicePulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 
 /* --- Сравнение с прошлым периодом ------------------------------------------- */
 .delta { font-size: 12.5px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
