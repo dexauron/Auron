@@ -63,7 +63,8 @@
 
   // Факт последней закрытой смены по этой кассе: подставляем как размен
   function lastFact(till) {
-    var list = E.shiftsOf(dds(), function (r) { return E.txt(r.till) === E.txt(till); });
+    var list = E.shiftsOf(dds(), function (r) { return E.txt(r.till) === E.txt(till); },
+      S.settings);
     if (!list.length) return null;
     var prev = list[list.length - 1];
     return { fact: E.shiftCalc(prev).factCash, date: E.txt(prev.date), shift: E.txt(prev.shift) };
@@ -454,7 +455,7 @@
     var pt = E.planTotals(S.state.plans || [], today());
     var deb = E.debtorTotals(S.state.debtors || [], today());
     var rating = E.cashierRating(sel.rows);
-    var gaps = E.cashGaps(all);
+    var gaps = E.cashGaps(all, S.settings);
     var debtColor = debt.debt >= num(S.settings.debtCrit) ? 'c-red'
       : (debt.debt >= num(S.settings.debtWarn) ? 'c-orange' : 'c-green');
 
@@ -574,7 +575,7 @@
   function viewMorning() {
     var u = U();
     var all = dds();
-    var shifts = E.shiftsOf(all).slice().reverse();
+    var shifts = E.shiftsOf(all, null, S.settings).slice().reverse();
     var sel = pick();
     var t = E.totals(sel.rows);
 
@@ -786,7 +787,7 @@
           '<small class="c-muted"> ' + esc(dateRu(r.worstDate)) + '</small>' : '—'; } }
     ], rating, { step: 30, empty: 'Смен за период нет.' }));
 
-    var bigOnes = E.shiftsOf(sel.rows).filter(function (r) {
+    var bigOnes = E.shiftsOf(sel.rows, null, S.settings).filter(function (r) {
       return Math.abs(E.shiftCalc(r).diff) >= crit;
     }).sort(function (a, b) { return E.shiftCalc(a).diff - E.shiftCalc(b).diff; });
     if (bigOnes.length) {

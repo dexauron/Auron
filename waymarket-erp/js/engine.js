@@ -232,15 +232,35 @@
     };
   }
 
-  // Смены по порядку: сначала по дате, потом по кассе, потом день/ночь
-  function shiftsOf(rows, filter) {
+  /* Смены по порядку: сначала по дате, потом по кассе, потом по очерёдности
+     смен внутри дня.
+
+     Порядок смен берётся из настроек магазина, а не из жёстких «День, Ночь»:
+     магазин вправе назвать смены «Утро, Вечер» — и раньше такие смены
+     выстраивались задом наперёд, отчего программа выдавала ложную тревогу
+     «размен не сходится» на всю выручку смены.
+
+     Ночная смена, которая заканчивается утром следующего дня, записывается
+     датой, когда она НАЧАЛАСЬ, — это обычный торговый день магазина 24/7.
+     Тогда размен ночной смены и есть факт дневной, и сверка сходится. */
+  function shiftOrder(settings) {
+    var raw = txt(settings && (settings.shiftNames || settings.finShifts));
+    var list = raw ? raw.split(',').map(function (x) { return norm(x); }).filter(Boolean) : [];
+    return list.length ? list : SHIFTS.map(norm);
+  }
+  function shiftsOf(rows, filter, settings) {
+    var order = shiftOrder(settings);
+    function rank(sh) {
+      var i = order.indexOf(norm(sh));
+      return i < 0 ? order.length : i;      // незнакомая смена — в конец дня
+    }
     var out = (rows || []).filter(function (r) {
       return isShift(r) && (!filter || filter(r));
     });
     return out.sort(function (a, b) {
       return txt(a.date).localeCompare(txt(b.date)) ||
         txt(a.till).localeCompare(txt(b.till)) ||
-        SHIFTS.indexOf(txt(a.shift)) - SHIFTS.indexOf(txt(b.shift));
+        rank(a.shift) - rank(b.shift);
     });
   }
 
@@ -388,9 +408,9 @@
   /* Размен новой смены обязан совпадать с фактом предыдущей по той же кассе.
      Не совпал — значит деньги вынули, и это надо записать, иначе учёт
      незаметно разъедется. Возвращаем список таких разрывов. */
-  function cashGaps(rows) {
+  function cashGaps(rows, settings) {
     var last = {}, out = [];
-    shiftsOf(rows).forEach(function (r) {
+    shiftsOf(rows, null, settings).forEach(function (r) {
       var till = txt(r.till) || TILLS[0];
       var prev = last[till];
       var c = shiftCalc(r);
@@ -410,7 +430,7 @@
   // Остаток в каждой кассе на конец последней смены
   function tillState(rows, settings) {
     var last = {};
-    shiftsOf(rows).forEach(function (r) {
+    shiftsOf(rows, null, settings).forEach(function (r) {
       last[txt(r.till) || TILLS[0]] = { fact: shiftCalc(r).factCash,
         date: txt(r.date), shift: txt(r.shift), cashier: txt(r.cashier) };
     });
@@ -2185,7 +2205,7 @@
 
     TILLS: TILLS, SHIFTS: SHIFTS, PLAN_STATUS: PLAN_STATUS, NOMINALS: NOMINALS,
     T_SHIFT: T_SHIFT, T_DAY: T_DAY, T_IN: T_IN, T_OUT: T_OUT, T_DRAW: T_DRAW,
-    T_MOVE: T_MOVE, isMove: isMove, hitsTill: hitsTill, moneyFrom: moneyFrom, notACost: notACost,
+    T_MOVE: T_MOVE, isMove: isMove, shiftOrder: shiftOrder, hitsTill: hitsTill, moneyFrom: moneyFrom, notACost: notACost,
     NOT_A_COST: NOT_A_COST, MONEY_SOURCES: MONEY_SOURCES,
     safeOnHand: safeOnHand, tillPayoutCheck: tillPayoutCheck,
     isShift: isShift, isDay: isDay, isIncome: isIncome, isExpense: isExpense,

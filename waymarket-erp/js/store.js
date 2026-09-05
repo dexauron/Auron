@@ -91,6 +91,14 @@
   var COLLECTIONS = ['dds', 'plans', 'staff', 'timesheet', 'payouts', 'debtors', 'cashcount',
     'log', 'templates', 'dictoff', 'filtersets', 'trash'];
 
+  /* Настоящие журналы — то, что владелец вводит руками и что нельзя потерять.
+     Служебное (журнал правок, корзина, шаблоны, наборы фильтров, скрытые
+     слова справочников) при сверке версий не учитывается: журнал правок
+     растёт от каждой мелочи, и из-за него две одинаковые базы выглядели бы
+     разошедшимися. */
+  var DATA_COLLECTIONS = ['dds', 'plans', 'staff', 'timesheet', 'payouts',
+    'debtors', 'cashcount'];
+
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
     for (var i = 0; i < COLLECTIONS.length; i++) s[COLLECTIONS[i]] = [];
@@ -133,20 +141,98 @@
   // на изменение подписывается сохранение в файл (js/filestore.js)
   function onChange(fn) { changeHooks.push(fn); }
 
+  /* ==========================================================================
+     СОХРАНЕНИЕ: localStorage — главный источник правды
+
+     Запись в браузер происходит МГНОВЕННО и синхронно: закрыли окно сразу
+     после ввода — запись уже там. Файл в папке пишется следом, с небольшой
+     задержкой (браузер не даёт писать на диск синхронно).
+
+     Чтобы отставший файл не затёр свежую запись при следующем запуске,
+     у базы есть отпечаток: rev — номер версии, растёт с каждой записью, и
+     savedAt — когда записали. Тот же отпечаток кладётся в файл. При старте
+     программа сравнивает их и берёт то, что новее, а не то, что в файле.
+     ====================================================================== */
   function save() {
     var ok = true;
+    state.rev = (+state.rev || 0) + 1;
+    state.savedAt = new Date().toISOString();
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
     } catch (e) {
       ok = false; // например, переполнено хранилище браузера
+      lastSaveError = e && e.message ? e.message : 'хранилище браузера переполнено';
     }
+    if (ok) lastSaveError = '';
     changeHooks.forEach(function (fn) { try { fn(state); } catch (e) {} });
     return ok;
+  }
+  var lastSaveError = '';
+
+  // Отпечаток базы: по нему видно, что новее — браузер или файл
+  function stamp(st) {
+    st = st || state;
+    var n = 0;
+    for (var i = 0; i < DATA_COLLECTIONS.length; i++) n += (st[DATA_COLLECTIONS[i]] || []).length;
+    return { rev: +st.rev || 0, savedAt: st.savedAt || '', records: n };
+  }
+
+  /* Что делать при запуске: взять браузер, взять файл или спросить.
+       'local'  — в браузере свежее: файл отстал, запись бы потерялась;
+       'file'   — в файле свежее: работали в другой вкладке или на другом
+                  компьютере, наши данные старые;
+       'same'   — одно и то же, делать нечего;
+       'ask'    — разошлись: и там, и там есть своё, нужен разбор вручную. */
+  function compare(fileState) {
+    var mine = stamp(state), theirs = stamp(fileState || {});
+    if (!fileState) {
+      return { verdict: 'local', mine: mine, theirs: theirs,
+        onlyMine: mine.records, onlyTheirs: 0 };
+    }
+    if (!mine.records && !theirs.records) {
+      return { verdict: 'same', mine: mine, theirs: theirs, onlyMine: 0, onlyTheirs: 0 };
+    }
+    if (!mine.records) {
+      return { verdict: 'file', mine: mine, theirs: theirs,
+        onlyMine: 0, onlyTheirs: theirs.records };
+    }
+    if (!theirs.records) {
+      return { verdict: 'local', mine: mine, theirs: theirs,
+        onlyMine: mine.records, onlyTheirs: 0 };
+    }
+
+    // Записи по номерам: есть ли у одной стороны то, чего нет у другой
+    var mineIds = {}, theirsIds = {}, onlyMine = 0, onlyTheirs = 0, i, j, c, list;
+    for (i = 0; i < DATA_COLLECTIONS.length; i++) {
+      c = DATA_COLLECTIONS[i];
+      list = state[c] || [];
+      for (j = 0; j < list.length; j++) if (list[j] && list[j].id) mineIds[c + ':' + list[j].id] = 1;
+      list = fileState[c] || [];
+      for (j = 0; j < list.length; j++) if (list[j] && list[j].id) theirsIds[c + ':' + list[j].id] = 1;
+    }
+    for (var k in mineIds) if (!theirsIds[k]) onlyMine++;
+    for (var k2 in theirsIds) if (!mineIds[k2]) onlyTheirs++;
+
+    var res = { mine: mine, theirs: theirs, onlyMine: onlyMine, onlyTheirs: onlyTheirs };
+    if (!onlyMine && !onlyTheirs) {
+      // состав одинаковый — берём более позднюю версию, чтобы подхватить правки
+      res.verdict = theirs.savedAt > mine.savedAt ? 'file' : 'same';
+      return res;
+    }
+    if (onlyMine && !onlyTheirs) { res.verdict = 'local'; return res; }
+    if (!onlyMine && onlyTheirs) { res.verdict = 'file'; return res; }
+    res.verdict = 'ask';                  // и там, и там своё — сливать вручную
+    return res;
   }
 
   // Заменить всё содержимое базы (например, прочитанное из файла в папке)
   function replaceAll(data) {
+    var keepRev = +state.rev || 0;
     state = merge(emptyState(), data || {});
+    // номер версии не откатываем назад: иначе следующая запись выглядела бы
+    // старее файла и программа снова взяла бы файл
+    state.rev = Math.max(keepRev, +state.rev || 0) + 1;
+    state.savedAt = new Date().toISOString();
     try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
     return state;
   }
@@ -395,12 +481,15 @@
 
   return {
     KEY: KEY, DEFAULT_SETTINGS: DEFAULT_SETTINGS, COLLECTIONS: COLLECTIONS,
+    DATA_COLLECTIONS: DATA_COLLECTIONS,
     reconcile: reconcile, reconcileWith: reconcileWith,
     get state() { return state; },
     get settings() { return state.settings; },
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
     restore: restore, undo: undo, emptyTrash: emptyTrash, logUndo: logUndo, COLL_RU: COLL_RU,
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
-    fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll
+    fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll,
+    stamp: stamp, compare: compare,
+    get lastSaveError() { return lastSaveError; }
   };
 });

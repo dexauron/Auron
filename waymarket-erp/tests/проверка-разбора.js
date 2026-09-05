@@ -518,6 +518,76 @@ console.log('\n— Списания из 1С: синхронизация фай�
     c.rows.length === 3 && c.stats.kept === 2, c.rows.length, 3);
 }
 
+console.log('\n— Ни байта не теряем: отпечаток базы и сверка при запуске');
+{
+  const S2 = STORE;
+  S2.clear();
+  S2.add('dds', { type: 'Смена', date: '2026-09-01', zCash: 26467 });
+  S2.save();
+  const mine = S2.stamp();
+  check('у базы есть номер версии и время', mine.rev > 0 && !!mine.savedAt,
+    'rev ' + mine.rev, 'есть');
+  check('и число записей', mine.records === 1, mine.records, 1);
+
+  // Файл отстал: в нём ещё пусто, а в браузере уже есть запись
+  const stale = S2.compare({ dds: [], rev: 0, savedAt: '2020-01-01T00:00:00Z' });
+  check('ОТСТАВШИЙ ФАЙЛ НЕ ПЕРЕБИВАЕТ БРАУЗЕР', stale.verdict === 'local',
+    stale.verdict, 'local');
+  check('видно, сколько записей уцелело', stale.onlyMine === 1, stale.onlyMine, 1);
+
+  // В файле есть то, чего нет здесь: работали в другой вкладке
+  const newer = S2.compare({ dds: [{ id: S2.state.dds[0].id, type: 'Смена' },
+    { id: 'zzz', type: 'Смена' }], rev: 99 });
+  check('чужие записи из файла подхватываем', newer.verdict === 'file',
+    newer.verdict, 'file');
+
+  // И там и там своё — молча выбирать нельзя
+  const both = S2.compare({ dds: [{ id: 'zzz', type: 'Смена' }], rev: 99 });
+  check('расхождение отдаём владельцу, а не решаем сами', both.verdict === 'ask',
+    both.verdict, 'ask');
+
+  // Одинаковый состав, файл новее — берём файл (там могли поправить суммы)
+  const sameSet = S2.compare({ dds: [{ id: S2.state.dds[0].id }], rev: 99,
+    savedAt: '2099-01-01T00:00:00Z' });
+  check('тот же состав, но файл новее — берём файл', sameSet.verdict === 'file',
+    sameSet.verdict, 'file');
+
+  // Загрузка из файла не откатывает номер версии назад
+  const before = S2.stamp().rev;
+  S2.replaceAll({ dds: [{ id: 'q' }], rev: 1 });
+  check('номер версии не откатывается назад', S2.stamp().rev > before,
+    S2.stamp().rev + ' > ' + before, 'больше');
+  S2.clear();
+}
+
+console.log('\n— Порядок смен: магазин вправе назвать их по-своему');
+{
+  const rows = [
+    { id: 'a', type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'Вечер',
+      openCash: 16000, zCash: 10000, zCashless: 0, payouts: 0, factCash: 26000 },
+    { id: 'b', type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'Утро',
+      openCash: 5000, zCash: 11000, zCashless: 0, payouts: 0, factCash: 16000 }
+  ];
+  const set = { shiftNames: 'Утро, Вечер' };
+  check('смены выстроились в порядке из настроек',
+    WM.shiftsOf(rows, null, set).map(r => r.shift).join('→') === 'Утро→Вечер',
+    WM.shiftsOf(rows, null, set).map(r => r.shift).join('→'), 'Утро→Вечер');
+  check('ЛОЖНОЙ ТРЕВОГИ ПРО РАЗМЕН БОЛЬШЕ НЕТ', WM.cashGaps(rows, set).length === 0,
+    WM.cashGaps(rows, set).length, 0);
+
+  // настоящий разрыв всё так же ловится
+  const real = [rows[1], { id: 'c', type: 'Смена', date: '2026-09-01', till: 'Касса 1',
+    shift: 'Вечер', openCash: 6000, zCash: 1, zCashless: 0, payouts: 0, factCash: 1 }];
+  check('а настоящий разрыв ловится', WM.cashGaps(real, set).length === 1,
+    WM.cashGaps(real, set).length, 1);
+  check('стандартные «День, Ночь» работают без настроек',
+    WM.cashGaps([{ id: 'x', type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      openCash: 5000, zCash: 11000, zCashless: 0, payouts: 0, factCash: 16000 },
+      { id: 'y', type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'Ночь',
+        openCash: 16000, zCash: 10000, zCashless: 0, payouts: 0, factCash: 26000 }]).length === 0,
+    'тревог нет', 0);
+}
+
 console.log('\n— Справочники');
 {
   const st = {

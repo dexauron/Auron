@@ -292,10 +292,58 @@
 
   /* --- сохранение базы --- */
   // Пишем не чаще раза в секунду: при быстром вводе не дёргаем диск на каждую букву
+  /* ==========================================================================
+     ЗАПИСЬ НА ДИСК БЕЗ ПОТЕРЬ
+
+     Браузер не умеет писать файлы синхронно: пока идёт запись, окно может
+     закрыться. Поэтому запись отложена на 900 мс — иначе при быстром вводе
+     диск дёргался бы на каждую букву.
+
+     Чтобы задержка ничего не стоила, сделано три вещи:
+       1) окно прячут или закрывают — запись срывается немедленно (flushNow);
+       2) сама база уже лежит в localStorage, синхронно, целиком;
+       3) при следующем запуске программа сверяет отпечатки и берёт то, что
+          новее, — отставший файл свежую запись не затирает.
+     ====================================================================== */
+  var pending = null;              // чьи данные ждут записи
+
   function scheduleSave(getData) {
     if (state !== 'ready') return;
+    pending = getData;
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(function () { saveNow(getData); }, 900);
+    saveTimer = setTimeout(function () { saveTimer = null; saveNow(getData); }, 900);
+  }
+
+  /* Записать прямо сейчас всё, что ждало очереди. Вызывается, когда окно
+     прячут или закрывают, и перед любой опасной операцией. */
+  function flushNow(getData) {
+    var fn = getData || pending;
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    if (state !== 'ready' || !fn) return Promise.resolve(false);
+    return saveNow(fn, true);
+  }
+
+  /* Срываем запись, когда окно уходит: вкладку спрятали, свернули, закрыли.
+     visibilitychange — единственное событие, которое браузеры обещают
+     доставить на телефоне; beforeunload на мобильных часто не приходит,
+     поэтому на нём одном строить нельзя. */
+  var lifecycleBound = false;
+  function bindLifecycle(getData) {
+    if (lifecycleBound || typeof document === 'undefined') return;
+    lifecycleBound = true;
+    pending = getData || pending;
+    function bail() { try { flushNow(); } catch (e) { /* закрытие не ломаем */ } }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') bail();
+    });
+    window.addEventListener('pagehide', bail);
+    window.addEventListener('beforeunload', bail);
+    // телефон усыпляет вкладку — тоже последний шанс записать
+    window.addEventListener('freeze', bail);
+    window.addEventListener('blur', function () {
+      // окно потеряло фокус: не срочно, но записать стоит
+      if (saveTimer) bail();
+    });
   }
 
   // Сколько копий храним (из настроек программы, по умолчанию 30)
@@ -344,7 +392,11 @@
         }
       }
       var stampTime = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
-      var payload = JSON.stringify({ saved: new Date().toISOString(), data: getData() }, null, 2);
+      var data = getData();
+      var payload = JSON.stringify({ saved: new Date().toISOString(),
+        // отпечаток: по нему при следующем запуске видно, что новее
+        rev: +(data && data.rev) || 0, savedAt: (data && data.savedAt) || '',
+        data: data }, null, 2);
       var st = await writeFileStamped(DATA_FILE, payload);
       dataStamp = st;
       // копия с датой и временем: перезагрузка страницы больше не затирает
@@ -585,6 +637,8 @@
   return {
     supported: supported, connect: connect, restore: restore, reconnect: reconnect, forget: forget,
     scheduleSave: scheduleSave, saveNow: saveNow, loadSaved: loadSaved,
+    flushNow: flushNow, bindLifecycle: bindLifecycle,
+    get saveQueued() { return !!saveTimer; },
     listExports: listExports, writeFile: writeFile, readFile: readFile, onChange: onChange,
     saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,

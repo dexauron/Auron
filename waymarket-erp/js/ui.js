@@ -926,6 +926,47 @@
     // Имя сохранённого набора фильтров спрашиваем своей формой, а не окном
     // браузера: системное окно выглядит чужеродно и в части браузеров
     // блокируется, а здесь всё как в остальной программе.
+    /* «Быстрая настройка»: пять полей, без которых программа считает
+       неправильно. Кнопка на экране настроек была, а формы за ней не было. */
+    setupWizard: {
+      title: 'Быстрая настройка', icon: '🧭',
+      body: function (v) {
+        var s2 = S.settings; v = v || {};
+        return fieldRow('Название магазина', 'storeName', 'text',
+          v.storeName != null ? v.storeName : s2.storeName) +
+          fieldRow('Денежные ящики', 'tills', 'text',
+            v.tills != null ? v.tills : s2.tills,
+            { hint: 'через запятую: «Касса 1, Касса 2»' }) +
+          fieldRow('Названия смен', 'shiftNames', 'text',
+            v.shiftNames != null ? v.shiftNames : s2.shiftNames,
+            { hint: 'по порядку, от первой к последней: «День, Ночь»' }) +
+          fieldRow('Наличных в кассах сейчас', 'openCashStart', 'number',
+            v.openCashStart != null ? v.openCashStart : s2.openCashStart,
+            { hint: 'сложите деньги во всех ящиках' }) +
+          fieldRow('Наличных в сейфе сейчас', 'openSafeStart', 'number',
+            v.openSafeStart != null ? v.openSafeStart : s2.openSafeStart) +
+          fieldRow('Долг поставщикам сейчас', 'openDebtStart', 'number',
+            v.openDebtStart != null ? v.openDebtStart : s2.openDebtStart,
+            { hint: 'общей суммой по магазину' });
+      },
+      hint: 'Это тот минимум, без которого остаток наличных и долг начнутся с нуля, ' +
+        'а не с того, что есть на самом деле. Остальное настраивается ниже, на экране.',
+      save: function (v) {
+        if (!E.txt(v.tills)) return 'Впишите хотя бы один денежный ящик.';
+        if (!E.txt(v.shiftNames)) return 'Впишите хотя бы одну смену.';
+        ['storeName', 'tills', 'shiftNames'].forEach(function (k) {
+          S.setSetting(k, E.txt(v[k]));
+        });
+        ['openCashStart', 'openSafeStart', 'openDebtStart'].forEach(function (k) {
+          S.setSetting(k, E.num(v[k]));
+        });
+        S.setSetting('finShifts', E.txt(v.shiftNames));
+        applyLook(); recompute();
+        return { ok: 'Готово. Программа считает от ' + money(E.num(v.openCashStart)) +
+          ' в кассах и долга ' + money(E.num(v.openDebtStart)) + '.' };
+      }
+    },
+
     filterSetName: {
       title: 'Запомнить набор фильтров', icon: '⭐',
       body: function (v) {
@@ -1217,7 +1258,7 @@
         E.daysBetween(d.date, t) > (num(S.settings.debtorOldDays) || 30);
     }).length;
     if (oldN) c.debtors = oldN > 99 ? '99+' : oldN;
-    var bad = E.shiftsOf(S.state.dds || []).filter(function (r) {
+    var bad = E.shiftsOf(S.state.dds || [], null, S.settings).filter(function (r) {
       return !E.shiftCalc(r).ok && E.daysBetween(r.date, t) <= 30;
     }).length;
     if (bad) c.cashiers = bad > 99 ? '99+' : bad;
@@ -1256,7 +1297,7 @@
       items.push({ icon: '🧮', text: 'За ' + dateRu(yest) + ' смена не сверена', go: 'morning' });
     }
     var crit = num(S.settings.diffCrit) || 1000;
-    var bad = E.shiftsOf(S.state.dds || []).filter(function (r) {
+    var bad = E.shiftsOf(S.state.dds || [], null, S.settings).filter(function (r) {
       return E.daysBetween(r.date, t) <= 7 && Math.abs(E.shiftCalc(r).diff) >= crit;
     });
     if (bad.length) items.push({ icon: '⚠️', text: 'Крупные расхождения кассы: ' + bad.length +
@@ -1609,19 +1650,31 @@
     sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
       '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
   }
+  /* Кнопка «＋ Записать» — главный вход на телефоне. Каждый пункт здесь
+     обязан открывать существующую форму: раньше девять из десяти вели в
+     пустоту, потому что остались от прошлой версии программы. */
   function openAddSheet() {
-    sheet('Что записать?', listOf([
-      listRow({ icon: '💵', title: 'Касса за смену', sub: 'Z-отчёт и фактические деньги', tap: true, attrs: ' data-form="cashShift"' }),
-      listRow({ icon: '🧾', title: 'Расход', sub: 'закуп, аренда, ЗП, прочее', tap: true, attrs: ' data-form="ddsExpense"' }),
-      listRow({ icon: '💰', title: 'Приход денег', sub: 'прочие поступления', tap: true, attrs: ' data-form="ddsIncome"' }),
-      listRow({ icon: '📅', title: 'Выплата поставщику', sub: 'план платежа и оплата', tap: true, attrs: ' data-form="payPlan"' }),
-      listRow({ icon: '📥', title: 'Приход товара', sub: 'накладная от поставщика', tap: true, attrs: ' data-form="invoice"' }),
-      listRow({ icon: '💸', title: 'Оплата поставщику', sub: 'наличными или переводом', tap: true, attrs: ' data-form="payment"' }),
-      listRow({ icon: '🗑', title: 'Списание товара', sub: 'просрочка, бой, потери', tap: true, attrs: ' data-form="writeoff"' }),
-      listRow({ icon: '⏰', title: 'Товар с коротким сроком', sub: 'чтобы вовремя уценить', tap: true, attrs: ' data-form="expiryItem"' }),
-      listRow({ icon: '👤', title: 'Смена сотрудника', sub: 'часы и ставка', tap: true, attrs: ' data-form="timesheet"' }),
-      listRow({ icon: '💰', title: 'Выплата сотруднику', sub: 'аванс или зарплата', tap: true, attrs: ' data-form="payout"' })
-    ], ''));
+    var items = [
+      ['💵', 'Сверка кассы за смену', 'Z-отчёт, выплаты, факт в ящике', 'shiftClose'],
+      ['🌙', 'Итоги дня', 'товар за наличные, долги поставщикам', 'dayTotals'],
+      ['🧾', 'Расход', 'аренда, ЗП, ГСМ, обеды', 'moneyOut'],
+      ['💰', 'Приход денег', 'прочие поступления', 'moneyIn'],
+      ['🚛', 'Инкассация', 'увезли в сейф или банк', 'moveCash'],
+      ['👛', 'Забрал владелец', 'деньги из оборота', 'moneyDraw'],
+      ['📅', 'Выплата поставщику', 'план платежа', 'payPlan'],
+      ['📓', 'Долг покупателя', 'тетрадка у кассы', 'debtor'],
+      ['🧮', 'Пересчёт кассы', 'по купюрам', 'cashCount'],
+      ['🗒', 'Смена в табель', 'часы, премия, удержание', 'timesheetRow'],
+      ['💵', 'Выдать зарплату', 'аванс или расчёт', 'payoutRow'],
+      ['👤', 'Новый сотрудник', 'карточка со ставкой', 'staffCard']
+    ];
+    // показываем только то, что действительно есть: если файл экрана не
+    // подключён, пункт не рисуем, а не ведём владельца в пустоту
+    var live = items.filter(function (i) { return !!FORMS[i[3]]; });
+    sheet('Что записать?', listOf(live.map(function (i) {
+      return listRow({ icon: i[0], title: esc(i[1]), sub: esc(i[2]), tap: true,
+        attrs: ' data-form="' + esc(i[3]) + '"' });
+    }), 'Формы ввода не подключились — переоткройте программу.'));
   }
 
   /* --- Обработчики ------------------------------------------------------------------ */
@@ -1753,6 +1806,24 @@
           if (data) { S.replaceAll(data); recompute(); render(); toast('Взяли версию из файла.'); }
         });
       }
+      else if (a === 'q-repeat') {
+        /* «Повторить сегодня»: та же запись с сегодняшней датой. Открываем
+           форму заполненной, а не сохраняем молча — суммы почти всегда
+           надо поправить, да и молчаливая запись пугает. */
+        var src2 = (S.state[el.dataset.coll] || []).filter(function (x) {
+          return x.id === el.dataset.id;
+        })[0];
+        if (!src2) { toast('Запись не найдена — возможно, её уже удалили.'); return; }
+        var form2 = el.dataset.target;
+        if (!form2 || !FORMS[form2]) { toast('Для этой записи нет формы ввода.'); return; }
+        var copy = JSON.parse(JSON.stringify(src2));
+        delete copy.id;
+        copy.date = today();
+        if (copy.due) copy.due = today();
+        closeRowMenu();
+        openForm(form2, copy);
+        toast('Дата поставлена сегодняшняя — проверьте суммы и сохраните.');
+      }
       else if (a === 'add-record') openAddSheet();
       else if (a === 'open-menu') openMenuSheet();
       else if (a === 'readonly-on') {
@@ -1806,6 +1877,7 @@
           toast('Записали вашу версию поверх файла. Прежняя лежит в копиях.');
         });
       }
+      else if (a === 'settings-wizard') openForm('setupWizard');
       else if (a === 'settings-reset') {
         if (confirm('Вернуть все настройки к стандартным? Записи и документы не тронутся.')) {
           Object.keys(S.DEFAULT_SETTINGS).forEach(function (k) { S.setSetting(k, S.DEFAULT_SETTINGS[k]); });
@@ -2049,6 +2121,15 @@
       F.scheduleSave(function () { return S.state; });
       scheduleBook();
     });
+    /* Окно закрывают или прячут — дописываем файл немедленно, не дожидаясь
+       задержки. Сама база к этому моменту уже в localStorage: он пишется
+       синхронно, в той же строке, где владелец нажал «Сохранить». */
+    F.bindLifecycle(function () { return S.state; });
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'hidden') return;
+      if (bookTimer) { clearTimeout(bookTimer); bookTimer = null;
+        try { F.saveBook(bookBytes()); } catch (e) { /* книга не должна мешать */ } }
+    });
     F.onChange(function (st, when, other) {
       renderNav();
       if (other) conflictAsk(other);
@@ -2067,8 +2148,31 @@
 
     var st = await F.restore();
     if (st === 'ready') {
+      /* Сверка при запуске. Раньше здесь стояло безусловное «взять файл», и
+         запись, сделанная за секунду до закрытия окна, пропадала: файл ещё
+         не успевал записаться, а localStorage затирался его старым
+         содержимым. Теперь сравниваем отпечатки и берём то, что новее. */
       var saved = await F.loadSaved();
-      if (saved) S.replaceAll(saved);
+      var cmp = S.compare(saved);
+      if (saved && cmp.verdict === 'file') {
+        S.replaceAll(saved);
+      } else if (saved && cmp.verdict === 'local') {
+        // в браузере свежее — не трогаем базу, а дописываем файл
+        await F.flushNow(function () { return S.state; });
+        if (cmp.onlyMine) {
+          setTimeout(function () {
+            toast('Восстановлено ' + nf(cmp.onlyMine) + ' ' +
+              plural(cmp.onlyMine, 'запись', 'записи', 'записей') +
+              ': в файл они попасть не успели, программу закрыли слишком быстро. ' +
+              'Сейчас всё на месте и записано в папку.', 11000);
+          }, 1200);
+        }
+      } else if (saved && cmp.verdict === 'ask') {
+        // и в браузере, и в файле есть своё — это две вкладки или два
+        // компьютера. Молча выбирать нельзя, пропадёт чужая работа.
+        conflictAsk({ text: JSON.stringify({ data: saved }), data: saved,
+          onlyMine: cmp.onlyMine, onlyTheirs: cmp.onlyTheirs });
+      }
       // 125. Базы нет, а книга есть — предлагаем собрать базу из книги.
       // Так бывает, когда файл базы случайно удалили или почистили папку:
       // книга «Бухгалтерия.xlsx» лежит на виду и её удаляют реже.

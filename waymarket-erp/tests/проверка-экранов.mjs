@@ -556,6 +556,132 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 5г. Мёртвых кнопок быть не должно */
+{
+  console.log('— Кнопки, которые никуда не ведут');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 20000, zCashless: 0, payouts: 0, factCash: 20000 });
+    S.save(); window.WMUI.recompute();
+  });
+
+  // Все data-form на всех экранах должны открывать существующую форму
+  const ids = await screensOf(page);
+  const deadForms = new Set();
+  for (const id of ids) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(110);
+    const bad = await page.evaluate(() => {
+      const out = [];
+      document.querySelectorAll('[data-form]').forEach(b => {
+        if (!window.WMUI.form(b.dataset.form)) out.push(b.dataset.form);
+      });
+      return out;
+    });
+    bad.forEach(f => deadForms.add(f));
+  }
+  check('на экранах нет кнопок в несуществующую форму', deadForms.size === 0,
+    [...deadForms].join(', ') || 'нет', 'нет');
+
+  // Главная кнопка «＋ Записать» на телефоне
+  await page.evaluate(() => window.WMUI.go('pulse'));
+  await page.waitForTimeout(200);
+  await page.evaluate(() => document.querySelector('[data-act="add-record"]').click());
+  await page.waitForTimeout(400);
+  const add = await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.sheet [data-form]')];
+    return { total: items.length,
+      dead: items.map(b => b.dataset.form).filter(f => !window.WMUI.form(f)) };
+  });
+  check('«＋ Записать» показывает пункты', add.total >= 8, add.total + ' пунктов', '>=8');
+  check('И КАЖДЫЙ ПУНКТ ОТКРЫВАЕТ ФОРМУ', add.dead.length === 0,
+    add.dead.join(', ') || 'все живые', 'все живые');
+
+  // пункт действительно открывается
+  await page.evaluate(() => document.querySelector('.sheet [data-form="moveCash"]').click());
+  await page.waitForTimeout(400);
+  const opened = await page.evaluate(() => !!document.querySelector('#wmForm [name="amount"]'));
+  check('пункт открывает форму, а не пустоту', opened, opened ? 'открылась' : 'ничего',
+    'открылась');
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(250);
+
+  // «Повторить сегодня» из меню строки
+  await page.evaluate(() => window.WMUI.go('ledger'));
+  await page.waitForTimeout(300);
+  const repeated = await page.evaluate(() => {
+    const S = window.WMStore, rec = S.state.dds[0];
+    const el = { dataset: { coll: 'dds', id: rec.id, target: 'shiftClose' } };
+    return typeof window.WMUI.form('shiftClose') === 'object';
+  });
+  check('форма для «Повторить сегодня» существует', repeated, 'есть', 'есть');
+
+  // «Быстрая настройка» на экране настроек
+  await page.evaluate(() => window.WMUI.go('settings'));
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-act="settings-wizard"]').click());
+  await page.waitForTimeout(400);
+  const wiz = await page.evaluate(() => !!document.querySelector('#wmForm [name="openCashStart"]'));
+  check('«Быстрая настройка» открывается', wiz, wiz ? 'открылась' : 'мёртвая кнопка', 'открылась');
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(250);
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 5д. Ни байта не теряем при резком закрытии окна */
+{
+  console.log('— Закрыли окно сразу после ввода');
+  const { page, ctx, errs } = await open();
+
+  // Владелец записал смену и тут же прячет вкладку
+  await page.evaluate(() => {
+    window.WMStore.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1',
+      shift: 'День', cashier: 'Аня', openCash: 0, zCash: 26467, zCashless: 29743,
+      payouts: 10000, factCash: 16467 });
+    window.WMStore.save();
+  });
+  const ls = await page.evaluate(() => {
+    const raw = localStorage.getItem(window.WMStore.KEY);
+    return raw ? (JSON.parse(raw).dds || []).length : 0;
+  });
+  check('запись легла в браузер МГНОВЕННО, без задержки', ls === 1, ls, 1);
+
+  // Следующий запуск читает отставший файл — запись обязана уцелеть
+  const kept = await page.evaluate(() => {
+    const S = window.WMStore;
+    const stale = { dds: [], plans: [], staff: [], timesheet: [], payouts: [],
+      debtors: [], cashcount: [], rev: 0, savedAt: '2020-01-01T00:00:00Z' };
+    const cmp = S.compare(stale);
+    if (cmp.verdict === 'file') S.replaceAll(stale);
+    return { verdict: cmp.verdict, left: (S.state.dds || []).length, saved: cmp.onlyMine };
+  });
+  check('ОТСТАВШИЙ ФАЙЛ ЗАПИСЬ НЕ СТЁР', kept.left === 1 && kept.verdict === 'local',
+    kept.left + ' записей, вердикт ' + kept.verdict, '1, local');
+  check('программа знает, сколько спасла', kept.saved === 1, kept.saved, 1);
+
+  // Скрытие вкладки должно срывать запись на диск немедленно
+  const flush = await page.evaluate(async () => {
+    const F = window.WMFiles;
+    if (typeof F.flushNow !== 'function') return 'нет flushNow';
+    if (typeof F.bindLifecycle !== 'function') return 'нет bindLifecycle';
+    // папка не подключена — запись вернёт false, но не должна падать
+    let threw = null;
+    try { await F.flushNow(function () { return window.WMStore.state; }); }
+    catch (e) { threw = e.message; }
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('pagehide'));
+    return threw || 'ок';
+  });
+  check('срыв записи на диск есть и не падает без папки', flush === 'ок', flush, 'ок');
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 /* 6. Справочники: кассиры, увольнение, переименование */
 {
   console.log('— Справочники');
