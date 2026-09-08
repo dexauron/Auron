@@ -24,7 +24,7 @@ import { fmtPrice, todayISO } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
-import { RETAIL_HIST_ROWS } from './data.js';
+import { RETAIL_HIST_ROWS, pricesByProduct, pricesOf } from './data.js';
 
 const RISE_DAYS = 30;          // окно новостей — месяц, как просил владелец
 const RISE_ROWS = 6;           // столько строк в полосе на главной
@@ -165,23 +165,12 @@ function riseOf(p, rows) {
  *     изменения ценника в список даже не заглядывает.
  * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
  * массивы, что и остальной кэш приложения. */
-let riseCache = { products: null, prices: null, retail: null, byId: null, list: null };
+let riseCache = { gen: -1, session: null, list: [] };
 
 function refreshRise() {
-  /* Приводим к одному и тому же объекту, а не к новому пустому при каждом
-     вызове: иначе сверка «те же данные?» никогда не совпадала бы и всё
-     считалось заново на каждой перерисовке — ровно та беда, от которой этот
-     кэш и заводится. */
-  if (!state.prices) state.prices = [];
-  if (!state.retailHist) state.retailHist = {};
-  const prices = state.prices;
-  const retail = state.retailHist;
-  if (riseCache.products === state.products && riseCache.prices === prices && riseCache.retail === retail) return;
-  const byId = new Map();
-  for (const r of prices) {
-    const cur = byId.get(r.product_id);
-    if (cur) cur.push(r); else byId.set(r.product_id, [r]);
-  }
+  if (riseCache.gen === state.dataGen && riseCache.session === !!state.session) return;
+  const retail = state.retailHist || {};
+  const byId = pricesByProduct();
   const out = [];
   if (state.session) {
     // кандидаты: у кого есть вторая цена либо менялся ценник — остальных не трогаем
@@ -194,10 +183,9 @@ function refreshRise() {
     }
     out.sort((a, b) => b.pct - a.pct);
   }
-  riseCache = { products: state.products, prices, retail, byId, list: out.slice(0, LIST_MAX) };
+  riseCache = { gen: state.dataGen, session: !!state.session, list: out.slice(0, LIST_MAX) };
 }
 
-// строки цен одного товара — из того же указателя, что и список
 /* Первый расчёт после нового каталога — не на горячем пути. Он занимает
  * заметную долю секунды на бюджетном телефоне, а полоса «Подорожало» не
  * настолько срочная, чтобы ради неё замирал главный экран: посчитаем в
@@ -211,13 +199,7 @@ function riseWhenIdle(after) {
     ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 60);
 }
 
-const riseReady = () => riseCache.products === state.products
-  && riseCache.prices === state.prices && riseCache.retail === state.retailHist;
-
-function pricesOf(id) {
-  refreshRise();
-  return riseCache.byId.get(id) || [];
-}
+const riseReady = () => riseCache.gen === state.dataGen && riseCache.session === !!state.session;
 
 function risenList() {
   refreshRise();
