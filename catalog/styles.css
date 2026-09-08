@@ -165,6 +165,10 @@ body {
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: 0 0 auto;
+  /* Высота у чипа складывалась из отступов и высоты строки, а она зависит от
+     шрифта: получалось то 33,6 px, то 34,2 — и проверка «не мельче пальца»
+     падала через раз не из-за поломки, а из-за округления. Задаём высоту явно. */
+  min-height: 34px; display: inline-flex; align-items: center;
   padding: 9px 16px;
   border-radius: 100px;
   border: 1px solid var(--border);
