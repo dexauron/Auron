@@ -159,12 +159,24 @@ export async function shareProduct(p) {
 
 // Похожие товары — ПО НАЗВАНИЮ: совпадают слова в наименовании, особенно
 // первое слово (обычно бренд): «Агуша …» → другие «Агуша …».
-const nameWords = (n) => norm(n || '').split(/[^0-9a-zа-яё]+/i).filter((w) => w.length >= 3);
+const splitWords = (n) => norm(n || '').split(/[^0-9a-zа-яё]+/i).filter((w) => w.length >= 3);
+/* Разбор названия на слова стоит недёшево, а карточку открывают десятки раз за
+   смену, и каждый раз разбирались названия одних и тех же товаров. Запоминаем
+   разобранное до следующего каталога — сверяем по той же ссылке на список
+   товаров, что и остальной кэш приложения. */
+let wordsCache = { src: null, map: null };
+function nameWords(name, id) {
+  if (id == null) return splitWords(name);
+  if (wordsCache.src !== state.products) wordsCache = { src: state.products, map: new Map() };
+  let w = wordsCache.map.get(id);
+  if (!w) wordsCache.map.set(id, w = splitWords(name));
+  return w;
+}
 function renderSimilar(p) {
   const box = $('sheetSimilar');
   if (box && !state.session) { box.innerHTML = ''; return; }   // лента с фото — не для покупателя
   if (!box) return;
-  const pw = nameWords(p.name);
+  const pw = nameWords(p.name, p.id);
   if (!pw.length) { box.innerHTML = ''; return; }
   const pset = new Set(pw);
   const first = pw[0];
@@ -173,7 +185,7 @@ function renderSimilar(p) {
      всё равно не станет, а перебор всего каталога стоил секунды на карточку. */
   for (const x of productsWithWords(pw)) {
     if (x.id === p.id) continue;
-    const xw = nameWords(x.name);
+    const xw = nameWords(x.name, x.id);
     if (!xw.length) continue;
     let shared = 0;
     for (const w of xw) if (pset.has(w)) shared++;
