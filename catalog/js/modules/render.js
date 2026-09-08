@@ -9,6 +9,7 @@ import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
 import { ratingText } from './reviews.js';
+import { renderRiseStrip } from './pricerise.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -506,6 +507,7 @@ export function renderAll() {
   syncTabs(); renderCatScreen();
   renderNewProducts();
   renderCheaper();
+  renderRiseStrip();
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
@@ -718,6 +720,7 @@ const CHEAP_ROWS = 5;
 
 function renderCheaper() {
   ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
+  ui.anyFilter = anyFilterActive;        // полосе «подорожало» нужно то же правило показа
   const box = $('cheaperStrip');
   if (!box) return;
   const show = state.tab === 'catalog'

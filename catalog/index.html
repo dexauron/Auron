@@ -85,6 +85,7 @@
     <div class="recent-strip" id="newStrip" hidden></div>
     <!-- Покупателю: что подешевело со вчера. Причина зайти сегодня -->
     <div class="arr-strip" id="cheaperStrip" hidden></div>
+    <div class="arr-strip" id="riseStrip" hidden></div>
     <!-- Покупателю: что привезли сегодня (или последний завоз) -->
     <div class="arr-strip" id="arrivalStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
@@ -1132,6 +1133,18 @@
           <button class="ios-row ios-row-danger" id="ordDelete"><span class="ios-row-title">Удалить заказ</span></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Подорожало: что выросло в цене и когда (сотрудник и владелец) -->
+  <div class="sheet-backdrop" id="risenSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <h2 class="ios-nav-title">Подорожало</h2>
+        <button class="ios-nav-btn strong" data-close="risenSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="risenBody"></div>
     </div>
   </div>
 
