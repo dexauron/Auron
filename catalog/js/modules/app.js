@@ -24,6 +24,7 @@ import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
+import { bindPriceRise } from './pricerise.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -974,6 +975,7 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
+  bindPriceRise(openProduct);
   bindMargin(openProduct);
   bindScanResult(openProduct, toggleShop, openShelfReport);
   // отзывы: покупатель оценивает, владелец добавляет и сразу публикует

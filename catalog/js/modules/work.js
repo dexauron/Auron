@@ -13,6 +13,7 @@ import { plural } from './competitors.js';
 import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
 import { compareCount } from './compare.js';
+import { riseCount } from './pricerise.js';
 
 export function openWork() {
   renderWork();
@@ -41,12 +42,14 @@ function renderWork() {
     : 'на этой неделе пусто';
   const rest = restockCount();
   const cmp = compareCount();
+  const up = riseCount();
 
   box.innerHTML = `
     <div class="ios-group">
       ${row('orders', 'Заказы поставщикам', orders)}
       ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
+      ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
       ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
       ${row('scan', 'Сканировать штрихкод', '')}
     </div>
