@@ -85,6 +85,37 @@ const KEEP_PRICE_DAYS = 730;
 const KEEP_SALES_PERIODS = 12;
 const KEEP_POPULAR = 300;
 
+/* ── Цены по товару: один указатель на всё приложение ───────────────────────
+ * Строка цены знает свой товар, но не наоборот. Каждый, кому нужны цены одного
+ * товара, писал `state.prices.filter(...)` — то есть проходил ВЕСЬ список.
+ * Пока список был коротким, это сходило с рук; на настоящем магазине (25 000
+ * строк цен, 12 000 товаров) один такой проход на каждый товар превращался в
+ * сотни миллионов сравнений: меню открывалось двадцать одну секунду, экран
+ * наценки — семнадцать.
+ * Теперь цены раскладываются по товарам один раз на поколение данных
+ * (`state.dataGen`, растёт в buildIndex — то есть после любой выгрузки, входа
+ * и загрузки каталога). */
+let priceIdx = { gen: -1, src: null, n: -1, map: new Map(), stamp: 0 };
+export function pricesByProduct() {
+  const list = state.prices || [];
+  /* Сверяем тремя способами сразу: поколение данных, тот же ли это список и не
+     изменилась ли его длина. Одного поколения мало — цены иногда меняют
+     напрямую (удалили поставщика, тест подложил свои), и указатель молча
+     остался бы вчерашним. */
+  if (priceIdx.gen === state.dataGen && priceIdx.src === list && priceIdx.n === list.length) return priceIdx.map;
+  const map = new Map();
+  for (const r of list) {
+    const cur = map.get(r.product_id);
+    if (cur) cur.push(r); else map.set(r.product_id, [r]);
+  }
+  priceIdx = { gen: state.dataGen, src: list, n: list.length, map, stamp: priceIdx.stamp + 1 };
+  return map;
+}
+/* Метка «цены с тех пор не менялись» — по ней себя сбрасывают расчёты,
+   которые из этих цен считаются (наценка, «подорожало»). */
+export const priceStamp = () => { pricesByProduct(); return priceIdx.stamp; };
+export const pricesOf = (id) => pricesByProduct().get(id) || [];
+
 export function tidyMemory() {
   const before = { prices: (state.prices || []).length, sales: (state.sales || []).length };
   const edge = new Date(Date.now() - KEEP_PRICE_DAYS * 86400000).toISOString().slice(0, 10);

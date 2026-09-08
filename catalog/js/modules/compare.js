@@ -7,6 +7,7 @@
  * закупка, у кого она, наценка и остаток. Список живёт на устройстве. */
 
 import { $, state, ui } from './store.js';
+import { pricesOf } from './data.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtPrice, fmtRetail } from './catalog.js';
 import { priceParts } from './card.js';
@@ -45,7 +46,7 @@ export function renderCompareBar() {
 
 // лучшая (самая низкая) цена за штуку среди поставщиков товара
 function bestOffer(p) {
-  const rows = (state.prices || []).filter((r) => r.product_id === p.id);
+  const rows = pricesOf(p.id);
   let best = null;
   for (const r of rows) {
     const parts = priceParts(p, r);

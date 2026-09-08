@@ -19,12 +19,12 @@
  * изменение, а от разрастания списка спасает тот же месячный срок. */
 
 import { $, state, ui } from './store.js';
-import { closeSheet, esc, openSheet, supplierById } from './core.js';
+import { closeSheet, cmpStr, esc, openSheet, supplierById } from './core.js';
 import { fmtPrice, todayISO } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
-import { RETAIL_HIST_ROWS } from './data.js';
+import { RETAIL_HIST_ROWS, priceStamp, pricesByProduct, pricesOf } from './data.js';
 
 const RISE_DAYS = 30;          // окно новостей — месяц, как просил владелец
 const RISE_ROWS = 6;           // столько строк в полосе на главной
@@ -40,6 +40,8 @@ const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
  * чем кто-то успевал с ней сравнить. Отсюда и невозможность ответить на самый
  * нужный вопрос — «на сколько и когда подорожало».
  *
+ * Указатель строк (idx) приходит снаружи: он строится один раз на весь файл.
+ *
  * Теперь так: цена не изменилась — обновляем дату у той же записи (это тот же
  * ценник, просто привезли снова); изменилась — кладём НОВУЮ запись рядом, а
  * старая остаётся с её датой. Сколько таких записей хранить, решает tidyMemory
@@ -47,19 +49,36 @@ const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
  *
  * Выгрузка задним числом (дата старее той, что уже лежит) историю не трогает:
  * иначе один случайно открытый старый файл переписал бы всё. */
-export function rememberPrice(p, sid, info) {
+export function rememberPrice(p, sid, info, idx) {
   const date = info.date || null;
-  const rows = state.prices.filter((x) => x.product_id === p.id && x.supplier_id === sid);
+  const key = p.id + '|' + sid;
+  const rows = idx.get(key) || [];
   let last = null;
   for (const r of rows) if (!last || String(r.price_date || '') > String(last.price_date || '')) last = r;
-  if (!last) {
-    state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
-    return;
-  }
+  const add = () => {
+    const row = { product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null };
+    state.prices.push(row);
+    rows.push(row);
+    idx.set(key, rows);
+  };
+  if (!last) { add(); return; }
   if (String(date || '') < String(last.price_date || '')) return;      // файл старее того, что уже знаем
   const same = Number(last.price) === Number(info.price) && (last.unit || '') === (info.unit || '');
   if (same) { last.price_date = date || last.price_date; return; }
-  state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+  add();
+}
+
+/* Указатель для одной загрузки. Строится ОДИН раз на файл: искать нужную
+ * строку перебором всего списка цен — значит на прайсе в 25 000 строк сделать
+ * триста миллионов сравнений и подвесить телефон на всю вечернюю выгрузку. */
+export function priceIndexForImport() {
+  const idx = new Map();
+  for (const r of (state.prices || [])) {
+    const key = r.product_id + '|' + r.supplier_id;
+    const cur = idx.get(key);
+    if (cur) cur.push(r); else idx.set(key, [r]);
+  }
+  return idx;
 }
 
 /* Ценник менялся — запоминаем прежнюю цену и день, когда мы увидели новую.
@@ -78,37 +97,39 @@ export function rememberRetail(p, price) {
 /* ── Закупка ────────────────────────────────────────────────────────────────
  * Сравниваем ЗА ШТУКУ: поставщик мог перейти со штук на упаковки, тогда само
  * число в прайсе меняется, а цена — нет. Берём поставщика, у которого рост
- * больше всех: именно с ним и предстоит разговор. */
-function costRise(p) {
-  if (!p) return null;
+ * больше всех: именно с ним и предстоит разговор.
+ *
+ * Строки цен ПРИХОДЯТ ГОТОВЫМИ — только по этому товару. Сама функция по
+ * общему списку цен не ходит: в нём двадцать пять тысяч строк, и один такой
+ * проход на каждый из двенадцати тысяч товаров вешал приложение намертво
+ * (см. «Скорость» в docs/ОШИБКИ.md). */
+function costRise(p, rows) {
+  if (!p || !rows || rows.length < 2) return null;
   const from = edgeISO();
   const bySup = new Map();
-  for (const r of (state.prices || [])) {
-    if (r.product_id !== p.id) continue;
+  for (const r of rows) {
     if (!bySup.has(r.supplier_id)) bySup.set(r.supplier_id, []);
     bySup.get(r.supplier_id).push(r);
   }
   let best = null;
-  for (const [sid, rows] of bySup) {
-    rows.sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
-    const now = priceParts(p, rows[0]);
+  for (const [sid, list] of bySup) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => cmpStr(String(b.price_date || ''), String(a.price_date || '')));
+    const at = String(list[0].price_date || '').slice(0, 10);
+    if (!at || at < from) continue;                        // новость старше месяца — не новость
+    const now = priceParts(p, list[0]);
     if (!now || !(now.piece > 0)) continue;
-    // прежняя цена — первая, что отличается за штуку, и не старше месяца
-    const prevRow = rows.slice(1).find((r) => {
-      const q = priceParts(p, r);
-      return q && q.piece > 0 && q.piece !== now.piece;
-    });
-    if (!prevRow) continue;
-    const at = String(rows[0].price_date || '').slice(0, 10);
-    if (!at || at < from) continue;
-    const prev = priceParts(p, prevRow);
-    if (prev.piece >= now.piece) continue;                 // подешевело — это не наша новость
-    const item = {
-      was: prev.piece, is: now.piece, at, pct: pct(prev.piece, now.piece),
-      sup: (supplierById(sid) || {}).name || '',
-    };
+    // прежняя цена — первая, что отличается за штуку
+    let prev = null;
+    for (let i = 1; i < list.length && !prev; i++) {
+      const q = priceParts(p, list[i]);
+      if (q && q.piece > 0 && q.piece !== now.piece) prev = q;
+    }
+    if (!prev || prev.piece >= now.piece) continue;        // подешевело — это не наша новость
+    const item = { was: prev.piece, is: now.piece, at, pct: pct(prev.piece, now.piece), sid };
     if (!best || item.pct > best.pct) best = item;
   }
+  if (best) best.sup = (supplierById(best.sid) || {}).name || '';
   return best;
 }
 
@@ -129,41 +150,88 @@ function retailRise(p) {
 
 /* ── Наценка тает ───────────────────────────────────────────────────────────
  * Закупка выросла, ценник прежний. Считаем наценку до и после — в этом вся
- * суть: «было 22%, стало 9%» понятнее, чем «закупка +14%». */
-function marginSqueeze(p) {
-  const c = costRise(p);
-  if (!c) return null;
-  if (retailRise(p)) return null;                          // ценник тоже подняли — всё честно
+ * суть: «было 22%, стало 9%» понятнее, чем «закупка +14%».
+ * Готовые cost и retail передаются внутрь: пересчитывать их здесь заново — та
+ * же лишняя работа, помноженная на весь каталог. */
+function marginSqueeze(p, cost, retail) {
+  if (!cost || retail) return null;                        // ценник тоже подняли — всё честно
   const sell = Number(p && p.retail_price);
-  if (!(sell > 0) || sell <= c.is) return null;
-  return { wasPct: Math.round(((sell - c.was) / c.was) * 100), isPct: Math.round(((sell - c.is) / c.is) * 100) };
+  if (!(sell > 0) || sell <= cost.is) return null;
+  return { wasPct: Math.round(((sell - cost.was) / cost.was) * 100), isPct: Math.round(((sell - cost.is) / cost.is) * 100) };
 }
 
 /* Кому что видно: сотруднику — только ценник, владельцу — обе цены.
  * Это то же правило, по которому сотруднику не показывают закупку нигде. */
 const seesCost = () => !!state.canPurchase;
 
-function riseOf(p) {
+function riseOf(p, rows) {
   const retail = retailRise(p);
-  const cost = seesCost() ? costRise(p) : null;
+  const cost = seesCost() ? costRise(p, rows || pricesOf(p.id)) : null;
   if (!retail && !cost) return null;
-  const squeeze = cost ? marginSqueeze(p) : null;
+  const squeeze = marginSqueeze(p, cost, retail);
   // «когда» — по самому свежему из двух событий
   const at = [retail && retail.at, cost && cost.at].filter(Boolean).sort().pop();
   return { p, retail, cost, squeeze, at, pct: Math.max(retail ? retail.pct : 0, cost ? cost.pct : 0) };
 }
 
-/* Список для экрана и для полосы. Пересчитываем при каждом открытии: каталог
- * обновляется раз в сутки, а список короткий — считать заранее незачем. */
-function risenList() {
-  if (!state.session) return [];
+/* ── Список: считаем один раз на каталог ───────────────────────────────────
+ * Прежняя редакция обходила ВСЕ товары и для каждого просматривала весь список
+ * цен. На настоящем магазине (12 000 товаров, 25 000 строк цен) это давало
+ * тридцать пять секунд на одну перерисовку — каталог у вошедшего владельца
+ * попросту вис. Теперь два правила, оба из «Скорости» в скиле:
+ *   • цены раскладываются по товарам ОДИН раз (указатель), а не ищутся заново;
+ *   • кандидаты берутся из самих данных — товар без второй цены и без
+ *     изменения ценника в список даже не заглядывает.
+ * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
+ * массивы, что и остальной кэш приложения. */
+let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [] };
+
+function refreshRise() {
+  /* Держим один и тот же объект, а не создаём новый пустой при каждом вызове:
+     иначе сверка «те же данные?» не совпадала бы никогда и всё считалось бы
+     заново на каждой перерисовке — ровно та беда, от которой этот кэш и есть. */
+  if (!state.retailHist) state.retailHist = {};
+  if (riseReady()) return;
+  const retail = state.retailHist;
+  const byId = pricesByProduct();
   const out = [];
-  for (const p of state.products) {
-    const r = riseOf(p);
-    if (r) out.push(r);
+  if (state.session) {
+    // кандидаты: у кого есть вторая цена либо менялся ценник — остальных не трогаем
+    const ids = new Set(Object.keys(retail));
+    if (seesCost()) for (const [id, rows] of byId) if (rows.length > 1) ids.add(id);
+    for (const p of state.products) {
+      if (!ids.has(p.id)) continue;
+      const r = riseOf(p, byId.get(p.id) || []);
+      if (r) out.push(r);
+    }
+    out.sort((a, b) => b.pct - a.pct);
   }
-  out.sort((a, b) => b.pct - a.pct);
-  return out.slice(0, LIST_MAX);
+  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out.slice(0, LIST_MAX) };
+}
+
+/* Первый расчёт после нового каталога — не на горячем пути. Он занимает
+ * заметную долю секунды на бюджетном телефоне, а полоса «Подорожало» не
+ * настолько срочная, чтобы ради неё замирал главный экран: посчитаем в
+ * свободную минуту и дорисуем. Там, где ответ нужен прямо сейчас (экран
+ * «Подорожало», карточка товара), считаем сразу — человек сам туда нажал. */
+let riseIdle = 0;
+function riseWhenIdle(after) {
+  if (riseIdle) return;
+  const run = () => { riseIdle = 0; refreshRise(); after(); };
+  riseIdle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 60);
+}
+
+const riseReady = () => riseCache.stamp === priceStamp()
+  && riseCache.products === state.products
+  && riseCache.retail === state.retailHist
+  && riseCache.session === !!state.session
+  // роль решает, видно ли закупку: сменился вход — список нужно пересобрать
+  && riseCache.can === seesCost();
+
+function risenList() {
+  refreshRise();
+  return riseCache.list;
 }
 
 export const riseCount = () => risenList().length;
@@ -204,6 +272,8 @@ export function renderRiseStrip() {
   const box = $('riseStrip');
   if (!box) return;
   const show = state.session && state.tab === 'catalog' && !state.query && !state.favOnly && !ui.anyFilter();
+  if (!state.retailHist) state.retailHist = {};
+  if (show && !riseReady()) { riseWhenIdle(renderRiseStrip); box.hidden = true; return; }
   const list = show ? risenList() : [];
   if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
   const rows = list.slice(0, RISE_ROWS).map((r) => {
