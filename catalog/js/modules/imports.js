@@ -10,7 +10,7 @@ import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js'
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
-import { rememberPrice, rememberRetail } from './pricerise.js';
+import { priceIndexForImport, rememberPrice, rememberRetail } from './pricerise.js';
 import { loadScript } from './scanner.js';
 
 /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
@@ -102,6 +102,7 @@ function svAddBarcodes(idx, p, barcodes) {
 // «Цены поставщиков» (parsePriceReport): товары + штрихкоды + поставщики + закупка + иногда розница
 function svUploadPrices(byKey) {
   const idx = svIndex(); state.prices = state.prices || [];
+  const pidx = priceIndexForImport();      // один указатель на весь файл, см. pricerise.js
   for (const item of byKey.values()) {
     const barcodes = [...item.barcodes];
     let p = svMatch(idx, item.code, barcodes, item.name);
@@ -121,7 +122,7 @@ function svUploadPrices(byKey) {
       const sid = svSupplierId(supName);
       if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
       if (info.date && (!maxDate || info.date > maxDate)) maxDate = info.date;
-      rememberPrice(p, sid, info);
+      rememberPrice(p, sid, info, pidx);
     }
     // «Поступление» — самая свежая дата цены (для фильтра «🆕 Пришло сегодня»)
     if (maxDate && (!p.arrival_at || maxDate > String(p.arrival_at).slice(0, 10))) p.arrival_at = maxDate;

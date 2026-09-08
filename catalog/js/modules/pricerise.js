@@ -40,6 +40,8 @@ const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
  * чем кто-то успевал с ней сравнить. Отсюда и невозможность ответить на самый
  * нужный вопрос — «на сколько и когда подорожало».
  *
+ * Указатель строк (idx) приходит снаружи: он строится один раз на весь файл.
+ *
  * Теперь так: цена не изменилась — обновляем дату у той же записи (это тот же
  * ценник, просто привезли снова); изменилась — кладём НОВУЮ запись рядом, а
  * старая остаётся с её датой. Сколько таких записей хранить, решает tidyMemory
@@ -47,19 +49,36 @@ const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
  *
  * Выгрузка задним числом (дата старее той, что уже лежит) историю не трогает:
  * иначе один случайно открытый старый файл переписал бы всё. */
-export function rememberPrice(p, sid, info) {
+export function rememberPrice(p, sid, info, idx) {
   const date = info.date || null;
-  const rows = state.prices.filter((x) => x.product_id === p.id && x.supplier_id === sid);
+  const key = p.id + '|' + sid;
+  const rows = idx.get(key) || [];
   let last = null;
   for (const r of rows) if (!last || String(r.price_date || '') > String(last.price_date || '')) last = r;
-  if (!last) {
-    state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
-    return;
-  }
+  const add = () => {
+    const row = { product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null };
+    state.prices.push(row);
+    rows.push(row);
+    idx.set(key, rows);
+  };
+  if (!last) { add(); return; }
   if (String(date || '') < String(last.price_date || '')) return;      // файл старее того, что уже знаем
   const same = Number(last.price) === Number(info.price) && (last.unit || '') === (info.unit || '');
   if (same) { last.price_date = date || last.price_date; return; }
-  state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+  add();
+}
+
+/* Указатель для одной загрузки. Строится ОДИН раз на файл: искать нужную
+ * строку перебором всего списка цен — значит на прайсе в 25 000 строк сделать
+ * триста миллионов сравнений и подвесить телефон на всю вечернюю выгрузку. */
+export function priceIndexForImport() {
+  const idx = new Map();
+  for (const r of (state.prices || [])) {
+    const key = r.product_id + '|' + r.supplier_id;
+    const cur = idx.get(key);
+    if (cur) cur.push(r); else idx.set(key, [r]);
+  }
+  return idx;
 }
 
 /* Ценник менялся — запоминаем прежнюю цену и день, когда мы увидели новую.

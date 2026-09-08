@@ -16,6 +16,7 @@ import { syncShopButton } from './shopping.js';
 import { syncWaitButton } from './news.js';
 import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
+import { pricesOf } from './data.js';
 import { riseHtml } from './pricerise.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
 
@@ -645,7 +646,7 @@ async function renderProductPrices(p) {
   if (!state.session || !state.canPurchase) { box.innerHTML = ''; return; }
   // серверлес: цены поставщиков берём из памяти (расшифрованный каталог)
   if (state.serverless) {
-    const rows = (state.prices || []).filter((r) => r.product_id === p.id)
+    const rows = pricesOf(p.id)
       .sort((a, b) => String(b.price_date || '').localeCompare(String(a.price_date || '')));
     renderCardSuppliers(p, rows, baseSupIds, {});
     return;
