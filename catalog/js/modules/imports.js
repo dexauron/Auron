@@ -76,16 +76,43 @@ function svMatch(idx, code, barcodes, name) {
   if (name) { const k = nameKey(name); if (k && idx.byKey.get(k)) return idx.byKey.get(k); }
   return null;
 }
+/* Поставщик и группа по названию — через указатель, а не перебором.
+ * Раньше на КАЖДУЮ строку прайса перебирался весь список поставщиков, и
+ * название каждого приводилось к общему виду заново. На настоящем файле
+ * (12 000 строк, 668 поставщиков) это семь миллионов лишних приведений —
+ * восемьдесят процентов всего времени выгрузки. Указатель строится один раз и
+ * дополняется, когда появляется новое имя. */
+function lookupIdx(cache, list) {
+  if (cache.src !== list || cache.n !== list.length) {
+    cache.src = list; cache.n = list.length;
+    cache.map = new Map();
+    for (const x of list) cache.map.set(norm(x.name), x);
+  }
+  return cache;
+}
+const grpIdx = { src: null, n: -1, map: null };
+const supIdx = { src: null, n: -1, map: null };
+
 function svGroupId(name) {
   if (!name) return null;
-  let g = state.groups.find((x) => norm(x.name) === norm(name));
-  if (!g) { g = { id: svUuid(), name: String(name).trim(), sort_order: state.groups.length + 1 }; state.groups.push(g); }
+  const c = lookupIdx(grpIdx, state.groups);
+  const key = norm(name);
+  let g = c.map.get(key);
+  if (!g) {
+    g = { id: svUuid(), name: String(name).trim(), sort_order: state.groups.length + 1 };
+    state.groups.push(g); c.map.set(key, g); c.n = state.groups.length;
+  }
   return g.id;
 }
 function svSupplierId(name) {
   if (!name) return null;
-  let s = state.suppliers.find((x) => norm(x.name) === norm(name));
-  if (!s) { s = { id: svUuid(), name: String(name).trim() }; state.suppliers.push(s); }
+  const c = lookupIdx(supIdx, state.suppliers);
+  const key = norm(name);
+  let s = c.map.get(key);
+  if (!s) {
+    s = { id: svUuid(), name: String(name).trim() };
+    state.suppliers.push(s); c.map.set(key, s); c.n = state.suppliers.length;
+  }
   return s.id;
 }
 function svNewProduct(idx, name) {
