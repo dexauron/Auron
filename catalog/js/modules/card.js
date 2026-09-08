@@ -16,6 +16,7 @@ import { syncShopButton } from './shopping.js';
 import { syncWaitButton } from './news.js';
 import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
+import { riseHtml } from './pricerise.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
 
 /* ── Карточка товара ──────────────────────────── */
