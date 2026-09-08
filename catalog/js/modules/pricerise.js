@@ -24,7 +24,7 @@ import { fmtPrice, todayISO } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
-import { RETAIL_HIST_ROWS, pricesByProduct, pricesOf } from './data.js';
+import { RETAIL_HIST_ROWS, priceStamp, pricesByProduct, pricesOf } from './data.js';
 
 const RISE_DAYS = 30;          // окно новостей — месяц, как просил владелец
 const RISE_ROWS = 6;           // столько строк в полосе на главной
@@ -184,10 +184,10 @@ function riseOf(p, rows) {
  *     изменения ценника в список даже не заглядывает.
  * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
  * массивы, что и остальной кэш приложения. */
-let riseCache = { gen: -1, session: null, list: [] };
+let riseCache = { stamp: -1, products: null, retail: null, session: null, list: [] };
 
 function refreshRise() {
-  if (riseCache.gen === state.dataGen && riseCache.session === !!state.session) return;
+  if (riseReady()) return;
   const retail = state.retailHist || {};
   const byId = pricesByProduct();
   const out = [];
@@ -202,7 +202,7 @@ function refreshRise() {
     }
     out.sort((a, b) => b.pct - a.pct);
   }
-  riseCache = { gen: state.dataGen, session: !!state.session, list: out.slice(0, LIST_MAX) };
+  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, list: out.slice(0, LIST_MAX) };
 }
 
 /* Первый расчёт после нового каталога — не на горячем пути. Он занимает
@@ -218,7 +218,10 @@ function riseWhenIdle(after) {
     ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 60);
 }
 
-const riseReady = () => riseCache.gen === state.dataGen && riseCache.session === !!state.session;
+const riseReady = () => riseCache.stamp === priceStamp()
+  && riseCache.products === state.products
+  && riseCache.retail === (state.retailHist || null)
+  && riseCache.session === !!state.session;
 
 function risenList() {
   refreshRise();

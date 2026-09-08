@@ -20,7 +20,7 @@ import { fmtPrice, isFreshPrice } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { cellStr, parseDateCell, stockNum } from './imports.js';
-import { pricesOf } from './data.js';
+import { priceStamp, pricesOf } from './data.js';
 
 const THIN_PCT = 5;        // наценка ниже этой — «почти в ноль»
 const MAX_ROWS = 200;      // длиннее список никто не прочитает
@@ -46,12 +46,13 @@ const inStock = (p) => {
 
 /* Считаем один раз на поколение данных: этот разбор зовут и меню (счётчик),
  * и сам экран, и делать его дважды подряд незачем. */
-let issuesCache = { gen: -1, val: null };
+let issuesCache = { stamp: -1, products: null, can: null, val: null };
 export function marginIssues() {
-  if (issuesCache.gen === state.dataGen && issuesCache.can === state.canPurchase) return issuesCache.val;
+  const stamp = priceStamp();
+  if (issuesCache.stamp === stamp && issuesCache.products === state.products && issuesCache.can === state.canPurchase) return issuesCache.val;
   const loss = []; const thin = []; const noPrice = [];
   if (!state.canPurchase) {
-    issuesCache = { gen: state.dataGen, can: state.canPurchase, val: { loss, thin, noPrice } };
+    issuesCache = { stamp, products: state.products, can: state.canPurchase, val: { loss, thin, noPrice } };
     return issuesCache.val;
   }
   for (const p of state.products || []) {
@@ -70,7 +71,7 @@ export function marginIssues() {
   }
   loss.sort((a, b) => a.pct - b.pct);          // самые убыточные наверх
   thin.sort((a, b) => a.pct - b.pct);
-  issuesCache = { gen: state.dataGen, can: state.canPurchase, val: { loss, thin, noPrice } };
+  issuesCache = { stamp, products: state.products, can: state.canPurchase, val: { loss, thin, noPrice } };
   return issuesCache.val;
 }
 
