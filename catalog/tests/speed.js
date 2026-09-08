@@ -137,6 +137,12 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
     const P = window.WM_PUBLISH; const s = P._state();
     P.ghSetToken('tok'); P.applyServerless('pw');
     s.suppliers = d.suppliers; s.prices = d.prices;
+    /* Убираем поиск, оставшийся от замеров выше: полоса «Подорожало» при
+       активном поиске не показывается, и без этой строчки самый тяжёлый
+       расчёт просто не запускался бы — проверка мерила бы пустоту. */
+    const inp2 = document.getElementById('searchInput');
+    inp2.value = ''; inp2.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
     P.buildIndex();
     const out = {};
     const timeIt = (k, fn) => { const t = performance.now(); fn(); out[k] = Math.round(performance.now() - t); };
