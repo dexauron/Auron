@@ -19,10 +19,11 @@
 
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById } from './core.js';
-import { fmtPrice } from './catalog.js';
+import { fmtPrice, todayISO } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
+import { RETAIL_HIST_ROWS } from './data.js';
 
 const RISE_DAYS = 30;          // окно новостей — месяц, как просил владелец
 const RISE_ROWS = 6;           // столько строк в полосе на главной
@@ -31,11 +32,53 @@ const LIST_MAX = 200;          // длиннее список никто не л
 const edgeISO = () => new Date(Date.now() - RISE_DAYS * 86400000).toISOString().slice(0, 10);
 const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
 
+/* ── Память цен: почему её раньше не было ───────────────────────────────────
+ * Выгрузка из 1С приходит каждый вечер, и до 08.09.2026 новая цена поставщика
+ * просто затирала вчерашнюю. Место под историю в каталоге было (карточка её
+ * показывает), но заполнить его было нечем: вчерашняя цена исчезала раньше,
+ * чем кто-то успевал с ней сравнить. Отсюда и невозможность ответить на самый
+ * нужный вопрос — «на сколько и когда подорожало».
+ *
+ * Теперь так: цена не изменилась — обновляем дату у той же записи (это тот же
+ * ценник, просто привезли снова); изменилась — кладём НОВУЮ запись рядом, а
+ * старая остаётся с её датой. Сколько таких записей хранить, решает tidyMemory
+ * (восемь на поставщика), так что расти бесконечно память не может.
+ *
+ * Выгрузка задним числом (дата старее той, что уже лежит) историю не трогает:
+ * иначе один случайно открытый старый файл переписал бы всё. */
+export function rememberPrice(p, sid, info) {
+  const date = info.date || null;
+  const rows = state.prices.filter((x) => x.product_id === p.id && x.supplier_id === sid);
+  let last = null;
+  for (const r of rows) if (!last || String(r.price_date || '') > String(last.price_date || '')) last = r;
+  if (!last) {
+    state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+    return;
+  }
+  if (String(date || '') < String(last.price_date || '')) return;      // файл старее того, что уже знаем
+  const same = Number(last.price) === Number(info.price) && (last.unit || '') === (info.unit || '');
+  if (same) { last.price_date = date || last.price_date; return; }
+  state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+}
+
+/* Ценник менялся — запоминаем прежнюю цену и день, когда мы увидели новую.
+ * Даты смены ценника в 1С нет ни в одном файле, поэтому берём день выгрузки:
+ * владелец выгружает каждый вечер, значит ошибка — не больше суток. */
+export function rememberRetail(p, price) {
+  const was = p.retail_price;
+  p.retail_price = price;
+  if (was == null || was === '' || Number(was) === Number(price) || !(Number(was) > 0)) return;
+  state.retailHist = state.retailHist || {};
+  const list = state.retailHist[p.id] || [];
+  list.unshift({ price: Number(was), at: todayISO() });
+  state.retailHist[p.id] = list.slice(0, RETAIL_HIST_ROWS);
+}
+
 /* ── Закупка ────────────────────────────────────────────────────────────────
  * Сравниваем ЗА ШТУКУ: поставщик мог перейти со штук на упаковки, тогда само
  * число в прайсе меняется, а цена — нет. Берём поставщика, у которого рост
  * больше всех: именно с ним и предстоит разговор. */
-export function costRise(p) {
+function costRise(p) {
   if (!p) return null;
   const from = edgeISO();
   const bySup = new Map();
@@ -72,7 +115,7 @@ export function costRise(p) {
  * История ценника пишется при выгрузке из 1С: там даты смены цены нет, поэтому
  * датой считаем день выгрузки. Владелец выгружает каждый вечер — ошибка не
  * больше суток. */
-export function retailRise(p) {
+function retailRise(p) {
   if (!p) return null;
   const is = Number(p.retail_price);
   if (!(is > 0)) return null;
@@ -86,7 +129,7 @@ export function retailRise(p) {
 /* ── Наценка тает ───────────────────────────────────────────────────────────
  * Закупка выросла, ценник прежний. Считаем наценку до и после — в этом вся
  * суть: «было 22%, стало 9%» понятнее, чем «закупка +14%». */
-export function marginSqueeze(p) {
+function marginSqueeze(p) {
   const c = costRise(p);
   if (!c) return null;
   if (retailRise(p)) return null;                          // ценник тоже подняли — всё честно
@@ -99,7 +142,7 @@ export function marginSqueeze(p) {
  * Это то же правило, по которому сотруднику не показывают закупку нигде. */
 const seesCost = () => !!state.canPurchase;
 
-export function riseOf(p) {
+function riseOf(p) {
   const retail = retailRise(p);
   const cost = seesCost() ? costRise(p) : null;
   if (!retail && !cost) return null;
@@ -111,7 +154,7 @@ export function riseOf(p) {
 
 /* Список для экрана и для полосы. Пересчитываем при каждом открытии: каталог
  * обновляется раз в сутки, а список короткий — считать заранее незачем. */
-export function risenList() {
+function risenList() {
   if (!state.session) return [];
   const out = [];
   for (const p of state.products) {
@@ -207,7 +250,7 @@ function renderRisen() {
     история хранится месяц, потом стирается сама.</p>`;
 }
 
-export function openRisen() {
+function openRisen() {
   renderRisen();
   openSheet('risenSheet');
 }
