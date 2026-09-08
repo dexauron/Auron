@@ -187,8 +187,12 @@ function riseOf(p, rows) {
 let riseCache = { stamp: -1, products: null, retail: null, session: null, list: [] };
 
 function refreshRise() {
+  /* Держим один и тот же объект, а не создаём новый пустой при каждом вызове:
+     иначе сверка «те же данные?» не совпадала бы никогда и всё считалось бы
+     заново на каждой перерисовке — ровно та беда, от которой этот кэш и есть. */
+  if (!state.retailHist) state.retailHist = {};
   if (riseReady()) return;
-  const retail = state.retailHist || {};
+  const retail = state.retailHist;
   const byId = pricesByProduct();
   const out = [];
   if (state.session) {
@@ -220,7 +224,7 @@ function riseWhenIdle(after) {
 
 const riseReady = () => riseCache.stamp === priceStamp()
   && riseCache.products === state.products
-  && riseCache.retail === (state.retailHist || null)
+  && riseCache.retail === state.retailHist
   && riseCache.session === !!state.session;
 
 function risenList() {
@@ -266,6 +270,7 @@ export function renderRiseStrip() {
   const box = $('riseStrip');
   if (!box) return;
   const show = state.session && state.tab === 'catalog' && !state.query && !state.favOnly && !ui.anyFilter();
+  if (!state.retailHist) state.retailHist = {};
   if (show && !riseReady()) { riseWhenIdle(renderRiseStrip); box.hidden = true; return; }
   const list = show ? risenList() : [];
   if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
