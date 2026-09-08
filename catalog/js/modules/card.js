@@ -16,6 +16,7 @@ import { syncShopButton } from './shopping.js';
 import { syncWaitButton } from './news.js';
 import { feature } from './brand.js';
 import { daysBetween } from './admin.js';
+import { riseHtml } from './pricerise.js';
 import { barcodeSortKey, fmtBarcodeUnit, parseBarcodeUnit, svSaveAndPublish } from './imports.js';
 
 /* ── Карточка товара ──────────────────────────── */
@@ -123,6 +124,8 @@ export function openProduct(p) {
   }
   if (!rows.length && state.session) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
   $('sheetFields').innerHTML = rows.join('');
+  // подорожание — сразу под названием: у полки об этом спрашивают первым делом
+  $('sheetRise').innerHTML = state.session ? riseHtml(p) : '';
 
   $('sheetAdminActions').hidden = !state.isAdmin;
   // фото пока грузятся только на сервере — в бесплатном режиме кнопки прячем

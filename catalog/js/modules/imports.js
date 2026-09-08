@@ -10,6 +10,7 @@ import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js'
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
+import { rememberPrice, rememberRetail } from './pricerise.js';
 import { loadScript } from './scanner.js';
 
 /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
@@ -112,7 +113,7 @@ function svUploadPrices(byKey) {
     if (item.group) p.group_id = svGroupId(item.group);
     if (item.unit && !p.unit) p.unit = item.unit;
     if (item.weighted) p.is_weighted = true;
-    if (item.retail != null) p.retail_price = item.retail;
+    if (item.retail != null) rememberRetail(p, item.retail);
     svAddBarcodes(idx, p, barcodes);
     for (const supName of item.suppliers) { const sid = svSupplierId(supName); if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid); }
     let maxDate = null; // дата поступления = самая свежая цена поставщика (столбец «Период»)
@@ -120,9 +121,7 @@ function svUploadPrices(byKey) {
       const sid = svSupplierId(supName);
       if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
       if (info.date && (!maxDate || info.date > maxDate)) maxDate = info.date;
-      const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
-      if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; ex.unit = info.unit || null; } }
-      else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null, unit: info.unit || null });
+      rememberPrice(p, sid, info);
     }
     // «Поступление» — самая свежая дата цены (для фильтра «🆕 Пришло сегодня»)
     if (maxDate && (!p.arrival_at || maxDate > String(p.arrival_at).slice(0, 10))) p.arrival_at = maxDate;
@@ -134,7 +133,7 @@ function svUploadRetail(parsed) {
     let p = svMatch(idx, null, [], rec.name);
     if (!p && rec.article) p = state.products.find((x) => x.article && norm(x.article) === norm(rec.article)) || null;
     if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) p.article = rec.article; }
-    if (rec.retail != null) p.retail_price = rec.retail;
+    if (rec.retail != null) rememberRetail(p, rec.retail);
     if (rec.group) p.group_id = svGroupId(rec.group);
   }
 }
@@ -150,7 +149,7 @@ function svUploadStock(parsed) {
     if (rec.group) p.group_id = svGroupId(rec.group);
     if (rec.unit && !p.unit) p.unit = rec.unit;
     if (rec.unit === 'кг') p.is_weighted = true;
-    if (rec.retail != null) p.retail_price = rec.retail;
+    if (rec.retail != null) rememberRetail(p, rec.retail);
     // описание из 1С — на ценник покупателю. Повтор названия описанием не
     // считаем: колонку «Характеристика» часто заполняют тем же названием
     if (rec.descr && !p.description && norm(rec.descr) !== norm(rec.name)) p.description = rec.descr;

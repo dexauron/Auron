@@ -75,6 +75,12 @@ export function sortByName(list) {
  *   • счётчик просмотров — 300 самых открываемых товаров.
  * Всё, что нужно для расчётов «сколько заказать» и сравнения цен, остаётся. */
 const KEEP_PRICE_ROWS = 8;
+/* История ценника («подорожало» у сотрудника и владельца) живёт месяц —
+ * решение владельца 08.09.2026: «данные, которым уже месяц, чтобы стёрлись».
+ * Больше и не нужно: новость про подорожание месячной давности — уже не
+ * новость, а память телефона не копит лишнего. */
+export const RETAIL_HIST_ROWS = 8;
+const KEEP_RETAIL_DAYS = 30;
 const KEEP_PRICE_DAYS = 730;
 const KEEP_SALES_PERIODS = 12;
 const KEEP_POPULAR = 300;
@@ -99,6 +105,17 @@ export function tidyMemory() {
       kept.push(r);
     }
     state.prices = kept;
+  }
+
+  // ценник: изменения за последний месяц, дальше — незачем
+  if (state.retailHist) {
+    const redge = new Date(Date.now() - KEEP_RETAIL_DAYS * 86400000).toISOString().slice(0, 10);
+    const next = {};
+    for (const [id, rows] of Object.entries(state.retailHist)) {
+      const keep = (rows || []).filter((r) => String(r.at || '') >= redge).slice(0, RETAIL_HIST_ROWS);
+      if (keep.length) next[id] = keep;
+    }
+    state.retailHist = next;
   }
 
   // продажи: последние периоды

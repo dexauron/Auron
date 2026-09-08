@@ -60,7 +60,12 @@ const products = Array.from({ length: 6 }, (_, i) => ({
         document.querySelectorAll('button, [role="button"]').forEach((el) => {
           const r = el.getBoundingClientRect();
           if (!r.width || !r.height || skip(el)) return;
-          if (r.height < 34 || r.width < 32) {
+          /* Полпикселя допуска. Окно выезжает с преобразованием (transform), и
+             замер отдаёт размер С УЧЁТОМ него: кнопка ростом ровно 34 px в
+             последний миг анимации меряется как 33,99 — и проверка падала через
+             раз без всякой поломки. Настоящая мелочь (28 px и меньше) допуск
+             всё так же не проходит. */
+          if (r.height < 33.5 || r.width < 31.5) {
             out2.push(`${Math.round(r.width)}×${Math.round(r.height)} «${(el.innerText || el.id || el.className).replace(/\s+/g, ' ').slice(0, 22)}»`);
           }
         });
