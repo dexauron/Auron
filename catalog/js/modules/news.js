@@ -63,14 +63,9 @@ function toggleWait(p) {
   syncWaitButton(p);
 }
 
-/* ── Что изменилось с прошлого захода ───────────────────────────────────────
- * Считалось только для покупателя. Владелец решил иначе: зачёркнутая старая
- * цена и полоса «сегодня дешевле» нужны и сотруднику (его спрашивают у полки),
- * и владельцу (видно, что правка цены доехала). Поэтому цены сравниваем
- * ВСЕГДА, а плашку «что нового» с ожиданиями и новинками по-прежнему
- * показываем только покупателю — она про его личные пометки. */
-export async function checkNews() {
-  if (!state.products.length) { hideBanner(); return; }
+/* ── Что изменилось с прошлого захода ─────────────────────────────────── */
+export async function checkGuestNews() {
+  if (state.session || !state.products.length) { hideBanner(); return; }
   const now = {};
   for (const p of state.products) { const v = priceOf(p); if (v) now[p.id] = v; }
 
@@ -80,10 +75,6 @@ export async function checkNews() {
     && (Date.now() - new Date(snap.at).getTime()) < SNAP_DAYS * 86400000;
 
   news.cheaper = [];
-  /* Прежняя цена нужна не только этому окну: в строке товара она стоит
-     зачёркнутой рядом с новой — так экономия видна, не открывая ничего.
-     Кладём в общее состояние, чтобы отрисовка не лезла в хранилище сама. */
-  state.priceWas = {};
   if (fresh) {
     for (const p of state.products) {
       const was = snap.prices[p.id];
@@ -92,13 +83,12 @@ export async function checkNews() {
       const diff = was - is;
       if (diff < DROP_MIN_RUB || (diff / was) * 100 < DROP_MIN_PCT) continue;
       news.cheaper.push({ p, was, is });
-      state.priceWas[p.id] = was;
     }
     news.cheaper.sort((a, b) => (b.was - b.is) / b.was - (a.was - a.is) / a.was);
   }
 
-  // то, чего человек ждал, снова в продаже — это личные пометки покупателя
-  const wait = state.session ? [] : readWait();
+  // то, чего человек ждал, снова в продаже
+  const wait = readWait();
   news.appeared = [];
   if (wait.length) {
     const left = [];
@@ -110,16 +100,15 @@ export async function checkNews() {
     if (news.appeared.length) writeWait(left);   // сказали один раз — больше не напоминаем
   }
 
-  // новинки: что появилось в каталоге за две недели (лента для покупателя)
+  // новинки: что появилось в каталоге за две недели
   const from = daysAgoISO(NEW_DAYS);
-  const added = state.session ? [] : state.products.filter((p) => String(p.created_at || '').slice(0, 10) >= from);
+  const added = state.products.filter((p) => String(p.created_at || '').slice(0, 10) >= from);
   news.fresh = (added.length && added.length <= state.products.length * NEW_MAX_SHARE)
     ? added.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || ''))).slice(0, 40)
     : [];
 
   if (!fresh) { try { await idbSet(SNAP_KEY, { at: new Date().toISOString(), prices: now }); } catch (e) { /* не влезло */ } }
-  if (state.session) hideBanner(); else renderNewsBanner();
-  if (ui.renderCheaper) ui.renderCheaper();   // полоса «сегодня дешевле» на главной
+  renderNewsBanner();
 }
 
 function hideBanner() { const el = $('newsBanner'); if (el) el.hidden = true; }
@@ -173,7 +162,7 @@ function openNews() {
  * этот модуль (кнопка «сообщить, когда появится»), и встречный импорт замкнул
  * бы их друг на друга. */
 export function bindNews(openProduct) {
-  ui.checkNews = checkNews;
+  ui.checkGuestNews = checkGuestNews;
   $('newsBanner').addEventListener('click', openNews);
   $('btnWait').addEventListener('click', () => toggleWait(ui.currentProduct));
   $('newsBody').addEventListener('click', (e) => {

@@ -3,8 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, translit } from './core.js';
 import { checkMark, ic } from './icons.js';
-import { fmtDate, fmtPrice, telHref, fmtNum } from './catalog.js';
-import { waHref } from './whatsapp.js';
+import { fmtDate, fmtPrice, telHref, waHref, fmtNum } from './catalog.js';
 import { byName } from './data.js';
 import { renderPhotoManager } from './photos.js';
 import { svSaveAndPublish, svUuid } from './imports.js';

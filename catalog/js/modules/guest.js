@@ -13,16 +13,16 @@
 
 import { $, CFG, state, ui } from './store.js';
 import { attachMoneyInput, closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
-import { fmtDate, fmtPrice, todayISO, updatedText } from './catalog.js';
+import { fmtDate, fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
-import { sendWhatsApp, storeWa } from './whatsapp.js';
 
 const KEY = 'wm_guest_prices_v1';
 const MAX = 50;
 
 const isGuest = () => !state.session;
+const waNumber = () => String(CFG.STORE_WHATSAPP || '').replace(/\D/g, '');
 
 function read() {
   try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
@@ -41,7 +41,7 @@ function renderStore() {
   const box = $('storeBody');
   if (!box) return;
   const list = read();
-  const wa = storeWa();
+  const wa = waNumber();
   const phone = CFG.STORE_PHONE || '';
   const rows = list.map((x, i) => `<div class="ios-row">
     <span class="ios-row-title">${esc(x.name)}
@@ -56,11 +56,6 @@ function renderStore() {
   const addr = CFG.STORE_ADDRESS || '';
   const hours = CFG.STORE_HOURS || '';
   const map = CFG.STORE_MAP || (addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '');
-  const upd = updatedText();
-  /* Обещание магазина. Для Грозного «весь товар халяльный» — не украшение
-     и не реклама, а первое, что человек хочет знать. Сетевые магазины такого
-     не пишут никогда, потому что за всю сеть этого не пообещать. */
-  const promise = CFG.STORE_PROMISE || '';
   const about = (addr || hours) ? `<div class="ios-group">
       ${addr ? `<a class="ios-row ios-row-link" id="storeMap" href="${esc(map)}" target="_blank" rel="noopener">
         <span class="ios-row-title">Адрес<span class="ord-sub">${esc(addr)}</span></span>
@@ -71,9 +66,6 @@ function renderStore() {
 
   box.innerHTML = `
     ${about}
-    ${promise ? `<div class="store-promise">${ic('check', 'ic-xs')} ${esc(promise)}</div>` : ''}
-    ${upd ? `<p class="ios-note">Цены и наличие обновлены <b>${esc(upd)}</b>. Данные приходят
-      из магазина раз в день — если товар нужен наверняка, лучше позвонить.</p>` : ''}
     <p class="ios-note">Ошибка в цене, чего-то не хватает на полке, есть пожелание —
     напиши прямо в магазин, ответит владелец.</p>
     <div class="ios-group">
@@ -122,47 +114,11 @@ function sendAsk() {
   const what = $('askText').value.trim();
   const err = $('askError');
   if (!what) { err.textContent = 'Напиши, что ищешь.'; err.hidden = false; return; }
-  const wa = storeWa();
+  const wa = waNumber();
   if (!wa) { toast('Магазин не указал номер для связи'); return; }
   const text = `Здравствуйте! Ищу товар: ${what}. Бывает ли он у вас?`;
-  sendWhatsApp(text, wa);
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   closeSheet('askSheet');
-}
-
-/* ── «Цена на ценнике другая» ───────────────────────────────────────────────
- * Главная жалоба на все сетевые магазины во всех отзывах: на полке одна цена,
- * на кассе другая. Ни у одной сети нет способа сказать им об этом на месте —
- * человек либо ругается на кассе, либо молча уходит.
- *
- * У нас человек стоит у полки, сканирует товар и сразу видит нашу цену. Если
- * она не совпала с бумажным ценником — одна кнопка, и владельцу уходит
- * сообщение с кодом товара и обеими ценами. Копить такое нельзя: неверный
- * ценник надо править сегодня, поэтому уходит сразу, а не списком. */
-export function openShelfReport(p) {
-  if (!p) return;
-  ui.shelfFor = p;
-  $('shelfName').textContent = p.name || '';
-  $('shelfOurs').textContent = (p.retail_price != null && p.retail_price !== '')
-    ? fmtPrice(p.retail_price) + (p.is_weighted ? ' за кг' : '') : 'цена не указана';
-  $('shelfPrice').value = '';
-  $('shelfError').hidden = true;
-  openSheet('shelfSheet');
-}
-
-function sendShelfReport() {
-  const p = ui.shelfFor;
-  const err = $('shelfError');
-  if (!p) return;
-  const price = moneyNum($('shelfPrice').value);
-  if (!(price > 0)) { err.textContent = 'Напиши цену с ценника — по ней владелец и проверит.'; err.hidden = false; return; }
-  const wa = storeWa();
-  if (!wa) { toast('Магазин не указал номер для связи'); return; }
-  const ours = (p.retail_price != null && p.retail_price !== '') ? fmtPrice(p.retail_price) : 'нет цены';
-  const text = `Цена на ценнике не совпадает\n${p.name}${p.code ? ` (код ${p.code})` : ''}\n`
-    + `На ценнике: ${fmtPrice(price)}\nВ каталоге: ${ours}`;
-  sendWhatsApp(text, wa);
-  closeSheet('shelfSheet');
-  toast('Спасибо! Владелец проверит ценник');
 }
 
 /* ── «Видел дешевле в другом магазине» ─────────────────────────────────── */
@@ -199,12 +155,12 @@ function savePriceReport() {
  * руками не нужно. Отправленное больше не копится. */
 function sendReports() {
   const list = read();
-  const wa = storeWa();
+  const wa = waNumber();
   if (!list.length || !wa) return;
   const text = 'Здравствуйте! Заметил цены в других магазинах:\n'
     + list.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
       + (x.store ? `, ${x.store}` : '')).join('\n');
-  sendWhatsApp(text, wa);
+  window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   write([]);
   renderStore();
   renderStoreBadge();
@@ -230,8 +186,6 @@ function applyGuestMode() {
 
 // Обработчики покупательских экранов — здесь же, рядом с их логикой
 export function bindGuest() {
-  $('shelfSend').addEventListener('click', sendShelfReport);
-  attachMoneyInput($('shelfPrice'));
   $('btnReportPrice').addEventListener('click', () => openPriceReport(ui.currentProduct));
   $('repSave').addEventListener('click', savePriceReport);
   $('storeSend').addEventListener('click', sendReports);
