@@ -294,6 +294,13 @@ export function dice(a, b) {
 let gen = 0;
 export function buildIndex() {
   gen++;      // всё посчитанное раньше устарело, пересчитается по требованию
+  state.dataGen = (state.dataGen || 0) + 1;   // по этому счётчику себя сбрасывают и остальные расчёты
+  /* И тут же ставим указатель поиска в очередь на пересборку. Раньше его
+     грели только при запуске приложения, а после входа по паролю и после
+     каждой выгрузки из 1С он оставался пустым — и первый же поиск или первая
+     открытая карточка собирали его целиком, замирая почти на две секунды.
+     Здесь это одно место: перестроил каталог — указатель догонит сам. */
+  warmSearchIndex();
 }
 
 let grpCache = new Map(); let grpCacheGen = -1;
@@ -399,13 +406,32 @@ function wordIndex() {
  * построится при первом поиске, но тогда первое слово ждало бы лишнюю секунду.
  * Зовём после загрузки каталога, когда телефону нечем заняться. */
 export function warmSearchIndex() {
+  if (warming === gen) return;              // одна сборка на поколение, не десять
+  warming = gen;
   const later = (fn) => (typeof requestIdleCallback === 'function'
     ? requestIdleCallback(fn, { timeout: 2000 }) : setTimeout(fn, 60));
   const step = () => {
+    if (warming !== gen) return;            // каталог сменился — эта сборка уже не нужна
     try { if (indexStep(1000)) return; } catch (e) { return; /* построится при поиске */ }
     later(step);
   };
   later(step);
+}
+let warming = -1;
+
+/* Товары, у которых есть слово с таким же началом. Тем же указателем, что и
+ * поиск, пользуются «Похожие товары»: раньше они перебирали ВЕСЬ каталог и
+ * разбирали название каждого товара на слова — на двенадцати тысячах позиций
+ * это была почти секунда на каждое открытие карточки. */
+export function productsWithWords(words) {
+  const map = wordIndex();
+  const list = state.products;
+  const out = new Set();
+  for (const w of words) {
+    const arr = map.get(String(w).slice(0, KEY));
+    if (arr) for (const i of arr) out.add(list[i]);
+  }
+  return out;
 }
 
 /* Кандидаты на запрос: товары, у которых есть слово (или код), начинающееся

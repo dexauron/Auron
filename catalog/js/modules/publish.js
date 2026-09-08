@@ -633,7 +633,11 @@ export function applyServerless(pw) {
   $('adminBtnLabel').hidden = true;
   saveCache();
   renderAll();
-  setTimeout(autoDedup, 2000);   // тихо убрать дубли, если импорт их наплодил
+  /* Тихо убрать дубли, если импорт их наплодил. В свободную минуту, а не через
+     ровно две секунды: раньше эта уборка обходила весь каталог ровно тогда,
+     когда человек уже начал листать, и телефон замирал у него в руках. */
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(autoDedup, { timeout: 15000 });
+  else setTimeout(autoDedup, 4000);
 }
 // Включить режим «вошёл сотрудник»: видит закупку/контакты, но не «Ходовые» и
 // не правит каталог. Тоже запоминается на устройстве.

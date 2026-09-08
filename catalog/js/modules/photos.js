@@ -291,7 +291,8 @@ export async function autoPhotoSearch() {
 function findDuplicateIds() {
   const groups = new Map();
   for (const p of state.products) {
-    const key = norm(p.name) + '|' + JSON.stringify(p.barcodes || []);
+    // JSON.stringify на каждый из 12 000 товаров стоил заметной доли секунды
+    const key = norm(p.name) + '|' + (p.barcodes || []).join(',');
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(p);
   }
