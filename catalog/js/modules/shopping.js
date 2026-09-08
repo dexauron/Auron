@@ -13,6 +13,7 @@ import { fmtNum, fmtPrice } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
+import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -38,7 +39,9 @@ function total(list) {
   }, 0);
 }
 
-function toggleShop(p) {
+/* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его
+ * в список, не открывая карточку. */
+export function toggleShop(p) {
   if (!p) return false;
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
@@ -112,13 +115,15 @@ function renderShop() {
     box.innerHTML = `<p class="ios-note">Список пуст. Открой товар и нажми «В список покупок» —
       здесь соберётся, что взять, и сколько это выйдет.</p>`;
     $('shopShare').hidden = true;
+    $('shopWa').hidden = true;
     return;
   }
   const rows = list.map((x) => {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const sum = price * (Number(x.qty) || 1);
-    return `<div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
+    return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
+    <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
@@ -131,30 +136,128 @@ function renderShop() {
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
-    </div>`;
+    </div></div>`;
   }).join('');
   const left = list.filter((x) => !x.done).length;
   box.innerHTML = `
     <div class="ord-total">${left} ${plural(left, 'позиция', 'позиции', 'позиций')} · итого <b>${fmtPrice(total(list))}</b></div>
     <div class="ios-group">${rows}</div>
-    <p class="ios-note">Отметил кружком — вычеркнул: удобно в зале. Сумма считается по сегодняшним
-    ценам магазина и по количеству, которое ты поставил.</p>`;
+    <p class="ios-note">Отметил кружком — вычеркнул: удобно в зале. Строку можно смахнуть влево,
+    чтобы убрать. Сумма считается по сегодняшним ценам магазина и по количеству,
+    которое ты поставил.</p>`;
   $('shopShare').hidden = false;
+  $('shopWa').hidden = false;
 }
 
-// отправить список близким: пусть купят по дороге
-async function shareShop() {
+/* ── Список по ссылке ───────────────────────────────────────────────────────
+ * Раньше список уходил близким простым текстом: прочитать можно, а пользоваться
+ * нельзя — ни цен, ни суммы, ни возможности вычёркивать по ходу. Теперь рядом
+ * с текстом уходит ссылка, и тот, кто её откроет, получает ТОТ ЖЕ список прямо
+ * в каталоге: с сегодняшними ценами, суммой и галочками.
+ *
+ * Сервер для этого не нужен: весь список умещается в самой ссылке. Кодируем
+ * кодами товаров — они короткие («5940»), в отличие от внутренних номеров.
+ * Ссылка получается вида …/catalog/#l=5940-101x2-102 и спокойно живёт в
+ * WhatsApp. У товара без кода берём внутренний номер с пометкой «i».
+ *
+ * Полученный список ДОБАВЛЯЕТСЯ к своему, а не заменяет его: человек мог уже
+ * что-то отметить сам, и потерять это из-за чужой ссылки он не должен. */
+const LIST_MAX = 60;      // длиннее в ссылку не влезет, да и не бывает
+
+export function shopLink() {
+  const parts = [];
+  for (const x of read().filter((y) => !y.done).slice(0, LIST_MAX)) {
+    const p = state.products.find((y) => y.id === x.id);
+    const code = p && p.code ? String(p.code) : '';
+    const key = code ? code : 'i' + x.id;
+    if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
+    const q = Number(x.qty) || 1;
+    parts.push(q > 1 ? `${key}x${q}` : key);
+  }
+  if (!parts.length) return '';
+  const base = location.origin + location.pathname;
+  return `${base}#l=${parts.join('-')}`;
+}
+
+/* Открыли ссылку со списком: собираем товары и добавляем к своим. */
+export function shopFromHash() {
+  const m = String(location.hash || '').match(/[#&]l=([^&]+)/);
+  if (!m) return;
+  try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* некритично */ }
+  const list = read();
+  const have = new Set(list.map((x) => x.id));
+  let added = 0; let missing = 0;
+  for (const chunk of decodeURIComponent(m[1]).split('-')) {
+    if (!chunk) continue;
+    const [key, qty] = chunk.split('x');
+    const p = key[0] === 'i'
+      ? state.products.find((x) => String(x.id) === key.slice(1))
+      : state.products.find((x) => x.code != null && String(x.code) === key);
+    if (!p) { missing++; continue; }
+    if (have.has(p.id)) continue;                      // уже есть — количество не трогаем
+    list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: Number(qty) || 1, done: false });
+    have.add(p.id);
+    added++;
+  }
+  if (!added && !missing) return;
+  write(list);
+  renderShopBar();
+  openShop();
+  toast(added
+    ? `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`
+    : 'Этих товаров у нас нет');
+}
+
+/* ── Отправить список ───────────────────────────────────────────────────────
+ * Собрал список дома — отправил мужу, матери, в группу «Семья»: пусть купит
+ * тот, кто ближе к магазину. Текст один и тот же, отличается только разметка:
+ * WhatsApp понимает *звёздочки* как жирный шрифт, в остальных местах это
+ * просто мусор на экране.
+ *
+ * Длинный список в сообщение не заталкиваем: после шестидесяти строк это уже
+ * не сообщение, а простыня. Хвост честно назван числом, а весь список целиком
+ * открывается по ссылке. */
+function shopText(wa) {
   const list = read().filter((x) => !x.done);
-  if (!list.length) { toast('Список пуст'); return; }
-  const text = 'Список покупок:\n' + list.map((x) => {
+  const b = (s) => (wa ? `*${s}*` : s);
+  const lines = list.slice(0, WA_MAX_LINES).map((x, i) => {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
-    return `— ${x.name}${(Number(x.qty) || 1) > 1 ? ` × ${fmtNum(x.qty)}` : ''}${price ? ` — ${fmtPrice(price)}` : ''}`;
-  }).join('\n') + `\nИтого: ${fmtPrice(total(read()))}`;
+    const qty = Number(x.qty) || 1;
+    let tail = '';
+    if (price && qty > 1) tail = ` — ${fmtNum(qty)} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
+    else if (price) tail = ` — ${fmtPrice(price)}`;
+    else if (qty > 1) tail = ` — ${fmtNum(qty)} шт`;
+    return `${i + 1}. ${x.name}${tail}`;
+  });
+  const rest = list.length - lines.length;
+  const parts = [b('Список покупок'), '', lines.join('\n')];
+  if (rest > 0) parts.push(`…и ещё ${rest} ${plural(rest, 'позиция', 'позиции', 'позиций')} — весь список по ссылке.`);
+  parts.push('', b(`Итого: ${fmtPrice(total(read()))}`));
+  // ссылку даём отдельной строкой: текст читается и без неё, а по ссылке
+  // список откроется живым — с ценами и галочками
+  const link = shopLink();
+  if (link) parts.push('', 'Открыть список в каталоге:', link);
+  const sign = storeSignature();
+  if (sign) parts.push('', sign);
+  return parts.join('\n');
+}
+
+// Кнопка «Отправить в WhatsApp»: контакты покажет сам WhatsApp
+function shopToWhatsApp() {
+  if (!read().some((x) => !x.done)) { toast('Список пуст'); return; }
+  buzz();
+  sendWhatsApp(shopText(true));
+}
+
+// Кнопка «Отправить»: телеграм, почта, СМС — что человек выберет сам
+async function shareShop() {
+  if (!read().some((x) => !x.done)) { toast('Список пуст'); return; }
+  const text = shopText(false);
   try {
     if (navigator.share) { await navigator.share({ text }); return; }
     await navigator.clipboard.writeText(text);
-    toast('Список скопирован');
+    toast('Список и ссылка скопированы');
   } catch (e) { toast('Не получилось поделиться'); }
 }
 
@@ -164,6 +267,56 @@ export function syncShopButton(p) {
   if (!b || !p) return;
   b.textContent = inShop(p.id) ? 'Убрать из списка покупок' : 'В список покупок';
   ui.shopFor = p.id;
+}
+
+/* ── Смахнуть строку влево — убрать ──────────────────────────────────────
+ * В зале человек держит телефон одной рукой, и попасть в маленький крестик
+ * на ходу трудно. Смахивание — то же движение, что в почте и в заметках:
+ * его не нужно объяснять. Направление определяем по первым восьми точкам
+ * пути: если палец пошёл вниз, это прокрутка списка, и мы отпускаем строку.
+ * Крестик при этом никуда не делся — жест его дополняет, а не заменяет. */
+const SWIPE_OUT = 80;    // столько нужно протянуть, чтобы строка ушла
+
+function enableSwipeRemove(box) {
+  let row = null; let x0 = 0; let y0 = 0; let dx = 0; let axis = '';
+  const release = (animate) => {
+    if (!row) return;
+    const r = row;
+    row = null;
+    r.style.transition = animate ? 'transform .24s cubic-bezier(.32,.72,0,1)' : '';
+    r.style.transform = '';
+    r.classList.remove('swipe-armed');
+    setTimeout(() => { r.style.transition = ''; }, 300);
+  };
+  box.addEventListener('touchstart', (e) => {
+    row = null;
+    const r = e.target.closest('.shop-row');
+    if (!r || e.target.closest('button')) return;   // по кнопкам жест не начинаем
+    row = r; dx = 0; axis = '';
+    x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+    r.style.transition = 'none';
+  }, { passive: true });
+  box.addEventListener('touchmove', (e) => {
+    if (!row) return;
+    const x = e.touches[0].clientX; const y = e.touches[0].clientY;
+    if (!axis) {
+      if (Math.abs(x - x0) < 8 && Math.abs(y - y0) < 8) return;
+      axis = Math.abs(x - x0) > Math.abs(y - y0) ? 'x' : 'y';
+      if (axis === 'y') { release(false); return; }   // это прокрутка, не жест
+    }
+    dx = Math.min(0, x - x0);                          // тянем только влево
+    row.style.transform = `translateX(${dx}px)`;
+    row.classList.toggle('swipe-armed', dx < -SWIPE_OUT);
+  }, { passive: true });
+  const finish = () => {
+    if (!row) return;
+    const id = (row.querySelector('[data-shop-rm]') || {}).dataset;
+    const far = dx < -SWIPE_OUT;
+    release(true);
+    if (far && id && id.shopRm) { buzz(12); removeShop(id.shopRm); }
+  };
+  box.addEventListener('touchend', finish);
+  box.addEventListener('touchcancel', () => release(true));
 }
 
 /* Обработчики модуль вешает сам: раньше все до одного жили в app.js, и он
@@ -180,6 +333,7 @@ export function bindShopping() {
   });
   $('shopOpen').addEventListener('click', openShop);
   $('shopShare').addEventListener('click', shareShop);
+  $('shopWa').addEventListener('click', shopToWhatsApp);
   $('shopClear').addEventListener('click', clearShop);
   $('shopBody').addEventListener('click', (e) => {
     const done = e.target.closest('[data-shop-done]');
@@ -191,5 +345,8 @@ export function bindShopping() {
     const rm = e.target.closest('[data-shop-rm]');
     if (rm) removeShop(rm.dataset.shopRm);
   });
+  enableSwipeRemove($('shopBody'));
+  // ссылку со списком могли открыть, уже находясь в каталоге
+  window.addEventListener('hashchange', shopFromHash);
   renderShopBar();   // список мог остаться с прошлого захода
 }

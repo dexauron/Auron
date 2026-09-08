@@ -14,6 +14,7 @@ export async function loadCache() {
       state.suppliers = c.suppliers || [];
       state.products = c.products;
       state.syncMax = c.syncMax || '';
+      state.showcaseAt = c.showcaseAt || '';
       buildIndex();
       state.lastFetch = c.ts || 0;
       return true;
@@ -45,6 +46,7 @@ function writeCache() {
   idbSet(CACHE_KEY, {
     groups: state.groups, suppliers: state.suppliers,
     products: clean, ts: Date.now(), syncMax: state.syncMax,
+    showcaseAt: state.showcaseAt || '',
   }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
 }
 
