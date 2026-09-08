@@ -92,8 +92,9 @@ const openWork = (page) => page.evaluate(async () => {
   chk(work.body.indexOf('Батон') < work.body.indexOf('Молоко'), 'сверху то, что подорожало сильнее');
 
   // ── 3. Наценка тает: закупка выросла, ценник прежний ──
-  chk(/наценка упала с 61% до 40%/.test(work.body),
-    `сказано, что наценка упала, раз ценник не трогали (${(work.body.match(/наценка упала[^·]*/) || [''])[0]})`);
+  // Батон: 45 ₽ при закупке 30 → 36, значит 50% → 25%. Молоко: 100 ₽ при 62 → 71, значит 61% → 41%.
+  chk(/наценка упала с 50% до 25%/.test(work.body) && /наценка упала с 61% до 41%/.test(work.body),
+    `сказано, на сколько упала наценка, раз ценник не трогали (${(work.body.match(/наценка упала[^+]*/g) || []).join(' | ')})`);
 
   // ── 4. Ценник подняли — про наценку молчим, зато видно новую цену ──
   const retail = await page.evaluate(async () => {
@@ -133,13 +134,16 @@ const openWork = (page) => page.evaluate(async () => {
     s.session = null; s.isAdmin = false; s.canPurchase = false; s.canSales = false;
     P.renderAll();
     await new Promise((r) => setTimeout(r, 400));
-    return {
-      strip: document.getElementById('riseStrip').hidden,
-      tab: !!document.querySelector('[data-work="risen"]'),
-    };
+    const strip = document.getElementById('riseStrip').hidden;
+    // вкладка «Работа» покупателю и так спрятана (.emp-only), но откроем её
+    // насильно: содержимое тоже не должно ничего ему рассказывать
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return { strip, work: document.getElementById('workBody').innerText.replace(/\s+/g, ' ') };
   });
   chk(guest.strip, 'покупателю полоса «Подорожало» не показывается');
-  chk(!guest.tab, 'и во вкладку «Работа» он её не видит');
+  chk(!/Подорожало/.test(guest.work), `и во вкладке «Работа» её для него нет (${guest.work.slice(0, 50)})`);
 
   // ── 7. Сотруднику — только ценник, закупка остаётся закрытой ──
   const staff = await page.evaluate(async () => {
