@@ -3,13 +3,14 @@
 import { $, CFG, state, ui } from './store.js';
 import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
-import { buildIndex, fmtNum } from './catalog.js';
+import { buildIndex, fmtNum, todayISO } from './catalog.js';
 import { renderAll } from './render.js';
 
 import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
+import { RETAIL_HIST_ROWS } from './pricerise.js';
 import { loadScript } from './scanner.js';
 
 /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
@@ -98,6 +99,35 @@ function svAddBarcodes(idx, p, barcodes) {
   p.barcodes = [...set];
   for (const b of barcodes) if (b) idx.byBc.set(String(b), p);
 }
+/* ── Память цен: почему её раньше не было ───────────────────────────────────
+ * Выгрузка из 1С приходит каждый вечер, и до 08.09.2026 новая цена поставщика
+ * просто затирала вчерашнюю. Место под историю в каталоге было (карточка её
+ * показывает), но заполнить его было нечем: вчерашняя цена исчезала раньше,
+ * чем кто-то успевал с ней сравнить. Отсюда и невозможность ответить на самый
+ * нужный вопрос — «на сколько и когда подорожало».
+ *
+ * Теперь так: цена не изменилась — обновляем дату у той же записи (это тот же
+ * ценник, просто привезли снова); изменилась — кладём НОВУЮ запись рядом, а
+ * старая остаётся с её датой. Сколько таких записей хранить, решает tidyMemory
+ * (восемь на поставщика), так что расти бесконечно память не может.
+ *
+ * Выгрузка задним числом (дата старее той, что уже лежит) историю не трогает:
+ * иначе один случайно открытый старый файл переписал бы всё. */
+function svRememberPrice(p, sid, info) {
+  const date = info.date || null;
+  const rows = state.prices.filter((x) => x.product_id === p.id && x.supplier_id === sid);
+  let last = null;
+  for (const r of rows) if (!last || String(r.price_date || '') > String(last.price_date || '')) last = r;
+  if (!last) {
+    state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+    return;
+  }
+  if (String(date || '') < String(last.price_date || '')) return;      // файл старее того, что уже знаем
+  const same = Number(last.price) === Number(info.price) && (last.unit || '') === (info.unit || '');
+  if (same) { last.price_date = date || last.price_date; return; }
+  state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: date, unit: info.unit || null });
+}
+
 // «Цены поставщиков» (parsePriceReport): товары + штрихкоды + поставщики + закупка + иногда розница
 function svUploadPrices(byKey) {
   const idx = svIndex(); state.prices = state.prices || [];
@@ -112,7 +142,7 @@ function svUploadPrices(byKey) {
     if (item.group) p.group_id = svGroupId(item.group);
     if (item.unit && !p.unit) p.unit = item.unit;
     if (item.weighted) p.is_weighted = true;
-    if (item.retail != null) p.retail_price = item.retail;
+    if (item.retail != null) svRememberRetail(p, item.retail);
     svAddBarcodes(idx, p, barcodes);
     for (const supName of item.suppliers) { const sid = svSupplierId(supName); if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid); }
     let maxDate = null; // дата поступления = самая свежая цена поставщика (столбец «Период»)
@@ -120,21 +150,32 @@ function svUploadPrices(byKey) {
       const sid = svSupplierId(supName);
       if (!p.supplier_ids.includes(sid)) p.supplier_ids.push(sid);
       if (info.date && (!maxDate || info.date > maxDate)) maxDate = info.date;
-      const ex = state.prices.find((x) => x.product_id === p.id && x.supplier_id === sid);
-      if (ex) { if ((info.date || '') >= (ex.price_date || '')) { ex.price = info.price; ex.price_date = info.date || null; ex.unit = info.unit || null; } }
-      else state.prices.push({ product_id: p.id, supplier_id: sid, price: info.price, price_date: info.date || null, unit: info.unit || null });
+      svRememberPrice(p, sid, info);
     }
     // «Поступление» — самая свежая дата цены (для фильтра «🆕 Пришло сегодня»)
     if (maxDate && (!p.arrival_at || maxDate > String(p.arrival_at).slice(0, 10))) p.arrival_at = maxDate;
   }
 }
+/* Ценник менялся — запоминаем прежнюю цену и день, когда мы увидели новую.
+ * Даты смены ценника в 1С нет ни в одном файле, поэтому берём день выгрузки:
+ * владелец выгружает каждый вечер, значит ошибка — не больше суток. */
+function svRememberRetail(p, price) {
+  const was = p.retail_price;
+  p.retail_price = price;
+  if (was == null || was === '' || Number(was) === Number(price) || !(Number(was) > 0)) return;
+  state.retailHist = state.retailHist || {};
+  const list = state.retailHist[p.id] || [];
+  list.unshift({ price: Number(was), at: todayISO() });
+  state.retailHist[p.id] = list.slice(0, RETAIL_HIST_ROWS);
+}
+
 function svUploadRetail(parsed) {
   const idx = svIndex();
   for (const rec of parsed.recs) {
     let p = svMatch(idx, null, [], rec.name);
     if (!p && rec.article) p = state.products.find((x) => x.article && norm(x.article) === norm(rec.article)) || null;
     if (!p) { p = svNewProduct(idx, rec.name); if (rec.article) p.article = rec.article; }
-    if (rec.retail != null) p.retail_price = rec.retail;
+    if (rec.retail != null) svRememberRetail(p, rec.retail);
     if (rec.group) p.group_id = svGroupId(rec.group);
   }
 }
@@ -150,7 +191,7 @@ function svUploadStock(parsed) {
     if (rec.group) p.group_id = svGroupId(rec.group);
     if (rec.unit && !p.unit) p.unit = rec.unit;
     if (rec.unit === 'кг') p.is_weighted = true;
-    if (rec.retail != null) p.retail_price = rec.retail;
+    if (rec.retail != null) svRememberRetail(p, rec.retail);
     // описание из 1С — на ценник покупателю. Повтор названия описанием не
     // считаем: колонку «Характеристика» часто заполняют тем же названием
     if (rec.descr && !p.description && norm(rec.descr) !== norm(rec.name)) p.description = rec.descr;
