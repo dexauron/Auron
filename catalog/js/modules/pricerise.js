@@ -168,8 +168,14 @@ function riseOf(p, rows) {
 let riseCache = { products: null, prices: null, retail: null, byId: null, list: null };
 
 function refreshRise() {
-  const prices = state.prices || [];
-  const retail = state.retailHist || {};
+  /* Приводим к одному и тому же объекту, а не к новому пустому при каждом
+     вызове: иначе сверка «те же данные?» никогда не совпадала бы и всё
+     считалось заново на каждой перерисовке — ровно та беда, от которой этот
+     кэш и заводится. */
+  if (!state.prices) state.prices = [];
+  if (!state.retailHist) state.retailHist = {};
+  const prices = state.prices;
+  const retail = state.retailHist;
   if (riseCache.products === state.products && riseCache.prices === prices && riseCache.retail === retail) return;
   const byId = new Map();
   for (const r of prices) {
