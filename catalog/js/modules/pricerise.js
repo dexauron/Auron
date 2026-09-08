@@ -198,6 +198,22 @@ function refreshRise() {
 }
 
 // строки цен одного товара — из того же указателя, что и список
+/* Первый расчёт после нового каталога — не на горячем пути. Он занимает
+ * заметную долю секунды на бюджетном телефоне, а полоса «Подорожало» не
+ * настолько срочная, чтобы ради неё замирал главный экран: посчитаем в
+ * свободную минуту и дорисуем. Там, где ответ нужен прямо сейчас (экран
+ * «Подорожало», карточка товара), считаем сразу — человек сам туда нажал. */
+let riseIdle = 0;
+function riseWhenIdle(after) {
+  if (riseIdle) return;
+  const run = () => { riseIdle = 0; refreshRise(); after(); };
+  riseIdle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback(run, { timeout: 2000 }) : setTimeout(run, 60);
+}
+
+const riseReady = () => riseCache.products === state.products
+  && riseCache.prices === state.prices && riseCache.retail === state.retailHist;
+
 function pricesOf(id) {
   refreshRise();
   return riseCache.byId.get(id) || [];
@@ -246,6 +262,7 @@ export function renderRiseStrip() {
   const box = $('riseStrip');
   if (!box) return;
   const show = state.session && state.tab === 'catalog' && !state.query && !state.favOnly && !ui.anyFilter();
+  if (show && !riseReady()) { riseWhenIdle(renderRiseStrip); box.hidden = true; return; }
   const list = show ? risenList() : [];
   if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
   const rows = list.slice(0, RISE_ROWS).map((r) => {
