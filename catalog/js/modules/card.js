@@ -3,7 +3,7 @@
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
-import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, telHref, updatedText } from './catalog.js';
+import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, productsWithWords, telHref, updatedText } from './catalog.js';
 import { waHref } from './whatsapp.js';
 import { isFav, pushRecentProduct, renderNewProducts, stockLabel } from './render.js';
 import { ratingText, reviewsHtml } from './reviews.js';
@@ -169,7 +169,9 @@ function renderSimilar(p) {
   const pset = new Set(pw);
   const first = pw[0];
   const scored = [];
-  for (const x of state.products) {
+  /* Кандидаты — из поискового указателя: товар без единого общего слова похожим
+     всё равно не станет, а перебор всего каталога стоил секунды на карточку. */
+  for (const x of productsWithWords(pw)) {
     if (x.id === p.id) continue;
     const xw = nameWords(x.name);
     if (!xw.length) continue;
