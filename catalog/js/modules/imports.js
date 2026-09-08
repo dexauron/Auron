@@ -3,7 +3,7 @@
 import { $, CFG, state, ui } from './store.js';
 import { esc, logError, norm, toast, cmpRu } from './core.js';
 import { ic } from './icons.js';
-import { buildIndex, fmtNum, todayISO } from './catalog.js';
+import { buildIndex, fmtNum } from './catalog.js';
 import { renderAll } from './render.js';
 
 import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
