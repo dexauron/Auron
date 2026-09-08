@@ -184,7 +184,7 @@ function riseOf(p, rows) {
  *     изменения ценника в список даже не заглядывает.
  * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
  * массивы, что и остальной кэш приложения. */
-let riseCache = { stamp: -1, products: null, retail: null, session: null, list: [] };
+let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [] };
 
 function refreshRise() {
   /* Держим один и тот же объект, а не создаём новый пустой при каждом вызове:
@@ -206,7 +206,7 @@ function refreshRise() {
     }
     out.sort((a, b) => b.pct - a.pct);
   }
-  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, list: out.slice(0, LIST_MAX) };
+  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out.slice(0, LIST_MAX) };
 }
 
 /* Первый расчёт после нового каталога — не на горячем пути. Он занимает
@@ -225,7 +225,9 @@ function riseWhenIdle(after) {
 const riseReady = () => riseCache.stamp === priceStamp()
   && riseCache.products === state.products
   && riseCache.retail === state.retailHist
-  && riseCache.session === !!state.session;
+  && riseCache.session === !!state.session
+  // роль решает, видно ли закупку: сменился вход — список нужно пересобрать
+  && riseCache.can === seesCost();
 
 function risenList() {
   refreshRise();
