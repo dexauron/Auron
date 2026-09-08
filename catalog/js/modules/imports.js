@@ -6,11 +6,10 @@ import { ic } from './icons.js';
 import { buildIndex, fmtNum, todayISO } from './catalog.js';
 import { renderAll } from './render.js';
 
-import { byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
+import { RETAIL_HIST_ROWS, byName, loadCache, saveCache, sortByName, tidyMemory } from './data.js';
 import { buildPopularIds, publishFull, SHOWCASE_V } from './publish.js';
 import { parsePhotoSheet } from './photos.js';
 import { plural } from './competitors.js';
-import { RETAIL_HIST_ROWS } from './pricerise.js';
 import { loadScript } from './scanner.js';
 
 /* ── Серверлес-импорт: те же парсеры 1С, но результат сливается в каталог в
