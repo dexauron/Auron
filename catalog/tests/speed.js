@@ -116,6 +116,85 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   chk(inst.shown && /главный экран/.test(inst.text), `подсказка про главный экран появляется (${inst.text.slice(0, 40)})`);
   chk(inst.hiddenNow && inst.remembered === 'off', 'закрыл подсказку — больше не показывается');
 
+  /* ── Вошедший владелец ──────────────────────────────────────────────────
+   * Всё, что выше, меряет каталог глазами ПОКУПАТЕЛЯ — а тормозил он у
+   * владельца: там появляются 25 000 строк закупочных цен, и расчёты, которые
+   * ходили по всему списку на каждый товар, превращались в сотни миллионов
+   * сравнений. Меню открывалось 21 секунду, экран наценки — 17, перерисовка
+   * главного экрана — 35, вечерняя выгрузка из 1С — 33. Снаружи это выглядело
+   * как «каталог завис».
+   * Потолки здесь с большим запасом: важно поймать возврат перебора, а не
+   * ловить каждую сотню миллисекунд. */
+  const SUP = 600;
+  const iso = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+  const suppliers = Array.from({ length: SUP }, (_, i) => ({ id: 's' + i, name: 'Поставщик ' + i }));
+  const prices = [];
+  for (let i = 0; i < N; i++) {
+    prices.push({ product_id: 'p' + i, supplier_id: 's' + (i % SUP), price: 20 + (i % 300), price_date: iso(10), unit: 'шт' });
+    prices.push({ product_id: 'p' + i, supplier_id: 's' + (i % SUP), price: 22 + (i % 300), price_date: iso(2), unit: 'шт' });
+  }
+  const own = await page.evaluate(async (d) => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    P.ghSetToken('tok'); P.applyServerless('pw');
+    s.suppliers = d.suppliers; s.prices = d.prices;
+    P.buildIndex();
+    const out = {};
+    const timeIt = (k, fn) => { const t = performance.now(); fn(); out[k] = Math.round(performance.now() - t); };
+    timeIt('render', () => P.renderAll());
+    timeIt('render2', () => P.renderAll());
+    await new Promise((r) => setTimeout(r, 2500));       // свободная минута: указатели догоняют
+    const tap = async (k, fn) => {
+      document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+      await new Promise((r) => setTimeout(r, 30));
+      const t = performance.now();
+      fn();
+      await new Promise((r) => setTimeout(r, 0));
+      out[k] = Math.round(performance.now() - t);
+    };
+    await tap('menu', () => document.getElementById('adminBtn').click());
+    await tap('margin', () => P._openMargin());
+    await tap('work', () => document.querySelector('.tabbar [data-tab="work"]').click());
+    await tap('risen', () => document.querySelector('[data-work="risen"]').click());
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    window.location.hash = '';
+    await new Promise((r) => setTimeout(r, 60));
+    const t = performance.now();
+    window.location.hash = '#p=p500';
+    await new Promise((r) => setTimeout(r, 0));
+    out.card = Math.round(performance.now() - t);
+    return out;
+  }, { suppliers, prices });
+  chk(own.render < 2000, `перерисовка главного экрана у владельца (${own.render} мс, потолок 2000)`);
+  chk(own.render2 < 800, `повторная перерисовка не считает всё заново (${own.render2} мс, потолок 800)`);
+  chk(own.menu < 2500, `меню открывается (${own.menu} мс, потолок 2500)`);
+  chk(own.margin < 3000, `сторож наценки открывается (${own.margin} мс, потолок 3000)`);
+  chk(own.work < 2000, `вкладка «Работа» открывается (${own.work} мс, потолок 2000)`);
+  chk(own.risen < 2500, `экран «Подорожало» открывается (${own.risen} мс, потолок 2500)`);
+  chk(own.card < 2500, `карточка товара открывается (${own.card} мс, потолок 2500)`);
+
+  // Вечерняя выгрузка из 1С: владелец делает её каждый день на телефоне
+  const ru = (days) => { const x = new Date(Date.now() - days * 86400000);
+    return `${String(x.getDate()).padStart(2, '0')}.${String(x.getMonth() + 1).padStart(2, '0')}.${x.getFullYear()}`; };
+  const priceFile = (days, bump) => [
+    ['Отчёт по ценам поставщиков'], [],
+    ['Номенклатура', 'Код товара', 'Контрагент', 'Ед.', 'Цена', 'Период'],
+    ...Array.from({ length: N }, (_, i) => [`Товар ${i} марка ${i % 97}`, String(100000 + i),
+      'Поставщик ' + (i % SUP), 'шт', String(20 + (i % 300) + bump), ru(days)]),
+  ];
+  const imp = await page.evaluate(async (d) => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    s.products = []; s.groups = []; s.suppliers = []; s.prices = []; s.retailHist = {};
+    P.buildIndex();
+    const out = {};
+    let t = performance.now(); P.svImportRows(d.a); out.first = Math.round(performance.now() - t);
+    t = performance.now(); P.svImportRows(d.b); out.second = Math.round(performance.now() - t);
+    out.rows = s.prices.length;
+    return out;
+  }, { a: priceFile(10, 0), b: priceFile(1, 5) });
+  chk(imp.first < 8000, `выгрузка ${N} строк из 1С (${imp.first} мс, потолок 8000)`);
+  chk(imp.second < 8000, `вторая выгрузка, цены выросли (${imp.second} мс, потолок 8000)`);
+  chk(imp.rows === N * 2, `вчерашние цены сохранены рядом с новыми (${imp.rows} строк)`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
