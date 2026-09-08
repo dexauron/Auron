@@ -20,6 +20,7 @@ import { fmtPrice, isFreshPrice } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
 import { cellStr, parseDateCell, stockNum } from './imports.js';
+import { pricesOf } from './data.js';
 
 const THIN_PCT = 5;        // наценка ниже этой — «почти в ноль»
 const MAX_ROWS = 200;      // длиннее список никто не прочитает
@@ -28,7 +29,7 @@ const MAX_ROWS = 200;      // длиннее список никто не про
  * считает наценку. Старую цену без нового поступления за настоящую не
  * считаем: товар мог давно подорожать. */
 function bestCost(p) {
-  const rows = (state.prices || []).filter((r) => r.product_id === p.id);
+  const rows = pricesOf(p.id);
   let best = null;
   for (const r of rows) {
     if (!isFreshPrice(r)) continue;      // строка целиком, дату функция берёт сама
@@ -43,9 +44,16 @@ const inStock = (p) => {
   return !Number.isFinite(n) || n > 0;    // остатка не знаем — считаем, что есть
 };
 
+/* Считаем один раз на поколение данных: этот разбор зовут и меню (счётчик),
+ * и сам экран, и делать его дважды подряд незачем. */
+let issuesCache = { gen: -1, val: null };
 export function marginIssues() {
+  if (issuesCache.gen === state.dataGen && issuesCache.can === state.canPurchase) return issuesCache.val;
   const loss = []; const thin = []; const noPrice = [];
-  if (!state.canPurchase) return { loss, thin, noPrice };
+  if (!state.canPurchase) {
+    issuesCache = { gen: state.dataGen, can: state.canPurchase, val: { loss, thin, noPrice } };
+    return issuesCache.val;
+  }
   for (const p of state.products || []) {
     const retail = Number(p.retail_price);
     const has = p.retail_price != null && p.retail_price !== '' && Number.isFinite(retail) && retail > 0;
@@ -62,7 +70,8 @@ export function marginIssues() {
   }
   loss.sort((a, b) => a.pct - b.pct);          // самые убыточные наверх
   thin.sort((a, b) => a.pct - b.pct);
-  return { loss, thin, noPrice };
+  issuesCache = { gen: state.dataGen, can: state.canPurchase, val: { loss, thin, noPrice } };
+  return issuesCache.val;
 }
 
 export function marginCount() {
