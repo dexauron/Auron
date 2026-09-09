@@ -474,90 +474,145 @@
   }
 
   /* --- Пульт ------------------------------------------------------------------ */
-  function viewPulse() {
-    var u = U();
-    var all = dds();
-    var h = u.pageHead('Пульт', 'Деньги в кассе, долги и кто недосдаёт');
+  /* ==========================================================================
+     ПУЛЬТ
 
-    if (!all.length) {
-      return h + '<div class="card"><div class="empty"><b>Записей пока нет</b><br>' +
-        'Начните со «Сверки кассы» — закройте первую смену.<br>' +
-        'Начальный остаток наличных и долг поставщикам впишите в «Настройках», ' +
-        'раздел «Начальные остатки».</div></div>' + quickBar();
+     Утром владельцу нужны две вещи: сколько денег в кассе и что сегодня
+     сделать. Раньше экран отвечал на них двадцать первым числом — пять
+     одинаковых плашек, баннер на сорок слов и пять кнопок. Глазу негде было
+     остановиться.
+
+     Теперь так: одна крупная цифра, под ней список дел по одной строке на
+     дело, и одна кнопка — та, которой пользуются прямо сейчас. Объяснения
+     переехали на те экраны, куда эти дела ведут: на Пульте они не нужны,
+     нужен повод туда зайти.
+     ====================================================================== */
+
+  // Дела на сегодня: коротко, по строке. Пусто — значит всё в порядке.
+  function todoList(all, sel) {
+    var out = [];
+    var t = today();
+    var pt = E.planTotals(S.state.plans || [], t);
+    if (pt.overdue) {
+      out.push({ icon: 'warning', color: 'c-red', text: 'Просрочено ' + money(pt.overdue),
+        go: 'finpay', act: 'Открыть' });
+    } else if (pt.dueToday) {
+      out.push({ icon: 'calendar', text: 'Сегодня платить ' + money(pt.dueToday),
+        go: 'finpay', act: 'Открыть' });
+    }
+
+    var yest = E.addDays(t, -1);
+    if (all.length && !E.shiftsOf(all, null, S.settings).some(function (r) { return r.date === yest; })) {
+      out.push({ icon: 'calculator', text: 'Смена за ' + dateRu(yest) + ' не сверена',
+        form: 'shiftClose', act: 'Свести' });
+    }
+
+    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [] });
+    if (chk.left > 0.5) {
+      out.push({ icon: 'receipt', color: 'c-orange',
+        text: 'Не расписано ' + money(chk.left) + ' из ящика',
+        go: 'ledger', act: 'Разобрать' });
+    } else if (chk.over) {
+      out.push({ icon: 'warning', color: 'c-red',
+        text: 'Лишних расходов из ящика на ' + money(-chk.left),
+        go: 'ledger', act: 'Проверить' });
     }
 
     var cash = E.cashOnHand(all, S.settings);
+    if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
+      out.push({ icon: 'truck', text: 'В ящике ' + money(cash) + ' — пора увезти',
+        form: 'moveCash', act: 'Инкассация' });
+    }
+
+    var gaps = E.cashGaps(all, S.settings);
+    if (gaps.length) {
+      var g = gaps[gaps.length - 1];
+      out.push({ icon: 'warning', color: 'c-orange',
+        text: 'Размен ' + dateRu(g.date) + ' не сошёлся на ' + money(Math.abs(g.gap)),
+        go: 'cashiers', act: 'Смотреть' });
+    }
+
+    var deb = E.debtorTotals(S.state.debtors || [], t);
+    if (deb.old > 0) {
+      out.push({ icon: 'hourglass', text: 'Старые долги покупателей ' + money(deb.old),
+        go: 'debtors', act: 'Открыть' });
+    }
+    return out;
+  }
+
+  function viewPulse() {
+    var u = U();
+    var all = dds();
+    var h = u.pageHead('Пульт', 'Деньги и дела на сегодня');
+
+    if (!all.length) {
+      return h + '<div class="card"><div class="empty"><b>Записей пока нет</b><br>' +
+        'Начните со сверки кассы — закройте первую смену.</div>' +
+        '<div class="card-pad"><button class="btn btn-primary btn-lg" data-form="shiftClose">' +
+        ic('calculator') + ' Свести кассу</button></div></div>';
+    }
+
+    var cash = E.cashOnHand(all, S.settings);
+    var safe = E.safeOnHand(all, S.settings);
     var debt = E.supplierDebt(all, S.settings);
     var sel = pick(), t = E.totals(sel.rows);
-    var pt = E.planTotals(S.state.plans || [], today());
-    var deb = E.debtorTotals(S.state.debtors || [], today());
-    var rating = E.cashierRating(sel.rows);
-    var gaps = E.cashGaps(all, S.settings);
-    var debtColor = debt.debt >= num(S.settings.debtCrit) ? 'c-red'
-      : (debt.debt >= num(S.settings.debtWarn) ? 'c-orange' : 'c-green');
 
-    var safe = E.safeOnHand(all, S.settings);
-    h += '<div class="stat-grid">' +
-      u.stat('Наличные в кассе', u.priv(cash), 'в ящиках прямо сейчас',
-        cash < 0 ? 'c-red' : (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)
-          ? 'c-orange' : '')) +
-      u.stat('В сейфе', u.priv(safe), 'увезено инкассацией') +
-      u.stat('Долг поставщикам', u.priv(debt.debt),
-        'взято ' + money(debt.taken) + ' · отдано ' + money(debt.paid), debtColor) +
-      u.stat('Безнал за период', u.priv(t.zCashless),
-        'ушёл на счёт, в кассе его нет') +
-      u.stat('Недостачи за период', u.priv(t.short),
-        t.badShifts ? t.badShifts + ' смен из ' + t.shifts + ' не сошлись' : 'все смены сошлись',
-        t.short ? 'c-red' : 'c-green') +
+    /* Главная цифра. Всё остальное про деньги — одной строкой под ней:
+       эти суммы нужны для справки, а не для решения. */
+    /* Подпись под главной цифрой: только то, что не ноль. Строка «в сейфе
+       0 ₽» ничего не сообщает, а место занимает. Отрицательный долг — это
+       переплата, и написать это словом понятнее, чем показать минус. */
+    var bits = [];
+    if (safe) bits.push('в сейфе ' + money(safe));
+    if (debt.debt > 0) bits.push('долг поставщикам ' + money(debt.debt));
+    else if (debt.debt < 0) bits.push('переплата поставщикам ' + money(-debt.debt));
+    if (t.zCashless) bits.push('безнал ' + money(t.zCashless));
+    var sub = bits.join('  ·  ');
+    h += u.hero('Наличные в кассе', u.priv(cash), esc(sub),
+      cash < 0 ? 'c-red' : '');
+
+    // Дела: по строке на дело, без объяснений — они ждут на своём экране
+    var todo = todoList(all, sel);
+    if (todo.length) {
+      h += u.card('Что сделать', u.listOf(todo.map(function (x) {
+        var attrs = x.go ? ' data-go="' + esc(x.go) + '"' : ' data-form="' + esc(x.form) + '"';
+        return u.listRow({ icon: x.icon,
+          title: '<span class="' + (x.color || '') + '">' + esc(x.text) + '</span>',
+          value: '<button class="btn btn-sm"' + attrs + '>' + esc(x.act) + '</button>' });
+      }), ''));
+    } else {
+      h += '<div class="banner green"><span>' + ic('check') + '</span><span>' +
+        'Всё сведено: смены закрыты, выплаты не просрочены, деньги из ящика расписаны.</span></div>';
+    }
+
+    // Одна главная кнопка — та, которой пользуются прямо сейчас
+    var hourNow = new Date().getHours();
+    var evening = hourNow >= 17 || hourNow < 4;
+    h += '<div class="quick quick-main">' +
+      (evening
+        ? '<button class="btn btn-primary btn-lg" data-form="dayTotals">' + ic('moon') +
+          ' Итоги дня</button>'
+        : '<button class="btn btn-primary btn-lg" data-form="shiftClose">' + ic('calculator') +
+          ' Свести кассу</button>') +
+      '<button class="btn" data-form="' + (evening ? 'shiftClose' : 'dayTotals') + '">' +
+      (evening ? 'Сверка кассы' : 'Итоги дня') + '</button>' +
+      '<button class="btn" data-form="moneyOut">Расход</button>' +
+      '<button class="btn" data-form="moveCash">Инкассация</button>' +
       '</div>';
 
-    // В ящике скопилось больше, чем вы считаете безопасным
-    if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
-      h += '<div class="banner orange"><span>' + ic('truck') + '</span><span>В ящике ' +
-        esc(money(cash)) + ' — больше вашего порога ' + esc(money(S.settings.cashLimit)) +
-        '. Пора увезти в сейф: это перемещение, прибыль оно не меняет. ' +
-        '<button class="btn btn-sm" data-form="moveCash">Записать инкассацию</button></span></div>';
-    }
-
-    /* Из ящика выдали больше, чем расписали по статьям: деньги брали, а на
-       что — не записали. Без этой сверки расходы месяца выходят неполными. */
-    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [] });
-    if (chk.left > 0.5) {
-      var parts = Object.keys(chk.parts).map(function (k) {
-        return k + ' ' + money(chk.parts[k]);
-      }).join(', ');
-      h += '<div class="banner orange"><span>' + ic('receipt') + '</span><span>Из ящика за период выдали ' +
-        esc(money(chk.payouts)) + ', а расписано ' + esc(money(chk.explained)) +
-        (parts ? ' (' + esc(parts) + ')' : '') + '. Не хватает объяснения на <b>' +
-        esc(money(chk.left)) + '</b> — эти деньги нигде не учтены, ' +
-        'и прибыль за месяц выглядит выше настоящей.</span></div>';
-    } else if (chk.over) {
-      h += '<div class="banner red"><span>' + ic('warning') + '</span><span>Расходов «из ящика» записано на ' +
-        esc(money(-chk.left)) + ' больше, чем вообще выдавали из ящика. ' +
-        'Где-то лишняя запись — посмотрите «Базу операций».</span></div>';
-    }
-
     h += wholeNote(sel);
-    h += quickBar();
 
-    // Кассы: где сколько лежит по последней закрытой смене
+    var rating = E.cashierRating(sel.rows);
+    var pt = E.planTotals(S.state.plans || [], today());
+    var deb = E.debtorTotals(S.state.debtors || [], today());
     var st = E.tillState(all, S.settings);
+
     h += u.card('Кассы', u.listOf(st.map(function (x) {
       return u.listRow({ icon: 'coins', title: esc(x.till),
         sub: x.closed ? 'последняя смена ' + dateRu(x.date) + ' · ' + esc(x.shift) +
           (x.cashier ? ' · ' + esc(x.cashier) : '') : 'смен ещё не было',
         value: u.priv(x.fact) });
     }), ''), 'По факту последней закрытой смены');
-
-    if (gaps.length) {
-      var g = gaps[gaps.length - 1];
-      h += '<div class="banner orange"><span>' + ic('warning') + '</span><span>Размен не сходится с прошлой сменой: ' +
-        esc(g.till) + ' закрылась ' + dateRu(g.prevDate) + ' с <b>' + money(g.prevFact) +
-        '</b>, а ' + dateRu(g.date) + ' смену открыли с <b>' + money(g.open) + '</b>. ' +
-        'Разница ' + money(Math.abs(g.gap)) + ' — если деньги убрали в сейф или забрал владелец, ' +
-        'запишите это расходом, иначе учёт разъедется.' +
-        (gaps.length > 1 ? ' Всего таких случаев: ' + gaps.length + '.' : '') + '</span></div>';
-    }
 
     h += '<div class="grid-2">' +
       u.card('Выплаты поставщикам', u.listOf([

@@ -150,12 +150,17 @@ console.log('Страница: ' + PAGE + '\n');
     window.WMStore.save(); window.WMUI.recompute(); window.WMUI.go('pulse');
   });
   await page.waitForTimeout(500);
-  const pulse = await page.textContent('#page');
-  check('на Пульте видно кассу, долг и кто недосдаёт',
-    pulse.includes('Наличные в кассе') && pulse.includes('Долг поставщикам') && pulse.includes('Аня'),
+  const pulse = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+  /* Пульт отвечает на два вопроса: сколько денег и что сделать. Долг и
+     кассиры остались ниже, но главное — крупная цифра и список дел. */
+  check('на Пульте главная цифра — деньги в кассе', pulse.includes('Наличные в кассе'),
     'видно', 'видно');
-  check('программа заметила, что размен не сходится с прошлой сменой',
-    pulse.includes('Размен не сходится'), 'заметила', 'заметила');
+  check('и список дел на сегодня', pulse.includes('Что сделать') || pulse.includes('Всё сведено'),
+    'видно', 'видно');
+  check('кассиры и долг остались ниже на том же экране',
+    pulse.includes('Аня') && /долг|переплат/i.test(pulse), 'видно', 'видно');
+  check('программа заметила, что размен не сошёлся с прошлой сменой',
+    /Размен .* не сошёлся/.test(pulse), 'заметила', 'заметила');
 
   await page.evaluate(() => window.WMUI.go('morning'));
   await page.waitForTimeout(400);

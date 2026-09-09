@@ -994,6 +994,7 @@
   }
 
   var EDIT = null;    // что правим: {coll, id}
+  var SYNC_NOW = null;   // «Обновить из 1С» — вызывается из меню
 
   /* --- Шаблоны частых записей ------------------------------------------------
      «Аренда 168 000, 5 числа» вбивается раз в месяц одинаково. Сохранили
@@ -1365,7 +1366,10 @@
     if (num(S.settings.debtCrit) && debt.debt >= num(S.settings.debtCrit)) {
       items.push({ icon: 'clipboard', text: 'Долг поставщикам ' + money(debt.debt), go: 'evening' });
     }
-    if (!items.length) { bar.hidden = true; return; }
+    /* На Пульте дела уже показаны списком «Что сделать» — полоса сверху
+       повторяла бы их слово в слово. Одно и то же дважды на одном экране
+       читается как шум, а не как напоминание. */
+    if (!items.length || VIEW === 'pulse') { bar.hidden = true; return; }
     bar.hidden = false;
     bar.innerHTML = items.slice(0, 4).map(function (a) {
       return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + ic(a.icon, 18) +
@@ -1380,11 +1384,15 @@
     });
   }
 
+  /* Период. Пять кнопок в ряд занимали половину шапки, а стоят они почти
+     всегда на «Месяце»: это выбор, который делают раз в неделю, а место
+     занимает постоянно. Один список — один контрол вместо пяти. */
   function renderPeriods() {
-    var html = PERIODS.map(function (p) {
-      return '<button class="' + (p.id === PERIOD ? 'active' : '') + '" data-period="' + p.id + '">' + esc(p.name) + '</button>';
-    }).join('');
-    $('periods').innerHTML = html;
+    $('periods').innerHTML = '<select id="periodSel" title="За какой период смотрим">' +
+      PERIODS.map(function (p) {
+        return '<option value="' + esc(p.id) + '"' + (p.id === PERIOD ? ' selected' : '') + '>' +
+          esc(p.name) + '</option>';
+      }).join('') + '</select>';
   }
 
   function render() {
@@ -1719,7 +1727,9 @@
     }
 
     var actions = [
-      listRow({ icon: 'folder', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
+      listRow({ icon: 'folder', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="sync-1c"' }),
+      listRow({ icon: 'download', title: 'Скачать этот экран в Excel', tap: true, attrs: ' data-act="export-screen"' }),
+      listRow({ icon: 'share', title: 'Отправить этот экран', sub: 'WhatsApp или Telegram', tap: true, attrs: ' data-act="share-screen"' }),
       listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
     ];
     sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
@@ -1859,6 +1869,7 @@
         if (DRAFT_BACK) Q.clearDraft(DRAFT_BACK.id);
         DRAFT_BACK = null;
       }
+      else if (a === 'sync-1c') { closeSheet(); if (SYNC_NOW) SYNC_NOW(); }
       else if (a === 'pick-files' || a === 'backup') { closeSheet(); if (a === 'backup') backup(); else $('filesInput').click(); }
       else if (a === 'more') { PAGE[el.dataset.id] = (PAGE[el.dataset.id] || +el.dataset.step) + (+el.dataset.step) * 3; render(); }
       else if (a === 'pick-folder') $('folderInput').click();
@@ -2004,6 +2015,7 @@
     });
 
     document.addEventListener('change', function (e) {
+      if (e.target.id === 'periodSel') { PERIOD = e.target.value; PAGE = {}; render(); return; }
       if (window.WM_EXTRA_CHANGE && window.WM_EXTRA_CHANGE(e.target)) { render(); }
     });
 
@@ -2141,12 +2153,15 @@
     });
     $('menuBtn').addEventListener('click', openMenuSheet);
     $('addBtn').addEventListener('click', openAddSheet);
-    $('syncBtn').addEventListener('click', function () {
+    /* «Обновить из 1С» переехало в меню: выгрузки читают раз в месяц, а место
+       в шапке кнопка занимала каждый день. Действие осталось прежним. */
+    function syncNow() {
       if (F.state === 'ready') syncFolder(false);
       else if (F.state === 'needs-permission') reconnectFolder();
       else if (F.state === 'lost') { go('data'); toast(F.humanError({ name: 'NotFoundError' }), 11000); }
       else $('folderInput').click();
-    });
+    }
+    SYNC_NOW = syncNow;
     $('privacyBtn').addEventListener('click', function () {
       var on = document.body.classList.toggle('priv');
       try { localStorage.setItem('wm_priv', on ? '1' : '0'); } catch (e) {}

@@ -375,6 +375,9 @@ body.readonly .quick .btn { opacity: .45; }
 @media (max-width: 480px) { .calc-key { height: 52px; font-size: 19px; } }
 
 /* --- Тревожная строка под шапкой: видна с любого экрана --------------------- */
+/* Скрытая полоса обязана исчезать: атрибут hidden сам по себе слабее
+   правила display ниже, и полоса оставалась узкой розовой полоской. */
+.alert-bar[hidden] { display: none; }
 .alert-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
   padding: 10px 24px; font-size: 14px; font-weight: 550;
   background: color-mix(in srgb, var(--red) 12%, var(--bg));
@@ -763,3 +766,37 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .banner > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
 .alert-item > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
 .row-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ============================================================================
+   Проще на глаз: одна главная цифра, дела строкой, один выбор периода.
+   ========================================================================== */
+/* Период — обычный список вместо пяти кнопок в ряд */
+.segmented select { height: 34px; border: none; border-radius: var(--r-pill);
+  background: var(--fill-2); color: var(--label); font-size: 14px; font-weight: 600;
+  padding: 0 30px 0 12px; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; }
+.segmented select:hover { background-color: var(--fill); }
+
+/* Главная цифра: крупно и без соседей, чтобы взгляду было где остановиться */
+.hero { padding: 26px 24px 22px; }
+.hero-value { font-size: clamp(38px, 6vw, 54px); letter-spacing: -1.2px; }
+.hero-sub { margin-top: 8px; font-size: 14px; color: var(--label-2); }
+
+/* Главное действие крупнее остальных: их не надо разглядывать */
+.quick-main { align-items: center; gap: 8px; margin: 4px 0 18px; }
+.quick-main .btn-lg { padding: 12px 22px; font-size: 16px; }
+
+/* Дело — одна строка: текст слева, кнопка справа, объяснений нет */
+.card .row .btn-sm { white-space: nowrap; }
+
+/* Блок периода был рассчитан на пять кнопок в ряд; теперь там один список,
+   и растягиваться ему больше не на что. */
+.segmented { flex: 0 0 auto; background: none; padding: 0; }
+
+/* Дело на телефоне: длинную строку не сжимаем в столбик из трёх слов —
+   вся строка и так открывает нужный экран, кнопка справа лишь подсказка. */
+@media (max-width: 700px) {
+  .card .row .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+  .row-title { font-size: 15px; }
+}
