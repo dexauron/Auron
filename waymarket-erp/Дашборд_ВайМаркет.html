@@ -28,17 +28,17 @@
 
 <main class="main">
   <div class="topbar">
-    <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню">☰</button>
+    <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню" data-ic="menu"></button>
     <div class="search">
-      <span>🔍</span>
+      <span class="search-ic" data-ic="search"></span>
       <input type="text" id="search" placeholder="Товар, поставщик, штрихкод, телефон">
     </div>
     <div class="segmented" id="periods"></div>
-    <button class="btn btn-primary" id="addBtn">＋ Записать</button>
-    <button class="btn hide-mobile" id="syncBtn">📂 Обновить из 1С</button>
-    <button class="btn btn-icon hide-mobile" data-act="export-screen" title="Скачать этот экран в Excel">⤓</button>
-    <button class="btn btn-icon hide-mobile" data-act="share-screen" title="Отправить этот экран в WhatsApp или Telegram">📤</button>
-    <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы">👁</button>
+    <button class="btn btn-primary" id="addBtn"><span data-ic="plus"></span> Записать</button>
+    <button class="btn hide-mobile" id="syncBtn"><span data-ic="folder"></span> Обновить из 1С</button>
+    <button class="btn btn-icon hide-mobile" data-act="export-screen" title="Скачать этот экран в Excel" data-ic="download"></button>
+    <button class="btn btn-icon hide-mobile" data-act="share-screen" title="Отправить этот экран в WhatsApp или Telegram" data-ic="share"></button>
+    <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы" data-ic="eye"></button>
     <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv" hidden>
     <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
   </div>
@@ -51,15 +51,16 @@
 <!-- Нижняя панель: на телефоне это главная навигация, как в приложениях на iPhone.
      На планшете и компьютере она скрыта — там есть меню слева и кнопки сверху. -->
 <nav class="tabbar" id="tabbar">
-  <button class="tab" data-go="pulse"><span class="tab-icon">📊</span><span class="tab-name">Пульт</span></button>
-  <button class="tab" data-go="morning"><span class="tab-icon">🧮</span><span class="tab-name">Касса</span></button>
-  <button class="tab tab-add" data-act="add-record"><span class="tab-icon">＋</span><span class="tab-name">Записать</span></button>
-  <button class="tab" data-go="finpay"><span class="tab-icon">📅</span><span class="tab-name">Выплаты</span></button>
-  <button class="tab" data-act="open-menu"><span class="tab-icon">☰</span><span class="tab-name">Ещё</span></button>
+  <button class="tab" data-go="pulse"><span class="tab-icon" data-ic="gauge"></span><span class="tab-name">Пульт</span></button>
+  <button class="tab" data-go="morning"><span class="tab-icon" data-ic="calculator"></span><span class="tab-name">Касса</span></button>
+  <button class="tab tab-add" data-act="add-record"><span class="tab-icon" data-ic="plus"></span><span class="tab-name">Записать</span></button>
+  <button class="tab" data-go="finpay"><span class="tab-icon" data-ic="calendar"></span><span class="tab-name">Выплаты</span></button>
+  <button class="tab" data-act="open-menu"><span class="tab-icon" data-ic="menu"></span><span class="tab-name">Ещё</span></button>
 </nav>
 
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/chart.umd.min.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/store.js"></script>
 <script src="js/settings.js"></script>

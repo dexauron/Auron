@@ -727,3 +727,39 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .nav-item.nav-more { color: var(--label-2); font-weight: 550; margin-top: 4px; }
 .nav-item.nav-more .nav-icon { opacity: .6; }
 .nav-count.nav-count-quiet { background: var(--fill-2); color: var(--label-2); }
+
+/* ============================================================================
+   Значки. Рисуются линиями и берут цвет текста — поэтому одинаково хорошо
+   выглядят в светлой и тёмной теме, а в выделенном пункте меню становятся
+   белыми вместе с надписью. Толщину линии не трогаем: она задана в самом
+   значке и одинакова у всех.
+   ========================================================================== */
+.ic { display: block; flex: 0 0 auto; }
+.nav-icon { display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; color: var(--label-2); }
+.nav-item.active .nav-icon { color: inherit; }
+.row-icon { display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--label-2); flex: 0 0 auto; }
+.tab-icon { display: flex; align-items: center; justify-content: center;
+  height: 24px; }
+/* Плюс лежит на синем кружке — значит он белый. Правило ниже задаёт
+   сам кружок только на телефоне, здесь важен цвет самой линии. */
+.tab-add .tab-icon { color: #fff; }
+.stat-icon, .banner .ic { color: inherit; }
+
+/* Значок в кнопке стоит вплотную к надписи и выравнивается по её середине.
+   Правило намеренно не трогает display: иначе оно перебивает скрытие кнопок
+   по ширине экрана («только на телефоне», «спрятать на телефоне») — они
+   объявлены выше и с тем же весом. */
+.btn { align-items: center; gap: 7px; }
+.btn:not(.only-mobile):not(.hide-mobile) { display: inline-flex; }
+.btn .ic, .btn > span[data-ic] { flex: 0 0 auto; }
+.btn-icon { justify-content: center; padding-left: 10px; padding-right: 10px; }
+.btn-icon .ic { margin: 0; }
+.search-ic { display: flex; align-items: center; color: var(--label-3); }
+#privacyBtn.is-off { color: var(--blue); }
+.row-menu-list .ic { color: var(--label-2); }
+.row-menu-list button.danger .ic { color: #FF3B30; }
+.banner > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
+.alert-item > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
+.row-menu-btn { display: inline-flex; align-items: center; justify-content: center; }

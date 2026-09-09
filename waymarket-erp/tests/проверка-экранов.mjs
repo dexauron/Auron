@@ -647,6 +647,65 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 5в-4. Значки: везде векторные, ни одного эмодзи на экране */
+{
+  console.log('— Значки в стиле iOS');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 20000, zCashless: 5000, payouts: 3000, factCash: 17000 });
+    S.add('plans', { due: '2026-09-01', supplier: 'Рамми', amount: 15000, status: 'Запланирована' });
+    S.save(); window.WMUI.recompute(); window.WMUI.render();
+  });
+
+  const набор = await page.evaluate(() => window.WMIcons.names().length);
+  check('набор значков подключён', набор > 50, набор + ' значков', '>50');
+
+  // Ни одного эмодзи в видимом тексте — иначе рядом разнобой
+  /* Картинки-эмодзи, а не типографика: минус «−», точка «·» и стрелка «→»
+     в тексте — обычные знаки препинания, к значкам отношения не имеют. */
+  const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{22EE}]/u;
+  const ids = await screensOf(page);
+  const dirty = [];
+  for (const id of ids) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(90);
+    const found = await page.evaluate(re => {
+      const bad = new Set();
+      const rx = new RegExp(re, 'u');
+      document.querySelectorAll('#page, #nav, .topbar, #tabbar, #alertBar').forEach(root => {
+        const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let n; while ((n = w.nextNode())) {
+          const m = n.nodeValue.match(rx);
+          if (m) bad.add(m[0]);
+        }
+      });
+      return [...bad];
+    }, EMOJI.source);
+    found.forEach(e => dirty.push(id + ':' + e));
+  }
+  check('НА ЭКРАНАХ НЕТ ЭМОДЗИ — только векторные значки', dirty.length === 0,
+    dirty.slice(0, 5).join(', ') || 'чисто', 'чисто');
+
+  // Значки должны быть настоящим svg и брать цвет текста
+  const svgOk = await page.evaluate(() => {
+    const s = document.querySelector('#nav .nav-icon svg');
+    if (!s) return 'нет значка в меню';
+    return s.getAttribute('stroke') === 'currentColor' &&
+      s.getAttribute('viewBox') === '0 0 24 24' ? 'ок' : 'не тот формат';
+  });
+  check('значок — svg, цвет берёт у текста', svgOk === 'ок', svgOk, 'ок');
+
+  // В нижней панели телефона значки тоже подставились
+  const tabs = await page.evaluate(() =>
+    [...document.querySelectorAll('#tabbar .tab-icon')].filter(e => e.querySelector('svg')).length);
+  check('в нижней панели значки на месте', tabs === 5, tabs + ' из 5', 5);
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 /* 5г. Мёртвых кнопок быть не должно */
 {
   console.log('— Кнопки, которые никуда не ведут');

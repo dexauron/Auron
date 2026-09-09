@@ -7,6 +7,7 @@
   'use strict';
 
   var E = window.WM, S = window.WMStore, F = window.WMFiles, BOOK = window.WMBook;
+  var IC = window.WMIcons;
   S.load();
 
   /* --- Данные выгрузок (в памяти) ----------------------------------------- */
@@ -39,7 +40,8 @@
     var acts = EN.rowMenu({ more: opts.more, form: opts.form, extra: opts.extra });
     return '<span class="row-menu"><button class="row-menu-btn" data-menu="' +
       esc(coll) + ':' + esc(id) + ':' + esc(opts.form || '') + ':' +
-      esc(opts.more ? opts.more.kind + '|' + opts.more.key : '') + '" title="Действия">⋮</button></span>';
+      esc(opts.more ? opts.more.kind + '|' + opts.more.key : '') +
+      '" title="Действия">' + ic('dots', 18) + '</button></span>';
   }
 
   function openRowMenu(btn) {
@@ -48,14 +50,14 @@
     var coll = p[0], id = p[1], form = p[2], more = p[3];
     var rec = (S.state[coll] || []).filter(function (x) { return x.id === id; })[0];
     var items = [];
-    if (more) items.push(['more', '👁', 'Подробнее', 'data-more="' + esc(more) + '"']);
-    if (form) items.push(['edit', '✎', 'Изменить', 'data-edit="' + esc(coll + ':' + id + ':' + form) + '"']);
-    if (form) items.push(['repeat', '↻', 'Повторить сегодня',
+    if (more) items.push(['more', ic('eye', 18), 'Подробнее', 'data-more="' + esc(more) + '"']);
+    if (form) items.push(['edit', ic('edit', 18), 'Изменить', 'data-edit="' + esc(coll + ':' + id + ':' + form) + '"']);
+    if (form) items.push(['repeat', ic('refresh', 18), 'Повторить сегодня',
       'data-act="q-repeat" data-coll="' + esc(coll) + '" data-id="' + esc(id) + '" data-target="' + esc(form) + '"']);
-    items.push(['copy', '⧉', 'Копировать', 'data-act="rec-copy" data-coll="' + esc(coll) + '" data-id="' + esc(id) + '"']);
-    if (EN.clip()) items.push(['paste', '📋', 'Вставить скопированное',
+    items.push(['copy', ic('copy', 18), 'Копировать', 'data-act="rec-copy" data-coll="' + esc(coll) + '" data-id="' + esc(id) + '"']);
+    if (EN.clip()) items.push(['paste', ic('clipboard', 18), 'Вставить скопированное',
       'data-act="rec-paste" data-form="' + esc(form) + '"']);
-    items.push(['del', '🗑', 'Удалить', 'data-del="' + esc(coll + ':' + id) + '"', true]);
+    items.push(['del', ic('trash', 18), 'Удалить', 'data-del="' + esc(coll + ':' + id) + '"', true]);
 
     var box = document.createElement('div');
     box.className = 'row-menu-list';
@@ -116,6 +118,11 @@
     ] };
   }
   function cls(x) { return x > 0 ? 'c-green' : (x < 0 ? 'c-red' : 'c-muted'); }
+  /* Значок по имени. Не нашли имя — вернём как есть: в редких местах ещё
+     стоят эмодзи, и они не должны превратиться в пустоту. */
+  function ic(name, size) {
+    return IC && IC.svg ? IC.svg(name, { size: size || 22 }) : esc(String(name || ''));
+  }
   function badge(text, kind) { return '<span class="badge b-' + kind + '">' + esc(text) + '</span>'; }
   function plural(n, one, few, many) {
     n = Math.abs(Math.round(n)); var m10 = n % 10, m100 = n % 100;
@@ -230,7 +237,7 @@
   function manageTemplates(formId) {
     var list = IN.templatesFor(S.state.templates || [], formId);
     sheet('Шаблоны', '<div class="detail">' + listOf(list.map(function (t) {
-      return listRow({ icon: '☆', title: esc(t.name),
+      return listRow({ icon: 'star', title: esc(t.name),
         sub: 'вставляли ' + nf(t.used || 0) + ' ' + plural(t.used || 0, 'раз', 'раза', 'раз'),
         value: '<button class="btn btn-sm btn-danger" data-del="templates:' + esc(t.id) + '">Убрать</button>' });
     }), 'Шаблонов пока нет') + '</div>');
@@ -251,7 +258,7 @@
     var box = document.createElement('div');
     box.className = 'backdrop calc-back';
     box.innerHTML = '<div class="sheet calc-sheet">' +
-      '<div class="sheet-head"><div class="sheet-title">🧮 ' + esc(label || 'Калькулятор') + '</div>' +
+      '<div class="sheet-head"><div class="sheet-title">' + ic('calculator') + ' ' + esc(label || 'Калькулятор') + '</div>' +
       '<button class="btn btn-sm" data-calc-act="close">Закрыть</button></div>' +
       '<div class="sheet-body">' +
       '<div class="calc-screen"><input id="calcLine" type="text" inputmode="decimal" value="' +
@@ -397,7 +404,7 @@
   }
   function listRow(o) {
     return '<div class="row' + (o.tap ? ' tappable' : '') + '"' + (o.attrs || '') + '>' +
-      (o.icon ? '<div class="row-icon">' + o.icon + '</div>' : '') +
+      (o.icon ? '<div class="row-icon">' + ic(o.icon, 20) + '</div>' : '') +
       '<div class="row-main"><div class="row-title">' + o.title + '</div>' +
       (o.sub ? '<div class="row-sub">' + o.sub + '</div>' : '') + '</div>' +
       (o.value ? '<div class="row-value">' + o.value + '</div>' : '') +
@@ -469,7 +476,7 @@
       (dlid ? ' list="' + dlid + '"' : '') + ' placeholder="' + esc((ph && ph[0]) || 'за что') + '">' +
       '<input type="text" inputmode="decimal" class="num-input" name="' + esc(name) + '_a' + i + '"' +
       ' value="' + esc(it.sum == null || it.sum === '' ? '' : it.sum) + '" placeholder="' + esc((ph && ph[1]) || 'сумма') + '">' +
-      '<button type="button" class="btn btn-sm pair-del" data-pairdel="1" title="Убрать строку">✕</button>' +
+      '<button type="button" class="btn btn-sm pair-del" data-pairdel="1" title="Убрать строку">' + ic('close') + '</button>' +
       '</div>';
   }
 
@@ -514,7 +521,7 @@
         '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
-        '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">🧮</button>' +
+        '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">' + ic('calculator') + '</button>' +
         '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
     } else if (type === 'pairs') {
       var plid = (opts.options && opts.options.length) ? 'dl-' + name + '-' + (++LIST_N) : '';
@@ -796,7 +803,7 @@
     box.className = 'backdrop lock-screen';
     box.innerHTML = '<div class="sheet" style="max-width:360px;text-align:center">' +
       '<div class="sheet-body" style="padding:26px 22px 22px">' +
-      '<div style="font-size:40px">🔒</div>' +
+      '<div style="font-size:40px">' + ic('lock') + '</div>' +
       '<div class="sheet-title" style="margin-top:8px">' + esc(S.settings.storeName || 'Вай Маркет') + '</div>' +
       '<div class="card-note" style="margin:6px 0 16px">' +
       (askNew ? 'Придумайте пароль из 4 цифр' : 'Введите пароль') + '</div>' +
@@ -929,7 +936,7 @@
     /* «Быстрая настройка»: пять полей, без которых программа считает
        неправильно. Кнопка на экране настроек была, а формы за ней не было. */
     setupWizard: {
-      title: 'Быстрая настройка', icon: '🧭',
+      title: 'Быстрая настройка', icon: 'gear',
       body: function (v) {
         var s2 = S.settings; v = v || {};
         return fieldRow('Название магазина', 'storeName', 'text',
@@ -968,7 +975,7 @@
     },
 
     filterSetName: {
-      title: 'Запомнить набор фильтров', icon: '⭐',
+      title: 'Запомнить набор фильтров', icon: 'star',
       body: function (v) {
         v = v || {};
         return fieldRow('Название набора', 'name', 'text', v.name || '',
@@ -1002,7 +1009,7 @@
       }).join('');
     }
     h += '<button type="button" class="btn btn-sm tpl-save" data-tpl-save="' + esc(formId) +
-      '" title="Запомнить как шаблон">☆ В шаблоны</button>';
+      '" title="Запомнить как шаблон">' + ic('star') + ' В шаблоны</button>';
     if (list.length) h += '<button type="button" class="btn btn-sm" data-tpl-manage="' + esc(formId) + '">Убрать лишние</button>';
     return h + '</div>';
   }
@@ -1088,19 +1095,19 @@
         (F.state === 'needs-permission' ? 'folder-reconnect' : 'folder-connect') + '">Подключить папку</button>';
     }
     h += '<div class="banner ' + (st.ok ? 'green' : '') + '">' +
-      '<span>' + (st.ok ? '✅' : '⚠️') + '</span><div><b>' + esc(st.text) + '</b>' +
+      '<span>' + ic(st.ok ? 'check' : 'warning') + '</span><div><b>' + esc(st.text) + '</b>' +
       '<div class="card-note">' + note + '</div></div>' + button + '</div>';
 
     var counts = S.COLLECTIONS.filter(function (c) { return S.COLL_RU[c]; }).map(function (c) {
       return { name: S.COLL_RU[c], coll: c, n: (S.state[c] || []).length };
     }).filter(function (x) { return x.n; });
     h += card('Аналитика из 1С', listOf([
-      listRow({ icon: '📂', title: 'Прочитать папку с выгрузками',
+      listRow({ icon: 'folder', title: 'Прочитать папку с выгрузками',
         sub: 'Продажи, Остатки, Цены, Контакты, Накладные, Причины списания — имена любые',
         value: '<button class="btn btn-sm btn-primary" data-act="pick-folder">Выбрать папку</button>' }),
-      listRow({ icon: '📄', title: 'Загрузить отдельные файлы', sub: 'если нужно обновить один отчёт',
+      listRow({ icon: 'doc', title: 'Загрузить отдельные файлы', sub: 'если нужно обновить один отчёт',
         value: '<button class="btn btn-sm" data-act="pick-files">Выбрать файлы</button>' }),
-      F.state === 'ready' ? listRow({ icon: '🔄', title: 'Перечитать подключённую папку',
+      F.state === 'ready' ? listRow({ icon: 'refresh', title: 'Перечитать подключённую папку',
         sub: 'берёт только изменившиеся файлы',
         value: '<button class="btn btn-sm" data-act="folder-sync">Обновить</button>' }) : ''
     ].filter(Boolean), ''),
@@ -1120,26 +1127,26 @@
     }
 
     h += card('Что в базе', listOf(counts.map(function (x) {
-      return listRow({ icon: '📄', title: esc(x.name), value: nf(x.n) });
+      return listRow({ icon: 'doc', title: esc(x.name), value: nf(x.n) });
     }), 'База пока пуста'));
 
     h += card('Книга «' + BOOK.FILE + '»', listOf([
-      listRow({ icon: '📗', title: 'Записать книгу заново', sub: 'пересобрать все листы из базы',
+      listRow({ icon: 'doc', title: 'Записать книгу заново', sub: 'пересобрать все листы из базы',
         value: '<button class="btn btn-sm" data-act="book-save">Записать</button>' }),
-      listRow({ icon: '📖', title: 'Прочитать правки из книги', sub: 'если правили её в Excel',
+      listRow({ icon: 'book', title: 'Прочитать правки из книги', sub: 'если правили её в Excel',
         value: '<button class="btn btn-sm" data-act="book-read">Прочитать</button>' }),
-      listRow({ icon: '🧱', title: 'Собрать базу из книги', sub: 'если файл базы потерялся',
+      listRow({ icon: 'grid', title: 'Собрать базу из книги', sub: 'если файл базы потерялся',
         value: '<button class="btn btn-sm" data-act="book-restore">Собрать</button>' })
     ], ''), 'Листы: ' + BOOK.SHEETS.map(function (x) { return x.name; }).join(', '));
 
     h += card('Копии и перенос', listOf([
-      listRow({ icon: '⤓', title: 'Скачать этот экран в Excel', sub: 'то, что видно на экране',
+      listRow({ icon: 'download', title: 'Скачать этот экран в Excel', sub: 'то, что видно на экране',
         value: '<button class="btn btn-sm" data-act="export-screen">Скачать</button>' }),
-      listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json — положите на флешку',
+      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'файл .json — положите на флешку',
         value: '<button class="btn btn-sm" data-act="backup">Скачать</button>' }),
-      listRow({ icon: '📥', title: 'Загрузить базу из копии', sub: 'заменит текущие записи',
+      listRow({ icon: 'download', title: 'Загрузить базу из копии', sub: 'заменит текущие записи',
         value: '<button class="btn btn-sm" data-act="restore">Загрузить</button>' }),
-      listRow({ icon: '🗑', title: 'Очистить всю базу', sub: 'копия сохранится в папке',
+      listRow({ icon: 'trash', title: 'Очистить всю базу', sub: 'копия сохранится в папке',
         value: '<button class="btn btn-sm btn-danger" data-act="wipe">Очистить</button>' })
     ], ''));
     return h;
@@ -1157,10 +1164,10 @@
   function viewSettings() {
     var s = S.settings, SET = window.WMSettings;
     var h = pageHead('Настройки', 'Настройте программу под свой магазин — считать она будет по этим правилам',
-      '<button class="btn" data-act="settings-wizard">🧭 Быстрая настройка</button> ' +
+      '<button class="btn" data-act="settings-wizard">' + ic('gear') + ' Быстрая настройка</button> ' +
       '<button class="btn" data-act="settings-reset">Сбросить всё</button>');
 
-    h += '<div class="banner blue"><span>💡</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
       'на листе «Настройки» — можно править и там.</span></div>';
 
     h += '<form id="setForm">';
@@ -1194,6 +1201,7 @@
   // Помощники рисования отдаём экранам (js/finviews.js, js/dictviews.js)
   window.WMUI = {
     esc: esc, money: money, priv: priv, nf: nf, pct: pct, num: num, cls: cls, badge: badge,
+    ic: ic,
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
     fieldRow: fieldRow, pairValues: pairValues, pageHead: pageHead, toast: toast,
@@ -1223,8 +1231,8 @@
 
   /* --- Навигация ---------------------------------------------------------------- */
   var VIEWS = [
-    { id: 'data', icon: '🗂', name: 'Данные и копии', group: 'Ещё', render: viewData },
-    { id: 'settings', icon: '⚙️', name: 'Настройки', group: 'Ещё', render: viewSettings }
+    { id: 'data', icon: 'folder', name: 'Данные и копии', group: 'Ещё', render: viewData },
+    { id: 'settings', icon: 'gear', name: 'Настройки', group: 'Ещё', render: viewSettings }
   ];
 
   // Экраны финансового учёта встают рядом со своими соседями
@@ -1301,7 +1309,7 @@
     shown.forEach(function (v) {
       if (v.group !== group) { group = v.group; html += '<div class="nav-group">' + esc(group) + '</div>'; }
       html += '<div class="nav-item' + (v.id === VIEW ? ' active' : '') + '" data-go="' + v.id + '">' +
-        '<span class="nav-icon">' + v.icon + '</span><span>' + esc(v.name) + '</span>' +
+        '<span class="nav-icon">' + ic(v.icon) + '</span><span>' + esc(v.name) + '</span>' +
         (c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '') + '</div>';
     });
 
@@ -1312,12 +1320,12 @@
 
     if (hidden > 0) {
       html += '<div class="nav-item nav-more" data-act="views-all">' +
-        '<span class="nav-icon">⋯</span><span>Показать все экраны</span>' +
+        '<span class="nav-icon">' + ic('menu') + '</span><span>Показать все экраны</span>' +
         '<span class="nav-count' + (hiddenCount ? '' : ' nav-count-quiet') + '">' +
         (hiddenCount ? hiddenCount : hidden) + '</span></div>';
     } else if (all) {
       html += '<div class="nav-item nav-more" data-act="views-main">' +
-        '<span class="nav-icon">⌃</span><span>Оставить только рабочие</span></div>';
+        '<span class="nav-icon">' + ic('chevronUp') + '</span><span>Оставить только рабочие</span></div>';
     }
     $('nav').innerHTML = html;
     $('brandName').textContent = S.settings.storeName || 'Вай Маркет';
@@ -1333,34 +1341,34 @@
     var bar = $('alertBar'); if (!bar) return;
     var t = today(), items = [];
     var pt = E.planTotals(S.state.plans || [], t);
-    if (pt.overdue) items.push({ icon: '🔴', text: 'Просрочены выплаты на ' + money(pt.overdue),
+    if (pt.overdue) items.push({ icon: 'warning', text: 'Просрочены выплаты на ' + money(pt.overdue),
       go: 'finpay' });
-    if (pt.dueToday) items.push({ icon: '📅', text: 'Сегодня платить ' + money(pt.dueToday), go: 'finpay' });
+    if (pt.dueToday) items.push({ icon: 'calendar', text: 'Сегодня платить ' + money(pt.dueToday), go: 'finpay' });
 
     // смена не закрыта: за вчера нет ни одной сверки
     var yest = E.addDays(t, -1);
     var closedYest = (S.state.dds || []).some(function (r) { return E.isShift(r) && r.date === yest; });
     if (!closedYest && (S.state.dds || []).length) {
-      items.push({ icon: '🧮', text: 'За ' + dateRu(yest) + ' смена не сверена', go: 'morning' });
+      items.push({ icon: 'calculator', text: 'За ' + dateRu(yest) + ' смена не сверена', go: 'morning' });
     }
     var crit = num(S.settings.diffCrit) || 1000;
     var bad = E.shiftsOf(S.state.dds || [], null, S.settings).filter(function (r) {
       return E.daysBetween(r.date, t) <= 7 && Math.abs(E.shiftCalc(r).diff) >= crit;
     });
-    if (bad.length) items.push({ icon: '⚠️', text: 'Крупные расхождения кассы: ' + bad.length +
+    if (bad.length) items.push({ icon: 'warning', text: 'Крупные расхождения кассы: ' + bad.length +
       ' за неделю', go: 'cashiers' });
     var cash = E.cashOnHand(S.state.dds || [], S.settings);
     var limit = num(S.settings.cashLimit);
-    if (limit && cash > limit) items.push({ icon: '💰', text: 'Наличных в кассе ' + money(cash) +
+    if (limit && cash > limit) items.push({ icon: 'banknote', text: 'Наличных в кассе ' + money(cash) +
       ' — больше вашего порога', go: 'morning' });
     var debt = E.supplierDebt(S.state.dds || [], S.settings);
     if (num(S.settings.debtCrit) && debt.debt >= num(S.settings.debtCrit)) {
-      items.push({ icon: '💼', text: 'Долг поставщикам ' + money(debt.debt), go: 'evening' });
+      items.push({ icon: 'clipboard', text: 'Долг поставщикам ' + money(debt.debt), go: 'evening' });
     }
     if (!items.length) { bar.hidden = true; return; }
     bar.hidden = false;
     bar.innerHTML = items.slice(0, 4).map(function (a) {
-      return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + a.icon +
+      return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + ic(a.icon, 18) +
         '</span><span>' + esc(a.text) + '</span></button>';
     }).join('') + '<span class="alert-cash">в кассе сейчас <b class="private">' +
       money(cash) + '</b></span>';
@@ -1429,7 +1437,7 @@
   }
   function readOnlyBar() {
     if (!readOnly()) return '';
-    return '<div class="ro-bar"><span>🔒 Режим показа: записи видны, менять ничего нельзя</span>' +
+    return '<div class="ro-bar"><span>' + ic('lock') + ' Режим показа: записи видны, менять ничего нельзя</span>' +
       '<button class="btn btn-sm" data-act="readonly-off">Выйти из режима показа</button></div>';
   }
   function readOnlyOff() {
@@ -1491,9 +1499,9 @@
       'Без интернета нажмите «Скопировать» и вставьте в мессенджер на телефоне.</div>' +
       '</div></div>' +
       '<div class="form-actions">' +
-      '<button class="btn" data-act="share-copy">📋 Скопировать</button>' +
-      '<button class="btn" data-act="share-telegram">✈️ Telegram</button>' +
-      '<button class="btn btn-primary" data-act="share-whatsapp">💬 WhatsApp</button>' +
+      '<button class="btn" data-act="share-copy">' + ic('clipboard') + ' Скопировать</button>' +
+      '<button class="btn" data-act="share-telegram">' + ic('share') + ' Telegram</button>' +
+      '<button class="btn btn-primary" data-act="share-whatsapp">' + ic('notebook') + ' WhatsApp</button>' +
       '</div>');
   }
   function shareVia(where) {
@@ -1701,18 +1709,18 @@
 
     if (hidden > 0) {
       rows.push('<div class="nav-group">Остальное</div>');
-      rows.push(listRow({ icon: '⋯', title: 'Показать все экраны',
+      rows.push(listRow({ icon: 'menu', title: 'Показать все экраны',
         sub: 'ещё ' + hidden + ' — отчёты и товарная аналитика', tap: true,
         attrs: ' data-act="views-all"' }));
     } else if (all) {
       rows.push('<div class="nav-group">Меню</div>');
-      rows.push(listRow({ icon: '⌃', title: 'Оставить только рабочие',
+      rows.push(listRow({ icon: 'chevronUp', title: 'Оставить только рабочие',
         sub: 'чтобы не листать лишнее', tap: true, attrs: ' data-act="views-main"' }));
     }
 
     var actions = [
-      listRow({ icon: '📂', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
-      listRow({ icon: '💾', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
+      listRow({ icon: 'folder', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="pick-files"' }),
+      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
     ];
     sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
       '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
@@ -1722,18 +1730,18 @@
      пустоту, потому что остались от прошлой версии программы. */
   function openAddSheet() {
     var items = [
-      ['💵', 'Сверка кассы за смену', 'Z-отчёт, выплаты, факт в ящике', 'shiftClose'],
-      ['🌙', 'Итоги дня', 'товар за наличные, долги поставщикам', 'dayTotals'],
-      ['🧾', 'Расход', 'аренда, ЗП, ГСМ, обеды', 'moneyOut'],
-      ['💰', 'Приход денег', 'прочие поступления', 'moneyIn'],
-      ['🚛', 'Инкассация', 'увезли в сейф или банк', 'moveCash'],
-      ['👛', 'Забрал владелец', 'деньги из оборота', 'moneyDraw'],
-      ['📅', 'Выплата поставщику', 'план платежа', 'payPlan'],
-      ['📓', 'Долг покупателя', 'тетрадка у кассы', 'debtor'],
-      ['🧮', 'Пересчёт кассы', 'по купюрам', 'cashCount'],
-      ['🗒', 'Смена в табель', 'часы, премия, удержание', 'timesheetRow'],
-      ['💵', 'Выдать зарплату', 'аванс или расчёт', 'payoutRow'],
-      ['👤', 'Новый сотрудник', 'карточка со ставкой', 'staffCard']
+      ['calculator', 'Сверка кассы за смену', 'Z-отчёт, выплаты, факт в ящике', 'shiftClose'],
+      ['moon', 'Итоги дня', 'товар за наличные, долги поставщикам', 'dayTotals'],
+      ['receipt', 'Расход', 'аренда, ЗП, ГСМ, обеды', 'moneyOut'],
+      ['banknote', 'Приход денег', 'прочие поступления', 'moneyIn'],
+      ['truck', 'Инкассация', 'увезли в сейф или банк', 'moveCash'],
+      ['wallet', 'Забрал владелец', 'деньги из оборота', 'moneyDraw'],
+      ['calendar', 'Выплата поставщику', 'план платежа', 'payPlan'],
+      ['notebook', 'Долг покупателя', 'тетрадка у кассы', 'debtor'],
+      ['coins', 'Пересчёт кассы', 'по купюрам', 'cashCount'],
+      ['clipboard', 'Смена в табель', 'часы, премия, удержание', 'timesheetRow'],
+      ['coins', 'Выдать зарплату', 'аванс или расчёт', 'payoutRow'],
+      ['person', 'Новый сотрудник', 'карточка со ставкой', 'staffCard']
     ];
     // показываем только то, что действительно есть: если файл экрана не
     // подключён, пункт не рисуем, а не ведём владельца в пустоту
@@ -2065,7 +2073,7 @@
       var name = (FORMS[found.id] || {}).title || found.id;
       var bar = document.createElement('div');
       bar.className = 'draft-bar';
-      bar.innerHTML = '<span>📝 Осталась незаконченная запись: <b>' + esc(name) + '</b> — ' +
+      bar.innerHTML = '<span>' + ic('edit', 18) + ' Осталась незаконченная запись: <b>' + esc(name) + '</b> — ' +
         found.filled + ' ' + plural(found.filled, 'поле заполнено', 'поля заполнено', 'полей заполнено') + '</span>' +
         '<button class="btn btn-sm btn-primary" data-act="draft-open">Продолжить</button>' +
         '<button class="btn btn-sm" data-act="draft-drop">Не нужно</button>';
@@ -2080,7 +2088,7 @@
       try { Q.saveDraft(f.dataset.fid, formValues(f)); } catch (err) {}
     }, 3000);
 
-    // калькулятор: 🧮 у поля, а также «=» прямо в поле
+    // калькулятор: кнопка у поля, а также «=» прямо в поле
     document.addEventListener('keydown', function (e) {
       var el = e.target;
       if (!el.classList || !el.classList.contains('num-input')) return;
@@ -2142,7 +2150,8 @@
     $('privacyBtn').addEventListener('click', function () {
       var on = document.body.classList.toggle('priv');
       try { localStorage.setItem('wm_priv', on ? '1' : '0'); } catch (e) {}
-      $('privacyBtn').textContent = on ? '🙈' : '👁';
+      $('privacyBtn').innerHTML = ic(on ? 'eye' : 'eye', 20);
+      $('privacyBtn').classList.toggle('is-off', on);
     });
     $('filesInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
     $('folderInput').addEventListener('change', function (e) { loadFiles(e.target.files); e.target.value = ''; });
@@ -2169,7 +2178,11 @@
     var privSaved = null;
     try { privSaved = localStorage.getItem('wm_priv'); } catch (e) {}
     var privOn = privSaved === null ? E.norm(S.settings.privacyDefault) === 'да' : privSaved === '1';
-    if (privOn) { document.body.classList.add('priv'); $('privacyBtn').textContent = '🙈'; }
+    if (privOn) {
+      document.body.classList.add('priv');
+      $('privacyBtn').innerHTML = ic('eye', 20);
+      $('privacyBtn').classList.add('is-off');
+    }
 
     // экран и период, с которых начинаем — из настроек
     var startMap = { 'пульт': 'pulse', 'сегодня': 'pulse', 'утро': 'morning',
@@ -2179,6 +2192,11 @@
     if (sv) VIEW = sv;
     var pd = periodMap[E.norm(S.settings.defaultPeriod)];
     if (pd) PERIOD = pd;
+
+    // Значки в нижней панели: подставляем при запуске, она в разметке статична
+    Array.prototype.forEach.call(document.querySelectorAll('[data-ic]'), function (el) {
+      el.innerHTML = ic(el.dataset.ic, 24);
+    });
 
     recompute(); bind(); render();
 

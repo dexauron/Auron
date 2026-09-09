@@ -21,6 +21,7 @@
   function D() { return U().data(); }
   function C() { return U().calc(); }
   function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
   function dateRu(d) { return U().dateRu(d); }
   function num(v) { return E.num(v); }
   function money(v) { return E.fmtMoney(v); }
@@ -98,7 +99,7 @@
     var pace = R.monthPace(F.flatten(dds()), m, today());
 
     var h = u.pageHead('Дашборд', 'Как идут дела в ' + monthRu(m),
-      '<button class="btn" data-act="print">🖨 Напечатать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
     h += monthPicker();
 
     h += u.hero('Чистая прибыль за месяц', u.priv(p.net),
@@ -121,7 +122,7 @@
       '</div>';
 
     if (pace && pace.forecast) {
-      h += '<div class="banner blue"><span>📈</span><span>Такими темпами месяц закроется на ' +
+      h += '<div class="banner blue"><span>' + ic('chartLine') + '</span><span>Такими темпами месяц закроется на ' +
         '<b>' + esc(money(pace.forecast)) + '</b> выручки: за ' + u.nf(pace.daysDone) +
         ' дн. сделано ' + esc(money(pace.done)) + '.</span></div>';
     }
@@ -130,17 +131,17 @@
     var eaters = R.profitEaters({ dds: F.flatten(dds()), ym: m, writeoffSum: writeoff1c(m) });
     if (eaters && eaters.rows && eaters.rows.length) {
       h += u.card('Куда уходит прибыль', u.listOf(eaters.rows.slice(0, 6).map(function (x) {
-        return u.listRow({ icon: '💸', title: esc(x.name), sub: esc(x.why),
+        return u.listRow({ icon: 'coins', title: esc(x.name), sub: esc(x.why),
           value: u.priv(x.sum), tap: !!x.go,
           attrs: x.go ? ' data-go="' + esc(x.go) + '"' : '' });
       }), 'Всё в порядке'), 'от валовой прибыли ' + money(eaters.gross));
     }
 
     h += u.card('Куда пойти', u.listOf([
-      u.listRow({ icon: '🧮', title: 'Свести кассу за смену', tap: true, attrs: ' data-go="morning"' }),
-      u.listRow({ icon: '🌙', title: 'Записать итоги дня', tap: true, attrs: ' data-go="evening"' }),
-      u.listRow({ icon: '💰', title: 'Ведомость зарплаты', tap: true, attrs: ' data-go="payroll"' }),
-      u.listRow({ icon: '📈', title: 'Прибыль подробно (P&L)', tap: true, attrs: ' data-go="pnl"' })
+      u.listRow({ icon: 'calculator', title: 'Свести кассу за смену', tap: true, attrs: ' data-go="morning"' }),
+      u.listRow({ icon: 'moon', title: 'Записать итоги дня', tap: true, attrs: ' data-go="evening"' }),
+      u.listRow({ icon: 'banknote', title: 'Ведомость зарплаты', tap: true, attrs: ' data-go="payroll"' }),
+      u.listRow({ icon: 'chartLine', title: 'Прибыль подробно (P&L)', tap: true, attrs: ' data-go="pnl"' })
     ], ''));
     return h;
   }
@@ -151,8 +152,8 @@
   function viewPnl() {
     var u = U(), m = ym(), p = pnlOf(m);
     var h = u.pageHead('Прибыль (P&L)', 'Из чего сложилась прибыль за ' + monthRu(m),
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button> ' +
-      '<button class="btn" data-act="print">🖨</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
+      '<button class="btn" data-act="print">' + ic('print') + '</button>');
     h += monthPicker();
 
     h += '<div class="stat-grid">' +
@@ -166,7 +167,7 @@
       '</div>';
 
     h += u.card('Расчёт по шагам', u.listOf([
-      u.listRow({ icon: '＋', title: 'Выручка', sub: 'Z-отчёты за месяц', value: u.priv(p.revenue) }),
+      u.listRow({ icon: 'plus', title: 'Выручка', sub: 'Z-отчёты за месяц', value: u.priv(p.revenue) }),
       u.listRow({ icon: '−', title: 'Закуп товара', sub: 'куплено за наличные и взято в долг',
         value: u.priv(p.purchase) }),
       u.listRow({ icon: '=', title: '<b>Валовая прибыль</b>', sub: 'сколько заработали на наценке',
@@ -201,13 +202,13 @@
         { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } }
       ], p.excluded, { step: 10 }),
         'на ' + money(p.excludedTotal) + ' прибыль занижена НЕ была');
-      h += '<div class="banner orange"><span>✏️</span><span>Эти записи лучше переделать: ' +
+      h += '<div class="banner orange"><span>' + ic('edit') + '</span><span>Эти записи лучше переделать: ' +
         'закуп — в «Итоги дня», погашение долга — туда же, инкассацию — кнопкой ' +
         '«Инкассация». Пока они лежат расходами, их видно в базе, но в прибыль ' +
         'они не идут.</span></div>';
     }
 
-    h += '<div class="banner blue"><span>💵</span><span>Мимо прибыли за месяц прошли: ' +
+    h += '<div class="banner blue"><span>' + ic('coins') + '</span><span>Мимо прибыли за месяц прошли: ' +
       'выплаты из ящика <b>' + esc(money(p.payouts)) + '</b> (способ оплаты, а не трата), ' +
       'погашение долгов поставщикам <b>' + esc(money(p.debtPaid)) + '</b> (возврат чужих денег), ' +
       'инкассация <b>' + esc(money(p.moved)) + '</b> (деньги переложили, а не потратили) ' +
@@ -233,8 +234,8 @@
     var p = mc.pnl;
 
     var h = u.pageHead('Закрытие месяца', monthRu(m) + ' — что должно сойтись',
-      '<button class="btn" data-act="print">🖨 Напечатать</button> ' +
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
 
     h += u.hero(mc.ready ? 'Месяц можно закрывать' : 'Месяц закрывать рано',
@@ -244,24 +245,24 @@
       mc.ready ? 'c-green' : 'c-orange');
 
     h += u.card('Что проверяем', u.listOf(mc.items.map(function (i) {
-      return u.listRow({ icon: i.ok ? '✅' : (i.hard ? '⛔️' : '⚠️'),
+      return u.listRow({ icon: i.ok ? 'check' : 'warning',
         title: esc(i.name), sub: esc(i.said),
         value: i.go && !i.ok ? '<button class="btn btn-sm" data-go="' + esc(i.go) +
           '">Открыть</button>' : '',
         tap: false });
-    }), ''), '⛔️ — без этого месяц считать нельзя, ⚠️ — стоит посмотреть');
+    }), ''), 'Восклицательный знак — без этого месяц считать нельзя; галочка — сошлось');
 
     // Деньги на конец месяца: три места, где они лежат
     h += u.card('Где деньги на конец месяца', u.listOf([
-      u.listRow({ icon: '💵', title: 'В ящиках', value: u.priv(mc.cash) }),
-      u.listRow({ icon: '🔐', title: 'В сейфе', sub: 'увезено инкассацией',
+      u.listRow({ icon: 'coins', title: 'В ящиках', value: u.priv(mc.cash) }),
+      u.listRow({ icon: 'safe', title: 'В сейфе', sub: 'увезено инкассацией',
         value: u.priv(mc.safe) }),
-      u.listRow({ icon: '🤝', title: 'Должны поставщикам', sub: 'общей суммой по магазину',
+      u.listRow({ icon: 'supplier', title: 'Должны поставщикам', sub: 'общей суммой по магазину',
         value: u.priv(mc.debt) })
     ], ''), 'Инкассация деньги не тратит — она их перекладывает');
 
     h += u.card('Прибыль за месяц', u.listOf([
-      u.listRow({ icon: '＋', title: 'Выручка', value: u.priv(p.revenue) }),
+      u.listRow({ icon: 'plus', title: 'Выручка', value: u.priv(p.revenue) }),
       u.listRow({ icon: '−', title: 'Закуп товара', sub: 'наличными и в долг',
         value: u.priv(p.purchase) }),
       u.listRow({ icon: '=', title: '<b>Валовая прибыль</b>',
@@ -295,7 +296,7 @@
     h += u.card('Сверка долга с поставщиками', '<div class="card-pad">' +
       'Программа считает долг ' + money(mc.debt) + '. Позвоните поставщикам, ' +
       'узнайте их цифру и впишите — если сойдётся, месяц можно закрывать спокойно.' +
-      '<br><br><button class="btn btn-primary" data-form="debtCheck">🤝 Вписать долг по сверке</button>' +
+      '<br><br><button class="btn btn-primary" data-form="debtCheck">' + ic('supplier') + ' Вписать долг по сверке</button>' +
       '</div>');
     return h;
   }
@@ -307,7 +308,7 @@
     var u = U(), m = ym();
     var flow = R.moneyFlow(F.flatten(dds()), m);
     var h = u.pageHead('Куда ушли деньги', 'Выручка по шагам за ' + monthRu(m),
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
 
     if (!flow.steps.length) {
@@ -344,7 +345,7 @@
       return h + '<div class="card"><div class="empty"><b>Нет числа чеков</b><br>' +
         'Средний чек считается из Z-отчёта: впишите «Чеков за смену» при сверке кассы — ' +
         'это одно поле, на деньги оно не влияет.</div>' +
-        '<div class="card-pad"><button class="btn btn-primary" data-form="shiftClose">🧮 Свести кассу</button></div></div>';
+        '<div class="card-pad"><button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') + ' Свести кассу</button></div></div>';
     }
     h += '<div class="stat-grid">' +
       u.stat('Средний чек', u.priv(ac.avg), 'выручка ÷ число чеков') +
@@ -408,7 +409,7 @@
       ], gp.rows.slice(0, 30), { step: 30 }),
         'наценка по магазину ' + u.pct(gp.margin));
     } else {
-      h += '<div class="banner blue"><span>📦</span><span>Чтобы увидеть, какие группы товаров ' +
+      h += '<div class="banner blue"><span>' + ic('box') + '</span><span>Чтобы увидеть, какие группы товаров ' +
         'приносят прибыль, загрузите отчёт «Продажи» из 1С на экране «Данные и копии». ' +
         'На кассу и зарплату это не влияет.</span></div>';
     }
@@ -429,8 +430,8 @@
       S.state.staff || [], S.settings));
 
     var h = u.pageHead('Отчёт собственнику', 'Одна страница за ' + monthRu(m),
-      '<button class="btn" data-act="print">🖨 Напечатать</button> ' +
-      '<button class="btn" data-act="share-screen">↗ Отправить</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
     h += monthPicker();
 
     h += u.hero('Заработали за месяц', u.priv(p.net),
@@ -438,26 +439,26 @@
       p.net >= 0 ? 'c-green' : 'c-red');
 
     h += u.card('Деньги', u.listOf([
-      u.listRow({ icon: '💵', title: 'Наличные в ящиках', sub: 'на сегодня', value: u.priv(cash) }),
-      u.listRow({ icon: '💳', title: 'Безнал за месяц', sub: 'ушёл на счёт',
+      u.listRow({ icon: 'coins', title: 'Наличные в ящиках', sub: 'на сегодня', value: u.priv(cash) }),
+      u.listRow({ icon: 'card', title: 'Безнал за месяц', sub: 'ушёл на счёт',
         value: u.priv(E.cashlessTotal(rowsOf(m))) }),
-      u.listRow({ icon: '🤝', title: 'Долг поставщикам', sub: 'общей суммой по магазину',
+      u.listRow({ icon: 'supplier', title: 'Долг поставщикам', sub: 'общей суммой по магазину',
         value: u.priv(debt.debt), tap: true, attrs: ' data-go="suppliers"' }),
-      u.listRow({ icon: '📓', title: 'Должны покупатели', sub: 'тетрадка у кассы',
+      u.listRow({ icon: 'notebook', title: 'Должны покупатели', sub: 'тетрадка у кассы',
         value: u.priv(deb.open), tap: true, attrs: ' data-go="debtors"' }),
-      u.listRow({ icon: '👛', title: 'Владелец взял себе', sub: 'заборы за месяц',
+      u.listRow({ icon: 'wallet', title: 'Владелец взял себе', sub: 'заборы за месяц',
         value: u.priv(p.draw) })
     ], ''));
 
     h += u.card('Работа магазина', u.listOf([
-      u.listRow({ icon: '🧾', title: 'Выручка', sub: u.nf(t.shifts) + ' смен', value: u.priv(p.revenue) }),
-      u.listRow({ icon: '📦', title: 'Закуп товара', sub: 'наличными и в долг', value: u.priv(p.purchase) }),
-      u.listRow({ icon: '📈', title: 'Валовая прибыль', sub: 'наценка ' + u.pct(p.grossPct),
+      u.listRow({ icon: 'receipt', title: 'Выручка', sub: u.nf(t.shifts) + ' смен', value: u.priv(p.revenue) }),
+      u.listRow({ icon: 'box', title: 'Закуп товара', sub: 'наличными и в долг', value: u.priv(p.purchase) }),
+      u.listRow({ icon: 'chartLine', title: 'Валовая прибыль', sub: 'наценка ' + u.pct(p.grossPct),
         value: u.priv(p.gross) }),
-      u.listRow({ icon: '👥', title: 'Зарплата начислена', sub: pay.people + ' чел., ' +
+      u.listRow({ icon: 'people', title: 'Зарплата начислена', sub: pay.people + ' чел., ' +
         u.nf(pay.shifts) + ' смен', value: u.priv(pay.accrued), tap: true, attrs: ' data-go="payroll"' }),
-      u.listRow({ icon: '🧮', title: 'Затраты всего', sub: 'все статьи', value: u.priv(p.costTotal) }),
-      u.listRow({ icon: '⚖️', title: 'Расхождения по кассе',
+      u.listRow({ icon: 'calculator', title: 'Затраты всего', sub: 'все статьи', value: u.priv(p.costTotal) }),
+      u.listRow({ icon: 'scale', title: 'Расхождения по кассе',
         sub: t.badShifts + ' из ' + t.shifts + ' смен',
         value: '<span class="' + u.cls(t.diff) + '">' + u.priv(t.diff) + '</span>' })
     ], ''));
@@ -465,7 +466,7 @@
     var probs = R.topProblems({ dds: F.flatten(dds()), ym: m });
     if (probs && probs.length) {
       h += u.card('На что посмотреть', u.listOf(probs.slice(0, 5).map(function (x) {
-        return u.listRow({ icon: '⚠️', title: esc(x.what), sub: esc(x.why), value: u.priv(x.sum) });
+        return u.listRow({ icon: 'warning', title: esc(x.what), sub: esc(x.why), value: u.priv(x.sum) });
       }), ''));
     }
     return h;
@@ -481,7 +482,7 @@
     var b = E.bep(fixed, margin, p.revenue);
 
     var h = u.pageHead('Безубыточность', 'Сколько надо продать, чтобы выйти в ноль',
-      '<button class="btn" data-act="costs-to-settings">↧ Взять расходы из ' +
+      '<button class="btn" data-act="costs-to-settings">' + ic('download') + ' Взять расходы из ' +
       esc(monthRu(m)) + '</button>');
     h += monthPicker();
     h += u.hero(b.profitable ? 'Порог пройден' : 'До нуля осталось',
@@ -558,14 +559,14 @@
     var tax = F.taxAmount(S.settings, t.revenue, t.expense);
 
     var h = u.pageHead('Налоговый календарь', 'Что и когда платить в ' + year + ' году',
-      '<button class="btn" data-act="print">🖨</button>');
+      '<button class="btn" data-act="print">' + ic('print') + '</button>');
     h += '<div class="stat-grid">' +
       u.stat('Система', esc(String(S.settings.taxMode || 'не выбрана')),
         'меняется в настройках') +
       u.stat('Выручка за год', u.priv(t.revenue), 'по кассе') +
       u.stat('Налог прикидочно', u.priv(tax.sum), tax.name) +
       '</div>';
-    h += '<div class="banner blue"><span>ℹ️</span><span>Суммы здесь — прикидка по вашей выручке, ' +
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Суммы здесь — прикидка по вашей выручке, ' +
       'а не расчёт налоговой. Точные цифры считает бухгалтер: программа только напоминает про даты.</span></div>';
 
     h += u.card('Даты', u.table('taxT', [
@@ -592,9 +593,9 @@
     var debt = E.supplierDebt(dds(), S.settings);
 
     var h = u.pageHead('Готовый отчёт', 'Что отдать бухгалтеру за ' + monthRu(m),
-      '<button class="btn btn-primary" data-act="print">🖨 Напечатать</button> ' +
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button> ' +
-      '<button class="btn" data-act="share-screen">↗ Отправить</button>');
+      '<button class="btn btn-primary" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
+      '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
     h += monthPicker();
 
     var lines = [
@@ -625,7 +626,7 @@
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } }
     ], p.costs.filter(function (r) { return r.sum > 0; }), { step: 20, empty: 'Затрат нет' }));
 
-    h += '<div class="banner blue"><span>📗</span><span>Полные журналы — в книге ' +
+    h += '<div class="banner blue"><span>' + ic('doc') + '</span><span>Полные журналы — в книге ' +
       '«Бухгалтерия.xlsx»: листы Касса_и_Смены, ДДС_Операции, План_Выплат, ' +
       'Табель_Зарплаты и Настройки. Их можно открыть в Excel и отправить как есть.</span></div>';
     return h;
@@ -644,9 +645,9 @@
     var total = counts.reduce(function (a, x) { return a + x.n; }, 0);
 
     var h = u.pageHead('Сброс и откат базы', 'Если что-то пошло не так',
-      '<button class="btn" data-go="data">🗂 Данные и копии</button>');
+      '<button class="btn" data-go="data">' + ic('folder') + ' Данные и копии</button>');
 
-    h += '<div class="banner orange"><span>🛟</span><span>Перед любым сбросом программа сама ' +
+    h += '<div class="banner orange"><span>' + ic('lifebuoy') + '</span><span>Перед любым сбросом программа сама ' +
       'сохраняет копию базы. Ничего не пропадёт безвозвратно: копии лежат в рабочей папке ' +
       'и скачиваются файлом .json.</span></div>';
 
@@ -657,9 +658,9 @@
       '</div>';
 
     h += u.card('Сделать копию сейчас', u.listOf([
-      u.listRow({ icon: '💾', title: 'Скачать копию базы', sub: 'файл .json — положите на флешку',
+      u.listRow({ icon: 'save', title: 'Скачать копию базы', sub: 'файл .json — положите на флешку',
         value: '<button class="btn btn-sm" data-act="reset-backup">Скачать</button>' }),
-      u.listRow({ icon: '📗', title: 'Записать книгу заново', sub: 'пересобрать Бухгалтерию.xlsx из базы',
+      u.listRow({ icon: 'doc', title: 'Записать книгу заново', sub: 'пересобрать Бухгалтерию.xlsx из базы',
         value: '<button class="btn btn-sm" data-act="book-save">Записать</button>' })
     ], ''));
 
@@ -673,19 +674,19 @@
             esc(r.name) + '">Откатиться</button>'; } }
       ], BK, { step: 20, empty: 'Копий в папке нет' })
       : '<div class="card-pad"><button class="btn" data-act="reset-copies">' +
-        '📂 Показать копии из папки</button></div>') +
-      '<div class="card-pad"><button class="btn" data-act="restore">📥 Загрузить копию файлом</button></div>',
+        '' + ic('folder') + ' Показать копии из папки</button></div>') +
+      '<div class="card-pad"><button class="btn" data-act="restore">' + ic('download') + ' Загрузить копию файлом</button></div>',
       'Откат заменит нынешние записи содержимым копии');
 
     h += u.card('Очистить журналы', u.listOf(counts.map(function (x) {
-      return u.listRow({ icon: '🗑', title: esc(x.coll), sub: u.nf(x.n) + ' записей',
+      return u.listRow({ icon: 'trash', title: esc(x.coll), sub: u.nf(x.n) + ' записей',
         value: '<button class="btn btn-sm btn-danger" data-act="reset-coll" data-coll="' +
           esc(x.coll) + '">Очистить</button>' });
     }), 'База пуста'), 'Сначала скачается копия, потом журнал очистится');
 
     h += u.card('Начать с нуля', '<div class="card-pad">' +
-      '<button class="btn btn-danger" data-act="reset-all">🧨 Очистить всю базу</button> ' +
-      '<button class="btn" data-act="settings-reset">↺ Сбросить настройки</button>' +
+      '<button class="btn btn-danger" data-act="reset-all">' + ic('warning') + ' Очистить всю базу</button> ' +
+      '<button class="btn" data-act="settings-reset">' + ic('refresh') + ' Сбросить настройки</button>' +
       '</div>', 'Копия сохранится автоматически');
     return h;
   }
@@ -699,7 +700,7 @@
      запоминает и сравнивает — сам долг она не меняет: у долга один источник,
      это «Итоги дня». Иначе сверка стала бы вторым источником и они разошлись бы. */
   FORMS.debtCheck = {
-    title: 'Долг по сверке с поставщиками', icon: '🤝',
+    title: 'Долг по сверке с поставщиками', icon: 'supplier',
     body: function (v) {
       var u = U(); v = v || {};
       var m = ym();
@@ -837,17 +838,17 @@
 
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'findash', icon: '📊', name: 'Дашборд', group: 'Отчёты', render: viewDash },
-    { id: 'owner', icon: '🧑‍💼', name: 'Отчёт собственнику', group: 'Отчёты', render: viewOwner },
-    { id: 'moneyflow', icon: '💸', name: 'Куда ушли деньги', group: 'Отчёты', render: viewMoneyFlow },
-    { id: 'avgcheck', icon: '🧾', name: 'Средний чек', group: 'Отчёты', render: viewAvgCheck },
-    { id: 'earners', icon: '🏅', name: 'Кто зарабатывает', group: 'Отчёты', render: viewEarners },
-    { id: 'ready', icon: '📑', name: 'Готовый отчёт', group: 'Отчёты', render: viewReady },
-    { id: 'pnl', icon: '📈', name: 'Прибыль (P&L)', group: 'Отчёты', render: viewPnl },
-    { id: 'bep', icon: '⚖️', name: 'Безубыточность', group: 'Отчёты', render: viewBep },
-    { id: 'bepdays', icon: '🗓', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays },
-    { id: 'taxcal', icon: '🏛', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxCal },
-    { id: 'monthclose', icon: '🔒', name: 'Закрытие месяца', group: 'Отчёты', render: viewMonthClose },
-    { id: 'reset', icon: '🛟', name: 'Сброс и откат базы', group: 'Ещё', render: viewReset }
+    { id: 'findash', icon: 'chartPie', name: 'Дашборд', group: 'Отчёты', render: viewDash },
+    { id: 'owner', icon: 'person', name: 'Отчёт собственнику', group: 'Отчёты', render: viewOwner },
+    { id: 'moneyflow', icon: 'coins', name: 'Куда ушли деньги', group: 'Отчёты', render: viewMoneyFlow },
+    { id: 'avgcheck', icon: 'receipt', name: 'Средний чек', group: 'Отчёты', render: viewAvgCheck },
+    { id: 'earners', icon: 'medal', name: 'Кто зарабатывает', group: 'Отчёты', render: viewEarners },
+    { id: 'ready', icon: 'doc', name: 'Готовый отчёт', group: 'Отчёты', render: viewReady },
+    { id: 'pnl', icon: 'chartLine', name: 'Прибыль (P&L)', group: 'Отчёты', render: viewPnl },
+    { id: 'bep', icon: 'scale', name: 'Безубыточность', group: 'Отчёты', render: viewBep },
+    { id: 'bepdays', icon: 'calendarCheck', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays },
+    { id: 'taxcal', icon: 'bank', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxCal },
+    { id: 'monthclose', icon: 'lock', name: 'Закрытие месяца', group: 'Отчёты', render: viewMonthClose },
+    { id: 'reset', icon: 'lifebuoy', name: 'Сброс и откат базы', group: 'Ещё', render: viewReset }
   );
 })();

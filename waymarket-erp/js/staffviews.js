@@ -17,6 +17,7 @@
   function U() { return window.WMUI; }
   function FLT() { return window.WMFilter; }
   function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
   function dateRu(d) { return U().dateRu(d); }
   function num(v) { return E.num(v); }
   function money(v) { return E.fmtMoney(v); }
@@ -91,7 +92,7 @@
       if (E.costKindOf(r.category) === 'fot') byArticle += num(r.amount);
     });
     if (!byArticle) return '';
-    return '<div class="banner orange"><span>⚠️</span><span>За этот месяц зарплата записана ' +
+    return '<div class="banner orange"><span>' + ic('warning') + '</span><span>За этот месяц зарплата записана ' +
       'ещё и расходом по статье «ЗП» на <b>' + money(byArticle) + '</b>. ' +
       'В отчёте о прибыли считается что-то одно: пока ведётся табель, берётся он. ' +
       'Чтобы не путаться, эти расходы лучше убрать на экране «База операций».</span></div>';
@@ -104,7 +105,7 @@
 
   /* --- Карточка сотрудника ---------------------------------------------------- */
   FORMS.staffCard = {
-    title: 'Сотрудник', icon: '👤',
+    title: 'Сотрудник', icon: 'person',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -154,7 +155,7 @@
   /* --- Смена в табеле --------------------------------------------------------
      Часы днём и ночью — раздельно: ночью ставка выше. */
   FORMS.timesheetRow = {
-    title: 'Смена в табеле', icon: '🗒',
+    title: 'Смена в табеле', icon: 'clipboard',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -215,7 +216,7 @@
 
   /* --- Выдача денег ----------------------------------------------------------- */
   FORMS.payoutRow = {
-    title: 'Выдача зарплаты', icon: '💵',
+    title: 'Выдача зарплаты', icon: 'coins',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -272,7 +273,7 @@
     });
 
     var h = u.pageHead('Табель смен', 'Кто сколько отработал за ' + monthRu(m),
-      '<button class="btn btn-primary" data-form="timesheetRow">＋ Смена</button>');
+      '<button class="btn btn-primary" data-form="timesheetRow">' + ic('plus') + ' Смена</button>');
     h += monthPicker();
     h += '<div class="stat-grid">' +
       u.stat('Смен в табеле', u.nf(rows.length), monthRu(m)) +
@@ -322,7 +323,7 @@
     var u = U(), m = ym();
     var sch = ST.schedule([], timesheet(), m, staff());
     var h = u.pageHead('График смен', 'Кто выходил в ' + monthRu(m),
-      '<button class="btn btn-primary" data-form="timesheetRow">＋ Смена</button>');
+      '<button class="btn btn-primary" data-form="timesheetRow">' + ic('plus') + ' Смена</button>');
     h += monthPicker();
     h += '<div class="stat-grid">' +
       u.stat('Дней в месяце', u.nf(sch.daysIn), monthRu(m)) +
@@ -383,8 +384,8 @@
     var parts = ST.payParts(S.settings, m);
 
     var h = u.pageHead('Ведомость зарплаты', 'ФОТ за ' + monthRu(m),
-      '<button class="btn btn-primary" data-form="payoutRow">＋ Выдать</button>' +
-      ' <button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn btn-primary" data-form="payoutRow">' + ic('plus') + ' Выдать</button>' +
+      ' <button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
     h += '<div class="stat-grid">' +
       u.stat('Начислено (ФОТ)', u.priv(tot.accrued), tot.people + ' чел., ' +
@@ -397,13 +398,13 @@
       '</div>';
     h += doubleWarn(m);
     if (tot.shortage > 0) {
-      h += '<div class="banner orange"><span>⚖️</span><span>За месяц недостач по кассе на <b>' +
+      h += '<div class="banner orange"><span>' + ic('scale') + '</span><span>За месяц недостач по кассе на <b>' +
         esc(money(tot.shortage)) + '</b>' +
         (tot.fine ? ', из них удержано ' + esc(money(tot.fine)) : ', пока ничего не удержано') +
         '. Удержание уменьшает зарплату — деньги в кассу оно не возвращает: ' +
         'недостача уже уменьшила остаток в ящике, когда смена не сошлась.</span></div>';
     }
-    h += '<div class="banner blue"><span>📅</span><span>Аванс по настройкам — ' +
+    h += '<div class="banner blue"><span>' + ic('calendar') + '</span><span>Аванс по настройкам — ' +
       esc(dateRu(parts.advanceDate)) + ' (' + u.pct(parts.advancePct) + ' от начисленного), ' +
       'окончательный расчёт — ' + esc(dateRu(parts.finalDate)) + '.</span></div>';
 
@@ -434,7 +435,7 @@
           ? '<button class="btn btn-sm" data-act="pay-rest" data-employee="' + esc(r.employee) +
             '">Выдать остаток</button>'
           : '<button class="btn btn-sm" data-form="payoutRow" data-employee="' + esc(r.employee) +
-            '">＋</button>';
+            '">' + ic('plus') + '</button>';
         return btn; } }
     ], rows, { step: 40, empty: 'За ' + monthRu(m) + ' ни смен, ни выплат',
       total: [{ span: 5, html: 'Итого', label: '' },
@@ -467,14 +468,14 @@
     var rows = board(m);
     var live = E.activeStaff(staff());
     var h = u.pageHead('Личные листы', 'Что заработал каждый в ' + monthRu(m),
-      '<button class="btn btn-primary" data-form="staffCard">＋ Сотрудник</button>' +
-      ' <button class="btn" data-go="dicts">📚 Справочник сотрудников</button>');
+      '<button class="btn btn-primary" data-form="staffCard">' + ic('plus') + ' Сотрудник</button>' +
+      ' <button class="btn" data-go="dicts">' + ic('book') + ' Справочник сотрудников</button>');
     h += monthPicker();
 
     if (!live.length) {
       return h + '<div class="card"><div class="empty">Сотрудников пока нет.<br>' +
         'Заведите карточки — тогда посчитается табель и зарплата.</div>' +
-        '<div class="card-pad"><button class="btn btn-primary" data-form="staffCard">＋ Добавить сотрудника</button></div></div>';
+        '<div class="card-pad"><button class="btn btn-primary" data-form="staffCard">' + ic('plus') + ' Добавить сотрудника</button></div></div>';
     }
 
     rows.forEach(function (r) {
@@ -508,14 +509,14 @@
       ], shifts, { step: 12, empty: 'Смен в этом месяце нет' });
       if (pays.length) {
         body += '<div class="sub-title">Выплаты</div>' + pays.map(function (t) {
-          return u.listRow({ icon: '💵', title: esc(dateRu(t.date)) + ' · ' + esc(t.kind || 'выплата'),
+          return u.listRow({ icon: 'coins', title: esc(dateRu(t.date)) + ' · ' + esc(t.kind || 'выплата'),
             sub: esc(t.method || ''), value: u.priv(t.amount) });
         }).join('');
       }
       body += '<div class="card-pad">' +
-        '<button class="btn" data-form="timesheetRow" data-employee="' + esc(r.employee) + '">＋ Смена</button> ' +
-        '<button class="btn" data-form="payoutRow" data-employee="' + esc(r.employee) + '">＋ Выдать</button>' +
-        (p.id ? ' <button class="btn btn-sm" data-edit="staff:' + esc(p.id) + ':staffCard">✎ Карточка</button>' : '') +
+        '<button class="btn" data-form="timesheetRow" data-employee="' + esc(r.employee) + '">' + ic('plus') + ' Смена</button> ' +
+        '<button class="btn" data-form="payoutRow" data-employee="' + esc(r.employee) + '">' + ic('plus') + ' Выдать</button>' +
+        (p.id ? ' <button class="btn btn-sm" data-edit="staff:' + esc(p.id) + ':staffCard">' + ic('edit') + ' Карточка</button>' : '') +
         '</div>';
       h += u.card(r.employee + (r.fired ? ' (уволен)' : ''), body,
         r.left > 0 ? 'к выдаче ' + money(r.left) : 'рассчитан');
@@ -559,9 +560,9 @@
 
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'timesheet', icon: '🗒', name: 'Табель смен', group: 'Люди', render: viewTimesheet },
-    { id: 'sched', icon: '🗓', name: 'График смен', group: 'Люди', render: viewSchedule },
-    { id: 'payroll', icon: '💰', name: 'Ведомость зарплаты', group: 'Люди', render: viewPayroll },
-    { id: 'staffcards', icon: '👤', name: 'Личные листы', group: 'Люди', render: viewStaffCards }
+    { id: 'timesheet', icon: 'clipboard', name: 'Табель смен', group: 'Люди', render: viewTimesheet },
+    { id: 'sched', icon: 'calendar', name: 'График смен', group: 'Люди', render: viewSchedule },
+    { id: 'payroll', icon: 'banknote', name: 'Ведомость зарплаты', group: 'Люди', render: viewPayroll },
+    { id: 'staffcards', icon: 'person', name: 'Личные листы', group: 'Люди', render: viewStaffCards }
   );
 })();

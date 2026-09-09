@@ -27,19 +27,19 @@
      «where» нужен, чтобы честно сказать: «этим пользовались 118 раз» —
      и не дать удалить то, на чём висит история. */
   var KINDS = [
-    { key: 'categories', name: 'Статьи расходов', icon: '🏷', setting: 'finCategories',
+    { key: 'categories', name: 'Статьи расходов', icon: 'tag', setting: 'finCategories',
       one: 'статью', hint: 'За что платим: закуп, аренда, зарплата, хозрасходы.',
       where: [['dds', 'category']] },
-    { key: 'methods', name: 'Способы оплаты', icon: '💳', setting: 'finMethods',
+    { key: 'methods', name: 'Способы оплаты', icon: 'card', setting: 'finMethods',
       one: 'способ оплаты', hint: 'Наличные, карта, СБП, перевод со счёта.',
       where: [['dds', 'method'], ['plans', 'method']] },
-    { key: 'shifts', name: 'Смены', icon: '🕒', setting: 'finShifts',
+    { key: 'shifts', name: 'Смены', icon: 'clock', setting: 'finShifts',
       one: 'смену', hint: 'Как называете смены: день, ночь, сутки.',
       where: [['dds', 'shift']] },
-    { key: 'cashiers', name: 'Кассиры', icon: '🧑‍💼', setting: 'finCashiers',
+    { key: 'cashiers', name: 'Кассиры', icon: 'people', setting: 'finCashiers',
       one: 'кассира', hint: 'Кто сдаёт кассу. Это подсказка в форме; полная карточка — в «Сотрудниках».',
       where: [['dds', 'cashier'], ['debtors', 'cashier'], ['cashcount', 'cashier']] },
-    { key: 'suppliers', name: 'Поставщики', icon: '🏢', setting: 'finSuppliers',
+    { key: 'suppliers', name: 'Поставщики', icon: 'supplier', setting: 'finSuppliers',
       one: 'поставщика', hint: 'Кому платим: имена подставляются в плане выплат.',
       where: [['plans', 'supplier']] }
   ];

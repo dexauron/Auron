@@ -16,6 +16,7 @@
   function D() { return U().data(); }
   function C() { return U().calc(); }
   function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
   function num(v) { return E.num(v); }
   function money(v) { return E.fmtMoney(v); }
   function dateRu(d) { return U().dateRu(d); }
@@ -30,7 +31,7 @@
       'имя файла значения не имеет, программа смотрит внутрь.<br><br>' +
       'На кассу, зарплаты и долг магазина это никак не влияет: ' +
       'товарная аналитика живёт отдельно.</div>' +
-      '<div class="card-pad"><button class="btn btn-primary" data-go="data">📂 Загрузить выгрузки</button></div></div>';
+      '<div class="card-pad"><button class="btn btn-primary" data-go="data">' + ic('folder') + ' Загрузить выгрузки</button></div></div>';
   }
 
   /* --- Склад ------------------------------------------------------------------ */
@@ -39,7 +40,7 @@
     if (!d.stock.length) return need('Склад', 'Что лежит на полках и сколько это стоит', 'Остатки номенклатуры');
     var t = c.stock;
     var h = u.pageHead('Склад', u.nf(t.sku) + ' позиций из 1С',
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Товара на складе', u.priv(t.buySum), 'по себестоимости') +
@@ -91,7 +92,7 @@
     var days = d.salesPeriod ? d.salesPeriod.days : 30;
     var list = E.ropList(d.sales, d.stock, days, S.settings, c.bestPrices);
     var h = u.pageHead('Заказы', 'Что заканчивается и сколько заказать',
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
 
     var money0 = list.reduce(function (a, r) { return a + num(r.orderSum); }, 0);
     h += '<div class="stat-grid">' +
@@ -129,7 +130,7 @@
 
     var h = u.pageHead('Сроки годности', 'Что уценить сегодня, пока не списали');
     if (!rows.length) {
-      return h + '<div class="banner blue"><span>ℹ️</span><span>В выгрузке остатков нет колонки со сроком ' +
+      return h + '<div class="banner blue"><span>' + ic('info') + '</span><span>В выгрузке остатков нет колонки со сроком ' +
         'годности, поэтому считать нечего. Если 1С её отдаёт — она подхватится сама.</span></div>';
     }
     var crit = rows.filter(function (r) { return r.level === 'crit' || r.level === 'expired'; });
@@ -166,7 +167,7 @@
 
     var h = u.pageHead('Списания', 'Что и почему ушло не через кассу' +
       (d.writeoffsPeriod ? ' · ' + d.writeoffsPeriod.from + ' – ' + d.writeoffsPeriod.to : ''),
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Списано всего', u.priv(total), u.nf(d.writeoffs.length) + ' строк', 'c-red') +
@@ -175,7 +176,7 @@
         byReason[0] ? money(byReason[0].cost) : '') +
       '</div>';
 
-    h += '<div class="banner blue"><span>🔄</span><span>Список пересобирается при каждой загрузке ' +
+    h += '<div class="banner blue"><span>' + ic('refresh') + '</span><span>Список пересобирается при каждой загрузке ' +
       'отчёта: новые строки добавляются, изменившиеся обновляются, а пропавшие из файла ' +
       'исчезают и из аналитики. Дубли не копятся.</span></div>';
 
@@ -254,7 +255,7 @@
       '</div>';
     var traps = rows.filter(function (r) { return r.gap < -3 && r.revShare >= 3; });
     if (traps.length) {
-      h += '<div class="banner orange"><span>⚠️</span><span>Продаём много, зарабатываем мало: <b>' +
+      h += '<div class="banner orange"><span>' + ic('warning') + '</span><span>Продаём много, зарабатываем мало: <b>' +
         traps.map(function (r) { return esc(r.group); }).join(', ') + '</b>. Доля в выручке заметно ' +
         'больше доли в прибыли — проверьте наценку.</span></div>';
     }
@@ -347,7 +348,7 @@
         return '<b class="' + (r.dead ? 'c-orange' : 'c-green') + '">' + perRub(r.perRuble) + '</b>'; } },
       { title: '', cls: 'center', fn: function (r) { return r.dead ? u.badge('место зря', 'orange') : ''; } }
     ], res.rows, { step: 50 }));
-    h += '<div class="banner"><span>💡</span><span>Полка не резиновая. Если рубль, вложенный в товар, ' +
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Полка не резиновая. Если рубль, вложенный в товар, ' +
       'приносит копейки, его лучше вложить в тот, что приносит рубль.</span></div>';
     return h;
   }
@@ -444,7 +445,7 @@
     var pt = E.planTotals(S.state.plans || [], E.today());
 
     var h = u.pageHead('Поставщики и долг', 'Общий долг магазина и кто сколько привозит',
-      '<button class="btn btn-primary" data-form="payPlan">＋ Запланировать выплату</button>');
+      '<button class="btn btn-primary" data-form="payPlan">' + ic('plus') + ' Запланировать выплату</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Должны поставщикам', u.priv(debt.debt), 'общей суммой по магазину',
@@ -455,7 +456,7 @@
         pt.overdue ? 'c-red' : 'c-green') +
       '</div>';
 
-    h += '<div class="banner blue"><span>💼</span><span>Долг магазина ведётся <b>общей суммой</b>: ' +
+    h += '<div class="banner blue"><span>' + ic('clipboard') + '</span><span>Долг магазина ведётся <b>общей суммой</b>: ' +
       'вечером вы вписываете, сколько взяли в долг и сколько погасили. Разносить каждую ' +
       'накладную по торговым представителям не нужно. Таблица ниже — это аналитика из 1С: ' +
       'она показывает, кто сколько привозит, но на долг не влияет.</span></div>';
@@ -511,18 +512,18 @@
 
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'suppliers', icon: '🤝', name: 'Поставщики и долг', group: 'Деньги', render: viewSuppliers },
-    { id: 'stock', icon: '📦', name: 'Склад', group: 'Товары', render: viewStock },
-    { id: 'orders', icon: '🚚', name: 'Заказы', group: 'Товары', render: viewOrders },
-    { id: 'expiry', icon: '⏰', name: 'Сроки годности', group: 'Товары', render: viewExpiry },
-    { id: 'losses', icon: '🗑', name: 'Списания', group: 'Товары', render: viewLosses },
-    { id: 'dead', icon: '🧊', name: 'Неликвиды', group: 'Товары', render: viewDead },
-    { id: 'groups', icon: '📊', name: 'Группы товаров', group: 'Товары', render: viewGroups },
-    { id: 'itemprofit', icon: '🏆', name: 'Рейтинг по прибыли', group: 'Товары', render: viewItemProfit },
-    { id: 'shelf', icon: '🧱', name: 'Полки: что окупает место', group: 'Товары', render: viewShelf },
-    { id: 'returns', icon: '↩️', name: 'Возвраты поставщикам', group: 'Товары', render: viewReturns },
-    { id: 'abc', icon: '🥇', name: 'ABC-анализ', group: 'Товары', render: viewAbc },
-    { id: 'pricecmp', icon: '🏷', name: 'Цены поставщиков', group: 'Товары', render: viewPrices },
-    { id: 'seasons', icon: '🗓', name: 'Сезонность', group: 'Отчёты', render: viewSeasons }
+    { id: 'suppliers', icon: 'supplier', name: 'Поставщики и долг', group: 'Деньги', render: viewSuppliers },
+    { id: 'stock', icon: 'box', name: 'Склад', group: 'Товары', render: viewStock },
+    { id: 'orders', icon: 'truck', name: 'Заказы', group: 'Товары', render: viewOrders },
+    { id: 'expiry', icon: 'clock', name: 'Сроки годности', group: 'Товары', render: viewExpiry },
+    { id: 'losses', icon: 'trash', name: 'Списания', group: 'Товары', render: viewLosses },
+    { id: 'dead', icon: 'snowflake', name: 'Неликвиды', group: 'Товары', render: viewDead },
+    { id: 'groups', icon: 'chartBar', name: 'Группы товаров', group: 'Товары', render: viewGroups },
+    { id: 'itemprofit', icon: 'trophy', name: 'Рейтинг по прибыли', group: 'Товары', render: viewItemProfit },
+    { id: 'shelf', icon: 'grid', name: 'Полки: что окупает место', group: 'Товары', render: viewShelf },
+    { id: 'returns', icon: 'returnArrow', name: 'Возвраты поставщикам', group: 'Товары', render: viewReturns },
+    { id: 'abc', icon: 'medal', name: 'ABC-анализ', group: 'Товары', render: viewAbc },
+    { id: 'pricecmp', icon: 'tag', name: 'Цены поставщиков', group: 'Товары', render: viewPrices },
+    { id: 'seasons', icon: 'calendar', name: 'Сезонность', group: 'Отчёты', render: viewSeasons }
   );
 })();

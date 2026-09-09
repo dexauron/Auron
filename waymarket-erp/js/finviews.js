@@ -19,6 +19,7 @@
   function U() { return window.WMUI; }
   function FLT() { return window.WMFilter; }
   function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
   function dateRu(d) { return U().dateRu(d); }
   function num(v) { return E.num(v); }
   function money(v) { return E.fmtMoney(v); }
@@ -57,7 +58,7 @@
   }
   function wholeNote(sel) {
     if (!sel.whole || !dds().length) return '';
-    return '<div class="banner blue"><span>ℹ️</span><span>За ' +
+    return '<div class="banner blue"><span>' + ic('info') + '</span><span>За ' +
       esc(U().periodName().toLowerCase()) + ' записей нет — показаны все данные.</span></div>';
   }
 
@@ -79,7 +80,7 @@
      Единственное место, где считается расхождение. Безнал сюда не входит:
      этих денег в ящике не было. */
   FORMS.shiftClose = {
-    title: 'Сверка кассы за смену', icon: '🧮',
+    title: 'Сверка кассы за смену', icon: 'calculator',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -149,7 +150,7 @@
      Кассу эта форма НЕ двигает: деньги за товар уже ушли через «выплаты из
      ящика» в сверке смены. Здесь — товарные обороты и долг поставщикам. */
   FORMS.dayTotals = {
-    title: 'Итоги дня', icon: '🌙',
+    title: 'Итоги дня', icon: 'moon',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -208,7 +209,7 @@
      Теперь форма спрашивает, ОТКУДА взяли деньги, и не принимает статьи,
      которые тратой не являются. */
   FORMS.moneyOut = {
-    title: 'Расход', icon: '🧾',
+    title: 'Расход', icon: 'receipt',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -264,7 +265,7 @@
      месте. Касса уменьшается, прибыль НЕ меняется. Раньше это можно было
      записать только расходом, и месяц закрывался с ложным убытком. */
   FORMS.moveCash = {
-    title: 'Инкассация', icon: '🚛',
+    title: 'Инкассация', icon: 'truck',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
     body: function (v) {
       var u = U(); v = v || {};
@@ -307,7 +308,7 @@
   };
 
   FORMS.moneyIn = {
-    title: 'Приход денег', icon: '💰',
+    title: 'Приход денег', icon: 'banknote',
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
@@ -338,7 +339,7 @@
   };
 
   FORMS.moneyDraw = {
-    title: 'Забрал владелец', icon: '👛',
+    title: 'Забрал владелец', icon: 'wallet',
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
@@ -361,7 +362,7 @@
 
   /* --- План выплат ------------------------------------------------------------ */
   FORMS.payPlan = {
-    title: 'Выплата поставщику', icon: '📅',
+    title: 'Выплата поставщику', icon: 'calendar',
     editsInPlace: true,
     body: function (v) {
       var u = U(); v = v || {};
@@ -397,7 +398,7 @@
 
   /* --- Долг покупателя --------------------------------------------------------- */
   FORMS.debtor = {
-    title: 'Долг покупателя', icon: '📓',
+    title: 'Долг покупателя', icon: 'notebook',
     editsInPlace: true,
     body: function (v) {
       var u = U(); v = v || {};
@@ -430,7 +431,7 @@
 
   /* --- Пересчёт кассы по купюрам ----------------------------------------------- */
   FORMS.cashCount = {
-    title: 'Пересчитать кассу', icon: '🧾',
+    title: 'Пересчитать кассу', icon: 'receipt',
     body: function (v) {
       var u = U(); v = v || {};
       var h = u.fieldRow('Дата', 'date', 'date', v.date || today()) +
@@ -465,11 +466,11 @@
 
   function quickBar() {
     return '<div class="quick">' +
-      '<button class="btn btn-primary" data-form="shiftClose">🧮 Сверка кассы</button>' +
-      '<button class="btn" data-form="dayTotals">🌙 Итоги дня</button>' +
-      '<button class="btn" data-form="moneyOut">🧾 Расход</button>' +
-      '<button class="btn" data-form="moveCash">🚛 Инкассация</button>' +
-      '<button class="btn" data-form="payPlan">📅 Выплата</button></div>';
+      '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') + ' Сверка кассы</button>' +
+      '<button class="btn" data-form="dayTotals">' + ic('moon') + ' Итоги дня</button>' +
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Расход</button>' +
+      '<button class="btn" data-form="moveCash">' + ic('truck') + ' Инкассация</button>' +
+      '<button class="btn" data-form="payPlan">' + ic('calendar') + ' Выплата</button></div>';
   }
 
   /* --- Пульт ------------------------------------------------------------------ */
@@ -512,7 +513,7 @@
 
     // В ящике скопилось больше, чем вы считаете безопасным
     if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
-      h += '<div class="banner orange"><span>🚛</span><span>В ящике ' +
+      h += '<div class="banner orange"><span>' + ic('truck') + '</span><span>В ящике ' +
         esc(money(cash)) + ' — больше вашего порога ' + esc(money(S.settings.cashLimit)) +
         '. Пора увезти в сейф: это перемещение, прибыль оно не меняет. ' +
         '<button class="btn btn-sm" data-form="moveCash">Записать инкассацию</button></span></div>';
@@ -525,13 +526,13 @@
       var parts = Object.keys(chk.parts).map(function (k) {
         return k + ' ' + money(chk.parts[k]);
       }).join(', ');
-      h += '<div class="banner orange"><span>🧾</span><span>Из ящика за период выдали ' +
+      h += '<div class="banner orange"><span>' + ic('receipt') + '</span><span>Из ящика за период выдали ' +
         esc(money(chk.payouts)) + ', а расписано ' + esc(money(chk.explained)) +
         (parts ? ' (' + esc(parts) + ')' : '') + '. Не хватает объяснения на <b>' +
         esc(money(chk.left)) + '</b> — эти деньги нигде не учтены, ' +
         'и прибыль за месяц выглядит выше настоящей.</span></div>';
     } else if (chk.over) {
-      h += '<div class="banner red"><span>⚠️</span><span>Расходов «из ящика» записано на ' +
+      h += '<div class="banner red"><span>' + ic('warning') + '</span><span>Расходов «из ящика» записано на ' +
         esc(money(-chk.left)) + ' больше, чем вообще выдавали из ящика. ' +
         'Где-то лишняя запись — посмотрите «Базу операций».</span></div>';
     }
@@ -542,7 +543,7 @@
     // Кассы: где сколько лежит по последней закрытой смене
     var st = E.tillState(all, S.settings);
     h += u.card('Кассы', u.listOf(st.map(function (x) {
-      return u.listRow({ icon: '💵', title: esc(x.till),
+      return u.listRow({ icon: 'coins', title: esc(x.till),
         sub: x.closed ? 'последняя смена ' + dateRu(x.date) + ' · ' + esc(x.shift) +
           (x.cashier ? ' · ' + esc(x.cashier) : '') : 'смен ещё не было',
         value: u.priv(x.fact) });
@@ -550,7 +551,7 @@
 
     if (gaps.length) {
       var g = gaps[gaps.length - 1];
-      h += '<div class="banner orange"><span>⚠️</span><span>Размен не сходится с прошлой сменой: ' +
+      h += '<div class="banner orange"><span>' + ic('warning') + '</span><span>Размен не сходится с прошлой сменой: ' +
         esc(g.till) + ' закрылась ' + dateRu(g.prevDate) + ' с <b>' + money(g.prevFact) +
         '</b>, а ' + dateRu(g.date) + ' смену открыли с <b>' + money(g.open) + '</b>. ' +
         'Разница ' + money(Math.abs(g.gap)) + ' — если деньги убрали в сейф или забрал владелец, ' +
@@ -560,21 +561,21 @@
 
     h += '<div class="grid-2">' +
       u.card('Выплаты поставщикам', u.listOf([
-        u.listRow({ icon: '🔴', title: 'Просрочено', sub: pt.overdueCount + ' платежей',
+        u.listRow({ icon: 'warning', title: 'Просрочено', sub: pt.overdueCount + ' платежей',
           value: '<span class="c-red private">' + money(pt.overdue) + '</span>',
           tap: true, attrs: ' data-go="finpay"' }),
-        u.listRow({ icon: '📅', title: 'Сегодня', value: u.priv(pt.dueToday),
+        u.listRow({ icon: 'calendar', title: 'Сегодня', value: u.priv(pt.dueToday),
           tap: true, attrs: ' data-go="finpay"' }),
-        u.listRow({ icon: '🗓', title: 'На неделе', value: u.priv(pt.week),
+        u.listRow({ icon: 'calendar', title: 'На неделе', value: u.priv(pt.week),
           tap: true, attrs: ' data-go="finpay"' })
       ], ''), '') +
       u.card('Долги покупателей', u.listOf([
-        u.listRow({ icon: '📓', title: 'Всего не отдали', value: u.priv(deb.open),
+        u.listRow({ icon: 'notebook', title: 'Всего не отдали', value: u.priv(deb.open),
           tap: true, attrs: ' data-go="debtors"' }),
-        u.listRow({ icon: '⏳', title: 'Старше 30 дней',
+        u.listRow({ icon: 'hourglass', title: 'Старше 30 дней',
           value: '<span class="' + (deb.old ? 'c-orange' : '') + ' private">' + money(deb.old) + '</span>',
           tap: true, attrs: ' data-go="debtors"' }),
-        u.listRow({ icon: '👥', title: 'Должников', value: u.nf(deb.people.length) })
+        u.listRow({ icon: 'people', title: 'Должников', value: u.nf(deb.people.length) })
       ], ''), '') +
       '</div>';
 
@@ -589,22 +590,22 @@
       { title: 'Смен с расхождением', cls: 'num', fn: function (r) {
         return u.nf(r.badShifts) + ' <span class="c-muted">' + u.pct(r.badPct) + '</span>'; } }
     ], bad.slice(0, 5), { step: 5 })
-      : '<div class="empty">👍 Недостач нет — все смены сошлись.</div>',
+      : '<div class="empty">' + ic('check') + ' Недостач нет — все смены сошлись.</div>',
       '<button class="btn btn-sm" data-go="cashiers">Все кассиры</button>');
 
     h += u.card('Как идёт магазин — ' + (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
       u.listOf([
-        u.listRow({ icon: '💰', title: 'Выручка', sub: 'наличные ' + money(t.zCash) +
+        u.listRow({ icon: 'banknote', title: 'Выручка', sub: 'наличные ' + money(t.zCash) +
           ' · безнал ' + money(t.zCashless), value: u.priv(t.revenue) }),
-        u.listRow({ icon: '🧾', title: 'Выплаты из ящика', sub: 'что брали из кассы за смены',
+        u.listRow({ icon: 'receipt', title: 'Выплаты из ящика', sub: 'что брали из кассы за смены',
           value: u.priv(t.payouts) }),
-        u.listRow({ icon: '💸', title: 'Прочие расходы', sub: 'записаны отдельно',
+        u.listRow({ icon: 'coins', title: 'Прочие расходы', sub: 'записаны отдельно',
           value: u.priv(t.expense) }),
-        u.listRow({ icon: '📦', title: 'Товар за наличные', value: u.priv(t.goodsCash) }),
-        u.listRow({ icon: '🕒', title: 'Смен закрыто',
+        u.listRow({ icon: 'box', title: 'Товар за наличные', value: u.priv(t.goodsCash) }),
+        u.listRow({ icon: 'clock', title: 'Смен закрыто',
           sub: t.shifts ? 'в среднем ' + money(t.avgShift) + ' за смену' : '',
           value: u.nf(t.shifts) }),
-        u.listRow({ icon: '📅', title: 'Средняя выручка в день',
+        u.listRow({ icon: 'calendar', title: 'Средняя выручка в день',
           sub: 'дней с записями: ' + t.dayCount, value: u.priv(t.avgDay) })
       ], ''));
     return h;
@@ -620,9 +621,9 @@
 
     var h = u.pageHead('Утро: сверка кассы',
       'Закрыли смену — сверили ящик. Безнал в ящик не попадает',
-      '<button class="btn btn-primary" data-form="shiftClose">＋ Закрыть смену</button>');
+      '<button class="btn btn-primary" data-form="shiftClose">' + ic('plus') + ' Закрыть смену</button>');
 
-    h += '<div class="banner blue"><span>🧮</span><span>' +
+    h += '<div class="banner blue"><span>' + ic('calculator') + '</span><span>' +
       '<b>Расчётный остаток</b> = размен + Z-наличные − выплаты из ящика.<br>' +
       '<b>Расхождение</b> = факт в ящике − расчётный остаток. ' +
       'Минус — недостача кассира, плюс — излишек. ' +
@@ -681,8 +682,9 @@
         { html: '<span class="' + u.cls(t.diff) + '">' + money(t.diff) + '</span>', cls: 'num', label: 'Расхождение' },
         { html: '' }] }));
 
-    h += '<div class="quick"><button class="btn" data-form="cashCount">🧾 Пересчитать по купюрам</button> ' +
-      '<button class="btn" data-go="cashiers">🧑‍💼 Кассиры и расхождения</button></div>';
+    h += '<div class="quick"><button class="btn" data-form="cashCount">' + ic('receipt') + ' Пересчитать по купюрам</button> ' +
+      '<button class="btn" data-go="cashiers">' + ic('people') +
+      ' Кассиры и расхождения</button></div>';
     return h;
   }
 
@@ -696,9 +698,9 @@
     var debt = E.supplierDebt(dds(), S.settings);
 
     var h = u.pageHead('Вечер: итоги дня', 'Товар и долги поставщикам за день',
-      '<button class="btn btn-primary" data-form="dayTotals">＋ Записать итоги дня</button>');
+      '<button class="btn btn-primary" data-form="dayTotals">' + ic('plus') + ' Записать итоги дня</button>');
 
-    h += '<div class="banner blue"><span>🌙</span><span>Эта форма про <b>товар и долги</b>, ' +
+    h += '<div class="banner blue"><span>' + ic('moon') + '</span><span>Эта форма про <b>товар и долги</b>, ' +
       'а не про кассу. Деньги за товар уже ушли из ящика и посчитаны в «Выплатах» при сверке ' +
       'смены — если вычесть их ещё раз, одни и те же деньги уйдут дважды.</span></div>';
 
@@ -712,7 +714,7 @@
     h += wholeNote(sel);
 
     if (debt.opening) {
-      h += '<div class="banner"><span>ℹ️</span><span>Долг считается от начального: ' +
+      h += '<div class="banner"><span>' + ic('info') + '</span><span>Долг считается от начального: ' +
         '<b>' + money(debt.opening) + '</b> из «Настроек» плюс взятое в долг минус погашенное. ' +
         'Если начальная цифра не та — поправьте в настройках, раздел «Начальные остатки».</span></div>';
     }
@@ -747,7 +749,7 @@
     var t = E.planTotals(plans, today());
 
     var h = u.pageHead('План выплат', 'Кому и когда платить',
-      '<button class="btn btn-primary" data-form="payPlan">＋ Запланировать выплату</button>');
+      '<button class="btn btn-primary" data-form="payPlan">' + ic('plus') + ' Запланировать выплату</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Просрочено', u.priv(t.overdue), t.overdueCount + ' платежей',
@@ -757,7 +759,7 @@
       u.stat('Всего запланировано', u.priv(t.planned), t.plannedCount + ' платежей') +
       '</div>';
 
-    h += '<div class="banner"><span>💡</span><span>Отметка «Оплачена» закрывает пункт плана, ' +
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Отметка «Оплачена» закрывает пункт плана, ' +
       'но долг поставщикам сама не уменьшает: сумму погашения впишите в «Итоги дня». ' +
       'Так у долга остаётся один источник и он не считается дважды.</span></div>';
 
@@ -799,7 +801,7 @@
 
     var h = u.pageHead('Кассиры и расхождения',
       'У кого касса не сходится — ' + (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
-      '<button class="btn" data-act="print">🖨 Печать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Недостачи', u.priv(t.short), 'всего не хватило', t.short ? 'c-red' : 'c-green') +
@@ -846,7 +848,7 @@
         'Порог задаётся в настройках, раздел «Пороги»');
     }
 
-    h += '<div class="banner"><span>💡</span><span>Сравнивайте не сумму недостач, а ' +
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Сравнивайте не сумму недостач, а ' +
       '<b>недостачу на 1000 ₽ выручки</b>: кассир с большой выручкой и парой ошибок ' +
       'аккуратнее того, у кого выручка маленькая, а недостачи те же.</span></div>';
     return h;
@@ -862,7 +864,7 @@
 
     var h = u.pageHead('База операций', 'Все записи о деньгах — ' +
       (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
-      '<button class="btn" data-act="export-screen">⤓ В Excel</button>');
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Записей', u.nf(rows.length), 'смены, дни, приходы и расходы') +
@@ -915,9 +917,9 @@
     ], list, { step: 50, empty: FLT().active('ledger') ? 'Под фильтр ничего не подошло' : 'Записей нет.' }));
 
     h += '<div class="quick">' +
-      '<button class="btn" data-form="moneyIn">💰 Приход</button> ' +
-      '<button class="btn" data-form="moneyOut">🧾 Расход</button> ' +
-      '<button class="btn" data-form="moneyDraw">👛 Забрал владелец</button></div>';
+      '<button class="btn" data-form="moneyIn">' + ic('banknote') + ' Приход</button> ' +
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Расход</button> ' +
+      '<button class="btn" data-form="moneyDraw">' + ic('wallet') + ' Забрал владелец</button></div>';
     return h;
   }
 
@@ -931,7 +933,7 @@
     var oldDays = num(S.settings.debtorOldDays) || 30;
 
     var h = u.pageHead('Долги покупателей', 'Бывшая тетрадка у кассы',
-      '<button class="btn btn-primary" data-form="debtor">＋ Записать долг</button>');
+      '<button class="btn btn-primary" data-form="debtor">' + ic('plus') + ' Записать долг</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Не отдали', u.priv(t.open), t.people.length + ' человек', t.open ? 'c-orange' : 'c-green') +
@@ -966,7 +968,7 @@
       { title: '', cls: 'center', fn: function (d) { return u.rowMenu('debtors', d.id, { form: 'debtor' }); } }
     ], list, { step: 40, empty: 'Долгов нет.' }));
 
-    h += '<div class="banner"><span>💡</span><span>Пока долг не погашен, он не выручка. ' +
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Пока долг не погашен, он не выручка. ' +
       'Когда человек вернёт деньги — впишите сумму в «Уже погашено», а сами деньги ' +
       'придут в кассу через сверку смены (или запишите «Приход денег»).</span></div>';
     return h;
@@ -994,7 +996,7 @@
       list.map(function (m) {
         return '<option value="' + m + '"' + (m === ym ? ' selected' : '') + '>' +
           esc(E.monthTitle(m)) + '</option>';
-      }).join('') + '</select> <button class="btn" data-act="print">🖨 Печать</button>');
+      }).join('') + '</select> <button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
 
     function line(name, x, y, isMoney) {
       return { name: name, cur: x, prev: y, delta: E.safeRound(x - y),
@@ -1088,13 +1090,13 @@
      ========================================================================== */
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'pulse', icon: '📊', name: 'Пульт', group: 'Каждый день', render: viewPulse },
-    { id: 'morning', icon: '🧮', name: 'Утро: сверка кассы', group: 'Каждый день', render: viewMorning },
-    { id: 'evening', icon: '🌙', name: 'Вечер: итоги дня', group: 'Каждый день', render: viewEvening },
-    { id: 'finpay', icon: '📅', name: 'План выплат', group: 'Каждый день', render: viewPlans },
-    { id: 'ledger', icon: '🧮', name: 'База операций', group: 'Деньги', render: viewLedger },
-    { id: 'cashiers', icon: '🧑‍💼', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers },
-    { id: 'debtors', icon: '📓', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
-    { id: 'finreport', icon: '📄', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport }
+    { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },
+    { id: 'morning', icon: 'calculator', name: 'Утро: сверка кассы', group: 'Каждый день', render: viewMorning },
+    { id: 'evening', icon: 'moon', name: 'Вечер: итоги дня', group: 'Каждый день', render: viewEvening },
+    { id: 'finpay', icon: 'calendar', name: 'План выплат', group: 'Каждый день', render: viewPlans },
+    { id: 'ledger', icon: 'list', name: 'База операций', group: 'Деньги', render: viewLedger },
+    { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers },
+    { id: 'debtors', icon: 'notebook', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
+    { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport }
   );
 })();

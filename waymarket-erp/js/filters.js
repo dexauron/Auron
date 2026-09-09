@@ -174,15 +174,15 @@
       var line = '<div class="filter-line"><span class="filter-name">Мои наборы</span><div class="chips">';
       saved.forEach(function (st) {
         line += '<button class="chip' + (sameAs(id, st) ? ' active' : '') +
-          '" data-filterset="' + esc(id) + '|' + esc(st.id) + '">⭐ ' + esc(st.name) +
-          '<small data-filterset-del="' + esc(st.id) + '" title="Убрать набор">✕</small></button>';
+          '" data-filterset="' + esc(id) + '|' + esc(st.id) + '">' + ic('star') + ' ' + esc(st.name) +
+          '<small data-filterset-del="' + esc(st.id) + '" title="Убрать набор">' + ic('close') + '</small></button>';
       });
       h = line + '</div></div>' + h;
     }
     var head = '<div class="filter-head"><span>Фильтры' + (any ? ' · выбрано ' + any : '') + '</span>' +
       '<span class="filter-acts">' +
       (any && SETS ? '<button class="btn btn-sm" data-filterset-save="' + esc(id) +
-        '">⭐ Запомнить набор</button> ' : '') +
+        '">' + ic('star') + ' Запомнить набор</button> ' : '') +
       (any ? '<button class="btn btn-sm" data-filter-clear="' + esc(id) + '">Сбросить</button>' : '') +
       '</span></div>';
     return '<div class="filters">' + head + h + '</div>';

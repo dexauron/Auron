@@ -9,12 +9,13 @@
 
   function U() { return window.WMUI; }
   function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
   function dateRu(d) { return U().dateRu(d); }
   function num(v) { return E.num(v); }
   function today() { return new Date().toISOString().slice(0, 10); }
   function refresh() { U().recompute(); }
 
-  var TABS = [{ id: 'staff', icon: '👤', name: 'Кассиры' }].concat(
+  var TABS = [{ id: 'staff', icon: 'person', name: 'Кассиры' }].concat(
     DI.KINDS.map(function (k) { return { id: k.key, icon: k.icon, name: k.name }; }));
 
   function tabBar(cur) {
@@ -41,14 +42,14 @@
       '</div>';
 
     h += '<div class="quick">' +
-      '<button class="btn btn-primary" data-form="staffCard">＋ Добавить сотрудника</button> ' +
-      (missing.length ? '<button class="btn" data-act="dict-staff-import">👥 Собрать из записей (' +
+      '<button class="btn btn-primary" data-form="staffCard">' + ic('plus') + ' Добавить сотрудника</button> ' +
+      (missing.length ? '<button class="btn" data-act="dict-staff-import">' + ic('people') + ' Собрать из записей (' +
         missing.length + ')</button> ' : '') +
-      '<button class="btn" data-go="staffcards">👤 Личные листы</button> ' +
-      '<button class="btn" data-go="sched">🗓 График смен</button></div>';
+      '<button class="btn" data-go="staffcards">' + ic('person') + ' Личные листы</button> ' +
+      '<button class="btn" data-go="sched">' + ic('calendar') + ' График смен</button></div>';
 
     if (missing.length) {
-      h += '<div class="banner orange"><span>👥</span><span>В табеле, выплатах и сменах встречаются ' +
+      h += '<div class="banner orange"><span>' + ic('people') + '</span><span>В табеле, выплатах и сменах встречаются ' +
         'люди без карточки: <b>' + esc(missing.slice(0, 6).map(function (m) { return m.name; }).join(', ')) +
         (missing.length > 6 ? ' и ещё ' + (missing.length - 6) : '') + '</b>. ' +
         'Пока карточки нет, зарплата по ним не считается.</span></div>';
@@ -74,11 +75,11 @@
         { title: 'Записей', cls: 'num', fn: function (r) { return u.nf(DI.staffUsage(S.state, r.name)); } },
         { title: '', cls: 'center', fn: function (r) {
           var used = DI.staffUsage(S.state, r.name);
-          return '<button class="btn btn-sm" data-edit="staff:' + r.id + ':staffCard">✎</button> ' +
+          return '<button class="btn btn-sm" data-edit="staff:' + r.id + ':staffCard">' + ic('edit') + '</button> ' +
             (fired
               ? '<button class="btn btn-sm" data-act="staff-hire" data-id="' + r.id + '">Вернуть в штат</button>'
               : '<button class="btn btn-sm" data-act="staff-fire" data-id="' + r.id + '">Уволить</button>') +
-            (used ? '' : ' <button class="btn btn-sm btn-danger" data-act="staff-del" data-id="' + r.id + '">✕</button>'); } }
+            (used ? '' : ' <button class="btn btn-sm btn-danger" data-act="staff-del" data-id="' + r.id + '">' + ic('close') + '</button>'); } }
       ], rows, { step: 40, empty: fired ? 'Уволенных нет'
         : 'Сотрудников пока нет. Добавьте или соберите из записей.' });
     }
@@ -104,7 +105,7 @@
       '</div>';
 
     h += '<div class="quick"><button class="btn btn-primary" data-act="dict-add" data-kind="' +
-      esc(key) + '">＋ Добавить ' + esc(k.one) + '</button></div>';
+      esc(key) + '">' + ic('plus') + ' Добавить ' + esc(k.one) + '</button></div>';
 
     function tbl(id, list, hidden) {
       return u.table(id, [
@@ -121,7 +122,7 @@
             (hidden
               ? '<button class="btn btn-sm" data-act="dict-show"' + d + '>Вернуть</button>'
               : '<button class="btn btn-sm" data-act="dict-hide"' + d + '>Скрыть</button>') +
-            (r.used ? '' : ' <button class="btn btn-sm btn-danger" data-act="dict-del"' + d + '>✕</button>'); } }
+            (r.used ? '' : ' <button class="btn btn-sm btn-danger" data-act="dict-del"' + d + '>' + ic('close') + '</button>'); } }
       ], list, { step: 40, empty: hidden ? 'Скрытых нет' : 'Пока пусто — нажмите «Добавить».' });
     }
 
@@ -129,7 +130,7 @@
     if (hid.length) h += u.card('Скрытые', tbl('dkh' + key, hid, true),
       'В формах не предлагаются. Записи, где они стоят, не тронуты');
 
-    h += '<div class="banner"><span>💡</span><span>«Переименовать» меняет слово и в справочнике, ' +
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>«Переименовать» меняет слово и в справочнике, ' +
       'и во всех записях, где оно стоит, — поэтому отчёты не разъедутся на «Хозтовары» и ' +
       '«Хозрасходы». Удалить можно только то, чем ни разу не пользовались; всё остальное ' +
       '<b>скрывается</b>: из форм пропадает, в истории остаётся.</span></div>';
@@ -144,7 +145,7 @@
 
     var h = u.pageHead('Справочники',
       'Поставщики, сотрудники и слова, которые подставляются в формах',
-      '<button class="btn" data-act="print">🖨 Печать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
     h += tabBar(tab);
 
     if (tab === 'staff') h += viewStaff();
@@ -157,7 +158,7 @@
   var DICT_KIND = '', DICT_OLD = '';
 
   FORMS.dictAdd = {
-    title: 'Новое значение', icon: '📚',
+    title: 'Новое значение', icon: 'book',
     body: function (v) {
       var u = U(); v = v || {};
       var k = DI.kindOf(DICT_KIND) || { name: '', hint: '' };
@@ -172,7 +173,7 @@
   };
 
   FORMS.dictRename = {
-    title: 'Переименовать', icon: '✏️',
+    title: 'Переименовать', icon: 'edit',
     body: function (v) {
       var u = U(); v = v || {};
       var used = DI.usage(S.state, DICT_KIND, DICT_OLD);
@@ -194,7 +195,7 @@
 
   var FIRE_ID = '';
   FORMS.staffFire = {
-    title: 'Увольнение', icon: '👋',
+    title: 'Увольнение', icon: 'person',
     body: function (v) {
       var u = U(); v = v || {};
       var p = (S.state.staff || []).filter(function (x) { return x.id === FIRE_ID; })[0] || {};
@@ -280,6 +281,6 @@
   };
 
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
-  VIEWS.push({ id: 'dicts', icon: '📚', name: 'Справочники', group: 'Ещё',
+  VIEWS.push({ id: 'dicts', icon: 'book', name: 'Справочники', group: 'Ещё',
     render: viewDicts, after: 'data' });
 })();
