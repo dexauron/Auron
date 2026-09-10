@@ -323,17 +323,32 @@
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
         u.fieldRow('С какого счёта', 'account', 'select', v.account || accDefault(false),
-          { options: accOptions(), hint: 'из ящика — уже посчитано в «выплатах» смены' }) +
+          { options: accOptions(),
+            hint: 'сейф, расчётный счёт или касса — откуда деньги взяли на самом деле' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Деньги ушли из оборота, но это не расход магазина: прибыль они не уменьшают.',
+    editsInPlace: true,
+    hint: 'Деньги ушли из оборота, но это не расход магазина: прибыль они не уменьшают. ' +
+      'Владелец берёт уже из заработанного, поэтому в отчёте о прибыли забор стоит ' +
+      'отдельной строкой, а не в затратах.',
     save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
-      S.add('dds', { type: E.T_DRAW, date: v.date, category: 'Забор владельца',
-        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note });
+      if (!E.txt(v.account)) return 'Выберите, с какого счёта взяли деньги.';
+      var rec = { type: E.T_DRAW, date: v.date, category: 'Забор владельца',
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
-      return { ok: 'Записано: из оборота ушло ' + money(v.amount) };
+      var acc = E.accountOf(rec, accounts());
+      var bal = E.accountBalances(dds(), accounts()).rows
+        .filter(function (x) { return acc && x.id === acc.id; })[0];
+      return { ok: 'Записано: владелец взял ' + money(v.amount) +
+        (acc ? ' со счёта «' + acc.name + '»' : '') + '.' +
+        (bal ? ' Там осталось ' + money(bal.balance) + '.' : '') +
+        (acc && acc.kind === 'till'
+          ? ' Проверьте, что кассир записал эти деньги в «выплаты из ящика».' : '') };
     }
   };
 
@@ -638,7 +653,8 @@
       '<button class="btn" data-form="' + (evening ? 'shiftClose' : 'dayTotals') + '">' +
       (evening ? 'Сверка кассы' : 'Итоги дня') + '</button>' +
       '<button class="btn" data-form="moneyOut">Расход</button>' +
-      '<button class="btn" data-form="moveCash">Инкассация</button>' +
+      '<button class="btn" data-form="moveCash">Перевод</button>' +
+      '<button class="btn" data-form="moneyDraw">Взял себе</button>' +
       '</div>';
 
     h += wholeNote(sel);

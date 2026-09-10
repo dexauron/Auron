@@ -54,9 +54,11 @@
     return E.txt(S.settings.payrollMonth) || String(today()).slice(0, 7);
   }
   function inYm(r, m) { return String(r.date || '').slice(0, 7) === (m || ym()); }
+  /* Название месяца стоит после «за»: «за сентябрь 2026», а не «за сентября».
+     Родительный падеж читается как ошибка, а ведомость — документ. */
   function monthRu(m) {
-    var names = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля',
-      'августа', 'сентября', 'октября', 'ноября', 'декабря'];
+    var names = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 'июль',
+      'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
     var mm = +String(m).slice(5, 7);
     return (names[mm - 1] || '') + ' ' + String(m).slice(0, 4);
   }
@@ -397,6 +399,7 @@
 
     var h = u.pageHead('Ведомость зарплаты', 'ФОТ за ' + monthRu(m),
       '<button class="btn btn-primary" data-form="payoutRow">' + ic('plus') + ' Выдать</button>' +
+      ' <button class="btn" data-go="payslip">' + ic('print') + ' Ведомость на подпись</button>' +
       ' <button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
     h += '<div class="stat-grid">' +
@@ -471,6 +474,80 @@
       { title: '', cls: 'center', fn: function (r) {
         return u.rowMenu('payouts', r.id, { form: 'payoutRow' }); } }
     ], pl, { step: 30, empty: 'Выплат за месяц нет' }));
+    return h;
+  }
+
+  /* ==========================================================================
+     ВЕДОМОСТЬ НА ПОДПИСЬ
+
+     Бумага, которую распечатывают и дают людям расписаться за полученные
+     деньги. На экране её показывать незачем — она нужна ровно в тот момент,
+     когда выдают зарплату, поэтому кнопка «Напечатать» стоит первой.
+
+     Колонки те же, что в обычной платёжной ведомости: кто, должность,
+     сколько начислено, сколько удержано, сколько к выдаче, подпись и дата.
+     Пустые строки для подписи оставлены на всю высоту — иначе расписаться
+     негде.
+     ========================================================================== */
+  function viewPayslip() {
+    var u = U(), m = ym();
+    var rows = board(m).filter(function (r) { return r.accrued || r.paid; });
+    var tot = E.payrollTotals(rows);
+    var st = S.settings;
+
+    var h = u.pageHead('Ведомость на подпись', monthRu(m),
+      '<button class="btn btn-primary" data-act="print">' + ic('print') +
+      ' Напечатать</button> <button class="btn" data-go="payroll">Назад к расчёту</button>');
+    h += monthPicker();
+
+    if (!rows.length) {
+      return h + '<div class="card"><div class="empty">За ' + esc(monthRu(m)) +
+        ' начислений нет — печатать нечего.</div></div>';
+    }
+
+    /* Шапка документа: она печатается, на экране её видно тоже — так владелец
+       понимает, что именно уйдёт на бумагу. */
+    var head = '<div class="payslip-head">' +
+      '<div class="payslip-org">' + esc(st.storeName || 'Магазин') +
+      (st.legalName ? '<br><span>' + esc(st.legalName) +
+        (st.inn ? ', ИНН ' + esc(st.inn) : '') + '</span>' : '') + '</div>' +
+      '<div class="payslip-title">Платёжная ведомость</div>' +
+      '<div class="payslip-sub">на выдачу заработной платы за ' + esc(monthRu(m)) + '</div>' +
+      '</div>';
+
+    var body = u.table('payslipT', [
+      { title: '№', cls: 'num', fn: function (r, i) { return String(i + 1); } },
+      { title: 'Фамилия, имя', fn: function (r) { return esc(r.employee); } },
+      { title: 'Должность', fn: function (r) { return esc(r.position || '—'); } },
+      { title: 'Начислено', cls: 'num', fn: function (r) { return u.nf(r.accrued); } },
+      { title: 'Удержано', cls: 'num', fn: function (r) { return r.fine ? u.nf(r.fine) : '—'; } },
+      { title: 'Выдано ранее', cls: 'num', fn: function (r) { return r.paid ? u.nf(r.paid) : '—'; } },
+      { title: 'К выдаче', cls: 'num', fn: function (r) { return '<b>' + u.nf(r.left) + '</b>'; } },
+      { title: 'Подпись', cls: 'sign', fn: function () { return '<span class="sign-line"></span>'; } },
+      { title: 'Дата', cls: 'sign', fn: function () { return '<span class="sign-line"></span>'; } }
+    ], rows, { step: 200,
+      total: [{ span: 3, html: 'Итого' },
+        { cls: 'num', html: '<b>' + u.nf(tot.accrued) + '</b>' },
+        { cls: 'num', html: tot.fine ? u.nf(tot.fine) : '—' },
+        { cls: 'num', html: u.nf(tot.paid) },
+        { cls: 'num', html: '<b>' + u.nf(tot.left) + '</b>' },
+        { html: '' }, { html: '' }] });
+
+    var foot = '<div class="payslip-foot">' +
+      '<div>Всего к выдаче: <b>' + esc(money(tot.left)) + '</b>' +
+      (window.WMNum && window.WMNum.words
+        ? ' <span class="c-muted">(' + esc(window.WMNum.words(tot.left)) + ')</span>' : '') +
+      '</div>' +
+      '<div class="payslip-signs">' +
+      '<div>Выдал <span class="sign-line wide"></span><small>должность, подпись, расшифровка</small></div>' +
+      '<div>Проверил <span class="sign-line wide"></span><small>подпись, расшифровка</small></div>' +
+      '</div></div>';
+
+    h += '<div class="card payslip">' + head + body + foot + '</div>';
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+      'Печатается только сама ведомость: меню, кнопки и подсказки на бумагу не идут. ' +
+      'Суммы в ведомости показаны цифрами без значка рубля — так принято в платёжных ' +
+      'документах.</span></div>';
     return h;
   }
 
@@ -575,6 +652,7 @@
     { id: 'timesheet', icon: 'clipboard', name: 'Табель смен', group: 'Люди', render: viewTimesheet },
     { id: 'sched', icon: 'calendar', name: 'График смен', group: 'Люди', render: viewSchedule },
     { id: 'payroll', icon: 'banknote', name: 'Ведомость зарплаты', group: 'Люди', render: viewPayroll },
-    { id: 'staffcards', icon: 'person', name: 'Личные листы', group: 'Люди', render: viewStaffCards }
+    { id: 'staffcards', icon: 'person', name: 'Личные листы', group: 'Люди', render: viewStaffCards },
+    { id: 'payslip', icon: 'doc', name: 'Ведомость на подпись', group: 'Люди', render: viewPayslip }
   );
 })();

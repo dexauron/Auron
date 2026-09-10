@@ -800,3 +800,40 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
   .card .row .btn-sm { padding: 5px 10px; font-size: 12.5px; }
   .row-title { font-size: 15px; }
 }
+
+/* ============================================================================
+   Платёжная ведомость: бумага, на которой расписываются за деньги.
+   На экране выглядит как документ, на печати остаётся только она.
+   ========================================================================== */
+.payslip-head { padding: 20px 22px 6px; text-align: center; }
+.payslip-org { font-size: 14px; font-weight: 650; }
+.payslip-org span { font-size: 12.5px; font-weight: 400; color: var(--label-2); }
+.payslip-title { font-size: 19px; font-weight: 700; margin-top: 14px; }
+.payslip-sub { font-size: 13.5px; color: var(--label-2); margin-top: 3px; }
+.payslip .data th, .payslip .data td { border: .5px solid var(--separator); }
+.payslip .data td.sign { min-width: 130px; }
+/* Линия, на которой расписываются: пустая, во всю ширину клетки */
+.sign-line { display: block; min-width: 110px; height: 17px;
+  border-bottom: .8px solid var(--label-3); }
+.sign-line.wide { display: inline-block; min-width: 240px; margin: 0 8px; }
+.payslip-foot { padding: 16px 22px 22px; font-size: 14px; }
+.payslip-signs { display: flex; flex-wrap: wrap; gap: 26px 40px; margin-top: 22px; }
+.payslip-signs small { display: block; font-size: 11px; color: var(--label-3);
+  margin-left: 76px; margin-top: 2px; }
+
+@media print {
+  /* Строку ведомости не разрываем между страницами: подпись должна остаться
+     рядом с фамилией. */
+  .payslip .data tr { break-inside: avoid; }
+  .payslip { box-shadow: none; }
+  .sign-line { border-bottom: .8px solid #000; }
+}
+
+/* Шапка и подпись печатного отчёта */
+.rep-head { text-align: center; padding: 6px 0 16px; }
+.rep-org { font-size: 13.5px; color: var(--label-2); font-weight: 600; }
+.rep-title { font-size: 20px; font-weight: 700; margin-top: 4px; }
+.rep-foot { margin: 22px 0 8px; font-size: 13.5px; color: var(--label-2); }
+.inline-label input[type="date"] { height: 34px; border-radius: var(--r-inner);
+  border: 1px solid var(--separator); background: var(--bg-inset);
+  color: var(--label); padding: 0 10px; font-size: 14px; }

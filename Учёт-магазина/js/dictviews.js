@@ -22,7 +22,7 @@
   function tabBar(cur) {
     return '<div class="tabs">' + TABS.map(function (t) {
       return '<button class="chip' + (t.id === cur ? ' active' : '') +
-        '" data-tab="dicts:' + t.id + '">' + t.icon + ' ' + esc(t.name) + '</button>';
+        '" data-tab="dicts:' + t.id + '">' + ic(t.icon, 16) + ' ' + esc(t.name) + '</button>';
     }).join('') + '</div>';
   }
 
@@ -162,7 +162,9 @@
       '</div>';
 
     h += '<div class="quick"><button class="btn btn-primary" data-act="dict-add" data-kind="' +
-      esc(key) + '">' + ic('plus') + ' Добавить ' + esc(k.one) + '</button></div>';
+      esc(key) + '">' + ic('plus') + ' Добавить ' + esc(k.one) + '</button>' +
+      '<button class="btn" data-act="dict-paste" data-kind="' + esc(key) + '">' +
+      ic('clipboard') + ' Вставить списком из Excel</button></div>';
 
     function tbl(id, list, hidden) {
       return u.table(id, [
@@ -305,6 +307,32 @@
     }
   };
 
+  /* Вставка из Excel. Владелец копирует столбец в таблице и вставляет сюда —
+     разбирать файл не нужно, буфер обмена и так отдаёт по строке на значение. */
+  FORMS.dictPaste = {
+    title: 'Вставить список', icon: 'clipboard',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var k = DI.kindOf(DICT_KIND) || { name: '', one: 'значение' };
+      return '<div class="form-row"><label>' + esc(k.name) +
+        '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' +
+        'по одному в строке — как в столбце Excel</small></label>' +
+        '<textarea name="text" rows="9" placeholder="Продавец-кассир&#10;Товаровед&#10;' +
+        'Администратор&#10;Уборщица" style="width:100%;font:inherit;padding:10px 12px;' +
+        'border:1px solid var(--separator);border-radius:var(--r-inner);' +
+        'background:var(--bg-inset);color:var(--label);resize:vertical"></textarea></div>';
+    },
+    hint: 'Откройте свою таблицу, выделите столбец, скопируйте — и вставьте сюда. ' +
+      'Если скопировали несколько столбцов, программа возьмёт первый. ' +
+      'То, что уже есть в списке, второй раз не добавится.',
+    save: function (v) {
+      var res = DI.addMany(S.state, S.settings, DICT_KIND, v.text);
+      if (res.error) return res.error;
+      S.save(); refresh();
+      return { ok: res.ok };
+    }
+  };
+
   var FIRE_ID = '';
   FORMS.staffFire = {
     title: 'Увольнение', icon: 'person',
@@ -331,6 +359,11 @@
   A['dict-add'] = function (el) {
     DICT_KIND = el.dataset.kind;
     U().openForm('dictAdd');
+    return null;
+  };
+  A['dict-paste'] = function (el) {
+    DICT_KIND = el.dataset.kind;
+    U().openForm('dictPaste');
     return null;
   };
   A['dict-rename'] = function (el) {

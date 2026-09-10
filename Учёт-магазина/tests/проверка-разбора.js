@@ -846,5 +846,63 @@ console.log('\n— Фильтры и меню строки');
   check('отменить нечего, когда журнал пуст', ENT.lastUndoable([]) === null, 'null', 'null');
 }
 
+console.log('\n— Вставка справочника из таблицы');
+{
+  const st = {}, se = { finPositions: 'Продавец, Уборщица' };
+  const r1 = DIC.addMany(st, se, 'positions', 'Продавец\nТовароведНЕТ');
+  check('вставка из одного столбца добавляет новое',
+    se.finPositions.indexOf('ТовароведНЕТ') >= 0, se.finPositions, 'есть ТовароведНЕТ');
+  check('уже заведённое второй раз не добавляется',
+    (se.finPositions.match(/Продавец/g) || []).length === 1, r1.ok, 'Продавец один раз');
+
+  const se2 = { finPositions: '' };
+  DIC.addMany(st, se2, 'positions', 'Кассир\tсменный\t100\nПекарь\tночь\t200');
+  check('из нескольких столбцов берётся первый',
+    se2.finPositions === 'Кассир, Пекарь', se2.finPositions, 'Кассир, Пекарь');
+
+  const se3 = { finCategories: '' };
+  DIC.addMany(st, se3, 'categories', 'Аренда; Свет, Вода');
+  check('строка с запятыми — тоже список',
+    se3.finCategories === 'Аренда, Свет, Вода', se3.finCategories, 'Аренда, Свет, Вода');
+
+  const se4 = { finPositions: '' };
+  const bad = DIC.addMany(st, se4, 'positions', '   ');
+  check('пустую вставку программа объясняет словами',
+    !!bad.error, bad.error || 'ошибки нет', 'есть объяснение');
+
+  const se5 = { finPositions: '' };
+  DIC.addMany(st, se5, 'positions', 'Повар\n' + 'я'.repeat(80));
+  check('слишком длинное название не попадает в справочник',
+    se5.finPositions === 'Повар', se5.finPositions, 'Повар');
+}
+
+console.log('\n— Владелец взял себе: с какого счёта');
+{
+  const accs = [
+    { id: 'a1', name: 'Касса', kind: 'till', opening: 0, defaultCash: true },
+    { id: 'a2', name: 'Сейф', kind: 'cash', opening: 0 },
+    { id: 'a3', name: 'Счёт', kind: 'bank', opening: 0, defaultCashless: true }];
+  const rows = [
+    { type: WM.T_SHIFT, date: '2026-09-01', openCash: 0, zCash: 30000, zCashless: 12000,
+      payouts: 25000, factCash: 5000, account: 'a1', cashlessAccount: 'a3' },
+    { type: WM.T_MOVE, date: '2026-09-01', amount: 20000, account: 'a1', toAccount: 'a2' },
+    { type: WM.T_DRAW, date: '2026-09-02', amount: 8000, account: 'a2' },
+    { type: WM.T_DRAW, date: '2026-09-02', amount: 3000, account: 'a3' }];
+  const b = WM.accountBalances(rows, accs);
+  const by = {}; b.rows.forEach(r => { by[r.id] = r.balance; });
+  check('забор из сейфа уменьшил сейф', by.a2 === 12000, by.a2, 12000);
+  check('забор со счёта уменьшил счёт', by.a3 === 9000, by.a3, 9000);
+  check('ЗАБОР ЯЩИК ВТОРОЙ РАЗ НЕ ТРОНУЛ', by.a1 === 5000, by.a1, 5000);
+
+  const rows2 = rows.concat([{ type: WM.T_DRAW, date: '2026-09-03', amount: 1000, account: 'a1' }]);
+  const b2 = WM.accountBalances(rows2, accs);
+  check('забор из ящика объясняет выплату, а не вычитает её',
+    b2.rows.filter(r => r.id === 'a1')[0].balance === 5000,
+    b2.rows.filter(r => r.id === 'a1')[0].balance, 5000);
+  const p = WM.pnl({ rows: rows2, ym: '2026-09' });
+  check('ЗАБОР ВЛАДЕЛЬЦА В ЗАТРАТЫ НЕ ПОПАЛ', p.costTotal === 0, p.costTotal, 0);
+  check('забор показан отдельной строкой', p.draw === 12000, p.draw, 12000);
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

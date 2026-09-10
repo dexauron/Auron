@@ -31,7 +31,12 @@
   /* --- Какой месяц смотрим ---------------------------------------------------- */
   function ym() { return E.txt(S.settings.reportMonth) || String(today()).slice(0, 7); }
   function inYm(r, m) { return String(r.date || '').slice(0, 7) === (m || ym()); }
-  function monthRu(m) { return E.monthTitle ? E.monthTitle(m) : m; }
+  /* «Сентябрь 2026» с большой буквы уместен заголовком, но в середине фразы
+     «за Сентябрь 2026» выглядит опечаткой. */
+  function monthRu(m) {
+    var t = E.monthTitle ? E.monthTitle(m) : String(m);
+    return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+  }
   function monthList() {
     var seen = {}, out = [];
     dds().forEach(function (r) { var k = String(r.date || '').slice(0, 7); if (k.length === 7) seen[k] = 1; });
@@ -419,57 +424,195 @@
   /* ==========================================================================
      ОТЧЁТ СОБСТВЕННИКУ
      ========================================================================== */
+  /* ==========================================================================
+     ОТЧЁТ СОБСТВЕННИКУ
+
+     Одна страница, которую владелец распечатывает и кладёт в папку — или
+     смотрит утром за вчера. Поэтому у него два режима: за месяц и за день.
+     День отвечает на вопрос «как отработали вчера», месяц — «сколько
+     заработали и куда всё ушло».
+
+     Печатается только сам отчёт: меню, кнопки и подсказки на бумагу не идут.
+     ====================================================================== */
+  function ownerMode() { return E.txt(S.settings.ownerMode) === 'день' ? 'день' : 'месяц'; }
+  function ownerDay() { return E.txt(S.settings.ownerDay) || today(); }
+
+  function ownerRange() {
+    if (ownerMode() === 'день') {
+      var d = ownerDay();
+      return { from: d, to: d, title: 'за ' + dateRu(d),
+        rows: dds().filter(function (r) { return E.txt(r.date) === d; }) };
+    }
+    var m = ym();
+    return { from: m + '-01', to: m + '-31', title: 'за ' + monthRu(m), ym: m,
+      rows: rowsOf(m) };
+  }
+
   function viewOwner() {
-    var u = U(), m = ym(), p = pnlOf(m), t = E.totals(rowsOf(m));
-    var cash = E.cashOnHand(dds(), S.settings, null, S.state.accounts || []);
-    var debt = E.supplierDebt(dds(), S.settings);
-    var deb = E.debtorTotals(S.state.debtors || [], today());
+    var u = U(), mode = ownerMode(), R2 = ownerRange();
+    var rows = R2.rows, t = E.totals(rows);
+    var accounts = S.state.accounts || [];
+    var upto = R2.to;
+
     var pay = E.payrollTotals(E.payrollSummary(
-      (S.state.timesheet || []).filter(function (r) { return inYm(r, m); }),
-      (S.state.payouts || []).filter(function (r) { return inYm(r, m); }),
-      S.state.staff || [], S.settings));
+      (S.state.timesheet || []).filter(function (r) { return inPeriod(r, R2); }),
+      (S.state.payouts || []).filter(function (r) { return inPeriod(r, R2); }),
+      S.state.staff || [], S.settings, { dds: rows }));
 
-    var h = u.pageHead('Отчёт собственнику', 'Одна страница за ' + monthRu(m),
-      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+    var p = E.pnl({ rows: rows, payroll: pay.accrued,
+      writeoff1c: R2.ym ? writeoff1c(R2.ym) : 0,
+      salaryPaid: pay.paid,
+      taxAmount: R2.ym ? F.taxAmount(S.settings, t.revenue, t.expense).sum : 0 });
+
+    var bal = E.accountBalances(dds(), accounts, upto);
+    var debt = E.supplierDebt(dds(), S.settings, upto);
+    var deb = E.debtorTotals(S.state.debtors || [], upto);
+
+    var h = u.pageHead('Отчёт собственнику', 'Одна страница ' + R2.title,
+      '<button class="btn btn-primary" data-act="print">' + ic('print') + ' Напечатать</button> ' +
       '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
-    h += monthPicker();
 
-    h += u.hero('Заработали за месяц', u.priv(p.net),
-      p.net >= 0 ? 'после всех расходов' : 'магазин сработал в минус',
+    /* Переключатель периода: за день смотрят утром, за месяц — в конце. */
+    h += '<div class="quick"><label class="inline-label">Отчёт:&nbsp;' +
+      '<select id="ownerMode">' +
+      '<option value="месяц"' + (mode === 'месяц' ? ' selected' : '') + '>за месяц</option>' +
+      '<option value="день"' + (mode === 'день' ? ' selected' : '') + '>за день</option>' +
+      '</select></label>' +
+      (mode === 'день'
+        ? '<label class="inline-label">Дата:&nbsp;<input type="date" id="ownerDay" value="' +
+          esc(ownerDay()) + '"></label>'
+        : monthPickerInline()) +
+      '</div>';
+
+    // Шапка документа — она уходит на печать
+    h += '<div class="rep-head">' +
+      '<div class="rep-org">' + esc(S.settings.storeName || 'Магазин') +
+      (S.settings.legalName ? ' · ' + esc(S.settings.legalName) : '') + '</div>' +
+      '<div class="rep-title">Отчёт собственнику ' + esc(R2.title) + '</div>' +
+      '</div>';
+
+    if (!rows.length) {
+      return h + '<div class="card"><div class="empty">' + esc(R2.title[0].toUpperCase() +
+        R2.title.slice(1)) + ' записей нет.</div></div>';
+    }
+
+    var netLabel = mode === 'день' ? 'Заработали за день' : 'Заработали за месяц';
+    h += u.hero(netLabel, u.priv(p.net),
+      p.net >= 0 ? 'после всех расходов' : 'сработали в минус',
       p.net >= 0 ? 'c-green' : 'c-red');
 
-    h += u.card('Деньги', u.listOf([
-      u.listRow({ icon: 'coins', title: 'Наличные в ящиках', sub: 'на сегодня', value: u.priv(cash) }),
-      u.listRow({ icon: 'card', title: 'Безнал за месяц', sub: 'ушёл на счёт',
-        value: u.priv(E.cashlessTotal(rowsOf(m))) }),
-      u.listRow({ icon: 'supplier', title: 'Долг поставщикам', sub: 'общей суммой по магазину',
-        value: u.priv(debt.debt), tap: true, attrs: ' data-go="suppliers"' }),
-      u.listRow({ icon: 'notebook', title: 'Должны покупатели', sub: 'тетрадка у кассы',
-        value: u.priv(deb.open), tap: true, attrs: ' data-go="debtors"' }),
-      u.listRow({ icon: 'wallet', title: 'Владелец взял себе', sub: 'заборы за месяц',
-        value: u.priv(p.draw) })
+    /* Главное: откуда пришло и куда ушло. Порядок такой же, как в разговоре:
+       продали — закупили — осталось валовой — потратили — вот чистая. */
+    h += u.card('Как получилась прибыль', u.listOf([
+      u.listRow({ icon: 'receipt', title: 'Выручка',
+        sub: 'наличными ' + money(t.zCash) + ' · безналом ' + money(t.zCashless) +
+          ' · смен ' + u.nf(t.shifts), value: u.priv(p.revenue) }),
+      u.listRow({ icon: 'box', title: 'Закуп товара',
+        sub: 'за наличные ' + money(p.goodsCash) + ' · в долг ' + money(p.debtTaken),
+        value: '−' + u.priv(p.purchase) }),
+      u.listRow({ icon: 'chartLine', title: 'Валовая прибыль',
+        sub: 'наценка ' + u.pct(p.grossPct), value: '<b>' + u.priv(p.gross) + '</b>' }),
+      u.listRow({ icon: 'calculator', title: 'Затраты магазина',
+        sub: 'зарплата, аренда и всё остальное', value: '−' + u.priv(p.costTotal) }),
+      u.listRow({ icon: 'banknote', title: 'Чистая прибыль',
+        sub: u.pct(p.netPct) + ' от выручки',
+        value: '<b class="' + (p.net >= 0 ? 'c-green' : 'c-red') + '">' + u.priv(p.net) + '</b>' })
     ], ''));
 
-    h += u.card('Работа магазина', u.listOf([
-      u.listRow({ icon: 'receipt', title: 'Выручка', sub: u.nf(t.shifts) + ' смен', value: u.priv(p.revenue) }),
-      u.listRow({ icon: 'box', title: 'Закуп товара', sub: 'наличными и в долг', value: u.priv(p.purchase) }),
-      u.listRow({ icon: 'chartLine', title: 'Валовая прибыль', sub: 'наценка ' + u.pct(p.grossPct),
-        value: u.priv(p.gross) }),
-      u.listRow({ icon: 'people', title: 'Зарплата начислена', sub: pay.people + ' чел., ' +
-        u.nf(pay.shifts) + ' смен', value: u.priv(pay.accrued), tap: true, attrs: ' data-go="payroll"' }),
-      u.listRow({ icon: 'calculator', title: 'Затраты всего', sub: 'все статьи', value: u.priv(p.costTotal) }),
-      u.listRow({ icon: 'scale', title: 'Расхождения по кассе',
-        sub: t.badShifts + ' из ' + t.shifts + ' смен',
-        value: '<span class="' + u.cls(t.diff) + '">' + u.priv(t.diff) + '</span>' })
-    ], ''));
-
-    var probs = R.topProblems({ dds: F.flatten(dds()), ym: m });
-    if (probs && probs.length) {
-      h += u.card('На что посмотреть', u.listOf(probs.slice(0, 5).map(function (x) {
-        return u.listRow({ icon: 'warning', title: esc(x.what), sub: esc(x.why), value: u.priv(x.sum) });
-      }), ''));
+    // Затраты по статьям: без этого «затраты всего» ничего не объясняют
+    var costs = p.costs.filter(function (c) { return c.sum > 0; });
+    if (costs.length) {
+      h += u.card('На что ушли деньги', u.table('ownCost', [
+        { title: 'Статья', fn: function (r) { return esc(r.name); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
+        { title: 'Доля выручки', cls: 'num', fn: function (r) { return u.pct(r.share); } }
+      ], costs, { step: 20,
+        total: [{ html: 'Всего' }, { cls: 'num', html: '<b>' + u.priv(p.costTotal) + '</b>' },
+          { cls: 'num', html: u.pct(p.revenue ? E.safeRound(E.div(p.costTotal, p.revenue) * 100) : 0) }] }));
     }
+
+    // Где деньги на конец периода — по каждому счёту, а не общей кучей
+    h += u.card('Где деньги' + (mode === 'день' ? ' на конец дня' : ' на конец месяца'),
+      u.listOf(bal.live.map(function (a) {
+        return u.listRow({ icon: a.kind === 'bank' ? 'card' : 'coins',
+          title: esc(a.name), sub: esc(a.note || ''), value: u.priv(a.balance) });
+      }).concat([
+        u.listRow({ icon: 'supplier', title: 'Должны поставщикам',
+          sub: 'взято ' + money(debt.taken) + ' · отдано ' + money(debt.paid),
+          value: '<span class="c-orange private">' + money(debt.debt) + '</span>' }),
+        u.listRow({ icon: 'notebook', title: 'Должны покупатели', sub: 'тетрадка у кассы',
+          value: u.priv(deb.open) })
+      ]), ''), 'Итого своих денег ' + money(bal.totals.total));
+
+    // Люди: сколько начислено и сколько ещё должны выдать
+    h += u.card('Зарплата', u.listOf([
+      u.listRow({ icon: 'people', title: 'Начислено',
+        sub: pay.people + ' чел. · ' + u.nf(pay.shifts) + ' смен · ' + u.nf(pay.hours) + ' часов',
+        value: u.priv(pay.accrued) }),
+      u.listRow({ icon: 'coins', title: 'Выдано', sub: 'из них авансом ' + money(pay.advance),
+        value: u.priv(pay.paid) }),
+      u.listRow({ icon: 'wallet', title: 'Осталось выдать',
+        value: '<b class="' + (pay.left > 0 ? 'c-orange' : 'c-green') + '">' +
+          u.priv(pay.left) + '</b>' })
+    ], ''), '<button class="btn btn-sm" data-go="payslip">Ведомость на подпись</button>');
+
+    // Владелец: сколько взял себе — это не затрата, но знать надо
+    h += u.card('Владелец', u.listOf([
+      u.listRow({ icon: 'wallet', title: 'Взял себе', sub: 'из заработанного, не затрата',
+        value: u.priv(p.draw) }),
+      u.listRow({ icon: 'chartLine', title: 'Осталось в деле',
+        sub: 'чистая прибыль минус то, что взяли',
+        value: u.priv(E.safeRound(p.net - p.draw)) })
+    ], ''));
+
+    // Что не сошлось: расхождения кассы и нерасписанные деньги
+    var chk = E.tillPayoutCheck(rows, null,
+      { payouts: S.state.payouts || [], accounts: accounts });
+    var probs = [];
+    if (t.badShifts) {
+      probs.push(u.listRow({ icon: 'scale', title: 'Смены с расхождением',
+        sub: t.badShifts + ' из ' + t.shifts + ' · недостачи ' + money(t.short) +
+          ' · излишки ' + money(t.over),
+        value: '<span class="' + u.cls(t.diff) + ' private">' + money(t.diff) + '</span>',
+        tap: true, attrs: ' data-go="cashiers"' }));
+    }
+    if (Math.abs(chk.left) > 0.5) {
+      probs.push(u.listRow({ icon: 'receipt', title: chk.left > 0
+        ? 'Не расписано, куда ушли деньги из ящика' : 'Расписано больше, чем брали',
+        sub: 'выдали ' + money(chk.payouts) + ' · расписано ' + money(chk.explained),
+        value: '<span class="c-orange private">' + money(Math.abs(chk.left)) + '</span>',
+        tap: true, attrs: ' data-go="ledger"' }));
+    }
+    if (p.excluded && p.excluded.length) {
+      probs.push(u.listRow({ icon: 'warning', title: 'Записи не на своём месте',
+        sub: p.excluded.map(function (x) { return x.name; }).join(', ') +
+          ' — в затраты не вошли',
+        value: u.priv(p.excludedTotal), tap: true, attrs: ' data-go="ledger"' }));
+    }
+    h += u.card('Что не сошлось', probs.length ? u.listOf(probs, '')
+      : '<div class="empty">' + ic('check') + ' Всё сходится: смены закрыты, ' +
+        'деньги из ящика расписаны.</div>');
+
+    h += '<div class="rep-foot">Отчёт составлен ' +
+      esc(new Date().toLocaleString('ru-RU').slice(0, 16)) +
+      '. Подпись ______________________</div>';
     return h;
+  }
+
+  // Запись попала в период отчёта
+  function inPeriod(r, range) {
+    var d = E.txt(r.date);
+    return d >= range.from && d <= range.to;
+  }
+
+  // Выбор месяца рядом с переключателем режима
+  function monthPickerInline() {
+    var cur = ym();
+    return '<label class="inline-label">Месяц:&nbsp;<select id="repMonth">' +
+      monthList().map(function (m) {
+        return '<option value="' + esc(m) + '"' + (m === cur ? ' selected' : '') + '>' +
+          esc(monthRu(m)) + '</option>';
+      }).join('') + '</select></label>';
   }
 
   /* ==========================================================================
@@ -833,6 +976,8 @@
   var prevChange = window.WM_EXTRA_CHANGE;
   window.WM_EXTRA_CHANGE = function (el) {
     if (el.id === 'repMonth') { S.setSetting('reportMonth', el.value); return true; }
+    if (el.id === 'ownerMode') { S.setSetting('ownerMode', el.value); return true; }
+    if (el.id === 'ownerDay') { S.setSetting('ownerDay', el.value); return true; }
     return prevChange ? prevChange(el) : false;
   };
 

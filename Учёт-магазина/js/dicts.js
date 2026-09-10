@@ -117,6 +117,54 @@
     return { ok: 'Добавлено: ' + v };
   }
 
+  /* Вставка списком из Excel.
+
+     Владелец копирует столбец в таблице и вставляет сюда. Из буфера приходит
+     по значению на строку, а если скопировали несколько столбцов — колонки
+     разделены табуляцией: берём первую, остальное это обычно комментарии или
+     цифры. Точку с запятой и запятую тоже понимаем: из CSV копируют так.
+
+     Строки, которые уже есть, не задваиваем — просто пропускаем и говорим,
+     сколько пропустили. Так вставку можно повторить, ничего не сломав. */
+  function addMany(state, settings, key, text) {
+    var k = kindOf(key); if (!k) return { error: 'Неизвестный справочник.' };
+    var raw = txt(text);
+    if (!raw) return { error: 'Вставьте список — по одному значению на строку.' };
+
+    var parts = [];
+    raw.split(/[\r\n]+/).forEach(function (line) {
+      var first = String(line).split('\t')[0];
+      // одна строка с запятыми — это тоже список
+      first.split(/[;,]/).forEach(function (x) { parts.push(txt(x)); });
+    });
+
+    var cur = split(settings[k.setting]);
+    var have = {};
+    cur.forEach(function (v) { have[norm(v)] = v; });
+
+    var added = [], skipped = 0, bad = [];
+    parts.forEach(function (v) {
+      if (!v) return;
+      if (v.length > 60) { bad.push(v.slice(0, 20) + '…'); return; }
+      if (have[norm(v)]) { skipped++; return; }
+      have[norm(v)] = v; cur.push(v); added.push(v);
+    });
+
+    if (!added.length && !skipped) {
+      return { error: 'В том, что вставили, не нашлось ни одного названия.' };
+    }
+    settings[k.setting] = cur.join(', ');
+
+    var msg = added.length ? 'Добавлено: ' + added.length : 'Ничего нового не добавилось';
+    if (skipped) msg += ', уже было: ' + skipped;
+    if (bad.length) msg += '. Пропущено слишком длинных: ' + bad.length;
+    if (added.length) {
+      msg += '. ' + added.slice(0, 5).join(', ') + (added.length > 5 ? ' и ещё ' +
+        (added.length - 5) : '');
+    }
+    return { ok: msg, added: added.length, skipped: skipped };
+  }
+
   // Переименование: и в списке, и — по желанию — во всех записях
   function rename(state, settings, key, from, to, alsoRecords) {
     var k = kindOf(key); if (!k) return { error: 'Неизвестный справочник.' };
@@ -222,7 +270,7 @@
   return {
     KINDS: KINDS, kindOf: kindOf,
     list: list, usage: usage, isHidden: isHidden, hiddenMap: hiddenMap,
-    add: add, rename: rename, hide: hide, show: show, remove: remove,
+    add: add, addMany: addMany, rename: rename, hide: hide, show: show, remove: remove,
     staffActive: staffActive, staffFired: staffFired,
     staffUsage: staffUsage,
     staffFromRecords: staffFromRecords,

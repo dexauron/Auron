@@ -67,7 +67,7 @@ console.log('Страница: ' + PAGE + '\n');
   const need1 = ['pulse', 'morning', 'evening', 'finpay', 'ledger', 'cashiers', 'debtors',
     'timesheet', 'sched', 'payroll', 'staffcards', 'pnl', 'bep', 'bepdays', 'taxcal',
     'findash', 'owner', 'moneyflow', 'avgcheck', 'earners', 'ready', 'dicts', 'reset'];
-  const need2 = ['suppliers', 'stock', 'orders', 'expiry', 'losses', 'dead', 'groups',
+  const need2 = ['suppliers', 'stock', 'orders', 'losses', 'dead', 'groups',
     'itemprofit', 'shelf', 'returns', 'abc', 'pricecmp'];
   const miss1 = need1.filter(id => !ids.includes(id));
   const miss2 = need2.filter(id => !ids.includes(id));
@@ -967,6 +967,160 @@ console.log('Страница: ' + PAGE + '\n');
     old: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозтовары').length,
     now: (window.WMStore.state.dds || []).filter(r => r.category === 'Хозрасходы').length }));
   check('переименование переписало записи', ren.old === 0 && ren.now === 2, 'стало ' + ren.now, 2);
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 7. Владелец: забор денег, вставка справочника, ведомость на подпись, отчёт */
+{
+  console.log('— Владелец: забор денег, ведомость и отчёт');
+  const { page, ctx, errs } = await open();
+  const fill = (n, v) => page.fill('.sheet [name="' + n + '"]', v);
+  const pickAcc = (n, label) => page.selectOption('.sheet [name="' + n + '"]', { label });
+
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    const a = S.state.accounts || [];
+    const till = a.find(x => x.kind === 'till'), safe = a.find(x => x.kind === 'cash'),
+      bank = a.find(x => x.kind === 'bank');
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 40000, zCashless: 12000,
+      payouts: 30000, factCash: 10000,
+      account: till && till.id, cashlessAccount: bank && bank.id });
+    S.add('dds', { type: 'Перемещение', date: '2026-09-01', amount: 25000,
+      account: till && till.id, toAccount: safe && safe.id });
+    S.add('dds', { type: 'День', date: '2026-09-01', goodsCash: 5000 });
+    S.setSetting('storeName', 'Продукты у дома');
+    S.setSetting('reportMonth', '2026-09');
+    S.save(); window.WMUI.recompute();
+  });
+
+  /* --- 7а. Владелец взял себе — с выбором счёта ------------------------- */
+  // Владельцу не надо искать: кнопка есть и на Пульте, и в базе операций, и в «Записать»
+  const where = [];
+  for (const v of ['pulse', 'ledger']) {
+    await page.evaluate(id => window.WMUI.go(id), v);
+    await page.waitForTimeout(400);
+    if (await page.evaluate(() => !!document.querySelector('[data-form="moneyDraw"]'))) where.push(v);
+  }
+  const inMenu = await page.evaluate(() => {
+    const b = document.querySelector('[data-act="add-menu"], [data-act="quick-add"]');
+    if (b) b.click();
+    return [...document.querySelectorAll('[data-form="moneyDraw"]')].length > 0;
+  });
+  if (inMenu) where.push('меню «Записать»');
+  check('кнопку «Забрал владелец» владелец найдёт сразу', where.length >= 2,
+    where.join(', ') || 'нигде нет', 'минимум в двух местах');
+
+  await page.evaluate(() => window.WMUI.openForm('moneyDraw'));
+  await page.waitForTimeout(400);
+  const hasAcc = await page.evaluate(() => !!document.querySelector('.sheet [name="account"]'));
+  check('в форме спрашивают, С КАКОГО СЧЁТА взяли', hasAcc, 'спрашивают', 'спрашивают');
+  await fill('date', '2026-09-02');
+  await pickAcc('account', 'Сейф');
+  await fill('amount', '8000');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const afterDraw = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const b = E.accountBalances(S.state.dds || [], S.state.accounts || []);
+    const g = k => b.rows.filter(r => r.kind === k)[0];
+    return { safe: g('cash').balance, till: g('till').balance,
+      draw: E.pnl({ rows: S.state.dds, ym: '2026-09' }).draw,
+      costs: E.pnl({ rows: S.state.dds, ym: '2026-09' }).costTotal };
+  });
+  check('деньги ушли именно с того счёта, что выбрали', afterDraw.safe === 17000,
+    afterDraw.safe, 17000);
+  check('ЯЩИК ОТ ЗАБОРА ИЗ СЕЙФА НЕ ИЗМЕНИЛСЯ', afterDraw.till === 10000, afterDraw.till, 10000);
+  check('ЗАБОР ВЛАДЕЛЬЦА ПРИБЫЛЬ НЕ СЪЕЛ', afterDraw.costs === 0, afterDraw.costs, 0);
+  check('но в отчёте он стоит отдельной строкой', afterDraw.draw === 8000, afterDraw.draw, 8000);
+
+  /* --- 7б. Справочник вставкой из Excel --------------------------------- */
+  await page.evaluate(() => window.WMUI.go('dicts'));
+  await page.waitForTimeout(400);
+  await page.click('[data-tab="dicts:positions"]');
+  await page.waitForTimeout(400);
+  const pasteBtn = await page.evaluate(() =>
+    !!document.querySelector('[data-act="dict-paste"]'));
+  check('на справочнике есть «Вставить список»', pasteBtn, 'есть', 'есть');
+  await page.click('[data-act="dict-paste"]');
+  await page.waitForTimeout(400);
+  await page.fill('.sheet [name="text"]',
+    'Продавец-кассир\t2\nТоваровед\t1\nПекарь\t1\nПродавец-кассир\t9');
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(500);
+  const pos = await page.evaluate(() => window.WMStore.settings.finPositions || '');
+  check('вставленный столбец попал в справочник',
+    pos.includes('Товаровед') && pos.includes('Пекарь'), 'Товаровед и Пекарь есть', 'есть');
+  check('ПОВТОР ИЗ ТАБЛИЦЫ НЕ ЗАДВОИЛСЯ',
+    (pos.match(/Продавец-кассир/g) || []).length === 1,
+    (pos.match(/Продавец-кассир/g) || []).length, 1);
+
+  /* --- 7в. Ведомость на подпись ----------------------------------------- */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('staff', { name: 'Аня Петрова', position: 'Продавец-кассир', scheme: 'Смена', rate: 2500 });
+    S.add('timesheet', { date: '2026-09-01', cashier: 'Аня Петрова', shift: 'День', hours: 12 });
+    S.add('timesheet', { date: '2026-09-02', cashier: 'Аня Петрова', shift: 'День', hours: 12 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('payslip');
+  });
+  await page.waitForTimeout(500);
+  const slip = await page.evaluate(() => {
+    const t = document.querySelector('#page').textContent.replace(/[\u00a0\u202f]/g, ' ');
+    return { text: t,
+      signs: document.querySelectorAll('#page .sign-line').length,
+      cols: [...document.querySelectorAll('#page table.data th')].map(x => x.textContent.trim()),
+      printable: !!document.querySelector('#page [data-act="print"]') };
+  });
+  check('В ВЕДОМОСТИ ЕСТЬ СТОЛБЕЦ «ПОДПИСЬ»', slip.cols.includes('Подпись'),
+    slip.cols.join(', '), 'Подпись');
+  check('и место для даты получения', slip.cols.includes('Дата'), 'есть', 'Дата');
+  check('в каждой строке пустая линейка под роспись', slip.signs >= 4, slip.signs + ' линеек', '>=4');
+  check('внизу расписываются выдавший и проверивший',
+    slip.text.includes('Выдал') && slip.text.includes('Проверил'), 'есть', 'есть');
+  check('сумма продублирована прописью — как в бумажной ведомости',
+    /прописью|\(пять|тысяч/i.test(slip.text), 'есть', 'есть');
+  check('ведомость можно напечатать', slip.printable, 'есть кнопка', 'есть');
+  check('в шапке — название магазина владельца, а не чужое',
+    slip.text.includes('Продукты у дома'), 'своё', 'Продукты у дома');
+
+  /* --- 7г. Отчёт собственнику: за месяц и за день ------------------------ */
+  await page.evaluate(() => window.WMUI.go('owner'));
+  await page.waitForTimeout(500);
+  const mon = await page.evaluate(() => ({
+    text: document.querySelector('#page').textContent.replace(/[\u00a0\u202f]/g, ' '),
+    hasMode: !!document.querySelector('#ownerMode'),
+    printable: !!document.querySelector('#page [data-act="print"]') }));
+  check('отчёт собственнику печатается', mon.printable, 'есть кнопка', 'есть');
+  check('можно выбрать месяц или день', mon.hasMode, 'есть переключатель', 'есть');
+  check('за месяц видно, сколько заработали', mon.text.includes('за месяц'), 'видно', 'за месяц');
+  check('видно, из чего сложилась прибыль',
+    mon.text.includes('Как получилась прибыль') && mon.text.includes('Выручка'), 'видно', 'видно');
+  check('видно, на что ушли деньги', mon.text.includes('На что ушли деньги'), 'видно', 'видно');
+  check('видно, ГДЕ СЕЙЧАС ДЕНЬГИ по счетам',
+    mon.text.includes('Где деньги') && mon.text.includes('Сейф'), 'видно', 'видно');
+  check('видно, сколько владелец забрал себе', mon.text.includes('8 000'), 'видно', '8 000');
+
+  await page.selectOption('#ownerMode', { label: 'за день' });
+  await page.waitForTimeout(300);
+  await page.fill('#ownerDay', '2026-09-01');
+  await page.waitForTimeout(500);
+  const day = await page.evaluate(() =>
+    document.querySelector('#page').textContent.replace(/[\u00a0\u202f]/g, ' '));
+  check('ОТЧЁТ ЗА ДЕНЬ СЧИТАЕТ ТОЛЬКО ЭТОТ ДЕНЬ',
+    day.includes('за день') && day.includes('52 000'), 'выручка дня 52 000', '52 000');
+  check('чужой день в дневной отчёт не попал', !day.includes('8 000'),
+    day.includes('8 000') ? 'попал забор 2 сентября' : 'не попал', 'не попал');
+  check('выбранный день запомнился',
+    (await page.evaluate(() => window.WMStore.settings.ownerDay)) === '2026-09-01',
+    'запомнился', '2026-09-01');
+
+  /* --- 7д. Срок годности убран ------------------------------------------ */
+  const noExp = await page.evaluate(() =>
+    !(window.WMUI.views() || []).some(v => v.id === 'expiry'));
+  check('экрана «Срок годности» больше нет', noExp, 'убран', 'убран');
+
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
   console.log('');

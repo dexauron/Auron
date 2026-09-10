@@ -117,42 +117,6 @@
     return h;
   }
 
-  /* --- Сроки годности ----------------------------------------------------------- */
-  function viewExpiry() {
-    var u = U(), d = D();
-    if (!d.stock.length) return need('Сроки годности', 'Что уценить сегодня', 'Остатки номенклатуры');
-    var rows = d.stock.filter(function (r) { return r.bestBefore; }).map(function (r) {
-      var f = E.fefoStatus(r.bestBefore, S.settings);
-      return { name: r.name, group: r.group, qty: num(r.qty), price: num(r.retailPrice),
-        bestBefore: r.bestBefore, days: f.days, level: f.level, discount: f.discount,
-        now: E.safeRound(num(r.retailPrice) * (100 - f.discount) / 100) };
-    }).sort(function (a, b) { return a.days - b.days; });
-
-    var h = u.pageHead('Сроки годности', 'Что уценить сегодня, пока не списали');
-    if (!rows.length) {
-      return h + '<div class="banner blue"><span>' + ic('info') + '</span><span>В выгрузке остатков нет колонки со сроком ' +
-        'годности, поэтому считать нечего. Если 1С её отдаёт — она подхватится сама.</span></div>';
-    }
-    var crit = rows.filter(function (r) { return r.level === 'crit' || r.level === 'expired'; });
-    h += '<div class="stat-grid">' +
-      u.stat('Красная зона', u.nf(crit.length), 'уценить сегодня', crit.length ? 'c-red' : 'c-green') +
-      u.stat('Денег в красной зоне', u.priv(crit.reduce(function (a, r) { return a + r.qty * r.price; }, 0)),
-        'если не продать — спишем') +
-      '</div>';
-    h += u.card('По срокам', u.table('fefoT', [
-      { title: 'Товар', fn: function (r) { return esc(r.name); } },
-      { title: 'Годен до', fn: function (r) { return esc(dateRu(r.bestBefore)); } },
-      { title: 'Дней', cls: 'num', fn: function (r) {
-        return '<span class="' + (r.days <= 2 ? 'c-red' : r.days <= 5 ? 'c-orange' : '') + '">' +
-          u.nf(r.days) + '</span>'; } },
-      { title: 'Остаток', cls: 'num', fn: function (r) { return u.nf(r.qty, 2); } },
-      { title: 'Цена', cls: 'num', fn: function (r) { return u.priv(r.price); } },
-      { title: 'Уценка', cls: 'num', fn: function (r) { return r.discount ? u.pct(r.discount) : '—'; } },
-      { title: 'Ставить в зал', cls: 'num', fn: function (r) { return u.priv(r.now); } }
-    ], rows, { step: 50 }));
-    return h;
-  }
-
   /* --- Списания: синхронизация с отчётом 1С --------------------------------------
      Отчёт «Причины списания» перечитывается целиком: что было в прошлом файле,
      но пропало в новом, из аналитики уходит — иначе на экране копились бы
@@ -515,7 +479,6 @@
     { id: 'suppliers', icon: 'supplier', name: 'Поставщики и долг', group: 'Деньги', render: viewSuppliers },
     { id: 'stock', icon: 'box', name: 'Склад', group: 'Товары', render: viewStock },
     { id: 'orders', icon: 'truck', name: 'Заказы', group: 'Товары', render: viewOrders },
-    { id: 'expiry', icon: 'clock', name: 'Сроки годности', group: 'Товары', render: viewExpiry },
     { id: 'losses', icon: 'trash', name: 'Списания', group: 'Товары', render: viewLosses },
     { id: 'dead', icon: 'snowflake', name: 'Неликвиды', group: 'Товары', render: viewDead },
     { id: 'groups', icon: 'chartBar', name: 'Группы товаров', group: 'Товары', render: viewGroups },
