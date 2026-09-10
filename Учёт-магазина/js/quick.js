@@ -284,7 +284,7 @@
   }
 
   /* --- Черновик формы ------------------------------------------------------- */
-  var DRAFT = 'waymarket_draft_';
+  var DRAFT = 'store_erp_draft_';
   function saveDraft(form, values) {
     try { localStorage.setItem(DRAFT + form, JSON.stringify(values)); } catch (e) {}
   }

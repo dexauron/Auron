@@ -9,11 +9,17 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var KEY = 'waymarket_erp_v1';
+  /* Ключ, под которым база лежит в браузере. Имя нейтральное: программа
+     не привязана к одному магазину. Старый ключ читается при первом запуске
+     и переносится сюда — записи, накопленные до переименования, не пропадут. */
+  var KEY = 'store_erp_v1';
+  var OLD_KEYS = ['waymarket_erp_v1'];
 
   var DEFAULT_SETTINGS = {
     /* --- Магазин ------------------------------------------------------- */
-    storeName: 'ВАЙ МАРКЕТ',
+    /* Название магазина владелец вписывает при первом запуске. Пусто —
+       значит программа ещё не настроена и предложит быструю настройку. */
+    storeName: '',
     legalName: '', inn: '', address: '', phone: '',
     workMode: 'Круглосуточно',
     tills: 'Касса 1, Касса 2',          // сколько денежных ящиков в магазине
@@ -111,6 +117,13 @@
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
+      // База под прежним именем: переносим один раз и оставляем старую копию
+      if (!raw) {
+        for (var i = 0; i < OLD_KEYS.length && !raw; i++) {
+          raw = localStorage.getItem(OLD_KEYS[i]);
+          if (raw) { try { localStorage.setItem(KEY, raw); } catch (e2) {} }
+        }
+      }
       if (raw) {
         var parsed = JSON.parse(raw);
         state = merge(emptyState(), parsed);

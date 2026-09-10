@@ -9,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const PAGE = 'file://' + path.join(HERE, '..', 'Дашборд_ВайМаркет.html');
+const PAGE = 'file://' + path.join(HERE, '..', 'Учёт_магазина.html');
 
 async function loadChromium() {
   for (const where of ['playwright', '/opt/node22/lib/node_modules/playwright/index.js',

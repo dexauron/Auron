@@ -1,5 +1,5 @@
 /* ============================================================================
-   Вай Маркет — интерфейс. Оформление в стиле iOS: крупные цифры, списки,
+   Интерфейс. Оформление в стиле iOS: крупные цифры, списки,
    минимум лишнего. Расчёты — js/engine.js, журналы — js/store.js,
    сохранение в файлы — js/filestore.js.
    ========================================================================== */
@@ -804,7 +804,7 @@
     box.innerHTML = '<div class="sheet" style="max-width:360px;text-align:center">' +
       '<div class="sheet-body" style="padding:26px 22px 22px">' +
       '<div style="font-size:40px">' + ic('lock') + '</div>' +
-      '<div class="sheet-title" style="margin-top:8px">' + esc(S.settings.storeName || 'Вай Маркет') + '</div>' +
+      '<div class="sheet-title" style="margin-top:8px">' + esc(S.settings.storeName || 'Мой магазин') + '</div>' +
       '<div class="card-note" style="margin:6px 0 16px">' +
       (askNew ? 'Придумайте пароль из 4 цифр' : 'Введите пароль') + '</div>' +
       '<input id="pinInput" type="password" inputmode="numeric" maxlength="4" ' +
@@ -940,7 +940,12 @@
       body: function (v) {
         var s2 = S.settings; v = v || {};
         return fieldRow('Название магазина', 'storeName', 'text',
-          v.storeName != null ? v.storeName : s2.storeName) +
+          v.storeName != null ? v.storeName : s2.storeName,
+          { placeholder: 'как называется ваш магазин' }) +
+          fieldRow('Режим работы', 'workMode', 'list',
+            v.workMode != null ? v.workMode : s2.workMode,
+            { options: ['Круглосуточно', 'с 8:00 до 23:00', 'с 9:00 до 21:00'],
+              hint: 'показывается под названием' }) +
           fieldRow('Денежные ящики', 'tills', 'text',
             v.tills != null ? v.tills : s2.tills,
             { hint: 'через запятую: «Касса 1, Касса 2»' }) +
@@ -959,9 +964,10 @@
       hint: 'Это тот минимум, без которого остаток наличных и долг начнутся с нуля, ' +
         'а не с того, что есть на самом деле. Остальное настраивается ниже, на экране.',
       save: function (v) {
+        if (!E.txt(v.storeName)) return 'Впишите название магазина — оно будет в шапке и в отчётах.';
         if (!E.txt(v.tills)) return 'Впишите хотя бы один денежный ящик.';
         if (!E.txt(v.shiftNames)) return 'Впишите хотя бы одну смену.';
-        ['storeName', 'tills', 'shiftNames'].forEach(function (k) {
+        ['storeName', 'workMode', 'tills', 'shiftNames'].forEach(function (k) {
           S.setSetting(k, E.txt(v[k]));
         });
         ['openCashStart', 'openSafeStart', 'openDebtStart'].forEach(function (k) {
@@ -1190,7 +1196,8 @@
       'смены: день с ' + esc(s.dayStart) + ', ночь с ' + esc(s.nightStart) + '.' +
       '</div>');
 
-    h += card('О программе', '<div class="card-body">Вай Маркет — учёт магазина. Работает без интернета: ' +
+    h += card('О программе', '<div class="card-body">Учёт продуктового магазина. ' +
+      'Работает без интернета: ' +
       'папку можно скопировать на флешку и открыть на любом компьютере.<br>' +
       'Записи хранятся в книге ' + F.BOOK_FILE + ' и в файле ' + F.DATA_DIR + '/' + F.DATA_FILE + '.</div>');
     return h;
@@ -1329,7 +1336,11 @@
         '<span class="nav-icon">' + ic('chevronUp') + '</span><span>Оставить только рабочие</span></div>';
     }
     $('nav').innerHTML = html;
-    $('brandName').textContent = S.settings.storeName || 'Вай Маркет';
+    /* Шапка показывает то, что владелец вписал о своём магазине. Пока не
+       вписал — нейтральная надпись, а не чужое название. */
+    $('brandName').textContent = S.settings.storeName || 'Мой магазин';
+    var sub = $('brandSub');
+    if (sub) sub.textContent = E.txt(S.settings.workMode) || 'учёт магазина';
     var st = saveState();
     $('saveState').innerHTML = '<span class="saved-dot ' + st.dot + '"></span><span>' + esc(st.text) + '</span>';
     renderAlerts();
@@ -1642,7 +1653,7 @@
   function backup() {
     var blob = new Blob([S.exportJSON()], { type: 'application/json' });
     var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = 'WayMarket_baza_' + today() + '.json'; a.click();
+    a.href = URL.createObjectURL(blob); a.download = 'база_' + today() + '.json'; a.click();
     toast('Копия базы сохранена.');
   }
   function restore() {
@@ -2180,7 +2191,7 @@
     if (typeof XLSX === 'undefined' || typeof S === 'undefined') {
       document.getElementById('page').innerHTML =
         '<div class="card"><div class="empty"><b>Папка скопирована не полностью</b><br>' +
-        'Рядом с файлом «Дашборд_ВайМаркет.html» должны лежать папки js и vendor и файл styles.css.</div></div>';
+        'Рядом с файлом программы должны лежать папки js и vendor и файл styles.css.</div></div>';
       return;
     }
     applyLook();
@@ -2214,6 +2225,8 @@
     });
 
     recompute(); bind(); render();
+
+
 
     // сохранение в файл: подписываемся на любые изменения журналов
     S.onChange(function () {

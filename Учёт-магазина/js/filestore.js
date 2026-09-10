@@ -11,7 +11,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var DB = 'waymarket_erp', STORE = 'handles', KEY = 'workdir';
+  var DB = 'store_erp', STORE = 'handles', KEY = 'workdir';
   var DATA_DIR = 'Данные_дашборда';
   var DATA_FILE = 'база.json';
   var BACKUP_DIR = 'копии';
@@ -121,7 +121,7 @@
   /* --- подключение папки --- */
   async function connect() {
     if (!supported()) throw new Error('Браузер не умеет сохранять в папку. Откройте дашборд в Chrome, Edge или Яндекс.Браузере.');
-    var handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'waymarket-data' });
+    var handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'store-erp-data' });
     var perm = await handle.requestPermission({ mode: 'readwrite' });
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     dirHandle = handle;
@@ -550,7 +550,7 @@
 
   async function connectBackup() {
     if (!supported()) throw new Error('Браузер не умеет сохранять в папку.');
-    var handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'waymarket-backup' });
+    var handle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'store-erp-backup' });
     var perm = await handle.requestPermission({ mode: 'readwrite' });
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     backupHandle = handle;
@@ -582,7 +582,7 @@
     if (backupState !== 'ready' || !backupHandle) return '';
     try {
       var stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 16);
-      var name = 'ВайМаркет-база-' + stamp + '.json';
+      var name = 'база-' + stamp + '.json';
       var fh = await backupHandle.getFileHandle(name, { create: true });
       var w = await fh.createWritable();
       await w.write(JSON.stringify({ saved: new Date().toISOString(), tag: tag || '', data: getData() }, null, 2));

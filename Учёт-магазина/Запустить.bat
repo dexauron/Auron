@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 > nul
-title Вай Маркет
+title Учёт магазина
 cd /d "%~dp0"
 
-if not exist "Дашборд_ВайМаркет.html" (
+if not exist "Учёт_магазина.html" (
   echo.
-  echo   Рядом с этим файлом нет "Дашборд_ВайМаркет.html".
+  echo   Рядом с этим файлом нет "Учёт_магазина.html".
   echo   Скопируйте папку целиком, вместе с папками js и vendor.
   echo.
   pause
@@ -13,7 +13,7 @@ if not exist "Дашборд_ВайМаркет.html" (
 )
 
 rem Открываем в Chrome или Edge: только они умеют сохранять данные прямо в папку.
-set "PAGE=%~dp0Дашборд_ВайМаркет.html"
+set "PAGE=%~dp0Учёт_магазина.html"
 
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
   start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" "%PAGE%"
