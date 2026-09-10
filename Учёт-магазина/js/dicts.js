@@ -41,7 +41,12 @@
       where: [['dds', 'cashier'], ['debtors', 'cashier'], ['cashcount', 'cashier']] },
     { key: 'suppliers', name: 'Поставщики', icon: 'supplier', setting: 'finSuppliers',
       one: 'поставщика', hint: 'Кому платим: имена подставляются в плане выплат.',
-      where: [['plans', 'supplier']] }
+      where: [['plans', 'supplier']] },
+    { key: 'positions', name: 'Должности', icon: 'clipboard', setting: 'finPositions',
+      one: 'должность',
+      hint: 'Кем работают у вас. Список готовый, но его можно менять: ' +
+        'добавьте свои названия, ненужные уберите.',
+      where: [['staff', 'position'], ['timesheet', 'position']] }
   ];
   function kindOf(key) {
     for (var i = 0; i < KINDS.length; i++) if (KINDS[i].key === key) return KINDS[i];

@@ -94,7 +94,7 @@
     var u = U(), m = ym(), rows = rowsOf(m);
     var p = pnlOf(m);
     var t = E.totals(rows);
-    var cash = E.cashOnHand(dds(), S.settings);
+    var cash = E.cashOnHand(dds(), S.settings, null, S.state.accounts || []);
     var debt = E.supplierDebt(dds(), S.settings);
     var pace = R.monthPace(F.flatten(dds()), m, today());
 
@@ -229,7 +229,7 @@
       S.state.staff || [], S.settings, { dds: rowsOf(m) }));
     var mc = E.monthClose({ rows: dds(), ym: m, settings: S.settings,
       payrollRow: pay, cashcount: S.state.cashcount || [], pnl: pnlOf(m),
-      salaryPaid: S.state.payouts || [],
+      salaryPaid: S.state.payouts || [], accounts: S.state.accounts || [],
       debtChecked: (S.settings.debtChecked || {})[m] });
     var p = mc.pnl;
 
@@ -421,7 +421,7 @@
      ========================================================================== */
   function viewOwner() {
     var u = U(), m = ym(), p = pnlOf(m), t = E.totals(rowsOf(m));
-    var cash = E.cashOnHand(dds(), S.settings);
+    var cash = E.cashOnHand(dds(), S.settings, null, S.state.accounts || []);
     var debt = E.supplierDebt(dds(), S.settings);
     var deb = E.debtorTotals(S.state.debtors || [], today());
     var pay = E.payrollTotals(E.payrollSummary(

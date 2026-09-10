@@ -35,6 +35,22 @@
     return fallback || [];
   }
   function tills() { return dict('tills', E.TILLS); }
+
+  /* Счета для выпадающих списков. Убранные не предлагаем, но и не теряем:
+     в старых записях они остаются, и остаток по ним считается. */
+  function accounts() { return (S.state.accounts || []).filter(function (a) { return !a.archived; }); }
+  function accOptions(kinds) {
+    return accounts().filter(function (a) { return !kinds || kinds.indexOf(a.kind) >= 0; })
+      .map(function (a) { return { value: a.id, text: a.name }; });
+  }
+  function accDefault(cashless) {
+    var a = E.defaultAccount(accounts(), cashless);
+    return a ? a.id : '';
+  }
+  function accName(id) {
+    var a = accounts().filter(function (x) { return x.id === id; })[0];
+    return a ? a.name : '';
+  }
   function shiftNames() { return dict('shiftNames', E.SHIFTS); }
   function cashiers() { return Q.dicts(S.state, S.settings).cashiers; }
   function categories() { return Q.dicts(S.state, S.settings).categories; }
@@ -98,8 +114,14 @@
           v.openCash != null ? v.openCash : (prev ? prev.fact : 0), { hint: openHint }) +
         u.fieldRow('Z-отчёт: наличные', 'zCash', 'number', v.zCash || '',
           { hint: 'выручка, которая легла в ящик' }) +
+        u.fieldRow('Наличные лягут на счёт', 'account', 'select',
+          v.account || accDefault(false), { options: accOptions(['till', 'cash']),
+            hint: 'обычно денежный ящик — меняется в справочнике счетов' }) +
         u.fieldRow('Z-отчёт: безнал', 'zCashless', 'number', v.zCashless || '',
-          { hint: 'карта, СБП, QR — в ящик не попадают, идут на счёт' }) +
+          { hint: 'карта, СБП, эквайринг — купюрами их не бывает' }) +
+        u.fieldRow('Безнал ляжет на счёт', 'cashlessAccount', 'select',
+          v.cashlessAccount || accDefault(true), { options: accOptions(['bank']),
+            hint: 'расчётный счёт или карта, куда банк зачисляет' }) +
         u.fieldRow('Выплаты из ящика', 'payouts', 'number', v.payouts || 0,
           { hint: 'что брали из кассы за смену: поставщикам, на хознужды' }) +
         u.fieldRow('Факт в ящике', 'factCash', 'number', v.factCash || '',
@@ -128,7 +150,9 @@
       var rec = { type: E.T_SHIFT, date: v.date, till: v.till, shift: v.shift,
         cashier: v.cashier, openCash: num(v.openCash), zCash: num(v.zCash),
         zCashless: num(v.zCashless), payouts: num(v.payouts),
-        factCash: num(v.factCash), checks: num(v.checks), note: v.note };
+        factCash: num(v.factCash), checks: num(v.checks),
+        account: E.txt(v.account), cashlessAccount: E.txt(v.cashlessAccount),
+        note: v.note };
       var c = E.shiftCalc(rec);
       rec.diff = c.diff;
       if (edS) S.update(edS.coll, edS.id, rec); else S.add('dds', rec);
@@ -219,11 +243,10 @@
           { options: categories(), placeholder: 'за что платим',
             hint: 'закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
-        u.fieldRow('Откуда деньги', 'source', 'select',
-          v.source || (cash ? 'Из ящика' : 'Со счёта'),
-          { options: E.MONEY_SOURCES,
-            hint: 'из ящика — эти деньги уже посчитаны в «выплатах» при сверке смены, ' +
-              'второй раз их не вычтут' }) +
+        u.fieldRow('С какого счёта', 'account', 'select',
+          v.account || accDefault(!cash), { options: accOptions(),
+            hint: 'из денежного ящика — эти деньги уже посчитаны в «выплатах» при ' +
+              'сверке смены, второй раз их не вычтут' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -249,14 +272,15 @@
       }
       learn({ categories: v.category, methods: v.method });
       var rec = { type: E.T_OUT, date: v.date, category: v.category,
-        method: v.method, source: v.source, amount: num(v.amount), note: v.note };
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note };
       var ed = U().editing();
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
-      var where = E.moneyFrom(rec);
+      var acc = E.accountOf(rec, accounts());
       return { ok: 'Расход записан: ' + v.category + ' — ' + money(v.amount) +
-        (where === 'ящик' ? '. Кассу не трогаем: эти деньги уже в «выплатах» смены.'
-          : where === 'сейф' ? '. Сейф уменьшился.' : '.') };
+        (acc && acc.kind === 'till'
+          ? '. Ящик не трогаем: эти деньги уже в «выплатах» смены.'
+          : acc ? '. Списано со счёта «' + acc.name + '».' : '.') };
     }
   };
 
@@ -264,49 +288,6 @@
      Увезли выручку в сейф или в банк — деньги не потрачены, они лежат в другом
      месте. Касса уменьшается, прибыль НЕ меняется. Раньше это можно было
      записать только расходом, и месяц закрывался с ложным убытком. */
-  FORMS.moveCash = {
-    title: 'Инкассация', icon: 'truck',
-    editsInPlace: true,   // правит запись сама — удалять старую нельзя
-    body: function (v) {
-      var u = U(); v = v || {};
-      var cash = E.cashOnHand(dds(), S.settings);
-      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-        u.fieldRow('Откуда', 'from', 'select', v.from || 'Касса',
-          { options: ['Касса', 'Сейф'], hint: 'в кассе сейчас ' + money(cash) }) +
-        u.fieldRow('Куда', 'to', 'select', v.to || S.settings.collectTo || 'Сейф',
-          { options: ['Сейф', 'Банк', 'Касса'] }) +
-        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-        u.fieldRow('Кто повёз', 'who', 'list', v.who || '',
-          { options: cashiers(), placeholder: 'необязательно' }) +
-        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
-    },
-    hint: 'Деньги переложили, а не потратили: прибыль от инкассации не меняется ни на рубль. ' +
-      'Из кассы они уходят через «выплаты из ящика» той смены, где их вынули, — ' +
-      'поэтому здесь остаток ящика второй раз не уменьшается, а сейф пополняется.',
-    save: function (v) {
-      var badM = Q.checkDate(v.date); if (badM) return badM;
-      var bad = Q.checkAmount(v.amount); if (bad) return bad;
-      if (E.norm(v.from) === E.norm(v.to)) return 'Откуда и куда — одно и то же место.';
-      var cash = E.cashOnHand(dds(), S.settings);
-      if (E.norm(v.from) === 'сейф' && num(v.amount) > E.safeOnHand(dds(), S.settings) + 0.5) {
-        return 'В сейфе сейчас ' + money(E.safeOnHand(dds(), S.settings)) +
-          ' — увезти ' + money(v.amount) + ' не получится.';
-      }
-      var rec = { type: E.T_MOVE, date: v.date, from: v.from, to: v.to,
-        amount: num(v.amount), cashier: v.who, note: v.note };
-      var ed = U().editing();
-      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
-      S.save(); refresh();
-      var msg = 'Инкассация записана: ' + money(v.amount) + ' из «' + v.from +
-        '» в «' + v.to + '». Прибыль не изменилась — деньги не потрачены, а переложены.';
-      if (E.norm(v.from) === 'касса') {
-        msg += ' Проверьте, что эти ' + money(v.amount) +
-          ' кассир записал в «выплаты из ящика» за смену — иначе касса не сойдётся.';
-      }
-      return { ok: msg };
-    }
-  };
-
   FORMS.moneyIn = {
     title: 'Приход денег', icon: 'banknote',
     body: function (v) {
@@ -315,9 +296,9 @@
         u.fieldRow('Откуда', 'category', 'list', v.category || 'Прочий приход',
           { options: categories().concat(['Прочий приход', 'Вернули долг', 'Внёс владелец']) }) +
         u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
-        u.fieldRow('Куда положили', 'source', 'select', v.source || 'Из ящика',
-          { options: ['Из ящика', 'Из сейфа', 'Со счёта'],
-            hint: '«Из ящика» значит в ящик — кассир пересчитает их вместе со сменой' }) +
+        u.fieldRow('На какой счёт', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(),
+            hint: 'в денежный ящик — кассир пересчитает их вместе со сменой' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -328,13 +309,10 @@
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       learn({ categories: v.category, methods: v.method });
       S.add('dds', { type: E.T_IN, date: v.date, category: v.category || 'Прочий приход',
-        method: v.method, source: E.txt(v.source) || 'Из ящика',
-        amount: num(v.amount), note: v.note });
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note });
       S.save(); refresh();
-      var where = E.moneyFrom({ source: v.source, method: v.method });
       return { ok: 'Приход записан: ' + money(v.amount) +
-        (where === 'сейф' ? '. В сейфе стало ' + money(E.safeOnHand(dds(), S.settings)) + '.'
-          : where === 'ящик' ? '. Кассир пересчитает их вместе со сменой.' : '.') };
+        (accName(v.account) ? ' на счёт «' + accName(v.account) + '».' : '.') };
     }
   };
 
@@ -344,9 +322,8 @@
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
-        u.fieldRow('Откуда деньги', 'source', 'select', v.source || 'Из ящика',
-          { options: E.MONEY_SOURCES,
-            hint: 'из ящика — уже посчитано в «выплатах» смены, второй раз не вычтем' }) +
+        u.fieldRow('С какого счёта', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(), hint: 'из ящика — уже посчитано в «выплатах» смены' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -354,9 +331,62 @@
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       S.add('dds', { type: E.T_DRAW, date: v.date, category: 'Забор владельца',
-        method: v.method, source: v.source, amount: num(v.amount), note: v.note });
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note });
       S.save(); refresh();
       return { ok: 'Записано: из оборота ушло ' + money(v.amount) };
+    }
+  };
+
+  FORMS.moveCash = {
+    title: 'Перевод между счетами', icon: 'truck',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      var bal = E.accountBalances(dds(), accounts());
+      function label(a) {
+        var b = bal.rows.filter(function (x) { return x.id === a.value; })[0];
+        return { value: a.value, text: a.text + (b ? ' — ' + money(b.balance) : '') };
+      }
+      var opts = accOptions().map(label);
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Откуда', 'account', 'select', v.account || accDefault(false),
+          { options: opts }) +
+        u.fieldRow('Куда', 'toAccount', 'select', v.toAccount || accDefault(true),
+          { options: opts }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Кто повёз', 'cashier', 'list', v.cashier || '',
+          { options: cashiers(), placeholder: 'необязательно' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Инкассация в сейф, перевод со счёта на счёт, размен обратно в кассу — всё это ' +
+      'перевод. Деньги переложили, а не потратили: прибыль от перевода не меняется ни на рубль. ' +
+      'Из денежного ящика они уходят через «выплаты» той смены, где их вынули, поэтому ' +
+      'остаток ящика здесь второй раз не уменьшается.',
+    save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (!E.txt(v.account) || !E.txt(v.toAccount)) return 'Выберите, откуда и куда.';
+      if (E.txt(v.account) === E.txt(v.toAccount)) return 'Откуда и куда — один и тот же счёт.';
+      var bal = E.accountBalances(dds(), accounts());
+      var from = bal.rows.filter(function (x) { return x.id === E.txt(v.account); })[0];
+      // Ящик не проверяем: смену могли ещё не закрыть, и остаток там временный
+      if (from && from.kind !== 'till' && num(v.amount) > from.balance + 0.5) {
+        return 'На счёте «' + from.name + '» сейчас ' + money(from.balance) +
+          ' — перевести ' + money(v.amount) + ' не получится.';
+      }
+      var rec = { type: E.T_MOVE, date: v.date, account: E.txt(v.account),
+        toAccount: E.txt(v.toAccount), amount: num(v.amount),
+        cashier: E.txt(v.cashier), note: E.txt(v.note) };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      var msg = 'Перевод записан: ' + money(v.amount) + ' с «' + accName(v.account) +
+        '» на «' + accName(v.toAccount) + '». Прибыль не изменилась — деньги переложили.';
+      if (from && from.kind === 'till') {
+        msg += ' Проверьте, что эти ' + money(v.amount) +
+          ' кассир записал в «выплаты из ящика» за смену.';
+      }
+      return { ok: msg };
     }
   };
 
@@ -507,7 +537,7 @@
         form: 'shiftClose', act: 'Свести' });
     }
 
-    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [] });
+    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [], accounts: accounts() });
     if (chk.left > 0.5) {
       out.push({ icon: 'receipt', color: 'c-orange',
         text: 'Не расписано ' + money(chk.left) + ' из ящика',
@@ -518,7 +548,7 @@
         go: 'ledger', act: 'Проверить' });
     }
 
-    var cash = E.cashOnHand(all, S.settings);
+    var cash = E.cashOnHand(all, S.settings, null, accounts());
     if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
       out.push({ icon: 'truck', text: 'В ящике ' + money(cash) + ' — пора увезти',
         form: 'moveCash', act: 'Инкассация' });
@@ -563,8 +593,8 @@
         ic('calculator') + ' Свести кассу</button></div></div>';
     }
 
-    var cash = E.cashOnHand(all, S.settings);
-    var safe = E.safeOnHand(all, S.settings);
+    var cash = E.cashOnHand(all, S.settings, null, accounts());
+    var safe = E.safeOnHand(all, S.settings, null, accounts());
     var debt = E.supplierDebt(all, S.settings);
     var sel = pick(), t = E.totals(sel.rows);
 

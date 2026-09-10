@@ -422,28 +422,40 @@ console.log('Страница: ' + PAGE + '\n');
   const { page, ctx, errs } = await open();
   const fill = (n, v) => page.fill('.sheet [name="' + n + '"]', v);
   const pick = (n, v) => page.selectOption('.sheet [name="' + n + '"]', v);
+  // Счёт выбирается по названию: его номер программа заводит сама
+  const pickAcc = (n, label) =>
+    page.selectOption('.sheet [name="' + n + '"]', { label });
 
   await page.evaluate(() => {
-    window.WMStore.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1',
+    const S = window.WMStore;
+    const till = (S.state.accounts || []).find(a => a.kind === 'till');
+    const bank = (S.state.accounts || []).find(a => a.kind === 'bank');
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1',
       shift: 'День', cashier: 'Аня', openCash: 0, zCash: 26467, zCashless: 29743,
-      payouts: 10000, factCash: 16467 });
-    window.WMStore.setSetting('reportMonth', '2026-09');
-    window.WMStore.save(); window.WMUI.recompute();
+      payouts: 10000, factCash: 16467,
+      account: till && till.id, cashlessAccount: bank && bank.id });
+    S.setSetting('reportMonth', '2026-09');
+    S.save(); window.WMUI.recompute();
   });
+
+  // Счета заводятся сами при первом запуске
+  const accs = await page.evaluate(() =>
+    (window.WMStore.state.accounts || []).map(a => a.name + ':' + a.kind));
+  check('счета заведены при первом запуске', accs.length >= 3, accs.join(', '), '>=3');
 
   // Расшифровываем выплату из ящика — касса меняться не должна
   await page.evaluate(() => window.WMUI.openForm('moneyOut'));
   await page.waitForTimeout(350);
   await fill('date', '2026-09-01');
   await fill('category', 'Аренда');
-  await pick('source', 'Из ящика');
+  await pickAcc('account', 'Касса');
   await fill('amount', '5000');
   await page.click('.sheet .btn-primary');
   await page.waitForTimeout(600);
 
   const c1 = await page.evaluate(() => {
     const E = window.WM, S = window.WMStore;
-    return { cash: E.cashOnHand(S.state.dds, S.settings),
+    return { cash: E.cashOnHand(S.state.dds, S.settings, null, S.state.accounts),
       rent: E.pnl({ rows: S.state.dds }).costs.find(c => c.key === 'rent').sum };
   });
   check('РАСХОД ИЗ ЯЩИКА КАССУ НЕ ТРОНУЛ', c1.cash === 16467, c1.cash, 16467);
@@ -473,17 +485,18 @@ console.log('Страница: ' + PAGE + '\n');
   await page.evaluate(() => window.WMUI.openForm('moveCash'));
   await page.waitForTimeout(350);
   await fill('date', '2026-09-02');
-  await pick('from', 'Касса');
-  await pick('to', 'Сейф');
+  await page.selectOption('.sheet [name="account"]', { index: 0 });
+  await page.selectOption('.sheet [name="toAccount"]', { index: 1 });
   await fill('amount', '10000');
   await page.click('.sheet .btn-primary');
   await page.waitForTimeout(600);
   const c2 = await page.evaluate(() => {
     const E = window.WM, S = window.WMStore;
-    return { cash: E.cashOnHand(S.state.dds, S.settings),
-      safe: E.safeOnHand(S.state.dds, S.settings),
+    return { cash: E.cashOnHand(S.state.dds, S.settings, null, S.state.accounts),
+      safe: E.safeOnHand(S.state.dds, S.settings, null, S.state.accounts),
       net: E.pnl({ rows: S.state.dds }).net,
-      chk: E.tillPayoutCheck(S.state.dds, null, { payouts: S.state.payouts || [] }) };
+      chk: E.tillPayoutCheck(S.state.dds, null, { payouts: S.state.payouts || [],
+        accounts: S.state.accounts || [] }) };
   });
   /* Кассир вынул деньги при закрытии смены и записал их в «выплаты из ящика»
      (10 000), а факт это учёл. Значит инкассация ящик второй раз уменьшать
@@ -499,18 +512,18 @@ console.log('Страница: ' + PAGE + '\n');
   check('ЛИШНЮЮ РАСШИФРОВКУ ПРОГРАММА ЗАМЕЧАЕТ', c2.chk.over && c2.chk.left === -5000,
     'перебор на ' + (-c2.chk.left), 'перебор на 5000');
 
-  // Из сейфа нельзя увезти больше, чем в нём лежит
+  // Со счёта нельзя перевести больше, чем на нём лежит
   await page.evaluate(() => window.WMUI.openForm('moveCash'));
   await page.waitForTimeout(350);
-  await pick('from', 'Сейф');
-  await pick('to', 'Банк');
+  await page.selectOption('.sheet [name="account"]', { index: 1 });
+  await page.selectOption('.sheet [name="toAccount"]', { index: 2 });
   await fill('amount', '999999');
   await page.click('.sheet .btn-primary');
   await page.waitForTimeout(500);
   const over = await page.evaluate(() => ({
     moves: (window.WMStore.state.dds || []).filter(r => r.type === 'Перемещение').length }));
-  check('нельзя увезти из сейфа больше, чем в нём есть', over.moves === 1,
-    over.moves + ' перемещений', 1);
+  check('нельзя перевести со счёта больше, чем на нём есть', over.moves === 1,
+    over.moves + ' переводов', 1);
   await page.evaluate(() => window.WMUI.closeSheet());
   await page.waitForTimeout(300);
 
@@ -906,7 +919,19 @@ console.log('Страница: ' + PAGE + '\n');
       method: 'Наличные', cashier: 'Аня', amount: 700 });
     S.save(); window.WMUI.recompute(); window.WMUI.go('dicts');
   });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(400);
+
+  // Справочники открываются на «Счетах» — это первое, что настраивают
+  const accTab = await page.textContent('#page');
+  check('справочник счетов открыт первым',
+    accTab.includes('Счета') && accTab.includes('Наличными'), 'открыт', 'открыт');
+  const accRows = await page.evaluate(() =>
+    document.querySelectorAll('#accLive tbody tr').length ||
+    (window.WMStore.state.accounts || []).length);
+  check('в справочнике видны заведённые счета', accRows >= 3, accRows + ' счетов', '>=3');
+
+  await page.click('[data-tab="dicts:staff"]');
+  await page.waitForTimeout(400);
   await page.click('[data-act="dict-staff-import"]');
   await page.waitForTimeout(500);
   const staffN = await page.evaluate(() => (window.WMStore.state.staff || []).length);

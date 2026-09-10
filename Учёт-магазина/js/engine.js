@@ -269,8 +269,15 @@
      Σ(Z-наличные − выплаты + расхождение). Расхождение обязано входить:
      в ящике лежит факт, а не то, что должно было быть.
      Карта и СБП тут не участвуют — они не в ящике. */
-  function cashOnHand(rows, settings, upto) {
+  function cashOnHand(rows, settings, upto, accounts) {
     settings = settings || {};
+    /* Есть справочник счетов — считаем по нему: наличные это сумма ящиков и
+       прочих наличных счетов. Нет (старая база, ещё не заведены) — считаем
+       по-прежнему, от одного общего остатка. */
+    if (accounts && accounts.length) {
+      // Именно ящики: сейф показывается отдельной цифрой
+      return accountBalances(rows, accounts, upto).totals.till;
+    }
     var cash = safeRound(settings.openCashStart);
     (rows || []).forEach(function (r) {
       if (upto && txt(r.date) > upto) return;
@@ -299,11 +306,114 @@
     return safeRound(cash);
   }
 
+  /* ==========================================================================
+     ОСТАТКИ ПО СЧЕТАМ
+
+     Каждая запись знает, с какого счёта ушли деньги и на какой пришли.
+     Смена кладёт наличную выручку на один счёт, а безналичную — на другой:
+     эквайринг, СБП и оплата картой никогда не бывают купюрами в ящике.
+
+     Остаток денежного ящика правит факт пересчёта: сколько кассир насчитал
+     руками, столько там и есть. Остальные счета живут обычной арифметикой
+     «пришло минус ушло».
+     ====================================================================== */
+
+  // Счёт записи: сначала явно указанный, потом — по старой пометке «откуда»
+  function accountOf(r, accounts, which) {
+    var list = accounts || [];
+    var id = txt(r && (which === 'to' ? r.toAccount : r.account || r.fromAccount));
+    var i;
+    if (id) {
+      for (i = 0; i < list.length; i++) if (txt(list[i].id) === id) return list[i];
+    }
+    // Записи, сделанные до появления счетов: раскладываем по прежним словам
+    var w = moneyFrom(r);
+    var wantKind = w === 'счёт' ? 'bank' : (w === 'сейф' ? 'cash' : 'till');
+    if (!w && !isCash(r && r.method)) wantKind = 'bank';
+    for (i = 0; i < list.length; i++) if (list[i].kind === wantKind) return list[i];
+    return list[0] || null;
+  }
+
+  function defaultAccount(accounts, cashless) {
+    var list = accounts || [], i;
+    for (i = 0; i < list.length; i++) {
+      if (list[i].archived) continue;
+      if (cashless ? list[i].defaultCashless : list[i].defaultCash) return list[i];
+    }
+    for (i = 0; i < list.length; i++) {
+      if (list[i].archived) continue;
+      if (cashless ? list[i].kind === 'bank' : list[i].kind === 'till') return list[i];
+    }
+    return list[0] || null;
+  }
+
+  /* Остатки по всем счетам. Возвращает список счетов с полем balance и
+     итоги: сколько наличными, сколько на счетах, сколько всего. */
+  function accountBalances(rows, accounts, upto) {
+    var list = (accounts || []).map(function (a) {
+      return { id: a.id, name: a.name, kind: a.kind, archived: !!a.archived,
+        note: a.note, opening: safeRound(a.opening), balance: safeRound(a.opening),
+        defaultCash: !!a.defaultCash, defaultCashless: !!a.defaultCashless };
+    });
+    var by = {};
+    list.forEach(function (a) { by[txt(a.id)] = a; });
+    function hit(acc, sum) { if (acc && by[txt(acc.id)]) by[txt(acc.id)].balance += safeRound(sum); }
+
+    (rows || []).forEach(function (r) {
+      if (upto && txt(r.date) > upto) return;
+      if (isShift(r)) {
+        var c = shiftCalc(r);
+        /* Наличная выручка минус выплаты плюс расхождение — на счёт ящика:
+           в ящике лежит факт, а не то, что должно было лежать.
+           Безналичная выручка — на свой счёт, целиком. */
+        hit(accountOf(r, accounts), c.zCash - c.payouts + c.diff);
+        if (c.zCashless) {
+          hit(accountOf({ toAccount: r.cashlessAccount, method: 'Карта' }, accounts, 'to'),
+            c.zCashless);
+        }
+      } else if (isMove(r)) {
+        /* Из денежного ящика деньги уходят только через «выплаты из ящика»
+           при сверке смены: кассир вынул их при себе и записал. Инкассация
+           лишь объясняет, куда они делись, — второй раз ящик не уменьшаем.
+           С сейфа и со счёта перевод списывается обычным порядком. */
+        var from = accountOf(r, accounts);
+        if (!(from && from.kind === 'till')) hit(from, -safeRound(r.amount));
+        hit(accountOf(r, accounts, 'to'), safeRound(r.amount));
+      } else if (isIncome(r)) {
+        hit(accountOf(r, accounts), safeRound(r.amount));
+      } else if (isExpense(r) || isDraw(r)) {
+        /* Из денежного ящика деньги уходят только одним путём — через
+           «выплаты из ящика» при сверке смены. Расход лишь объясняет, на что
+           они ушли, и остаток ящика второй раз не уменьшает. С сейфа и со
+           счёта списываем обычным порядком. */
+        var acc = accountOf(r, accounts);
+        if (!acc || acc.kind !== 'till') hit(acc, -safeRound(r.amount));
+      }
+    });
+
+    var t = { till: 0, safe: 0, cash: 0, bank: 0, total: 0 };
+    list.forEach(function (a) {
+      a.balance = safeRound(a.balance);
+      if (a.kind === 'bank') t.bank += a.balance;
+      else if (a.kind === 'till') t.till += a.balance;   // в ящиках прямо сейчас
+      else t.safe += a.balance;                          // сейф и прочие наличные
+    });
+    ['till', 'safe', 'bank'].forEach(function (k) { t[k] = safeRound(t[k]); });
+    t.cash = safeRound(t.till + t.safe);                  // все наличные
+    t.total = safeRound(t.cash + t.bank);
+    return { rows: list, totals: t,
+      live: list.filter(function (a) { return !a.archived; }) };
+  }
+
   /* Сколько денег в сейфе. Сейф пополняется инкассацией из кассы и тратится
      на расходы, помеченные «из сейфа». В прибыли сейф не участвует вовсе:
      переложить деньги — не значит их потратить. */
-  function safeOnHand(rows, settings, upto) {
+  function safeOnHand(rows, settings, upto, accounts) {
     settings = settings || {};
+    if (accounts && accounts.length) {
+      // «В сейфе» — все наличные, кроме тех, что лежат в ящиках
+      return accountBalances(rows, accounts, upto).totals.safe;
+    }
     var safe = safeRound(settings.openSafeStart);
     (rows || []).forEach(function (r) {
       if (upto && txt(r.date) > upto) return;
@@ -339,6 +449,15 @@
      Если больше — где-то лишняя запись. */
   function tillPayoutCheck(rows, ym, opts) {
     opts = opts || {};
+    var accounts = opts.accounts || [];
+    // Перевод сделан из денежного ящика? По счёту, а если счетов нет — по слову
+    function fromTill(r) {
+      if (accounts.length) {
+        var a = accountOf(r, accounts);
+        return !!(a && a.kind === 'till');
+      }
+      return norm(r.from) === 'касса';
+    }
     var byDay = {};
     function day(d) {
       if (!byDay[d]) byDay[d] = { date: d, payouts: 0, explained: 0, parts: {} };
@@ -357,23 +476,25 @@
       else if (isDay(r)) {
         // товар за наличные и отданные долги — деньги из ящика, если владелец
         // не указал, что платил из сейфа или со счёта
-        var w = moneyFrom(r);
-        if (w !== 'сейф' && w !== 'счёт') {
+        var fromBox = accounts.length ? fromTill(r) : (moneyFrom(r) !== 'сейф' && moneyFrom(r) !== 'счёт');
+        if (fromBox) {
           add(d, 'товар', num(r.goodsCash));
           add(d, 'долги поставщикам', num(r.debtPaid));
         }
-      } else if (isMove(r) && norm(r.from) === 'касса') {
+      } else if (isMove(r) && fromTill(r)) {
         add(d, 'инкассация', num(r.amount));
-      } else if ((isExpense(r) || isDraw(r)) && isCash(r.method) && moneyFrom(r) === 'ящик') {
-        add(d, isDraw(r) ? 'забрал владелец' : 'расходы', num(r.amount));
+      } else if (isExpense(r) || isDraw(r)) {
+        var fromBox2 = accounts.length ? fromTill(r)
+          : (isCash(r.method) && moneyFrom(r) === 'ящик');
+        if (fromBox2) add(d, isDraw(r) ? 'забрал владелец' : 'расходы', num(r.amount));
       }
     });
     // Зарплата лежит в своём журнале, но берут её из того же ящика
     (opts.payouts || []).forEach(function (p) {
       var d = txt(p.date); if (!d) return;
       if (ym && ymOf(d) !== ym) return;
-      if (!isCash(p.method)) return;
-      if (moneyFrom(p) === 'сейф' || moneyFrom(p) === 'счёт') return;
+      if (accounts.length) { if (!fromTill(p)) return; }
+      else if (!isCash(p.method) || moneyFrom(p) === 'сейф' || moneyFrom(p) === 'счёт') return;
       add(d, 'зарплата', num(p.amount));
     });
     var rows2 = [], totalPayouts = 0, totalExplained = 0, allParts = {};
@@ -759,7 +880,8 @@
         : 'расхождение за месяц ' + fmtMoney(t.diff), 'cashiers', false);
 
     // 3. Выплаты из ящика расшифрованы
-    var chk = tillPayoutCheck(rows, ym, { payouts: opts.salaryPaid || [] });
+    var chk = tillPayoutCheck(rows, ym, { payouts: opts.salaryPaid || [],
+      accounts: opts.accounts || [] });
     item('payouts', 'Выплаты из ящика расшифрованы',
       Math.abs(chk.left) < 0.5 && !chk.over,
       chk.over ? 'расшифровано больше, чем выдавали, на ' + fmtMoney(-chk.left) +
@@ -2268,6 +2390,7 @@
     T_MOVE: T_MOVE, isMove: isMove, shiftOrder: shiftOrder, hitsTill: hitsTill, moneyFrom: moneyFrom, notACost: notACost,
     NOT_A_COST: NOT_A_COST, MONEY_SOURCES: MONEY_SOURCES,
     safeOnHand: safeOnHand, tillPayoutCheck: tillPayoutCheck,
+    accountOf: accountOf, defaultAccount: defaultAccount, accountBalances: accountBalances,
     isShift: isShift, isDay: isDay, isIncome: isIncome, isExpense: isExpense,
     isDraw: isDraw, isCash: isCash,
 

@@ -1369,7 +1369,7 @@
     });
     if (bad.length) items.push({ icon: 'warning', text: 'Крупные расхождения кассы: ' + bad.length +
       ' за неделю', go: 'cashiers' });
-    var cash = E.cashOnHand(S.state.dds || [], S.settings);
+    var cash = E.cashOnHand(S.state.dds || [], S.settings, null, S.state.accounts || []);
     var limit = num(S.settings.cashLimit);
     if (limit && cash > limit) items.push({ icon: 'banknote', text: 'Наличных в кассе ' + money(cash) +
       ' — больше вашего порога', go: 'morning' });

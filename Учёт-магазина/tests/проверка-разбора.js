@@ -455,6 +455,100 @@ console.log('\n— Рабочий день магазина: две кассы, 
   check('чистая прибыль = 90000 − 12000 − 18000', p.net === 60000, p.net, 60000);
 }
 
+console.log('\n— Счета: где лежат деньги');
+{
+  const acc = [
+    { id: 'a1', name: 'Касса', kind: 'till', opening: 10000, defaultCash: true },
+    { id: 'a2', name: 'Сейф', kind: 'cash', opening: 50000 },
+    { id: 'a3', name: 'Расчётный счёт', kind: 'bank', opening: 0, defaultCashless: true }
+  ];
+  const rows = [
+    { type: 'Смена', date: '2026-09-01', account: 'a1', cashlessAccount: 'a3',
+      openCash: 10000, zCash: 40000, zCashless: 12000, payouts: 25000, factCash: 25000 },
+    { type: 'Перемещение', date: '2026-09-01', account: 'a1', toAccount: 'a2', amount: 5000 },
+    { type: 'Расход', date: '2026-09-02', category: 'Аренда', method: 'Перевод',
+      account: 'a3', amount: 30000 }
+  ];
+  const b = WM.accountBalances(rows, acc);
+  const by = n => b.rows.find(x => x.name === n).balance;
+
+  check('НАЛИЧНАЯ ВЫРУЧКА ЛОЖИТСЯ НА СВОЙ СЧЁТ, БЕЗНАЛ — НА СВОЙ',
+    by('Касса') === 25000 && by('Расчётный счёт') === -18000,
+    by('Касса') + ' / ' + by('Расчётный счёт'), '25000 / -18000');
+  check('перевод пополнил сейф', by('Сейф') === 55000, by('Сейф'), 55000);
+  check('ИЗ ЯЩИКА ПЕРЕВОД ВТОРОЙ РАЗ НЕ СПИСЫВАЕТСЯ',
+    by('Касса') === 25000, by('Касса'), 25000);
+  check('расход со счёта списался как обычно', by('Расчётный счёт') === -18000,
+    by('Расчётный счёт'), -18000);
+
+  const t = b.totals;
+  check('итоги: в ящиках, в сейфе и на счетах отдельно',
+    t.till === 25000 && t.safe === 55000 && t.bank === -18000,
+    t.till + '/' + t.safe + '/' + t.bank, '25000/55000/-18000');
+  check('«наличные» — это ящики, сейф считается отдельно',
+    WM.cashOnHand(rows, {}, null, acc) === 25000 &&
+    WM.safeOnHand(rows, {}, null, acc) === 55000,
+    WM.cashOnHand(rows, {}, null, acc), 25000);
+
+  // Расход из ящика остаток ящика не трогает: он уже в выплатах смены
+  const withCash = rows.concat([{ type: 'Расход', date: '2026-09-01', category: 'Обед',
+    method: 'Наличные', account: 'a1', amount: 3000 }]);
+  check('РАСХОД ИЗ ЯЩИКА ЕГО ОСТАТОК НЕ МЕНЯЕТ',
+    WM.cashOnHand(withCash, {}, null, acc) === 25000,
+    WM.cashOnHand(withCash, {}, null, acc), 25000);
+  check('но в сверку выплат он попадает',
+    WM.tillPayoutCheck(withCash, null, { accounts: acc }).parts['расходы'] === 3000,
+    WM.tillPayoutCheck(withCash, null, { accounts: acc }).parts['расходы'], 3000);
+
+  // Счёт по умолчанию
+  check('счёт по умолчанию для наличной выручки',
+    WM.defaultAccount(acc).name === 'Касса', WM.defaultAccount(acc).name, 'Касса');
+  check('и для безналичной', WM.defaultAccount(acc, true).name === 'Расчётный счёт',
+    WM.defaultAccount(acc, true).name, 'Расчётный счёт');
+
+  // Старые записи без счёта раскладываются по виду счёта
+  const old = [{ type: 'Расход', date: '2026-09-01', category: 'ГСМ',
+    method: 'Наличные', source: 'Из сейфа', amount: 2000 }];
+  check('записи, сделанные до появления счетов, находят свой счёт',
+    WM.accountOf(old[0], acc).name === 'Сейф', WM.accountOf(old[0], acc).name, 'Сейф');
+
+  // Счета заводятся сами и переносят прежние остатки
+  STORE.clear();
+  STORE.state.settings.openCashStart = 7000;
+  STORE.state.settings.openSafeStart = 3000;
+  STORE.state.accounts = [];
+  const made = STORE.ensureAccounts();
+  check('счета заводятся при первом запуске', made.length === 3, made.length, 3);
+  check('и забирают прежние начальные остатки',
+    made.find(a => a.kind === 'till').opening === 7000 &&
+    made.find(a => a.name === 'Сейф').opening === 3000,
+    made.find(a => a.kind === 'till').opening, 7000);
+  check('счета не считаются «записями» владельца', STORE.stamp().records === 0,
+    STORE.stamp().records, 0);
+  STORE.clear();
+}
+
+console.log('\n— Должности: готовый список и свои');
+{
+  const st = { staff: [{ name: 'Аня', position: 'Продавец-кассир, Товаровед' }],
+    dds: [], plans: [], debtors: [], cashcount: [], dictoff: [] };
+  const d = Q.dicts(st, STORE.DEFAULT_SETTINGS);
+  check('готовый список должностей продуктового магазина', d.positions.length >= 10,
+    d.positions.length + ' должностей', '>=10');
+  check('есть те, кого реально держат в магазине',
+    ['Продавец-кассир', 'Товаровед', 'Администратор', 'Уборщица', 'Грузчик', 'Бухгалтер']
+      .every(p => d.positions.indexOf(p) >= 0), 'все на месте', 'все');
+  check('СОВМЕЩЕНИЕ: обе должности человека попадают в справочник',
+    d.positions.indexOf('Товаровед') >= 0 && d.positions.indexOf('Продавец-кассир') >= 0,
+    'обе', 'обе');
+
+  // Своя должность, которой нет в списке
+  const set = JSON.parse(JSON.stringify(STORE.DEFAULT_SETTINGS));
+  Q.learn(set, 'positions', 'Пекарь', st);
+  check('свою должность можно добавить',
+    Q.dicts(st, set).positions.indexOf('Пекарь') >= 0, 'добавилась', 'добавилась');
+}
+
 console.log('\n— Зарплата: один источник ФОТ, но всегда какой-то есть');
 {
   const rows = [{ type: 'Смена', date: '2026-09-01', openCash: 0, zCash: 500000,

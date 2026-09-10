@@ -15,7 +15,8 @@
   function today() { return new Date().toISOString().slice(0, 10); }
   function refresh() { U().recompute(); }
 
-  var TABS = [{ id: 'staff', icon: 'person', name: 'Кассиры' }].concat(
+  var TABS = [{ id: 'accounts', icon: 'wallet', name: 'Счета' },
+    { id: 'staff', icon: 'person', name: 'Сотрудники' }].concat(
     DI.KINDS.map(function (k) { return { id: k.key, icon: k.icon, name: k.name }; }));
 
   function tabBar(cur) {
@@ -23,6 +24,62 @@
       return '<button class="chip' + (t.id === cur ? ' active' : '') +
         '" data-tab="dicts:' + t.id + '">' + t.icon + ' ' + esc(t.name) + '</button>';
     }).join('') + '</div>';
+  }
+
+  /* --- Счета: где лежат деньги ---------------------------------------------
+     Как в приложениях банков: сколько мест нужно, столько и заводим. Вид
+     счёта решает, как он участвует в учёте, а не название. */
+  function viewAccounts() {
+    var u = U();
+    var accs = S.state.accounts || [];
+    var bal = E.accountBalances(S.state.dds || [], accs);
+    var live = bal.rows.filter(function (a) { return !a.archived; });
+    var gone = bal.rows.filter(function (a) { return a.archived; });
+
+    var h = '<div class="stat-grid">' +
+      u.stat('Наличными', u.priv(bal.totals.cash), 'в ящиках и сейфе') +
+      u.stat('На счетах', u.priv(bal.totals.bank), 'эквайринг, СБП, переводы') +
+      u.stat('Всего денег', u.priv(bal.totals.total), 'по всем счетам') +
+      '</div>';
+
+    h += '<div class="quick"><button class="btn btn-primary" data-form="accountCard">' +
+      ic('plus') + ' Новый счёт</button> ' +
+      '<button class="btn" data-form="moveCash">' + ic('truck') + ' Перевести между счетами</button></div>';
+
+    if (!live.some(function (a) { return a.defaultCash; })) {
+      h += '<div class="banner orange"><span>' + ic('warning') + '</span><span>' +
+        'Не выбран счёт для наличной выручки. Отметьте его в карточке счёта — ' +
+        'иначе при закрытии смены придётся выбирать каждый раз.</span></div>';
+    }
+
+    function table(id, rows, archived) {
+      return u.table(id, [
+        { title: 'Счёт', fn: function (r) { return esc(r.name); } },
+        { title: 'Вид', fn: function (r) {
+          var k = S.ACCOUNT_KINDS.filter(function (x) { return x.key === r.kind; })[0];
+          return u.badge(k ? k.name : r.kind, r.kind === 'bank' ? 'blue' : 'gray'); } },
+        { title: 'По умолчанию', fn: function (r) {
+          var b = [];
+          if (r.defaultCash) b.push('наличная выручка');
+          if (r.defaultCashless) b.push('безнал');
+          return b.length ? esc(b.join(', ')) : '—'; } },
+        { title: 'Было на старте', cls: 'num', fn: function (r) { return u.priv(r.opening); } },
+        { title: 'Сейчас', cls: 'num', fn: function (r) {
+          return '<b class="' + (r.balance < 0 ? 'c-red' : '') + '">' + u.priv(r.balance) + '</b>'; } },
+        { title: '', cls: 'center', fn: function (r) {
+          return '<button class="btn btn-sm" data-edit="accounts:' + esc(r.id) + ':accountCard">' +
+            ic('edit', 16) + '</button> ' +
+            (archived
+              ? '<button class="btn btn-sm" data-act="acc-use" data-id="' + esc(r.id) + '">Вернуть</button>'
+              : '<button class="btn btn-sm" data-act="acc-hide" data-id="' + esc(r.id) + '">Убрать</button>'); } }
+      ], rows, { step: 30, empty: archived ? 'Убранных счетов нет'
+        : 'Счетов нет — заведите хотя бы кассу' });
+    }
+
+    h += u.card('Счета', table('accLive', live, false),
+      'Ящик пересчитывают при закрытии смены, остальные меняются переводами и расходами');
+    if (gone.length) h += u.card('Убранные', table('accGone', gone, true), '');
+    return h;
   }
 
   /* --- Сотрудники -------------------------------------------------------------- */
@@ -140,15 +197,16 @@
   /* --- Экран целиком ------------------------------------------------------------- */
   function viewDicts() {
     var u = U();
-    var tab = u.tab('dicts', 'staff');
+    var tab = u.tab('dicts', 'accounts');
     if (!TABS.filter(function (t) { return t.id === tab; }).length) tab = 'firms';
 
     var h = u.pageHead('Справочники',
-      'Поставщики, сотрудники и слова, которые подставляются в формах',
+      'Счета, сотрудники и слова, которые подставляются в формах',
       '<button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
     h += tabBar(tab);
 
-    if (tab === 'staff') h += viewStaff();
+    if (tab === 'accounts') h += viewAccounts();
+    else if (tab === 'staff') h += viewStaff();
     else h += viewSimple(tab);
     return h;
   }
@@ -190,6 +248,60 @@
       if (res.error) return res.error;
       S.save(); refresh();
       return { ok: res.ok };
+    }
+  };
+
+  /* Карточка счёта. Вид меняет поведение, поэтому подписан словами:
+     владелец выбирает не «till», а «денежный ящик». */
+  FORMS.accountCard = {
+    title: 'Счёт', icon: 'wallet',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      var kind = v.kind || 'cash';
+      var k = S.ACCOUNT_KINDS.filter(function (x) { return x.key === kind; })[0];
+      return u.fieldRow('Название', 'name', 'text', v.name || '',
+        { placeholder: 'Касса 2, Сейф, Счёт в Сбере, Карта' }) +
+        u.fieldRow('Вид счёта', 'kind', 'select', kind,
+          { options: S.ACCOUNT_KINDS.map(function (x) { return { value: x.key, text: x.name }; }),
+            hint: k ? k.hint : '' }) +
+        u.fieldRow('Было на старте', 'opening', 'number', v.opening || 0,
+          { hint: 'сколько лежит на этом счёте в день, когда начинаете вести учёт' }) +
+        u.fieldRow('Сюда идёт наличная выручка', 'defaultCash', 'select',
+          v.defaultCash ? 'да' : 'нет', { options: ['да', 'нет'],
+            hint: 'подставляется при закрытии смены' }) +
+        u.fieldRow('Сюда идёт безнал', 'defaultCashless', 'select',
+          v.defaultCashless ? 'да' : 'нет', { options: ['да', 'нет'],
+            hint: 'карта, СБП, эквайринг' }) +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Денежный ящик пересчитывают при закрытии смены — его остаток правит факт. ' +
+      'Наличные и безнал меняются переводами, расходами и приходами.',
+    save: function (v) {
+      if (!E.txt(v.name)) return 'Впишите название счёта.';
+      var bad = window.WMQuick.checkAmount(v.opening, { allowEmpty: true, allowZero: true,
+        allowNegative: true });
+      if (bad) return 'Остаток на старте: ' + bad;
+      var ed = U().editing();
+      var same = (S.state.accounts || []).filter(function (a) {
+        return E.norm(a.name) === E.norm(v.name) && (!ed || a.id !== ed.id);
+      })[0];
+      if (same) return 'Счёт «' + same.name + '» уже есть.';
+      var rec = { name: E.txt(v.name), kind: E.txt(v.kind) || 'cash',
+        opening: num(v.opening), note: E.txt(v.note),
+        defaultCash: E.norm(v.defaultCash) === 'да',
+        defaultCashless: E.norm(v.defaultCashless) === 'да' };
+      // «По умолчанию» бывает только у одного счёта: иначе непонятно, куда класть
+      if (rec.defaultCash || rec.defaultCashless) {
+        (S.state.accounts || []).forEach(function (a) {
+          if (ed && a.id === ed.id) return;
+          if (rec.defaultCash) a.defaultCash = false;
+          if (rec.defaultCashless) a.defaultCashless = false;
+        });
+      }
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('accounts', rec);
+      S.save(); refresh();
+      return { ok: 'Счёт «' + rec.name + '» сохранён.' };
     }
   };
 
@@ -256,6 +368,23 @@
     S.save(); refresh(); U().render();
     return 'Заведено сотрудников: ' + found.length +
       '. Откройте карточку и впишите ставку — иначе зарплата по ним не посчитается.';
+  };
+
+  A['acc-hide'] = function (el) {
+    var a = (S.state.accounts || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!a) return 'Счёт не найден.';
+    var live = (S.state.accounts || []).filter(function (x) { return !x.archived; });
+    if (live.length <= 1) return 'Это последний счёт — деньги должно быть куда класть.';
+    a.archived = true; a.defaultCash = false; a.defaultCashless = false;
+    S.save(); refresh(); U().render();
+    return 'Счёт «' + a.name + '» убран из форм. Записи по нему остались, остаток считается.';
+  };
+  A['acc-use'] = function (el) {
+    var a = (S.state.accounts || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!a) return 'Счёт не найден.';
+    a.archived = false;
+    S.save(); refresh(); U().render();
+    return 'Счёт «' + a.name + '» снова в списке.';
   };
 
   A['staff-fire'] = function (el) {

@@ -43,7 +43,8 @@
   function dicts(state, settings) {
     state = state || {}; settings = settings || {};
     var dds = state.dds || [], out = {}, counts = {
-      category: {}, cashier: {}, shift: {}, method: {}, employee: {}, supplier: {}
+      category: {}, cashier: {}, shift: {}, method: {}, employee: {}, supplier: {},
+    position: {}
     };
     function put(bag, key, value) {
       var v = txt(value); if (!v) return;
@@ -102,13 +103,20 @@
       .filter(function (v) { return !goneEmp[norm(v)]; });
     out.suppliers = merge(settings.finSuppliers, sup, 'supplier', [], 'suppliers')
       .filter(function (v) { return !goneSup[norm(v)]; });
+    // Должности: из справочника плюс то, что уже вписано в карточках людей
+    var pos = {};
+    (state.staff || []).forEach(function (r) {
+      splitDict(r.position).forEach(function (v) { put(pos, 'position', v); });
+    });
+    out.positions = merge(settings.finPositions, pos, 'position', [], 'positions');
     return out;
   }
 
   // Настройка-справочник, куда дописывать новое слово
   var DICT_SETTING = {
     categories: 'finCategories', cashiers: 'finCashiers', shifts: 'finShifts',
-    methods: 'finMethods', employees: 'finEmployees', suppliers: 'finSuppliers'
+    methods: 'finMethods', employees: 'finEmployees', suppliers: 'finSuppliers',
+    positions: 'finPositions'
   };
 
   /* Запомнить новое значение в справочнике настроек (true, если что-то изменилось).

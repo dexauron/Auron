@@ -54,6 +54,13 @@
     finMethods: 'Наличные, Карта, СБП, Перевод',
     finSuppliers: '',
     finEmployees: '',
+    /* Должности продуктового магазина. Список — только заготовка: свои
+       добавляются, лишние убираются в справочнике. У одного человека их
+       может быть несколько: в маленьком магазине администратор нередко
+       и за кассой стоит, и товар принимает. */
+    finPositions: 'Продавец-кассир, Продавец зала, Оператор, Товаровед, ' +
+      'Администратор, Старший смены, Уборщица, Грузчик, Бухгалтер, ' +
+      'Управляющий, Директор, Владелец',
 
     /* --- Зарплата кассиров ---------------------------------------------- */
     rateDay: 200,           // ставка дневной смены, ₽/час
@@ -95,16 +102,55 @@
        cashcount — пересчёты денег в ящике по купюрам.
      Остальные — служебные: журнал правок, корзина, скрытое в справочниках,
      сохранённые наборы фильтров и шаблоны частых записей. */
-  var COLLECTIONS = ['dds', 'plans', 'staff', 'timesheet', 'payouts', 'debtors', 'cashcount',
-    'log', 'templates', 'dictoff', 'filtersets', 'trash'];
+  var COLLECTIONS = ['accounts', 'dds', 'plans', 'staff', 'timesheet', 'payouts', 'debtors',
+    'cashcount', 'log', 'templates', 'dictoff', 'filtersets', 'trash'];
 
   /* Настоящие журналы — то, что владелец вводит руками и что нельзя потерять.
      Служебное (журнал правок, корзина, шаблоны, наборы фильтров, скрытые
      слова справочников) при сверке версий не учитывается: журнал правок
      растёт от каждой мелочи, и из-за него две одинаковые базы выглядели бы
      разошедшимися. */
-  var DATA_COLLECTIONS = ['dds', 'plans', 'staff', 'timesheet', 'payouts',
+  var DATA_COLLECTIONS = ['accounts', 'dds', 'plans', 'staff', 'timesheet', 'payouts',
     'debtors', 'cashcount'];
+
+  /* Что считать «записями» в разговоре с владельцем. Счета — это настройка,
+     а не записи: сказать «восстановлено 4 записи», когда из них три — это
+     заведённые программой касса, сейф и счёт, значит соврать. Сверяться с
+     файлом они всё равно должны, поэтому из DATA_COLLECTIONS не убраны. */
+  var JOURNALS = ['dds', 'plans', 'staff', 'timesheet', 'payouts', 'debtors', 'cashcount'];
+
+  /* ==========================================================================
+     СЧЕТА — где лежат деньги
+
+     Магазин держит деньги в нескольких местах: ящик в зале, сейф, расчётный
+     счёт, иногда карта владельца. Раньше мест было ровно три и назывались
+     они жёстко. Теперь это обычный справочник: сколько нужно, столько и
+     заводите, называйте как привыкли.
+
+     Вид счёта решает, как он участвует в учёте:
+       ящик  — денежный ящик в зале. Его остаток правит сверка смены: сколько
+               насчитали руками, столько и есть;
+       нал   — прочие наличные: сейф, деньги дома. Меняются переводами и
+               расходами, пересчёту при закрытии смены не подлежат;
+       безнал— расчётный счёт или карта. Сюда падает эквайринг, СБП и оплата
+               картой; наличными этих денег никогда не бывает.
+     ====================================================================== */
+  var ACCOUNT_KINDS = [
+    { key: 'till', name: 'Денежный ящик', hint: 'касса в зале, её пересчитывают при закрытии смены' },
+    { key: 'cash', name: 'Наличные', hint: 'сейф, деньги дома — всё, что лежит купюрами' },
+    { key: 'bank', name: 'Безнал', hint: 'расчётный счёт или карта: эквайринг, СБП, переводы' }
+  ];
+
+  /* С чего начинается новый магазин: ящик, сейф и счёт. Названия и остатки
+     владелец меняет, лишние удаляет, свои добавляет. */
+  function starterAccounts() {
+    return [
+      { name: 'Касса', kind: 'till', opening: 0, defaultCash: true, note: 'денежный ящик в зале' },
+      { name: 'Сейф', kind: 'cash', opening: 0, note: 'куда увозят выручку из ящика' },
+      { name: 'Расчётный счёт', kind: 'bank', opening: 0, defaultCashless: true,
+        note: 'эквайринг, СБП, переводы поставщикам' }
+    ];
+  }
 
   function emptyState() {
     var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
@@ -129,7 +175,25 @@
         state = merge(emptyState(), parsed);
       }
     } catch (e) { /* повреждённое хранилище не должно ломать запуск */ }
+    // Счета заводим в любом случае: даже если хранилище не прочиталось,
+    // деньги должно быть куда класть
+    ensureAccounts();
     return state;
+  }
+
+  /* Счета должны быть всегда: без них некуда положить выручку. Если их нет
+     (новая база или база, заведённая до появления счетов), создаём три
+     обычных и переносим в них прежние начальные остатки. */
+  function ensureAccounts() {
+    if ((state.accounts || []).length) return state.accounts;
+    var st = state.settings || {};
+    state.accounts = starterAccounts().map(function (a) {
+      if (a.kind === 'till') a.opening = +st.openCashStart || 0;
+      if (a.name === 'Сейф') a.opening = +st.openSafeStart || 0;
+      a.id = uid();
+      return a;
+    });
+    return state.accounts;
   }
 
   // Ключи, которыми можно подменить прототип объекта: в базе им не место
@@ -187,7 +251,7 @@
   function stamp(st) {
     st = st || state;
     var n = 0;
-    for (var i = 0; i < DATA_COLLECTIONS.length; i++) n += (st[DATA_COLLECTIONS[i]] || []).length;
+    for (var i = 0; i < JOURNALS.length; i++) n += (st[JOURNALS[i]] || []).length;
     return { rev: +st.rev || 0, savedAt: st.savedAt || '', records: n };
   }
 
@@ -217,8 +281,8 @@
 
     // Записи по номерам: есть ли у одной стороны то, чего нет у другой
     var mineIds = {}, theirsIds = {}, onlyMine = 0, onlyTheirs = 0, i, j, c, list;
-    for (i = 0; i < DATA_COLLECTIONS.length; i++) {
-      c = DATA_COLLECTIONS[i];
+    for (i = 0; i < JOURNALS.length; i++) {
+      c = JOURNALS[i];
       list = state[c] || [];
       for (j = 0; j < list.length; j++) if (list[j] && list[j].id) mineIds[c + ':' + list[j].id] = 1;
       list = fileState[c] || [];
@@ -495,7 +559,7 @@
 
   return {
     KEY: KEY, DEFAULT_SETTINGS: DEFAULT_SETTINGS, COLLECTIONS: COLLECTIONS,
-    DATA_COLLECTIONS: DATA_COLLECTIONS,
+    DATA_COLLECTIONS: DATA_COLLECTIONS, JOURNALS: JOURNALS,
     reconcile: reconcile, reconcileWith: reconcileWith,
     get state() { return state; },
     get settings() { return state.settings; },
@@ -504,6 +568,8 @@
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
     fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll,
     stamp: stamp, compare: compare,
+    ACCOUNT_KINDS: ACCOUNT_KINDS, ensureAccounts: ensureAccounts,
+    starterAccounts: starterAccounts,
     get lastSaveError() { return lastSaveError; }
   };
 });

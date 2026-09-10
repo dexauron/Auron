@@ -30,6 +30,12 @@
   function dds() { return S.state.dds || []; }
 
   function employees() { return Q.dicts(S.state, S.settings).employees; }
+  function positions() { return Q.dicts(S.state, S.settings).positions; }
+  // Должности одного человека: их может быть несколько через запятую
+  function positionsOf(p) {
+    return E.txt(p && p.position).split(',').map(function (x) { return x.trim(); })
+      .filter(Boolean);
+  }
   function shiftNames() {
     var raw = E.txt(S.settings.finShifts || S.settings.shiftNames);
     var list = raw ? raw.split(',').map(function (x) { return x.trim(); }).filter(Boolean) : [];
@@ -111,7 +117,9 @@
       var u = U(); v = v || {};
       return u.fieldRow('Имя', 'name', 'text', v.name || '', { placeholder: 'как зовёте в магазине' }) +
         u.fieldRow('Должность', 'position', 'list', v.position || '',
-          { options: ['Кассир', 'Продавец', 'Администратор', 'Уборщица', 'Грузчик', 'Бухгалтер'] }) +
+          { options: positions(),
+            hint: 'совмещает несколько — перечислите через запятую: ' +
+              '«Продавец-кассир, Товаровед»' }) +
         u.fieldRow('Как считаем зарплату', 'scheme', 'select', v.scheme || 'Ставка за час',
           { options: ST.SCHEMES, hint: 'оклад и часы вместе не складываются' }) +
         u.fieldRow('Ставка за час, день', 'rate', 'number',
@@ -147,8 +155,12 @@
         percent: num(v.percent), normShifts: num(v.normShifts), phone: E.txt(v.phone),
         hired: E.txt(v.hired), fired: E.txt(v.fired), note: E.txt(v.note) };
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('staff', rec);
+      // Новые должности запоминаем: в следующий раз будут в подсказках
+      learn({ positions: positionsOf(rec) });
       S.save(); refresh();
-      return { ok: rec.name + ' — карточка сохранена.' };
+      var pos = positionsOf(rec);
+      return { ok: rec.name + ' — карточка сохранена' +
+        (pos.length > 1 ? '. Совмещает: ' + pos.join(', ') + '.' : '.') };
     }
   };
 
