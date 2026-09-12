@@ -1,0 +1,179 @@
+// Загрузка каталога
+
+import { CACHE_KEY, idbGet, idbSet, state } from './store.js';
+import { cmpRu, cmpStr } from './core.js';
+import { buildIndex } from './catalog.js';
+
+/* ── Данные ───────────────────────────────────── */
+
+export async function loadCache() {
+  try {
+    const c = await idbGet(CACHE_KEY);
+    if (c && Array.isArray(c.products)) {
+      state.groups = c.groups || [];
+      state.suppliers = c.suppliers || [];
+      state.products = c.products;
+      state.syncMax = c.syncMax || '';
+      state.showcaseAt = c.showcaseAt || '';
+      buildIndex();
+      state.lastFetch = c.ts || 0;
+      return true;
+    }
+  } catch (e) { /* нет кэша или IndexedDB недоступен — работаем от сети */ }
+  return false;
+}
+
+/* Запись каталога в память телефона — это копия 17 000 объектов и несколько
+ * мегабайт: на бюджетном Android почти секунда, в которую приложение не
+ * отвечает на нажатия. Кэш вспомогательный, спешить некуда — пишем в свободную
+ * минуту и один раз на серию вызовов (при загрузке фото их бывает много). */
+let savePlanned = false;
+export function saveCache() {
+  if (savePlanned) return;
+  savePlanned = true;
+  const run = () => { savePlanned = false; writeCache(); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
+  else setTimeout(run, 400);
+}
+
+function writeCache() {
+  // служебные поля индекса (начинаются с "_") в кэш не пишем — экономим место
+  const clean = state.products.map((p) => {
+    const o = {};
+    for (const k in p) if (k[0] !== '_') o[k] = p[k];
+    return o;
+  });
+  idbSet(CACHE_KEY, {
+    groups: state.groups, suppliers: state.suppliers,
+    products: clean, ts: Date.now(), syncMax: state.syncMax,
+    showcaseAt: state.showcaseAt || '',
+  }).catch(() => { /* не сохранилось — не страшно, кэш вспомогательный */ });
+}
+
+export const byName = (a, b) => cmpRu(a.name, b.name);
+
+/* Сортировка 17 000 названий по-русски — это сотни миллисекунд на телефоне.
+ * А файл витрины пишется уже по алфавиту, то есть почти всегда сортировать
+ * нечего. Проверка «уже по порядку?» стоит один проход и в этом случае
+ * избавляет от сортировки совсем. */
+export function sortByName(list) {
+  for (let i = 1; i < list.length; i++) {
+    if (byName(list[i - 1], list[i]) > 0) return list.sort(byName);
+  }
+  return list;
+}
+
+/* ── Уборка памяти ──────────────────────────────────────────────────────────
+ * Каждый импорт добавляет строки истории цен и новый отчёт продаж, и со
+ * временем в памяти телефона копится то, чем никто не пользуется: цены
+ * трёхлетней давности, полтора десятка старых отчётов. На 17 тысячах товаров
+ * это десятки мегабайт — телефон начинает думать и захлёбываться.
+ * Правила простые и понятные:
+ *   • история цены — последние 8 записей по каждому поставщику и не старше 2 лет
+ *     (в карточке всё равно видно последние);
+ *   • отчёты продаж — последние 12 периодов;
+ *   • счётчик просмотров — 300 самых открываемых товаров.
+ * Всё, что нужно для расчётов «сколько заказать» и сравнения цен, остаётся. */
+const KEEP_PRICE_ROWS = 8;
+/* История ценника («подорожало» у сотрудника и владельца) живёт месяц —
+ * решение владельца 08.09.2026: «данные, которым уже месяц, чтобы стёрлись».
+ * Больше и не нужно: новость про подорожание месячной давности — уже не
+ * новость, а память телефона не копит лишнего. */
+export const RETAIL_HIST_ROWS = 8;
+const KEEP_RETAIL_DAYS = 30;
+const KEEP_PRICE_DAYS = 730;
+const KEEP_SALES_PERIODS = 12;
+const KEEP_POPULAR = 300;
+
+/* ── Цены по товару: один указатель на всё приложение ───────────────────────
+ * Строка цены знает свой товар, но не наоборот. Каждый, кому нужны цены одного
+ * товара, писал `state.prices.filter(...)` — то есть проходил ВЕСЬ список.
+ * Пока список был коротким, это сходило с рук; на настоящем магазине (25 000
+ * строк цен, 12 000 товаров) один такой проход на каждый товар превращался в
+ * сотни миллионов сравнений: меню открывалось двадцать одну секунду, экран
+ * наценки — семнадцать.
+ * Теперь цены раскладываются по товарам один раз на поколение данных
+ * (`state.dataGen`, растёт в buildIndex — то есть после любой выгрузки, входа
+ * и загрузки каталога). */
+let priceIdx = { gen: -1, src: null, n: -1, map: new Map(), stamp: 0 };
+export function pricesByProduct() {
+  const list = state.prices || [];
+  /* Сверяем тремя способами сразу: поколение данных, тот же ли это список и не
+     изменилась ли его длина. Одного поколения мало — цены иногда меняют
+     напрямую (удалили поставщика, тест подложил свои), и указатель молча
+     остался бы вчерашним. */
+  if (priceIdx.gen === state.dataGen && priceIdx.src === list && priceIdx.n === list.length) return priceIdx.map;
+  const map = new Map();
+  for (const r of list) {
+    const cur = map.get(r.product_id);
+    if (cur) cur.push(r); else map.set(r.product_id, [r]);
+  }
+  priceIdx = { gen: state.dataGen, src: list, n: list.length, map, stamp: priceIdx.stamp + 1 };
+  return map;
+}
+/* Метка «цены с тех пор не менялись» — по ней себя сбрасывают расчёты,
+   которые из этих цен считаются (наценка, «подорожало»). */
+export const priceStamp = () => { pricesByProduct(); return priceIdx.stamp; };
+export const pricesOf = (id) => pricesByProduct().get(id) || [];
+
+export function tidyMemory() {
+  const before = { prices: (state.prices || []).length, sales: (state.sales || []).length };
+  const edge = new Date(Date.now() - KEEP_PRICE_DAYS * 86400000).toISOString().slice(0, 10);
+
+  // цены: свежие сверху, оставляем по 8 на пару «товар + поставщик»
+  if (state.prices && state.prices.length) {
+    const seen = new Map();
+    const kept = [];
+    const sorted = state.prices.slice().sort((a, b) => cmpStr(String(b.price_date || ''), String(a.price_date || '')));
+    for (const r of sorted) {
+      const key = r.product_id + '|' + r.supplier_id;
+      const n = (seen.get(key) || 0) + 1;
+      seen.set(key, n);
+      // самую свежую запись храним всегда, даже если она старая: иначе у товара
+      // вообще не останется цены и он «потеряет» поставщика
+      if (n > KEEP_PRICE_ROWS) continue;
+      if (n > 1 && r.price_date && r.price_date < edge) continue;
+      kept.push(r);
+    }
+    state.prices = kept;
+  }
+
+  // ценник: изменения за последний месяц, дальше — незачем
+  if (state.retailHist) {
+    const redge = new Date(Date.now() - KEEP_RETAIL_DAYS * 86400000).toISOString().slice(0, 10);
+    const next = {};
+    for (const [id, rows] of Object.entries(state.retailHist)) {
+      const keep = (rows || []).filter((r) => String(r.at || '') >= redge).slice(0, RETAIL_HIST_ROWS);
+      if (keep.length) next[id] = keep;
+    }
+    state.retailHist = next;
+  }
+
+  // продажи: последние периоды
+  if (state.sales && state.sales.length) {
+    const periods = [...new Set(state.sales.map((s) => (s.period_from || '') + '|' + (s.period_to || '')))]
+      .sort((a, b) => cmpStr(b, a)).slice(0, KEEP_SALES_PERIODS);
+    const keep = new Set(periods);
+    state.sales = state.sales.filter((s) => keep.has((s.period_from || '') + '|' + (s.period_to || '')));
+  }
+
+  // счётчик просмотров
+  const pop = state.popularity || {};
+  const ids = Object.keys(pop);
+  if (ids.length > KEEP_POPULAR) {
+    const top = ids.sort((a, b) => pop[b] - pop[a]).slice(0, KEEP_POPULAR);
+    const next = {};
+    for (const id of top) next[id] = pop[id];
+    state.popularity = next;
+  }
+  return { pricesRemoved: before.prices - (state.prices || []).length, salesRemoved: before.sales - (state.sales || []).length };
+}
+const trackMax = (rows) => { for (const r of rows) if (r.updated_at && r.updated_at > state.syncMax) state.syncMax = r.updated_at; };
+
+// маленькие таблицы (группы, поставщики) — всегда целиком, это быстро
+
+// Полная загрузка товаров страницами по id (быстро — id проиндексирован).
+// Первую страницу показываем сразу, остальное дозагружаем в фоне — экран не пустует.
+
+// Докачка: берём только товары, изменившиеся с прошлого раза, и вливаем в кэш.
+// Обычно это 0–несколько строк → мгновенно. Удаления ловим сверкой количества.
