@@ -6,6 +6,7 @@ __pycache__/
 .claude/*
 !.claude/settings.json
 !.claude/skills/
+!.claude/hooks/
 .claude/settings.local.json
 .claude/skills/gstack/
 
