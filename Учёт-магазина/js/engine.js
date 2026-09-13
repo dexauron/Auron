@@ -358,6 +358,16 @@
     var by = {};
     list.forEach(function (a) { by[txt(a.id)] = a; });
     function hit(acc, sum) { if (acc && by[txt(acc.id)]) by[txt(acc.id)].balance += safeRound(sum); }
+    /* ГЛАВНОЕ ПРАВИЛО ЯЩИКА, и оно работает в обе стороны.
+       Остаток денежного ящика задаёт ОДНА вещь — пересчёт при закрытии смены:
+       сколько кассир насчитал руками, столько в ящике и есть. Все остальные
+       записи лишь объясняют, куда деньги делись и откуда взялись.
+
+       Про расход это было понятно сразу. Про приход — ровно так же: принесли
+       размен из сейфа в кассу днём — кассир вечером пересчитал ящик вместе с
+       этим разменом, и он уже сидит в факте. Прибавить его ещё раз значит
+       насчитать деньги, которых в ящике нет. */
+    function hitUnlessTill(acc, sum) { if (!(acc && acc.kind === 'till')) hit(acc, sum); }
 
     (rows || []).forEach(function (r) {
       if (upto && txt(r.date) > upto) return;
@@ -372,22 +382,19 @@
             c.zCashless);
         }
       } else if (isMove(r)) {
-        /* Из денежного ящика деньги уходят только через «выплаты из ящика»
-           при сверке смены: кассир вынул их при себе и записал. Инкассация
-           лишь объясняет, куда они делись, — второй раз ящик не уменьшаем.
-           С сейфа и со счёта перевод списывается обычным порядком. */
-        var from = accountOf(r, accounts);
-        if (!(from && from.kind === 'till')) hit(from, -safeRound(r.amount));
-        hit(accountOf(r, accounts, 'to'), safeRound(r.amount));
+        /* Инкассация в сейф объясняет, куда делись деньги, вынутые из ящика
+           при кассире: он записал их в «выплаты», и факт смены это учёл.
+           Размен, привезённый обратно в кассу, кассир пересчитает вечером —
+           он тоже войдёт в факт. Поэтому ящик перевод не трогает ни с той
+           стороны, ни с другой. Сейф и счёт меняются обычным порядком. */
+        hitUnlessTill(accountOf(r, accounts), -safeRound(r.amount));
+        hitUnlessTill(accountOf(r, accounts, 'to'), safeRound(r.amount));
       } else if (isIncome(r)) {
-        hit(accountOf(r, accounts), safeRound(r.amount));
+        hitUnlessTill(accountOf(r, accounts), safeRound(r.amount));
       } else if (isExpense(r) || isDraw(r)) {
-        /* Из денежного ящика деньги уходят только одним путём — через
-           «выплаты из ящика» при сверке смены. Расход лишь объясняет, на что
-           они ушли, и остаток ящика второй раз не уменьшает. С сейфа и со
-           счёта списываем обычным порядком. */
-        var acc = accountOf(r, accounts);
-        if (!acc || acc.kind !== 'till') hit(acc, -safeRound(r.amount));
+        /* Расход и забор владельца лишь объясняют, на что ушли деньги.
+           Из ящика они уже ушли через «выплаты из ящика» той смены. */
+        hitUnlessTill(accountOf(r, accounts), -safeRound(r.amount));
       }
     });
 

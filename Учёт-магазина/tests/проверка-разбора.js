@@ -846,6 +846,45 @@ console.log('\n— Фильтры и меню строки');
   check('отменить нечего, когда журнал пуст', ENT.lastUndoable([]) === null, 'null', 'null');
 }
 
+console.log('\n— Ящик меняется только сверкой смены — в обе стороны');
+{
+  const accs = [
+    { id: 'till', name: 'Касса', kind: 'till', opening: 1000, defaultCash: true },
+    { id: 'safe', name: 'Сейф', kind: 'cash', opening: 50000 },
+    { id: 'bank', name: 'Счёт', kind: 'bank', opening: 0, defaultCashless: true }];
+  // Размен 1000, наличных 10 000, вынули 3000 → должно остаться 8000, столько и насчитали
+  const shift = { type: WM.T_SHIFT, date: '2026-09-01', account: 'till',
+    cashlessAccount: 'bank', openCash: 1000, zCash: 10000, zCashless: 0,
+    payouts: 3000, factCash: 8000 };
+  const till = rows => WM.accountBalances(rows, accs).rows.filter(a => a.id === 'till')[0].balance;
+  const safe = rows => WM.accountBalances(rows, accs).rows.filter(a => a.id === 'safe')[0].balance;
+
+  check('после смены в ящике столько, сколько насчитал кассир', till([shift]) === 8000,
+    till([shift]), 8000);
+
+  // Владелец привёз размен из сейфа в кассу — кассир его вечером уже пересчитал
+  const принёс = [{ type: WM.T_MOVE, date: '2026-09-01', amount: 5000,
+    account: 'safe', toAccount: 'till' }, shift];
+  check('ПРИВЕЗЁННЫЙ РАЗМЕН В ЯЩИКЕ НЕ ЗАДВАИВАЕТСЯ', till(принёс) === 8000, till(принёс), 8000);
+  check('но из сейфа он ушёл', safe(принёс) === 45000, safe(принёс), 45000);
+
+  // Инкассация из ящика в сейф — ящик тоже не трогает
+  const увёз = [shift, { type: WM.T_MOVE, date: '2026-09-01', amount: 5000,
+    account: 'till', toAccount: 'safe' }];
+  check('ИНКАССАЦИЯ ИЗ ЯЩИКА ЕГО НЕ УМЕНЬШАЕТ', till(увёз) === 8000, till(увёз), 8000);
+  check('и легла в сейф', safe(увёз) === 55000, safe(увёз), 55000);
+
+  // Приход наличными, записанный на кассу, — та же история
+  const приход = [shift, { type: WM.T_IN, date: '2026-09-01', category: 'Прочий приход',
+    method: 'Наличные', account: 'till', amount: 2000 }];
+  check('ПРИХОД НА КАССУ ЯЩИК НЕ РАЗДУВАЕТ', till(приход) === 8000, till(приход), 8000);
+
+  // Расход и забор из ящика — тоже только объяснение
+  const трата = [shift, { type: WM.T_OUT, date: '2026-09-01', category: 'Аренда',
+    method: 'Наличные', account: 'till', amount: 2000 }];
+  check('расход из ящика его не уменьшает', till(трата) === 8000, till(трата), 8000);
+}
+
 console.log('\n— Вставка справочника из таблицы');
 {
   const st = {}, se = { finPositions: 'Продавец, Уборщица' };

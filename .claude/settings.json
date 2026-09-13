@@ -33,5 +33,18 @@
         "repo": "obra/superpowers-marketplace"
       }
     }
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/проверить-перед-сдачей.sh\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
   }
 }
