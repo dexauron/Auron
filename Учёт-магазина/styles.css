@@ -837,3 +837,9 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .inline-label input[type="date"] { height: 34px; border-radius: var(--r-inner);
   border: 1px solid var(--separator); background: var(--bg-inset);
   color: var(--label); padding: 0 10px; font-size: 14px; }
+
+/* Кто попадёт в ведомость: отмеченные — залиты, остальные — обычные кнопки */
+.slip-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.btn-on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.btn-on .c-muted { color: rgba(255,255,255,.75); }
+@media print { .slip-pick, .quick, .banner { display: none !important; } }

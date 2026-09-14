@@ -1300,7 +1300,7 @@
   var MAIN_VIEWS = {
     pulse: 1, morning: 1, evening: 1, finpay: 1,            // каждый день
     ledger: 1, cashiers: 1, debtors: 1, suppliers: 1,       // деньги
-    timesheet: 1, payroll: 1,                               // люди
+    timesheet: 1, payroll: 1, payslip: 1,                   // люди
     pnl: 1, monthclose: 1, owner: 1,                        // отчёты
     data: 1, dicts: 1, settings: 1                          // служебное
   };

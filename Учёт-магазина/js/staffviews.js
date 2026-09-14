@@ -92,6 +92,89 @@
       { keepEmpty: true, dds: dds().filter(function (r) { return inYm(r, m); }) });
   }
 
+  /* --------------------------------------------------------------------------
+     СКОЛЬКО ЧЕЛОВЕКУ ДОЛЖНЫ — накопительным итогом, а не за месяц.
+
+     Зарплату в магазине выдают по-разному: кому каждый вечер после смены,
+     кому раз в месяц, кому через три дня — и у каждого свой порядок, который
+     ещё и меняется. Настройку «как платим» заводить бесполезно: она устареет
+     в первый же месяц и начнёт врать.
+
+     Поэтому считаем без всякого графика: всё, что человеку начислено за всё
+     время, минус всё, что ему за всё время выдано. Тогда смена 30 сентября и
+     деньги 1 октября сходятся сами собой. Раньше месяц запирал расчёт, и
+     получалось, что сентябрь навсегда должен, а октябрь ушёл в минус.
+
+     Начисление складываем ПО МЕСЯЦАМ, а не одной кучей: у кого оклад, тому
+     он положен за каждый месяц отдельно. Сложи всё разом — оклад начислился
+     бы один раз за год.
+     -------------------------------------------------------------------------- */
+  function debtBoard(upto) {
+    upto = upto || today();
+    var tsAll = timesheet().filter(function (r) { return E.txt(r.date) && E.txt(r.date) <= upto; });
+    var poAll = payouts().filter(function (r) { return E.txt(r.date) && E.txt(r.date) <= upto; });
+
+    var months = {};
+    tsAll.forEach(function (r) { months[E.txt(r.date).slice(0, 7)] = 1; });
+
+    var by = {}, order = [];
+    function row(src) {
+      var k = E.norm(src.employee) || '—';
+      if (!by[k]) {
+        by[k] = { employee: src.employee || '—', position: src.position || '',
+          scheme: src.scheme || '', salary: src.salary || 0,
+          shifts: 0, hours: 0, hoursNight: 0, bonus: 0, fine: 0,
+          accrued: 0, paid: 0, advance: 0, left: 0,
+          shortage: 0, withheld: 0, canWithhold: 0 };
+        order.push(k);
+      }
+      return by[k];
+    }
+
+    // Начислено — помесячно, чтобы оклад встал за каждый месяц
+    Object.keys(months).sort().forEach(function (m) {
+      E.payrollSummary(
+        tsAll.filter(function (r) { return E.txt(r.date).slice(0, 7) === m; }),
+        [], staff(), S.settings, {}
+      ).forEach(function (r) {
+        var x = row(r);
+        x.position = x.position || r.position; x.scheme = r.scheme;
+        x.shifts += r.shifts; x.hours += r.hours; x.hoursNight += r.hoursNight;
+        x.bonus += r.bonus; x.fine += r.fine; x.accrued += r.accrued;
+      });
+    });
+
+    // Выдано — за всё время, без разбивки: деньги есть деньги
+    poAll.forEach(function (r) {
+      var x = row({ employee: r.employee });
+      var sum = E.safeRound(num(r.amount));
+      x.paid += sum;
+      if (E.txt(r.kind).toLowerCase().indexOf('аванс') >= 0) x.advance += sum;
+    });
+
+    // Недостачи по кассе — справочно, за всё время
+    var shortByName = {};
+    E.cashierShortages(dds().filter(function (r) { return E.txt(r.date) <= upto; }))
+      .forEach(function (c) { shortByName[E.norm(c.cashier)] = c; });
+
+    var out = [];
+    order.forEach(function (k) {
+      var x = by[k];
+      ['shifts', 'hours', 'hoursNight', 'bonus', 'fine', 'accrued', 'paid', 'advance']
+        .forEach(function (f) { x[f] = E.safeRound(x[f]); });
+      x.left = E.safeRound(x.accrued - x.paid);
+      var sh = shortByName[k];
+      x.shortage = sh ? sh.net : 0;
+      x.withheld = x.fine;
+      x.canWithhold = E.safeRound(Math.max(0, x.shortage - x.fine));
+      // Карточка сотрудника могла появиться позже — подтянем должность
+      var p = staff().filter(function (q) { return E.norm(q.name) === k; })[0];
+      if (p) { x.position = x.position || E.txt(p.position); x.fired = E.txt(p.fired); }
+      out.push(x);
+    });
+    return out.sort(function (a, b) { return b.left - a.left || b.accrued - a.accrued; });
+  }
+
   /* Зарплата не должна попасть в затраты дважды: и табелем, и статьёй «ЗП» */
   function doubleWarn(m) {
     var byArticle = 0;
@@ -406,9 +489,9 @@
       u.stat('Начислено (ФОТ)', u.priv(tot.accrued), tot.people + ' чел., ' +
         u.nf(tot.shifts) + ' смен') +
       u.stat('Выдано', u.priv(tot.paid), 'из них авансом ' + money(tot.advance)) +
-      u.stat('Остаток к выдаче', u.priv(tot.left),
-        tot.left > 0 ? 'ещё должны людям' : 'все рассчитаны',
-        tot.left > 0 ? 'c-orange' : 'c-green') +
+      u.stat('Должны людям сейчас', u.priv(E.payrollTotals(debtBoard()).left),
+        'за всё время, не только за месяц',
+        E.payrollTotals(debtBoard()).left > 0 ? 'c-orange' : 'c-green') +
       u.stat('Премии / удержания', u.priv(tot.bonus) + ' / ' + u.priv(tot.fine), 'за месяц') +
       '</div>';
     h += doubleWarn(m);
@@ -489,39 +572,129 @@
      Пустые строки для подписи оставлены на всю высоту — иначе расписаться
      негде.
      ========================================================================== */
+  /* --------------------------------------------------------------------------
+     ВЕДОМОСТЬ НА ПОДПИСЬ — бумага, под которой сотрудник расписывается.
+
+     Открывается на том, что важно чаще всего: КОМУ СКОЛЬКО ДОЛЖНЫ ПРЯМО
+     СЕЙЧАС. Не за месяц — потому что платят по-разному и график меняется.
+     Кому платят каждый вечер, тот увидит свою смену; кому раз в месяц —
+     увидит месяц; и настраивать для этого ничего не надо.
+
+     Месяц и период остались для случая «посмотреть, что было».
+     -------------------------------------------------------------------------- */
+  var SLIP_PICK = {};          // кого отметили галочкой; пусто — берём всех
+
+  // В платёжном документе дату пишут полностью, а не «14 сен»
+  function fullDate(d) {
+    var МЕС = ['января','февраля','марта','апреля','мая','июня','июля','августа',
+      'сентября','октября','ноября','декабря'];
+    var p = E.txt(d).split('-');
+    if (p.length !== 3) return E.txt(d);
+    return Number(p[2]) + ' ' + МЕС[Number(p[1]) - 1] + ' ' + p[0] + ' г.';
+  }
+  function slipMode() {
+    var m = E.txt(S.settings.payslipMode);
+    return (m === 'месяц' || m === 'период') ? m : 'долг';
+  }
+  function slipFrom() { return E.txt(S.settings.payslipFrom) || today(); }
+  function slipTo() { return E.txt(S.settings.payslipTo) || today(); }
+
+  /* Что показываем и как это назвать на бумаге */
+  function slipRange() {
+    var mode = slipMode();
+    if (mode === 'месяц') {
+      var m = ym();
+      return { rows: board(m).filter(function (r) { return r.accrued || r.paid; }),
+        title: 'за ' + monthRu(m), empty: 'За ' + monthRu(m) + ' начислений нет.' };
+    }
+    if (mode === 'период') {
+      var a = slipFrom(), b = slipTo();
+      if (a > b) { var t = a; a = b; b = t; }
+      var ts = timesheet().filter(function (r) { var d = E.txt(r.date); return d >= a && d <= b; });
+      var po = payouts().filter(function (r) { var d = E.txt(r.date); return d >= a && d <= b; });
+      var rows = E.payrollSummary(ts, po, staff(), S.settings,
+        { dds: dds().filter(function (r) { var d = E.txt(r.date); return d >= a && d <= b; }) })
+        .filter(function (r) { return r.accrued || r.paid; });
+      return { rows: rows, title: 'с ' + dateRu(a) + ' по ' + dateRu(b),
+        empty: 'За эти дни начислений нет.' };
+    }
+    return { rows: debtBoard().filter(function (r) { return r.left > 0.005; }),
+      title: 'по состоянию на ' + fullDate(today()), debt: true,
+      empty: 'Никому ничего не должны — все рассчитаны.' };
+  }
+
   function viewPayslip() {
-    var u = U(), m = ym();
-    var rows = board(m).filter(function (r) { return r.accrued || r.paid; });
+    var u = U(), R = slipRange(), mode = slipMode(), st = S.settings;
+    var all = R.rows;
+    // Отметки: пока никого не трогали — печатаем всех, кто в списке
+    var any = all.some(function (r) { return SLIP_PICK[E.norm(r.employee)]; });
+    var rows = any ? all.filter(function (r) { return SLIP_PICK[E.norm(r.employee)]; }) : all;
     var tot = E.payrollTotals(rows);
-    var st = S.settings;
 
-    var h = u.pageHead('Ведомость на подпись', monthRu(m),
+    var h = u.pageHead('Ведомость на подпись', 'Кто сколько получил и расписался',
       '<button class="btn btn-primary" data-act="print">' + ic('print') +
-      ' Напечатать</button> <button class="btn" data-go="payroll">Назад к расчёту</button>');
-    h += monthPicker();
+      ' Напечатать</button> <button class="btn" data-go="payroll">' +
+      ic('banknote') + ' Расчёт зарплаты</button>');
 
-    if (!rows.length) {
-      return h + '<div class="card"><div class="empty">За ' + esc(monthRu(m)) +
-        ' начислений нет — печатать нечего.</div></div>';
+    /* Переключатель. «Кому должны» стоит первым: это то, ради чего экран
+       открывают в девяти случаях из десяти. */
+    h += '<div class="quick"><label class="inline-label">Показать:&nbsp;' +
+      '<select id="slipMode">' +
+      '<option value="долг"' + (mode === 'долг' ? ' selected' : '') + '>кому должны сейчас</option>' +
+      '<option value="месяц"' + (mode === 'месяц' ? ' selected' : '') + '>за месяц</option>' +
+      '<option value="период"' + (mode === 'период' ? ' selected' : '') + '>за период</option>' +
+      '</select></label>' +
+      (mode === 'месяц' ? monthPickerInlineSlip() : '') +
+      (mode === 'период'
+        ? '<label class="inline-label">С:&nbsp;<input type="date" id="slipFrom" value="' +
+          esc(slipFrom()) + '"></label>' +
+          '<label class="inline-label">по:&nbsp;<input type="date" id="slipTo" value="' +
+          esc(slipTo()) + '"></label>'
+        : '') +
+      '</div>';
+
+    if (!all.length) {
+      return h + '<div class="card"><div class="empty"><b>' + esc(R.empty) + '</b><br>' +
+        'Ведомость печатают, когда есть что выдавать: сначала отметьте смены в табеле, ' +
+        'а зарплата посчитается сама.</div>' +
+        '<div class="card-pad"><button class="btn btn-primary" data-go="timesheet">' +
+        ic('clipboard') + ' Открыть табель смен</button> ' +
+        '<button class="btn" data-go="payroll">' + ic('banknote') + ' Расчёт зарплаты</button></div></div>';
     }
 
-    /* Шапка документа: она печатается, на экране её видно тоже — так владелец
-       понимает, что именно уйдёт на бумагу. */
+    /* Выбор людей: Ане платят сегодня, Марату в конце месяца — в одной
+       бумаге им делать нечего. Никого не отметили — печатаем всех. */
+    if (all.length > 1) {
+      h += '<div class="card"><div class="card-pad"><div class="slip-pick">' +
+        all.map(function (r) {
+          var k = E.norm(r.employee);
+          return '<button class="btn btn-sm' + (!any || SLIP_PICK[k] ? ' btn-on' : '') +
+            '" data-act="slip-pick" data-employee="' + esc(r.employee) + '">' +
+            (!any || SLIP_PICK[k] ? ic('check', 16) : '') + ' ' + esc(r.employee) +
+            ' <span class="c-muted">' + esc(money(r.left)) + '</span></button>';
+        }).join(' ') +
+        (any ? ' <button class="btn btn-sm" data-act="slip-all">Отметить всех</button>' : '') +
+        '</div><div class="hint">Кому выдаёте сейчас — тот и попадёт на бумагу. ' +
+        'Никого не отметили — печатаются все.</div></div></div>';
+    }
+
     var head = '<div class="payslip-head">' +
       '<div class="payslip-org">' + esc(st.storeName || 'Магазин') +
       (st.legalName ? '<br><span>' + esc(st.legalName) +
         (st.inn ? ', ИНН ' + esc(st.inn) : '') + '</span>' : '') + '</div>' +
       '<div class="payslip-title">Платёжная ведомость</div>' +
-      '<div class="payslip-sub">на выдачу заработной платы за ' + esc(monthRu(m)) + '</div>' +
+      '<div class="payslip-sub">на выдачу заработной платы ' + esc(R.title) + '</div>' +
       '</div>';
 
     var body = u.table('payslipT', [
       { title: '№', cls: 'num', fn: function (r, i) { return String(i + 1); } },
       { title: 'Фамилия, имя', fn: function (r) { return esc(r.employee); } },
       { title: 'Должность', fn: function (r) { return esc(r.position || '—'); } },
-      { title: 'Начислено', cls: 'num', fn: function (r) { return u.nf(r.accrued); } },
+      { title: R.debt ? 'Начислено всего' : 'Начислено', cls: 'num',
+        fn: function (r) { return u.nf(r.accrued); } },
       { title: 'Удержано', cls: 'num', fn: function (r) { return r.fine ? u.nf(r.fine) : '—'; } },
-      { title: 'Выдано ранее', cls: 'num', fn: function (r) { return r.paid ? u.nf(r.paid) : '—'; } },
+      { title: R.debt ? 'Выдано всего' : 'Выдано ранее', cls: 'num',
+        fn: function (r) { return r.paid ? u.nf(r.paid) : '—'; } },
       { title: 'К выдаче', cls: 'num', fn: function (r) { return '<b>' + u.nf(r.left) + '</b>'; } },
       { title: 'Подпись', cls: 'sign', fn: function () { return '<span class="sign-line"></span>'; } },
       { title: 'Дата', cls: 'sign', fn: function () { return '<span class="sign-line"></span>'; } }
@@ -544,11 +717,24 @@
       '</div></div>';
 
     h += '<div class="card payslip">' + head + body + foot + '</div>';
-    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+
+    if (R.debt) {
+      h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+        'Здесь то, что человеку должны <b>на сегодня</b>, за всё время работы. ' +
+        'Поэтому не важно, платите вы каждый вечер, раз в неделю или раз в месяц: ' +
+        'выдали и записали — долг уменьшился сам.</span></div>';
+    }
+    h += '<div class="banner blue"><span>' + ic('print') + '</span><span>' +
       'Печатается только сама ведомость: меню, кнопки и подсказки на бумагу не идут. ' +
-      'Суммы в ведомости показаны цифрами без значка рубля — так принято в платёжных ' +
+      'Суммы показаны цифрами без значка рубля — так принято в платёжных ' +
       'документах.</span></div>';
     return h;
+  }
+
+  // Выбор месяца именно для ведомости — тот же, что на зарплатных экранах
+  function monthPickerInlineSlip() {
+    return '<label class="inline-label">Месяц:&nbsp;<input type="month" id="payMonth" value="' +
+      esc(ym()) + '"></label>';
   }
 
   /* --- Личные листы ------------------------------------------------------------ */
@@ -640,10 +826,23 @@
     return null;
   };
 
-  // Переключение месяца на зарплатных экранах
+  /* Отметить, кому выдаём прямо сейчас. Аня получает после смены, Марат —
+     в конце месяца: в одной бумаге им делать нечего. */
+  A['slip-pick'] = function (el) {
+    var k = E.norm(el.dataset.employee);
+    if (SLIP_PICK[k]) delete SLIP_PICK[k]; else SLIP_PICK[k] = 1;
+    refresh();
+    return null;
+  };
+  A['slip-all'] = function () { SLIP_PICK = {}; refresh(); return null; };
+
+  // Переключение месяца и периода на зарплатных экранах
   var prevChange = window.WM_EXTRA_CHANGE;
   window.WM_EXTRA_CHANGE = function (el) {
     if (el.id === 'payMonth') { S.setSetting('payrollMonth', el.value); return true; }
+    if (el.id === 'slipMode') { S.setSetting('payslipMode', el.value); SLIP_PICK = {}; return true; }
+    if (el.id === 'slipFrom') { S.setSetting('payslipFrom', el.value); return true; }
+    if (el.id === 'slipTo') { S.setSetting('payslipTo', el.value); return true; }
     return prevChange ? prevChange(el) : false;
   };
 
