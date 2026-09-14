@@ -894,3 +894,11 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 /* Значок слева от названия карточки — в настройках и им подобных */
 .card-title .card-ic { display: inline-flex; vertical-align: -3px; margin-right: 8px;
   color: var(--label-2); }
+
+/* Уведомление с кнопкой «Отменить»: текст слева, действие справа */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-text { flex: 1 1 auto; }
+.toast-act { flex: 0 0 auto; background: none; border: 0; padding: 4px 2px; font: inherit;
+  font-weight: 650; color: #6cb8ff; cursor: pointer; border-radius: 8px; }
+.toast-act:hover { text-decoration: underline; }
+@media (max-width: 560px) { .toast { max-width: calc(100vw - 32px); } }

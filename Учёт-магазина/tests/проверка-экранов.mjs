@@ -1315,6 +1315,91 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 9. Мелочи, из которых складывается удобство: отмена под рукой и
+      повторяющиеся выплаты. */
+{
+  console.log('— Отмена под рукой и повторяющиеся выплаты');
+  const { page, ctx, errs } = await open();
+  let dialogs = 0;
+  page.on('dialog', d => { dialogs++; d.dismiss(); });
+
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-01', category: 'Аренда',
+      method: 'Наличные', amount: 110000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-02', category: 'ГСМ',
+      method: 'Наличные', amount: 3500 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('ledger');
+  });
+  await page.waitForTimeout(400);
+
+  const before = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  await page.evaluate(() => { const b = document.querySelector('#page [data-menu]'); if (b) b.click(); });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { const b = document.querySelector('[data-del]'); if (b) b.click(); });
+  await page.waitForTimeout(400);
+
+  const after = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  check('УДАЛЕНИЕ НЕ СПРАШИВАЕТ «ВЫ УВЕРЕНЫ?» — делает сразу',
+    after === before - 1 && dialogs === 0,
+    after === before - 1 ? (dialogs ? 'всплыло окно' : 'сразу') : 'не удалилось', 'сразу');
+
+  const toast = await page.evaluate(() => {
+    const t = document.querySelector('.toast'); return t ? t.innerText : '';
+  });
+  check('и говорит, ЧТО именно удалено',
+    /ГСМ|Аренда/.test(toast) && /3\s*500|110\s*000/.test(toast.replace(/[\u00a0\u202f]/g, ' ')),
+    toast.split('\n')[0] || 'уведомления нет', 'видно запись');
+  check('А РЯДОМ — КНОПКА «ВЕРНУТЬ»',
+    await page.evaluate(() => !!document.querySelector('.toast-act')), 'есть', 'есть');
+
+  await page.evaluate(() => document.querySelector('.toast-act').click());
+  await page.waitForTimeout(400);
+  check('НАЖАЛ — ЗАПИСЬ ВЕРНУЛАСЬ',
+    (await page.evaluate(() => (window.WMStore.state.dds || []).length)) === before,
+    'вернулась', 'вернулась');
+
+  /* Повторяющиеся выплаты: аренду вбивают раз, дальше она встаёт сама */
+  await page.evaluate(() => window.WMUI.openForm('payPlan'));
+  await page.waitForTimeout(350);
+  check('в выплате можно поставить «повторять»',
+    await page.evaluate(() => !!document.querySelector('.sheet [name="repeat"]')), 'можно', 'можно');
+  await page.fill('.sheet [name="due"]', '2026-01-31');
+  await page.fill('.sheet [name="supplier"]', 'Аренда помещения');
+  await page.fill('.sheet [name="amount"]', '110000');
+  await page.selectOption('.sheet [name="repeat"]', { label: 'каждый месяц' });
+  await page.click('.sheet .btn-primary');
+  await page.waitForTimeout(450);
+
+  await page.evaluate(() => {
+    const pl = window.WMStore.state.plans[0];
+    window.WM_EXTRA_ACTIONS['plan-paid']({ dataset: { id: pl.id } });
+  });
+  await page.waitForTimeout(450);
+  const plans = await page.evaluate(() => (window.WMStore.state.plans || [])
+    .map(x => x.due + '|' + x.supplier + '|' + x.amount + '|' + x.status));
+  check('ОТМЕТИЛ ОПЛАЧЕННОЙ — СЛЕДУЮЩАЯ ВСТАЛА В ПЛАН САМА',
+    plans.some(x => x.indexOf('Запланирована') >= 0 && x.indexOf('110000') >= 0),
+    plans.join(' / ') || 'ничего', 'следующая есть');
+  check('КОНЕЦ МЕСЯЦА НЕ УЕХАЛ: 31 января + месяц = 28 февраля',
+    plans.some(x => x.indexOf('2026-02-28') === 0),
+    plans.filter(x => x.indexOf('2026-02') === 0).join(' ') || 'нет', '2026-02-28');
+
+  // Дважды одну и ту же следующую не заводим
+  await page.evaluate(() => {
+    const pl = window.WMStore.state.plans.filter(x => x.status === 'Оплачена')[0];
+    window.WM_EXTRA_ACTIONS['plan-paid']({ dataset: { id: pl.id } });
+  });
+  await page.waitForTimeout(400);
+  check('и дважды одна и та же не заводится',
+    (await page.evaluate(() => (window.WMStore.state.plans || []).length)) === 2,
+    await page.evaluate(() => (window.WMStore.state.plans || []).length), 2);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

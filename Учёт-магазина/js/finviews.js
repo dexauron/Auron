@@ -406,6 +406,54 @@
   };
 
   /* --- План выплат ------------------------------------------------------------ */
+  /* --------------------------------------------------------------------------
+     ПОВТОРЯЮЩИЕСЯ ВЫПЛАТЫ
+
+     Аренда, интернет, вывоз мусора, охрана — суммы одни и те же из месяца
+     в месяц, и каждый месяц их вбивали руками. Теперь достаточно поставить
+     «повторять»: как только выплату отметили оплаченной, следующая встаёт
+     в план сама, той же суммой и на то же число.
+
+     Важно: следующая создаётся ТОЛЬКО в момент оплаты, а не заранее пачкой
+     на год вперёд. Иначе план выплат превратился бы в свалку из ста будущих
+     строк, а просрочка — во враньё.
+     -------------------------------------------------------------------------- */
+  var REPEATS = ['не повторять', 'каждый месяц', 'раз в квартал', 'раз в год'];
+
+  // Следующая дата с тем же числом месяца. 31 января + месяц = 28 февраля:
+  // прыгать на 3 марта нельзя, платёж привязан к концу месяца.
+  function nextDue(date, repeat) {
+    var p = E.txt(date).split('-');
+    if (p.length !== 3) return '';
+    var y = +p[0], m = +p[1] - 1, d = +p[2];
+    if (repeat === 'каждый месяц') m += 1;
+    else if (repeat === 'раз в квартал') m += 3;
+    else if (repeat === 'раз в год') y += 1;
+    else return '';
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    var last = new Date(y, m + 1, 0).getDate();
+    var dd = Math.min(d, last);
+    return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+  }
+
+  /* Завести следующую выплату по повторяющейся. Возвращает строку для
+     владельца или пустоту, если повторять не просили. */
+  function makeNext(plan) {
+    if (!plan || !E.txt(plan.repeat)) return '';
+    var due = nextDue(plan.due, E.txt(plan.repeat));
+    if (!due) return '';
+    // Не заводим дважды: вдруг отметили оплаченной, передумали и отметили снова
+    var same = (S.state.plans || []).filter(function (x) {
+      return x.due === due && E.norm(x.supplier) === E.norm(plan.supplier) &&
+        E.txt(x.status) !== 'Отменена';
+    })[0];
+    if (same) return '';
+    S.add('plans', { due: due, supplier: plan.supplier, amount: num(plan.amount),
+      method: plan.method, status: E.PLAN_STATUS[0], note: plan.note,
+      repeat: E.txt(plan.repeat) });
+    return ' Следующая — ' + dateRu(due) + ', уже в плане.';
+  }
+
   FORMS.payPlan = {
     title: 'Выплата поставщику', icon: 'calendar',
     editsInPlace: true,
@@ -418,16 +466,21 @@
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
         u.fieldRow('Статус', 'status', 'select', v.status || E.PLAN_STATUS[0],
           { options: E.PLAN_STATUS }) +
+        u.fieldRow('Повторять', 'repeat', 'select', v.repeat || 'не повторять',
+          { options: REPEATS,
+            hint: 'аренда, интернет, охрана — суммы одни и те же каждый месяц' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Это календарь: кому и когда платить. Долг поставщикам отметка «Оплачена» ' +
-      'сама не уменьшает — сумму погашения впишите в «Итоги дня», иначе она посчитается дважды.',
+      'сама не уменьшает — сумму погашения впишите в «Итоги дня», иначе она посчитается дважды. ' +
+      'Поставили «повторять» — следующая выплата встанет в план сама, как только отметите эту оплаченной.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       if (!E.txt(v.supplier)) return 'Укажите, кому платим.';
       learn({ suppliers: v.supplier, methods: v.method });
       var rec = { due: v.due, supplier: v.supplier, amount: num(v.amount),
         method: v.method, status: v.status, note: v.note,
+        repeat: E.txt(v.repeat) === REPEATS[0] ? '' : E.txt(v.repeat),
         paidAt: v.status === 'Оплачена' ? (v.paidAt || today()) : '' };
       var edit = U().editing && U().editing();
       if (edit && edit.coll === 'plans') {
@@ -1186,15 +1239,16 @@
     if (!p) return 'Выплата не найдена.';
     p.status = 'Оплачена';
     p.paidAt = today();
+    var next = makeNext(p);
     S.save(); refresh(); U().render();
     var day = dds().filter(function (r) { return E.isDay(r) && r.date === today(); })[0];
     if (day) {
-      return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '. ' +
+      return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '.' + next + ' ' +
         'Не забудьте добавить эту сумму в «Погашение долгов ТП» за сегодня: ' +
         'сейчас там ' + money(day.debtPaid) + '.';
     }
     U().openForm('dayTotals', { date: today(), debtPaid: num(p.amount) });
-    return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '. ' +
+    return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '.' + next + ' ' +
       'Вписал сумму в итоги дня — проверьте и сохраните.';
   };
 

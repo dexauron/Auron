@@ -138,11 +138,64 @@
     return +m[3] + ' ' + mon[+m[2] - 1];
   }
 
-  function toast(text, ms) {
+  /* Уведомление внизу экрана. Может нести кнопку — обычно «Отменить».
+
+     Почему так, а не «вы уверены?»: спрашивать перед каждым удалением значит
+     облагать налогом сто правильных нажатий ради одного ошибочного. Человек
+     привыкает жать «да» не читая, и окно перестаёт защищать. Правильнее
+     сделать сразу, а рядом положить кнопку вернуть — тогда и быстро, и
+     ошибка не стоит ничего.
+
+     Окно-вопрос остаётся для того, что вернуть НЕЛЬЗЯ: сброс базы, отключение
+     папки, удаление смены целиком. */
+  /* Как назвать запись в уведомлении. «Удалено» без имени не помогает:
+     через секунду уже не помнишь, ту ли строку задел. */
+  function recTitle(coll, r) {
+    if (!r) return 'запись';
+    var d = r.date ? dateRu(r.date) + ' · ' : '';
+    if (coll === 'dds') {
+      if (E.isShift(r)) return d + 'смена ' + (r.till || '') + ' ' + (r.shift || '');
+      if (E.isDay(r)) return d + 'итоги дня';
+      return d + (r.category || r.type || 'операция') +
+        (num(r.amount) ? ' · ' + money(r.amount) : '');
+    }
+    if (coll === 'plans') return d + (r.supplier || 'выплата') +
+      (num(r.amount) ? ' · ' + money(r.amount) : '');
+    if (coll === 'staff') return r.name || 'сотрудник';
+    if (coll === 'timesheet') return d + (r.employee || 'смена в табеле');
+    if (coll === 'payouts') return d + (r.employee || 'выплата') +
+      (num(r.amount) ? ' · ' + money(r.amount) : '');
+    if (coll === 'debtors') return d + (r.name || 'долг покупателя');
+    if (coll === 'accounts') return 'счёт «' + (r.name || '') + '»';
+    if (coll === 'templates') return 'шаблон «' + (r.name || '') + '»';
+    return r.name || r.category || 'запись';
+  }
+
+  var toastTimer = null;
+  function toast(text, ms, action) {
     var old = document.querySelector('.toast'); if (old) old.remove();
-    var d = document.createElement('div'); d.className = 'toast'; d.textContent = text;
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+
+    var d = document.createElement('div'); d.className = 'toast';
+    var span = document.createElement('span');
+    span.className = 'toast-text'; span.textContent = text;
+    d.appendChild(span);
+
+    if (action && action.label && typeof action.run === 'function') {
+      var b = document.createElement('button');
+      b.className = 'toast-act'; b.type = 'button'; b.textContent = action.label;
+      b.addEventListener('click', function () {
+        if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+        d.remove();
+        action.run();
+      });
+      d.appendChild(b);
+    }
     document.body.appendChild(d);
-    setTimeout(function () { if (d.parentNode) d.remove(); }, ms || 4600);
+    // С кнопкой висит дольше: на неё надо успеть посмотреть и дотянуться
+    toastTimer = setTimeout(function () {
+      if (d.parentNode) d.remove(); toastTimer = null;
+    }, ms || (action ? 9000 : 4600));
   }
   function sheet(title, bodyHtml) {
     closeSheet();
@@ -2116,11 +2169,23 @@
       }
       if (el.dataset.del) {
         var d = el.dataset.del.split(':');
-        if (confirm('Удалить запись? Её можно будет вернуть из корзины на экране «Все записи».')) {
-          S.remove(d[0], d[1]);
-          recompute(); render();
-          toast('Удалено. Вернуть можно на экране «Все записи» → Корзина.');
-        }
+        var gone = (S.state[d[0]] || []).filter(function (x) { return x.id === d[1]; })[0];
+        var what = gone ? recTitle(d[0], gone) : 'запись';
+        S.remove(d[0], d[1]);
+        /* Запоминаем именно ЭТУ строку корзины, а не «последнюю удалённую»:
+           между удалением и нажатием «Вернуть» можно успеть удалить ещё
+           что-нибудь, и тогда вернулось бы не то. */
+        var tr = S.state.trash || [];
+        var trashId = tr.length ? tr[tr.length - 1].id : null;
+        recompute(); render();
+        toast('Удалено: ' + what, 9000, { label: 'Вернуть', run: function () {
+          if (trashId && S.restore(trashId)) {
+            recompute(); render();
+            toast('Вернулось на место: ' + what);
+          } else {
+            toast('Не получилось вернуть. Запись лежит в корзине на экране «Все записи».');
+          }
+        } });
         return;
       }
       var a = el.dataset.act;
