@@ -1727,11 +1727,38 @@
     try { html = v.render(); }
     catch (e) { html = pageHead('Ошибка', e.message) + '<div class="card"><div class="empty">Что-то пошло не так на этом экране.<br>' + esc(e.message) + '</div></div>'; }
     $('page').innerHTML = readOnlyBar() + html;
+    markScrollables();
     document.body.classList.toggle('readonly', readOnly());
     renderNav(); renderPeriods(); renderTabbar();
     var cur = VIEWS.filter(function (x) { return x.id === VIEW; })[0];
     if (cur && cur.onDraw) { try { cur.onDraw(); } catch (e) { /* график не критичен */ } }
   }
+  /* Таблица шире карточки — край просто обрезан, и человек не догадывается,
+     что справа есть продолжение. Помечаем такие таблицы: у них появляется
+     мягкая тень справа, видимая полоса прокрутки и подпись под таблицей.
+     Тень гаснет, когда долистали до конца. */
+  function markScrollables() {
+    var list = document.querySelectorAll('#page .table-wrap');
+    Array.prototype.forEach.call(list, function (w) {
+      var over = w.scrollWidth - w.clientWidth > 4;
+      w.classList.toggle('scrollable', over);
+      if (!over) { w.classList.remove('scrolled-end'); return; }
+      if (!w.dataset.hinted) {
+        w.dataset.hinted = '1';
+        var hint = document.createElement('div');
+        hint.className = 'scroll-hint';
+        hint.textContent = 'Таблица шире экрана — потяните её вбок, чтобы увидеть остальные столбцы.';
+        if (w.parentNode) w.parentNode.insertBefore(hint, w.nextSibling);
+        w.addEventListener('scroll', function () {
+          w.classList.toggle('scrolled-end',
+            w.scrollLeft + w.clientWidth >= w.scrollWidth - 4);
+        }, { passive: true });
+      }
+    });
+  }
+  // Окно изменили — ширины поменялись, метки пересчитываем
+  window.addEventListener('resize', function () { markScrollables(); });
+
   function go(id) { VIEW = id; PAGE = {}; render(); $('scroll').scrollTop = 0; }
 
   /* --- Экспорт и копии ------------------------------------------------------------- */

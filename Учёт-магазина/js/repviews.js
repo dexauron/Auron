@@ -1101,7 +1101,9 @@
       { title: 'Где', fn: function (r) { return esc(r.collName || r.coll || '—'); } },
       { title: 'Запись', fn: function (r) { return esc(r.title || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (r) {
-        return r.sum ? u.priv(r.sum) : '—'; } },
+        if (!r.sum) return '—';
+        var what = r.coll === 'dds' && /смена|Касса 1|Касса 2/.test(r.title || '') ? 'выручка' : '';
+        return u.priv(r.sum) + (what ? '<br><small class="c-muted">' + what + '</small>' : ''); } },
       { title: 'Было раньше', fn: function (r) {
         if (!r.before) return '—';
         var d = diffWords(r.before, r);

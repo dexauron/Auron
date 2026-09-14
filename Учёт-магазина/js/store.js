@@ -372,16 +372,36 @@
     filtersets: 'Наборы фильтров'
   };
   // Как записать строку в журнал, чтобы через месяц было понятно
+  /* Как назвать запись в истории. Смена и итоги дня не имеют ни названия,
+     ни суммы в обычных полях — раньше они попадали в историю строкой
+     «Касса и деньги — —», по которой невозможно понять, о чём речь.
+     Теперь у каждой записи есть человеческое имя. */
   function logTitle(rec) {
     if (!rec) return '';
+    var t = str(rec.type);
+    if (t === 'Смена') {
+      return [str(rec.till), str(rec.shift), str(rec.cashier)]
+        .filter(Boolean).join(' · ').slice(0, 60) || 'смена';
+    }
+    if (t === 'День') return 'итоги дня';
+    if (t === 'Перемещение') return 'перевод между счетами';
     return String(rec.name || rec.firm || rec.supplier || rec.employee ||
       rec.category || rec.doc || rec.title || '').slice(0, 60);
   }
+
+  /* Сумма записи для истории. У смены «сумма» — это выручка, у итогов дня —
+     закуп и долги, у пересчёта кассы — насчитанное. Ноль вместо них означал
+     бы, что запись пустая, а это неправда. */
   function logSum(rec) {
     if (!rec) return 0;
+    var t = str(rec.type);
+    function n(v) { var x = parseFloat(v); return isFinite(x) ? x : 0; }
+    if (t === 'Смена') return Math.round((n(rec.zCash) + n(rec.zCashless)) * 100) / 100;
+    if (t === 'День') {
+      return Math.round((n(rec.goodsCash) + n(rec.debtTaken) + n(rec.debtPaid)) * 100) / 100;
+    }
     var v = rec.amount != null ? rec.amount : (rec.sum != null ? rec.sum : rec.counted);
-    var n = parseFloat(v);
-    return isFinite(n) ? n : 0;
+    return n(v);
   }
   function writeLog(what, coll, rec, before) {
     if (coll === 'log' || coll === 'trash') return;

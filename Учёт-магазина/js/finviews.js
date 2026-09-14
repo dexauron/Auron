@@ -70,6 +70,17 @@
       return { value: f.id, text: f.name };
     }));
   }
+  /* Конверт по названию статьи. Заплатили «Аренду» — программа сама
+     подставит конверт «Аренда», если он есть. Без этого владелец платил бы
+     аренду обычным расходом, забывал отметить конверт, и тот рос бы вечно,
+     показывая деньги, которых давно нет. */
+  function fundForCategory(category) {
+    var c = E.norm(category);
+    if (!c) return '';
+    var hit = funds().filter(function (f) { return E.norm(f.name) === c; })[0];
+    return hit ? hit.id : '';
+  }
+
   function fundName(id) {
     var f = funds().filter(function (x) { return x.id === id; })[0];
     return f ? f.name : '';
@@ -299,9 +310,9 @@
               'из денежного ящика деньги уже посчитаны в «выплатах» смены — ' +
               'второй раз их не вычтут' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
-        (funds().length ? u.fieldRow('Из какого конверта', 'fund', 'select', v.fund || '',
-          { options: fundOptions(true),
-            hint: 'если на это откладывали — отметьте, конверт уменьшится' }) : '') +
+        (funds().length ? u.fieldRow('Из какого конверта', 'fund', 'select',
+          v.fund || fundForCategory(v.category), { options: fundOptions(true),
+            hint: 'если на это откладывали — отметьте, иначе конверт так и будет расти' }) : '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Расход уменьшает прибыль. Остаток наличных он уменьшает, только если ' +
@@ -728,6 +739,35 @@
       '<button class="btn" data-form="payPlan">' + ic('calendar') + ' Выплата</button></div>';
   }
 
+  /* СЧЁТ В МИНУСЕ — ЭТО НЕ БЫВАЕТ.
+
+     Из сейфа нельзя заплатить больше, чем в нём лежит. Если счёт ушёл в
+     минус, значит расход записали не с того счёта — обычно заплатили из
+     кассы, а отметили сейф. Программа не запрещает такую запись (владелец
+     может вносить историю не по порядку), но молчать о ней нельзя: минус
+     в сейфе тихо ломает и «сколько у нас денег», и закрытие месяца.
+
+     Денежный ящик не проверяем: пока смена не закрыта, его остаток временный. */
+  function negativeAccounts() {
+    return E.accountBalances(dds(), accounts()).live.filter(function (a) {
+      return a.kind !== 'till' && a.balance < -0.5;
+    });
+  }
+
+  function negativeBanner() {
+    var bad = negativeAccounts();
+    if (!bad.length) return '';
+    return '<div class="banner orange"><span>' + ic('warning') + '</span><span>' +
+      (bad.length === 1
+        ? 'Счёт «' + esc(bad[0].name) + '» ушёл в минус на <b>' +
+          esc(money(-bad[0].balance)) + '</b>.'
+        : 'В минусе ' + bad.length + ' счёта: ' +
+          esc(bad.map(function (a) { return a.name + ' (' + money(a.balance) + ')'; }).join(', ')) + '.') +
+      ' Так не бывает: заплатить больше, чем лежит, нельзя. Скорее всего расход ' +
+      'записан не с того счёта — проверьте последние записи в «Базе операций».' +
+      '</span> <button class="btn btn-sm" data-go="ledger">Проверить</button></div>';
+  }
+
   /* --- Пульт ------------------------------------------------------------------ */
   /* ==========================================================================
      ПУЛЬТ
@@ -773,6 +813,7 @@
         go: 'ledger', act: 'Проверить' });
     }
 
+
     var cash = E.cashOnHand(all, S.settings, null, accounts());
     if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
       out.push({ icon: 'truck', text: 'В ящике ' + money(cash) + ' — пора увезти',
@@ -799,6 +840,9 @@
     var u = U();
     var all = dds();
     var h = u.pageHead('Пульт', 'Деньги и дела на сегодня');
+
+    // Счёт в минусе — так не бывает; сказать об этом надо первым делом
+    h += negativeBanner();
 
     /* Программа ещё не настроена под свой магазин. Форму поверх экрана не
        открываем — она перекрыла бы работу; достаточно спокойной строки,
@@ -1444,6 +1488,7 @@
       var acc = box.querySelector('select[name="account"]');
       if (!acc) return;
       if (el.name === 'account') { acc.dataset.touched = '1'; return; }
+      if (el.name === 'fund') { el.dataset.touched = '1'; return; }
       if (el.name !== 'category' && el.name !== 'method') return;
       if (acc.dataset.touched === '1') return;
       var cat = box.querySelector('[name="category"]');
@@ -1451,6 +1496,12 @@
       var cashless = met ? E.norm(met.value) !== 'наличные' : false;
       var want = accForCategory(cat ? cat.value : '', cashless);
       if (want && acc.value !== want) acc.value = want;
+      // и конверт: «Аренда» → конверт «Аренда»
+      var fnd = box.querySelector('select[name="fund"]');
+      if (fnd && fnd.dataset.touched !== '1' && cat) {
+        var wf = fundForCategory(cat.value);
+        if (wf && fnd.value !== wf) fnd.value = wf;
+      }
     }
     document.addEventListener('change', function (e) { refit(e.target); });
     document.addEventListener('input', function (e) { refit(e.target); });
