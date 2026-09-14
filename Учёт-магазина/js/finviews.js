@@ -586,35 +586,134 @@
   };
 
   /* --- Пересчёт кассы по купюрам ----------------------------------------------- */
+  /* --------------------------------------------------------------------------
+     ПЕРЕСЧИТАТЬ КАССУ
+
+     Владелец (или старший смены) открывает ящик и считает купюры: сколько
+     пятитысячных, сколько тысячных и так далее. Программа складывает их сама
+     и сравнивает с тем, сколько в этой кассе должно быть по последней смене.
+
+     Зачем это нужно, если есть сверка смены: сверка говорит, сколько ДОЛЖНО
+     быть, а пересчёт — сколько есть НА САМОМ ДЕЛЕ, по купюрам. Совпало —
+     касса в порядке. Не совпало — видно сразу, а не через неделю в отчёте.
+
+     Пересчёт ничего не меняет в деньгах: он только фиксирует, что насчитали.
+     Остаток ящика по-прежнему правит сверка смены и только она.
+     -------------------------------------------------------------------------- */
+
+  // Сколько должно быть в этой кассе по последней закрытой смене
+  function tillExpected(till) {
+    var st = E.tillState(dds(), S.settings).filter(function (t) {
+      return E.norm(t.till) === E.norm(till);
+    })[0];
+    return st ? st.fact : 0;
+  }
+
+  /* Живой итог под купюрами. Считается на каждое нажатие: владелец видит сумму
+     СРАЗУ, а не после сохранения — иначе непонятно, зачем вообще всё это
+     вводить и когда остановиться. */
+  function cashCountSum(box) {
+    var total = 0, pieces = 0;
+    E.NOMINALS.forEach(function (n) {
+      var el = box.querySelector('[name="n' + n + '"]');
+      if (!el) return;
+      var k = Math.max(0, Math.round(num(window.WMNum.calc(el.value))));
+      var sum = k * n;
+      total += sum; pieces += k;
+      var hint = box.querySelector('[data-hint-for="n' + n + '"]');
+      if (hint) {
+        hint.innerHTML = k
+          ? E.fmtNum(k) + ' шт × ' + esc(money(n)) + ' = <b>' + esc(money(sum)) + '</b>'
+          : '';
+      }
+    });
+    return { total: E.safeRound(total), pieces: pieces };
+  }
+
+  function cashCountBox(total, pieces, till) {
+    var exp = tillExpected(till);
+    var diff = E.safeRound(total - exp);
+    var ok = Math.abs(diff) < 1;
+    return '<div class="cc-total">' +
+      '<div class="cc-line"><span>Насчитано в ящике</span>' +
+      '<b class="cc-big">' + esc(money(total)) + '</b></div>' +
+      '<div class="cc-sub">' + E.fmtNum(pieces) + ' ' +
+        esc(E.plural(pieces, 'купюра', 'купюры', 'купюр')) + '</div>' +
+      (exp
+        ? '<div class="cc-line"><span>Должно быть по последней смене</span>' +
+          '<b>' + esc(money(exp)) + '</b></div>' +
+          '<div class="cc-line cc-diff ' + (ok ? 'ok' : (diff < 0 ? 'bad' : 'warn')) + '">' +
+          '<span>' + (ok ? 'Сходится' : (diff < 0 ? 'Не хватает' : 'Больше, чем должно')) +
+          '</span><b>' + (ok ? '—' : esc(money(Math.abs(diff)))) + '</b></div>'
+        : '<div class="cc-sub">Смен по этой кассе ещё нет — сравнивать не с чем. ' +
+          'Пересчёт всё равно запишется.</div>') +
+      '</div>';
+  }
+
   FORMS.cashCount = {
     title: 'Пересчитать кассу', icon: 'receipt',
     body: function (v) {
       var u = U(); v = v || {};
-      var h = u.fieldRow('Дата', 'date', 'date', v.date || today()) +
-        u.fieldRow('Касса', 'till', 'select', v.till || tills()[0], { options: tills() }) +
+      var till = v.till || tills()[0];
+      var h = '<div class="form-hint">Откройте ящик и впишите, сколько каких купюр. ' +
+        'Складывать в уме не надо — программа посчитает сама и скажет, сходится ли ' +
+        'с тем, сколько должно быть по последней смене.</div>';
+      h += u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Касса', 'till', 'select', till, { options: tills() }) +
         u.fieldRow('Кассир', 'cashier', 'list', v.cashier || '', { options: cashiers() });
+      var total = 0, pieces = 0;
       E.NOMINALS.forEach(function (n) {
-        h += u.fieldRow(E.fmtNum(n) + ' ₽ — сколько штук', 'n' + n, 'number', v['n' + n] || 0);
+        var k = Math.max(0, Math.round(num(v['n' + n])));
+        total += k * n; pieces += k;
+        h += u.fieldRow(E.fmtNum(n) + ' ₽ — сколько штук', 'n' + n, 'number',
+          v['n' + n] || '', { unit: 'plain', placeholder: '0' });
       });
+      h += '<div id="ccTotal">' + cashCountBox(E.safeRound(total), pieces, till) + '</div>';
       return h;
     },
-    hint: 'Не надо складывать в уме: впишите количество купюр, программа посчитает сама ' +
-      'и сравнит с тем, сколько должно быть в этой кассе.',
+    hint: 'Пересчёт ничего не меняет в деньгах — он только записывает, что насчитали ' +
+      'по факту. Остаток ящика по-прежнему правит сверка смены и только она.',
     save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
       var c = E.countCash(v);
-      if (!c.sum) return 'Ни одной купюры не вписано.';
-      var st = E.tillState(dds(), S.settings).filter(function (t) { return t.till === v.till; })[0];
-      var expected = st ? st.fact : 0;
+      if (!c.sum) return 'Ни одной купюры не вписано — считать нечего.';
+      var expected = tillExpected(v.till);
       var diff = E.safeRound(c.sum - expected);
       S.add('cashcount', { date: v.date, till: v.till, cashier: v.cashier,
         sum: c.sum, expected: expected, diff: diff,
-        note: c.pieces + ' купюр' });
+        note: c.pieces + ' ' + E.plural(c.pieces, 'купюра', 'купюры', 'купюр') });
       S.save(); refresh();
-      return { ok: 'Насчитали ' + money(c.sum) + ' (' + c.pieces + ' купюр). ' +
-        (Math.abs(diff) < 1 ? 'Сходится с кассой.'
-          : (diff < 0 ? 'Не хватает ' + money(-diff) + '.' : 'Больше на ' + money(diff) + '.')) };
+      return { ok: 'Насчитали ' + money(c.sum) + ' — ' + c.pieces + ' ' +
+        E.plural(c.pieces, 'купюра', 'купюры', 'купюр') + '. ' +
+        (!expected ? 'Сравнивать пока не с чем: смен по этой кассе нет.'
+          : Math.abs(diff) < 1 ? 'Сходится с тем, сколько должно быть.'
+          : diff < 0 ? 'Не хватает ' + money(-diff) + ' — разберитесь, пока помните смену.'
+          : 'Больше на ' + money(diff) + ' — возможно, не записали приход.') };
     }
   };
+
+  /* Пересчёт: считаем на каждое нажатие. Форму не перерисовываем — введённое
+     пропало бы; обновляем только подписи и итог. */
+  (function () {
+    function tick(el) {
+      if (!el || !el.name || !el.closest) return;
+      if (!/^n\d+$/.test(el.name) && el.name !== 'till') return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var slot = box.querySelector('#ccTotal');
+      if (!slot) return;
+      var r = cashCountSum(box);
+      var till = box.querySelector('[name="till"]');
+      slot.innerHTML = cashCountBox(r.total, r.pieces, till ? till.value : '');
+    }
+    /* Откладываем на следующий тик нарочно. Общий обработчик в ui.js тоже
+       пишет в подпись под числовым полем — и для поля, в которое печатают,
+       он затирал бы нашу строку «2 шт × 5 000 = 10 000 ₽» сразу после того,
+       как мы её поставили. Отложенный вызов всегда идёт последним. */
+    function later(el) { setTimeout(function () { tick(el); }, 0); }
+    document.addEventListener('input', function (e) { later(e.target); });
+    document.addEventListener('change', function (e) { later(e.target); });
+  })();
 
   /* ==========================================================================
      ЭКРАНЫ

@@ -1624,6 +1624,58 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 12. Пересчёт кассы: итог виден, пока считаешь, а не после сохранения */
+{
+  console.log('— Пересчёт кассы по купюрам');
+  const { page, ctx, errs } = await open();
+  page.on('dialog', d => d.dismiss());
+  await page.evaluate(() => {
+    const S = window.WMStore, a = S.state.accounts || [];
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 30000, zCashless: 10000, payouts: 15000,
+      factCash: 15000, account: (a.find(x => x.kind === 'till') || {}).id });
+    S.save(); window.WMUI.recompute(); window.WMUI.openForm('cashCount');
+  });
+  await page.waitForTimeout(450);
+
+  const box = () => page.evaluate(() => {
+    const e = document.querySelector('#ccTotal'); return e ? e.innerText.replace(/\s+/g, ' ') : '';
+  });
+  check('В ФОРМЕ ЕСТЬ ОБЩАЯ СУММА — сразу, до сохранения',
+    (await box()).includes('Насчитано в ящике'), 'есть', 'есть');
+  check('и видно, сколько должно быть', (await box()).includes('15 000'), 'видно', '15 000');
+
+  for (const [n, k] of [['n5000', '2'], ['n1000', '4'], ['n500', '2']]) {
+    await page.fill('.sheet [name="' + n + '"]', k);
+    await page.waitForTimeout(180);
+  }
+  const b1 = await box();
+  check('СУММА СЧИТАЕТСЯ НА ХОДУ', b1.includes('15 000') && b1.includes('8 купюр'),
+    b1.slice(0, 60), '15 000 и 8 купюр');
+  check('и говорит, что касса сошлась', b1.includes('Сходится'), 'говорит', 'Сходится');
+
+  // Каждая строка объясняет свою сумму, а не подписана рублями
+  const hints = await page.evaluate(() => ['n5000', 'n1000', 'n500'].map(n => {
+    const e = document.querySelector('[data-hint-for="' + n + '"]');
+    return e ? e.innerText : '';
+  }));
+  check('У КАЖДОЙ СТРОКИ ВИДНО, СКОЛЬКО ЭТО ДЕНЕГ',
+    hints.every(h => /шт ×/.test(h)), hints[0] || 'подписи нет', '2 шт × 5 000 ₽ = 10 000 ₽');
+  check('ШТУКИ НЕ ПОДПИСАНЫ РУБЛЯМИ',
+    !hints.some(h => /^\s*\d+\s*₽\s*$/.test(h)), 'не подписаны', 'не подписаны');
+
+  // Недостача видна тут же
+  await page.fill('.sheet [name="n500"]', '0');
+  await page.waitForTimeout(250);
+  const b2 = await box();
+  check('НЕДОСТАЧУ ВИДНО СРАЗУ', b2.includes('Не хватает') && b2.includes('1 000'),
+    b2.slice(-40), 'не хватает 1 000');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

@@ -902,3 +902,17 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
   font-weight: 650; color: #6cb8ff; cursor: pointer; border-radius: 8px; }
 .toast-act:hover { text-decoration: underline; }
 @media (max-width: 560px) { .toast { max-width: calc(100vw - 32px); } }
+
+/* Итог пересчёта кассы — виден сразу, пока считаешь купюры */
+.cc-total { margin: 4px 14px 10px; padding: 14px 16px; border-radius: var(--r-inner);
+  background: var(--fill-2); }
+.cc-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 3px 0; }
+.cc-line > span { color: var(--label-2); }
+.cc-big { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cc-sub { font-size: 13px; color: var(--label-3); padding-bottom: 4px; }
+.cc-diff { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--separator);
+  font-weight: 600; }
+.cc-diff.ok > span, .cc-diff.ok > b { color: var(--green); }
+.cc-diff.bad > span, .cc-diff.bad > b { color: var(--red); }
+.cc-diff.warn > span, .cc-diff.warn > b { color: var(--orange); }
