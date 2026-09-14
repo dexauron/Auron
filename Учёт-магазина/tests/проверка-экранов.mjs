@@ -589,77 +589,134 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
-/* 5в-2. Меню не должно быть списком из сорока пунктов */
+/* 5в-2. Меню деревом: избранное сверху, остальное по папкам */
 {
-  console.log('— Рабочий набор экранов в меню');
+  console.log('— Меню деревом: избранное и папки');
   const { page, ctx, errs } = await open();
   const nav = () => page.evaluate(() =>
     [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go).filter(Boolean));
+  const folders = () => page.evaluate(() =>
+    [...document.querySelectorAll('.nav-folder')].map(e => e.dataset.folder));
 
-  const main = await nav();
-  const total = await page.evaluate(() => document.querySelectorAll('.nav-item').length);
-  check('в меню рабочий набор, а не всё подряд', main.length >= 12 && main.length <= 20,
-    main.length + ' экранов', '12–20');
-  check('каждодневное на месте',
-    ['pulse', 'morning', 'evening', 'finpay'].every(id => main.includes(id)),
+  const start = await nav();
+  check('меню короткое: избранное и папки, а не сорок пунктов',
+    start.length <= 8, start.length + ' пунктов', '<=8');
+  check('в избранном то, чем пользуются каждый день',
+    ['pulse', 'morning', 'evening', 'finpay', 'owner'].every(id => start.includes(id)),
     'на месте', 'на месте');
-  check('деньги и люди на месте',
-    ['ledger', 'cashiers', 'debtors', 'suppliers', 'timesheet', 'payroll']
-      .every(id => main.includes(id)), 'на месте', 'на месте');
-  check('главные отчёты на месте',
-    ['pnl', 'monthclose', 'owner'].every(id => main.includes(id)), 'на месте', 'на месте');
-  check('товарная аналитика убрана с глаз',
-    !main.includes('abc') && !main.includes('shelf') && !main.includes('seasons'),
-    'убрана', 'убрана');
-  check('есть кнопка «Показать все экраны»',
-    await page.evaluate(() => !!document.querySelector('[data-act="views-all"]')),
-    'есть', 'есть');
+  const f = await folders();
+  check('папки на месте',
+    ['Каждый день', 'Деньги', 'Люди', 'Товары', 'Отчёты', 'Ещё'].every(g => f.includes(g)),
+    f.join(', '), 'шесть папок');
+  check('папки свёрнуты — меню не длинное',
+    await page.evaluate(() => document.querySelectorAll('.nav-folder.open').length) === 0,
+    'свёрнуты', 'свёрнуты');
 
-  // СКРЫТЫЙ ЭКРАН НЕ ПОТЕРЯН: открывается и работает
-  await page.evaluate(() => window.WMUI.go('abc'));
-  await page.waitForTimeout(250);
-  const hiddenWorks = await page.evaluate(() =>
-    (document.querySelector('#page') || {}).textContent.length > 100);
-  check('СКРЫТЫЙ ЭКРАН ВСЁ РАВНО ОТКРЫВАЕТСЯ', hiddenWorks, 'открылся', 'открылся');
+  // ПАПКА РАСКРЫВАЕТСЯ И ЗАПОМИНАЕТСЯ
+  await page.click('[data-act="nav-folder"][data-folder="Товары"]');
+  await page.waitForTimeout(350);
+  const opened = await nav();
+  check('ПАПКА РАСКРЫЛАСЬ И ПОКАЗАЛА СВОИ ЭКРАНЫ',
+    opened.includes('abc') && opened.includes('shelf'), 'раскрылась', 'раскрылась');
+  check('и выбор запомнился',
+    (await page.evaluate(() => window.WMStore.settings.menuOpen || '')).includes('Товары'),
+    'запомнился', 'Товары');
+  await page.click('[data-act="nav-folder"][data-folder="Товары"]');
+  await page.waitForTimeout(350);
+  check('и сворачивается обратно',
+    !(await nav()).includes('abc'), 'свернулась', 'свернулась');
 
-  // Разворачиваем и сворачиваем обратно
-  await page.evaluate(() => document.querySelector('[data-act="views-all"]').click());
+  // ЗВЁЗДОЧКА КЛАДЁТ ЭКРАН В ИЗБРАННОЕ ПРЯМО ИЗ МЕНЮ
+  await page.click('[data-act="nav-folder"][data-folder="Отчёты"]');
+  await page.waitForTimeout(300);
+  await page.click('.nav-item[data-go="pnl"] [data-act="fav-toggle"]');
   await page.waitForTimeout(350);
-  const allShown = await nav();
-  check('«Показать все» открывает все сорок', allShown.length >= 38,
-    allShown.length + ' экранов', '>=38');
-  await page.evaluate(() => document.querySelector('[data-act="views-main"]').click());
+  check('ЗВЁЗДОЧКА ПОДНЯЛА ЭКРАН В ИЗБРАННОЕ',
+    (await page.evaluate(() => window.WMStore.settings.menuFav || '')).includes('pnl'),
+    'подняла', 'pnl в избранном');
+  const favFirst = await page.evaluate(() => {
+    const items = [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go).filter(Boolean);
+    const fold = [...document.querySelectorAll('.nav-folder')][0];
+    const all = [...document.querySelectorAll('.nav-item, .nav-folder')];
+    return all.indexOf(document.querySelector('.nav-item[data-go="pnl"]')) < all.indexOf(fold);
+  });
+  check('и оно стоит выше папок', favFirst, 'сверху', 'сверху');
+
+  // СКРЫТЫЙ ЭКРАН ИСЧЕЗАЕТ ИЗ МЕНЮ, НО ОТКРЫВАЕТСЯ
+  await page.evaluate(() => window.WMUI.go('menucfg'));
+  await page.waitForTimeout(400);
+  const cfg = await page.textContent('#page');
+  check('экран «Настроить меню» открывается',
+    cfg.includes('Что видеть сверху'), 'открылся', 'открылся');
+  await page.evaluate(() => {
+    const b = document.querySelector('#page [data-act="hide-toggle"][data-id="seasons"]');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(400);
+  check('ЭКРАН СКРЫЛСЯ ПО КНОПКЕ',
+    (await page.evaluate(() => window.WMStore.settings.menuHidden || '')).includes('seasons'),
+    'скрылся', 'seasons скрыт');
+  await page.click('[data-act="nav-folder"][data-folder="Отчёты"]');
   await page.waitForTimeout(350);
-  const backToMain = await nav();
-  check('и сворачивается обратно', backToMain.length <= 20,
-    backToMain.length + ' экранов', '<=20');
-  check('выбор запомнился',
-    await page.evaluate(() => window.WMStore.settings.showAllViews) === 'нет',
-    'запомнился', 'нет');
+  check('и пропал из папки', !(await nav()).includes('seasons'), 'пропал', 'пропал');
+  const stillOpens = await page.evaluate(async () => {
+    window.WMUI.go('seasons');
+    return (document.querySelector('#page') || {}).textContent.length > 60;
+  });
+  check('СКРЫТЫЙ ЭКРАН ВСЁ РАВНО ОТКРЫВАЕТСЯ', stillOpens, 'открылся', 'открылся');
+
+  // И ВОЗВРАЩАЕТСЯ ОДНОЙ КНОПКОЙ
+  await page.evaluate(() => window.WMUI.go('menucfg'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => {
+    const b = document.querySelector('#page [data-act="hide-toggle"][data-id="seasons"]');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(400);
+  check('и возвращается одной кнопкой',
+    !(await page.evaluate(() => window.WMStore.settings.menuHidden || '')).includes('seasons'),
+    'вернулся', 'вернулся');
+
+  // «КАК БЫЛО» ВОЗВРАЩАЕТ ОБЫЧНЫЙ ВИД
+  await page.evaluate(() => document.querySelector('#page [data-act="menu-reset"]').click());
+  await page.waitForTimeout(400);
+  check('кнопка «Как было» возвращает обычный вид',
+    (await page.evaluate(() => window.WMStore.settings.menuFav)) === 'pulse,morning,evening,finpay,owner',
+    await page.evaluate(() => window.WMStore.settings.menuFav), 'по умолчанию');
+
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
   console.log('');
 }
 
-/* 5в-3. То же меню на телефоне */
+/* 5в-3. То же дерево на телефоне */
 {
   console.log('— Меню на телефоне');
   const { page, ctx, errs } = await open({ viewport: { width: 393, height: 852 },
     hasTouch: true, isMobile: true });
   await page.evaluate(() => document.querySelector('[data-act="open-menu"]').click());
   await page.waitForTimeout(400);
-  const items = await page.evaluate(() =>
+  const items = () => page.evaluate(() =>
     [...document.querySelectorAll('.sheet [data-go]')].map(e => e.dataset.go));
-  check('на телефоне тоже рабочий набор', items.length >= 12 && items.length <= 20,
-    items.length + ' пунктов', '12–20');
-  check('и кнопка развернуть',
-    await page.evaluate(() => !!document.querySelector('.sheet [data-act="views-all"]')),
-    'есть', 'есть');
-  await page.evaluate(() => document.querySelector('.sheet [data-act="views-all"]').click());
-  await page.waitForTimeout(450);
-  const expanded = await page.evaluate(() =>
-    [...document.querySelectorAll('.sheet [data-go]')].map(e => e.dataset.go).length);
-  check('разворачивается прямо в открытом меню', expanded >= 38, expanded + ' пунктов', '>=38');
+  const start = await items();
+  check('на телефоне тоже короткое меню', start.length <= 8,
+    start.length + ' пунктов', '<=8');
+  check('избранное на месте',
+    ['pulse', 'morning', 'evening'].every(id => start.includes(id)), 'на месте', 'на месте');
+  check('и папки тоже',
+    await page.evaluate(() =>
+      [...document.querySelectorAll('.sheet [data-act="nav-folder"]')].length >= 5),
+    'есть', '>=5');
+
+  await page.evaluate(() => {
+    const b = document.querySelector('.sheet [data-act="nav-folder"][data-folder="Товары"]');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(500);
+  const after = await items();
+  check('ПАПКА РАСКРЫВАЕТСЯ ПРЯМО В ОТКРЫТОМ МЕНЮ',
+    after.includes('abc'), after.length + ' пунктов', 'товары видны');
+  check('есть кнопка «Настроить меню»', after.includes('menucfg'), 'есть', 'есть');
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
   console.log('');

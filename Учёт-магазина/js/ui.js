@@ -1264,7 +1264,8 @@
     // Полный список экранов — независимо от того, что сейчас в меню
     views: function () {
       return VIEWS.map(function (v) {
-        return { id: v.id, name: v.name, group: v.group, main: isMain(v) };
+        return { id: v.id, name: v.name, group: v.group,
+          fav: isFav(v.id), hidden: isHiddenView(v.id) };
       });
     },
     openForm: function (id, prefill, edit) { openForm(id, prefill, edit); },
@@ -1276,9 +1277,75 @@
   };
 
   /* --- Навигация ---------------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+     НАСТРОИТЬ МЕНЮ — владелец сам решает, что видеть
+
+     Один список всех экранов, у каждого две кнопки: звёздочка (наверх, в
+     избранное) и глаз (скрыть с глаз). Здесь же видно скрытое — чтобы
+     вернуть было так же просто, как убрать.
+     -------------------------------------------------------------------------- */
+  function viewMenuConfig() {
+    var c = counters();
+    var fav = favList(), hid = hiddenList();
+
+    var h = pageHead('Настроить меню', 'Что видеть сверху, что убрать с глаз',
+      '<button class="btn" data-act="menu-open-all">Раскрыть все папки</button> ' +
+      '<button class="btn" data-act="menu-close-all">Свернуть все</button> ' +
+      '<button class="btn" data-act="menu-reset">Как было</button>');
+
+    h += '<div class="stat-grid">' +
+      stat('В избранном', String(fav.length), 'видно сразу, сверху меню') +
+      stat('Скрыто', String(hid.length), hid.length ? 'не видно в меню' : 'ничего не скрыто',
+        hid.length ? 'c-orange' : 'c-green') +
+      stat('Всего экранов', String(VIEWS.length), 'ни один не удалён') +
+      '</div>';
+
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+      '<b>Звёздочка</b> поднимает экран в избранное — наверх меню, всегда на виду. ' +
+      '<b>Глаз</b> убирает экран из меню совсем. Убранное не пропадает: оно ' +
+      'остаётся в этом списке, находится поиском и возвращается кнопкой «Вернуть». ' +
+      'Звёздочку можно нажать и прямо в меню, не заходя сюда.</span></div>';
+
+    function block(title, list, sub) {
+      if (!list.length) return '';
+      return card(title, '<div class="mcfg">' + list.map(function (v) {
+        var f = isFav(v.id), hd = isHiddenView(v.id);
+        return '<div class="mcfg-row' + (hd ? ' off' : '') + '">' +
+          '<span class="mcfg-ic">' + ic(v.icon) + '</span>' +
+          '<button class="mcfg-name" data-go="' + esc(v.id) + '">' + esc(v.name) + '</button>' +
+          (c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '') +
+          '<button class="btn btn-sm' + (f ? ' btn-on' : '') + '" data-act="fav-toggle"' +
+          ' data-id="' + esc(v.id) + '">' + ic('star', 15) +
+          (f ? ' В избранном' : ' В избранное') + '</button> ' +
+          '<button class="btn btn-sm" data-act="hide-toggle" data-id="' + esc(v.id) + '">' +
+          (hd ? 'Вернуть' : 'Скрыть') + '</button>' +
+          '</div>';
+      }).join('') + '</div>', sub || '');
+    }
+
+    if (fav.length) {
+      h += block('Избранное — видно сразу, наверху меню',
+        fav.map(viewById).filter(Boolean),
+        'Эти экраны стоят наверху меню, в том порядке, в каком вы их отмечали');
+    }
+
+    groupNames().forEach(function (g) {
+      var inside = viewsOfGroup(g, true).filter(function (v) { return !isHiddenView(v.id); });
+      if (inside.length) h += block(g, inside, inside.length + ' ' + NUM.plural(inside.length, 'экран', 'экрана', 'экранов'));
+    });
+
+    var hiddenViews = hid.map(viewById).filter(Boolean);
+    if (hiddenViews.length) {
+      h += block('Скрытые — не видно в меню', hiddenViews,
+        'Открываются отсюда и поиском. Вернуть в меню — кнопка «Вернуть»');
+    }
+    return h;
+  }
+
   var VIEWS = [
     { id: 'data', icon: 'folder', name: 'Данные и копии', group: 'Ещё', render: viewData },
-    { id: 'settings', icon: 'gear', name: 'Настройки', group: 'Ещё', render: viewSettings }
+    { id: 'settings', icon: 'gear', name: 'Настройки', group: 'Ещё', render: viewSettings },
+    { id: 'menucfg', icon: 'menu', name: 'Настроить меню', group: 'Ещё', render: viewMenuConfig }
   ];
 
   // Экраны финансового учёта встают рядом со своими соседями
@@ -1325,54 +1392,155 @@
     return c;
   }
   /* ==========================================================================
-     РАБОЧИЙ НАБОР ЭКРАНОВ
+     МЕНЮ ДЕРЕВОМ: ИЗБРАННОЕ СВЕРХУ, ОСТАЛЬНОЕ ПО ПАПКАМ
 
-     Экранов в программе сорок, а магазином управляют полутора десятками.
-     Остальные — отчёты «на посмотреть» и товарная аналитика, которая нужна
-     раз в месяц. Держать их все в меню значит каждый день пролистывать
-     тридцать пунктов ради четырёх.
+     Экранов сорок. Показать все сразу — человек будет каждый день листать
+     тридцать пунктов ради четырёх. Показать пятнадцать «главных» — программа
+     решает за владельца, чем ему пользоваться, и это тоже неправильно:
+     у одного магазина главное одно, у другого другое.
 
-     Поэтому меню показывает рабочий набор, а всё остальное — за одной
-     кнопкой внизу. Ничего не удалено: экран открывается и по прямой ссылке,
-     и через поиск, и счётчик дел на нём считается как раньше.
+     Поэтому меню устроено как папки на компьютере:
+        ★ ИЗБРАННОЕ   — то, что владелец отметил сам. Всегда сверху, всегда видно.
+        📁 ПАПКИ      — по смыслу. Свёрнуты, разворачиваются щелчком.
+        СКРЫТОЕ       — чем не пользуются вовсе; не мозолит глаза, но не удалено.
+
+     Ничего не пропадает насовсем: скрытый экран открывается поиском, прямой
+     ссылкой и возвращается на место одной кнопкой в «Настроить меню».
+     Красный кружок с делом виден на папке, даже когда она свёрнута, —
+     дело не должно потеряться из-за того, что папку закрыли.
      ====================================================================== */
-  var MAIN_VIEWS = {
-    pulse: 1, morning: 1, evening: 1, finpay: 1,            // каждый день
-    ledger: 1, cashiers: 1, debtors: 1, suppliers: 1,       // деньги
-    timesheet: 1, payroll: 1, payslip: 1,                   // люди
-    pnl: 1, monthclose: 1, owner: 1,                        // отчёты
-    data: 1, dicts: 1, settings: 1                          // служебное
-  };
-  function showAll() { return E.norm(S.settings.showAllViews) === 'да'; }
-  function isMain(v) { return !!MAIN_VIEWS[v.id]; }
+
+  // С чего начинает новый магазин: то, чем пользуются каждый день
+  var FAV_DEFAULT = ['pulse', 'morning', 'evening', 'finpay', 'owner'];
+
+  /* Настройка хранится строкой «pulse,morning,evening» — так её видно
+     глазами в «Бухгалтерия.xlsx» и можно поправить руками.
+     Имя намеренно не listOf: так называется совсем другая вещь — рисование
+     списка на экране, и перекрыть её значило бы стереть половину программы. */
+  function idsFromSetting(key, fallback) {
+    var raw = S.settings[key];
+    if (raw == null || raw === '') return (fallback || []).slice();
+    return String(raw).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+  }
+  function saveIds(key, arr) { S.setSetting(key, arr.join(',')); }
+
+  function favList() {
+    return idsFromSetting('menuFav', FAV_DEFAULT).filter(function (id) {
+      return VIEWS.some(function (v) { return v.id === id; });
+    });
+  }
+  function hiddenList() { return idsFromSetting('menuHidden', []); }
+  function openFolders() { return idsFromSetting('menuOpen', []); }
+
+  function isFav(id) { return favList().indexOf(id) >= 0; }
+  function isHiddenView(id) { return hiddenList().indexOf(id) >= 0; }
+  function isFolderOpen(name) { return openFolders().indexOf(name) >= 0; }
+
+  function toggleFav(id) {
+    var f = favList(), i = f.indexOf(id);
+    if (i >= 0) f.splice(i, 1); else f.push(id);
+    saveIds('menuFav', f);
+    // Убрали в избранное — экран точно нужен, значит он не скрытый
+    if (i < 0 && isHiddenView(id)) toggleHidden(id);
+    else S.save();
+  }
+  function toggleHidden(id) {
+    var h = hiddenList(), i = h.indexOf(id);
+    if (i >= 0) h.splice(i, 1); else h.push(id);
+    saveIds('menuHidden', h);
+    // Скрыли — из избранного тоже убираем, иначе оно всплывёт сверху
+    if (i < 0 && isFav(id)) {
+      var f = favList(); f.splice(f.indexOf(id), 1); saveIds('menuFav', f);
+    }
+    S.save();
+  }
+  function toggleFolder(name) {
+    var o = openFolders(), i = o.indexOf(name);
+    if (i >= 0) o.splice(i, 1); else o.push(name);
+    saveIds('menuOpen', o);
+    S.save();
+  }
+
+  // Экраны папки: скрытые не показываем, пока не попросили показать всё
+  function viewsOfGroup(name, withHidden) {
+    return VIEWS.filter(function (v) {
+      return v.group === name && (withHidden || !isHiddenView(v.id));
+    });
+  }
+  function groupNames() {
+    var seen = {}, out = [];
+    VIEWS.forEach(function (v) { if (!seen[v.group]) { seen[v.group] = 1; out.push(v.group); } });
+    return out;
+  }
+  function viewById(id) {
+    return VIEWS.filter(function (v) { return v.id === id; })[0];
+  }
+
+  /* Одна строка меню. Звёздочка появляется при наведении — чтобы отметить
+     экран прямо оттуда, где на него смотришь, а не идти в настройки. */
+  function navRow(v, c, opts) {
+    opts = opts || {};
+    return '<div class="nav-item' + (v.id === VIEW ? ' active' : '') +
+      (opts.sub ? ' nav-sub' : '') + '" data-go="' + esc(v.id) + '">' +
+      '<span class="nav-icon">' + ic(v.icon) + '</span>' +
+      '<span class="nav-name">' + esc(v.name) + '</span>' +
+      (c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '') +
+      '<button class="nav-star' + (isFav(v.id) ? ' on' : '') + '" data-act="fav-toggle"' +
+      ' data-id="' + esc(v.id) + '" title="' +
+      (isFav(v.id) ? 'Убрать из избранного' : 'В избранное') + '">' +
+      ic('star', 15) + '</button>' +
+      '</div>';
+  }
+
+  // Сколько дел ждёт внутри папки — видно и когда папка свёрнута
+  function folderCount(name, c) {
+    var n = 0;
+    viewsOfGroup(name).forEach(function (v) { if (c[v.id]) n++; });
+    return n;
+  }
 
   function renderNav() {
-    var c = counters(), group = '', html = '';
-    var all = showAll();
-    var shown = VIEWS.filter(function (v) { return all || isMain(v) || v.id === VIEW; });
-    var hidden = VIEWS.length - shown.length;
+    var c = counters(), html = '';
+    var fav = favList();
 
-    shown.forEach(function (v) {
-      if (v.group !== group) { group = v.group; html += '<div class="nav-group">' + esc(group) + '</div>'; }
-      html += '<div class="nav-item' + (v.id === VIEW ? ' active' : '') + '" data-go="' + v.id + '">' +
-        '<span class="nav-icon">' + ic(v.icon) + '</span><span>' + esc(v.name) + '</span>' +
-        (c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '') + '</div>';
+    /* Избранное. Пусто — вместо списка подсказка: звёздочка рядом с экраном
+       кладёт его сюда. Иначе пустая полоса ничего не объясняет. */
+    html += '<div class="nav-group">' + ic('star', 13) + ' Избранное</div>';
+    if (fav.length) {
+      fav.forEach(function (id) {
+        var v = viewById(id);
+        if (v) html += navRow(v, c);
+      });
+    } else {
+      html += '<div class="nav-empty">Отметьте звёздочкой то, чем пользуетесь ' +
+        'каждый день — оно будет здесь.</div>';
+    }
+
+    /* Папки. Свёрнуты по умолчанию: короткое меню лучше длинного. */
+    groupNames().forEach(function (g) {
+      var inside = viewsOfGroup(g);
+      if (!inside.length) return;
+      var open = isFolderOpen(g), n = folderCount(g, c);
+      html += '<div class="nav-folder' + (open ? ' open' : '') +
+        '" data-act="nav-folder" data-folder="' + esc(g) + '">' +
+        '<span class="nav-icon">' + ic(open ? 'chevronDown' : 'chevron', 18) + '</span>' +
+        '<span class="nav-name">' + esc(g) + '</span>' +
+        '<span class="nav-of">' + inside.length + '</span>' +
+        (n ? '<span class="nav-count">' + n + '</span>' : '') + '</div>';
+      if (open) inside.forEach(function (v) { html += navRow(v, c, { sub: true }); });
     });
 
-    // Красный кружок на скрытом экране виден и в свёрнутом виде: дело не
-    // должно потеряться только потому, что экран убран из меню
-    var hiddenCount = 0;
-    VIEWS.forEach(function (v) { if (!all && !isMain(v) && c[v.id]) hiddenCount++; });
-
-    if (hidden > 0) {
-      html += '<div class="nav-item nav-more" data-act="views-all">' +
-        '<span class="nav-icon">' + ic('menu') + '</span><span>Показать все экраны</span>' +
-        '<span class="nav-count' + (hiddenCount ? '' : ' nav-count-quiet') + '">' +
-        (hiddenCount ? hiddenCount : hidden) + '</span></div>';
-    } else if (all) {
-      html += '<div class="nav-item nav-more" data-act="views-main">' +
-        '<span class="nav-icon">' + ic('chevronUp') + '</span><span>Оставить только рабочие</span></div>';
+    // Открытый экран всегда виден в меню, даже если он лежит в закрытой папке
+    var cur = viewById(VIEW);
+    if (cur && fav.indexOf(VIEW) < 0 && !isFolderOpen(cur.group)) {
+      html += '<div class="nav-group">Открыто сейчас</div>' + navRow(cur, c);
     }
+
+    var hid = hiddenList().length;
+    html += '<div class="nav-item nav-more" data-go="menucfg">' +
+      '<span class="nav-icon">' + ic('gear') + '</span><span>Настроить меню</span>' +
+      (hid ? '<span class="nav-count nav-count-quiet">' + hid + '</span>' : '') + '</div>';
+
     $('nav').innerHTML = html;
     /* Шапка показывает то, что владелец вписал о своём магазине. Пока не
        вписал — нейтральная надпись, а не чужое название. */
@@ -1753,27 +1921,45 @@
      листать сорок пунктов пальцем — худшее, что можно предложить человеку,
      который зашёл записать смену. */
   function openMenuSheet() {
-    var c = counters(), all = showAll(), group = '', rows = [];
-    var shown = VIEWS.filter(function (v) { return all || isMain(v); });
-    var hidden = VIEWS.length - shown.length;
+    var c = counters(), rows = [], fav = favList();
 
-    shown.forEach(function (v) {
-      if (v.group !== group) { group = v.group; rows.push('<div class="nav-group">' + esc(group) + '</div>'); }
-      rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true,
-        value: c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '',
-        attrs: ' data-go="' + v.id + '"' }));
+    /* На телефоне то же дерево: избранное сверху, папки ниже. Листать сорок
+       пунктов пальцем — худшее, что можно предложить человеку, который зашёл
+       записать смену. */
+    rows.push('<div class="nav-group">' + ic('star', 13) + ' Избранное</div>');
+    if (fav.length) {
+      fav.forEach(function (id) {
+        var v = viewById(id);
+        if (!v) return;
+        rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true,
+          value: c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '',
+          attrs: ' data-go="' + v.id + '"' }));
+      });
+    } else {
+      rows.push(listRow({ icon: 'star', title: 'Пока пусто',
+        sub: 'отметьте звёздочкой то, чем пользуетесь каждый день' }));
+    }
+
+    groupNames().forEach(function (g) {
+      var inside = viewsOfGroup(g);
+      if (!inside.length) return;
+      var open = isFolderOpen(g), n = folderCount(g, c);
+      rows.push(listRow({ icon: open ? 'chevronDown' : 'chevron', title: esc(g),
+        sub: inside.length + ' ' + NUM.plural(inside.length, 'экран', 'экрана', 'экранов'),
+        tap: true, value: n ? '<span class="nav-count">' + n + '</span>' : '',
+        attrs: ' data-act="nav-folder" data-folder="' + esc(g) + '"' }));
+      if (open) inside.forEach(function (v) {
+        rows.push(listRow({ icon: v.icon, title: esc(v.name), tap: true,
+          value: c[v.id] ? '<span class="nav-count">' + c[v.id] + '</span>' : '',
+          attrs: ' data-go="' + v.id + '"' }));
+      });
     });
 
-    if (hidden > 0) {
-      rows.push('<div class="nav-group">Остальное</div>');
-      rows.push(listRow({ icon: 'menu', title: 'Показать все экраны',
-        sub: 'ещё ' + hidden + ' — отчёты и товарная аналитика', tap: true,
-        attrs: ' data-act="views-all"' }));
-    } else if (all) {
-      rows.push('<div class="nav-group">Меню</div>');
-      rows.push(listRow({ icon: 'chevronUp', title: 'Оставить только рабочие',
-        sub: 'чтобы не листать лишнее', tap: true, attrs: ' data-act="views-main"' }));
-    }
+    var hidN = hiddenList().length;
+    rows.push('<div class="nav-group">Меню</div>');
+    rows.push(listRow({ icon: 'gear', title: 'Настроить меню',
+      sub: hidN ? 'скрыто экранов: ' + hidN : 'избранное, папки, что скрыть',
+      tap: true, attrs: ' data-go="menucfg"' }));
 
     var actions = [
       listRow({ icon: 'folder', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="sync-1c"' }),
@@ -1959,14 +2145,47 @@
         openForm(form2, copy);
         toast('Дата поставлена сегодняшняя — проверьте суммы и сохраните.');
       }
-      else if (a === 'views-all' || a === 'views-main') {
-        var onSheet = !!document.querySelector('.sheet');
-        S.setSetting('showAllViews', a === 'views-all' ? 'да' : 'нет');
+      /* Папка в меню: раскрыть или свернуть. Выбор запоминается — открыли
+         «Товары» один раз, и завтра они останутся открытыми. */
+      else if (a === 'nav-folder') {
+        var onSheet0 = !!document.querySelector('.sheet');
+        toggleFolder(el.dataset.folder);
         renderNav();
-        if (onSheet) { closeSheet(); openMenuSheet(); }
-        toast(a === 'views-all'
-          ? 'Показаны все ' + VIEWS.length + ' экранов. Свернуть обратно — кнопка внизу меню.'
-          : 'В меню остались рабочие экраны. Остальные — за кнопкой «Показать все».');
+        if (onSheet0) { closeSheet(); openMenuSheet(); }
+      }
+      /* Звёздочка: экран уезжает наверх, в избранное, или уходит обратно
+         в свою папку. Нажимается прямо в меню, идти в настройки не надо. */
+      else if (a === 'fav-toggle') {
+        var onSheet1 = !!document.querySelector('.sheet');
+        var vid = el.dataset.id, was = isFav(vid);
+        toggleFav(vid);
+        renderNav(); if (VIEW === 'menucfg') render();
+        if (onSheet1) { closeSheet(); openMenuSheet(); }
+        var vv = viewById(vid);
+        toast(was ? '«' + (vv ? vv.name : vid) + '» убрано из избранного.'
+          : '«' + (vv ? vv.name : vid) + '» теперь в избранном, наверху меню.');
+      }
+      /* Скрыть экран совсем. Не удаление: он остаётся в «Настроить меню»,
+         находится поиском и возвращается одной кнопкой. */
+      else if (a === 'hide-toggle') {
+        var hid = el.dataset.id, wasH = isHiddenView(hid);
+        toggleHidden(hid);
+        renderNav(); if (VIEW === 'menucfg') render();
+        var hv = viewById(hid);
+        toast(wasH ? '«' + (hv ? hv.name : hid) + '» снова в меню.'
+          : '«' + (hv ? hv.name : hid) + '» скрыт. Вернуть — кнопка «Вернуть» тут же.');
+      }
+      else if (a === 'menu-reset') {
+        S.setSetting('menuFav', FAV_DEFAULT.join(','));
+        S.setSetting('menuHidden', '');
+        S.setSetting('menuOpen', '');
+        S.save(); renderNav(); render();
+        toast('Меню вернулось к обычному виду: ничего не скрыто, в избранном — каждодневное.');
+      }
+      else if (a === 'menu-open-all' || a === 'menu-close-all') {
+        S.setSetting('menuOpen', a === 'menu-open-all' ? groupNames().join(',') : '');
+        S.save(); renderNav();
+        toast(a === 'menu-open-all' ? 'Все папки раскрыты.' : 'Все папки свёрнуты.');
       }
       else if (a === 'add-record') openAddSheet();
       else if (a === 'open-menu') openMenuSheet();
