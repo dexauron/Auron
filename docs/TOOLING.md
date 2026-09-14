@@ -70,11 +70,13 @@ Claude читает его сам, когда трогает расчёты. Л�
 
 | Сервер | Что положить в переменные |
 |---|---|
-| `firecrawl` | `FIRECRAWL_API_KEY` — с firecrawl.dev |
+| `firecrawl` | `FIRECRAWL_API_KEY` — с firecrawl.dev. **Ключ уже вписан** в `.claude/settings.local.json` (этот файл закрыт в `.gitignore` и в репозиторий не попадает) |
 | `n8n` | `N8N_API_URL`, `N8N_API_KEY` — со своего сервера n8n |
 | `yandex-cloud` | `YANDEX_CLOUD_TOKEN`, `YANDEX_CLOUD_FOLDER_ID` |
 
-Ключи в репозиторий **не кладём** — только имена переменных.
+Ключи в репозиторий **не кладём** — только имена переменных. Сами ключи живут
+в `.claude/settings.local.json`; `.env` и `.env.*` тоже закрыты в `.gitignore`.
+Репозиторий открытый: утёкший ключ сразу становится чужим.
 
 Остальные MCP (`github`, `notion`, `supabase`, `telegram`, `context7`, `playwright`)
 приехали внутри плагинов и настраиваются при первом использовании.
