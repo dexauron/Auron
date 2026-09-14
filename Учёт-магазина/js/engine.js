@@ -676,6 +676,80 @@
     return t;
   }
 
+  /* ==========================================================================
+     КОНВЕРТЫ: НА ЧТО МАГАЗИН ОТКЛАДЫВАЕТ
+
+     Самая частая причина, по которой небольшой магазин внезапно остаётся без
+     денег: выручка была, её пустили на товар, а в конце месяца пришли аренда,
+     зарплата и налог. Деньги вроде были — и вроде не было.
+
+     Лечится способом, которым люди пользуются веками: откладывать сразу, а не
+     в конце. Конверт — это цель («Аренда, 110 000 в месяц») и счёт, где лежат
+     отложенные деньги.
+
+     Отложить  = перевод с пометкой конверта.
+     Потратить = расход с пометкой того же конверта.
+     В конверте = отложено − потрачено.
+
+     Новых денег конверт не создаёт: он только помечает уже существующие
+     переводы и расходы. Поэтому прибыль от конвертов не меняется ни на рубль,
+     и остатки по счетам тоже.
+     ========================================================================== */
+  function fundTotals(funds, rows, upto, ym) {
+    var by = {};
+    (funds || []).forEach(function (f) {
+      by[txt(f.id)] = { id: txt(f.id), name: txt(f.name), plan: safeRound(f.plan),
+        account: txt(f.account), note: txt(f.note),
+        put: 0, spent: 0, left: 0, putThisMonth: 0 };
+    });
+    (rows || []).forEach(function (r) {
+      var fid = txt(r.fund);
+      if (!fid || !by[fid]) return;
+      var d = txt(r.date);
+      if (upto && d > upto) return;
+      var sum = safeRound(r.amount);
+      if (isMove(r)) {
+        by[fid].put += sum;
+        if (ym && ymOf(d) === ym) by[fid].putThisMonth += sum;
+      } else if (isExpense(r) || isDraw(r)) {
+        by[fid].spent += sum;
+      }
+    });
+    var out = [], t = { plan: 0, put: 0, spent: 0, left: 0, putThisMonth: 0, short: 0 };
+    Object.keys(by).forEach(function (k) {
+      var f = by[k];
+      ['put', 'spent', 'putThisMonth'].forEach(function (x) { f[x] = safeRound(f[x]); });
+      f.left = safeRound(f.put - f.spent);
+      // Сколько ещё осталось отложить в этом месяце до плана
+      f.toPut = safeRound(Math.max(0, f.plan - f.putThisMonth));
+      f.donePct = f.plan ? safeRound(div(f.putThisMonth, f.plan) * 100) : 0;
+      t.plan += f.plan; t.put += f.put; t.spent += f.spent;
+      t.left += f.left; t.putThisMonth += f.putThisMonth; t.short += f.toPut;
+      out.push(f);
+    });
+    ['plan', 'put', 'spent', 'left', 'putThisMonth', 'short'].forEach(function (k) {
+      t[k] = safeRound(t[k]);
+    });
+    return { rows: out, totals: t };
+  }
+
+  /* Сколько выручки ушло на товар. Если закуп съедает больше положенного,
+     платить аренду и зарплату будет нечем — и это видно ЗАРАНЕЕ, а не по
+     факту пустого сейфа. */
+  function purchaseCheck(rows, settings, ym) {
+    settings = settings || {};
+    var list = ym ? (rows || []).filter(function (r) { return ymOf(txt(r.date)) === ym; }) : rows;
+    var t = totals(list, settings);
+    var purchase = safeRound(t.goodsCash + t.debtTaken);
+    var limitPct = num(settings.purchaseLimitPct);
+    if (!limitPct) limitPct = 75;
+    var limit = safeRound(t.revenue * limitPct / 100);
+    var sharePct = t.revenue ? safeRound(div(purchase, t.revenue) * 100) : 0;
+    return { revenue: t.revenue, purchase: purchase, limit: limit, limitPct: limitPct,
+      sharePct: sharePct, over: safeRound(Math.max(0, purchase - limit)),
+      ok: purchase <= limit + 0.5, room: safeRound(Math.max(0, limit - purchase)) };
+  }
+
   /* --- План выплат ----------------------------------------------------------- */
   var PLAN_STATUS = ['Запланирована', 'Оплачена', 'Отменена'];
   function planStatus(p, t) {
@@ -2405,6 +2479,7 @@
     cashlessTotal: cashlessTotal, supplierDebt: supplierDebt,
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,
     totals: totals, planStatus: planStatus, planTotals: planTotals,
+    fundTotals: fundTotals, purchaseCheck: purchaseCheck,
     debtorTotals: debtorTotals, countCash: countCash,
     COST_KINDS: COST_KINDS, costKindOf: costKindOf, pnl: pnl,
     breakEven: breakEven, breakEvenDay: breakEvenDay,

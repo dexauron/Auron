@@ -238,6 +238,13 @@
       debtChecked: (S.settings.debtChecked || {})[m] });
     var p = mc.pnl;
 
+    /* Замок. Заперли месяц — записи за него больше не правятся ни случайно,
+       ни задним числом. Снять замок может тот же владелец: это защита от
+       случайности, а не от самого себя. */
+    var closed = E.txt(S.settings.closedTo);
+    var lastDay = m + '-' + E.daysInMonth(m);
+    var isClosed = closed && closed >= lastDay;
+
     var h = u.pageHead('Закрытие месяца', monthRu(m) + ' — что должно сойтись',
       '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
@@ -248,6 +255,28 @@
       mc.ready ? 'важное сошлось' + (mc.softLeft ? ', ещё ' + mc.softLeft + ' на ваше усмотрение' : '')
         : 'осталось важного: ' + mc.hardLeft,
       mc.ready ? 'c-green' : 'c-orange');
+
+    h += '<div class="quick">' +
+      (isClosed
+        ? '<button class="btn" data-act="month-unlock">' + ic('lock') +
+          ' Снять замок с ' + esc(monthRu(m)) + '</button>'
+        : '<button class="btn' + (mc.ready ? ' btn-primary' : '') +
+          '" data-act="month-lock" data-ym="' + esc(m) + '">' + ic('lock') +
+          ' Запереть ' + esc(monthRu(m)) + '</button>') +
+      '</div>';
+
+    if (isClosed) {
+      h += '<div class="banner green"><span>' + ic('lock') + '</span><span>' +
+        '<b>Месяц заперт по ' + esc(dateRu(closed)) + '.</b> Записи за это время не ' +
+        'добавляются, не правятся и не удаляются — отчёт задним числом уже не поедет. ' +
+        'Понадобилось поправить — снимите замок кнопкой выше.</span></div>';
+    } else {
+      h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+        'Когда всё сошлось и налог посчитан, месяц стоит запереть: после этого записи ' +
+        'за него не изменятся ни случайно, ни задним числом. ' +
+        (mc.ready ? '' : 'Сейчас ещё не всё сошлось — запереть можно, но лучше сперва разобраться.') +
+        '</span></div>';
+    }
 
     h += u.card('Что проверяем', u.listOf(mc.items.map(function (i) {
       return u.listRow({ icon: i.ok ? 'check' : 'warning',
@@ -897,6 +926,32 @@
      ========================================================================== */
   var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
 
+  /* Запереть месяц. Дата замка — последний день выбранного месяца: всё, что
+     раньше неё, становится неприкосновенным. Если раньше запирали более
+     поздний месяц, замок не отодвигаем назад — иначе открылось бы то,
+     что уже закрыто. */
+  A['month-lock'] = function (el) {
+    var m = E.txt(el.dataset.ym);
+    if (!m) return 'Не понял, какой месяц запирать.';
+    var to = m + '-' + E.daysInMonth(m);
+    var was = E.txt(S.settings.closedTo);
+    if (was && was > to) {
+      return 'Уже заперто по ' + dateRu(was) + ' — это позже. Замок назад не двигаем.';
+    }
+    S.setSetting('closedTo', to);
+    U().render();
+    return 'Месяц заперт по ' + dateRu(to) + '. Записи за это время больше не меняются.';
+  };
+
+  A['month-unlock'] = function () {
+    var was = E.txt(S.settings.closedTo);
+    if (!was) return 'Замка и так нет.';
+    S.setSetting('closedTo', '');
+    U().render();
+    return 'Замок снят. Записи снова можно править — не забудьте запереть обратно, ' +
+      'когда закончите.';
+  };
+
   // Скачать копию базы файлом
   function downloadBackup(tag) {
     var text = S.exportJSON();
@@ -1001,6 +1056,86 @@
     return prevChange ? prevChange(el) : false;
   };
 
+  /* --------------------------------------------------------------------------
+     ЧТО МЕНЯЛОСЬ
+
+     Журнал правок в программе был с самого начала — по нему работает
+     «Отменить». Но посмотреть его было нельзя, а это ровно то, что нужно,
+     когда не сходится и надо вспомнить, что вчера трогали.
+     -------------------------------------------------------------------------- */
+  function viewLog() {
+    var u = U();
+    var rows = (S.state.log || []).slice().reverse();
+
+    var h = u.pageHead('Что менялось', 'История записей: что добавили, поправили и удалили',
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
+
+    if (!rows.length) {
+      return h + '<div class="card"><div class="empty"><b>Пока ничего не менялось</b><br>' +
+        'Здесь появится список всего, что вы добавили, поправили или удалили — ' +
+        'с датой и временем. Пригодится, когда цифры не сходятся и надо вспомнить, ' +
+        'что трогали вчера.</div><div class="card-pad">' +
+        '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
+        ' Свести кассу за смену</button></div></div>';
+    }
+
+    var today0 = today();
+    var todayN = rows.filter(function (r) { return E.txt(r.at).slice(0, 10) === today0; }).length;
+    h += '<div class="stat-grid">' +
+      u.stat('Всего записей в истории', u.nf(rows.length), 'помним последние ' + u.nf(rows.length)) +
+      u.stat('Сегодня', u.nf(todayN), todayN ? 'изменений за сегодня' : 'сегодня не трогали') +
+      u.stat('Последнее', rows[0] ? esc(whenRu(rows[0].at)) : '—',
+        rows[0] ? esc(rows[0].what + ' · ' + rows[0].collName) : '') +
+      '</div>';
+
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+      'Это только история изменений — сами записи лежат на своих экранах. ' +
+      'Вернуть удалённое можно на экране «База операций» в корзине, а отменить ' +
+      'последнее действие — сочетанием Ctrl+Z.</span></div>';
+
+    h += u.card('История', u.table('logT', [
+      { title: 'Когда', fn: function (r) { return esc(whenRu(r.at)); } },
+      { title: 'Что сделали', fn: function (r) {
+        var color = r.what === 'удаление' ? 'red' : r.what === 'правка' ? 'orange' : 'green';
+        return u.badge(r.what, color); } },
+      { title: 'Где', fn: function (r) { return esc(r.collName || r.coll || '—'); } },
+      { title: 'Запись', fn: function (r) { return esc(r.title || '—'); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) {
+        return r.sum ? u.priv(r.sum) : '—'; } },
+      { title: 'Было раньше', fn: function (r) {
+        if (!r.before) return '—';
+        var d = diffWords(r.before, r);
+        return d ? '<small class="c-muted">' + esc(d) + '</small>' : '—'; } }
+    ], rows, { step: 50, empty: 'Записей нет' }),
+      'Сверху — самое свежее');
+    return h;
+  }
+
+  // «14 сен, 09:35» — понятнее, чем машинная дата
+  function whenRu(iso) {
+    var t = E.txt(iso);
+    if (t.length < 16) return t;
+    return dateRu(t.slice(0, 10)) + ', ' + t.slice(11, 16);
+  }
+
+  /* Что именно поменялось в записи. Показываем только поля с деньгами и
+     ключевыми словами: перечислять все двадцать полей бессмысленно. */
+  function diffWords(before, row) {
+    var WATCH = { amount: 'сумма', zCash: 'наличные', zCashless: 'безнал',
+      payouts: 'выплаты', factCash: 'факт в ящике', openCash: 'размен',
+      goodsCash: 'товар', debtTaken: 'взяли в долг', debtPaid: 'отдали долг',
+      category: 'статья', supplier: 'поставщик', employee: 'сотрудник',
+      date: 'дата', due: 'дата', status: 'состояние' };
+    var out = [];
+    Object.keys(WATCH).forEach(function (k) {
+      if (!(k in before)) return;
+      var was = before[k];
+      if (was === '' || was == null) return;
+      out.push(WATCH[k] + ' ' + (typeof was === 'number' ? money(was) : E.txt(was)));
+    });
+    return out.slice(0, 4).join(' · ');
+  }
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     { id: 'findash', icon: 'chartPie', name: 'Дашборд', group: 'Отчёты', render: viewDash },
@@ -1014,6 +1149,7 @@
     { id: 'bepdays', icon: 'calendarCheck', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays },
     { id: 'taxcal', icon: 'bank', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxCal },
     { id: 'monthclose', icon: 'lock', name: 'Закрытие месяца', group: 'Отчёты', render: viewMonthClose },
+    { id: 'log', icon: 'clock', name: 'Что менялось', group: 'Ещё', render: viewLog },
     { id: 'reset', icon: 'lifebuoy', name: 'Сброс и откат базы', group: 'Ещё', render: viewReset }
   );
 })();

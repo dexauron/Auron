@@ -63,6 +63,18 @@
      Счёт всё равно виден в форме и меняется одним нажатием: подстановка
      экономит время, а не отнимает выбор.
      -------------------------------------------------------------------------- */
+  function funds() { return S.state.funds || []; }
+  function fundOptions(withNone) {
+    var o = withNone ? [{ value: '', text: '— не в конверт —' }] : [];
+    return o.concat(funds().map(function (f) {
+      return { value: f.id, text: f.name };
+    }));
+  }
+  function fundName(id) {
+    var f = funds().filter(function (x) { return x.id === id; })[0];
+    return f ? f.name : '';
+  }
+
   function accForCategory(category, cashless) {
     var cat = E.norm(category);
     if (cat) {
@@ -287,6 +299,9 @@
               'из денежного ящика деньги уже посчитаны в «выплатах» смены — ' +
               'второй раз их не вычтут' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        (funds().length ? u.fieldRow('Из какого конверта', 'fund', 'select', v.fund || '',
+          { options: fundOptions(true),
+            hint: 'если на это откладывали — отметьте, конверт уменьшится' }) : '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Расход уменьшает прибыль. Остаток наличных он уменьшает, только если ' +
@@ -311,7 +326,8 @@
       }
       learn({ categories: v.category, methods: v.method });
       var rec = { type: E.T_OUT, date: v.date, category: v.category,
-        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note };
+        method: v.method, account: E.txt(v.account), amount: num(v.amount),
+        fund: E.txt(v.fund), note: v.note };
       var ed = U().editing();
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
@@ -410,6 +426,9 @@
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Кто повёз', 'cashier', 'list', v.cashier || '',
           { options: cashiers(), placeholder: 'необязательно' }) +
+        (funds().length ? u.fieldRow('Откладываем в конверт', 'fund', 'select', v.fund || '',
+          { options: fundOptions(true),
+            hint: 'на аренду, зарплату, налоги — чтобы эти деньги было видно отдельно' }) : '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
     hint: 'Инкассация в сейф, перевод со счёта на счёт, размен обратно в кассу — всё это ' +
@@ -430,7 +449,7 @@
       }
       var rec = { type: E.T_MOVE, date: v.date, account: E.txt(v.account),
         toAccount: E.txt(v.toAccount), amount: num(v.amount),
-        cashier: E.txt(v.cashier), note: E.txt(v.note) };
+        cashier: E.txt(v.cashier), fund: E.txt(v.fund), note: E.txt(v.note) };
       var ed = U().editing();
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
@@ -1273,6 +1292,21 @@
 
   /* Отметить выплату оплаченной. Долг сама не уменьшает — предлагает вписать
      сумму в итоги дня, чтобы у кредиторки остался один источник. */
+  /* «Отложить» у конверта: открывает обычный перевод, но конверт и счёт-получатель
+     уже проставлены. Отдельной «операции откладывания» в программе нет — это
+     важно: чем меньше видов записей, тем меньше мест, где деньги могут
+     потеряться. */
+  A['fund-put'] = function (el) {
+    var f = funds().filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!f) return 'Конверт не найден.';
+    var ft = E.fundTotals(funds(), dds(), null, U().month ? U().month() : E.ymOf(today()));
+    var row = ft.rows.filter(function (x) { return x.id === f.id; })[0];
+    U().openForm('moveCash', { date: today(), toAccount: E.txt(f.account),
+      account: accDefault(false), fund: f.id,
+      amount: row && row.toPut > 0 ? row.toPut : '' });
+    return null;
+  };
+
   A['plan-paid'] = function (el) {
     var p = (S.state.plans || []).filter(function (x) { return x.id === el.dataset.id; })[0];
     if (!p) return 'Выплата не найдена.';
@@ -1323,6 +1357,127 @@
     document.addEventListener('input', function (e) { refit(e.target); });
   })();
 
+  /* --------------------------------------------------------------------------
+     НАКОПЛЕНИЯ
+
+     Экран отвечает на один вопрос: хватит ли денег, когда придёт счёт.
+     Сверху — сколько отложено всего, сколько ещё надо отложить в этом месяце
+     и не съедает ли закуп больше положенного.
+     -------------------------------------------------------------------------- */
+  function viewFunds() {
+    var u = U(), m = U().month ? U().month() : E.ymOf(today());
+    var ft = E.fundTotals(funds(), dds(), null, m);
+    var pc = E.purchaseCheck(dds(), S.settings, m);
+    var t = ft.totals;
+
+    var h = u.pageHead('Накопления', 'Чтобы в конце месяца было чем платить',
+      '<button class="btn btn-primary" data-form="moveCash">' + ic('truck') +
+      ' Отложить</button> <button class="btn" data-form="fundCard">' + ic('plus') +
+      ' Новый конверт</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Отложено сейчас', u.priv(t.left), 'лежит в конвертах') +
+      u.stat('Надо отложить в этом месяце', u.priv(t.short),
+        t.short > 0 ? 'ещё не отложено' : 'план выполнен',
+        t.short > 0 ? 'c-orange' : 'c-green') +
+      u.stat('План на месяц', u.priv(t.plan), 'по всем конвертам') +
+      '</div>';
+
+    /* Закуп — главный пожиратель выручки. Если он выходит за рамки,
+       откладывать будет не из чего, и это надо видеть заранее. */
+    if (pc.revenue) {
+      var bad = !pc.ok;
+      h += '<div class="banner ' + (bad ? 'orange' : 'green') + '"><span>' +
+        ic(bad ? 'warning' : 'check') + '</span><span>' +
+        'На товар ушло <b>' + esc(money(pc.purchase)) + '</b> — это ' +
+        esc(u.pct(pc.sharePct)) + ' выручки. ' +
+        (bad
+          ? 'Больше вашей планки в ' + esc(u.pct(pc.limitPct)) + ' на <b>' +
+            esc(money(pc.over)) + '</b>. Столько же не хватит на аренду, зарплату и налоги — ' +
+            'закупайте осторожнее или поднимайте наценку.'
+          : 'Ваша планка — ' + esc(u.pct(pc.limitPct)) + ', до неё ещё ' +
+            esc(money(pc.room)) + '. Планка меняется в настройках.') +
+        '</span></div>';
+    }
+
+    if (!ft.rows.length) {
+      return h + '<div class="card"><div class="empty"><b>Конвертов пока нет</b><br>' +
+        'Конверт — это цель: «Аренда, 110 000 в месяц». Откладываете в него понемногу ' +
+        'с выручки, и к сроку деньги уже лежат отдельно от оборотных.</div>' +
+        '<div class="card-pad"><button class="btn btn-primary" data-form="fundCard">' +
+        ic('plus') + ' Завести конверт</button></div></div>';
+    }
+
+    h += u.card('Конверты', u.table('fundsT', [
+      { title: 'На что', fn: function (r) { return esc(r.name) +
+        (r.note ? '<br><small class="c-muted">' + esc(r.note) + '</small>' : ''); } },
+      { title: 'План в месяц', cls: 'num', fn: function (r) {
+        return r.plan ? u.priv(r.plan) : '<span class="c-muted">не задан</span>'; } },
+      { title: 'Отложено в этом месяце', cls: 'num', fn: function (r) {
+        return u.priv(r.putThisMonth) + (r.plan
+          ? ' <small class="c-muted">' + u.pct(r.donePct) + '</small>' : ''); } },
+      { title: 'Ещё отложить', cls: 'num', fn: function (r) {
+        return r.toPut > 0 ? '<b class="c-orange">' + u.priv(r.toPut) + '</b>'
+          : '<span class="c-green">хватает</span>'; } },
+      { title: 'Лежит в конверте', cls: 'num', fn: function (r) {
+        return '<b>' + u.priv(r.left) + '</b>'; } },
+      { title: 'Потрачено', cls: 'num', fn: function (r) {
+        return r.spent ? u.priv(r.spent) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="funds:' + esc(r.id) + ':fundCard">' +
+          ic('edit', 16) + '</button> ' +
+          '<button class="btn btn-sm" data-act="fund-put" data-id="' + esc(r.id) +
+          '">Отложить</button>'; } }
+    ], ft.rows, { step: 30, empty: 'Конвертов нет',
+      total: [{ html: 'Всего' },
+        { cls: 'num', html: u.priv(t.plan) },
+        { cls: 'num', html: u.priv(t.putThisMonth) },
+        { cls: 'num', html: t.short ? '<b class="c-orange">' + u.priv(t.short) + '</b>' : '—' },
+        { cls: 'num', html: '<b>' + u.priv(t.left) + '</b>' },
+        { cls: 'num', html: u.priv(t.spent) }, { html: '' }] }),
+      'Деньги в конвертах лежат на настоящих счетах — конверт лишь помечает, что они заняты');
+
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+      'Конверт не создаёт новых денег и не меняет прибыль: он помечает переводы и расходы, ' +
+      'которые и так есть. «Отложить» — это обычный перевод, например из кассы в сейф, ' +
+      'с пометкой конверта. Заплатили аренду и отметили тот же конверт — он уменьшился.' +
+      '</span></div>';
+    return h;
+  }
+
+  FORMS.fundCard = {
+    title: 'Конверт', icon: 'safe',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('На что откладываем', 'name', 'text', v.name || '',
+        { placeholder: 'Аренда, Зарплата, Налоги, На ремонт' }) +
+        u.fieldRow('Сколько в месяц', 'plan', 'number', v.plan || '',
+          { hint: 'сколько надо откладывать каждый месяц; 0 — если просто копите' }) +
+        u.fieldRow('Где лежат деньги', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(),
+            hint: 'настоящий счёт, обычно сейф или расчётный счёт' }) +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Конверт — это цель, а не отдельный кошелёк. Деньги лежат на обычном счёте, ' +
+      'а конверт показывает, сколько из них уже занято под аренду или зарплату.',
+    save: function (v) {
+      if (!E.txt(v.name)) return 'Впишите, на что откладываете.';
+      var bad = Q.checkAmount(v.plan, { allowEmpty: true, allowZero: true });
+      if (bad) return 'Сколько в месяц: ' + bad;
+      var ed = U().editing();
+      var same = funds().filter(function (f) {
+        return E.norm(f.name) === E.norm(v.name) && (!ed || f.id !== ed.id);
+      })[0];
+      if (same) return 'Конверт «' + same.name + '» уже есть.';
+      var rec = { name: E.txt(v.name), plan: num(v.plan),
+        account: E.txt(v.account), note: E.txt(v.note) };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('funds', rec);
+      S.save(); refresh();
+      return { ok: 'Конверт «' + rec.name + '» сохранён.' };
+    }
+  };
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },
@@ -1332,6 +1487,7 @@
     { id: 'ledger', icon: 'list', name: 'База операций', group: 'Деньги', render: viewLedger },
     { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers },
     { id: 'debtors', icon: 'notebook', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
-    { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport }
+    { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport },
+    { id: 'funds', icon: 'safe', name: 'Накопления', group: 'Деньги', render: viewFunds }
   );
 })();

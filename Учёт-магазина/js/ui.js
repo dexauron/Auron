@@ -2379,7 +2379,18 @@
       e.preventDefault();
       if (f.id === 'wmForm') {
         var id = f.dataset.fid, def = FORMS[id];
-        var res = def.save(formValues(f));
+        /* Закрытый месяц не правят. Проверяем здесь, в одном месте на все
+           формы: у каждой есть дата, и этого достаточно. Отдельная проверка
+           в хранилище — на случай, если запись создадут в обход формы. */
+        var vals = formValues(f);
+        var lockWhy = S.lockedWhy('dds', { date: vals.date || vals.due });
+        if (lockWhy) { toast(lockWhy, 9000); return; }
+        if (EDIT) {
+          var wasRec = (S.state[EDIT.coll] || []).filter(function (x) { return x.id === EDIT.id; })[0];
+          var lockOld = wasRec ? S.lockedWhy(EDIT.coll, wasRec) : '';
+          if (lockOld) { toast(lockOld, 9000); return; }
+        }
+        var res = def.save(vals);
         window.WM_LAST_SAVE = { form: id, ok: typeof res !== 'string' };
         if (typeof res === 'string') { toast(res); return; }
         // При правке форма обычно добавляет новую запись — старую убираем.
@@ -2487,6 +2498,36 @@
       if (!f || !f.dataset.fid) return;
       try { Q.saveDraft(f.dataset.fid, formValues(f)); } catch (err) {}
     }, 3000);
+
+    /* --- СВАЙП ПО СТРОКЕ НА ТЕЛЕФОНЕ -------------------------------------
+       На телефоне целиться в маленькую кнопку с тремя точками неудобно.
+       Провёл по строке влево — открылось то же меню действий, что и по
+       кнопке. Никакого отдельного поведения: свайп это просто второй способ
+       нажать ту же кнопку, поэтому и вести себя он может только так же.
+
+       Порог 60 пикселей и проверка, что палец шёл вбок, а не вниз: иначе
+       меню выскакивало бы при обычной прокрутке списка. */
+    (function () {
+      var x0 = 0, y0 = 0, row = null;
+      document.addEventListener('touchstart', function (e) {
+        if (!e.touches || e.touches.length !== 1) { row = null; return; }
+        var t = e.touches[0];
+        x0 = t.clientX; y0 = t.clientY;
+        row = e.target.closest ? e.target.closest('tr, .row') : null;
+        // строка без меню действий свайпать нечему
+        if (row && !row.querySelector('[data-menu]')) row = null;
+      }, { passive: true });
+
+      document.addEventListener('touchend', function (e) {
+        if (!row || !e.changedTouches || !e.changedTouches.length) { row = null; return; }
+        var t = e.changedTouches[0];
+        var dx = t.clientX - x0, dy = Math.abs(t.clientY - y0);
+        var btn = row.querySelector('[data-menu]');
+        row = null;
+        if (dx > -60 || dy > 40 || !btn) return;   // это была прокрутка, а не свайп
+        openRowMenu(btn);
+      }, { passive: true });
+    })();
 
     // «сегодня» и «вчера» у поля даты
     document.addEventListener('click', function (e) {

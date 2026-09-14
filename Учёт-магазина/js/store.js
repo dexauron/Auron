@@ -209,12 +209,22 @@
     // Счета заводим в любом случае: даже если хранилище не прочиталось,
     // деньги должно быть куда класть
     ensureAccounts();
+    ensureFunds();
     return state;
   }
 
   /* Счета должны быть всегда: без них некуда положить выручку. Если их нет
      (новая база или база, заведённая до появления счетов), создаём три
      обычных и переносим в них прежние начальные остатки. */
+  /* Конверты заводим один раз, пустыми: владелец вписывает свои суммы.
+     Сумма 0 значит «пока не откладываю» — конверт не мешает и не ругается. */
+  function ensureFunds() {
+    if ((state.funds || []).length) return;
+    state.funds = starterFunds(state.accounts || []).map(function (f) {
+      return { id: uid(), name: f.name, plan: f.plan, account: f.account, note: f.note };
+    });
+  }
+
   function ensureAccounts() {
     if ((state.accounts || []).length) return state.accounts;
     var st = state.settings || {};
@@ -385,7 +395,46 @@
     if (state.log.length > LOG_MAX) state.log = state.log.slice(-LOG_MAX);
   }
 
+  /* --------------------------------------------------------------------------
+     ЗАКРЫТЫЙ МЕСЯЦ НЕ ПРАВЯТ
+
+     Владелец сводит месяц, смотрит прибыль, платит налог — и с этого момента
+     цифры должны остаться как есть. Если потом задним числом поправить смену,
+     отчёт поедет, а владелец об этом не узнает.
+
+     Поэтому месяц можно «запереть»: в настройке closedTo стоит последняя
+     закрытая дата, и всё, что раньше неё, не добавляется, не правится и не
+     удаляется. Запирание снимается тем же владельцем в один клик — это защита
+     от случайности, а не замок от самого себя.
+     -------------------------------------------------------------------------- */
+  var LOCKED = ['dds', 'plans', 'timesheet', 'payouts', 'debtors', 'cashcount'];
+
+  // Своего txt в этом файле нет — движок сюда не подключается
+  function str(v) { return String(v == null ? '' : v).trim(); }
+
+  function closedTo() { return str(state.settings && state.settings.closedTo); }
+
+  // Дата записи: у выплат она называется due, у остальных date
+  function recDate(item) { return str(item && (item.date || item.due)); }
+
+  /* Заперто ли редактирование этой записи. Возвращает объяснение для владельца
+     или пустоту, если править можно. */
+  function lockedWhy(coll, item) {
+    var to = closedTo();
+    if (!to) return '';
+    if (LOCKED.indexOf(coll) < 0) return '';
+    var d = recDate(item);
+    if (!d || d > to) return '';
+    return 'Месяц закрыт по ' + to.split('-').reverse().join('.') +
+      ', и записи за это время уже не меняются. Если поправить действительно нужно — ' +
+      'откройте «Закрытие месяца» и снимите замок.';
+  }
+
   function add(coll, item) {
+    /* Последняя линия обороны. Основную проверку делает форма — она умеет
+       объяснить владельцу словами. Здесь молча отказываем, чтобы закрытый
+       месяц нельзя было тронуть даже по недосмотру в коде. */
+    if (lockedWhy(coll, item)) return null;
     if (!state[coll]) state[coll] = [];
     if (!item.id) item.id = uid();
     state[coll].push(item);
@@ -409,6 +458,7 @@
     var rows = state[coll] || [];
     for (var i = 0; i < rows.length; i++) {
       if (rows[i].id === id) {
+        if (lockedWhy(coll, rows[i])) return null;
         var before = JSON.parse(JSON.stringify(rows[i]));
         for (var k in patch) rows[i][k] = patch[k];
         writeLog('правка', coll, rows[i], before);
@@ -427,6 +477,7 @@
     for (var i = 0; i < rows.length; i++) {
       if (rows[i].id === id) {
         var rec = rows[i];
+        if (lockedWhy(coll, rec)) return null;
         rows.splice(i, 1);
         writeLog('удаление', coll, rec, rec);
         if (!forever && coll !== 'trash') {
@@ -600,7 +651,8 @@
     fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll,
     stamp: stamp, compare: compare,
     ACCOUNT_KINDS: ACCOUNT_KINDS, ensureAccounts: ensureAccounts,
-    starterAccounts: starterAccounts,
+    starterAccounts: starterAccounts, starterFunds: starterFunds,
+    lockedWhy: lockedWhy, closedTo: closedTo,
     get lastSaveError() { return lastSaveError; }
   };
 });

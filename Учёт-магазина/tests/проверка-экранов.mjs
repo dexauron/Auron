@@ -1489,6 +1489,141 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 11. Накопления, замок месяца, история правок и свайп на телефоне */
+{
+  console.log('— Накопления, замок месяца, история и свайп');
+  const { page, ctx, errs } = await open();
+
+  /* --- КОНВЕРТЫ --------------------------------------------------------- */
+  await page.evaluate(() => {
+    const S = window.WMStore, a = S.state.accounts || [];
+    const till = a.find(x => x.kind === 'till'), safe = a.find(x => x.kind === 'cash'),
+      bank = a.find(x => x.kind === 'bank');
+    (S.state.funds || []).forEach(f => { f.plan = f.name === 'Аренда' ? 110000 : 0;
+      f.account = safe && safe.id; });
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 300000, zCashless: 100000, payouts: 250000,
+      factCash: 50000, account: till && till.id, cashlessAccount: bank && bank.id });
+    S.add('dds', { type: 'День', date: '2026-09-01', goodsCash: 200000, debtTaken: 120000 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('funds');
+  });
+  await page.waitForTimeout(500);
+  let t = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+  check('экран «Накопления» открывается', t.includes('Чтобы в конце месяца'), 'открылся', 'открылся');
+  check('ЗАКУП СВЕРХ ПЛАНКИ ПРОГРАММА ЗАМЕЧАЕТ',
+    t.includes('80,0%') && t.includes('20 000'), 'заметила', 'перебор 20 000');
+  check('и видно, сколько ещё отложить', t.includes('110 000'), 'видно', 'видно');
+
+  // Откладываем — это обычный перевод с пометкой конверта
+  const put = await page.evaluate(() => {
+    const S = window.WMStore, a = S.state.accounts || [];
+    const before = window.WM.pnl({ rows: S.state.dds }).net;
+    const bal = window.WM.accountBalances(S.state.dds, a).totals.total;
+    S.add('dds', { type: 'Перемещение', date: '2026-09-02', amount: 60000,
+      account: a.find(x => x.kind === 'till').id, toAccount: a.find(x => x.kind === 'cash').id,
+      fund: (S.state.funds || [])[0].id });
+    S.save(); window.WMUI.recompute();
+    return { before, after: window.WM.pnl({ rows: S.state.dds }).net,
+      fund: window.WM.fundTotals(S.state.funds, S.state.dds).rows[0].left };
+  });
+  check('ОТЛОЖЕННОЕ ВИДНО В КОНВЕРТЕ', put.fund === 60000, put.fund, 60000);
+  check('А ПРИБЫЛЬ ОТ ЭТОГО НЕ ИЗМЕНИЛАСЬ', Math.abs(put.before - put.after) < 0.5,
+    put.before + ' → ' + put.after, 'та же');
+
+  /* --- ЗАМОК МЕСЯЦА ----------------------------------------------------- */
+  await page.evaluate(() => {
+    window.WMStore.setSetting('reportMonth', '2026-09');
+    window.WMUI.go('monthclose');
+  });
+  await page.waitForTimeout(450);
+  check('на «Закрытии месяца» есть кнопка «Запереть»',
+    await page.evaluate(() => !!document.querySelector('[data-act="month-lock"]')), 'есть', 'есть');
+  await page.evaluate(() => document.querySelector('[data-act="month-lock"]').click());
+  await page.waitForTimeout(450);
+  check('МЕСЯЦ ЗАПИРАЕТСЯ',
+    (await page.evaluate(() => window.WMStore.settings.closedTo)) === '2026-09-30',
+    await page.evaluate(() => window.WMStore.settings.closedTo), '2026-09-30');
+
+  const nBefore = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await page.waitForTimeout(350);
+  await page.fill('.sheet [name="date"]', '2026-09-05');
+  await page.fill('.sheet [name="category"]', 'Обед');
+  await page.fill('.sheet [name="amount"]', '500');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(450);
+  check('И ЗАПИСЬ ЗАДНИМ ЧИСЛОМ БОЛЬШЕ НЕ ПРОХОДИТ',
+    (await page.evaluate(() => (window.WMStore.state.dds || []).length)) === nBefore,
+    'не прошла', 'не прошла');
+  check('а программа объясняет, почему',
+    /[Мм]есяц закрыт/.test(await page.evaluate(() => {
+      const x = document.querySelector('.toast'); return x ? x.innerText : ''; })),
+    'объясняет', 'объясняет');
+
+  await page.evaluate(() => { window.WMUI.go('monthclose'); });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-act="month-unlock"]').click());
+  await page.waitForTimeout(400);
+  check('и замок снимается одной кнопкой',
+    (await page.evaluate(() => window.WMStore.settings.closedTo)) === '',
+    JSON.stringify(await page.evaluate(() => window.WMStore.settings.closedTo)), '""');
+
+  /* --- ЧТО МЕНЯЛОСЬ ----------------------------------------------------- */
+  await page.evaluate(() => window.WMUI.go('log'));
+  await page.waitForTimeout(450);
+  t = await page.textContent('#page');
+  check('ИСТОРИЮ ПРАВОК ТЕПЕРЬ ВИДНО',
+    t.includes('Что менялось') && /добавление|правка|удаление/.test(t),
+    'видно', 'видно');
+  check('и в ней написано, когда и что', /\d{1,2}\s\S+,\s\d{2}:\d{2}/.test(t),
+    'написано', 'дата и время');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+
+  /* --- СВАЙП НА ТЕЛЕФОНЕ ------------------------------------------------ */
+  const m = await open({ viewport: { width: 393, height: 852 }, hasTouch: true, isMobile: true });
+  await m.page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-01', category: 'Аренда',
+      method: 'Наличные', amount: 110000 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('ledger');
+  });
+  await m.page.waitForTimeout(500);
+  const swiped = await m.page.evaluate(() => {
+    const btn = document.querySelector('#page tr [data-menu]');
+    if (!btn) return 'строки нет';
+    const row = btn.closest('tr'), b = row.getBoundingClientRect();
+    const y = b.y + b.height / 2;
+    const mk = (type, cx) => new TouchEvent(type, { bubbles: true, cancelable: true,
+      touches: type === 'touchend' ? [] : [new Touch({ identifier: 1, target: row, clientX: cx, clientY: y })],
+      changedTouches: [new Touch({ identifier: 1, target: row, clientX: cx, clientY: y })] });
+    row.dispatchEvent(mk('touchstart', b.x + b.width - 40));
+    row.dispatchEvent(mk('touchend', b.x + b.width - 160));
+    return !!document.querySelector('[data-del]') ? 'меню открылось' : 'меню не открылось';
+  });
+  check('СВАЙП ВЛЕВО ПО СТРОКЕ ОТКРЫВАЕТ ДЕЙСТВИЯ', swiped === 'меню открылось', swiped, 'меню открылось');
+
+  // Обычная прокрутка вниз меню открывать не должна
+  const scrolled = await m.page.evaluate(() => {
+    document.querySelectorAll('[data-del]').forEach(e => e.closest('div,ul').remove());
+    const btn = document.querySelector('#page tr [data-menu]');
+    const row = btn.closest('tr'), b = row.getBoundingClientRect();
+    const mk = (type, cy) => new TouchEvent(type, { bubbles: true, cancelable: true,
+      touches: type === 'touchend' ? [] : [new Touch({ identifier: 1, target: row, clientX: b.x + 40, clientY: cy })],
+      changedTouches: [new Touch({ identifier: 1, target: row, clientX: b.x + 40, clientY: cy })] });
+    row.dispatchEvent(mk('touchstart', b.y + 10));
+    row.dispatchEvent(mk('touchend', b.y + 200));
+    return !!document.querySelector('[data-del]');
+  });
+  check('а прокрутка вниз — нет', scrolled === false, scrolled ? 'открылось' : 'не открылось',
+    'не открылось');
+  check('в консоли чисто на телефоне', m.errs.length === 0,
+    m.errs.slice(0, 2).join(' | ') || 'чисто', 'чисто');
+  await m.page.close(); await m.ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
