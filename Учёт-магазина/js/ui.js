@@ -398,8 +398,13 @@
       '<div class="stat-value private' + (color ? ' ' + color : '') + '">' + value + '</div>' +
       (sub ? '<div class="stat-sub">' + sub + '</div>' : '') + '</div>';
   }
-  function card(title, bodyHtml, headRight) {
-    return '<div class="card"><div class="card-head"><div class="card-title">' + esc(title) + '</div>' +
+  /* Заголовок карточки экранируется — иначе чужой текст мог бы подсунуть
+     разметку. Поэтому значок передаётся отдельным полем, а не склейкой:
+     склеенное имя значка напечаталось бы словом «people» вместо картинки. */
+  function card(title, bodyHtml, headRight, iconName) {
+    return '<div class="card"><div class="card-head"><div class="card-title">' +
+      (iconName ? '<span class="card-ic">' + ic(iconName, 18) + '</span>' : '') +
+      esc(title) + '</div>' +
       (headRight ? '<div>' + headRight + '</div>' : '') + '</div>' + bodyHtml + '</div>';
   }
   function listRow(o) {
@@ -486,13 +491,32 @@
     return true;
   }
 
-  function numHint(raw) {
+  /* Подпись под числовым полем. Она должна говорить то же, что написано
+     в названии поля: дни — днями, проценты — процентами, рубли — рублями.
+     Раньше подписывала всё рублями, и «напоминать за 7 дней» превращалось
+     в «7 ₽», а «часов в смене 12» — в «12 ₽».
+
+     Для дней, процентов и просто чисел подпись нужна только тогда, когда
+     в поле выражение или число крупное: «3 секунды» под полем, где написано
+     3, — это шум, а не помощь. */
+  function numHint(raw, unit) {
     var txt = String(raw == null ? '' : raw).trim();
     if (!txt) return '';
     var v = NUM.calc(txt);
     if (v === null) return '<span class="c-red">не получается посчитать</span>';
+    var expr = NUM.isExpr(txt);
+    var u = unit || 'money';
+
+    if (u !== 'money') {
+      if (!expr && Math.abs(v) < 1000) return '';       // и так всё видно
+      var tail = u === 'percent' ? '%'
+        : u === 'days' ? NUM.plural(Math.abs(v), 'день', 'дня', 'дней') : '';
+      var body = '<b>' + esc(NUM.group(v)) + (tail ? ' ' + esc(tail) : '') + '</b>';
+      return (expr ? esc(txt) + ' = ' : '') + body;
+    }
+
     var out = '<b>' + esc(NUM.money(v)) + '</b>';
-    if (NUM.isExpr(txt)) out = esc(txt) + ' = ' + out;
+    if (expr) out = esc(txt) + ' = ' + out;
     if (Math.abs(v) >= 1000) out += ' <span class="c-muted">' + esc(NUM.words(v)) + '</span>';
     return out;
   }
@@ -550,10 +574,12 @@
       var start = value == null || value === '' ? '' : NUM.groupInput(String(value));
       h += '<div class="num-field">' +
         '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
+        (opts.unit && opts.unit !== 'money' ? ' data-unit="' + esc(opts.unit) + '"' : '') +
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
         (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
         '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">' + ic('calculator') + '</button>' +
-        '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' + numHint(start) + '</div>';
+        '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' +
+        numHint(start, opts.unit) + '</div>';
     } else if (type === 'pairs') {
       var plid = (opts.options && opts.options.length) ? 'dl-' + name + '-' + (++LIST_N) : '';
       var items = (opts.rows && opts.rows.length) ? opts.rows : [{ name: '', sum: '' }];
@@ -1187,7 +1213,7 @@
     h += card('Копии и перенос', listOf([
       listRow({ icon: 'download', title: 'Скачать этот экран в Excel', sub: 'то, что видно на экране',
         value: '<button class="btn btn-sm" data-act="export-screen">Скачать</button>' }),
-      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'файл .json — положите на флешку',
+      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'один файл со всеми записями — положите на флешку',
         value: '<button class="btn btn-sm" data-act="backup">Скачать</button>' }),
       listRow({ icon: 'download', title: 'Загрузить базу из копии', sub: 'заменит текущие записи',
         value: '<button class="btn btn-sm" data-act="restore">Загрузить</button>' }),
@@ -1197,11 +1223,23 @@
     return h;
   }
 
+  // Карточка со значком слева от названия — для настроек и им подобных
+  function cardWithIcon(iconName, title, bodyHtml, headRight) {
+    return card(title, bodyHtml, headRight, iconName);
+  }
+
   function setInput(item, value) {
     var t = item.type, opts = { hint: item.hint };
     if (t === 'select') { opts.options = item.options || []; return fieldRow(item.label, item.key, 'select', value, opts); }
     if (t === 'yesno') { opts.options = ['да', 'нет']; return fieldRow(item.label, item.key, 'select', value || 'нет', opts); }
-    if (t === 'money' || t === 'percent' || t === 'days' || t === 'number') return fieldRow(item.label, item.key, 'number', value, opts);
+    if (t === 'money' || t === 'percent' || t === 'days' || t === 'number') {
+      /* Единица измерения. Без неё «напоминать за 7 дней» подписывалось
+         как «7 ₽», а «часов в смене 12» — как «12 ₽». Владелец читает
+         подпись, а не тип поля в коде. */
+      opts.unit = t === 'money' ? 'money' : t === 'percent' ? 'percent'
+        : t === 'days' ? 'days' : 'plain';
+      return fieldRow(item.label, item.key, 'number', value, opts);
+    }
     if (t === 'time') return fieldRow(item.label, item.key, 'time', value, opts);
     return fieldRow(item.label, item.key, 'text', value, opts);
   }
@@ -1217,7 +1255,7 @@
 
     h += '<form id="setForm">';
     SET.GROUPS.forEach(function (g) {
-      h += card(g.icon + '  ' + g.name,
+      h += cardWithIcon(g.icon, g.name,
         (g.note ? '<div class="form-hint">' + esc(g.note) + '</div>' : '') +
         '<div class="form-list">' + g.items.map(function (it) {
           var item = { key: it[0], label: it[1], type: it[2], hint: it[3] || '', options: it[4] || null };
@@ -1965,7 +2003,7 @@
       listRow({ icon: 'folder', title: 'Обновить из 1С', sub: 'прочитать папку с выгрузками', tap: true, attrs: ' data-act="sync-1c"' }),
       listRow({ icon: 'download', title: 'Скачать этот экран в Excel', tap: true, attrs: ' data-act="export-screen"' }),
       listRow({ icon: 'share', title: 'Отправить этот экран', sub: 'WhatsApp или Telegram', tap: true, attrs: ' data-act="share-screen"' }),
-      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'файл .json', tap: true, attrs: ' data-act="backup"' })
+      listRow({ icon: 'save', title: 'Сохранить копию базы', sub: 'один файл со всеми записями', tap: true, attrs: ' data-act="backup"' })
     ];
     sheet('Экраны', '<div class="list">' + rows.join('') + '</div>' +
       '<div class="nav-group">Действия</div><div class="list">' + actions.join('') + '</div>');
@@ -2294,7 +2332,7 @@
       if (el.classList.contains('num-input')) {
         regroup(el);
         var hint = document.querySelector('[data-hint-for="' + el.name + '"]');
-        if (hint) hint.innerHTML = numHint(el.value);
+        if (hint) hint.innerHTML = numHint(el.value, el.dataset.unit);
       } else if (el.type === 'date' && el.name) {
         var dh = document.querySelector('[data-hint-for="' + el.name + '"]');
         if (dh) dh.textContent = NUM.dateFull(el.value);

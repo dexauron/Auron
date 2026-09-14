@@ -1092,7 +1092,13 @@
     var all = dds();
     if (!all.length) {
       return u.pageHead('Отчёт за месяц', 'Что было и как это выглядит рядом с прошлым месяцем') +
-        '<div class="card"><div class="empty">Записей пока нет.</div></div>';
+        '<div class="card"><div class="empty"><b>Записей пока нет</b><br>' +
+        'Этот отчёт сравнивает месяц с прошлым. Он появится, когда наберётся ' +
+        'хотя бы одна закрытая смена.</div><div class="card-pad">' +
+        '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
+        ' Свести кассу за смену</button> ' +
+        '<button class="btn" data-go="pulse">' + ic('gauge') + ' На Пульт</button>' +
+        '</div></div>';
     }
     var months = {};
     all.forEach(function (r) { if (r.date) months[E.ymOf(r.date)] = 1; });

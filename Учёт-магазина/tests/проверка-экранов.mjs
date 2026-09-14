@@ -1183,6 +1183,138 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 8. Сплошная вычитка: что владелец видит на экранах и в формах.
+      Ловит целый класс ошибок, который глазами находят случайно: имя значка,
+      напечатанное словом вместо картинки; рубль, приклеенный к дням и часам;
+      разметку, утёкшую в текст; «undefined» и «NaN» на виду. */
+{
+  console.log('— Сплошная вычитка экранов и форм');
+  const { page, ctx, errs } = await open();
+  await page.evaluate(() => {
+    const S = window.WMStore, a = S.state.accounts || [];
+    const till = a.find(x => x.kind === 'till'), safe = a.find(x => x.kind === 'cash'),
+      bank = a.find(x => x.kind === 'bank');
+    S.setSetting('storeName', 'Продукты у дома');
+    // настройки, которые считаются НЕ в рублях — на них и ловились подписи «7 ₽»
+    S.setSetting('planWarnDays', 7); S.setSetting('debtorOldDays', 30);
+    S.setSetting('shiftHours', 12); S.setSetting('taxRate', 6);
+    S.setSetting('backupKeep', 30); S.setSetting('watchSeconds', 3);
+    S.setSetting('lockMinutes', 15);
+    S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 40000, zCashless: 12000, payouts: 30000,
+      factCash: 10000, checks: 180, account: till && till.id,
+      cashlessAccount: bank && bank.id });
+    S.add('dds', { type: 'День', date: '2026-09-01', goodsCash: 5000, debtTaken: 12000, debtPaid: 3000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-01', category: 'Аренда',
+      method: 'Наличные', account: safe && safe.id, amount: 15000 });
+    S.add('staff', { name: 'Аня Петрова', position: 'Продавец-кассир', rate: 2500 });
+    S.add('timesheet', { date: '2026-09-01', employee: 'Аня Петрова', shift: 'День', hoursDay: 12 });
+    S.save(); window.WMUI.recompute();
+  });
+
+  const icons = await page.evaluate(() => window.WMIcons.names());
+  const views = await page.evaluate(() => window.WMUI.views().map(v => v.id));
+  const beda = [];
+
+  // Смотрим по ячейкам, а не по всему тексту: иначе заголовок столбца
+  // «Дней» и соседняя колонка с рублями выглядели бы как ошибка.
+  function read(where, text) {
+    (text || '').split(/[\n\t]/).map(x => x.trim()).filter(Boolean).forEach(c => {
+      icons.forEach(ic => {
+        if (ic.length < 4) return;
+        if (new RegExp('(^|[\\s«(])' + ic + '($|[\\s»),.:])').test(c)) {
+          beda.push(where + ': имя значка словом — «' + c.slice(0, 40) + '»');
+        }
+      });
+      if (/(дней|дня|часов|минут|секунд|копий|штук|%)\s*₽/.test(c)) {
+        beda.push(where + ': рубль у не-денег — «' + c.slice(0, 40) + '»');
+      }
+      if (/<(div|span|b|button|svg)\b/.test(c)) {
+        beda.push(where + ': разметка в тексте — «' + c.slice(0, 40) + '»');
+      }
+      if (/undefined|NaN|\[object/.test(c)) {
+        beda.push(where + ': технический мусор — «' + c.slice(0, 40) + '»');
+      }
+    });
+  }
+
+  const formIds = new Set();
+  for (const v of views) {
+    await page.evaluate(id => window.WMUI.go(id), v);
+    await page.waitForTimeout(110);
+    read('экран ' + v, await page.evaluate(() => document.querySelector('#page').innerText));
+    (await page.evaluate(() =>
+      [...document.querySelectorAll('[data-form]')].map(e => e.dataset.form))).forEach(f => formIds.add(f));
+  }
+  check('ВСЕ ЭКРАНЫ ЧИТАЮТСЯ КАК ПО-РУССКИ НАПИСАННЫЕ', beda.length === 0,
+    beda.slice(0, 3).join(' | ') || views.length + ' экранов чисто', 'чисто');
+
+  const bedaF = [];
+  let opened = 0;
+  for (const f of formIds) {
+    const ok = await page.evaluate(id => {
+      try { window.WMUI.openForm(id); return true; } catch (e) { return false; }
+    }, f);
+    await page.waitForTimeout(170);
+    if (!ok) { bedaF.push('форма ' + f + ' не открылась'); continue; }
+    opened++;
+    const before = beda.length;
+    read('форма ' + f, await page.evaluate(() => {
+      const s = document.querySelector('.sheet'); return s ? s.innerText : '';
+    }));
+    while (beda.length > before) bedaF.push(beda.pop());
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(90);
+  }
+  check('и все формы тоже', bedaF.length === 0,
+    bedaF.slice(0, 3).join(' | ') || opened + ' форм чисто', 'чисто');
+
+  // Заголовки карточек настроек: значок обязан быть картинкой
+  await page.evaluate(() => window.WMUI.go('settings'));
+  await page.waitForTimeout(400);
+  const heads = await page.evaluate(() =>
+    [...document.querySelectorAll('#page .card-title')].slice(0, 10)
+      .map(e => ({ t: e.innerText.trim(), svg: !!e.querySelector('svg') })));
+  check('В НАСТРОЙКАХ ЗНАЧКИ — КАРТИНКИ, А НЕ СЛОВА',
+    heads.filter(h => h.svg).length >= 8,
+    heads.filter(h => h.svg).length + ' из ' + heads.length, '>=8');
+
+  // Дни, часы и проценты не подписываются рублями
+  const setText = await page.evaluate(() => document.querySelector('#page').innerText);
+  check('ДНИ И ЧАСЫ НЕ ПОДПИСАНЫ РУБЛЯМИ',
+    !/\b(7|12|30|3|15)\s*₽/.test(setText.replace(/[\u00a0\u202f]/g, ' ')),
+    'не подписаны', 'не подписаны');
+  check('а деньги подписаны', /280\s*000\s*₽|200\s*₽/.test(setText.replace(/[\u00a0\u202f]/g, ' ')),
+    'подписаны', 'подписаны');
+
+  /* НИ ОДИН ЭКРАН НЕ ДОЛЖЕН БЫТЬ СТЕНОЙ.
+     У нового магазина данных нет, и половина экранов пуста. Пустой экран
+     обязан сказать, почему пусто, и дать кнопку, которая это исправит:
+     «записей нет» и точка — это тупик, из которого человек не выберется. */
+  const { page: p2, ctx: c2, errs: e2 } = await open();
+  const stены = [];
+  for (const v of await p2.evaluate(() => window.WMUI.views().map(x => x.id))) {
+    await p2.evaluate(id => window.WMUI.go(id), v);
+    await p2.waitForTimeout(110);
+    const d = await p2.evaluate(() => {
+      const pg = document.querySelector('#page');
+      const t = pg ? pg.innerText.replace(/\s+/g, ' ').trim() : '';
+      return { len: t.length,
+        buttons: pg ? pg.querySelectorAll('[data-form],[data-go],[data-act]').length : 0 };
+    });
+    if (d.len < 300 && d.buttons === 0) stены.push(v + ' (' + d.len + ' знаков, кнопок нет)');
+  }
+  check('НИ ОДИН ПУСТОЙ ЭКРАН НЕ ТУПИК — везде есть, что нажать',
+    stены.length === 0, stены.slice(0, 4).join(', ') || 'тупиков нет', 'тупиков нет');
+  check('в консоли чисто на пустой базе', e2.length === 0,
+    e2.slice(0, 2).join(' | ') || 'чисто', 'чисто');
+  await p2.close(); await c2.close();
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

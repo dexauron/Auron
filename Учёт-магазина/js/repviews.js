@@ -317,8 +317,9 @@
     h += monthPicker();
 
     if (!flow.steps.length) {
-      return h + '<div class="card"><div class="empty">За ' + esc(monthRu(m)) +
-        ' записей нет.</div></div>';
+      return h + emptyStart('За ' + monthRu(m) + ' записей ещё нет',
+        'Этот отчёт складывается из закрытых смен. Закройте первую — и здесь ' +
+        'появится выручка, прибыль и сравнение с прошлым месяцем.');
     }
     h += u.card('Дорожка денег', u.table('flowT', [
       { title: 'Шаг', fn: function (r) {
@@ -434,6 +435,24 @@
 
      Печатается только сам отчёт: меню, кнопки и подсказки на бумагу не идут.
      ====================================================================== */
+  /* ПУСТОЙ ЭКРАН НЕ ДОЛЖЕН БЫТЬ СТЕНОЙ.
+
+     Новый владелец открывает отчёт первым делом — данных ещё нет. Надпись
+     «записей нет» не говорит ему ничего: непонятно, сломалось или так надо,
+     и совсем непонятно, что делать дальше.
+
+     Поэтому пустой экран отвечает на три вопроса: что это за экран, почему
+     сейчас пусто и какая кнопка это исправит. */
+  function emptyStart(title, why) {
+    return '<div class="card"><div class="empty"><b>' + esc(title) + '</b><br>' +
+      esc(why) + '</div><div class="card-pad">' +
+      '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
+      ' Свести кассу за смену</button> ' +
+      '<button class="btn" data-form="dayTotals">' + ic('moon') + ' Итоги дня</button> ' +
+      '<button class="btn" data-go="settings">' + ic('gear') + ' Настроить магазин</button>' +
+      '</div></div>';
+  }
+
   function ownerMode() { return E.txt(S.settings.ownerMode) === 'день' ? 'день' : 'месяц'; }
   function ownerDay() { return E.txt(S.settings.ownerDay) || today(); }
 
@@ -492,8 +511,9 @@
       '</div>';
 
     if (!rows.length) {
-      return h + '<div class="card"><div class="empty">' + esc(R2.title[0].toUpperCase() +
-        R2.title.slice(1)) + ' записей нет.</div></div>';
+      return h + emptyStart(R2.title[0].toUpperCase() + R2.title.slice(1) + ' записей ещё нет',
+        'Отчёт собственнику собирается из смен и расходов. Закройте первую смену — ' +
+        'и здесь появится, сколько заработали, куда ушли деньги и где они лежат.');
     }
 
     var netLabel = mode === 'день' ? 'Заработали за день' : 'Заработали за месяц';
