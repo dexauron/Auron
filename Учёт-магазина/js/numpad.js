@@ -116,6 +116,50 @@
   }
   function money(n) { return group(n) + ' ₽'; }
 
+  /* --- Разряды прямо в поле ввода ---------------------------------------------
+     Кассир набирает сумму не глядя на экран. Без разделения «168000» и
+     «16800» отличаются одним символом, и промах на ноль замечают уже в отчёте.
+     Поэтому пока печатаешь — разряды расставляются сами.
+
+     Выражение («1250*3+400») не трогаем: его считает калькулятор, и пробелы
+     там только мешали бы читать. Дробную часть оставляем, но не длиннее
+     копеек: рублей с тремя знаками после запятой не бывает. */
+  function groupInput(raw) {
+    var src = String(raw == null ? '' : raw);
+    if (!src) return '';
+    // Появился знак действия — это уже выражение: разряды убираем, чтобы
+    // «1 250*3+400» не рябило в глазах. Считает его калькулятор.
+    if (isExpr(src)) return src.replace(/\u00A0/g, '');
+    // в поле только цифры, разделители разрядов и одна запятая — иначе не наше
+    if (!/^-?[\d\u00A0 ]*([.,]\d*)?$/.test(src)) return src;
+    var neg = src.charAt(0) === '-';
+    var body = src.replace(/[^\d.,]/g, '');
+    var cut = body.search(/[.,]/);
+    var whole = cut < 0 ? body : body.slice(0, cut);
+    var frac = cut < 0 ? null : body.slice(cut + 1).replace(/[.,]/g, '').slice(0, 2);
+    whole = whole.replace(/^0+(?=\d)/, '');
+    var out = whole.replace(/\B(?=(\d{3})+(?!\d))/g, NBSP);
+    if (frac !== null) out += ',' + frac;
+    if (neg) out = '-' + out;
+    return out;
+  }
+
+  // Сколько цифр стоит левее курсора: по ним курсор и возвращают на место,
+  // иначе он прыгал бы в конец на каждом нажатии
+  function digitsBefore(text, caret) {
+    var n = 0;
+    for (var i = 0; i < caret && i < text.length; i++) if (/\d/.test(text.charAt(i))) n++;
+    return n;
+  }
+  function caretAfter(text, digits) {
+    if (digits <= 0) return text.charAt(0) === '-' ? 1 : 0;
+    var n = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (/\d/.test(text.charAt(i))) { n++; if (n >= digits) return i + 1; }
+    }
+    return text.length;
+  }
+
   // Сумма словами — чтобы не ошибиться на ноль: «семьдесят две тысячи пятьсот»
   var ONES = ['', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять',
     'десять', 'одиннадцать', 'двенадцать', 'тринадцать', 'четырнадцать', 'пятнадцать',
@@ -186,6 +230,7 @@
 
   return {
     calc: calc, isExpr: isExpr, group: group, money: money, words: words,
+    groupInput: groupInput, digitsBefore: digitsBefore, caretAfter: caretAfter,
     dateFull: dateFull, daysBetween: daysBetween, plural: plural,
     KEYS: KEYS, QUICK: QUICK, MAX: MAX
   };

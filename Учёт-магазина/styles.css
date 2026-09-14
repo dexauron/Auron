@@ -843,3 +843,10 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .btn.btn-on { background: var(--blue); border-color: var(--blue); color: #fff; }
 .btn.btn-on .c-muted { color: rgba(255,255,255,.75); }
 @media print { .slip-pick, .quick, .banner { display: none !important; } }
+
+/* Поле даты: сам календарь и две быстрые кнопки рядом */
+.date-field { display: flex; gap: 6px; align-items: center; }
+.date-field input[type="date"] { flex: 1 1 auto; min-width: 0; }
+.btn.date-quick { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 560px) { .date-field { flex-wrap: wrap; }
+  .date-field input[type="date"] { flex: 1 0 100%; } }

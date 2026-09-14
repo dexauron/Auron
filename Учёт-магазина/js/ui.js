@@ -455,6 +455,37 @@
 
   // Что написать под числовым полем: сумму с пробелами и прописью,
   // а для выражения — ещё и результат счёта
+  /* Пока печатаешь сумму — разряды расставляются сами: 168000 → 168 000.
+     Курсор при этом не прыгает в конец: считаем цифры левее него и ставим
+     обратно после того же количества. */
+  function regroup(el) {
+    var was = el.value;
+    var out = NUM.groupInput(was);
+    if (out === was) return;
+    var before = NUM.digitsBefore(was, el.selectionStart == null ? was.length : el.selectionStart);
+    el.value = out;
+    try {
+      var at = NUM.caretAfter(out, before);
+      el.setSelectionRange(at, at);
+    } catch (e) { /* поле могло потерять фокус — не беда */ }
+  }
+
+  /* Backspace сквозь разделитель разрядов должен стирать ЦИФРУ, а не пробел.
+     Иначе пробел тут же встаёт обратно, и кажется, что клавиша сломалась. */
+  function numBackspace(e, el) {
+    if (e.key !== 'Backspace') return false;
+    if (el.selectionStart !== el.selectionEnd) return false;
+    var p = el.selectionStart;
+    if (p < 2) return false;
+    var ch = el.value.charAt(p - 1);
+    if (ch !== '\u00A0' && ch !== ' ') return false;
+    e.preventDefault();
+    el.value = el.value.slice(0, p - 2) + el.value.slice(p);
+    try { el.setSelectionRange(p - 2, p - 2); } catch (err) {}
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return true;
+  }
+
   function numHint(raw) {
     var txt = String(raw == null ? '' : raw).trim();
     if (!txt) return '';
@@ -516,7 +547,7 @@
     } else if (type === 'number') {
       // Числовое поле принимает и выражение: «1250*3+400». Считается на месте,
       // под полем сразу видно сумму с разделением разрядов и прописью.
-      var start = value == null || value === '' ? '' : String(value);
+      var start = value == null || value === '' ? '' : NUM.groupInput(String(value));
       h += '<div class="num-field">' +
         '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
@@ -536,8 +567,16 @@
         '<button type="button" class="btn btn-sm" data-pairadd="' + esc(name) + '">+ ещё строка</button>' +
         '</div>';
     } else if (type === 'date') {
-      h += '<input type="date" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
+      /* Кнопки «сегодня» и «вчера» — потому что утром записывают вчерашнюю
+         смену, а вечером сегодняшнюю, и в календарь за этим лезть незачем. */
+      h += '<div class="date-field">' +
+        '<input type="date" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
         ' data-prefilled="' + esc(value == null ? '' : value) + '">' +
+        '<button type="button" class="btn btn-sm date-quick" data-setdate="' + esc(name) +
+        '" data-days="0">сегодня</button>' +
+        '<button type="button" class="btn btn-sm date-quick" data-setdate="' + esc(name) +
+        '" data-days="-1">вчера</button>' +
+        '</div>' +
         '<div class="num-hint" data-hint-for="' + esc(name) + '">' + esc(NUM.dateFull(value)) + '</div>';
     } else {
       h += '<input type="' + type + '" name="' + name + '" value="' + esc(value == null ? '' : value) + '"' +
@@ -2034,6 +2073,7 @@
       var el = e.target;
       if (!el.classList) return;
       if (el.classList.contains('num-input')) {
+        regroup(el);
         var hint = document.querySelector('[data-hint-for="' + el.name + '"]');
         if (hint) hint.innerHTML = numHint(el.value);
       } else if (el.type === 'date' && el.name) {
@@ -2110,10 +2150,25 @@
       try { Q.saveDraft(f.dataset.fid, formValues(f)); } catch (err) {}
     }, 3000);
 
+    // «сегодня» и «вчера» у поля даты
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-setdate]');
+      if (!b) return;
+      e.preventDefault();
+      var f = document.querySelector('[name="' + b.dataset.setdate + '"]');
+      if (!f) return;
+      var d = new Date();
+      d.setDate(d.getDate() + (parseInt(b.dataset.days, 10) || 0));
+      f.value = d.toISOString().slice(0, 10);
+      f.dispatchEvent(new Event('input', { bubbles: true }));
+      f.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
     // калькулятор: кнопка у поля, а также «=» прямо в поле
     document.addEventListener('keydown', function (e) {
       var el = e.target;
       if (!el.classList || !el.classList.contains('num-input')) return;
+      if (numBackspace(e, el)) return;
       if (e.key === '=' || (e.key === 'Enter' && NUM.isExpr(el.value))) {
         var v = NUM.calc(el.value);
         if (v !== null) {
