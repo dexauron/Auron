@@ -62,6 +62,7 @@
           var b = [];
           if (r.defaultCash) b.push('наличная выручка');
           if (r.defaultCashless) b.push('безнал');
+          if (r.defaultExpense) b.push('расходы');
           return b.length ? esc(b.join(', ')) : '—'; } },
         { title: 'Было на старте', cls: 'num', fn: function (r) { return u.priv(r.opening); } },
         { title: 'Сейчас', cls: 'num', fn: function (r) {
@@ -275,6 +276,9 @@
         u.fieldRow('Сюда идёт безнал', 'defaultCashless', 'select',
           v.defaultCashless ? 'да' : 'нет', { options: ['да', 'нет'],
             hint: 'карта, СБП, эквайринг' }) +
+        u.fieldRow('Отсюда обычно платим расходы', 'defaultExpense', 'select',
+          v.defaultExpense ? 'да' : 'нет', { options: ['да', 'нет'],
+            hint: 'подставляется в «Расходе», чтобы не выбирать каждый раз' }) +
         u.fieldRow('Заметка', 'note', 'text', v.note || '');
     },
     hint: 'Денежный ящик пересчитывают при закрытии смены — его остаток правит факт. ' +
@@ -292,13 +296,15 @@
       var rec = { name: E.txt(v.name), kind: E.txt(v.kind) || 'cash',
         opening: num(v.opening), note: E.txt(v.note),
         defaultCash: E.norm(v.defaultCash) === 'да',
-        defaultCashless: E.norm(v.defaultCashless) === 'да' };
+        defaultCashless: E.norm(v.defaultCashless) === 'да',
+        defaultExpense: E.norm(v.defaultExpense) === 'да' };
       // «По умолчанию» бывает только у одного счёта: иначе непонятно, куда класть
-      if (rec.defaultCash || rec.defaultCashless) {
+      if (rec.defaultCash || rec.defaultCashless || rec.defaultExpense) {
         (S.state.accounts || []).forEach(function (a) {
           if (ed && a.id === ed.id) return;
           if (rec.defaultCash) a.defaultCash = false;
           if (rec.defaultCashless) a.defaultCashless = false;
+          if (rec.defaultExpense) a.defaultExpense = false;
         });
       }
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('accounts', rec);

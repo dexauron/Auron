@@ -47,6 +47,44 @@
     var a = E.defaultAccount(accounts(), cashless);
     return a ? a.id : '';
   }
+
+  /* --------------------------------------------------------------------------
+     С КАКОГО СЧЁТА ПОДСТАВИТЬ В «РАСХОДЕ»
+
+     Выбирать счёт при каждом расходе утомительно, а один общий счёт по
+     умолчанию врёт: обед покупают из кассы, аренду платят переводом.
+     Поэтому по старшинству:
+
+       1. ЧЕМ ЗАПЛАТИЛИ ПРОШЛЫЙ РАЗ ПО ЭТОЙ СТАТЬЕ. Программа сама помнит:
+          «Аренда» вспомнит счёт, «Обед» — кассу. Ничего настраивать не надо.
+       2. Счёт, отмеченный в карточке как «отсюда обычно платим расходы».
+       3. Счёт наличной выручки — как было раньше.
+
+     Счёт всё равно виден в форме и меняется одним нажатием: подстановка
+     экономит время, а не отнимает выбор.
+     -------------------------------------------------------------------------- */
+  function accForCategory(category, cashless) {
+    var cat = E.norm(category);
+    if (cat) {
+      var rows = dds().filter(function (r) {
+        return E.isExpense(r) && E.norm(r.category) === cat && E.txt(r.account);
+      });
+      // берём самую свежую по дате, а при равных — последнюю записанную
+      var best = null;
+      rows.forEach(function (r) {
+        if (!best || E.txt(r.date) >= E.txt(best.date)) best = r;
+      });
+      if (best) {
+        var live = accounts().filter(function (a) {
+          return a.id === E.txt(best.account) && !a.archived;
+        })[0];
+        if (live) return live.id;
+      }
+    }
+    var pick = accounts().filter(function (a) { return a.defaultExpense && !a.archived; })[0];
+    if (pick) return pick.id;
+    return accDefault(cashless);
+  }
   function accName(id) {
     var a = accounts().filter(function (x) { return x.id === id; })[0];
     return a ? a.name : '';
@@ -244,9 +282,10 @@
             hint: 'закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
         u.fieldRow('С какого счёта', 'account', 'select',
-          v.account || accDefault(!cash), { options: accOptions(),
-            hint: 'из денежного ящика — эти деньги уже посчитаны в «выплатах» при ' +
-              'сверке смены, второй раз их не вычтут' }) +
+          v.account || accForCategory(v.category, !cash), { options: accOptions(),
+            hint: 'подставлен тот, с которого платили по этой статье в прошлый раз; ' +
+              'из денежного ящика деньги уже посчитаны в «выплатах» смены — ' +
+              'второй раз их не вычтут' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
@@ -1260,6 +1299,30 @@
   /* ==========================================================================
      РЕГИСТРАЦИЯ ЭКРАНОВ
      ========================================================================== */
+  /* Выбрали статью — счёт подставляется сам, тот же, с которого платили по ней
+     в прошлый раз. Нельзя перебивать владельца: если он уже трогал поле счёта
+     руками, его выбор остаётся. Перерисовывать всю форму ради этого тоже
+     нельзя — набранное пропало бы. */
+  (function () {
+    function refit(el) {
+      if (!el || !el.name || !el.closest) return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var acc = box.querySelector('select[name="account"]');
+      if (!acc) return;
+      if (el.name === 'account') { acc.dataset.touched = '1'; return; }
+      if (el.name !== 'category' && el.name !== 'method') return;
+      if (acc.dataset.touched === '1') return;
+      var cat = box.querySelector('[name="category"]');
+      var met = box.querySelector('[name="method"]');
+      var cashless = met ? E.norm(met.value) !== 'наличные' : false;
+      var want = accForCategory(cat ? cat.value : '', cashless);
+      if (want && acc.value !== want) acc.value = want;
+    }
+    document.addEventListener('change', function (e) { refit(e.target); });
+    document.addEventListener('input', function (e) { refit(e.target); });
+  })();
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },

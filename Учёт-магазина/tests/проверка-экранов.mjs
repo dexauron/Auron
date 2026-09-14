@@ -1427,6 +1427,68 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 10. Счёт в «Расходе» подставляется сам — по памяти о прошлом разе */
+{
+  console.log('— Счёт расхода подставляется сам');
+  const { page, ctx, errs } = await open();
+  const accName = () => page.evaluate(() => {
+    const s = document.querySelector('.sheet select[name="account"]');
+    return s ? s.options[s.selectedIndex].text : '';
+  });
+
+  // Аренду платим со счёта, обед — из кассы
+  for (const [cat, acc, sum] of [['Аренда', 'Расчётный счёт', '110000'],
+    ['Обед', 'Касса', '800']]) {
+    await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+    await page.waitForTimeout(320);
+    await page.fill('.sheet [name="category"]', cat);
+    await page.selectOption('.sheet [name="account"]', { label: acc });
+    await page.fill('.sheet [name="amount"]', sum);
+    await page.click('.sheet .btn-primary');
+    await page.waitForTimeout(420);
+  }
+
+  await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await page.waitForTimeout(320);
+  await page.fill('.sheet [name="category"]', 'Аренда');
+  await page.dispatchEvent('.sheet [name="category"]', 'change');
+  await page.waitForTimeout(220);
+  check('ПРОГРАММА ПОМНИТ, С КАКОГО СЧЁТА ПЛАТИЛИ ПО ЭТОЙ СТАТЬЕ',
+    (await accName()) === 'Расчётный счёт', await accName(), 'Расчётный счёт');
+
+  await page.fill('.sheet [name="category"]', 'Обед');
+  await page.dispatchEvent('.sheet [name="category"]', 'change');
+  await page.waitForTimeout(220);
+  check('у каждой статьи память своя', (await accName()) === 'Касса',
+    await accName(), 'Касса');
+
+  // Выбор владельца важнее памяти
+  await page.selectOption('.sheet [name="account"]', { label: 'Сейф' });
+  await page.fill('.sheet [name="category"]', 'Аренда');
+  await page.dispatchEvent('.sheet [name="category"]', 'change');
+  await page.waitForTimeout(220);
+  check('НО ВЫБОР ВЛАДЕЛЬЦА ПРОГРАММА НЕ ПЕРЕБИВАЕТ',
+    (await accName()) === 'Сейф', await accName(), 'Сейф');
+
+  /* Счёт можно назначить расходным раз и навсегда. Форму не закрываем
+     клавишей: она спросит про несохранённое. Открываем поверх — новая
+     форма закрывает старую сама. */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    (S.state.accounts || []).forEach(a => { a.defaultExpense = a.kind === 'cash'; });
+    S.state.dds = [];                       // память стёрли — остаётся настройка
+    S.save(); window.WMUI.recompute();
+  });
+  await page.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await page.waitForTimeout(350);
+  check('а если памяти нет — берётся счёт, отмеченный «отсюда платим расходы»',
+    (await accName()) === 'Сейф', await accName(), 'Сейф');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
