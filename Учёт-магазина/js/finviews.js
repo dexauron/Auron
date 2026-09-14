@@ -156,6 +156,91 @@
   /* --- Утро: сверка кассы ----------------------------------------------------
      Единственное место, где считается расхождение. Безнал сюда не входит:
      этих денег в ящике не было. */
+  /* --------------------------------------------------------------------------
+     РАСХОЖДЕНИЕ ВИДНО СРАЗУ, А НЕ ПОСЛЕ СОХРАНЕНИЯ
+
+     Кассир сдаёт смену и хочет знать, сошлось ли, ПОКА он у кассы и помнит,
+     что брал. Раньше расхождение показывалось только после «Сохранить» —
+     и разбираться приходилось задним числом.
+
+     Считаем то же самое, что и движок, той же формулой: размен + Z-наличные
+     − выплаты = расчётный остаток; факт − расчётный = расхождение.
+     -------------------------------------------------------------------------- */
+  function shiftSumBox(v) {
+    v = v || {};
+    function n(x) {
+      if (x == null || x === '') return 0;
+      var c = window.WMNum.calc(String(x));
+      return c === null ? num(x) : c;
+    }
+    var open = n(v.openCash), zc = n(v.zCash), zb = n(v.zCashless);
+    var pay = n(v.payouts), fact = n(v.factCash);
+    var expected = E.safeRound(open + zc - pay);
+    var diff = E.safeRound(fact - expected);
+    var пусто = !zc && !fact && !pay;
+    var ok = Math.abs(diff) < 0.5;
+
+    var h = '<div class="cc-total">';
+    h += '<div class="cc-line"><span>Размен на начало</span><b>' + esc(money(open)) + '</b></div>';
+    h += '<div class="cc-line"><span>+ Z-отчёт: наличные</span><b>' + esc(money(zc)) + '</b></div>';
+    h += '<div class="cc-line"><span>− Выплаты из ящика</span><b>' + esc(money(pay)) + '</b></div>';
+    h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
+      '<span>Должно быть в ящике</span><b class="cc-big">' + esc(money(expected)) + '</b></div>';
+    h += '<div class="cc-line"><span>Пересчитали руками</span><b>' + esc(money(fact)) + '</b></div>';
+
+    if (пусто) {
+      h += '<div class="cc-sub">Впишите Z-отчёт и факт — расхождение посчитается само.</div>';
+    } else {
+      h += '<div class="cc-line cc-diff ' + (ok ? 'ok' : (diff < 0 ? 'bad' : 'warn')) + '">' +
+        '<span>' + (ok ? 'Сходится' : (diff < 0 ? 'НЕДОСТАЧА' : 'ИЗЛИШЕК')) + '</span>' +
+        '<b>' + (ok ? '—' : esc(money(Math.abs(diff)))) + '</b></div>';
+      if (!ok) {
+        h += '<div class="cc-sub">' + (diff < 0
+          ? 'В ящике меньше, чем должно. Проверьте, всё ли записали в «выплаты из ящика».'
+          : 'В ящике больше, чем должно. Возможно, не записали приход или размен.') +
+          '</div>';
+      }
+    }
+    if (zb) {
+      h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
+        '<span>Безнал (в ящик не попадает)</span><b>' + esc(money(zb)) + '</b></div>';
+      h += '<div class="cc-sub">Выручка за смену всего: ' +
+        esc(money(E.safeRound(zc + zb))) + '</div>';
+    }
+
+    /* Наличные смены обязаны лечь в денежный ящик той кассы, что выбрана
+       выше. Если выбран сейф, остаток ящика навсегда останется нулевым,
+       а сверка — бессмысленной. Молчать об этом нельзя. */
+    var acc = accounts().filter(function (a) { return a.id === E.txt(v.account); })[0];
+    if (acc && acc.kind !== 'till') {
+      h += '<div class="cc-sub" style="color:var(--orange)">⚠ Наличные вы отправляете ' +
+        'на счёт «' + esc(acc.name) + '», а это не денежный ящик. Тогда в ящике так и ' +
+        'останется ноль, и сверять будет нечего. Обычно здесь ставят кассу.</div>';
+    }
+    return h + '</div>';
+  }
+
+  /* Пересчёт на каждое нажатие. Форму не перерисовываем — набранное пропало бы. */
+  (function () {
+    var WATCH = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash', 'account', 'till'];
+    function tick(el) {
+      if (!el || !el.name || WATCH.indexOf(el.name) < 0 || !el.closest) return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var slot = box.querySelector('#shiftSum');
+      if (!slot) return;
+      var v = {};
+      WATCH.forEach(function (k) {
+        var f = box.querySelector('[name="' + k + '"]');
+        if (f) v[k] = f.value;
+      });
+      slot.innerHTML = shiftSumBox(v);
+    }
+    function later(el) { setTimeout(function () { tick(el); }, 0); }
+    document.addEventListener('input', function (e) { later(e.target); });
+    document.addEventListener('change', function (e) { later(e.target); });
+  })();
+
   FORMS.shiftClose = {
     title: 'Сверка кассы за смену', icon: 'calculator',
     editsInPlace: true,   // правит запись сама — удалять старую нельзя
@@ -177,7 +262,7 @@
           { hint: 'выручка, которая легла в ящик' }) +
         u.fieldRow('Наличные лягут на счёт', 'account', 'select',
           v.account || accDefault(false), { options: accOptions(['till', 'cash']),
-            hint: 'обычно денежный ящик — меняется в справочнике счетов' }) +
+            hint: 'денежный ящик той кассы, что выбрана выше' }) +
         u.fieldRow('Z-отчёт: безнал', 'zCashless', 'number', v.zCashless || '',
           { hint: 'карта, СБП, эквайринг — купюрами их не бывает' }) +
         u.fieldRow('Безнал ляжет на счёт', 'cashlessAccount', 'select',
@@ -189,7 +274,8 @@
           { hint: 'сколько денег пересчитали руками' }) +
         u.fieldRow('Чеков за смену', 'checks', 'number', v.checks || '',
           { hint: 'из Z-отчёта — нужно только для среднего чека, на кассу не влияет' }) +
-        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '') +
+        '<div id="shiftSum">' + shiftSumBox(v) + '</div>';
     },
     hint: 'Расчётный остаток = размен + Z-наличные − выплаты. ' +
       'Расхождение = факт − расчётный. Безнал в этой формуле не участвует: ' +
@@ -489,6 +575,23 @@
      -------------------------------------------------------------------------- */
   var REPEATS = ['не повторять', 'каждый месяц', 'раз в квартал', 'раз в год'];
 
+  /* Что обычно платят по календарю. Не только поставщикам: аренда, коммуналка
+     и налоги приходят так же по расписанию, и планировать их надо там же.
+     «Выплата ТП» — общей суммой, когда развозчиков много и расписывать
+     каждого по отдельности незачем. */
+  function planKinds() {
+    var базовые = ['Выплата ТП', 'Аренда', 'Коммунальные', 'Интернет и связь',
+      'Охрана', 'Вывоз мусора', 'Налоги', 'Зарплата', 'Прочее'];
+    var свои = categories();
+    var было = {}, out = [];
+    базовые.concat(свои).forEach(function (x) {
+      var k = E.norm(x);
+      if (!k || было[k]) return;
+      было[k] = 1; out.push(x);
+    });
+    return out;
+  }
+
   // Следующая дата с тем же числом месяца. 31 января + месяц = 28 февраля:
   // прыгать на 3 марта нельзя, платёж привязан к концу месяца.
   function nextDue(date, repeat) {
@@ -529,8 +632,14 @@
     body: function (v) {
       var u = U(); v = v || {};
       return u.fieldRow('Дата выплаты', 'due', 'date', v.due || today()) +
+        u.fieldRow('Что платим', 'category', 'list', v.category || '',
+          { options: planKinds(),
+            placeholder: 'выплата ТП, аренда, коммуналка, налоги…',
+            hint: 'можно выбрать из списка или вписать своё' }) +
         u.fieldRow('Кому', 'supplier', 'list', v.supplier || '',
-          { options: suppliers(), placeholder: 'поставщик или ТП' }) +
+          { options: suppliers(),
+            placeholder: 'поставщик, ТП, арендодатель — или оставьте пустым',
+            hint: 'для общей выплаты ТП можно не указывать' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
         u.fieldRow('Статус', 'status', 'select', v.status || E.PLAN_STATUS[0],
@@ -545,9 +654,18 @@
       'Поставили «повторять» — следующая выплата встанет в план сама, как только отметите эту оплаченной.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
-      if (!E.txt(v.supplier)) return 'Укажите, кому платим.';
-      learn({ suppliers: v.supplier, methods: v.method });
-      var rec = { due: v.due, supplier: v.supplier, amount: num(v.amount),
+      /* План — это календарь на будущее, поэтому дату вперёд разрешаем
+         широко. Проверяем только очевидную опечатку в годе. */
+      var badD2 = Q.checkDate(v.due, { aheadDays: 400 }); if (badD2) return badD2;
+      /* Раньше требовали поставщика — и запланировать аренду или коммуналку
+         было нельзя вовсе. Теперь достаточно любого из двух: «что платим»
+         или «кому». Общая выплата ТП — это «Выплата ТП» без имени. */
+      if (!E.txt(v.supplier) && !E.txt(v.category)) {
+        return 'Напишите, что платим или кому — иначе в плане будет пустая строка.';
+      }
+      learn({ suppliers: v.supplier, methods: v.method, categories: v.category });
+      var rec = { due: v.due, supplier: v.supplier, category: E.txt(v.category),
+        amount: num(v.amount),
         method: v.method, status: v.status, note: v.note,
         repeat: E.txt(v.repeat) === REPEATS[0] ? '' : E.txt(v.repeat),
         paidAt: v.status === 'Оплачена' ? (v.paidAt || today()) : '' };
@@ -559,7 +677,8 @@
       }
       S.add('plans', rec);
       S.save(); refresh();
-      return { ok: 'В плане: ' + v.supplier + ' — ' + money(v.amount) + ' на ' + dateRu(v.due) };
+      return { ok: 'В плане: ' + (E.txt(v.supplier) || E.txt(v.category)) +
+        ' — ' + money(v.amount) + ' на ' + dateRu(v.due) };
     }
   };
 
@@ -806,7 +925,7 @@
     if (chk.left > 0.5) {
       out.push({ icon: 'receipt', color: 'c-orange',
         text: 'Не расписано ' + money(chk.left) + ' из ящика',
-        go: 'ledger', act: 'Разобрать' });
+        act2: 'payout-help', act: 'Разобрать' });
     } else if (chk.over) {
       out.push({ icon: 'warning', color: 'c-red',
         text: 'Лишних расходов из ящика на ' + money(-chk.left),
@@ -885,7 +1004,8 @@
     var todo = todoList(all, sel);
     if (todo.length) {
       h += u.card('Что сделать', u.listOf(todo.map(function (x) {
-        var attrs = x.go ? ' data-go="' + esc(x.go) + '"' : ' data-form="' + esc(x.form) + '"';
+        var attrs = x.act2 ? ' data-act="' + esc(x.act2) + '"'
+          : x.go ? ' data-go="' + esc(x.go) + '"' : ' data-form="' + esc(x.form) + '"';
         return u.listRow({ icon: x.icon,
           title: '<span class="' + (x.color || '') + '">' + esc(x.text) + '</span>',
           value: '<button class="btn btn-sm"' + attrs + '>' + esc(x.act) + '</button>' });
@@ -1141,7 +1261,10 @@
 
     h += u.card('Календарь платежей', FLT().note(list.length, plans.length) + u.table('plansT', [
       { title: 'Когда', fn: function (p) { return esc(dateRu(p.due)); } },
-      { title: 'Кому', fn: function (p) { return esc(p.supplier || '—'); } },
+      { title: 'Что и кому', fn: function (p) {
+        var что = E.txt(p.category), кому = E.txt(p.supplier);
+        if (что && кому) return esc(что) + '<br><small class="c-muted">' + esc(кому) + '</small>';
+        return esc(что || кому || '—'); } },
       { title: 'Сумма', cls: 'num', fn: function (p) { return u.priv(p.amount); } },
       { title: 'Чем', fn: function (p) { return esc(p.method || '—'); } },
       { title: 'Состояние', fn: function (p) {
@@ -1447,6 +1570,80 @@
     U().openForm('moveCash', { date: today(), toAccount: E.txt(f.account),
       account: accDefault(false), fund: f.id,
       amount: row && row.toPut > 0 ? row.toPut : '' });
+    return null;
+  };
+
+  /* --------------------------------------------------------------------------
+     «РАЗОБРАТЬ»: ЧТО ЗНАЧИТ «НЕ РАСПИСАНО ИЗ ЯЩИКА»
+
+     Это самая непонятная строка в программе, и объяснять её надо словами,
+     а не отправлять человека в журнал разбираться самому.
+
+     Суть простая. При сверке смены кассир пишет одной строкой, сколько всего
+     вынул из ящика («выплаты из ящика»). Сумма известна, а на ЧТО ушли эти
+     деньги — нет. Пока не расписано, в отчёте о прибыли их не видно:
+     программа не знает, товар это был, зарплата или аренда.
+
+     Окно показывает, сколько не расписано по дням, и даёт кнопки — каждая
+     открывает нужную форму с уже подставленной датой.
+     -------------------------------------------------------------------------- */
+  A['payout-help'] = function () {
+    var u = U();
+    var sel = { rows: dds() };
+    var chk = E.tillPayoutCheck(dds(), null,
+      { payouts: S.state.payouts || [], accounts: accounts() });
+    var дни = (chk.rows || []).filter(function (r) { return r.left > 0.5; })
+      .sort(function (a, b) { return b.date < a.date ? -1 : 1; });
+    var день = дни.length ? дни[0].date : today();
+
+    var h = '<div class="card-pad">' +
+      '<p><b>Что это значит.</b> При сверке смены вы написали, сколько всего вынули ' +
+      'из денежного ящика — это поле «Выплаты из ящика». Сумма известна, а на что ' +
+      'именно ушли эти деньги — нет. Пока не расписано, в отчёте о прибыли их не видно: ' +
+      'программа не знает, товар это был, зарплата или аренда.</p>' +
+      '<p><b>Что сделать.</b> Вспомните, на что уходили деньги из ящика, и запишите ' +
+      'каждую трату своей кнопкой. Сумма «не расписано» будет уменьшаться, пока не ' +
+      'дойдёт до нуля.</p></div>';
+
+    h += '<div class="nav-group">Куда обычно уходят деньги из ящика</div>';
+    h += '<div class="list">' +
+      u.listRow({ icon: 'box', title: 'Купили товар за наличные',
+        sub: 'впишите сумму в «Итоги дня» — это не расход, это закуп', tap: true,
+        attrs: ' data-form="dayTotals" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'supplier', title: 'Отдали долг поставщику',
+        sub: 'тоже в «Итоги дня», поле «Погашение долгов»', tap: true,
+        attrs: ' data-form="dayTotals" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'receipt', title: 'Расход магазина',
+        sub: 'аренда, обед, ГСМ, хозтовары — «Расход», счёт «Касса»', tap: true,
+        attrs: ' data-form="moneyOut" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'people', title: 'Выдали зарплату',
+        sub: 'из журнала выплат — тогда она попадёт и в ведомость', tap: true,
+        attrs: ' data-form="payoutRow" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'truck', title: 'Увезли в сейф или банк',
+        sub: 'это перевод, а не трата — прибыль он не меняет', tap: true,
+        attrs: ' data-form="moveCash" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'wallet', title: 'Владелец взял себе',
+        sub: 'не расход магазина, но записать надо', tap: true,
+        attrs: ' data-form="moneyDraw" data-pre-date="' + esc(день) + '"' }) +
+      '</div>';
+
+    if (дни.length) {
+      h += '<div class="nav-group">По каким дням не сходится</div>';
+      h += u.table('payoutDays', [
+        { title: 'День', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Вынули из ящика', cls: 'num', fn: function (r) { return u.priv(r.payouts); } },
+        { title: 'Уже расписано', cls: 'num', fn: function (r) { return u.priv(r.explained); } },
+        { title: 'Не расписано', cls: 'num', fn: function (r) {
+          return '<b class="c-orange">' + u.priv(r.left) + '</b>'; } }
+      ], дни, { step: 12, empty: 'Всё расписано' });
+    }
+
+    h += '<div class="card-pad"><div class="form-hint">Если вспомнить не удаётся — ' +
+      'не страшно. Проверьте, не завышены ли «выплаты из ящика» в той смене: ' +
+      'бывает, что кассир написал больше, чем брал. Открыть смену можно в «Базе операций».' +
+      '</div><button class="btn" data-go="ledger">Открыть базу операций</button></div>';
+
+    u.sheet('Не расписано ' + money(chk.left) + ' из ящика', h);
     return null;
   };
 

@@ -1676,6 +1676,135 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 13. Расхождение видно в форме, «Разобрать» объясняет, план принимает статьи */
+{
+  console.log('— Расхождение сразу, «Разобрать» и план выплат');
+  const { page, ctx, errs } = await open();
+
+  /* --- РАСХОЖДЕНИЕ ПРЯМО В ФОРМЕ ---------------------------------------- */
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(400);
+  const box = () => page.evaluate(() => {
+    const e = document.querySelector('#shiftSum');
+    return e ? e.innerText.replace(/\s+/g, ' ') : '';
+  });
+  check('в форме смены есть живой расчёт', (await box()).includes('Должно быть в ящике'),
+    'есть', 'есть');
+
+  for (const [n, v] of [['openCash', '10000'], ['zCash', '50000'], ['zCashless', '50000'],
+    ['payouts', '5000'], ['factCash', '55000']]) {
+    await page.fill('.sheet [name="' + n + '"]', v);
+    await page.waitForTimeout(150);
+  }
+  let b1 = await box();
+  check('РАСХОЖДЕНИЕ СЧИТАЕТСЯ ДО СОХРАНЕНИЯ',
+    b1.includes('55 000') && b1.includes('Сходится'), 'считается', 'сходится');
+  check('и безнал в ящик не подмешан',
+    b1.includes('Безнал (в ящик не попадает)') && b1.includes('100 000'),
+    'не подмешан', 'выручка 100 000');
+
+  await page.fill('.sheet [name="factCash"]', '54000');
+  await page.waitForTimeout(280);
+  b1 = await box();
+  check('НЕДОСТАЧУ ВИДНО СРАЗУ', b1.includes('НЕДОСТАЧА') && b1.includes('1 000'),
+    'видно', 'недостача 1 000');
+
+  // Выручка смены обязана падать в денежный ящик
+  const warned = await page.evaluate(() => {
+    const sel = document.querySelector('.sheet [name="account"]');
+    const opt = [...sel.options].find(o => /Сейф/.test(o.text));
+    if (!opt) return 'сейфа нет в списке';
+    sel.value = opt.value;
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    return 'ok';
+  });
+  await page.waitForTimeout(300);
+  check('ПРОГРАММА ПРЕДУПРЕЖДАЕТ, ЕСЛИ ВЫРУЧКА ИДЁТ НЕ В ЯЩИК',
+    warned !== 'ok' || (await box()).includes('не денежный ящик'),
+    warned === 'ok' ? 'предупреждает' : warned, 'предупреждает');
+
+  /* --- «РАЗОБРАТЬ» ОБЪЯСНЯЕТ -------------------------------------------- */
+  await page.evaluate(() => {
+    const S = window.WMStore, a = S.state.accounts || [];
+    S.state.dds = [];
+    S.add('dds', { type: 'Смена', date: '2026-09-05', till: 'Касса 1', shift: 'День',
+      cashier: 'Иман', openCash: 10000, zCash: 50000, zCashless: 50000,
+      payouts: 5000, factCash: 55000,
+      account: (a.find(x => x.kind === 'till') || {}).id });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('pulse');
+  });
+  await page.waitForTimeout(450);
+  check('на Пульте есть кнопка «Разобрать»',
+    await page.evaluate(() => !!document.querySelector('[data-act="payout-help"]')),
+    'есть', 'есть');
+  await page.evaluate(() => document.querySelector('[data-act="payout-help"]').click());
+  await page.waitForTimeout(450);
+  // Суммы печатаются с неразрывным пробелом — для поиска приводим к обычному
+  const help = (await page.evaluate(() => {
+    const s = document.querySelector('.sheet'); return s ? s.innerText : '';
+  })).replace(/[\u00a0\u202f]/g, ' ');
+  check('«РАЗОБРАТЬ» ОБЪЯСНЯЕТ, ЧТО ЭТО ЗНАЧИТ',
+    help.includes('Что это значит') && help.includes('Выплаты из ящика'),
+    'объясняет', 'объясняет');
+  check('и даёт кнопки, куда записать',
+    /Купили товар|Расход магазина|Выдали зарплату/.test(help), 'даёт', 'даёт');
+  check('и показывает, по каким дням не сходится',
+    /05\.09|5 сен|2026-09-05/.test(help) && help.includes('5 000'),
+    (help.match(/[^\n]*5 000[^\n]*/) || ['нет'])[0].slice(0, 50), 'день и сумма');
+
+  // Кнопка открывает форму с той же датой
+  await page.evaluate(() => {
+    const b = document.querySelector('.sheet [data-form="moneyOut"][data-pre-date]');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(400);
+  check('КНОПКА ОТКРЫВАЕТ ФОРМУ С НУЖНОЙ ДАТОЙ',
+    (await page.inputValue('.sheet [name="date"]')) === '2026-09-05',
+    await page.inputValue('.sheet [name="date"]'), '2026-09-05');
+
+  /* --- ПЛАН ВЫПЛАТ: НЕ ТОЛЬКО ПОСТАВЩИКИ -------------------------------- */
+  await page.evaluate(() => window.WMUI.openForm('payPlan'));
+  await page.waitForTimeout(400);
+  check('в плане выплат можно выбрать, ЧТО платим',
+    await page.evaluate(() => !!document.querySelector('.sheet [name="category"]')),
+    'можно', 'можно');
+  await page.fill('.sheet [name="due"]', '2026-09-25');
+  await page.fill('.sheet [name="category"]', 'Коммунальные');
+  await page.fill('.sheet [name="amount"]', '35000');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(450);
+  check('КОММУНАЛКУ МОЖНО ЗАПЛАНИРОВАТЬ БЕЗ ПОСТАВЩИКА',
+    (await page.evaluate(() => (window.WMStore.state.plans || [])
+      .filter(x => x.category === 'Коммунальные').length)) === 1,
+    'можно', 'можно');
+
+  await page.evaluate(() => window.WMUI.openForm('payPlan'));
+  await page.waitForTimeout(350);
+  await page.fill('.sheet [name="due"]', '2026-09-26');
+  await page.fill('.sheet [name="category"]', 'Выплата ТП');
+  await page.fill('.sheet [name="amount"]', '120000');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(450);
+  check('и общую выплату ТП — одной суммой',
+    (await page.evaluate(() => (window.WMStore.state.plans || [])
+      .filter(x => x.category === 'Выплата ТП' && x.amount === 120000).length)) === 1,
+    'можно', 'можно');
+
+  // Совсем пустую строку в план не пускаем
+  await page.evaluate(() => window.WMUI.openForm('payPlan'));
+  await page.waitForTimeout(350);
+  await page.fill('.sheet [name="amount"]', '1000');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(400);
+  check('а пустую строку в план не пускает',
+    (await page.evaluate(() => (window.WMStore.state.plans || []).length)) === 2,
+    await page.evaluate(() => (window.WMStore.state.plans || []).length), 2);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

@@ -2207,6 +2207,8 @@
         if (el.dataset.employee) pre.employee = el.dataset.employee;
         if (el.dataset.moreName) pre.name = el.dataset.moreName;
         if (el.dataset.moreFirm) { pre.name = el.dataset.moreFirm; pre.firm = el.dataset.moreFirm; }
+        // Дата того дня, который разбираем: чтобы не искать её руками
+        if (el.dataset.preDate) { pre.date = el.dataset.preDate; pre.due = el.dataset.preDate; }
         openForm(el.dataset.form, pre);
         return;
       }
