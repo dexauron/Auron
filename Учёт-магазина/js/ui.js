@@ -855,6 +855,12 @@
   function bookBytes() {
     return XLSX.write(bookWorkbook(), { bookType: 'xlsx', type: 'array' });
   }
+  /* Задержка перед записью книги. Переменная обязана быть объявлена: файл
+     в строгом режиме, и обращение к необъявленной роняет всю функцию.
+     Пока её не было, scheduleBook() падал при каждой записи с подключённой
+     папкой — и «Бухгалтерия.xlsx» молча переставала обновляться. */
+  var bookTimer = null;
+
   function scheduleBook() {
     if (F.state !== 'ready') return;
     if (E.norm(S.settings.bookAutoSave) === 'нет') return;   // владелец отключил автозапись
@@ -1510,7 +1516,17 @@
      списка на экране, и перекрыть её значило бы стереть половину программы. */
   function idsFromSetting(key, fallback) {
     var raw = S.settings[key];
-    if (raw == null || raw === '') return (fallback || []).slice();
+    /* ПУСТО — ЭТО НЕ «НИЧЕГО НЕ ВЫБРАНО», А «ВЫБРАНО НИЧЕГО».
+
+       Раньше пустая строка считалась «настройки ещё нет» и подставлялся
+       список по умолчанию. Из-за этого владелец убирал последний экран из
+       избранного — и пять стандартных возвращались сами. Выглядело так,
+       будто программа отменяет любые изменения.
+
+       Теперь по умолчанию подставляется только тогда, когда настройки нет
+       вовсе (первый запуск). Пустая строка значит ровно то, что написано:
+       список пуст, и трогать его не надо. */
+    if (raw == null) return (fallback || []).slice();
     return String(raw).split(',').map(function (x) { return x.trim(); }).filter(Boolean);
   }
   function saveIds(key, arr) { S.setSetting(key, arr.join(',')); }
@@ -2615,6 +2631,7 @@
     F.bindLifecycle(function () { return S.state; });
     document.addEventListener('visibilitychange', function () {
       if (document.visibilityState !== 'hidden') return;
+      if (F.state !== 'ready') return;          // папка не подключена — и писать некуда
       if (bookTimer) { clearTimeout(bookTimer); bookTimer = null;
         try { F.saveBook(bookBytes()); } catch (e) { /* книга не должна мешать */ } }
     });

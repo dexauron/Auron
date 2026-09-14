@@ -684,6 +684,33 @@ console.log('Страница: ' + PAGE + '\n');
     (await page.evaluate(() => window.WMStore.settings.menuFav)) === 'pulse,morning,evening,finpay,owner',
     await page.evaluate(() => window.WMStore.settings.menuFav), 'по умолчанию');
 
+  /* ПУСТОЕ ИЗБРАННОЕ ОБЯЗАНО ОСТАТЬСЯ ПУСТЫМ.
+     Раньше пустая строка настройки считалась «настройки ещё нет», и пять
+     стандартных экранов возвращались сами. Со стороны выглядело так, будто
+     программа отменяет любые изменения. */
+  await page.evaluate(() => window.WMUI.go('menucfg'));
+  await page.waitForTimeout(350);
+  for (const id of ['pulse', 'morning', 'evening', 'finpay', 'owner', 'pnl']) {
+    await page.evaluate(v => {
+      const b = document.querySelector('#page [data-act="fav-toggle"][data-id="' + v + '"].btn-on');
+      if (b) b.click();
+    }, id);
+    await page.waitForTimeout(160);
+  }
+  check('ИЗБРАННОЕ МОЖНО ОПУСТОШИТЬ — И ОНО НЕ ВЕРНЁТСЯ САМО',
+    (await page.evaluate(() => window.WMStore.settings.menuFav)) === '',
+    JSON.stringify(await page.evaluate(() => window.WMStore.settings.menuFav)), '""');
+  await page.reload();
+  await page.waitForTimeout(700);
+  check('и после перезапуска тоже пусто',
+    (await page.evaluate(() => window.WMStore.settings.menuFav)) === '',
+    JSON.stringify(await page.evaluate(() => window.WMStore.settings.menuFav)), '""');
+  check('а меню при этом не сломалось — «Настроить меню» на месте',
+    await page.evaluate(() => !!document.querySelector('#nav [data-go="menucfg"]')),
+    'на месте', 'на месте');
+
+  await page.evaluate(() => window.WMUI.go('menucfg'));
+  await page.waitForTimeout(350);
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
   console.log('');
