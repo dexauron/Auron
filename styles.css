@@ -1,0 +1,4 @@
+
+/* --- Полоска доли в таблице --------------------------------------------------- */
+.bar-line { background: var(--fill-2); border-radius: 4px; height: 8px; width: 120px; overflow: hidden; }
+.bar-line span { display: block; height: 100%; border-radius: 4px; }

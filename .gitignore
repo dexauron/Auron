@@ -6,9 +6,20 @@ __pycache__/
 .claude/*
 !.claude/settings.json
 !.claude/skills/
+!.claude/hooks/
 .claude/settings.local.json
 .claude/skills/gstack/
+
+# Ключи к сервисам — в репозиторий не кладём никогда
+.env
+.env.*
+!.env.example
 
 node_modules/
 package-lock.json
 package.json
+
+# Выгрузки 1С магазина не публикуем: репозиторий открытый,
+# а в этих файлах цены, себестоимость и телефоны поставщиков.
+Учёт-магазина/Данные_1С_и_Excel/*
+!Учёт-магазина/Данные_1С_и_Excel/ПОЛОЖИТЕ_СЮДА_ВЫГРУЗКИ.txt
