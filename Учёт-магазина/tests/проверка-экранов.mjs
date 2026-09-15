@@ -2582,6 +2582,139 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 18. Оформление форм: строки ровные, кнопки на месте, ничего не уезжает.
+
+   Форму владелец видит чаще любого отчёта. Раньше её строки были втрое выше
+   соседних, кнопка «Сохранить» терялась в конце, а на телефоне её закрывала
+   нижняя панель. Такое ломается незаметно — от одной строки в стилях. */
+{
+  console.log('— Оформление форм');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(500);
+
+  /* Панель как в телефоне: слева «Отмена», по центру название, справа «Готово» */
+  const шапка = await page.evaluate(() => {
+    const h = document.querySelector('.sheet-head');
+    if (!h) return null;
+    const b = [...h.querySelectorAll('button')].map(e => e.textContent.trim());
+    return { кнопки: b, заголовок: (h.querySelector('.sheet-title') || {}).textContent };
+  });
+  check('В ФОРМЕ ЕСТЬ «ОТМЕНА» И «ГОТОВО»',
+    шапка && шапка.кнопки.includes('Отмена') && шапка.кнопки.includes('Готово'),
+    шапка ? шапка.кнопки.join(', ') : 'шапки нет', 'Отмена, Готово');
+  check('и название формы посередине', шапка && /Сверка/.test(шапка.заголовок || ''),
+    (шапка && шапка.заголовок) || 'нет', 'Сверка кассы за смену');
+
+  /* «Готово» сохраняет так же, как кнопка внизу */
+  const готово = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.sheet-head button')]
+      .find(e => e.textContent.trim() === 'Готово');
+    return b ? { type: b.type, form: b.getAttribute('form') } : null;
+  });
+  check('«Готово» — это то же сохранение, а не другая кнопка',
+    готово && готово.type === 'submit' && готово.form === 'wmForm',
+    готово ? готово.type + '/' + готово.form : 'нет', 'submit/wmForm');
+
+  /* Кнопка «Сохранить» видна без прокрутки до конца формы */
+  const сохранить = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.sheet button[type="submit"]')]
+      .find(e => /Сохранить/.test(e.textContent));
+    if (!b) return null;
+    const r = b.getBoundingClientRect(), s = document.querySelector('.sheet').getBoundingClientRect();
+    return { внутри: r.bottom <= s.bottom + 2 && r.top >= s.top, ширина: Math.round(r.width) };
+  });
+  check('КНОПКА «СОХРАНИТЬ» ВИДНА СРАЗУ, А НЕ В КОНЦЕ ФОРМЫ',
+    сохранить && сохранить.внутри, сохранить ? 'видна' : 'не найдена', 'видна');
+  check('и она во всю ширину — мимо не промахнёшься',
+    сохранить && сохранить.ширина > 300, (сохранить || {}).ширина + 'px', '> 300px');
+
+  /* Строки формы примерно одной высоты: одна втрое выше других — верный
+     признак, что подсказка снова растянула её на полстраницы */
+  const высоты = await page.evaluate(() =>
+    [...document.querySelectorAll('.form-row')].map(e => Math.round(e.getBoundingClientRect().height)));
+  const макс = Math.max.apply(null, высоты), мин = Math.min.apply(null, высоты);
+  check('СТРОКИ ФОРМЫ ПРИМЕРНО ОДНОЙ ВЫСОТЫ', макс <= мин * 3,
+    'от ' + мин + ' до ' + макс + 'px', 'разброс не больше трёх раз');
+  check('и ни одна строка не разрослась на полэкрана', макс < 200, макс + 'px', '< 200px');
+
+  /* Длинное пояснение свёрнуто, но раскрывается, когда встал в поле */
+  const пояснение = await page.evaluate(() => {
+    const s = [...document.querySelectorAll('.form-row label small')]
+      .sort((a, b) => b.textContent.length - a.textContent.length)[0];
+    if (!s) return null;
+    const до = s.getBoundingClientRect().height;
+    const row = s.closest('.form-row');
+    const inp = row.querySelector('input,select,textarea');
+    if (inp) inp.focus();
+    return { до: Math.round(до), после: Math.round(s.getBoundingClientRect().height),
+      длина: s.textContent.length };
+  });
+  if (пояснение && пояснение.длина > 90) {
+    check('ДЛИННОЕ ПОЯСНЕНИЕ СВЁРНУТО, ПОКА НЕ НУЖНО',
+      пояснение.до <= 40, пояснение.до + 'px', 'не выше двух строк');
+    check('а как встал в поле — раскрылось целиком',
+      пояснение.после > пояснение.до, пояснение.до + ' → ' + пояснение.после + 'px', 'стало выше');
+  }
+
+  /* Число и калькулятор — в одном ряду, а не этажами */
+  const ряд = await page.evaluate(() => {
+    const f = document.querySelector('.num-field');
+    if (!f) return null;
+    const i = f.querySelector('input').getBoundingClientRect();
+    const b = f.querySelector('.num-calc').getBoundingClientRect();
+    return { совпали: Math.abs(i.top - b.top) < 12, поле: Math.round(i.width) };
+  });
+  check('ЧИСЛО И КАЛЬКУЛЯТОР — В ОДНОМ РЯДУ', ряд && ряд.совпали,
+    ряд ? (ряд.совпали ? 'в ряд' : 'калькулятор уехал вниз') : 'нет поля', 'в ряд');
+  check('и поле для числа не сжато в ноль', ряд && ряд.поле > 60,
+    (ряд || {}).поле + 'px', '> 60px');
+
+  /* Пустое числовое поле видно: в нём стоит серый ноль */
+  check('в пустом числовом поле виден ноль — понятно, куда писать',
+    await page.evaluate(() => {
+      const i = [...document.querySelectorAll('.num-input')].find(e => !e.value);
+      return !!i && i.placeholder === '0';
+    }), 'виден', 'виден');
+
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(250);
+  check('после закрытия формы страница снова обычная',
+    await page.evaluate(() => !document.body.classList.contains('sheet-open')),
+    'обычная', 'обычная');
+
+  /* --- ТЕЛЕФОН: кнопку не должна закрывать нижняя панель --- */
+  const ctxP = await browser.newContext({ viewport: { width: 390, height: 844 },
+    isMobile: true, hasTouch: true });
+  const p2 = await ctxP.newPage();
+  await p2.goto(PAGE); await p2.waitForTimeout(800);
+  await p2.evaluate(() => window.WMUI.openForm('moneyOut'));
+  await p2.waitForTimeout(500);
+  check('НА ТЕЛЕФОНЕ НИЖНЯЯ ПАНЕЛЬ НЕ ЗАКРЫВАЕТ КНОПКУ',
+    await p2.evaluate(() => {
+      const t = document.querySelector('.tabbar');
+      return !t || getComputedStyle(t).display === 'none';
+    }), 'не закрывает', 'не закрывает');
+  check('и у листа есть ухват сверху — его видно, что можно тянуть',
+    await p2.evaluate(() => {
+      const g = document.querySelector('.sheet-grabber');
+      return !!g && getComputedStyle(g).display !== 'none';
+    }), 'есть', 'есть');
+  const низ = await p2.evaluate(() => {
+    const b = [...document.querySelectorAll('.sheet button[type="submit"]')]
+      .find(e => /Сохранить/.test(e.textContent));
+    return b ? Math.round(b.getBoundingClientRect().bottom) : -1;
+  });
+  check('кнопка «Сохранить» помещается в экран телефона', низ > 0 && низ <= 844,
+    низ + 'px из 844', 'в экране');
+  await p2.close(); await ctxP.close();
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

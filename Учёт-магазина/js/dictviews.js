@@ -341,7 +341,7 @@
       var u = U(); v = v || {};
       var k = DI.kindOf(DICT_KIND) || { name: '', one: 'значение' };
       return '<div class="form-row"><label>' + esc(k.name) +
-        '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' +
+        '<small>' +
         'по одному в строке — как в столбце Excel</small></label>' +
         '<textarea name="text" rows="9" placeholder="Продавец-кассир&#10;Товаровед&#10;' +
         'Администратор&#10;Уборщица" style="width:100%;font:inherit;padding:10px 12px;' +

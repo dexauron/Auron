@@ -104,6 +104,11 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   padding: 0 16px; border-radius: 10px; border: none; background: var(--fill); color: var(--label);
   font-size: 14.5px; font-weight: 600; cursor: pointer; transition: filter .12s, background .12s; white-space: nowrap; }
 .btn:hover { filter: brightness(.96); }
+/* Нажатие видно сразу: кнопка чуть проседает. На телефоне это единственный
+   отклик, который есть, — без него непонятно, попал ты по кнопке или нет. */
+.btn:active { transform: scale(.97); filter: brightness(.92); }
+.btn { transition: filter .12s, background .12s, transform .08s; }
+.btn-primary { box-shadow: 0 1px 2px rgba(0,122,255,.25); }
 .btn-primary { background: var(--blue); color: #fff; }
 .btn-danger { background: var(--fill); color: var(--red); }
 .btn-plain { background: none; color: var(--blue); padding: 0 6px; height: 32px; }
@@ -122,7 +127,9 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 16px 20px 10px; flex-wrap: wrap; }
 .card-head .card-note { flex: 1 1 220px; text-align: right; }
-.card-title { font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
+.card-title { font-size: 17px; font-weight: 650; letter-spacing: -.35px;
+  display: flex; align-items: center; gap: 8px; }
+.card-ic { display: inline-flex; color: var(--label-2); }
 .card-note { font-size: 13px; color: var(--label-2); }
 .card-body { padding: 4px 20px 18px; font-size: 14.5px; color: var(--label-2); line-height: 1.55; }
 .card-pad { padding: 18px 20px; }
@@ -147,11 +154,16 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 
 /* ---------- Список в стиле iOS ---------- */
 .list { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); overflow: hidden; }
+/* Разделитель начинается там же, где текст, — так его рисует iOS.
+   Линия от края до края режет список на куски, а с отступом он читается
+   как одно целое. */
 .row { display: flex; align-items: center; gap: 13px; padding: 12px 18px; min-height: 56px;
-  border-top: .5px solid var(--separator); }
-.row:first-child { border-top: none; }
+  position: relative; }
+.row + .row::before { content: ''; position: absolute; left: 18px; right: 0; top: 0;
+  height: .5px; background: var(--separator); }
 .row.tappable { cursor: pointer; }
 .row.tappable:hover { background: var(--fill-2); }
+.row.tappable:active { background: var(--fill); }
 .row-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center;
   justify-content: center; font-size: 15px; flex-shrink: 0; background: var(--fill); }
 .row-main { flex: 1; min-width: 0; }
@@ -165,9 +177,10 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .table-wrap { overflow-x: auto; }
 table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
 table.data th { text-align: left; font-size: 12px; font-weight: 600; color: var(--label-2);
-  padding: 10px 14px; border-bottom: .5px solid var(--separator); white-space: nowrap;
-  position: sticky; top: 0; background: var(--bg-elev); }
-table.data td { padding: 11px 14px; border-bottom: .5px solid var(--separator); }
+  padding: 11px 16px; border-bottom: .5px solid var(--separator); white-space: nowrap;
+  position: sticky; top: 0; background: var(--bg-elev); letter-spacing: 0; }
+table.data td { padding: 12px 16px; border-bottom: .5px solid var(--separator); }
+table.data tbody tr:last-child td { border-bottom: none; }
 table.data tr:last-child td { border-bottom: none; }
 table.data tr:hover td { background: var(--fill-2); }
 table.data td.num, table.data th.num { text-align: right; white-space: nowrap; }
@@ -184,46 +197,114 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .b-blue { background: rgba(0,122,255,.14); color: var(--blue); }
 .b-gray { background: var(--fill); color: var(--label-2); }
 
-/* ---------- Формы ---------- */
+/* ---------- Формы: сгруппированный список, как в настройках iPhone ---------- */
 .form-list { background: var(--bg-elev); border-radius: var(--r-card); overflow: hidden; }
-/* Подсказка под полем («1 500 ₽ — одна тысяча пятьсот») должна стоять
-   отдельной строкой, а не в одном ряду с полем: иначе длинная подсказка
-   сжимала само поле до нулевой ширины и в него нельзя было попасть. */
-.form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 9px 18px;
-  min-height: 50px; border-top: .5px solid var(--separator); }
-.form-row .num-field { flex: 1; min-width: 0; }
-.form-row .num-hint { flex: 0 0 100%; text-align: right; margin-top: 0; }
-.form-row:first-child { border-top: none; }
-.form-row label { font-size: 15px; flex: 0 0 46%; color: var(--label); }
+
+/* Строка формы — ровно одна строка: слева что спрашиваем, справа что отвечают.
+   Раньше подсказка занимала отдельную строку во всю ширину, и строки выходили
+   втрое выше соседних: форма растягивалась на три экрана, а взгляду не за что
+   было зацепиться. Теперь подсказка стоит под названием мелким серым. */
+.form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 10px 16px; min-height: 48px; position: relative; }
+/* Разделитель с отступом слева — так его рисует iOS: линия начинается там,
+   где начинается текст, и список читается как единое целое. */
+.form-row + .form-row::before { content: ''; position: absolute; left: 16px; right: 0; top: 0;
+  height: .5px; background: var(--separator); }
+.form-row label { font-size: 16px; flex: 0 0 44%; color: var(--label); line-height: 1.25; }
+/* Пояснение под названием поля свёрнуто до двух строк: иначе одна строка
+   формы разрасталась на шесть, и форма выглядела стеной текста. Полностью
+   оно раскрывается, когда владелец встал в это поле или подвёл курсор —
+   то есть ровно тогда, когда собрался его заполнять. */
+.form-row label small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; font-size: 12.5px; color: var(--label-2);
+  font-weight: 400; margin-top: 2px; line-height: 1.35; transition: none; }
+.form-row:hover label small, .form-row:focus-within label small { -webkit-line-clamp: 99; }
 .form-row input, .form-row select, .form-row textarea {
-  flex: 1; border: none; background: none; outline: none; text-align: right; font-size: 15px;
-  min-width: 0; padding: 6px 0; }
+  flex: 1; border: none; background: none; outline: none; text-align: right; font-size: 16px;
+  min-width: 0; padding: 7px 0; border-radius: 8px; }
 .form-row input::placeholder { color: var(--label-3); }
-.form-row select { text-align: right; text-align-last: right; }
+/* Пустое числовое поле без подсказки выглядело пустым местом — непонятно,
+   куда жать. Показываем серый ноль: видно и поле, и что в нём пока пусто. */
+.form-row .num-input:placeholder-shown { background: var(--fill-2); }
+.form-row .num-input { padding-left: 10px; padding-right: 10px; }
+.form-row select { text-align: right; text-align-last: right; color: var(--blue);
+  appearance: none; padding-right: 16px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") right center no-repeat; }
+/* Пустое поле выглядит пустым местом: непонятно, можно ли туда писать.
+   Под курсором и в фокусе оно подсвечивается — и сразу видно, что это поле. */
+.form-row input:hover, .form-row textarea:hover,
+.form-row input:focus, .form-row textarea:focus {
+  background: var(--fill-2); padding-left: 10px; padding-right: 10px; }
+.form-row input:focus, .form-row textarea:focus {
+  box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* Число и калькулятор — в одном ряду: поле справа, кнопка рядом с ним.
+   Иначе калькулятор уезжает под число, и строка ломается на три этажа. */
+.form-row .num-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.form-row .num-field input { flex: 1; min-width: 0; }
+.num-calc { flex: 0 0 auto; width: 34px; height: 34px; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--fill-2); border: none;
+  color: var(--label-2); box-shadow: none; }
+.num-calc:hover { background: var(--fill); color: var(--blue); }
+.num-calc svg { width: 18px; height: 18px; }
+/* Подсказка под числом («55 000 ₽ пятьдесят пять тысяч») — мелко и вплотную,
+   она поясняет, а не спорит за место с самим полем. */
+.form-row .num-hint { flex: 0 0 auto; width: 100%; text-align: right; margin-top: 1px; }
+.num-hint { font-size: 12.5px; color: var(--label-2); min-height: 0; line-height: 1.3; }
+.num-hint:empty { display: none; }
+.num-hint b { color: var(--label-2); font-size: 12.5px; font-weight: 600; }
+.num-hint .c-muted { font-size: 12px; }
+
 /* Список «за что + сколько»: выплаты из кассы за смену, по строке на каждую */
 .pair-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
 .pair-row { display: flex; gap: 8px; align-items: center; }
-.form-row .pair-row input { flex: 1; text-align: left; border: .5px solid var(--separator);
-  border-radius: 8px; padding: 6px 9px; background: var(--bg-inset); }
+.form-row .pair-row input { flex: 1; text-align: left; border: none;
+  border-radius: 9px; padding: 8px 10px; background: var(--fill-2); }
 .form-row .pair-row input.num-input { flex: 0 0 34%; text-align: right; }
 .pair-row .pair-del { flex: 0 0 auto; padding: 0 9px; color: var(--label-3); }
 .pair-box > .btn { align-self: flex-start; }
 
-.form-hint { padding: 10px 18px; font-size: 13px; color: var(--label-2); background: var(--bg-inset); }
-.form-actions { display: flex; gap: 10px; justify-content: flex-end; padding: 14px 0 0; }
+/* Пояснение ко всей форме — как «footer» секции в iOS: без плашки, мелко */
+.form-hint { padding: 10px 16px 0; font-size: 13px; color: var(--label-2); background: none;
+  line-height: 1.45; display: flex; gap: 7px; align-items: flex-start; }
+.form-hint svg { flex: 0 0 auto; margin-top: 2px; opacity: .6; }
+.form-actions { display: flex; gap: 10px; padding: 4px 0 0; }
+.form-actions .btn-lg { flex: 1; }
 
-/* ---------- Модальное окно (лист) ---------- */
-.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); backdrop-filter: blur(3px);
-  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px; }
-.sheet { background: var(--bg); border-radius: 20px; box-shadow: var(--shadow-sheet);
-  width: min(560px, 100%); max-height: 88vh; overflow-y: auto; }
-.sheet-head { position: sticky; top: 0; background: var(--bg); display: flex; align-items: center;
-  justify-content: space-between; padding: 16px 18px 10px; z-index: 2; }
-.sheet-title { font-size: 18px; font-weight: 680; letter-spacing: -.3px; }
-.sheet-body { padding: 0 18px 18px; display: flex; flex-direction: column; gap: 14px; }
-.sheet-text { font-size: 14.5px; line-height: 1.6; white-space: pre-line; color: var(--label); }
+/* ---------- Лист (модальное окно) ---------- */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.28); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px;
+  animation: fadeIn .18s ease; }
+@keyframes fadeIn { from { opacity: 0; } }
+.sheet { background: var(--bg); border-radius: 22px; box-shadow: var(--shadow-sheet);
+  width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  overflow: hidden; animation: sheetIn .26s cubic-bezier(.32,.72,0,1); }
+@keyframes sheetIn { from { transform: translateY(14px) scale(.99); opacity: 0; } }
+.sheet-grabber { display: none; }
+/* Панель листа: «Отмена» слева, название по центру, «Готово» справа —
+   как в любом окне на телефоне, и рука сама тянется в нужный угол. */
+.sheet-head { flex: 0 0 auto; background: var(--bg); display: grid;
+  grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 14px 14px 10px; z-index: 2; border-bottom: .5px solid transparent; }
+.sheet-head.stuck { border-bottom-color: var(--separator); }
+.sheet-title { font-size: 17px; font-weight: 640; letter-spacing: -.3px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-head-right { display: flex; justify-content: flex-end; }
+.sheet-btn { background: none; border: none; color: var(--blue); font-size: 16px;
+  padding: 6px 4px; cursor: pointer; border-radius: 8px; }
+.sheet-btn.strong { font-weight: 600; }
+.sheet-btn:active { opacity: .5; }
+.sheet-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.sheet-text { font-size: 15px; line-height: 1.55; white-space: pre-line; color: var(--label); }
+/* Главная кнопка не теряется в конце длинной формы: она прижата к низу листа */
+.sheet-body > form { display: flex; flex-direction: column; gap: 12px; }
+.sheet-body .form-actions { position: sticky; bottom: -16px; background: var(--bg);
+  padding: 10px 0 2px; margin-top: auto; }
 
 /* ---------- Прочее ---------- */
+/* Подсказка снизу перекрывала кнопку «Сохранить» в открытой форме.
+   Пока форма открыта — поднимаем её выше кнопки. */
+body.sheet-open .toast { bottom: 96px; }
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 90;
   background: rgba(28,28,30,.94); color: #fff; padding: 12px 18px; border-radius: 14px;
   font-size: 14px; max-width: 520px; white-space: pre-line; box-shadow: var(--shadow-sheet); }
@@ -232,7 +313,14 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
   background: rgba(255,149,0,.12); color: var(--label); font-size: 14.5px; }
 .banner.blue { background: rgba(0,122,255,.1); }
 .banner.green { background: rgba(52,199,89,.12); }
-.banner .btn { margin-left: auto; }
+/* Кнопка в баннере стоит СПРАВА, отдельно от текста, а не внутри абзаца:
+   вставленная в текст, она разрывала фразу пополам и читалась как опечатка. */
+.banner .btn { margin-left: auto; flex: 0 0 auto; }
+.banner > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 720px) {
+  .banner { flex-wrap: wrap; align-items: flex-start; }
+  .banner .btn { margin-left: 0; width: 100%; margin-top: 4px; }
+}
 .empty { padding: 40px 24px; text-align: center; color: var(--label-2); font-size: 14.5px; line-height: 1.7; }
 .empty b { color: var(--label); }
 .quick { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -350,9 +438,7 @@ body.readonly .quick .btn { opacity: .45; }
 .num-field { display: flex; gap: 8px; align-items: center; }
 .num-field .num-input { flex: 1; min-width: 0; }
 .num-calc { flex-shrink: 0; height: 38px; padding: 0 12px; font-size: 17px; }
-.num-hint { font-size: 13px; color: var(--label-2); margin-top: 5px; min-height: 17px; line-height: 1.4; }
-.num-hint b { color: var(--label); font-size: 14px; }
-.num-hint .c-muted { font-size: 12.5px; }
+/* правила .num-hint живут выше, в блоке форм — второй набор их перекрывал */
 
 /* --- Калькулятор ------------------------------------------------------------ */
 .calc-sheet { width: min(380px, 100%); }
@@ -409,10 +495,15 @@ body.readonly .quick .btn { opacity: .45; }
 .spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }
 
 /* --- Шаблоны частых записей -------------------------------------------------- */
+/* Полоска шаблонов над формой. «В шаблоны» — тихая кнопка: она не действие
+   формы, а способ запомнить её на потом, и спорить за внимание не должна. */
 .tpl-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
-  padding-bottom: 12px; margin-bottom: 2px; border-bottom: .5px solid var(--separator); }
+  padding: 0 2px 2px; }
 .tpl-label { font-size: 13px; color: var(--label-2); font-weight: 550; }
-.tpl-save { margin-left: auto; }
+.tpl-save { margin-left: auto; background: none; border: none; color: var(--label-2);
+  font-size: 13px; height: auto; padding: 4px 2px; box-shadow: none; }
+.tpl-save:hover { background: none; color: var(--blue); }
+.tpl-save svg { width: 15px; height: 15px; }
 
 /* --- Сравнение с прошлым периодом ------------------------------------------- */
 .delta { font-size: 12.5px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
@@ -560,14 +651,29 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 
   /* Форма: подпись сверху, поле во всю ширину — как в настройках iPhone.
      16 px обязательны: с меньшим шрифтом Safari зумит страницу при вводе. */
-  .form-row { flex-direction: column; align-items: stretch; gap: 4px; padding: 10px 16px; }
+  .form-row { flex-direction: column; align-items: stretch; gap: 3px; padding: 10px 16px; }
   .form-row label { flex-basis: auto; font-size: 13px; color: var(--label-2); }
+  .form-row label small { font-size: 12px; margin-top: 1px; }
   .form-row input, .form-row select, .form-row textarea { text-align: left; font-size: 16px; padding: 6px 0; }
+  .form-row select { text-align-last: left; background-position: right center; }
+  .form-row input:focus, .form-row textarea:focus { padding-left: 0; padding-right: 0; }
+  .form-row .num-field { align-items: stretch; }
   .form-row .num-hint { text-align: left; }
   .form-row .pair-row input.num-input { flex: 0 0 38%; }
-  .sheet { width: 100%; max-height: 92vh; border-radius: 20px 20px 0 0; align-self: flex-end;
-    padding-bottom: env(safe-area-inset-bottom); }
-  .backdrop { padding: 0; align-items: flex-end; }
+  /* Лист выезжает снизу и тянется за ухват — так открываются окна на телефоне */
+  .sheet { width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; align-self: flex-end;
+    padding-bottom: env(safe-area-inset-bottom); animation: sheetUp .3s cubic-bezier(.32,.72,0,1); }
+  @keyframes sheetUp { from { transform: translateY(100%); } }
+  .sheet-grabber { display: block; width: 36px; height: 5px; border-radius: 3px;
+    background: var(--label-3); margin: 8px auto 0; flex: 0 0 auto; }
+  .sheet-head { padding: 10px 12px 8px; }
+  .sheet-title { font-size: 16px; }
+  .backdrop { padding: 0; align-items: flex-end; z-index: 80; }
+  /* Пока форма открыта, нижняя панель вкладок прячется: она перекрывала
+     кнопку «Сохранить», и до неё нельзя было дотянуться. */
+  body.sheet-open .tabbar { display: none; }
+  body.sheet-open .toast { bottom: 84px; max-width: 86vw; font-size: 13.5px; padding: 10px 14px; }
+  .sheet-body .form-actions { padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
   .quick { gap: 8px; }
   .quick .btn { flex: 1 1 100%; }
   .filter-name { flex-basis: 100%; padding-top: 0; }

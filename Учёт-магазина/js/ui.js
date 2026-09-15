@@ -202,8 +202,11 @@
     closeSheet();
     var b = document.createElement('div');
     b.className = 'backdrop';
-    b.innerHTML = '<div class="sheet"><div class="sheet-head"><div class="sheet-title">' + esc(title) +
-      '</div><button class="btn btn-sm" data-act="close-sheet">Закрыть</button></div>' +
+    b.innerHTML = '<div class="sheet"><div class="sheet-grabber"></div>' +
+      '<div class="sheet-head">' +
+      '<button class="sheet-btn" data-act="close-sheet">Отмена</button>' +
+      '<div class="sheet-title">' + esc(title) + '</div>' +
+      '<div class="sheet-head-right" id="sheetRight"></div></div>' +
       '<div class="sheet-body">' + bodyHtml + '</div></div>';
 
     // Окно закрывается по щелчку мимо него — но ТОЛЬКО если и нажали мимо.
@@ -219,8 +222,17 @@
       askClose();
     });
     document.body.appendChild(b);
+    document.body.classList.add('sheet-open');
     var first = b.querySelector('input,select,textarea');
     if (first) setTimeout(function () { first.focus(); }, 60);
+    /* Пока список прокручен, панель отделяется тонкой чертой — видно, что
+       сверху есть ещё содержимое. Прокрутили в начало — черта исчезает. */
+    var body = b.querySelector('.sheet-body'), head = b.querySelector('.sheet-head');
+    if (body && head) {
+      body.addEventListener('scroll', function () {
+        head.classList.toggle('stuck', body.scrollTop > 2);
+      }, { passive: true });
+    }
     return b;
   }
 
@@ -403,7 +415,10 @@
     closeSheet();
     return true;
   }
-  function closeSheet() { var b = document.querySelector('.backdrop'); if (b) b.remove(); }
+  function closeSheet() {
+    var b = document.querySelector('.backdrop'); if (b) b.remove();
+    document.body.classList.remove('sheet-open');
+  }
 
   /* --- Период --------------------------------------------------------------- */
   var PERIODS = [
@@ -569,6 +584,9 @@
       return (expr ? esc(txt) + ' = ' : '') + body;
     }
 
+    /* Знак рубля в подсказке нужен: в поле стоит голое «280 000», и по нему
+       не отличить деньги от дней или часов. Поэтому сумма со знаком остаётся,
+       а прописью идёт следом — чтобы не ошибиться нулём. */
     var out = '<b>' + esc(NUM.money(v)) + '</b>';
     if (expr) out = esc(txt) + ' = ' + out;
     if (Math.abs(v) >= 1000) out += ' <span class="c-muted">' + esc(NUM.words(v)) + '</span>';
@@ -605,7 +623,9 @@
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
     var h = '<div class="form-row"><label>' + esc(label) +
-      (opts.hint ? '<small style="display:block;font-size:12px;color:var(--label-2);font-weight:400">' + esc(opts.hint) + '</small>' : '') +
+      /* Оформление — в styles.css. Инлайновый style перебивал его и не давал
+         свернуть длинное пояснение: строка формы разрасталась на шесть строк. */
+      (opts.hint ? '<small>' + esc(opts.hint) + '</small>' : '') +
       '</label>';
     if (type === 'list') {
       // свой список: можно выбрать из своих значений, а можно вписать новое —
@@ -630,7 +650,7 @@
         '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
         (opts.unit && opts.unit !== 'money' ? ' data-unit="' + esc(opts.unit) + '"' : '') +
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
-        (opts.placeholder ? ' placeholder="' + esc(opts.placeholder) + '"' : '') + '>' +
+        ' placeholder="' + esc(opts.placeholder || '0') + '">' +
         '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">' + ic('calculator') + '</button>' +
         '</div><div class="num-hint" data-hint-for="' + esc(name) + '">' +
         numHint(start, opts.unit) + '</div>';
@@ -1230,12 +1250,21 @@
     var oldBar = document.querySelector('.draft-bar'); if (oldBar) oldBar.remove();
     EDIT = edit || null;
     var lists = '';
+    var подпись = edit ? 'Сохранить изменения' : 'Сохранить';
     sheet(f.title,
+      '<form id="wmForm" data-fid="' + id + '">' +
       tplBar(id) +
-      '<form id="wmForm" data-fid="' + id + '"><div class="form-list">' + f.body(prefill) + '</div>' +
-      (f.hint ? '<div class="form-hint">' + esc(f.hint) + '</div>' : '') + lists +
-      '<div class="form-actions"><button type="button" class="btn" data-act="close-sheet">Отмена</button>' +
-      '<button type="submit" class="btn btn-primary btn-lg">' + (edit ? 'Сохранить изменения' : 'Сохранить') + '</button></div></form>');
+      '<div class="form-list">' + f.body(prefill) + '</div>' +
+      (f.hint ? '<div class="form-hint">' + ic('info', 15) + '<span>' + esc(f.hint) + '</span></div>' : '') +
+      lists +
+      '<div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">' +
+      подпись + '</button></div></form>');
+    /* «Готово» в шапке — то же самое сохранение. На iOS главное действие
+       живёт справа вверху, и рука тянется туда даже в длинной форме. */
+    var right = $('sheetRight');
+    if (right) {
+      right.innerHTML = '<button type="submit" form="wmForm" class="sheet-btn strong">Готово</button>';
+    }
   }
   /* --- Долги к оплате (ручные записи + документы 1С) -------------------------- */
   /* --- Экран «Сегодня» --------------------------------------------------------- */
