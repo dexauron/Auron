@@ -26,6 +26,13 @@
   var TEXT = {};              // { screenId: 'строка поиска' }
   var SETS = null;            // откуда брать сохранённые наборы («мой понедельник»)
 
+  /* Значки приходят снаружи, как и наборы: файл фильтров ни от чего не зависит
+     и работает даже без них. Раньше ic() здесь просто вызывался, хотя нигде не
+     был определён, — и экран падал, как только фильтр становился активным. */
+  var ICON = function () { return ''; };
+  function useIcons(fn) { ICON = typeof fn === 'function' ? fn : function () { return ''; }; }
+  function ic(name, size) { return ICON(name, size); }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -83,6 +90,110 @@
     return true;
   }
 
+  /* ==========================================================================
+     УМНЫЙ ПОИСК — как в браузере
+
+     Раньше поиск искал строку целиком: «моло 3.2» не находило «Молоко 3.2%»,
+     потому что в названии между словами стоит пробел, а не то, что набрали.
+     Владелец при этом решает, что товара нет.
+
+     Теперь набранное разбирается на части, и строка подходит, если подходят
+     ВСЕ части. Порядок слов значения не имеет.
+
+       молоко 3.2      — оба куска, в любом порядке и в любом месте строки
+       "молоко 3.2"    — в кавычках: ровно эта фраза подряд
+       -козье          — минус: строки с этим словом убрать
+       >1000           — число больше 1000 (по любому числу строки)
+       <50  >=10  <=5  — так же
+       =0              — ровно ноль: чем удобно искать «ничего не продалось»
+
+     Числовые части сравниваются с числами строки — их даёт экран
+     (numsFn). Не дал — числовые части просто никого не отсеивают.
+     ---------------------------------------------------------------------- */
+  function parseQuery(q) {
+    var parts = [], m;
+    var src = String(q == null ? '' : q);
+    // Сначала выкусываем фразы в кавычках — внутри них пробел значим
+    var re = /"([^"]*)"|(\S+)/g;
+    while ((m = re.exec(src))) {
+      if (m[1] !== undefined) {
+        var phrase = norm(m[1]);
+        if (phrase) parts.push({ kind: 'phrase', text: phrase });
+        continue;
+      }
+      var w = m[2];
+      var neg = false;
+      if (w.charAt(0) === '-' && w.length > 1 && !/^-\d/.test(w)) { neg = true; w = w.slice(1); }
+
+      var num = w.match(/^(>=|<=|>|<|=)(-?[\d\s.,]+)$/);
+      if (num) {
+        var v = parseFloat(String(num[2]).replace(/\s/g, '').replace(',', '.'));
+        if (!isNaN(v)) { parts.push({ kind: 'num', op: num[1], value: v, neg: neg }); continue; }
+      }
+      var t = norm(w);
+      if (t) parts.push({ kind: 'word', text: t, neg: neg });
+    }
+    return parts;
+  }
+
+  function numOk(op, a, b) {
+    if (op === '>') return a > b;
+    if (op === '<') return a < b;
+    if (op === '>=') return a >= b;
+    if (op === '<=') return a <= b;
+    return Math.abs(a - b) < 0.0001;         // '='
+  }
+
+  /* Подходит ли строка. haystack — всё, что у строки можно прочитать словами;
+     nums — числа строки (суммы, количества), если экран их дал. */
+  function matches(parts, haystack, nums) {
+    var hay = norm(haystack);
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i], ok;
+      if (p.kind === 'num') {
+        ok = false;
+        for (var j = 0; nums && j < nums.length; j++) {
+          if (numOk(p.op, Number(nums[j]), p.value)) { ok = true; break; }
+        }
+        // Экран чисел не дал — числовая часть никого не отсеивает
+        if (!nums || !nums.length) ok = !p.neg;
+      } else {
+        ok = hay.indexOf(p.text) >= 0;
+      }
+      if (p.neg ? ok : !ok) return false;
+    }
+    return true;
+  }
+
+  /* Подсветка найденного — чтобы глаз сразу видел, за что зацепилось.
+     Работает по уже экранированному тексту, поэтому теги не ломаются. */
+  function highlight(value, q) {
+    var safe = esc(value);
+    var parts = parseQuery(q).filter(function (p) {
+      return (p.kind === 'word' || p.kind === 'phrase') && !p.neg && p.text.length > 1;
+    });
+    if (!parts.length) return safe;
+    // Ищем по нормализованной копии, а режем по исходной — длины совпадают,
+    // потому что norm только меняет регистр и ё на е, но не длину строки
+    var low = norm(safe), marks = [];
+    parts.forEach(function (p) {
+      var from = 0, at;
+      while ((at = low.indexOf(p.text, from)) >= 0) {
+        marks.push([at, at + p.text.length]);
+        from = at + p.text.length;
+      }
+    });
+    if (!marks.length) return safe;
+    marks.sort(function (a, b) { return a[0] - b[0]; });
+    var out = '', pos = 0;
+    marks.forEach(function (mk) {
+      if (mk[0] < pos) { if (mk[1] > pos) pos = pos; return; }   // пересечения пропускаем
+      out += safe.slice(pos, mk[0]) + '<mark>' + safe.slice(mk[0], mk[1]) + '</mark>';
+      pos = mk[1];
+    });
+    return out + safe.slice(pos);
+  }
+
   /* --- Список кнопок по данным --------------------------------------------- */
   // Самые частые значения поля: показываем не больше limit кнопок,
   // иначе панель фильтров превращается в простыню
@@ -128,9 +239,11 @@
     return true;
   }
 
-  // Отфильтровать строки по выбранным кнопкам и строке поиска
-  function apply(id, rows, defs, searchFn) {
-    var b = bag(id), q = norm(text(id));
+  /* Отфильтровать строки по выбранным кнопкам и строке поиска.
+     searchFn(r) — что у строки читать словами.
+     numsFn(r)   — какие числа строки сравнивать с «>1000» и подобным.  */
+  function apply(id, rows, defs, searchFn, numsFn) {
+    var b = bag(id), q = text(id);
     var out = (rows || []).filter(function (r) {
       for (var i = 0; i < defs.length; i++) {
         var v = b[defs[i].key];
@@ -138,7 +251,14 @@
       }
       return true;
     });
-    if (q && searchFn) out = out.filter(function (r) { return norm(searchFn(r)).indexOf(q) >= 0; });
+    if (q && searchFn) {
+      var parts = parseQuery(q);
+      if (parts.length) {
+        out = out.filter(function (r) {
+          return matches(parts, searchFn(r), numsFn ? numsFn(r) : null);
+        });
+      }
+    }
     return out;
   }
 
@@ -161,9 +281,15 @@
       h += '</div></div>';
     });
     if (opts.search) {
+      /* Подсказка про то, что поиск умеет больше, чем кажется. Без неё про
+         «-козье» и «>1000» никто не узнает: догадаться неоткуда. */
       h += '<div class="filter-line"><span class="filter-name">Поиск</span>' +
         '<input class="filter-input" type="search" data-filter-text="' + esc(id) + '" value="' +
-        esc(text(id)) + '" placeholder="' + esc(opts.search) + '"></div>';
+        esc(text(id)) + '" placeholder="' + esc(opts.search) + '">' +
+        '<span class="search-tip" title="Слова можно писать в любом порядке и кусками. ' +
+        'Минус убирает: молоко -козье. Кавычки ищут фразу целиком. ' +
+        'Больше и меньше ищут по числам: &gt;1000, &lt;10, =0.">' +
+        'моло 3.2 · -козье · &quot;ровно так&quot; · &gt;1000</span></div>';
     }
     if (!h) return '';
     // Сохранённые наборы — своя строка кнопок над остальными.
@@ -198,7 +324,8 @@
   return {
     get: get, set: set, text: text, setText: setText, clear: clear, clearAll: clearAll,
     active: active, apply: apply, bar: bar, note: note,
-    snapshot: snapshot, restore: restore, useSets: useSets, sameAs: sameAs,
-    autoOptions: autoOptions, optionsOf: optionsOf, norm: norm
+    snapshot: snapshot, restore: restore, useSets: useSets, useIcons: useIcons, sameAs: sameAs,
+    autoOptions: autoOptions, optionsOf: optionsOf, norm: norm,
+    parseQuery: parseQuery, matches: matches, highlight: highlight
   };
 });

@@ -2084,18 +2084,18 @@ console.log('Страница: ' + PAGE + '\n');
     'названа', 'названа');
 
   /* --- ПЕРИОД ----------------------------------------------------------- */
-  check('на экране есть поля «с» и «по»',
-    await page.evaluate(() => !!document.querySelector('#lossFrom') &&
-      !!document.querySelector('#lossTo')), 'есть', 'есть');
+  const естьПоля = await page.evaluate(() => !!document.querySelector('#anaFrom') &&
+    !!document.querySelector('#anaTo'));
+  check('на экране есть поля «с» и «по»', естьПоля, естьПоля ? 'есть' : 'полей нет', 'есть');
 
   const выбрать = async (f, t2) => {
     await page.evaluate(v => {
-      const a = document.querySelector('#lossFrom'), b = document.querySelector('#lossTo');
+      const a = document.querySelector('#anaFrom'), b = document.querySelector('#anaTo');
       a.value = v[0]; a.dispatchEvent(new Event('change', { bubbles: true }));
     }, [f, t2]);
     await page.waitForTimeout(300);
     await page.evaluate(v => {
-      const b = document.querySelector('#lossTo');
+      const b = document.querySelector('#anaTo');
       b.value = v; b.dispatchEvent(new Event('change', { bubbles: true }));
     }, t2);
     await page.waitForTimeout(350);
@@ -2123,12 +2123,16 @@ console.log('Страница: ' + PAGE + '\n');
   check('ПОЛОВИНУ МЕСЯЦА НЕ ВЫДАЁМ ЗА ТОЧНЫЙ ОТВЕТ',
     /приблизительно/i.test(текст), /приблизительно/i.test(текст) ? 'оговорка есть' : 'молчит',
     'программа оговаривается');
-  check('и объясняет, почему именно', /дат по строкам нет|дат по строкам/i.test(текст),
-    'объясняет', 'объясняет');
+  const почему = /дней внутри|сводом за период|дат по строкам/i.test(текст);
+  check('и объясняет, почему именно', почему,
+    почему ? 'объясняет' : 'оговорилась, но не объяснила', 'объясняет');
+  check('и подсказывает, как получить точную цифру',
+    /по границам выгрузок|выгружайте из 1С помельче/i.test(текст),
+    'подсказывает', 'подсказывает');
 
   /* Заготовка «Всё» возвращает весь загруженный период */
   await page.evaluate(() => {
-    const b = [...document.querySelectorAll('[data-act="loss-period"]')]
+    const b = [...document.querySelectorAll('[data-act="ana-period"]')]
       .find(e => e.textContent.trim() === 'Всё');
     if (b) b.click();
   });
@@ -2159,6 +2163,249 @@ console.log('Страница: ' + PAGE + '\n');
     (возвр.split('\n')[1] || 'пусто').slice(0, 40), 'причины на месте');
   check('и там они тоже сложены по причине', /750/.test(возвр),
     /750/.test(возвр) ? '750' : 'не сложены', '450 + 300 = 750');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 16. Товарные экраны: период, умный поиск и фильтры на каждом */
+{
+  console.log('— Товарные экраны: период, поиск, фильтры');
+  const { page, ctx, errs } = await open();
+
+  /* Два месяца выгрузок: только на них и видно, что период вообще работает */
+  await page.evaluate(() => {
+    const U = window.WMUI, E = window.WM, d = U.data();
+    const мес = (f, t) => ({ periodKey: f + '..' + t, from: f, to: t, date: t });
+    const с = мес('2026-09-01', '2026-09-30'), о = мес('2026-10-01', '2026-10-31');
+    const прод = (n, rev, cogs, p) => Object.assign({ name: n, key: E.norm(n),
+      qty: 10, revenue: rev, cogs: cogs, profit: rev - cogs }, p);
+    d.sales = [
+      прод('Молоко 3.2% Простоквашино', 50000, 40000, с),
+      прод('Сыр Российский', 30000, 28000, с),
+      прод('Хлеб Бородинский', 10000, 9500, с),
+      прод('Молоко козье', 5000, 6000, с),
+      прод('Молоко 3.2% Простоквашино', 60000, 45000, о)
+    ];
+    d.salesPeriod = { from: '01.10.2026', to: '31.10.2026', days: 31 };
+    d.stock = [
+      { name: 'Молоко 3.2% Простоквашино', key: E.norm('Молоко 3.2% Простоквашино'),
+        group: 'Молочка', qty: 2, buyPrice: 60, retailPrice: 90, buySum: 120, barcode: '4600001' },
+      { name: 'Сыр Российский', key: E.norm('Сыр Российский'), group: 'Молочка',
+        qty: 40, buyPrice: 400, retailPrice: 520, buySum: 16000, barcode: '4600002' },
+      { name: 'Хлеб Бородинский', key: E.norm('Хлеб Бородинский'), group: 'Хлеб',
+        qty: 0, buyPrice: 30, retailPrice: 45, buySum: 0, barcode: '4600003' }
+    ];
+    d.stockTaken = { date: '2026-10-31', from: 'файл' };
+    d.prices = [
+      { name: 'Молоко 3.2% Простоквашино', key: E.norm('Молоко 3.2% Простоквашино'),
+        supplier: 'Молокозавод', price: 58 },
+      { name: 'Молоко 3.2% Простоквашино', key: E.norm('Молоко 3.2% Простоквашино'),
+        supplier: 'Оптовик', price: 64 },
+      { name: 'Сыр Российский', key: E.norm('Сыр Российский'), supplier: 'Оптовик', price: 400 }
+    ];
+    d.pricesTaken = { date: '2026-10-31', from: 'файл' };
+    d.returns = [
+      Object.assign({ name: 'Кефир', key: 'кефир', reason: 'Истёк срок', qty: 3, cost: 450 }, с),
+      Object.assign({ name: 'Сок', key: 'сок', reason: 'Брак упаковки', qty: 1, cost: 120 }, о)
+    ];
+    d.writeoffs = [
+      Object.assign({ name: 'Специи', key: 'специи', reason: 'Производство', qty: 9, cost: 18192 }, с),
+      Object.assign({ name: 'Крупа', key: 'крупа', reason: 'Просрочка', qty: 2, cost: 5000 }, о)
+    ];
+    d.dead = [
+      Object.assign({ name: 'Сыр Российский', key: E.norm('Сыр Российский'),
+        left: 40, sold: 0, money: 16000, days: 90 }, с),
+      Object.assign({ name: 'Хлеб Бородинский', key: E.norm('Хлеб Бородинский'),
+        left: 5, sold: 1, money: 150, days: 40 }, о)
+    ];
+    window.WMStore.setSetting('anaFrom', ''); window.WMStore.setSetting('anaTo', '');
+    U.recompute();
+  });
+  await page.waitForTimeout(400);
+
+  const текстЭкрана = () => page.evaluate(() =>
+    document.body.innerText.replace(/[  ]/g, ' '));
+  const открыть = async id => {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(320);
+  };
+  const периодНа = async id => {
+    await открыть(id);
+    return page.evaluate(() => !!document.querySelector('#anaFrom') &&
+      !!document.querySelector('#anaTo'));
+  };
+  const поискНа = async id => {
+    await открыть(id);
+    return page.evaluate(() => !!document.querySelector('[data-filter-text]'));
+  };
+
+  /* --- ПЕРИОД ТАМ, ГДЕ ОН ЕСТЬ НА САМОМ ДЕЛЕ --------------------------- */
+  const сПериодом = ['orders', 'losses', 'dead', 'groups', 'itemprofit', 'shelf',
+    'returns', 'abc'];
+  const безПериода = [];
+  for (const id of сПериодом) if (!(await периодНа(id))) безПериода.push(id);
+  check('ПЕРИОД ВЫБИРАЕТСЯ НА ВОСЬМИ ЭКРАНАХ, ГДЕ ДАННЫЕ ЗА ПЕРИОД',
+    безПериода.length === 0, безПериода.join(', ') || 'на всех', 'на всех');
+
+  /* Склад и цены — снимки. Фальшивого выбора дат там быть не должно */
+  for (const id of ['stock', 'pricecmp']) {
+    await открыть(id);
+    const естьДаты = await page.evaluate(() => !!document.querySelector('#anaFrom'));
+    const т = await текстЭкрана();
+    check('«' + id + '»: СНИМОК, А НЕ ПЕРИОД — ДАТ НЕ ОБЕЩАЕМ', !естьДаты,
+      естьДаты ? 'предлагает выбрать период, хотя не может' : 'не предлагает', 'не предлагает');
+    check('«' + id + '»: сказано, на какой момент снимок',
+      /снимок/i.test(т) && /31\.10\.2026/.test(т),
+      /снимок/i.test(т) ? 'сказано' : 'молчит', 'снимок на 31.10.2026');
+  }
+
+  /* --- ПОИСК И ФИЛЬТРЫ НА КАЖДОМ ЭКРАНЕ -------------------------------- */
+  const всеТоварные = ['stock', 'orders', 'losses', 'dead', 'groups', 'itemprofit',
+    'shelf', 'returns', 'abc', 'pricecmp'];
+  const безПоиска = [];
+  for (const id of всеТоварные) if (!(await поискНа(id))) безПоиска.push(id);
+  check('ПОИСК ЕСТЬ НА ВСЕХ ДЕСЯТИ ТОВАРНЫХ ЭКРАНАХ',
+    безПоиска.length === 0, безПоиска.join(', ') || 'на всех', 'на всех');
+
+  const безФильтров = [];
+  for (const id of всеТоварные) {
+    await открыть(id);
+    const n = await page.evaluate(() => document.querySelectorAll('.chip[data-filter]').length);
+    if (!n) безФильтров.push(id);
+  }
+  check('и кнопки-фильтры тоже', безФильтров.length === 0,
+    безФильтров.join(', ') || 'на всех', 'на всех');
+
+  /* --- УМНЫЙ ПОИСК В ЖИВОМ БРАУЗЕРЕ ------------------------------------ */
+  await открыть('stock');
+  const искать = async q => {
+    await page.evaluate(v => {
+      const i = document.querySelector('[data-filter-text]');
+      i.value = v; i.dispatchEvent(new Event('input', { bubbles: true }));
+    }, q);
+    await page.waitForTimeout(400);
+  };
+  const строкиТаблицы = () => page.evaluate(() => {
+    const t = document.querySelector('.card table');
+    return t ? [...t.querySelectorAll('tbody tr')].map(r => r.innerText.trim()) : [];
+  });
+
+  await искать('моло 3.2');
+  let стр = await строкиТаблицы();
+  check('СЛОВА КУСКАМИ И В ЛЮБОМ ПОРЯДКЕ — НАХОДИТ',
+    стр.length === 1 && /Молоко 3\.2/.test(стр[0]),
+    стр.length + ' стр.: ' + (стр[0] || '').slice(0, 30), 'одна строка, молоко 3.2');
+  check('и подсвечивает то, за что зацепилось',
+    await page.evaluate(() => !!document.querySelector('.card table mark')),
+    'подсвечивает', 'подсвечивает');
+
+  await искать('4600002');
+  стр = await строкиТаблицы();
+  check('по штрихкоду тоже находит',
+    стр.length === 1 && /Сыр/.test(стр[0]), (стр[0] || '').slice(0, 20), 'Сыр');
+
+  await искать('>10000');
+  стр = await строкиТаблицы();
+  check('ПОИСК ПО ЧИСЛАМ: «>10000» оставил только дорогое',
+    стр.length === 1 && /Сыр/.test(стр[0]),
+    стр.length + ' стр.: ' + (стр[0] || '').slice(0, 20), 'Сыр на 16 000');
+
+  await искать('');
+  await открыть('itemprofit');
+  await искать('моло');
+  стр = await строкиТаблицы();
+  check('ОДИН ТОВАР ИЗ ДВУХ ВЫГРУЗОК — ОДНА СТРОКА, А НЕ ДВЕ', стр.length === 2,
+    стр.length + ' стр.', '2: молоко 3.2 и козье');
+  const суммаМолока = стр.find(t => /3\.2/.test(t)) || '';
+  check('и выручка в ней сложена: 50 000 + 60 000',
+    /110 000/.test(суммаМолока.replace(/[\u00a0\u202f]/g, ' ')),
+    суммаМолока.replace(/[\u00a0\u202f]/g, ' ').slice(0, 60), '110 000');
+  await искать('моло -козье');
+  стр = await строкиТаблицы();
+  check('МИНУС УБИРАЕТ НЕНУЖНОЕ: козьего не осталось',
+    стр.length === 1 && !/козье/i.test(стр[0]),
+    стр.length + ' стр.: ' + (стр[0] || '').slice(0, 30), 'одна, без козьего');
+  await искать('');
+  await открыть('stock');
+
+  await искать('такогонетвообще');
+  check('ЧЕГО НЕТ — ПРОГРАММА ГОВОРИТ ПРЯМО, А НЕ ПОКАЗЫВАЕТ ПУСТОТУ',
+    /Показано 0 из|Пока пусто/i.test(await текстЭкрана()), 'говорит', 'говорит');
+  await искать('');
+
+  /* --- ПЕРИОД РЕАЛЬНО МЕНЯЕТ ЦИФРЫ ------------------------------------- */
+  const выбрать = async (f, t) => {
+    await page.evaluate(v => {
+      const a = document.querySelector('#anaFrom');
+      a.value = v; a.dispatchEvent(new Event('change', { bubbles: true }));
+    }, f);
+    await page.waitForTimeout(250);
+    await page.evaluate(v => {
+      const b = document.querySelector('#anaTo');
+      b.value = v; b.dispatchEvent(new Event('change', { bubbles: true }));
+    }, t);
+    await page.waitForTimeout(400);
+  };
+
+  await открыть('itemprofit');
+  await выбрать('2026-09-01', '2026-09-30');
+  let т = await текстЭкрана();
+  check('СЕНТЯБРЬ: видно сентябрьские товары', /Сыр Российский/.test(т) && /Хлеб/.test(т),
+    'видно', 'видно');
+  check('и сентябрьская выручка молока, а не октябрьская',
+    /50 000/.test(т) && !/60 000/.test(т),
+    /60 000/.test(т) ? 'взялась октябрьская' : '50 000', '50 000');
+
+  await выбрать('2026-10-01', '2026-10-31');
+  т = await текстЭкрана();
+  check('ОКТЯБРЬ: цифры сменились на октябрьские',
+    /60 000/.test(т) && !/50 000/.test(т),
+    /60 000/.test(т) ? '60 000' : 'не сменились', '60 000');
+  check('и сентябрьских товаров в октябре нет', !/Сыр Российский/.test(т),
+    /Сыр Российский/.test(т) ? 'сентябрьские остались' : 'только октябрь', 'только октябрь');
+
+  /* Кнопка «Всё» складывает оба месяца — и ничего не теряет */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-act="ana-period"]')]
+      .find(e => e.textContent.trim() === 'Всё');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(400);
+  т = await текстЭкрана();
+  const всёСложено = /Сыр Российский/.test(т) && /110 000/.test(т);
+  check('«ВСЁ» СКЛАДЫВАЕТ ОБА МЕСЯЦА: 50 000 + 60 000 = 110 000', всёСложено,
+    всёСложено ? '110 000'
+      : (/60 000/.test(т) ? 'показан только октябрь' : 'не сложилось'),
+    '110 000 одной строкой');
+
+  /* Кнопки самих выгрузок: попадание в них — единственная точная цифра */
+  await открыть('losses');
+  const выгрузки = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-act="ana-period"]')]
+      .map(e => e.textContent.trim()).filter(t => /\d{2}\.\d{2}\.\d{4}/.test(t)));
+  check('ПРОГРАММА ПОКАЗЫВАЕТ, КАКИЕ ВЫГРУЗКИ ЗАГРУЖЕНЫ',
+    выгрузки.length === 2, выгрузки.join(' | ') || 'не показывает', 'две выгрузки');
+  check('и у каждой виден год, а не только «1 сен»',
+    выгрузки.every(t => /\.2026/.test(t)), выгрузки[0] || 'нет', 'с годом');
+
+  /* --- ПЕРИОД ОДИН НА ВСЕ ЭКРАНЫ --------------------------------------- */
+  await открыть('abc');
+  await выбрать('2026-09-01', '2026-09-30');
+  await открыть('groups');
+  const наДругом = await page.evaluate(() =>
+    (document.querySelector('#anaFrom') || {}).value);
+  check('ПЕРИОД ОДИН НА ВСЕ ЭКРАНЫ, А НЕ СВОЙ У КАЖДОГО',
+    наДругом === '2026-09-01', наДругом || 'сбросился', '2026-09-01');
+
+  /* --- ЗАКАЗЫ СЧИТАЮТ СКОРОСТЬ ПО ВЫБРАННОМУ ПЕРИОДУ -------------------- */
+  await открыть('orders');
+  const заказы = await текстЭкрана();
+  const отВыбранного = /01\.09\.2026/.test(заказы);
+  check('заказы считаются от выбранного периода, а не от последней выгрузки',
+    отВыбранного, отВыбранного ? 'от выбранного' : 'период в заголовке не тот',
+    'от выбранного');
 
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();

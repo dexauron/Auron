@@ -15,7 +15,8 @@
      программа. В базу оперативных записей и в книгу «Бухгалтерия.xlsx» они
      не попадают — ручной учёт и товарная аналитика не смешиваются. */
   var D = {
-    sales: [], salesPeriod: null, stock: [], prices: [], contacts: [], pricelist: [],
+    sales: [], salesPeriod: null, stock: [], stockTaken: '', prices: [], pricesTaken: '',
+    contacts: [], pricelist: [], pricelistTaken: '',
     barcodes: [], units: [], writeoffs: [], writeoffsPeriod: null, returns: [], returnsPeriod: null,
     invoices1c: [], invoicesPeriod: null, cashOrders: [], dead: [], deadPeriod: null,
     incexp: null, files: []
@@ -697,20 +698,40 @@
   /* Прочитать один файл 1С. Данные ложатся ТОЛЬКО в память (D) — в базу
      оперативных записей и в книгу «Бухгалтерия.xlsx» они не попадают.
      Закрыли программу — товарная аналитика ушла, ручной учёт остался. */
+  /* Когда снят снимок. Лучшее — дата из самого файла; её нет — честно
+     говорим, что знаем лишь день загрузки, и помечаем это. */
+  function snapStamp(matrix) {
+    var d = E.parseAsOf(matrix);
+    return d ? { date: d, from: 'файл' } : { date: today(), from: 'загрузка' };
+  }
+
   function ingest(name, buffer, size) {
     var m = readWorkbook(buffer);
     var kind = E.detectKind(name, m.matrix, m.names);
     var info = { name: name, kind: kind, rows: 0, size: size || 0, period: null, note: '' };
     var r;
-    if (kind === 'sales') { r = E.parseSales(m.matrix); D.sales = r.rows; D.salesPeriod = r.period; info.period = r.period; }
-    else if (kind === 'stock') { r = E.parseStock(m.matrix); D.stock = r.rows; }
-    else if (kind === 'prices') { r = E.parsePrices(m.matrix); D.prices = r.rows; }
+    if (kind === 'sales') {
+      /* Продажи копятся по периодам, а не затирают друг друга: иначе выбрать
+         период было бы не из чего — в памяти всегда лежал бы только последний
+         файл. Свой период файл переписывает, чужие не трогает. */
+      r = E.parseSales(m.matrix);
+      var ss = E.syncByPeriod(D.sales, r.rows, r.period, function (x) { return x.key; });
+      D.sales = ss.rows; D.salesPeriod = r.period; info.period = r.period;
+      info.note = 'обновлено ' + ss.stats.updated + ', добавлено ' + ss.stats.added;
+    }
+    /* Остатки — не период, а СНИМОК: что лежит на полке на момент выгрузки.
+       Копить снимки бессмысленно, каждый новый заменяет прошлый целиком.
+       Но дату снимка помним — без неё владелец не знает, насколько он свежий. */
+    else if (kind === 'stock') { r = E.parseStock(m.matrix); D.stock = r.rows; D.stockTaken = snapStamp(m.matrix); }
+    else if (kind === 'prices') { r = E.parsePrices(m.matrix); D.prices = r.rows; D.pricesTaken = snapStamp(m.matrix); }
     else if (kind === 'contacts') { r = E.parseContacts(m.matrix); D.contacts = r.rows; }
-    else if (kind === 'pricelist') { r = E.parsePricelist(m.matrix); D.pricelist = r.rows; }
+    else if (kind === 'pricelist') { r = E.parsePricelist(m.matrix); D.pricelist = r.rows; D.pricelistTaken = snapStamp(m.matrix); }
     else if (kind === 'barcodes') { r = E.parseBarcodes(m.matrix); D.barcodes = r.rows; }
     else if (kind === 'units') { r = E.parseUnits(m.matrix); D.units = r.rows; }
     else if (kind === 'deadstock') {
-      r = E.parseDeadStock(m.matrix); D.dead = r.rows; D.deadPeriod = r.period; info.period = r.period;
+      r = E.parseDeadStock(m.matrix);
+      var ds = E.syncByPeriod(D.dead, r.rows, r.period, function (x) { return x.key || E.norm(x.name); });
+      D.dead = ds.rows; D.deadPeriod = r.period; info.period = r.period;
       info.note = 'позиций ' + r.rows.length;
     }
     else if (kind === 'incexp1c') {
@@ -730,7 +751,14 @@
       info.note = 'обновлено ' + sync.stats.updated + ', добавлено ' + sync.stats.added +
         (sync.stats.removed ? ', убрано из аналитики ' + sync.stats.removed : '');
     }
-    else if (kind === 'returns') { r = E.parseReturns(m.matrix); D.returns = r.rows; D.returnsPeriod = r.period; info.period = r.period; }
+    else if (kind === 'returns') {
+      r = E.parseReturns(m.matrix);
+      var rs = E.syncByPeriod(D.returns, r.rows, r.period, function (x) {
+        return E.norm(x.name) + '|' + E.norm(x.reason) + '|' + E.norm(x.contract);
+      });
+      D.returns = rs.rows; D.returnsPeriod = r.period; info.period = r.period;
+      info.note = 'обновлено ' + rs.stats.updated + ', добавлено ' + rs.stats.added;
+    }
     else if (kind === 'invoices1c') {
       r = E.parseIncomingInvoices(m.matrix); D.invoices1c = r.rows; D.invoicesPeriod = r.period; info.period = r.period;
       info.note = 'накладных ' + r.rows.length;
@@ -783,19 +811,67 @@
 
   /* Пересчёт: ручной учёт считается на лету в js/engine.js, а здесь готовим
      товарную аналитику из того, что лежит в памяти после загрузки файлов 1С. */
+  /* ==========================================================================
+     ПЕРИОД АНАЛИЗА — один на все товарные экраны
+
+     Период выбирается в одном месте и действует везде: иначе владелец
+     сравнивал бы «Рейтинг по прибыли» за сентябрь с «ABC» за октябрь и не
+     заметил бы этого. Пусто — значит всё, что загружено.
+
+     Точность отбора ограничена не программой, а самими выгрузками: отчёт 1С
+     даёт свод за период, дней внутри него нет. Насколько мелко владелец
+     выгружает файлы — настолько мелко он и сможет выбирать. Программа про это
+     говорит прямо на каждом экране, где это важно.
+     ========================================================================== */
+  function anaRange() {
+    return { from: E.txt(S.settings.anaFrom), to: E.txt(S.settings.anaTo) };
+  }
+  // Весь охват загруженного — это и есть «Всё»
+  function anaCover() {
+    var all = [].concat(D.sales, D.writeoffs, D.returns, D.dead);
+    return E.coverOf(all);
+  }
+  function anaPick(rows) {
+    var r = anaRange();
+    if (!r.from && !r.to) return { rows: rows || [], rough: 0, roughSum: 0 };
+    return E.rowsInRange(rows, r.from, r.to);
+  }
+
   function recompute() {
     C = {};
-    C.sales = E.salesTotals(D.sales);
+    var r = anaRange();
+    /* Всё, что копится по периодам, режется выбранным периодом ОДИН раз,
+       здесь. Экраны получают уже отобранное и не могут случайно посчитать
+       одну цифру за месяц, а соседнюю — за всё время. */
+    C.range = r;
+    C.cover = anaCover();
+    C.salesSel = anaPick(D.sales);
+    C.writeoffsSel = anaPick(D.writeoffs);
+    C.returnsSel = anaPick(D.returns);
+    C.deadSel = anaPick(D.dead);
+    C.periods = {
+      sales: E.periodsOf(D.sales), writeoffs: E.periodsOf(D.writeoffs),
+      returns: E.periodsOf(D.returns), dead: E.periodsOf(D.dead)
+    };
+    /* Один товар из двух выгрузок — это ОДНА строка с суммой, а не две.
+       Склеиваем здесь, один раз: иначе дубли разъехались бы по рейтингу,
+       ABC, полкам и заказам, и каждый экран врал бы по-своему. */
+    var sales = E.mergeSales(C.salesSel.rows);
+    var dead = E.mergeByKey(C.deadSel.rows,
+      function (r) { return E.txt(r.key) || E.norm(r.name); }, ['left', 'sold', 'money']);
+    C.salesMerged = sales;
+
+    C.sales = E.salesTotals(sales);
     C.stock = E.stockTotals(D.stock);
     C.groupIdx = E.groupIndex(D.stock, D.prices);
-    C.byGroup = E.salesByGroup(D.sales, C.groupIdx);
+    C.byGroup = E.salesByGroup(sales, C.groupIdx);
     C.contactsIdx = E.contactsIndex(D.contacts);
     C.bestPrices = E.bestPriceIndex(D.prices);
-    C.stockIdx = {}; D.stock.forEach(function (r) { C.stockIdx[r.key] = r; });
-    C.abc = E.abcClassify(D.sales.slice());
-    C.writeoffSum = E.safeRound(D.writeoffs.reduce(function (a, r) { return a + num(r.cost); }, 0));
-    C.returnSum = E.safeRound(D.returns.reduce(function (a, r) { return a + num(r.cost); }, 0));
-    C.dead = D.dead.length ? E.deadStockList(D.dead, C.stockIdx, S.settings) : null;
+    C.stockIdx = {}; D.stock.forEach(function (r2) { C.stockIdx[r2.key] = r2; });
+    C.abc = E.abcClassify(sales.slice());
+    C.writeoffSum = E.safeRound(C.writeoffsSel.rows.reduce(function (a, x) { return a + num(x.cost); }, 0));
+    C.returnSum = E.safeRound(C.returnsSel.rows.reduce(function (a, x) { return a + num(x.cost); }, 0));
+    C.dead = dead.length ? E.deadStockList(dead, C.stockIdx, S.settings) : null;
     C.incexp = D.incexp ? E.incomeExpenseSummary(D.incexp.rows) : null;
     C.supplies = D.invoices1c.length ? E.supplierBalance(D.invoices1c, D.cashOrders) : null;
     C.bySupplier = {};
@@ -1361,6 +1437,7 @@
     editing: function () { return EDIT; },
     // Контур 2 живёт в памяти: экраны товаров читают его отсюда
     data: function () { return D; }, calc: function () { return C; },
+    anaRange: anaRange, anaCover: anaCover, anaPick: anaPick,
     // Полный список экранов — независимо от того, что сейчас в меню
     views: function () {
       return VIEWS.map(function (v) {
@@ -2021,6 +2098,7 @@
     return (S.state.filtersets || []).filter(function (f) { return f.view === view; });
   }
   FLT.useSets(filterSets);
+  FLT.useIcons(function (name, size) { return ic(name, size || 16); });
 
   function saveFilterSet(view, rawName) {
     var name = String(rawName == null ? '' : rawName).trim();

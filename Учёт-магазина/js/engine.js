@@ -1340,6 +1340,20 @@
     return { from: m[1], to: m[2], days: daysBetween(m[1], m[2]) };
   }
 
+  /* На какой момент снят отчёт-СНИМОК (остатки, цены). Периода у него нет:
+     он отвечает на вопрос «что лежит сейчас», а не «что было за месяц».
+     Дату ищем в шапке листа; не нашли — вернём пусто, и экран честно скажет,
+     что знает только момент загрузки, а не дату самого файла. */
+  function parseAsOf(matrix) {
+    var sig = sheetSignature(matrix);
+    var p = sig.match(/(\d{2}\.\d{2}\.\d{4})\s*[-–—]\s*(\d{2}\.\d{2}\.\d{4})/);
+    if (p) return ruDateToISO(p[2]);              // период — берём его конец
+    var m = sig.match(/(?:на|по состоянию на)\s+(\d{2}\.\d{2}\.\d{4})/);
+    if (m) return ruDateToISO(m[1]);
+    var any = sig.match(/(\d{2}\.\d{2}\.\d{4})/);
+    return any ? ruDateToISO(any[1]) : '';
+  }
+
   function ruDateToISO(d) {
     var m = txt(d).match(/(\d{2})\.(\d{2})\.(\d{4})/);
     return m ? m[3] + '-' + m[2] + '-' + m[1] : '';
@@ -1638,6 +1652,137 @@
     return { rows: rows, period: parsePeriod(matrix), cols: col };
   }
 
+  /* ==========================================================================
+     НАКОПЛЕНИЕ ВЫГРУЗОК ПО ПЕРИОДАМ
+
+     Отчёты 1С — это СВОДЫ за период, а не журналы операций: одна строка на
+     товар за весь период выгрузки, дней внутри неё нет. Поэтому «произвольный
+     период» может быть точным ровно настолько, насколько мелко владелец
+     выгружает файлы: выгружает помесячно — точность до месяца.
+
+     Чтобы период вообще можно было выбирать, выгрузки не затирают друг друга,
+     а КОПЯТСЯ: файл — правда за свой период, чужие периоды он не трогает.
+     Загрузили октябрь — сентябрь остался на месте, и их можно сложить.
+
+     Каждая строка получает from / to / periodKey — по ним работает отбор.
+     ========================================================================== */
+  function periodKey(p) {
+    return p && p.from ? txt(p.from) + '..' + txt(p.to) : 'без периода';
+  }
+
+  /* existing — что уже накоплено, incoming — строки нового файла,
+     period — период файла, keyOf — чем строка отличается от соседней.  */
+  function syncByPeriod(existing, incoming, period, keyOf) {
+    var pk = periodKey(period);
+    var from = period && period.from ? ruDateToISO(period.from) : '';
+    var to = period && period.to ? ruDateToISO(period.to) : '';
+    var old = {}, kept = [], i;
+
+    for (i = 0; i < (existing || []).length; i++) {
+      var e = existing[i];
+      if (txt(e.periodKey) === pk) old[keyOf(e)] = e;   // тот же период — под замену
+      else kept.push(e);                                // чужой период — не трогаем
+    }
+
+    var rows = [], stats = { updated: 0, added: 0, removed: 0, kept: kept.length };
+    for (i = 0; i < (incoming || []).length; i++) {
+      var n = incoming[i], k = keyOf(n);
+      var prev = old[k];
+      var row = {};
+      for (var f in n) row[f] = n[f];
+      if (prev && prev.id) row.id = prev.id;
+      row.periodKey = pk;
+      row.from = from;
+      row.to = to;
+      // Дата нужна отчётам по месяцам: берём конец периода выгрузки
+      if (!row.date) row.date = to || from || '';
+      if (prev) { stats.updated++; delete old[k]; } else { stats.added++; }
+      rows.push(row);
+    }
+    for (var k2 in old) stats.removed++;      // были в памяти, в файле их больше нет
+
+    return { rows: kept.concat(rows), stats: stats };
+  }
+
+  /* Сложить строки одного товара из РАЗНЫХ выгрузок.
+
+     Выбрали «Всё» при загруженных сентябре и октябре — один товар приходит
+     двумя строками. Владелец ждёт одну строку с суммой за весь период, а не
+     один и тот же товар дважды в рейтинге: иначе и рейтинг врёт, и ABC, и
+     скорость продаж для заказа.
+
+     Складываем только то, что складывается: количества и деньги. Цены не
+     складываются — их пересчитываем из сумм, иначе получится цена вдвое выше.  */
+  function mergeByKey(rows, keyOf, sumFields) {
+    var map = {}, order = [];
+    (rows || []).forEach(function (r) {
+      var k = keyOf(r);
+      if (!map[k]) {
+        var copy = {};
+        for (var f in r) copy[f] = r[f];
+        copy.partsCount = 1;
+        map[k] = copy; order.push(k);
+        return;
+      }
+      var m = map[k];
+      sumFields.forEach(function (f) { m[f] = safeRound(num(m[f]) + num(r[f])); });
+      m.partsCount++;
+      // Период склеенной строки — самый широкий из тех, что сложили
+      if (txt(r.from) && (!txt(m.from) || txt(r.from) < txt(m.from))) m.from = r.from;
+      if (txt(r.to) && (!txt(m.to) || txt(r.to) > txt(m.to))) m.to = r.to;
+      if (txt(r.date) > txt(m.date)) m.date = r.date;
+      if (m.partsCount > 1) m.periodKey = '';    // строка уже не из одной выгрузки
+    });
+    return order.map(function (k) { return map[k]; });
+  }
+
+  /* Продажи за несколько выгрузок. Цены пересчитываем из сумм: усреднённая
+     цена продажи — это выручка на единицу, а не сумма двух средних цен. */
+  function mergeSales(rows) {
+    var out = mergeByKey(rows || [], function (r) { return txt(r.key) || norm(r.name); },
+      ['qty', 'revenue', 'cogs', 'profit', 'discount', 'vat']);
+    out.forEach(function (r) {
+      if (r.partsCount > 1) {
+        r.sellPrice = num(r.qty) ? safeRound(div(r.revenue, r.qty)) : 0;
+        r.buyPrice = num(r.qty) ? safeRound(div(r.cogs, r.qty)) : 0;
+        // ABC/XYZ 1С считала для своего периода — за склейку они не отвечают
+        r.abc = ''; r.xyz = '';
+      }
+      r.profit = safeRound(num(r.revenue) - num(r.cogs));
+    });
+    return out;
+  }
+
+  /* Какие периоды сейчас загружены. Владелец должен видеть, из чего он
+     выбирает, иначе пустой экран выглядит поломкой, а не отсутствием файла. */
+  function periodsOf(rows) {
+    var map = {};
+    (rows || []).forEach(function (r) {
+      var k = txt(r.periodKey);
+      if (!k) k = 'без периода';
+      if (!map[k]) {
+        map[k] = { key: k, from: txt(r.from), to: txt(r.to), rows: 0 };
+      }
+      map[k].rows++;
+    });
+    var out = [];
+    for (var k in map) out.push(map[k]);
+    return out.sort(function (a, b) { return (a.from || '') < (b.from || '') ? -1 : 1; });
+  }
+
+  /* Весь охват накопленного: от самой ранней даты до самой поздней.
+     Это и есть «Всё» в выборе периода. */
+  function coverOf(rows) {
+    var from = '', to = '';
+    (rows || []).forEach(function (r) {
+      var f = txt(r.from) || txt(r.date).slice(0, 10);
+      var t = txt(r.to) || txt(r.date).slice(0, 10);
+      if (f && (!from || f < from)) from = f;
+      if (t && (!to || t > to)) to = t;
+    });
+    return { from: from, to: to };
+  }
+
   /* Синхронизация списаний с файлом 1С (Upsert).
 
      Файл — это правда за свой период. Поэтому:
@@ -1650,42 +1795,13 @@
      Ключ строки — товар + партия + склад + причина: именно так одну и ту же
      позицию печатает 1С в каждой выгрузке.
      ------------------------------------------------------------------------ */
-  function periodKey(p) {
-    return p && p.from ? txt(p.from) + '..' + txt(p.to) : 'без периода';
-  }
   function writeoffKey(r) {
     return [norm(r.name), norm(r.batch), norm(r.warehouse), norm(r.reason)].join('|');
   }
+  // Частный случай общего накопления: ключ строки списания — товар+партия+склад+причина.
+  // Именно так одну и ту же позицию печатает 1С в каждой выгрузке.
   function syncWriteoffs(existing, incoming, period) {
-    var pk = periodKey(period);
-    var from = period && period.from ? ruDateToISO(period.from) : '';
-    var to = period && period.to ? ruDateToISO(period.to) : '';
-    var old = {}, kept = [], i;
-
-    for (i = 0; i < (existing || []).length; i++) {
-      var e = existing[i];
-      if (txt(e.periodKey) === pk) old[writeoffKey(e)] = e;   // тот же период — под замену
-      else kept.push(e);                                      // чужой период — не трогаем
-    }
-
-    var rows = [], stats = { updated: 0, added: 0, removed: 0, kept: kept.length };
-    for (i = 0; i < (incoming || []).length; i++) {
-      var n = incoming[i], k = writeoffKey(n);
-      var prev = old[k];
-      var row = {
-        id: prev ? prev.id : n.id,
-        name: n.name, key: n.key, warehouse: n.warehouse, batch: n.batch,
-        reason: n.reason, qty: n.qty, cost: n.cost, retail: n.retail,
-        periodKey: pk, from: from, to: to,
-        // дата нужна отчётам по месяцам: берём конец периода выгрузки
-        date: to || from || ''
-      };
-      if (prev) { stats.updated++; delete old[k]; } else { stats.added++; }
-      rows.push(row);
-    }
-    for (var k2 in old) stats.removed++;      // были в базе, в файле их больше нет
-
-    return { rows: kept.concat(rows), stats: stats };
+    return syncByPeriod(existing, incoming, period, writeoffKey);
   }
 
   // Отчёт 1С «Причины возврата»: причина / склад / договор / номенклатура / суммы
@@ -2651,7 +2767,9 @@
     parseCashOrders: parseCashOrders, parseDeadStock: parseDeadStock,
     parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
-    rowsInRange: rowsInRange,
+    rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
+    periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
+    mergeByKey: mergeByKey, mergeSales: mergeSales,
     deadStockList: deadStockList, matchPayments: matchPayments,
     supplierBalance: supplierBalance, cashSummary: cashSummary,
     salesTotals: salesTotals, abcClassify: abcClassify, stockTotals: stockTotals,
