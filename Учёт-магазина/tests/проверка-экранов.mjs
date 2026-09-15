@@ -2715,6 +2715,144 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 19. Сверка по настоящему Z-отчёту: вводим цифры с чека магазина. */
+{
+  console.log('— Сверка смены по настоящему Z-отчёту');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(450);
+
+  const поле = async (n, v) => {
+    const есть = await page.evaluate(x => !!document.querySelector('.sheet [name="' + x + '"]'), n);
+    if (!есть) return false;
+    await page.fill('.sheet [name="' + n + '"]', v);
+    await page.waitForTimeout(110);
+    return true;
+  };
+  const коробка = () => page.evaluate(() => {
+    const e = document.querySelector('#shiftSum');
+    return e ? e.innerText.replace(/[  ]/g, ' ') : '';
+  });
+
+  /* Все строки Z-отчёта должны быть в форме — иначе переписать чек некуда */
+  const нужные = ['openCash', 'zCash', 'zCashless', 'zCard', 'zQr', 'zNfc',
+    'returnsCash', 'returnsCashless', 'deposits', 'payouts', 'collected',
+    'factCash', 'checks', 'voided'];
+  const нет = [];
+  for (const n of нужные) {
+    const есть = await page.evaluate(x => !!document.querySelector('.sheet [name="' + x + '"]'), n);
+    if (!есть) нет.push(n);
+  }
+  check('В ФОРМЕ ЕСТЬ ВСЕ СТРОКИ Z-ОТЧЁТА', нет.length === 0,
+    нет.join(', ') || 'все ' + нужные.length, 'все');
+
+  /* Цифры с настоящего чека магазина, касса наличная */
+  await поле('date', '2026-09-14');
+  await поле('cashier', 'Администратор');
+  await поле('openCash', '0');
+  await поле('zCash', '138194');
+  await поле('returnsCash', '690');
+  await поле('deposits', '10000');
+  await поле('payouts', '57180');
+  await поле('collected', '90324');
+  await поле('factCash', '0');
+  await поле('checks', '391');
+  await page.waitForTimeout(350);
+
+  let б = await коробка();
+  check('ПО ЧЕКУ КАССА СХОДИТСЯ В НОЛЬ',
+    /Должно быть в ящике/.test(б) && /Сходится/.test(б),
+    (б.match(/Должно быть в ящике[^\n]*/) || ['нет'])[0], 'сходится');
+  check('в расчёте видны возвраты, внесения и инкассация',
+    /Возвраты/.test(б) && /Внесения/.test(б) && /Инкассация/.test(б),
+    'видны', 'видны');
+  check('выручка показана как приход минус возвраты',
+    /137 504/.test(б), (б.match(/Выручка[^\n]*/) || ['нет'])[0], '137 504');
+
+  /* Стёрли инкассацию — расхождение обязано вылезти сразу */
+  await поле('collected', '0');
+  await page.waitForTimeout(350);
+  б = await коробка();
+  check('УБРАЛИ ИНКАССАЦИЮ — НЕДОСТАЧА ВИДНА СРАЗУ',
+    /НЕДОСТАЧА/.test(б) && /90 324/.test(б),
+    /НЕДОСТАЧА/.test(б) ? 'видна' : 'молчит', 'недостача 90 324');
+  await поле('collected', '90324');
+  await page.waitForTimeout(300);
+
+  /* Разбивка безнала сверяется с Z-отчётом прямо в форме */
+  await поле('zCashless', '113955');
+  await поле('zCard', '53185');
+  await поле('zQr', '53377');
+  await поле('zNfc', '7393');
+  await page.waitForTimeout(400);
+  б = await коробка();
+  check('РАЗБИВКА ТЕРМИНАЛА СОШЛАСЬ — ПРОГРАММА МОЛЧИТ',
+    !/разошлись/i.test(б), /разошлись/i.test(б) ? 'ругается зря' : 'молчит', 'молчит');
+  check('и показывает, сколько картой, а сколько по QR',
+    /карта/.test(б) && /QR/.test(б), 'показывает', 'показывает');
+
+  await поле('zNfc', '5000');
+  await page.waitForTimeout(400);
+  б = await коробка();
+  check('РАЗОШЛИСЬ НА 2 393 — ПРОГРАММА ГОВОРИТ ОБ ЭТОМ',
+    /разошлись/i.test(б) && /2 393/.test(б),
+    (б.match(/разошлись[^\n]*/) || ['молчит'])[0].slice(0, 50), 'называет сумму');
+  await поле('zNfc', '7393');
+  await page.waitForTimeout(300);
+
+  /* Сохраняем — и проверяем, что инкассация стала переводом в сейф */
+  await page.click('.sheet button[type="submit"]');
+  await page.waitForTimeout(700);
+
+  const итог = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const смена = (S.state.dds || []).filter(r => E.isShift(r))[0];
+    const пер = (S.state.dds || []).filter(r => E.isMove(r));
+    const c = смена ? E.shiftCalc(смена) : null;
+    return { смен: (S.state.dds || []).filter(r => E.isShift(r)).length,
+      переводов: пер.length, сумма: пер[0] ? пер[0].amount : 0,
+      привязан: pl => 0, изСмены: pер => 0,
+      fromShift: пер[0] ? !!пер[0].fromShift : false,
+      выручка: c ? c.revenueCash : 0, расхождение: c ? c.diff : null };
+  });
+  check('смена записалась', итог.смен === 1, итог.смен, 1);
+  check('ИНКАССАЦИЯ САМА СТАЛА ПЕРЕВОДОМ В СЕЙФ',
+    итог.переводов === 1 && итог.сумма === 90324,
+    итог.переводов + ' перевод на ' + итог.сумма, '1 на 90 324');
+  check('и перевод помечен номером смены — второй раз не заведётся',
+    итог.fromShift, итог.fromShift ? 'помечен' : 'не помечен', 'помечен');
+  check('выручка в записи — 137 504, как на чеке', итог.выручка === 137504,
+    итог.выручка, 137504);
+  check('расхождения нет', итог.расхождение === 0, итог.расхождение, 0);
+
+  /* Правим смену второй раз — перевод обязан обновиться, а не удвоиться */
+  await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const см = (S.state.dds || []).filter(r => E.isShift(r))[0];
+    window.WMUI.openForm('shiftClose', JSON.parse(JSON.stringify(см)),
+      { coll: 'dds', id: см.id });
+  });
+  await page.waitForTimeout(500);
+  await поле('collected', '80000');
+  await поле('factCash', '10324');
+  await page.waitForTimeout(250);
+  await page.click('.sheet button[type="submit"]');
+  await page.waitForTimeout(700);
+  const после = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const пер = (S.state.dds || []).filter(r => E.isMove(r));
+    return { n: пер.length, сумма: пер[0] ? пер[0].amount : 0 };
+  });
+  check('ПОПРАВИЛИ СМЕНУ — ПЕРЕВОД ОБНОВИЛСЯ, А НЕ УДВОИЛСЯ',
+    после.n === 1 && после.сумма === 80000,
+    после.n + ' перевод на ' + после.сумма, '1 на 80 000');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

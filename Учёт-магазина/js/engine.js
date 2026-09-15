@@ -214,17 +214,63 @@
   /* Сверка одной смены. Единственное место, где считается расхождение.
      Безнал (карта, СБП, QR) в расчётный остаток НЕ входит: этих денег в
      ящике не было — они ушли на расчётный счёт. */
+  /* Сверка смены по Z-отчёту кассы.
+
+     Z-отчёт печатает больше, чем «приход и выплаты», и каждая строка двигает
+     ящик в свою сторону. Поэтому в расчёт входит всё, что там есть:
+
+       в ящик кладут:   приход наличными + внесения (довезли размен)
+       из ящика берут:  возвраты покупателям + выплаты + инкассация
+
+       Должно быть в ящике = размен
+                           + приход наличными
+                           − возвраты покупателям
+                           + внесения
+                           − выплаты
+                           − инкассация
+
+     ВЫРУЧКА — это приход МИНУС возвраты, и наличная, и безналичная:
+     деньги, которые вернули покупателю, магазин не заработал.
+
+     Старые смены, где новых полей нет, считаются ровно как раньше: пустое
+     поле — это ноль, и формула сворачивается в прежнюю.  */
   function shiftCalc(s) {
     s = s || {};
     var open = safeRound(s.openCash), zCash = safeRound(s.zCash);
     var zCashless = safeRound(s.zCashless), payouts = safeRound(s.payouts);
     var fact = safeRound(s.factCash);
-    var expected = safeRound(open + zCash - payouts);
+    var retCash = safeRound(s.returnsCash);        // возвраты покупателям наличными
+    var retCashless = safeRound(s.returnsCashless);// возвраты на карту
+    var deposits = safeRound(s.deposits);          // внесения в кассу
+    var collected = safeRound(s.collected);        // инкассация из ящика
+
+    var expected = safeRound(open + zCash - retCash + deposits - payouts - collected);
     var diff = safeRound(fact - expected);
+
+    // Безнал по способам оплаты: по ним сверяются с отчётом терминала
+    var card = safeRound(s.zCard), qr = safeRound(s.zQr), nfc = safeRound(s.zNfc);
+    var byWay = safeRound(card + qr + nfc);
+    // Разбивку заполняют не всегда: пустая — это не расхождение, а «не вводили»
+    var wayFilled = byWay > 0.005;
+    var wayDiff = wayFilled ? safeRound(byWay - zCashless) : 0;
+
+    var revenueCash = safeRound(zCash - retCash);
+    var revenueCashless = safeRound(zCashless - retCashless);
+    var checks = safeRound(s.checks);
+
     return {
       openCash: open, zCash: zCash, zCashless: zCashless, payouts: payouts,
+      returnsCash: retCash, returnsCashless: retCashless,
+      deposits: deposits, collected: collected,
       factCash: fact, expected: expected, diff: diff,
-      revenue: safeRound(zCash + zCashless),
+      revenue: safeRound(revenueCash + revenueCashless),
+      revenueCash: revenueCash, revenueCashless: revenueCashless,
+      returns: safeRound(retCash + retCashless),
+      card: card, qr: qr, nfc: nfc, byWay: byWay,
+      wayFilled: wayFilled, wayDiff: wayDiff,
+      wayOk: !wayFilled || Math.abs(wayDiff) < 0.5,
+      checks: checks, voided: safeRound(s.voided),
+      avgCheck: checks ? safeRound(div(safeRound(revenueCash + revenueCashless), checks)) : 0,
       short: diff < 0 ? safeRound(-diff) : 0,
       over: diff > 0 ? safeRound(diff) : 0,
       ok: Math.abs(diff) < 0.5,
@@ -629,12 +675,15 @@
     var t = { zCash: 0, zCashless: 0, revenue: 0, payouts: 0, short: 0, over: 0,
       diff: 0, shifts: 0, badShifts: 0, expense: 0, income: 0, draw: 0,
       goodsCash: 0, debtTaken: 0, debtPaid: 0, moved: 0, collected: 0,
+      returns: 0, checks: 0, card: 0, qr: 0, nfc: 0,
       notCost: 0, explained: 0, days: {}, byCategory: {} };
     (rows || []).forEach(function (r) {
       if (isShift(r)) {
         var c = shiftCalc(r);
         t.zCash += c.zCash; t.zCashless += c.zCashless; t.payouts += c.payouts;
         t.short += c.short; t.over += c.over; t.diff += c.diff;
+        t.returns += c.returns; t.checks += c.checks;
+        t.card += c.card; t.qr += c.qr; t.nfc += c.nfc;
         t.shifts++; if (!c.ok) t.badShifts++;
         if (r.date) t.days[r.date] = true;
       } else if (isDay(r)) {
@@ -658,8 +707,12 @@
         if (norm(r.to) === 'сейф' || norm(r.to) === 'банк') t.collected += safeRound(r.amount);
       }
     });
-    t.revenue = safeRound(t.zCash + t.zCashless);
+    /* Выручка — приход МИНУС возвраты покупателям: возвращённые деньги
+       магазин не заработал, и в прибыль они попадать не должны. */
+    t.revenue = safeRound(t.zCash + t.zCashless - t.returns);
+    t.avgCheck = t.checks ? safeRound(div(t.revenue, t.checks)) : 0;
     ['zCash', 'zCashless', 'payouts', 'short', 'over', 'diff', 'expense',
+      'returns', 'card', 'qr', 'nfc',
       'income', 'draw', 'goodsCash', 'debtTaken', 'debtPaid', 'moved', 'collected',
       'notCost', 'explained'].forEach(function (k) { t[k] = safeRound(t[k]); });
     t.dayCount = Object.keys(t.days).length;

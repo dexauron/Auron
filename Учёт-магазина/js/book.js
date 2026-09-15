@@ -28,15 +28,23 @@
     /* Смены отдельным листом: это самый частый лист, и мешать его с
        расходами неудобно — в нём своя шапка и своя арифметика. */
     { name: 'Касса_и_Смены', coll: 'dds', edit: true, only: 'Смена',
-      about: 'Закрытые смены: размен, Z-отчёт наличными и безналом, выплаты из ящика, ' +
-        'факт и расхождение. Безнал в ящик не попадает — в расчётный остаток он не входит.',
+      about: 'Закрытые смены — всё, что печатает Z-отчёт кассы. ' +
+        'Должно быть в ящике = размен + Z-наличные − возвраты + внесения − выплаты − инкассация. ' +
+        'Безнал в ящик не попадает. Колонки «Картой», «По_QR», «Телефоном» — ' +
+        'разбивка безнала из отчёта терминала: их сумма обязана равняться Z-безналу.',
       cols: [['ID', 'id'], ['Тип', 'type'], ['Дата', 'date', 'date'],
         ['Касса', 'till'], ['Смена', 'shift'], ['Кассир', 'cashier'],
         ['Размен_на_начало', 'openCash', 'num'],
         ['Z_наличные', 'zCash', 'num'], ['Z_безнал', 'zCashless', 'num'],
+        ['Картой', 'zCard', 'num'], ['По_QR', 'zQr', 'num'], ['Телефоном', 'zNfc', 'num'],
+        ['Возвраты_наличными', 'returnsCash', 'num'],
+        ['Возвраты_на_карту', 'returnsCashless', 'num'],
+        ['Внесения', 'deposits', 'num'], ['Инкассация', 'collected', 'num'],
         ['Выплаты_из_ящика', 'payouts', 'num'], ['Факт_в_ящике', 'factCash', 'num'],
         ['Расхождение', 'diff', 'num'], ['Чеков', 'checks', 'num'],
+        ['Аннулировано', 'voided', 'num'],
         ['Счёт_наличных', 'account'], ['Счёт_безнала', 'cashlessAccount'],
+        ['Счёт_инкассации', 'collectAccount'],
         ['Комментарий', 'note']] },
 
     { name: 'ДДС_Операции', coll: 'dds', edit: true, not: 'Смена',
@@ -171,7 +179,7 @@
     function slot(ym) {
       if (!map[ym]) map[ym] = { ym: ym, zCash: 0, zCashless: 0, revenue: 0,
         payouts: 0, short: 0, over: 0, shifts: 0, goodsCash: 0,
-        debtTaken: 0, debtPaid: 0, expense: 0 };
+        debtTaken: 0, debtPaid: 0, expense: 0, returns: 0 };
       return map[ym];
     }
     rows.forEach(function (r) {
@@ -181,6 +189,7 @@
         var c = E.shiftCalc(r);
         m.zCash += c.zCash; m.zCashless += c.zCashless; m.payouts += c.payouts;
         m.short += c.short; m.over += c.over; m.shifts++;
+        m.returns += c.returns;
       } else if (E.isDay(r)) {
         m.goodsCash += num(r.goodsCash);
         m.debtTaken += num(r.debtTaken); m.debtPaid += num(r.debtPaid);
@@ -190,9 +199,10 @@
     });
     return Object.keys(map).sort().map(function (k) {
       var m = map[k];
-      m.revenue = round(m.zCash + m.zCashless);
+      // Возвраты покупателям выручкой не были — вычитаем, как и везде
+      m.revenue = round(m.zCash + m.zCashless - m.returns);
       ['zCash', 'zCashless', 'payouts', 'short', 'over', 'goodsCash',
-        'debtTaken', 'debtPaid', 'expense'].forEach(function (f) { m[f] = round(m[f]); });
+        'debtTaken', 'debtPaid', 'expense', 'returns'].forEach(function (f) { m[f] = round(m[f]); });
       return m;
     });
   }

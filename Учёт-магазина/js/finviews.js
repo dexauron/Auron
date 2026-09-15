@@ -173,39 +173,70 @@
       var c = window.WMNum.calc(String(x));
       return c === null ? num(x) : c;
     }
-    var open = n(v.openCash), zc = n(v.zCash), zb = n(v.zCashless);
-    var pay = n(v.payouts), fact = n(v.factCash);
-    var expected = E.safeRound(open + zc - pay);
-    var diff = E.safeRound(fact - expected);
-    var пусто = !zc && !fact && !pay;
-    var ok = Math.abs(diff) < 0.5;
+    /* Считаем ровно тем же движком, что и при сохранении: чтобы то, что
+       владелец видит в форме, не разошлось с тем, что потом ляжет в базу. */
+    var c = E.shiftCalc({
+      openCash: n(v.openCash), zCash: n(v.zCash), zCashless: n(v.zCashless),
+      payouts: n(v.payouts), factCash: n(v.factCash),
+      returnsCash: n(v.returnsCash), returnsCashless: n(v.returnsCashless),
+      deposits: n(v.deposits), collected: n(v.collected),
+      zCard: n(v.zCard), zQr: n(v.zQr), zNfc: n(v.zNfc), checks: n(v.checks)
+    });
+    var zb = c.zCashless, пусто = !c.zCash && !c.factCash && !c.payouts;
 
     var h = '<div class="cc-total">';
-    h += '<div class="cc-line"><span>Размен на начало</span><b>' + esc(money(open)) + '</b></div>';
-    h += '<div class="cc-line"><span>+ Z-отчёт: наличные</span><b>' + esc(money(zc)) + '</b></div>';
-    h += '<div class="cc-line"><span>− Выплаты из ящика</span><b>' + esc(money(pay)) + '</b></div>';
+    h += '<div class="cc-line"><span>Размен на начало</span><b>' + esc(money(c.openCash)) + '</b></div>';
+    h += '<div class="cc-line"><span>+ Z-отчёт: наличные</span><b>' + esc(money(c.zCash)) + '</b></div>';
+    // Показываем только те строки, которые владелец заполнил: пустые молчат
+    if (c.returnsCash) h += '<div class="cc-line"><span>− Возвраты покупателям</span><b>' +
+      esc(money(c.returnsCash)) + '</b></div>';
+    if (c.deposits) h += '<div class="cc-line"><span>+ Внесения в кассу</span><b>' +
+      esc(money(c.deposits)) + '</b></div>';
+    h += '<div class="cc-line"><span>− Выплаты из ящика</span><b>' + esc(money(c.payouts)) + '</b></div>';
+    if (c.collected) h += '<div class="cc-line"><span>− Инкассация</span><b>' +
+      esc(money(c.collected)) + '</b></div>';
     h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
-      '<span>Должно быть в ящике</span><b class="cc-big">' + esc(money(expected)) + '</b></div>';
-    h += '<div class="cc-line"><span>Пересчитали руками</span><b>' + esc(money(fact)) + '</b></div>';
+      '<span>Должно быть в ящике</span><b class="cc-big">' + esc(money(c.expected)) + '</b></div>';
+    h += '<div class="cc-line"><span>Пересчитали руками</span><b>' + esc(money(c.factCash)) + '</b></div>';
 
     if (пусто) {
       h += '<div class="cc-sub">Впишите Z-отчёт и факт — расхождение посчитается само.</div>';
     } else {
-      h += '<div class="cc-line cc-diff ' + (ok ? 'ok' : (diff < 0 ? 'bad' : 'warn')) + '">' +
-        '<span>' + (ok ? 'Сходится' : (diff < 0 ? 'НЕДОСТАЧА' : 'ИЗЛИШЕК')) + '</span>' +
-        '<b>' + (ok ? '—' : esc(money(Math.abs(diff)))) + '</b></div>';
-      if (!ok) {
-        h += '<div class="cc-sub">' + (diff < 0
-          ? 'В ящике меньше, чем должно. Проверьте, всё ли записали в «выплаты из ящика».'
-          : 'В ящике больше, чем должно. Возможно, не записали приход или размен.') +
+      h += '<div class="cc-line cc-diff ' + (c.ok ? 'ok' : (c.diff < 0 ? 'bad' : 'warn')) + '">' +
+        '<span>' + (c.ok ? 'Сходится' : (c.diff < 0 ? 'НЕДОСТАЧА' : 'ИЗЛИШЕК')) + '</span>' +
+        '<b>' + (c.ok ? '—' : esc(money(Math.abs(c.diff)))) + '</b></div>';
+      if (!c.ok) {
+        h += '<div class="cc-sub">' + (c.diff < 0
+          ? 'В ящике меньше, чем должно. Проверьте выплаты, инкассацию и возвраты — всё ли из Z-отчёта переписали.'
+          : 'В ящике больше, чем должно. Возможно, не записали внесение или размен.') +
           '</div>';
       }
     }
     if (zb) {
       h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
         '<span>Безнал (в ящик не попадает)</span><b>' + esc(money(zb)) + '</b></div>';
-      h += '<div class="cc-sub">Выручка за смену всего: ' +
-        esc(money(E.safeRound(zc + zb))) + '</div>';
+      /* Сверка с отчётом терминала: карта + QR + телефон обязаны дать Z-безнал.
+         Не сошлось — либо платёж не долетел до кассы, либо пробили мимо. */
+      if (c.wayFilled) {
+        h += '<div class="cc-line"><span class="c-muted">карта ' + esc(money(c.card)) +
+          ' · QR ' + esc(money(c.qr)) + (c.nfc ? ' · телефон ' + esc(money(c.nfc)) : '') +
+          '</span><b class="' + (c.wayOk ? 'c-green' : 'c-red') + '">' +
+          esc(money(c.byWay)) + '</b></div>';
+        if (!c.wayOk) {
+          h += '<div class="cc-sub c-red">Терминал и Z-отчёт разошлись на ' +
+            esc(money(Math.abs(c.wayDiff))) + '. ' +
+            (c.wayDiff > 0 ? 'По терминалу прошло больше, чем пробито на кассе.'
+              : 'На кассе пробито больше, чем прошло по терминалу.') +
+            ' Это надо разобрать сегодня: завтра концов не найти.</div>';
+        }
+      }
+    }
+    /* Выручку показываем ВСЕГДА, а не только когда заполнен безнал: у наличной
+       кассы безнала нет вовсе, и владелец не увидел бы, сколько наторговал. */
+    if (!пусто) {
+      h += '<div class="cc-sub">Выручка за смену: <b>' + esc(money(c.revenue)) + '</b>' +
+        (c.returns ? ' (возвраты ' + esc(money(c.returns)) + ' уже вычтены)' : '') +
+        (c.avgCheck ? ' · средний чек ' + esc(money(c.avgCheck)) : '') + '</div>';
     }
 
     /* Наличные смены обязаны лечь в денежный ящик той кассы, что выбрана
@@ -222,7 +253,12 @@
 
   /* Пересчёт на каждое нажатие. Форму не перерисовываем — набранное пропало бы. */
   (function () {
-    var WATCH = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash', 'account', 'till'];
+    /* Следим за ВСЕМИ полями, из которых считается ящик. Забудешь здесь одно —
+       владелец введёт его, а расчёт над кнопкой не шелохнётся, и будет
+       казаться, что программа его не услышала. */
+    var WATCH = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash', 'account', 'till',
+      'returnsCash', 'returnsCashless', 'deposits', 'collected',
+      'zCard', 'zQr', 'zNfc', 'checks'];
     function tick(el) {
       if (!el || !el.name || WATCH.indexOf(el.name) < 0 || !el.closest) return;
       var box = el.closest('.sheet');
@@ -268,18 +304,42 @@
         u.fieldRow('Безнал ляжет на счёт', 'cashlessAccount', 'select',
           v.cashlessAccount || accDefault(true), { options: accOptions(['bank']),
             hint: 'расчётный счёт или карта, куда банк зачисляет' }) +
+        /* Разбивка безнала по способам. Нужна не для красоты: комиссия банка
+           за карту и за СБП разная, а сверить Z-отчёт с отчётом терминала
+           иначе нечем — терминал печатает именно эти три строки. */
+        u.fieldRow('Из них картой', 'zCard', 'number', v.zCard || '',
+          { hint: 'из отчёта терминала: «ОПЛАТА» / «КАРТА»' }) +
+        u.fieldRow('Из них по QR (СБП)', 'zQr', 'number', v.zQr || '',
+          { hint: 'из отчёта терминала: «ОПЛАТА ПО QR». Комиссия по СБП ниже, чем по карте' }) +
+        u.fieldRow('Из них телефоном', 'zNfc', 'number', v.zNfc || '',
+          { hint: 'из отчёта терминала: «BLUETOOTH» или «БИО». Не вводили — оставьте пусто' }) +
+        u.fieldRow('Возвраты покупателям, наличными', 'returnsCash', 'number', v.returnsCash || 0,
+          { hint: 'из Z-отчёта: «ЧЕКОВ ВОЗВРАТОВ ПРИХОДА». Их отдали из ящика, и выручкой они не были' }) +
+        u.fieldRow('Возвраты покупателям, на карту', 'returnsCashless', 'number', v.returnsCashless || 0,
+          { hint: 'если возврат ушёл обратно на карту — ящик он не трогает' }) +
+        u.fieldRow('Внесения в кассу', 'deposits', 'number', v.deposits || 0,
+          { hint: 'из Z-отчёта: «ВНЕСЕНИЙ». Довезли размен среди смены — эти деньги в ящике есть, а выручкой не являются' }) +
         u.fieldRow('Выплаты из ящика', 'payouts', 'number', v.payouts || 0,
-          { hint: 'что брали из кассы за смену: поставщикам, на хознужды' }) +
+          { hint: 'из Z-отчёта: «ВЫПЛАТ». Что брали из кассы за смену: поставщикам, на хознужды' }) +
+        u.fieldRow('Инкассация', 'collected', 'number', v.collected || 0,
+          { hint: 'из Z-отчёта: «ИНКАССАЦИЯ». Сколько увезли из ящика в сейф. ' +
+            'Программа сама запишет перевод — второй раз вводить не надо' }) +
+        u.fieldRow('Инкассацию положить на счёт', 'collectAccount', 'select',
+          v.collectAccount || accDefault(false), { options: accOptions(['cash', 'bank']),
+            hint: 'куда увезли: сейф или банк' }) +
         u.fieldRow('Факт в ящике', 'factCash', 'number', v.factCash || '',
-          { hint: 'сколько денег пересчитали руками' }) +
+          { hint: 'сколько денег пересчитали руками ПОСЛЕ инкассации' }) +
         u.fieldRow('Чеков за смену', 'checks', 'number', v.checks || '',
-          { hint: 'из Z-отчёта — нужно только для среднего чека, на кассу не влияет' }) +
+          { hint: 'из Z-отчёта — для среднего чека, на кассу не влияет' }) +
+        u.fieldRow('Аннулированных чеков', 'voided', 'number', v.voided || '',
+          { hint: 'из Z-отчёта. На деньги не влияет, но много аннулирований — повод спросить кассира' }) +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '') +
         '<div id="shiftSum">' + shiftSumBox(v) + '</div>';
     },
-    hint: 'Расчётный остаток = размен + Z-наличные − выплаты. ' +
-      'Расхождение = факт − расчётный. Безнал в этой формуле не участвует: ' +
-      'карта и СБП в ящик не попадают.',
+    hint: 'Должно быть в ящике = размен + наличная выручка − возвраты + внесения ' +
+      '− выплаты − инкассация. Расхождение = факт − это число. Безнал в формуле ' +
+      'не участвует: карта и СБП в ящик не попадают. ' +
+      'Заполняйте прямо по Z-отчёту сверху вниз — строки названы так же, как на чеке.',
     save: function (v) {
       var badDate = Q.checkDate(v.date);
       if (badDate) return badDate;
@@ -287,7 +347,8 @@
       if (bad) return 'Z-отчёт наличные: ' + bad;
       if (!E.txt(v.factCash) && v.factCash !== 0) return 'Впишите, сколько денег пересчитали в ящике.';
       if (!E.txt(v.cashier)) return 'Укажите кассира — иначе непонятно, с кем разбирать расхождение.';
-      var fields = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash'];
+      var fields = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash',
+        'zCard', 'zQr', 'zNfc', 'returnsCash', 'returnsCashless', 'deposits', 'collected'];
       for (var i = 0; i < fields.length; i++) {
         var b = Q.checkAmount(v[fields[i]], { allowEmpty: true, allowZero: true });
         if (b) return 'Поле «' + fields[i] + '»: ' + b;
@@ -297,12 +358,24 @@
       var rec = { type: E.T_SHIFT, date: v.date, till: v.till, shift: v.shift,
         cashier: v.cashier, openCash: num(v.openCash), zCash: num(v.zCash),
         zCashless: num(v.zCashless), payouts: num(v.payouts),
-        factCash: num(v.factCash), checks: num(v.checks),
+        zCard: num(v.zCard), zQr: num(v.zQr), zNfc: num(v.zNfc),
+        returnsCash: num(v.returnsCash), returnsCashless: num(v.returnsCashless),
+        deposits: num(v.deposits), collected: num(v.collected),
+        collectAccount: E.txt(v.collectAccount),
+        factCash: num(v.factCash), checks: num(v.checks), voided: num(v.voided),
         account: E.txt(v.account), cashlessAccount: E.txt(v.cashlessAccount),
         note: v.note };
       var c = E.shiftCalc(rec);
       rec.diff = c.diff;
-      if (edS) S.update(edS.coll, edS.id, rec); else S.add('dds', rec);
+      var saved;
+      if (edS) { S.update(edS.coll, edS.id, rec); saved = edS.id; }
+      else { saved = (S.add('dds', rec) || {}).id; }
+
+      /* Инкассация из Z-отчёта сама становится переводом в сейф: иначе деньги
+         из ящика ушли бы в никуда — по кассе их нет, а в сейфе не появились.
+         Перевод помечен номером смены, поэтому при повторном сохранении он
+         обновляется, а не заводится второй раз. */
+      syncCollect(saved, rec);
       S.save(); refresh();
 
       var msg = 'Смена записана. Расчётный остаток ' + money(c.expected) + ', в ящике ' +
@@ -316,6 +389,26 @@
       return { ok: msg };
     }
   };
+
+  /* Перевод-инкассация, привязанный к смене. Один на смену: заново сохранили
+     смену — он обновился; стёрли сумму — он ушёл; смены нет — и его нет. */
+  function syncCollect(shiftId, rec) {
+    if (!shiftId) return;
+    var было = dds().filter(function (r) { return E.txt(r.fromShift) === E.txt(shiftId); })[0];
+    var сумма = num(rec.collected);
+    if (!сумма) {
+      if (было) S.remove('dds', было.id);
+      return;
+    }
+    var куда = E.txt(rec.collectAccount) || accDefault(false);
+    var перевод = {
+      type: E.T_MOVE, date: rec.date, amount: сумма,
+      account: E.txt(rec.account), toAccount: куда,
+      category: 'Инкассация', fromShift: E.txt(shiftId),
+      note: 'Инкассация из смены ' + (rec.till || '') + ' ' + (rec.shift || '')
+    };
+    if (было) S.update('dds', было.id, перевод); else S.add('dds', перевод);
+  }
 
   /* --- Вечер: итоги дня ------------------------------------------------------
      Кассу эта форма НЕ двигает: деньги за товар уже ушли через «выплаты из
