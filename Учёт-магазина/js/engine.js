@@ -1743,6 +1743,47 @@
     return out.sort(function (a, b) { return b.cost - a.cost; });
   }
 
+  /* Отбор строк за произвольный период.
+
+     ЧЕСТНО О ТОЧНОСТИ. В выгрузке 1С «Причины списания» дат по строкам НЕТ —
+     отчёт даёт только период целиком (он записан в строке в полях from/to).
+     Поэтому такая строка попадает в выбранный период, если периоды
+     пересекаются, и считается ЦЕЛИКОМ: разрезать её по дням не на чем.
+     Программа про это говорит прямо, а не делает вид, что знает дни.
+
+     У выгрузки «Списания» с колонкой «Дата» дата настоящая — такие строки
+     отбираются точно, день в день.
+
+     Возвращает: rows — что показывать; rough — сколько строк уложились
+     в период лишь приблизительно; roughSum — на какую они сумму.  */
+  function rowsInRange(rows, from, to) {
+    from = txt(from) || '0000-01-01';
+    to = txt(to) || '9999-12-31';
+    if (from > to) { var swap = from; from = to; to = swap; }
+
+    var out = [], rough = 0, roughSum = 0;
+    (rows || []).forEach(function (r) {
+      var pf = txt(r.from), pt = txt(r.to);
+      if (pf || pt) {
+        // Строка из выгрузки за период: дней в ней нет
+        pf = pf || pt; pt = pt || pf;
+        if (pt < from || pf > to) return;             // периоды не пересеклись
+        out.push(r);
+        // Период вылезает за выбранные рамки — значит, попало и лишнее
+        if (pf < from || pt > to) { rough++; roughSum += num(r.cost); }
+        return;
+      }
+      var d = txt(r.date).slice(0, 10);
+      if (!d) {
+        // Даты нет вовсе. Прятать нельзя — деньги пропадут из итога молча
+        out.push(r); rough++; roughSum += num(r.cost);
+        return;
+      }
+      if (d >= from && d <= to) out.push(r);
+    });
+    return { rows: out, rough: rough, roughSum: safeRound(roughSum) };
+  }
+
   // Топ позиций по сумме потерь (списания или возвраты)
   function topByCost(rows, limit) {
     var map = {};
@@ -2610,6 +2651,7 @@
     parseCashOrders: parseCashOrders, parseDeadStock: parseDeadStock,
     parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
+    rowsInRange: rowsInRange,
     deadStockList: deadStockList, matchPayments: matchPayments,
     supplierBalance: supplierBalance, cashSummary: cashSummary,
     salesTotals: salesTotals, abcClassify: abcClassify, stockTotals: stockTotals,

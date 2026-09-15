@@ -741,8 +741,11 @@
     }
     else if (kind === 'writeoffs') {
       r = E.parseWriteoffs(m.matrix);
+      /* Дату несём дальше: в этой выгрузке она настоящая, по строкам, и отбор
+         за произвольный период по ней работает день в день. */
       D.writeoffs = r.rows.map(function (x) {
-        return { name: x.name, reason: x.reason || 'Без причины', qty: x.qty, cost: x.sum, retail: 0, key: E.norm(x.name) };
+        return { name: x.name, reason: x.reason || 'Без причины', qty: x.qty,
+          cost: x.sum, retail: 0, key: E.norm(x.name), date: x.date || '' };
       });
     } else { info.note = 'формат не распознан'; }
     info.rows = r && r.rows ? r.rows.length : 0;

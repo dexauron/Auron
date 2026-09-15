@@ -121,42 +121,107 @@
      Отчёт «Причины списания» перечитывается целиком: что было в прошлом файле,
      но пропало в новом, из аналитики уходит — иначе на экране копились бы
      позиции, которых в 1С уже нет. */
-  function viewLosses() {
-    var u = U(), d = D(), c = C();
-    if (!d.writeoffs.length) return need('Списания', 'Что и почему списали', 'Причины списания');
-    var byReason = E.byReason(d.writeoffs);
-    var top = E.topByCost(d.writeoffs, 40);
-    var months = E.perMonth(d.writeoffs);
-    var total = c.writeoffSum;
+  /* Выбранный период на экране «Списания». Пусто — значит всё, что загружено. */
+  function lossFrom() { return E.txt(S.settings.lossFrom); }
+  function lossTo() { return E.txt(S.settings.lossTo); }
 
-    var h = u.pageHead('Списания', 'Что и почему ушло не через кассу' +
-      (d.writeoffsPeriod ? ' · ' + d.writeoffsPeriod.from + ' – ' + d.writeoffsPeriod.to : ''),
+  /* Кнопки-заготовки: то, что спрашивают чаще всего, в одно нажатие.
+     Даты считаем от сегодняшнего дня, а не от периода выгрузки. */
+  function lossPresets() {
+    var t = U().today(), y = t.slice(0, 4), m = t.slice(0, 7);
+    var prev = new Date(t.slice(0, 8) + '01');
+    prev.setUTCMonth(prev.getUTCMonth() - 1);
+    var pm = prev.toISOString().slice(0, 7);
+    var last = new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + 1, 0))
+      .toISOString().slice(0, 10);
+    return [
+      { name: 'Всё', from: '', to: '' },
+      { name: 'Этот месяц', from: m + '-01', to: t },
+      { name: 'Прошлый месяц', from: pm + '-01', to: last },
+      { name: 'Этот год', from: y + '-01-01', to: t }
+    ];
+  }
+
+  function lossRangeBar() {
+    var u = U(), f = lossFrom(), t = lossTo();
+    var чипы = lossPresets().map(function (p) {
+      var on = (p.from === f && p.to === t);
+      return '<button class="btn btn-sm' + (on ? ' btn-primary' : '') +
+        '" data-act="loss-period" data-from="' + esc(p.from) + '" data-to="' + esc(p.to) +
+        '">' + esc(p.name) + '</button>';
+    }).join('');
+    return '<div class="quick">' + чипы +
+      '<label class="inline-label">с&nbsp;<input type="date" id="lossFrom" value="' +
+      esc(f) + '"></label>' +
+      '<label class="inline-label">по&nbsp;<input type="date" id="lossTo" value="' +
+      esc(t) + '"></label></div>';
+  }
+
+  function viewLosses() {
+    var u = U(), d = D();
+    if (!d.writeoffs.length) return need('Списания', 'Что и почему списали', 'Причины списания');
+
+    var f = lossFrom(), t = lossTo();
+    var sel = E.rowsInRange(d.writeoffs, f, t);
+    var list = sel.rows;
+    var byReason = E.byReason(list);
+    var top = E.topByCost(list, 40);
+    var months = E.perMonth(list);
+    var total = E.safeRound(list.reduce(function (a, r) { return a + num(r.cost); }, 0));
+
+    var заголовок = (f || t)
+      ? (f ? dateRu(f) : 'начала') + ' – ' + (t ? dateRu(t) : 'сегодня')
+      : (d.writeoffsPeriod ? d.writeoffsPeriod.from + ' – ' + d.writeoffsPeriod.to : 'весь период');
+
+    var h = u.pageHead('Списания', 'Что и почему ушло не через кассу · ' + заголовок,
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
 
+    h += lossRangeBar();
+
     h += '<div class="stat-grid">' +
-      u.stat('Списано всего', u.priv(total), u.nf(d.writeoffs.length) + ' строк', 'c-red') +
+      u.stat('Списано всего', u.priv(total), u.nf(list.length) + ' строк', 'c-red') +
       u.stat('Причин', u.nf(byReason.length), 'разных') +
-      u.stat('Самая дорогая причина', esc((byReason[0] || {}).name || '—'),
+      u.stat('Самая дорогая причина', esc((byReason[0] || {}).reason || '—'),
         byReason[0] ? money(byReason[0].cost) : '') +
       '</div>';
+
+    if (!list.length) {
+      h += '<div class="card"><div class="empty"><b>За эти дни списаний нет</b><br>' +
+        'Либо в выбранный период ничего не списывали, либо выгрузка 1С за эти дни ' +
+        'ещё не загружена. Нажмите «Всё», чтобы увидеть весь загруженный период.' +
+        '</div></div>';
+      return h;
+    }
+
+    /* Про точность говорим прямо. 1С в отчёте «Причины списания» дат по строкам
+       не даёт — только период целиком, и разложить его по дням не на чем. */
+    if (sel.rough) {
+      h += '<div class="banner orange"><span>' + ic('info') + '</span><span>' +
+        'Из них ' + u.nf(sel.rough) + ' строк на ' + money(sel.roughSum) +
+        ' попали в период приблизительно: в выгрузке 1С «Причины списания» дат ' +
+        'по строкам нет — она даёт только период целиком, и такие строки считаются ' +
+        'полностью. Чтобы период считался день в день, нужна выгрузка со столбцом «Дата».' +
+        '</span></div>';
+    }
 
     h += '<div class="banner blue"><span>' + ic('refresh') + '</span><span>Список пересобирается при каждой загрузке ' +
       'отчёта: новые строки добавляются, изменившиеся обновляются, а пропавшие из файла ' +
       'исчезают и из аналитики. Дубли не копятся.</span></div>';
 
+    /* Причина и сумма — то, ради чего сюда заходят. Количество здесь
+       складывать бессмысленно: килограммы и штуки в одну колонку не сложить. */
     h += u.card('По причинам', u.table('reasonT', [
-      { title: 'Причина', fn: function (r) { return esc(r.name); } },
-      { title: 'Позиций', cls: 'num', fn: function (r) { return u.nf(r.count); } },
-      { title: 'Количество', cls: 'num', fn: function (r) { return u.nf(r.qty, 2); } },
+      { title: 'Причина', fn: function (r) { return esc(r.reason); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.cost); } },
       { title: 'Доля', cls: 'num', fn: function (r) { return u.pct(E.div(r.cost, total) * 100); } }
-    ], byReason, { step: 20 }));
+    ], byReason, { step: 20,
+      total: [{ html: 'Всего' }, { cls: 'num', html: '<b>' + u.priv(total) + '</b>' },
+        { cls: 'num', html: '100%' }] }));
 
     if (months.length > 1) {
       h += u.card('По месяцам', u.table('woMonthT', [
         { title: 'Месяц', fn: function (r) { return esc(E.monthTitle(r.ym)); } },
-        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.cost); } },
-        { title: 'Позиций', cls: 'num', fn: function (r) { return u.nf(r.count); } }
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.cost); } }
       ], months, { step: 24 }));
     }
 
@@ -329,8 +394,7 @@
       u.stat('Причин', u.nf(byReason.length), 'разных') +
       '</div>';
     h += u.card('По причинам', u.table('retReasonT', [
-      { title: 'Причина', fn: function (r) { return esc(r.name); } },
-      { title: 'Позиций', cls: 'num', fn: function (r) { return u.nf(r.count); } },
+      { title: 'Причина', fn: function (r) { return esc(r.reason); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.cost); } }
     ], byReason, { step: 20 }));
     h += u.card('Что возвращали', u.table('retTopT', [
@@ -480,6 +544,24 @@
     ], sez.months, { step: 12 }));
     return h;
   }
+
+  /* --- Действия и поля экрана «Списания» ---------------------------------------- */
+  var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
+
+  A['loss-period'] = function (el) {
+    S.setSetting('lossFrom', E.txt(el.dataset.from));
+    S.setSetting('lossTo', E.txt(el.dataset.to));
+    return null;      // перерисовку делает общий обработчик нажатий
+  };
+
+  /* Поля «с» и «по». Перепутанные местами даты не ошибка владельца, а обычная
+     оговорка: отбор всё равно сработает, rowsInRange поменяет их местами сам. */
+  var prevGoodsChange = window.WM_EXTRA_CHANGE;
+  window.WM_EXTRA_CHANGE = function (el) {
+    if (el.id === 'lossFrom') { S.setSetting('lossFrom', el.value); return true; }
+    if (el.id === 'lossTo') { S.setSetting('lossTo', el.value); return true; }
+    return prevGoodsChange ? prevGoodsChange(el) : false;
+  };
 
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
