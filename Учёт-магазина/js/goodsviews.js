@@ -517,7 +517,7 @@
     var sel = U().anaPick(d.sales);
     var res = G.shelfValue(d.stock, c.salesMerged, c.groupIdx);
     var h = u.pageHead('Полки: что окупает место',
-      'Сколько прибыли приносит каждый рубль, вложенный в товар · ' + anaTitle());
+      'Сколько прибыли приносит каждый рубль, вложенный в группу товаров · ' + anaTitle());
     h += anaBar('sales');
     h += anaRough(sel, 'продажи');
     h += snapNote(d.stockTaken, 'Остатки');
@@ -525,27 +525,40 @@
       return num(v).toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
     }
     h += '<div class="stat-grid">' +
-      u.stat('Денег в товаре', u.priv(res.money), 'по себестоимости') +
+      u.stat('Денег в товаре', u.priv(res.totalStock), 'по себестоимости') +
       u.stat('Прибыль с рубля', perRub(res.avgPerRuble), 'в среднем по складу') +
-      u.stat('Мёртвых полок', u.nf(res.deadCount), 'приносят меньше трети среднего',
+      u.stat('Мёртвых полок', u.nf(res.deadCount),
+        res.deadMoney ? 'в них ' + money(res.deadMoney) + ' — приносят меньше трети среднего'
+          : 'приносят меньше трети среднего',
         res.deadCount ? 'c-orange' : 'c-green') +
       '</div>';
     var sdefs = [{ key: 'pay', name: 'Окупает ли место', options: [
       { v: 'no', name: 'Место зря', test: function (r) { return !!r.dead; } },
       { v: 'yes', name: 'Окупает', test: function (r) { return !r.dead; } }
-    ] }, { key: 'grp', name: 'Группа', auto: function (r) { return r.group; }, limit: 14 }];
+    ] }, { key: 'big', name: 'Размер вложения', options: [
+      { v: 'top', name: 'Больше 5% полки', test: function (r) { return num(r.share) >= 5; } },
+      { v: 'small', name: 'Меньше 1%', test: function (r) { return num(r.share) < 1; } }
+    ] }];
     var srows = FLT().apply('shelf', res.rows, sdefs,
-      function (r) { return r.name + ' ' + (r.group || ''); },
-      nums('money', 'profit', 'perRuble'));
-    h += FLT().bar('shelf', sdefs, res.rows, { search: 'товар, группа' });
+      function (r) { return r.group || ''; },
+      nums('stockSum', 'profit', 'perRuble', 'sku'));
+    h += FLT().bar('shelf', sdefs, res.rows, { search: 'группа товаров' });
 
+    /* Полки считаются ПО ГРУППАМ ТОВАРОВ, а не по каждому товару: место на
+       полке занимает группа целиком, и решение принимается тоже про группу. */
     h += u.card('Что стоит на полке', FLT().note(srows.length, res.rows.length) + u.table('shelfT', [
-      { title: 'Товар', fn: function (r) { return hl('shelf', r.name); } },
-      { title: 'Группа', fn: function (r) { return hl('shelf', r.group || '—'); } },
-      { title: 'Денег в товаре', cls: 'num', fn: function (r) { return u.priv(r.money); } },
+      { title: 'Группа товаров', fn: function (r) { return hl('shelf', r.group || '—'); } },
+      { title: 'Позиций', cls: 'num', fn: function (r) { return u.nf(r.sku); } },
+      { title: 'Денег в товаре', cls: 'num', fn: function (r) { return u.priv(r.stockSum); } },
+      { title: 'Доля полки', cls: 'num', fn: function (r) { return u.pct(r.share); } },
       { title: 'Прибыль', cls: 'num', fn: function (r) { return u.priv(r.profit); } },
       { title: 'На рубль', cls: 'num', fn: function (r) {
-        return '<b class="' + (r.dead ? 'c-orange' : 'c-green') + '">' + perRub(r.perRuble) + '</b>'; } },
+        return r.perRuble === null ? '<span class="c-muted">—</span>'
+          : '<b class="' + (r.dead ? 'c-orange' : 'c-green') + '">' + perRub(r.perRuble) + '</b>'; } },
+      { title: 'Против среднего', cls: 'num', fn: function (r) {
+        return r.vsAvg === null ? '—'
+          : '<span class="' + u.cls(r.vsAvg) + '">' + (r.vsAvg > 0 ? '+' : '') +
+            u.pct(r.vsAvg) + '</span>'; } },
       { title: '', cls: 'center', fn: function (r) { return r.dead ? u.badge('место зря', 'orange') : ''; } }
     ], srows, { step: 50 }));
     h += '<div class="banner"><span>' + ic('info') + '</span><span>Полка не резиновая. Если рубль, вложенный в товар, ' +

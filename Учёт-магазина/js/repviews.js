@@ -411,13 +411,15 @@
     // 1. Кассиры — из ручного учёта, работает всегда
     var rating = E.cashierRating(rowsOf(m));
     h += u.card('Кассиры', u.table('erC', [
-      { title: 'Кассир', fn: function (r) { return esc(r.cashier); } },
+      { title: 'Кассир', fn: function (r) { return esc(r.name); } },
       { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shifts); } },
       { title: 'Выручка', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
-      { title: 'В среднем за смену', cls: 'num', fn: function (r) { return u.priv(r.avgShift); } },
+      { title: 'В среднем за смену', cls: 'num', fn: function (r) {
+        return u.priv(r.shifts ? E.safeRound(E.div(r.revenue, r.shifts)) : 0); } },
       { title: 'Расхождения', cls: 'num', fn: function (r) {
-        return r.diffSum ? '<span class="' + u.cls(r.diffSum) + '">' + u.priv(r.diffSum) + '</span>' : '—'; } },
-      { title: 'Смен без расхождений', cls: 'num', fn: function (r) { return u.pct(r.okPct); } }
+        return r.diff ? '<span class="' + u.cls(r.diff) + '">' + u.priv(r.diff) + '</span>' : '—'; } },
+      { title: 'Смен без расхождений', cls: 'num', fn: function (r) {
+        return u.pct(E.safeRound(100 - num(r.badPct))); } }
     ], rating, { step: 20, empty: 'За месяц смен нет' }),
       'Считается из сверки кассы — 1С для этого не нужна');
 
@@ -433,7 +435,7 @@
     if (c.byGroup && c.byGroup.length) {
       var gp = R.groupProfit(c.byGroup);
       h += u.card('Группы товаров (из 1С)', u.table('erG', [
-        { title: 'Группа', fn: function (r) { return esc(r.name); } },
+        { title: 'Группа', fn: function (r) { return esc(r.group); } },
         { title: 'Выручка', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
         { title: 'Валовая прибыль', cls: 'num', fn: function (r) { return u.priv(r.gross); } },
         { title: 'Доля выручки', cls: 'num', fn: function (r) { return u.pct(r.revShare); } },

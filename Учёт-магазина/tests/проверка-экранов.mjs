@@ -2412,6 +2412,176 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 17. СПЛОШНАЯ ПРОВЕРКА НА ПУСТЫЕ КОЛОНКИ.
+
+   За эту сессию одна и та же ошибка нашлась пять раз: экран спрашивает у
+   расчёта поле, которого тот не отдаёт. В консоли при этом чисто, программа
+   не падает — просто колонка пустая, и владелец видит таблицу без имён
+   кассиров, без названий групп, с нулями вместо денег.
+
+   Глазами это видно сразу, а ни одна проверка не ловила. Теперь ловит эта:
+   заполняем программу живыми данными, открываем каждый экран и смотрим,
+   нет ли колонки, где ВСЕ ячейки пустые при непустой таблице.            */
+{
+  console.log('— Пустые колонки: экран спрашивает поле, которого нет');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => {
+    const U = window.WMUI, E = window.WM, S = window.WMStore, d = U.data();
+    const a = (S.state.accounts || []);
+    const касса = (a.find(x => x.kind === 'till') || {}).id;
+    const банк = (a.find(x => x.kind === 'bank') || {}).id;
+
+    // Ручной учёт: две смены с разными кассирами и расхождениями
+    S.state.dds = [];
+    S.add('dds', { type: 'Смена', date: '2026-09-02', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 5000, zCash: 40000, zCashless: 20000,
+      payouts: 10000, factCash: 34500, account: касса, cashlessAccount: банк });
+    S.add('dds', { type: 'Смена', date: '2026-09-03', till: 'Касса 1', shift: 'Ночь',
+      cashier: 'Марат', openCash: 34500, zCash: 30000, zCashless: 15000,
+      payouts: 5000, factCash: 59500, account: касса, cashlessAccount: банк });
+    S.add('dds', { type: 'День', date: '2026-09-02', goodsCash: 20000,
+      debtTaken: 30000, debtPaid: 10000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-02', category: 'Аренда',
+      method: 'Наличные', account: касса, amount: 15000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-03', category: 'Коммунальные / Свет',
+      method: 'Наличные', account: касса, amount: 3000 });
+    S.state.staff = [];
+    S.add('staff', { name: 'Аня', position: 'Продавец', rate: 2000 });
+    S.state.timesheet = [];
+    S.add('timesheet', { date: '2026-09-02', employee: 'Аня', shift: 'День', pay: 2000 });
+    S.state.debtors = [];
+    S.add('debtors', { name: 'Пётр', date: '2026-09-01', sum: 3000, paid: 1000 });
+    S.state.plans = [];
+    S.add('plans', { due: '2026-09-25', supplier: 'Молокозавод',
+      category: 'Оплата ТП', amount: 50000, status: 'Запланирована' });
+
+    // Товарная аналитика: два периода, разные группы
+    const мес = (f, t) => ({ periodKey: f + '..' + t, from: f, to: t, date: t });
+    const с = мес('2026-09-01', '2026-09-30'), о = мес('2026-10-01', '2026-10-31');
+    const прод = (n, qty, rev, cogs, p) => Object.assign({ name: n, key: E.norm(n),
+      qty: qty, revenue: rev, cogs: cogs, profit: rev - cogs, abc: 'A' }, p);
+    d.sales = [
+      прод('Молоко 3.2%', 100, 50000, 40000, с),
+      прод('Сыр Российский', 20, 30000, 24000, с),
+      прод('Хлеб', 200, 10000, 7000, с),
+      прод('Молоко 3.2%', 120, 60000, 46000, о)
+    ];
+    d.salesPeriod = { from: '01.10.2026', to: '31.10.2026', days: 31 };
+    d.stock = [
+      { name: 'Молоко 3.2%', key: E.norm('Молоко 3.2%'), group: 'Молочка', qty: 5,
+        buyPrice: 60, retailPrice: 90, buySum: 300, barcode: '4600001' },
+      { name: 'Сыр Российский', key: E.norm('Сыр Российский'), group: 'Молочка', qty: 30,
+        buyPrice: 400, retailPrice: 520, buySum: 12000, barcode: '4600002' },
+      { name: 'Хлеб', key: E.norm('Хлеб'), group: 'Хлеб', qty: 2,
+        buyPrice: 30, retailPrice: 45, buySum: 60, barcode: '4600003' }
+    ];
+    d.stockTaken = { date: '2026-10-31', from: 'файл' };
+    d.prices = [
+      { name: 'Молоко 3.2%', key: E.norm('Молоко 3.2%'), supplier: 'Молокозавод', price: 58 },
+      { name: 'Молоко 3.2%', key: E.norm('Молоко 3.2%'), supplier: 'Оптовик', price: 64 },
+      { name: 'Сыр Российский', key: E.norm('Сыр Российский'), supplier: 'Оптовик', price: 400 }
+    ];
+    d.pricesTaken = { date: '2026-10-31', from: 'файл' };
+    d.contacts = [{ name: 'Молокозавод', key: E.norm('Молокозавод'), phone: '+7 900 000-00-00' }];
+    d.writeoffs = [
+      Object.assign({ name: 'Специи', key: 'специи', reason: 'Производство', qty: 9, cost: 18192 }, с),
+      Object.assign({ name: 'Крупа', key: 'крупа', reason: 'Просрочка', qty: 2, cost: 5000 }, о)
+    ];
+    d.returns = [
+      Object.assign({ name: 'Кефир', key: 'кефир', reason: 'Истёк срок', qty: 3, cost: 450 }, с)
+    ];
+    d.dead = [
+      Object.assign({ name: 'Сыр Российский', key: E.norm('Сыр Российский'),
+        left: 30, sold: 0, money: 12000, days: 90 }, с)
+    ];
+    S.setSetting('anaFrom', ''); S.setSetting('anaTo', '');
+    S.setSetting('reportMonth', '2026-09');
+    S.save(); U.recompute();
+  });
+  await page.waitForTimeout(500);
+
+  /* Пустые колонки на текущем экране. Колонки без заголовка не считаем:
+     это значки и бейджи, им пусто быть положено. */
+  const пустыеКолонки = () => page.evaluate(() => {
+    const плохие = [];
+    document.querySelectorAll('.card').forEach(card => {
+      const заголовок = (card.querySelector('.card-title') || {}).textContent || 'таблица';
+      card.querySelectorAll('table').forEach(t => {
+        const шапка = [...t.querySelectorAll('thead th')].map(e => e.textContent.trim());
+        const строки = [...t.querySelectorAll('tbody tr')]
+          .filter(tr => !tr.classList.contains('plain') && !tr.classList.contains('total'));
+        if (строки.length < 2) return;            // одна строка — не показатель
+        шапка.forEach((имя, i) => {
+          if (!имя) return;                       // колонка значков
+          const пусто = строки.every(tr => {
+            const td = tr.children[i];
+            return !td || td.textContent.trim() === '';
+          });
+          if (пусто) плохие.push(заголовок.trim() + ' → «' + имя + '»');
+        });
+      });
+    });
+    return плохие;
+  });
+
+  const экраны = ['pulse', 'ledger', 'cashiers', 'debtors', 'finpay', 'funds',
+    'timesheet', 'payroll', 'staffcards', 'sched',
+    'pnl', 'owner', 'earners', 'moneyflow', 'finreport', 'ready', 'taxcal',
+    'stock', 'orders', 'losses', 'dead', 'groups', 'itemprofit', 'shelf',
+    'returns', 'abc', 'pricecmp', 'suppliers', 'log'];
+
+  const найдено = [];
+  for (const id of экраны) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(220);
+    const плохие = await пустыеКолонки();
+    плохие.forEach(x => найдено.push(id + ': ' + x));
+  }
+  check('НИ НА ОДНОМ ЭКРАНЕ НЕТ ПУСТОЙ КОЛОНКИ',
+    найдено.length === 0, найдено.slice(0, 6).join(' | ') || 'пустых колонок нет',
+    'пустых колонок нет');
+
+  /* Отдельно — то, что было сломано и видно на скриншотах владельца */
+  await page.evaluate(() => window.WMUI.go('earners'));
+  await page.waitForTimeout(400);
+  const кассиры = await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.card')]
+      .find(e => (e.querySelector('.card-title') || {}).textContent.trim() === 'Кассиры');
+    return c ? c.innerText.replace(/[  ]/g, ' ') : '';
+  });
+  check('ИМЕНА КАССИРОВ ВИДНЫ', /Аня/.test(кассиры) && /Марат/.test(кассиры),
+    (кассиры.split('\n')[2] || 'пусто').slice(0, 40), 'Аня и Марат');
+  check('и средняя выручка за смену посчитана, а не ноль',
+    /60 000|45 000/.test(кассиры), 'посчитана', 'посчитана');
+  check('и «смен без расхождений» — процент, а не пусто',
+    /%/.test(кассиры), 'процент есть', 'процент есть');
+
+  const группы = await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.card')]
+      .find(e => /Группы товаров/.test((e.querySelector('.card-title') || {}).textContent || ''));
+    return c ? c.innerText.replace(/[  ]/g, ' ') : '';
+  });
+  check('НАЗВАНИЯ ГРУПП ТОВАРОВ ВИДНЫ',
+    /Молочка/.test(группы) && /Хлеб/.test(группы),
+    (группы.split('\n')[2] || 'пусто').slice(0, 40), 'Молочка и Хлеб');
+
+  await page.evaluate(() => window.WMUI.go('shelf'));
+  await page.waitForTimeout(400);
+  const полки = await page.evaluate(() => document.body.innerText.replace(/[  ]/g, ' '));
+  check('ПОЛКИ: ДЕНЬГИ В ТОВАРЕ НЕ НОЛЬ', /12 360|12 000/.test(полки),
+    (полки.match(/Денег в товаре[\s\S]{0,30}/) || ['нет'])[0].replace(/\n/g, ' '),
+    'сумма по себестоимости');
+  check('и колонка называется «Группа товаров», а не «Товар»',
+    /Группа товаров/.test(полки) && !/^Товар$/m.test(полки),
+    /Группа товаров/.test(полки) ? 'Группа товаров' : 'осталась колонка «Товар»',
+    'Группа товаров');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
