@@ -935,3 +935,26 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .scroll-hint { font-size: 12px; color: var(--label-2); padding: 6px 20px 12px;
   display: flex; align-items: center; gap: 6px; }
 .scroll-hint::before { content: '↔'; font-size: 15px; opacity: .7; }
+
+/* ---- Быстрый ввод: сумма крупно, клавиши под пальцем ------------------- */
+.fast-sum { font-size: 44px; font-weight: 700; text-align: center; padding: 18px 0 6px;
+  font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+.fast-sum.empty { color: var(--label-3); }
+.fast-note { text-align: center; color: var(--label-2); font-size: 13px;
+  padding: 0 20px 14px; line-height: 1.4; }
+.fast-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  max-width: 420px; margin: 0 auto 14px; }
+.fast-key { font: inherit; font-size: 24px; font-weight: 600; padding: 18px 0;
+  background: var(--bg-elev); color: var(--label); border: 1px solid var(--separator);
+  border-radius: var(--r-inner); cursor: pointer; }
+.fast-key:hover { background: var(--fill-2); }
+.fast-key:active { transform: scale(.97); }
+.fast-quick { justify-content: center; }
+.fast-cats { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 20px 18px; }
+.fast-cat { flex: 1 1 150px; padding: 16px 12px; font-size: 15px; }
+.fast-cat[disabled] { opacity: .45; cursor: default; }
+@media (max-width: 560px) {
+  .fast-sum { font-size: 38px; }
+  .fast-key { padding: 16px 0; font-size: 22px; }
+  .fast-cat { flex: 1 1 calc(50% - 5px); }
+}

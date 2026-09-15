@@ -388,7 +388,8 @@
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Статья', 'category', 'list', v.category || '',
           { options: categories(), placeholder: 'за что платим',
-            hint: 'закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
+            hint: 'подстатья пишется через косую черту: «Коммунальные / Свет». ' +
+              'Закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
         u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
         u.fieldRow('С какого счёта', 'account', 'select',
           v.account || accForCategory(v.category, !cash), { options: accOptions(),
@@ -429,7 +430,7 @@
       if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
       S.save(); refresh();
       var acc = E.accountOf(rec, accounts());
-      return { ok: 'Расход записан: ' + v.category + ' — ' + money(v.amount) +
+      return { ok: 'Расход записан: ' + E.catLabel(v.category) + ' — ' + money(v.amount) +
         (acc && acc.kind === 'till'
           ? '. Ящик не трогаем: эти деньги уже в «выплатах» смены.'
           : acc ? '. Списано со счёта «' + acc.name + '».' : '.') };
@@ -1383,7 +1384,8 @@
       if (E.isShift(r)) return 'Смена: ' + esc(r.till || '') + ' ' + esc(r.shift || '') +
         (r.cashier ? ' · ' + esc(r.cashier) : '');
       if (E.isDay(r)) return 'Итоги дня';
-      return esc(r.category || '—');
+      // Подстатью показываем стрелкой: «Коммунальные → Свет» читается легче черты
+      return esc(E.catLabel(r.category) || '—');
     }
     h += u.card('Записи', FLT().note(list.length, rows.length) + u.table('ledgerT', [
       { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
@@ -1541,7 +1543,7 @@
     }).sort(function (x, y) { return y.sum - x.sum; });
     if (cats.length) {
       h += u.card('Расходы по статьям', u.table('catT', [
-        { title: 'Статья', fn: function (r) { return esc(r.name); } },
+        { title: 'Статья', fn: function (r) { return esc(E.catLabel(r.name)); } },
         { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
         { title: 'Доля', cls: 'num', fn: function (r) {
           return u.pct(E.div(r.sum, a.expense) * 100); } },
@@ -1587,6 +1589,55 @@
      Окно показывает, сколько не расписано по дням, и даёт кнопки — каждая
      открывает нужную форму с уже подставленной датой.
      -------------------------------------------------------------------------- */
+  /* Кнопки быстрого ввода. Экран перерисовываем целиком: на нём нет полей,
+     которые можно потерять, — только набранная сумма, а она в FAST_SUM. */
+  A['fast-key'] = function (el) {
+    var k = el.dataset.key;
+    if (k === 'C') FAST_SUM = '';
+    else if (k === '⌫') FAST_SUM = FAST_SUM.slice(0, -1);
+    else if (k === '00') FAST_SUM = FAST_SUM ? FAST_SUM + '00' : '';
+    else FAST_SUM = (FAST_SUM + k).replace(/^0+(?=\d)/, '');
+    if (FAST_SUM.length > 9) FAST_SUM = FAST_SUM.slice(0, 9);
+    return null;      // перерисовку делает общий обработчик нажатий
+  };
+
+  A['fast-add'] = function (el) {
+    var было = num(window.WMNum.calc(FAST_SUM) || 0);
+    FAST_SUM = String(было + num(el.dataset.add));
+    return null;
+  };
+
+  /* Нажали статью — запись готова. Дата сегодняшняя, счёт по памяти о том,
+     чем платили по этой статье в прошлый раз, конверт по названию статьи. */
+  A['fast-cat'] = function (el) {
+    var cat = decodeURIComponent(el.dataset.cat || '');
+    var сумма = E.safeRound(num(window.WMNum.calc(FAST_SUM) || 0));
+    if (!сумма) return 'Сначала наберите сумму.';
+    if (!cat) return 'Не понял статью.';
+
+    var не = E.notACost(cat);
+    if (не) {
+      return 'Это не расход магазина. ' + (не.why || '') +
+        ' Запишите через «Итоги дня» или «Перевод».';
+    }
+    var lock = S.lockedWhy('dds', { date: today() });
+    if (lock) return lock;
+
+    var acc = accForCategory(cat, false);
+    var rec = { type: E.T_OUT, date: today(), category: cat, method: 'Наличные',
+      account: acc, amount: сумма, fund: fundForCategory(cat) };
+    S.add('dds', rec);
+    S.save();
+    FAST_SUM = '';
+    refresh();
+
+    /* Сразу говорим, куда легло, и даём поправить: быстрый ввод хорош тем,
+       что ошибка исправляется так же быстро, как делается.
+       Возвращаем строку — объект {ok:…} это соглашение форм, не действий. */
+    return E.catLabel(cat) + ' — ' + money(сумма) + ', счёт «' +
+      (accName(acc) || '—') + '», сегодня. Ошиблись — поправьте в списке ниже.';
+  };
+
   A['payout-help'] = function () {
     var u = U();
     var sel = { rows: dds() };
@@ -1784,6 +1835,41 @@
         { cls: 'num', html: u.priv(t.spent) }, { html: '' }] }),
       'Деньги в конвертах лежат на настоящих счетах — конверт лишь помечает, что они заняты');
 
+    /* Бюджеты. Отдельная карточка, потому что это про другое: конверт копит
+       деньги, бюджет ставит потолок трате. Смешать их — запутать владельца. */
+    var bt = E.budgetTotals(budgets(), dds(), m);
+    var bh = '';
+    if (bt.rows.length) {
+      bh = u.table('budgetsT', [
+        { title: 'Статья', fn: function (r) { return esc(r.label); } },
+        { title: 'Лимит на месяц', cls: 'num', fn: function (r) { return u.priv(r.limit); } },
+        { title: 'Потрачено', cls: 'num', fn: function (r) {
+          return u.priv(r.spent) + ' <small class="c-muted">' + u.pct(r.pct) + '</small>'; } },
+        { title: 'Осталось', cls: 'num', fn: function (r) {
+          return r.over
+            ? '<b class="c-red">перебор ' + u.priv(r.over) + '</b>'
+            : '<b class="c-green">' + u.priv(r.left) + '</b>'; } },
+        { title: '', cls: 'center', fn: function (r) {
+          return '<button class="btn btn-sm" data-edit="budgets:' + esc(r.id) + ':budgetCard">' +
+            ic('edit', 16) + '</button>'; } }
+      ], bt.rows, { step: 30, empty: 'Лимитов нет',
+        total: [{ html: 'Всего' }, { cls: 'num', html: u.priv(bt.totals.limit) },
+          { cls: 'num', html: u.priv(bt.totals.spent) },
+          { cls: 'num', html: bt.totals.over
+            ? '<b class="c-red">перебор ' + u.priv(bt.totals.over) + '</b>'
+            : '<b class="c-green">' + u.priv(bt.totals.left) + '</b>' }, { html: '' }] });
+    } else {
+      bh = '<div class="empty"><b>Лимитов пока нет</b><br>' +
+        'Бюджет — это потолок траты по статье: «на обеды не больше 10 000 в месяц». ' +
+        'Деньги он не двигает, просто предупреждает, когда разогналось.</div>';
+    }
+    h += u.card('Лимиты на месяц', bh +
+      '<div class="card-pad"><button class="btn btn-primary" data-form="budgetCard">' +
+      ic('plus') + ' Поставить лимит</button></div>',
+      bt.totals.overCount
+        ? '<span class="c-red">перебор по ' + bt.totals.overCount + ' статьям</span>'
+        : 'Конверт копит деньги, бюджет ставит потолок трате');
+
     h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
       'Конверт не создаёт новых денег и не меняет прибыль: он помечает переводы и расходы, ' +
       'которые и так есть. «Отложить» — это обычный перевод, например из кассы в сейф, ' +
@@ -1791,6 +1877,36 @@
       '</span></div>';
     return h;
   }
+
+  function budgets() { return S.state.budgets || []; }
+
+  FORMS.budgetCard = {
+    title: 'Лимит на статью', icon: 'scale',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('На какую статью', 'category', 'list', v.category || '',
+        { options: categories(), placeholder: 'Обед, ГСМ, Расходники',
+          hint: 'если поставить на группу («Коммунальные»), засчитаются и подстатьи' }) +
+        u.fieldRow('Не больше, в месяц', 'limit', 'number', v.limit || '') +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Бюджет денег не двигает — он только следит, чтобы трата по статье ' +
+      'не разогналась. Копить деньги заранее — это конверты, они выше.',
+    save: function (v) {
+      if (!E.txt(v.category)) return 'Выберите статью, на которую ставим лимит.';
+      var bad = Q.checkAmount(v.limit); if (bad) return 'Лимит: ' + bad;
+      var ed = U().editing();
+      var same = budgets().filter(function (b) {
+        return E.norm(b.category) === E.norm(v.category) && (!ed || b.id !== ed.id);
+      })[0];
+      if (same) return 'Лимит на «' + E.catLabel(same.category) + '» уже стоит — поправьте его.';
+      var rec = { category: E.txt(v.category), limit: num(v.limit), note: E.txt(v.note) };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('budgets', rec);
+      S.save(); refresh();
+      return { ok: 'Лимит на «' + E.catLabel(rec.category) + '»: ' + money(rec.limit) + ' в месяц.' };
+    }
+  };
 
   FORMS.fundCard = {
     title: 'Конверт', icon: 'safe',
@@ -1825,6 +1941,100 @@
     }
   };
 
+  /* ==========================================================================
+     БЫСТРЫЙ ВВОД: СУММА → СТАТЬЯ → ГОТОВО
+
+     Обычная форма расхода — шесть полей, и это правильно, когда запись
+     непростая. Но девять расходов из десяти в магазине одинаковые: обед,
+     хозтовары, ГСМ. Ради них открывать форму и заполнять шесть полей —
+     слишком долго, и владелец просто перестаёт записывать.
+
+     Здесь три касания: набрал сумму, ткнул статью — записано. Всё остальное
+     программа подставляет сама: дата сегодняшняя, счёт — тот, с которого
+     платили по этой статье в прошлый раз, конверт — по названию статьи.
+
+     Статьи показываем те, которыми пользуются чаще всего: программа считает
+     их по вашим же записям, а не по списку из справочника.
+     ========================================================================== */
+  var FAST_SUM = '';
+
+  // Чем чаще статьёй пользуются, тем выше она стоит
+  function topCategories(n) {
+    var by = {};
+    dds().forEach(function (r) {
+      if (!E.isExpense(r)) return;
+      var c = E.txt(r.category);
+      if (!c || E.notACost(c)) return;
+      by[c] = (by[c] || 0) + 1;
+    });
+    var list = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; });
+    // Добавим справочные статьи, если своих записей ещё мало
+    categories().forEach(function (c) {
+      if (list.indexOf(c) < 0 && !E.notACost(c)) list.push(c);
+    });
+    return list.slice(0, n || 12);
+  }
+
+  function viewFast() {
+    var u = U();
+    var сумма = FAST_SUM;
+    var число = сумма ? num(window.WMNum.calc(сумма) || 0) : 0;
+
+    var h = u.pageHead('Быстрый ввод', 'Сумма, статья — и записано',
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Обычная форма</button>');
+
+    h += '<div class="fast-sum' + (число ? '' : ' empty') + '">' +
+      (число ? esc(money(число)) : '0 ₽') + '</div>';
+    if (число) {
+      var acc = accounts().filter(function (a) { return a.id === accForCategory('', false); })[0];
+      h += '<div class="fast-note">Спишется со счёта «' +
+        esc(acc ? acc.name : 'по умолчанию') + '» сегодняшним числом. ' +
+        'Счёт подставится точнее, когда выберете статью.</div>';
+    } else {
+      h += '<div class="fast-note">Наберите сумму и нажмите статью — запись готова.</div>';
+    }
+
+    h += '<div class="fast-pad">';
+    ['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', '⌫'].forEach(function (k) {
+      h += '<button class="fast-key' + (k === '⌫' ? ' wide-del' : '') +
+        '" data-act="fast-key" data-key="' + esc(k) + '">' + esc(k) + '</button>';
+    });
+    h += '</div>';
+
+    h += '<div class="quick fast-quick">' +
+      [100, 500, 1000, 5000].map(function (q) {
+        return '<button class="btn" data-act="fast-add" data-add="' + q + '">+' +
+          E.fmtNum(q) + '</button>';
+      }).join('') +
+      (число ? ' <button class="btn" data-act="fast-key" data-key="C">Стереть</button>' : '') +
+      '</div>';
+
+    var cats = topCategories(12);
+    h += u.card('На что потратили', '<div class="fast-cats">' +
+      cats.map(function (c) {
+        return '<button class="btn fast-cat' + (число ? ' btn-primary' : '') +
+          '" data-act="fast-cat" data-cat="' + encodeURIComponent(c) + '"' +
+          (число ? '' : ' disabled') + '>' +
+          esc(E.catLabel(c)) + '</button>';
+      }).join('') + '</div>',
+      число ? 'Нажмите статью — запись сохранится' : 'Сначала наберите сумму');
+
+    var сегодня = dds().filter(function (r) {
+      return E.isExpense(r) && E.txt(r.date) === today();
+    });
+    if (сегодня.length) {
+      h += u.card('Записано сегодня', u.table('fastToday', [
+        { title: 'Статья', fn: function (r) { return esc(E.catLabel(r.category)); } },
+        { title: 'Счёт', fn: function (r) { return esc(accName(r.account) || '—'); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.amount); } },
+        { title: '', cls: 'center', fn: function (r) {
+          return u.rowMenu('dds', r.id, { form: 'moneyOut' }); } }
+      ], сегодня.slice().reverse(), { step: 20, empty: '' }),
+        'Ошиблись — поправьте здесь же');
+    }
+    return h;
+  }
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },
@@ -1835,6 +2045,7 @@
     { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers },
     { id: 'debtors', icon: 'notebook', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
     { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport },
-    { id: 'funds', icon: 'safe', name: 'Накопления', group: 'Деньги', render: viewFunds }
+    { id: 'funds', icon: 'safe', name: 'Накопления', group: 'Деньги', render: viewFunds },
+    { id: 'fast', icon: 'plus', name: 'Быстрый ввод', group: 'Каждый день', render: viewFast }
   );
 })();

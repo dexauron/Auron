@@ -1017,5 +1017,112 @@ console.log('\n— Владелец взял себе: с какого счёт�
   check('забор показан отдельной строкой', p.draw === 12000, p.draw, 12000);
 }
 
+console.log('\n— Подстатьи: «Коммунальные → Свет»');
+{
+  check('группа отрезается по черте', WM.catGroup('Коммунальные / Свет') === 'Коммунальные',
+    WM.catGroup('Коммунальные / Свет'), 'Коммунальные');
+  check('подстатья читается после черты', WM.catLeaf('Коммунальные / Свет') === 'Свет',
+    WM.catLeaf('Коммунальные / Свет'), 'Свет');
+  check('статья без черты — сама себе группа', WM.catGroup('Аренда') === 'Аренда',
+    WM.catGroup('Аренда'), 'Аренда');
+  check('у статьи без черты подстатьи нет', WM.catLeaf('Аренда') === '',
+    '«' + WM.catLeaf('Аренда') + '»', 'пусто');
+  check('человеку показываем стрелкой', WM.catLabel('Коммунальные / Свет') === 'Коммунальные → Свет',
+    WM.catLabel('Коммунальные / Свет'), 'Коммунальные → Свет');
+  check('лишние пробелы вокруг черты не мешают',
+    WM.catGroup('Коммунальные/Свет') === 'Коммунальные' && WM.catLeaf('Коммунальные/Свет') === 'Свет',
+    WM.catGroup('Коммунальные/Свет') + '|' + WM.catLeaf('Коммунальные/Свет'), 'Коммунальные|Свет');
+  check('собрать обратно — та же строка',
+    WM.catGroup(WM.catJoin('Коммунальные', 'Свет')) === 'Коммунальные' &&
+    WM.catLeaf(WM.catJoin('Коммунальные', 'Свет')) === 'Свет',
+    WM.catJoin('Коммунальные', 'Свет'), 'Коммунальные / Свет');
+  check('без подстатьи черта не добавляется', WM.catJoin('Аренда', '') === 'Аренда',
+    WM.catJoin('Аренда', ''), 'Аренда');
+
+  const tree = WM.catTree({ 'Коммунальные / Свет': 5000, 'Коммунальные / Вода': 2000,
+    'Аренда': 110000 });
+  const comm = tree.filter(g => g.name === 'Коммунальные')[0];
+  check('подстатьи складываются в группу', comm.sum === 7000, comm.sum, 7000);
+  check('внутри группы обе подстатьи', comm.kids.length === 2, comm.kids.length, 2);
+  check('крупная подстатья сверху', comm.kids[0].name === 'Свет', comm.kids[0].name, 'Свет');
+  check('группы идут от крупной к мелкой', tree[0].name === 'Аренда', tree[0].name, 'Аренда');
+  check('у одиночной статьи подстатей нет',
+    tree.filter(g => g.name === 'Аренда')[0].kids.length === 0, 0, 0);
+  check('сумма дерева равна сумме всех статей',
+    tree.reduce((s, g) => s + g.sum, 0) === 117000,
+    tree.reduce((s, g) => s + g.sum, 0), 117000);
+}
+
+console.log('\n— Подстатьи попадают в ту же группу затрат, что и родитель');
+{
+  const rows = [
+    { type: WM.T_SHIFT, date: '2026-09-01', openCash: 0, zCash: 200000, payouts: 0, factCash: 200000 },
+    { type: WM.T_OUT, date: '2026-09-02', amount: 5000, category: 'Коммунальные / Свет' },
+    { type: WM.T_OUT, date: '2026-09-03', amount: 2000, category: 'Коммунальные' }];
+  const p = WM.pnl({ rows: rows, ym: '2026-09' });
+  const kinds = p.byKind || {};
+  check('подстатья не уехала в «прочее»',
+    WM.costKindOf(WM.catGroup('Коммунальные / Свет')) === WM.costKindOf('Коммунальные'),
+    WM.costKindOf(WM.catGroup('Коммунальные / Свет')), WM.costKindOf('Коммунальные'));
+  check('обе записи попали в затраты', p.costTotal === 7000, p.costTotal, 7000);
+}
+
+console.log('\n— Бюджеты: потолок траты по статье');
+{
+  const rows = [
+    { type: WM.T_OUT, date: '2026-09-02', amount: 5000, category: 'Коммунальные / Свет' },
+    { type: WM.T_OUT, date: '2026-09-03', amount: 2000, category: 'Коммунальные / Вода' },
+    { type: WM.T_OUT, date: '2026-09-04', amount: 3000, category: 'Обеды' },
+    { type: WM.T_OUT, date: '2026-08-30', amount: 9000, category: 'Обеды' },
+    { type: WM.T_OUT, date: '2026-09-05', amount: 400000, category: 'Закуп товара' }];
+  const budgets = [
+    { id: 'b1', category: 'Коммунальные', limit: 6000 },
+    { id: 'b2', category: 'Обеды', limit: 10000 },
+    { id: 'b3', category: 'Закуп товара', limit: 1000 }];
+  const b = WM.budgetTotals(budgets, rows, '2026-09');
+  const by = {}; b.rows.forEach(r => { by[r.id] = r; });
+
+  check('БЮДЖЕТ НА ГРУППУ СЧИТАЕТ И ПОДСТАТЬИ', by.b1.spent === 7000, by.b1.spent, 7000);
+  check('перебор виден в рублях', by.b1.over === 1000, by.b1.over, 1000);
+  check('перебор — это минус в остатке', by.b1.left === -1000, by.b1.left, -1000);
+  check('ЧУЖОЙ МЕСЯЦ В БЮДЖЕТ НЕ ЛЕЗЕТ', by.b2.spent === 3000, by.b2.spent, 3000);
+  check('пока в рамках — перебора нет', by.b2.over === 0 && by.b2.left === 7000, by.b2.left, 7000);
+  check('процент потраченного считается', by.b2.pct === 30, by.b2.pct, 30);
+  check('ЗАКУП ТРАТОЙ НЕ СЧИТАЕТСЯ', by.b3.spent === 0, by.b3.spent, 0);
+  check('самый горячий бюджет сверху', b.rows[0].id === 'b1', b.rows[0].id, 'b1');
+  check('в итогах виден общий потолок', b.totals.limit === 17000, b.totals.limit, 17000);
+  check('в итогах видно, сколько бюджетов пробито', b.totals.overCount === 1,
+    b.totals.overCount, 1);
+  check('в итогах видна общая сумма перебора', b.totals.over === 1000, b.totals.over, 1000);
+  check('бюджет на подстатью считает только её',
+    WM.budgetTotals([{ id: 'x', category: 'Коммунальные / Свет', limit: 9000 }], rows, '2026-09')
+      .rows[0].spent === 5000, 5000, 5000);
+  check('бюджет без статьи пропускается',
+    WM.budgetTotals([{ id: 'y', category: '', limit: 100 }], rows, '2026-09').rows.length === 0,
+    0, 0);
+  check('бюджеты и конверты не путаются: бюджет денег не двигает',
+    WM.fundTotals([], rows, null, '2026-09').totals.left === 0, 0, 0);
+  const noYm = WM.budgetTotals(budgets, rows, null);
+  check('без месяца бюджет считает всё подряд',
+    noYm.rows.filter(r => r.id === 'b2')[0].spent === 12000,
+    noYm.rows.filter(r => r.id === 'b2')[0].spent, 12000);
+}
+
+console.log('\n— Конверт и бюджет — разные вещи');
+{
+  const funds = [{ id: 'f1', name: 'Аренда', plan: 110000 }];
+  const rows = [
+    { type: WM.T_MOVE, date: '2026-09-01', amount: 110000, fund: 'f1' },
+    { type: WM.T_OUT, date: '2026-09-10', amount: 110000, category: 'Аренда', fund: 'f1' }];
+  const f = WM.fundTotals(funds, rows, null, '2026-09');
+  const r = f.rows[0];
+  check('отложили и потратили — в конверте ноль', r.left === 0, r.left, 0);
+  check('план месяца выполнен', r.putThisMonth === 110000 && r.toPut === 0, r.toPut, 0);
+  const b = WM.budgetTotals([{ id: 'b1', category: 'Аренда', limit: 110000 }], rows, '2026-09');
+  check('та же трата видна и в бюджете', b.rows[0].spent === 110000, b.rows[0].spent, 110000);
+  check('ПЕРЕВОД В КОНВЕРТ ТРАТОЙ НЕ СЧИТАЕТСЯ',
+    b.rows[0].spent === 110000 && b.rows[0].over === 0, b.rows[0].over, 0);
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

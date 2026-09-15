@@ -750,6 +750,58 @@
       ok: purchase <= limit + 0.5, room: safeRound(Math.max(0, limit - purchase)) };
   }
 
+  /* ==========================================================================
+     БЮДЖЕТЫ: СКОЛЬКО МОЖНО ПОТРАТИТЬ ПО СТАТЬЕ
+
+     Конверт и бюджет — разные вещи, и путать их нельзя.
+
+       КОНВЕРТ — деньги, которые РЕАЛЬНО отложены и лежат на счёте.
+                 Про аренду, зарплату, налоги: их надо накопить заранее.
+       БЮДЖЕТ  — просто потолок траты за месяц, денег он не двигает.
+                 Про обеды, ГСМ, расходники: тратим по мере надобности,
+                 но следим, чтобы не разогналось.
+
+     Бюджет ставится на статью. Если статья — группа («Коммунальные»),
+     в неё засчитываются и все подстатьи: «Коммунальные / Свет» тоже.
+     ========================================================================== */
+  function budgetTotals(budgets, rows, ym) {
+    var list = ym ? (rows || []).filter(function (r) { return ymOf(txt(r.date)) === ym; })
+      : (rows || []);
+    var spentBy = {};
+    list.forEach(function (r) {
+      if (!isExpense(r)) return;
+      if (notACost(r.category)) return;      // закуп и инкассация тратой не считаются
+      var c = txt(r.category);
+      if (!c) return;
+      spentBy[c] = safeRound((spentBy[c] || 0) + safeRound(r.amount));
+    });
+
+    var out = [], t = { limit: 0, spent: 0, left: 0, over: 0, overCount: 0 };
+    (budgets || []).forEach(function (b) {
+      var cat = txt(b.category);
+      if (!cat) return;
+      var spent = 0;
+      Object.keys(spentBy).forEach(function (c) {
+        // Бюджет на группу считает и её подстатьи
+        if (norm(c) === norm(cat) || norm(catGroup(c)) === norm(cat)) spent += spentBy[c];
+      });
+      spent = safeRound(spent);
+      var limit = safeRound(b.limit);
+      var left = safeRound(limit - spent);
+      var row = { id: txt(b.id), category: cat, label: catLabel(cat),
+        limit: limit, spent: spent, left: left,
+        over: left < 0 ? safeRound(-left) : 0,
+        pct: limit ? safeRound(div(spent, limit) * 100) : 0,
+        note: txt(b.note) };
+      t.limit += limit; t.spent += spent;
+      if (row.over) { t.over += row.over; t.overCount++; }
+      out.push(row);
+    });
+    ['limit', 'spent', 'over'].forEach(function (k) { t[k] = safeRound(t[k]); });
+    t.left = safeRound(t.limit - t.spent);
+    return { rows: out.sort(function (a, b) { return b.pct - a.pct; }), totals: t };
+  }
+
   /* --- План выплат ----------------------------------------------------------- */
   var PLAN_STATUS = ['Запланирована', 'Оплачена', 'Отменена'];
   function planStatus(p, t) {
@@ -825,6 +877,64 @@
     { key: 'writeoff', name: 'Списания', cats: ['списание', 'списания', 'просрочка', 'бой', 'порча'] },
     { key: 'other', name: 'Прочие расходы', cats: [] }
   ];
+  /* ==========================================================================
+     ПОДСТАТЬИ: «Коммунальные / Свет»
+
+     Владельцу нужны два уровня: «Коммунальные → Свет, Вода, Вывоз мусора».
+     Заводить для этого отдельную таблицу и переписывать все записи — лишнее.
+     Достаточно косой черты в названии: «Коммунальные / Свет».
+
+     Что это даёт даром:
+       — старые записи со статьёй «Коммунальные» продолжают работать;
+       — справочник остаётся обычным списком слов, его видно в книге Excel
+         и можно править руками;
+       — в отчётах суммы сами складываются по группе.
+
+     Правило одно: до черты — группа, после — подстатья. Больше двух уровней
+     не бывает намеренно: третий никто не заполняет, а читать становится
+     труднее.
+     ========================================================================== */
+  var CAT_SEP = '/';
+
+  // «Коммунальные / Свет» → «Коммунальные». Без черты — сама статья группа.
+  function catGroup(name) {
+    var t = txt(name);
+    var i = t.indexOf(CAT_SEP);
+    return i < 0 ? t : txt(t.slice(0, i));
+  }
+  // «Коммунальные / Свет» → «Свет». Без черты — пусто.
+  function catLeaf(name) {
+    var t = txt(name);
+    var i = t.indexOf(CAT_SEP);
+    return i < 0 ? '' : txt(t.slice(i + 1));
+  }
+  // Как показать человеку: «Коммунальные → Свет»
+  function catLabel(name) {
+    var g = catGroup(name), l = catLeaf(name);
+    return l ? g + ' → ' + l : g;
+  }
+  function catJoin(group, leaf) {
+    var g = txt(group), l = txt(leaf);
+    return l ? g + ' ' + CAT_SEP + ' ' + l : g;
+  }
+
+  /* Суммы по статьям, свёрнутые в группы. Возвращает список групп, у каждой
+     свои подстатьи и общая сумма — так отчёт читается сверху вниз. */
+  function catTree(byCategory) {
+    var by = {}, order = [];
+    Object.keys(byCategory || {}).forEach(function (name) {
+      var g = catGroup(name) || 'Без статьи';
+      if (!by[g]) { by[g] = { name: g, sum: 0, kids: [] }; order.push(g); }
+      by[g].sum = safeRound(by[g].sum + safeRound(byCategory[name]));
+      var leaf = catLeaf(name);
+      if (leaf) by[g].kids.push({ name: leaf, full: name, sum: safeRound(byCategory[name]) });
+    });
+    return order.map(function (g) {
+      by[g].kids.sort(function (a, b) { return b.sum - a.sum; });
+      return by[g];
+    }).sort(function (a, b) { return b.sum - a.sum; });
+  }
+
   function costKindOf(category) {
     var c = norm(category);
     for (var i = 0; i < COST_KINDS.length; i++) {
@@ -865,7 +975,8 @@
         excluded[not.key].count++;
         return;
       }
-      byKind[costKindOf(r.category)] += safeRound(r.amount);
+      // Вид затраты берём по группе: «Коммунальные / Свет» — это коммунальные
+      byKind[costKindOf(catGroup(r.category) || r.category)] += safeRound(r.amount);
     });
     Object.keys(byKind).forEach(function (k) { byKind[k] = safeRound(byKind[k]); sources[k] = 'записи'; });
 
@@ -2480,8 +2591,11 @@
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,
     totals: totals, planStatus: planStatus, planTotals: planTotals,
     fundTotals: fundTotals, purchaseCheck: purchaseCheck,
+    budgetTotals: budgetTotals,
     debtorTotals: debtorTotals, countCash: countCash,
     COST_KINDS: COST_KINDS, costKindOf: costKindOf, pnl: pnl,
+    CAT_SEP: CAT_SEP, catGroup: catGroup, catLeaf: catLeaf, catLabel: catLabel,
+    catJoin: catJoin, catTree: catTree,
     breakEven: breakEven, breakEvenDay: breakEvenDay,
 
     /* --- Контур 2: 1С --------------------------------------------------- */

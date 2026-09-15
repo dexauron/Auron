@@ -1805,6 +1805,227 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 14. Быстрый ввод, подстатьи и бюджеты — так, как ими пользуются руками */
+{
+  console.log('— Быстрый ввод, подстатьи и лимиты');
+  const { page, ctx, errs } = await open();
+
+  /* --- БЫСТРЫЙ ВВОД: сумма, статья — и записано ------------------------- */
+  await page.evaluate(() => window.WMUI.go('fast'));
+  await page.waitForTimeout(350);
+  check('экран быстрого ввода открывается',
+    await page.evaluate(() => !!document.querySelector('.fast-pad')), 'открывается', 'открывается');
+  check('цифры на месте: все двенадцать клавиш',
+    (await page.evaluate(() => document.querySelectorAll('.fast-key').length)) === 12,
+    await page.evaluate(() => document.querySelectorAll('.fast-key').length), 12);
+
+  const набрано = () => page.evaluate(() =>
+    (document.querySelector('.fast-sum') || {}).innerText || '');
+  const жать = async k => {
+    await page.evaluate(v => {
+      const b = [...document.querySelectorAll('[data-act="fast-key"]')]
+        .find(e => e.dataset.key === v);
+      if (b) b.click();
+    }, k);
+    await page.waitForTimeout(140);
+  };
+
+  check('пока ничего не набрано — ноль', (await набрано()).includes('0'), await набрано(), '0 ₽');
+  // Статьи нажать нельзя, пока нет суммы: чтобы не записать пустую трату
+  check('БЕЗ СУММЫ СТАТЬИ НЕ НАЖИМАЮТСЯ',
+    await page.evaluate(() => [...document.querySelectorAll('.fast-cat')].every(b => b.disabled)),
+    'не нажимаются', 'не нажимаются');
+
+  for (const k of ['3', '5', '00']) await жать(k);
+  check('набранное видно крупно',
+    (await набрано()).replace(/[  \s]/g, '').includes('3500'), await набрано(), '3 500 ₽');
+
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-act="fast-add"]')]
+      .find(e => e.dataset.add === '500');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(160);
+  check('кнопка «+500» прибавляет к набранному',
+    (await набрано()).replace(/[  \s]/g, '').includes('4000'), await набрано(), '4 000 ₽');
+
+  await жать('⌫');
+  check('стрелка стирает последнюю цифру',
+    (await набрано()).replace(/[  \s]/g, '').includes('400'), await набрано(), '400 ₽');
+
+  for (const k of ['C', '1', '2', '0', '0']) await жать(k);
+  check('«Стереть» очищает и можно набрать заново',
+    (await набрано()).replace(/[  \s]/g, '').includes('1200'), await набрано(), '1 200 ₽');
+
+  const былоЗаписей = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.fast-cat')]
+      .find(e => /Обед|ГСМ|Расходник/.test(e.textContent));
+    (b || document.querySelector('.fast-cat')).click();
+  });
+  await page.waitForTimeout(450);
+  const стало = await page.evaluate(() => {
+    const d = (window.WMStore.state.dds || []);
+    const r = d[d.length - 1] || {};
+    return { n: d.length, amount: r.amount, type: r.type, date: r.date,
+      category: r.category, account: r.account };
+  });
+  check('ОДНО НАЖАТИЕ СТАТЬИ — ЗАПИСЬ ГОТОВА', стало.n === былоЗаписей + 1,
+    стало.n, былоЗаписей + 1);
+  check('сумма записалась та, что набрали', стало.amount === 1200, стало.amount, 1200);
+  check('это расход сегодняшним числом',
+    стало.type === 'Расход' && стало.date === new Date().toISOString().slice(0, 10),
+    стало.type + ' ' + стало.date, 'Расход сегодня');
+  check('счёт подставился сам', !!стало.account, стало.account || 'пусто', 'подставлен');
+  const подсказка = await page.evaluate(() => {
+    const t = document.querySelector('.toast'); return t ? t.innerText : '';
+  });
+  check('программа говорит, куда легла запись',
+    /Обед|ГСМ|Расходник/.test(подсказка) && /счёт/i.test(подсказка),
+    подсказка.split('\n')[0] || 'молчит', 'называет статью и счёт');
+  check('И НЕ ПОКАЗЫВАЕТ [object Object]', !/\[object/.test(подсказка),
+    подсказка.includes('[object') ? '[object Object]' : 'по-человечески', 'по-человечески');
+  check('после записи сумма обнулилась', (await набрано()).replace(/[  \s]/g, '') === '0₽',
+    await набрано(), '0 ₽');
+  const естьСписок = await page.evaluate(() => /Записано сегодня/.test(document.body.innerText));
+  check('записанное сразу видно на экране', естьСписок,
+    естьСписок ? 'видно' : 'списка нет', 'видно');
+
+  /* Закуп и инкассация — не траты. Быстрый ввод их вообще не предлагает:
+     кнопки с такой статьёй на экране нет, нажать нечего. */
+  await page.evaluate(() => {
+    window.WMStore.settings.finCategories = 'Обед, ГСМ, Закуп товара, Инкассация';
+    window.WMUI.render();
+  });
+  await page.waitForTimeout(350);
+  const кнопки = await page.evaluate(() =>
+    [...document.querySelectorAll('.fast-cat')].map(e => e.textContent.trim()));
+  check('ЗАКУПА И ИНКАССАЦИИ СРЕДИ СТАТЕЙ НЕТ — НАЖАТЬ НЕЧЕГО',
+    !кнопки.some(t => /Закуп|Инкассац/i.test(t)),
+    кнопки.filter(t => /Закуп|Инкассац/i.test(t)).join(', ') || 'нет таких кнопок',
+    'нет таких кнопок');
+  check('а обычные статьи предлагаются', кнопки.some(t => /Обед|ГСМ/.test(t)),
+    кнопки.slice(0, 4).join(', ') || 'пусто', 'Обед, ГСМ');
+
+  /* И даже если такая статья как-то попадёт в нажатие — запись не пройдёт.
+     Вторая линия обороны: проверяем её напрямую, кнопки для этого нет. */
+  for (const k of ['5', '0', '0']) await жать(k);
+  const доЗакупа = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  const отказ = await page.evaluate(() => {
+    const A = window.WM_EXTRA_ACTIONS || {};
+    if (typeof A['fast-cat'] !== 'function') return 'действие не зарегистрировано';
+    return A['fast-cat']({ dataset: { cat: encodeURIComponent('Закуп товара') } });
+  });
+  const послеЗакупа = await page.evaluate(() => (window.WMStore.state.dds || []).length);
+  check('ЗАКУП ЧЕРЕЗ БЫСТРЫЙ ВВОД НЕ ЗАПИСЫВАЕТСЯ', послеЗакупа === доЗакупа,
+    послеЗакупа === доЗакупа ? 'не записался' : 'записался, а не должен был',
+    'не записался');
+  check('и программа объясняет словами, куда его писать',
+    typeof отказ === 'string' && /не расход|Итоги дня/i.test(отказ),
+    String(отказ).split('\n')[0].slice(0, 60) || 'молча', 'объясняет');
+  await жать('C');
+
+  /* --- ПОДСТАТЬИ: «Коммунальные → Свет» -------------------------------- */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.settings.finCategories = 'Аренда, Коммунальные, Коммунальные / Свет, ' +
+      'Коммунальные / Вода, Обед';
+    S.state.dds = [];
+    const a = (S.state.accounts || [])[0] || {};
+    const d = new Date().toISOString().slice(0, 7);
+    S.add('dds', { type: 'Расход', date: d + '-02', category: 'Коммунальные / Свет',
+      method: 'Наличные', account: a.id, amount: 5000 });
+    S.add('dds', { type: 'Расход', date: d + '-03', category: 'Коммунальные / Вода',
+      method: 'Наличные', account: a.id, amount: 2000 });
+    S.add('dds', { type: 'Расход', date: d + '-04', category: 'Обед',
+      method: 'Наличные', account: a.id, amount: 3000 });
+    S.save(); window.WMUI.render();
+  });
+  await page.waitForTimeout(350);
+  await page.evaluate(() => window.WMUI.go('ledger'));
+  await page.waitForTimeout(350);
+  /* Смотрим саму таблицу записей, а не всю страницу: в фильтрах и подсказках
+     статья намеренно стоит как есть, с чертой — по ней ищут и фильтруют. */
+  const ledgerText = await page.evaluate(() => {
+    const t = document.querySelector('#ledgerT') || document.querySelector('table');
+    return t ? t.innerText : document.body.innerText;
+  });
+  const стрелкой = /Коммунальные\s*→\s*Свет/.test(ledgerText);
+  check('ПОДСТАТЬЯ ЧИТАЕТСЯ СТРЕЛКОЙ, А НЕ ЧЕРТОЙ', стрелкой,
+    стрелкой ? 'Коммунальные → Свет'
+      : (/Коммунальные\s*\/\s*Свет/.test(ledgerText) ? 'осталась косая черта'
+        : (ledgerText.match(/Коммунальные[^\n]{0,12}/) || ['статьи не видно'])[0]),
+    'Коммунальные → Свет');
+
+  await page.evaluate(() => window.WMUI.go('dicts'));
+  await page.waitForTimeout(400);
+  // Пояснение живёт на вкладке «Статьи расходов» — на неё и переходим
+  await page.click('[data-tab="dicts:categories"]');
+  await page.waitForTimeout(350);
+  const dictText = await page.evaluate(() => document.body.innerText);
+  const естьПояснение = /косую черту|косая черта|через черту|Коммунальные\s*\/\s*Свет/i
+    .test(dictText);
+  check('в справочнике объяснено, как делать подстатьи', естьПояснение,
+    естьПояснение ? 'объяснено' : 'пояснения нет', 'объяснено');
+
+  /* --- БЮДЖЕТЫ: потолок на статью -------------------------------------- */
+  await page.evaluate(() => window.WMUI.go('funds'));
+  await page.waitForTimeout(400);
+  check('лимиты живут отдельной карточкой от конвертов',
+    await page.evaluate(() => /Лимиты на месяц/.test(document.body.innerText)),
+    'отдельно', 'отдельно');
+  check('и объяснено, чем лимит отличается от конверта',
+    await page.evaluate(() => /потолок/i.test(document.body.innerText)),
+    'объяснено', 'объяснено');
+
+  await page.evaluate(() => window.WMUI.openForm('budgetCard'));
+  await page.waitForTimeout(400);
+  await page.fill('.sheet [name="category"]', 'Коммунальные');
+  await page.fill('.sheet [name="limit"]', '6000');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(450);
+  check('лимит сохраняется',
+    (await page.evaluate(() => (window.WMStore.state.budgets || []).length)) === 1,
+    await page.evaluate(() => (window.WMStore.state.budgets || []).length), 1);
+
+  await page.evaluate(() => window.WMUI.go('funds'));
+  await page.waitForTimeout(400);
+  const текст = await page.evaluate(() => document.body.innerText.replace(/[  ]/g, ' '));
+  check('ЛИМИТ НА ГРУППУ СЧИТАЕТ ПОДСТАТЬИ: 5 000 + 2 000 = 7 000',
+    /7 000/.test(текст), '7 000', '7 000');
+  check('ПЕРЕБОР ВИДЕН СЛОВОМ И СУММОЙ',
+    /перебор/i.test(текст) && /1 000/.test(текст), 'перебор 1 000', 'перебор 1 000');
+
+  /* Второй лимит на ту же статью не заводится — иначе двойной счёт */
+  await page.evaluate(() => window.WMUI.openForm('budgetCard'));
+  await page.waitForTimeout(400);
+  await page.fill('.sheet [name="category"]', 'Коммунальные');
+  await page.fill('.sheet [name="limit"]', '9000');
+  await page.click('.sheet button.btn-primary');
+  await page.waitForTimeout(400);
+  check('ДВА ЛИМИТА НА ОДНУ СТАТЬЮ НЕ ЗАВОДЯТСЯ',
+    (await page.evaluate(() => (window.WMStore.state.budgets || []).length)) === 1,
+    await page.evaluate(() => (window.WMStore.state.budgets || []).length), 1);
+  await page.evaluate(() => { const b = document.querySelector('.sheet .btn-ghost, .sheet [data-close]');
+    if (b) b.click(); });
+  await page.waitForTimeout(250);
+
+  /* Лимит не трогает деньги: остатки по счетам до и после одни и те же */
+  const деньги = await page.evaluate(() => {
+    const S = window.WMStore, U = window.WMUI, E = window.WM;
+    const до = E.accountBalances(S.state.dds, S.state.accounts).totals.total;
+    S.add('budgets', { category: 'Обед', limit: 1000 }); S.save(); U.recompute();
+    const после = E.accountBalances(S.state.dds, S.state.accounts).totals.total;
+    return { до, после };
+  });
+  check('ЛИМИТ ДЕНЕГ НЕ ДВИГАЕТ', деньги.до === деньги.после,
+    деньги.до + ' → ' + деньги.после, 'не изменились');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

@@ -167,9 +167,22 @@
       '<button class="btn" data-act="dict-paste" data-kind="' + esc(key) + '">' +
       ic('clipboard') + ' Вставить списком из Excel</button></div>';
 
+    if (key === 'categories') {
+      h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+        'Статью можно разбить на подстатьи — пишите через косую черту: ' +
+        '<b>Коммунальные / Свет</b>, <b>Коммунальные / Вода</b>. В отчётах видно и ' +
+        'общую сумму по «Коммунальным», и каждую подстатью отдельно. ' +
+        'Лимит, поставленный на группу, засчитывает все её подстатьи.</span></div>';
+    }
+
     function tbl(id, list, hidden) {
       return u.table(id, [
-        { title: 'Название', fn: function (r) { return esc(r.name); } },
+        { title: 'Название', fn: function (r) {
+          /* Статьи расходов бывают двухуровневыми: «Коммунальные / Свет».
+             Показываем стрелкой — так сразу видно, что к чему относится. */
+          if (key !== 'categories') return esc(r.name);
+          var g = E.catGroup(r.name), l = E.catLeaf(r.name);
+          return l ? '<span class="c-muted">' + esc(g) + ' →</span> ' + esc(l) : esc(g); } },
         { title: 'Где стоит', cls: 'num', fn: function (r) {
           return r.used ? u.nf(r.used) + ' ' + u.plural(r.used, 'запись', 'записи', 'записей')
             : '<span class="c-muted">нигде</span>'; } },
@@ -315,6 +328,13 @@
 
   /* Вставка из Excel. Владелец копирует столбец в таблице и вставляет сюда —
      разбирать файл не нужно, буфер обмена и так отдаёт по строке на значение. */
+  /* Статьи расходов показываем по-человечески: «Коммунальные → Свет».
+     В справочнике они хранятся строкой «Коммунальные / Свет» — так их видно
+     и в книге Excel, и править можно руками. */
+  function catShow(name) {
+    return (window.WM.catLabel ? window.WM.catLabel(name) : name);
+  }
+
   FORMS.dictPaste = {
     title: 'Вставить список', icon: 'clipboard',
     body: function (v) {

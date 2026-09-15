@@ -112,16 +112,16 @@
        cashcount — пересчёты денег в ящике по купюрам.
      Остальные — служебные: журнал правок, корзина, скрытое в справочниках,
      сохранённые наборы фильтров и шаблоны частых записей. */
-  var COLLECTIONS = ['accounts', 'funds', 'dds', 'plans', 'staff', 'timesheet', 'payouts',
-    'debtors', 'cashcount', 'log', 'templates', 'dictoff', 'filtersets', 'trash'];
+  var COLLECTIONS = ['accounts', 'funds', 'budgets', 'dds', 'plans', 'staff', 'timesheet',
+    'payouts', 'debtors', 'cashcount', 'log', 'templates', 'dictoff', 'filtersets', 'trash'];
 
   /* Настоящие журналы — то, что владелец вводит руками и что нельзя потерять.
      Служебное (журнал правок, корзина, шаблоны, наборы фильтров, скрытые
      слова справочников) при сверке версий не учитывается: журнал правок
      растёт от каждой мелочи, и из-за него две одинаковые базы выглядели бы
      разошедшимися. */
-  var DATA_COLLECTIONS = ['accounts', 'funds', 'dds', 'plans', 'staff', 'timesheet', 'payouts',
-    'debtors', 'cashcount'];
+  var DATA_COLLECTIONS = ['accounts', 'funds', 'budgets', 'dds', 'plans', 'staff', 'timesheet',
+    'payouts', 'debtors', 'cashcount'];
 
   /* Что считать «записями» в разговоре с владельцем. Счета — это настройка,
      а не записи: сказать «восстановлено 4 записи», когда из них три — это
