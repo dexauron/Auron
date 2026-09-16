@@ -1,13 +1,10 @@
 __pycache__/
 
-# Настройки Claude Code: храним в репозитории только конфиг и лёгкие навыки.
-# Личные и временные файлы Claude, а также тяжёлый gstack (~23 МБ)
-# ставятся локально скриптом scripts/setup-claude-skills.sh
-.claude/*
-!.claude/settings.json
-!.claude/skills/
-.claude/settings.local.json
-.claude/skills/gstack/
+# Настройки Claude Code (плагины, навыки, MCP) живут отдельно —
+# в репозитории dexauron/claude-setup, общем для всех проектов.
+# Здесь их быть не должно.
+.claude/
+.mcp.json
 
 node_modules/
 package-lock.json

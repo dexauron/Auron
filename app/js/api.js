@@ -842,6 +842,384 @@
   }
 
   // ══════════════════════════════════════════════════════════════════════════
+  // SHIFT WITHDRAWALS — выплаты с кассы
+  // ══════════════════════════════════════════════════════════════════════════
+  // Экран «Касса», блок «Выплаты с кассы». Каждая выплата — отдельная строка
+  // со своей статьёй расходов, поэтому попадает в аналитику по категориям.
+  // Расхождение по смене считается как (факт + выплаты) − Z-отчёт: выплаты
+  // уже ушли из кассы, поэтому их прибавляют к остатку, а не вычитают.
+
+  async function getShiftWithdrawals(orgId, shiftId) {
+    return _q('shift_withdrawals')
+      .select('*,categories(name,icon),accounts(name)')
+      .eq('org_id', orgId)
+      .eq('shift_id', shiftId)
+      .eq('status', 'active')
+      .order('created_at', false)
+      .get();
+  }
+
+  async function saveShiftWithdrawal(orgId, shiftId, data) {
+    const row = {
+      org_id:         orgId,
+      shift_id:       shiftId,
+      name:           String(data.name || '').trim(),
+      type:           data.type || 'other',
+      category_id:    data.categoryId || null,
+      account_id:     data.accountId || null,
+      amount_kopecks: kopecks(data.amount)
+    };
+    if (!row.name)          throw new Error('Укажите, за что выплата');
+    if (!row.amount_kopecks) throw new Error('Сумма выплаты не может быть нулевой');
+
+    if (data.id) {
+      const [r] = await _q('shift_withdrawals').eq('id', data.id).eq('org_id', orgId).update(row);
+      return r;
+    }
+    const [r] = await _q('shift_withdrawals').insert(row);
+    return r;
+  }
+
+  // Выплату не удаляем физически — помечаем отменённой, чтобы след остался в аудите
+  async function cancelShiftWithdrawal(orgId, id) {
+    const [r] = await _q('shift_withdrawals')
+      .eq('id', id).eq('org_id', orgId)
+      .update({ status: 'cancelled' });
+    return r;
+  }
+
+  // Расхождение по смене: (факт + выплаты) − Z-отчёт.
+  // Минус — недостача, плюс — излишек, ноль — сошлось.
+  function shiftDiscrepancy(shift, withdrawals) {
+    const z    = (shift.z_cash_kopecks || 0) + (shift.z_card_kopecks || 0) + (shift.z_sbp_kopecks || 0);
+    const fact = (shift.fact_cash_kopecks || 0) + (shift.fact_card_kopecks || 0) + (shift.fact_sbp_kopecks || 0);
+    const out  = (withdrawals || [])
+      .filter(w => w.status !== 'cancelled')
+      .reduce((s, w) => s + (w.amount_kopecks || 0), 0);
+    return (fact + out) - z;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // PURCHASE ORDERS — заказы поставщикам
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async function getPurchaseOrders(orgId, opts) {
+    opts = opts || {};
+    const q = _q('purchase_orders')
+      .select('*,counterparties(name,phone)')
+      .eq('org_id', orgId)
+      .is('deleted_at', 'null')
+      .order('expected_date', false)
+      .limit(opts.limit || 100);
+    if (opts.status) q.eq('status', opts.status);
+    return q.get();
+  }
+
+  async function savePurchaseOrder(orgId, data) {
+    const row = {
+      org_id:          orgId,
+      counterparty_id: data.counterpartyId,
+      department:      data.department || null,
+      expected_date:   data.expectedDate || null,
+      total_kopecks:   kopecks(data.total),
+      notes:           data.notes || null
+    };
+    if (!row.counterparty_id) throw new Error('Выберите поставщика');
+
+    if (data.id) {
+      const [r] = await _q('purchase_orders').eq('id', data.id).eq('org_id', orgId).update(row);
+      return r;
+    }
+    const [r] = await _q('purchase_orders').insert(row);
+    return r;
+  }
+
+  // «Товар пришёл»: фиксируем фактическую сумму. Если брали в долг —
+  // сразу создаём запись долга поставщику, чтобы не заводить её руками.
+  async function receivePurchaseOrder(orgId, id, data) {
+    const actual = kopecks(data.actual);
+    const [order] = await _q('purchase_orders')
+      .eq('id', id).eq('org_id', orgId)
+      .update({
+        status:         'received',
+        actual_kopecks: actual,
+        received_at:    new Date().toISOString()
+      });
+
+    if (data.onCredit && order) {
+      await saveDebtEntry(orgId, {
+        counterpartyId: order.counterparty_id,
+        type:           'debt',
+        amount:         data.actual,
+        date:           (data.date || new Date().toISOString().slice(0, 10)),
+        comment:        'Поставка' + (order.department ? ' · ' + order.department : '')
+      });
+    }
+    return order;
+  }
+
+  async function cancelPurchaseOrder(orgId, id) {
+    const [r] = await _q('purchase_orders')
+      .eq('id', id).eq('org_id', orgId)
+      .update({ status: 'cancelled' });
+    return r;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // GOALS — накопления и цели
+  // ══════════════════════════════════════════════════════════════════════════
+  // Одна таблица на две сущности: reserve_item — статья накоплений
+  // (Аренда, ЗП, Налоги), goal — цель, которую ставит Владелец.
+
+  async function getGoals(orgId, type) {
+    const q = _q('goals')
+      .select('*')
+      .eq('org_id', orgId)
+      .is('deleted_at', 'null')
+      .order('sort_order', false);
+    if (type) q.eq('type', type);
+    const rows = await q.get();
+    return rows.map(_withGoalProgress);
+  }
+
+  // Считает то, что видно на экране: сколько осталось, процент,
+  // сколько нужно откладывать в день до дедлайна.
+  function _withGoalProgress(g) {
+    const target  = g.target_kopecks  || 0;
+    const current = g.current_kopecks || 0;
+    const left    = Math.max(0, target - current);
+    const percent = target > 0 ? Math.min(100, Math.round(current / target * 100)) : 0;
+
+    let daysLeft = null, perDay = 0;
+    if (g.deadline) {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const end   = new Date(g.deadline + 'T00:00:00');
+      daysLeft = Math.max(0, Math.round((end - today) / 86400000));
+      // в последний день делить на ноль нельзя — остаток нужен целиком сегодня
+      perDay = daysLeft > 0 ? Math.ceil(left / daysLeft) : left;
+    }
+
+    // «Отстаём» — если к этому дню месяца должно быть отложено больше
+    let behind = false;
+    if (g.deadline && daysLeft !== null && target > 0) {
+      const end     = new Date(g.deadline + 'T00:00:00');
+      const monthStart = new Date(end.getFullYear(), end.getMonth(), 1);
+      const totalDays  = Math.max(1, Math.round((end - monthStart) / 86400000));
+      const passed     = Math.max(0, totalDays - daysLeft);
+      behind = current < Math.round(target * passed / totalDays);
+    }
+
+    return { ...g, left_kopecks: left, percent, days_left: daysLeft, per_day_kopecks: perDay, behind };
+  }
+
+  async function saveGoal(orgId, data) {
+    const row = {
+      org_id:         orgId,
+      name:           String(data.name || '').trim(),
+      type:           data.type || 'reserve_item',
+      target_kopecks: kopecks(data.target),
+      deadline:       data.deadline || null,
+      account_id:     data.accountId || null,
+      sort_order:     data.sortOrder || 0
+    };
+    if (!row.name) throw new Error('Укажите название');
+
+    if (data.id) {
+      const [r] = await _q('goals').eq('id', data.id).eq('org_id', orgId).update(row);
+      return _withGoalProgress(r);
+    }
+    const [r] = await _q('goals').insert(row);
+    return _withGoalProgress(r);
+  }
+
+  // Пополнить накопление. Резервирует сумму из свободного остатка;
+  // перевыполнение плана разрешено — предупреждает интерфейс, не API.
+  async function contributeToGoal(orgId, id, amount) {
+    const add = kopecks(amount);
+    if (!add) throw new Error('Сумма пополнения не может быть нулевой');
+
+    const goal = await _q('goals').select('*').eq('id', id).eq('org_id', orgId).one();
+    if (!goal) throw new Error('Статья накоплений не найдена');
+
+    const next   = (goal.current_kopecks || 0) + add;
+    const patch  = { current_kopecks: next };
+    // цель достигнута — закрываем сама, чтобы не висела в активных
+    if (goal.type === 'goal' && goal.target_kopecks > 0 && next >= goal.target_kopecks) {
+      patch.status = 'achieved';
+    }
+    const [r] = await _q('goals').eq('id', id).eq('org_id', orgId).update(patch);
+    return _withGoalProgress(r);
+  }
+
+  async function deleteGoal(orgId, id) {
+    await _q('goals').eq('id', id).eq('org_id', orgId)
+      .update({ deleted_at: new Date().toISOString() });
+    return true;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TIMESHEET — табель
+  // ══════════════════════════════════════════════════════════════════════════
+
+  async function getTimesheet(orgId, date) {
+    return _q('timesheet_entries')
+      .select('*,employees(name,position)')
+      .eq('org_id', orgId)
+      .eq('work_date', date)
+      .get();
+  }
+
+  // Пара (сотрудник, дата) уникальна — повторное сохранение обновляет строку,
+  // а не плодит дубли. Правка задним числом разрешена и видна в аудите.
+  async function saveTimesheetEntry(orgId, data) {
+    const row = {
+      org_id:      orgId,
+      employee_id: data.employeeId,
+      work_date:   data.date,
+      status:      data.status || 'worked',
+      coefficient: data.coefficient != null ? Number(data.coefficient) : 1,
+      note:        data.note || null
+    };
+    if (!row.employee_id) throw new Error('Не указан сотрудник');
+    if (!row.work_date)   throw new Error('Не указана дата');
+
+    const r = await _q('timesheet_entries').upsert(row, 'employee_id,work_date');
+    return Array.isArray(r) ? r[0] : r;
+  }
+
+  // «Подтвердить день» — закрывает день целиком, дальше он учитывается в зарплате
+  async function confirmTimesheetDay(orgId, date, userId) {
+    return _q('timesheet_entries')
+      .eq('org_id', orgId).eq('work_date', date)
+      .update({ confirmed: true, confirmed_by: userId || null });
+  }
+
+  // Неподтверждённые дни за период — предупреждение при расчёте зарплаты
+  async function getUnconfirmedDays(orgId, from, to) {
+    const rows = await _q('timesheet_entries')
+      .select('work_date')
+      .eq('org_id', orgId)
+      .gte('work_date', from)
+      .lte('work_date', to)
+      .eq('confirmed', false)
+      .get();
+    return [...new Set(rows.map(r => r.work_date))].sort();
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SALARY — расчёт зарплаты
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // Сколько оплачиваемых дней набралось по табелю.
+  // Полный день = 1, полдня = 0.5, выходной и прогул = 0.
+  // Больничный и отпуск не оплачиваются — решение фиксируется здесь.
+  // Коэффициент домножается сверху: 0.75 при нестандартной частичной оплате.
+  function salaryUnits(entries) {
+    const WEIGHT = { worked: 1, half_day: 0.5, day_off: 0, sick: 0, absent: 0, vacation: 0 };
+    return (entries || []).reduce((sum, e) => {
+      const base = WEIGHT[e.status] != null ? WEIGHT[e.status] : 0;
+      const k    = e.coefficient != null ? Number(e.coefficient) : 1;
+      return sum + base * k;
+    }, 0);
+  }
+
+  async function getSalaryCalculations(orgId, periodStart) {
+    const q = _q('salary_calculations')
+      .select('*,employees(name,position)')
+      .eq('org_id', orgId)
+      .order('created_at', true);
+    if (periodStart) q.eq('period_start', periodStart);
+    return q.get();
+  }
+
+  // Считает зарплату по табелю за период.
+  // Авансы собираются автоматически из транзакций с этим сотрудником.
+  // Если аванс превысил заработок — к выплате ноль, а не минус:
+  // разница переносится на следующий месяц.
+  async function calculateSalary(orgId, employeeId, from, to) {
+    const [employee, entries, advances] = await Promise.all([
+      _q('employees').select('*').eq('id', employeeId).eq('org_id', orgId).one(),
+      _q('timesheet_entries').select('status,coefficient')
+        .eq('org_id', orgId).eq('employee_id', employeeId)
+        .gte('work_date', from).lte('work_date', to).get(),
+      _q('transactions').select('amount_kopecks')
+        .eq('org_id', orgId).eq('employee_id', employeeId)
+        .eq('type', 'expense')
+        .gte('date', from).lte('date', to)
+        .is('deleted_at', 'null').get()
+    ]);
+    if (!employee) throw new Error('Сотрудник не найден');
+
+    const units = salaryUnits(entries);
+    const rate  = employee.rate_kopecks || employee.salary_kopecks || 0;
+    const gross = Math.round(units * rate);
+    const adv   = advances.reduce((s, t) => s + (t.amount_kopecks || 0), 0);
+    const net   = Math.max(0, gross - adv);
+
+    return {
+      employee_id:      employeeId,
+      employee_name:    employee.name,
+      period_start:     from,
+      period_end:       to,
+      units,
+      rate_kopecks:     rate,
+      gross_kopecks:    gross,
+      advances_kopecks: adv,
+      net_kopecks:      net,
+      // сколько аванса не покрылось заработком — переносится на следующий период
+      carry_over_kopecks: Math.max(0, adv - gross)
+    };
+  }
+
+  // Сохранить расчёт как черновик, чтобы вернуться к нему позже
+  async function saveSalaryCalculation(orgId, calc) {
+    const row = {
+      org_id:             orgId,
+      employee_id:        calc.employee_id,
+      period_start:       calc.period_start,
+      period_end:         calc.period_end,
+      gross_kopecks:      calc.gross_kopecks,
+      advances_kopecks:   calc.advances_kopecks,
+      deductions_kopecks: calc.deductions_kopecks || 0,
+      net_kopecks:        calc.net_kopecks,
+      status:             'draft'
+    };
+    const r = await _q('salary_calculations').upsert(row, 'employee_id,period_start,period_end');
+    return Array.isArray(r) ? r[0] : r;
+  }
+
+  // Выплатить: сумма редактируемая — бухгалтер может поправить руками.
+  // Создаёт расход и связывает его с расчётом.
+  async function paySalary(orgId, calcId, data) {
+    const calc = await _q('salary_calculations').select('*').eq('id', calcId).eq('org_id', orgId).one();
+    if (!calc) throw new Error('Расчёт не найден');
+    if (calc.status === 'paid') throw new Error('Эта зарплата уже выплачена');
+
+    const amount = data && data.amount != null ? kopecks(data.amount) : calc.net_kopecks;
+    if (!amount) throw new Error('Сумма к выплате нулевая');
+
+    const tx = await saveTransaction(orgId, {
+      type:       'expense',
+      amount:     rub(amount),
+      accountId:  data && data.accountId,
+      categoryId: data && data.categoryId,
+      employeeId: calc.employee_id,
+      date:       (data && data.date) || new Date().toISOString().slice(0, 10),
+      comment:    'Зарплата за ' + calc.period_start + ' — ' + calc.period_end
+    });
+
+    const [r] = await _q('salary_calculations')
+      .eq('id', calcId).eq('org_id', orgId)
+      .update({
+        status:         'paid',
+        paid_at:        new Date().toISOString(),
+        net_kopecks:    amount,
+        transaction_id: tx && tx.id ? tx.id : null
+      });
+    return r;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
   // PUBLIC
   // ══════════════════════════════════════════════════════════════════════════
 
@@ -870,8 +1248,13 @@
     saveTransaction, saveTransfer, deleteTransaction, getTransactions, searchTransactions,
     getHomeSummary,
     saveShift, getShifts, cancelShift,
+    getShiftWithdrawals, saveShiftWithdrawal, cancelShiftWithdrawal, shiftDiscrepancy,
     getCounterparties, saveCounterparty,
     getDebts, getDebtEntries, saveDebtEntry, deleteDebtEntry,
+    getPurchaseOrders, savePurchaseOrder, receivePurchaseOrder, cancelPurchaseOrder,
+    getGoals, saveGoal, contributeToGoal, deleteGoal, goalProgress: _withGoalProgress,
+    getTimesheet, saveTimesheetEntry, confirmTimesheetDay, getUnconfirmedDays,
+    getSalaryCalculations, calculateSalary, saveSalaryCalculation, paySalary, salaryUnits,
     getAnalytics, getCashierAnalytics, getHeatmap,
     uploadReceipt,
     getSetting, setSetting,
