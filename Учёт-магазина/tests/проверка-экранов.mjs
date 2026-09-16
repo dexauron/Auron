@@ -2853,6 +2853,149 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 20. Отчёты: пустой экран объясняет, подробности раскрываются, печать чистая. */
+{
+  console.log('— Отчёты: пустой экран, подробности, печать');
+  const { page, ctx, errs } = await open();
+
+  const отчёты = ['findash', 'owner', 'moneyflow', 'avgcheck', 'earners', 'ready',
+    'pnl', 'bep', 'bepdays', 'taxcal', 'monthclose', 'seasons'];
+
+  /* --- ПУСТОЙ ЭКРАН НА ВСЕХ ДВЕНАДЦАТИ ---------------------------------- */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.state.dds = []; S.state.staff = []; S.state.plans = []; S.state.timesheet = [];
+    S.save(); window.WMUI.recompute();
+  });
+  await page.waitForTimeout(300);
+
+  const безПустого = [], безКнопки = [], сНулями = [];
+  for (const id of отчёты) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(220);
+    const r = await page.evaluate(() => {
+      const b = document.querySelector('.blank');
+      return { есть: !!b,
+        кнопок: b ? b.querySelectorAll('button').length : 0,
+        почему: b ? (b.querySelector('.blank-why') || {}).textContent || '' : '',
+        нулей: (document.body.innerText.match(/0\s*₽/g) || []).length };
+    });
+    if (!r.есть) безПустого.push(id);
+    else {
+      if (!r.кнопок || r.почему.length < 40) безКнопки.push(id);
+      if (r.нулей > 0) сНулями.push(id + ':' + r.нулей);
+    }
+  }
+  check('НА ПУСТОЙ БАЗЕ ВСЕ 12 ОТЧЁТОВ ОБЪЯСНЯЮТ, А НЕ МОЛЧАТ',
+    безПустого.length === 0, безПустого.join(', ') || 'все 12', 'все 12');
+  check('и у каждого есть кнопка и внятное «почему пусто»',
+    безКнопки.length === 0, безКнопки.join(', ') || 'у всех', 'у всех');
+  check('НУЛЕЙ ВМЕСТО ОБЪЯСНЕНИЯ НЕ ОСТАЛОСЬ', сНулями.length === 0,
+    сНулями.join(', ') || 'нет нулей', 'нет нулей');
+
+  /* --- С ДАННЫМИ: ПОДРОБНОСТИ РАСКРЫВАЮТСЯ ------------------------------ */
+  await page.evaluate(() => {
+    const S = window.WMStore, U = window.WMUI;
+    const a = S.state.accounts || [];
+    const касса = (a.find(x => x.kind === 'till') || {}).id;
+    const банк = (a.find(x => x.kind === 'bank') || {}).id;
+    S.setSetting('storeName', 'Мой магазин');
+    S.setSetting('legalName', 'ИП Иванов И. И.');
+    S.setSetting('inn', '123456789012');
+    S.state.dds = [];
+    S.add('dds', { type: 'Смена', date: '2026-09-02', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 0, zCash: 200000, zCashless: 100000,
+      payouts: 0, factCash: 199500, account: касса, cashlessAccount: банк });
+    S.add('dds', { type: 'Расход', date: '2026-09-02', category: 'Коммунальные / Свет',
+      method: 'Наличные', account: касса, amount: 5000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-03', category: 'Коммунальные / Вода',
+      method: 'Наличные', account: касса, amount: 2000 });
+    S.add('dds', { type: 'Расход', date: '2026-09-04', category: 'Аренда',
+      method: 'Наличные', account: касса, amount: 110000 });
+    S.setSetting('reportMonth', '2026-09');
+    S.save(); U.recompute();
+  });
+  await page.waitForTimeout(400);
+
+  await page.evaluate(() => window.WMUI.go('pnl'));
+  await page.waitForTimeout(400);
+  const нажимаемых = await page.evaluate(() =>
+    document.querySelectorAll('[data-act="drill"]').length);
+  check('строки затрат в отчёте нажимаются', нажимаемых > 0, нажимаемых, '> 0');
+
+  await page.evaluate(() => {
+    const c = [...document.querySelectorAll('[data-act="drill"]')]
+      .find(e => /Коммунальные/.test(e.textContent));
+    if (c) c.click();
+  });
+  await page.waitForTimeout(500);
+  const окно = await page.evaluate(() => {
+    const s = document.querySelector('.sheet');
+    return s ? s.innerText.replace(/[  ]/g, ' ') : '';
+  });
+  check('ОТКРЫЛОСЬ ОКНО С ПОДРОБНОСТЯМИ', /Коммунальные/.test(окно),
+    окно.split('\n')[1] || 'окна нет', 'Коммунальные');
+  check('в нём сумма и число записей', /7 000/.test(окно) && /2 запис/.test(окно),
+    (окно.match(/\d+ запис\S*/) || ['нет'])[0], '2 записи на 7 000');
+  check('И ВИДНО, ИЗ ЧЕГО СУММА СЛОЖИЛАСЬ: свет и вода',
+    /Свет/.test(окно) && /Вода/.test(окно) && /5 000/.test(окно) && /2 000/.test(окно),
+    'видно', 'видно');
+  check('подстатьи попали в группу, а не потерялись',
+    /Коммунальные → Свет/.test(окно), 'попали', 'попали');
+  check('есть кнопка в базу операций', /базе операций/i.test(окно),
+    'есть', 'есть');
+
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await page.waitForTimeout(250);
+
+  /* --- ПЕЧАТЬ: документ, а не снимок экрана ----------------------------- */
+  await page.emulateMedia({ media: 'print' });
+  await page.waitForTimeout(250);
+
+  const печать = await page.evaluate(() => {
+    const видно = s => {
+      const e = document.querySelector(s);
+      return !!e && getComputedStyle(e).display !== 'none';
+    };
+    return {
+      меню: видно('.sidebar'), шапкаЭкрана: видно('.topbar'),
+      кнопки: видно('.btn'), фильтры: видно('.filters'),
+      реквизиты: видно('.print-head'), подвал: видно('.print-foot'),
+      подписи: document.querySelectorAll('.sign-cell').length,
+      таблиц: document.querySelectorAll('table').length,
+      текст: document.body.innerText.replace(/[  ]/g, ' ')
+    };
+  });
+  check('НА БУМАГЕ НЕТ МЕНЮ И КНОПОК',
+    !печать.меню && !печать.шапкаЭкрана && !печать.кнопки && !печать.фильтры,
+    [печать.меню && 'меню', печать.шапкаЭкрана && 'шапка', печать.кнопки && 'кнопки',
+      печать.фильтры && 'фильтры'].filter(Boolean).join(', ') || 'чисто', 'чисто');
+  check('зато есть реквизиты магазина',
+    печать.реквизиты && /ИП Иванов/.test(печать.текст), 'есть', 'есть');
+  check('И МЕСТО ДЛЯ ПОДПИСЕЙ', печать.подвал && печать.подписи === 2,
+    печать.подписи + ' подписи', '2 подписи');
+  check('дата составления не обрезана',
+    /Составлено \d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}/.test(печать.текст),
+    (печать.текст.match(/Составлено[^\n]*/) || ['нет'])[0], 'полная дата и время');
+  check('таблицы с цифрами остались', печать.таблиц > 0, печать.таблиц, '> 0');
+
+  /* Строки отчёта не должны исчезать с бумаги из-за data-атрибутов */
+  await page.evaluate(() => window.WMUI.go('owner'));
+  await page.waitForTimeout(400);
+  const собств = await page.evaluate(() =>
+    document.body.innerText.replace(/[  ]/g, ' '));
+  check('В ОТЧЁТЕ СОБСТВЕННИКУ НА БУМАГЕ ЕСТЬ ДАННЫЕ, А НЕ ОДНИ ЗАГОЛОВКИ',
+    /110 000/.test(собств) && /Аренда/.test(собств), 'есть', 'есть');
+  check('и своя шапка не задваивает печатную',
+    (собств.match(/ИП Иванов/g) || []).length === 1,
+    (собств.match(/ИП Иванов/g) || []).length + ' раз', '1 раз');
+
+  await page.emulateMedia({ media: 'screen' });
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

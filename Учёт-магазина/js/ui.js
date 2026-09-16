@@ -476,6 +476,53 @@
       esc(title) + '</div>' +
       (headRight ? '<div>' + headRight + '</div>' : '') + '</div>' + bodyHtml + '</div>';
   }
+  /* ==========================================================================
+     ПУСТОЙ ЭКРАН
+
+     Владелец открывает отчёт первым делом — данных ещё нет. Надпись «записей
+     нет» не говорит ничего: непонятно, сломалось оно или так надо, и совсем
+     непонятно, что делать дальше.
+
+     Поэтому пустой экран отвечает на три вопроса:
+       что это за экран — заголовком,
+       почему сейчас пусто — одной фразой без жаргона,
+       чем это исправить — кнопкой, которая ведёт ровно туда, куда надо.
+
+     Выдуманных цифр здесь нет намеренно: спутать пример с настоящими
+     деньгами — хуже, чем подождать до первой смены.
+     ========================================================================== */
+  function blank(o) {
+    o = o || {};
+    var кнопки = (o.actions || []).map(function (a, i) {
+      var attr = a.form ? ' data-form="' + esc(a.form) + '"'
+        : a.go ? ' data-go="' + esc(a.go) + '"'
+        : a.act ? ' data-act="' + esc(a.act) + '"' : '';
+      return '<button class="btn' + (i === 0 ? ' btn-primary' : '') + '"' + attr + '>' +
+        (a.icon ? ic(a.icon) + ' ' : '') + esc(a.name) + '</button>';
+    }).join(' ');
+    return '<div class="card blank-card"><div class="blank">' +
+      (o.icon ? '<div class="blank-ic">' + ic(o.icon, 30) + '</div>' : '') +
+      '<div class="blank-title">' + esc(o.title || 'Пока пусто') + '</div>' +
+      (o.why ? '<div class="blank-why">' + esc(o.why) + '</div>' : '') +
+      (кнопки ? '<div class="blank-acts">' + кнопки + '</div>' : '') +
+      '</div></div>';
+  }
+
+  /* Пустой экран отчёта, который считается из смен и расходов. Таких у нас
+     большинство, и объяснение у них одно и то же — пусть не расходится. */
+  function blankReport(что, зачем) {
+    return blank({
+      icon: 'chartLine', title: что + ' пока не посчитан' + (/ь$/.test(что) ? 'а' : ''),
+      why: зачем + ' Всё считается из закрытых смен и записанных расходов — ' +
+        'закройте первую смену, и цифры появятся здесь сами.',
+      actions: [
+        { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+        { name: 'Итоги дня', icon: 'moon', form: 'dayTotals' },
+        { name: 'Настроить магазин', icon: 'gear', go: 'settings' }
+      ]
+    });
+  }
+
   function listRow(o) {
     return '<div class="row' + (o.tap ? ' tappable' : '') + '"' + (o.attrs || '') + '>' +
       (o.icon ? '<div class="row-icon">' + ic(o.icon, 20) + '</div>' : '') +
@@ -505,7 +552,10 @@
     rows.slice(0, limit).forEach(function (r, i) {
       h += '<tr>';
       cols.forEach(function (c) {
-        h += '<td class="' + (c.cls || '') + '" data-label="' + esc(c.title) + '">' +
+        /* attrs(r) даёт ячейке свои атрибуты — так строка отчёта становится
+           нажимаемой и открывает подробности, не требуя отдельной кнопки. */
+        h += '<td class="' + (c.cls || '') + '" data-label="' + esc(c.title) + '"' +
+          (c.attrs ? c.attrs(r, i) : '') + '>' +
           (c.fn ? c.fn(r, i) : esc(r[c.key])) + '</td>';
       });
       h += '</tr>';
@@ -1282,13 +1332,34 @@
   }
 
   // Шапка для печати: реквизиты из настроек. На экране не видна.
+  /* Шапка печатного листа. На экране не видна, на бумаге — первое, что читают:
+     кто отчитывается, за что и когда составлено. Без неё лист с цифрами
+     невозможно ни подшить, ни кому-то отдать. */
   function printHead() {
     var s = S.settings;
     var line = [s.legalName, s.inn ? 'ИНН ' + s.inn : '', s.address, s.phone].filter(Boolean).join(' · ');
     if (!line && !s.storeName) return '';
-    return '<div class="print-head">' + esc(s.storeName || '') +
-      (line ? '<div class="print-sub">' + esc(line) + '</div>' : '') +
-      '<div class="print-sub">Напечатано ' + new Date().toLocaleString('ru-RU').slice(0, 16) + '</div></div>';
+    return '<div class="print-head"><div class="print-org">' + esc(s.storeName || '') + '</div>' +
+      (line ? '<div class="print-sub">' + esc(line) + '</div>' : '') + '</div>';
+  }
+
+  /* Подвал печатного листа: когда составлено и кто подписывает.
+     Без подписи отчёт — просто распечатка; с подписью это документ. */
+  function printFoot(подписи) {
+    /* slice(0,16) резал время до «07:4»: длина строки плавает от даты.
+       Собираем дату и время по частям — и оно всегда целое. */
+    var d = new Date();
+    var две = function (n) { return (n < 10 ? '0' : '') + n; };
+    var когда = две(d.getDate()) + '.' + две(d.getMonth() + 1) + '.' + d.getFullYear() +
+      ', ' + две(d.getHours()) + ':' + две(d.getMinutes());
+    var h = '<div class="print-foot"><div class="print-when">Составлено ' + esc(когда) + '</div>';
+    if (подписи !== false) {
+      h += '<div class="sign-row">' +
+        '<div class="sign-cell"><span class="sign-line"></span><small>Составил</small></div>' +
+        '<div class="sign-cell"><span class="sign-line"></span><small>Проверил</small></div>' +
+        '</div>';
+    }
+    return h + '</div>';
   }
 
   /* --- Списания и возвраты ---------------------------------------------------------- */
@@ -1455,6 +1526,7 @@
     ic: ic,
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
+    blank: blank, blankReport: blankReport, printFoot: printFoot,
     fieldRow: fieldRow, pairValues: pairValues, pageHead: pageHead, toast: toast,
     sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,

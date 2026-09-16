@@ -83,6 +83,27 @@
     return E.safeRound(sum);
   }
 
+  /* Границы месяца — окну подробностей нужно знать, за какой период копать */
+  function monthEdges(m) {
+    m = m || ym();
+    var от = m + '-01';
+    var d = new Date(m + '-01T00:00:00Z');
+    d.setUTCMonth(d.getUTCMonth() + 1); d.setUTCDate(0);
+    return { от: от, до: d.toISOString().slice(0, 10) };
+  }
+
+  /* Строку отчёта делаем нажимаемой: под ней прячется ответ на первый же
+     вопрос владельца — «а из чего эта сумма сложилась». */
+  /* Период принимаем и месяцем («2026-09»), и готовым диапазоном {from,to}:
+     у отчёта собственнику период свой — он умеет показывать и один день. */
+  function drill(вид, что, период) {
+    var от, до;
+    if (период && период.from) { от = период.from; до = период.to || период.from; }
+    else { var e = monthEdges(период); от = e.от; до = e.до; }
+    return ' data-act="drill" data-drill="' + esc(вид) + '|' +
+      esc(encodeURIComponent(что)) + '|' + от + '|' + до + '"';
+  }
+
   function pnlOf(m) {
     m = m || ym();
     var rows = rowsOf(m);
@@ -106,6 +127,12 @@
     var h = u.pageHead('Дашборд', 'Как идут дела в ' + monthRu(m),
       '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
     h += monthPicker();
+    if (!rows.length) {
+      return h + emptyStart('В ' + monthRu(m) + ' дел пока не было',
+        'Дашборд показывает всё главное на одном экране: выручку, прибыль, ' +
+        'сколько денег в кассе и успеваете ли вы к плану месяца. Он оживёт ' +
+        'после первой закрытой смены.');
+    }
 
     h += u.hero('Чистая прибыль за месяц', u.priv(p.net),
       'выручка ' + money(p.revenue) + ' · закуп ' + money(p.purchase) +
@@ -160,6 +187,12 @@
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
       '<button class="btn" data-act="print">' + ic('print') + '</button>');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('За ' + monthRu(m) + ' прибыль считать не из чего',
+        'Прибыль складывается так: выручка минус закуп товара минус затраты. ' +
+        'Всё это берётся из закрытых смен и записанных расходов — закройте ' +
+        'первую смену за месяц, и расчёт появится здесь сам.');
+    }
 
     h += '<div class="stat-grid">' +
       u.stat('Выручка', u.priv(p.revenue), 'наличные + безнал') +
@@ -183,8 +216,13 @@
         value: '<b class="' + (p.net >= 0 ? 'c-green' : 'c-red') + '">' + u.priv(p.net) + '</b>' })
     ], ''), 'Погашение долгов поставщикам сюда не входит: это возврат денег, а не трата');
 
+    /* На бумаге подробные таблицы начинаются с новой страницы: первый лист —
+       сводка, его и кладут директору на стол. */
+    h += '<div class="print-break"></div>';
     h += u.card('Затраты по статьям', u.table('pnlT', [
-      { title: 'Статья', fn: function (r) { return esc(r.name); } },
+      { title: 'Статья', cls: 'drillable', attrs: function (r) { return drill('kind', r.key, m); },
+        fn: function (r) {
+          return esc(r.name) + '<span class="drill-mark">›</span>'; } },
       { title: 'Откуда', fn: function (r) {
         var color = r.source === 'табель' ? 'blue' : r.source === '1С' ? 'green'
           : r.source === 'расчёт' ? 'gray' : 'gray';
@@ -219,6 +257,7 @@
       'инкассация <b>' + esc(money(p.moved)) + '</b> (деньги переложили, а не потратили) ' +
       'и забор владельца <b>' + esc(money(p.draw)) + '</b> (это уже из прибыли, а не до неё).' +
       '</span></div>';
+    h += u.printFoot();      // подписи — только на бумаге
     return h;
   }
 
@@ -249,6 +288,12 @@
       '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('Закрывать в ' + monthRu(m) + ' пока нечего',
+        'Перед закрытием месяца программа проверяет главное: все ли смены сведены, ' +
+        'расписаны ли деньги из ящика, сходится ли долг поставщикам. ' +
+        'Проверять начнёт, когда в месяце появятся записи.');
+    }
 
     h += u.hero(mc.ready ? 'Месяц можно закрывать' : 'Месяц закрывать рано',
       u.nf(mc.done) + ' из ' + u.nf(mc.total),
@@ -344,9 +389,15 @@
     var h = u.pageHead('Куда ушли деньги', 'Выручка по шагам за ' + monthRu(m),
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('За ' + monthRu(m) + ' денег ещё не было',
+        'Этот отчёт показывает выручку по шагам: сколько пришло, сколько ушло ' +
+        'на товар, сколько на затраты и что осталось. Он собирается из смен — ' +
+        'закройте первую.');
+    }
 
     if (!flow.steps.length) {
-      return h + emptyStart('За ' + monthRu(m) + ' записей ещё нет',
+      return h + emptyStart('За ' + monthRu(m) + ' считать пока нечего',
         'Этот отчёт складывается из закрытых смен. Закройте первую — и здесь ' +
         'появится выручка, прибыль и сравнение с прошлым месяцем.');
     }
@@ -364,6 +415,7 @@
       h += u.hero('Осталось после всех расходов', u.priv(flow.left), monthRu(m),
         flow.left >= 0 ? 'c-green' : 'c-red');
     }
+    h += u.printFoot();      // подписи — только на бумаге
     return h;
   }
 
@@ -377,10 +429,11 @@
     h += monthPicker();
 
     if (!ac.checks) {
-      return h + '<div class="card"><div class="empty"><b>Нет числа чеков</b><br>' +
-        'Средний чек считается из Z-отчёта: впишите «Чеков за смену» при сверке кассы — ' +
-        'это одно поле, на деньги оно не влияет.</div>' +
-        '<div class="card-pad"><button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') + ' Свести кассу</button></div></div>';
+      return h + u.blank({ icon: 'receipt', title: 'Средний чек пока не посчитан',
+        why: 'Он считается из Z-отчёта: впишите «Чеков за смену» при сверке кассы. ' +
+          'Это одно поле, на деньги оно не влияет, зато сразу видно, ' +
+          'сколько оставляет один покупатель.',
+        actions: [{ name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' }] });
     }
     h += '<div class="stat-grid">' +
       u.stat('Средний чек', u.priv(ac.avg), 'выручка ÷ число чеков') +
@@ -397,6 +450,7 @@
       { title: 'Выручка', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
       { title: 'Средний чек', cls: 'num', fn: function (r) { return u.priv(r.avg); } }
     ], ac.days.slice().reverse(), { step: 31, empty: 'Дней с чеками нет' }));
+    h += u.printFoot();      // подписи — только на бумаге
     return h;
   }
 
@@ -407,6 +461,12 @@
     var u = U(), m = ym(), c = C(), d = D();
     var h = u.pageHead('Кто зарабатывает', 'Кассиры, смены и товарные группы');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('За ' + monthRu(m) + ' смен не было',
+        'Здесь видно, кто из кассиров сколько наторговал, у кого чаще не сходится ' +
+        'касса и какие смены прибыльнее — дневные или ночные. Всё считается ' +
+        'из сверки кассы.');
+    }
 
     // 1. Кассиры — из ручного учёта, работает всегда
     var rating = E.cashierRating(rowsOf(m));
@@ -450,6 +510,7 @@
         'приносят прибыль, загрузите отчёт «Продажи» из 1С на экране «Данные и копии». ' +
         'На кассу и зарплату это не влияет.</span></div>';
     }
+    h += u.printFoot();      // подписи — только на бумаге
     return h;
   }
 
@@ -474,14 +535,15 @@
 
      Поэтому пустой экран отвечает на три вопроса: что это за экран, почему
      сейчас пусто и какая кнопка это исправит. */
+  /* Пустой экран у всех отчётов один: значок, заголовок, одна фраза «почему
+     пусто» и кнопка, которая это исправит. Рисует его ui.js — чтобы формулировка
+     и вид не расходились от экрана к экрану. */
   function emptyStart(title, why) {
-    return '<div class="card"><div class="empty"><b>' + esc(title) + '</b><br>' +
-      esc(why) + '</div><div class="card-pad">' +
-      '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
-      ' Свести кассу за смену</button> ' +
-      '<button class="btn" data-form="dayTotals">' + ic('moon') + ' Итоги дня</button> ' +
-      '<button class="btn" data-go="settings">' + ic('gear') + ' Настроить магазин</button>' +
-      '</div></div>';
+    return U().blank({ icon: 'chartLine', title: title, why: why, actions: [
+      { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+      { name: 'Итоги дня', icon: 'moon', form: 'dayTotals' },
+      { name: 'Настроить магазин', icon: 'gear', go: 'settings' }
+    ] });
   }
 
   function ownerMode() { return E.txt(S.settings.ownerMode) === 'день' ? 'день' : 'месяц'; }
@@ -542,7 +604,7 @@
       '</div>';
 
     if (!rows.length) {
-      return h + emptyStart(R2.title[0].toUpperCase() + R2.title.slice(1) + ' записей ещё нет',
+      return h + emptyStart('Отчёт ' + R2.title + ' пока пуст',
         'Отчёт собственнику собирается из смен и расходов. Закройте первую смену — ' +
         'и здесь появится, сколько заработали, куда ушли деньги и где они лежат.');
     }
@@ -574,7 +636,9 @@
     var costs = p.costs.filter(function (c) { return c.sum > 0; });
     if (costs.length) {
       h += u.card('На что ушли деньги', u.table('ownCost', [
-        { title: 'Статья', fn: function (r) { return esc(r.name); } },
+        { title: 'Статья', cls: 'drillable',
+          attrs: function (r) { return drill('kind', r.key, R2); },
+          fn: function (r) { return esc(r.name) + '<span class="drill-mark">›</span>'; } },
         { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
         { title: 'Доля выручки', cls: 'num', fn: function (r) { return u.pct(r.share); } }
       ], costs, { step: 20,
@@ -640,13 +704,16 @@
           ' — в затраты не вошли',
         value: u.priv(p.excludedTotal), tap: true, attrs: ' data-go="ledger"' }));
     }
-    h += u.card('Что не сошлось', probs.length ? u.listOf(probs, '')
-      : '<div class="empty">' + ic('check') + ' Всё сходится: смены закрыты, ' +
-        'деньги из ящика расписаны.</div>');
+    h += '<div class="card' + (probs.length ? '' : ' print-hide') + '">' +
+      '<div class="card-head"><div class="card-title">Что не сошлось</div></div>' +
+      (probs.length ? u.listOf(probs, '')
+        : '<div class="empty">' + ic('check') + ' Всё сходится: смены закрыты, ' +
+          'деньги из ящика расписаны.</div>') + '</div>';
 
-    h += '<div class="rep-foot">Отчёт составлен ' +
-      esc(new Date().toLocaleString('ru-RU').slice(0, 16)) +
-      '. Подпись ______________________</div>';
+    /* Подвал один на все отчёты: дата и подписи рисует printFoot.
+       Раньше здесь был свой, со временем, обрезанным до «07:4», — и на бумаге
+       их выходило два подряд. */
+    h += u.printFoot();
     return h;
   }
 
@@ -679,6 +746,12 @@
       '<button class="btn" data-act="costs-to-settings">' + ic('download') + ' Взять расходы из ' +
       esc(monthRu(m)) + '</button>');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('Точку безубыточности пока не из чего считать',
+        'Она отвечает на вопрос: сколько надо продавать в день, чтобы просто ' +
+        'выйти в ноль. Для расчёта нужны постоянные расходы за месяц — ' +
+        'запишите аренду и зарплату или закройте первую смену.');
+    }
     h += u.hero(b.profitable ? 'Порог пройден' : 'До нуля осталось',
       u.priv(b.profitable ? p.revenue - b.month : b.month - p.revenue),
       'порог ' + money(b.month) + ' в месяц при наценке ' + u.pct(b.margin),
@@ -695,7 +768,9 @@
       '</div>';
 
     h += u.card('Из чего порог', u.table('bepT', [
-      { title: 'Статья', fn: function (r) { return esc(r.name); } },
+      { title: 'Статья', cls: 'drillable',
+        attrs: function (r) { return drill('kind', r.key, m); },
+        fn: function (r) { return esc(r.name) + '<span class="drill-mark">›</span>'; } },
       { title: 'В месяц', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
       { title: 'Надо продать на', cls: 'num', fn: function (r) {
         return u.priv(margin > 0 ? E.safeRound(r.sum / (margin / 100)) : 0); } }
@@ -716,6 +791,11 @@
 
     var h = u.pageHead('Выход в ноль по дням', 'Когда магазин отбил расходы в ' + monthRu(m));
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('За ' + monthRu(m) + ' считать нечего',
+        'Этот отчёт показывает день, когда магазин отбил все расходы месяца ' +
+        'и начал работать на прибыль. Он собирается из закрытых смен.');
+    }
     h += u.hero(bd.passed ? 'Вышли в ноль' : 'В ноль пока не вышли',
       bd.passed ? dateRu(bd.passed.date) : u.priv(bd.need - bd.acc),
       bd.passed ? 'дальше месяц работает на прибыль'
@@ -754,6 +834,18 @@
 
     var h = u.pageHead('Налоговый календарь', 'Что и когда платить в ' + year + ' году',
       '<button class="btn" data-act="print">' + ic('print') + '</button>');
+    if (!yearRows.length) {
+      return h + U().blank({ icon: 'bank', title: 'Считать налог пока не с чего',
+        why: 'Календарь напоминает, что и когда платить, и прикидывает сумму ' +
+          'по вашей выручке за год. Выручка берётся из закрытых смен — ' +
+          'закройте первую, и суммы появятся. Систему налогообложения ' +
+          'проверьте в настройках: сейчас стоит «' +
+          E.txt(S.settings.taxMode || 'не выбрана') + '».',
+        actions: [
+          { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+          { name: 'Проверить систему', icon: 'gear', go: 'settings' }
+        ] });
+    }
     h += '<div class="stat-grid">' +
       u.stat('Система', esc(String(S.settings.taxMode || 'не выбрана')),
         'меняется в настройках') +
@@ -791,6 +883,12 @@
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
       '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
     h += monthPicker();
+    if (!rowsOf(m).length) {
+      return h + emptyStart('За ' + monthRu(m) + ' отдавать нечего',
+        'Это одна страница со всеми цифрами месяца — её печатают и отдают ' +
+        'бухгалтеру. Она соберётся сама, как только в месяце появится ' +
+        'хотя бы одна закрытая смена.');
+    }
 
     var lines = [
       ['Выручка всего', p.revenue],
@@ -816,13 +914,16 @@
     ], lines, { step: 30 }));
 
     h += u.card('Затраты по статьям', u.table('rdyC', [
-      { title: 'Статья', fn: function (r) { return esc(r.name); } },
+      { title: 'Статья', cls: 'drillable',
+        attrs: function (r) { return drill('kind', r.key, m); },
+        fn: function (r) { return esc(r.name) + '<span class="drill-mark">›</span>'; } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } }
     ], p.costs.filter(function (r) { return r.sum > 0; }), { step: 20, empty: 'Затрат нет' }));
 
     h += '<div class="banner blue"><span>' + ic('doc') + '</span><span>Полные журналы — в книге ' +
       '«Бухгалтерия.xlsx»: листы Касса_и_Смены, ДДС_Операции, План_Выплат, ' +
       'Табель_Зарплаты и Настройки. Их можно открыть в Excel и отправить как есть.</span></div>';
+    h += u.printFoot();      // подписи — только на бумаге
     return h;
   }
 
@@ -1073,12 +1174,11 @@
       '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
 
     if (!rows.length) {
-      return h + '<div class="card"><div class="empty"><b>Пока ничего не менялось</b><br>' +
-        'Здесь появится список всего, что вы добавили, поправили или удалили — ' +
-        'с датой и временем. Пригодится, когда цифры не сходятся и надо вспомнить, ' +
-        'что трогали вчера.</div><div class="card-pad">' +
-        '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
-        ' Свести кассу за смену</button></div></div>';
+      return h + U().blank({ icon: 'clock', title: 'Пока ничего не менялось',
+        why: 'Здесь видно всё, что вы добавляли, правили и удаляли — с датой и ' +
+          'прежним значением. Пригодится, когда цифра не сойдётся и надо вспомнить, ' +
+          'что вчера трогали.',
+        actions: [{ name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' }] });
     }
 
     var today0 = today();

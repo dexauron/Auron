@@ -1031,6 +1031,13 @@
     }).sort(function (a, b) { return b.sum - a.sum; });
   }
 
+  // Как называется группа затрат — чтобы окно подробностей знало свой заголовок
+  function costKindName(key) {
+    for (var i = 0; i < COST_KINDS.length; i++) {
+      if (COST_KINDS[i].key === key) return COST_KINDS[i].name;
+    }
+    return txt(key);
+  }
   function costKindOf(category) {
     var c = norm(category);
     for (var i = 0; i < COST_KINDS.length; i++) {
@@ -2864,7 +2871,7 @@
     parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
     rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
-    isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА,
+    isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА, costKindName: costKindName,
     periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
     mergeByKey: mergeByKey, mergeSales: mergeSales,
     deadStockList: deadStockList, matchPayments: matchPayments,

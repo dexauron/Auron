@@ -340,14 +340,128 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
 .print-head { display: none; }
 .print-sub { font-size: 12px; color: var(--label-2); font-weight: 400; }
 
+/* ============================================================================
+   ПЕЧАТЬ: отчёт, который не стыдно положить на стол директору
+
+   Первая страница — сводка: кто отчитывается, за какой период, главная цифра
+   и несколько ключевых. Её отдают руководителю.
+   Дальше — подробные таблицы: их смотрят, если спросят цифры.
+
+   С экрана на бумагу не уходит ничего лишнего: ни меню, ни кнопок, ни
+   фильтров, ни подсказок. Только документ.
+   ========================================================================== */
+.print-only { display: none; }
+.print-foot { display: none; }
+
+@page { size: A4 portrait; margin: 16mm 14mm 14mm; }
+
 @media print {
-  .print-head { display: block; font-size: 16px; font-weight: 700; margin-bottom: 10px;
-    padding-bottom: 8px; border-bottom: 1px solid #ccc; }
-  .sidebar, .topbar, .quick, .btn { display: none !important; }
-  body { display: block; overflow: visible; background: #fff; }
-  .scroll { overflow: visible; }
-  .card, .list, .stat, .hero { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; }
+  :root { --bg: #fff; --bg-elev: #fff; --bg-inset: #fff;
+    --label: #000; --label-2: #444; --label-3: #777; --separator: #bbb;
+    --fill: #f0f0f0; --fill-2: #f6f6f6;
+    --blue: #000; --green: #000; --red: #000; --orange: #000; }
+
+  body { display: block; overflow: visible; background: #fff; color: #000;
+    font-size: 10.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .scroll { overflow: visible; height: auto; }
+
+  /* Всё, что помогает работать, но мешает читать документ */
+  .sidebar, .topbar, .tabbar, .quick, .filters, .btn, .chip, .segmented,
+  .toast, .backdrop, .row-menu, .more, .draft-bar, .scroll-hint,
+  .search-tip, .ana-bar, .ana-loaded, .chevron, .drill-mark,
+  .alert-bar, .print-hide,
+  /* Своя шапка отчёта дублировала печатную: на бумаге название магазина
+     стояло дважды подряд. Печатной хватает. */
+  .rep-head, .rep-foot,
+  /* Прячем КНОПКИ, а не всё подряд с data-атрибутом. Раньше здесь стояло
+     [data-go] — и вместе с кнопками с бумаги исчезали строки отчёта:
+     раздел «Что не сошлось» печатался пустым, хотя расхождения были. */
+  button[data-act], button[data-form], button[data-go], button[data-edit],
+  button[data-del], button[data-menu], button[data-drill],
+  a[data-go] { display: none !important; }
+
+  .print-only { display: block; }
+
+  /* Шапка документа */
+  .print-head { display: block; text-align: center; margin-bottom: 4mm;
+    padding-bottom: 3mm; border-bottom: 1.5pt solid #000; }
+  .print-org { font-size: 14pt; font-weight: 700; letter-spacing: -.2pt; }
+  .print-sub { font-size: 9pt; color: #444; font-weight: 400; margin-top: 1mm; }
+
+  /* Заголовок отчёта — по центру, как в деловом документе */
+  .page-head { display: block; text-align: center; margin: 0 0 5mm; }
+  .page-title { font-size: 15pt; font-weight: 700; letter-spacing: -.2pt; }
+  .page-sub { font-size: 10pt; color: #444; margin-top: 1mm; }
+
+  /* Сводка: главные цифры в ряд, крупно и без рамок-коробок */
+  .stat-grid { display: grid !important; grid-template-columns: repeat(3, 1fr);
+    gap: 3mm; margin-bottom: 5mm; }
+  /* Без рамок: на бумаге коробка вокруг числа выглядит обрывком таблицы.
+     Цифры разделяет воздух и линия под подписью — как в годовом отчёте. */
+  .stat, .hero { border: none; box-shadow: none; padding: 0; break-inside: avoid; }
+  .stat-label, .hero-label { border-bottom: .5pt solid #ccc; padding-bottom: 1mm;
+    margin-bottom: 1.5mm; display: block; }
+  .stat-label, .hero-label { font-size: 8.5pt; color: #555; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .3pt; }
+  .stat-value { font-size: 15pt; font-weight: 700; letter-spacing: -.3pt; }
+  .hero-value { font-size: 24pt; font-weight: 700; }
+  .stat-sub, .hero-sub { font-size: 8.5pt; color: #666; }
+
+  /* Карточки становятся разделами документа, а не плитками */
+  .card, .list { box-shadow: none; border: none; border-radius: 0;
+    margin-bottom: 4mm; break-inside: auto; }
+  .card-head { padding: 0 0 2mm; border-bottom: .75pt solid #000; margin-bottom: 2mm;
+    break-after: avoid; }
+  .card-title { font-size: 11pt; font-weight: 700; letter-spacing: 0; }
+  .card-ic { display: none; }
+  .card-note { font-size: 8.5pt; color: #555; }
+  .card-body, .card-pad { padding: 0 0 2mm; font-size: 9.5pt; }
+
+  /* Таблицы — главное содержимое отчёта */
+  table.data { font-size: 9.5pt; width: 100%; }
+  table.data th { background: #f2f2f2 !important; color: #000; font-size: 8.5pt;
+    font-weight: 700; padding: 1.5mm 2mm; border-bottom: .75pt solid #000;
+    position: static; }
+  table.data td { padding: 1.5mm 2mm; border-bottom: .25pt solid #ddd; }
+  table.data tr { break-inside: avoid; }
+  thead { display: table-header-group; }   /* шапка повторяется на каждой странице */
+  tr.total td { background: #f2f2f2 !important; font-weight: 700;
+    border-top: .75pt solid #000; }
+  .table-wrap { overflow: visible !important; }
+
+  /* Строки-списки */
+  .row { padding: 1.5mm 0; min-height: 0; break-inside: avoid; }
+  .row + .row::before { left: 0; }
+  .row-icon, .card-ic, .blank-ic { display: none !important; }
+  .row-title { font-size: 10pt; font-weight: 600; }
+  .row-sub { font-size: 8.5pt; color: #555; }
+  .row-value { font-size: 10pt; font-weight: 700; }
+
+  /* Подсказки и баннеры: на бумаге они не нужны, это интерфейс, а не отчёт */
+  .banner, .empty, .blank, .filter-note, .form-hint { display: none !important; }
+  /* ...но предупреждение о неточности — нужно: оно про достоверность цифр */
+  .banner.orange { display: flex !important; border: .5pt solid #000;
+    background: #fff !important; padding: 2mm; font-size: 8.5pt; margin-bottom: 3mm; }
+
+  /* Скрытые суммы на бумаге показываются: печатают для себя */
   .priv .private { filter: none; }
+
+  /* Графики печатаются как есть, но не рвутся между страницами */
+  .chart-box { break-inside: avoid; height: 55mm; border: none; box-shadow: none;
+    padding: 0; margin-bottom: 4mm; }
+
+  /* Подвал с подписями — в конце документа */
+  .print-foot { display: block; margin-top: 8mm; padding-top: 3mm;
+    border-top: .5pt solid #999; break-inside: avoid; }
+  .print-when { font-size: 8.5pt; color: #555; margin-bottom: 6mm; }
+  .sign-row { display: flex; gap: 14mm; }
+  .sign-cell { flex: 1; }
+  .sign-cell .sign-line { display: block; border-bottom: .75pt solid #000;
+    height: 8mm; margin-bottom: 1mm; }
+  .sign-cell small { font-size: 8.5pt; color: #555; }
+
+  /* Разрыв страницы перед подробностями: сводка остаётся отдельным листом */
+  .print-break { break-before: page; }
 }
 
 /* --- Фильтры: одинаковые кнопки на всех экранах ----------------------------- */
@@ -1079,3 +1193,29 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .search-tip { display: none; }
   .ana-bar .inline-label { flex: 1 1 45%; }
 }
+
+/* ---------- Пустой экран: что это, почему пусто, что нажать ---------- */
+.blank-card { background: var(--bg-elev); }
+.blank { padding: 48px 28px 40px; text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 10px; }
+.blank-ic { width: 60px; height: 60px; border-radius: 18px; background: var(--fill-2);
+  display: flex; align-items: center; justify-content: center; color: var(--label-3);
+  margin-bottom: 4px; }
+.blank-title { font-size: 19px; font-weight: 650; letter-spacing: -.3px; }
+.blank-why { font-size: 14.5px; color: var(--label-2); line-height: 1.55; max-width: 460px; }
+.blank-acts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-top: 12px; }
+@media (max-width: 620px) {
+  .blank { padding: 34px 18px 30px; }
+  .blank-acts .btn { flex: 1 1 100%; }
+}
+
+/* ---------- Окно подробностей: из чего сложилась сумма ---------- */
+.drill-head { padding: 4px 2px 14px; }
+.drill-sum { font-size: 32px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+.drill-sub { font-size: 13.5px; color: var(--label-2); margin-top: 2px; }
+/* Строка отчёта, которая раскрывается: под курсором видно, что она нажимается */
+.drillable { cursor: pointer; }
+.drillable:hover { background: var(--fill-2); }
+.drillable .drill-mark { color: var(--label-3); font-size: 15px; margin-left: 6px; }
+.drillable:hover .drill-mark { color: var(--blue); }

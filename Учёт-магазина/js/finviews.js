@@ -1072,10 +1072,14 @@
     }
 
     if (!all.length) {
-      return h + '<div class="card"><div class="empty"><b>Записей пока нет</b><br>' +
-        'Начните со сверки кассы — закройте первую смену.</div>' +
-        '<div class="card-pad"><button class="btn btn-primary btn-lg" data-form="shiftClose">' +
-        ic('calculator') + ' Свести кассу</button></div></div>';
+      return h + u.blank({ icon: 'gauge', title: 'Пульт пока пуст',
+        why: 'Здесь будет видно, сколько денег в кассе, что сделать сегодня и ' +
+          'где не сходится. Всё это собирается из закрытых смен — закройте первую, ' +
+          'и пульт оживёт.',
+        actions: [
+          { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+          { name: 'Настроить магазин', icon: 'gear', go: 'settings' }
+        ] });
     }
 
     var cash = E.cashOnHand(all, S.settings, null, accounts());
@@ -1567,13 +1571,13 @@
     var all = dds();
     if (!all.length) {
       return u.pageHead('Отчёт за месяц', 'Что было и как это выглядит рядом с прошлым месяцем') +
-        '<div class="card"><div class="empty"><b>Записей пока нет</b><br>' +
-        'Этот отчёт сравнивает месяц с прошлым. Он появится, когда наберётся ' +
-        'хотя бы одна закрытая смена.</div><div class="card-pad">' +
-        '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
-        ' Свести кассу за смену</button> ' +
-        '<button class="btn" data-go="pulse">' + ic('gauge') + ' На Пульт</button>' +
-        '</div></div>';
+        u.blank({ icon: 'doc', title: 'Сравнивать пока не с чем',
+          why: 'Этот отчёт ставит месяц рядом с прошлым и показывает, что выросло, ' +
+            'а что просело. Он появится, когда наберётся хотя бы одна закрытая смена.',
+          actions: [
+            { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+            { name: 'На Пульт', icon: 'gauge', go: 'pulse' }
+          ] });
     }
     var months = {};
     all.forEach(function (r) { if (r.date) months[E.ymOf(r.date)] = 1; });
@@ -1653,6 +1657,103 @@
      ДЕЙСТВИЯ
      ========================================================================== */
   var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
+
+  /* ==========================================================================
+     ОКНО ПОДРОБНОСТЕЙ
+
+     В отчёте видно «Коммунальные 7 000 ₽». Первый вопрос владельца — из чего
+     они сложились. Раньше на него можно было ответить только уйдя в «Базу
+     операций» и выставив там фильтры руками.
+
+     Теперь строка отчёта нажимается и открывает окно: все записи, из которых
+     сложилась сумма, с датой, счётом и кассиром. Отчёт при этом не покидается —
+     закрыл окно и читаешь дальше.
+
+     data-drill="вид|что|с|по" — вид говорит, что показывать:
+       cat    — расходы по статье (и по её подстатьям)
+       acc    — движение по счёту
+       shift  — смены за период
+     ========================================================================== */
+  A['drill'] = function (el) {
+    var p = E.txt(el.dataset.drill).split('|');
+    var вид = p[0], что = decodeURIComponent(p[1] || ''), от = p[2] || '', до = p[3] || '';
+    var u = U();
+
+    var строки = dds().filter(function (r) {
+      var d = E.txt(r.date);
+      if (от && d < от) return false;
+      if (до && d > до) return false;
+      if (вид === 'cat') {
+        if (!E.isExpense(r)) return false;
+        var c = E.txt(r.category);
+        // Статья-группа показывает и свои подстатьи: «Коммунальные» и «Свет»
+        return E.norm(c) === E.norm(что) || E.norm(E.catGroup(c)) === E.norm(что);
+      }
+      if (вид === 'kind') {
+        /* Группа затрат из отчёта о прибыли («Аренда», «Коммунальные»).
+           Группу считаем по ГРУППЕ статьи: «Коммунальные / Свет» должен
+           попасть в «Коммунальные», а не в «прочие расходы». */
+        if (!E.isExpense(r) || E.notACost(r.category)) return false;
+        return E.costKindOf(E.catGroup(r.category) || r.category) === что;
+      }
+      if (вид === 'acc') return E.txt(r.account) === что || E.txt(r.toAccount) === что;
+      if (вид === 'shift') return E.isShift(r);
+      return false;
+    }).sort(function (a, b) { return E.txt(a.date) < E.txt(b.date) ? -1 : 1; });
+
+    var сумма = E.safeRound(строки.reduce(function (a, r) {
+      return a + num(вид === 'shift' ? E.shiftCalc(r).revenue : r.amount);
+    }, 0));
+
+    var заголовок = вид === 'cat' ? E.catLabel(что)
+      : вид === 'kind' ? (E.costKindName ? E.costKindName(что) : что)
+      : вид === 'acc' ? (accName(что) || 'Счёт') : 'Смены';
+    var период = (от || до)
+      ? ' · ' + (от ? dateRu(от) : '') + (до ? ' – ' + dateRu(до) : '') : '';
+
+    var h = '<div class="drill-head"><div class="drill-sum">' + esc(money(сумма)) + '</div>' +
+      '<div class="drill-sub">' + u.nf(строки.length) + ' ' +
+      u.plural(строки.length, 'запись', 'записи', 'записей') + esc(период) + '</div></div>';
+
+    if (!строки.length) {
+      h += '<div class="empty">За этот период записей по «' + esc(заголовок) + '» нет.</div>';
+    } else {
+      h += u.table('drillT', [
+        { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Что', fn: function (r) {
+          return вид === 'shift'
+            ? esc((r.till || '') + ' ' + (r.shift || '') + (r.cashier ? ' · ' + r.cashier : ''))
+            : esc(E.catLabel(r.category) || '—') +
+              (r.note ? ' <span class="c-muted">· ' + esc(r.note) + '</span>' : ''); } },
+        { title: 'Счёт', fn: function (r) { return esc(accName(r.account) || '—'); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) {
+          return u.priv(вид === 'shift' ? E.shiftCalc(r).revenue : r.amount); } },
+        { title: '', cls: 'center', fn: function (r) {
+          return вид === 'shift' ? '' : u.rowMenu('dds', r.id, { form: 'moneyOut' }); } }
+      ], строки, { step: 60,
+        total: [{ html: 'Всего' }, { html: '' }, { html: '' },
+          { cls: 'num', html: '<b>' + u.priv(сумма) + '</b>' }, { html: '' }] });
+    }
+
+    /* Кнопка в базу операций: когда подробностей мало — правят прямо здесь,
+       когда надо копать глубже — идут туда, где есть все фильтры. */
+    h += '<div class="form-actions"><button class="btn" data-act="drill-ledger" ' +
+      'data-kind="' + esc(вид) + '" data-what="' + esc(encodeURIComponent(что)) + '">' +
+      ic('list') + ' Показать в базе операций</button></div>';
+
+    u.sheet(заголовок + период, h);
+    return null;
+  };
+
+  /* Перейти в базу операций с уже выставленным фильтром */
+  A['drill-ledger'] = function (el) {
+    var вид = E.txt(el.dataset.kind), что = decodeURIComponent(el.dataset.what || '');
+    U().closeSheet();
+    if (вид === 'cat') FLT().set('ledger', 'cat', что);
+    U().go('ledger');
+    return null;
+  };
+
 
   /* Отметить выплату оплаченной. Долг сама не уменьшает — предлагает вписать
      сумму в итоги дня, чтобы у кредиторки остался один источник. */
@@ -1895,11 +1996,11 @@
     }
 
     if (!ft.rows.length) {
-      return h + '<div class="card"><div class="empty"><b>Конвертов пока нет</b><br>' +
-        'Конверт — это цель: «Аренда, 110 000 в месяц». Откладываете в него понемногу ' +
-        'с выручки, и к сроку деньги уже лежат отдельно от оборотных.</div>' +
-        '<div class="card-pad"><button class="btn btn-primary" data-form="fundCard">' +
-        ic('plus') + ' Завести конверт</button></div></div>';
+      return h + u.blank({ icon: 'safe', title: 'Конвертов пока нет',
+        why: 'Конверт — это цель, под которую откладывают заранее: аренда, зарплата, ' +
+          'налоги. Заведите первый, впишите, сколько откладывать в месяц, — ' +
+          'и программа будет следить, чтобы к сроку деньги были.',
+        actions: [{ name: 'Завести конверт', icon: 'plus', form: 'fundCard' }] });
     }
 
     h += u.card('Конверты', u.table('fundsT', [

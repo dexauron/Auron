@@ -744,15 +744,14 @@
     var sez = G.seasons(rows, F.isIncome);
     var h = u.pageHead('Сезонность', 'В каком месяце магазин работает лучше');
     if (!sez.monthsWithData) {
-      return h + '<div class="card"><div class="empty"><b>Сезонность пока не видна</b><br>' +
-        'Она складывается из нескольких месяцев работы: программа сравнивает, ' +
-        'в каком месяце магазин заработал больше. Закрывайте смены — через ' +
-        'два-три месяца здесь появится картина года.</div>' +
-        '<div class="card-pad">' +
-        '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') +
-        ' Свести кассу за смену</button> ' +
-        '<button class="btn" data-go="owner">' + ic('person') + ' Отчёт собственнику</button>' +
-        '</div></div>';
+      return h + u.blank({ icon: 'calendar', title: 'Сезонность пока не видна',
+        why: 'Она складывается из нескольких месяцев работы: программа сравнивает, ' +
+          'в каком месяце магазин заработал больше. Закрывайте смены — через ' +
+          'два-три месяца здесь появится картина года.',
+        actions: [
+          { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+          { name: 'Отчёт собственнику', icon: 'person', go: 'owner' }
+        ] });
     }
     h += '<div class="stat-grid">' +
       u.stat('Месяцев с данными', u.nf(sez.monthsWithData), 'из 12') +
