@@ -180,7 +180,8 @@
       payouts: n(v.payouts), factCash: n(v.factCash),
       returnsCash: n(v.returnsCash), returnsCashless: n(v.returnsCashless),
       deposits: n(v.deposits), collected: n(v.collected),
-      zCard: n(v.zCard), zQr: n(v.zQr), zNfc: n(v.zNfc), checks: n(v.checks)
+      zCard: n(v.zCard), zQr: n(v.zQr), zNfc: n(v.zNfc), checks: n(v.checks),
+      factFilled: v.factCash !== '' && v.factCash != null
     });
     var zb = c.zCashless, пусто = !c.zCash && !c.factCash && !c.payouts;
 
@@ -197,7 +198,7 @@
       esc(money(c.collected)) + '</b></div>';
     h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
       '<span>Должно быть в ящике</span><b class="cc-big">' + esc(money(c.expected)) + '</b></div>';
-    h += '<div class="cc-line"><span>Пересчитали руками</span><b>' + esc(money(c.factCash)) + '</b></div>';
+    h += '<div class="cc-line"><span>Факт в ящике</span><b>' + esc(money(c.factCash)) + '</b></div>';
 
     if (пусто) {
       h += '<div class="cc-sub">Впишите Z-отчёт и факт — расхождение посчитается само.</div>';
@@ -215,13 +216,15 @@
         h += '<div class="cc-sub">' + (c.diff < 0
           ? 'В ящике меньше, чем должно.'
           : 'В ящике больше, чем должно.') +
-          (f.big ? ' Это ' + esc(E.fmtPct(f.share * 100, 0)) + ' от наличных за смену — столько не теряют ' +
-            'и не находят. Скорее всего, одно число вписано неверно.' : '') + '</div>';
+          (f.big ? ' Это ' + esc(E.fmtPct(f.share * 100, 0)) + ' от наличных за смену. ' +
+            'Чаще всего при таком расхождении неверно вписано одно число — ' +
+            'сверьтесь со списком ниже. Если всё верно, недостача настоящая, ' +
+            'и разбираться надо с людьми, а не с цифрами.' : '') + '</div>';
         if (f.reason) h += '<div class="cc-sub c-red">' + esc(f.reason) + '</div>';
         if (f.list.length) {
           h += '<div class="cc-fix"><div class="cc-fix-h">Чтобы ящик сошёлся, ' +
             'достаточно исправить одно из чисел:</div>';
-          f.list.forEach(function (x) {
+          f.list.slice(0, 4).forEach(function (x) {
             h += '<div class="cc-fix-r"><span>' + esc(x.name) + '</span>' +
               '<b><s>' + esc(money(x.now)) + '</s> → ' + esc(money(x.need)) + '</b></div>';
           });
@@ -313,12 +316,16 @@
         u.fieldRow('Размен на начало', 'openCash', 'number',
           v.openCash != null ? v.openCash : (prev ? prev.fact : 0), { hint: openHint }) +
         u.fieldRow('Z-отчёт: наличные', 'zCash', 'number', v.zCash || '',
-          { hint: 'выручка, которая легла в ящик' }) +
+          { hint: 'из Z-отчёта: строка «НАЛИЧНЫМИ» под «ЧЕКОВ ПРИХОДА». ' +
+            'Это приход ДО вычета возвратов, а НЕ строка «ВЫРУЧКА» — возвраты ' +
+            'вычтет сама программа. Аппаратов на кассе два и ящик общий? ' +
+            'Пишите через плюс: 74936+2688' }) +
         u.fieldRow('Наличные лягут на счёт', 'account', 'select',
           v.account || accDefault(false), { options: accOptions(['till', 'cash']),
             hint: 'денежный ящик той кассы, что выбрана выше' }) +
         u.fieldRow('Z-отчёт: безнал', 'zCashless', 'number', v.zCashless || '',
-          { hint: 'карта, СБП, эквайринг — купюрами их не бывает' }) +
+          { hint: 'из Z-отчёта: «БЕЗНАЛИЧНЫМИ». Карта, СБП, эквайринг — купюрами ' +
+            'их не бывает, в ящик они не попадают' }) +
         u.fieldRow('Безнал ляжет на счёт', 'cashlessAccount', 'select',
           v.cashlessAccount || accDefault(true), { options: accOptions(['bank']),
             hint: 'расчётный счёт или карта, куда банк зачисляет' }) +
@@ -340,13 +347,18 @@
         u.fieldRow('Выплаты из ящика', 'payouts', 'number', v.payouts || 0,
           { hint: 'из Z-отчёта: «ВЫПЛАТ». Что брали из кассы за смену: поставщикам, на хознужды' }) +
         u.fieldRow('Инкассация', 'collected', 'number', v.collected || 0,
-          { hint: 'из Z-отчёта: «ИНКАССАЦИЯ». Сколько увезли из ящика в сейф. ' +
-            'Программа сама запишет перевод — второй раз вводить не надо' }) +
+          { hint: 'сколько денег РЕАЛЬНО увезли из ящика в сейф — пересчитанных ' +
+            'купюрами. На чеке есть строка «ИНКАССАЦИЯ», но если в сейф доехало ' +
+            'меньше, пишите пересчитанное: разница и есть недостача. ' +
+            'Два аппарата на кассе — складывайте: 74081+2688. ' +
+            'Перевод в сейф программа запишет сама — второй раз вводить не надо' }) +
         u.fieldRow('Инкассацию положить на счёт', 'collectAccount', 'select',
           v.collectAccount || accDefault(false), { options: accOptions(['cash', 'bank']),
             hint: 'куда увезли: сейф или банк' }) +
         u.fieldRow('Факт в ящике', 'factCash', 'number', v.factCash || '',
-          { hint: 'сколько денег пересчитали руками ПОСЛЕ инкассации' }) +
+          { hint: 'сколько ОСТАЛОСЬ в ящике после инкассации и выплат — обычно ' +
+            'размен на следующую смену, часто ноль. Деньги, увезённые в сейф, ' +
+            'сюда не входят: они в «Инкассации»' }) +
         /* unit: 'plain' обязателен — иначе программа подпишет число чеков
            рублями: «391 ₽». Чеки не деньги, и такая подпись сбивает с толку. */
         u.fieldRow('Чеков за смену', 'checks', 'number', v.checks || '',

@@ -271,6 +271,10 @@
     var open = safeRound(s.openCash), zCash = safeRound(s.zCash);
     var zCashless = safeRound(s.zCashless), payouts = safeRound(s.payouts);
     var fact = safeRound(s.factCash);
+    /* Пустое поле и вписанный ноль — разные вещи. Ящик, закрытый в ноль, это
+       норма, а не забывчивость, и разбор не вправе на него ругаться. */
+    var factFilled = s.factFilled !== undefined
+      ? !!s.factFilled : !(s.factCash == null || s.factCash === '');
     var retCash = safeRound(s.returnsCash);        // возвраты покупателям наличными
     var retCashless = safeRound(s.returnsCashless);// возвраты на карту
     var deposits = safeRound(s.deposits);          // внесения в кассу
@@ -294,7 +298,7 @@
       openCash: open, zCash: zCash, zCashless: zCashless, payouts: payouts,
       returnsCash: retCash, returnsCashless: retCashless,
       deposits: deposits, collected: collected,
-      factCash: fact, expected: expected, diff: diff,
+      factCash: fact, factFilled: factFilled, expected: expected, diff: diff,
       revenue: safeRound(revenueCash + revenueCashless),
       revenueCash: revenueCash, revenueCashless: revenueCashless,
       returns: safeRound(retCash + retCashless),
@@ -337,7 +341,7 @@
      подсказку владелец справедливо не поймёт.
      -------------------------------------------------------------------------- */
   var ПОЛЯ_ЯЩИКА = [
-    { key: 'factCash', k: 0, name: 'Пересчитали руками' },
+    { key: 'factCash', k: 0, name: 'Факт в ящике' },
     { key: 'collected', k: -1, name: 'Инкассация' },
     { key: 'payouts', k: -1, name: 'Выплаты из ящика' },
     { key: 'deposits', k: 1, name: 'Внесения в кассу' },
@@ -362,11 +366,11 @@
        том же обороте — ошибка ввода, и об этом надо сказать прямо. */
     var оборот = safeRound(Math.abs(c.openCash) + Math.abs(c.zCash) + Math.abs(c.deposits));
     out.share = оборот > КОПЕЙКА ? Math.abs(diff) / оборот : 1;
-    out.big = Math.abs(diff) >= 1000 && out.share >= 0.05;
+    out.big = Math.abs(diff) >= 1000 && out.share >= 0.10;
 
     /* Частые случаи, когда расхождение в точности равно одному из чисел, —
        их можно назвать своим именем, не гадая. */
-    if (isZero(c.factCash) && !isZero(c.expected)) {
+    if (!c.factFilled && !isZero(c.expected)) {
       out.reason = 'Похоже, вы не вписали, сколько денег пересчитали в ящике.';
     } else if (!isZero(c.collected) && same(diff, c.collected)) {
       out.reason = 'Похоже, ящик пересчитали до того, как забрали инкассацию: ' +
