@@ -305,9 +305,14 @@
       var u = U(); v = v || {};
       var till = v.till || tills()[0];
       var prev = lastFact(till);
+      var что = 'мелкие деньги, лежавшие в ящике ДО открытия смены — чтобы было ' +
+        'чем давать сдачу. Это не выручка. Донесли деньги среди смены — это не ' +
+        'размен, а «Внесения в кассу» ниже';
       var openHint = prev
-        ? 'прошлая смена (' + dateRu(prev.date) + ') закрылась с ' + money(prev.fact)
-        : 'первая смена по этой кассе';
+        ? что + '. Прошлая смена (' + dateRu(prev.date) + ') закрылась с ' +
+          money(prev.fact) + ' — столько и должно было остаться в ящике'
+        : что + '. Это первая смена по этой кассе. Всё увозят инкассацией и ящик ' +
+          'закрывается в ноль? Тогда здесь ноль';
       return u.fieldRow('Дата смены', 'date', 'date', v.date || today()) +
         u.fieldRow('Касса', 'till', 'select', till, { options: tills() }) +
         u.fieldRow('Смена', 'shift', 'select', v.shift || shiftNames()[0], { options: shiftNames() }) +
