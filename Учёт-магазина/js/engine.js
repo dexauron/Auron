@@ -312,6 +312,88 @@
     };
   }
 
+  /* --------------------------------------------------------------------------
+     РАЗБОР РАСХОЖДЕНИЯ ПО ЯЩИКУ
+
+     «ИЗЛИШЕК 56 231 ₽» — это не ответ, а вопрос. Сама формула считает верно,
+     но владельцу от этого не легче: он видит огромное число и думает, что
+     врёт программа. Врёт почти всегда одно введённое число — чаще всего
+     инкассация или недосчитанный ящик.
+
+     Здесь мы делаем обратный ход: берём каждое поле по очереди и считаем,
+     каким оно должно было быть, чтобы ящик сошёлся. Получается короткий
+     список «либо здесь, либо здесь» — с него разбор начинается за минуту,
+     а не за вечер.
+
+     Математика простая. Ящик считается так:
+        должно = размен + Z-нал − возвраты + внесения − выплаты − инкассация
+        расхождение = факт − должно
+     Каждое поле входит в «должно» со знаком k (+1 или −1). Сдвинешь поле
+     на Δ — расхождение сдвинется на −k·Δ. Значит, чтобы обнулить:
+        Δ = расхождение / k,  то есть  надо = сейчас + расхождение / k
+     Для факта проще: он и есть «должно».
+
+     Отрицательные «надо» отбрасываем: выплаты не бывают минусовыми, такую
+     подсказку владелец справедливо не поймёт.
+     -------------------------------------------------------------------------- */
+  var ПОЛЯ_ЯЩИКА = [
+    { key: 'factCash', k: 0, name: 'Пересчитали руками' },
+    { key: 'collected', k: -1, name: 'Инкассация' },
+    { key: 'payouts', k: -1, name: 'Выплаты из ящика' },
+    { key: 'deposits', k: 1, name: 'Внесения в кассу' },
+    { key: 'returnsCash', k: -1, name: 'Возвраты покупателям' },
+    { key: 'zCash', k: 1, name: 'Z-отчёт: наличные' },
+    { key: 'openCash', k: 1, name: 'Размен на начало' }
+  ];
+
+  function shiftFix(s) {
+    /* Принимаем и саму смену, и уже посчитанный разбор: экран форму уже
+       посчитал, второй раз считать нечего. */
+    var c = (s && s.expected !== undefined && s.diff !== undefined) ? s : shiftCalc(s);
+    var diff = safeRound(c.diff);
+    var out = {
+      diff: diff, ok: isZero(diff), big: false, share: 0,
+      reason: '', list: []
+    };
+    if (out.ok) return out;
+
+    /* Доля расхождения от того, сколько наличных вообще прошло через ящик.
+       Недостача в 200 ₽ при обороте 80 000 — жизнь. Излишек в 56 000 при
+       том же обороте — ошибка ввода, и об этом надо сказать прямо. */
+    var оборот = safeRound(Math.abs(c.openCash) + Math.abs(c.zCash) + Math.abs(c.deposits));
+    out.share = оборот > КОПЕЙКА ? Math.abs(diff) / оборот : 1;
+    out.big = Math.abs(diff) >= 1000 && out.share >= 0.05;
+
+    /* Частые случаи, когда расхождение в точности равно одному из чисел, —
+       их можно назвать своим именем, не гадая. */
+    if (isZero(c.factCash) && !isZero(c.expected)) {
+      out.reason = 'Похоже, вы не вписали, сколько денег пересчитали в ящике.';
+    } else if (!isZero(c.collected) && same(diff, c.collected)) {
+      out.reason = 'Похоже, ящик пересчитали до того, как забрали инкассацию: ' +
+        'в нём как раз лишние ' + fmtMoney(c.collected) + '.';
+    } else if (!isZero(c.payouts) && same(diff, c.payouts)) {
+      out.reason = 'Похоже, выплаты записали, а деньги из ящика не выдали.';
+    } else if (!isZero(c.deposits) && same(diff, c.deposits)) {
+      out.reason = 'Похоже, внесение посчитали дважды: и в ящике, и в поле «Внесения».';
+    } else if (!isZero(c.openCash) && same(diff, c.openCash)) {
+      out.reason = 'Похоже, размен посчитали дважды: он уже лежит в ящике.';
+    } else if (!isZero(c.collected) && same(diff, -c.collected)) {
+      out.reason = 'Похоже, инкассацию записали дважды.';
+    }
+
+    ПОЛЯ_ЯЩИКА.forEach(function (f) {
+      var сейчас = safeRound(c[f.key]);
+      var надо = f.k === 0 ? safeRound(c.expected) : safeRound(сейчас + diff / f.k);
+      if (надо < -КОПЕЙКА) return;          // минусовых выплат не бывает
+      if (same(надо, сейчас)) return;       // это поле и так верное
+      out.list.push({
+        key: f.key, name: f.name, now: сейчас, need: safeRound(надо),
+        delta: safeRound(надо - сейчас)
+      });
+    });
+    return out;
+  }
+
   /* Смены по порядку: сначала по дате, потом по кассе, потом по очерёдности
      смен внутри дня.
 
@@ -2846,7 +2928,7 @@
     isShift: isShift, isDay: isDay, isIncome: isIncome, isExpense: isExpense,
     isDraw: isDraw, isCash: isCash,
 
-    shiftCalc: shiftCalc, shiftsOf: shiftsOf, cashOnHand: cashOnHand,
+    shiftCalc: shiftCalc, shiftFix: shiftFix, shiftsOf: shiftsOf, cashOnHand: cashOnHand,
     cashlessTotal: cashlessTotal, supplierDebt: supplierDebt,
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,
     totals: totals, planStatus: planStatus, planTotals: planTotals,

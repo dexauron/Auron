@@ -1508,5 +1508,73 @@ console.log('\n— Старые смены без новых полей счит
   check('и выручка прежняя', старая.revenue === 40000, старая.revenue, 40000);
 }
 
+console.log('\n— Разбор расхождения: какое число вписано неверно');
+{
+  /* Настоящая смена владельца, на которой он сказал «явно не правильно считает».
+     Формула считает верно: 10 000 + 77 529 − 950 + 10 000 − 10 760 − 74 081
+     = 11 738, а в ящике насчитали 67 969. Значит, ошибка не в формуле, а в
+     одном из введённых чисел — программа обязана показать, в каком именно. */
+  const c = WM.shiftCalc({
+    openCash: 10000, zCash: 77529, returnsCash: 950, deposits: 10000,
+    payouts: 10760, collected: 74081, factCash: 67969,
+    zCashless: 73165, zCard: 25003, zQr: 45828, zNfc: 2334, checks: 129 });
+  check('ФОРМУЛА СЧИТАЕТ ВЕРНО: должно быть 11 738', c.expected === 11738, c.expected, 11738);
+  check('излишек ровно 56 231', c.diff === 56231 && c.over === 56231, c.diff, 56231);
+
+  const f = WM.shiftFix(c);
+  check('РАСХОЖДЕНИЕ РАЗМЕРОМ С ВЫРУЧКУ ПОМЕЧЕНО КАК КРУПНОЕ', f.big === true, f.big, true);
+  check('доля от наличных за смену посчитана', Math.round(f.share * 100) === 58,
+    Math.round(f.share * 100), 58);
+
+  const по = {};
+  f.list.forEach(function (x) { по[x.key] = x.need; });
+  check('ЯЩИК СОШЁЛСЯ БЫ ПРИ ИНКАССАЦИИ 17 850', по.collected === 17850, по.collected, 17850);
+  check('или если в ящике насчитали бы 11 738', по.factCash === 11738, по.factCash, 11738);
+  check('или при размене 66 231', по.openCash === 66231, по.openCash, 66231);
+  check('или при Z-нале 133 760', по.zCash === 133760, по.zCash, 133760);
+  check('МИНУСОВЫЕ ВЫПЛАТЫ НЕ ПРЕДЛАГАЮТСЯ', по.payouts === undefined, по.payouts, undefined);
+  check('минусовые возвраты тоже', по.returnsCash === undefined, по.returnsCash, undefined);
+
+  /* Каждая подсказка обязана обнулять расхождение — иначе это не подсказка. */
+  let всеСходятся = true;
+  f.list.forEach(function (x) {
+    const правка = { openCash: 10000, zCash: 77529, returnsCash: 950, deposits: 10000,
+      payouts: 10760, collected: 74081, factCash: 67969 };
+    правка[x.key] = x.need;
+    if (!WM.shiftCalc(правка).ok) всеСходятся = false;
+  });
+  check('КАЖДАЯ ПОДСКАЗКА ДЕЙСТВИТЕЛЬНО ОБНУЛЯЕТ РАСХОЖДЕНИЕ', всеСходятся, всеСходятся, true);
+}
+
+console.log('\n— Разбор называет знакомые ошибки своим именем');
+{
+  // Ящик пересчитали до инкассации: в нём ровно на инкассацию больше
+  const до = WM.shiftFix({ openCash: 5000, zCash: 60000, payouts: 0, collected: 50000,
+    factCash: 65000 });
+  check('«ПЕРЕСЧИТАЛИ ДО ИНКАССАЦИИ» УЗНАЁТСЯ',
+    /до того, как забрали инкассацию/.test(до.reason), до.reason, 'про инкассацию');
+
+  // Факт не вписали вовсе
+  const пусто = WM.shiftFix({ openCash: 5000, zCash: 60000, factCash: 0 });
+  check('«НЕ ВПИСАЛИ ФАКТ» УЗНАЁТСЯ',
+    /не вписали/.test(пусто.reason), пусто.reason, 'про факт');
+
+  // Выплаты записали, а деньги не выдали
+  const вып = WM.shiftFix({ openCash: 0, zCash: 30000, payouts: 4000, factCash: 30000 });
+  check('«ВЫПЛАТЫ ЗАПИСАЛИ, А НЕ ВЫДАЛИ» УЗНАЁТСЯ',
+    /деньги из ящика не выдали/.test(вып.reason), вып.reason, 'про выплаты');
+
+  // Обычная недостача в 200 ₽ на обороте 80 000 — это жизнь, а не ошибка ввода
+  const мелочь = WM.shiftFix({ openCash: 5000, zCash: 75000, payouts: 0, collected: 0,
+    factCash: 79800 });
+  check('МЕЛКАЯ НЕДОСТАЧА НЕ ОБЪЯВЛЯЕТСЯ ОШИБКОЙ ВВОДА', мелочь.big === false, мелочь.big, false);
+  check('но подсказки всё равно есть', мелочь.list.length > 0, мелочь.list.length, '>0');
+
+  // Сошлось — разбирать нечего
+  const ровно = WM.shiftFix({ openCash: 5000, zCash: 60000, payouts: 0, factCash: 65000 });
+  check('СОШЛОСЬ — РАЗБОРА НЕТ',
+    ровно.ok && ровно.list.length === 0 && !ровно.reason, ровно.list.length, 0);
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

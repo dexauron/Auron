@@ -678,6 +678,46 @@ const правило = (имя, объяснение, проверка) =>
     return '';
   });
 
+правило('Подсказка по расхождению всегда обнуляет расхождение',
+  'Программа говорит: «поставь сюда столько — и ящик сойдётся». Если после ' +
+  'такой правки ящик не сходится, подсказка врёт, и владелец ищет ошибку там, ' +
+  'где её нет.',
+  м => {
+    const r = зерно(м.строки.length + 606);
+    for (let i = 0; i < 200; i++) {
+      const д = () => Math.round(r() * 5000000) / 100;
+      const s = { openCash: д(), zCash: д(), returnsCash: д(), deposits: д(),
+        payouts: д(), collected: д(), factCash: д() };
+      const c = E.shiftCalc(s);
+      const f = E.shiftFix(c);
+      if (c.ok) {
+        if (f.list.length || f.reason) return 'ящик сошёлся, а разбор что-то советует';
+        continue;
+      }
+      if (!f.list.length) return 'расхождение ' + РУБ(c.diff) + ', а подсказок нет';
+      for (const x of f.list) {
+        if (x.need < -0.005) return 'подсказка предлагает минусовое «' + x.name + '»';
+        const правка = Object.assign({}, s);
+        правка[x.key] = x.need;
+        const после = E.shiftCalc(правка);
+        if (!близко(после.diff, 0)) {
+          return '«' + x.name + '» → ' + РУБ(x.need) + ' оставляет расхождение ' +
+            РУБ(после.diff);
+        }
+      }
+      // Доля от оборота — величина честная: от неё зависит, бить ли тревогу
+      const оборот = E.safeRound(Math.abs(c.openCash) + Math.abs(c.zCash) +
+        Math.abs(c.deposits));
+      if (оборот > 0.005 && !близко(f.share, Math.abs(c.diff) / оборот)) {
+        return 'доля расхождения посчитана неверно';
+      }
+      if (f.big !== (Math.abs(c.diff) >= 1000 && f.share >= 0.05)) {
+        return 'тревога поднята не по правилу';
+      }
+    }
+    return '';
+  });
+
 /* --- Прогон ------------------------------------------------------------------ */
 const один = process.argv[2] ? Number(process.argv[2]) : null;
 const СКОЛЬКО = один !== null ? 1 : 1000;
