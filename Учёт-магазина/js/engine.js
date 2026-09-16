@@ -54,11 +54,30 @@
   }
 
   // Округление до копеек без «0.30000000000000004»
+  /* Округление до копейки.
+
+     Обычное Math.round(n * 100) / 100 врёт ровно на половине копейки.
+     Компьютер хранит дроби в двоичном виде, и 1.005 * 100 получается не 100.5,
+     а 100.49999999999999 — округление даёт 1.00 вместо 1.01. Копейка пропадает,
+     а на длинном отчёте таких копеек набирается на рубли.
+
+     Лечится подтягиванием на машинную погрешность: она в разы меньше копейки,
+     поэтому настоящие числа не двигает, а «почти половину» дотягивает до
+     половины. Знак выносим отдельно, чтобы −1.005 округлялось в −1.01, а не
+     в −1.00: деньги округляют одинаково в обе стороны. */
   function safeRound(v) {
     var n = num(v);
     if (!isFinite(n)) return 0;
-    return Math.round(n * 100) / 100;
+    var sign = n < 0 ? -1 : 1;
+    var x = Math.abs(n) * 100;
+    return sign * Math.round(x * (1 + Number.EPSILON)) / 100;
   }
+
+  /* Ноль с точностью до копейки. Сравнивать деньги через === нельзя: после
+     нескольких сложений 0 легко превращается в 0.0000000000001. */
+  var КОПЕЙКА = 0.005;
+  function isZero(v) { return Math.abs(num(v)) < КОПЕЙКА; }
+  function same(a, b) { return Math.abs(num(a) - num(b)) < КОПЕЙКА; }
   function div(a, b) { b = num(b); return b ? num(a) / b : 0; }
 
   /* --- Как показываем ------------------------------------------------------- */
@@ -70,7 +89,20 @@
       maximumFractionDigits: d == null ? 0 : d
     });
   }
-  function fmtMoney(v) { return fmtNum(Math.round(num(v))) + ' ₽'; }
+  /* Деньги на экране.
+
+     Раньше сумма всегда округлялась до целых рублей при показе. Из-за этого
+     на экране 100,40 + 100,40 давало «100 ₽ + 100 ₽ = 201 ₽»: каждое слагаемое
+     округлилось вниз, а итог — вверх. Арифметика на глазах не сходилась,
+     хотя в базе всё было верно.
+
+     Теперь копейки показываются ТОГДА, КОГДА ОНИ ЕСТЬ. Суммы без копеек
+     выглядят как раньше — коротко; с копейками показаны целиком и сходятся. */
+  function fmtMoney(v) {
+    var n = safeRound(v);
+    var целое = Math.abs(n * 100 - Math.round(n) * 100) < 0.5;
+    return fmtNum(n, целое ? 0 : 2) + ' ₽';
+  }
   function fmtPct(v, d) { return fmtNum(v, d == null ? 1 : d).replace('.', ',') + '%'; }
   function plural(n, one, few, many) {
     n = Math.abs(Math.round(num(n)));
@@ -268,13 +300,15 @@
       returns: safeRound(retCash + retCashless),
       card: card, qr: qr, nfc: nfc, byWay: byWay,
       wayFilled: wayFilled, wayDiff: wayDiff,
-      wayOk: !wayFilled || Math.abs(wayDiff) < 0.5,
+      wayOk: !wayFilled || isZero(wayDiff),
       checks: checks, voided: safeRound(s.voided),
       avgCheck: checks ? safeRound(div(safeRound(revenueCash + revenueCashless), checks)) : 0,
       short: diff < 0 ? safeRound(-diff) : 0,
       over: diff > 0 ? safeRound(diff) : 0,
-      ok: Math.abs(diff) < 0.5,
-      status: Math.abs(diff) < 0.5 ? 'сходится' : (diff < 0 ? 'недостача' : 'излишек')
+      /* Раньше порогом было полрубля, и недостача в 49 копеек показывалась
+         как «сходится». Теперь сходится — значит сходится до копейки. */
+      ok: isZero(diff),
+      status: isZero(diff) ? 'сходится' : (diff < 0 ? 'недостача' : 'излишек')
     };
   }
 
@@ -419,13 +453,22 @@
       if (upto && txt(r.date) > upto) return;
       if (isShift(r)) {
         var c = shiftCalc(r);
-        /* Наличная выручка минус выплаты плюс расхождение — на счёт ящика:
-           в ящике лежит факт, а не то, что должно было лежать.
-           Безналичная выручка — на свой счёт, целиком. */
-        hit(accountOf(r, accounts), c.zCash - c.payouts + c.diff);
-        if (c.zCashless) {
+        /* ПОСЛЕ СМЕНЫ В ЯЩИКЕ РОВНО СТОЛЬКО, СКОЛЬКО НАСЧИТАЛ КАССИР.
+           Поэтому прибавляем разницу между фактом и разменом — и остаток
+           становится фактом, чем бы смена ни была наполнена.
+
+           Раньше здесь стояло «zCash − payouts + diff». На старой, короткой
+           формуле расчётного остатка это давало то же самое, но как только в
+           расчёт вошли возвраты, внесения и инкассация, выражение разъехалось:
+           по чеку магазина ящик показывал 81 014 ₽ там, где кассир насчитал 0.
+           Прямая запись правила от состава формулы больше не зависит.
+
+           Безнал идёт на свой счёт за вычетом возвратов на карту: банк
+           зачисляет ровно то, что осталось после возвратов. */
+        hit(accountOf(r, accounts), c.factCash - c.openCash);
+        if (c.revenueCashless) {
           hit(accountOf({ toAccount: r.cashlessAccount, method: 'Карта' }, accounts, 'to'),
-            c.zCashless);
+            c.revenueCashless);
         }
       } else if (isMove(r)) {
         /* Инкассация в сейф объясняет, куда делись деньги, вынутые из ящика
@@ -2821,6 +2864,7 @@
     parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
     rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
+    isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА,
     periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
     mergeByKey: mergeByKey, mergeSales: mergeSales,
     deadStockList: deadStockList, matchPayments: matchPayments,
