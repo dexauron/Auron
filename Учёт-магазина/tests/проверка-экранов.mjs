@@ -3726,6 +3726,116 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 28. Командная палитра, плавность и отклик.
+
+       В программе сорок экранов. Искать нужный глазами в меню — это каждый
+       раз пять секунд и сбитая мысль. */
+{
+  console.log('— Командная палитра и плавность');
+  const { page, ctx, errs } = await open();
+
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(400);
+  check('ПАЛИТРА ОТКРЫВАЕТСЯ ПО CTRL+K',
+    await page.evaluate(() => !!document.getElementById('cmdWrap')), 'открылась', 'открылась');
+  check('и сразу предлагает, куда пойти',
+    await page.evaluate(() => document.querySelectorAll('.cmd-row').length) > 5,
+    await page.evaluate(() => document.querySelectorAll('.cmd-row').length), '> 5');
+
+  const найти = async (q) => {
+    await page.fill('#cmdInput', q);
+    await page.waitForTimeout(300);
+    return page.evaluate(() => [...document.querySelectorAll('.cmd-row')]
+      .map(e => e.innerText.replace(/\n/g, ' · ')));
+  };
+
+  /* Владелец думает словом «инкассация», а экран называется «Утро: сверка
+     кассы». Палитра обязана это связать. */
+  const инкас = await найти('инкас');
+  check('СЛОВО ВЛАДЕЛЬЦА ВЕДЁТ НА НУЖНЫЙ ЭКРАН: «инкас» → сверка кассы',
+    инкас.length === 1 && /сверка кассы/i.test(инкас[0]), инкас.join(' | ') || 'пусто',
+    'Утро: сверка кассы');
+
+  const опечатка = await найти('зарплта');
+  check('ОПЕЧАТКА ПРОЩАЕТСЯ',
+    опечатка.some(x => /зарплат/i.test(x)), опечатка.slice(0, 2).join(' | ') || 'пусто',
+    'про зарплату');
+
+  /* Мусор в списке хуже пустого списка: владелец нажмёт наугад и попадёт не
+     туда. Лучше честно сказать «не нашлось». */
+  const чепуха = await найти('ыфвафыв');
+  check('ЧЕПУХА НЕ ВЫДАЁТ МУСОРА, А ЧЕСТНО ГОВОРИТ «НЕ НАШЛОСЬ»',
+    чепуха.length === 0 &&
+    await page.evaluate(() => !!document.querySelector('.cmd-empty')),
+    чепуха.length + ' пунктов', '0 пунктов');
+
+  /* Стрелки и Enter — палитрой пользуются с клавиатуры, не мышью */
+  await найти('ревизор');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(500);
+  check('ENTER ОТКРЫВАЕТ ВЫБРАННОЕ',
+    /Ревизор/.test(await page.evaluate(() => {
+      const t = document.querySelector('.page-head h1, .page-head .page-title');
+      return t ? t.textContent : '';
+    })), 'открылся', 'Ревизор');
+  check('и палитра закрывается за собой',
+    await page.evaluate(() => !document.getElementById('cmdWrap')), 'закрылась', 'закрылась');
+
+  /* Esc должен закрывать: это первое, что нажимают, когда передумали */
+  await page.keyboard.press('Control+k');
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  check('ESC ЗАКРЫВАЕТ ПАЛИТРУ',
+    await page.evaluate(() => !document.getElementById('cmdWrap')), 'закрылась', 'закрылась');
+
+  check('КНОПКА В ШАПКЕ ТОЖЕ ОТКРЫВАЕТ — на телефоне Ctrl+K нет',
+    await page.evaluate(() => {
+      const b = document.querySelector('[data-act="palette"]');
+      if (!b) return false;
+      b.click();
+      return !!document.getElementById('cmdWrap');
+    }), 'открывает', 'открывает');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+
+  /* Плавность: программа не должна дёргаться. Но и уважать «уменьшить
+     движение» обязана — кому анимация мешает, тот её не увидит. */
+  /* Стили читаем с диска, а не из браузера: страница открыта как файл, и
+     Chrome не даёт заглянуть в её таблицы стилей — cssRules бросает ошибку,
+     а счёт выходит нулевым. Я на этом и попался. */
+  const css = fs.readFileSync(path.join(HERE, '..', 'styles.css'), 'utf8');
+  const анимаций = (css.match(/animation\s*:|transition\s*:|@keyframes/g) || []).length;
+  check('ПЛАВНОСТЬ ЕСТЬ, А НЕ ПЯТЬ ПРАВИЛ НА ВСЮ ПРОГРАММУ',
+    анимаций >= 15, анимаций + ' правил', '≥ 15');
+  check('и «уменьшить движение» уважается — кому анимация мешает, тот её не увидит',
+    /prefers-reduced-motion/.test(css), 'уважается', 'уважается');
+  check('на печати анимаций нет',
+    /@media print[\s\S]{0,200}animation:\s*none/.test(css), 'нет', 'нет');
+
+  /* Размер букв — одна настройка на три ступени, а не две разные */
+  const ступени = await page.evaluate(() => {
+    const S = window.WMStore, out = {};
+    ['нет', 'да', 'очень крупный'].forEach(v => {
+      S.setSetting('bigText', v); window.WMUI.applyLook();
+      out[v] = [document.body.classList.contains('big'),
+        document.body.classList.contains('huge')].join('/');
+    });
+    S.setSetting('bigText', 'нет'); window.WMUI.applyLook();
+    return out;
+  });
+  check('РАЗМЕР БУКВ — ТРИ СТУПЕНИ ОДНОЙ НАСТРОЙКОЙ',
+    ступени['нет'] === 'false/false' && ступени['да'] === 'true/false' &&
+    ступени['очень крупный'] === 'true/true',
+    JSON.stringify(ступени), 'нет → да → очень крупный');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

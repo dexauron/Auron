@@ -2003,5 +2003,109 @@ console.log('\n— Ревизор считает «обычное» по сам�
     мало.findings.filter(function (f) { return f.key.indexOf('odd:') === 0; }).length, 0);
 }
 
+console.log('\n— Переезд базы на новый формат');
+{
+  /* Номер версии в базе стоял с самого начала, а кода, который бы что-то с
+     ним делал, не было. Каждое изменение формата старая база переживала
+     СЛУЧАЙНО — просто потому, что новые поля оказывались необязательными.  */
+  const было = STORE.dataVersion().app;
+  check('У ФОРМАТА ЕСТЬ НОМЕР ВЕРСИИ', было >= 2, было, '≥ 2');
+
+  /* Старая база: смены заданы только под одним именем из двух. Мы этот
+     капкан уже один раз проходили — форма сверки смен не видела. */
+  STORE.importJSON(JSON.stringify({ version: 1,
+    settings: { shiftNames: 'Утро, Вечер, Ночь' },
+    dds: [{ type: 'Смена', date: '2026-09-01', till: 'Касса 1' }] }));
+  const после = STORE.state;
+  check('СМЕНЫ ДОЕХАЛИ ДО ОБОИХ ИМЁН',
+    после.settings.finShifts === 'Утро, Вечер, Ночь' &&
+    после.settings.shiftNames === 'Утро, Вечер, Ночь',
+    после.settings.finShifts, 'Утро, Вечер, Ночь');
+  check('ЗАПИСЬ БЕЗ НОМЕРА ЕГО ПОЛУЧИЛА — иначе её не исправить и не удалить',
+    !!после.dds[0].id, после.dds[0].id ? 'есть' : 'нет', 'есть');
+  check('и версия поднялась', после.version === было, после.version, было);
+
+  // И в обратную сторону: задан только finShifts
+  STORE.importJSON(JSON.stringify({ version: 1, settings: { finShifts: 'Сутки' } }));
+  check('переезд работает в обе стороны',
+    STORE.state.settings.shiftNames === 'Сутки', STORE.state.settings.shiftNames, 'Сутки');
+
+  /* Главное: настройки по умолчанию не должны маскировать пустое поле.
+     Поднимать надо ДО слияния с ними — я сначала сделал наоборот, и
+     миграция тихо ничего не делала. */
+  STORE.importJSON(JSON.stringify({ version: 2,
+    settings: { shiftNames: 'А, Б', finShifts: 'А, Б' } }));
+  check('СВЕЖУЮ БАЗУ НЕ ТРОГАЕМ',
+    STORE.state.settings.shiftNames === 'А, Б', STORE.state.settings.shiftNames, 'А, Б');
+  check('и она не считается пришедшей из будущего',
+    STORE.fromFuture() === false, STORE.fromFuture(), false);
+
+  /* База новее программы: чинить нельзя ни в коем случае. Старая программа
+     не знает, что в ней появилось, и «починит» так, что данные испортятся. */
+  STORE.importJSON(JSON.stringify({ version: 99, settings: { shiftNames: 'Из будущего' },
+    dds: [] }));
+  check('БАЗУ ИЗ БУДУЩЕГО ПРОГРАММА НЕ ЧИНИТ',
+    STORE.fromFuture() === true, STORE.fromFuture(), true);
+  check('и номер её версии не сбивает на свой',
+    STORE.state.version === 99, STORE.state.version, 99);
+  check('данные при этом целы',
+    STORE.state.settings.shiftNames === 'Из будущего', STORE.state.settings.shiftNames,
+    'Из будущего');
+
+  // Повторный переезд ничего не портит: миграцию могут применить дважды
+  const дважды = JSON.stringify({ version: 1, settings: { shiftNames: 'Раз, Два' } });
+  STORE.importJSON(дважды);
+  const первый = JSON.stringify(STORE.state.settings.shiftNames);
+  STORE.importJSON(JSON.stringify({ version: 1, settings: STORE.state.settings }));
+  check('ПОВТОРНЫЙ ПЕРЕЕЗД НИЧЕГО НЕ ПОРТИТ',
+    JSON.stringify(STORE.state.settings.shiftNames) === первый,
+    STORE.state.settings.shiftNames, 'Раз, Два');
+}
+
+console.log('\n— Комиссия банка за эквайринг');
+{
+  /* Настоящая смена владельца: карта 25 003, QR 45 828, телефон 2 334. */
+  const c = WM.shiftCalc({ zCashless: 73165, zCard: 25003, zQr: 45828, zNfc: 2334 });
+
+  const выкл = WM.acquiring(c, {});
+  check('ПОКА НЕ ВКЛЮЧИЛИ — ПРОГРАММА НЕ ВЫДУМЫВАЕТ РАСХОД',
+    выкл.on === false && выкл.total === 0, выкл.total, 0);
+  check('и на счёт приходит весь безнал', выкл.net === 73165, выкл.net, 73165);
+
+  const ставки = { acqOn: 'да', acqCard: 1.8, acqQr: 0.5, acqNfc: 1.8 };
+  const a = WM.acquiring(c, ставки);
+  check('ВКЛЮЧИЛИ — КАЖДЫЙ СПОСОБ ПО СВОЕЙ СТАВКЕ',
+    a.card === WM.safeRound(25003 * 1.8 / 100) && a.qr === WM.safeRound(45828 * 0.5 / 100),
+    a.card + ' / ' + a.qr, '450.05 / 229.14');
+  check('итог — сумма трёх способов',
+    a.total === WM.safeRound(a.card + a.qr + a.nfc), a.total, 721.2);
+  check('НА СЧЁТ ПРИДЁТ ВЫРУЧКА МИНУС КОМИССИЯ',
+    a.net === WM.safeRound(73165 - a.total), a.net, 72443.8);
+  check('QR ДЕШЕВЛЕ КАРТЫ — это и видно: с большей суммы комиссия меньше',
+    a.qr < a.card && 45828 > 25003, a.qr + ' с 45 828 против ' + a.card + ' с 25 003',
+    'QR дешевле');
+
+  /* Ставки не вписаны — считать нечего, и выдумывать нельзя */
+  const пусто = WM.acquiring(c, { acqOn: 'да' });
+  check('ВКЛЮЧИЛИ, НО СТАВОК НЕТ — КОМИССИЯ НОЛЬ, А НЕ ВЫДУМАННАЯ',
+    пусто.total === 0, пусто.total, 0);
+
+  /* Разбивки нет — считаем осторожно, по ставке карты: занижать нельзя,
+     владелец построит планы на деньгах, которых не будет. */
+  const безРазбивки = WM.acquiring(WM.shiftCalc({ zCashless: 73165 }), ставки);
+  check('БЕЗ РАЗБИВКИ СЧИТАЕМ ОСТОРОЖНО — по ставке карты, а не по дешёвой',
+    безРазбивки.total === WM.safeRound(73165 * 1.8 / 100), безРазбивки.total, 1316.97);
+  check('и это больше, чем вышло бы с разбивкой',
+    безРазбивки.total > a.total, безРазбивки.total + ' против ' + a.total, 'больше');
+
+  /* Возвраты на карту банк тоже не зачисляет */
+  const сВозвратом = WM.acquiring(
+    WM.shiftCalc({ zCashless: 73165, returnsCashless: 3165, zCard: 25003, zQr: 45828, zNfc: 2334 }),
+    ставки);
+  check('ВОЗВРАТ НА КАРТУ УМЕНЬШАЕТ ТО, ЧТО ПРИДЁТ НА СЧЁТ',
+    сВозвратом.net === WM.safeRound(70000 - сВозвратом.total), сВозвратом.net,
+    WM.safeRound(70000 - сВозвратом.total));
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

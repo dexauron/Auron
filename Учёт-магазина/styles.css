@@ -1349,3 +1349,105 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .form-hint .more-btn { margin-left: 0; }
 /* На бумаге прятать нечего: печатаем всё, что объясняет документ */
 @media print { .more-box[hidden] { display: block !important; } .more-btn { display: none !important; } }
+
+/* ============================================================================
+   ПЛАВНОСТЬ
+
+   Ощущение дорогой программы на восемьдесят процентов состоит из того, что
+   ничего не дёргается. До этой правки на весь файл было пять анимаций:
+   экраны переключались рывком, окна появлялись мгновенно, списки моргали.
+
+   Длительности намеренно короткие — 120–220 мс. Медленная анимация красива
+   ровно один раз, а потом начинает мешать: владелец открывает сверку кассы
+   в семь утра и ждать её выезда не должен.
+
+   Всё уважает системную настройку «уменьшить движение»: кому анимация мешает
+   или вредит, тот её не увидит.
+   ========================================================================== */
+#page { animation: page-in .18s ease both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+
+.card { transition: box-shadow .16s ease, transform .16s ease; }
+.list-row, .nav-item, .btn, .chip, .stat, .xyz-cell, .more-btn {
+  transition: background-color .14s ease, color .14s ease,
+              border-color .14s ease, transform .12s ease, opacity .14s ease;
+}
+.btn:active, .chip:active, .list-row:active, .xyz-cell:active { transform: scale(.97); }
+.nav-item { will-change: background-color; }
+
+/* Окно выезжает снизу, как на телефоне, и затемнение проявляется вместе с ним */
+.sheet { animation: sheet-in .24s cubic-bezier(.22,.8,.3,1) both; }
+@keyframes sheet-in { from { transform: translateY(18px); opacity: .6; } }
+.sheet-back, .backdrop { animation: fade-in .2s ease both; }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* Свёрнутое объяснение раскрывается, а не выпрыгивает */
+.more-box:not([hidden]) { animation: more-in .16s ease both; }
+@keyframes more-in { from { opacity: 0; transform: translateY(-3px); } }
+
+/* Строки таблицы проявляются по очереди — глаз успевает за ними */
+.table-wrap table.data tbody tr { animation: row-in .2s ease both; }
+@keyframes row-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}
+@media print { *, *::before, *::after { animation: none !important; } }
+
+/* --- Скелетон: пока грузится выгрузка 1С ---------------------------------------
+   Раньше программа просто застывала на двадцати тысячах строк, и было
+   непонятно — работает она или повисла. */
+.skeleton { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.sk-line {
+  height: 14px; border-radius: 7px;
+  background: linear-gradient(90deg, var(--fill-2) 25%, var(--fill) 37%, var(--fill-2) 63%);
+  background-size: 400% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+}
+.sk-line.w70 { width: 70%; } .sk-line.w40 { width: 40%; } .sk-line.w90 { width: 90%; }
+.sk-line.tall { height: 30px; border-radius: 10px; }
+@keyframes sk { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+/* --- Ещё крупнее ---------------------------------------------------------------
+   «Крупный режим» в программе уже был. Заводить рядом вторую настройку размера
+   значит развести два механизма на одно дело и однажды в них запутаться.
+   Поэтому просто добавили третью ступень к существующей: магазин
+   круглосуточный, смотрят ночью и с телефона. */
+body.huge { font-size: 19px; }
+body.huge .page-title { font-size: 40px; }
+body.huge .hero-value { font-size: 54px; }
+body.huge .stat-value { font-size: 34px; }
+body.huge .btn, body.huge input, body.huge select, body.huge textarea { font-size: 17px; }
+
+/* Командная палитра: сорок экранов — это много, чтобы искать их глазами */
+.cmd-wrap { position: fixed; inset: 0; z-index: 900; display: flex;
+  align-items: flex-start; justify-content: center; padding: 10vh 16px 16px; }
+.cmd-back { position: absolute; inset: 0; background: rgba(0,0,0,.35);
+  backdrop-filter: blur(3px); animation: fade-in .18s ease both; }
+.cmd-box { position: relative; width: 100%; max-width: 560px; overflow: hidden;
+  background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow-sheet);
+  animation: cmd-in .2s cubic-bezier(.22,.8,.3,1) both; }
+@keyframes cmd-in { from { transform: translateY(-10px) scale(.98); opacity: 0; } }
+.cmd-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+  border-bottom: 1px solid var(--separator); }
+.cmd-head svg { flex: none; color: var(--label-3); }
+.cmd-head input { flex: 1; border: 0; background: none; outline: none;
+  font: inherit; font-size: 17px; color: var(--label); }
+.cmd-head kbd { font: inherit; font-size: 11px; color: var(--label-3);
+  border: 1px solid var(--separator); border-radius: 5px; padding: 2px 6px; }
+.cmd-list { max-height: 52vh; overflow: auto; padding: 6px; }
+.cmd-row { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border: 0; border-radius: var(--r-inner); background: none;
+  font: inherit; text-align: left; color: var(--label); cursor: pointer; }
+.cmd-row svg { flex: none; color: var(--label-2); }
+.cmd-row.on, .cmd-row:hover { background: var(--fill-2); }
+.cmd-row.on svg { color: var(--blue); }
+.cmd-name { flex: 1; font-size: 15px; }
+.cmd-where { font-size: 12px; color: var(--label-3); }
+.cmd-empty { padding: 22px 16px; text-align: center; font-size: 14px; color: var(--label-2); }
+.cmd-foot { padding: 9px 16px; border-top: 1px solid var(--separator);
+  font-size: 11.5px; color: var(--label-3); }
+@media print { .cmd-wrap { display: none !important; } }

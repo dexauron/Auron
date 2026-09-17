@@ -97,7 +97,8 @@
 
     /* --- Внешний вид ----------------------------------------------------- */
     theme: 'Авто', themeDayFrom: '07:00', themeNightFrom: '20:00',
-    bigText: 'нет', privacyDefault: 'нет',
+    bigText: 'нет', privacyDefault: 'нет', haptics: 'да',
+    acqOn: 'нет', acqCard: '', acqQr: '', acqNfc: '',
     startView: 'Пульт', defaultPeriod: 'Месяц',
     showAllViews: 'нет'      // меню: только рабочие экраны или все сорок
   };
@@ -183,8 +184,86 @@
     ];
   }
 
+  /* ==========================================================================
+     МИГРАЦИИ: КАК БАЗА ПЕРЕЕЗЖАЕТ НА НОВЫЙ ФОРМАТ
+
+     Номер версии в базе стоял с самого начала, а кода, который бы что-то с
+     ним делал, не было. Каждое изменение формата старая база переживала
+     СЛУЧАЙНО — просто потому, что новые поля оказывались необязательными.
+     Однажды повезло бы меньше, и владелец открыл бы программу с пустыми
+     цифрами, не поняв почему.
+
+     Теперь так: у формата есть номер, у каждого перехода — своя функция.
+     База младше — её поднимают по очереди, шаг за шагом, и записывают новый
+     номер. База уже свежая — не трогают.
+
+     ОТДЕЛЬНО ПРО ФАЙЛ ИЗ БУДУЩЕГО. Если база новее самой программы (владелец
+     обновил её на одном компьютере, а на втором открыл старой копией),
+     чинить её нельзя ни в коем случае: старая программа не знает, что там
+     появилось, и «починит» так, что данные испортятся. В этом случае просто
+     оставляем как есть и поднимаем флаг — экран о нём скажет.
+
+     ПОДНИМАЕМ ДО СЛИЯНИЯ С НАСТРОЙКАМИ ПО УМОЛЧАНИЮ, и это принципиально.
+     После слияния пустое поле уже не отличить от заданного: настройки по
+     умолчанию подставят своё значение, и миграция решит, что всё на месте.
+     Я написал сначала наоборот и получил ровно это — finShifts осталась
+     «День, Ночь» там, где владелец задал «Утро, Вечер, Ночь».
+
+     ПРАВИЛО ДЛЯ ТОГО, КТО БУДЕТ ПРАВИТЬ ДАЛЬШЕ: меняешь формат данных —
+     подними ВЕРСИЯ на единицу и допиши шаг сюда. Миграция обязана быть
+     безопасной при повторном запуске: её могут применить дважды.
+     ========================================================================== */
+  var ВЕРСИЯ = 2;
+
+  /* Движок сюда не подключается намеренно: хранилище обязано работать само
+     по себе. Поэтому своя строка — маленькая и без затей. */
+  function строка(v) { return String(v == null ? '' : v).trim(); }
+
+  var МИГРАЦИИ = [
+    {
+      до: 2,
+      имя: 'смены под двумя именами и записи без номера',
+      делать: function (s) {
+        /* Смены хранятся в двух настройках сразу: shiftNames видит мастер
+           настройки, finShifts — форма сверки. Мы это уже один раз забыли.
+           В старых базах заполнена обычно одна: копируем в пустую. */
+        var н = s.settings || {};
+        if (строка(н.shiftNames) && !строка(н.finShifts)) н.finShifts = н.shiftNames;
+        else if (строка(н.finShifts) && !строка(н.shiftNames)) н.shiftNames = н.finShifts;
+
+        /* Записи без номера. Такое бывает у баз, которые правили руками или
+           собирали из старых выгрузок. Без номера запись нельзя ни исправить,
+           ни удалить — она просто «прилипает» к экрану. */
+        for (var i = 0; i < COLLECTIONS.length; i++) {
+          var список = s[COLLECTIONS[i]];
+          if (Object.prototype.toString.call(список) !== '[object Array]') continue;
+          for (var j = 0; j < список.length; j++) {
+            if (список[j] && !список[j].id) список[j].id = uid();
+          }
+        }
+      }
+    }
+  ];
+
+  var ИЗ_БУДУЩЕГО = false;      // база новее программы — трогать нельзя
+
+  function поднять(s) {
+    if (!s || typeof s !== 'object') return s;
+    var было = +s.version || 1;
+    ИЗ_БУДУЩЕГО = было > ВЕРСИЯ;
+    if (ИЗ_БУДУЩЕГО) return s;            // файл из будущего не чиним
+    for (var i = 0; i < МИГРАЦИИ.length; i++) {
+      if (было < МИГРАЦИИ[i].до) {
+        try { МИГРАЦИИ[i].делать(s); }
+        catch (e) { /* одна неудачная миграция не должна ронять запуск */ }
+      }
+    }
+    s.version = ВЕРСИЯ;
+    return s;
+  }
+
   function emptyState() {
-    var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: 1 };
+    var s = { settings: JSON.parse(JSON.stringify(DEFAULT_SETTINGS)), version: ВЕРСИЯ };
     for (var i = 0; i < COLLECTIONS.length; i++) s[COLLECTIONS[i]] = [];
     return s;
   }
@@ -203,7 +282,7 @@
       }
       if (raw) {
         var parsed = JSON.parse(raw);
-        state = merge(emptyState(), parsed);
+        state = merge(emptyState(), поднять(parsed));
       }
     } catch (e) { /* повреждённое хранилище не должно ломать запуск */ }
     // Счета заводим в любом случае: даже если хранилище не прочиталось,
@@ -347,7 +426,7 @@
   // Заменить всё содержимое базы (например, прочитанное из файла в папке)
   function replaceAll(data) {
     var keepRev = +state.rev || 0;
-    state = merge(emptyState(), data || {});
+    state = merge(emptyState(), поднять(data || {}));
     // номер версии не откатываем назад: иначе следующая запись выглядела бы
     // старее файла и программа снова взяла бы файл
     state.rev = Math.max(keepRev, +state.rev || 0) + 1;
@@ -642,13 +721,17 @@
     return r.report;
   }
 
+  /* База новее программы: чинить нельзя, но молчать тем более. */
+  function fromFuture() { return ИЗ_БУДУЩЕГО; }
+  function dataVersion() { return { now: +state.version || 1, app: ВЕРСИЯ }; }
+
   function exportJSON() {
     return JSON.stringify({ exported: new Date().toISOString(), data: state }, null, 2);
   }
   function importJSON(text) {
     var obj = JSON.parse(text);
     var data = obj.data || obj;
-    state = merge(emptyState(), data);
+    state = merge(emptyState(), поднять(data));
     save();
     return state;
   }
@@ -668,6 +751,7 @@
     load: load, save: save, add: add, addMany: addMany, update: update, remove: remove,
     restore: restore, undo: undo, emptyTrash: emptyTrash, logUndo: logUndo, COLL_RU: COLL_RU,
     clear: clear, setSetting: setSetting, exportJSON: exportJSON, importJSON: importJSON,
+    fromFuture: fromFuture, dataVersion: dataVersion,
     fixedMonthly: fixedMonthly, uid: uid, onChange: onChange, replaceAll: replaceAll,
     stamp: stamp, compare: compare,
     ACCOUNT_KINDS: ACCOUNT_KINDS, ensureAccounts: ensureAccounts,

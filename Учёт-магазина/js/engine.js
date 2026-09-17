@@ -430,6 +430,51 @@
     return out;
   }
 
+  /* ==========================================================================
+     КОМИССИЯ ЭКВАЙРИНГА
+
+     Банк зачисляет на счёт НЕ ту сумму, что прошла по терминалу: он забирает
+     свой процент. Программа же до сих пор считала, что пришло всё. На обороте
+     в семьдесят тысяч безнала за смену разница выходит около тысячи рублей в
+     день — деньги, которых владелец не видит как отдельную строку.
+
+     Ставки у карты и у СБП разные, и разница большая: по карте обычно 1,5–2,5%,
+     по СБП — 0,4–0,7%. Поэтому считаем по каждому способу отдельно: тогда
+     видно не только сколько отдали, но и сколько экономит QR.
+
+     ВЫКЛЮЧАТЕЛЬ ОБЯЗАТЕЛЕН. Владелец сказал прямо: одному магазину это нужно,
+     другому нет. Пока `acqOn` не включён, комиссия равна нулю и нигде не
+     показывается — программа не должна выдумывать расходы, которых владелец
+     не подтвердил. И пока ставки не вписаны, считать тоже нечего.
+     ========================================================================== */
+  function acquiring(c, settings) {
+    var s = settings || {};
+    var вкл = norm(s.acqOn) === 'да';
+    var out = { on: вкл, card: 0, qr: 0, nfc: 0, total: 0, net: 0,
+      rateCard: num(s.acqCard), rateQr: num(s.acqQr), rateNfc: num(s.acqNfc) };
+    var база = c || {};
+    out.net = safeRound(num(база.revenueCashless));
+    if (!вкл) return out;
+
+    /* Считаем по разбивке, если она есть: карта и СБП стоят по-разному.
+       Разбивки нет — берём весь безнал по ставке карты: это осторожная
+       оценка, она скорее завысит комиссию, чем занизит. Занижать нельзя:
+       владелец построит планы на деньгах, которых не будет. */
+    var телефон = num(база.nfc);
+    var ставкаNfc = out.rateNfc || out.rateCard;
+    if (num(база.byWay) > КОПЕЙКА) {
+      out.card = safeRound(num(база.card) * out.rateCard / 100);
+      out.qr = safeRound(num(база.qr) * out.rateQr / 100);
+      out.nfc = safeRound(телефон * ставкаNfc / 100);
+    } else {
+      out.card = safeRound(num(база.zCashless) * out.rateCard / 100);
+    }
+    out.total = safeRound(out.card + out.qr + out.nfc);
+    // На счёт придёт выручка безналом за вычетом комиссии
+    out.net = safeRound(num(база.revenueCashless) - out.total);
+    return out;
+  }
+
   /* Смены по порядку: сначала по дате, потом по кассе, потом по очерёдности
      смен внутри дня.
 
@@ -3241,7 +3286,8 @@
     isShift: isShift, isDay: isDay, isIncome: isIncome, isExpense: isExpense,
     isDraw: isDraw, isCash: isCash,
 
-    shiftCalc: shiftCalc, shiftFix: shiftFix, shiftsOf: shiftsOf, cashOnHand: cashOnHand,
+    shiftCalc: shiftCalc, shiftFix: shiftFix, acquiring: acquiring,
+    shiftsOf: shiftsOf, cashOnHand: cashOnHand,
     journal: journal,
     cashlessTotal: cashlessTotal, supplierDebt: supplierDebt,
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,

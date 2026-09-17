@@ -173,6 +173,17 @@
   }
 
   var toastTimer = null;
+  /* Короткий отклик телефона. Не украшение: когда кассир сдаёт смену одной
+     рукой, глядя на покупателя, вибрация — единственный способ понять, что
+     программа услышала. На компьютере её просто нет, и это нормально. */
+  function дрогнуть(вид) {
+    try {
+      if (!navigator.vibrate) return;
+      if (E.norm(S.settings.haptics) === 'нет') return;
+      navigator.vibrate(вид === 'плохо' ? [22, 40, 22] : 12);
+    } catch (e) { /* вибрация — приятное дополнение, а не обязанность */ }
+  }
+
   function toast(text, ms, action) {
     var old = document.querySelector('.toast'); if (old) old.remove();
     if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
@@ -1161,7 +1172,12 @@
     if (mode) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     // «Крупный режим» — одна настройка на всё: буквы, кнопки, поля, таблицы
-    document.body.classList.toggle('big', E.norm(s.bigText) === 'да');
+    /* Три ступени вместо двух. «Очень крупный» включает обе: крупный режим
+       задаёт заголовки и отступы, huge добавляет размер поверх. */
+    var буквы = E.norm(s.bigText);
+    var крупно = буквы === 'да' || буквы.indexOf('очень') >= 0;
+    document.body.classList.toggle('big', крупно);
+    document.body.classList.toggle('huge', буквы.indexOf('очень') >= 0);
   }
 
   // Файл базы изменил кто-то ещё (вторая вкладка или другой компьютер).
@@ -1662,6 +1678,7 @@
     sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
     go: function (id) { go(id); }, render: function () { render(); },
+    applyLook: function () { applyLook(); }, palette: function () { кпОткрыть(); },
     tab: function (key, def) { return TAB[key] || def; },
     rowMenu: function (coll, id, opts) { return rowMenu(coll, id, opts); },
     pasteClip: function (formId) { pasteClip(formId); },
@@ -2073,6 +2090,152 @@
 
   function go(id) { VIEW = id; PAGE = {}; render(); $('scroll').scrollTop = 0; }
 
+  /* ==========================================================================
+     КОМАНДНАЯ ПАЛИТРА: Ctrl+K
+
+     В программе сорок экранов. Искать нужный в меню — это каждый раз пять
+     секунд и сбитая мысль. Набрал «инкас» — попал в инкассацию; набрал
+     «марьям» — открыл её личный лист. Именно это отличает инструмент от
+     анкеты, и приём давно стандартный.
+
+     Ищем не только по экранам, но и по действиям (формам ввода): чаще всего
+     владельцу нужен не экран, а «записать расход».
+
+     Опечатки прощаем тем же Fuse, что и в поиске по товарам, — и по тому же
+     правилу: сначала точно, и только если точно ничего не нашлось.
+     ========================================================================== */
+  var КП_ОТКР = false;
+
+  /* Слова, которыми владелец думает, редко совпадают с названием экрана.
+     Он ищет «инкассацию», а экран называется «Утро: сверка кассы»; ищет
+     «недостачу», а экран — «Кассиры и расхождения». Список маленький и
+     живёт в одном месте; это про названия экранов, а не про конкретный
+     магазин, поэтому правилу универсальности не мешает. */
+  var КП_СЛОВА = {
+    morning: 'инкассация размен z-отчёт смена ящик недостача излишек сверка',
+    cashiers: 'недостача излишек расхождение кассир воровство',
+    ledger: 'операции записи история движение денег',
+    revizor: 'ошибки проверка тревога правила аудит',
+    shifts: 'смена табель график',
+    payroll: 'зарплата аванс расчёт ведомость выплата',
+    suppliers: 'долг поставщик накладная оплата',
+    funds: 'конверт накопить отложить аренда',
+    abc: 'xyz неликвид рейтинг ровность заказ',
+    stock: 'остаток склад товар',
+    settings: 'настроить ставки комиссия эквайринг пин тема',
+    data: 'копия резерв выгрузка 1с файл папка'
+  };
+
+  function кпПункты() {
+    var список = [];
+    (VIEWS || []).forEach(function (v) {
+      список.push({ вид: 'экран', id: v.id, имя: v.name,
+        где: v.group || '', слова: КП_СЛОВА[v.id] || '', icon: v.icon || 'grid' });
+    });
+    Object.keys(FORMS).forEach(function (k) {
+      var f = FORMS[k];
+      if (!f || !f.title) return;
+      список.push({ вид: 'форма', id: k, имя: f.title, где: 'записать',
+        слова: '', icon: f.icon || 'plus' });
+    });
+    return список;
+  }
+
+  function кпНайти(q) {
+    var все = кпПункты();
+    var з = E.norm(q);
+    if (!з) return все.slice(0, 12);
+    var точно = все.filter(function (x) {
+      return E.norm(x.имя).indexOf(з) >= 0 || E.norm(x.где).indexOf(з) >= 0 ||
+        E.norm(x.слова).indexOf(з) >= 0;
+    });
+    if (точно.length) return точно.slice(0, 12);
+    /* Точного нет — прощаем опечатку. Но с отсечкой по качеству: без неё на
+       «инкас» палитра выдавала «Настройки» и «График смен». Мусор в списке
+       хуже пустого списка: владелец нажимает наугад и попадает не туда.
+       Лучше честно сказать «не нашлось» — он наберёт другое слово. */
+    var F = window.Fuse;
+    if (!F) return [];
+    var f = new F(все, { keys: ['имя', 'слова', 'где'], threshold: 0.34,
+      ignoreLocation: true, includeScore: true, minMatchCharLength: 3 });
+    return f.search(q)
+      .filter(function (x) { return x.score <= 0.35; })
+      .slice(0, 12).map(function (x) { return x.item; });
+  }
+
+  function кпРисовать(q) {
+    var найдено = кпНайти(q);
+    var box = $('cmdList');
+    if (!box) return;
+    if (!найдено.length) {
+      box.innerHTML = '<div class="cmd-empty">Ничего не нашлось. Попробуйте другое слово — ' +
+        'например, «касса», «расход», «зарплата».</div>';
+      return;
+    }
+    box.innerHTML = найдено.map(function (x, i) {
+      return '<button type="button" class="cmd-row' + (i === 0 ? ' on' : '') + '" ' +
+        'data-kind="' + esc(x.вид) + '" data-id="' + esc(x.id) + '">' +
+        ic(x.icon, 17) + '<span class="cmd-name">' + esc(x.имя) + '</span>' +
+        '<span class="cmd-where">' + esc(x.где) + '</span></button>';
+    }).join('');
+  }
+
+  function кпЗакрыть() {
+    КП_ОТКР = false;
+    var w = $('cmdWrap');
+    if (w) w.remove();
+  }
+
+  function кпПойти(el) {
+    var вид = el.dataset.kind, id = el.dataset.id;
+    кпЗакрыть();
+    if (вид === 'форма') openForm(id); else go(id);
+  }
+
+  function кпОткрыть() {
+    if (КП_ОТКР) { кпЗакрыть(); return; }
+    КП_ОТКР = true;
+    var w = document.createElement('div');
+    w.id = 'cmdWrap';
+    w.className = 'cmd-wrap';
+    w.innerHTML = '<div class="cmd-back"></div><div class="cmd-box">' +
+      '<div class="cmd-head">' + ic('search', 18) +
+      '<input id="cmdInput" type="text" autocomplete="off" spellcheck="false" ' +
+      'placeholder="Куда пойти или что записать">' +
+      '<kbd>Esc</kbd></div><div id="cmdList" class="cmd-list"></div>' +
+      '<div class="cmd-foot">↑ ↓ — выбрать · Enter — открыть</div></div>';
+    document.body.appendChild(w);
+    кпРисовать('');
+
+    var поле = $('cmdInput');
+    поле.addEventListener('input', function () { кпРисовать(поле.value); });
+    поле.focus();
+
+    w.addEventListener('click', function (e) {
+      if (e.target.closest('.cmd-back')) { кпЗакрыть(); return; }
+      var r = e.target.closest('.cmd-row');
+      if (r) кпПойти(r);
+    });
+    w.addEventListener('keydown', function (e) {
+      var ряды = Array.prototype.slice.call(w.querySelectorAll('.cmd-row'));
+      var i = ряды.indexOf(w.querySelector('.cmd-row.on'));
+      if (e.key === 'Escape') { e.preventDefault(); кпЗакрыть(); return; }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (ряды[i < 0 ? 0 : i]) кпПойти(ряды[i < 0 ? 0 : i]);
+        return;
+      }
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      e.preventDefault();
+      if (!ряды.length) return;
+      var н = e.key === 'ArrowDown' ? (i + 1) % ряды.length
+        : (i <= 0 ? ряды.length - 1 : i - 1);
+      ряды.forEach(function (r2) { r2.classList.remove('on'); });
+      ряды[н].classList.add('on');
+      ряды[н].scrollIntoView({ block: 'nearest' });
+    });
+  }
+
   /* --- Экспорт и копии ------------------------------------------------------------- */
   /* --- 133. Режим «только чтение» ---------------------------------------------
      Приходит проверяющий — программу надо показать, но не дать в ней ничего
@@ -2091,7 +2254,7 @@
   }
   // Что можно нажимать в режиме показа: только смотреть, печатать и выгружать
   var RO_ALLOWED = {
-    'print': 1, 'pdf': 1, 'more-toggle': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
+    'print': 1, 'pdf': 1, 'more-toggle': 1, 'palette': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
     'close-sheet': 1, 'more-back': 1, 'readonly-off': 1, 'share-copy': 1,
     'share-whatsapp': 1, 'share-telegram': 1
   };
@@ -2575,6 +2738,8 @@
       else if (a === 'folder-forget') { if (confirm('Отключить папку? Записи останутся в браузере и в уже сохранённом файле.')) { F.forget(); render(); } }
       else if (a === 'export-screen') exportScreen();
       else if (a === 'restore') restore();
+      /* Не все знают про Ctrl+K, и на телефоне его нет вовсе. */
+      else if (a === 'palette') кпОткрыть();
       else if (a === 'more-toggle') {
         var блок = $(el.dataset.more);
         if (блок) {
@@ -2761,7 +2926,8 @@
         }
         var res = def.save(vals);
         window.WM_LAST_SAVE = { form: id, ok: typeof res !== 'string' };
-        if (typeof res === 'string') { toast(res); return; }
+        if (typeof res === 'string') { дрогнуть('плохо'); toast(res); return; }
+        дрогнуть('хорошо');
         // При правке форма обычно добавляет новую запись — старую убираем.
         // Формы с пометкой editsInPlace правят запись сами, их трогать нельзя.
         if (EDIT && !def.editsInPlace) { S.remove(EDIT.coll, EDIT.id, true); }
@@ -2807,6 +2973,8 @@
     document.addEventListener('keydown', function (e) {
       if (!(e.ctrlKey || e.metaKey)) return;
       var key = (e.key || '').toLowerCase();
+      // Ctrl+K — командная палитра. Работает всегда, даже поверх формы.
+      if (key === 'k' || key === 'л') { e.preventDefault(); кпОткрыть(); return; }
       var form = document.getElementById('wmForm');
       if ((key === 's' || key === 'ы') && form) {
         e.preventDefault();
@@ -3116,6 +3284,20 @@
         }
       }
     } catch (e) { /* вторая папка — приятное дополнение, а не обязанность */ }
+
+    /* База новее самой программы. Так бывает, когда владелец обновил
+       программу на одном компьютере, а на втором открыл старой копией.
+       Чинить такую базу нельзя: старая программа не знает, что в ней
+       появилось, и «починит» так, что данные испортятся. Не трогаем — но и
+       молчать нельзя, иначе он решит, что часть записей пропала. */
+    if (S.fromFuture && S.fromFuture()) {
+      var верс = S.dataVersion();
+      setTimeout(function () {
+        toast('Эта база сделана более новой версией программы (формат ' + верс.now +
+          ', здесь ' + верс.app + '). Ничего в ней не менял и не буду: сначала ' +
+          'обновите программу, иначе записи можно испортить.', 20000);
+      }, 900);
+    }
 
     if (st === 'lost') {
       // папку перенесли или распаковали заново в другое место: говорим сразу,
