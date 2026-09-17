@@ -181,7 +181,9 @@
       returnsCash: n(v.returnsCash), returnsCashless: n(v.returnsCashless),
       deposits: n(v.deposits), collected: n(v.collected),
       zCard: n(v.zCard), zQr: n(v.zQr), zNfc: n(v.zNfc), checks: n(v.checks),
-      factFilled: v.factCash !== '' && v.factCash != null
+      factFilled: v.factCash !== '' && v.factCash != null,
+      collectedFact: (v.collectedFact === '' || v.collectedFact == null)
+        ? null : n(v.collectedFact)
     });
     var zb = c.zCashless, пусто = !c.zCash && !c.factCash && !c.payouts;
 
@@ -194,7 +196,7 @@
     if (c.deposits) h += '<div class="cc-line"><span>+ Внесения в кассу</span><b>' +
       esc(money(c.deposits)) + '</b></div>';
     h += '<div class="cc-line"><span>− Выплаты из ящика</span><b>' + esc(money(c.payouts)) + '</b></div>';
-    if (c.collected) h += '<div class="cc-line"><span>− Инкассация</span><b>' +
+    if (c.collected) h += '<div class="cc-line"><span>− Инкассация (пробито кассой)</span><b>' +
       esc(money(c.collected)) + '</b></div>';
     h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
       '<span>Должно быть в ящике</span><b class="cc-big">' + esc(money(c.expected)) + '</b></div>';
@@ -233,23 +235,67 @@
         }
       }
     }
-    if (zb) {
-      h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
-        '<span>Безнал (в ящик не попадает)</span><b>' + esc(money(zb)) + '</b></div>';
-      /* Сверка с отчётом терминала: карта + QR + телефон обязаны дать Z-безнал.
-         Не сошлось — либо платёж не долетел до кассы, либо пробили мимо. */
-      if (c.wayFilled) {
-        h += '<div class="cc-line"><span class="c-muted">карта ' + esc(money(c.card)) +
-          ' · QR ' + esc(money(c.qr)) + (c.nfc ? ' · телефон ' + esc(money(c.nfc)) : '') +
-          '</span><b class="' + (c.wayOk ? 'c-green' : 'c-red') + '">' +
-          esc(money(c.byWay)) + '</b></div>';
-        if (!c.wayOk) {
-          h += '<div class="cc-sub c-red">Терминал и Z-отчёт разошлись на ' +
-            esc(money(Math.abs(c.wayDiff))) + '. ' +
-            (c.wayDiff > 0 ? 'По терминалу прошло больше, чем пробито на кассе.'
-              : 'На кассе пробито больше, чем прошло по терминалу.') +
-            ' Это надо разобрать сегодня: завтра концов не найти.</div>';
+    /* --------------------------------------------------------------------------
+       ТРИ КОЛОНКИ: ЧТО СКАЗАЛА КАССА · ЧТО ДОЛЖНО БЫТЬ · ЧТО ЕСТЬ ПО ФАКТУ
+
+       Владелец попросил ровно это, и просьба правильная. Выше идёт арифметика
+       ящика — она отвечает на вопрос «почему столько». А здесь ответ на вопрос
+       «сошлось или нет», по каждому кошельку отдельно:
+
+         · наличные в ящике — касса про остаток ничего не говорит, поэтому в
+           её колонке прочерк;
+         · инкассация — касса пробила одно, в сейф доехало другое;
+         · безнал — касса пробила одно, терминал показал другое.
+
+       Каждая строка отвечает за свой карман, и итог складывается ровно один
+       раз. Так видно не только «сколько не хватает», но и ГДЕ искать.
+       -------------------------------------------------------------------------- */
+    if (!пусто) {
+      var стр = [];
+      стр.push({ имя: 'Наличные в ящике', касса: null, надо: c.expected,
+        факт: c.factFilled ? c.factCash : null, раз: c.factFilled ? c.diff : 0 });
+      if (c.collected || c.collectFilled) {
+        стр.push({ имя: 'Инкассация в сейф', касса: c.collected, надо: c.collected,
+          факт: c.collectFilled ? c.collectedFact : null,
+          раз: c.collectFilled ? c.collectDiff : 0 });
+      }
+      if (zb || c.wayFilled) {
+        стр.push({ имя: 'Безнал на счёт', касса: c.zCashless, надо: null,
+          факт: c.wayFilled ? c.byWay : null, раз: c.wayFilled ? c.wayDiff : 0 });
+      }
+      h += '<div class="cc-cmp"><div class="cc-cmp-h">' +
+        '<span>Кошелёк</span><b>Касса сказала</b><b>Должно быть</b><b>По факту</b></div>';
+      стр.forEach(function (r) {
+        var есть = r.факт != null, сошлось = есть && Math.abs(r.раз) < 0.005;
+        h += '<div class="cc-cmp-r"><span>' + esc(r.имя) + '</span>' +
+          '<b>' + (r.касса == null ? '<i>—</i>' : esc(money(r.касса))) + '</b>' +
+          '<b>' + (r.надо == null ? '<i>—</i>' : esc(money(r.надо))) + '</b>' +
+          '<b class="' + (!есть ? 'c-muted' : (сошлось ? 'c-green' : 'c-red')) + '">' +
+          (есть ? esc(money(r.факт)) : '<i>не считали</i>') + '</b></div>';
+        if (есть && !сошлось) {
+          h += '<div class="cc-cmp-n' + (r.раз < 0 ? ' bad' : '') + '">' +
+            (r.раз < 0 ? 'не хватает ' : 'больше на ') + esc(money(Math.abs(r.раз))) + '</div>';
         }
+      });
+      h += '<div class="cc-cmp-t ' + (c.allOk ? 'ok' : (c.totalDiff < 0 ? 'bad' : 'warn')) + '">' +
+        '<span>' + (c.allOk ? 'Всё сошлось'
+          : (c.totalDiff < 0 ? 'ВСЕГО НЕ ХВАТАЕТ' : 'ВСЕГО ЛИШНИХ')) + '</span>' +
+        '<b>' + (c.allOk ? '—' : esc(money(Math.abs(c.totalDiff)))) + '</b></div></div>';
+    }
+
+    /* Итог по безналу уже стоит в таблице сравнения выше — второй раз его
+       показывать незачем. Здесь только то, чего в таблице нет: из чего он
+       сложился и что делать, если терминал с кассой разошлись. */
+    if (zb && c.wayFilled) {
+      h += '<div class="cc-sub">Из них по терминалу: карта ' + esc(money(c.card)) +
+        ' · QR ' + esc(money(c.qr)) + (c.nfc ? ' · телефон ' + esc(money(c.nfc)) : '') +
+        '</div>';
+      if (!c.wayOk) {
+        h += '<div class="cc-sub c-red">Терминал и Z-отчёт разошлись на ' +
+          esc(money(Math.abs(c.wayDiff))) + '. ' +
+          (c.wayDiff > 0 ? 'По терминалу прошло больше, чем пробито на кассе.'
+            : 'На кассе пробито больше, чем прошло по терминалу.') +
+          ' Это надо разобрать сегодня: завтра концов не найти.</div>';
       }
     }
     /* Выручку показываем ВСЕГДА, а не только когда заполнен безнал: у наличной
@@ -278,7 +324,7 @@
        владелец введёт его, а расчёт над кнопкой не шелохнётся, и будет
        казаться, что программа его не услышала. */
     var WATCH = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash', 'account', 'till',
-      'returnsCash', 'returnsCashless', 'deposits', 'collected',
+      'returnsCash', 'returnsCashless', 'deposits', 'collected', 'collectedFact',
       'zCard', 'zQr', 'zNfc', 'checks'];
     function tick(el) {
       if (!el || !el.name || WATCH.indexOf(el.name) < 0 || !el.closest) return;
@@ -352,11 +398,16 @@
         u.fieldRow('Выплаты из ящика', 'payouts', 'number', v.payouts || 0,
           { hint: 'из Z-отчёта: «ВЫПЛАТ». Что брали из кассы за смену: поставщикам, на хознужды' }) +
         u.fieldRow('Инкассация', 'collected', 'number', v.collected || 0,
-          { hint: 'сколько денег РЕАЛЬНО увезли из ящика в сейф — пересчитанных ' +
-            'купюрами. На чеке есть строка «ИНКАССАЦИЯ», но если в сейф доехало ' +
-            'меньше, пишите пересчитанное: разница и есть недостача. ' +
+          { hint: 'из Z-отчёта: строка «ИНКАССАЦИЯ» — сколько касса вынула из ящика. ' +
+            'Сколько доехало до сейфа, впишете следующей строкой. ' +
             'Несколько аппаратов на кассе — складывайте: 50000+3000. ' +
             'Перевод в сейф программа запишет сама — второй раз вводить не надо' }) +
+        u.fieldRow('Инкассация: пересчитали', 'collectedFact', 'number',
+          v.collectedFact != null ? v.collectedFact : '',
+          { keepEmpty: true,   // пусто ≠ ноль: «не считали» против «не доехало ничего»
+            hint: 'сколько денег РЕАЛЬНО доехало до сейфа, пересчитанных купюрами. ' +
+            'Совпало с чеком или не пересчитывали — оставьте пусто. ' +
+            'Меньше — программа покажет, сколько пропало по дороге' }) +
         u.fieldRow('Инкассацию положить на счёт', 'collectAccount', 'select',
           v.collectAccount || accDefault(false), { options: accOptions(['cash', 'bank']),
             hint: 'куда увезли: сейф или банк' }) +
@@ -386,7 +437,8 @@
       if (!E.txt(v.factCash) && v.factCash !== 0) return 'Впишите, сколько денег пересчитали в ящике.';
       if (!E.txt(v.cashier)) return 'Укажите кассира — иначе непонятно, с кем разбирать расхождение.';
       var fields = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash',
-        'zCard', 'zQr', 'zNfc', 'returnsCash', 'returnsCashless', 'deposits', 'collected'];
+        'zCard', 'zQr', 'zNfc', 'returnsCash', 'returnsCashless', 'deposits',
+        'collected', 'collectedFact'];
       for (var i = 0; i < fields.length; i++) {
         var b = Q.checkAmount(v[fields[i]], { allowEmpty: true, allowZero: true });
         if (b) return 'Поле «' + fields[i] + '»: ' + b;
@@ -399,6 +451,8 @@
         zCard: num(v.zCard), zQr: num(v.zQr), zNfc: num(v.zNfc),
         returnsCash: num(v.returnsCash), returnsCashless: num(v.returnsCashless),
         deposits: num(v.deposits), collected: num(v.collected),
+        collectedFact: (v.collectedFact === '' || v.collectedFact == null)
+          ? '' : num(v.collectedFact),
         collectAccount: E.txt(v.collectAccount),
         factCash: num(v.factCash), checks: num(v.checks), voided: num(v.voided),
         account: E.txt(v.account), cashlessAccount: E.txt(v.cashlessAccount),
@@ -445,7 +499,8 @@
   function syncCollect(shiftId, rec) {
     if (!shiftId) return;
     var было = dds().filter(function (r) { return E.txt(r.fromShift) === E.txt(shiftId); })[0];
-    var сумма = num(rec.collected);
+    var сумма = (rec.collectedFact === '' || rec.collectedFact == null)
+      ? num(rec.collected) : num(rec.collectedFact);
     if (!сумма) {
       if (было) S.remove('dds', было.id);
       return;

@@ -699,6 +699,7 @@
       h += '<div class="num-field">' +
         '<input type="text" inputmode="decimal" class="num-input" name="' + name + '"' +
         (opts.unit && opts.unit !== 'money' ? ' data-unit="' + esc(opts.unit) + '"' : '') +
+        (opts.keepEmpty ? ' data-keep-empty="1"' : '') +
         ' value="' + esc(start) + '" data-prefilled="' + esc(start) + '"' +
         ' placeholder="' + esc(opts.placeholder || '0') + '">' +
         '<button type="button" class="btn btn-sm num-calc" data-calc="' + esc(name) + '" title="Калькулятор">' + ic('calculator') + '</button>' +
@@ -741,6 +742,7 @@
     Array.prototype.forEach.call(form.querySelectorAll('input,select,textarea'), function (i) {
       if (!i.name) return;
       if (i.classList && i.classList.contains('num-input')) {
+        if (i.dataset.keepEmpty && !String(i.value).trim()) { out[i.name] = ''; return; }
         // «1250*3+400» превращается в 4150 ровно здесь, при сохранении
         var v = NUM.calc(i.value);
         out[i.name] = v === null ? num(i.value) : v;

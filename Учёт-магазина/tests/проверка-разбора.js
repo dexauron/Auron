@@ -1630,5 +1630,63 @@ console.log('\n— Одна касса, два аппарата: чеки маг
     !f.reason, f.reason || 'молчит', 'молчит');
 }
 
+console.log('\n— Инкассация: что пробила касса и что доехало до сейфа');
+{
+  /* Смена 16.09.26, оба аппарата одной кассы. Касса пробила инкассацию
+     74 081 + 2 688 = 76 769, а владелец пересчитал 67 969. Пока поле было
+     одно, ему приходилось выбирать: написать цифру с чека и спрятать
+     пропажу, или написать пересчитанное и потерять слова кассы. */
+  const пробито = 74081 + 2688;
+  const c = WM.shiftCalc({
+    openCash: 0, zCash: 74936 + 2688, zCashless: 73165, returnsCash: 95,
+    deposits: 10000, payouts: 10760, collected: пробито, collectedFact: 67969,
+    factCash: 0, zCard: 25003, zQr: 45828, zNfc: 2334, checks: 129 });
+
+  check('ЯЩИК СЧИТАЕТСЯ ПО ПРОБИТОЙ СУММЕ — её кассир из ящика вынул',
+    c.expected === 0, c.expected, 0);
+  check('и по ящику всё сошлось: в нём и должно быть пусто',
+    c.ok && c.diff === 0, c.status, 'сходится');
+  check('ДО СЕЙФА НЕ ДОЕХАЛО 8 800', c.collectShort === 8800, c.collectShort, 8800);
+  check('пропажа названа отдельно от ящика, а не свалена в кучу',
+    c.diff === 0 && c.collectDiff === -8800, c.diff + ' / ' + c.collectDiff, '0 / -8800');
+  check('ИТОГ ПО СМЕНЕ — 8 800, А НЕ 17 600: одна недостача, а не две',
+    c.totalShort === 8800, c.totalShort, 8800);
+  check('и вердикт «всё сошлось» не выдаётся', c.allOk === false, c.allOk, false);
+  check('выручка от этого не изменилась', c.revenue === 150694, c.revenue, 150694);
+
+  /* Не пересчитывали — верим кассе, недостаче взяться неоткуда */
+  const без = WM.shiftCalc({
+    openCash: 0, zCash: 74936 + 2688, returnsCash: 95, deposits: 10000,
+    payouts: 10760, collected: пробито, factCash: 0 });
+  check('НЕ ПЕРЕСЧИТЫВАЛИ — ПРОГРАММА НЕ ВЫДУМЫВАЕТ НЕДОСТАЧУ',
+    без.collectFilled === false && без.collectDiff === 0 && без.allOk === true,
+    без.collectDiff, 0);
+  check('в сейф уйдёт пробитая сумма — другой мы не знаем',
+    без.collectedFact === пробито, без.collectedFact, пробито);
+
+  /* Пустая строка — это «не считали», а не «доехало ноль». Спутать эти два
+     значения означало бы объявить пропавшей всю инкассацию. */
+  const пусто = WM.shiftCalc({
+    openCash: 0, zCash: 74936 + 2688, returnsCash: 95, deposits: 10000,
+    payouts: 10760, collected: пробито, collectedFact: '', factCash: 0 });
+  check('ПУСТАЯ СТРОКА НЕ ОЗНАЧАЕТ «ДОЕХАЛО НОЛЬ»',
+    пусто.allOk === true && пусто.collectShort === 0, пусто.collectShort, 0);
+
+  const ноль = WM.shiftCalc({
+    openCash: 0, zCash: 74936 + 2688, returnsCash: 95, deposits: 10000,
+    payouts: 10760, collected: пробито, collectedFact: 0, factCash: 0 });
+  check('А ВПИСАННЫЙ НОЛЬ ОЗНАЧАЕТ: НЕ ДОЕХАЛО НИЧЕГО',
+    ноль.collectShort === пробито, ноль.collectShort, пробито);
+
+  /* Итог месяца обязан показать пропажу отдельной суммой */
+  const t = WM.totals([{ type: 'Смена', date: '2026-09-16', till: 'Касса 1',
+    shift: 'Ночь', cashier: 'Марьям', openCash: 0, zCash: 74936 + 2688,
+    zCashless: 73165, returnsCash: 95, deposits: 10000, payouts: 10760,
+    collected: пробито, collectedFact: 67969, factCash: 0 }]);
+  check('В ИТОГАХ ПРОПАЖА ПО ДОРОГЕ СЧИТАЕТСЯ ОТДЕЛЬНОЙ СУММОЙ',
+    t.collectShort === 8800 && t.collectBad === 1 && t.diff === 0,
+    'ящик ' + t.diff + ', дорога ' + t.collectShort, 'ящик 0, дорога 8800');
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

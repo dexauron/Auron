@@ -1247,3 +1247,37 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .wiz-bar i.on { background: var(--blue); }
 .wiz-why { font-size: 14px; color: var(--label-2); line-height: 1.4; }
 .wiz-nav { padding-top: 14px; }
+
+/* Сверка в три колонки: что сказала касса, что должно быть, что есть по факту.
+   Числа выравниваем по правому краю моноширинными цифрами — иначе глаз не
+   поймает разницу между 76 769 и 67 969, а она и есть вся суть. */
+.cc-cmp {
+  margin-top: 12px; padding: 10px 12px 8px;
+  border-radius: 12px; background: var(--fill-2);
+}
+.cc-cmp-h, .cc-cmp-r {
+  display: grid; grid-template-columns: 1fr auto auto auto;
+  gap: 10px; align-items: baseline;
+}
+.cc-cmp-h { font-size: 11px; color: var(--label-3); padding-bottom: 6px;
+  border-bottom: 1px solid var(--separator); text-transform: uppercase; letter-spacing: .03em; }
+.cc-cmp-h b { font-weight: 600; min-width: 74px; text-align: right; }
+.cc-cmp-r { padding: 7px 0 2px; font-size: 15px; }
+.cc-cmp-r span { color: var(--label-2); }
+.cc-cmp-r b { min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.cc-cmp-r i { font-style: normal; color: var(--label-3); font-weight: 400; }
+.cc-cmp-n { font-size: 12px; color: var(--label-3); text-align: right; padding-bottom: 4px; }
+.cc-cmp-n.bad { color: var(--red); }
+.cc-cmp-t {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--separator);
+  font-size: 15px; font-weight: 600;
+}
+.cc-cmp-t b { font-size: 19px; font-variant-numeric: tabular-nums; }
+.cc-cmp-t.ok { color: var(--green); }
+.cc-cmp-t.bad { color: var(--red); }
+.cc-cmp-t.warn { color: var(--orange); }
+@media (max-width: 480px) {
+  .cc-cmp-h b, .cc-cmp-r b { min-width: 62px; }
+  .cc-cmp-r, .cc-cmp-h { gap: 6px; font-size: 14px; }
+}

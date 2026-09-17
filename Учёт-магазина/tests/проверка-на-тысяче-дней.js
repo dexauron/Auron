@@ -96,6 +96,12 @@ function магазин(номер) {
         const payouts = потолок > 0 ? деньги(0, потолок) : 0;
         const послеВыплат = потолок - payouts;
         const collected = (послеВыплат > 0 && r() < 0.35) ? деньги(0, послеВыплат) : 0;
+        /* Инкассацию пересчитывают не всегда, а когда пересчитали — в сейф
+           иногда доезжает меньше, чем пробила касса. Пока генератор этого не
+           знал, новые правила проверяли бы половину жизни. */
+        const пересчитали = collected && r() < 0.4;
+        const collectedFact = пересчитали
+          ? Math.max(0, Math.round((collected + деньги(-3000, 500)) * 100) / 100) : '';
 
         const расчёт = Math.round((вКассе[к] + zCash - returnsCash + deposits
           - payouts - collected) * 100) / 100;
@@ -115,7 +121,7 @@ function магазин(номер) {
              имени», а не исчезнуть: недостача не может повиснуть ни на ком. */
           cashier: r() < 0.1 ? '' : выбор(кассиры),
           openCash: вКассе[к], zCash, zCashless, payouts, factCash,
-          returnsCash, returnsCashless, deposits, collected,
+          returnsCash, returnsCashless, deposits, collected, collectedFact,
           zCard: картой, zQr: поQr, zNfc: телефоном,
           checks: целое(1, 400),
           account: 'till' + к, cashlessAccount: 'bank' });
@@ -124,7 +130,8 @@ function магазин(номер) {
            форма сверки; здесь делаем то же самое, иначе деньги из ящика
            уехали бы в никуда и сейф не сошёлся. */
         if (collected) {
-          строки.push({ type: E.T_MOVE, date: дата, amount: collected,
+          строки.push({ type: E.T_MOVE, date: дата,
+            amount: пересчитали ? collectedFact : collected,
             account: 'till' + к, toAccount: 'safe', category: 'Инкассация' });
         }
 
@@ -804,6 +811,73 @@ const правило = (имя, объяснение, проверка) =>
       if (k.badShifts > k.shifts) {
         return 'у «' + k.name + '» плохих смен ' + k.badShifts + ' из ' + k.shifts;
       }
+    }
+    return '';
+  });
+
+правило('Инкассация не создаёт и не съедает денег молча',
+  'Касса печатает, сколько пробили инкассацией; в сейф может доехать меньше. ' +
+  'Эта разница — недостача, и она обязана быть названа. Если программа её ' +
+  'проглотит, деньги пропадут беззвучно, а сейф покажет сумму, которой в нём нет.',
+  м => {
+    const r = зерно(м.строки.length + 707);
+    for (let i = 0; i < 200; i++) {
+      const д = () => Math.round(r() * 5000000) / 100;
+      const пробито = д();
+      const доехало = д();
+      const s = { openCash: д(), zCash: д(), returnsCash: д(), deposits: д(),
+        payouts: д(), collected: пробито, collectedFact: доехало, factCash: д() };
+      const c = E.shiftCalc(s);
+
+      // Из ящика вычитается ПРОБИТОЕ: эти деньги кассир из ящика вынул
+      const надо = E.safeRound(s.openCash + s.zCash - s.returnsCash + s.deposits
+        - s.payouts - пробито);
+      if (!близко(c.expected, надо)) {
+        return 'ящик посчитан по доехавшей сумме, а надо по пробитой';
+      }
+      if (!близко(c.collectDiff, E.safeRound(доехало - пробито))) {
+        return 'пропажа по дороге ' + РУБ(c.collectDiff) + ' ≠ доехало − пробито';
+      }
+      // Одна и та же недостача не может показаться дважды
+      if (!близко(c.totalDiff, E.safeRound(c.diff + c.collectDiff))) {
+        return 'итог смены ' + РУБ(c.totalDiff) + ' ≠ ящик ' + РУБ(c.diff) +
+          ' + дорога ' + РУБ(c.collectDiff);
+      }
+      if (c.allOk !== (Math.abs(c.diff) < 0.005 && Math.abs(c.collectDiff) < 0.005)) {
+        return 'вердикт «всё сошлось» разошёлся с числами';
+      }
+    }
+
+    /* Не пересчитывали — верим кассе, и никакой недостачи взяться неоткуда.
+       Это же и защита старых записей: в них поля «пересчитали» нет вовсе. */
+    for (let i = 0; i < 100; i++) {
+      const д = () => Math.round(r() * 3000000) / 100;
+      const s = { openCash: д(), zCash: д(), payouts: д(), collected: д(), factCash: д() };
+      const c = E.shiftCalc(s);
+      if (c.collectFilled) return 'пустое поле принято за пересчёт';
+      if (!близко(c.collectDiff, 0)) return 'без пересчёта взялась пропажа ' + РУБ(c.collectDiff);
+      if (!близко(c.collectedFact, c.collected)) return 'без пересчёта сумма в сейф изменилась';
+      if (!близко(c.totalDiff, c.diff)) return 'без пересчёта итог разошёлся с ящиком';
+      const пустое = E.shiftCalc({ openCash: s.openCash, zCash: s.zCash,
+        payouts: s.payouts, collected: s.collected, factCash: s.factCash,
+        collectedFact: '' });
+      if (!близко(пустое.totalDiff, c.totalDiff)) return 'пустая строка сработала как ноль';
+    }
+    return '';
+  });
+
+правило('Сейф получает столько, сколько принесли',
+  'В сейфе лежит пересчитанное, а не то, что пробила касса. Иначе программа ' +
+  'покажет в сейфе деньги, которых там нет, и владелец построит на них планы.',
+  м => {
+    const смены = м.строки.filter(r => E.isShift(r));
+    const переводы = м.строки.filter(r => E.isMove(r) && E.txt(r.category) === 'Инкассация');
+    let ждём = 0;
+    смены.forEach(r => { ждём += E.shiftCalc(r).collectedFact; });
+    let есть = 0;
+    переводы.forEach(r => { есть += E.num(r.amount); });
+    if (!близко(ждём, есть)) {
+      return 'в сейф перевели ' + РУБ(есть) + ', а пересчитали при инкассации ' + РУБ(ждём);
     }
     return '';
   });

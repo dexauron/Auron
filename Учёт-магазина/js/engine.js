@@ -278,7 +278,27 @@
     var retCash = safeRound(s.returnsCash);        // возвраты покупателям наличными
     var retCashless = safeRound(s.returnsCashless);// возвраты на карту
     var deposits = safeRound(s.deposits);          // внесения в кассу
-    var collected = safeRound(s.collected);        // инкассация из ящика
+    var collected = safeRound(s.collected);        // инкассация: сколько пробила касса
+
+    /* ИНКАССАЦИЯ ПРОБИТАЯ И ИНКАССАЦИЯ ДОЕХАВШАЯ — РАЗНЫЕ ЧИСЛА
+
+       Касса печатает, сколько денег кассир объявил инкассацией. Сколько из
+       них доехало до сейфа, касса не знает — это видно только когда деньги
+       пересчитают на месте. Пока поле было одно, владельцу приходилось
+       выбирать: вписать цифру с чека (и тогда пропажа по дороге пряталась)
+       или вписать пересчитанное (и тогда терялось, что сказала касса).
+
+       Теперь их двое. Из ящика вычитается ПРОБИТАЯ сумма — её кассир из
+       ящика вынул, и ящик об этом знает. В сейф кладётся ПЕРЕСЧИТАННАЯ — в
+       сейфе лежит ровно столько, сколько принесли. Разница между ними —
+       пропажа по дороге, и она считается ровно один раз, отдельно от
+       расхождения по ящику: иначе одна и та же недостача показалась бы
+       дважды и владелец решил бы, что потерял вдвое больше.
+
+       Поле не заполняли — значит, не пересчитывали, и верим кассе. */
+    var collectFilled = !(s.collectedFact == null || s.collectedFact === '');
+    var collectedFact = collectFilled ? safeRound(s.collectedFact) : collected;
+    var collectDiff = collectFilled ? safeRound(collectedFact - collected) : 0;
 
     var expected = safeRound(open + zCash - retCash + deposits - payouts - collected);
     var diff = safeRound(fact - expected);
@@ -298,6 +318,10 @@
       openCash: open, zCash: zCash, zCashless: zCashless, payouts: payouts,
       returnsCash: retCash, returnsCashless: retCashless,
       deposits: deposits, collected: collected,
+      collectedFact: collectedFact, collectFilled: collectFilled,
+      collectDiff: collectDiff,
+      collectShort: collectDiff < 0 ? safeRound(-collectDiff) : 0,
+      collectOk: isZero(collectDiff),
       factCash: fact, factFilled: factFilled, expected: expected, diff: diff,
       revenue: safeRound(revenueCash + revenueCashless),
       revenueCash: revenueCash, revenueCashless: revenueCashless,
@@ -312,7 +336,15 @@
       /* Раньше порогом было полрубля, и недостача в 49 копеек показывалась
          как «сходится». Теперь сходится — значит сходится до копейки. */
       ok: isZero(diff),
-      status: isZero(diff) ? 'сходится' : (diff < 0 ? 'недостача' : 'излишек')
+      status: isZero(diff) ? 'сходится' : (diff < 0 ? 'недостача' : 'излишек'),
+
+      /* Итог по всей смене: ящик плюс дорога до сейфа. Владельцу важно не
+         «где именно», а «сколько всего денег не хватает», — и только потом,
+         где искать. */
+      totalDiff: safeRound(diff + collectDiff),
+      totalShort: safeRound(diff + collectDiff) < 0 ? safeRound(-(diff + collectDiff)) : 0,
+      totalOver: safeRound(diff + collectDiff) > 0 ? safeRound(diff + collectDiff) : 0,
+      allOk: isZero(diff) && isZero(collectDiff)
     };
   }
 
@@ -803,6 +835,10 @@
   function totals(rows, settings) {
     var t = { zCash: 0, zCashless: 0, revenue: 0, payouts: 0, short: 0, over: 0,
       diff: 0, shifts: 0, badShifts: 0, expense: 0, income: 0, draw: 0,
+      /* Пропажа по дороге в сейф считается ОТДЕЛЬНО от расхождения по ящику:
+         это разные беды и ищут их в разных местах. Смешаешь — владелец решит,
+         что недостача вдвое больше, чем на самом деле. */
+      collectShort: 0, collectDiff: 0, collectBad: 0,
       goodsCash: 0, debtTaken: 0, debtPaid: 0, moved: 0, collected: 0,
       returns: 0, checks: 0, card: 0, qr: 0, nfc: 0,
       notCost: 0, explained: 0, days: {}, byCategory: {} };
@@ -811,6 +847,8 @@
         var c = shiftCalc(r);
         t.zCash += c.zCash; t.zCashless += c.zCashless; t.payouts += c.payouts;
         t.short += c.short; t.over += c.over; t.diff += c.diff;
+        t.collectShort += c.collectShort; t.collectDiff += c.collectDiff;
+        if (!c.collectOk) t.collectBad++;
         t.returns += c.returns; t.checks += c.checks;
         t.card += c.card; t.qr += c.qr; t.nfc += c.nfc;
         t.shifts++; if (!c.ok) t.badShifts++;
@@ -843,7 +881,9 @@
     ['zCash', 'zCashless', 'payouts', 'short', 'over', 'diff', 'expense',
       'returns', 'card', 'qr', 'nfc',
       'income', 'draw', 'goodsCash', 'debtTaken', 'debtPaid', 'moved', 'collected',
-      'notCost', 'explained'].forEach(function (k) { t[k] = safeRound(t[k]); });
+      'notCost', 'explained', 'collectShort', 'collectDiff'].forEach(function (k) {
+        t[k] = safeRound(t[k]);
+      });
     t.dayCount = Object.keys(t.days).length;
     t.avgDay = safeRound(div(t.revenue, t.dayCount));
     t.avgShift = safeRound(div(t.revenue, t.shifts));
@@ -1253,12 +1293,16 @@
     // 2. Расхождения по кассе разобраны
     var crit = num(settings.diffCrit) || 1000;
     var bad = rows.filter(function (r) {
-      return isShift(r) && Math.abs(shiftCalc(r).diff) >= crit;
+      var c = shiftCalc(r);
+      return isShift(r) && Math.abs(c.totalDiff) >= crit;
     });
     item('diff', 'Крупные расхождения разобраны', bad.length === 0,
       bad.length ? bad.length + ' смен с расхождением от ' + fmtMoney(crit) +
-        ', всего ' + fmtMoney(t.diff)
-        : 'расхождение за месяц ' + fmtMoney(t.diff), 'cashiers', false);
+        ', всего ' + fmtMoney(safeRound(t.diff + t.collectDiff)) +
+        (t.collectShort ? ' (из них ' + fmtMoney(t.collectShort) +
+          ' не доехало до сейфа)' : '')
+        : 'расхождение за месяц ' + fmtMoney(safeRound(t.diff + t.collectDiff)),
+      'cashiers', false);
 
     // 3. Выплаты из ящика расшифрованы
     var chk = tillPayoutCheck(rows, ym, { payouts: opts.salaryPaid || [],
