@@ -1324,3 +1324,28 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .rev-item { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--label-2); }
 .rev-item svg { flex: none; margin-top: 2px; color: var(--green); }
 .card-note { font-size: 12px; color: var(--label-3); padding-top: 10px; line-height: 1.4; }
+
+/* «Подробнее»: объяснение по требованию.
+   Владелец: «слишком много объяснений, мешает глазам сфокусироваться и
+   искать». Короткая подпись остаётся, длинное объяснение прячется за
+   значком — нажал и прочитал, когда нужно. */
+.more-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 6px; margin-left: 6px;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--fill); color: var(--label-2);
+  font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer;
+  vertical-align: middle;
+}
+.more-btn:hover { background: var(--fill); color: var(--blue); }
+.more-btn.on { background: var(--blue); color: #fff; }
+.more-box {
+  display: block; margin-top: 6px; padding: 9px 11px;
+  border-radius: var(--r-inner); background: var(--fill-2);
+  font-size: 13px; line-height: 1.45; color: var(--label-2);
+  font-weight: 400; white-space: normal;
+}
+.more-box[hidden] { display: none; }
+.form-hint .more-btn { margin-left: 0; }
+/* На бумаге прятать нечего: печатаем всё, что объясняет документ */
+@media print { .more-box[hidden] { display: block !important; } .more-btn { display: none !important; } }

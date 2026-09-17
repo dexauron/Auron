@@ -45,8 +45,9 @@
         actions: [{ name: 'Собрать своё правило', form: 'ruleNew', icon: 'plus' }] });
     } else {
       h += u.card('Что нашлось', u.listOf(r.findings.map(function (f) {
-        var подробно = esc(f.why) + (f.what
-          ? '<br><b class="c-' + ЦВЕТ[f.level] + '">' + esc(f.what) + '</b>' : '');
+        var подробно = (f.what
+          ? '<b class="c-' + ЦВЕТ[f.level] + '">' + esc(f.what) + '</b>' : '') +
+          u.more(f.why, 'Почему');
         return u.listRow({ icon: ЗНАЧОК[f.level] || 'info',
           title: f.title + (f.own ? ' · ваше правило' : ''),
           sub: подробно,
@@ -81,7 +82,9 @@
     h += '</div>';
 
     h += '<div class="card"><div class="card-head"><div class="card-title">' +
-      'Что Ревизор стережёт всегда</div></div><div class="rev-list">' +
+      'Что Ревизор стережёт всегда' + u.more('Эти проверки выключить нельзя: они ' +
+        'стерегут сами деньги, а не привычки магазина.') +
+      '</div></div><div class="rev-list">' +
       ['Деньги сходятся: у каждого рубля есть пара — откуда пришёл и куда ушёл',
         'Инкассация: сколько пробила касса и сколько доехало до сейфа',
         'Терминал и касса говорят одно и то же',
@@ -89,8 +92,7 @@
         'Выплаты из ящика расписаны по статьям'
       ].map(function (t) {
         return '<div class="rev-item">' + ic('check', 15) + '<span>' + esc(t) + '</span></div>';
-      }).join('') + '</div><div class="card-note">Эти проверки выключить нельзя: ' +
-      'они стерегут сами деньги, а не привычки магазина.</div></div>';
+      }).join('') + '</div></div>';
     return h;
   }
 

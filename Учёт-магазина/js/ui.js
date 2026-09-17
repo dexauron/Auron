@@ -670,12 +670,41 @@
     return out;
   }
 
+  /* --- «ПОДРОБНЕЕ»: объяснение по требованию, а не всегда ---------------------
+
+     Владелец сказал прямо: «слишком много объяснений, мешает глазам
+     сфокусироваться и искать». Он прав. Объяснение нужно один раз — когда
+     человек впервые видит поле; на сотый раз оно превращается в шум, сквозь
+     который приходится продираться к цифрам.
+
+     Правило простое и не на глаз: КОРОТКОЕ пояснение (до 45 знаков) — это
+     не объяснение, а подпись, она остаётся видна. Длинное прячется за
+     значком «?» рядом с названием. Нажал — открылось, нажал ещё — закрылось.
+
+     Ничего не удаляем: всё написанное остаётся в программе. Меняется только
+     то, показано оно сразу или по требованию.
+     -------------------------------------------------------------------------- */
+  var ПОДПИСЬ = 45;          // до скольких знаков пояснение считается подписью
+  var MORE_N = 0;
+
+  function more(текст, подпись) {
+    var t = String(текст == null ? '' : текст);
+    if (!t) return '';
+    var id = 'more' + (++MORE_N);
+    return '<button type="button" class="more-btn" data-act="more-toggle" ' +
+      'data-more="' + id + '" aria-expanded="false" title="Подробнее">' +
+      (подпись ? esc(подпись) + ' ' : '') + '?</button>' +
+      '<span class="more-box" id="' + id + '" hidden>' + esc(t) + '</span>';
+  }
+
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
+    var коротко = opts.hint && String(opts.hint).length <= ПОДПИСЬ;
     var h = '<div class="form-row"><label>' + esc(label) +
       /* Оформление — в styles.css. Инлайновый style перебивал его и не давал
          свернуть длинное пояснение: строка формы разрасталась на шесть строк. */
-      (opts.hint ? '<small>' + esc(opts.hint) + '</small>' : '') +
+      (коротко ? '<small>' + esc(opts.hint) + '</small>' : '') +
+      (opts.hint && !коротко ? more(opts.hint) : '') +
       '</label>';
     if (type === 'list') {
       // свой список: можно выбрать из своих значений, а можно вписать новое —
@@ -1403,7 +1432,10 @@
       '<form id="wmForm" data-fid="' + id + '">' +
       tplBar(id) +
       '<div class="form-list">' + f.body(prefill) + '</div>' +
-      (f.hint ? '<div class="form-hint">' + ic('info', 15) + '<span>' + esc(f.hint) + '</span></div>' : '') +
+      /* Подсказка ко всей форме — это уже целый абзац. Он нужен, но не
+         каждый раз: прячем за кнопкой «Как это считается». */
+      (f.hint ? '<div class="form-hint">' + ic('info', 15) +
+        more(f.hint, 'Как это считается') + '</div>' : '') +
       lists +
       '<div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">' +
       подпись + '</button></div></form>');
@@ -1625,7 +1657,7 @@
     ic: ic,
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
-    blank: blank, blankReport: blankReport, printFoot: printFoot,
+    blank: blank, blankReport: blankReport, printFoot: printFoot, more: more,
     fieldRow: fieldRow, pairValues: pairValues, pageHead: pageHead, toast: toast,
     sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
@@ -2059,7 +2091,7 @@
   }
   // Что можно нажимать в режиме показа: только смотреть, печатать и выгружать
   var RO_ALLOWED = {
-    'print': 1, 'pdf': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
+    'print': 1, 'pdf': 1, 'more-toggle': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
     'close-sheet': 1, 'more-back': 1, 'readonly-off': 1, 'share-copy': 1,
     'share-whatsapp': 1, 'share-telegram': 1
   };
@@ -2543,6 +2575,15 @@
       else if (a === 'folder-forget') { if (confirm('Отключить папку? Записи останутся в браузере и в уже сохранённом файле.')) { F.forget(); render(); } }
       else if (a === 'export-screen') exportScreen();
       else if (a === 'restore') restore();
+      else if (a === 'more-toggle') {
+        var блок = $(el.dataset.more);
+        if (блок) {
+          var открыто = !блок.hidden;
+          блок.hidden = открыто;
+          el.setAttribute('aria-expanded', открыто ? 'false' : 'true');
+          el.classList.toggle('on', !открыто);
+        }
+      }
       else if (a === 'print') window.print();
       /* Файл, а не принтер. Печать у нас была, но отчёт чаще нужно ОТПРАВИТЬ:
          бухгалтеру, в папку за месяц, себе в телефон. Раньше для этого
