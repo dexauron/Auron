@@ -1114,7 +1114,7 @@
       h += '<div class="banner blue"><span>' + ic('store') + '</span><span>' +
         'Программа ещё не настроена под ваш магазин: название, кассы, смены и ' +
         'начальные остатки. Без остатков касса и долг начнут считаться с нуля. ' +
-        '<button class="btn btn-sm" data-form="setupWizard">Настроить за минуту</button>' +
+        '<button class="btn btn-sm" data-form="setupWizard">Настроить магазин</button>' +
         '</span></div>';
     }
 

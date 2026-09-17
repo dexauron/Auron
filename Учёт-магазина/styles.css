@@ -1237,3 +1237,13 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .cc-fix-r b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .cc-fix-r s { color: var(--label-3); font-weight: 400; }
 .cc-fix-n { font-size: 12px; color: var(--label-3); margin-top: 8px; line-height: 1.35; }
+
+/* Мастер настройки: шапка шага. Владелец должен видеть, сколько осталось, —
+   иначе длинная настройка кажется бесконечной и её бросают. */
+.wiz-head { padding: 4px 0 14px; }
+.wiz-step { font-size: 13px; font-weight: 600; color: var(--label-2); letter-spacing: .02em; }
+.wiz-bar { display: flex; gap: 5px; margin: 8px 0 8px; }
+.wiz-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); }
+.wiz-bar i.on { background: var(--blue); }
+.wiz-why { font-size: 14px; color: var(--label-2); line-height: 1.4; }
+.wiz-nav { padding-top: 14px; }

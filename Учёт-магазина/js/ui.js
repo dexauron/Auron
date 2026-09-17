@@ -1208,50 +1208,140 @@
     // блокируется, а здесь всё как в остальной программе.
     /* «Быстрая настройка»: пять полей, без которых программа считает
        неправильно. Кнопка на экране настроек была, а формы за ней не было. */
-    setupWizard: {
-      title: 'Быстрая настройка', icon: 'gear',
-      body: function (v) {
-        var s2 = S.settings; v = v || {};
-        return fieldRow('Название магазина', 'storeName', 'text',
-          v.storeName != null ? v.storeName : s2.storeName,
-          { placeholder: 'как называется ваш магазин' }) +
-          fieldRow('Режим работы', 'workMode', 'list',
-            v.workMode != null ? v.workMode : s2.workMode,
-            { options: ['Круглосуточно', 'с 8:00 до 23:00', 'с 9:00 до 21:00'],
-              hint: 'показывается под названием' }) +
-          fieldRow('Денежные ящики', 'tills', 'text',
-            v.tills != null ? v.tills : s2.tills,
-            { hint: 'через запятую: «Касса 1, Касса 2»' }) +
-          fieldRow('Названия смен', 'shiftNames', 'text',
-            v.shiftNames != null ? v.shiftNames : s2.shiftNames,
-            { hint: 'по порядку, от первой к последней: «День, Ночь»' }) +
-          fieldRow('Наличных в кассах сейчас', 'openCashStart', 'number',
-            v.openCashStart != null ? v.openCashStart : s2.openCashStart,
-            { hint: 'сложите деньги во всех ящиках' }) +
-          fieldRow('Наличных в сейфе сейчас', 'openSafeStart', 'number',
-            v.openSafeStart != null ? v.openSafeStart : s2.openSafeStart) +
-          fieldRow('Долг поставщикам сейчас', 'openDebtStart', 'number',
-            v.openDebtStart != null ? v.openDebtStart : s2.openDebtStart,
-            { hint: 'общей суммой по магазину' });
-      },
-      hint: 'Это тот минимум, без которого остаток наличных и долг начнутся с нуля, ' +
-        'а не с того, что есть на самом деле. Остальное настраивается ниже, на экране.',
-      save: function (v) {
-        if (!E.txt(v.storeName)) return 'Впишите название магазина — оно будет в шапке и в отчётах.';
-        if (!E.txt(v.tills)) return 'Впишите хотя бы один денежный ящик.';
-        if (!E.txt(v.shiftNames)) return 'Впишите хотя бы одну смену.';
-        ['storeName', 'workMode', 'tills', 'shiftNames'].forEach(function (k) {
-          S.setSetting(k, E.txt(v[k]));
-        });
-        ['openCashStart', 'openSafeStart', 'openDebtStart'].forEach(function (k) {
-          S.setSetting(k, E.num(v[k]));
-        });
-        S.setSetting('finShifts', E.txt(v.shiftNames));
-        applyLook(); recompute();
-        return { ok: 'Готово. Программа считает от ' + money(E.num(v.openCashStart)) +
-          ' в кассах и долга ' + money(E.num(v.openDebtStart)) + '.' };
+    /* МАСТЕР НАСТРОЙКИ — ПО ШАГАМ
+
+       Владелец сказал главное: «хочу, чтобы магазин сам настроил программу
+       под свой магазин». Раньше здесь была одна форма на восемь полей: она
+       спрашивала кассы и смены, но молчала о людях, а длинный список в один
+       столбец владелец бросает на середине.
+
+       Теперь три шага, по одной теме на шаг. Мастер открывается только по
+       кнопке — так решил владелец: сам лезть при первом запуске программа
+       не должна.
+
+       Как это устроено. Шаг живёт в скрытом поле `step`, а ответы прошлых
+       шагов — в скрытых полях рядом, поэтому «Назад» ничего не теряет и
+       никакого состояния в стороне держать не надо. Главная кнопка на
+       первых шагах подписана «Дальше», и только на последнем — «Сохранить»:
+       кнопка обязана говорить правду о том, что сделает.  */
+    setupWizard: (function () {
+      var ШАГИ = [
+        { имя: 'Магазин', зачем: 'Название попадёт в шапку и во все отчёты.' },
+        { имя: 'Кассы и смены', зачем: 'Без этого не работает сверка кассы.' },
+        { имя: 'Люди', зачем: 'Кто стоит на кассе и сколько стоит смена.' }
+      ];
+      function шаг(v) {
+        var n = Math.round(num((v || {}).step)) || 1;
+        return Math.min(ШАГИ.length, Math.max(1, n));
       }
-    },
+      // Ответы прошлых шагов едут скрытыми полями: «Назад» ничего не теряет
+      function скрытые(v, кроме) {
+        return Object.keys(v || {}).filter(function (k) {
+          return k !== 'step' && кроме.indexOf(k) < 0 && v[k] !== '' && v[k] != null;
+        }).map(function (k) {
+          return '<input type="hidden" name="' + esc(k) + '" value="' + esc(String(v[k])) + '">';
+        }).join('');
+      }
+      return {
+        title: 'Настройка магазина', icon: 'gear',
+        submitLabel: function (v) {
+          return шаг(v) < ШАГИ.length ? 'Дальше' : 'Сохранить настройки';
+        },
+        body: function (v) {
+          var s2 = S.settings; v = v || {};
+          var n = шаг(v), поля = [], h = '';
+          function было(k) { return v[k] != null ? v[k] : s2[k]; }
+
+          h += '<div class="wiz-head"><div class="wiz-step">Шаг ' + n + ' из ' + ШАГИ.length +
+            ' · ' + esc(ШАГИ[n - 1].имя) + '</div><div class="wiz-bar">' +
+            ШАГИ.map(function (_, i) {
+              return '<i class="' + (i < n ? 'on' : '') + '"></i>';
+            }).join('') + '</div><div class="wiz-why">' + esc(ШАГИ[n - 1].зачем) +
+            '</div></div>';
+
+          if (n === 1) {
+            поля = ['storeName', 'workMode'];
+            h += fieldRow('Название магазина', 'storeName', 'text', было('storeName'),
+              { placeholder: 'как называется ваш магазин',
+                hint: 'своё, любое — программа ни к какому магазину не привязана' }) +
+              fieldRow('Режим работы', 'workMode', 'list', было('workMode'),
+                { options: ['Круглосуточно', 'с 8:00 до 23:00', 'с 9:00 до 21:00'],
+                  hint: 'можно вписать своё — показывается под названием' });
+          } else if (n === 2) {
+            поля = ['tills', 'shiftNames', 'openCashStart', 'openSafeStart', 'openDebtStart'];
+            h += fieldRow('Денежные ящики', 'tills', 'text', было('tills'),
+              { placeholder: 'Касса 1, Касса 2',
+                hint: 'через запятую. Считайте по ЯЩИКАМ, а не по аппаратам: ' +
+                  'два аппарата над одним ящиком — это одна касса' }) +
+              fieldRow('Названия смен', 'shiftNames', 'text', было('shiftNames'),
+                { placeholder: 'День, Ночь',
+                  hint: 'по порядку, от первой к последней. Смен может быть сколько угодно: ' +
+                    '«Утро, Вечер, Ночь» или просто «Сутки»' }) +
+              fieldRow('Наличных в кассах сейчас', 'openCashStart', 'number',
+                было('openCashStart'), { hint: 'сложите деньги во всех ящиках' }) +
+              fieldRow('Наличных в сейфе сейчас', 'openSafeStart', 'number',
+                было('openSafeStart')) +
+              fieldRow('Долг поставщикам сейчас', 'openDebtStart', 'number',
+                было('openDebtStart'), { hint: 'общей суммой по магазину' });
+          } else {
+            поля = ['finCashiers', 'rateDay', 'rateNight', 'shiftHours'];
+            h += fieldRow('Кассиры', 'finCashiers', 'text', было('finCashiers'),
+              { placeholder: 'Марьям, Аслан, Зарема',
+                hint: 'через запятую. Их можно будет выбирать при сдаче смены, ' +
+                  'и по ним считается, у кого касса не сходится' }) +
+              fieldRow('Ставка дневной смены, ₽/час', 'rateDay', 'number', было('rateDay')) +
+              fieldRow('Ставка ночной смены, ₽/час', 'rateNight', 'number', было('rateNight'),
+                { hint: 'ночью обычно платят больше — если у вас так же' }) +
+              fieldRow('Часов в смене', 'shiftHours', 'number', было('shiftHours'),
+                { unit: 'plain', hint: 'из ставки и часов считается зарплата за смену' });
+          }
+
+          h += скрытые(v, поля.concat(['step']));
+          h += '<input type="hidden" name="step" value="' + n + '">';
+          if (n > 1) {
+            h += '<div class="wiz-nav"><button type="button" class="btn" ' +
+              'data-act="wiz-back">Назад</button></div>';
+          }
+          return h;
+        },
+        hint: 'Настроить можно и потом, на экране «Настройки» — там же всё остальное: ' +
+          'статьи расходов, налог, пороги тревоги, поставщики.',
+        save: function (v) {
+          var n = шаг(v);
+          if (n === 1 && !E.txt(v.storeName)) {
+            return 'Впишите название магазина — оно будет в шапке и в отчётах.';
+          }
+          if (n === 2) {
+            if (!E.txt(v.tills)) return 'Впишите хотя бы один денежный ящик.';
+            if (!E.txt(v.shiftNames)) return 'Впишите хотя бы одну смену.';
+          }
+          // Не последний шаг — не сохраняем, а открываем следующий
+          if (n < ШАГИ.length) {
+            var дальше = {}; Object.keys(v).forEach(function (k) { дальше[k] = v[k]; });
+            дальше.step = n + 1;
+            setTimeout(function () { openForm('setupWizard', дальше); }, 0);
+            return 'Шаг ' + (n + 1) + ' из ' + ШАГИ.length + ': ' + ШАГИ[n].имя.toLowerCase() + '.';
+          }
+
+          ['storeName', 'workMode', 'tills', 'shiftNames', 'finCashiers'].forEach(function (k) {
+            if (v[k] != null) S.setSetting(k, E.txt(v[k]));
+          });
+          ['openCashStart', 'openSafeStart', 'openDebtStart',
+            'rateDay', 'rateNight', 'shiftHours'].forEach(function (k) {
+            if (v[k] != null && v[k] !== '') S.setSetting(k, E.num(v[k]));
+          });
+          // Смены живут под двумя именами — иначе форма сверки их не увидит
+          if (v.shiftNames != null) S.setSetting('finShifts', E.txt(v.shiftNames));
+          applyLook(); recompute();
+          var касс = E.txt(v.tills).split(',').filter(function (x) { return x.trim(); }).length;
+          var смен = E.txt(v.shiftNames).split(',').filter(function (x) { return x.trim(); }).length;
+          return { ok: 'Готово. «' + E.txt(v.storeName) + '»: ' +
+            касс + ' ' + E.plural(касс, 'касса', 'кассы', 'касс') + ', ' +
+            смен + ' ' + E.plural(смен, 'смена', 'смены', 'смен') + '. ' +
+            'Считаем от ' + money(E.num(v.openCashStart)) + ' в кассах.' };
+        }
+      };
+    })(),
 
     filterSetName: {
       title: 'Запомнить набор фильтров', icon: 'star',
@@ -1300,7 +1390,8 @@
     var oldBar = document.querySelector('.draft-bar'); if (oldBar) oldBar.remove();
     EDIT = edit || null;
     var lists = '';
-    var подпись = edit ? 'Сохранить изменения' : 'Сохранить';
+    var подпись = f.submitLabel ? f.submitLabel(prefill)
+      : (edit ? 'Сохранить изменения' : 'Сохранить');
     sheet(f.title,
       '<form id="wmForm" data-fid="' + id + '">' +
       tplBar(id) +
@@ -1313,7 +1404,8 @@
        живёт справа вверху, и рука тянется туда даже в длинной форме. */
     var right = $('sheetRight');
     if (right) {
-      right.innerHTML = '<button type="submit" form="wmForm" class="sheet-btn strong">Готово</button>';
+      right.innerHTML = '<button type="submit" form="wmForm" class="sheet-btn strong">' +
+        esc(f.submitLabel ? f.submitLabel(prefill) : 'Готово') + '</button>';
     }
   }
   /* --- Долги к оплате (ручные записи + документы 1С) -------------------------- */
@@ -1485,7 +1577,7 @@
   function viewSettings() {
     var s = S.settings, SET = window.WMSettings;
     var h = pageHead('Настройки', 'Настройте программу под свой магазин — считать она будет по этим правилам',
-      '<button class="btn" data-act="settings-wizard">' + ic('gear') + ' Быстрая настройка</button> ' +
+      '<button class="btn" data-act="settings-wizard">' + ic('gear') + ' Настроить магазин</button> ' +
       '<button class="btn" data-act="settings-reset">Сбросить всё</button>');
 
     h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
@@ -1517,7 +1609,7 @@
     return h;
   }
 
-  // Быстрая настройка: несколько вопросов, чтобы программа сразу считала верно
+  // Мастер настройки: три шага, чтобы программа сразу считала под этот магазин
   /* --- Неликвиды: что лежит без движения ------------------------------------ */
   /* --- Доходы и расходы по данным 1С ---------------------------------------- */
   // Помощники рисования отдаём экранам (js/finviews.js, js/dictviews.js)
@@ -2571,6 +2663,14 @@
         });
       }
       else if (a === 'settings-wizard') openForm('setupWizard');
+      else if (a === 'wiz-back') {
+        var wf = document.getElementById('wmForm');
+        if (wf) {
+          var wv = formValues(wf);
+          wv.step = Math.max(1, (num(wv.step) || 1) - 1);
+          openForm('setupWizard', wv);
+        }
+      }
       else if (a === 'settings-reset') {
         if (confirm('Вернуть все настройки к стандартным? Записи и документы не тронутся.')) {
           Object.keys(S.DEFAULT_SETTINGS).forEach(function (k) { S.setSetting(k, S.DEFAULT_SETTINGS[k]); });

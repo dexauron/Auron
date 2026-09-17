@@ -53,6 +53,8 @@ const screensOf = page => page.evaluate(() =>
   (window.WMUI.views ? window.WMUI.views().map(v => v.id)
     : [...document.querySelectorAll('.nav-item')].map(e => e.dataset.go)));
 
+const E = v => Number(String(v == null ? '' : v).replace(',', '.')) || 0;
+
 console.log('Страница: ' + PAGE + '\n');
 
 /* 1. Пустая база: ни один экран не падает */
@@ -870,13 +872,15 @@ console.log('Страница: ' + PAGE + '\n');
   });
   check('форма для «Повторить сегодня» существует', repeated, 'есть', 'есть');
 
-  // «Быстрая настройка» на экране настроек
+  // Кнопка «Настроить магазин» на экране настроек открывает мастер с ПЕРВОГО шага
   await page.evaluate(() => window.WMUI.go('settings'));
   await page.waitForTimeout(300);
   await page.evaluate(() => document.querySelector('[data-act="settings-wizard"]').click());
   await page.waitForTimeout(400);
-  const wiz = await page.evaluate(() => !!document.querySelector('#wmForm [name="openCashStart"]'));
-  check('«Быстрая настройка» открывается', wiz, wiz ? 'открылась' : 'мёртвая кнопка', 'открылась');
+  const wiz = await page.evaluate(() => !!document.querySelector('#wmForm [name="storeName"]')
+    && /Шаг 1 из/.test((document.querySelector('.wiz-head') || {}).innerText || ''));
+  check('КНОПКА НА ЭКРАНЕ НАСТРОЕК ОТКРЫВАЕТ МАСТЕР С ПЕРВОГО ШАГА',
+    wiz, wiz ? 'открылся на шаге 1' : 'мёртвая кнопка', 'открылся на шаге 1');
   await page.evaluate(() => window.WMUI.closeSheet());
   await page.waitForTimeout(250);
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
@@ -3075,6 +3079,117 @@ console.log('Страница: ' + PAGE + '\n');
     /от наличных за смену/.test(б) ? 'паникует' : 'спокойно', 'спокойно');
   check('но подсказки всё равно под рукой',
     /достаточно исправить одно из чисел/.test(б), 'есть', 'есть');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 22. Мастер настройки: магазин настраивает программу под себя сам.
+
+       Владелец сказал: «хочу, чтобы магазин сам настроил программу под свой
+       магазин». Значит, проверять надо не поля по одному, а весь путь — от
+       первого шага до того, что настройки доехали до рабочей формы. */
+{
+  console.log('— Мастер настройки магазина');
+  const { page, ctx, errs } = await open();
+
+  const шапка = () => page.evaluate(() => {
+    const e = document.querySelector('.wiz-head');
+    return e ? e.innerText.replace(/\n/g, ' · ') : '';
+  });
+  const кнопка = () => page.evaluate(() => {
+    const b = document.querySelector('.form-actions button');
+    return b ? b.innerText.trim() : '';
+  });
+  const дальше = async () => { await page.click('.form-actions button'); await page.waitForTimeout(450); };
+
+  await page.evaluate(() => window.WMUI.openForm('setupWizard'));
+  await page.waitForTimeout(400);
+
+  check('МАСТЕР ОТКРЫВАЕТСЯ И ГОВОРИТ, СКОЛЬКО ШАГОВ',
+    /Шаг 1 из 3/.test(await шапка()), await шапка(), 'Шаг 1 из 3');
+  check('КНОПКА НЕ ВРЁТ: на первом шаге она ведёт дальше, а не сохраняет',
+    (await кнопка()) === 'Дальше', await кнопка(), 'Дальше');
+
+  /* Пустое название дальше не пускает: без него отчёты будут без шапки */
+  await дальше();
+  check('БЕЗ НАЗВАНИЯ МАГАЗИНА ДАЛЬШЕ НЕ ПУСКАЕТ',
+    /Шаг 1 из 3/.test(await шапка()), await шапка(), 'остались на шаге 1');
+
+  await page.fill('.sheet [name="storeName"]', 'Продукты у дома');
+  await page.fill('.sheet [name="workMode"]', 'Круглосуточно');
+  await дальше();
+  check('ШАГ 2 — КАССЫ И СМЕНЫ', /Шаг 2 из 3/.test(await шапка()), await шапка(), 'Шаг 2 из 3');
+
+  const скрытые = () => page.evaluate(() => [...document.querySelectorAll('.sheet [name]')]
+    .filter(i => i.type === 'hidden').map(i => i.name));
+  check('ОТВЕТ ПЕРВОГО ШАГА ЕДЕТ ДАЛЬШЕ СКРЫТЫМ ПОЛЕМ',
+    (await скрытые()).includes('storeName'), (await скрытые()).join(', '), 'storeName среди них');
+
+  await page.fill('.sheet [name="tills"]', 'Касса 1, Касса 2, Экспресс');
+  await page.fill('.sheet [name="shiftNames"]', 'Утро, Вечер, Ночь');
+  await page.fill('.sheet [name="openCashStart"]', '15000');
+  await page.fill('.sheet [name="openSafeStart"]', '200000');
+  await page.fill('.sheet [name="openDebtStart"]', '480000');
+  await дальше();
+  check('ШАГ 3 — ЛЮДИ', /Шаг 3 из 3/.test(await шапка()), await шапка(), 'Шаг 3 из 3');
+  check('НА ПОСЛЕДНЕМ ШАГЕ КНОПКА ГОВОРИТ «СОХРАНИТЬ»',
+    /Сохранить/.test(await кнопка()), await кнопка(), 'Сохранить настройки');
+
+  /* «Назад» обязано вернуть набранное: заметил опечатку на третьем шаге —
+     не начинать же всё заново */
+  await page.click('.sheet [data-act="wiz-back"]');
+  await page.waitForTimeout(450);
+  check('«НАЗАД» ВОЗВРАЩАЕТ НА ПРОШЛЫЙ ШАГ',
+    /Шаг 2 из 3/.test(await шапка()), await шапка(), 'Шаг 2 из 3');
+  check('И НИЧЕГО НЕ ТЕРЯЕТ',
+    (await page.inputValue('.sheet [name="tills"]')) === 'Касса 1, Касса 2, Экспресс',
+    await page.inputValue('.sheet [name="tills"]'), 'Касса 1, Касса 2, Экспресс');
+  check('название магазина с первого шага тоже цело',
+    (await page.evaluate(() => (document.querySelector('.sheet [name="storeName"]') || {}).value))
+      === 'Продукты у дома', 'цело', 'цело');
+
+  await дальше();
+  await page.fill('.sheet [name="finCashiers"]', 'Марьям, Аслан, Зарема');
+  await page.fill('.sheet [name="rateDay"]', '250');
+  await page.fill('.sheet [name="rateNight"]', '300');
+  await page.fill('.sheet [name="shiftHours"]', '12');
+  await дальше();
+  await page.waitForTimeout(400);
+
+  const s = await page.evaluate(() => window.WMStore.settings);
+  check('НАСТРОЙКИ ЗАПИСАЛИСЬ ВСЕ, А НЕ ТОЛЬКО ПОСЛЕДНЕГО ШАГА',
+    s.storeName === 'Продукты у дома' && s.tills === 'Касса 1, Касса 2, Экспресс' &&
+    s.finCashiers === 'Марьям, Аслан, Зарема',
+    [s.storeName, s.tills, s.finCashiers].join(' | '), 'все три');
+  check('стартовые остатки не потерялись по дороге',
+    E(s.openCashStart) === 15000 && E(s.openSafeStart) === 200000 && E(s.openDebtStart) === 480000,
+    [s.openCashStart, s.openSafeStart, s.openDebtStart].join(' / '), '15000 / 200000 / 480000');
+  check('ставки и часы смены записались',
+    E(s.rateDay) === 250 && E(s.rateNight) === 300 && E(s.shiftHours) === 12,
+    [s.rateDay, s.rateNight, s.shiftHours].join(' / '), '250 / 300 / 12');
+  check('СМЕНЫ ЛЕГЛИ ПОД ОБОИМИ ИМЕНАМИ — иначе форма сверки их не увидит',
+    s.shiftNames === s.finShifts && s.finShifts === 'Утро, Вечер, Ночь',
+    s.finShifts, 'Утро, Вечер, Ночь');
+
+  /* Главное: настройки должны доехать до рабочей формы, а не осесть в базе */
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(500);
+  const списки = await page.evaluate(() => {
+    const g = n => [...(document.querySelector('.sheet [name="' + n + '"]') || { options: [] }).options]
+      .map(o => o.value);
+    const поле = document.querySelector('.sheet [name="cashier"]');
+    const lid = поле && поле.getAttribute('list');
+    return { кассы: g('till'), смены: g('shift'),
+      кассиры: lid ? [...document.querySelectorAll('#' + lid + ' option')].map(o => o.value) : [] };
+  });
+  check('КАССЫ ИЗ МАСТЕРА ВИДНЫ В СВЕРКЕ СМЕНЫ',
+    списки.кассы.join(',') === 'Касса 1,Касса 2,Экспресс', списки.кассы.join(' / '), 'три кассы');
+  check('СМЕНЫ ИЗ МАСТЕРА ВИДНЫ И СТОЯТ ПО ПОРЯДКУ',
+    списки.смены.join(',') === 'Утро,Вечер,Ночь', списки.смены.join(' / '), 'Утро / Вечер / Ночь');
+  check('КАССИРЫ ИЗ МАСТЕРА ПОДСТАВЛЯЮТСЯ ПРИ СДАЧЕ СМЕНЫ',
+    списки.кассиры.length === 3, списки.кассиры.join(' / '), 'три кассира');
 
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
