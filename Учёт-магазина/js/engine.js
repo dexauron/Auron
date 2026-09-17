@@ -2113,6 +2113,44 @@
     return { rows: kept.concat(rows), stats: stats };
   }
 
+  /* --- Сколько выгрузок 1С держать в памяти ---------------------------------
+
+     Выгрузки копятся по месяцам и старые не затираются — иначе выбрать период
+     было бы не из чего. Но копятся они бесконечно, а живут только в памяти и
+     перечитываются при каждом запуске. Замерено на магазине в 3000
+     наименований: год — 8 МБ, пять лет — 39 МБ, десять — 77 МБ. Через
+     несколько лет запуск начал бы заметно тормозить.
+
+     Поэтому старые периоды отбрасываем. Ручной учёт это НЕ трогает: смены,
+     расходы, табель и выплаты лежат в базе и не удаляются никогда. Здесь
+     только товарная аналитика, которая и так собирается из файлов заново.
+
+     0 месяцев — не ограничивать. Строки без периода оставляем всегда:
+     раз период неизвестен, судить о возрасте не по чему.              */
+  function monthStart(iso, backMonths) {
+    var y = +txt(iso).slice(0, 4), m = +txt(iso).slice(5, 7);
+    if (!y || !m) return '';
+    var total = y * 12 + (m - 1) - backMonths;
+    if (total < 0) return '';
+    return String(Math.floor(total / 12)) + '-' + ('0' + (total % 12 + 1)).slice(-2) + '-01';
+  }
+
+  function pruneOldPeriods(rows, keepMonths, nowISO) {
+    var keep = Math.round(num(keepMonths));
+    if (!rows || !rows.length || !(keep > 0)) return rows || [];
+    // keep месяцев, считая текущий: при keep = 1 остаётся только этот месяц
+    var cutoff = monthStart(nowISO || today(), keep - 1);
+    if (!cutoff) return rows;
+    /* Судим ТОЛЬКО по полям периода выгрузки (to/from). По r.date судить
+       нельзя: дата есть и у смены, и у расхода — направь эту функцию на
+       записи учёта, и она стёрла бы работу за прошлые годы. Нет периода —
+       значит это не выгрузка, и трогать строку не за что. */
+    return rows.filter(function (r) {
+      var to = txt(r.to) || txt(r.from);
+      return !to || to >= cutoff;
+    });
+  }
+
   /* Сложить строки одного товара из РАЗНЫХ выгрузок.
 
      Выбрали «Всё» при загруженных сентябре и октябре — один товар приходит
@@ -3315,6 +3353,7 @@
     rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
     isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА, costKindName: costKindName,
     periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
+    pruneOldPeriods: pruneOldPeriods, monthStart: monthStart,
     mergeByKey: mergeByKey, mergeSales: mergeSales,
     deadStockList: deadStockList, matchPayments: matchPayments,
     supplierBalance: supplierBalance, cashSummary: cashSummary,

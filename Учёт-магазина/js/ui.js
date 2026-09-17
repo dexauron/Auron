@@ -891,7 +891,7 @@
          файл. Свой период файл переписывает, чужие не трогает. */
       r = E.parseSales(m.matrix);
       var ss = E.syncByPeriod(D.sales, r.rows, r.period, function (x) { return x.key; });
-      D.sales = ss.rows; D.salesPeriod = r.period; info.period = r.period;
+      D.sales = обрезать(ss.rows); D.salesPeriod = r.period; info.period = r.period;
       info.note = 'обновлено ' + ss.stats.updated + ', добавлено ' + ss.stats.added;
     }
     /* Остатки — не период, а СНИМОК: что лежит на полке на момент выгрузки.
@@ -906,7 +906,7 @@
     else if (kind === 'deadstock') {
       r = E.parseDeadStock(m.matrix);
       var ds = E.syncByPeriod(D.dead, r.rows, r.period, function (x) { return x.key || E.norm(x.name); });
-      D.dead = ds.rows; D.deadPeriod = r.period; info.period = r.period;
+      D.dead = обрезать(ds.rows); D.deadPeriod = r.period; info.period = r.period;
       info.note = 'позиций ' + r.rows.length;
     }
     else if (kind === 'incexp1c') {
@@ -931,7 +931,7 @@
       var rs = E.syncByPeriod(D.returns, r.rows, r.period, function (x) {
         return E.norm(x.name) + '|' + E.norm(x.reason) + '|' + E.norm(x.contract);
       });
-      D.returns = rs.rows; D.returnsPeriod = r.period; info.period = r.period;
+      D.returns = обрезать(rs.rows); D.returnsPeriod = r.period; info.period = r.period;
       info.note = 'обновлено ' + rs.stats.updated + ', добавлено ' + rs.stats.added;
     }
     else if (kind === 'invoices1c') {
@@ -993,6 +993,13 @@
     }
     render();
     return await syncFolder(false);
+  }
+
+  /* Товарная аналитика живёт только в памяти и перечитывается при каждом
+     запуске, поэтому старые выгрузки отбрасываем — сколько месяцев держать,
+     решает владелец в настройках. Ручного учёта это не касается. */
+  function обрезать(rows) {
+    return E.pruneOldPeriods(rows, S.settings.anaKeepMonths, E.today ? E.today() : '');
   }
 
   async function syncFolder(silent) {
