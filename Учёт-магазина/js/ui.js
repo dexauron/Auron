@@ -1428,7 +1428,7 @@
                 { options: ['Круглосуточно', 'с 8:00 до 23:00', 'с 9:00 до 21:00'],
                   hint: 'можно вписать своё — показывается под названием' });
           } else if (n === 2) {
-            поля = ['tills', 'shiftNames', 'openCashStart', 'openSafeStart', 'openDebtStart'];
+            поля = ['tills', 'shiftNames', 'openSafeStart', 'openDebtStart'];
             h += fieldRow('Денежные ящики', 'tills', 'text', было('tills'),
               { placeholder: 'Касса 1, Касса 2',
                 hint: 'через запятую. Считайте по ЯЩИКАМ, а не по аппаратам: ' +
@@ -1437,10 +1437,10 @@
                 { placeholder: 'День, Ночь',
                   hint: 'по порядку, от первой к последней. Смен может быть сколько угодно: ' +
                     '«Утро, Вечер, Ночь» или просто «Сутки»' }) +
-              fieldRow('Наличных в кассах сейчас', 'openCashStart', 'number',
-                было('openCashStart'), { hint: 'сложите деньги во всех ящиках' }) +
-              fieldRow('Наличных в сейфе сейчас', 'openSafeStart', 'number',
-                было('openSafeStart')) +
+              fieldRow('Наличных у вас сейчас', 'openSafeStart', 'number',
+                было('openSafeStart'),
+                { hint: 'сколько живых денег в вашем сейфе. Деньги в ящиках сюда не входят — ' +
+                  'они у кассиров на сдачу и вашими не считаются' }) +
               fieldRow('Долг поставщикам сейчас', 'openDebtStart', 'number',
                 было('openDebtStart'), { hint: 'общей суммой по магазину' });
           } else {
@@ -1486,7 +1486,7 @@
           ['storeName', 'workMode', 'tills', 'shiftNames', 'finCashiers'].forEach(function (k) {
             if (v[k] != null) S.setSetting(k, E.txt(v[k]));
           });
-          ['openCashStart', 'openSafeStart', 'openDebtStart',
+          ['openSafeStart', 'openDebtStart',
             'rateDay', 'rateNight', 'shiftHours'].forEach(function (k) {
             if (v[k] != null && v[k] !== '') S.setSetting(k, E.num(v[k]));
           });
@@ -1498,7 +1498,7 @@
           return { ok: 'Готово. «' + E.txt(v.storeName) + '»: ' +
             касс + ' ' + E.plural(касс, 'касса', 'кассы', 'касс') + ', ' +
             смен + ' ' + E.plural(смен, 'смена', 'смены', 'смен') + '. ' +
-            'Считаем от ' + money(E.num(v.openCashStart)) + ' в кассах.' };
+            'Считаем от ' + money(E.num(v.openSafeStart)) + ' в сейфе.' };
         }
       };
     })(),

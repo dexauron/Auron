@@ -270,11 +270,31 @@
     s = s || {};
     var open = safeRound(s.openCash), zCash = safeRound(s.zCash);
     var zCashless = safeRound(s.zCashless), payouts = safeRound(s.payouts);
-    var fact = safeRound(s.factCash);
+    /* --- ВЗГЛЯД БУХГАЛТЕРА -------------------------------------------------
+
+       Владелец не следит за ящиком. Он приходит, забирает деньги и уносит их
+       в свой сейф. Смена для него — не счёт с остатком, а событие: «касса
+       сказала столько, кассир потратил столько, размен я оставил такой,
+       забрал вот это».
+
+       Это та же арифметика, записанная с другой стороны:
+
+           в ящике = то, что забрал + то, что оставил
+
+       Поэтому ломать расчёт не пришлось. Заполнено «получил на руки» —
+       считаем по-новому, пусто — по-старому, как считали раньше. Обе дороги
+       приводят к одному расхождению, и это закреплено проверкой. */
+    var keptFilled = !(s.kept == null || s.kept === '');
+    var kept = safeRound(s.kept);                  // размен, оставленный в ящике
+    var recvFilled = !(s.received == null || s.received === '');
+    var received = safeRound(s.received);          // сколько владелец забрал
+
+    var fact = recvFilled ? safeRound(received + kept) : safeRound(s.factCash);
     /* Пустое поле и вписанный ноль — разные вещи. Ящик, закрытый в ноль, это
        норма, а не забывчивость, и разбор не вправе на него ругаться. */
-    var factFilled = s.factFilled !== undefined
-      ? !!s.factFilled : !(s.factCash == null || s.factCash === '');
+    var factFilled = recvFilled ? true
+      : (s.factFilled !== undefined
+        ? !!s.factFilled : !(s.factCash == null || s.factCash === ''));
     var retCash = safeRound(s.returnsCash);        // возвраты покупателям наличными
     var retCashless = safeRound(s.returnsCashless);// возвраты на карту
     var deposits = safeRound(s.deposits);          // внесения в кассу
@@ -301,6 +321,11 @@
     var collectDiff = collectFilled ? safeRound(collectedFact - collected) : 0;
 
     var expected = safeRound(open + zCash - retCash + deposits - payouts - collected);
+    /* Сколько владельцу должны отдать на руки: всё, что накопилось в ящике,
+       минус размен, который он там оставляет. Когда размен не меняется,
+       «было на начало» и «оставил» гасят друг друга, и остаётся ровно то,
+       что владелец и считает в уме: Z-наличные минус выплаты. */
+    var handed = safeRound(expected - kept);
     var diff = safeRound(fact - expected);
 
     // Безнал по способам оплаты: по ним сверяются с отчётом терминала
@@ -323,6 +348,9 @@
       collectShort: collectDiff < 0 ? safeRound(-collectDiff) : 0,
       collectOk: isZero(collectDiff),
       factCash: fact, factFilled: factFilled, expected: expected, diff: diff,
+      kept: kept, keptFilled: keptFilled,
+      received: received, recvFilled: recvFilled,
+      handed: handed,
       revenue: safeRound(revenueCash + revenueCashless),
       revenueCash: revenueCash, revenueCashless: revenueCashless,
       returns: safeRound(retCash + retCashless),
@@ -507,21 +535,30 @@
     });
   }
 
-  /* Сколько наличных в ящиках прямо сейчас.
-     Раз «факт = расчётный + расхождение», накопленное движение по кассе — это
-     Σ(Z-наличные − выплаты + расхождение). Расхождение обязано входить:
-     в ящике лежит факт, а не то, что должно было быть.
-     Карта и СБП тут не участвуют — они не в ящике. */
+  /* СКОЛЬКО ЖИВЫХ ДЕНЕГ У ВЛАДЕЛЬЦА ПРЯМО СЕЙЧАС.
+
+     Раньше эта функция считала «сколько в кассовых ящиках», и это было не то,
+     что владельцу нужно. Он бухгалтер: ящик — не его хозяйство, деньги в нём
+     лежат у кассира на сдачу. Его деньги начинаются там, где он их забрал.
+
+     Поэтому теперь здесь ВСЕ наличные счета, а не ящики. У нового магазина
+     ящиков нет вовсе, и это просто сейф. У магазина, который вёл учёт
+     по-старому, в закрытом ящике могли остаться деньги от прежних смен —
+     они тоже его, и терять их нельзя, поэтому они входят сюда же.
+
+     Двойного счёта тут нет: по правилу ящика инкассация прибавляла сейфу, но
+     не вычитала из ящика — потому что кассир уже записал эти деньги в
+     «выплаты из ящика», и факт смены их не содержал.
+
+     Карта и СБП сюда не входят никогда: это не наличные. */
   function cashOnHand(rows, settings, upto, accounts) {
     settings = settings || {};
-    /* Есть справочник счетов — считаем по нему: наличные это сумма ящиков и
-       прочих наличных счетов. Нет (старая база, ещё не заведены) — считаем
-       по-прежнему, от одного общего остатка. */
     if (accounts && accounts.length) {
-      // Именно ящики: сейф показывается отдельной цифрой
-      return accountBalances(rows, accounts, upto).totals.till;
+      return accountBalances(rows, accounts, upto).totals.cash;
     }
-    var cash = safeRound(settings.openCashStart);
+    /* Счетов нет — очень старая база. Считаем от того, что владелец назвал
+       начальным остатком своих наличных. */
+    var cash = safeRound(settings.openSafeStart);
     (rows || []).forEach(function (r) {
       if (upto && txt(r.date) > upto) return;
       if (isShift(r)) {
@@ -577,6 +614,22 @@
     return list[0] || null;
   }
 
+  /* Куда ложатся деньги, забранные со смены. Это сейф владельца — ящика в
+     новой картине мира нет вовсе. Ищем сначала помеченный «наличные по
+     умолчанию», потом любой наличный, и только потом что попало: лучше
+     положить не туда и показать это, чем потерять сумму молча. */
+  function cashAccount(accounts) {
+    var list = accounts || [], i;
+    for (i = 0; i < list.length; i++) {
+      if (!list[i].archived && list[i].kind === 'cash' && list[i].defaultCash) return list[i];
+    }
+    for (i = 0; i < list.length; i++) {
+      if (!list[i].archived && list[i].kind === 'cash') return list[i];
+    }
+    for (i = 0; i < list.length; i++) if (!list[i].archived) return list[i];
+    return list[0] || null;
+  }
+
   function defaultAccount(accounts, cashless) {
     var list = accounts || [], i;
     for (i = 0; i < list.length; i++) {
@@ -628,7 +681,17 @@
 
            Безнал идёт на свой счёт за вычетом возвратов на карту: банк
            зачисляет ровно то, что осталось после возвратов. */
-        hit(accountOf(r, accounts), c.factCash - c.openCash);
+        if (c.recvFilled) {
+          /* ВЗГЛЯД БУХГАЛТЕРА: ящика нет, есть событие «я забрал деньги».
+             В сейф ложится ровно то, что владелец пересчитал и унёс, —
+             ни рублём больше. Сколько осталось в ящике на размен, его не
+             касается: эти деньги он в руках не держал и в своих не считает. */
+          hit(txt(r.toAccount) ? accountOf(r, accounts, 'to') : cashAccount(accounts), c.received);
+        } else {
+          /* Старый способ: владелец считал сам ящик. Оставлен ради записей,
+             сделанных до перехода, — переписывать историю нельзя. */
+          hit(accountOf(r, accounts), c.factCash - c.openCash);
+        }
         if (c.revenueCashless) {
           hit(accountOf({ toAccount: r.cashlessAccount, method: 'Карта' }, accounts, 'to'),
             c.revenueCashless);
@@ -3352,6 +3415,7 @@
     byReason: byReason, topByCost: topByCost, perMonth: perMonth,
     rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
     isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА, costKindName: costKindName,
+    cashAccount: cashAccount,
     periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
     pruneOldPeriods: pruneOldPeriods, monthStart: monthStart,
     mergeByKey: mergeByKey, mergeSales: mergeSales,

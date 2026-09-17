@@ -99,7 +99,6 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('— День магазина');
   const { page, ctx, errs } = await open();
   await page.evaluate(() => {
-    window.WMStore.setSetting('openCashStart', 0);
     window.WMStore.setSetting('openDebtStart', 100000);
     window.WMUI.recompute();
   });
@@ -428,8 +427,24 @@ console.log('Страница: ' + PAGE + '\n');
   const pickAcc = (n, label) =>
     page.selectOption('.sheet [name="' + n + '"]', { label });
 
+  /* Сначала смотрим, что программа завела сама: ящика среди счетов быть
+     не должно. И только потом заводим его руками для проверки старого пути. */
+  const своиСчета = await page.evaluate(() =>
+    (window.WMStore.state.accounts || []).map(a => a.name + ':' + a.kind));
+  check('ПРОГРАММА САМА ЯЩИК НЕ ЗАВОДИТ',
+    !своиСчета.some(a => a.endsWith(':till')), своиСчета.join(', '), 'только cash и bank');
+
+  /* ЭТОТ БЛОК НАРОЧНО ПРОВЕРЯЕТ СТАРЫЙ СПОСОБ УЧЁТА.
+
+     Новые магазины ящик не ведут: владелец забирает деньги и кладёт в сейф.
+     Но у того, кто вёл учёт по-старому, записи с ящиком остались, и они
+     обязаны считаться ровно как раньше — переписывать историю нельзя.
+     Поэтому ящик здесь заводится руками: сам по себе он больше не
+     появляется, и это правильно. */
   await page.evaluate(() => {
     const S = window.WMStore;
+    S.state.accounts.unshift({ id: 'старый-ящик', name: 'Касса', kind: 'till',
+      opening: 0, note: 'заведён вручную: проверяем старый способ' });
     const till = (S.state.accounts || []).find(a => a.kind === 'till');
     const bank = (S.state.accounts || []).find(a => a.kind === 'bank');
     S.add('dds', { type: 'Смена', date: '2026-09-01', till: 'Касса 1',
@@ -440,10 +455,11 @@ console.log('Страница: ' + PAGE + '\n');
     S.save(); window.WMUI.recompute();
   });
 
-  // Счета заводятся сами при первом запуске
+  /* Счета заводятся сами: сейф и расчётный счёт. Денежного ящика среди них
+     нет — владелец бухгалтер, ящик не его хозяйство. */
   const accs = await page.evaluate(() =>
     (window.WMStore.state.accounts || []).map(a => a.name + ':' + a.kind));
-  check('счета заведены при первом запуске', accs.length >= 3, accs.join(', '), '>=3');
+  check('счета заведены при первом запуске', accs.length >= 2, accs.join(', '), '>=2');
 
   // Расшифровываем выплату из ящика — касса меняться не должна
   await page.evaluate(() => window.WMUI.openForm('moneyOut'));
@@ -495,6 +511,7 @@ console.log('Страница: ' + PAGE + '\n');
   const c2 = await page.evaluate(() => {
     const E = window.WM, S = window.WMStore;
     return { cash: E.cashOnHand(S.state.dds, S.settings, null, S.state.accounts),
+      till: E.accountBalances(S.state.dds, S.state.accounts).totals.till,
       safe: E.safeOnHand(S.state.dds, S.settings, null, S.state.accounts),
       net: E.pnl({ rows: S.state.dds }).net,
       chk: E.tillPayoutCheck(S.state.dds, null, { payouts: S.state.payouts || [],
@@ -502,9 +519,14 @@ console.log('Страница: ' + PAGE + '\n');
   });
   /* Кассир вынул деньги при закрытии смены и записал их в «выплаты из ящика»
      (10 000), а факт это учёл. Значит инкассация ящик второй раз уменьшать
-     не должна — иначе те же деньги пропадут дважды. */
-  check('ИНКАССАЦИЯ НЕ ВЫЧИТАЕТСЯ ИЗ ЯЩИКА ДВАЖДЫ', c2.cash === 16467, c2.cash, 16467);
+     не должна — иначе те же деньги пропадут дважды.
+
+     Спрашиваем про САМ ЯЩИК, а не про «все наличные»: всех наличных стало
+     больше, и это верно — деньги, вынутые из ящика при кассире, до сейфа
+     доехали и снова попали в счёт. Раньше они не числились нигде. */
+  check('ИНКАССАЦИЯ НЕ ВЫЧИТАЕТСЯ ИЗ ЯЩИКА ДВАЖДЫ', c2.till === 16467, c2.till, 16467);
   check('и положила деньги в сейф', c2.safe === 10000, c2.safe, 10000);
+  check('всего наличных стало ящик плюс сейф', c2.cash === 26467, c2.cash, 26467);
   check('ИНКАССАЦИЯ ПРИБЫЛЬ НЕ ИЗМЕНИЛА', c2.net === before, c2.net, before);
   check('она попала в расшифровку выплат из ящика',
     c2.chk.parts['инкассация'] === 10000, c2.chk.parts['инкассация'], 10000);
@@ -900,8 +922,8 @@ console.log('Страница: ' + PAGE + '\n');
       debtTaken: 0 }, 'goodsCash', '2000'],
     ['dds', 'moneyOut', { type: 'Расход', date: '2026-09-01', category: 'Аренда',
       method: 'Наличные', source: 'Из ящика', amount: 5000 }, 'amount', '7000'],
-    ['dds', 'moveCash', { type: 'Перемещение', date: '2026-09-01', from: 'Касса', to: 'Сейф',
-      amount: 2000 }, 'amount', '3000'],
+    ['dds', 'moveCash', { type: 'Перемещение', date: '2026-09-01', from: 'Сейф',
+      to: 'Расчётный счёт', amount: 2000 }, 'amount', '3000'],
     ['dds', 'moneyIn', { type: 'Приход', date: '2026-09-01', category: 'Прочий приход',
       method: 'Наличные', amount: 500 }, 'amount', '900'],
     ['dds', 'moneyDraw', { type: 'Забор', date: '2026-09-01', method: 'Наличные',
@@ -919,7 +941,14 @@ console.log('Страница: ' + PAGE + '\n');
   for (const [coll, form, seed, field, val] of cases) {
     const r = await page.evaluate(async ([coll, form, seed, field, val]) => {
       const S = window.WMStore, U = window.WMUI;
-      S.state[coll] = []; S.save();
+      S.state[coll] = [];
+      /* Перевод из пустого сейфа программа отклоняет — и правильно делает.
+         Здесь проверяется не это, а что правка записи не теряет и не двоит,
+         поэтому даём сейфу денег, чтобы переводу было откуда взяться. */
+      (S.state.accounts || []).forEach(function (a) {
+        if (a.kind === 'cash') a.opening = 100000;
+      });
+      S.save();
       const rec = S.add(coll, seed); S.save(); U.recompute();
       U.openForm(form, JSON.parse(JSON.stringify(rec)), { coll, id: rec.id });
       await new Promise(r2 => setTimeout(r2, 350));
@@ -1016,7 +1045,7 @@ console.log('Страница: ' + PAGE + '\n');
   const accRows = await page.evaluate(() =>
     document.querySelectorAll('#accLive tbody tr').length ||
     (window.WMStore.state.accounts || []).length);
-  check('в справочнике видны заведённые счета', accRows >= 3, accRows + ' счетов', '>=3');
+  check('в справочнике видны заведённые счета', accRows >= 2, accRows + ' счетов', '>=2');
 
   await page.click('[data-tab="dicts:staff"]');
   await page.waitForTimeout(400);
@@ -1108,19 +1137,28 @@ console.log('Страница: ' + PAGE + '\n');
   await fill('date', '2026-09-02');
   await pickAcc('account', 'Сейф');
   await fill('amount', '8000');
+  /* Запоминаем счёт ДО забора: деньги обязаны уйти ровно с одного кошелька,
+     и проверить это надёжнее сравнением «до и после», чем числом из головы. */
+  const до = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const b = E.accountBalances(S.state.dds || [], S.state.accounts || []);
+    const g = k => b.rows.filter(r => r.kind === k)[0] || { balance: 0 };
+    return { safe: g('cash').balance, bank: g('bank').balance };
+  });
   await page.click('.sheet .btn-primary');
   await page.waitForTimeout(500);
   const afterDraw = await page.evaluate(() => {
     const S = window.WMStore, E = window.WM;
     const b = E.accountBalances(S.state.dds || [], S.state.accounts || []);
-    const g = k => b.rows.filter(r => r.kind === k)[0];
-    return { safe: g('cash').balance, till: g('till').balance,
+    const g = k => b.rows.filter(r => r.kind === k)[0] || { balance: 0 };
+    return { safe: g('cash').balance, bank: g('bank').balance,
       draw: E.pnl({ rows: S.state.dds, ym: '2026-09' }).draw,
       costs: E.pnl({ rows: S.state.dds, ym: '2026-09' }).costTotal };
   });
-  check('деньги ушли именно с того счёта, что выбрали', afterDraw.safe === 17000,
-    afterDraw.safe, 17000);
-  check('ЯЩИК ОТ ЗАБОРА ИЗ СЕЙФА НЕ ИЗМЕНИЛСЯ', afterDraw.till === 10000, afterDraw.till, 10000);
+  check('СЕЙФ УМЕНЬШИЛСЯ РОВНО НА ЗАБРАННОЕ',
+    afterDraw.safe === до.safe - 8000, afterDraw.safe, до.safe - 8000);
+  check('ЗАБОР ИЗ СЕЙФА ДРУГИЕ КОШЕЛЬКИ НЕ ТРОНУЛ', afterDraw.bank === до.bank,
+    afterDraw.bank, до.bank);
   check('ЗАБОР ВЛАДЕЛЬЦА ПРИБЫЛЬ НЕ СЪЕЛ', afterDraw.costs === 0, afterDraw.costs, 0);
   check('но в отчёте он стоит отдельной строкой', afterDraw.draw === 8000, afterDraw.draw, 8000);
 
@@ -1440,9 +1478,9 @@ console.log('Страница: ' + PAGE + '\n');
     return s ? s.options[s.selectedIndex].text : '';
   });
 
-  // Аренду платим со счёта, обед — из кассы
+  // Аренду платим со счёта, обед — наличными из сейфа
   for (const [cat, acc, sum] of [['Аренда', 'Расчётный счёт', '110000'],
-    ['Обед', 'Касса', '800']]) {
+    ['Обед', 'Сейф', '800']]) {
     await page.evaluate(() => window.WMUI.openForm('moneyOut'));
     await page.waitForTimeout(320);
     await page.fill('.sheet [name="category"]', cat);
@@ -1463,8 +1501,8 @@ console.log('Страница: ' + PAGE + '\n');
   await page.fill('.sheet [name="category"]', 'Обед');
   await page.dispatchEvent('.sheet [name="category"]', 'change');
   await page.waitForTimeout(220);
-  check('у каждой статьи память своя', (await accName()) === 'Касса',
-    await accName(), 'Касса');
+  check('у каждой статьи память своя', (await accName()) === 'Сейф',
+    await accName(), 'Сейф');
 
   // Выбор владельца важнее памяти
   await page.selectOption('.sheet [name="account"]', { label: 'Сейф' });
@@ -1524,7 +1562,7 @@ console.log('Страница: ' + PAGE + '\n');
     const before = window.WM.pnl({ rows: S.state.dds }).net;
     const bal = window.WM.accountBalances(S.state.dds, a).totals.total;
     S.add('dds', { type: 'Перемещение', date: '2026-09-02', amount: 60000,
-      account: a.find(x => x.kind === 'till').id, toAccount: a.find(x => x.kind === 'cash').id,
+      account: a.find(x => x.kind === 'cash').id, toAccount: a.find(x => x.kind === 'bank').id,
       fund: (S.state.funds || [])[0].id });
     S.save(); window.WMUI.recompute();
     return { before, after: window.WM.pnl({ rows: S.state.dds }).net,
@@ -3155,7 +3193,6 @@ console.log('Страница: ' + PAGE + '\n');
 
   await page.fill('.sheet [name="tills"]', 'Касса 1, Касса 2, Экспресс');
   await page.fill('.sheet [name="shiftNames"]', 'Утро, Вечер, Ночь');
-  await page.fill('.sheet [name="openCashStart"]', '15000');
   await page.fill('.sheet [name="openSafeStart"]', '200000');
   await page.fill('.sheet [name="openDebtStart"]', '480000');
   await дальше();
@@ -3190,8 +3227,8 @@ console.log('Страница: ' + PAGE + '\n');
     s.finCashiers === 'Марьям, Аслан, Зарема',
     [s.storeName, s.tills, s.finCashiers].join(' | '), 'все три');
   check('стартовые остатки не потерялись по дороге',
-    E(s.openCashStart) === 15000 && E(s.openSafeStart) === 200000 && E(s.openDebtStart) === 480000,
-    [s.openCashStart, s.openSafeStart, s.openDebtStart].join(' / '), '15000 / 200000 / 480000');
+    E(s.openSafeStart) === 200000 && E(s.openDebtStart) === 480000,
+    [s.openSafeStart, s.openDebtStart].join(' / '), '200000 / 480000');
   check('ставки и часы смены записались',
     E(s.rateDay) === 250 && E(s.rateNight) === 300 && E(s.shiftHours) === 12,
     [s.rateDay, s.rateNight, s.shiftHours].join(' / '), '250 / 300 / 12');
@@ -3316,6 +3353,16 @@ console.log('Страница: ' + PAGE + '\n');
 {
   console.log('— Внесение размена списывается оттуда, откуда его взяли');
   const { page, ctx, errs } = await open();
+
+  /* Внесение размера среди смены — история про ящик, и проверяется здесь
+     старый путь учёта. Сам по себе ящик больше не заводится, поэтому
+     заводим его руками. */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.state.accounts.unshift({ id: 'старый-ящик', name: 'Касса', kind: 'till',
+      opening: 0, defaultCash: true, note: 'заведён вручную: проверяем старый способ' });
+    S.save();
+  });
 
   await page.evaluate(() => window.WMUI.openForm('shiftClose'));
   await page.waitForTimeout(450);

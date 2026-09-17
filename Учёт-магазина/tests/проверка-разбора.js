@@ -52,8 +52,8 @@ console.log('\n— Сколько наличных в ящиках');
   check('в кассе только наличные', WM.cashOnHand(rows, {}) === 16000, WM.cashOnHand(rows, {}), 16000);
   check('безнал посчитан отдельно', WM.cashlessTotal(rows) === 29743, WM.cashlessTotal(rows), 29743);
   check('начальный остаток прибавляется',
-    WM.cashOnHand(rows, { openCashStart: 5000 }) === 21000,
-    WM.cashOnHand(rows, { openCashStart: 5000 }), 21000);
+    WM.cashOnHand(rows, { openSafeStart: 5000 }) === 21000,
+    WM.cashOnHand(rows, { openSafeStart: 5000 }), 21000);
 
   const withOut = rows.concat([
     { type: 'Расход', date: '2026-09-02', method: 'Наличные', amount: 3000, category: 'Аренда' },
@@ -112,9 +112,9 @@ console.log('\n— Долг поставщикам');
   check('долг = начальный + взято − погашено', d.debt === 102000, d.debt, 102000);
   check('видно, сколько взяли и сколько отдали', d.taken === 12000 && d.paid === 10000,
     d.taken + ' и ' + d.paid, '12000 и 10000');
-  // самое важное: вечерняя форма не двигает кассу — иначе двойной счёт
-  check('ИТОГИ ДНЯ КАССУ НЕ ДВИГАЮТ', WM.cashOnHand(rows, { openCashStart: 50000 }) === 50000,
-    WM.cashOnHand(rows, { openCashStart: 50000 }), 50000);
+  // самое важное: вечерняя форма не двигает наличные — иначе двойной счёт
+  check('ИТОГИ ДНЯ НАЛИЧНЫЕ НЕ ДВИГАЮТ', WM.cashOnHand(rows, { openSafeStart: 50000 }) === 50000,
+    WM.cashOnHand(rows, { openSafeStart: 50000 }), 50000);
   check('без начального остатка долг считается от нуля',
     WM.supplierDebt(rows, {}).debt === 2000, WM.supplierDebt(rows, {}).debt, 2000);
 }
@@ -428,14 +428,18 @@ console.log('\n— Рабочий день магазина: две кассы, 
   ];
   const salary = [{ date: '2026-09-01', employee: 'Аня', kind: 'Аванс',
     amount: 15000, method: 'Наличные', source: 'Из ящика' }];
-  const set = { openCashStart: 10000, openSafeStart: 0 };
+  const set = { openSafeStart: 10000 };
 
   check('обе смены сошлись', rows.filter(r => r.type === 'Смена')
     .every(r => WM.shiftCalc(r).ok), 'сошлись', 'сошлись');
-  check('НАЛИЧНЫЕ ПО ДВУМ КАССАМ СЧИТАЮТСЯ ВЕРНО',
+  /* Наличные владельца по двум кассам. Считаем без справочника счетов —
+     это старый путь для очень старых баз, и он обязан остаться верным. */
+  check('НАЛИЧНЫЕ ПО ДВУМ СМЕНАМ СЧИТАЮТСЯ ВЕРНО',
     WM.cashOnHand(rows, set) === 40000, WM.cashOnHand(rows, set), 40000);
-  check('инкассация легла в сейф', WM.safeOnHand(rows, set) === 2000,
-    WM.safeOnHand(rows, set), 2000);
+  /* Сейф отвечает на другой вопрос — сколько лежит именно в сейфе, — поэтому
+     и начальный остаток у него свой: считаем от пустого сейфа. */
+  check('инкассация легла в сейф', WM.safeOnHand(rows, { openSafeStart: 0 }) === 2000,
+    WM.safeOnHand(rows, { openSafeStart: 0 }), 2000);
 
   const chk = WM.tillPayoutCheck(rows, null, { payouts: salary });
   check('из ящика выдали столько, сколько записали кассиры', chk.payouts === 40000,
@@ -490,17 +494,25 @@ console.log('\n— Счета: где лежат деньги');
   check('итоги: в ящиках, в сейфе и на счетах отдельно',
     t.till === 25000 && t.safe === 55000 && t.bank === -18000,
     t.till + '/' + t.safe + '/' + t.bank, '25000/55000/-18000');
-  check('«наличные» — это ящики, сейф считается отдельно',
-    WM.cashOnHand(rows, {}, null, acc) === 25000 &&
-    WM.safeOnHand(rows, {}, null, acc) === 55000,
-    WM.cashOnHand(rows, {}, null, acc), 25000);
+  /* «Наличные» — это ВСЕ живые деньги владельца, а не остаток ящика.
+     Ящик ему не принадлежит, но если в старой базе в нём ещё лежат деньги
+     от прежних смен — это тоже его деньги, и терять их нельзя. */
+  check('«НАЛИЧНЫЕ» — ЭТО ВСЕ ЖИВЫЕ ДЕНЬГИ ВЛАДЕЛЬЦА',
+    WM.cashOnHand(rows, {}, null, acc) === 80000,
+    WM.cashOnHand(rows, {}, null, acc), 80000);
+  check('а «в сейфе» — только сейф', WM.safeOnHand(rows, {}, null, acc) === 55000,
+    WM.safeOnHand(rows, {}, null, acc), 55000);
 
-  // Расход из ящика остаток ящика не трогает: он уже в выплатах смены
+  /* Расход, записанный на ящик, наличные владельца НЕ уменьшает: эти деньги
+     кассир уже записал в «выплаты из ящика», и факт смены их не содержал.
+     Вычесть второй раз значит потерять их дважды. Сравниваем «до» и «после»,
+     а не magic-число: так проверка говорит именно то, что защищает. */
+  const до = WM.cashOnHand(rows, {}, null, acc);
   const withCash = rows.concat([{ type: 'Расход', date: '2026-09-01', category: 'Обед',
     method: 'Наличные', account: 'a1', amount: 3000 }]);
-  check('РАСХОД ИЗ ЯЩИКА ЕГО ОСТАТОК НЕ МЕНЯЕТ',
-    WM.cashOnHand(withCash, {}, null, acc) === 25000,
-    WM.cashOnHand(withCash, {}, null, acc), 25000);
+  check('РАСХОД ИЗ ЯЩИКА НАЛИЧНЫЕ НЕ УМЕНЬШАЕТ',
+    WM.cashOnHand(withCash, {}, null, acc) === до,
+    WM.cashOnHand(withCash, {}, null, acc), до);
   check('но в сверку выплат он попадает',
     WM.tillPayoutCheck(withCash, null, { accounts: acc }).parts['расходы'] === 3000,
     WM.tillPayoutCheck(withCash, null, { accounts: acc }).parts['расходы'], 3000);
@@ -517,17 +529,18 @@ console.log('\n— Счета: где лежат деньги');
   check('записи, сделанные до появления счетов, находят свой счёт',
     WM.accountOf(old[0], acc).name === 'Сейф', WM.accountOf(old[0], acc).name, 'Сейф');
 
-  // Счета заводятся сами и переносят прежние остатки
+  /* Счета заводятся сами. Денежного ящика среди них НЕТ: владелец — бухгалтер,
+     ящик не его хозяйство. Его кошельков два — сейф и расчётный счёт. */
   STORE.clear();
-  STORE.state.settings.openCashStart = 7000;
   STORE.state.settings.openSafeStart = 3000;
   STORE.state.accounts = [];
   const made = STORE.ensureAccounts();
-  check('счета заводятся при первом запуске', made.length === 3, made.length, 3);
-  check('и забирают прежние начальные остатки',
-    made.find(a => a.kind === 'till').opening === 7000 &&
-    made.find(a => a.name === 'Сейф').opening === 3000,
-    made.find(a => a.kind === 'till').opening, 7000);
+  check('счета заводятся при первом запуске', made.length === 2, made.length, 2);
+  check('СРЕДИ НИХ НЕТ КАССОВОГО ЯЩИКА',
+    !made.some(a => a.kind === 'till'), made.map(a => a.kind).join(', '), 'cash, bank');
+  check('и сейф забирает начальный остаток наличных',
+    made.find(a => a.kind === 'cash').opening === 3000,
+    made.find(a => a.kind === 'cash').opening, 3000);
   check('счета не считаются «записями» владельца', STORE.stamp().records === 0,
     STORE.stamp().records, 0);
   STORE.clear();
@@ -2152,6 +2165,88 @@ console.log('\n— Сколько выгрузок 1С держим в памя�
   check('настройка выгрузок ручной учёт не трогает',
     WM.pruneOldPeriods(смены, 1, '2026-09-17').length === 2,
     WM.pruneOldPeriods(смены, 1, '2026-09-17').length, 2);
+}
+
+console.log('\n— Взгляд бухгалтера: смена как событие «я забрал деньги»');
+{
+  /* Владелец не следит за ящиком. Он приходит, забирает выручку и уносит её
+     в свой сейф. Это та же арифметика, записанная с другой стороны:
+     в ящике = то, что забрал + то, что оставил. */
+  const s1 = { openCash: 5000, zCash: 74841, zCashless: 73165, payouts: 10760,
+    kept: 5000, received: 57969 };
+  const c = WM.shiftCalc(s1);
+
+  check('ДОЛЖНЫ ОТДАТЬ = БЫЛО + Z-НАЛИЧНЫЕ − ВЫПЛАТЫ − ОСТАВИЛ',
+    c.handed === 64081, c.handed, 64081);
+  check('расхождение считается от того, что получили на руки',
+    c.diff === WM.safeRound(c.received - c.handed), c.diff, WM.safeRound(c.received - c.handed));
+
+  /* Главное: обе записи одной и той же смены обязаны дать одно расхождение.
+     Иначе переход на новый способ менял бы цифры задним числом. */
+  const поСтарому = WM.shiftCalc({ openCash: 5000, zCash: 74841, zCashless: 73165,
+    payouts: 10760, factCash: 57969 + 5000 });
+  check('НОВЫЙ И СТАРЫЙ СПОСОБ ДАЮТ ОДНО РАСХОЖДЕНИЕ',
+    c.diff === поСтарому.diff, c.diff + ' и ' + поСтарому.diff, 'одинаково');
+
+  /* Размен, который не меняется, обязан сократиться сам: владелец считает в
+     уме «Z-наличные минус выплаты», и программа обязана думать так же. */
+  const ровный = WM.shiftCalc({ openCash: 3000, zCash: 50000, payouts: 8000,
+    kept: 3000, received: 42000 });
+  check('НЕИЗМЕННЫЙ РАЗМЕН СОКРАЩАЕТСЯ САМ: должны отдать = Z-нал − выплаты',
+    ровный.handed === 42000, ровный.handed, 42000);
+  check('и тогда смена сходится', ровный.ok, ровный.status, 'сходится');
+
+  /* Оставили больше, чем было, — значит забрали меньше ровно на разницу. */
+  const больше = WM.shiftCalc({ openCash: 3000, zCash: 50000, payouts: 8000,
+    kept: 5000, received: 40000 });
+  check('оставили размена на 2 000 больше — забрали на 2 000 меньше',
+    больше.handed === 40000, больше.handed, 40000);
+  check('и это тоже сходится', больше.ok, больше.status, 'сходится');
+
+  /* Деньги ложатся в сейф, а не в ящик. Ящика в счетах нет вовсе. */
+  /* Счёт нарочно стоит ПЕРВЫМ. Если деньги со смены пойдут не в сейф, а
+     «куда придётся», они свалятся сюда — и проверка это увидит. Когда сейф
+     стоял первым, ошибочный путь попадал в него же, и проверка проходила
+     по случайности, ничего не защищая. */
+  const acc = [{ id: 'банк', name: 'Счёт', kind: 'bank', opening: 0 },
+               { id: 'сейф', name: 'Сейф', kind: 'cash', opening: 0, defaultCash: true }];
+  const b = WM.accountBalances([Object.assign({ type: 'Смена', date: '2026-09-14',
+    cashlessAccount: 'банк' }, s1)], acc);
+  const по = (n) => b.rows.find(x => x.name === n).balance;
+  check('В СЕЙФ ЛЁГЛО РОВНО ТО, ЧТО ЗАБРАЛИ', по('Сейф') === 57969, по('Сейф'), 57969);
+  check('БЕЗНАЛ В СЕЙФ НЕ ПОПАЛ, ОН УШЁЛ НА СЧЁТ',
+    по('Счёт') === 73165, по('Счёт'), 73165);
+  check('ОСТАВЛЕННЫЙ РАЗМЕН В ДЕНЬГАХ ВЛАДЕЛЬЦА НЕ ЧИСЛИТСЯ',
+    b.totals.cash === 57969, b.totals.cash, 57969);
+  check('и ящиков в итогах нет вовсе', b.totals.till === 0, b.totals.till, 0);
+}
+
+console.log('\n— Переезд старой базы: ящик закрывается, деньги остаются');
+{
+  const старая = { version: 2, dds: [], accounts: [
+    { id: 't1', name: 'Касса', kind: 'till', opening: 12000, defaultCash: true },
+    { id: 's1', name: 'Сейф', kind: 'cash', opening: 50000 },
+    { id: 'b1', name: 'Счёт', kind: 'bank', opening: 0, defaultCashless: true } ] };
+  const н = STORE.поднять(JSON.parse(JSON.stringify(старая)));
+  const ящик = н.accounts.find(a => a.kind === 'till');
+  const сейф = н.accounts.find(a => a.kind === 'cash');
+
+  check('база поднялась до нынешней версии', н.version === STORE.ВЕРСИЯ, н.version, STORE.ВЕРСИЯ);
+  check('ящик закрыт', ящик.archived === true, ящик.archived, true);
+  check('НИ ОДИН РУБЛЬ НЕ ПРОПАЛ: остаток ящика ушёл в сейф',
+    сейф.opening === 62000, сейф.opening, 62000);
+  check('и сейф стал наличным счётом по умолчанию', сейф.defaultCash === true,
+    сейф.defaultCash, true);
+  /* Миграцию могут применить дважды — например, при слиянии двух копий базы.
+     Второй проход обязан не изменить ничего. */
+  const дважды = STORE.поднять(JSON.parse(JSON.stringify(н)));
+  check('ПОВТОРНЫЙ ПЕРЕЕЗД НИЧЕГО НЕ УДВАИВАЕТ',
+    дважды.accounts.find(a => a.kind === 'cash').opening === 62000,
+    дважды.accounts.find(a => a.kind === 'cash').opening, 62000);
+  /* Старые записи не переписываем: они обязаны считаться ровно как раньше. */
+  const старая_смена = WM.shiftCalc({ openCash: 5000, zCash: 40000, payouts: 10000, factCash: 35000 });
+  check('СТАРЫЕ СМЕНЫ СЧИТАЮТСЯ КАК РАНЬШЕ, ДО КОПЕЙКИ',
+    старая_смена.expected === 35000 && старая_смена.ok, старая_смена.expected, 35000);
 }
 
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');

@@ -133,11 +133,11 @@
       name: settings.taxMode };
   }
 
-  /* Где сейчас лежат деньги. Наличные считает касса (размен, смены, расходы
-     наличными), безнал приходит с карт и СБП — в ящик он не попадает. */
+  /* Где сейчас лежат деньги владельца. Наличные — это то, что он забрал со
+     смен и ещё не потратил; безнал приходит с карт и СБП на счёт. */
   function balances(rows, opening) {
     opening = opening || {};
-    var cash = E.cashOnHand(rows || [], { openCashStart: num(opening['Наличные']) });
+    var cash = E.cashOnHand(rows || [], { openSafeStart: num(opening['Наличные']) });
     var cashless = E.cashlessTotal(rows || []);
     var map = { 'Наличные': cash, 'Карта': 0, 'СБП': 0, 'Перевод': 0, 'Безнал': cashless };
     (rows || []).forEach(function (r) {
