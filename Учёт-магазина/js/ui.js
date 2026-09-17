@@ -957,6 +957,44 @@
     return info;
   }
 
+  /* Отпечатки уже прочитанных выгрузок: «имя файла» → «дата изменения:размер».
+     Держим в памяти, а не в базе, и это правильно: разбор выгрузок 1С живёт
+     только в памяти (D) и при запуске программы обнуляется — значит файлы
+     и надо перечитать заново. Иначе после перезапуска товарные экраны были
+     бы пустыми, а программа считала бы, что «новых выгрузок нет». */
+  var folderStamps = {};
+
+  /* Подключить папку впервые. Папка новая — отпечатки старой не годятся,
+     чистим, иначе одноимённый файл из другой папки прочитан не будет. */
+  async function connectFolder() {
+    try {
+      await F.connect();
+      folderStamps = {};
+    } catch (e) {
+      var why = F.humanError(e);
+      if (why) toast(why, 11000);     // пустая строка = владелец сам закрыл окно выбора
+      render();
+      return false;
+    }
+    render();
+    return await syncFolder(false);
+  }
+
+  /* Вернуть доступ к папке, которую браузер помнит, но разрешение отозвал.
+     F.reconnect() сам предложит выбрать папку заново, если её перенесли. */
+  async function reconnectFolder() {
+    try {
+      await F.reconnect();
+    } catch (e) {
+      var why = F.humanError(e);
+      if (why) toast(why, 11000);
+      render();
+      return false;
+    }
+    render();
+    return await syncFolder(false);
+  }
+
   async function syncFolder(silent) {
     if (F.state !== 'ready') return false;
     var book = null, files;
@@ -2759,9 +2797,9 @@
         var parts = el.dataset.edit.split(':');      // коллекция : id : форма
         var rec = (S.state[parts[0]] || []).filter(function (x) { return x.id === parts[1]; })[0];
         if (rec) {
-          var pre = JSON.parse(JSON.stringify(rec));
-          if (parts[0] === 'dds') pre.debt = rec.type === 'Долг' ? 'да' : 'нет';
-          openForm(parts[2], pre, { coll: parts[0], id: parts[1] });
+          var preEdit = JSON.parse(JSON.stringify(rec));
+          if (parts[0] === 'dds') preEdit.debt = rec.type === 'Долг' ? 'да' : 'нет';
+          openForm(parts[2], preEdit, { coll: parts[0], id: parts[1] });
         }
         return;
       }

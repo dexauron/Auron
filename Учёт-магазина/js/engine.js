@@ -3307,7 +3307,7 @@
     parseContacts: parseContacts, parsePricelist: parsePricelist,
     parseBarcodes: parseBarcodes, parseUnits: parseUnits,
     parseWriteoffs: parseWriteoffs, parseWriteoffs1C: parseWriteoffs1C,
-    syncWriteoffs: syncWriteoffs, writeoffKey: writeoffKey, periodKey: periodKey,
+    syncWriteoffs: syncWriteoffs, writeoffKey: writeoffKey,
     parseReturns: parseReturns, parseIncomingInvoices: parseIncomingInvoices,
     parseCashOrders: parseCashOrders, parseDeadStock: parseDeadStock,
     parseIncomeExpense: parseIncomeExpense, incomeExpenseSummary: incomeExpenseSummary,

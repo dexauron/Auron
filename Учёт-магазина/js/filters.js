@@ -187,7 +187,13 @@
     marks.sort(function (a, b) { return a[0] - b[0]; });
     var out = '', pos = 0;
     marks.forEach(function (mk) {
-      if (mk[0] < pos) { if (mk[1] > pos) pos = pos; return; }   // пересечения пропускаем
+      /* Подсветки могут налезать друг на друга: слово «хлеб» и слово «хлебный»
+         найдены оба. Тогда берём только хвост, который ещё не подсвечен, —
+         иначе конец второго слова оставался бы без подсветки. */
+      if (mk[0] < pos) {
+        if (mk[1] > pos) { out += '<mark>' + safe.slice(pos, mk[1]) + '</mark>'; pos = mk[1]; }
+        return;
+      }
       out += safe.slice(pos, mk[0]) + '<mark>' + safe.slice(mk[0], mk[1]) + '</mark>';
       pos = mk[1];
     });
