@@ -14,6 +14,7 @@ const FLT = require(path.join(__dirname, '..', 'js', 'filters.js'));
 const DIC = require(path.join(__dirname, '..', 'js', 'dicts.js'));
 const NUM = require(path.join(__dirname, '..', 'js', 'numpad.js'));
 const ENT = require(path.join(__dirname, '..', 'js', 'entry.js'));
+const REV = require(path.join(__dirname, '..', 'js', 'revizor.js'));
 
 let passed = 0, failed = 0;
 function check(name, ok, got, want) {
@@ -1832,6 +1833,109 @@ console.log('\n— XYZ: насколько ровно берут товар');
     'молчит', 'молчит');
   check('и говорит, чего не хватает',
     /три выгрузки/.test(мало.rows[0].advice), мало.rows[0].advice.slice(0, 40), 'про выгрузки');
+}
+
+console.log('\n— Ревизор: программа проверяет себя сама');
+{
+  const счета = [
+    { id: 'till1', name: 'Касса 1', kind: 'till', opening: 0, defaultCash: true },
+    { id: 'safe', name: 'Сейф', kind: 'cash', opening: 200000 },
+    { id: 'bank', name: 'Счёт', kind: 'bank', opening: 0, defaultCashless: true }
+  ];
+  const здоровая = {
+    id: 's1', type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'Ночь',
+    cashier: 'Марьям', account: 'till1', cashlessAccount: 'bank',
+    openCash: 0, zCash: 50000, returnsCash: 0, deposits: 0, payouts: 5000,
+    collected: 45000, factCash: 0, zCashless: 20000, zCard: 12000, zQr: 8000
+  };
+  const инкас = { type: 'Перемещение', date: '2026-09-16', amount: 45000,
+    account: 'till1', toAccount: 'safe', category: 'Инкассация', fromShift: 's1' };
+  const расход = { type: 'Расход', date: '2026-09-16', amount: 5000,
+    account: 'till1', category: 'Хознужды' };
+
+  const чисто = REV.check({ accounts: счета, dds: [здоровая, инкас, расход] }, {});
+  check('НА ЗДОРОВОМ МАГАЗИНЕ РЕВИЗОР МОЛЧИТ',
+    чисто.counts.alarm === 0 && чисто.counts.warn === 0,
+    'тревог ' + чисто.counts.alarm + ', внимания ' + чисто.counts.warn, '0 и 0');
+
+  const больная = Object.assign({}, здоровая, { collectedFact: 40000, zNfc: 500 });
+  const инкас2 = Object.assign({}, инкас, { amount: 40000 });
+  const r = REV.check({ accounts: счета, dds: [больная, инкас2, расход] }, {});
+  const заголовки = r.findings.map(function (f) { return f.title; }).join(' | ')
+    .replace(/[\u00a0\u202f]/g, ' ');
+
+  check('НЕДОСТАЧУ ПО ДОРОГЕ В СЕЙФ РЕВИЗОР НАХОДИТ',
+    /не доехало 5 000/.test(заголовки), заголовки.slice(0, 60), 'про 5 000');
+  check('и расхождение терминала тоже',
+    /Терминал и касса разошлись/.test(заголовки), 'находит', 'находит');
+  check('ТРЕВОГА СТОИТ ВЫШЕ ВНИМАНИЯ — важное первым',
+    r.findings[0].level === 'alarm', r.findings[0].level, 'alarm');
+  check('каждая находка объяснена словами',
+    r.findings.every(function (f) { return f.why && f.why.length > 20; }), 'объяснены', 'объяснены');
+  check('и у каждой есть, куда нажать',
+    r.findings.every(function (f) { return !!f.go; }), 'есть', 'есть');
+
+  const воздух = Object.assign({}, здоровая, { deposits: 10000, factCash: 10000 });
+  const rv = REV.check({ accounts: счета, dds: [воздух, инкас, расход] }, {});
+  /* Журнал сходится в ноль ВСЕГДА — это его устройство, а не проверка.
+     Внесение без перевода ловит МОСТ «через ящик»: смена объявила, что через
+     ящик прошло одно, а записи объясняют другое. Ждать здесь «journal» —
+     значит ждать того, чего по построению не бывает. */
+  check('ВНЕСЕНИЕ БЕЗ ПЕРЕВОДА ЛОВИТ МОСТ «ЧЕРЕЗ ЯЩИК»',
+    rv.findings.some(function (f) { return f.key === 'tillgap'; }),
+    rv.findings.map(function (f) { return f.key; }).join(','), 'есть tillgap');
+  check('и мост показывает ровно те 10 000, что взялись из воздуха',
+    Math.abs(rv.totals.tillGap) === 10000, Math.abs(rv.totals.tillGap), 10000);
+}
+
+console.log('\n— Конструктор правил: кубики вместо формул');
+{
+  const счета = [{ id: 'till1', name: 'Касса 1', kind: 'till', opening: 0, defaultCash: true }];
+  const смена = { id: 's1', type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'День',
+    account: 'till1', openCash: 0, zCash: 30000, payouts: 0, collected: 0, factCash: 30000 };
+
+  check('ПОКАЗАТЕЛЕЙ ХВАТАЕТ, ЧТОБЫ БЫЛО ИЗ ЧЕГО СОБИРАТЬ',
+    REV.МЕТРИКИ.length >= 15, REV.МЕТРИКИ.length, '≥ 15');
+  check('у каждого показателя есть имя словами и пояснение',
+    REV.МЕТРИКИ.every(function (m) { return m.name && m.hint && m.unit; }), 'есть', 'есть');
+  check('ПРАВИЛО ЧИТАЕТСЯ КАК ФРАЗА, А НЕ КАК ФОРМУЛА',
+    REV.ruleText({ metric: 'diff', op: '>', value: 1000, level: 'alarm' })
+      .replace(/[\u00a0\u202f]/g, ' ') === 'Если «Расхождение по кассе» больше 1 000 ₽ — тревога',
+    REV.ruleText({ metric: 'diff', op: '>', value: 1000, level: 'alarm' }),
+    'фраза по-русски');
+  check('недособранное правило не притворяется готовым',
+    /не до конца/.test(REV.ruleText({ metric: 'нетакого', op: '>' })),
+    REV.ruleText({ metric: 'нетакого', op: '>' }), 'про «не до конца»');
+
+  const порог = { id: 'r1', metric: 'revenue', op: '<', value: 40000, level: 'warn',
+    title: 'Выручка ниже обычного', what: 'Проверить завоз.' };
+  const сработало = REV.check({ accounts: счета, dds: [смена], rules: [порог] }, {});
+  check('ПРАВИЛО ВЛАДЕЛЬЦА СРАБОТАЛО: 30 000 меньше 40 000',
+    сработало.findings.some(function (f) { return f.own && /Выручка ниже/.test(f.title); }),
+    'сработало', 'сработало');
+
+  const молчит = REV.check({ accounts: счета, dds: [смена],
+    rules: [Object.assign({}, порог, { value: 20000 })] }, {});
+  check('И МОЛЧИТ, КОГДА ПОРОГ НЕ ПЕРЕЙДЁН: 30 000 не меньше 20 000',
+    !молчит.findings.some(function (f) { return f.own; }), 'молчит', 'молчит');
+
+  const выкл = REV.check({ accounts: счета, dds: [смена],
+    rules: [Object.assign({}, порог, { off: true })] }, {});
+  check('ВЫКЛЮЧЕННОЕ ПРАВИЛО МОЛЧИТ, НО ОСТАЁТСЯ',
+    !выкл.findings.some(function (f) { return f.own; }), 'молчит', 'молчит');
+
+  const кривое = REV.check({ accounts: счета, dds: [смена],
+    rules: [{ id: 'bad', metric: 'такого-нет', op: '>>>', value: 'ерунда' }] }, {});
+  check('КРИВОЕ ПРАВИЛО НЕ ЛОМАЕТ РЕВИЗОРА — оно просто не срабатывает',
+    !кривое.findings.some(function (f) { return f.own; }), 'пережил', 'пережил');
+
+  const поИтогу = REV.check({ accounts: счета,
+    dds: [смена, Object.assign({}, смена, { id: 's2' })],
+    rules: [{ id: 'r2', metric: 'cashInTill', op: '>', value: 1000, level: 'note',
+      title: 'Много наличных' }] }, {});
+  check('ПРАВИЛО ПО ИТОГУ СРАБАТЫВАЕТ ОДИН РАЗ, А НЕ НА КАЖДУЮ СМЕНУ',
+    поИтогу.findings.filter(function (f) { return f.ruleId === 'r2'; }).length === 1,
+    поИтогу.findings.filter(function (f) { return f.ruleId === 'r2'; }).length, 1);
 }
 
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');

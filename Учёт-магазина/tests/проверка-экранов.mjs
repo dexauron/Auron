@@ -3469,6 +3469,110 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 26. Ревизор: программа проверяет себя сама, а правила собираются кубиками.
+
+       Владелец попросил «ИИ внутри, который анализирует ошибки, говорит и
+       исправляет». Языковую модель в папку не положить, а вот правила —
+       можно, и они надёжнее. До сих пор 34 правила проверяли выдуманные
+       магазины у разработчика; Ревизор переносит ту же проверку на данные
+       владельца. */
+{
+  console.log('— Ревизор и конструктор правил');
+  const { page, ctx, errs } = await open();
+
+  check('ЭКРАН РЕВИЗОРА ЕСТЬ В ПРОГРАММЕ',
+    await page.evaluate(() => (window.WMUI.views() || []).some(v => v.id === 'revizor')),
+    'есть', 'есть');
+
+  await page.evaluate(() => window.WMUI.go('revizor'));
+  await page.waitForTimeout(500);
+  const текст = () => page.evaluate(() =>
+    document.body.innerText.replace(/[\u00a0\u202f]/g, ' '));
+  let t = await текст();
+  check('на пустой базе он не выдумывает тревог',
+    /Тревоги\s*0/.test(t) && /Смен пока нет/.test(t), 'молчит', 'молчит');
+
+  /* Записываем смену, где до сейфа не доехало, и терминал разошёлся */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    const касса = (S.state.accounts || []).filter(a => a.kind === 'till')[0];
+    const банк = (S.state.accounts || []).filter(a => a.kind === 'bank')[0];
+    S.add('dds', { type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'Ночь',
+      cashier: 'Марьям', account: касса ? касса.id : '', cashlessAccount: банк ? банк.id : '',
+      openCash: 0, zCash: 77624, returnsCash: 95, deposits: 0, payouts: 0,
+      collected: 76769, collectedFact: 67969, factCash: 760,
+      zCashless: 73165, zCard: 25003, zQr: 45828, zNfc: 2000, checks: 129 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('revizor');
+  });
+  await page.waitForTimeout(600);
+  t = await текст();
+
+  check('РЕВИЗОР УВИДЕЛ, ЧТО ДО СЕЙФА НЕ ДОЕХАЛО 8 800',
+    /не доехало 8 800/.test(t), (t.match(/не доехало[^\n]*/) || ['нет'])[0], '8 800 ₽');
+  check('И ОБЪЯСНИЛ СЛОВАМИ, А НЕ КОДОМ ОШИБКИ',
+    /Касса пробила инкассацию/.test(t) && /пересчитали в сейфе/.test(t),
+    'объяснил', 'объяснил');
+  check('увидел и расхождение терминала с кассой',
+    /Терминал и касса разошлись/.test(t),
+    (t.match(/Терминал и касса[^\n]*/) || ['нет'])[0], 'нашёл');
+  check('тревог стало больше нуля', !/Тревоги\s*0/.test(t), 'есть', 'есть');
+
+  /* --- Конструктор: собираем правило мышкой ------------------------------- */
+  await page.evaluate(() => window.WMUI.openForm('ruleNew'));
+  await page.waitForTimeout(450);
+  check('КОНСТРУКТОР ОТКРЫВАЕТСЯ И ПОКАЗЫВАЕТ СОБРАННУЮ ФРАЗУ',
+    await page.evaluate(() => !!document.querySelector('.rule-preview')),
+    await page.evaluate(() => (document.querySelector('.rule-preview') || {}).innerText || 'нет'),
+    'фраза видна');
+  check('ПОЛЯ — СПИСКИ, А НЕ МЕСТО ДЛЯ ФОРМУЛЫ',
+    await page.evaluate(() => {
+      const f = ['metric', 'op', 'level'];
+      return f.every(n => {
+        const e = document.querySelector('.sheet [name="' + n + '"]');
+        return e && e.tagName === 'SELECT' && e.options.length > 1;
+      });
+    }), 'списки', 'списки');
+  const показателей = await page.evaluate(() =>
+    document.querySelector('.sheet [name="metric"]').options.length);
+  check('показателей в списке много — есть из чего собирать',
+    показателей >= 15, показателей, '≥ 15');
+
+  await page.selectOption('.sheet [name="metric"]', 'revenue');
+  await page.selectOption('.sheet [name="op"]', '<');
+  await page.fill('.sheet [name="value"]', '200000');
+  await page.selectOption('.sheet [name="level"]', 'warn');
+  await page.fill('.sheet [name="title"]', 'Выручка ниже обычного');
+  await page.fill('.sheet [name="what"]', 'Проверить, был ли завоз.');
+  await page.click('.sheet button[type="submit"]');
+  await page.waitForTimeout(800);
+
+  t = await текст();
+  check('ПРАВИЛО ВЛАДЕЛЬЦА СРАБОТАЛО НА ЕГО ЖЕ ДАННЫХ',
+    /Выручка ниже обычного/.test(t), 'сработало', 'сработало');
+  check('и подписано как своё, а не встроенное',
+    /ваше правило/.test(t), 'подписано', 'подписано');
+  check('рядом стоит совет, который владелец написал сам',
+    /Проверить, был ли завоз/.test(t), 'есть', 'есть');
+
+  /* Правило можно выключить, не удаляя */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-act="rule-off"]')][0];
+    if (b) b.click();
+  });
+  await page.waitForTimeout(700);
+  t = await текст();
+  check('ПРАВИЛО ВЫКЛЮЧАЕТСЯ, НЕ ИСЧЕЗАЯ',
+    !/Выручка ниже обычного.*ваше правило/s.test(t) && /Выручка ниже обычного/.test(t),
+    'выключено, но на месте', 'выключено, но на месте');
+
+  const правил = await page.evaluate(() => (window.WMStore.state.rules || []).length);
+  check('и осталось в списке', правил === 1, правил, 1);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

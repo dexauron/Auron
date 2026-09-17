@@ -1310,3 +1310,17 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .xyz-cell span { font-size: 18px; }
   .xyz-cell i { font-size: 11px; }
 }
+
+/* Ревизор. Собранное правило владелец видит фразой, пока выбирает кубики, —
+   иначе он поймёт, что получилось, только после сохранения. */
+.rule-preview {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 12px 14px; margin-bottom: 14px;
+  border-radius: var(--r-inner); background: rgba(0, 122, 255, .1);
+  font-size: 15px; line-height: 1.4; color: var(--blue);
+}
+.rule-preview svg { flex: none; margin-top: 1px; }
+.rev-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
+.rev-item { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--label-2); }
+.rev-item svg { flex: none; margin-top: 2px; color: var(--green); }
+.card-note { font-size: 12px; color: var(--label-3); padding-top: 10px; line-height: 1.4; }

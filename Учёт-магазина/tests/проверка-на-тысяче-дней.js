@@ -16,6 +16,7 @@
 'use strict';
 const path = require('path');
 const E = require(path.join(__dirname, '..', 'js', 'engine.js'));
+const REV = require(path.join(__dirname, '..', 'js', 'revizor.js'));
 
 const РУБ = v => (Math.round(v * 100) / 100).toLocaleString('ru-RU');
 const близко = (a, b, допуск) => Math.abs(a - b) <= (допуск === undefined ? 0.005 : допуск);
@@ -1063,6 +1064,94 @@ const правило = (имя, объяснение, проверка) =>
       for (const x of a.rows) {
         if ('ABC'.indexOf(x.abc) < 0) return 'класс ABC равен «' + x.abc + '»';
         if (x.xyz && 'XYZ'.indexOf(x.xyz) < 0) return 'класс XYZ равен «' + x.xyz + '»';
+      }
+    }
+    return '';
+  });
+
+правило('Ревизор не выдумывает тревог и не молчит о настоящих',
+  'Он смотрит на те же деньги, что и остальные правила. Скажет о том, чего ' +
+  'нет, — владелец перестанет ему верить и пропустит настоящую пропажу. ' +
+  'Промолчит о настоящей — тем более.',
+  м => {
+    const r = REV.check({ accounts: м.счета, dds: м.строки }, { diffCrit: 1000 });
+
+    for (const f of r.findings) {
+      if (!f.title || !f.why) return 'находка без объяснения: ' + JSON.stringify(f).slice(0, 80);
+      if (!f.go) return 'находке «' + f.title + '» некуда нажать';
+      if (['alarm', 'warn', 'note'].indexOf(f.level) < 0) {
+        return 'у находки «' + f.title + '» непонятная важность: ' + f.level;
+      }
+    }
+    const сумма = r.counts.alarm + r.counts.warn + r.counts.note;
+    if (сумма !== r.findings.length) {
+      return 'счётчики дают ' + сумма + ', а находок ' + r.findings.length;
+    }
+    // Важное — сверху: тревога не может оказаться под заметкой
+    let ранг = 4;
+    for (const f of r.findings) {
+      const g = REV.level(f.level).rank;
+      if (g > ранг) return 'важное ушло вниз: «' + f.title + '» после менее важного';
+      ранг = g;
+    }
+    // О чём он ОБЯЗАН сказать: про каждую недоехавшую инкассацию
+    const молча = м.строки.filter(x => E.isShift(x) && !E.shiftCalc(x).collectOk);
+    for (const s2 of молча) {
+      if (!r.findings.some(f => f.key === 'collect:' + E.txt(s2.id))) {
+        return 'смена ' + E.txt(s2.date) + ': до сейфа не доехало ' +
+          РУБ(E.shiftCalc(s2).collectShort) + ', а Ревизор промолчал';
+      }
+    }
+    return '';
+  });
+
+правило('Правило владельца срабатывает ровно тогда, когда должно',
+  'Конструктор обещает: «если показатель больше порога — скажу». Скажет ' +
+  'раньше или позже — владелец соберёт правило, которое врёт, и винить будет ' +
+  'себя, а не программу.',
+  м => {
+    const r = зерно(м.строки.length + 1111);
+    const смены = м.строки.filter(x => E.isShift(x));
+    if (!смены.length) return '';
+    /* Перебирать все показатели на все сравнения — это 66 полных прогонов на
+       магазин, и тысяча магазинов считалась бы минутами. Берём по паре наугад:
+       за тысячу магазинов каждое сочетание всё равно выпадет много раз, а
+       проверка остаётся быстрой. Медленная проверка — это проверка, которую
+       перестают запускать. */
+    const поСмене = REV.МЕТРИКИ.filter(x => x.scope === 'смена');
+    const выбор = (сп, n) => {
+      const из = сп.slice(), взяли = [];
+      while (из.length && взяли.length < n) взяли.push(из.splice(Math.floor(r() * из.length), 1)[0]);
+      return взяли;
+    };
+    for (const мет of выбор(поСмене, 2)) {
+      /* Порог берём из настоящего значения одной из смен: так проверка
+         попадает и выше, и ниже границы, а не гуляет далеко в стороне. */
+      const образец = смены[Math.floor(r() * смены.length)];
+      const порог = E.safeRound(мет.calc(E.shiftCalc(образец)));
+      for (const оп of выбор(REV.СРАВНЕНИЯ, 2)) {
+        const правило = { id: 'x', metric: мет.id, op: оп.id, value: порог,
+          level: 'note', title: 'проба' };
+        const из = REV.check({ accounts: м.счета, dds: м.строки, rules: [правило] }, {});
+        const сказал = из.findings.filter(f => f.ruleId === 'x').length;
+        /* Сравнение здесь написано ЗАНОВО, а не взято из программы. Возьмёшь
+           её же функцию — правило будет сверять программу с самой собой и не
+           провалится никогда, даже если «меньше» начнёт работать как «меньше
+           или равно». Проверено: с общей функцией поломка проходила незаметно. */
+        const своё = (a, b) => {
+          if (оп.id === '>') return a > b;
+          if (оп.id === '>=') return a > b || Math.abs(a - b) < 0.005;
+          if (оп.id === '<') return a < b;
+          if (оп.id === '<=') return a < b || Math.abs(a - b) < 0.005;
+          if (оп.id === '=') return Math.abs(a - b) < 0.005;
+          return Math.abs(a - b) >= 0.005;
+        };
+        const должен = смены
+          .filter(s2 => своё(E.safeRound(мет.calc(E.shiftCalc(s2))), порог)).length;
+        if (сказал !== должен) {
+          return 'показатель «' + мет.name + '» ' + оп.name + ' ' + порог +
+            ': сказал про ' + сказал + ' смен, а должен про ' + должен;
+        }
       }
     }
     return '';
