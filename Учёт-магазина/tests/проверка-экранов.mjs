@@ -3376,6 +3376,99 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 25. XYZ: девять групп на экране ABC.
+
+       ABC отвечает «сколько денег приносит», XYZ — «можно ли на него
+       положиться». Товар может давать много выручки и браться рывками:
+       заказывать его как хлеб значит сделать из него неликвид. */
+{
+  console.log('— ABC и XYZ: девять групп');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => {
+    const U = window.WMUI, E = window.WM, d = U.data();
+    const данные = {
+      'Хлеб': [200, 190, 210, 205, 195],      // много и ровно → AX
+      'Молоко': [100, 102, 98, 101, 99],      // ровно, но меньше денег
+      'Кофе': [20, 28, 15, 25, 22],           // колеблется → Y
+      'Шампанское': [2, 0, 1, 40, 0],         // рывком → Z
+      'Чипсы': [0, 0, 30, 0, 0]               // один раз из пяти → самый неровный
+    };
+    d.sales = [];
+    ['н1', 'н2', 'н3', 'н4', 'н5'].forEach((w, i) => {
+      const день = '2026-0' + (i + 1);
+      Object.keys(данные).forEach(t => {
+        const q = данные[t][i];
+        if (!q) return;      // товара нет в выгрузке — строки тоже нет
+        d.sales.push({ key: E.norm(t), name: t, periodKey: w,
+          from: день + '-01', to: день + '-28', date: день + '-28',
+          qty: q, revenue: q * 100, cogs: q * 70, profit: q * 30 });
+      });
+    });
+    d.salesPeriod = { from: '01.01.2026', to: '28.05.2026', days: 148 };
+    U.recompute();
+    U.go('abc');
+  });
+  await page.waitForTimeout(700);
+
+  const текст = () => page.evaluate(() =>
+    document.body.innerText.replace(/[\u00a0\u202f]/g, ' '));
+  let t = await текст();
+
+  check('ЭКРАН НАЗЫВАЕТСЯ ПО ДЕЛУ: ABC И XYZ',
+    /ABC и XYZ/.test(t), (t.match(/ABC[^\n]*/) || ['нет'])[0].slice(0, 40), 'ABC и XYZ');
+  check('ДЕВЯТЬ КЛЕТОК НА ЭКРАНЕ',
+    await page.evaluate(() => document.querySelectorAll('.xyz-cell').length) === 9,
+    await page.evaluate(() => document.querySelectorAll('.xyz-cell').length), 9);
+  check('и сказано, что XYZ считается по всем выгрузкам, а не по выбранному периоду',
+    /по всем загруженным периодам/.test(t), 'сказано', 'сказано');
+
+  const клетки = await page.evaluate(() =>
+    [...document.querySelectorAll('.xyz-cell')]
+      .map(e => e.innerText.replace(/\n/g, ' ').replace(/[\u00a0\u202f]/g, ' ')));
+  check('КОРМИЛЕЦ AX НАЙДЕН', /AX 1/.test(клетки.join(' | ')),
+    клетки.filter(x => /^AX/.test(x))[0] || 'нет', 'AX 1');
+  check('МЁРТВЫЙ ГРУЗ CZ НАЙДЕН — два товара', /CZ 2/.test(клетки.join(' | ')),
+    клетки.filter(x => /^CZ/.test(x))[0] || 'нет', 'CZ 2');
+  check('у клеток есть совет своими словами',
+    /Держите всегда/.test(t) && /мёртвым грузом/.test(t), 'есть', 'есть');
+  /* Суммы в клетках — деньги, а не разметка. Я уже обернул готовый HTML в
+     экранирование и показал владельцу теги вместо рублей. */
+  check('В КЛЕТКАХ ДЕНЬГИ, А НЕ ТЕГИ',
+    !/<span|class=/.test(клетки.join(' ')) && /100 000/.test(клетки.join(' ')),
+    клетки.filter(x => /^AX/.test(x))[0] || 'нет', 'AX 1 100 000 ₽');
+
+  /* В таблице у каждого товара свой класс и свой разброс */
+  check('В ТАБЛИЦЕ ПОЯВИЛАСЬ КОЛОНКА «РОВНОСТЬ»',
+    /Ровность/.test(t) && /Разброс/.test(t), 'есть', 'есть');
+  check('и она не пустая — у товаров стоят X, Y, Z',
+    await page.evaluate(() => {
+      const t = [...document.querySelectorAll('table.data')].pop();
+      if (!t) return false;
+      return [...t.querySelectorAll('tbody tr')].some(tr => /\b[XYZ]\b/.test(tr.innerText));
+    }), 'заполнена', 'заполнена');
+
+  /* Клетка — не украшение: по нажатию она фильтрует таблицу */
+  const строк = () => page.evaluate(() => {
+    const t = [...document.querySelectorAll('table.data')].pop();
+    return t ? t.querySelectorAll('tbody tr').length : 0;
+  });
+  const былоСтрок = await строк();
+  await page.evaluate(() => {
+    const c = [...document.querySelectorAll('.xyz-cell')].filter(e => /^CZ/.test(e.innerText))[0];
+    if (c) c.click();
+  });
+  await page.waitForTimeout(600);
+  const сталоСтрок = await строк();
+  check('НАЖАТИЕ НА КЛЕТКУ ФИЛЬТРУЕТ ТАБЛИЦУ, А НЕ ДЕЛАЕТ НИЧЕГО',
+    сталоСтрок < былоСтрок && сталоСтрок > 0,
+    былоСтрок + ' → ' + сталоСтрок, 'стало меньше');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

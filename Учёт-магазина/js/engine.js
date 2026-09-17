@@ -2721,6 +2721,140 @@
     return sorted;
   }
 
+  /* ==========================================================================
+     XYZ: НАСКОЛЬКО РОВНО БЕРУТ ТОВАР
+
+     ABC отвечает на вопрос «сколько денег приносит», XYZ — «можно ли на него
+     положиться». Это разные вопросы, и вместе они полезнее, чем порознь:
+     товар может давать много выручки, но рывками, и тогда заказывать его
+     как молоко — верный способ получить неликвид.
+
+     Считается коэффициентом вариации: берём, сколько штук продали в каждом
+     периоде, и смотрим, насколько сильно числа гуляют вокруг своего среднего.
+
+         разброс = стандартное отклонение ÷ среднее
+
+         X — до 10%   берут ровно, как хлеб
+         Y — до 25%   колеблется, но предсказуемо
+         Z — больше   рывками, предсказать нельзя
+
+     Библиотеку ради этого тянуть незачем: формула в пять строк, и своя не
+     требует ни лицензии, ни интернета.
+
+     ВАЖНО: периоды, где товара нет в выгрузке, считаются НУЛЁМ, а не
+     пропускаются. Товар, который взяли один раз из пяти, — самый неровный,
+     какой бывает, и молчать об этом нельзя. Пропусти их — и он окажется
+     идеальным «X» по единственному периоду.
+
+     Меньше трёх периодов — честно говорим «мало данных» и не гадаем.
+     ========================================================================== */
+  var XYZ_X = 10, XYZ_Y = 25;      // границы разброса в процентах
+
+  function xyzClassify(sales, minPeriods) {
+    var мин = minPeriods || 3;
+    var периоды = [], естьПериод = {};
+    (sales || []).forEach(function (r) {
+      var k = txt(r.periodKey) || txt(r.from) || 'без периода';
+      if (!естьПериод[k]) { естьПериод[k] = true; периоды.push({ key: k, from: txt(r.from) }); }
+    });
+    периоды.sort(function (a, b) { return (a.from || '') < (b.from || '') ? -1 : 1; });
+
+    var по = {};
+    (sales || []).forEach(function (r) {
+      var k = txt(r.key) || norm(r.name);
+      if (!по[k]) {
+        по[k] = { key: k, name: txt(r.name), qtyBy: {}, revenue: 0, qty: 0 };
+      }
+      var p = txt(r.periodKey) || txt(r.from) || 'без периода';
+      по[k].qtyBy[p] = safeRound((по[k].qtyBy[p] || 0) + num(r.qty));
+      по[k].revenue = safeRound(по[k].revenue + num(r.revenue));
+      по[k].qty = safeRound(по[k].qty + num(r.qty));
+    });
+
+    var out = [];
+    Object.keys(по).forEach(function (k) {
+      var t = по[k];
+      // Нет в выгрузке за период — значит, не продавали: это ноль, а не пропуск
+      var ряд = периоды.map(function (p) { return num(t.qtyBy[p.key]); });
+      var n = ряд.length, i, сумма = 0;
+      for (i = 0; i < n; i++) сумма += ряд[i];
+      var среднее = n ? сумма / n : 0;
+      var откл = 0;
+      for (i = 0; i < n; i++) откл += (ряд[i] - среднее) * (ряд[i] - среднее);
+      var сигма = n ? Math.sqrt(откл / n) : 0;
+      var разброс = среднее > 0 ? safeRound(сигма / среднее * 100) : 0;
+
+      var класс, мало = n < мин;
+      if (мало) класс = '';
+      else if (среднее <= 0) класс = 'Z';          // не продавался вовсе
+      else класс = разброс <= XYZ_X ? 'X' : (разброс <= XYZ_Y ? 'Y' : 'Z');
+
+      out.push({
+        key: k, name: t.name, xyz: класс, spread: разброс,
+        avgQty: safeRound(среднее), qty: t.qty, revenue: t.revenue,
+        periods: n, series: ряд, enough: !мало
+      });
+    });
+    return out.sort(function (a, b) { return b.revenue - a.revenue; });
+  }
+
+  /* Девять групп: что с этим товаром делать. Владельцу нужен не ярлык, а
+     совет, поэтому у каждой клетки свои слова. */
+  var ABC_XYZ = {
+    AX: 'Кормилец: берут много и ровно. Держите всегда, заказывайте смело.',
+    AY: 'Берут много, но неровно. Держите запас побольше обычного.',
+    AZ: 'Большие деньги рывками. Следите руками, по расписанию не заказывать.',
+    BX: 'Ровный середняк. Можно заказывать по расписанию и не думать.',
+    BY: 'Середняк с колебаниями. Небольшой запас не помешает.',
+    BZ: 'Середняк рывками. Не затоваривайтесь: легко превратится в неликвид.',
+    CX: 'Мелочь, но берут ровно. Держите понемногу, места не займёт.',
+    CY: 'Мелочь с колебаниями. Заказывайте по остатку, не впрок.',
+    CZ: 'Случайный товар. Деньги лежат мёртвым грузом — решите, нужен ли он.'
+  };
+
+  function abcXyz(sales, minPeriods) {
+    /* ABC считается по товару ЦЕЛИКОМ за все загруженные периоды, а XYZ — по
+       тому, как он вёл себя от периода к периоду. Значит, ABC нужно давать
+       уже сведённые строки: иначе одно и то же молоко из пяти выгрузок
+       попадёт в рейтинг пять раз и разложится сразу по нескольким классам.
+       Сводит их mergeSales — тот же, что и для рейтинга по прибыли. */
+    var abc = abcClassify(mergeSales(sales || []));
+    var xyz = xyzClassify(sales, minPeriods);
+    var поКлючу = {};
+    xyz.forEach(function (r) { поКлючу[r.key] = r; });
+
+    var строки = [], клетки = {};
+    abc.forEach(function (a) {
+      var k = txt(a.key) || norm(a.name);
+      var x = поКлючу[k] || { xyz: '', spread: 0, periods: 0, enough: false, avgQty: 0 };
+      var группа = (a.abc && x.xyz) ? a.abc + x.xyz : '';
+      var r = {
+        key: k, name: txt(a.name), abc: a.abc, xyz: x.xyz, group: группа,
+        advice: группа ? ABC_XYZ[группа] : 'Мало данных: нужно хотя бы три выгрузки за разные периоды.',
+        spread: x.spread, periods: x.periods, enough: x.enough, avgQty: x.avgQty,
+        revenue: safeRound(a.revenue), qty: safeRound(a.qty),
+        profit: safeRound(a.profit), share: a.share
+      };
+      строки.push(r);
+      if (группа) {
+        if (!клетки[группа]) клетки[группа] = { group: группа, count: 0, revenue: 0,
+          advice: ABC_XYZ[группа] };
+        клетки[группа].count++;
+        клетки[группа].revenue = safeRound(клетки[группа].revenue + r.revenue);
+      }
+    });
+    var сетка = [];
+    ['A', 'B', 'C'].forEach(function (a) {
+      ['X', 'Y', 'Z'].forEach(function (x) {
+        var g = a + x;
+        сетка.push(клетки[g] || { group: g, count: 0, revenue: 0, advice: ABC_XYZ[g] });
+      });
+    });
+    return { rows: строки, grid: сетка,
+      periods: xyz.length ? xyz[0].periods : 0,
+      enough: xyz.length ? xyz[0].enough : false };
+  }
+
   function stockTotals(stock) {
     var buySum = 0, retailSum = 0, qty = 0, zero = 0;
     for (var i = 0; i < stock.length; i++) {
@@ -3138,7 +3272,9 @@
     mergeByKey: mergeByKey, mergeSales: mergeSales,
     deadStockList: deadStockList, matchPayments: matchPayments,
     supplierBalance: supplierBalance, cashSummary: cashSummary,
-    salesTotals: salesTotals, abcClassify: abcClassify, stockTotals: stockTotals,
+    salesTotals: salesTotals, abcClassify: abcClassify,
+    xyzClassify: xyzClassify, abcXyz: abcXyz, ABC_XYZ: ABC_XYZ,
+    stockTotals: stockTotals,
     groupIndex: groupIndex, salesByGroup: salesByGroup,
     bestPriceIndex: bestPriceIndex, priceComparison: priceComparison,
     contactsIndex: contactsIndex, priceFor: priceFor, ropList: ropList,

@@ -1281,3 +1281,32 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   .cc-cmp-h b, .cc-cmp-r b { min-width: 62px; }
   .cc-cmp-r, .cc-cmp-h { gap: 6px; font-size: 14px; }
 }
+
+/* Девять клеток ABC×XYZ. Слева направо — ровность, сверху вниз — деньги.
+   Кормильца (AX) красим зелёным, мёртвый груз (CZ) — красным: владелец должен
+   находить их взглядом, не читая подписей. */
+.xyz-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; padding: 4px 0 12px;
+}
+.xyz-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 12px 6px; border-radius: var(--r-inner);
+  background: var(--fill-2); cursor: pointer;
+  transition: background .12s ease;
+}
+.xyz-cell:hover { background: var(--fill); }
+.xyz-cell b { font-size: 13px; font-weight: 700; color: var(--label-2); letter-spacing: .04em; }
+.xyz-cell span { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.xyz-cell i { font-style: normal; font-size: 12px; color: var(--label-3); }
+.xyz-cell.empty { opacity: .45; cursor: default; }
+.xyz-cell.ax { background: rgba(52, 199, 89, .14); }
+.xyz-cell.ax b, .xyz-cell.ax span { color: var(--green); }
+.xyz-cell.cz { background: rgba(255, 59, 48, .12); }
+.xyz-cell.cz b, .xyz-cell.cz span { color: var(--red); }
+.xyz-legend { font-size: 12px; color: var(--label-3); line-height: 1.45; padding-bottom: 4px; }
+@media (max-width: 420px) {
+  .xyz-cell { padding: 9px 4px; }
+  .xyz-cell span { font-size: 18px; }
+  .xyz-cell i { font-size: 11px; }
+}

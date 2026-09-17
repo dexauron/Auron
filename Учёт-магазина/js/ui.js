@@ -941,6 +941,11 @@
     C.bestPrices = E.bestPriceIndex(D.prices);
     C.stockIdx = {}; D.stock.forEach(function (r2) { C.stockIdx[r2.key] = r2; });
     C.abc = E.abcClassify(sales.slice());
+    /* XYZ смотрит, как товар вёл себя ОТ ПЕРИОДА К ПЕРИОДУ, поэтому берёт все
+       загруженные выгрузки, а не выбранный сверху период. По одному периоду
+       разброс посчитать нельзя: сравнивать не с чем. На экране об этом
+       сказано прямо, чтобы владелец не искал несуществующего противоречия. */
+    C.abcXyz = E.abcXyz(D.sales);
     C.writeoffSum = E.safeRound(C.writeoffsSel.rows.reduce(function (a, x) { return a + num(x.cost); }, 0));
     C.returnSum = E.safeRound(C.returnsSel.rows.reduce(function (a, x) { return a + num(x.cost); }, 0));
     C.dead = dead.length ? E.deadStockList(dead, C.stockIdx, S.settings) : null;

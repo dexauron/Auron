@@ -607,8 +607,8 @@
     var rows = c.abc;
     var counts = { A: 0, B: 0, C: 0 };
     rows.forEach(function (r) { counts[r.abc] = (counts[r.abc] || 0) + 1; });
-    var h = u.pageHead('ABC-анализ',
-      'A — первые 80% выручки, B — до 95%, C — остальное · ' + anaTitle());
+    var h = u.pageHead('ABC и XYZ',
+      'ABC — сколько денег приносит. XYZ — можно ли на него положиться · ' + anaTitle());
     h += anaBar('sales');
     h += anaRough(c.salesSel, 'продажи');
     h += '<div class="stat-grid">' +
@@ -616,14 +616,83 @@
       u.stat('Группа B', u.nf(counts.B), 'следующие 15%') +
       u.stat('Группа C', u.nf(counts.C), 'последние 5% — кандидаты на вылет', 'c-orange') +
       '</div>';
+
+    /* --- XYZ: девять клеток -------------------------------------------------
+       ABC один отвечает только на половину вопроса. Товар может давать много
+       денег и при этом браться рывками — заказывать его как хлеб значит
+       сделать из него неликвид. XYZ добавляет вторую половину. */
+    var ax = c.abcXyz;
+    if (!ax || !ax.enough) {
+      h += u.blank({ icon: 'chartBar', title: 'XYZ пока посчитать не из чего',
+        why: 'XYZ смотрит, как товар продавался ОТ ПЕРИОДА К ПЕРИОДУ: ровно или ' +
+          'рывками. Для этого нужно хотя бы три выгрузки за разные недели или ' +
+          'месяцы, а сейчас загружено ' + ((ax && ax.periods) || 0) + '. ' +
+          'Загрузите ещё — программа сама всё сопоставит.',
+        actions: [{ name: 'Загрузить выгрузку', go: 'data', icon: 'upload' }] });
+    } else {
+      var сетка = ax.grid, всего = 0;
+      сетка.forEach(function (g) { всего += g.count; });
+      h += '<div class="card"><div class="card-head"><div class="card-title">' +
+        'Девять групп</div><div class="card-sub">по ' + ax.periods +
+        ' выгрузкам · XYZ считается по всем загруженным периодам, а не по ' +
+        'выбранному сверху — иначе сравнивать не с чем</div></div>' +
+        '<div class="xyz-grid">';
+      сетка.forEach(function (g) {
+        var цвет = g.group === 'AX' ? 'ax' : (g.group === 'CZ' ? 'cz' : '');
+        h += '<div class="xyz-cell ' + цвет + (g.count ? '' : ' empty') +
+          '" data-act="xyz-cell" data-group="' + esc(g.group) + '" title="' +
+          esc(g.advice) + '">' +
+          '<b>' + esc(g.group) + '</b>' +
+          '<span>' + u.nf(g.count) + '</span>' +
+          '<i>' + u.priv(g.revenue) + '</i></div>';
+      });
+      h += '</div><div class="xyz-legend">' +
+        '<b>A · B · C</b> — сколько приносит денег. ' +
+        '<b>X · Y · Z</b> — насколько ровно берут: ' +
+        'X до 10% разброса, Y до 25%, Z больше.</div></div>';
+
+      var топ = сетка.filter(function (g) { return g.count; })
+        .sort(function (a, b) { return b.revenue - a.revenue; });
+      if (топ.length) {
+        h += u.card('Что с этим делать', u.listOf(топ.map(function (g) {
+          return u.listRow({ icon: g.group === 'CZ' ? 'warning' : 'medal',
+            title: g.group + ' — ' + u.nf(g.count) + ' ' +
+              E.plural(g.count, 'товар', 'товара', 'товаров'),
+            sub: g.advice, value: u.priv(g.revenue) });
+        }), ''));
+      }
+    }
+
     var defs = [{ key: 'abc', name: 'Класс', auto: function (r) { return r.abc; }, limit: 3 }];
+    if (ax && ax.enough) {
+      defs.push({ key: 'xyz', name: 'Ровность', auto: function (r) { return r.xyz; }, limit: 3 });
+    }
+    // К строкам ABC подмешиваем XYZ того же товара: таблица одна, а не две
+    var поКлючу = {};
+    if (ax) ax.rows.forEach(function (r) { поКлючу[r.key] = r; });
+    rows = rows.map(function (r) {
+      var k = E.txt(r.key) || E.norm(r.name);
+      var x = поКлючу[k];
+      var копия = {};
+      for (var f in r) копия[f] = r[f];
+      копия.xyz = x ? x.xyz : '';
+      копия.spread = x ? x.spread : 0;
+      копия.group = x ? x.group : '';
+      копия.advice = x ? x.advice : '';
+      return копия;
+    });
     var list = FLT().apply('abc', rows, defs, function (r) { return r.name; },
-      nums('revenue', 'share', 'cum'));
+      nums('revenue', 'share', 'cum', 'spread'));
     h += FLT().bar('abc', defs, rows, { search: 'товар' });
     h += u.card('Товары', FLT().note(list.length, rows.length) + u.table('abcT', [
       { title: 'Товар', fn: function (r) { return hl('abc', r.name); } },
       { title: 'Класс', cls: 'center', fn: function (r) {
         return u.badge(r.abc, r.abc === 'A' ? 'green' : r.abc === 'B' ? 'blue' : 'gray'); } },
+      { title: 'Ровность', cls: 'center', fn: function (r) {
+        if (!r.xyz) return '<span class="c-muted">—</span>';
+        return u.badge(r.xyz, r.xyz === 'X' ? 'green' : r.xyz === 'Y' ? 'blue' : 'orange'); } },
+      { title: 'Разброс', cls: 'num', fn: function (r) {
+        return r.xyz ? u.pct(r.spread) : '<span class="c-muted">—</span>'; } },
       { title: 'Выручка', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
       { title: 'Доля', cls: 'num', fn: function (r) { return u.pct(r.share); } },
       { title: 'Накопленно', cls: 'num', fn: function (r) { return u.pct(r.cum); } }
@@ -775,6 +844,18 @@
   /* --- Действия и поля экрана «Списания» ---------------------------------------- */
   var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
 
+  /* Нажатие на клетку девяти групп ставит оба фильтра разом. Без обработчика
+     клетка была бы мёртвой кнопкой: выглядит нажимаемой, а не делает ничего.
+     Пустые клетки не трогаем — фильтровать там нечего. */
+  A['xyz-cell'] = function (el) {
+    var g = E.txt(el.dataset.group);
+    if (g.length !== 2) return null;
+    if (el.classList && el.classList.contains('empty')) return null;
+    FLT().set('abc', 'abc', g.charAt(0));
+    FLT().set('abc', 'xyz', g.charAt(1));
+    return null;      // перерисовку делает общий обработчик нажатий
+  };
+
   A['ana-period'] = function (el) {
     S.setSetting('anaFrom', E.txt(el.dataset.from));
     S.setSetting('anaTo', E.txt(el.dataset.to));
@@ -802,7 +883,7 @@
     { id: 'itemprofit', icon: 'trophy', name: 'Рейтинг по прибыли', group: 'Товары', render: viewItemProfit },
     { id: 'shelf', icon: 'grid', name: 'Полки: что окупает место', group: 'Товары', render: viewShelf },
     { id: 'returns', icon: 'returnArrow', name: 'Возвраты поставщикам', group: 'Товары', render: viewReturns },
-    { id: 'abc', icon: 'medal', name: 'ABC-анализ', group: 'Товары', render: viewAbc },
+    { id: 'abc', icon: 'medal', name: 'ABC и XYZ', group: 'Товары', render: viewAbc },
     { id: 'pricecmp', icon: 'tag', name: 'Цены поставщиков', group: 'Товары', render: viewPrices },
     { id: 'seasons', icon: 'calendar', name: 'Сезонность', group: 'Отчёты', render: viewSeasons }
   );
