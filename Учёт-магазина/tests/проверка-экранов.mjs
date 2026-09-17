@@ -3573,6 +3573,132 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 27. Отчёт в файл PDF, с русскими буквами.
+
+       Печать через браузер была и раньше. Но отчёт чаще нужно ОТПРАВИТЬ:
+       бухгалтеру, в папку за месяц, себе в телефон. jsPDF из коробки знает
+       только латиницу — проверено, слова «Ведомость» в файле не оказывалось
+       вовсе. Поэтому рядом лежит урезанный PT Sans. */
+{
+  console.log('— Отчёт в PDF-файл');
+  const { page, ctx, errs } = await open();
+
+  check('БИБЛИОТЕКИ ПОДКЛЮЧЕНЫ И РАБОТАЮТ ОФЛАЙН',
+    await page.evaluate(() => !!(window.jspdf && window.jspdf.jsPDF) &&
+      !!window.WMPdfFont && !!window.Fuse && !!window.ss && !!window.WMPdf),
+    await page.evaluate(() => [
+      (window.jspdf && window.jspdf.jsPDF) ? 'jsPDF' : '—',
+      window.WMPdfFont ? 'шрифт' : '—', window.Fuse ? 'Fuse' : '—',
+      window.ss ? 'статистика' : '—', window.WMPdf ? 'наш модуль' : '—'].join(' ')),
+    'все пять');
+
+  /* Заполняем базу и открываем отчёт */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.setSetting('storeName', 'Продукты у дома');
+    S.setSetting('legalName', 'ИП Иванов И.И.');
+    const касса = (S.state.accounts || []).filter(a => a.kind === 'till')[0];
+    S.add('dds', { type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'День',
+      cashier: 'Марьям', account: касса ? касса.id : '', openCash: 0, zCash: 50000,
+      payouts: 0, collected: 0, factCash: 50000, checks: 120 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('cashiers');
+  });
+  await page.waitForTimeout(600);
+
+  check('КНОПКА PDF СТОИТ РЯДОМ С ПЕЧАТЬЮ',
+    await page.evaluate(() => !!document.querySelector('[data-act="pdf"]')),
+    'есть', 'есть');
+
+  const файл = await page.evaluate(() => {
+    const doc = window.WMPdf.build(document.getElementById('page') || document.body,
+      window.WMStore.settings);
+    if (!doc) return { ошибка: 'не собрался' };
+    const байты = new Uint8Array(doc.output('arraybuffer'));
+    let текст = '';
+    for (let i = 0; i < байты.length; i++) текст += String.fromCharCode(байты[i]);
+    return { размер: байты.length, страниц: doc.getNumberOfPages(),
+      шрифт: Object.keys(doc.getFontList()).includes('PTSans'),
+      встроен: /FontFile2/.test(текст),
+      имя: window.WMPdf.fileName(document.getElementById('page') || document.body,
+        window.WMStore.settings) };
+  });
+
+  check('ФАЙЛ СОБИРАЕТСЯ', !файл.ошибка && файл.размер > 2000,
+    файл.размер + ' байт', '> 2000');
+  check('и шрифт с кириллицей встроен в сам документ, а не «где-то есть»',
+    файл.шрифт && файл.встроен, файл.встроен ? 'встроен' : 'нет', 'встроен');
+
+  /* Самое важное про PDF: дошли ли русские буквы. Искать слова в байтах
+     файла бесполезно — со встроенным шрифтом текст лежит НОМЕРАМИ ГЛИФОВ, а
+     не буквами. Зато если буквы в шрифте нет, номер будет 0000 («пусто»).
+     Значит, доказательство такое: у слова из девяти букв — девять номеров,
+     и ни одного нулевого. */
+  const глифы = await page.evaluate(() => {
+    const J = window.jspdf.jsPDF;
+    const d = new J();
+    window.WMPdfFont.install(d);
+    d.setFontSize(12);
+    d.text('Ведомость', 10, 20);
+    const поток = d.internal.pages[1].join('\n');
+    const куски = поток.match(/<([0-9A-Fa-f]{4,})>\s*Tj/g) || [];
+    const hex = куски.length ? куски[0].replace(/[<>]|\s*Tj/g, '') : '';
+    let нулей = 0;
+    for (let i = 0; i < hex.length; i += 4) if (hex.slice(i, i + 4) === '0000') нулей++;
+    return { букв: hex.length / 4, нулей: нулей };
+  });
+  check('РУССКИЕ БУКВЫ ДОШЛИ ДО ФАЙЛА: девять букв — девять глифов',
+    глифы.букв === 9, глифы.букв, 9);
+  check('И НИ ОДНА НЕ ПРЕВРАТИЛАСЬ В ПУСТОЙ КВАДРАТ',
+    глифы.нулей === 0, глифы.нулей + ' пустых', '0 пустых');
+  check('ИМЯ ФАЙЛА ПОНЯТНОЕ: магазин, отчёт, дата',
+    /Продукты у дома — .+ \d{4}-\d{2}-\d{2}\.pdf$/.test(файл.имя), файл.имя, 'с магазином и датой');
+
+  /* В файл попадает то, что на экране, а не что-то посчитанное заново */
+  const собрано = await page.evaluate(() =>
+    window.WMPdf.collect(document.getElementById('page') || document.body)
+      .map(b => b.вид));
+  check('В ФАЙЛ ИДЁТ ТО ЖЕ, ЧТО НА ЭКРАНЕ: титул, плитки, таблицы',
+    собрано.includes('титул') && собрано.length >= 2, собрано.join(', '), 'титул и данные');
+
+  /* --- Поиск с опечатками в настоящем браузере ---------------------------- */
+  await page.evaluate(() => {
+    const U = window.WMUI, E = window.WM, d = U.data();
+    d.sales = [
+      { key: 'a', name: 'Молоко 3.2% Простоквашино', qty: 10, revenue: 5000, cogs: 4000, profit: 1000 },
+      { key: 'b', name: 'Сметана 20% Домик в деревне', qty: 5, revenue: 2000, cogs: 1500, profit: 500 },
+      { key: 'c', name: 'Шоколад Алёнка', qty: 3, revenue: 900, cogs: 600, profit: 300 }
+    ];
+    d.salesPeriod = { from: '01.09.2026', to: '30.09.2026', days: 30 };
+    U.recompute(); U.go('itemprofit');
+  });
+  await page.waitForTimeout(500);
+  /* Считаем только строки с данными. Таблица на пустом результате рисует
+     строку «Пока пусто», а внизу бывает итоговая — обе не находки. */
+  const строк = async () => page.evaluate(() => {
+    const t = [...document.querySelectorAll('table.data')].pop();
+    if (!t) return 0;
+    return [...t.querySelectorAll('tbody tr')]
+      .filter(tr => !tr.classList.contains('plain') && !tr.classList.contains('total')).length;
+  });
+  const искать = async (q) => {
+    await page.evaluate(x => {
+      window.WMFilter.setText('itemprof', x); window.WMUI.render();
+    }, q);
+    await page.waitForTimeout(350);
+    return строк();
+  };
+  check('ТОЧНЫЙ ПОИСК В БРАУЗЕРЕ РАБОТАЕТ', (await искать('молоко')) === 1,
+    await искать('молоко'), 1);
+  check('И ОПЕЧАТКА ПРОЩАЕТСЯ: «малако» находит молоко',
+    (await искать('малако')) === 1, await искать('малако'), 1);
+  check('а чепуха по-прежнему не находит ничего',
+    (await искать('ыфвафыв')) === 0, await искать('ыфвафыв'), 0);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

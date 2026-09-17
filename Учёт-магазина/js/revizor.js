@@ -110,6 +110,17 @@
       calc: function (t) { return Math.abs(t.journalGap); } }
   ];
 
+  /* simple-statistics (лицензия ISC) лежит в vendor/. Без него Ревизор работает
+     как работал — просто молчит о том, что считается по истории магазина. */
+  function стат() {
+    if (typeof ss !== 'undefined') return ss;
+    if (typeof window !== 'undefined' && window.ss) return window.ss;
+    if (typeof require === 'function') {
+      try { return require('../vendor/simple-statistics.min.js'); } catch (e) { return null; }
+    }
+    return null;
+  }
+
   function метрика(id) {
     for (var i = 0; i < МЕТРИКИ.length; i++) if (МЕТРИКИ[i].id === txt(id)) return МЕТРИКИ[i];
     return null;
@@ -234,6 +245,50 @@
           what: совет, go: 'cashiers' });
       }
     });
+
+    /* --- «НОРМАЛЬНАЯ ЛИ ЭТА НЕДОСТАЧА» --------------------------------------
+
+       Порог из головы («больше тысячи — тревога») для одного магазина велик,
+       для другого мал. Правильный ответ даёт сам магазин: посмотреть, какие
+       расхождения у него БЫВАЮТ обычно, и заметить то, что выбивается.
+
+       Считаем по медиане и медианному отклонению, а не по среднему: одна
+       кража на сто тысяч утянула бы среднее за собой и спрятала все
+       остальные. Медиану она не сдвинет — в этом весь смысл.
+
+       Меньше восьми смен — молчим: по трём числам «обычного» не бывает.  */
+    var S2 = стат();
+    if (S2 && S2.median && S2.medianAbsoluteDeviation) {
+      var ряд = [], поСменам = [];
+      (rows || []).forEach(function (r) {
+        if (!E.isShift(r)) return;
+        var c2 = E.shiftCalc(r);
+        ряд.push(Math.abs(c2.totalDiff));
+        поСменам.push({ r: r, v: Math.abs(c2.totalDiff), c: c2 });
+      });
+      if (ряд.length >= 8) {
+        var мед = S2.median(ряд);
+        var mad = S2.medianAbsoluteDeviation(ряд);
+        // 1.4826 переводит медианное отклонение в привычное «сигму»
+        var сигма = mad * 1.4826;
+        if (сигма > 0.5) {
+          поСменам.forEach(function (x) {
+            if (x.v < 300) return;                       // мелочь не разбираем
+            var во = (x.v - мед) / сигма;
+            if (во < 3.5) return;
+            нашли({ level: 'warn', key: 'odd:' + txt(x.r.id), id: txt(x.r.id),
+              title: 'Расхождение выбивается из вашей же истории',
+              why: дата(x.r.date) + ', ' + (txt(x.r.till) || 'касса') + ', ' +
+                (txt(x.r.shift) || 'смена') + '. Разошлось на ' + руб(x.v) +
+                ', а обычно у вас расходится на ' + руб(мед) + '.',
+              what: 'Порог тревоги тут ни при чём: программа сравнила смену не с ' +
+                'круглым числом, а с тем, как расходится у вас самих. Такое стоит ' +
+                'посмотреть отдельно.',
+              go: 'cashiers' });
+          });
+        }
+      }
+    }
 
     if (!смен) {
       нашли({ level: 'note', key: 'noshifts',

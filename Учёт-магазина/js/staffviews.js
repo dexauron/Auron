@@ -632,6 +632,7 @@
     var tot = E.payrollTotals(rows);
 
     var h = u.pageHead('Ведомость на подпись', 'Кто сколько получил и расписался',
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button> ' +
       '<button class="btn btn-primary" data-act="print">' + ic('print') +
       ' Напечатать</button> <button class="btn" data-go="payroll">' +
       ic('banknote') + ' Расчёт зарплаты</button>');

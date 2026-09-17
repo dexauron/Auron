@@ -125,7 +125,8 @@
     var pace = R.monthPace(F.flatten(dds()), m, today());
 
     var h = u.pageHead('Дашборд', 'Как идут дела в ' + monthRu(m),
-      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button>');
     h += monthPicker();
     if (!rows.length) {
       return h + emptyStart('В ' + monthRu(m) + ' дел пока не было',
@@ -185,7 +186,8 @@
     var u = U(), m = ym(), p = pnlOf(m);
     var h = u.pageHead('Прибыль (P&L)', 'Из чего сложилась прибыль за ' + monthRu(m),
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
-      '<button class="btn" data-act="print">' + ic('print') + '</button>');
+      '<button class="btn" data-act="print">' + ic('print') + '</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + '</button>');
     h += monthPicker();
     if (!rowsOf(m).length) {
       return h + emptyStart('За ' + monthRu(m) + ' прибыль считать не из чего',
@@ -286,6 +288,7 @@
 
     var h = u.pageHead('Закрытие месяца', monthRu(m) + ' — что должно сойтись',
       '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button> ' +
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
     if (!rowsOf(m).length) {
@@ -582,6 +585,7 @@
 
     var h = u.pageHead('Отчёт собственнику', 'Одна страница ' + R2.title,
       '<button class="btn btn-primary" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button> ' +
       '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
 
     /* Переключатель периода: за день смотрят утром, за месяц — в конце. */
@@ -833,7 +837,8 @@
     var tax = F.taxAmount(S.settings, t.revenue, t.expense);
 
     var h = u.pageHead('Налоговый календарь', 'Что и когда платить в ' + year + ' году',
-      '<button class="btn" data-act="print">' + ic('print') + '</button>');
+      '<button class="btn" data-act="print">' + ic('print') + '</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + '</button>');
     if (!yearRows.length) {
       return h + U().blank({ icon: 'bank', title: 'Считать налог пока не с чего',
         why: 'Календарь напоминает, что и когда платить, и прикидывает сумму ' +
@@ -880,6 +885,7 @@
 
     var h = u.pageHead('Готовый отчёт', 'Что отдать бухгалтеру за ' + monthRu(m),
       '<button class="btn btn-primary" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button> ' +
       '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button> ' +
       '<button class="btn" data-act="share-screen">' + ic('share') + ' Отправить</button>');
     h += monthPicker();
@@ -1171,7 +1177,8 @@
     var rows = (S.state.log || []).slice().reverse();
 
     var h = u.pageHead('Что менялось', 'История записей: что добавили, поправили и удалили',
-      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Напечатать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button>');
 
     if (!rows.length) {
       return h + U().blank({ icon: 'clock', title: 'Пока ничего не менялось',

@@ -254,12 +254,61 @@
     if (q && searchFn) {
       var parts = parseQuery(q);
       if (parts.length) {
-        out = out.filter(function (r) {
+        var точно = out.filter(function (r) {
           return matches(parts, searchFn(r), numsFn ? numsFn(r) : null);
         });
+        /* ПОИСК С ОПЕЧАТКАМИ — ТОЛЬКО КОГДА ТОЧНЫЙ НИЧЕГО НЕ НАШЁЛ.
+
+           Порядок здесь важнее самой возможности. Набрал «молоко» — получи
+           молоко, и ничего кроме: подмешивать похожее к точному найденному
+           значит портить работающий поиск ради удобства, которого не просили.
+           А вот когда точный не нашёл НИЧЕГО, выбор простой: пустой экран или
+           «может быть, вы искали это». Второе лучше.
+
+           Ищем по тому же тексту, что и точный поиск, и только по словам:
+           числовые условия («>1000») прощать опечатки бессмысленно. */
+        out = точно;
+        if (!точно.length && fuzzy() && !parts.some(function (p2) { return p2.op; })) {
+          out = похоже(q, out.length ? out : rows, searchFn, defs, b);
+        }
       }
     }
     return out;
+  }
+
+  /* Fuse.js, лицензия Apache-2.0, лежит в vendor/. Нет его — просто вернём
+     пустой список: поиск с опечатками приятная добавка, а не обязанность. */
+  function fuzzy() {
+    if (typeof Fuse !== 'undefined') return Fuse;
+    if (typeof window !== 'undefined' && window.Fuse) return window.Fuse;
+    // В проверках модуль живёт под node, где глобального Fuse нет
+    if (typeof require === 'function') {
+      try { return require('../vendor/fuse.min.js'); } catch (e) { return null; }
+    }
+    return null;
+  }
+  function похоже(q, rows, searchFn, defs, b) {
+    var F = fuzzy();
+    if (!F) return [];
+    var годные = (rows || []).filter(function (r) {
+      for (var i = 0; i < (defs || []).length; i++) {
+        var v = b[defs[i].key];
+        if (v && !pass(defs[i], v, r)) return false;
+      }
+      return true;
+    });
+    if (!годные.length) return [];
+    var корм = годные.map(function (r, i) { return { i: i, t: String(searchFn(r) || '') }; });
+    var f = new F(корм, {
+      keys: ['t'], includeScore: true,
+      /* 0.4 — опытный порог: «малако» находит «молоко», а «хлеб» не тащит за
+         собой «шоколад». Выше — начинается мусор, и владелец перестаёт верить
+         поиску вовсе. */
+      threshold: 0.4, ignoreLocation: true, minMatchCharLength: 2
+    });
+    return f.search(String(q).replace(/[-"<>=]/g, ' ').trim())
+      .slice(0, 50)
+      .map(function (x) { return годные[x.item.i]; });
   }
 
   /* --- Рисование ------------------------------------------------------------ */
@@ -326,6 +375,7 @@
     active: active, apply: apply, bar: bar, note: note,
     snapshot: snapshot, restore: restore, useSets: useSets, useIcons: useIcons, sameAs: sameAs,
     autoOptions: autoOptions, optionsOf: optionsOf, norm: norm,
-    parseQuery: parseQuery, matches: matches, highlight: highlight
+    parseQuery: parseQuery, matches: matches, highlight: highlight,
+    fuzzy: похоже
   };
 });

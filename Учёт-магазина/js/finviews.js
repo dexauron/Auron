@@ -1535,7 +1535,8 @@
 
     var h = u.pageHead('Кассиры и расхождения',
       'У кого касса не сходится — ' + (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
-      '<button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
+      '<button class="btn" data-act="print">' + ic('print') + ' Печать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button>');
 
     h += '<div class="stat-grid">' +
       u.stat('Недостачи', u.priv(t.short), 'всего не хватило', t.short ? 'c-red' : 'c-green') +

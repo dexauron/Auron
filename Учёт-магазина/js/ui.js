@@ -2059,7 +2059,7 @@
   }
   // Что можно нажимать в режиме показа: только смотреть, печатать и выгружать
   var RO_ALLOWED = {
-    'print': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
+    'print': 1, 'pdf': 1, 'export-screen': 1, 'export-excel': 1, 'share-screen': 1,
     'close-sheet': 1, 'more-back': 1, 'readonly-off': 1, 'share-copy': 1,
     'share-whatsapp': 1, 'share-telegram': 1
   };
@@ -2544,6 +2544,16 @@
       else if (a === 'export-screen') exportScreen();
       else if (a === 'restore') restore();
       else if (a === 'print') window.print();
+      /* Файл, а не принтер. Печать у нас была, но отчёт чаще нужно ОТПРАВИТЬ:
+         бухгалтеру, в папку за месяц, себе в телефон. Раньше для этого
+         приходилось печатать «в PDF» средствами Windows, и на разных
+         компьютерах выходило по-разному. */
+      else if (a === 'pdf') {
+        var корень = $('page') || document.body;
+        var беда = window.WMPdf ? window.WMPdf.save(корень, S.settings)
+          : 'Не получилось собрать PDF: модуль не загрузился.';
+        toast(беда || 'Файл сохранён — ищите в загрузках.');
+      }
       else if (a === 'del-shift') {
         if (confirm('Удалить смену целиком?')) {
           el.dataset.ids.split(',').forEach(function (id) { S.remove('dds', id); });
