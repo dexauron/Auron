@@ -131,6 +131,9 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
   display: flex; align-items: center; gap: 8px; }
 .card-ic { display: inline-flex; color: var(--label-2); }
 .card-note { font-size: 13px; color: var(--label-2); }
+/* Подпись под заголовком карточки: тем же тоном, что и .card-note,
+   но на своей строке. Без неё текст шёл размером с основной. */
+.card-sub { font-size: 13px; color: var(--label-2); line-height: 1.4; margin-top: 2px; }
 .card-body { padding: 4px 20px 18px; font-size: 14.5px; color: var(--label-2); line-height: 1.55; }
 .card-pad { padding: 18px 20px; }
 
@@ -256,12 +259,19 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 
 /* Список «за что + сколько»: выплаты из кассы за смену, по строке на каждую */
 .pair-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+/* Просвет между строками задаёт список, а не коробка: коробка отделяет
+   список от кнопки «+ ещё строка», а строки лежат внутри списка и без
+   этого правила слипались. */
+.pair-list { display: flex; flex-direction: column; gap: 6px; }
 .pair-row { display: flex; gap: 8px; align-items: center; }
 .form-row .pair-row input { flex: 1; text-align: left; border: none;
   border-radius: 9px; padding: 8px 10px; background: var(--fill-2); }
 .form-row .pair-row input.num-input { flex: 0 0 34%; text-align: right; }
 .pair-row .pair-del { flex: 0 0 auto; padding: 0 9px; color: var(--label-3); }
 .pair-box > .btn { align-self: flex-start; }
+
+/* Пояснение внутри экрана, не в форме: тем же тоном, что и подписи форм */
+.hint { font-size: 13px; color: var(--label-2); line-height: 1.45; }
 
 /* Пояснение ко всей форме — как «footer» секции в iOS: без плашки, мелко */
 .form-hint { padding: 10px 16px 0; font-size: 13px; color: var(--label-2); background: none;
@@ -589,6 +599,11 @@ body.readonly .quick .btn { opacity: .45; }
   box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 .alert-bar .alert-item:hover { background: var(--fill-2); }
 .alert-bar .alert-more { margin-left: auto; color: var(--label-2); font-weight: 500; font-size: 13px; }
+/* Сколько сейчас в кассе — не тревога, а справка: у правого края и тише.
+   Без margin-left она липла к последней кнопке и читалась как её часть. */
+.alert-bar .alert-cash { margin-left: auto; color: var(--label-2); font-size: 13px;
+  white-space: nowrap; }
+.alert-bar .alert-cash b { color: var(--label); font-weight: 600; }
 @media (max-width: 700px) { .alert-bar { padding: 9px 16px; font-size: 13px; } }
 
 /* --- Купюры и пересчёт кассы ------------------------------------------------ */

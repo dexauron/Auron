@@ -1734,7 +1734,7 @@
     var s = S.settings, SET = window.WMSettings;
     var h = pageHead('Настройки', 'Настройте программу под свой магазин — считать она будет по этим правилам',
       '<button class="btn" data-act="settings-wizard">' + ic('gear') + ' Настроить магазин</button> ' +
-      '<button class="btn" data-act="settings-reset">Сбросить всё</button>');
+      '<button class="btn btn-danger" data-act="settings-reset">Сбросить всё</button>');
 
     h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
       'на листе «Настройки» — можно править и там.</span></div>';
