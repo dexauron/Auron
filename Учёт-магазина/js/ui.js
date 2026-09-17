@@ -797,7 +797,70 @@
     }).join('') + '</datalist>';
   }
 
-  function readWorkbook(buffer) {
+  /* --------------------------------------------------------------------------
+     CSV ИЗ 1С ЧИТАЕТСЯ ОТДЕЛЬНО, И ЭТО НЕ ПРИДИРКА
+
+     Файлы Excel читал SheetJS, и CSV он тоже брал — формально. На настоящей
+     выгрузке 1С выходило вот что:
+
+         Íîìåíêëàòóðà;Êîëè÷åñòâî;Ñóììà        ← кириллица в мусор
+         Хлеб Бородинский;40;98000            ← «980,00» стало 98 000
+
+     Первое — из-за кодировки: 1С по умолчанию пишет Windows-1251, а читали
+     как латиницу. Второе куда хуже: запятая как десятичный разделитель
+     потерялась, и девятьсот восемьдесят рублей превратились в девяносто
+     восемь тысяч. Ошибка в СТО РАЗ, и притом молчаливая.
+
+     Поэтому CSV теперь: сами определяем кодировку, сами разбираем PapaParse
+     (MIT, 18 КБ), сами превращаем «1 450,50» в число. Excel как читался
+     SheetJS, так и читается — там этих бед нет.
+     -------------------------------------------------------------------------- */
+  function csvКодировка(bytes) {
+    /* Метка UTF-8 в начале файла — сомнений нет */
+    if (bytes.length > 2 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+      return 'utf-8';
+    }
+    /* Пробуем прочитать как UTF-8 строго. Развалилось — значит, 1251:
+       других кодировок в выгрузках 1С почти не бывает. */
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+      return 'utf-8';
+    } catch (e) { return 'windows-1251'; }
+  }
+
+  function csvЧисло(v) {
+    var t = String(v == null ? '' : v).trim();
+    if (!t) return '';
+    /* Пробелы внутри числа — разделители тысяч, в том числе неразрывные.
+       Запятая — десятичный разделитель: так пишет 1С и так пишут люди. */
+    var чист = t.replace(/[\s\u00a0\u202f]/g, '');
+    if (!/^[-+]?\d+([.,]\d+)?$/.test(чист)) return t;     // не число — отдаём как есть
+    var n = Number(чист.replace(',', '.'));
+    return isFinite(n) ? n : t;
+  }
+
+  function readCsv(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var текст = new TextDecoder(csvКодировка(bytes)).decode(bytes);
+    var P = window.Papa;
+    var строки;
+    if (P) {
+      // Разделитель PapaParse определяет сам: 1С пишет «;», Excel бывает «,»
+      строки = P.parse(текст, { skipEmptyLines: 'greedy' }).data || [];
+    } else {
+      // Библиотеки нет — читаем просто, лишь бы не потерять файл целиком
+      var разд = (текст.split('\n')[0] || '').indexOf(';') >= 0 ? ';' : ',';
+      строки = текст.split(/\r?\n/).filter(function (l) { return l.trim(); })
+        .map(function (l) { return l.split(разд); });
+    }
+    return строки.map(function (r) { return (r || []).map(csvЧисло); });
+  }
+
+  function readWorkbook(buffer, name) {
+    if (/\.csv$/i.test(String(name || ''))) {
+      var m = readCsv(buffer);
+      return { wb: null, names: ['CSV'], matrix: m };
+    }
     var wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
     return { wb: wb, names: wb.SheetNames,
       matrix: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' }) };
@@ -818,7 +881,7 @@
   }
 
   function ingest(name, buffer, size) {
-    var m = readWorkbook(buffer);
+    var m = readWorkbook(buffer, name);
     var kind = E.detectKind(name, m.matrix, m.names);
     var info = { name: name, kind: kind, rows: 0, size: size || 0, period: null, note: '' };
     var r;
@@ -1679,6 +1742,7 @@
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
     go: function (id) { go(id); }, render: function () { render(); },
     applyLook: function () { applyLook(); }, palette: function () { кпОткрыть(); },
+    readWorkbook: function (b, n) { return readWorkbook(b, n); },
     tab: function (key, def) { return TAB[key] || def; },
     rowMenu: function (coll, id, opts) { return rowMenu(coll, id, opts); },
     pasteClip: function (formId) { pasteClip(formId); },
@@ -1994,6 +2058,23 @@
   function renderAlerts() {
     var bar = $('alertBar'); if (!bar) return;
     var t = today(), items = [];
+
+    /* ЗАПИСЬ НЕ СОХРАНИЛАСЬ — ЭТО ПЕРВОЕ, ЧТО НАДО СКАЗАТЬ.
+
+       Хранилище браузера не резиновое: рано или поздно оно переполняется, и
+       тогда setItem падает. Программа это ловила и запоминала в
+       lastSaveError — но НИКТО ЭТУ ОШИБКУ НЕ ЧИТАЛ. То есть записи молча
+       переставали сохраняться, а владелец продолжал их вносить и узнал бы
+       обо всём только назавтра, открыв программу с пустыми цифрами.
+
+       Молчаливая потеря данных — худшее, что программа учёта может сделать.
+       Поэтому строка идёт первой и не уходит, пока не сохранится. */
+    if (S.lastSaveError) {
+      items.push({ icon: 'warning',
+        text: 'ЗАПИСИ НЕ СОХРАНЯЮТСЯ: ' + S.lastSaveError +
+          '. Подключите папку на экране «Данные и файлы» — там места хватит.',
+        go: 'data' });
+    }
     var pt = E.planTotals(S.state.plans || [], t);
     if (pt.overdue) items.push({ icon: 'warning', text: 'Просрочены выплаты на ' + money(pt.overdue),
       go: 'finpay' });
@@ -2021,8 +2102,15 @@
     }
     /* На Пульте дела уже показаны списком «Что сделать» — полоса сверху
        повторяла бы их слово в слово. Одно и то же дважды на одном экране
-       читается как шум, а не как напоминание. */
-    if (!items.length || VIEW === 'pulse') { bar.hidden = true; return; }
+       читается как шум, а не как напоминание.
+
+       НО НЕ ВСЁ РАВНО ЧТО. «Записи не сохраняются» в списке дел Пульта нет,
+       и прятать это сообщение нельзя нигде: молчаливая потеря данных — самое
+       дорогое, что программа учёта может сделать с владельцем. Из-за этого
+       правила предупреждение и не показывалось при первом запуске — а первый
+       экран как раз Пульт. */
+    var срочно = !!S.lastSaveError;
+    if (!items.length || (VIEW === 'pulse' && !срочно)) { bar.hidden = true; return; }
     bar.hidden = false;
     bar.innerHTML = items.slice(0, 4).map(function (a) {
       return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + ic(a.icon, 18) +

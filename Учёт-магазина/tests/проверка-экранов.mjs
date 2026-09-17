@@ -3836,6 +3836,75 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 29. CSV из 1С и молчаливая потеря записей.
+
+       Две настоящие ошибки, найденные на настоящей выгрузке:
+       кириллица превращалась в «Íîìåíêëàòóðà», а «980,00» — в 98 000. */
+{
+  console.log('— CSV из 1С и потеря записей');
+  const { page, ctx, errs } = await open();
+
+  const строки = ['Номенклатура;Количество;Сумма',
+    'Молоко 3,2% Простоквашино;12;1 450,50',
+    'Хлеб Бородинский;40;980,00',
+    'Сыр Российский;5;2 300,75'].join('\r\n');
+
+  /* Windows-1251 — то, в чём 1С пишет по умолчанию. Собираем байты руками:
+     подделывать кодировку нельзя, проверка должна видеть настоящие байты. */
+  const в1251 = [];
+  for (const ch of строки) {
+    const c = ch.codePointAt(0);
+    if (c < 128) в1251.push(c);
+    else if (c === 0x0401) в1251.push(168);              // Ё
+    else if (c === 0x0451) в1251.push(184);              // ё
+    else if (c >= 0x0410 && c <= 0x044F) в1251.push(c - 0x0410 + 192);
+    else в1251.push(63);
+  }
+
+  const m1251 = await page.evaluate((a) =>
+    window.WMUI.readWorkbook(new Uint8Array(a).buffer, 'продажи.csv').matrix, в1251);
+
+  check('КИРИЛЛИЦА В CSV ЧИТАЕТСЯ, А НЕ ПРЕВРАЩАЕТСЯ В «Íîìåíêëàòóðà»',
+    m1251[0][0] === 'Номенклатура', m1251[0][0], 'Номенклатура');
+  check('«980,00» ОСТАЛОСЬ 980, А НЕ СТАЛО 98 000 — ошибка была в сто раз',
+    m1251[2][2] === 980, m1251[2][2], 980);
+  check('«1 450,50» с пробелом-разделителем прочиталось верно',
+    m1251[1][2] === 1450.5, m1251[1][2], 1450.5);
+  check('название с запятой не превратилось в число',
+    m1251[1][0] === 'Молоко 3,2% Простоквашино', m1251[1][0], 'осталось текстом');
+
+  const вUtf = [...new TextEncoder().encode(строки)];
+  const mUtf = await page.evaluate((a) =>
+    window.WMUI.readWorkbook(new Uint8Array(a).buffer, 'продажи.csv').matrix, вUtf);
+  check('CSV В UTF-8 ЧИТАЕТСЯ ТОЧНО ТАК ЖЕ',
+    mUtf[0][0] === 'Номенклатура' && mUtf[2][2] === 980,
+    mUtf[0][0] + ' / ' + mUtf[2][2], 'Номенклатура / 980');
+
+  /* Молчаливая потеря записей. Хранилище браузера не резиновое; программа
+     ошибку ловила и запоминала, но НИКТО её не читал. Владелец продолжал бы
+     вносить записи и узнал бы обо всём назавтра, открыв пустые цифры. */
+  await page.evaluate(() => {
+    // Подделываем переполнение: настоящее ждать слишком долго
+    const было = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function () { throw new Error('хранилище браузера переполнено'); };
+    try { window.WMStore.save(); } finally { localStorage.setItem = было; }
+    window.WMUI.render();
+  });
+  await page.waitForTimeout(400);
+  const тревога = await page.evaluate(() => {
+    const b = document.getElementById('alertBar');
+    return b && !b.hidden ? b.innerText.replace(/\s+/g, ' ') : '';
+  });
+  check('ЗАПИСИ ПЕРЕСТАЛИ СОХРАНЯТЬСЯ — ПРОГРАММА КРИЧИТ ОБ ЭТОМ',
+    /НЕ СОХРАНЯЮТСЯ/.test(тревога), тревога.slice(0, 70) || 'молчит', 'кричит');
+  check('и говорит, что делать',
+    /Данные и файлы/.test(тревога), 'говорит', 'говорит');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
