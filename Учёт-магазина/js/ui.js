@@ -711,7 +711,11 @@
   function fieldRow(label, name, type, value, opts) {
     opts = opts || {};
     var коротко = opts.hint && String(opts.hint).length <= ПОДПИСЬ;
-    var h = '<div class="form-row"><label>' + esc(label) +
+    /* Список пар «за что и сколько» кладём на всю ширину: рядом с подписью
+       на строку остаётся треть экрана, и «Молокозавод» превращается в
+       «Молокозаво». Подпись встаёт сверху, строки — под ней. */
+    var h = '<div class="form-row' + (type === 'pairs' ? ' form-row-wide' : '') +
+      '"><label>' + esc(label) +
       /* Оформление — в styles.css. Инлайновый style перебивал его и не давал
          свернуть длинное пояснение: строка формы разрасталась на шесть строк. */
       (коротко ? '<small>' + esc(opts.hint) + '</small>' : '') +

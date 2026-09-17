@@ -259,6 +259,13 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 
 /* Список «за что + сколько»: выплаты из кассы за смену, по строке на каждую */
 .pair-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+/* Строка формы, которой тесно рядом с подписью: подпись сверху, поле под
+   ней во всю ширину. Нужна спискам «кому и за что» — в трети строки
+   название поставщика не помещается. */
+.form-row-wide { flex-direction: column; align-items: stretch; gap: 4px; }
+.form-row-wide > label { flex-basis: auto; width: 100%; }
+.form-row-wide .pair-row input { text-align: left; }
+.form-row-wide .pair-row input.num-input { flex: 0 0 30%; text-align: right; }
 /* Просвет между строками задаёт список, а не коробка: коробка отделяет
    список от кнопки «+ ещё строка», а строки лежат внутри списка и без
    этого правила слипались. */
@@ -269,6 +276,13 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .form-row .pair-row input.num-input { flex: 0 0 34%; text-align: right; }
 .pair-row .pair-del { flex: 0 0 auto; padding: 0 9px; color: var(--label-3); }
 .pair-box > .btn { align-self: flex-start; }
+
+/* Заголовок части формы. Длинную форму без них читать невозможно: владелец
+   жаловался, что глазам не за что зацепиться. Тон тихий — это указатель,
+   а не сообщение. */
+.form-cap { padding: 16px 16px 6px; font-size: 12px; font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase; color: var(--label-2); }
+.form-cap:first-child { padding-top: 6px; }
 
 /* Пояснение внутри экрана, не в форме: тем же тоном, что и подписи форм */
 .hint { font-size: 13px; color: var(--label-2); line-height: 1.45; }

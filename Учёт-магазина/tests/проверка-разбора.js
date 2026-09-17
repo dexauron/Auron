@@ -2221,6 +2221,50 @@ console.log('\n— Взгляд бухгалтера: смена как собы
   check('и ящиков в итогах нет вовсе', b.totals.till === 0, b.totals.till, 0);
 }
 
+console.log('\n— Обратный счёт: каждый совет обязан сводить кассу');
+{
+  /* Программа советует, каким должно было быть каждое число, чтобы всё
+     сошлось. Совет, который не сводит кассу, хуже молчания: владелец
+     исправит по нему и получит новую ошибку.
+
+     Эта проверка поймала настоящую ошибку. Для поля «получил на руки» я
+     поставил знак как у полей расчёта, а оно стоит по другую сторону
+     равенства — программа советовала уменьшить полученное там, где надо
+     было увеличить. Совет ровно наоборот. */
+  const случаи = [
+    { openCash: 5000, zCash: 74841, payouts: 10760, kept: 5000, received: 57969 },
+    { openCash: 0, zCash: 40000, payouts: 0, kept: 0, received: 41500 },
+    { openCash: 3000, zCash: 26467, payouts: 10000, deposits: 2000, kept: 3000, received: 14000 },
+    { openCash: 1000, zCash: 99999, payouts: 500, returnsCash: 300, kept: 0, received: 90000 }
+  ];
+  let всего = 0, плохих = 0;
+  случаи.forEach(function (s0) {
+    const f = WM.shiftFix(WM.shiftCalc(s0));
+    f.list.forEach(function (x) {
+      всего++;
+      const s2 = Object.assign({}, s0);
+      s2[x.key] = x.need;
+      if (!WM.shiftCalc(s2).ok) {
+        плохих++;
+        console.log('     ! совет «' + x.name + '» = ' + x.need + ' не сводит кассу');
+      }
+    });
+  });
+  check('КАЖДЫЙ СОВЕТ ДЕЙСТВИТЕЛЬНО СВОДИТ КАССУ', плохих === 0,
+    (всего - плохих) + ' из ' + всего, 'все ' + всего);
+  check('и советов программа даёт не пустой список', всего >= 12, всего, 'не меньше 12');
+
+  // Старые смены правятся старыми именами: владелец ищет поле в своей форме
+  const старый = WM.shiftFix(WM.shiftCalc({ openCash: 0, zCash: 40000, payouts: 0, factCash: 38000 }));
+  check('у старой смены советы названы по-старому',
+    старый.list.some(function (x) { return x.name === 'Факт в ящике'; }),
+    старый.list.map(function (x) { return x.name; }).join(', '), 'среди них «Факт в ящике»');
+  const новый = WM.shiftFix(WM.shiftCalc({ openCash: 0, zCash: 40000, kept: 0, received: 38000 }));
+  check('а у новой — по-новому',
+    новый.list.some(function (x) { return x.name === 'Получил на руки'; }),
+    новый.list.map(function (x) { return x.name; }).join(', '), 'среди них «Получил на руки»');
+}
+
 console.log('\n— Переезд старой базы: ящик закрывается, деньги остаются');
 {
   const старая = { version: 2, dds: [], accounts: [
