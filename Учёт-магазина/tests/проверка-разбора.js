@@ -1688,5 +1688,84 @@ console.log('\n— Инкассация: что пробила касса и ч�
     'ящик ' + t.diff + ', дорога ' + t.collectShort, 'ящик 0, дорога 8800');
 }
 
+console.log('\n— Журнал проводок: у каждого рубля есть пара');
+{
+  const счета = [
+    { id: 'till1', name: 'Касса 1', kind: 'till', opening: 0, defaultCash: true },
+    { id: 'safe', name: 'Сейф', kind: 'cash', opening: 200000 },
+    { id: 'bank', name: 'Расчётный счёт', kind: 'bank', opening: 0, defaultCashless: true }
+  ];
+  /* Настоящая смена владельца: пробили инкассацию 76 769, доехало 67 969,
+     размен 10 000 взяли в сейфе, выплаты 10 760 расписаны расходом. */
+  const смена = { type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'Ночь',
+    cashier: 'Марьям', account: 'till1', cashlessAccount: 'bank',
+    openCash: 0, zCash: 77624, returnsCash: 95, deposits: 10000, payouts: 10760,
+    collected: 76769, collectedFact: 67969, factCash: 0, zCashless: 73165 };
+  const внесение = { type: 'Перемещение', date: '2026-09-16', amount: 10000,
+    account: 'safe', toAccount: 'till1', category: 'Размен', fromShiftDep: 's1' };
+  const инкас = { type: 'Перемещение', date: '2026-09-16', amount: 67969,
+    account: 'till1', toAccount: 'safe', category: 'Инкассация', fromShift: 's1' };
+  const расход = { type: 'Расход', date: '2026-09-16', amount: 10760,
+    account: 'till1', category: 'Хознужды' };
+  const записи = [смена, внесение, инкас, расход];
+  const j = WM.journal(записи, счета);
+
+  check('ЖУРНАЛ СХОДИТСЯ В НОЛЬ: у каждого рубля нашлась пара',
+    j.ok && j.total === 0, j.total, 0);
+  check('НЕДОСТАЧА ПОЛУЧИЛА СВОЙ СЧЁТ, А НЕ ИСЧЕЗЛА',
+    j.gaps === 8800, j.gaps, 8800);
+  check('выручка в журнале — та же, что в смене', j.sales === 150694, j.sales, 150694);
+  check('затраты — расписанные выплаты', j.costs === 10760, j.costs, 10760);
+  check('МОСТ «ЧЕРЕЗ ЯЩИК» ЗАКРЫЛСЯ: смена и записи сказали одно и то же',
+    j.tillOk && j.tillGap === 0, j.tillGap, 0);
+
+  /* Два разных способа посчитать одни деньги обязаны дать одно число */
+  const b = WM.accountBalances(записи, счета);
+  let сошлось = true, где = '';
+  b.rows.forEach(function (a) {
+    const пров = j.accounts.filter(function (x) { return x.id === a.id; })[0];
+    const изЖурнала = WM.safeRound(a.opening + (пров ? пров.sum : 0));
+    if (a.balance !== изЖурнала) { сошлось = false; где = a.name; }
+  });
+  check('ОСТАТКИ СЧЕТОВ И ЖУРНАЛ ДАЮТ ОДНО И ТО ЖЕ',
+    сошлось, сошлось ? 'сошлось' : 'разошлось по «' + где + '»', 'сошлось');
+  check('в ящике ноль, в сейфе 257 969',
+    b.totals.till === 0 && b.rows.filter(function (a) { return a.id === 'safe'; })[0].balance === 257969,
+    b.rows.filter(function (a) { return a.id === 'safe'; })[0].balance, 257969);
+
+  /* Выплаты не расписаны — мост показывает, на сколько */
+  const безРасхода = WM.journal([смена, внесение, инкас], счета);
+  check('ВЫПЛАТЫ НЕ РАСПИСАНЫ — МОСТ ГОВОРИТ, НА СКОЛЬКО',
+    безРасхода.tillGap === 10760 && безРасхода.tillOk === false,
+    безРасхода.tillGap, 10760);
+  check('но журнал всё равно сходится в ноль: это вопрос, а не дыра',
+    безРасхода.ok, безРасхода.total, 0);
+}
+
+console.log('\n— Внесение размена: деньги берутся в сейфе, а не из воздуха');
+{
+  const счета = [
+    { id: 'till1', name: 'Касса 1', kind: 'till', opening: 0, defaultCash: true },
+    { id: 'safe', name: 'Сейф', kind: 'cash', opening: 200000 }
+  ];
+  const смена = { type: 'Смена', date: '2026-09-16', till: 'Касса 1', shift: 'День',
+    account: 'till1', openCash: 0, zCash: 50000, deposits: 10000, payouts: 0,
+    collected: 0, factCash: 60000 };
+
+  const без = WM.accountBalances([смена], счета);
+  check('БЕЗ ПЕРЕВОДА ДЕНЬГИ БЕРУТСЯ ИЗ ВОЗДУХА — так было раньше',
+    без.totals.total === 260000, без.totals.total, 260000);
+
+  const перевод = { type: 'Перемещение', date: '2026-09-16', amount: 10000,
+    account: 'safe', toAccount: 'till1', category: 'Размен', fromShiftDep: 's1' };
+  const с = WM.accountBalances([смена, перевод], счета);
+  check('С ПЕРЕВОДОМ ВСЁ СХОДИТСЯ: было 200 000, заработали 50 000',
+    с.totals.total === 250000, с.totals.total, 250000);
+  check('в ящике то, что насчитал кассир', с.totals.till === 60000, с.totals.till, 60000);
+  check('СЕЙФ ПОХУДЕЛ РОВНО НА РАЗМЕН', с.totals.safe === 190000, с.totals.safe, 190000);
+  check('и правило ящика не нарушено: перевод В ящик его остаток не трогал',
+    с.totals.till === WM.shiftCalc(смена).factCash, с.totals.till, 60000);
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

@@ -2813,12 +2813,17 @@ console.log('Страница: ' + PAGE + '\n');
   const итог = await page.evaluate(() => {
     const S = window.WMStore, E = window.WM;
     const смена = (S.state.dds || []).filter(r => E.isShift(r))[0];
-    const пер = (S.state.dds || []).filter(r => E.isMove(r));
+    const пер = (S.state.dds || []).filter(r => E.isMove(r) &&
+      E.txt(r.category) === 'Инкассация');
+    const разм = (S.state.dds || []).filter(r => E.isMove(r) &&
+      E.txt(r.category) === 'Размен');
     const c = смена ? E.shiftCalc(смена) : null;
+    const j = E.journal(S.state.dds || [], S.state.accounts || []);
     return { смен: (S.state.dds || []).filter(r => E.isShift(r)).length,
       переводов: пер.length, сумма: пер[0] ? пер[0].amount : 0,
-      привязан: pl => 0, изСмены: pер => 0,
+      разменов: разм.length, разменСумма: разм[0] ? E.num(разм[0].amount) : 0,
       fromShift: пер[0] ? !!пер[0].fromShift : false,
+      журналСошёлся: j.ok,
       выручка: c ? c.revenueCash : 0, расхождение: c ? c.diff : null };
   });
   check('смена записалась', итог.смен === 1, итог.смен, 1);
@@ -2827,6 +2832,11 @@ console.log('Страница: ' + PAGE + '\n');
     итог.переводов + ' перевод на ' + итог.сумма, '1 на 90 324');
   check('и перевод помечен номером смены — второй раз не заведётся',
     итог.fromShift, итог.fromShift ? 'помечен' : 'не помечен', 'помечен');
+  check('ВНЕСЕНИЕ 10 000 ТОЖЕ СТАЛО ПЕРЕВОДОМ — ЭТО ОТДЕЛЬНАЯ ЗАПИСЬ',
+    итог.разменов === 1 && итог.разменСумма === 10000,
+    итог.разменов + ' на ' + итог.разменСумма, '1 на 10 000');
+  check('и после обоих переводов журнал сходится в ноль',
+    итог.журналСошёлся, 'сходится', 'сходится');
   check('выручка в записи — 137 504, как на чеке', итог.выручка === 137504,
     итог.выручка, 137504);
   check('расхождения нет', итог.расхождение === 0, итог.расхождение, 0);
@@ -2846,8 +2856,10 @@ console.log('Страница: ' + PAGE + '\n');
   await page.waitForTimeout(700);
   const после = await page.evaluate(() => {
     const S = window.WMStore, E = window.WM;
-    const пер = (S.state.dds || []).filter(r => E.isMove(r));
-    return { n: пер.length, сумма: пер[0] ? пер[0].amount : 0 };
+    const пер = (S.state.dds || []).filter(r => E.isMove(r) &&
+      E.txt(r.category) === 'Инкассация');
+    const все = (S.state.dds || []).filter(r => E.isMove(r));
+    return { n: пер.length, сумма: пер[0] ? пер[0].amount : 0, всего: все.length };
   });
   check('ПОПРАВИЛИ СМЕНУ — ПЕРЕВОД ОБНОВИЛСЯ, А НЕ УДВОИЛСЯ',
     после.n === 1 && после.сумма === 80000,
@@ -3277,6 +3289,87 @@ console.log('Страница: ' + PAGE + '\n');
   check('а слова кассы сохранились — 76 769 никуда не делось',
     итог.пробито === 76769, итог.пробито, 76769);
   check('и пропажа записана вместе со сменой', итог.пропажа === 8800, итог.пропажа, 8800);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 24. Внесение размена само становится переводом из сейфа.
+
+       До этой правки размен, довезённый среди смены, появлялся в ящике из
+       воздуха: сейф, откуда его взяли, ничего не терял. Нашла это двойная
+       запись — журнал проводок не сходился в ноль. */
+{
+  console.log('— Внесение размена списывается оттуда, откуда его взяли');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(450);
+  check('В ФОРМЕ ЕСТЬ ПОЛЕ «ВНЕСЕНИЕ ВЗЯЛИ СО СЧЁТА»',
+    await page.evaluate(() => !!document.querySelector('.sheet [name="depositAccount"]')),
+    'есть', 'есть');
+
+  const было = await page.evaluate(() => window.WM.accountBalances(
+    window.WMStore.state.dds || [], window.WMStore.state.accounts || []).totals.total);
+
+  for (const [n, v] of [['date', '2026-09-16'], ['cashier', 'Марьям'],
+    ['openCash', '0'], ['zCash', '50000'], ['deposits', '10000'],
+    ['payouts', '0'], ['collected', '0'], ['factCash', '60000']]) {
+    await page.fill('.sheet [name="' + n + '"]', v);
+    await page.waitForTimeout(90);
+  }
+  await page.click('.sheet button[type="submit"]');
+  await page.waitForTimeout(800);
+
+  const итог = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const счета = S.state.accounts || [], записи = S.state.dds || [];
+    const разм = записи.filter(r => E.isMove(r) && E.txt(r.category) === 'Размен');
+    const b = E.accountBalances(записи, счета);
+    const j = E.journal(записи, счета);
+    return { переводов: разм.length, сумма: разм[0] ? E.num(разм[0].amount) : 0,
+      помечен: разм[0] ? !!разм[0].fromShiftDep : false,
+      всего: b.totals.total, вЯщике: b.totals.till,
+      журналСошёлся: j.ok, журнал: j.total };
+  });
+
+  check('ВНЕСЕНИЕ САМО СТАЛО ПЕРЕВОДОМ ИЗ СЕЙФА',
+    итог.переводов === 1 && итог.сумма === 10000,
+    итог.переводов + ' перевод на ' + итог.сумма, '1 на 10 000');
+  check('и помечен номером смены — второй раз не заведётся',
+    итог.помечен, итог.помечен ? 'помечен' : 'не помечен', 'помечен');
+  check('ДЕНЬГИ НЕ ВЗЯЛИСЬ ИЗ ВОЗДУХА: стало ровно на выручку больше',
+    итог.всего === было + 50000, итог.всего + ' (было ' + было + ')', было + 50000);
+  check('в ящике при этом то, что насчитал кассир',
+    итог.вЯщике === 60000, итог.вЯщике, 60000);
+  check('ЖУРНАЛ ПРОВОДОК СХОДИТСЯ В НОЛЬ',
+    итог.журналСошёлся, итог.журнал, 0);
+
+  /* Стёрли внесение — перевод обязан уйти, а не остаться висеть */
+  await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const см = (S.state.dds || []).filter(r => E.isShift(r))[0];
+    window.WMUI.openForm('shiftClose', JSON.parse(JSON.stringify(см)),
+      { coll: 'dds', id: см.id });
+  });
+  await page.waitForTimeout(500);
+  await page.fill('.sheet [name="deposits"]', '0');
+  await page.fill('.sheet [name="factCash"]', '50000');
+  await page.waitForTimeout(150);
+  await page.click('.sheet button[type="submit"]');
+  await page.waitForTimeout(800);
+  const после = await page.evaluate(() => {
+    const S = window.WMStore, E = window.WM;
+    const разм = (S.state.dds || []).filter(r => E.isMove(r) && E.txt(r.category) === 'Размен');
+    const j = E.journal(S.state.dds || [], S.state.accounts || []);
+    return { переводов: разм.length, журналСошёлся: j.ok,
+      смен: (S.state.dds || []).filter(r => E.isShift(r)).length };
+  });
+  check('СТЁРЛИ ВНЕСЕНИЕ — ПЕРЕВОД УШЁЛ, А НЕ ПОВИС',
+    после.переводов === 0, после.переводов + ' перевод', '0');
+  check('и смена не задвоилась', после.смен === 1, после.смен, 1);
+  check('журнал по-прежнему сходится', после.журналСошёлся, 'сходится', 'сходится');
 
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();

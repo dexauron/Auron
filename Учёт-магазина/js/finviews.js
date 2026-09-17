@@ -324,7 +324,8 @@
        владелец введёт его, а расчёт над кнопкой не шелохнётся, и будет
        казаться, что программа его не услышала. */
     var WATCH = ['openCash', 'zCash', 'zCashless', 'payouts', 'factCash', 'account', 'till',
-      'returnsCash', 'returnsCashless', 'deposits', 'collected', 'collectedFact',
+      'returnsCash', 'returnsCashless', 'deposits', 'depositAccount',
+      'collected', 'collectedFact',
       'zCard', 'zQr', 'zNfc', 'checks'];
     function tick(el) {
       if (!el || !el.name || WATCH.indexOf(el.name) < 0 || !el.closest) return;
@@ -394,7 +395,13 @@
         u.fieldRow('Возвраты покупателям, на карту', 'returnsCashless', 'number', v.returnsCashless || 0,
           { hint: 'если возврат ушёл обратно на карту — ящик он не трогает' }) +
         u.fieldRow('Внесения в кассу', 'deposits', 'number', v.deposits || 0,
-          { hint: 'из Z-отчёта: «ВНЕСЕНИЙ». Довезли размен среди смены — эти деньги в ящике есть, а выручкой не являются' }) +
+          { hint: 'из Z-отчёта: «ВНЕСЕНИЙ». Довезли размен среди смены — эти деньги ' +
+            'в ящике есть, а выручкой не являются' }) +
+        u.fieldRow('Внесение взяли со счёта', 'depositAccount', 'select',
+          v.depositAccount || accDefault(false), { options: accOptions(['cash', 'bank']),
+            hint: 'откуда принесли деньги: из сейфа или сняли со счёта. ' +
+              'Программа сама спишет их оттуда — иначе в сейфе останутся деньги, ' +
+              'которых там уже нет' }) +
         u.fieldRow('Выплаты из ящика', 'payouts', 'number', v.payouts || 0,
           { hint: 'из Z-отчёта: «ВЫПЛАТ». Что брали из кассы за смену: поставщикам, на хознужды' }) +
         u.fieldRow('Инкассация', 'collected', 'number', v.collected || 0,
@@ -454,6 +461,7 @@
         collectedFact: (v.collectedFact === '' || v.collectedFact == null)
           ? '' : num(v.collectedFact),
         collectAccount: E.txt(v.collectAccount),
+        depositAccount: E.txt(v.depositAccount),
         factCash: num(v.factCash), checks: num(v.checks), voided: num(v.voided),
         account: E.txt(v.account), cashlessAccount: E.txt(v.cashlessAccount),
         note: v.note };
@@ -468,6 +476,7 @@
          Перевод помечен номером смены, поэтому при повторном сохранении он
          обновляется, а не заводится второй раз. */
       syncCollect(saved, rec);
+      syncDeposit(saved, rec);
       S.save(); refresh();
 
       var msg = 'Смена записана. Расчётный остаток ' + money(c.expected) + ', в ящике ' +
@@ -493,6 +502,39 @@
       return { ok: msg };
     }
   };
+
+  /* Перевод-внесение, привязанный к смене.
+
+     ВНЕСЕНИЯ ДЕЛАЛИ ДЕНЬГИ ИЗ ВОЗДУХА. Размен, довезённый среди смены, кассир
+     пересчитает вечером — он входит в факт, и ящик про него знает. А вот сейф,
+     откуда этот размен взяли, ничего не терял: программа его не списывала.
+     В магазине с сейфом 200 000 после смены с внесением 10 000 всего денег
+     становилось 260 000 вместо 250 000.
+
+     Инкассация так себя не вела: для неё перевод заводился сам. Асимметрия и
+     была ошибкой — теперь у внесения такой же перевод, только в другую сторону.
+
+     Помечен `fromShiftDep`, а не `fromShift`: иначе он подменил бы собой
+     перевод-инкассацию, и деньги поехали бы не туда. */
+  function syncDeposit(shiftId, rec) {
+    if (!shiftId) return;
+    var было = dds().filter(function (r) {
+      return E.txt(r.fromShiftDep) === E.txt(shiftId);
+    })[0];
+    var сумма = num(rec.deposits);
+    var откуда = E.txt(rec.depositAccount);
+    if (!сумма || !откуда) {
+      if (было) S.remove('dds', было.id);
+      return;
+    }
+    var перевод = {
+      type: E.T_MOVE, date: rec.date, amount: сумма,
+      account: откуда, toAccount: E.txt(rec.account),
+      category: 'Размен', fromShiftDep: E.txt(shiftId),
+      note: 'Внесение в смену ' + (rec.till || '') + ' ' + (rec.shift || '')
+    };
+    if (было) S.update('dds', было.id, перевод); else S.add('dds', перевод);
+  }
 
   /* Перевод-инкассация, привязанный к смене. Один на смену: заново сохранили
      смену — он обновился; стёрли сумму — он ушёл; смены нет — и его нет. */

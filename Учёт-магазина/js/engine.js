@@ -899,6 +899,137 @@
   }
 
   /* ==========================================================================
+     ЖУРНАЛ ПРОВОДОК: КАЖДЫЙ РУБЛЬ ИМЕЕТ ПАРУ
+
+     Идея взята у бухгалтерских программ (Frappe Books, GnuCash) и переделана
+     под наш магазин. Смысл её простой и старый: у любого движения денег две
+     стороны — откуда ушло и куда пришло. Сложи все стороны — получится ноль.
+     Не получился ноль, значит, деньги где-то появились из воздуха или пропали
+     молча, и программа обязана это заметить РАНЬШЕ владельца.
+
+     Копировать их устройство нельзя: у нас ГЛАВНОЕ ПРАВИЛО ЯЩИКА — остаток
+     ящика задаёт только пересчёт смены. Двойная запись в лоб с ним воюет.
+     Мирит их вот что: расхождение по кассе — это не дыра, а такая же статья,
+     как аренда. Заводим ей счёт «Недостачи и излишки», и правило ящика
+     становится ЧАСТЬЮ двойной записи, а не исключением из неё.
+
+     Счета, которых нет в жизни, но без которых не сходится:
+
+       #sales   Продажи             откуда взялась выручка
+       #costs   Затраты             на что ушли деньги
+       #other   Прочие доходы
+       #owner   Владелец            заборы из прибыли
+       #gaps    Недостачи и излишки расхождения по сменам и по дороге в сейф
+       #till    Через ящик          мост
+
+     Последний — мост, и он особенный. Деньги проходят через ящик, но остаток
+     ящика не меняют: его задаёт факт смены. Такая сторона проводки уходит на
+     мост.
+
+     Мост НЕ обязан быть нулём, и это не поблажка. Смена объявляет, сколько
+     через ящик прошло: выплаты, инкассация, внесения. Записи объясняют то же
+     самое с другой стороны: переводы, расходы, приходы. Сойдутся — мост ноль.
+     Не сойдутся — владелец записал движение денег через ящик, которого смена
+     не объявляла (или наоборот), и мост показывает, на сколько. Это ровно та
+     же беда, что и «не расписано, куда ушли деньги из ящика», только видная
+     насквозь, по всем видам записей сразу.
+
+     А вот ИТОГ по всему журналу обязан быть нулём всегда, при любых записях:
+     это и есть двойная запись.
+     ========================================================================== */
+  var СЛУЖЕБНЫЕ = [
+    { id: '#sales', name: 'Продажи', kind: 'virtual' },
+    { id: '#costs', name: 'Затраты', kind: 'virtual' },
+    { id: '#other', name: 'Прочие доходы', kind: 'virtual' },
+    { id: '#owner', name: 'Владелец', kind: 'virtual' },
+    { id: '#gaps', name: 'Недостачи и излишки', kind: 'virtual' },
+    { id: '#till', name: 'Через ящик', kind: 'bridge' }
+  ];
+
+  function journal(rows, accounts, upto) {
+    var lines = [], by = {};
+    function счёт(id, name, kind) {
+      if (!by[id]) by[id] = { id: id, name: name, kind: kind, sum: 0 };
+      return by[id];
+    }
+    (accounts || []).forEach(function (a) { счёт(txt(a.id), txt(a.name), a.kind); });
+    СЛУЖЕБНЫЕ.forEach(function (a) { счёт(a.id, a.name, a.kind); });
+
+    function пишем(doc, date, id, name, kind, sum) {
+      sum = safeRound(sum);
+      if (isZero(sum)) return;
+      счёт(id, name, kind).sum += sum;
+      lines.push({ doc: doc, date: txt(date), account: id, name: счёт(id, name, kind).name,
+        kind: счёт(id, name, kind).kind, sum: sum });
+    }
+    /* Сторона реального счёта. Если это денежный ящик — деньги через него
+       прошли, но остаток его не изменили: правило ящика. Такая сторона
+       уходит на мост, и мост обязан сойтись. */
+    function реальный(doc, date, acc, sum) {
+      if (!acc || acc.kind === 'till') {
+        return пишем(doc, date, '#till', 'Через ящик', 'bridge', sum);
+      }
+      пишем(doc, date, txt(acc.id), txt(acc.name), acc.kind, sum);
+    }
+
+    (rows || []).forEach(function (r) {
+      if (upto && txt(r.date) > upto) return;
+      var d = txt(r.date);
+      if (isShift(r)) {
+        var c = shiftCalc(r);
+        var ящик = accountOf(r, accounts);
+        // Правило ящика: после смены в ящике ровно столько, сколько насчитали
+        if (ящик) пишем('смена', d, txt(ящик.id), txt(ящик.name), ящик.kind,
+          c.factCash - c.openCash);
+        пишем('смена', d, '#sales', 'Продажи', 'virtual', -c.revenueCash);
+        if (c.revenueCashless) {
+          var сч = accountOf({ toAccount: r.cashlessAccount, method: 'Карта' }, accounts, 'to');
+          if (сч) пишем('смена', d, txt(сч.id), txt(сч.name), сч.kind, c.revenueCashless);
+          пишем('смена', d, '#sales', 'Продажи', 'virtual', -c.revenueCashless);
+        }
+        /* Все расхождения смены — и по ящику, и по дороге в сейф — одной
+           строкой. Недостача делает счёт положительным: это потеря, такая
+           же статья затрат, как бой или списание. */
+        пишем('смена', d, '#gaps', 'Недостачи и излишки', 'virtual', -c.totalDiff);
+        /* Мост: что смена объявила прошедшим через ящик мимо его остатка —
+           выплаты, инкассация и внесения. Записи должны сказать то же самое. */
+        пишем('смена', d, '#till', 'Через ящик', 'bridge',
+          c.collectedFact - c.deposits + c.payouts);
+      } else if (isMove(r)) {
+        реальный('перевод', d, accountOf(r, accounts), -safeRound(r.amount));
+        реальный('перевод', d, accountOf(r, accounts, 'to'), safeRound(r.amount));
+      } else if (isIncome(r)) {
+        реальный('приход', d, accountOf(r, accounts), safeRound(r.amount));
+        пишем('приход', d, '#other', 'Прочие доходы', 'virtual', -safeRound(r.amount));
+      } else if (isDraw(r)) {
+        реальный('забор', d, accountOf(r, accounts), -safeRound(r.amount));
+        пишем('забор', d, '#owner', 'Владелец', 'virtual', safeRound(r.amount));
+      } else if (isExpense(r)) {
+        реальный('расход', d, accountOf(r, accounts), -safeRound(r.amount));
+        пишем('расход', d, '#costs', 'Затраты', 'virtual', safeRound(r.amount));
+      }
+    });
+
+    var список = [], итог = 0;
+    Object.keys(by).forEach(function (k) {
+      by[k].sum = safeRound(by[k].sum);
+      итог += by[k].sum;
+      список.push(by[k]);
+    });
+    итог = safeRound(итог);
+    var мост = by['#till'].sum;
+    return {
+      lines: lines, accounts: список, total: итог, ok: isZero(итог),
+      gaps: by['#gaps'].sum,                  // потери за период, со знаком плюс
+      sales: safeRound(-by['#sales'].sum),    // выручка, со знаком плюс
+      costs: by['#costs'].sum,
+      /* Сколько прошло через ящик, но не объяснено записями. Не ошибка
+         программы — вопрос к владельцу: что это за деньги. */
+      tillGap: мост, tillOk: isZero(мост)
+    };
+  }
+
+  /* ==========================================================================
      КОНВЕРТЫ: НА ЧТО МАГАЗИН ОТКЛАДЫВАЕТ
 
      Самая частая причина, по которой небольшой магазин внезапно остаётся без
@@ -2977,6 +3108,7 @@
     isDraw: isDraw, isCash: isCash,
 
     shiftCalc: shiftCalc, shiftFix: shiftFix, shiftsOf: shiftsOf, cashOnHand: cashOnHand,
+    journal: journal,
     cashlessTotal: cashlessTotal, supplierDebt: supplierDebt,
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,
     totals: totals, planStatus: planStatus, planTotals: planTotals,
