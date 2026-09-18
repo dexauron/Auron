@@ -1002,6 +1002,14 @@
      Остаток на утро следующего дня равен остатку на вечер предыдущего. Это
      не украшение, а главное свойство книги: если цепочка где-то рвётся,
      деньги взялись из воздуха или пропали. Проверка это стережёт. */
+  // День перед этим: '2026-09-01' → '2026-08-31'
+  function деньРаньше(iso) {
+    var d = new Date(txt(iso) + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return '';
+    d.setUTCDate(d.getUTCDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }
+
   function cashBook(rows, settings, from, to, accounts) {
     settings = settings || {};
     var сейчас = {}, порядок = [];
@@ -1089,8 +1097,21 @@
        счетам. Нет (очень старая база) — по-прежнему из настройки. */
     var начало = 0;
     if (accounts && accounts.length) {
-      for (var ai = 0; ai < accounts.length; ai++) {
-        if (accounts[ai] && accounts[ai].kind !== 'bank') начало += num(accounts[ai].opening);
+      if (from) {
+        /* СМОТРИМ ОДИН МЕСЯЦ — НАЧИНАТЬ НАДО С ТОГО, ЧТО ПЕРЕШЛО С ПРОШЛОГО.
+
+           Сначала я брал здесь начальный остаток счёта, и книга за сентябрь
+           открывалась суммой, которая лежала в сейфе в апреле. Увидел это
+           глазами на полугоде данных: книга говорила 5 миллионов там, где в
+           сейфе 34. За месяц книга показывала неправду.
+
+           Берём остаток на день перед началом периода — тем же расчётом,
+           которым считается сам сейф. Один источник, разойтись нечему. */
+        начало = accountBalances(rows, accounts, деньРаньше(from)).totals.cash;
+      } else {
+        for (var ai = 0; ai < accounts.length; ai++) {
+          if (accounts[ai] && accounts[ai].kind !== 'bank') начало += num(accounts[ai].opening);
+        }
       }
     } else {
       начало = num(settings.openSafeStart);

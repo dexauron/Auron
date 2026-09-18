@@ -1499,9 +1499,9 @@
       u.stat('Смен за период', u.nf(t.shifts),
         t.badShifts ? t.badShifts + ' с расхождением' : 'все сошлись',
         t.badShifts ? 'c-orange' : 'c-green') +
-      u.stat('Недостачи', u.priv(t.short), 'не хватило в ящике', t.short ? 'c-red' : 'c-green') +
-      u.stat('Излишки', u.priv(t.over), 'оказалось больше расчётного') +
-      u.stat('Выплаты из ящика', u.priv(t.payouts), 'брали за смены') +
+      u.stat('Недостачи', u.priv(t.short), 'вам отдали меньше, чем должны', t.short ? 'c-red' : '') +
+      u.stat('Излишки', u.priv(t.over), 'вам отдали больше, чем должны') +
+      u.stat('Кассиры платили из ящика', u.priv(t.payouts), 'за смены периода') +
       '</div>';
     h += wholeNote(sel);
 
