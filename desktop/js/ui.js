@@ -3649,7 +3649,9 @@
        что данные пропали. О переносе говорим один раз за запуск — молчать
        нельзя, цифры на экране взялись не из его записей здесь. */
     try {
-      var перенос = window.AuronBridge && window.AuronBridge.sync(S);
+      var мост = window.AuronBridge;
+      var сервер = window.AURON_BOOT && window.AURON_BOOT.db;
+      var перенос = мост && (сервер ? мост.syncFrom(S, сервер) : мост.sync(S));
       if (перенос && (перенос.operations || перенос.accounts)) {
         setTimeout(function () {
           toast('Из Auron перенесено записей: ' + перенос.operations +

@@ -131,10 +131,68 @@ function doGet(e) {
   // до страницы даже в виде мусора.
   var invite = _urlParam(e, 'invite', /^[A-Za-z0-9_\-]{20,80}$/);      // id таблицы
   var invEmail = _urlParam(e, 'email', /^[^@\s]{1,64}@[^@\s]{1,64}\.[A-Za-z]{2,16}$/);
+
+  /* ГЛАВНЫЙ ЭКРАН — ПОЛНЫЙ УЧЁТ.
+     Приложение — это программа «Учёт магазина»: все её экраны, кнопки и
+     расчёты. Прежний вид остаётся по ссылке с `?classic=1` — не как
+     запасной путь «на всякий случай», а потому что данные у владельца
+     живут именно там, и отрезать его от них одним обновлением нельзя.
+     По приглашению сотрудника тоже открываем прежний экран: приглашение
+     умеет разбирать только он. */
+  if (!invite) {
+    try {
+      var стр = _uchetPage();
+      if (стр) return стр;
+    } catch (err) {
+      /* Полный учёт не собрался — отдаём прежнее приложение, а не ошибку.
+         Владелец должен попасть к своим деньгам при любой нашей поломке. */
+    }
+  }
+
   var t = HtmlService.createTemplateFromFile('Index');
   t.inviteOrg = invite;
   t.inviteEmail = invEmail;
   return t.evaluate()
+    .setTitle('Auron Finance')
+    .addMetaTag('viewport','width=device-width,initial-scale=1,maximum-scale=1');
+}
+
+/* Собирает страницу полного учёта и кладёт в неё данные владельца.
+
+   ПОЧЕМУ ДАННЫЕ ВСТАВЛЯЮТСЯ В САМУ СТРАНИЦУ, А НЕ ГРУЗЯТСЯ ПОТОМ.
+   Программа читает базу сразу при запуске, в первую же секунду. Если
+   данные приедут позже, владелец успеет увидеть нули — и решит, что всё
+   пропало. Поэтому они уже внутри страницы, когда та открывается. */
+function _uchetPage() {
+  var ssId = '';
+  try {
+    var d = initUserApp();
+    ssId = (d && d.orgs && d.orgs[0]) ? d.orgs[0].ssId : '';
+  } catch (e) { ssId = ''; }
+  // Магазина ещё нет — человек только регистрируется. Это умеет прежний экран.
+  if (!ssId) return null;
+
+  var boot = { ssId: ssId, db: null, uchet: '' };
+  try {
+    var dump = uchetDump({ ssId: ssId });
+    if (dump && !dump.__error) boot.db = dump;
+  } catch (e) {}
+  try {
+    var base = uchetLoad({ ssId: ssId });
+    if (base && !base.__error) boot.uchet = base.json || '';
+  } catch (e) {}
+
+  var html = HtmlService.createHtmlOutputFromFile('Uchet').getContent();
+  var метка = '/*AURON_BOOT*/null/*/AURON_BOOT*/';
+  if (html.indexOf(метка) < 0) return null;   // страница собрана без метки
+
+  /* В записях владельца может оказаться «</script>» — хоть в названии
+     товара, хоть в заметке. Внутри страницы это закрыло бы код раньше
+     времени и сломало всё. Поэтому любую угловую скобку отдаём кодом. */
+  var json = JSON.stringify(boot).replace(/</g, '\\u003c');
+  html = html.replace(метка, json);
+
+  return HtmlService.createHtmlOutput(html)
     .setTitle('Auron Finance')
     .addMetaTag('viewport','width=device-width,initial-scale=1,maximum-scale=1');
 }
@@ -9317,4 +9375,91 @@ function getBottomLine(p) {
              revenueSource:revSrc, topExpenses:topExp, lossByReason:byReason,
              margin: revUsed>0 ? Math.round(total/revUsed*1000)/10 : null };
   } catch(e) { return {__error:e.message}; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODULE: ПОЛНЫЙ УЧЁТ (программа «Учёт магазина» внутри Auron Finance)
+//
+// Программа считает у себя, в браузере. Но браузер — плохое место для
+// денег магазина: страница Apps Script живёт на временном адресе, память
+// там может обнулиться между обновлениями, и записи пропали бы молча.
+// Поэтому её база хранится в таблице владельца, рядом с остальными
+// листами, и переезжает вместе с ней на любое устройство.
+//
+// Читает она и то, что уже записано в Auron: смены, операции, счета.
+// Перенос делает мост на стороне страницы (desktop/js/auron-bridge.js) —
+// здесь только отдаём строки как есть.
+// ═══════════════════════════════════════════════════════════════════════
+
+var SH_UCHET = 'ПОЛНЫЙ_УЧЁТ';
+// В одну ячейку Google-таблицы влезает 50 000 символов. Режем с запасом:
+// на границе бьются не байты, а символы, и кириллица тут не при чём —
+// запас нужен на случай, если формат записи чуть изменится.
+var UCHET_CHUNK = 40000;
+
+// Строки листов, как есть. Мост на странице разберёт их по заголовкам.
+function uchetDump(p) {
+  var ssId = p && p.ssId;
+  if (!_finGuard(ssId)) return FIN_DENIED;
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    var out = {};
+    [SH_BASE, SH_ACCOUNTS, SH_SHIFTS, SH_TIMESHEET].forEach(function (name) {
+      var sh = ss.getSheetByName(name);
+      if (!sh || sh.getLastRow() < 1) { out[name] = []; return; }
+      out[name] = sh.getRange(1, 1, sh.getLastRow(), sh.getLastColumn()).getValues();
+    });
+    return out;
+  } catch (e) { return { __error: e.message }; }
+}
+
+function _uchetSheet(ss) {
+  var sh = ss.getSheetByName(SH_UCHET);
+  if (!sh) {
+    sh = ss.insertSheet(SH_UCHET);
+    sh.appendRow(['Кусок', 'Данные']);
+    // Лист служебный: владелец не должен править его руками — там один
+    // длинный кусок текста, и правка ломает всю базу программы целиком.
+    try { sh.hideSheet(); } catch (e) {}
+  }
+  return sh;
+}
+
+function uchetLoad(p) {
+  var ssId = p && p.ssId;
+  if (!_finGuard(ssId)) return FIN_DENIED;
+  try {
+    var ss = SpreadsheetApp.openById(ssId);
+    var sh = ss.getSheetByName(SH_UCHET);
+    if (!sh || sh.getLastRow() < 2) return { json: '' };
+    var vals = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+    // Куски складываем ПО НОМЕРУ, а не по порядку строк: строки может
+    // переставить кто угодно, и тогда база собралась бы задом наперёд.
+    vals.sort(function (a, b) { return (parseInt(a[0], 10) || 0) - (parseInt(b[0], 10) || 0); });
+    var json = vals.map(function (r) { return String(r[1] || ''); }).join('');
+    return { json: json };
+  } catch (e) { return { __error: e.message }; }
+}
+
+function uchetSave(p) {
+  return _withLock(function () {
+    var ssId = p && p.ssId, json = String((p && p.json) || '');
+    if (!_finGuard(ssId)) return FIN_DENIED;
+    try {
+      var ss = SpreadsheetApp.openById(ssId);
+      var sh = _uchetSheet(ss);
+      var куски = [];
+      for (var i = 0; i < json.length; i += UCHET_CHUNK) {
+        куски.push([куски.length + 1, json.substr(i, UCHET_CHUNK)]);
+      }
+      // Сначала пишем новое, потом убираем лишние строки. Наоборот нельзя:
+      // если запись оборвётся посередине, от базы останется огрызок.
+      if (куски.length) sh.getRange(2, 1, куски.length, 2).setValues(куски);
+      var было = sh.getLastRow() - 1;
+      if (было > куски.length) {
+        sh.deleteRows(куски.length + 2, было - куски.length);
+      }
+      return { ok: true, chunks: куски.length, chars: json.length };
+    } catch (e) { return { __error: e.message }; }
+  });
 }

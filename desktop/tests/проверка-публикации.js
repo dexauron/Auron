@@ -83,5 +83,26 @@ check('страница полного учёта на месте',
       fs.existsSync(path.join(КОРЕНЬ, 'desktop', f)), 'есть', 'есть');
   });
 
+console.log('\n— Страница для Auron Finance собрана из ТЕКУЩИХ исходников');
+
+/* Приложение на сервере отдаёт не папку desktop/, а собранный из неё файл
+   webapp/Uchet.html. Поправить программу и забыть пересобрать — значит
+   выложить владельцу вчерашнюю версию, ничего при этом не заметив. */
+const { execFileSync } = require('child_process');
+const собранное = path.join(КОРЕНЬ, 'webapp', 'Uchet.html');
+check('собранная страница лежит в проекте', fs.existsSync(собранное), 'лежит', 'лежит');
+if (fs.existsSync(собранное)) {
+  const было = fs.readFileSync(собранное, 'utf8');
+  execFileSync('node', [path.join(КОРЕНЬ, 'webapp', 'build-uchet.js')], { stdio: 'ignore' });
+  const стало = fs.readFileSync(собранное, 'utf8');
+  check('ОНА СОБРАНА ИЗ ТОГО, ЧТО СЕЙЧАС В desktop/', было === стало,
+    было === стало ? 'совпадает' : 'отличается — пересоберите: node webapp/build-uchet.js', 'совпадает');
+  check('в ней есть метка для данных владельца',
+    стало.indexOf('/*AURON_BOOT*/null/*/AURON_BOOT*/') >= 0, 'есть', 'есть');
+  check('и метка стоит ДО кода программы (иначе данные не подхватятся)',
+    стало.indexOf('window.AURON_BOOT') < стало.indexOf('/* js/server-store.js */'),
+    'до кода', 'до кода');
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

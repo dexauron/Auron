@@ -1,6 +1,11 @@
 # Не заливать в Apps Script — только рабочий код (Code.gs, Index.html, appsscript.json).
 # Тесты используют Node (require), в Apps Script они ломают весь проект.
 tests/**
+# Сборщик страницы полного учёта. Это НОДОВСКИЙ скрипт: у него сверху
+# require('fs'), и в Apps Script он падает при загрузке проекта — вместе
+# с ним перестают работать ВСЕ функции приложения, а не только он.
+build-uchet.js
+deploy.sh
 **/*.test.js
 **/*.md
 .claspignore

@@ -291,7 +291,13 @@
   /* Главная точка входа: зовётся один раз при запуске.
      Возвращает, что перенесено, — это показывается владельцу. */
   function sync(S, store) {
-    var db = readRaw(store);
+    return syncFrom(S, readRaw(store));
+  }
+
+  /* Тот же перенос, но данные уже на руках. Внутри Auron Finance на сервере
+     они приходят из таблицы владельца, а не из памяти браузера: памяти там
+     может не быть вовсе. */
+  function syncFrom(S, db) {
     if (!db) return null;
 
     var st = S.state;
@@ -334,7 +340,7 @@
   }
 
   return {
-    available: available, sync: sync, back: back,
+    available: available, sync: sync, syncFrom: syncFrom, back: back,
     // наружу для проверок
     _rows: rows, _accounts: accounts, _operations: operations, _staff: staff,
     _shifts: shifts, _shiftIds: shiftIds,

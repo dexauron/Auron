@@ -95,8 +95,16 @@ done
 # ── 4. Мусор, который нельзя пушить ─────────────────────────────────────
 say "4. Отладочный мусор в изменениях"
 for pat in 'console\.log' 'debugger' 'TODO:REMOVE' 'XXX'; do
-  # Проверки печатают в консоль по своей природе — их не считаем мусором.
-  d=$(git diff HEAD -- webapp app desktop android ':(exclude)*/tests/*' 2>/dev/null || true)
+  # Что не считаем мусором и почему:
+  #   */tests/*        — проверки печатают в консоль по своей природе;
+  #   webapp/Uchet.html — СОБРАННЫЙ файл: в него вклеены чужие библиотеки,
+  #                       и внутри них есть и console.log, и XXX. Править
+  #                       там нечего, а красная проверка на ровном месте
+  #                       приучает пушить мимо проверок;
+  #   build-*.js        — сборщики говорят человеку, что собрали; это их работа.
+  d=$(git diff HEAD -- webapp app desktop android \
+      ':(exclude)*/tests/*' ':(exclude)webapp/Uchet.html' ':(exclude)*build-*.js' \
+      2>/dev/null || true)
   hits=$(grep -c "^+.*$pat" <<< "$d" || true)
   [ "${hits:-0}" -gt 0 ] && bad "$pat — $hits шт. в добавленных строках"
 done
