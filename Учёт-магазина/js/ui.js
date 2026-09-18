@@ -1770,6 +1770,11 @@
     return fieldRow(item.label, item.key, 'text', value, opts);
   }
 
+  /* Что владелец ищет в настройках и какие разделы раскрыл. Живёт в памяти
+     экрана: это не его данные, а то, куда он сейчас смотрит. */
+  var ПОИСК_НАСТРОЕК = '', ТАЙМЕР_ПОИСКА = null;
+  var ОТКРЫТЫЕ_НАСТРОЙКИ = {};
+
   function viewSettings() {
     var s = S.settings, SET = window.WMSettings;
     var h = pageHead('Настройки', 'Настройте программу под свой магазин — считать она будет по этим правилам',
@@ -1779,15 +1784,56 @@
     h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Все настройки лежат и в книге «Бухгалтерия.xlsx» ' +
       'на листе «Настройки» — можно править и там.</span></div>';
 
+    /* ВОСЕМЬДЕСЯТ СЕМЬ НАСТРОЕК В ЧЕТЫРНАДЦАТИ РАЗДЕЛАХ — ЭТО СЕМЬ ЭКРАНОВ
+       ПРОКРУТКИ, и найти в них нужное глазами нельзя.
+
+       Раскрыты сразу только два раздела: «Магазин» и «Насколько подробно
+       показывать». Первый заполняют один раз при запуске, второй владелец
+       будет трогать чаще всего. Остальные свёрнуты — заголовок и сколько
+       внутри настроек.
+
+       Сверху строка поиска: написал «аванс» — остались только строки про
+       аванс, из каких бы разделов они ни были. Тогда не нужно помнить, в
+       каком разделе что лежит. */
+    var ищем = E.norm(ПОИСК_НАСТРОЕК);
+    h += '<div class="set-find"><input type="text" id="setFind" ' +
+      'placeholder="Найти настройку: аванс, размен, налог…" value="' +
+      esc(ПОИСК_НАСТРОЕК) + '" autocomplete="off">' +
+      (ищем ? '<button class="btn btn-sm" data-act="set-find-clear">Сбросить</button>' : '') +
+      '</div>';
+
     h += '<form id="setForm">';
+    var ВСЕГДА_ОТКРЫТЫ = { store: 1, level: 1 };
+    var найдено = 0;
     SET.GROUPS.forEach(function (g) {
-      h += cardWithIcon(g.icon, g.name,
-        (g.note ? '<div class="form-hint">' + esc(g.note) + '</div>' : '') +
-        '<div class="form-list">' + g.items.map(function (it) {
-          var item = { key: it[0], label: it[1], type: it[2], hint: it[3] || '', options: it[4] || null };
-          return setInput(item, s[item.key]);
-        }).join('') + '</div>');
+      var строки = g.items.filter(function (it) {
+        if (!ищем) return true;
+        return E.norm(it[1]).indexOf(ищем) >= 0 || E.norm(it[3] || '').indexOf(ищем) >= 0 ||
+          E.norm(g.name).indexOf(ищем) >= 0;
+      });
+      if (!строки.length) return;
+      найдено += строки.length;
+      // ищем — раскрываем всё найденное, иначе искать было бы незачем
+      var открыт = !!ищем || ВСЕГДА_ОТКРЫТЫ[g.id] || ОТКРЫТЫЕ_НАСТРОЙКИ[g.id];
+      var тело = открыт
+        ? (g.note ? '<div class="form-hint">' + esc(g.note) + '</div>' : '') +
+          '<div class="form-list">' + строки.map(function (it) {
+            var item = { key: it[0], label: it[1], type: it[2], hint: it[3] || '', options: it[4] || null };
+            return setInput(item, s[item.key]);
+          }).join('') + '</div>'
+        : '';
+      h += '<div class="card set-g' + (открыт ? ' open' : '') + '">' +
+        '<button type="button" class="set-h" data-act="set-group" data-g="' + esc(g.id) + '">' +
+        '<span class="card-ic">' + ic(g.icon, 18) + '</span>' +
+        '<span class="set-n">' + esc(g.name) + '</span>' +
+        '<span class="set-c">' + строки.length + '</span>' +
+        ic(открыт ? 'chevronDown' : 'chevron', 14) + '</button>' + тело + '</div>';
     });
+    if (ищем && !найдено) {
+      h += '<div class="banner"><span>' + ic('search') + '</span><span>' +
+        'Настроек со словом «' + esc(ПОИСК_НАСТРОЕК) + '» нет. ' +
+        'Попробуйте короче: «аванс» вместо «какого числа аванс».</span></div>';
+    }
     h += '<div class="form-actions"><button type="submit" class="btn btn-primary btn-lg">Сохранить настройки</button></div></form>';
 
     h += card('Что получилось', '<div class="card-body">' +
@@ -1815,6 +1861,10 @@
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
     blank: blank, blankReport: blankReport, printFoot: printFoot, more: more,
+    /* Уровень подробности раздела числом: 1 просто, 2 обычно, 3 подробно.
+       Экраны спрашивают его сами и решают, что показывать сразу. */
+    уровень: уровеньРаздела,
+    подУровнем: подУровнем,
     fieldRow: fieldRow, pairValues: pairValues, pageHead: pageHead, toast: toast,
     sheet: sheet, closeSheet: closeSheet,
     periodRange: periodRange, periodName: periodName, periodDays: periodDays, inPeriod: inPeriod,
@@ -2011,6 +2061,62 @@
   function openFolders() { return idsFromSetting('menuOpen', []); }
 
   function isFav(id) { return favList().indexOf(id) >= 0; }
+  /* --------------------------------------------------------------------------
+     НАСКОЛЬКО ПОДРОБНО ПОКАЗЫВАТЬ
+
+     Владелец сказал: функции нравятся, убирать нечего, но «когда куча
+     информации перед глазами, фокус теряется». Значит задача не в том,
+     чтобы урезать программу, а в том, чтобы показывать сразу только нужное
+     этому магазину — и давать добраться до остального в один шаг.
+
+     Уровень свой у каждого раздела: по деньгам можно вести подробно, а по
+     товарам просто. Каждому экрану проставлен уровень, с которого он
+     появляется в меню.
+
+     ГЛАВНОЕ: УРОВЕНЬ НИЧЕГО НЕ ОТКЛЮЧАЕТ. Спрятанный экран работает, живёт
+     по своему адресу и находится поиском и командной палитрой. Прятать так,
+     чтобы человек не смог найти нужное, — это не минимализм, а ловушка.
+     -------------------------------------------------------------------------- */
+  var УРОВНИ = { 'просто': 1, 'обычно': 2, 'подробно': 3 };
+
+  /* Какой раздел каким переключателем управляется. «Каждый день» и «Ещё»
+     не управляются вовсе: там лежит то, без чего программой не пользуются. */
+  var РАЗДЕЛ_НАСТРОЙКА = {
+    'Деньги': 'levelMoney', 'Товары': 'levelGoods',
+    'Люди': 'levelPeople', 'Отчёты': 'levelReports'
+  };
+
+  /* С какого уровня экран появляется в меню. 1 — виден всегда.
+     Раскладка сделана по простому правилу: сначала то, без чего не
+     обойтись, потом то, что смотрят раз в месяц, потом разбор. */
+  var УРОВЕНЬ_ЭКРАНА = {
+    // Деньги
+    ledger: 2, cashiers: 3, debtors: 2, finreport: 2, funds: 3, suppliers: 1,
+    // Товары
+    stock: 1, orders: 1, losses: 2, dead: 3, groups: 3, itemprofit: 2,
+    shelf: 3, returns: 3, abc: 2, pricecmp: 3,
+    // Люди
+    payroll: 1, timesheet: 2, sched: 3, staffcards: 2, payslip: 3,
+    // Отчёты
+    owner: 1, pnl: 1, findash: 2, moneyflow: 2, monthclose: 2, ready: 2,
+    seasons: 3, avgcheck: 3, earners: 3, bep: 3, bepdays: 3, taxcal: 3
+  };
+
+  function уровеньРаздела(group) {
+    var ключ = РАЗДЕЛ_НАСТРОЙКА[group];
+    if (!ключ) return 3;                      // разделом не управляем — показываем всё
+    return УРОВНИ[E.norm(S.settings[ключ])] || 2;
+  }
+
+  /* Спрятан ли экран уровнем подробности. Избранное сильнее уровня: если
+     владелец сам поставил звёздочку, экран ему нужен, и спорить не о чем. */
+  function подУровнем(v) {
+    if (!v || isFav(v.id)) return false;
+    var надо = УРОВЕНЬ_ЭКРАНА[v.id];
+    if (!надо) return false;
+    return надо > уровеньРаздела(v.group);
+  }
+
   function isHiddenView(id) { return hiddenList().indexOf(id) >= 0; }
   function isFolderOpen(name) { return openFolders().indexOf(name) >= 0; }
 
@@ -2042,7 +2148,9 @@
   // Экраны папки: скрытые не показываем, пока не попросили показать всё
   function viewsOfGroup(name, withHidden) {
     return VIEWS.filter(function (v) {
-      return v.group === name && (withHidden || !isHiddenView(v.id));
+      if (v.group !== name) return false;
+      if (withHidden) return true;
+      return !isHiddenView(v.id) && !подУровнем(v);
     });
   }
   function groupNames() {
@@ -3091,6 +3199,13 @@
         toast('Пример убран: удалено ' + nf(n2) + ' ' +
           plural(n2, 'запись', 'записи', 'записей') + '.');
       }
+      else if (a === 'set-group') {
+        var g = el.dataset.g;
+        if (ОТКРЫТЫЕ_НАСТРОЙКИ[g]) delete ОТКРЫТЫЕ_НАСТРОЙКИ[g];
+        else ОТКРЫТЫЕ_НАСТРОЙКИ[g] = true;
+        render();
+      }
+      else if (a === 'set-find-clear') { ПОИСК_НАСТРОЕК = ''; render(); }
       else if (a === 'settings-reset') {
         if (confirm('Вернуть все настройки к стандартным? Записи и документы не тронутся.')) {
           Object.keys(S.DEFAULT_SETTINGS).forEach(function (k) { S.setSetting(k, S.DEFAULT_SETTINGS[k]); });
@@ -3153,6 +3268,18 @@
     document.addEventListener('input', function (e) {
       var el = e.target;
       if (!el.classList) return;
+      /* Поиск по настройкам. Перерисовываем не сразу, а через мгновение:
+         иначе экран пересобирается на каждую букву и поле теряет курсор. */
+      if (el.id === 'setFind') {
+        ПОИСК_НАСТРОЕК = el.value;
+        clearTimeout(ТАЙМЕР_ПОИСКА);
+        ТАЙМЕР_ПОИСКА = setTimeout(function () {
+          render();
+          var снова = document.getElementById('setFind');
+          if (снова) { снова.focus(); снова.setSelectionRange(снова.value.length, снова.value.length); }
+        }, 220);
+        return;
+      }
       if (el.classList.contains('num-input')) {
         regroup(el);
         var hint = document.querySelector('[data-hint-for="' + el.name + '"]');

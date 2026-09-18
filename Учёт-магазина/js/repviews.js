@@ -280,6 +280,10 @@
 
      Безнала здесь нет и быть не может: кассовая книга — про наличные.
      -------------------------------------------------------------------------- */
+  /* Какие дни кассовой книги раскрыты. Живёт в памяти экрана, а не в базе:
+     это не данные владельца, а то, куда он сейчас смотрит. */
+  var ОТКРЫТЫЕ_ДНИ = {};
+
   function viewCashBook() {
     var u = U(), m = ym();
     var from = m + '-01', to = m + '-31';
@@ -311,25 +315,43 @@
         '</span></div>';
     }
 
-    /* Экранный вид: день — карточка, внутри приходы и расходы строками.
-       Таблицей это читать невозможно: в одном дне может быть десять строк. */
+    /* ДНИ СВЁРНУТЫ, РАСКРЫВАЮТСЯ ПО НАЖАТИЮ.
+
+       Сначала каждый день был карточкой со всеми строками внутри. На месяце
+       это выходило 8 544 пикселя — восемь экранов прокрутки, и владелец
+       сказал ровно то, чего я и боялся: «когда куча информации перед
+       глазами, фокус теряется».
+
+       Теперь день — одна строка: дата, было, пришло, ушло, осталось. Весь
+       месяц виден целиком. Нужны подробности — нажали на день, он раскрылся
+       на месте. Ничего не потеряно, просто не всё сразу. */
+    h += '<div class="card"><div class="cb-t">' +
+      '<div class="cb-r cb-th"><span>День</span><b>Было с утра</b><b>Пришло</b>' +
+      '<b>Ушло</b><b>Осталось</b></div>';
     b.days.forEach(function (d) {
-      var строки = d.in.map(function (x) {
-        return u.listRow({ icon: 'plus', title: esc(x.name),
-          sub: x.who ? esc(x.who) : '',
-          value: '<span class="c-green">+ ' + u.priv(x.sum) + '</span>' });
-      }).concat(d.out.map(function (x) {
-        return u.listRow({ icon: 'minus', title: esc(x.name),
-          sub: x.who ? esc(x.who) : '',
-          value: '− ' + u.priv(x.sum) });
-      }));
-      h += u.card(dateRu(d.date),
-        '<div class="cb-head"><span>Было с утра</span><b>' + u.priv(d.open) + '</b></div>' +
-        u.listOf(строки, '') +
-        '<div class="cb-head cb-close"><span>Осталось к вечеру</span><b>' +
-          u.priv(d.close) + '</b></div>',
-        'приход ' + money(d.inSum) + '  ·  расход ' + money(d.outSum));
+      var открыт = ОТКРЫТЫЕ_ДНИ[d.date];
+      h += '<div class="cb-r cb-day' + (открыт ? ' open' : '') +
+        '" data-act="cb-day" data-day="' + esc(d.date) + '">' +
+        '<span>' + ic(открыт ? 'chevronDown' : 'chevron', 14) + ' ' + esc(dateRu(d.date)) + '</span>' +
+        '<b>' + u.priv(d.open) + '</b>' +
+        '<b class="' + (d.inSum ? 'c-green' : 'c-muted') + '">' +
+          (d.inSum ? '+ ' + u.priv(d.inSum) : '—') + '</b>' +
+        '<b class="' + (d.outSum ? '' : 'c-muted') + '">' +
+          (d.outSum ? '− ' + u.priv(d.outSum) : '—') + '</b>' +
+        '<b>' + u.priv(d.close) + '</b></div>';
+      if (!открыт) return;
+      d.in.forEach(function (x) {
+        h += '<div class="cb-r cb-line"><span>' + ic('plus', 12) + ' ' + esc(x.name) +
+          (x.who ? ' <i>' + esc(x.who) + '</i>' : '') + '</span>' +
+          '<b></b><b class="c-green">+ ' + u.priv(x.sum) + '</b><b></b><b></b></div>';
+      });
+      d.out.forEach(function (x) {
+        h += '<div class="cb-r cb-line"><span>' + ic('minus', 12) + ' ' + esc(x.name) +
+          (x.who ? ' <i>' + esc(x.who) + '</i>' : '') + '</span>' +
+          '<b></b><b></b><b>− ' + u.priv(x.sum) + '</b><b></b></div>';
+      });
     });
+    h += '</div></div>';
 
     /* --- Бланк КО-4: виден только на бумаге ----------------------------- */
     h += '<div class="print-only ko4">';
@@ -1242,6 +1264,13 @@
   };
 
   // Обработчики, которых не хватало на экране «Данные и копии»
+  A['cb-day'] = function (el) {
+    var d = el && el.dataset ? el.dataset.day : '';
+    if (!d) return null;
+    if (ОТКРЫТЫЕ_ДНИ[d]) delete ОТКРЫТЫЕ_ДНИ[d]; else ОТКРЫТЫЕ_ДНИ[d] = true;
+    return null;
+  };
+
   A['book-save'] = function () {
     U().saveBook();
     return 'Записываю книгу «Бухгалтерия.xlsx»…';

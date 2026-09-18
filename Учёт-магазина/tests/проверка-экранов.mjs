@@ -643,8 +643,10 @@ console.log('Страница: ' + PAGE + '\n');
   await page.click('[data-act="nav-folder"][data-folder="Товары"]');
   await page.waitForTimeout(350);
   const opened = await nav();
+  /* «Полки» на обычном уровне подробности в меню не показываются — это
+     разбор, его смотрят редко. Берём экраны, которые видны всегда. */
   check('ПАПКА РАСКРЫЛАСЬ И ПОКАЗАЛА СВОИ ЭКРАНЫ',
-    opened.includes('abc') && opened.includes('shelf'), 'раскрылась', 'раскрылась');
+    opened.includes('abc') && opened.includes('stock'), opened.join(','), 'abc и stock');
   check('и выбор запомнился',
     (await page.evaluate(() => window.WMStore.settings.menuOpen || '')).includes('Товары'),
     'запомнился', 'Товары');
@@ -1345,14 +1347,41 @@ console.log('Страница: ' + PAGE + '\n');
   // Заголовки карточек настроек: значок обязан быть картинкой
   await page.evaluate(() => window.WMUI.go('settings'));
   await page.waitForTimeout(400);
+  /* Разделы настроек теперь сворачиваются, и заголовок у них свой —
+     кнопка, а не заголовок карточки. Значок обязан остаться картинкой. */
   const heads = await page.evaluate(() =>
-    [...document.querySelectorAll('#page .card-title')].slice(0, 10)
+    [...document.querySelectorAll('#page .set-h')]
       .map(e => ({ t: e.innerText.trim(), svg: !!e.querySelector('svg') })));
   check('В НАСТРОЙКАХ ЗНАЧКИ — КАРТИНКИ, А НЕ СЛОВА',
-    heads.filter(h => h.svg).length >= 8,
-    heads.filter(h => h.svg).length + ' из ' + heads.length, '>=8');
+    heads.length >= 10 && heads.every(h => h.svg),
+    heads.filter(h => h.svg).length + ' из ' + heads.length, 'все');
+  check('И РАЗДЕЛЫ СВЁРНУТЫ, А НЕ ВЫВАЛЕНЫ ВСЕ СРАЗУ',
+    await page.evaluate(() => document.querySelectorAll('.set-g.open').length) <= 3,
+    await page.evaluate(() => document.querySelectorAll('.set-g.open').length), 'не больше 3');
 
-  // Дни, часы и проценты не подписываются рублями
+  /* Поиск по настройкам: написал «аванс» — остались только нужные строки.
+     Тогда не надо помнить, в каком разделе что лежит. */
+  await page.fill('#setFind', 'аванс');
+  await page.waitForTimeout(500);
+  const поиск = await page.evaluate(() => ({
+    полей: document.querySelectorAll('#setForm .form-row').length,
+    текст: document.getElementById('page').innerText
+  }));
+  check('ПОИСК ПО НАСТРОЙКАМ НАХОДИТ НУЖНОЕ',
+    поиск.полей >= 2 && поиск.полей <= 6 && /Аванс какого числа/.test(поиск.текст),
+    поиск.полей + ' строк', 'от 2 до 6, среди них «Аванс какого числа»');
+  await page.evaluate(() => { const i = document.getElementById('setFind'); i.value = '';
+    i.dispatchEvent(new Event('input', { bubbles: true })); });
+  await page.waitForTimeout(450);
+
+  /* Дни, часы и проценты не подписываются рублями. Раскрываем зарплату:
+     после сворачивания разделов эти поля иначе не видны. */
+  await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.set-h')]
+      .filter(x => /Зарплата|Постоянные/.test(x.innerText))[0];
+    if (b) b.click();
+  });
+  await page.waitForTimeout(450);
   const setText = await page.evaluate(() => document.querySelector('#page').innerText);
   check('ДНИ И ЧАСЫ НЕ ПОДПИСАНЫ РУБЛЯМИ',
     !/\b(7|12|30|3|15)\s*₽/.test(setText.replace(/[\u00a0\u202f]/g, ' ')),
