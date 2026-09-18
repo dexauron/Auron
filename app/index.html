@@ -767,6 +767,17 @@ input{font:inherit;background:none;border:none;outline:none;color:inherit}
         </div>
       </div>
       <div class="settings-section">
+        <div class="section-title">Полный учёт</div>
+        <div class="settings-item" id="si-desktop">
+          <span class="settings-item-icon">📚</span>
+          <span class="settings-item-text">Учёт магазина</span>
+          <svg class="settings-item-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div style="padding:6px 20px 0;font-size:13px;color:var(--muted);line-height:1.5">
+          Сверка кассы, зарплата, долги, отчёты, товарная аналитика. Записи там свои — с этим приложением не общие.
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="section-title">Безопасность</div>
         <div class="settings-item" id="si-pin">
           <span class="settings-item-icon">🔑</span>
@@ -1511,6 +1522,10 @@ const App = (() => {
       try { await AUTH.setupBiometrics(); toast('Биометрия настроена'); }
       catch (e) { toast(e.message); }
     };
+    // Полный учёт лежит рядом на сайте, отдельной страницей. Открываем новой
+    // вкладкой: это другая программа со своими записями, и уводить из этой
+    // без возврата неправильно.
+    $('si-desktop').onclick = () => window.open('desktop/Учёт_магазина.html', '_blank');
     $('si-employees').onclick = () => openEmployeesSheet();
     $('si-accounts').onclick  = () => openAccountsSheet();
     $('si-orgs').onclick = () => {

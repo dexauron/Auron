@@ -64,7 +64,7 @@ else bad "тестов не найдено — так быть не должно
 say "2б. Проверки полного учёта (desktop/tests)"
 if [ -d desktop/tests ]; then
   m=0
-  for t in "проверка-моста.js" "проверка-настроек.js" "проверка-года.js"; do
+  for t in "проверка-моста.js" "проверка-публикации.js" "проверка-настроек.js" "проверка-года.js"; do
     [ -f "desktop/tests/$t" ] || continue
     m=$((m+1))
     if out=$(cd desktop && node "tests/$t" 2>&1); then :
@@ -80,6 +80,11 @@ say "3. Версия"
 for pair in "webapp/Index.html|APP_VERSION" "app/index.html|APP_VERSION" "app/sw.js|CACHE_NAME"; do
   f="${pair%%|*}"; key="${pair##*|}"
   [ -f "$f" ] || continue
+  # Ключа в файле нет вовсе — правило к нему не относится. У app/index.html
+  # номера версии никогда не было: устаревшую страницу там сбрасывает
+  # CACHE_NAME в app/sw.js, он проверяется отдельной строкой. Без этой
+  # проверки любая правка файла давала ложное «версия не поднята».
+  grep -q "$key" "$f" 2>/dev/null || continue
   if changed "$f"; then
     if has_added "$f" "$key"; then good "$f — $key поднят"
     else bad "$f изменён, но $key не поднят"; fi

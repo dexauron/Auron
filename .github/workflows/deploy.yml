@@ -3,7 +3,8 @@ name: Deploy to GitHub Pages
 # ВАЖНО. Сайт собирается из ТРЁХ независимых источников:
 #   приложение Auron   — ветка claude/optimistic-einstein-Afzmv (папка app/)
 #   каталог товаров    — ветка claude/store-product-catalog-60wer4 (папка catalog/)
-#   страница сканера   — ветка claude/cool-archimedes-qv458l (app/scan.html)
+#   сканер и полный учёт — ветка claude/cool-archimedes-qv458l
+#                          (app/scan.html и папка desktop/)
 #
 # Публикация идёт с force_orphan, то есть ЗАМЕНЯЕТ содержимое сайта целиком.
 # Поэтому каждая сборка обязана собрать все три части. Если workflow собирает
@@ -53,7 +54,7 @@ jobs:
           ref: claude/store-product-catalog-60wer4
           path: catalog-src
 
-      - name: Исходники страницы сканера
+      - name: Исходники сканера и полного учёта
         uses: actions/checkout@v4
         continue-on-error: true
         with:
@@ -84,6 +85,25 @@ jobs:
           else
             echo "::warning::scan-src/app/scan.html не найден — сканер не публикуется"
           fi
+
+      # Полный учёт — вторая половина продукта. На телефоне она едет внутри
+      # приложения, здесь — открывается по адресу …/Auron/desktop/.
+      # Сборки не требует: это обычные файлы, их достаточно положить рядом.
+      - name: Добавить полный учёт
+        run: |
+          if [ -f "scan-src/desktop/Учёт_магазина.html" ]; then
+            rm -rf app/desktop
+            mkdir -p app/desktop
+            cp -r scan-src/desktop/. app/desktop/
+            # Проверки нужны разработке, а не сайту, и весят почти мегабайт.
+            rm -rf app/desktop/tests app/desktop/eslint.config.mjs
+            # Выгрузки 1С владельца на сайт не выкладываем НИКОГДА: в них
+            # закупочные цены и телефоны поставщиков, а сайт открыт всем.
+            rm -rf "app/desktop/Данные_1С_и_Excel"
+            echo "полный учёт добавлен: $(du -sh app/desktop | cut -f1)"
+          else
+            echo "::warning::scan-src/desktop не найден — полный учёт не публикуется"
+          fi
           rm -rf scan-src
 
       # Страховка от «сайта без половины частей»: лучше не выложить ничего,
@@ -97,7 +117,7 @@ jobs:
             echo "::error::не собрано:$missing — публикация отменена"
             exit 1
           fi
-          echo "все части на месте: приложение + каталог$( [ -f app/scan.html ] && echo ' + сканер' )"
+          echo "все части на месте: приложение + каталог$( [ -f app/scan.html ] && echo ' + сканер' )$( [ -f "app/desktop/Учёт_магазина.html" ] && echo ' + полный учёт' )"
 
       - name: Опубликовать на GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
