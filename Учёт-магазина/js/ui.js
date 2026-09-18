@@ -2164,7 +2164,7 @@
     bar.innerHTML = items.slice(0, 4).map(function (a) {
       return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + ic(a.icon, 18) +
         '</span><span>' + esc(a.text) + '</span></button>';
-    }).join('') + '<span class="alert-cash">в кассе сейчас <b class="private">' +
+    }).join('') + '<span class="alert-cash">в сейфе сейчас <b class="private">' +
       money(cash) + '</b></span>';
   }
   function renderTabbar() {
@@ -2722,7 +2722,7 @@
      пустоту, потому что остались от прошлой версии программы. */
   function openAddSheet() {
     var items = [
-      ['calculator', 'Сверка кассы за смену', 'Z-отчёт, выплаты, факт в ящике', 'shiftClose'],
+      ['calculator', 'Сверка кассы за смену', 'Z-отчёт, выплаты, сколько забрали', 'shiftClose'],
       ['moon', 'Итоги дня', 'товар за наличные, долги поставщикам', 'dayTotals'],
       ['receipt', 'Расход', 'аренда, ЗП, ГСМ, обеды', 'moneyOut'],
       ['banknote', 'Приход денег', 'прочие поступления', 'moneyIn'],

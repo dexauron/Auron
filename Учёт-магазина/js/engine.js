@@ -828,7 +828,23 @@
     (rows || []).forEach(function (r) {
       var d = txt(r.date); if (!d) return;
       if (ym && ymOf(d) !== ym) return;
-      if (isShift(r)) day(d).payouts += shiftCalc(r).payouts;
+      if (isShift(r)) {
+        var c0 = shiftCalc(r);
+        day(d).payouts += c0.payouts;
+        /* Смена, записанная по-новому, объясняет свои выплаты сама: владелец
+           вписал их строками «кому и за что» прямо в форме. Требовать, чтобы
+           он расписал их второй раз отдельными расходами, — значит заставлять
+           делать одну работу дважды и потом ругаться, что не сходится.
+
+           Считаем расписанным ровно столько, сколько в строках. Строк нет —
+           смена по-старому, и расшифровку по-прежнему ждём со стороны. */
+        var список = r.payoutList;
+        if (c0.recvFilled && список && список.length) {
+          for (var li = 0; li < список.length; li++) {
+            add(d, txt(список[li].name) || 'без названия', num(список[li].sum));
+          }
+        }
+      }
       else if (isDay(r)) {
         // товар за наличные и отданные долги — деньги из ящика, если владелец
         // не указал, что платил из сейфа или со счёта
@@ -955,18 +971,20 @@
     return out;
   }
 
-  // Остаток в каждой кассе на конец последней смены
+  /* Последняя смена по каждой кассе. Экран показывает по ней не остаток
+     ящика (владельцу он не нужен), а сколько он с этой смены забрал и
+     сошлось ли — поэтому отдаём и саму запись. */
   function tillState(rows, settings) {
     var last = {};
     shiftsOf(rows, null, settings).forEach(function (r) {
-      last[txt(r.till) || TILLS[0]] = { fact: shiftCalc(r).factCash,
+      last[txt(r.till) || TILLS[0]] = { fact: shiftCalc(r).factCash, rec: r,
         date: txt(r.date), shift: txt(r.shift), cashier: txt(r.cashier) };
     });
     var tills = txt(settings && settings.tills)
       ? txt(settings.tills).split(',').map(function (x) { return x.trim(); }).filter(Boolean)
       : TILLS.slice();
     return tills.map(function (t) {
-      return { till: t, fact: last[t] ? last[t].fact : 0,
+      return { till: t, fact: last[t] ? last[t].fact : 0, rec: last[t] ? last[t].rec : null,
         date: last[t] ? last[t].date : '', shift: last[t] ? last[t].shift : '',
         cashier: last[t] ? last[t].cashier : '', closed: !!last[t] };
     });

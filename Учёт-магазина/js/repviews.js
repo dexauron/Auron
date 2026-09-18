@@ -336,9 +336,8 @@
 
     // Деньги на конец месяца: три места, где они лежат
     h += u.card('Где деньги на конец месяца', u.listOf([
-      u.listRow({ icon: 'coins', title: 'В ящиках', value: u.priv(mc.cash) }),
-      u.listRow({ icon: 'safe', title: 'В сейфе', sub: 'увезено инкассацией',
-        value: u.priv(mc.safe) }),
+      u.listRow({ icon: 'safe', title: 'В сейфе', sub: 'наличные у вас на руках',
+        value: u.priv(mc.cash) }),
       u.listRow({ icon: 'supplier', title: 'Должны поставщикам', sub: 'общей суммой по магазину',
         value: u.priv(mc.debt) })
     ], ''), 'Инкассация деньги не тратит — она их перекладывает');

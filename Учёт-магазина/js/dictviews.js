@@ -37,7 +37,7 @@
     var gone = bal.rows.filter(function (a) { return a.archived; });
 
     var h = '<div class="stat-grid">' +
-      u.stat('Наличными', u.priv(bal.totals.cash), 'в ящиках и сейфе') +
+      u.stat('Наличными', u.priv(bal.totals.cash), 'в сейфе и на руках') +
       u.stat('На счетах', u.priv(bal.totals.bank), 'эквайринг, СБП, переводы') +
       u.stat('Всего денег', u.priv(bal.totals.total), 'по всем счетам') +
       '</div>';

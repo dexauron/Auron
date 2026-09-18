@@ -280,6 +280,9 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 /* Заголовок части формы. Длинную форму без них читать невозможно: владелец
    жаловался, что глазам не за что зацепиться. Тон тихий — это указатель,
    а не сообщение. */
+/* Строка под плитками Пульта: что пришло и что ушло за период. */
+.pulse-flow { padding: 0 4px 12px; font-size: 13.5px; color: var(--label-2); line-height: 1.5; }
+
 .form-cap { padding: 16px 16px 6px; font-size: 12px; font-weight: 700;
   letter-spacing: .4px; text-transform: uppercase; color: var(--label-2); }
 .form-cap:first-child { padding-top: 6px; }
