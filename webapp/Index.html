@@ -3416,6 +3416,19 @@ input.money{font-variant-numeric:tabular-nums;}
         </div>
       </div>
 
+      <div class="settings-sec" data-sgrp="app"><div class="settings-sec-title">Полный учёт</div>
+        <div class="settings-list">
+          <div class="settings-row" onclick="App.openDeepBooks()" style="cursor:pointer;">
+            <span class="settings-row-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H10v18H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M14 3h4.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H14z"/><path d="M10 3h4v18h-4z"/></svg></span>
+            <div style="flex:1;">
+              <div class="settings-row-label">Учёт магазина</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px;">Сверка кассы, зарплата, долги, отчёты, товарная аналитика. Без интернета</div>
+            </div>
+            <span class="settings-row-arrow">›</span>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-sec" data-sgrp="app"><div class="settings-sec-title">Разное</div>
         <div class="settings-list">
           <div class="settings-row" onclick="App.openCalc()" style="cursor:pointer;">
@@ -3666,7 +3679,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.11.0';
+var APP_VERSION='6.12.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -10641,6 +10654,30 @@ var App={
       '<div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Если номер совпадает с тем, что назвал помощник — обновление дошло</div></div>'+
       '<div style="font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">Что нового</div>'+
       '<div style="background:var(--surface-2);border-radius:14px;padding:4px 14px;">'+ch+'</div>');
+  },
+
+  // ── Полный учёт (настольная половина продукта) ──
+  // «Учёт магазина» лежит рядом, в папке desktop/, и работает без интернета.
+  // В приложении на телефоне она едет внутри сборки (www/desktop/), в вебе на
+  // Apps Script её нет вовсе. Поэтому сначала спрашиваем адрес и только потом
+  // открываем: молчаливая пустая страница владельцу ничего не объясняет.
+  DEEP_URL:'desktop/Учёт_магазина.html',
+  openDeepBooks:function(){
+    var url=App.DEEP_URL;
+    var fail=function(){
+      App.openModal('<div class="modal-title">Полный учёт</div>'+
+        '<div style="font-size:13.5px;line-height:1.7;color:var(--ink-2);">'+
+        'Здесь этой части нет. Полный учёт — отдельная программа «Учёт магазина»: '+
+        'сверка кассы, зарплата, долги, отчёты и товарная аналитика.<br><br>'+
+        '<b style="color:var(--ink);">Где открыть:</b> в приложении на телефоне — этой же кнопкой; '+
+        'на компьютере — папка <b>desktop</b>, файл <b>Учёт_магазина.html</b>.<br><br>'+
+        'Интернет ей не нужен: всё считается на устройстве.</div>');
+    };
+    try{
+      fetch(url,{method:'HEAD'}).then(function(r){
+        if(r&&r.ok){window.open(url,'_blank');}else{fail();}
+      })['catch'](fail);
+    }catch(e){fail();}
   },
 
   // ── Помощь ──

@@ -396,3 +396,33 @@ fs.mkdirSync(OUT,{recursive:true});
 fs.writeFileSync(path.join(OUT,'index.html'),html);
 console.log('собрано: android/www/index.html');
 console.log('размер: '+Math.round(html.length/1024)+' КБ');
+
+// ── Вторая половина продукта едет в том же приложении ────────────────
+// «Учёт магазина» (desktop/) — глубокий учёт: сверка кассы, зарплата,
+// долги, отчёты, товарная аналитика. Она обычные файлы без сборки,
+// поэтому просто кладём её рядом: внутри приложения она открывается по
+// адресу desktop/Учёт_магазина.html и работает без интернета, как и всё
+// остальное. Выгрузки 1С владельца НЕ копируем — в них закупочные цены
+// и телефоны поставщиков, а сборка уезжает на чужую машину.
+const DEEP_SRC=path.join(ROOT,'desktop');
+const DEEP_SKIP=new Set(['Данные_1С_и_Excel','tests','eslint.config.mjs']);
+function copyDir(from,to,skip){
+  fs.mkdirSync(to,{recursive:true});
+  let n=0;
+  for(const name of fs.readdirSync(from)){
+    if(skip&&skip.has(name)) continue;
+    const s=path.join(from,name), d=path.join(to,name);
+    if(fs.statSync(s).isDirectory()) n+=copyDir(s,d,null);
+    else { fs.copyFileSync(s,d); n++; }
+  }
+  return n;
+}
+if(fs.existsSync(path.join(DEEP_SRC,'Учёт_магазина.html'))){
+  const n=copyDir(DEEP_SRC,path.join(OUT,'desktop'),DEEP_SKIP);
+  console.log('полный учёт: '+n+' файлов в android/www/desktop/');
+} else {
+  // Не роняем сборку: приложение без этой части работает, а кнопка в нём
+  // честно скажет, где программу открыть. Но промолчать тоже нельзя —
+  // иначе половина продукта пропадёт из сборки незаметно.
+  console.warn('ВНИМАНИЕ: папки desktop/ нет — полный учёт в приложение не попадёт');
+}
