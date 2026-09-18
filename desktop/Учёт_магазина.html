@@ -27,6 +27,14 @@
 </aside>
 
 <main class="main">
+  <!-- Возврат в Auron. Виден только внутри приложения (тема auron):
+       полный учёт там не отдельная программа, а его часть. -->
+  <div class="auron-back">
+    <button type="button" onclick="AuronBridge.back()">
+      <span aria-hidden="true">‹</span> Auron
+    </button>
+    <span class="auron-where">Полный учёт</span>
+  </div>
   <div class="topbar">
     <button class="btn btn-icon only-mobile" id="menuBtn" title="Меню" data-ic="menu"></button>
     <div class="search">
@@ -73,6 +81,7 @@
 <script src="js/icons.js"></script>
 <script src="js/engine.js"></script>
 <script src="js/store.js"></script>
+<script src="js/auron-bridge.js"></script>
 <script src="js/settings.js"></script>
 <script src="js/quick.js"></script>
 <script src="js/numpad.js"></script>

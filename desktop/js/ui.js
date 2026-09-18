@@ -1315,6 +1315,9 @@
         : (hour >= nightFrom && hour < dayFrom);
       mode = night ? 'dark' : 'light';
     }
+    /* Внутри приложения Auron берём его цвета — но только если владелец сам
+       не выбрал тему. Выбор человека главнее нашей заботы о единообразии. */
+    if (!mode && window.AuronBridge && window.AuronBridge.available()) mode = 'auron';
     if (mode) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     // «Крупный режим» — одна настройка на всё: буквы, кнопки, поля, таблицы
@@ -3639,6 +3642,22 @@
       return;
     }
     applyLook();
+
+    /* Записи из Auron. Мост односторонний и молчит, если Auron рядом нет
+       (например, программу открыли просто с флешки). Делаем это ДО первой
+       отрисовки: иначе владелец успевает увидеть пустой «Пульт» и решить,
+       что данные пропали. О переносе говорим один раз за запуск — молчать
+       нельзя, цифры на экране взялись не из его записей здесь. */
+    try {
+      var перенос = window.AuronBridge && window.AuronBridge.sync(S);
+      if (перенос && (перенос.operations || перенос.accounts)) {
+        setTimeout(function () {
+          toast('Из Auron перенесено записей: ' + перенос.operations +
+            '. Править их нужно там же, в Auron — здесь они показываются.', 9000);
+        }, 900);
+      }
+    } catch (e) { /* мост не должен мешать программе запуститься */ }
+
     // пароль спрашиваем до того, как показать цифры
     if (E.norm(S.settings.askPin) === 'да') lockScreen(!pinSaved());
     ['click', 'keydown', 'input'].forEach(function (ev) {

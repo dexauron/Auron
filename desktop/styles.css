@@ -40,6 +40,56 @@
     --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-sheet: 0 20px 60px rgba(0,0,0,.6);
 }
 
+/* ── Вид Auron ──────────────────────────────────────────────────────────────
+   Когда полный учёт открыт ВНУТРИ приложения Auron, он берёт его цвета:
+   иначе половины продукта выглядят как два разных приложения, и владелец
+   каждый раз заново соображает, где он находится. Ставится само —
+   `js/auron-bridge.js` включает эту тему, когда рядом есть база Auron.
+   Цвета взяты один в один из webapp/Index.html: расходиться им нельзя,
+   иначе при следующей правке Auron половины опять разъедутся.
+   Системный акцент «синий» здесь — фирменный цвет Auron: в программе он
+   работает как «главное действие», и подменять его отдельным цветом
+   значило бы раскрасить экран в два главных цвета сразу. */
+:root[data-theme="auron"] {
+    --bg: #07090C; --bg-elev: #101318; --bg-inset: #161A21;
+    --sidebar: rgba(16,19,24,.92);
+    --label: #F3F4F6; --label-2: #C7C7CC; --label-3: #8E8E93;
+    --separator: rgba(255,255,255,.075);
+    --fill: rgba(255,255,255,.06); --fill-2: rgba(255,255,255,.035);
+    --blue: #5E5CE6; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.7);
+    --shadow-sheet: 0 2px 4px rgba(0,0,0,.4), 0 24px 60px -20px rgba(0,0,0,.85);
+    --r-card: 20px; --r-inner: 14px;
+    color-scheme: dark;
+}
+/* Кромки как в Auron: светлая сверху, тёмная снизу — карточка получает
+   толщину без нарисованного «трёхмерного» рисунка, который в приложении
+   про деньги мешает читать цифры. */
+:root[data-theme="auron"] .card,
+:root[data-theme="auron"] .sheet {
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+/* Шапка возврата в Auron: полный учёт — часть приложения, а не отдельная
+   программа, поэтому из него всегда виден путь назад. */
+.auron-back {
+  display: none; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--bg-elev);
+  border-bottom: 1px solid var(--separator);
+  position: sticky; top: 0; z-index: 40;
+}
+:root[data-theme="auron"] .auron-back { display: flex; }
+.auron-back button {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 14px; border-radius: 980px;
+  border: 1px solid var(--separator); background: var(--fill);
+  color: var(--label); font: inherit; font-weight: 600; cursor: pointer;
+}
+.auron-back button:active { opacity: .7; }
+.auron-back .auron-where { color: var(--label-2); font-size: 13px; }
+
+
 /* Крупный шрифт: включается в «Настройках» — всё становится больше */
 body.big { font-size: 17px; }
 body.big .page-title { font-size: 36px; }

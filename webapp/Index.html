@@ -2486,6 +2486,10 @@ input.money{font-variant-numeric:tabular-nums;}
       <button class="sb-nav-item" data-need="finance" data-tab="report" onclick="App.setTab('report',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>Отчёт
       </button>
+      <div class="sb-group">Полный учёт</div>
+      <button class="sb-nav-item" data-need="finance" onclick="App.openDeepBooks()">
+        <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H10v18H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M14 3h4.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H14z"/><path d="M10 3h4v18h-4z"/></svg></span>Учёт магазина
+      </button>
       <div class="sb-group">Настройка</div>
       <button class="sb-nav-item" data-tab="settings" onclick="App.setTab('settings',this)">
         <span class="sb-nav-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 20 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>Настройки
@@ -3679,7 +3683,7 @@ input.money{font-variant-numeric:tabular-nums;}
 
 <script>
 var OB_KEY='auron_ob_v1';
-var APP_VERSION='6.12.0';
+var APP_VERSION='6.13.0';
 var APP_CHANGELOG=[
   {v:'2.6.0',t:'Ещё умнее: спарклайны трендов на плитках, финансовый автопилот (отложить из выручки), напоминание об авансе УСН, обучающий тур при первом входе'},
   {v:'2.5.0',t:'Рабочий день бухгалтера: утренний брифинг «Ожидаем сегодня» + «Темп дня», приём торгового одним экраном, проверка аномалии выручки, лента активности команды, красивый отчёт владельцу в WhatsApp/Telegram'},
@@ -5260,7 +5264,10 @@ var App={
     {id:'suppliers', t:'Поставщики', svg:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', act:"App.setTab('suppliers',this)", tab:'suppliers', fin:true, need:'finance'},
     {id:'analytics', t:'Аналитика',  svg:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>', act:"App.setTab('analytics',this)", tab:'analytics', fin:true, need:'finance'},
     {id:'journal',   t:'Операции',   svg:'<path d="M7 7h10M7 12h10M7 17h6"/><rect x="3" y="3" width="18" height="18" rx="3"/>', act:"App.setTab('journal',this)", tab:'journal', fin:true, need:'finance'},
-    {id:'report',    t:'Отчёт',      svg:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', act:"App.setTab('report',this)", tab:'report', fin:true, need:'finance'}
+    {id:'report',    t:'Отчёт',      svg:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>', act:"App.setTab('report',this)", tab:'report', fin:true, need:'finance'},
+    // Полный учёт — вторая половина приложения. Стоит в общем списке:
+    // владелец сам решает, выносить ли его вниз, как любой другой экран.
+    {id:'deep',      t:'Полный учёт', svg:'<path d="M4 4.5A1.5 1.5 0 0 1 5.5 3H10v18H5.5A1.5 1.5 0 0 1 4 19.5z"/><path d="M14 3h4.5A1.5 1.5 0 0 1 20 4.5v15a1.5 1.5 0 0 1-1.5 1.5H14z"/><path d="M10 3h4v18h-4z"/>', act:"App.openDeepBooks()", fin:true, need:'finance'}
   ],
   _navMeta:function(id){for(var i=0;i<App._navCatalog.length;i++)if(App._navCatalog[i].id===id)return App._navCatalog[i];return null;},
   _navAllowed:function(){return App._navCatalog.filter(function(m){return !m.need||App.can(m.need);});},
@@ -10673,9 +10680,11 @@ var App={
         'на компьютере — папка <b>desktop</b>, файл <b>Учёт_магазина.html</b>.<br><br>'+
         'Интернет ей не нужен: всё считается на устройстве.</div>');
     };
+    /* В ТОМ ЖЕ окне, а не новой вкладкой: это одна программа, а не две.
+       Обратно владелец возвращается кнопкой «‹ Auron» в её шапке. */
     try{
       fetch(url,{method:'HEAD'}).then(function(r){
-        if(r&&r.ok){window.open(url,'_blank');}else{fail();}
+        if(r&&r.ok){window.location.href=url;}else{fail();}
       })['catch'](fail);
     }catch(e){fail();}
   },
