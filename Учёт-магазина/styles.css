@@ -283,6 +283,21 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 /* --- Кассовая книга ------------------------------------------------------
    Остаток на утро и на вечер — это не такая же строка, как приход или
    расход: это рамка дня. Поэтому тоном тише и с чертой. */
+/* --- Колокольчик: значок с числом непрочитанного ------------------------
+   Число маленькое и красное только когда есть что читать. Значок, который
+   горит всегда, перестаёт что-либо значить. */
+.bell-wrap { position: relative; display: inline-flex; }
+#bellBtn.has { color: var(--blue); }
+.bell-n { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
+  padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bg); }
+.bell-n[hidden] { display: none; }
+
+/* Точка «новое» слева от текста уведомления */
+.dot-new { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blue); margin-right: 7px; vertical-align: 1px; }
+
 /* --- Настройки: разделы свёрнуты, сверху поиск -------------------------- */
 .set-find { display: flex; gap: 8px; align-items: center; margin: 0 0 14px; }
 .set-find input { flex: 1; min-width: 0; padding: 11px 14px; font-size: 15px;

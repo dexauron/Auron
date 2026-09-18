@@ -36,6 +36,13 @@
     <div class="segmented" id="periods"></div>
     <button class="btn btn-primary" id="addBtn"><span data-ic="plus"></span> Записать</button>
     <button class="btn btn-icon" data-act="palette" title="Куда пойти — Ctrl+K" data-ic="search"></button>
+    <!-- Число непрочитанного лежит РЯДОМ с кнопкой, а не внутри: значки в
+         статичной разметке подставляются через data-ic, и он переписывает
+         всё содержимое элемента — вложенный счётчик стирался при запуске. -->
+    <span class="bell-wrap">
+      <button class="btn btn-icon" id="bellBtn" data-act="notices" title="Уведомления" data-ic="bell"></button>
+      <span class="bell-n" id="bellN" hidden></span>
+    </span>
     <button class="btn btn-icon" id="privacyBtn" title="Скрыть суммы" data-ic="eye"></button>
     <input type="file" id="filesInput" multiple accept=".xls,.xlsx,.csv" hidden>
     <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
@@ -87,6 +94,7 @@
 <script src="js/book.js"></script>
 <script src="js/dictviews.js"></script>
 <script src="js/revizorviews.js"></script>
+<script src="js/notices.js"></script>
 <script src="js/demo.js"></script>
 <script src="js/filestore.js"></script>
 <script src="js/ui.js"></script>

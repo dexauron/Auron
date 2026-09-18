@@ -1178,7 +1178,7 @@
     }, 1200);
   }
   async function saveBookNow() {
-    if (F.state !== 'ready') { toast('Сначала подключите папку на экране «Данные и файлы».'); return false; }
+    if (F.state !== 'ready') { toast('Сначала подключите папку на экране «Данные и копии».'); return false; }
     var ok = await F.saveBook(bookBytes());
     toast(ok ? 'Книга сохранена: ' + F.dirName + '/' + F.BOOK_FILE : 'Не получилось записать книгу.');
     renderNav();
@@ -1628,7 +1628,7 @@
   /* --- Цены поставщиков ---------------------------------------------------------- */
   // Красивая цена: закуп + наценка, округлённые по вашему правилу
   /* --- Поиск ------------------------------------------------------------------------ */
-  /* --- Данные и файлы ---------------------------------------------------------------- */
+  /* --- Данные и копии ---------------------------------------------------------------- */
   /* --- Данные и копии --------------------------------------------------------
      Раньше здесь загружались выгрузки 1С. Теперь у программы один файл —
      своя книга «Бухгалтерия.xlsx» плюс копии базы. */
@@ -1774,6 +1774,52 @@
      экрана: это не его данные, а то, куда он сейчас смотрит. */
   var ПОИСК_НАСТРОЕК = '', ТАЙМЕР_ПОИСКА = null;
   var ОТКРЫТЫЕ_НАСТРОЙКИ = {};
+
+  /* --------------------------------------------------------------------------
+     ЭКРАН УВЕДОМЛЕНИЙ
+
+     Здесь живёт всё, что программа заметила, но не стала выносить на глаза.
+     Три части: срочное (оно же на полосе), «стоит посмотреть» и «кстати».
+
+     У каждой строки есть объяснение и кнопка, которая ведёт туда, где дело
+     закрывают. Уведомление без кнопки — это просто повод для тревоги, а не
+     помощь.
+     -------------------------------------------------------------------------- */
+  function viewNotices() {
+    var список = уведомления();
+    var N = window.WMNotices;
+    var h = pageHead('Уведомления', 'Что программа заметила, пока вы работали',
+      список.length
+        ? '<button class="btn" data-act="notices-seen">Отметить прочитанным</button>' : '');
+
+    if (!список.length) {
+      return h + blank('Всё спокойно',
+        'Программа смотрит за деньгами, сроками и расхождениями. ' +
+        'Появится что-то важное — покажет здесь.',
+        { actions: [{ name: 'На Пульт', go: 'pulse', icon: 'gauge' }] });
+    }
+
+    var видели = N ? N.прочитанные(S, E) : [];
+    var части = [
+      ['срочно', 'Срочное', 'Это показывается и полосой сверху'],
+      ['внимание', 'Стоит посмотреть', 'Не горит, но разобраться стоит'],
+      ['кстати', 'Кстати', 'Просто к сведению']
+    ];
+    части.forEach(function (ч) {
+      var свои = список.filter(function (x) { return x.вид === ч[0]; });
+      if (!свои.length) return;
+      h += card(ч[1], listOf(свои.map(function (x) {
+        var новое = видели.indexOf(x.id) < 0 && x.вид !== 'кстати';
+        var куда = x.form ? ' data-form="' + esc(x.form) + '"' : ' data-go="' + esc(x.go) + '"';
+        return listRow({ icon: x.icon,
+          title: (новое ? '<span class="dot-new"></span>' : '') +
+            '<span class="' + (x.вид === 'срочно' ? 'c-red' : '') + '">' + esc(x.text) + '</span>',
+          sub: x.why ? esc(x.why) : '',
+          value: '<button class="btn btn-sm"' + куда + '>' + esc(x.act) + '</button>' });
+      }), ''), ч[2]);
+    });
+    return h;
+  }
 
   function viewSettings() {
     var s = S.settings, SET = window.WMSettings;
@@ -1961,6 +2007,7 @@
   }
 
   var VIEWS = [
+    { id: 'notices', icon: 'bell', name: 'Уведомления', group: 'Ещё', render: viewNotices },
     { id: 'data', icon: 'folder', name: 'Данные и копии', group: 'Ещё', render: viewData },
     { id: 'settings', icon: 'gear', name: 'Настройки', group: 'Ещё', render: viewSettings },
     { id: 'menucfg', icon: 'menu', name: 'Настроить меню', group: 'Ещё', render: viewMenuConfig }
@@ -2241,69 +2288,51 @@
   // Строка под шапкой: что горит прямо сейчас. Видна с любого экрана,
   // поэтому просроченную оплату нельзя не заметить, чем бы вы ни занимались.
   /* Строка под шапкой: что горит прямо сейчас. Видна с любого экрана. */
+  /* --------------------------------------------------------------------------
+     ПОЛОСА СВЕРХУ — ТОЛЬКО СРОЧНОЕ
+
+     Раньше сюда сваливалось всё замеченное: просрочки, расхождения, лимиты,
+     долги — до четырёх строк разом. Владелец сказал прямо: «чтобы это было в
+     уведомлениях, а не на виду». Он прав: полоса, которая горит всегда,
+     перестаёт что-либо значить.
+
+     Теперь здесь ровно три вещи, которые он назвал срочными: записи не
+     сохраняются, крупная недостача прямо сейчас, сегодня платить поставщику.
+     Всё остальное — в колокольчике, и само на экран не лезет.
+     -------------------------------------------------------------------------- */
+  function уведомления() {
+    var N = window.WMNotices;
+    if (!N) return [];
+    return N.собрать(S, E, window.WMRevizor);
+  }
+
   function renderAlerts() {
-    var bar = $('alertBar'); if (!bar) return;
-    var t = today(), items = [];
+    var bar = $('alertBar');
+    var список = уведомления();
 
-    /* ЗАПИСЬ НЕ СОХРАНИЛАСЬ — ЭТО ПЕРВОЕ, ЧТО НАДО СКАЗАТЬ.
-
-       Хранилище браузера не резиновое: рано или поздно оно переполняется, и
-       тогда setItem падает. Программа это ловила и запоминала в
-       lastSaveError — но НИКТО ЭТУ ОШИБКУ НЕ ЧИТАЛ. То есть записи молча
-       переставали сохраняться, а владелец продолжал их вносить и узнал бы
-       обо всём только назавтра, открыв программу с пустыми цифрами.
-
-       Молчаливая потеря данных — худшее, что программа учёта может сделать.
-       Поэтому строка идёт первой и не уходит, пока не сохранится. */
-    if (S.lastSaveError) {
-      items.push({ icon: 'warning',
-        text: 'ЗАПИСИ НЕ СОХРАНЯЮТСЯ: ' + S.lastSaveError +
-          '. Подключите папку на экране «Данные и файлы» — там места хватит.',
-        go: 'data' });
+    // Значок с числом: сколько непрочитанного
+    var N = window.WMNotices, n = N ? N.новых(список, S, E) : 0;
+    var знак = $('bellN');
+    if (знак) {
+      знак.textContent = n > 99 ? '99+' : String(n);
+      знак.hidden = !n;
     }
-    var pt = E.planTotals(S.state.plans || [], t);
-    if (pt.overdue) items.push({ icon: 'warning', text: 'Просрочены выплаты на ' + money(pt.overdue),
-      go: 'finpay' });
-    if (pt.dueToday) items.push({ icon: 'calendar', text: 'Сегодня платить ' + money(pt.dueToday), go: 'finpay' });
+    var кнопка = $('bellBtn');
+    if (кнопка) кнопка.classList.toggle('has', !!n);
 
-    // смена не закрыта: за вчера нет ни одной сверки
-    var yest = E.addDays(t, -1);
-    var closedYest = (S.state.dds || []).some(function (r) { return E.isShift(r) && r.date === yest; });
-    if (!closedYest && (S.state.dds || []).length) {
-      items.push({ icon: 'calculator', text: 'За ' + dateRu(yest) + ' смена не сверена', go: 'morning' });
-    }
-    var crit = num(S.settings.diffCrit) || 1000;
-    var bad = E.shiftsOf(S.state.dds || [], null, S.settings).filter(function (r) {
-      return E.daysBetween(r.date, t) <= 7 && Math.abs(E.shiftCalc(r).diff) >= crit;
-    });
-    if (bad.length) items.push({ icon: 'warning', text: 'Крупные расхождения кассы: ' + bad.length +
-      ' за неделю', go: 'cashiers' });
-    var cash = E.cashOnHand(S.state.dds || [], S.settings, null, S.state.accounts || []);
-    var limit = num(S.settings.cashLimit);
-    if (limit && cash > limit) items.push({ icon: 'banknote', text: 'Наличных в кассе ' + money(cash) +
-      ' — больше вашего порога', go: 'morning' });
-    var debt = E.supplierDebt(S.state.dds || [], S.settings);
-    if (num(S.settings.debtCrit) && debt.debt >= num(S.settings.debtCrit)) {
-      items.push({ icon: 'clipboard', text: 'Долг поставщикам ' + money(debt.debt), go: 'evening' });
-    }
-    /* На Пульте дела уже показаны списком «Что сделать» — полоса сверху
-       повторяла бы их слово в слово. Одно и то же дважды на одном экране
-       читается как шум, а не как напоминание.
-
-       НО НЕ ВСЁ РАВНО ЧТО. «Записи не сохраняются» в списке дел Пульта нет,
-       и прятать это сообщение нельзя нигде: молчаливая потеря данных — самое
-       дорогое, что программа учёта может сделать с владельцем. Из-за этого
-       правила предупреждение и не показывалось при первом запуске — а первый
-       экран как раз Пульт. */
-    var срочно = !!S.lastSaveError;
-    if (!items.length || (VIEW === 'pulse' && !срочно)) { bar.hidden = true; return; }
+    if (!bar) return;
+    var срочно = N ? N.срочные(список) : [];
+    if (!срочно.length) { bar.hidden = true; return; }
     bar.hidden = false;
-    bar.innerHTML = items.slice(0, 4).map(function (a) {
-      return '<button class="alert-item" data-go="' + esc(a.go) + '"><span>' + ic(a.icon, 18) +
-        '</span><span>' + esc(a.text) + '</span></button>';
+    var cash = E.cashOnHand(S.state.dds || [], S.settings, null, S.state.accounts || []);
+    bar.innerHTML = срочно.slice(0, 3).map(function (a) {
+      return '<button class="alert-item"' +
+        (a.form ? ' data-form="' + esc(a.form) + '"' : ' data-go="' + esc(a.go) + '"') +
+        '><span>' + ic(a.icon, 18) + '</span><span>' + esc(a.text) + '</span></button>';
     }).join('') + '<span class="alert-cash">в сейфе сейчас <b class="private">' +
       money(cash) + '</b></span>';
   }
+
   function renderTabbar() {
     var bar = $('tabbar'); if (!bar) return;
     Array.prototype.forEach.call(bar.querySelectorAll('.tab'), function (t) {
@@ -3199,6 +3228,13 @@
         toast('Пример убран: удалено ' + nf(n2) + ' ' +
           plural(n2, 'запись', 'записи', 'записей') + '.');
       }
+      else if (a === 'notices') { go('notices'); }
+      else if (a === 'notices-seen') {
+        var NN = window.WMNotices;
+        if (NN) NN.пометить(уведомления(), S, E);
+        render();
+        toast('Отмечено прочитанным.');
+      }
       else if (a === 'set-group') {
         var g = el.dataset.g;
         if (ОТКРЫТЫЕ_НАСТРОЙКИ[g]) delete ОТКРЫТЫЕ_НАСТРОЙКИ[g];
@@ -3633,7 +3669,7 @@
     } else if (st === 'off' && F.supported()) {
       // первый запуск: подскажем один раз, но не мешаем работать
       setTimeout(function () {
-        if (F.state === 'off') toast('Совет: подключите папку на экране «Данные и файлы» — тогда все записи будут сохраняться в файл рядом с программой.', 9000);
+        if (F.state === 'off') toast('Совет: подключите папку на экране «Данные и копии» — тогда все записи будут сохраняться в файл рядом с программой.', 9000);
       }, 1500);
     }
   }

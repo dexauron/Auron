@@ -1,4 +1,7 @@
 export default [
+  /* Чужие библиотеки лежат в vendor/ сжатыми в одну строку. Проверять их
+     нечего — их пишем не мы, — а тысяча их замечаний прятала наши. */
+  { ignores: ['vendor/**'] },
   {
     files: ['**/*.js'],
     languageOptions: {
@@ -42,5 +45,18 @@ export default [
       'no-shadow-restricted-names': 'error',
       'no-implicit-globals': 'error'
     }
+  },
+  /* Проверки запускаются в Node, а не в браузере: там свои имена. Без
+     этого проверки давали три десятка замечаний на ровном месте, и в них
+     тонули настоящие. */
+  {
+    files: ['tests/**/*.js', 'tests/**/*.mjs'],
+    languageOptions: {
+      globals: { require: 'readonly', module: 'writable', process: 'readonly',
+        __dirname: 'readonly', __filename: 'readonly', Buffer: 'readonly',
+        console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
+        URL: 'readonly', TextDecoder: 'readonly', TextEncoder: 'readonly' }
+    },
+    rules: { 'no-implicit-globals': 'off' }
   }
 ];
