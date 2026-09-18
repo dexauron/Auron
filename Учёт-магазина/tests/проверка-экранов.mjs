@@ -4023,6 +4023,115 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 26. Пример за год: программа заполняется одной кнопкой.
+
+       Владелец попросил «примерно заполни данные за год во всех окнах».
+       Пустая программа ничего не говорит о себе. Здесь проверяется, что
+       кнопка действительно заполняет ВСЕ экраны, а не половину, и что
+       убрать пример можно, не потеряв своих записей. */
+{
+  console.log('— Пример за год');
+  const { page, ctx, errs } = await open();
+  /* Обычно всплывшее окно — это ошибка, и open() его отклоняет. Здесь
+     наоборот: кнопки примера СПРАШИВАЮТ подтверждение, и это правильно —
+     учёт не то место, где что-то появляется само. Поэтому на время блока
+     снимаем общий обработчик и соглашаемся. */
+  page.removeAllListeners('dialog');
+  const вопросы = [];
+  page.on('dialog', d => { вопросы.push(d.message()); d.accept(); });
+
+  // сначала кладём настоящую запись владельца
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-01-15', category: 'Аренда',
+      method: 'Наличные', amount: 110000 });
+    S.save();
+  });
+
+  /* Считаем своё ДО заполнения и сравниваем с тем, что стало. Число из
+     головы сюда не годится: программа при первом запуске заводит себе
+     кое-что сама, и это тоже «не пример». */
+  const своихДо = await page.evaluate(() => window.WMDemo.счёт(window.WMStore, false));
+
+  await page.evaluate(() => window.WMUI.go('data'));
+  await page.waitForTimeout(450);
+  check('НА ЭКРАНЕ «ДАННЫЕ» ЕСТЬ КНОПКА «ЗАПОЛНИТЬ»',
+    await page.evaluate(() => !!document.querySelector('[data-act="demo-fill"]')),
+    'есть', 'есть');
+
+  const t0 = Date.now();
+  await page.evaluate(() => document.querySelector('[data-act="demo-fill"]').click());
+  await page.waitForTimeout(1500);
+  const мс = Date.now() - t0;
+
+  const после = await page.evaluate(() => {
+    const S = window.WMStore, DEMO = window.WMDemo;
+    return { примера: DEMO.счёт(S, true), своих: DEMO.счёт(S, false),
+      журнал: (S.state.log || []).length };
+  });
+  check('ПЕРЕД ЗАПОЛНЕНИЕМ ПРОГРАММА СПРОСИЛА',
+    вопросы.length > 0 && /Заполнить|пример/i.test(вопросы[0]),
+    вопросы[0] ? вопросы[0].slice(0, 60) : 'не спросила', 'спрашивает');
+  check('и предупредила, что записи владельца не пострадают',
+    /вместо них|не вместо|К НИМ/i.test(вопросы.join(' ')),
+    вопросы.join(' | ').slice(0, 80), 'предупреждает');
+  check('ПРИМЕР ЗАПОЛНИЛ БАЗУ', после.примера > 1500, после.примера, 'больше 1500');
+  check('и сделал это быстро, а не за полминуты', мс < 6000, мс + ' мс', 'меньше 6000 мс');
+  check('ЗАПИСИ ВЛАДЕЛЬЦА НЕ ТРОНУТЫ', после.своих === своихДо, после.своих, своихДо);
+  /* Пример не пишет в журнал правок: иначе «Что менялось» забилось бы
+     тремя тысячами строк и перестало быть полезным. */
+  check('и не забил журнал «Что менялось»', после.журнал < 50, после.журнал, 'меньше 50');
+
+  /* Главное: ВСЕ экраны должны показывать числа, а не пустоту. */
+  const экраны = await page.evaluate(() => window.WMUI.views().map(v => v.id));
+  const пустые = [], сбои = [];
+  for (const v of экраны) {
+    try {
+      await page.evaluate(id => window.WMUI.go(id), v);
+      await page.waitForTimeout(200);
+      const t = (await page.evaluate(() => document.getElementById('page').innerText))
+        .replace(/[\u00a0\u202f]/g, ' ');
+      // «Что менялось» пуст намеренно — пример в журнал не пишет
+      if (v !== 'log' && (t.match(/\d/g) || []).length < 12) пустые.push(v);
+    } catch (e) { сбои.push(v); }
+  }
+  check('ВСЕ ЭКРАНЫ ЗАПОЛНИЛИСЬ ЧИСЛАМИ', пустые.length === 0,
+    пустые.join(', ') || 'все ' + экраны.length, 'ни одного пустого');
+  check('и ни один не упал', сбои.length === 0, сбои.join(', ') || 'ни один', 'ни один');
+  check('экранов проверено', экраны.length >= 40, экраны.length, 'не меньше 40');
+
+  /* Числа примера обязаны быть честными: иначе владелец посмотрит на них и
+     решит, что программа врёт. */
+  const честно = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    const кн = E.cashBook(S.state.dds, S.settings, null, null, S.state.accounts);
+    return { книга: кн.close,
+      сейф: E.safeOnHand(S.state.dds, S.settings, null, S.state.accounts),
+      журнал: E.journal(S.state.dds, S.state.accounts).ok };
+  });
+  check('КНИГА ПРИМЕРА СХОДИТСЯ С НАЛИЧНЫМИ', честно.книга === честно.сейф,
+    честно.книга + ' против ' + честно.сейф, 'одинаково');
+  check('и журнал двойной записи в ноль', честно.журнал, 'сходится', 'сходится');
+
+  // Убираем
+  await page.evaluate(() => window.WMUI.go('data'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-act="demo-clear"]').click());
+  await page.waitForTimeout(900);
+  const итог = await page.evaluate(() => {
+    const S = window.WMStore, DEMO = window.WMDemo;
+    return { примера: DEMO.счёт(S, true), своих: DEMO.счёт(S, false),
+      продаж: window.WMUI.data().sales.length };
+  });
+  check('УБРАЛИ ПРИМЕР — ОТ НЕГО НЕ ОСТАЛОСЬ НИЧЕГО', итог.примера === 0, итог.примера, 0);
+  check('А ЗАПИСИ ВЛАДЕЛЬЦА ОСТАЛИСЬ', итог.своих === своихДо, итог.своих, своихДо);
+  check('и товарная аналитика примера тоже убралась', итог.продаж === 0, итог.продаж, 0);
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

@@ -2359,5 +2359,66 @@ console.log('\n— Переезд старой базы: ящик закрыва
     старая_смена.expected === 35000 && старая_смена.ok, старая_смена.expected, 35000);
 }
 
+console.log('\n— Пример за год: заполняет и убирается без следа');
+{
+  const DEMO = require(path.join(__dirname, '..', 'js', 'demo.js'));
+
+  STORE.clear();
+  // сначала кладём НАСТОЯЩУЮ запись владельца — её трогать нельзя
+  STORE.add('dds', { type: 'Расход', date: '2026-01-15', category: 'Аренда',
+    method: 'Наличные', amount: 110000 });
+  const своих = DEMO.счёт(STORE, false);
+
+  const D = { sales: [], stock: [], prices: [], contacts: [], writeoffs: [],
+    dead: [], returns: [], files: [] };
+  const добавлено = DEMO.заполнить(STORE, WM, D, 365);
+  DEMO.товары(D, WM, 365);
+
+  check('пример заполняет базу', добавлено > 1500, добавлено, 'больше 1500 записей');
+  check('и все нужные журналы, а не только смены',
+    ['dds', 'staff', 'timesheet', 'payouts', 'debtors', 'plans', 'funds', 'cashcount']
+      .every(c => (STORE.state[c] || []).length > 0),
+    ['dds', 'staff', 'timesheet', 'payouts', 'debtors', 'plans', 'funds', 'cashcount']
+      .filter(c => !(STORE.state[c] || []).length).join(', ') || 'все заполнены', 'все');
+
+  check('КАЖДАЯ ЗАПИСЬ ПРИМЕРА ПОМЕЧЕНА',
+    DEMO.счёт(STORE, true) === добавлено, DEMO.счёт(STORE, true), добавлено);
+  check('и запись владельца пример не тронул',
+    DEMO.счёт(STORE, false) === своих, DEMO.счёт(STORE, false), своих);
+
+  /* Данные примера обязаны быть такими же честными, как настоящие: иначе
+     владелец посмотрит на неверные числа и решит, что программа врёт. */
+  const счета = STORE.state.accounts || [];
+  const книга = WM.cashBook(STORE.state.dds, STORE.settings, null, null, счета);
+  check('КНИГА ПРИМЕРА СХОДИТСЯ С ОСТАТКОМ НАЛИЧНЫХ',
+    книга.close === WM.safeOnHand(STORE.state.dds, STORE.settings, null, счета),
+    книга.close, WM.safeOnHand(STORE.state.dds, STORE.settings, null, счета));
+  check('и журнал двойной записи сходится в ноль',
+    WM.journal(STORE.state.dds, счета).ok, WM.journal(STORE.state.dds, счета).total, 0);
+
+  /* Пример нужен, чтобы ПОКАЗАТЬ анализ. Если весь товар попадёт в одну
+     клетку, экран ABC и XYZ ничего не покажет — а он ради этого и сделан.
+     Первая версия давала все сорок пять товаров в группу Z. */
+  const ax = WM.abcXyz(D.sales);
+  const клетки = {};
+  (ax.rows || []).forEach(r => { клетки[(r.abc || '?') + (r.xyz || '?')] = 1; });
+  check('ВСЕ ДЕВЯТЬ ГРУПП ABC И XYZ ЗАПОЛНЕНЫ, А НЕ ОДНА',
+    Object.keys(клетки).length === 9, Object.keys(клетки).length + ' из 9', 9);
+  check('товарные экраны получают данные',
+    D.sales.length > 300 && D.stock.length > 30 && D.returns.length > 0 &&
+    D.writeoffs.length > 0 && D.dead.length > 0,
+    'продажи ' + D.sales.length + ', остатки ' + D.stock.length +
+    ', возвраты ' + D.returns.length, 'все непустые');
+
+  // Убираем пример — от него не должно остаться ничего, кроме записи владельца
+  const убрано = DEMO.убрать(STORE);
+  check('УБРАТЬ ПРИМЕР — УДАЛЯЕТ РОВНО ЕГО', убрано === добавлено, убрано, добавлено);
+  check('ЗАПИСЬ ВЛАДЕЛЬЦА ОСТАЛАСЬ НА МЕСТЕ',
+    DEMO.счёт(STORE, false) === своих, DEMO.счёт(STORE, false), своих);
+  check('и ни одной пометки примера не осталось',
+    DEMO.счёт(STORE, true) === 0, DEMO.счёт(STORE, true), 0);
+  STORE.clear();
+}
+
 console.log('\nИтог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
