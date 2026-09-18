@@ -990,6 +990,158 @@
     });
   }
 
+  /* --- КАССОВАЯ КНИГА ----------------------------------------------------
+
+     То, ради чего владелец и завёл эту программу: по дням — сколько было с
+     утра, что пришло, что ушло, сколько осталось к вечеру. Каждая строка
+     названа: кому и за что.
+
+     Считаем ТОЛЬКО наличные владельца. Безнал в кассовую книгу не входит
+     никогда — это не касса, это счёт в банке, у него своя выписка.
+
+     Остаток на утро следующего дня равен остатку на вечер предыдущего. Это
+     не украшение, а главное свойство книги: если цепочка где-то рвётся,
+     деньги взялись из воздуха или пропали. Проверка это стережёт. */
+  function cashBook(rows, settings, from, to, accounts) {
+    settings = settings || {};
+    var сейчас = {}, порядок = [];
+
+    function день(d) {
+      if (!сейчас[d]) { сейчас[d] = { date: d, in: [], out: [] }; порядок.push(d); }
+      return сейчас[d];
+    }
+    function приход(d, имя, сумма, кто) {
+      if (isZero(сумма)) return;
+      день(d).in.push({ name: имя, sum: safeRound(сумма), who: txt(кто) });
+    }
+    function расход(d, имя, сумма, кто) {
+      if (isZero(сумма)) return;
+      день(d).out.push({ name: имя, sum: safeRound(сумма), who: txt(кто) });
+    }
+
+    /* Наличный ли это счёт. Без справочника счетов судим по слову: так
+       работали старые записи, и ломать их нельзя. */
+    function наличными(r, which) {
+      if (accounts && accounts.length) {
+        var a = accountOf(r, accounts, which);
+        return !!a && a.kind !== 'bank';
+      }
+      var w = moneyFrom(r);
+      return w !== 'счёт' && isCash(r.method);
+    }
+
+    (rows || []).forEach(function (r) {
+      var d = txt(r.date);
+      if (!d || (from && d < from) || (to && d > to)) return;
+
+      if (isShift(r)) {
+        var c = shiftCalc(r);
+        if (c.recvFilled) {
+          /* Забрали со смены — это приход наличных владельцу. Довезённый
+             среди смены размен он взял отсюда же, поэтому стоит расходом:
+             две строки вместо одной разницы, чтобы в книге было видно, что
+             деньги туда-обратно ходили. */
+          приход(d, 'Выручка, смена' + (txt(r.shift) ? ' «' + txt(r.shift) + '»' : ''),
+            c.received, txt(r.cashier));
+          расход(d, 'Размен в кассу', c.deposits, txt(r.cashier));
+        }
+      } else if (isIncome(r) && наличными(r)) {
+        приход(d, txt(r.category) || 'Приход', num(r.amount), txt(r.note));
+      } else if (isExpense(r) && наличными(r)) {
+        расход(d, txt(r.category) || 'Расход', num(r.amount), txt(r.supplier) || txt(r.note));
+      } else if (isDraw(r) && наличными(r)) {
+        расход(d, 'Забрал владелец', num(r.amount), txt(r.note));
+      } else if (isDay(r)) {
+        /* Закуп и погашение долга попадают в книгу, ТОЛЬКО если платили из
+           денег владельца. Заплатили из ящика при кассире — эти деньги уже
+           сидят в «выплатах кассира» той смены и до рук владельца не дошли;
+           записать их ещё и сюда значит потерять одну и ту же сумму дважды.
+
+           Поэтому спрашиваем прямо: наличный ли это счёт и не ящик ли он.
+           Источник не указан вовсе — в книгу не берём: лучше не показать
+           строку, чем показать деньги, которых не было. */
+        var откуда = moneyFrom(r);
+        var своими = откуда === 'сейф' ||
+          (accounts && accounts.length && !откуда && наличными(r));
+        if (своими) {
+          расход(d, 'Закуп товара', num(r.goodsCash), '');
+          расход(d, 'Оплата поставщикам', num(r.debtPaid), '');
+        }
+      } else if (isMove(r)) {
+        // перевод между своими кошельками: из наличных — расход, в наличные — приход
+        if (наличными(r)) расход(d, txt(r.category) || 'Перевод', num(r.amount), txt(r.to));
+        if (наличными(r, 'to')) приход(d, txt(r.category) || 'Перевод', num(r.amount), txt(r.from));
+      }
+    });
+
+    порядок.sort();
+    /* НАЧАЛЬНЫЙ ОСТАТОК БЕРЁМ ОТТУДА ЖЕ, ОТКУДА ЕГО БЕРУТ СЧЕТА.
+
+       Сначала я взял его из настройки «наличных у вас сейчас». Проверка тут
+       же поймала: счета живут своей жизнью, и стоит владельцу поправить
+       настройку после того, как счета заведены, — книга и остаток сейфа
+       разойдутся ровно на эту правку. Владелец увидел бы два разных числа
+       и не знал бы, какому верить.
+
+       Есть справочник счетов — начальный остаток складываем по наличным
+       счетам. Нет (очень старая база) — по-прежнему из настройки. */
+    var начало = 0;
+    if (accounts && accounts.length) {
+      for (var ai = 0; ai < accounts.length; ai++) {
+        if (accounts[ai] && accounts[ai].kind !== 'bank') начало += num(accounts[ai].opening);
+      }
+    } else {
+      начало = num(settings.openSafeStart);
+    }
+    начало = safeRound(начало);
+    var остаток = начало;
+    var дни = порядок.map(function (d) {
+      var x = сейчас[d];
+      var пр = 0, рс = 0, i;
+      for (i = 0; i < x.in.length; i++) пр += x.in[i].sum;
+      for (i = 0; i < x.out.length; i++) рс += x.out[i].sum;
+      пр = safeRound(пр); рс = safeRound(рс);
+      var утро = остаток;
+      остаток = safeRound(утро + пр - рс);
+      return { date: d, open: утро, in: x.in, out: x.out,
+        inSum: пр, outSum: рс, close: остаток };
+    });
+    return { days: дни, open: начало, close: остаток,
+      inSum: safeRound(дни.reduce(function (a, x) { return a + x.inSum; }, 0)),
+      outSum: safeRound(дни.reduce(function (a, x) { return a + x.outSum; }, 0)) };
+  }
+
+  /* --- СКОЛЬКО МАГАЗИН ДОЛЖЕН ВЛАДЕЛЬЦУ ---------------------------------
+
+     Владелец кладёт свои деньги в оборот, когда не хватает на закуп, а потом
+     забирает обратно. Его словами: «Внёс 100 000 — магазин должен мне
+     100 000. Забрал 30 000 — осталось 70 000».
+
+     В прибыль это не лезет ни с одной стороны, и так было и раньше: свои
+     деньги не выручка, а забор владельца берётся уже из прибыли. Здесь
+     считается только сам долг.
+
+     Забрал больше, чем вносил, — долг уходит в минус, и это не ошибка:
+     значит он взял из заработанного. Экран обязан сказать это словами, а
+     не показать минус, который читается как сбой. */
+  var СВОИ_ДЕНЬГИ = ['внёс владелец', 'внес владелец', 'вложение владельца',
+    'свои деньги', 'внёс свои', 'внес свои'];
+
+  function isOwnerMoney(r) {
+    return СВОИ_ДЕНЬГИ.indexOf(norm(r && r.category)) >= 0;
+  }
+
+  function ownerFunds(rows, upto) {
+    var внёс = 0, забрал = 0;
+    (rows || []).forEach(function (r) {
+      if (upto && txt(r.date) > upto) return;
+      if (isIncome(r) && isOwnerMoney(r)) внёс += safeRound(r.amount);
+      else if (isDraw(r)) забрал += safeRound(r.amount);
+    });
+    внёс = safeRound(внёс); забрал = safeRound(забрал);
+    return { in: внёс, out: забрал, debt: safeRound(внёс - забрал) };
+  }
+
   /* Итоги за период: выручка, расходы, товар, долги. Одна функция на все
      экраны, чтобы цифры нигде не разошлись. */
   function totals(rows, settings) {
@@ -3468,6 +3620,7 @@
     rowsInRange: rowsInRange, syncByPeriod: syncByPeriod, parseAsOf: parseAsOf,
     isZero: isZero, same: same, КОПЕЙКА: КОПЕЙКА, costKindName: costKindName,
     cashAccount: cashAccount,
+    ownerFunds: ownerFunds, isOwnerMoney: isOwnerMoney, cashBook: cashBook,
     periodsOf: periodsOf, coverOf: coverOf, periodKey: periodKey,
     pruneOldPeriods: pruneOldPeriods, monthStart: monthStart,
     mergeByKey: mergeByKey, mergeSales: mergeSales,

@@ -267,6 +267,103 @@
      ЗАКРЫТИЕ МЕСЯЦА
      Один экран, который отвечает на вопрос «можно ли верить цифрам за месяц».
      ========================================================================== */
+  /* --------------------------------------------------------------------------
+     КАССОВАЯ КНИГА
+
+     То, ради чего владелец и завёл программу. По дням: сколько было с утра,
+     что пришло, что ушло, сколько осталось к вечеру — и каждая строка
+     названа, кому и за что.
+
+     Владелец просил и то, и другое: удобный вид для работы и официальный
+     бланк КО-4 на печать, чтобы можно было подшить. Считает обе вещи одна
+     функция E.cashBook — иначе бумага и экран однажды разошлись бы.
+
+     Безнала здесь нет и быть не может: кассовая книга — про наличные.
+     -------------------------------------------------------------------------- */
+  function viewCashBook() {
+    var u = U(), m = ym();
+    var from = m + '-01', to = m + '-31';
+    var b = E.cashBook(dds(), S.settings, from, to, S.state.accounts || []);
+
+    var h = u.pageHead('Кассовая книга', 'Наличные по дням: что пришло, что ушло, сколько осталось',
+      monthPicker() + ' <button class="btn" data-act="print">' + ic('print') +
+      ' Напечатать КО-4</button>');
+
+    if (!b.days.length) {
+      h += u.blank('За ' + esc(monthRu(m)) + ' наличных движений нет',
+        'Книга заполняется сама: из сверки смен, расходов и приходов.',
+        { actions: [{ name: 'Свести кассу', form: 'shiftClose', icon: 'calculator' }] });
+      return h;
+    }
+
+    h += '<div class="stat-grid">' +
+      u.stat('На начало месяца', u.priv(b.days[0].open), esc(monthRu(m))) +
+      u.stat('Пришло', u.priv(b.inSum), 'наличными', 'c-green') +
+      u.stat('Ушло', u.priv(b.outSum), 'наличными') +
+      u.stat('На конец месяца', u.priv(b.close), 'должно лежать в сейфе',
+        b.close < 0 ? 'c-red' : '') +
+      '</div>';
+
+    if (b.close < 0) {
+      h += '<div class="banner orange"><span>' + ic('warning') + '</span><span>' +
+        'Книга ушла в минус: по записям вы потратили больше наличных, чем получили. ' +
+        'Так не бывает — значит какой-то приход не записан или расход записан дважды.' +
+        '</span></div>';
+    }
+
+    /* Экранный вид: день — карточка, внутри приходы и расходы строками.
+       Таблицей это читать невозможно: в одном дне может быть десять строк. */
+    b.days.forEach(function (d) {
+      var строки = d.in.map(function (x) {
+        return u.listRow({ icon: 'plus', title: esc(x.name),
+          sub: x.who ? esc(x.who) : '',
+          value: '<span class="c-green">+ ' + u.priv(x.sum) + '</span>' });
+      }).concat(d.out.map(function (x) {
+        return u.listRow({ icon: 'minus', title: esc(x.name),
+          sub: x.who ? esc(x.who) : '',
+          value: '− ' + u.priv(x.sum) });
+      }));
+      h += u.card(dateRu(d.date),
+        '<div class="cb-head"><span>Было с утра</span><b>' + u.priv(d.open) + '</b></div>' +
+        u.listOf(строки, '') +
+        '<div class="cb-head cb-close"><span>Осталось к вечеру</span><b>' +
+          u.priv(d.close) + '</b></div>',
+        'приход ' + money(d.inSum) + '  ·  расход ' + money(d.outSum));
+    });
+
+    /* --- Бланк КО-4: виден только на бумаге ----------------------------- */
+    h += '<div class="print-only ko4">';
+    h += '<h2>Кассовая книга за ' + esc(monthRu(m)) + '</h2>' +
+      '<div class="print-sub">' + esc(E.txt(S.settings.legalName) || E.txt(S.settings.storeName)) +
+      (E.txt(S.settings.inn) ? ' · ИНН ' + esc(E.txt(S.settings.inn)) : '') + '</div>';
+    b.days.forEach(function (d, i) {
+      h += '<table class="ko4-t"><caption>Лист ' + (i + 1) + ' · ' + esc(dateRu(d.date)) +
+        '</caption><thead><tr><th>Номер документа</th><th>От кого получено ' +
+        'или кому выдано</th><th>Приход</th><th>Расход</th></tr></thead><tbody>';
+      h += '<tr><td></td><td>Остаток на начало дня</td><td>' + esc(money(d.open)) +
+        '</td><td></td></tr>';
+      d.in.forEach(function (x, n) {
+        h += '<tr><td>' + (n + 1) + '</td><td>' + esc(x.name) +
+          (x.who ? ' · ' + esc(x.who) : '') + '</td><td>' + esc(money(x.sum)) +
+          '</td><td></td></tr>';
+      });
+      d.out.forEach(function (x, n) {
+        h += '<tr><td>' + (n + 1) + '</td><td>' + esc(x.name) +
+          (x.who ? ' · ' + esc(x.who) : '') + '</td><td></td><td>' +
+          esc(money(x.sum)) + '</td></tr>';
+      });
+      h += '<tr class="ko4-sum"><td></td><td>Итого за день</td><td>' + esc(money(d.inSum)) +
+        '</td><td>' + esc(money(d.outSum)) + '</td></tr>';
+      h += '<tr class="ko4-sum"><td></td><td>Остаток на конец дня</td><td>' +
+        esc(money(d.close)) + '</td><td></td></tr>';
+      h += '</tbody></table>';
+      h += '<div class="ko4-sign">Кассир ____________________  ' +
+        'Бухгалтер ____________________</div>';
+    });
+    h += '</div>';
+    return h;
+  }
+
   function viewMonthClose() {
     var u = U(), m = ym();
     var pay = E.payrollTotals(E.payrollSummary(
@@ -1258,6 +1355,7 @@
     { id: 'bep', icon: 'scale', name: 'Безубыточность', group: 'Отчёты', render: viewBep },
     { id: 'bepdays', icon: 'calendarCheck', name: 'Выход в ноль по дням', group: 'Отчёты', render: viewBepDays },
     { id: 'taxcal', icon: 'bank', name: 'Налоговый календарь', group: 'Отчёты', render: viewTaxCal },
+    { id: 'cashbook', icon: 'notebook', name: 'Кассовая книга', group: 'Каждый день', render: viewCashBook },
     { id: 'monthclose', icon: 'lock', name: 'Закрытие месяца', group: 'Отчёты', render: viewMonthClose },
     { id: 'log', icon: 'clock', name: 'Что менялось', group: 'Ещё', render: viewLog },
     { id: 'reset', icon: 'lifebuoy', name: 'Сброс и откат базы', group: 'Ещё', render: viewReset }

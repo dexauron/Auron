@@ -3945,6 +3945,84 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 25. Кассовая книга: то, ради чего владелец и завёл программу.
+
+       По дням — сколько было с утра, что пришло, что ушло, сколько осталось.
+       Главное свойство книги: остаток на утро следующего дня равен остатку на
+       вечер предыдущего. Рвётся цепочка — деньги взялись из воздуха. */
+{
+  console.log('— Кассовая книга');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.setSetting('reportMonth', '2026-09');
+    const a = S.state.accounts || [];
+    /* Начальный остаток живёт на самом счёте, а не в настройке: настройку
+       программа переносит в счёт один раз, при заведении. Ставим туда, где
+       он хранится на самом деле, — иначе проверка проверяла бы не то. */
+    a.find(x => x.kind === 'cash').opening = 10000;
+    const сейф = a.find(x => x.kind === 'cash').id, банк = a.find(x => x.kind === 'bank').id;
+    S.state.dds = [];
+    S.add('dds', { type: 'Смена', date: '2026-09-14', till: 'Касса 1', shift: 'День',
+      cashier: 'Аня', openCash: 5000, zCash: 74841, zCashless: 73165, payouts: 10760,
+      kept: 5000, received: 57969,
+      payoutList: [{ name: 'Молокозавод', sum: 8000 }, { name: 'Вода', sum: 2760 }],
+      toAccount: сейф, cashlessAccount: банк });
+    S.add('dds', { type: 'Расход', date: '2026-09-14', category: 'Аренда',
+      method: 'Наличные', account: сейф, amount: 15000 });
+    S.add('dds', { type: 'Приход', date: '2026-09-15', category: 'Внёс владелец',
+      method: 'Наличные', account: сейф, amount: 50000 });
+    S.add('dds', { type: 'Забор', date: '2026-09-16', method: 'Наличные',
+      account: сейф, amount: 20000 });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('cashbook');
+  });
+  await page.waitForTimeout(600);
+  const cb = (await page.textContent('#page')).replace(/[\u00a0\u202f]/g, ' ');
+
+  check('КАССОВАЯ КНИГА ОТКРЫЛАСЬ', cb.includes('Кассовая книга'), 'открылась', 'открылась');
+  check('видно, что было на начало месяца', cb.includes('10 000'), 'видно', '10 000 ₽');
+  check('ВЫРУЧКА СМЕНЫ ПОПАЛА В КНИГУ ПРИХОДОМ',
+    cb.includes('57 969'), 'попала', '57 969 ₽');
+  check('расход наличными — строкой со статьёй',
+    /Аренда/.test(cb) && cb.includes('15 000'), 'есть', 'Аренда 15 000 ₽');
+  check('свои деньги владельца видны отдельно',
+    /Внёс владелец/.test(cb) && cb.includes('50 000'), 'видно', 'Внёс владелец 50 000 ₽');
+  check('и забор владельца тоже', /Забрал владелец/.test(cb), 'видно', 'видно');
+  /* 10 000 + 57 969 − 15 000 + 50 000 − 20 000 = 82 969 */
+  check('ОСТАТОК НА КОНЕЦ СОШЁЛСЯ', cb.includes('82 969'), 'сошёлся', '82 969 ₽');
+
+  /* Цепочка: вечер одного дня = утро следующего. Проверяем по самой книге,
+     а не по экрану: на экране числа могут совпасть случайно. */
+  const цепь = await page.evaluate(() => {
+    const E = window.WM, S = window.WMStore;
+    const b = E.cashBook(S.state.dds, S.settings, null, null, S.state.accounts);
+    return { рвётся: b.days.some((d, i) => i > 0 && d.open !== b.days[i - 1].close),
+      конец: b.close,
+      сейф: E.safeOnHand(S.state.dds, S.settings, null, S.state.accounts) };
+  });
+  check('ЦЕПОЧКА ОСТАТКОВ НЕ РВЁТСЯ', !цепь.рвётся, цепь.рвётся ? 'рвётся' : 'цела', 'цела');
+  check('КНИГА СОШЛАСЬ С ОСТАТКОМ СЕЙФА', цепь.конец === цепь.сейф,
+    цепь.конец + ' против ' + цепь.сейф, 'одинаково');
+
+  /* Бланк КО-4 существует, но на экране его не видно — только на бумаге. */
+  const бланк = await page.evaluate(() => {
+    const e = document.querySelector('.ko4');
+    if (!e) return 'бланка нет';
+    return getComputedStyle(e).display === 'none' ? 'скрыт' : 'виден на экране';
+  });
+  check('БЛАНК КО-4 ЕСТЬ, НО НА ЭКРАНЕ НЕ МЕШАЕТ', бланк === 'скрыт', бланк, 'скрыт');
+  check('и в нём есть шапка с юрлицом',
+    await page.evaluate(() => /ИП Ахмедов|Кассовая книга за/.test(
+      (document.querySelector('.ko4') || {}).textContent || '')) ||
+    await page.evaluate(() => !!document.querySelector('.ko4-t')),
+    'есть', 'есть');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

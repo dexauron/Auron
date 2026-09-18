@@ -776,17 +776,19 @@
       var u = U(); v = v || {};
       return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
         u.fieldRow('Откуда', 'category', 'list', v.category || 'Прочий приход',
-          { options: categories().concat(['Прочий приход', 'Вернули долг', 'Внёс владелец']) }) +
+          { options: ['Возврат от поставщика', 'Вернули долг', 'Внёс владелец', 'Прочий приход']
+            .concat(categories()),
+            hint: '«Внёс владелец» — ваши личные деньги в оборот. Программа запомнит, ' +
+              'сколько магазин вам должен, и в прибыль это не полезет' }) +
         u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
-        u.fieldRow('На какой счёт', 'account', 'select', v.account || accDefault(false),
-          { options: accOptions(),
-            hint: 'в денежный ящик — кассир пересчитает их вместе со сменой' }) +
+        u.fieldRow('Куда положили', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(), hint: 'в сейф или на счёт' }) +
         u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
         u.fieldRow('Комментарий', 'note', 'text', v.note || '');
     },
-    hint: 'Выручку сюда писать не нужно — она приходит из сверки смены. Наличные, ' +
-      'положенные в ящик, остаток не увеличивают: их пересчитают при закрытии смены, ' +
-      'и они попадут в факт. Иначе те же деньги посчитались бы дважды.',
+    hint: 'Выручку сюда писать не нужно — она приходит из сверки смены. Сюда идёт всё ' +
+      'остальное: возврат от поставщика, отданный покупателем долг, ваши собственные ' +
+      'деньги в оборот. Выручкой и прибылью ничто из этого не становится.',
     save: function (v) {
       var bad = Q.checkAmount(v.amount); if (bad) return bad;
       learn({ categories: v.category, methods: v.method });
@@ -1331,11 +1333,18 @@
        и платит, и без этой цифры решение «сколько можно потратить» не
        принять. Переплату пишем словом — минус читается как ошибка. */
     var bank = E.accountBalances(all, accounts()).totals.bank;
+    var own = E.ownerFunds(all);
     h += '<div class="stat-grid">' +
       u.stat('В сейфе', u.priv(cash), 'наличные у вас на руках',
         cash < 0 ? 'c-red' : '') +
       u.stat('На счёте', u.priv(bank), 'карта, СБП, переводы',
         bank < 0 ? 'c-red' : '') +
+      (E.norm(S.settings.ownFunds) === 'да' && (own.in || own.out)
+        ? u.stat(own.debt < 0 ? 'Взяли сверх вложенного' : 'Магазин должен вам',
+          u.priv(Math.abs(own.debt)),
+          own.debt < 0 ? 'из заработанного' : 'ваши деньги в обороте',
+          own.debt < 0 ? 'c-green' : '')
+        : '') +
       u.stat(debt.debt < 0 ? 'Переплата поставщикам' : 'Должен поставщикам',
         u.priv(Math.abs(debt.debt)),
         debt.debt > 0 ? 'из этих денег и платим' : 'заплатили вперёд',
