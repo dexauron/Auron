@@ -1521,6 +1521,64 @@
     return r;
   }
 
+  /* --- Долг в разрезе поставщиков -------------------------------------------
+     Владелец просил: «Начать просто, углубляться по желанию». Сверху — одна
+     строка «должен всего столько», а кто хочет подробностей, нажимает
+     кнопку и получает вот это.
+
+     ЧЕСТНО О ТОМ, ЧТО ЗДЕСЬ МОЖНО, А ЧЕГО НЕЛЬЗЯ. Общий долг магазина —
+     цифра ручная, из вечерних итогов: «взял в долг столько, погасил
+     столько». Разложить эту одну цифру по поставщикам НЕЛЬЗЯ — в ней нет
+     имён, и любое «разложение» было бы выдумкой.
+
+     Зато по поставщикам программа знает другое, и знает точно:
+       · запланированные выплаты — их владелец заводит с именем поставщика;
+       · привоз и оплату по ордерам — если загружены накладные из 1С.
+     Именно это и показывается. Сумма строк НЕ обязана сходиться с общим
+     долгом, и подписано это прямо, чтобы никто не считал одно другим. */
+  function supplierBreakdown(plans, supplies, t) {
+    t = t || today();
+    var map = {}, порядок = [];
+    function строка(имя) {
+      var ключ = norm(имя);
+      if (!map[ключ]) {
+        map[ключ] = { supplier: txt(имя) || 'Без имени', planned: 0, overdue: 0,
+          soon: 0, paidPlans: 0, brought: 0, paidDocs: 0, docs: 0 };
+        порядок.push(ключ);
+      }
+      return map[ключ];
+    }
+
+    (plans || []).forEach(function (p) {
+      var st = planStatus(p, t), a = safeRound(p.amount);
+      var r = строка(p.supplier);
+      if (st.key === 'off') return;
+      if (st.key === 'paid') { r.paidPlans += a; return; }
+      r.planned += a;
+      if (st.key === 'late') r.overdue += a;
+      if (st.key === 'today' || st.key === 'soon') r.soon += a;
+    });
+
+    (supplies || []).forEach(function (x) {
+      var r = строка(x.supplier || x.name);
+      r.brought += safeRound(x.sum);
+      r.paidDocs += safeRound(x.paid);
+      r.docs += safeRound(x.docs);
+    });
+
+    var out = порядок.map(function (k) {
+      var r = map[k];
+      for (var f in r) if (f !== 'supplier') r[f] = safeRound(r[f]);
+      return r;
+    });
+    /* Сверху тот, с кем надо разобраться раньше: сначала просрочка, потом
+       остальные запланированные выплаты, и только потом объём привоза. */
+    out.sort(function (a, b) {
+      return (b.overdue - a.overdue) || (b.planned - a.planned) || (b.brought - a.brought);
+    });
+    return out;
+  }
+
   /* --- Долги покупателей («тетрадка у кассы») -------------------------------- */
   function debtorTotals(rows, t) {
     t = t || today();
@@ -3620,6 +3678,7 @@
     cashlessTotal: cashlessTotal, supplierDebt: supplierDebt,
     cashierRating: cashierRating, cashGaps: cashGaps, tillState: tillState,
     totals: totals, planStatus: planStatus, planTotals: planTotals,
+    supplierBreakdown: supplierBreakdown,
     fundTotals: fundTotals, purchaseCheck: purchaseCheck,
     budgetTotals: budgetTotals,
     debtorTotals: debtorTotals, countCash: countCash,

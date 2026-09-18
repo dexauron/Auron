@@ -4306,6 +4306,84 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 28. Поставщики: просто, а глубже по кнопке.
+
+       Владелец выбрал из предложенных вариантов именно этот: «Начать
+       просто, углубляться по желанию». Сверху одна цифра — сколько всего
+       должен, — а подробности по кнопке, на этом же экране. */
+{
+  console.log('— Поставщики: одна цифра, подробности по кнопке');
+  const { page, ctx, errs } = await open();
+
+  const сегодня = await page.evaluate(() => window.WM.today());
+  await page.evaluate(сег => {
+    const S = window.WMStore;
+    S.setSetting('openDebtStart', 200000);
+    S.add('plans', { due: '2026-01-05', supplier: 'Хлебозавод', amount: 15000,
+      status: 'Запланирована' });
+    S.add('plans', { due: сег, supplier: 'Молокозавод', amount: 40000,
+      status: 'Запланирована' });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('suppliers');
+  }, сегодня);
+  await page.waitForTimeout(500);
+
+  const просто = await page.evaluate(() =>
+    document.getElementById('page').innerText.replace(/\s+/g, ' '));
+  check('СРАЗУ ВИДНО ГЛАВНОЕ: СКОЛЬКО ВСЕГО ДОЛЖЕН',
+    /Должны поставщикам/.test(просто) && /200 000/.test(просто.replace(/[\u00a0\u202f]/g, ' ')),
+    просто.slice(0, 70), 'одна цифра долга');
+  check('и про просрочку сказано отдельно',
+    /Просрочено выплат/.test(просто), 'сказано', 'сказано');
+  check('А ПОДРОБНОСТЕЙ СРАЗУ НЕТ — ИХ НАДО ПОПРОСИТЬ',
+    !/По поставщикам/.test(просто) && !/Хлебозавод/.test(просто),
+    просто.length + ' знаков на экране', 'без таблицы');
+  check('но кнопка за ними на виду',
+    /Разбить по поставщикам/.test(просто), 'на виду', 'на виду');
+
+  await page.evaluate(() => document.querySelector('[data-act="sup-split"]').click());
+  await page.waitForTimeout(400);
+  const глубже = await page.evaluate(() =>
+    document.getElementById('page').innerText.replace(/\s+/g, ' '));
+  check('НАЖАЛ — ПОЯВИЛАСЬ РАЗБИВКА ПО ИМЕНАМ',
+    /По поставщикам/.test(глубже) && /Хлебозавод/.test(глубже) && /Молокозавод/.test(глубже),
+    'появилась', 'появилась');
+  check('и главная цифра никуда не делась',
+    /Должны поставщикам/.test(глубже), 'на месте', 'на месте');
+
+  /* САМОЕ ВАЖНОЕ. Разбивка — это выплаты по именам, а НЕ разложенный общий
+     долг: в ручной цифре имён нет. Если программа об этом промолчит,
+     владелец сложит столбец, не получит свой долг и решит, что она врёт. */
+  check('И ЧЕСТНО СКАЗАНО, ЧТО ЭТО НЕ РАЗЛОЖЕННЫЙ ДОЛГ',
+    /не складываются в общий долг|не разложенный общий долг/.test(глубже),
+    'сказано', 'сказано');
+
+  const свёрнуто = await page.evaluate(async () => {
+    document.querySelector('[data-act="sup-split"]').click();
+    await new Promise(r => setTimeout(r, 300));
+    return document.getElementById('page').innerText.replace(/\s+/g, ' ');
+  });
+  check('нажал ещё раз — свернулось обратно',
+    !/По поставщикам/.test(свёрнуто), 'свернулось', 'свернулось');
+
+  /* Кто ведёт долг по накладным, приходит сюда именно за подробностями:
+     ему экран открыт сразу. Это и есть работа настройки, которая раньше
+     не делала ничего. */
+  const поНакладным = await page.evaluate(async () => {
+    window.WMStore.setSetting('debtMode', 'по накладным');
+    window.WMUI.go('pulse');
+    await new Promise(r => setTimeout(r, 200));
+    window.WMUI.go('suppliers');
+    await new Promise(r => setTimeout(r, 300));
+    return document.getElementById('page').innerText.replace(/\s+/g, ' ');
+  });
+  check('НАСТРОЙКА «ДОЛГ ВЕДУ ПО НАКЛАДНЫМ» ТЕПЕРЬ ЧТО-ТО ЗНАЧИТ',
+    /По поставщикам/.test(поНакладным), 'экран сразу подробный', 'сразу подробный');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

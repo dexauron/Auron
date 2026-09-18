@@ -1116,6 +1116,11 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .hero-value { font-size: clamp(38px, 6vw, 54px); letter-spacing: -1.2px; }
 .hero-sub { margin-top: 8px; font-size: 14px; color: var(--label-2); }
 
+/* Ряд кнопок между карточками: «Разбить по поставщикам», «Свернуть».
+   Отступы такие же, как у карточек, иначе кнопка липнет к цифре над ней и
+   читается как её часть. */
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+
 /* Главное действие крупнее остальных: их не надо разглядывать */
 .quick-main { align-items: center; gap: 8px; margin: 4px 0 18px; }
 .quick-main .btn-lg { padding: 12px 22px; font-size: 16px; }
