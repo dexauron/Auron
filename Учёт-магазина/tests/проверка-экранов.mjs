@@ -4492,6 +4492,201 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 30. Установка: скопировали программу — она работает на новом месте.
+
+       Владелец попросил «примерно установочную программу»: чтобы приложение
+       можно было положить на флешку или на компьютер, и оно там работало.
+       Проверять это на словах нельзя: копирование ломается тихо — забыли
+       папку vendor, не тот регистр в имени файла, — и владелец узнаёт об
+       этом уже на месте, с пустым экраном. Поэтому здесь установщик
+       запускается по-настоящему, а копия открывается в браузере. */
+{
+  console.log('— Установка на другое место');
+  const { execFileSync } = await import('child_process');
+  const os = await import('os');
+
+  const куда = fs.mkdtempSync(path.join(os.tmpdir(), 'уст-'));
+  let поставилось = '';
+  try {
+    execFileSync('bash', [path.join(HERE, '..', 'Установить.command')],
+      { input: куда + '\n\n', encoding: 'utf8', timeout: 120000 });
+    поставилось = path.join(куда, 'Учёт магазина');
+  } catch (e) { поставилось = ''; }
+
+  check('УСТАНОВЩИК ОТРАБОТАЛ И ПОЛОЖИЛ ПРОГРАММУ',
+    !!поставилось && fs.existsSync(path.join(поставилось, 'Учёт_магазина.html')),
+    поставилось || 'не отработал', 'программа на месте');
+
+  if (поставилось) {
+    /* Папки, без которых программа — пустой экран. Их забывают чаще всего:
+       человек копирует «главный файл» и удивляется. */
+    const нужные = ['js', 'vendor', 'styles.css', 'Учёт_магазина.html',
+      'Запустить.bat', 'Запустить.command', 'README_Инструкция.txt'];
+    const нет = нужные.filter(f => !fs.existsSync(path.join(поставилось, f)));
+    check('И ВСЁ, БЕЗ ЧЕГО ОНА НЕ РАБОТАЕТ, СКОПИРОВАЛОСЬ',
+      нет.length === 0, нет.join(', ') || 'всё на месте', 'ничего не забыто');
+
+    /* ВЫГРУЗКИ 1С НЕ КОПИРУЮТСЯ, И ЭТО ВАЖНО. В них закупочные цены и
+       телефоны поставщиков. Программу отдают другому магазину, ставят на
+       чужой компьютер — чужие цены уезжать вместе с ней не должны. */
+    const выгрузки = fs.existsSync(path.join(поставилось, 'Данные_1С_и_Excel'))
+      ? fs.readdirSync(path.join(поставилось, 'Данные_1С_и_Excel')) : [];
+    check('А ВЫГРУЗКИ 1С С ЧУЖИМИ ЦЕНАМИ — НЕ УЕХАЛИ',
+      выгрузки.length === 1 && /ПОЛОЖИТЕ/.test(выгрузки[0]),
+      выгрузки.join(', ') || 'папки нет', 'только памятка');
+
+    const { page, ctx, errs } = await open();
+    await page.goto('file://' + path.join(поставилось, 'Учёт_магазина.html'));
+    await page.waitForTimeout(1200);
+    const живёт = await page.evaluate(() => {
+      const S = window.WMStore;
+      S.add('dds', { type: 'Расход', date: '2026-09-18', category: 'Аренда',
+        method: 'Наличные', amount: 5000 });
+      S.save(); window.WMUI.recompute(); window.WMUI.go('ledger');
+      return { экранов: window.WMUI.views().length, ошибка: S.lastSaveError || '',
+        видно: /5 000|5000/.test(document.getElementById('page').innerText
+          .replace(/[\u00a0\u202f]/g, ' ')) };
+    });
+    check('УСТАНОВЛЕННАЯ КОПИЯ ОТКРЫЛАСЬ ЦЕЛИКОМ',
+      живёт.экранов >= 40, живёт.экранов + ' экранов', 'не меньше 40');
+    check('И В НЕЙ МОЖНО РАБОТАТЬ: ЗАПИСЬ СОХРАНИЛАСЬ И ВИДНА',
+      !живёт.ошибка && живёт.видно, живёт.ошибка || 'видна', 'видна');
+    check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+    await page.close(); await ctx.close();
+  }
+
+  fs.rmSync(куда, { recursive: true, force: true });
+  console.log('');
+}
+
+/* 31. Вторая копия: флешка пропала — база осталась.
+
+       Владелец: «чтобы можно было сделать резервную копию, копию оставить
+       на компьютере либо на отдельной флешке — если вдруг флешка сгорит,
+       испортится, потеряется».
+
+       Механизм в программе был давно, а ВЫБРАТЬ эту папку было негде:
+       кнопки не существовало, и копия не делалась ни разу. Проверяем не
+       кнопку, а результат: в папке должен появиться файл, из которого база
+       поднимается целиком.
+
+       Настоящее окно выбора папки браузер показывает только человеку, и
+       нажать его отсюда нельзя. Поэтому подменяем РОВНО ЭТО окно — а всё
+       остальное работает своё: и запись файла, и состояния, и кнопки. */
+{
+  console.log('— Вторая копия на другой флешке');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => {
+    window.__папка = {};            // сюда «флешка» складывает файлы
+    const handle = {
+      name: 'Флешка-копии',
+      queryPermission: async () => 'granted',
+      requestPermission: async () => 'granted',
+      values: async function* () {},
+      getFileHandle: async (name) => ({
+        name: name,
+        createWritable: async () => ({
+          write: async t => { window.__папка[name] = t; },
+          close: async () => {}
+        })
+      })
+    };
+    window.showDirectoryPicker = async () => handle;
+  });
+
+  await page.evaluate(() => { window.WMUI.go('data'); });
+  await page.waitForTimeout(400);
+  const доТого = await page.evaluate(() =>
+    document.getElementById('page').innerText.replace(/\s+/g, ' '));
+  check('ПРОГРАММА СПРАШИВАЕТ, КУДА КЛАСТЬ ВТОРУЮ КОПИЮ',
+    /Куда класть вторую копию/.test(доТого), 'спрашивает', 'спрашивает');
+  check('и объясняет, зачем это нужно',
+    /флешк/i.test(доТого) && /ДРУГОЕ место/.test(доТого), 'объясняет', 'объясняет');
+
+  // Кладём запись, чтобы копии было что сохранять
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-18', category: 'Аренда',
+      method: 'Наличные', amount: 77777 });
+    S.save();
+  });
+
+  await page.evaluate(() => document.querySelector('[data-act="backup2-connect"]').click());
+  await page.waitForTimeout(700);
+
+  const после = await page.evaluate(() => {
+    const имена = Object.keys(window.__папка);
+    let база = null;
+    try { база = JSON.parse(window.__папка[имена[0]]); } catch (e) { база = null; }
+    return { файлов: имена.length, имя: имена[0] || '',
+      записей: база && база.data && база.data.dds ? база.data.dds.length : 0,
+      наша: !!(база && база.data && база.data.dds &&
+        база.data.dds.some(r => r.amount === 77777)),
+      экран: document.getElementById('page').innerText.replace(/\s+/g, ' ') };
+  });
+
+  check('ВЫБРАЛ ПАПКУ — КОПИЯ ЛЕГЛА СРАЗУ, А НЕ КОГДА-НИБУДЬ',
+    после.файлов === 1, после.файлов + ' файлов', 1);
+  check('и у неё в имени дата, чтобы на флешке была история',
+    /^база-\d{4}-\d{2}-\d{2}/.test(после.имя), после.имя, 'база-ГГГГ-ММ-ДД-…');
+  check('В КОПИИ ЛЕЖИТ НАСТОЯЩАЯ БАЗА, А НЕ ПУСТЫШКА',
+    после.наша && после.записей > 0, после.записей + ' записей', 'с записями');
+  check('и программа говорит, куда положила',
+    /Флешка-копии/.test(после.экран), 'говорит', 'говорит');
+
+  /* Копия «сейчас» — отдельная кнопка: перед тем как вынуть флешку,
+     владелец должен иметь возможность нажать и быть уверенным. */
+  /* Считать файлы тут нельзя: в имени копии минуты, и вторая копия в ту же
+     минуту ляжет тем же именем. Поэтому меняем базу и смотрим, попало ли
+     новое в файл — иначе проверка прошла бы и у кнопки, которая не делает
+     ничего. */
+  const свежесть = await page.evaluate(async () => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-18', category: 'Связь',
+      method: 'Наличные', amount: 31337 });
+    S.save();
+    document.querySelector('[data-act="backup2-now"]').click();
+    await new Promise(r => setTimeout(r, 600));
+    return Object.keys(window.__папка).some(n => {
+      try { return JSON.parse(window.__папка[n]).data.dds.some(r => r.amount === 31337); }
+      catch (e) { return false; }
+    });
+  });
+  check('«СДЕЛАТЬ КОПИЮ СЕЙЧАС» КЛАДЁТ СВЕЖУЮ БАЗУ, А НЕ ВЧЕРАШНЮЮ',
+    свежесть, свежесть ? 'свежая' : 'старая', 'свежая');
+
+  /* САМОЕ ГЛАВНОЕ. Флешку вынули — программа обязана это заметить и сказать,
+     а не молчать и делать вид, что копии идут. */
+  const пропала = await page.evaluate(async () => {
+    window.showDirectoryPicker = async () => { throw new Error('нет'); };
+    const F = window.WMFiles;
+    // «флешка сгорела»: папка больше не отвечает
+    const битый = {
+      name: 'Флешка-копии',
+      queryPermission: async () => 'granted',
+      requestPermission: async () => 'granted',
+      values: async function* () {},
+      getFileHandle: async () => { const e = new Error('нет папки'); e.name = 'NotFoundError'; throw e; }
+    };
+    window.showDirectoryPicker = async () => битый;
+    await F.connectBackup();
+    await F.copyToBackup(() => window.WMStore.state, 'проверка');
+    window.WMUI.render();
+    return { состояние: F.backupState,
+      экран: document.getElementById('page').innerText.replace(/\s+/g, ' ') };
+  });
+  check('ФЛЕШКУ ВЫНУЛИ — ПРОГРАММА ЗАМЕТИЛА',
+    пропала.состояние === 'lost', пропала.состояние, 'lost');
+  check('И СКАЗАЛА ОБ ЭТОМ, А НЕ ДЕЛАЕТ ВИД, ЧТО КОПИИ ИДУТ',
+    /не находится|Указать папку/.test(пропала.экран),
+    пропала.экран.slice(0, 80), 'сказала');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

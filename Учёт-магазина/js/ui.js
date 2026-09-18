@@ -984,6 +984,40 @@
     return await syncFolder(false);
   }
 
+  /* --- ВТОРАЯ ПАПКА ДЛЯ КОПИЙ -------------------------------------------
+     Копии внутри папки программы лежат на той же флешке. Флешка пропала —
+     пропало всё сразу. Поэтому вторая папка обязана быть в другом месте, и
+     программа об этом прямо говорит, а не надеется, что владелец догадается. */
+  async function выбратьПапкуКопий() {
+    try {
+      await F.connectBackup();
+    } catch (e) {
+      var why = F.humanError(e);
+      if (why) toast(why, 11000);     // пустая строка = владелец сам закрыл окно выбора
+      render();
+      return false;
+    }
+    render();
+    /* Первую копию кладём сразу. Иначе владелец выбрал папку, закрыл
+       программу — и остался без копии, думая, что она уже есть. */
+    return await копияВоВторуюПапку();
+  }
+
+  async function копияВоВторуюПапку() {
+    if (F.backupState !== 'ready') { toast('Сначала выберите папку для копий.'); return false; }
+    var имя = await F.copyToBackup(function () { return S.state; }, 'по просьбе владельца');
+    if (!имя) {
+      render();
+      toast('Копию положить не получилось. Проверьте, на месте ли папка: ' +
+        (F.backupDirName || 'та, что выбрана'), 11000);
+      return false;
+    }
+    F.markCopied();
+    render();
+    toast('Копия базы положена: ' + F.backupDirName + '/' + имя, 8000);
+    return true;
+  }
+
   /* Вернуть доступ к папке, которую браузер помнит, но разрешение отозвал.
      F.reconnect() сам предложит выбрать папку заново, если её перенесли. */
   async function reconnectFolder() {
@@ -1666,6 +1700,17 @@
       '<span>' + ic(st.ok ? 'check' : 'warning') + '</span><div><b>' + esc(st.text) + '</b>' +
       '<div class="card-note">' + note + '</div></div>' + button + '</div>';
 
+    /* --- ВТОРАЯ КОПИЯ: НА ДРУГОЙ ФЛЕШКЕ ИЛИ НА КОМПЬЮТЕРЕ ------------------
+       Владелец сказал: «чтобы копию можно было оставить на компьютере либо
+       на отдельной флешке — если вдруг флешка сгорит, испортится,
+       потеряется».
+
+       Копии внутри папки программы от этого не спасают: они лежат на той же
+       флешке и пропадут вместе с ней. Поэтому вторая папка — обязательно
+       ДРУГОЕ место. Механизм в программе был давно, а выбрать эту папку было
+       негде: кнопки просто не существовало, и копия никогда не делалась. */
+    h += картаВторойКопии();
+
     var counts = S.COLLECTIONS.filter(function (c) { return S.COLL_RU[c]; }).map(function (c) {
       return { name: S.COLL_RU[c], coll: c, n: (S.state[c] || []).length };
     }).filter(function (x) { return x.n; });
@@ -1747,6 +1792,69 @@
         : 'База пока пуста');
     }
     return h;
+  }
+
+  /* Когда положили последнюю копию — словами, а не отметкой времени.
+     «Сегодня в 14:20» человек понимает сразу, «2026-09-18T14:20» — нет. */
+  function когдаКопия(d) {
+    if (!d) return '';
+    var t = today(), дата = new Date(d), iso = дата.toISOString().slice(0, 10);
+    var часы = ('0' + дата.getHours()).slice(-2) + ':' + ('0' + дата.getMinutes()).slice(-2);
+    if (iso === t) return 'сегодня в ' + часы;
+    if (iso === E.addDays(t, -1)) return 'вчера в ' + часы;
+    return dateRu(iso) + ' в ' + часы;
+  }
+
+  function картаВторойКопии() {
+    var st = F.backupState, имя = F.backupDirName, когда = когдаКопия(F.lastCopy);
+    var часы = Math.max(1, num(S.settings.backupEveryHours) || 24);
+
+    if (!F.supported()) {
+      return card('Вторая копия — на случай, если флешка пропадёт',
+        '<div class="empty">Этот браузер не умеет сам писать в папку. ' +
+        'Копию можно сделать кнопкой «Сохранить копию базы» ниже и положить её ' +
+        'куда угодно вручную.</div>');
+    }
+
+    var строки = [];
+    if (st === 'ready') {
+      строки.push(listRow({ icon: 'check',
+        title: 'Копия ложится в папку «' + esc(имя) + '»',
+        sub: когда ? 'Последняя копия — ' + когда + '. Дальше сама, раз в ' +
+            часы + ' ' + plural(часы, 'час', 'часа', 'часов')
+          : 'Копия положится при следующем запуске программы, а потом раз в ' +
+            часы + ' ' + plural(часы, 'час', 'часа', 'часов'),
+        value: '<button class="btn btn-sm btn-primary" data-act="backup2-now">Сделать копию сейчас</button>' }));
+      строки.push(listRow({ icon: 'folder', title: 'Выбрать другое место',
+        sub: 'если флешку поменяли или копии надо класть в другую папку',
+        value: '<button class="btn btn-sm" data-act="backup2-connect">Выбрать</button> ' +
+          '<button class="btn btn-sm" data-act="backup2-forget">Отключить</button>' }));
+    } else if (st === 'needs-permission' || st === 'lost') {
+      строки.push(listRow({ icon: 'warning',
+        title: st === 'lost'
+          ? 'Папка «' + esc(имя) + '» не находится'
+          : 'Браузер снова спрашивает разрешение на папку «' + esc(имя) + '»',
+        sub: st === 'lost'
+          ? 'Флешку вынули, папку переименовали или перенесли. Копии в ней целы — ' +
+            'укажите, где она теперь, или выберите новое место.'
+          : 'Так бывает после перезапуска браузера. Одно нажатие — и копии пойдут дальше.',
+        value: '<button class="btn btn-sm btn-primary" data-act="backup2-connect">Указать папку</button> ' +
+          '<button class="btn btn-sm" data-act="backup2-forget">Больше не класть</button>' }));
+    } else {
+      строки.push(listRow({ icon: 'save', title: 'Куда класть вторую копию',
+        sub: 'Выберите ДРУГОЕ место: папку на компьютере, вторую флешку, папку облачного диска. ' +
+          'Программа сама будет класть туда копию базы раз в ' + часы + ' ' +
+          plural(часы, 'час', 'часа', 'часов') + '.',
+        value: '<button class="btn btn-sm btn-primary" data-act="backup2-connect">Выбрать папку</button>' }));
+    }
+
+    return card('Вторая копия — на случай, если флешка пропадёт', listOf(строки, ''),
+      st === 'ready' ? '' : 'Пока вторая копия не настроена') +
+      (st === 'ready' && имя && имя === F.dirName
+        ? '<div class="banner"><span>' + ic('warning') + '</span><span>Вторая копия ложится в ту же ' +
+          'папку, где лежит программа. Если флешка пропадёт, пропадёт и копия — ' +
+          'выберите место на другом диске.</span></div>'
+        : '');
   }
 
   // Карточка со значком слева от названия — для настроек и им подобных
@@ -3038,6 +3146,12 @@
       else if (a === 'folder-connect') connectFolder();
       else if (a === 'folder-reconnect') reconnectFolder();
       else if (a === 'folder-sync') syncFolder(false);
+      else if (a === 'backup2-connect') выбратьПапкуКопий();
+      else if (a === 'backup2-now') копияВоВторуюПапку();
+      else if (a === 'backup2-forget') {
+        if (confirm('Больше не класть копию во вторую папку? Копии, которые там уже лежат, ' +
+          'останутся на месте.')) { F.forgetBackup(); render(); }
+      }
       else if (a === 'folder-forget') { if (confirm('Отключить папку? Записи останутся в браузере и в уже сохранённом файле.')) { F.forget(); render(); } }
       else if (a === 'export-screen') exportScreen();
       else if (a === 'restore') restore();

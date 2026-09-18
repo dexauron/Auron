@@ -118,6 +118,18 @@
     });
   }
 
+  /* Запомнить папку между запусками — удобство, а не суть дела. Браузер
+     иногда отказывается: приватное окно, запрет на хранилище сайта, чужие
+     настройки. Раньше такой отказ ронял всё подключение, и владелец слышал
+     «не получилось» про папку, в которую программа прекрасно могла писать
+     прямо сейчас. Теперь работаем, а про «не запомнилось» говорим отдельно
+     и только если это действительно так. */
+  var запомнилась = true;
+  async function запомнить(ключ, handle) {
+    try { await idbSet(ключ, handle); return true; }
+    catch (e) { return false; }
+  }
+
   /* --- подключение папки --- */
   async function connect() {
     if (!supported()) throw new Error('Браузер не умеет сохранять в папку. Откройте дашборд в Chrome, Edge или Яндекс.Браузере.');
@@ -125,7 +137,7 @@
     var perm = await handle.requestPermission({ mode: 'readwrite' });
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     dirHandle = handle;
-    await idbSet(KEY, handle);
+    запомнилась = await запомнить(KEY, handle);
     bookStamp = null; dataStamp = null; lastBackup = null;   // папка новая — отпечатки старой не годятся
     state = 'ready'; notify();
     return handle;
@@ -554,7 +566,7 @@
     var perm = await handle.requestPermission({ mode: 'readwrite' });
     if (perm !== 'granted') throw new Error('Разрешение на папку не выдано.');
     backupHandle = handle;
-    await idbSet(KEY2, handle);
+    await запомнить(KEY2, handle);
     backupState = 'ready'; notify();
     return handle;
   }
@@ -643,6 +655,7 @@
     saveBook: saveBook, bookChangedOutside: bookChangedOutside, rootFile: rootFile, writeRoot: writeRoot,
     foreignChange: foreignChange, setKeepBackups: setKeepBackups, trimBackups: trimBackups,
     humanError: humanError, alive: alive,
+    get remembered() { return запомнилась; },
     listBackups: listBackups, readBackup: readBackup, backupNow: backupNow,
     verifyBackup: verifyBackup, verifyBackups: verifyBackups, countRecords: countRecords,
     listBookCopies: listBookCopies, readBookCopy: readBookCopy, readBookBytes: readBookBytes,
