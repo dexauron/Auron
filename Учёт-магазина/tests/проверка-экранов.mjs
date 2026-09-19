@@ -5129,6 +5129,143 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 36. Настройки, которые раньше ничего не меняли.
+
+       Десять настроек были объявлены, имели поле на экране «Настройки» и
+       что-то обещали владельцу — а НИ ОДНА строка программы их не читала.
+       Он переключал и был уверен, что программа считает иначе. Это хуже,
+       чем отсутствие настройки: отсутствие видно, а обман — нет.
+
+       Проверка в проверке-настроек ловит мёртвую настройку по коду. Здесь
+       проверяется другое и главное: что переключение МЕНЯЕТ ТО, ЧТО ВИДНО
+       НА ЭКРАНЕ. Настройку можно «оживить», упомянув её имя в коде, — от
+       этого она работать не начнёт. */
+{
+  console.log('— Настройки меняют то, что видно');
+  const { page, ctx, errs } = await open();
+
+  async function поставить(наст) {
+    await page.evaluate(o => {
+      Object.keys(o).forEach(k => window.WMStore.setSetting(k, o[k]));
+      window.WMUI.applyLook(); window.WMUI.recompute(); window.WMUI.render();
+    }, наст);
+    await page.waitForTimeout(250);
+  }
+  /* Считаем не строки в меню: экраны лежат в свёрнутых папках, и на виду
+     их всегда шесть. Спрашиваем у самой программы, какие экраны уровень
+     показывает, а какие прячет, — это и есть то, что решает настройка. */
+  const меню = () => page.evaluate(() =>
+    window.WMUI.views().filter(v => !v.hidden && !window.WMUI.подУровнем(v))
+      .map(v => v.name).join('|'));
+
+  /* --- Показывать в меню все экраны ----------------------------------- */
+  await поставить({ showAllViews: 'нет', levelMoney: 'просто', levelGoods: 'просто',
+    levelPeople: 'просто', levelReports: 'просто' });
+  const мало = (await меню()).split('|').length;
+  await поставить({ showAllViews: 'да' });
+  const много = (await меню()).split('|').length;
+  check('«ПОКАЗЫВАТЬ ВСЕ ЭКРАНЫ» ПРАВДА ПОКАЗЫВАЕТ БОЛЬШЕ',
+    много > мало, мало + ' → ' + много, 'стало больше');
+
+  /* --- Зарплату веду: просто / с табелем ------------------------------ */
+  await поставить({ showAllViews: 'нет', levelPeople: 'подробно', salaryMode: 'с табелем' });
+  const сТабелем = await меню();
+  await поставить({ salaryMode: 'просто' });
+  const просто = await меню();
+  check('«ЗАРПЛАТУ ВЕДУ ПРОСТО» УБИРАЕТ ТАБЕЛЬ ИЗ МЕНЮ',
+    /Табель/.test(сТабелем) && !/Табель/.test(просто),
+    (/Табель/.test(сТабелем) ? 'с табелем есть' : 'с табелем НЕТ') + ', ' +
+    (/Табель/.test(просто) ? 'просто есть' : 'просто нет'), 'есть → нет');
+
+  await page.evaluate(() => window.WMUI.go('payroll'));
+  await page.waitForTimeout(300);
+  const ведомостьПросто = await page.evaluate(() => document.getElementById('page').innerText);
+  await поставить({ salaryMode: 'с табелем' });
+  await page.evaluate(() => window.WMUI.go('payroll'));
+  await page.waitForTimeout(300);
+  const ведомостьТабель = await page.evaluate(() => document.getElementById('page').innerText);
+  check('и ведомость в простом режиме не делает вид, что считает',
+    /не считает начисление/.test(ведомостьПросто) && /Аванс по настройкам/.test(ведомостьТабель),
+    'разные', 'разные');
+
+  /* --- Полученные деньги вписываю по купюрам --------------------------- */
+  await поставить({ countMode: 'суммой' });
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(400);
+  const формаСуммой = await page.evaluate(() =>
+    !!document.querySelector('[name="received"]') && !document.querySelector('[name="b5000"]'));
+  await page.evaluate(() => window.WMUI.closeSheet());
+  await поставить({ countMode: 'по купюрам' });
+  await page.evaluate(() => window.WMUI.openForm('shiftClose'));
+  await page.waitForTimeout(400);
+  const формаКупюрами = await page.evaluate(() => !!document.querySelector('[name="b5000"]'));
+  check('«ПО КУПЮРАМ» МЕНЯЕТ ФОРМУ СВЕРКИ',
+    формаСуммой && формаКупюрами,
+    (формаСуммой ? 'суммой — одно поле' : 'суммой сломано') + ', ' +
+    (формаКупюрами ? 'купюры есть' : 'купюр нет'), 'обе формы верные');
+
+  /* САМОЕ ВАЖНОЕ: купюры должны СЛОЖИТЬСЯ. Иначе поля есть, а толку нет. */
+  const сложилось = await page.evaluate(async () => {
+    const дать = (имя, знач) => {
+      const f = document.querySelector('[name="' + имя + '"]');
+      if (!f) return;
+      f.value = знач;
+      f.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    дать('zCash', 30000); дать('openCash', 0); дать('kept', 0);
+    дать('b5000', 5); дать('b1000', 4); дать('b500', 2); дать('bCoins', 100);
+    await new Promise(r => setTimeout(r, 400));
+    return document.getElementById('shiftSum').innerText.replace(/[\u00a0\u202f]/g, ' ');
+  });
+  /* 5×5000 + 4×1000 + 2×500 + 100 = 30 100 */
+  check('И КУПЮРЫ СКЛАДЫВАЮТСЯ В «ПОЛУЧИЛ НА РУКИ»',
+    /30 100/.test(сложилось), сложилось.slice(0, 90).replace(/\n/g, ' '), 'видно 30 100');
+  await page.evaluate(() => window.WMUI.closeSheet());
+
+  /* --- Напоминать о выплате за N дней --------------------------------- */
+  const сегодня = await page.evaluate(() => window.WM.today());
+  await page.evaluate(с => {
+    const S = window.WMStore;
+    const через = window.WM.addDays(с, 5);
+    S.add('plans', { due: через, supplier: 'Хлебозавод', amount: 33000, status: 'Запланирована' });
+    S.save();
+  }, сегодня);
+  await поставить({ dueWarn: 2 });
+  const за2 = await page.evaluate(() =>
+    window.WMNotices.собрать(window.WMStore, window.WM, window.WMRevizor)
+      .some(x => x.id.indexOf('duesoon') === 0));
+  await поставить({ dueWarn: 10 });
+  const за10 = await page.evaluate(() =>
+    window.WMNotices.собрать(window.WMStore, window.WM, window.WMRevizor)
+      .some(x => x.id.indexOf('duesoon') === 0));
+  check('«НАПОМИНАТЬ ЗА N ДНЕЙ» ПРАВДА СЧИТАЕТ ЭТИ ДНИ',
+    !за2 && за10, 'за 2 дня: ' + (за2 ? 'есть' : 'нет') + ', за 10: ' + (за10 ? 'есть' : 'нет'),
+    'за 2 нет, за 10 есть');
+
+  /* --- Сверять безнал с банком ---------------------------------------- */
+  await page.evaluate(с => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Смена', date: с, till: 'Касса 1', shift: 'День', cashier: 'Аня',
+      openCash: 0, zCash: 10000, zCashless: 45000, received: 10000, kept: 0 });
+    S.save();
+  }, сегодня);
+  await поставить({ bankCheck: 'не сверять' });
+  const молчит = await page.evaluate(() =>
+    window.WMNotices.собрать(window.WMStore, window.WM, window.WMRevizor)
+      .some(x => x.id.indexOf('bankcheck') === 0));
+  await поставить({ bankCheck: 'каждый день' });
+  const говорит = await page.evaluate(() =>
+    window.WMNotices.собрать(window.WMStore, window.WM, window.WMRevizor)
+      .some(x => x.id.indexOf('bankcheck') === 0));
+  check('«СВЕРЯТЬ БЕЗНАЛ» МОЛЧИТ, КОГДА НЕ ПРОСИЛИ, И НАПОМИНАЕТ, КОГДА ПРОСИЛИ',
+    !молчит && говорит, 'не сверять: ' + (молчит ? 'говорит' : 'молчит') +
+    ', каждый день: ' + (говорит ? 'говорит' : 'молчит'), 'молчит / говорит');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

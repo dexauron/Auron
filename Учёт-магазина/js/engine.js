@@ -1504,10 +1504,15 @@
     if (daysBetween(t, due) <= 3) return { key: 'soon', name: 'Скоро', color: 'orange' };
     return { key: 'plan', name: 'Запланирована', color: 'blue' };
   }
-  function planTotals(plans, t) {
+  /* За сколько дней до срока считать выплату «скоро» — решает владелец
+     настройкой «Напоминать о выплате за, дней». Раньше здесь стояла
+     зашитая неделя, а настройка не читалась вовсе. */
+  function planTotals(plans, t, warnDays) {
     t = t || today();
-    var r = { overdue: 0, overdueCount: 0, dueToday: 0, week: 0, planned: 0,
-      plannedCount: 0, paid: 0 };
+    var скоро = Math.round(num(warnDays));
+    if (!(скоро > 0)) скоро = 7;
+    var r = { overdue: 0, overdueCount: 0, dueToday: 0, week: 0, weekCount: 0,
+      planned: 0, plannedCount: 0, paid: 0, warnDays: скоро };
     (plans || []).forEach(function (p) {
       var st = planStatus(p, t), a = safeRound(p.amount);
       if (st.key === 'paid') { r.paid += a; return; }
@@ -1515,7 +1520,9 @@
       r.planned += a; r.plannedCount++;
       if (st.key === 'late') { r.overdue += a; r.overdueCount++; }
       if (st.key === 'today') r.dueToday += a;
-      if (p.due && p.due >= t && daysBetween(t, p.due) <= 7) r.week += a;
+      if (p.due && p.due >= t && daysBetween(t, p.due) <= скоро) {
+        r.week += a; r.weekCount++;
+      }
     });
     for (var k in r) r[k] = safeRound(r[k]);
     return r;
@@ -3436,6 +3443,7 @@
         var p = personOf(staff, name);
         map[key] = { employee: txt(name) || '—', position: p ? txt(p.position) : '',
           salary: p ? num(p.salary) : 0, normShifts: p ? num(p.normShifts) : 0,
+          planBonus: 0,
           fired: p ? txt(p.fired) : '',
           shifts: 0, hoursDay: 0, hoursNight: 0, hours: 0,
           pay: 0, bonus: 0, fine: 0, accrued: 0, advance: 0, paid: 0 };
@@ -3451,6 +3459,27 @@
     }
 
     (staff || []).forEach(function (p) { if (!txt(p.fired)) idx(p.name); });
+
+    /* ПРЕМИЯ ЗА ВЫПОЛНЕНИЕ ПЛАНА. Настройка «Премия за выполнение плана, ₽»
+       была заведена и не читалась ничем: владелец вписывал сумму, а в
+       ведомости ничего не менялось.
+
+       Правило простое и понятное на слух: магазин сделал план выручки за
+       месяц — премию получает каждый, кто в этом месяце работал. Кто не
+       выходил ни разу, премии не получает: это премия за работу, а не
+       подарок к месяцу.
+
+       Ноль в настройке — премию не считаем вовсе, и это значение по
+       умолчанию: у кого такой премии нет, у того ничего и не поменялось. */
+    var премияЗаПлан = safeRound(settings && settings.bonusPlan);
+    var планВыручки = safeRound(settings && settings.planRevenue);
+    var планСделан = false;
+    if (премияЗаПлан > 0 && планВыручки > 0) {
+      /* Выручку берём у totals() — там она считается один раз и одинаково
+         для всей программы. Складывать её здесь заново значило бы завести
+         вторую правду о выручке, а их в учёте не бывает. */
+      планСделан = safeRound(totals(opts.dds || []).revenue) >= планВыручки;
+    }
 
     // Сколько у человека недостач по кассе за тот же период — справочно
     var shortByName = {};
@@ -3492,7 +3521,8 @@
       }
       r.base = safeRound(base);
       r.scheme = r.salary > 0 ? 'оклад' : 'по часам';
-      r.accrued = safeRound(base + r.bonus - r.fine);
+      r.planBonus = (планСделан && r.shifts > 0) ? премияЗаПлан : 0;
+      r.accrued = safeRound(base + r.bonus + r.planBonus - r.fine);
       r.left = safeRound(r.accrued - r.paid);
       /* Недостачи по кассе — отдельно от начисления. Показываем, сколько
          недостач числится и сколько из них уже удержано в табеле, чтобы

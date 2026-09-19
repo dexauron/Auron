@@ -474,6 +474,12 @@
   }
 
   /* --- Ведомость зарплаты ------------------------------------------------------ */
+  /* Считает ли программа зарплату сама. «с табелем» — считает по часам и
+     ставке; «просто» — только записывает выдачи. */
+  function поТабелю() {
+    return E.norm(S.settings.salaryMode).indexOf('табел') >= 0;
+  }
+
   function viewPayroll() {
     var u = U(), m = ym();
     var rows = board(m).filter(function (r) { return r.shifts || r.accrued || r.paid; });
@@ -486,8 +492,10 @@
       ' <button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
     h += monthPicker();
     h += '<div class="stat-grid">' +
-      u.stat('Начислено (ФОТ)', u.priv(tot.accrued), tot.people + ' чел., ' +
-        u.nf(tot.shifts) + ' смен') +
+      (поТабелю()
+        ? u.stat('Начислено (ФОТ)', u.priv(tot.accrued), tot.people + ' чел., ' +
+            u.nf(tot.shifts) + ' смен')
+        : u.stat('Выдано за месяц', u.priv(tot.paid), tot.people + ' чел.')) +
       u.stat('Выдано', u.priv(tot.paid), 'из них авансом ' + money(tot.advance)) +
       u.stat('Должны людям сейчас', u.priv(E.payrollTotals(debtBoard()).left),
         'за всё время, не только за месяц',
@@ -502,9 +510,25 @@
         '. Удержание уменьшает зарплату — деньги в кассу оно не возвращает: ' +
         'недостача уже уменьшила остаток в ящике, когда смена не сошлась.</span></div>';
     }
-    h += '<div class="banner blue"><span>' + ic('calendar') + '</span><span>Аванс по настройкам — ' +
-      esc(dateRu(parts.advanceDate)) + ' (' + u.pct(parts.advancePct) + ' от начисленного), ' +
-      'окончательный расчёт — ' + esc(dateRu(parts.finalDate)) + '.</span></div>';
+    /* «ЗАРПЛАТУ ВЕДУ ПРОСТО» — и программа не делает вид, что считает.
+
+       Настройка обещала: «просто» — записываю, кому и сколько выдал;
+       «с табелем» — программа сама считает начисление по часам и ставке,
+       аванс и окончательный расчёт. Не читалась она ничем, и экран в обоих
+       случаях показывал начисления по табелю. Магазину, который табель не
+       ведёт, это показывало нули и сбивало с толку: «начислено 0, выдано
+       80 000» выглядит как ошибка, хотя ошибка тут в том, что программа
+       считает то, чего ей не давали. */
+    if (!поТабелю()) {
+      h += '<div class="banner blue"><span>' + ic('info') + '</span><span>Зарплата ведётся ' +
+        '<b>просто</b>: программа не считает начисление по часам, а показывает, ' +
+        'кому и сколько выдано. Хотите, чтобы считала сама — «Настройки» → ' +
+        '«Как вы ведёте учёт» → «Зарплату веду» → «с табелем».</span></div>';
+    } else {
+      h += '<div class="banner blue"><span>' + ic('calendar') + '</span><span>Аванс по настройкам — ' +
+        esc(dateRu(parts.advanceDate)) + ' (' + u.pct(parts.advancePct) + ' от начисленного), ' +
+        'окончательный расчёт — ' + esc(dateRu(parts.finalDate)) + '.</span></div>';
+    }
 
     h += u.card('Ведомость', u.table('payT', [
       { title: 'Сотрудник', fn: function (r) { return esc(r.employee); } },
