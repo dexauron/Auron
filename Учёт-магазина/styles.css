@@ -1644,6 +1644,16 @@ body.huge .btn, body.huge input, body.huge select, body.huge textarea { font-siz
   font-size: 11.5px; color: var(--label-3); }
 @media print { .cmd-wrap { display: none !important; } }
 
+/* На телефоне компактный режим НЕ ужимает кнопки. Палец толще курсора:
+   кнопка в 32 пикселя мышью нажимается легко, а пальцем — мимо. Сорок
+   пикселей — нижняя граница, её стережёт проверка «кнопки на телефоне не
+   мельче пальца». Отступы и текст ужимаются как обычно: там ошибиться
+   нечем. */
+@media (max-width: 700px) {
+  body.compact .btn { height: 40px; font-size: 15px; padding: 0 14px; }
+  body.compact .btn-sm { height: 40px; font-size: 14px; }
+}
+
 /* --- ДЕТАЛИ ВИДА AURON FINANCE ---------------------------------------------
    Мелочи, по которым владелец узнаёт своё приложение: круглые кнопки-значки
    в шапке и кнопки-пилюли в ряду действий.
