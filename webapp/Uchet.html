@@ -93,7 +93,11 @@
   border-bottom: 1px solid var(--separator);
   position: sticky; top: 0; z-index: 40;
 }
-:root[data-theme="auron"] .auron-back { display: flex; }
+/* Показываем, только когда возвращаться ЕСТЬ КУДА: в приложении на
+   телефоне полный учёт открыт поверх Auron. На сервере он сам и есть
+   приложение — кнопка «назад» там уводила бы в никуда и делала вид,
+   будто это вложенная чужая программа. */
+html.has-auron-back .auron-back { display: flex; }
 .auron-back button {
   display: inline-flex; align-items: center; gap: 7px;
   height: 34px; padding: 0 14px; border-radius: 980px;
@@ -20373,7 +20377,17 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
     }
     /* Внутри приложения Auron берём его цвета — но только если владелец сам
        не выбрал тему. Выбор человека главнее нашей заботы о единообразии. */
-    if (!mode && window.AuronBridge && window.AuronBridge.available()) mode = 'auron';
+    /* Два случая, и оба — «мы внутри Auron Finance»: в приложении на телефоне
+       рядом лежит его база, на сервере страницу отдаёт он сам. Второй случай
+       я сперва упустил, и в вебе приложение открывалось чужим: светлая тема
+       и «Мой магазин» в углу вместо Auron Finance. Владелец справедливо
+       спросил, зачем ему отдельная программа. */
+    var рядомAuron = !!(window.AuronBridge && window.AuronBridge.available());
+    if (!mode && (window.AURON_SERVER || рядомAuron)) mode = 'auron';
+    /* Кнопка возврата нужна только там, где Auron открыт рядом (приложение
+       на телефоне). На сервере эта страница и есть приложение. */
+    document.documentElement.classList.toggle('has-auron-back',
+      рядомAuron && !window.AURON_SERVER);
     if (mode) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     // «Крупный режим» — одна настройка на всё: буквы, кнопки, поля, таблицы
@@ -20440,6 +20454,13 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
   }
 
   function saveState() {
+    /* Внутри Auron Finance на сервере записи уходят не в папку, а в таблицу
+       владельца — этим занимается js/server-store.js. Говорить ему здесь
+       «сохранение не подключено» — прямая неправда: он решит, что его
+       записи нигде не лежат, хотя они уже в его таблице. */
+    if (window.AURON_SERVER) {
+      return { dot: '', ok: true, text: 'Записи хранятся в вашей таблице' };
+    }
     var st = F.state, when = F.lastSaved;
     if (st === 'ready') {
       return { dot: '', text: 'Сохраняется в папку' + (when ? ' · ' + when.toLocaleTimeString('ru-RU').slice(0, 5) : ''), ok: true };
@@ -21446,7 +21467,14 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
        вписал — нейтральная надпись, а не чужое название. */
     $('brandName').textContent = S.settings.storeName || 'Мой магазин';
     var sub = $('brandSub');
-    if (sub) sub.textContent = E.txt(S.settings.workMode) || 'учёт магазина';
+    /* Внутри Auron Finance подписываемся им — это не вторая программа
+       рядом, а само приложение. Режим работы («Круглосуточно») сюда не
+       ставим: он стоит по умолчанию, владелец его не вписывал, а в углу
+       приложения должно быть его имя. Режим виден в настройках. */
+    var внутриAuron = !!(window.AURON_SERVER ||
+      (window.AuronBridge && window.AuronBridge.available()));
+    if (sub) sub.textContent = внутриAuron ? 'Auron Finance'
+      : (E.txt(S.settings.workMode) || 'учёт магазина');
     var st = saveState();
     $('saveState').innerHTML = '<span class="saved-dot ' + st.dot + '"></span><span>' + esc(st.text) + '</span>';
     renderAlerts();
@@ -22857,7 +22885,10 @@ function(t){t.__bidiEngine__=t.prototype.__bidiEngine__=function(t){var n,r,i,a,
       setTimeout(function () {
         if (F.state === 'lost') toast(F.humanError({ name: 'NotFoundError' }), 12000);
       }, 1200);
-    } else if (st === 'off' && F.supported()) {
+    } else if (st === 'off' && F.supported() && !window.AURON_SERVER) {
+      /* На сервере папку подключить нельзя, да и незачем: записи уходят
+         в таблицу владельца. Совет, который невозможно выполнить, только
+         сбивает с толку. */
       // первый запуск: подскажем один раз, но не мешаем работать
       setTimeout(function () {
         if (F.state === 'off') toast('Совет: подключите папку на экране «Данные и копии» — тогда все записи будут сохраняться в файл рядом с программой.', 9000);

@@ -115,6 +115,16 @@ check('все экраны на месте', виды >= 44, виды, '44 и б
 check('программа поняла, что работает на сервере',
   await p.evaluate(() => window.AURON_SERVER === true), 'да', 'да');
 
+/* Это должно выглядеть как Auron Finance, а не как чужая программа.
+   Сперва было наоборот: на сервере тема не включалась (её признаком была
+   база Auron в памяти браузера, которой на сервере нет), приложение
+   открывалось светлым и подписывалось «Мой магазин · учёт магазина» —
+   владелец спросил, зачем ему отдельная программа. Справедливо. */
+const тема = await p.evaluate(() => document.documentElement.getAttribute('data-theme'));
+check('ЭТО ВЫГЛЯДИТ КАК AURON FINANCE, А НЕ КАК ЧУЖОЕ', тема === 'auron', тема, 'auron');
+const подписьШапки = await p.evaluate(() => (document.getElementById('brandSub') || {}).textContent || '');
+check('и подписано Auron Finance', подписьШапки === 'Auron Finance', подписьШапки, 'Auron Finance');
+
 console.log('\n— Деньги владельца видны сразу, а не «через секунду»');
 const св = await p.evaluate(() => {
   const st = JSON.parse(localStorage.getItem('store_erp_v1') || '{}');
@@ -157,6 +167,17 @@ const содержит = await p.evaluate(() => {
 check('В ОТПРАВЛЕННОМ ЕСТЬ ТОЛЬКО ЧТО ЗАПИСАННОЕ', содержит, содержит, true);
 const подпись = await p.evaluate(() => (document.getElementById('saveState') || {}).innerText || '');
 check('владельцу написано, где хранятся записи', /табл/i.test(подпись), подпись.trim(), 'про таблицу');
+/* Строка внизу перерисовывается вместе с меню и затирала эту надпись
+   на «Сохранение в папку не подключено» — прямую неправду: записи в этот
+   момент уже лежали в таблице владельца. */
+await p.evaluate(() => { const el = document.querySelector('[data-go="ledger"]'); if (el) el.click(); });
+await p.waitForTimeout(600);
+const послеПерехода = await p.evaluate(() => (document.getElementById('saveState') || {}).innerText || '');
+check('И НЕ МЕНЯЕТСЯ НА НЕПРАВДУ ПРИ ПЕРЕХОДЕ ПО ЭКРАНАМ',
+  /табл/i.test(послеПерехода), послеПерехода.trim(), 'про таблицу');
+check('кнопки «назад в Auron» здесь нет — это само приложение',
+  await p.evaluate(() => { const el = document.querySelector('.auron-back');
+    return !el || getComputedStyle(el).display === 'none'; }), 'нет', 'нет');
 
 console.log('\n— Чужая библиотека не пострадала при вклейке');
 check('чтение Excel на месте', await p.evaluate(() => typeof XLSX !== 'undefined' && !!XLSX.read),

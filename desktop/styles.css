@@ -79,7 +79,11 @@
   border-bottom: 1px solid var(--separator);
   position: sticky; top: 0; z-index: 40;
 }
-:root[data-theme="auron"] .auron-back { display: flex; }
+/* Показываем, только когда возвращаться ЕСТЬ КУДА: в приложении на
+   телефоне полный учёт открыт поверх Auron. На сервере он сам и есть
+   приложение — кнопка «назад» там уводила бы в никуда и делала вид,
+   будто это вложенная чужая программа. */
+html.has-auron-back .auron-back { display: flex; }
 .auron-back button {
   display: inline-flex; align-items: center; gap: 7px;
   height: 34px; padding: 0 14px; border-radius: 980px;
