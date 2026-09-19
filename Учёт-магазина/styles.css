@@ -1,6 +1,17 @@
 /* ============================================================================
-   Оформление в стиле iOS: светлая тема по умолчанию,
-   тёмная включается автоматически по настройке системы.
+   ОФОРМЛЕНИЕ
+
+   Владелец показал своё второе приложение, Auron Finance, и попросил такой
+   же вид: почти чёрный фон, карточки чуть светлее с тонкой рамкой, зелёный
+   акцент вместо синего. И компактнее.
+
+   Цвета живут только здесь, в переменных: ни один экран не знает, какой
+   сейчас цвет, — поэтому тему можно поменять целиком, не трогая экраны.
+
+   Все цвета подобраны под измеримую читаемость: обычный текст не бледнее
+   4,5 к 1, крупный не бледнее 3 к 1. Это стережёт проверка «Тёмная тема:
+   всё читается» — она обходит все экраны в обеих темах и считает контраст
+   каждой надписи. Меняете цвет — прогоните её.
    ========================================================================== */
 :root {
   --bg: #F2F2F7;
@@ -8,37 +19,99 @@
   --bg-inset: #F7F7FA;
   --sidebar: rgba(246,246,248,.92);
   --label: #000000;
-  --label-2: rgba(60,60,67,.62);
-  --label-3: rgba(60,60,67,.35);
+  /* Серые подписи были взяты из оформления iPhone: .62 и .35. Замер показал
+     3,5 и 1,9 к 1 при норме 4,5 — то есть «наличные у вас на руках» под
+     цифрой приходилось разглядывать. Этой программой пользуется обычный
+     сотрудник и не всегда при хорошем свете. */
+  --label-2: rgba(60,60,67,.87);
+  --label-3: rgba(60,60,67,.76);
   --separator: rgba(60,60,67,.14);
   --fill: rgba(120,120,128,.12);
   --fill-2: rgba(120,120,128,.08);
-  --blue: #007AFF; --green: #34C759; --red: #FF3B30; --orange: #FF9500;
+  /* Акцент программы. Зелёный, как в Auron Finance: это одна семья программ,
+     и владелец должен узнавать её с первого взгляда. На светлой теме зелёный
+     темнее — иначе белые буквы на кнопке не прочитать. */
+  --accent: #077A43;
+  --accent-ink: #FFFFFF;
+  /* Красный для значков-счётчиков отдельно: яркий красный под белой цифрой
+     даёт 3,1 к 1, и цифру видно хуже, чем кажется. */
+  --badge-red: #C9251C;
+  /* Зелёный и оранжевый на белом взяты темнее обычного: яркие давали
+     3,5 и 4,0 к 1. В тёмной теме наоборот — там они светлее. */
+  --blue: #0062CC; --green: #14733A; --red: #C9251C; --orange: #8F5400;
   --purple: #AF52DE; --teal: #30B0C7; --indigo: #5856D6; --pink: #FF2D55;
   --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.04);
   --shadow-sheet: 0 20px 60px rgba(0,0,0,.28);
   --r-card: 16px; --r-inner: 12px; --r-pill: 980px;
   --sidebar-w: 258px;
+  /* Отступы одним местом: компактный режим меняет только их */
+  --pad-page: 26px; --pad-card: 20px; --gap-page: 22px; --gap-grid: 14px;
 }
-/* Тёмная тема: по настройке системы, либо принудительно из «Настроек» */
+
+/* --- ТЁМНАЯ ТЕМА -----------------------------------------------------------
+   Фон почти чёрный с лёгким зелёным оттенком, а не серый как у всех.
+   Карточки отделены не тенью, а тонкой рамкой: тень на чёрном не видна, и
+   карточки сливались бы с фоном. Рамку даёт --shadow — поэтому правила
+   карточек трогать не пришлось.
+   ------------------------------------------------------------------------- */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #000000; --bg-elev: #1C1C1E; --bg-inset: #2C2C2E; --sidebar: rgba(28,28,30,.92);
-    --label: #FFFFFF; --label-2: rgba(235,235,245,.62); --label-3: rgba(235,235,245,.32);
-    --separator: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-2: rgba(120,120,128,.16);
-    --blue: #0A84FF; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
-    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
-    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-sheet: 0 20px 60px rgba(0,0,0,.6);
+    --bg: #0A0C0B; --bg-elev: #131715; --bg-inset: #1A1F1C; --sidebar: #0D100E;
+    --label: #E9EFEB; --label-2: rgba(233,239,235,.74); --label-3: rgba(233,239,235,.56);
+    --separator: rgba(255,255,255,.08); --fill: rgba(255,255,255,.07); --fill-2: rgba(255,255,255,.045);
+    --accent: #22C55E; --accent-ink: #06210F; --badge-red: #D93025;
+    --blue: #4DA3FF; --green: #3DDC84; --red: #FF5B56; --orange: #FFB020;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #7B79FF; --pink: #FF6B8A;
+    --shadow: 0 0 0 1px rgba(255,255,255,.09);
+    --shadow-sheet: 0 20px 60px rgba(0,0,0,.75);
   }
 }
 :root[data-theme="dark"] {
-    --bg: #000000; --bg-elev: #1C1C1E; --bg-inset: #2C2C2E; --sidebar: rgba(28,28,30,.92);
-    --label: #FFFFFF; --label-2: rgba(235,235,245,.62); --label-3: rgba(235,235,245,.32);
-    --separator: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-2: rgba(120,120,128,.16);
-    --blue: #0A84FF; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
-    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
-    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-sheet: 0 20px 60px rgba(0,0,0,.6);
+    --bg: #0A0C0B; --bg-elev: #131715; --bg-inset: #1A1F1C; --sidebar: #0D100E;
+    --label: #E9EFEB; --label-2: rgba(233,239,235,.74); --label-3: rgba(233,239,235,.56);
+    --separator: rgba(255,255,255,.08); --fill: rgba(255,255,255,.07); --fill-2: rgba(255,255,255,.045);
+    --accent: #22C55E; --accent-ink: #06210F; --badge-red: #D93025;
+    --blue: #4DA3FF; --green: #3DDC84; --red: #FF5B56; --orange: #FFB020;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #7B79FF; --pink: #FF6B8A;
+    --shadow: 0 0 0 1px rgba(255,255,255,.09);
+    --shadow-sheet: 0 20px 60px rgba(0,0,0,.75);
 }
+
+/* --- КОМПАКТНЫЙ РЕЖИМ ------------------------------------------------------
+   «Сделай в компактном виде». Компактно — это когда на экран помещается
+   больше, а не когда буквы мельче до нечитаемости: работать с программой
+   будет обычный сотрудник. Поэтому режется ПУСТОТА, а размер текста падает
+   чуть-чуть и только у второстепенного.
+
+   Крупный режим (body.big) сильнее компактного: если владелец просил
+   крупные буквы, он получит крупные буквы в любом случае.
+   ------------------------------------------------------------------------- */
+body.compact {
+  --pad-page: 16px; --pad-card: 14px; --gap-page: 12px; --gap-grid: 10px;
+  --r-card: 12px; --r-inner: 9px;
+  --sidebar-w: 252px;
+}
+body.compact .page-title { font-size: 25px; letter-spacing: -.5px; }
+body.compact .page-sub { font-size: 13px; }
+body.compact .hero-value { font-size: 32px; }
+body.compact .stat-value { font-size: 21px; }
+body.compact .stat-label, body.compact .hero-label { font-size: 12.5px; }
+body.compact .stat-sub, body.compact .hero-sub, body.compact .card-note { font-size: 12.5px; }
+body.compact .row-title { font-size: 14.5px; }
+body.compact .row-sub { font-size: 12.5px; }
+body.compact .btn { height: 32px; font-size: 13.5px; padding: 0 12px; }
+body.compact .btn-sm { height: 27px; font-size: 12.5px; }
+body.compact .topbar { padding: 8px 16px; gap: 8px; }
+body.compact .nav-item { padding: 5px 9px; }
+body.compact .card-head { padding: 12px var(--pad-card) 8px; }
+body.compact .card-body { padding: 2px var(--pad-card) 12px; font-size: 13.5px; }
+body.compact .stat { padding: 11px 13px; }
+body.compact .hero { padding: 15px 17px; }
+body.compact table.data { font-size: 13px; }
+body.compact table.data th, body.compact table.data td { padding: 7px 10px; }
+body.compact .list-row { padding: 8px var(--pad-card); }
+body.compact .banner { padding: 9px 13px; font-size: 13.5px; }
+body.compact .form-row { min-height: 40px; }
 
 /* Крупный шрифт: включается в «Настройках» — всё становится больше */
 body.big { font-size: 17px; }
@@ -77,10 +150,10 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
   cursor: pointer; font-size: 14.5px; font-weight: 500; color: var(--label); transition: background .12s; }
 .nav-item:hover { background: var(--fill-2); }
-.nav-item.active { background: var(--blue); color: #fff; }
-.nav-item.active .nav-count { background: rgba(255,255,255,.25); color: #fff; }
+.nav-item.active { background: var(--accent); color: var(--accent-ink); }
+.nav-item.active .nav-count { background: rgba(0,0,0,.22); color: var(--accent-ink); }
 .nav-icon { width: 22px; text-align: center; font-size: 15px; }
-.nav-count { margin-left: auto; font-size: 12px; font-weight: 600; background: var(--red); color: #fff;
+.nav-count { margin-left: auto; font-size: 12px; font-weight: 600; background: var(--badge-red); color: #fff;
   border-radius: var(--r-pill); padding: 1px 7px; min-width: 20px; text-align: center; }
 .sidebar-foot { padding: 10px 14px 14px; border-top: .5px solid var(--separator); }
 
@@ -94,7 +167,8 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .search input { background: none; border: none; outline: none; width: 100%; font-size: 14.5px; }
 .search input::placeholder { color: var(--label-3); }
 .scroll { flex: 1; overflow-y: auto; }
-.page { max-width: 1180px; margin: 0 auto; padding: 26px 26px 60px; display: flex; flex-direction: column; gap: 22px; }
+.page { max-width: 1180px; margin: 0 auto; padding: var(--pad-page) var(--pad-page) 60px;
+  display: flex; flex-direction: column; gap: var(--gap-page); }
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .page-title { font-size: 32px; font-weight: 700; letter-spacing: -.7px; }
 .page-sub { font-size: 14px; color: var(--label-2); margin-top: 3px; }
@@ -109,9 +183,9 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 .btn:active { transform: scale(.97); filter: brightness(.92); }
 .btn { transition: filter .12s, background .12s, transform .08s; }
 .btn-primary { box-shadow: 0 1px 2px rgba(0,122,255,.25); }
-.btn-primary { background: var(--blue); color: #fff; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-danger { background: var(--fill); color: var(--red); }
-.btn-plain { background: none; color: var(--blue); padding: 0 6px; height: 32px; }
+.btn-plain { background: none; color: var(--accent); padding: 0 6px; height: 32px; }
 .btn-sm { height: 30px; padding: 0 11px; font-size: 13px; border-radius: 8px; }
 .btn-lg { height: 46px; font-size: 16px; border-radius: 13px; }
 .btn-icon { width: 38px; padding: 0; }
@@ -146,7 +220,7 @@ button, input, select, textarea { font-family: inherit; font-size: inherit; colo
 
 /* 240 px — чтобы «10 905 800 ₽» помещалось в строку: при 210 знак рубля
    переносился на вторую строку и карточка выглядела сломанной */
-.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--gap-grid); }
 .stat { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 16px 18px;
   display: flex; flex-direction: column; gap: 3px; }
 .stat-label { font-size: 13px; color: var(--label-2); font-weight: 500; }
@@ -197,7 +271,7 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .b-green { background: rgba(52,199,89,.14); color: var(--green); }
 .b-red { background: rgba(255,59,48,.14); color: var(--red); }
 .b-orange { background: rgba(255,149,0,.16); color: var(--orange); }
-.b-blue { background: rgba(0,122,255,.14); color: var(--blue); }
+.b-blue { background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
 .b-gray { background: var(--fill); color: var(--label-2); }
 
 /* ---------- Формы: сгруппированный список, как в настройках iPhone ---------- */
@@ -230,7 +304,7 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
    куда жать. Показываем серый ноль: видно и поле, и что в нём пока пусто. */
 .form-row .num-input:placeholder-shown { background: var(--fill-2); }
 .form-row .num-input { padding-left: 10px; padding-right: 10px; }
-.form-row select { text-align: right; text-align-last: right; color: var(--blue);
+.form-row select { text-align: right; text-align-last: right; color: var(--accent);
   appearance: none; padding-right: 16px;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") right center no-repeat; }
 /* Пустое поле выглядит пустым местом: непонятно, можно ли туда писать.
@@ -239,7 +313,7 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .form-row input:focus, .form-row textarea:focus {
   background: var(--fill-2); padding-left: 10px; padding-right: 10px; }
 .form-row input:focus, .form-row textarea:focus {
-  box-shadow: inset 0 0 0 1.5px var(--blue); }
+  box-shadow: inset 0 0 0 1.5px var(--accent); }
 /* Число и калькулятор — в одном ряду: поле справа, кнопка рядом с ним.
    Иначе калькулятор уезжает под число, и строка ломается на три этажа. */
 .form-row .num-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
@@ -247,7 +321,7 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .num-calc { flex: 0 0 auto; width: 34px; height: 34px; padding: 0; display: inline-flex;
   align-items: center; justify-content: center; background: var(--fill-2); border: none;
   color: var(--label-2); box-shadow: none; }
-.num-calc:hover { background: var(--fill); color: var(--blue); }
+.num-calc:hover { background: var(--fill); color: var(--accent); }
 .num-calc svg { width: 18px; height: 18px; }
 /* Подсказка под числом («55 000 ₽ пятьдесят пять тысяч») — мелко и вплотную,
    она поясняет, а не спорит за место с самим полем. */
@@ -287,23 +361,23 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
    Число маленькое и красное только когда есть что читать. Значок, который
    горит всегда, перестаёт что-либо значить. */
 .bell-wrap { position: relative; display: inline-flex; }
-#bellBtn.has { color: var(--blue); }
+#bellBtn.has { color: var(--accent); }
 .bell-n { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
-  padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+  padding: 0 4px; border-radius: 9px; background: var(--badge-red); color: #fff;
   font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
   box-shadow: 0 0 0 2px var(--bg); }
 .bell-n[hidden] { display: none; }
 
 /* Точка «новое» слева от текста уведомления */
 .dot-new { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--blue); margin-right: 7px; vertical-align: 1px; }
+  background: var(--accent); margin-right: 7px; vertical-align: 1px; }
 
 /* --- Настройки: разделы свёрнуты, сверху поиск -------------------------- */
 .set-find { display: flex; gap: 8px; align-items: center; margin: 0 0 14px; }
 .set-find input { flex: 1; min-width: 0; padding: 11px 14px; font-size: 15px;
   border: 1px solid var(--separator); border-radius: var(--r-card);
   background: var(--bg-elev); color: var(--label); }
-.set-find input:focus { outline: none; border-color: var(--blue); }
+.set-find input:focus { outline: none; border-color: var(--accent); }
 
 .set-g { margin-bottom: 10px; overflow: hidden; }
 .set-h { display: flex; align-items: center; gap: 10px; width: 100%;
@@ -397,7 +471,7 @@ tr.total td { background: var(--bg-inset); font-weight: 680; }
 .sheet-title { font-size: 17px; font-weight: 640; letter-spacing: -.3px; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sheet-head-right { display: flex; justify-content: flex-end; }
-.sheet-btn { background: none; border: none; color: var(--blue); font-size: 16px;
+.sheet-btn { background: none; border: none; color: var(--accent); font-size: 16px;
   padding: 6px 4px; cursor: pointer; border-radius: 8px; }
 .sheet-btn.strong { font-weight: 600; }
 .sheet-btn:active { opacity: .5; }
@@ -437,7 +511,7 @@ body.sheet-open .toast { bottom: 96px; }
   padding: 16px 18px; height: 260px; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
-a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
+a.phone { color: var(--accent); text-decoration: none; font-weight: 550; }
 .priv .private { filter: blur(7px); user-select: none; }
 .saved-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
 .saved-dot.off { background: var(--label-3); }
@@ -591,7 +665,7 @@ a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
   padding: 6px 12px; border-radius: var(--r-pill); font-size: 13.5px; font-weight: 550;
   line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip:hover { background: var(--fill); }
-.chip.active { background: var(--blue); color: #fff; }
+.chip.active { background: var(--accent); color: var(--accent-ink); }
 .chip small { opacity: .65; font-weight: 500; margin-left: 3px; }
 .chip.active small { opacity: .8; }
 /* крестик «убрать сохранённый набор» внутри кнопки набора */
@@ -623,7 +697,7 @@ body.readonly .quick .btn { opacity: .45; }
 .detail .det-block .table-wrap { border: 1px solid var(--separator); border-radius: var(--r-inner); }
 .detail .note-box { background: var(--bg-inset); border-radius: var(--r-inner);
   padding: 10px 12px; font-size: 14px; }
-.more-link { color: var(--blue); text-decoration: none; cursor: pointer; font-weight: 550; }
+.more-link { color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 550; }
 .more-link:hover { text-decoration: underline; }
 .btn-ghost { background: none; box-shadow: none; color: var(--label-2); font-size: 17px;
   padding: 0 8px; min-width: 28px; }
@@ -677,8 +751,8 @@ body.readonly .quick .btn { opacity: .45; }
   color: var(--label); font-size: 21px; font-weight: 600; cursor: pointer; font-family: inherit; }
 .calc-key:active { transform: scale(.96); }
 .calc-key:hover { background: var(--fill-2); }
-.calc-op { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); }
-.calc-eq { background: var(--blue); color: #fff; }
+.calc-op { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.calc-eq { background: var(--accent); color: var(--accent-ink); }
 .calc-back-key { font-size: 18px; }
 @media (max-width: 480px) { .calc-key { height: 52px; font-size: 19px; } }
 
@@ -718,8 +792,8 @@ body.readonly .quick .btn { opacity: .45; }
 
 /* --- Спарклайн в строке ------------------------------------------------------ */
 .spark { display: inline-block; vertical-align: middle; }
-.spark path { fill: none; stroke: var(--blue); stroke-width: 1.6; }
-.spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+.spark .spark-fill { fill: color-mix(in srgb, var(--accent) 14%, transparent); stroke: none; }
 
 /* --- Шаблоны частых записей -------------------------------------------------- */
 /* Полоска шаблонов над формой. «В шаблоны» — тихая кнопка: она не действие
@@ -729,7 +803,7 @@ body.readonly .quick .btn { opacity: .45; }
 .tpl-label { font-size: 13px; color: var(--label-2); font-weight: 550; }
 .tpl-save { margin-left: auto; background: none; border: none; color: var(--label-2);
   font-size: 13px; height: auto; padding: 4px 2px; box-shadow: none; }
-.tpl-save:hover { background: none; color: var(--blue); }
+.tpl-save:hover { background: none; color: var(--accent); }
 .tpl-save svg { width: 15px; height: 15px; }
 
 /* --- Сравнение с прошлым периодом ------------------------------------------- */
@@ -803,11 +877,11 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .sched-cell { border-radius: 10px; background: var(--fill-2); padding: 6px 7px; min-height: 74px; }
 .sched-cell.weekend { background: color-mix(in srgb, var(--orange) 8%, var(--fill-2)); }
 .sched-cell.empty { background: color-mix(in srgb, var(--red) 8%, transparent); }
-.sched-cell.now { outline: 2px solid var(--blue); }
+.sched-cell.now { outline: 2px solid var(--accent); }
 .sched-day { font-size: 12px; color: var(--label-2); margin-bottom: 3px; }
 .sched-who { font-size: 12px; padding: 2px 5px; border-radius: 5px; background: var(--fill);
   margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sched-who.fact { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); font-weight: 600; }
+.sched-who.fact { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); font-weight: 600; }
 .sched-abs { font-size: 11px; color: var(--orange); margin-top: 2px; }
 .sched-more { font-size: 11px; color: var(--label-3); }
 @media (max-width: 700px) { .sched-cell { min-height: 58px; padding: 4px; } .sched-who { font-size: 10.5px; } }
@@ -918,8 +992,8 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
     gap: 2px; padding: 7px 2px 6px; min-height: 50px; font-family: inherit; }
   .tab-icon { font-size: 21px; line-height: 1; }
   .tab-name { font-size: 10.5px; font-weight: 600; letter-spacing: -.1px; }
-  .tab.active { color: var(--blue); }
-  .tab-add .tab-icon { color: #fff; background: var(--blue); border-radius: 50%;
+  .tab.active { color: var(--accent); }
+  .tab-add .tab-icon { color: var(--accent-ink); background: var(--accent); border-radius: 50%;
     width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
     font-size: 19px; font-weight: 600; }
   .tab-add.active { color: var(--label-2); }
@@ -1036,7 +1110,7 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .cal-cell.empty { background: transparent; min-height: 0; }
 .cal-cell.weekend { background: var(--fill); }
 .cal-cell.gap { box-shadow: inset 0 0 0 1px rgba(255,149,0,.45); }
-.cal-cell.today { box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--accent); }
 .cal-day { font-size: 12.5px; font-weight: 700; color: var(--label-2); }
 .cal-who { font-size: 12px; line-height: 1.25; color: var(--label);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1093,7 +1167,7 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .btn-icon { justify-content: center; padding-left: 10px; padding-right: 10px; }
 .btn-icon .ic { margin: 0; }
 .search-ic { display: flex; align-items: center; color: var(--label-3); }
-#privacyBtn.is-off { color: var(--blue); }
+#privacyBtn.is-off { color: var(--accent); }
 .row-menu-list .ic { color: var(--label-2); }
 .row-menu-list button.danger .ic { color: #FF3B30; }
 .banner > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
@@ -1178,8 +1252,8 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 
 /* Кто попадёт в ведомость: отмеченные — залиты, остальные — обычные кнопки */
 .slip-pick { display: flex; flex-wrap: wrap; gap: 8px; }
-.btn.btn-on { background: var(--blue); border-color: var(--blue); color: #fff; }
-.btn.btn-on .c-muted { color: rgba(255,255,255,.75); }
+.btn.btn-on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.btn-on .c-muted, .btn-primary .c-muted, .chip.active .c-muted { color: inherit; opacity: .78; }
 @media print { .slip-pick, .quick, .banner { display: none !important; } }
 
 /* Поле даты: сам календарь и две быстрые кнопки рядом */
@@ -1208,7 +1282,7 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .nav-item:hover .nav-star, .nav-star.on { opacity: 1; }
 .nav-star.on { color: #f5a623; }
 .nav-star.on .ic { fill: currentColor; }
-.nav-item.active .nav-star { color: rgba(255,255,255,.85); }
+.nav-item.active .nav-star { color: var(--accent-ink); opacity: .85; }
 .nav-star:hover { background: var(--fill-2); color: var(--label); }
 /* На телефоне наведения нет — звёздочку показываем всегда */
 @media (hover: none) { .nav-star { opacity: 1; } }
@@ -1223,7 +1297,7 @@ body.big .form-row input, body.big .form-row select { height: 46px; font-size: 1
 .mcfg-ic { flex: 0 0 auto; color: var(--label-2); display: flex; }
 .mcfg-name { flex: 1 1 160px; min-width: 0; text-align: left; background: none; border: 0;
   font: inherit; color: var(--label); cursor: pointer; padding: 0; }
-.mcfg-name:hover { color: var(--blue); text-decoration: underline; }
+.mcfg-name:hover { color: var(--accent); text-decoration: underline; }
 @media (max-width: 560px) {
   .mcfg-name { flex: 1 0 100%; font-weight: 600; }
   .mcfg-row .btn { flex: 1 1 auto; }
@@ -1336,7 +1410,7 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .drillable { cursor: pointer; }
 .drillable:hover { background: var(--fill-2); }
 .drillable .drill-mark { color: var(--label-3); font-size: 15px; margin-left: 6px; }
-.drillable:hover .drill-mark { color: var(--blue); }
+.drillable:hover .drill-mark { color: var(--accent); }
 
 /* Разбор расхождения по ящику: «каким должно быть каждое число, чтобы сошлось».
    Спокойный серый блок — это подсказка, а не ошибка, пугать ею нельзя. */
@@ -1362,7 +1436,7 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
 .wiz-step { font-size: 13px; font-weight: 600; color: var(--label-2); letter-spacing: .02em; }
 .wiz-bar { display: flex; gap: 5px; margin: 8px 0 8px; }
 .wiz-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); }
-.wiz-bar i.on { background: var(--blue); }
+.wiz-bar i.on { background: var(--accent); }
 .wiz-why { font-size: 14px; color: var(--label-2); line-height: 1.4; }
 .wiz-nav { padding-top: 14px; }
 
@@ -1435,7 +1509,7 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   display: flex; gap: 8px; align-items: flex-start;
   padding: 12px 14px; margin-bottom: 14px;
   border-radius: var(--r-inner); background: rgba(0, 122, 255, .1);
-  font-size: 15px; line-height: 1.4; color: var(--blue);
+  font-size: 15px; line-height: 1.4; color: var(--accent);
 }
 .rule-preview svg { flex: none; margin-top: 1px; }
 .rev-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
@@ -1455,8 +1529,8 @@ mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; 
   font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer;
   vertical-align: middle;
 }
-.more-btn:hover { background: var(--fill); color: var(--blue); }
-.more-btn.on { background: var(--blue); color: #fff; }
+.more-btn:hover { background: var(--fill); color: var(--accent); }
+.more-btn.on { background: var(--accent); color: var(--accent-ink); }
 .more-box {
   display: block; margin-top: 6px; padding: 9px 11px;
   border-radius: var(--r-inner); background: var(--fill-2);
@@ -1562,10 +1636,24 @@ body.huge .btn, body.huge input, body.huge select, body.huge textarea { font-siz
   font: inherit; text-align: left; color: var(--label); cursor: pointer; }
 .cmd-row svg { flex: none; color: var(--label-2); }
 .cmd-row.on, .cmd-row:hover { background: var(--fill-2); }
-.cmd-row.on svg { color: var(--blue); }
+.cmd-row.on svg { color: var(--accent); }
 .cmd-name { flex: 1; font-size: 15px; }
 .cmd-where { font-size: 12px; color: var(--label-3); }
 .cmd-empty { padding: 22px 16px; text-align: center; font-size: 14px; color: var(--label-2); }
 .cmd-foot { padding: 9px 16px; border-top: 1px solid var(--separator);
   font-size: 11.5px; color: var(--label-3); }
 @media print { .cmd-wrap { display: none !important; } }
+
+/* --- ДЕТАЛИ ВИДА AURON FINANCE ---------------------------------------------
+   Мелочи, по которым владелец узнаёт своё приложение: круглые кнопки-значки
+   в шапке и кнопки-пилюли в ряду действий.
+   ------------------------------------------------------------------------- */
+.topbar .btn-icon { border-radius: 50%; }
+.quick-main .btn, .chip { border-radius: var(--r-pill); }
+
+/* Ссылка без класса. Браузер красит её в свой синий, и на тёмной полосе
+   предупреждения «Перейти к выплатам» читалось как тёмное на тёмном.
+   Внутри цветной полосы ссылка берёт цвет полосы и подчёркивается: там
+   любой свой цвет будет спорить с фоном. */
+a { color: var(--accent); }
+.banner a, .alert-bar a { color: inherit; text-decoration: underline; }

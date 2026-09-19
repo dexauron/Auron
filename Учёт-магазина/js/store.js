@@ -162,7 +162,11 @@
     askPin: 'нет', lockMinutes: 1,
 
     /* --- Внешний вид ----------------------------------------------------- */
-    theme: 'Авто', themeDayFrom: '07:00', themeNightFrom: '20:00',
+    /* По умолчанию тёмная и компактная — владелец показал своё второе
+       приложение, Auron Finance, и попросил такой же вид. Светлая тема и
+       просторный режим никуда не делись, они рядом в настройках. */
+    theme: 'Тёмная', themeDayFrom: '07:00', themeNightFrom: '20:00',
+    density: 'компактно',
     bigText: 'нет', privacyDefault: 'нет', haptics: 'да',
     acqOn: 'нет', acqCard: '', acqQr: '', acqNfc: '',
     startView: 'Пульт', defaultPeriod: 'Месяц',

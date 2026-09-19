@@ -4687,6 +4687,129 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 32. Тёмный компактный вид: нечитаемого текста нет ни на одном экране.
+
+       Владелец показал своё второе приложение, Auron Finance, и попросил
+       такой же вид: почти чёрный фон, зелёный акцент, компактно. Тема
+       ломается тихо и по мелочам: ссылка осталась браузерно-синей и
+       пропала на тёмной полосе, серая подпись слилась с фоном. Сорок семь
+       экранов в двух темах глазами так не пересмотришь — поэтому считаем
+       контраст по правилу WCAG: обычный текст 4,5 к 1, крупный 3 к 1.
+       Это не вкусовщина, а измеримое «видно или не видно». */
+{
+  console.log('— Тёмный компактный вид: всё читается');
+  const { page, ctx, errs } = await open();
+
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.setSetting('theme', 'Тёмная');
+    S.setSetting('density', 'компактно');
+    window.WMUI.applyLook();
+  });
+
+  // Заполняем годом: на пустых экранах красить нечего
+  await page.evaluate(() => window.WMUI.go('data'));
+  await page.waitForTimeout(400);
+  page.removeAllListeners('dialog');
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => document.querySelector('[data-act="demo-fill"]').click());
+  await page.waitForTimeout(2600);
+
+  const тёмная = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  check('ТЁМНАЯ ТЕМА ПРАВДА ВКЛЮЧИЛАСЬ',
+    /rgb\(1?\d, ?1?\d, ?1?\d\)/.test(тёмная), тёмная, 'почти чёрный фон');
+  check('и компактный режим тоже',
+    await page.evaluate(() => document.body.classList.contains('compact')),
+    'включён', 'включён');
+
+  await page.evaluate(() => {
+    window.__контраст = function () {
+      /* Браузер отдаёт цвет двумя разными записями. Обычную — «rgb(19, 23,
+         21)», где числа 0..255. А всё, что посчитано через color-mix (а у
+         нас так сделаны цветные полосы), — «color(srgb 0.93 0.85 0.86)»,
+         где числа 0..1. Первая версия этой проверки читала доли как 0..255,
+         считала светло-розовую полосу почти чёрной и выдавала чепуху:
+         чёрный текст на розовом получался «1 к 1». */
+      function разбор(c) {
+        const t = String(c);
+        const m = t.match(/[\d.]+/g);
+        if (!m) return null;
+        const k = /^color\(/.test(t) ? 255 : 1;
+        return { r: +m[0] * k, g: +m[1] * k, b: +m[2] * k, a: m.length > 3 ? +m[3] : 1 };
+      }
+      function фонПод(el) {
+        let n = el;
+        while (n && n !== document.documentElement) {
+          const c = разбор(getComputedStyle(n).backgroundColor);
+          if (c && c.a >= 0.95) return c;
+          n = n.parentElement;
+        }
+        return разбор(getComputedStyle(document.body).backgroundColor) || { r: 0, g: 0, b: 0, a: 1 };
+      }
+      function яркость(c) {
+        const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b);
+      }
+      const плохие = [];
+      const все = document.querySelectorAll('#page *, #alertBar *, .nav *, .topbar *');
+      Array.prototype.forEach.call(все, function (el) {
+        // только элементы с собственным видимым текстом
+        const свой = Array.prototype.filter.call(el.childNodes, n => n.nodeType === 3)
+          .map(n => n.textContent.trim()).join(' ').trim();
+        if (!свой) return;
+        const cs = getComputedStyle(el);
+        if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity < 0.3) return;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        const текст = разбор(cs.color); if (!текст) return;
+        const фон = фонПод(el);
+        // полупрозрачный текст смешиваем с фоном, иначе посчитаем не то
+        const см = текст.a >= 1 ? текст : {
+          r: текст.r * текст.a + фон.r * (1 - текст.a),
+          g: текст.g * текст.a + фон.g * (1 - текст.a),
+          b: текст.b * текст.a + фон.b * (1 - текст.a) };
+        const L1 = яркость(см), L2 = яркость(фон);
+        const к = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+        const размер = parseFloat(cs.fontSize), жирно = +cs.fontWeight >= 600;
+        const крупно = размер >= 24 || (размер >= 18.66 && жирно);
+        const надо = крупно ? 3 : 4.5;
+        if (к < надо) плохие.push({ текст: свой.slice(0, 40), к: Math.round(к * 10) / 10,
+          надо: надо, класс: (el.className || '').toString().slice(0, 30) });
+      });
+      return плохие;
+    };
+  });
+
+  /* Обе темы. Светлую владелец оставил себе на день, и ломается она так же
+     тихо: белая надпись на белой кнопке видна ровно никак. */
+  const ids = await screensOf(page);
+  check('ЭКРАНОВ ПРОВЕРЕНО НА ЧИТАЕМОСТЬ', ids.length >= 40, ids.length, 'не меньше 40');
+
+  for (const тема of ['Тёмная', 'Светлая']) {
+    await page.evaluate(t => {
+      window.WMStore.setSetting('theme', t); window.WMUI.applyLook();
+    }, тема);
+    const беды = [];
+    for (const id of ids) {
+      await page.evaluate(v => window.WMUI.go(v), id);
+      await page.waitForTimeout(80);
+      const п = await page.evaluate(() => window.__контраст());
+      п.forEach(x => беды.push(id + ': «' + x.текст + '» ' + x.к + ' вместо ' + x.надо +
+        (x.класс ? ' (.' + x.класс + ')' : '')));
+    }
+    const свод = беды.filter(function (x, i, a) { return a.indexOf(x) === i; });
+    check('НИ ОДНОЙ НЕЧИТАЕМОЙ НАДПИСИ — ТЕМА «' + тема.toUpperCase() + '»',
+      свод.length === 0, свод.slice(0, 20).join('\n      ') || 'все читаются', 'ни одной');
+  }
+  await page.evaluate(() => {
+    window.WMStore.setSetting('theme', 'Тёмная'); window.WMUI.applyLook();
+  });
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);
