@@ -1,0 +1,2695 @@
+/* ============================================================================
+   Экраны кассового учёта.
+
+   Порядок дня в магазине 24/7:
+     утром  — закрыли смену, сверили ящик  → экран «Утро: сверка кассы»;
+     вечером — записали товар и долги      → экран «Вечер: итоги дня»;
+     когда нужно — план выплат, расходы, долги покупателей.
+
+   Два правила, на которых держится вся арифметика:
+   1. В ящике только наличные. Карта и СБП туда не попадают.
+   2. У каждой цифры один источник. Кассу двигают смены и явные расходы;
+      долг поставщикам — только вечерние итоги. Двух дорог к одному числу
+      нет специально: они всегда кончаются двойным счётом.
+   ========================================================================== */
+(function () {
+  'use strict';
+  var E = window.WM, S = window.WMStore, Q = window.WMQuick;
+
+  function U() { return window.WMUI; }
+  function FLT() { return window.WMFilter; }
+  function esc(s) { return U().esc(s); }
+  function ic(n, size) { return U().ic(n, size); }
+  function dateRu(d) { return U().dateRu(d); }
+  function num(v) { return E.num(v); }
+  function money(v) { return E.fmtMoney(v); }
+  function today() { return E.today(); }
+  function dds() { return S.state.dds || []; }
+  function refresh() { U().recompute(); }
+
+  function dict(name, fallback) {
+    var v = S.settings[name];
+    if (typeof v === 'string' && v.trim()) {
+      return v.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    }
+    return fallback || [];
+  }
+  function tills() { return dict('tills', E.TILLS); }
+
+  /* Счета для выпадающих списков. Убранные не предлагаем, но и не теряем:
+     в старых записях они остаются, и остаток по ним считается. */
+  function accounts() { return (S.state.accounts || []).filter(function (a) { return !a.archived; }); }
+  function accOptions(kinds) {
+    return accounts().filter(function (a) { return !kinds || kinds.indexOf(a.kind) >= 0; })
+      .map(function (a) { return { value: a.id, text: a.name }; });
+  }
+  function accDefault(cashless) {
+    var a = E.defaultAccount(accounts(), cashless);
+    return a ? a.id : '';
+  }
+
+  /* --------------------------------------------------------------------------
+     С КАКОГО СЧЁТА ПОДСТАВИТЬ В «РАСХОДЕ»
+
+     Выбирать счёт при каждом расходе утомительно, а один общий счёт по
+     умолчанию врёт: обед покупают из кассы, аренду платят переводом.
+     Поэтому по старшинству:
+
+       1. ЧЕМ ЗАПЛАТИЛИ ПРОШЛЫЙ РАЗ ПО ЭТОЙ СТАТЬЕ. Программа сама помнит:
+          «Аренда» вспомнит счёт, «Обед» — кассу. Ничего настраивать не надо.
+       2. Счёт, отмеченный в карточке как «отсюда обычно платим расходы».
+       3. Счёт наличной выручки — как было раньше.
+
+     Счёт всё равно виден в форме и меняется одним нажатием: подстановка
+     экономит время, а не отнимает выбор.
+     -------------------------------------------------------------------------- */
+  function funds() { return S.state.funds || []; }
+  function fundOptions(withNone) {
+    var o = withNone ? [{ value: '', text: '— не в конверт —' }] : [];
+    return o.concat(funds().map(function (f) {
+      return { value: f.id, text: f.name };
+    }));
+  }
+  /* Конверт по названию статьи. Заплатили «Аренду» — программа сама
+     подставит конверт «Аренда», если он есть. Без этого владелец платил бы
+     аренду обычным расходом, забывал отметить конверт, и тот рос бы вечно,
+     показывая деньги, которых давно нет. */
+  function fundForCategory(category) {
+    var c = E.norm(category);
+    if (!c) return '';
+    var hit = funds().filter(function (f) { return E.norm(f.name) === c; })[0];
+    return hit ? hit.id : '';
+  }
+
+  function fundName(id) {
+    var f = funds().filter(function (x) { return x.id === id; })[0];
+    return f ? f.name : '';
+  }
+
+  function accForCategory(category, cashless) {
+    var cat = E.norm(category);
+    if (cat) {
+      var rows = dds().filter(function (r) {
+        return E.isExpense(r) && E.norm(r.category) === cat && E.txt(r.account);
+      });
+      // берём самую свежую по дате, а при равных — последнюю записанную
+      var best = null;
+      rows.forEach(function (r) {
+        if (!best || E.txt(r.date) >= E.txt(best.date)) best = r;
+      });
+      if (best) {
+        var live = accounts().filter(function (a) {
+          return a.id === E.txt(best.account) && !a.archived;
+        })[0];
+        if (live) return live.id;
+      }
+    }
+    var pick = accounts().filter(function (a) { return a.defaultExpense && !a.archived; })[0];
+    if (pick) return pick.id;
+    return accDefault(cashless);
+  }
+  function accName(id) {
+    var a = accounts().filter(function (x) { return x.id === id; })[0];
+    return a ? a.name : '';
+  }
+  function shiftNames() { return dict('shiftNames', E.SHIFTS); }
+  function cashiers() { return Q.dicts(S.state, S.settings).cashiers; }
+  function categories() { return Q.dicts(S.state, S.settings).categories; }
+  function methods() { return Q.dicts(S.state, S.settings).methods; }
+  function suppliers() { return Q.dicts(S.state, S.settings).suppliers; }
+  function learn(map) {
+    var changed = false;
+    Object.keys(map).forEach(function (d) {
+      if (Q.learn(S.settings, d, map[d], S.state)) changed = true;
+    });
+    if (changed) S.save();
+  }
+  function period() {
+    return dds().filter(function (r) { return U().inPeriod(r.date); });
+  }
+  // Если за выбранный период записей нет — считаем по всему, но говорим об этом
+  function pick() {
+    var p = period();
+    if (p.length) return { rows: p, whole: false };
+    return { rows: dds(), whole: true };
+  }
+  function wholeNote(sel) {
+    if (!sel.whole || !dds().length) return '';
+    return '<div class="banner blue"><span>' + ic('info') + '</span><span>За ' +
+      esc(U().periodName().toLowerCase()) + ' записей нет — показаны все данные.</span></div>';
+  }
+
+  // Факт последней закрытой смены по этой кассе: подставляем как размен
+  /* Сколько размена осталось в ящике с прошлой смены по этой кассе.
+     Владелец сам его там оставил — значит столько и было на начало. Поле
+     заполняется само, но поправить его можно: посчитать за владельца то,
+     что он знает, программа обязана, а спорить с ним — нет. */
+  // Заголовок части формы: длинную форму без них читать невозможно
+  function часть(имя) { return '<div class="form-cap">' + esc(имя) + '</div>'; }
+
+  function lastKept(till) {
+    var list = E.shiftsOf(dds(), function (r) { return E.txt(r.till) === E.txt(till); },
+      S.settings);
+    for (var i = list.length - 1; i >= 0; i--) {
+      var c = E.shiftCalc(list[i]);
+      if (c.recvFilled) return { kept: c.kept, date: E.txt(list[i].date) };
+    }
+    return null;
+  }
+
+  function lastFact(till) {
+    var list = E.shiftsOf(dds(), function (r) { return E.txt(r.till) === E.txt(till); },
+      S.settings);
+    if (!list.length) return null;
+    var prev = list[list.length - 1];
+    return { fact: E.shiftCalc(prev).factCash, date: E.txt(prev.date), shift: E.txt(prev.shift) };
+  }
+
+  /* ==========================================================================
+     ФОРМЫ
+     ========================================================================== */
+  var FORMS = window.WM_EXTRA_FORMS = window.WM_EXTRA_FORMS || {};
+
+  /* --- Утро: сверка кассы ----------------------------------------------------
+     Единственное место, где считается расхождение. Безнал сюда не входит:
+     этих денег в ящике не было. */
+  /* --------------------------------------------------------------------------
+     РАСХОЖДЕНИЕ ВИДНО СРАЗУ, А НЕ ПОСЛЕ СОХРАНЕНИЯ
+
+     Кассир сдаёт смену и хочет знать, сошлось ли, ПОКА он у кассы и помнит,
+     что брал. Раньше расхождение показывалось только после «Сохранить» —
+     и разбираться приходилось задним числом.
+
+     Считаем то же самое, что и движок, той же формулой: размен + Z-наличные
+     − выплаты = расчётный остаток; факт − расчётный = расхождение.
+     -------------------------------------------------------------------------- */
+  /* «Получил на руки» — одно число, но вписать его можно двумя способами:
+     суммой или по купюрам. Здесь оба сводятся к одному, и дальше вся
+     программа знает только про сумму: ни расчёт, ни отчёты про купюры не
+     подозревают. Купюры — это способ ВВОДА, а не ещё одна сущность учёта. */
+  function полученоНаРуки(v, n) {
+    var к = суммаКупюр(v);
+    if (к.есть) return к.сумма;
+    return (v.received === '' || v.received == null) ? null : n(v.received);
+  }
+
+  /* Что делать с недостачей: спрашиваем один раз, сразу после сверки.
+     Ответ остаётся в самой смене — чтобы через месяц было видно не только
+     «не сошлось на 4 200», но и что с этим решили. */
+  function спроситьПроНедостачу(id, rec, сколько) {
+    var u = U();
+    var кто = E.txt(rec.cashier) || 'кассир';
+    u.sheet('Недостача ' + money(сколько),
+      '<div class="cc-sub">Смена ' + esc(E.txt(rec.till)) + ' · ' + esc(E.txt(rec.shift)) +
+      ', ' + esc(кто) + '. Что с этим делаем?</div>' +
+      '<div class="row-btns" style="margin-top:14px">' +
+      '<button class="btn btn-primary" data-act="short-withhold" data-id="' + esc(id) + '">' +
+      'Удержать с кассира</button>' +
+      '<button class="btn" data-act="short-loss" data-id="' + esc(id) + '">' +
+      'Списать в убыток</button>' +
+      '<button class="btn btn-plain" data-act="close-sheet">Решу позже</button>' +
+      '</div>' +
+      '<div class="cc-sub" style="margin-top:12px">Удержание уменьшает зарплату и ' +
+      'попадает в табель. Списание в убыток денег не возвращает — оно просто ' +
+      'говорит, что разбираться не будем.</div>');
+  }
+
+  function shiftSumBox(v) {
+    v = v || {};
+    var u = U();
+    function n(x) {
+      if (x == null || x === '') return 0;
+      var c = window.WMNum.calc(String(x));
+      return c === null ? num(x) : c;
+    }
+    /* Считаем ровно тем же движком, что и при сохранении: чтобы то, что
+       владелец видит в форме, не разошлось с тем, что потом ляжет в базу. */
+    /* Выплаты складываются из строк «кому и за что» — прямо на лету, пока
+       владелец печатает. Одного поля «выплаты» больше нет: сумма живёт в
+       одном месте, в списке. */
+    var выплаты = 0;
+    for (var pi = 0; pi < 60; pi++) {
+      if (v['pay_a' + pi] === undefined && v['pay_n' + pi] === undefined) continue;
+      выплаты += n(v['pay_a' + pi]);
+    }
+    if (!выплаты && v.payouts) выплаты = n(v.payouts);   // старая запись
+
+    var c = E.shiftCalc({
+      openCash: n(v.openCash), zCash: n(v.zCash), zCashless: n(v.zCashless),
+      payouts: выплаты, factCash: n(v.factCash),
+      returnsCash: n(v.returnsCash), returnsCashless: n(v.returnsCashless),
+      deposits: n(v.deposits),
+      kept: (v.kept === '' || v.kept == null) ? 0 : n(v.kept),
+      received: полученоНаРуки(v, n),
+      zCard: n(v.zCard), zQr: n(v.zQr), zNfc: n(v.zNfc), checks: n(v.checks),
+      factFilled: v.factCash !== '' && v.factCash != null
+    });
+    var zb = c.zCashless;
+    var пусто = !c.zCash && !c.recvFilled && !c.payouts;
+
+    /* Сводка написана так, как владелец считает в уме: касса сказала столько,
+       кассир потратил столько, размен туда-сюда, значит мне должны вот это.
+       Строки, которые он не заполнял, молчат — пустые нули только мешают. */
+    var h = '<div class="cc-total">';
+    if (c.openCash) h += '<div class="cc-line"><span>Размен был на начало</span><b>' +
+      esc(money(c.openCash)) + '</b></div>';
+    h += '<div class="cc-line"><span>+ Касса сказала наличными</span><b>' +
+      esc(money(c.zCash)) + '</b></div>';
+    if (c.returnsCash) h += '<div class="cc-line"><span>− Возвраты покупателям</span><b>' +
+      esc(money(c.returnsCash)) + '</b></div>';
+    if (c.deposits) h += '<div class="cc-line"><span>+ Довозили размен</span><b>' +
+      esc(money(c.deposits)) + '</b></div>';
+    if (c.payouts) h += '<div class="cc-line"><span>− Кассир платил из ящика</span><b>' +
+      esc(money(c.payouts)) + '</b></div>';
+    if (c.kept) h += '<div class="cc-line"><span>− Размен оставили в ящике</span><b>' +
+      esc(money(c.kept)) + '</b></div>';
+    h += '<div class="cc-line" style="border-top:1px solid var(--separator);padding-top:8px">' +
+      '<span>Должны отдать вам</span><b class="cc-big">' + esc(money(c.handed)) + '</b></div>';
+    if (c.recvFilled) h += '<div class="cc-line"><span>Получили на руки</span><b>' +
+      esc(money(c.received)) + '</b></div>';
+
+    if (пусто) {
+      h += '<div class="cc-sub">Впишите, что сказала касса и сколько получили на руки — ' +
+        'расхождение посчитается само.</div>';
+    } else {
+      h += '<div class="cc-line cc-diff ' + (c.ok ? 'ok' : (c.diff < 0 ? 'bad' : 'warn')) + '">' +
+        '<span>' + (c.ok ? 'Сходится' : (c.diff < 0 ? 'НЕДОСТАЧА' : 'ИЗЛИШЕК')) + '</span>' +
+        '<b>' + (c.ok ? '—' : esc(money(Math.abs(c.diff)))) + '</b></div>';
+      if (!c.ok) {
+        /* Раньше здесь был совет вообще: «проверьте выплаты и возвраты».
+           При расхождении в 56 231 ₽ такой совет бесполезен — владелец решает,
+           что врёт программа. Теперь показываем обратный счёт: каким должно
+           было быть КАЖДОЕ поле, чтобы ящик сошёлся. По этому списку ошибка
+           находится за минуту — одно из чисел он узнает сразу. */
+        var f = E.shiftFix(c);
+        /* Коротко — всегда, длинное объяснение — по кнопке. Владелец смотрит
+           сюда каждый день и знает, что «в ящике меньше, чем должно»; абзац
+           про доли и про то, с кем разбираться, нужен ему раз в месяц. */
+        h += '<div class="cc-sub">' + (c.diff < 0
+          ? 'Вам отдали меньше, чем должны были.'
+          : 'Вам отдали больше, чем должны были.') +
+          (f.big ? ' Это ' + esc(E.fmtPct(f.share * 100, 0)) + ' от наличных за смену.' +
+            u.more('Чаще всего при таком расхождении неверно вписано одно число — ' +
+              'сверьтесь со списком ниже. Если всё верно, недостача настоящая, ' +
+              'и разбираться надо с людьми, а не с цифрами.') : '') + '</div>';
+        if (f.reason) h += '<div class="cc-sub c-red">' + esc(f.reason) + '</div>';
+        if (f.list.length) {
+          h += '<div class="cc-fix"><div class="cc-fix-h">Чтобы всё сошлось, ' +
+            'достаточно исправить одно из чисел:</div>';
+          f.list.slice(0, 4).forEach(function (x) {
+            h += '<div class="cc-fix-r"><span>' + esc(x.name) + '</span>' +
+              '<b><s>' + esc(money(x.now)) + '</s> → ' + esc(money(x.need)) + '</b></div>';
+          });
+          h += '<div class="cc-fix-n">' +
+            u.more('Если ни одно не подходит — расхождение настоящее, сохраняйте как ' +
+              'есть: программа его запомнит и покажет в отчёте.', 'А если всё верно') +
+            '</div></div>';
+        }
+      }
+    }
+    /* --------------------------------------------------------------------------
+       ТРИ КОЛОНКИ: ЧТО СКАЗАЛА КАССА · ЧТО ДОЛЖНО БЫТЬ · ЧТО ЕСТЬ ПО ФАКТУ
+
+       Владелец попросил ровно это, и просьба правильная. Выше идёт арифметика
+       ящика — она отвечает на вопрос «почему столько». А здесь ответ на вопрос
+       «сошлось или нет», по каждому кошельку отдельно:
+
+         · наличные в ящике — касса про остаток ничего не говорит, поэтому в
+           её колонке прочерк;
+         · инкассация — касса пробила одно, в сейф доехало другое;
+         · безнал — касса пробила одно, терминал показал другое.
+
+       Каждая строка отвечает за свой карман, и итог складывается ровно один
+       раз. Так видно не только «сколько не хватает», но и ГДЕ искать.
+       -------------------------------------------------------------------------- */
+    if (!пусто) {
+      var стр = [];
+      /* Строка про наличные написана с той стороны, с которой на неё смотрит
+         владелец. Раньше здесь стоял ящик: «должно быть 69 081, по факту
+         62 969». Он этих чисел в руках не держал — он держал 57 969 и ждал
+         64 081. Показываем то, что он считал сам. */
+      if (c.recvFilled) {
+        стр.push({ имя: 'Наличные вам на руки', касса: null, надо: c.handed,
+          факт: c.received, раз: c.diff });
+      } else {
+        стр.push({ имя: 'Наличные в ящике', касса: null, надо: c.expected,
+          факт: c.factFilled ? c.factCash : null, раз: c.factFilled ? c.diff : 0 });
+      }
+      if (c.collected || c.collectFilled) {
+        стр.push({ имя: 'Инкассация в сейф', касса: c.collected, надо: c.collected,
+          факт: c.collectFilled ? c.collectedFact : null,
+          раз: c.collectFilled ? c.collectDiff : 0 });
+      }
+      if (zb || c.wayFilled) {
+        стр.push({ имя: 'Безнал на счёт', касса: c.zCashless, надо: null,
+          факт: c.wayFilled ? c.byWay : null, раз: c.wayFilled ? c.wayDiff : 0 });
+      }
+      h += '<div class="cc-cmp"><div class="cc-cmp-h">' +
+        '<span>Кошелёк</span><b>Касса сказала</b><b>Должно быть</b><b>По факту</b></div>';
+      стр.forEach(function (r) {
+        var есть = r.факт != null, сошлось = есть && Math.abs(r.раз) < 0.005;
+        h += '<div class="cc-cmp-r"><span>' + esc(r.имя) + '</span>' +
+          '<b>' + (r.касса == null ? '<i>—</i>' : esc(money(r.касса))) + '</b>' +
+          '<b>' + (r.надо == null ? '<i>—</i>' : esc(money(r.надо))) + '</b>' +
+          '<b class="' + (!есть ? 'c-muted' : (сошлось ? 'c-green' : 'c-red')) + '">' +
+          (есть ? esc(money(r.факт)) : '<i>не считали</i>') + '</b></div>';
+        if (есть && !сошлось) {
+          h += '<div class="cc-cmp-n' + (r.раз < 0 ? ' bad' : '') + '">' +
+            (r.раз < 0 ? 'не хватает ' : 'больше на ') + esc(money(Math.abs(r.раз))) + '</div>';
+        }
+      });
+      h += '<div class="cc-cmp-t ' + (c.allOk ? 'ok' : (c.totalDiff < 0 ? 'bad' : 'warn')) + '">' +
+        '<span>' + (c.allOk ? 'Всё сошлось'
+          : (c.totalDiff < 0 ? 'ВСЕГО НЕ ХВАТАЕТ' : 'ВСЕГО ЛИШНИХ')) + '</span>' +
+        '<b>' + (c.allOk ? '—' : esc(money(Math.abs(c.totalDiff)))) + '</b></div></div>';
+    }
+
+    /* Комиссия банка. Показываем, только если владелец её включил и вписал
+       ставки: выдумывать расход, которого он не подтвердил, нельзя. */
+    var экв = E.acquiring(c, S.settings);
+    if (экв.on && экв.total) {
+      h += '<div class="cc-sub">Банк удержит <b>' + esc(money(экв.total)) + '</b>, на счёт ' +
+        'придёт <b>' + esc(money(экв.net)) + '</b>' +
+        u.more('Ставки взяты из настроек: карта ' + E.fmtPct(экв.rateCard, 2) +
+          ', QR ' + E.fmtPct(экв.rateQr, 2) +
+          (экв.nfc ? ', телефон ' + E.fmtPct(экв.rateNfc || экв.rateCard, 2) : '') +
+          '. Выключить или поправить — в настройках, раздел «Комиссия банка ' +
+          'за эквайринг».', 'Откуда') + '</div>';
+    }
+
+    /* Итог по безналу уже стоит в таблице сравнения выше — второй раз его
+       показывать незачем. Здесь только то, чего в таблице нет: из чего он
+       сложился и что делать, если терминал с кассой разошлись. */
+    if (zb && c.wayFilled) {
+      h += '<div class="cc-sub">Из них по терминалу: карта ' + esc(money(c.card)) +
+        ' · QR ' + esc(money(c.qr)) + (c.nfc ? ' · телефон ' + esc(money(c.nfc)) : '') +
+        '</div>';
+      if (!c.wayOk) {
+        h += '<div class="cc-sub c-red">Терминал и Z-отчёт разошлись на ' +
+          esc(money(Math.abs(c.wayDiff))) + '. ' +
+          (c.wayDiff > 0 ? 'По терминалу прошло больше, чем пробито на кассе.'
+            : 'На кассе пробито больше, чем прошло по терминалу.') +
+          ' Это надо разобрать сегодня: завтра концов не найти.</div>';
+      }
+    }
+    /* Выручку показываем ВСЕГДА, а не только когда заполнен безнал: у наличной
+       кассы безнала нет вовсе, и владелец не увидел бы, сколько наторговал. */
+    if (!пусто) {
+      h += '<div class="cc-sub">Выручка за смену: <b>' + esc(money(c.revenue)) + '</b>' +
+        (c.returns ? ' (возвраты ' + esc(money(c.returns)) + ' уже вычтены)' : '') +
+        (c.avgCheck ? ' · средний чек ' + esc(money(c.avgCheck)) : '') + '</div>';
+    }
+
+    /* Наличные смены обязаны лечь в денежный ящик той кассы, что выбрана
+       выше. Если выбран сейф, остаток ящика навсегда останется нулевым,
+       а сверка — бессмысленной. Молчать об этом нельзя. */
+    /* Куда владелец кладёт забранное, он выбирает сам: сейф или сразу банк.
+       Ругаться тут не на что — ящика в этой картине нет. Предупреждаем
+       только если выбран безналичный счёт: живые деньги туда не положишь,
+       их сначала надо отвезти. */
+    var acc = accounts().filter(function (a) { return a.id === E.txt(v.toAccount); })[0];
+    if (acc && acc.kind === 'bank') {
+      h += '<div class="cc-sub" style="color:var(--orange)">⚠ Наличные кладутся на счёт «' +
+        esc(acc.name) + '», а это банк.' +
+        u.more('Так пишут, когда деньги в тот же день отвезли в банк и сдали. ' +
+          'Если они пока у вас, выберите сейф — иначе программа покажет на счёте ' +
+          'деньги, которых банк ещё не видел.') + '</div>';
+    }
+    return h + '</div>';
+  }
+
+  /* Пересчёт на каждое нажатие. Форму не перерисовываем — набранное пропало бы. */
+  (function () {
+    /* Следим за ВСЕМИ полями, из которых считается ящик. Забудешь здесь одно —
+       владелец введёт его, а расчёт над кнопкой не шелохнётся, и будет
+       казаться, что программа его не услышала. */
+    var WATCH = ['openCash', 'zCash', 'zCashless', 'till',
+      // счёт по купюрам: каждое поле пересчитывает «получил на руки»
+      'b5000', 'b2000', 'b1000', 'b500', 'b200', 'b100', 'b50', 'bCoins',
+      'kept', 'received', 'toAccount',
+      'returnsCash', 'returnsCashless', 'deposits',
+      'zCard', 'zQr', 'zNfc', 'checks',
+      // старые записи: поля остались у смен, сделанных до перехода
+      'payouts', 'factCash', 'account', 'collected', 'collectedFact'];
+    // Строки «кому и за что» заводятся на лету, поэтому ловим их по имени
+    function парное(имя) { return /^pay_[na]\d+$/.test(имя || ''); }
+    function tick(el) {
+      if (!el || !el.name || !el.closest) return;
+      if (WATCH.indexOf(el.name) < 0 && !парное(el.name)) return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var slot = box.querySelector('#shiftSum');
+      if (!slot) return;
+      var v = {};
+      WATCH.forEach(function (k) {
+        var f = box.querySelector('[name="' + k + '"]');
+        if (f) v[k] = f.value;
+      });
+      /* Выплаты кассира лежат строками, и число строк меняется прямо сейчас —
+         поэтому собираем их не по списку, а по тому, что есть в форме. */
+      Array.prototype.forEach.call(box.querySelectorAll('[name^="pay_"]'), function (f) {
+        if (парное(f.name)) v[f.name] = f.value;
+      });
+      slot.innerHTML = shiftSumBox(v);
+    }
+    function later(el) { setTimeout(function () { tick(el); }, 0); }
+    document.addEventListener('input', function (e) { later(e.target); });
+    document.addEventListener('change', function (e) { later(e.target); });
+  })();
+
+  /* --- СЧЁТ ПО КУПЮРАМ ----------------------------------------------------
+     Настройка «Полученные деньги вписываю: суммой / по купюрам» была
+     заведена и не читалась ничем — владелец переключал, а форма оставалась
+     та же.
+
+     Считать по купюрам действительно надёжнее: пересчитывая пачку, человек
+     запоминает «шесть пятитысячных, двенадцать тысячных», а не итог. Сложить
+     это в уме — там и ошибаются. Поэтому программа складывает сама.
+
+     Номиналы — те, что ходят в России. «Монеты и мелочь» одной суммой: их
+     пересчитывают не поштучно, а взвешивают или прикидывают. */
+  var НОМИНАЛЫ = [
+    { поле: 'b5000', цена: 5000, имя: '5 000 ₽' },
+    { поле: 'b2000', цена: 2000, имя: '2 000 ₽' },
+    { поле: 'b1000', цена: 1000, имя: '1 000 ₽' },
+    { поле: 'b500', цена: 500, имя: '500 ₽' },
+    { поле: 'b200', цена: 200, имя: '200 ₽' },
+    { поле: 'b100', цена: 100, имя: '100 ₽' },
+    { поле: 'b50', цена: 50, имя: '50 ₽' }
+  ];
+
+  function поКупюрам() { return E.norm(S.settings.countMode).indexOf('купюр') >= 0; }
+
+  /* Сколько получилось по купюрам. Пусто во всех полях — значит считать
+     нечем, и тогда берём то, что вписано суммой: так старые записи и записи,
+     сделанные до переключения настройки, продолжают считаться как раньше. */
+  function суммаКупюр(v) {
+    var есть = false, итог = 0, i;
+    for (i = 0; i < НОМИНАЛЫ.length; i++) {
+      var шт = num(v[НОМИНАЛЫ[i].поле]);
+      if (E.txt(v[НОМИНАЛЫ[i].поле]) !== '') есть = true;
+      итог += шт * НОМИНАЛЫ[i].цена;
+    }
+    if (E.txt(v.bCoins) !== '') { есть = true; итог += num(v.bCoins); }
+    return есть ? { есть: true, сумма: E.safeRound(итог) } : { есть: false, сумма: 0 };
+  }
+
+  function купюрныеПоля(v) {
+    var u = U();
+    var h = часть('Получил на руки — считаем по купюрам');
+    НОМИНАЛЫ.forEach(function (н) {
+      h += u.fieldRow(н.имя, н.поле, 'number', v[н.поле] != null ? v[н.поле] : '',
+        { keepEmpty: true, unit: 'plain' });
+    });
+    h += u.fieldRow('Монеты и мелочь, ₽', 'bCoins', 'number',
+      v.bCoins != null ? v.bCoins : '',
+      { keepEmpty: true, hint: 'одной суммой: мелочь пересчитывают не поштучно' });
+    return h;
+  }
+
+  FORMS.shiftClose = {
+    title: 'Сверка кассы за смену', icon: 'calculator',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
+    body: function (v) {
+      var u = U(); v = v || {};
+      var поКассам = E.norm(S.settings.shiftMode) !== 'одной записью за день';
+      var till = v.till || tills()[0];
+      var было = lastKept(till);
+      var openHint = было
+        ? 'столько размена вы оставили в ящике ' + dateRu(было.date) + ' — значит столько там и было. ' +
+          'Поправьте, если на деле иначе'
+        : 'мелкие деньги, лежавшие в ящике до открытия смены, чтобы было чем давать сдачу. ' +
+          'Это не выручка. Забираете всё подчистую — здесь ноль';
+
+      var h = u.fieldRow('Дата смены', 'date', 'date', v.date || today());
+      if (поКассам) {
+        h += u.fieldRow('Касса', 'till', 'select', till, { options: tills() });
+      }
+      h += u.fieldRow('Смена', 'shift', 'select', v.shift || shiftNames()[0], { options: shiftNames() }) +
+        u.fieldRow('Кассир', 'cashier', 'list', v.cashier || '',
+          { options: cashiers(), placeholder: 'кто сдаёт смену' });
+
+      /* --- ЧТО СКАЗАЛА КАССА ------------------------------------------- */
+      h += часть('Что сказала касса') +
+        u.fieldRow('Z-отчёт: наличные', 'zCash', 'number', v.zCash || '',
+          { hint: 'строка «НАЛИЧНЫМИ» под «ЧЕКОВ ПРИХОДА». Это приход ДО вычета возвратов, ' +
+            'а не строка «ВЫРУЧКА» — возвраты вычтет сама программа. ' +
+            'Аппаратов два, а ящик один? Пишите через плюс: 50000+3000' }) +
+        u.fieldRow('Z-отчёт: безнал', 'zCashless', 'number', v.zCashless || '',
+          { hint: 'строка «БЕЗНАЛИЧНЫМИ». Эти деньги идут на счёт мимо вас — ' +
+            'в руки вы их не получаете' }) +
+        u.fieldRow('Безнал придёт на счёт', 'cashlessAccount', 'select',
+          v.cashlessAccount || accDefault(true), { options: accOptions(['bank']) }) +
+        u.fieldRow('Из них картой', 'zCard', 'number', v.zCard || '',
+          { hint: 'из отчёта терминала: «ОПЛАТА» / «КАРТА»' }) +
+        u.fieldRow('Из них по QR (СБП)', 'zQr', 'number', v.zQr || '',
+          { hint: 'из отчёта терминала: «ОПЛАТА ПО QR». Комиссия по СБП ниже, чем по карте' }) +
+        u.fieldRow('Из них телефоном', 'zNfc', 'number', v.zNfc || '',
+          { hint: 'из отчёта терминала: «BLUETOOTH» или «БИО». Не вводили — оставьте пусто' }) +
+        u.fieldRow('Возвраты покупателям, наличными', 'returnsCash', 'number', v.returnsCash || 0,
+          { hint: 'строка «ЧЕКОВ ВОЗВРАТОВ ПРИХОДА». Их отдали из ящика, и выручкой они не были' }) +
+        u.fieldRow('Возвраты покупателям, на карту', 'returnsCashless', 'number', v.returnsCashless || 0,
+          { hint: 'такой возврат ушёл обратно на карту — наличных он не касается' });
+
+      /* --- ЧТО КАССИР ПОТРАТИЛ ------------------------------------------
+         Владелец просил знать не сумму, а кому и за что. Поэтому строками:
+         каждая — отдельная трата, а сумма выплат складывается из них. Одно
+         число в двух местах не живёт: сумма считается из списка. */
+      h += часть('Что кассир потратил') +
+        u.fieldRow('Кассир платил из ящика', 'pay', 'pairs', '',
+        { rows: (v.payoutList && v.payoutList.length) ? v.payoutList : [{ name: '', sum: '' }],
+          options: (S.settings.finCategories || '').split(',').map(function (x) { return x.trim(); })
+            .filter(Boolean).concat(suppliers()),
+          placeholders: ['кому и за что', 'сумма'],
+          hint: 'что брали из кассы за смену: поставщику за поставку, за воду, на хознужды. ' +
+            'Строка «ВЫПЛАТ» в Z-отчёте — это их сумма' }) +
+        u.fieldRow('Довозили размен среди смены', 'deposits', 'number', v.deposits || 0,
+          { hint: 'строка «ВНЕСЕНИЙ» в Z-отчёте. Эти деньги вы взяли из своего сейфа и ' +
+            'вечером получите их обратно — программа спишет их из сейфа сама' });
+
+      /* --- СКОЛЬКО Я ЗАБРАЛ --------------------------------------------- */
+      h += часть('Сколько я забрал') +
+        u.fieldRow('Размен был на начало', 'openCash', 'number',
+          v.openCash != null ? v.openCash : (было ? было.kept : 0), { hint: openHint }) +
+        u.fieldRow('Размен оставил в ящике', 'kept', 'number',
+          v.kept != null ? v.kept : (было ? было.kept : 0),
+          { keepEmpty: true,
+            hint: 'сколько мелких денег оставляете кассиру на сдачу. Забрали всё — ноль' }) +
+        (поКупюрам()
+          ? купюрныеПоля(v)
+          : u.fieldRow('Получил на руки', 'received', 'number',
+            v.received != null ? v.received : '',
+            { keepEmpty: true,
+              hint: 'сколько вы пересчитали и унесли в сейф. Программа сравнит это с тем, ' +
+                'сколько вам должны были отдать' })) +
+        u.fieldRow('Положил в', 'toAccount', 'select',
+          v.toAccount || accDefault(false), { options: accOptions(['cash', 'bank']),
+            hint: 'куда унесли деньги: сейф или сразу в банк' }) +
+        u.fieldRow('Чеков за смену', 'checks', 'number', v.checks || '',
+          { unit: 'plain', hint: 'из Z-отчёта — для среднего чека, на деньги не влияет' }) +
+        u.fieldRow('Аннулированных чеков', 'voided', 'number', v.voided || '',
+          { unit: 'plain',
+            hint: 'на деньги не влияет, но много аннулирований — повод спросить кассира' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+
+      return h + '<div id="shiftSum">' + shiftSumBox(v) + '</div>';
+    },
+    hint: 'Должны отдать = было на начало + Z-наличные − возвраты + внесения ' +
+      '− выплаты − оставленный размен. Расхождение = получил − должны отдать. ' +
+      'Когда размен не меняется, «было» и «оставил» гасят друг друга, и остаётся ' +
+      'просто Z-наличные минус выплаты. Безнал в формуле не участвует: карта и СБП ' +
+      'идут на счёт мимо ваших рук.',
+    save: function (v) {
+      var badDate = Q.checkDate(v.date);
+      if (badDate) return badDate;
+      var bad = Q.checkAmount(v.zCash, { allowZero: true });
+      if (bad) return 'Z-отчёт наличные: ' + bad;
+      var купюры = суммаКупюр(v);
+      if (купюры.есть) v.received = купюры.сумма;
+      if (!E.txt(v.received) && v.received !== 0) {
+        return поКупюрам()
+          ? 'Впишите, сколько купюр вы пересчитали — без этого сверять не с чем.'
+          : 'Впишите, сколько денег вы получили на руки — без этого сверять не с чем.';
+      }
+      if (!E.txt(v.cashier)) return 'Укажите кассира — иначе непонятно, с кем разбирать расхождение.';
+
+      /* Кому и за что платил кассир: строками. Сумма выплат складывается из
+         них и отдельным полем не живёт — иначе одно число оказалось бы в двух
+         местах и рано или поздно разошлось бы само с собой. */
+      var список = U().pairValues(v, 'pay').filter(function (x) {
+        return E.txt(x.name) || num(x.sum);
+      });
+      var выплаты = 0;
+      for (var k = 0; k < список.length; k++) {
+        var b2 = Q.checkAmount(список[k].sum, { allowEmpty: true, allowZero: true });
+        if (b2) return 'Выплата «' + E.txt(список[k].name) + '»: ' + b2;
+        выплаты = E.safeRound(выплаты + num(список[k].sum));
+      }
+
+      var fields = ['openCash', 'zCash', 'zCashless', 'kept', 'received',
+        'zCard', 'zQr', 'zNfc', 'returnsCash', 'returnsCashless', 'deposits'];
+      for (var i = 0; i < fields.length; i++) {
+        var b = Q.checkAmount(v[fields[i]], { allowEmpty: true, allowZero: true });
+        if (b) return 'Поле «' + fields[i] + '»: ' + b;
+      }
+      learn({ cashiers: v.cashier });
+      var edS = U().editing();
+      var rec = { type: E.T_SHIFT, date: v.date, till: v.till || tills()[0], shift: v.shift,
+        cashier: v.cashier, openCash: num(v.openCash), zCash: num(v.zCash),
+        zCashless: num(v.zCashless), payouts: выплаты, payoutList: список,
+        zCard: num(v.zCard), zQr: num(v.zQr), zNfc: num(v.zNfc),
+        returnsCash: num(v.returnsCash), returnsCashless: num(v.returnsCashless),
+        deposits: num(v.deposits),
+        kept: (v.kept === '' || v.kept == null) ? 0 : num(v.kept),
+        received: (v.received === '' || v.received == null) ? '' : num(v.received),
+        checks: num(v.checks), voided: num(v.voided),
+        toAccount: E.txt(v.toAccount), cashlessAccount: E.txt(v.cashlessAccount),
+        note: v.note };
+      /* Сами купюры тоже храним: чтобы при исправлении записи владелец
+         увидел свой пересчёт, а не голый итог, и мог поправить одну
+         строчку вместо того, чтобы пересчитывать всё заново. */
+      if (купюры.есть) {
+        НОМИНАЛЫ.forEach(function (н) { rec[н.поле] = num(v[н.поле]); });
+        rec.bCoins = num(v.bCoins);
+      }
+      var c = E.shiftCalc(rec);
+      rec.diff = c.diff;
+      var saved;
+      if (edS) { S.update(edS.coll, edS.id, rec); saved = edS.id; }
+      else { saved = (S.add('dds', rec) || {}).id; }
+
+      /* КОГДА ЕСТЬ НЕДОСТАЧА. Настройка «показывать / спрашивать» была
+         заведена и не читалась ничем: программа всегда просто показывала
+         цифру, и решение владельца нигде не оставалось.
+
+         «Спрашивать» — программа спрашивает сразу, пока кассир ещё рядом:
+         удержать или списать в убыток. Это ровно тот момент, когда решение
+         принимается; через неделю его уже не принять — не у кого спросить,
+         что было.
+
+         Спрашиваем только про НАСТОЯЩУЮ недостачу: излишек удерживать не с
+         кого, а копеечное расхождение не стоит вопроса. Порог — тот же
+         «расхождение, после которого это ЧП», что и везде в программе. */
+      var порог = num(S.settings.diffCrit) || 1000;
+      if (E.norm(S.settings.shortAction).indexOf('спраш') >= 0 &&
+          c.diff < 0 && Math.abs(c.diff) >= порог) {
+        setTimeout(function () { спроситьПроНедостачу(saved, rec, Math.abs(c.diff)); }, 350);
+      }
+
+      /* Инкассация и внесение больше не заводят отдельных переводов: деньги
+         владелец забрал сам, и это уже записано в самой смене. Довезённый
+         размен списывается из сейфа прямо в расчёте остатков. Прежние записи
+         старых смен трогать не надо — они живут своей жизнью. */
+      S.save(); refresh();
+
+      var msg = 'Смена записана. Должны были отдать ' + money(c.handed) + ', получили ' +
+        money(c.received) + ' — ';
+      msg += c.ok ? 'касса сходится.'
+        : (c.diff < 0 ? 'НЕДОСТАЧА ' + money(c.short) + '.' : 'излишек ' + money(c.over) + '.');
+      /* Смену мы сохраняем в любом случае — учёт не место для запретов. Но если
+         расхождение размером с выручку, молчать нельзя: почти наверняка одно
+         число вписано неверно, и в отчётах это разъедется на весь месяц. */
+      var fx = E.shiftFix(c);
+      if (fx.big) {
+        var сам = fx.list[0];
+        msg += ' Это ' + E.fmtPct(fx.share * 100, 0) + ' от наличных за смену — проверьте числа: ' +
+          (fx.reason ? fx.reason.replace(/^Похоже, /, 'похоже, ')
+            : сам ? 'например, «' + сам.name + '» вместо ' + money(сам.now) +
+              ' должно быть ' + money(сам.need) + '.'
+              : 'что-то введено неверно.');
+      }
+      // размен новой смены должен равняться факту предыдущей — иначе деньги
+      // вынули, и это надо записать, иначе учёт разъедется
+      var prev = lastFact(v.till);
+      msg += ' Безнал ' + money(c.zCashless) + ' ушёл на счёт, в кассу не считается.';
+      return { ok: msg };
+    }
+  };
+
+  /* Перевод-внесение, привязанный к смене.
+
+     ВНЕСЕНИЯ ДЕЛАЛИ ДЕНЬГИ ИЗ ВОЗДУХА. Размен, довезённый среди смены, кассир
+     пересчитает вечером — он входит в факт, и ящик про него знает. А вот сейф,
+     откуда этот размен взяли, ничего не терял: программа его не списывала.
+     В магазине с сейфом 200 000 после смены с внесением 10 000 всего денег
+     становилось 260 000 вместо 250 000.
+
+     Инкассация так себя не вела: для неё перевод заводился сам. Асимметрия и
+     была ошибкой — теперь у внесения такой же перевод, только в другую сторону.
+
+     Помечен `fromShiftDep`, а не `fromShift`: иначе он подменил бы собой
+     перевод-инкассацию, и деньги поехали бы не туда. */
+  function syncDeposit(shiftId, rec) {
+    if (!shiftId) return;
+    var было = dds().filter(function (r) {
+      return E.txt(r.fromShiftDep) === E.txt(shiftId);
+    })[0];
+    var сумма = num(rec.deposits);
+    var откуда = E.txt(rec.depositAccount);
+    if (!сумма || !откуда) {
+      if (было) S.remove('dds', было.id);
+      return;
+    }
+    var перевод = {
+      type: E.T_MOVE, date: rec.date, amount: сумма,
+      account: откуда, toAccount: E.txt(rec.account),
+      category: 'Размен', fromShiftDep: E.txt(shiftId),
+      note: 'Внесение в смену ' + (rec.till || '') + ' ' + (rec.shift || '')
+    };
+    if (было) S.update('dds', было.id, перевод); else S.add('dds', перевод);
+  }
+
+  /* Перевод-инкассация, привязанный к смене. Один на смену: заново сохранили
+     смену — он обновился; стёрли сумму — он ушёл; смены нет — и его нет. */
+  function syncCollect(shiftId, rec) {
+    if (!shiftId) return;
+    var было = dds().filter(function (r) { return E.txt(r.fromShift) === E.txt(shiftId); })[0];
+    var сумма = (rec.collectedFact === '' || rec.collectedFact == null)
+      ? num(rec.collected) : num(rec.collectedFact);
+    if (!сумма) {
+      if (было) S.remove('dds', было.id);
+      return;
+    }
+    var куда = E.txt(rec.collectAccount) || accDefault(false);
+    var перевод = {
+      type: E.T_MOVE, date: rec.date, amount: сумма,
+      account: E.txt(rec.account), toAccount: куда,
+      category: 'Инкассация', fromShift: E.txt(shiftId),
+      note: 'Инкассация из смены ' + (rec.till || '') + ' ' + (rec.shift || '')
+    };
+    if (было) S.update('dds', было.id, перевод); else S.add('dds', перевод);
+  }
+
+  /* --- Вечер: итоги дня ------------------------------------------------------
+     Кассу эта форма НЕ двигает: деньги за товар уже ушли через «выплаты из
+     ящика» в сверке смены. Здесь — товарные обороты и долг поставщикам. */
+  FORMS.dayTotals = {
+    title: 'Итоги дня', icon: 'moon',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Товар за наличные', 'goodsCash', 'number', v.goodsCash || 0,
+          { hint: 'сколько товара взяли и сразу заплатили' }) +
+        u.fieldRow('Погашение долгов ТП', 'debtPaid', 'number', v.debtPaid || 0,
+          { hint: 'сколько отдали поставщикам по старым долгам' }) +
+        u.fieldRow('Взят новый товар в долг', 'debtTaken', 'number', v.debtTaken || 0,
+          { hint: 'привезли, деньги не платили — долг вырос' }) +
+        u.fieldRow('Откуда платили', 'source', 'select', v.source || 'Из ящика',
+          { options: E.MONEY_SOURCES,
+            hint: 'обычно из ящика — тогда сумма должна попасть в «выплаты» смены' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Эта форма про товар и долги, а не про кассу: деньги за товар уже ушли ' +
+      'из ящика и посчитаны в «Выплатах» при сверке смены. Если вычесть их ещё раз, ' +
+      'одни и те же деньги уйдут дважды.',
+    save: function (v) {
+      var badDay = Q.checkDate(v.date);
+      if (badDay) return badDay;
+      var f = ['goodsCash', 'debtPaid', 'debtTaken'];
+      for (var i = 0; i < f.length; i++) {
+        var b = Q.checkAmount(v[f[i]], { allowEmpty: true, allowZero: true });
+        if (b) return 'Поле «' + f[i] + '»: ' + b;
+      }
+      if (!num(v.goodsCash) && !num(v.debtPaid) && !num(v.debtTaken)) {
+        return 'Все три поля пустые — записывать нечего.';
+      }
+      /* Защита от двойных итогов за один день. Саму правку она блокировать
+         не должна: когда исправляют уже записанный день, «одинаковая» запись —
+         это он сам. Раньше из-за этого итоги дня нельзя было исправить вовсе. */
+      var ed = U().editing();
+      var same = dds().filter(function (r) {
+        return E.isDay(r) && r.date === v.date && (!ed || r.id !== ed.id);
+      })[0];
+      if (same) return 'Итоги за ' + dateRu(v.date) + ' уже записаны. ' +
+        'Поправьте ту запись на экране «База операций», чтобы не задвоить.';
+      var rec = { type: E.T_DAY, date: v.date, goodsCash: num(v.goodsCash),
+        debtPaid: num(v.debtPaid), debtTaken: num(v.debtTaken),
+        source: E.txt(v.source) || 'Из ящика', note: v.note };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      var d = E.supplierDebt(dds(), S.settings);
+      return { ok: 'Итоги дня записаны. Долг поставщикам теперь ' + money(d.debt) + '.' };
+    }
+  };
+
+  /* --- Расход и приход денег -------------------------------------------------- */
+  /* --- Расход ----------------------------------------------------------------
+     Две вещи, из-за которых расход раньше врал:
+       1) наличные вычитались из ящика второй раз, если эти же деньги уже
+          прошли выплатой при сверке смены;
+       2) статьи «Закуп товара» и «Оплата ТП» резали прибыль, хотя закуп
+          считается из итогов дня, а погашение долга — вообще не трата.
+     Теперь форма спрашивает, ОТКУДА взяли деньги, и не принимает статьи,
+     которые тратой не являются. */
+  FORMS.moneyOut = {
+    title: 'Расход', icon: 'receipt',
+    editsInPlace: true,   // правит запись сама — удалять старую нельзя
+    body: function (v) {
+      var u = U(); v = v || {};
+      var cash = E.norm(v.method || 'Наличные') === 'наличные';
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Статья', 'category', 'list', v.category || '',
+          { options: categories(), placeholder: 'за что платим',
+            hint: 'подстатья пишется через косую черту: «Коммунальные / Свет». ' +
+              'Закуп товара и долги поставщикам сюда не пишут — им место в «Итогах дня»' }) +
+        u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('С какого счёта', 'account', 'select',
+          v.account || accForCategory(v.category, !cash), { options: accOptions(),
+            hint: 'подставлен тот, с которого платили по этой статье в прошлый раз; ' +
+              'из денежного ящика деньги уже посчитаны в «выплатах» смены — ' +
+              'второй раз их не вычтут' }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        (funds().length ? u.fieldRow('Из какого конверта', 'fund', 'select',
+          v.fund || fundForCategory(v.category), { options: fundOptions(true),
+            hint: 'если на это откладывали — отметьте, иначе конверт так и будет расти' }) : '') +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Расход уменьшает прибыль. Остаток наличных он уменьшает, только если ' +
+      'деньги взяли не из ящика: то, что вынули из ящика, уже сидит в «выплатах» смены.',
+    save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (!E.txt(v.category)) return 'Укажите статью — иначе непонятно, за что ушли деньги.';
+      // Ловим статью, которая тратой не является: иначе прибыль занизится
+      var not = E.notACost(v.category);
+      if (not) {
+        if (not.key === 'purchase') {
+          return 'Закуп товара расходом не записывают: впишите сумму в «Итоги дня» → ' +
+            '«Товар за наличные». Иначе один и тот же товар уменьшит прибыль дважды.';
+        }
+        if (not.key === 'debt') {
+          return 'Погашение долга поставщику — не расход, а возврат денег. ' +
+            'Впишите сумму в «Итоги дня» → «Погашение долгов ТП».';
+        }
+        return 'Перемещение денег расходом не записывают — прибыль от этого не меняется. ' +
+          'Для инкассации есть своя кнопка «Инкассация».';
+      }
+      learn({ categories: v.category, methods: v.method });
+      var rec = { type: E.T_OUT, date: v.date, category: v.category,
+        method: v.method, account: E.txt(v.account), amount: num(v.amount),
+        fund: E.txt(v.fund), note: v.note };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      var acc = E.accountOf(rec, accounts());
+      return { ok: 'Расход записан: ' + E.catLabel(v.category) + ' — ' + money(v.amount) +
+        (acc && acc.kind === 'till'
+          ? '. Ящик не трогаем: эти деньги уже в «выплатах» смены.'
+          : acc ? '. Списано со счёта «' + acc.name + '».' : '.') };
+    }
+  };
+
+  /* --- Инкассация: перемещение денег, а не трата ------------------------------
+     Увезли выручку в сейф или в банк — деньги не потрачены, они лежат в другом
+     месте. Касса уменьшается, прибыль НЕ меняется. Раньше это можно было
+     записать только расходом, и месяц закрывался с ложным убытком. */
+  FORMS.moneyIn = {
+    title: 'Приход денег', icon: 'banknote',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Откуда', 'category', 'list', v.category || 'Прочий приход',
+          { options: ['Возврат от поставщика', 'Вернули долг', 'Внёс владелец', 'Прочий приход']
+            .concat(categories()),
+            hint: '«Внёс владелец» — ваши личные деньги в оборот. Программа запомнит, ' +
+              'сколько магазин вам должен, и в прибыль это не полезет' }) +
+        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Куда положили', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(), hint: 'в сейф или на счёт' }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Выручку сюда писать не нужно — она приходит из сверки смены. Сюда идёт всё ' +
+      'остальное: возврат от поставщика, отданный покупателем долг, ваши собственные ' +
+      'деньги в оборот. Выручкой и прибылью ничто из этого не становится.',
+    save: function (v) {
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      learn({ categories: v.category, methods: v.method });
+      S.add('dds', { type: E.T_IN, date: v.date, category: v.category || 'Прочий приход',
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note });
+      S.save(); refresh();
+      return { ok: 'Приход записан: ' + money(v.amount) +
+        (accName(v.account) ? ' на счёт «' + accName(v.account) + '».' : '.') };
+    }
+  };
+
+  FORMS.moneyDraw = {
+    title: 'Забрал владелец', icon: 'wallet',
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Чем', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('С какого счёта', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(),
+            hint: 'сейф, расчётный счёт или касса — откуда деньги взяли на самом деле' }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    editsInPlace: true,
+    hint: 'Деньги ушли из оборота, но это не расход магазина: прибыль они не уменьшают. ' +
+      'Владелец берёт уже из заработанного, поэтому в отчёте о прибыли забор стоит ' +
+      'отдельной строкой, а не в затратах.',
+    save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (!E.txt(v.account)) return 'Выберите, с какого счёта взяли деньги.';
+      var rec = { type: E.T_DRAW, date: v.date, category: 'Забор владельца',
+        method: v.method, account: E.txt(v.account), amount: num(v.amount), note: v.note };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      var acc = E.accountOf(rec, accounts());
+      var bal = E.accountBalances(dds(), accounts()).rows
+        .filter(function (x) { return acc && x.id === acc.id; })[0];
+      return { ok: 'Записано: владелец взял ' + money(v.amount) +
+        (acc ? ' со счёта «' + acc.name + '»' : '') + '.' +
+        (bal ? ' Там осталось ' + money(bal.balance) + '.' : '') +
+        (acc && acc.kind === 'till'
+          ? ' Проверьте, что кассир записал эти деньги в «выплаты из ящика».' : '') };
+    }
+  };
+
+  FORMS.moveCash = {
+    title: 'Перевод между счетами', icon: 'truck',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      var bal = E.accountBalances(dds(), accounts());
+      function label(a) {
+        var b = bal.rows.filter(function (x) { return x.id === a.value; })[0];
+        return { value: a.value, text: a.text + (b ? ' — ' + money(b.balance) : '') };
+      }
+      var opts = accOptions().map(label);
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Откуда', 'account', 'select', v.account || accDefault(false),
+          { options: opts }) +
+        u.fieldRow('Куда', 'toAccount', 'select', v.toAccount || accDefault(true),
+          { options: opts }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Кто повёз', 'cashier', 'list', v.cashier || '',
+          { options: cashiers(), placeholder: 'необязательно' }) +
+        (funds().length ? u.fieldRow('Откладываем в конверт', 'fund', 'select', v.fund || '',
+          { options: fundOptions(true),
+            hint: 'на аренду, зарплату, налоги — чтобы эти деньги было видно отдельно' }) : '') +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Инкассация в сейф, перевод со счёта на счёт, размен обратно в кассу — всё это ' +
+      'перевод. Деньги переложили, а не потратили: прибыль от перевода не меняется ни на рубль. ' +
+      'Из денежного ящика они уходят через «выплаты» той смены, где их вынули, поэтому ' +
+      'остаток ящика здесь второй раз не уменьшается.',
+    save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      if (!E.txt(v.account) || !E.txt(v.toAccount)) return 'Выберите, откуда и куда.';
+      if (E.txt(v.account) === E.txt(v.toAccount)) return 'Откуда и куда — один и тот же счёт.';
+      var bal = E.accountBalances(dds(), accounts());
+      var from = bal.rows.filter(function (x) { return x.id === E.txt(v.account); })[0];
+      // Ящик не проверяем: смену могли ещё не закрыть, и остаток там временный
+      if (from && from.kind !== 'till' && num(v.amount) > from.balance + 0.5) {
+        return 'На счёте «' + from.name + '» сейчас ' + money(from.balance) +
+          ' — перевести ' + money(v.amount) + ' не получится.';
+      }
+      var rec = { type: E.T_MOVE, date: v.date, account: E.txt(v.account),
+        toAccount: E.txt(v.toAccount), amount: num(v.amount),
+        cashier: E.txt(v.cashier), fund: E.txt(v.fund), note: E.txt(v.note) };
+      var ed = U().editing();
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('dds', rec);
+      S.save(); refresh();
+      var msg = 'Перевод записан: ' + money(v.amount) + ' с «' + accName(v.account) +
+        '» на «' + accName(v.toAccount) + '». Прибыль не изменилась — деньги переложили.';
+      if (from && from.kind === 'till') {
+        msg += ' Проверьте, что эти ' + money(v.amount) +
+          ' кассир записал в «выплаты из ящика» за смену.';
+      }
+      return { ok: msg };
+    }
+  };
+
+  /* --- План выплат ------------------------------------------------------------ */
+  /* --------------------------------------------------------------------------
+     ПОВТОРЯЮЩИЕСЯ ВЫПЛАТЫ
+
+     Аренда, интернет, вывоз мусора, охрана — суммы одни и те же из месяца
+     в месяц, и каждый месяц их вбивали руками. Теперь достаточно поставить
+     «повторять»: как только выплату отметили оплаченной, следующая встаёт
+     в план сама, той же суммой и на то же число.
+
+     Важно: следующая создаётся ТОЛЬКО в момент оплаты, а не заранее пачкой
+     на год вперёд. Иначе план выплат превратился бы в свалку из ста будущих
+     строк, а просрочка — во враньё.
+     -------------------------------------------------------------------------- */
+  var REPEATS = ['не повторять', 'каждый месяц', 'раз в квартал', 'раз в год'];
+
+  /* Что обычно платят по календарю. Не только поставщикам: аренда, коммуналка
+     и налоги приходят так же по расписанию, и планировать их надо там же.
+     «Выплата ТП» — общей суммой, когда развозчиков много и расписывать
+     каждого по отдельности незачем. */
+  function planKinds() {
+    var базовые = ['Выплата ТП', 'Аренда', 'Коммунальные', 'Интернет и связь',
+      'Охрана', 'Вывоз мусора', 'Налоги', 'Зарплата', 'Прочее'];
+    var свои = categories();
+    var было = {}, out = [];
+    базовые.concat(свои).forEach(function (x) {
+      var k = E.norm(x);
+      if (!k || было[k]) return;
+      было[k] = 1; out.push(x);
+    });
+    return out;
+  }
+
+  // Следующая дата с тем же числом месяца. 31 января + месяц = 28 февраля:
+  // прыгать на 3 марта нельзя, платёж привязан к концу месяца.
+  function nextDue(date, repeat) {
+    var p = E.txt(date).split('-');
+    if (p.length !== 3) return '';
+    var y = +p[0], m = +p[1] - 1, d = +p[2];
+    if (repeat === 'каждый месяц') m += 1;
+    else if (repeat === 'раз в квартал') m += 3;
+    else if (repeat === 'раз в год') y += 1;
+    else return '';
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    var last = new Date(y, m + 1, 0).getDate();
+    var dd = Math.min(d, last);
+    return y + '-' + String(m + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+  }
+
+  /* Завести следующую выплату по повторяющейся. Возвращает строку для
+     владельца или пустоту, если повторять не просили. */
+  function makeNext(plan) {
+    if (!plan || !E.txt(plan.repeat)) return '';
+    var due = nextDue(plan.due, E.txt(plan.repeat));
+    if (!due) return '';
+    // Не заводим дважды: вдруг отметили оплаченной, передумали и отметили снова
+    var same = (S.state.plans || []).filter(function (x) {
+      return x.due === due && E.norm(x.supplier) === E.norm(plan.supplier) &&
+        E.txt(x.status) !== 'Отменена';
+    })[0];
+    if (same) return '';
+    S.add('plans', { due: due, supplier: plan.supplier, amount: num(plan.amount),
+      method: plan.method, status: E.PLAN_STATUS[0], note: plan.note,
+      repeat: E.txt(plan.repeat) });
+    return ' Следующая — ' + dateRu(due) + ', уже в плане.';
+  }
+
+  FORMS.payPlan = {
+    title: 'Выплата поставщику', icon: 'calendar',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата выплаты', 'due', 'date', v.due || today()) +
+        u.fieldRow('Что платим', 'category', 'list', v.category || '',
+          { options: planKinds(),
+            placeholder: 'выплата ТП, аренда, коммуналка, налоги…',
+            hint: 'можно выбрать из списка или вписать своё' }) +
+        u.fieldRow('Кому', 'supplier', 'list', v.supplier || '',
+          { options: suppliers(),
+            placeholder: 'поставщик, ТП, арендодатель — или оставьте пустым',
+            hint: 'для общей выплаты ТП можно не указывать' }) +
+        u.fieldRow('Сумма', 'amount', 'number', v.amount || '') +
+        u.fieldRow('Чем платим', 'method', 'select', v.method || 'Наличные', { options: methods() }) +
+        u.fieldRow('Статус', 'status', 'select', v.status || E.PLAN_STATUS[0],
+          { options: E.PLAN_STATUS }) +
+        u.fieldRow('Повторять', 'repeat', 'select', v.repeat || 'не повторять',
+          { options: REPEATS,
+            hint: 'аренда, интернет, охрана — суммы одни и те же каждый месяц' }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Это календарь: кому и когда платить. Долг поставщикам отметка «Оплачена» ' +
+      'сама не уменьшает — сумму погашения впишите в «Итоги дня», иначе она посчитается дважды. ' +
+      'Поставили «повторять» — следующая выплата встанет в план сама, как только отметите эту оплаченной.',
+    save: function (v) {
+      var bad = Q.checkAmount(v.amount); if (bad) return bad;
+      /* План — это календарь на будущее, поэтому дату вперёд разрешаем
+         широко. Проверяем только очевидную опечатку в годе. */
+      var badD2 = Q.checkDate(v.due, { aheadDays: 400 }); if (badD2) return badD2;
+      /* Раньше требовали поставщика — и запланировать аренду или коммуналку
+         было нельзя вовсе. Теперь достаточно любого из двух: «что платим»
+         или «кому». Общая выплата ТП — это «Выплата ТП» без имени. */
+      if (!E.txt(v.supplier) && !E.txt(v.category)) {
+        return 'Напишите, что платим или кому — иначе в плане будет пустая строка.';
+      }
+      learn({ suppliers: v.supplier, methods: v.method, categories: v.category });
+      var rec = { due: v.due, supplier: v.supplier, category: E.txt(v.category),
+        amount: num(v.amount),
+        method: v.method, status: v.status, note: v.note,
+        repeat: E.txt(v.repeat) === REPEATS[0] ? '' : E.txt(v.repeat),
+        paidAt: v.status === 'Оплачена' ? (v.paidAt || today()) : '' };
+      var edit = U().editing && U().editing();
+      if (edit && edit.coll === 'plans') {
+        var old = (S.state.plans || []).filter(function (p) { return p.id === edit.id; })[0];
+        if (old) { Object.keys(rec).forEach(function (k) { old[k] = rec[k]; }); S.save(); refresh();
+          return { ok: 'Выплата обновлена.' }; }
+      }
+      S.add('plans', rec);
+      S.save(); refresh();
+      return { ok: 'В плане: ' + (E.txt(v.supplier) || E.txt(v.category)) +
+        ' — ' + money(v.amount) + ' на ' + dateRu(v.due) };
+    }
+  };
+
+  /* --- Долг покупателя --------------------------------------------------------- */
+  FORMS.debtor = {
+    title: 'Долг покупателя', icon: 'notebook',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Кто', 'name', 'text', v.name || '', { placeholder: 'имя из тетрадки' }) +
+        u.fieldRow('Телефон', 'phone', 'text', v.phone || '') +
+        u.fieldRow('Сумма долга', 'sum', 'number', v.sum || '') +
+        u.fieldRow('Уже погашено', 'paid', 'number', v.paid || 0) +
+        u.fieldRow('Кто записал', 'cashier', 'list', v.cashier || '', { options: cashiers() }) +
+        u.fieldRow('Комментарий', 'note', 'text', v.note || '');
+    },
+    hint: 'Пока долг не погашен, выручкой он не считается.',
+    save: function (v) {
+      var bad = Q.checkAmount(v.sum); if (bad) return bad;
+      if (!E.txt(v.name)) return 'Впишите, кто должен.';
+      learn({ cashiers: v.cashier });
+      var rec = { date: v.date, name: v.name, phone: v.phone, sum: num(v.sum),
+        paid: num(v.paid), cashier: v.cashier, note: v.note };
+      var edit = U().editing && U().editing();
+      if (edit && edit.coll === 'debtors') {
+        var old = (S.state.debtors || []).filter(function (d) { return d.id === edit.id; })[0];
+        if (old) { Object.keys(rec).forEach(function (k) { old[k] = rec[k]; }); S.save(); refresh();
+          return { ok: 'Долг обновлён.' }; }
+      }
+      S.add('debtors', rec);
+      S.save(); refresh();
+      return { ok: 'Записано: ' + v.name + ' должен ' + money(num(v.sum) - num(v.paid)) };
+    }
+  };
+
+  /* --- Пересчёт кассы по купюрам ----------------------------------------------- */
+  /* --------------------------------------------------------------------------
+     ПЕРЕСЧИТАТЬ КАССУ
+
+     Владелец (или старший смены) открывает ящик и считает купюры: сколько
+     пятитысячных, сколько тысячных и так далее. Программа складывает их сама
+     и сравнивает с тем, сколько в этой кассе должно быть по последней смене.
+
+     Зачем это нужно, если есть сверка смены: сверка говорит, сколько ДОЛЖНО
+     быть, а пересчёт — сколько есть НА САМОМ ДЕЛЕ, по купюрам. Совпало —
+     касса в порядке. Не совпало — видно сразу, а не через неделю в отчёте.
+
+     Пересчёт ничего не меняет в деньгах: он только фиксирует, что насчитали.
+     Остаток ящика по-прежнему правит сверка смены и только она.
+     -------------------------------------------------------------------------- */
+
+  // Сколько должно быть в этой кассе по последней закрытой смене
+  function tillExpected(till) {
+    var st = E.tillState(dds(), S.settings).filter(function (t) {
+      return E.norm(t.till) === E.norm(till);
+    })[0];
+    return st ? st.fact : 0;
+  }
+
+  /* Живой итог под купюрами. Считается на каждое нажатие: владелец видит сумму
+     СРАЗУ, а не после сохранения — иначе непонятно, зачем вообще всё это
+     вводить и когда остановиться. */
+  function cashCountSum(box) {
+    var total = 0, pieces = 0;
+    E.NOMINALS.forEach(function (n) {
+      var el = box.querySelector('[name="n' + n + '"]');
+      if (!el) return;
+      var k = Math.max(0, Math.round(num(window.WMNum.calc(el.value))));
+      var sum = k * n;
+      total += sum; pieces += k;
+      var hint = box.querySelector('[data-hint-for="n' + n + '"]');
+      if (hint) {
+        hint.innerHTML = k
+          ? E.fmtNum(k) + ' шт × ' + esc(money(n)) + ' = <b>' + esc(money(sum)) + '</b>'
+          : '';
+      }
+    });
+    return { total: E.safeRound(total), pieces: pieces };
+  }
+
+  function cashCountBox(total, pieces, till) {
+    var exp = tillExpected(till);
+    var diff = E.safeRound(total - exp);
+    var ok = Math.abs(diff) < 1;
+    return '<div class="cc-total">' +
+      '<div class="cc-line"><span>Насчитано</span>' +
+      '<b class="cc-big">' + esc(money(total)) + '</b></div>' +
+      '<div class="cc-sub">' + E.fmtNum(pieces) + ' ' +
+        esc(E.plural(pieces, 'купюра', 'купюры', 'купюр')) + '</div>' +
+      (exp
+        ? '<div class="cc-line"><span>Должно быть по последней смене</span>' +
+          '<b>' + esc(money(exp)) + '</b></div>' +
+          '<div class="cc-line cc-diff ' + (ok ? 'ok' : (diff < 0 ? 'bad' : 'warn')) + '">' +
+          '<span>' + (ok ? 'Сходится' : (diff < 0 ? 'Не хватает' : 'Больше, чем должно')) +
+          '</span><b>' + (ok ? '—' : esc(money(Math.abs(diff)))) + '</b></div>'
+        : '<div class="cc-sub">Смен по этой кассе ещё нет — сравнивать не с чем. ' +
+          'Пересчёт всё равно запишется.</div>') +
+      '</div>';
+  }
+
+  FORMS.cashCount = {
+    title: 'Пересчитать кассу', icon: 'receipt',
+    body: function (v) {
+      var u = U(); v = v || {};
+      var till = v.till || tills()[0];
+      var h = '<div class="form-hint">Впишите, сколько каких купюр вы пересчитали. ' +
+        'Складывать в уме не надо — программа посчитает сама и скажет, сходится ли ' +
+        'с тем, сколько вам должны были отдать по последней смене.</div>';
+      h += u.fieldRow('Дата', 'date', 'date', v.date || today()) +
+        u.fieldRow('Касса', 'till', 'select', till, { options: tills() }) +
+        u.fieldRow('Кассир', 'cashier', 'list', v.cashier || '', { options: cashiers() });
+      var total = 0, pieces = 0;
+      E.NOMINALS.forEach(function (n) {
+        var k = Math.max(0, Math.round(num(v['n' + n])));
+        total += k * n; pieces += k;
+        h += u.fieldRow(E.fmtNum(n) + ' ₽ — сколько штук', 'n' + n, 'number',
+          v['n' + n] || '', { unit: 'plain', placeholder: '0' });
+      });
+      h += '<div id="ccTotal">' + cashCountBox(E.safeRound(total), pieces, till) + '</div>';
+      return h;
+    },
+    hint: 'Пересчёт ничего не меняет в деньгах — он только записывает, что насчитали ' +
+      'по факту. Остаток ящика по-прежнему правит сверка смены и только она.',
+    save: function (v) {
+      var badD = Q.checkDate(v.date); if (badD) return badD;
+      var c = E.countCash(v);
+      if (!c.sum) return 'Ни одной купюры не вписано — считать нечего.';
+      var expected = tillExpected(v.till);
+      var diff = E.safeRound(c.sum - expected);
+      S.add('cashcount', { date: v.date, till: v.till, cashier: v.cashier,
+        sum: c.sum, expected: expected, diff: diff,
+        note: c.pieces + ' ' + E.plural(c.pieces, 'купюра', 'купюры', 'купюр') });
+      S.save(); refresh();
+      return { ok: 'Насчитали ' + money(c.sum) + ' — ' + c.pieces + ' ' +
+        E.plural(c.pieces, 'купюра', 'купюры', 'купюр') + '. ' +
+        (!expected ? 'Сравнивать пока не с чем: смен по этой кассе нет.'
+          : Math.abs(diff) < 1 ? 'Сходится с тем, сколько должно быть.'
+          : diff < 0 ? 'Не хватает ' + money(-diff) + ' — разберитесь, пока помните смену.'
+          : 'Больше на ' + money(diff) + ' — возможно, не записали приход.') };
+    }
+  };
+
+  /* Пересчёт: считаем на каждое нажатие. Форму не перерисовываем — введённое
+     пропало бы; обновляем только подписи и итог. */
+  (function () {
+    function tick(el) {
+      if (!el || !el.name || !el.closest) return;
+      if (!/^n\d+$/.test(el.name) && el.name !== 'till') return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var slot = box.querySelector('#ccTotal');
+      if (!slot) return;
+      var r = cashCountSum(box);
+      var till = box.querySelector('[name="till"]');
+      slot.innerHTML = cashCountBox(r.total, r.pieces, till ? till.value : '');
+    }
+    /* Откладываем на следующий тик нарочно. Общий обработчик в ui.js тоже
+       пишет в подпись под числовым полем — и для поля, в которое печатают,
+       он затирал бы нашу строку «2 шт × 5 000 = 10 000 ₽» сразу после того,
+       как мы её поставили. Отложенный вызов всегда идёт последним. */
+    function later(el) { setTimeout(function () { tick(el); }, 0); }
+    document.addEventListener('input', function (e) { later(e.target); });
+    document.addEventListener('change', function (e) { later(e.target); });
+  })();
+
+  /* ==========================================================================
+     ЭКРАНЫ
+     ========================================================================== */
+
+  function quickBar() {
+    return '<div class="quick">' +
+      '<button class="btn btn-primary" data-form="shiftClose">' + ic('calculator') + ' Сверка кассы</button>' +
+      '<button class="btn" data-form="dayTotals">' + ic('moon') + ' Итоги дня</button>' +
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Расход</button>' +
+      '<button class="btn" data-form="moveCash">' + ic('truck') + ' Инкассация</button>' +
+      '<button class="btn" data-form="payPlan">' + ic('calendar') + ' Выплата</button></div>';
+  }
+
+  /* СЧЁТ В МИНУСЕ — ЭТО НЕ БЫВАЕТ.
+
+     Из сейфа нельзя заплатить больше, чем в нём лежит. Если счёт ушёл в
+     минус, значит расход записали не с того счёта — обычно заплатили из
+     кассы, а отметили сейф. Программа не запрещает такую запись (владелец
+     может вносить историю не по порядку), но молчать о ней нельзя: минус
+     в сейфе тихо ломает и «сколько у нас денег», и закрытие месяца.
+
+     Денежный ящик не проверяем: пока смена не закрыта, его остаток временный. */
+  function negativeAccounts() {
+    return E.accountBalances(dds(), accounts()).live.filter(function (a) {
+      return a.kind !== 'till' && a.balance < -0.5;
+    });
+  }
+
+  function negativeBanner() {
+    var bad = negativeAccounts();
+    if (!bad.length) return '';
+    return '<div class="banner orange"><span>' + ic('warning') + '</span><span>' +
+      (bad.length === 1
+        ? 'Счёт «' + esc(bad[0].name) + '» ушёл в минус на <b>' +
+          esc(money(-bad[0].balance)) + '</b>.'
+        : 'В минусе ' + bad.length + ' счёта: ' +
+          esc(bad.map(function (a) { return a.name + ' (' + money(a.balance) + ')'; }).join(', ')) + '.') +
+      ' Так не бывает: заплатить больше, чем лежит, нельзя. Скорее всего расход ' +
+      'записан не с того счёта — проверьте последние записи в «Базе операций».' +
+      '</span> <button class="btn btn-sm" data-go="ledger">Проверить</button></div>';
+  }
+
+  /* --- Пульт ------------------------------------------------------------------ */
+  /* ==========================================================================
+     ПУЛЬТ
+
+     Утром владельцу нужны две вещи: сколько денег в кассе и что сегодня
+     сделать. Раньше экран отвечал на них двадцать первым числом — пять
+     одинаковых плашек, баннер на сорок слов и пять кнопок. Глазу негде было
+     остановиться.
+
+     Теперь так: одна крупная цифра, под ней список дел по одной строке на
+     дело, и одна кнопка — та, которой пользуются прямо сейчас. Объяснения
+     переехали на те экраны, куда эти дела ведут: на Пульте они не нужны,
+     нужен повод туда зайти.
+     ====================================================================== */
+
+  // Дела на сегодня: коротко, по строке. Пусто — значит всё в порядке.
+  function todoList(all, sel) {
+    var out = [];
+    var t = today();
+    var pt = E.planTotals(S.state.plans || [], t);
+    if (pt.overdue) {
+      out.push({ icon: 'warning', color: 'c-red', text: 'Просрочено ' + money(pt.overdue),
+        go: 'finpay', act: 'Открыть' });
+    } else if (pt.dueToday) {
+      out.push({ icon: 'calendar', text: 'Сегодня платить ' + money(pt.dueToday),
+        go: 'finpay', act: 'Открыть' });
+    }
+
+    var yest = E.addDays(t, -1);
+    if (all.length && !E.shiftsOf(all, null, S.settings).some(function (r) { return r.date === yest; })) {
+      out.push({ icon: 'calculator', text: 'Смена за ' + dateRu(yest) + ' не сверена',
+        form: 'shiftClose', act: 'Свести' });
+    }
+
+    var chk = E.tillPayoutCheck(sel.rows, null, { payouts: S.state.payouts || [], accounts: accounts() });
+    if (chk.left > 0.5) {
+      out.push({ icon: 'receipt', color: 'c-orange',
+        text: 'Не расписано ' + money(chk.left) + ' из ящика',
+        act2: 'payout-help', act: 'Разобрать' });
+    } else if (chk.over) {
+      out.push({ icon: 'warning', color: 'c-red',
+        text: 'Лишних расходов из ящика на ' + money(-chk.left),
+        go: 'ledger', act: 'Проверить' });
+    }
+
+
+    var cash = E.cashOnHand(all, S.settings, null, accounts());
+    if (num(S.settings.cashLimit) && cash > num(S.settings.cashLimit)) {
+      out.push({ icon: 'truck', text: 'В ящике ' + money(cash) + ' — пора увезти',
+        form: 'moveCash', act: 'Инкассация' });
+    }
+
+    var gaps = E.cashGaps(all, S.settings);
+    if (gaps.length) {
+      var g = gaps[gaps.length - 1];
+      out.push({ icon: 'warning', color: 'c-orange',
+        text: 'Размен ' + dateRu(g.date) + ' не сошёлся на ' + money(Math.abs(g.gap)),
+        go: 'cashiers', act: 'Смотреть' });
+    }
+
+    var deb = E.debtorTotals(S.state.debtors || [], t);
+    if (deb.old > 0) {
+      out.push({ icon: 'hourglass', text: 'Старые долги покупателей ' + money(deb.old),
+        go: 'debtors', act: 'Открыть' });
+    }
+    return out;
+  }
+
+  function viewPulse() {
+    var u = U();
+    var all = dds();
+    var h = u.pageHead('Пульт', 'Деньги и дела на сегодня');
+
+    // Счёт в минусе — так не бывает; сказать об этом надо первым делом
+    h += negativeBanner();
+
+    /* Программа ещё не настроена под свой магазин. Форму поверх экрана не
+       открываем — она перекрыла бы работу; достаточно спокойной строки,
+       которую можно закрыть, вписав название. */
+    if (!E.txt(S.settings.storeName)) {
+      h += '<div class="banner blue"><span>' + ic('store') + '</span><span>' +
+        'Программа ещё не настроена под ваш магазин: название, кассы, смены и ' +
+        'начальные остатки. Без остатков касса и долг начнут считаться с нуля. ' +
+        '<button class="btn btn-sm" data-form="setupWizard">Настроить магазин</button>' +
+        '</span></div>';
+    }
+
+    if (!all.length) {
+      return h + u.blank({ icon: 'gauge', title: 'Пульт пока пуст',
+        why: 'Здесь будет видно, сколько денег в кассе, что сделать сегодня и ' +
+          'где не сходится. Всё это собирается из закрытых смен — закройте первую, ' +
+          'и пульт оживёт.',
+        actions: [
+          { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+          { name: 'Настроить магазин', icon: 'gear', go: 'settings' }
+        ] });
+    }
+
+    var cash = E.cashOnHand(all, S.settings, null, accounts());
+    var safe = E.safeOnHand(all, S.settings, null, accounts());
+    var debt = E.supplierDebt(all, S.settings);
+    var sel = pick(), t = E.totals(sel.rows);
+
+    /* ДВЕ ГЛАВНЫЕ ЦИФРЫ — ТЕ, ЧТО ВЛАДЕЛЕЦ СПРАШИВАЕТ ПЕРВЫМИ.
+
+       Здесь стояло «Наличные в кассе», и это было не про него. Он бухгалтер:
+       ящик — хозяйство кассира, а его деньги лежат в сейфе и на счёте. Он
+       так и сказал: «Мне не нужно знать, сколько у меня наличные в кассе.
+       Вот сколько у меня в сейфе и сколько безнал — мне это нужно знать».
+
+       Долг поставщикам стоит третьей плиткой, а не подписью: из сейфа он
+       и платит, и без этой цифры решение «сколько можно потратить» не
+       принять. Переплату пишем словом — минус читается как ошибка. */
+    var bank = E.accountBalances(all, accounts()).totals.bank;
+    var own = E.ownerFunds(all);
+    h += '<div class="stat-grid">' +
+      u.stat('В сейфе', u.priv(cash), 'наличные у вас на руках',
+        cash < 0 ? 'c-red' : '') +
+      u.stat('На счёте', u.priv(bank), 'карта, СБП, переводы',
+        bank < 0 ? 'c-red' : '') +
+      (E.norm(S.settings.ownFunds) === 'да' && (own.in || own.out)
+        ? u.stat(own.debt < 0 ? 'Взяли сверх вложенного' : 'Магазин должен вам',
+          u.priv(Math.abs(own.debt)),
+          own.debt < 0 ? 'из заработанного' : 'ваши деньги в обороте',
+          own.debt < 0 ? 'c-green' : '')
+        : '') +
+      u.stat(debt.debt < 0 ? 'Переплата поставщикам' : 'Должен поставщикам',
+        u.priv(Math.abs(debt.debt)),
+        debt.debt > 0 ? 'из этих денег и платим' : 'заплатили вперёд',
+        debt.debt > E.num(S.settings.debtCrit) ? 'c-red'
+          : debt.debt > E.num(S.settings.debtWarn) ? 'c-orange' : '') +
+      '</div>';
+
+    /* Сколько пришло и сколько ушло за период — строкой под плитками.
+
+       Подписи здесь точные, и это не придирка. Сложить расходы, закуп,
+       долги поставщикам и забор владельца в одно слово «потратили» я не
+       стал: у каждой из этих сумм свой источник, и сложенные вместе они
+       где-нибудь да задвоятся. Лучше назвать каждую своим именем, чем
+       показать одно красивое число, которому нельзя верить. */
+    var строки = [];
+    if (t.revenue) строки.push('выручка ' + u.priv(t.revenue));
+    if (t.expense) строки.push('расходы ' + u.priv(t.expense));
+    if (t.goodsCash || t.debtPaid) {
+      строки.push('поставщикам ' + u.priv(E.safeRound(num(t.goodsCash) + num(t.debtPaid))));
+    }
+    if (t.draw) строки.push('взяли себе ' + u.priv(t.draw));
+    if (строки.length) {
+      h += '<div class="pulse-flow">За ' + esc(u.periodName().toLowerCase()) + ': ' +
+        строки.join('  ·  ') + '</div>';
+    }
+
+    // Дела: по строке на дело, без объяснений — они ждут на своём экране
+    var todo = todoList(all, sel);
+    if (todo.length) {
+      h += u.card('Что сделать', u.listOf(todo.map(function (x) {
+        var attrs = x.act2 ? ' data-act="' + esc(x.act2) + '"'
+          : x.go ? ' data-go="' + esc(x.go) + '"' : ' data-form="' + esc(x.form) + '"';
+        return u.listRow({ icon: x.icon,
+          title: '<span class="' + (x.color || '') + '">' + esc(x.text) + '</span>',
+          value: '<button class="btn btn-sm"' + attrs + '>' + esc(x.act) + '</button>' });
+      }), ''));
+    } else {
+      h += '<div class="banner green"><span>' + ic('check') + '</span><span>' +
+        'Всё сведено: смены закрыты, выплаты не просрочены, деньги расписаны.</span></div>';
+    }
+
+    // Одна главная кнопка — та, которой пользуются прямо сейчас
+    var hourNow = new Date().getHours();
+    var evening = hourNow >= 17 || hourNow < 4;
+    h += '<div class="quick quick-main">' +
+      (evening
+        ? '<button class="btn btn-primary btn-lg" data-form="dayTotals">' + ic('moon') +
+          ' Итоги дня</button>'
+        : '<button class="btn btn-primary btn-lg" data-form="shiftClose">' + ic('calculator') +
+          ' Свести кассу</button>') +
+      '<button class="btn" data-form="' + (evening ? 'shiftClose' : 'dayTotals') + '">' +
+      (evening ? 'Сверка кассы' : 'Итоги дня') + '</button>' +
+      '<button class="btn" data-form="moneyOut">Расход</button>' +
+      '<button class="btn" data-form="moveCash">Перевод</button>' +
+      '<button class="btn" data-form="moneyDraw">Взял себе</button>' +
+      '</div>';
+
+    h += wholeNote(sel);
+
+    var rating = E.cashierRating(sel.rows);
+    var pt = E.planTotals(S.state.plans || [], today());
+    var deb = E.debtorTotals(S.state.debtors || [], today());
+    var st = E.tillState(all, S.settings);
+
+    /* Здесь стояли остатки по кассовым ящикам. Владелец сказал прямо:
+       «Мне не нужно знать, сколько денег в этих кассовых ящиках». Его
+       касается не остаток, а последняя смена: сколько он с неё забрал и
+       сошлось ли. Это и показываем. */
+    h += u.card('Смены по кассам', u.listOf(st.map(function (x) {
+      var c = x.rec ? E.shiftCalc(x.rec) : null;
+      var сумма = c && c.recvFilled ? c.received : x.fact;
+      return u.listRow({ icon: 'calculator', title: esc(x.till),
+        sub: x.closed
+          ? 'забрали ' + dateRu(x.date) + ' · ' + esc(x.shift) +
+            (x.cashier ? ' · ' + esc(x.cashier) : '') +
+            (c && !c.ok ? ' · ' + (c.diff < 0 ? 'недостача ' : 'излишек ') + money(Math.abs(c.diff)) : '')
+          : 'смен ещё не было',
+        value: u.priv(сумма) });
+    }), ''), 'Сколько вы забрали с последней смены');
+
+    h += '<div class="grid-2">' +
+      u.card('Выплаты поставщикам', u.listOf([
+        u.listRow({ icon: 'warning', title: 'Просрочено', sub: pt.overdueCount + ' платежей',
+          value: '<span class="c-red private">' + money(pt.overdue) + '</span>',
+          tap: true, attrs: ' data-go="finpay"' }),
+        u.listRow({ icon: 'calendar', title: 'Сегодня', value: u.priv(pt.dueToday),
+          tap: true, attrs: ' data-go="finpay"' }),
+        u.listRow({ icon: 'calendar', title: 'На неделе', value: u.priv(pt.week),
+          tap: true, attrs: ' data-go="finpay"' })
+      ], ''), '') +
+      u.card('Долги покупателей', u.listOf([
+        u.listRow({ icon: 'notebook', title: 'Всего не отдали', value: u.priv(deb.open),
+          tap: true, attrs: ' data-go="debtors"' }),
+        u.listRow({ icon: 'hourglass', title: 'Старше 30 дней',
+          value: '<span class="' + (deb.old ? 'c-orange' : '') + ' private">' + money(deb.old) + '</span>',
+          tap: true, attrs: ' data-go="debtors"' }),
+        u.listRow({ icon: 'people', title: 'Должников', value: u.nf(deb.people.length) })
+      ], ''), '') +
+      '</div>';
+
+    // Антирейтинг: сверху тот, у кого недостач больше
+    var bad = rating.filter(function (r) { return r.short > 0; });
+    h += u.card('Кто недосдаёт', bad.length ? u.table('pulseRate', [
+      { title: 'Кассир', fn: function (r) { return esc(r.name); } },
+      { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shifts); } },
+      { title: 'Недостачи', cls: 'num', fn: function (r) {
+        return '<b class="c-red private">' + money(r.short) + '</b>'; } },
+      { title: 'На 1000 ₽ выручки', cls: 'num', fn: function (r) { return u.priv(r.per1000); } },
+      { title: 'Смен с расхождением', cls: 'num', fn: function (r) {
+        return u.nf(r.badShifts) + ' <span class="c-muted">' + u.pct(r.badPct) + '</span>'; } }
+    ], bad.slice(0, 5), { step: 5 })
+      : '<div class="empty">' + ic('check') + ' Недостач нет — все смены сошлись.</div>',
+      '<button class="btn btn-sm" data-go="cashiers">Все кассиры</button>');
+
+    h += u.card('Как идёт магазин — ' + (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
+      u.listOf([
+        u.listRow({ icon: 'banknote', title: 'Выручка', sub: 'наличные ' + money(t.zCash) +
+          ' · безнал ' + money(t.zCashless), value: u.priv(t.revenue) }),
+        u.listRow({ icon: 'receipt', title: 'Выплаты из ящика', sub: 'что брали из кассы за смены',
+          value: u.priv(t.payouts) }),
+        u.listRow({ icon: 'coins', title: 'Прочие расходы', sub: 'записаны отдельно',
+          value: u.priv(t.expense) }),
+        u.listRow({ icon: 'box', title: 'Товар за наличные', value: u.priv(t.goodsCash) }),
+        u.listRow({ icon: 'clock', title: 'Смен закрыто',
+          sub: t.shifts ? 'в среднем ' + money(t.avgShift) + ' за смену' : '',
+          value: u.nf(t.shifts) }),
+        u.listRow({ icon: 'calendar', title: 'Средняя выручка в день',
+          sub: 'дней с записями: ' + t.dayCount, value: u.priv(t.avgDay) })
+      ], ''));
+    return h;
+  }
+
+  /* --- Утро: сверка кассы ------------------------------------------------------ */
+  function viewMorning() {
+    var u = U();
+    var all = dds();
+    var shifts = E.shiftsOf(all, null, S.settings).slice().reverse();
+    var sel = pick();
+    var t = E.totals(sel.rows);
+
+    var h = u.pageHead('Утро: сверка кассы',
+      'Кассир сдал смену — вы забрали деньги. Безнал идёт на счёт мимо ваших рук',
+      '<button class="btn btn-primary" data-form="shiftClose">' + ic('plus') + ' Закрыть смену</button>');
+
+    h += '<div class="banner blue"><span>' + ic('calculator') + '</span><span>' +
+      '<b>Должны отдать</b> = было на начало + Z-наличные − выплаты кассира − оставленный размен.<br>' +
+      '<b>Расхождение</b> = получили на руки − должны отдать. ' +
+      'Минус — недостача кассира, плюс — излишек. ' +
+      'Карта и СБП сюда не входят: эти деньги идут на счёт мимо вас.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Смен за период', u.nf(t.shifts),
+        t.badShifts ? t.badShifts + ' с расхождением' : 'все сошлись',
+        t.badShifts ? 'c-orange' : 'c-green') +
+      u.stat('Недостачи', u.priv(t.short), 'вам отдали меньше, чем должны', t.short ? 'c-red' : '') +
+      u.stat('Излишки', u.priv(t.over), 'вам отдали больше, чем должны') +
+      u.stat('Кассиры платили из ящика', u.priv(t.payouts), 'за смены периода') +
+      '</div>';
+    h += wholeNote(sel);
+
+    var defs = [
+      { key: 'res', name: 'Как сошлась', options: [
+        { v: 'short', name: 'Недостача', test: function (r) { return E.shiftCalc(r).diff < -0.5; } },
+        { v: 'over', name: 'Излишек', test: function (r) { return E.shiftCalc(r).diff > 0.5; } },
+        { v: 'ok', name: 'Сошлась', test: function (r) { return E.shiftCalc(r).ok; } }
+      ] },
+      { key: 'till', name: 'Касса', auto: function (r) { return r.till; }, limit: 6 },
+      { key: 'shift', name: 'Смена', auto: function (r) { return r.shift; }, limit: 6 },
+      { key: 'cashier', name: 'Кассир', auto: function (r) { return r.cashier; }, limit: 12 }
+    ];
+    var list = FLT().apply('morning', shifts, defs, function (r) {
+      return (r.cashier || '') + ' ' + (r.note || '') + ' ' + (r.date || '');
+    });
+    h += FLT().bar('morning', defs, shifts, { search: 'кассир, дата, комментарий' });
+
+    h += u.card('Закрытые смены', FLT().note(list.length, shifts.length) + u.table('shiftsT', [
+      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Касса', fn: function (r) { return esc(r.till || '—'); } },
+      { title: 'Смена', fn: function (r) { return esc(r.shift || '—'); } },
+      { title: 'Кассир', fn: function (r) { return esc(r.cashier || '—'); } },
+      { title: 'Размен', cls: 'num', fn: function (r) { return u.priv(r.openCash); } },
+      { title: 'Z наличные', cls: 'num', fn: function (r) { return u.priv(r.zCash); } },
+      { title: 'Z безнал', cls: 'num', fn: function (r) { return u.priv(r.zCashless); } },
+      { title: 'Выплаты', cls: 'num', fn: function (r) { return u.priv(r.payouts); } },
+      { title: 'Должно быть', cls: 'num', fn: function (r) { return u.priv(E.shiftCalc(r).expected); } },
+      { title: 'Факт', cls: 'num', fn: function (r) { return u.priv(r.factCash); } },
+      { title: 'Расхождение', cls: 'num', fn: function (r) {
+        var c = E.shiftCalc(r);
+        if (c.ok) return '<span class="c-green">сходится</span>';
+        return '<b class="' + (c.diff < 0 ? 'c-red' : 'c-orange') + ' private">' +
+          (c.diff > 0 ? '+' : '') + money(c.diff) + '</b>'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return u.rowMenu('dds', r.id, { form: 'shiftClose' }); } }
+    ], list, { step: 40, empty: FLT().active('morning') ? 'Под фильтр ничего не подошло'
+      : 'Смен пока нет. Нажмите «Закрыть смену».',
+      total: [{ html: 'Итого', span: 5, label: 'Итого' },
+        { html: money(t.zCash), cls: 'num', label: 'Z наличные' },
+        { html: money(t.zCashless), cls: 'num', label: 'Z безнал' },
+        { html: money(t.payouts), cls: 'num', label: 'Выплаты' },
+        { html: '', cls: 'num' }, { html: '', cls: 'num' },
+        { html: '<span class="' + u.cls(t.diff) + '">' + money(t.diff) + '</span>', cls: 'num', label: 'Расхождение' },
+        { html: '' }] }));
+
+    h += '<div class="quick"><button class="btn" data-form="cashCount">' + ic('receipt') + ' Пересчитать по купюрам</button> ' +
+      '<button class="btn" data-go="cashiers">' + ic('people') +
+      ' Кассиры и расхождения</button></div>';
+    return h;
+  }
+
+  /* --- Вечер: итоги дня --------------------------------------------------------- */
+  function viewEvening() {
+    var u = U();
+    var days = dds().filter(E.isDay).slice().sort(function (a, b) {
+      return E.txt(b.date).localeCompare(E.txt(a.date));
+    });
+    var sel = pick(), t = E.totals(sel.rows);
+    var debt = E.supplierDebt(dds(), S.settings);
+
+    var h = u.pageHead('Вечер: итоги дня', 'Товар и долги поставщикам за день',
+      '<button class="btn btn-primary" data-form="dayTotals">' + ic('plus') + ' Записать итоги дня</button>');
+
+    h += '<div class="banner blue"><span>' + ic('moon') + '</span><span>Эта форма про <b>товар и долги</b>, ' +
+      'а не про кассу. Деньги за товар уже ушли из ящика и посчитаны в «Выплатах» при сверке ' +
+      'смены — если вычесть их ещё раз, одни и те же деньги уйдут дважды.</span></div>';
+
+    h += '<div class="stat-grid">' +
+      u.stat('Долг поставщикам', u.priv(debt.debt), 'на сегодня',
+        debt.debt >= num(S.settings.debtCrit) ? 'c-red' : '') +
+      u.stat('Взято в долг за период', u.priv(t.debtTaken), 'привезли без оплаты') +
+      u.stat('Погашено за период', u.priv(t.debtPaid), 'отдали поставщикам', 'c-green') +
+      u.stat('Товар за наличные', u.priv(t.goodsCash), 'взяли и сразу заплатили') +
+      '</div>';
+    h += wholeNote(sel);
+
+    if (debt.opening) {
+      h += '<div class="banner"><span>' + ic('info') + '</span><span>Долг считается от начального: ' +
+        '<b>' + money(debt.opening) + '</b> из «Настроек» плюс взятое в долг минус погашенное. ' +
+        'Если начальная цифра не та — поправьте в настройках, раздел «Начальные остатки».</span></div>';
+    }
+
+    h += u.card('Итоги по дням', u.table('daysT', [
+      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Товар за наличные', cls: 'num', fn: function (r) { return u.priv(r.goodsCash); } },
+      { title: 'Погашено долга', cls: 'num', fn: function (r) { return u.priv(r.debtPaid); } },
+      { title: 'Взято в долг', cls: 'num', fn: function (r) { return u.priv(r.debtTaken); } },
+      { title: 'Долг вырос на', cls: 'num', fn: function (r) {
+        var d = E.safeRound(num(r.debtTaken) - num(r.debtPaid));
+        return '<span class="' + (d > 0 ? 'c-red' : 'c-green') + ' private">' +
+          (d > 0 ? '+' : '') + money(d) + '</span>'; } },
+      { title: 'Комментарий', fn: function (r) { return esc(r.note || '—'); } },
+      { title: '', cls: 'center', fn: function (r) {
+        return u.rowMenu('dds', r.id, { form: 'dayTotals' }); } }
+    ], days, { step: 40, empty: 'Итогов дня пока нет.',
+      total: [{ html: 'Итого', label: 'Итого' },
+        { html: money(t.goodsCash), cls: 'num', label: 'Товар за наличные' },
+        { html: money(t.debtPaid), cls: 'num', label: 'Погашено' },
+        { html: money(t.debtTaken), cls: 'num', label: 'Взято в долг' },
+        { html: '', cls: 'num' }, { html: '' }, { html: '' }] }));
+    return h;
+  }
+
+  /* --- План выплат -------------------------------------------------------------- */
+  function viewPlans() {
+    var u = U();
+    var plans = (S.state.plans || []).slice().sort(function (a, b) {
+      return E.txt(a.due).localeCompare(E.txt(b.due));
+    });
+    var t = E.planTotals(plans, today());
+
+    var h = u.pageHead('План выплат', 'Кому и когда платить',
+      '<button class="btn btn-primary" data-form="payPlan">' + ic('plus') + ' Запланировать выплату</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Просрочено', u.priv(t.overdue), t.overdueCount + ' платежей',
+        t.overdue ? 'c-red' : 'c-green') +
+      u.stat('Сегодня', u.priv(t.dueToday), 'платить сегодня') +
+      u.stat('На неделе', u.priv(t.week), 'ближайшие 7 дней') +
+      u.stat('Всего запланировано', u.priv(t.planned), t.plannedCount + ' платежей') +
+      '</div>';
+
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Отметка «Оплачена» закрывает пункт плана, ' +
+      'но долг поставщикам сама не уменьшает: сумму погашения впишите в «Итоги дня». ' +
+      'Так у долга остаётся один источник и он не считается дважды.</span></div>';
+
+    var defs = [{ key: 'st', name: 'Состояние', options: [
+      { v: 'late', name: 'Просрочено', test: function (p) { return E.planStatus(p).key === 'late'; } },
+      { v: 'today', name: 'Сегодня', test: function (p) { return E.planStatus(p).key === 'today'; } },
+      { v: 'plan', name: 'Впереди', test: function (p) {
+        var k = E.planStatus(p).key; return k === 'plan' || k === 'soon'; } },
+      { v: 'paid', name: 'Оплачено', test: function (p) { return E.planStatus(p).key === 'paid'; } }
+    ] }, { key: 'who', name: 'Кому', auto: function (p) { return p.supplier; }, limit: 14 }];
+    var list = FLT().apply('plans', plans, defs, function (p) { return p.supplier + ' ' + (p.note || ''); });
+    h += FLT().bar('plans', defs, plans, { search: 'поставщик или комментарий' });
+
+    h += u.card('Календарь платежей', FLT().note(list.length, plans.length) + u.table('plansT', [
+      { title: 'Когда', fn: function (p) { return esc(dateRu(p.due)); } },
+      { title: 'Что и кому', fn: function (p) {
+        var что = E.txt(p.category), кому = E.txt(p.supplier);
+        if (что && кому) return esc(что) + '<br><small class="c-muted">' + esc(кому) + '</small>';
+        return esc(что || кому || '—'); } },
+      { title: 'Сумма', cls: 'num', fn: function (p) { return u.priv(p.amount); } },
+      { title: 'Чем', fn: function (p) { return esc(p.method || '—'); } },
+      { title: 'Состояние', fn: function (p) {
+        var st = E.planStatus(p, today());
+        return u.badge(st.name, st.color); } },
+      { title: 'Комментарий', fn: function (p) { return esc(p.note || '—'); } },
+      { title: '', cls: 'center', fn: function (p) {
+        var st = E.planStatus(p, today());
+        return (st.key === 'paid' ? ''
+          : '<button class="btn btn-sm btn-primary" data-act="plan-paid" data-id="' + p.id + '">Оплатил</button> ') +
+          u.rowMenu('plans', p.id, { form: 'payPlan' }); } }
+    ], list, { step: 40, empty: 'Плановых выплат нет.' }));
+    return h;
+  }
+
+  /* --- Кассиры и расхождения ------------------------------------------------------ */
+  function viewCashiers() {
+    var u = U();
+    var sel = pick();
+    var rating = E.cashierRating(sel.rows);
+    var t = E.totals(sel.rows);
+    var crit = num(S.settings.diffCrit) || 1000;
+
+    var h = u.pageHead('Кассиры и расхождения',
+      'У кого касса не сходится — ' + (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
+      '<button class="btn" data-act="print">' + ic('print') + ' Печать</button> ' +
+      '<button class="btn" data-act="pdf">' + ic('doc') + ' PDF</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Недостачи', u.priv(t.short), 'всего не хватило', t.short ? 'c-red' : 'c-green') +
+      u.stat('Излишки', u.priv(t.over), 'всего оказалось лишним') +
+      u.stat('Смен с расхождением', u.nf(t.badShifts), 'из ' + t.shifts,
+        t.badShifts ? 'c-orange' : 'c-green') +
+      u.stat('Кассиров', u.nf(rating.length), 'работали за период') +
+      '</div>';
+    h += wholeNote(sel);
+
+    /* Сравнивать кассиров голой суммой недостач нельзя: у кого выручка
+       больше, у того и недостачи больше. Поэтому на картинке — недостача на
+       каждую тысячу рублей выручки. Это то самое число, которое владелец
+       ищет глазами в таблице, и именно его удобно сравнивать столбиками. */
+    if (rating.length > 1) {
+      h += u.card('Недостачи на 1000 ₽ выручки', u.chartBox('cashierBars', 220,
+        'Чем выше столбик, тем чаще у человека не сходится касса. Голая сумма ' +
+        'тут не годится: у кого выручка больше, у того и недостачи больше.'));
+    }
+
+    h += u.card('Антирейтинг', u.table('rateT', [
+      { title: 'Кассир', fn: function (r) { return esc(r.name); } },
+      { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shifts); } },
+      { title: 'Выручка', cls: 'num', fn: function (r) { return u.priv(r.revenue); } },
+      { title: 'Недостачи', cls: 'num', fn: function (r) {
+        return r.short ? '<b class="c-red private">' + money(r.short) + '</b>' : '—'; } },
+      { title: 'Излишки', cls: 'num', fn: function (r) {
+        return r.over ? '<span class="c-orange private">' + money(r.over) + '</span>' : '—'; } },
+      { title: 'На 1000 ₽ выручки', cls: 'num', fn: function (r) { return u.priv(r.per1000); } },
+      { title: 'Смен с расхождением', cls: 'num', fn: function (r) {
+        return u.nf(r.badShifts) + ' <span class="c-muted">' + u.pct(r.badPct) + '</span>'; } },
+      { title: 'Худший случай', cls: 'num', fn: function (r) {
+        return r.worst ? '<span class="private">' + money(r.worst) + '</span>' +
+          '<small class="c-muted"> ' + esc(dateRu(r.worstDate)) + '</small>' : '—'; } }
+    ], rating, { step: 30, empty: 'Смен за период нет.' }));
+
+    var bigOnes = E.shiftsOf(sel.rows, null, S.settings).filter(function (r) {
+      return Math.abs(E.shiftCalc(r).diff) >= crit;
+    }).sort(function (a, b) { return E.shiftCalc(a).diff - E.shiftCalc(b).diff; });
+    if (bigOnes.length) {
+      h += u.card('Крупные расхождения — от ' + money(crit), u.table('bigT', [
+        { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Касса', fn: function (r) { return esc(r.till || '—'); } },
+        { title: 'Смена', fn: function (r) { return esc(r.shift || '—'); } },
+        { title: 'Кассир', fn: function (r) { return esc(r.cashier || '—'); } },
+        { title: 'Должно быть', cls: 'num', fn: function (r) { return u.priv(E.shiftCalc(r).expected); } },
+        { title: 'Факт', cls: 'num', fn: function (r) { return u.priv(r.factCash); } },
+        { title: 'Расхождение', cls: 'num', fn: function (r) {
+          var c = E.shiftCalc(r);
+          return '<b class="' + (c.diff < 0 ? 'c-red' : 'c-orange') + ' private">' +
+            (c.diff > 0 ? '+' : '') + money(c.diff) + '</b>'; } },
+        { title: 'Комментарий', fn: function (r) { return esc(r.note || '—'); } }
+      ], bigOnes, { step: 30 }),
+        'Порог задаётся в настройках, раздел «Пороги»');
+    }
+
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Сравнивайте не сумму недостач, а ' +
+      '<b>недостачу на 1000 ₽ выручки</b>: кассир с большой выручкой и парой ошибок ' +
+      'аккуратнее того, у кого выручка маленькая, а недостачи те же.</span></div>';
+    return h;
+  }
+
+  /* --- База операций -------------------------------------------------------------- */
+  function viewLedger() {
+    var u = U();
+    var sel = pick(), rows = sel.rows.slice().sort(function (a, b) {
+      return E.txt(b.date).localeCompare(E.txt(a.date));
+    });
+    var t = E.totals(rows);
+
+    var h = u.pageHead('База операций', 'Все записи о деньгах — ' +
+      (sel.whole ? 'за всё время' : u.periodName().toLowerCase()),
+      '<button class="btn" data-act="export-screen">' + ic('download') + ' В Excel</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Записей', u.nf(rows.length), 'смены, дни, приходы и расходы') +
+      u.stat('Выручка', u.priv(t.revenue), 'наличные ' + money(t.zCash) + ' · безнал ' + money(t.zCashless)) +
+      u.stat('Потрачено', u.priv(t.spent), 'выплаты из ящика плюс расходы') +
+      u.stat('Забрал владелец', u.priv(t.draw), 'из оборота') +
+      '</div>';
+    h += wholeNote(sel);
+
+    var defs = [
+      { key: 'type', name: 'Что это', auto: function (r) { return r.type; }, limit: 6 },
+      { key: 'cat', name: 'Статья', auto: function (r) { return r.category; }, limit: 14 },
+      { key: 'method', name: 'Чем', auto: function (r) { return r.method; }, limit: 6 },
+      { key: 'cashier', name: 'Кассир', auto: function (r) { return r.cashier; }, limit: 12 }
+    ];
+    var list = FLT().apply('ledger', rows, defs, function (r) {
+      return [r.category, r.note, r.cashier, r.till, r.shift].filter(Boolean).join(' ');
+    });
+    h += FLT().bar('ledger', defs, rows, { search: 'статья, кассир, комментарий' });
+
+    function sumOf(r) {
+      if (E.isShift(r)) return E.shiftCalc(r).revenue;
+      if (E.isDay(r)) return E.safeRound(num(r.goodsCash) + num(r.debtPaid));
+      return num(r.amount);
+    }
+    function whatOf(r) {
+      if (E.isShift(r)) return 'Смена: ' + esc(r.till || '') + ' ' + esc(r.shift || '') +
+        (r.cashier ? ' · ' + esc(r.cashier) : '');
+      if (E.isDay(r)) return 'Итоги дня';
+      // Подстатью показываем стрелкой: «Коммунальные → Свет» читается легче черты
+      return esc(E.catLabel(r.category) || '—');
+    }
+    h += u.card('Записи', FLT().note(list.length, rows.length) + u.table('ledgerT', [
+      { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+      { title: 'Что это', fn: function (r) { return u.badge(r.type || '—',
+        E.isShift(r) ? 'blue' : E.isDay(r) ? 'gray' : E.isIncome(r) ? 'green'
+          : E.isDraw(r) ? 'orange' : 'red'); } },
+      { title: 'Подробности', fn: whatOf },
+      { title: 'Чем', fn: function (r) { return esc(r.method || (E.isShift(r) ? 'нал + безнал' : '—')); } },
+      { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(sumOf(r)); } },
+      { title: 'Расхождение', cls: 'num', fn: function (r) {
+        if (!E.isShift(r)) return '—';
+        var c = E.shiftCalc(r);
+        return c.ok ? '<span class="c-green">сходится</span>'
+          : '<span class="' + (c.diff < 0 ? 'c-red' : 'c-orange') + ' private">' + money(c.diff) + '</span>'; } },
+      { title: 'Комментарий', fn: function (r) { return esc(r.note || '—'); } },
+      { title: '', cls: 'center', fn: function (r) {
+        var form = E.isShift(r) ? 'shiftClose' : E.isDay(r) ? 'dayTotals'
+          : E.isIncome(r) ? 'moneyIn' : E.isDraw(r) ? 'moneyDraw' : 'moneyOut';
+        return u.rowMenu('dds', r.id, { form: form }); } }
+    ], list, { step: 50, empty: FLT().active('ledger') ? 'Под фильтр ничего не подошло' : 'Записей нет.' }));
+
+    h += '<div class="quick">' +
+      '<button class="btn" data-form="moneyIn">' + ic('banknote') + ' Приход</button> ' +
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Расход</button> ' +
+      '<button class="btn" data-form="moneyDraw">' + ic('wallet') + ' Забрал владелец</button></div>';
+    return h;
+  }
+
+  /* --- Долги покупателей ---------------------------------------------------------- */
+  function viewDebtors() {
+    var u = U();
+    var rows = (S.state.debtors || []).slice().sort(function (a, b) {
+      return E.txt(b.date).localeCompare(E.txt(a.date));
+    });
+    var t = E.debtorTotals(rows, today());
+    var oldDays = num(S.settings.debtorOldDays) || 30;
+
+    var h = u.pageHead('Долги покупателей', 'Бывшая тетрадка у кассы',
+      '<button class="btn btn-primary" data-form="debtor">' + ic('plus') + ' Записать долг</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Не отдали', u.priv(t.open), t.people.length + ' человек', t.open ? 'c-orange' : 'c-green') +
+      u.stat('Старше ' + oldDays + ' дней', u.priv(t.old), 'пора напомнить', t.old ? 'c-red' : 'c-green') +
+      u.stat('Погашено', u.priv(t.closed), 'вернули полностью', 'c-green') +
+      '</div>';
+
+    var defs = [{ key: 'st', name: 'Состояние', options: [
+      { v: 'open', name: 'Не отдал', test: function (d) { return num(d.sum) - num(d.paid) > 0; } },
+      { v: 'old', name: 'Старше ' + oldDays + ' дней', test: function (d) {
+        return num(d.sum) - num(d.paid) > 0 && E.daysBetween(d.date, today()) > oldDays; } },
+      { v: 'closed', name: 'Вернул', test: function (d) { return num(d.sum) - num(d.paid) <= 0; } }
+    ] }];
+    var list = FLT().apply('debtors', rows, defs, function (d) { return d.name + ' ' + (d.phone || ''); });
+    h += FLT().bar('debtors', defs, rows, { search: 'имя или телефон' });
+
+    h += u.card('Кто должен', FLT().note(list.length, rows.length) + u.table('debtT', [
+      { title: 'Кто', fn: function (d) { return esc(d.name); } },
+      { title: 'Телефон', fn: function (d) {
+        return d.phone ? '<a href="tel:' + esc(d.phone) + '">' + esc(d.phone) + '</a>' : '—'; } },
+      { title: 'Когда', fn: function (d) { return esc(dateRu(d.date)); } },
+      { title: 'Дней', cls: 'num', fn: function (d) {
+        var n = E.daysBetween(d.date, today());
+        return '<span class="' + (n > oldDays ? 'c-red' : '') + '">' + u.nf(n) + '</span>'; } },
+      { title: 'Взял', cls: 'num', fn: function (d) { return u.priv(d.sum); } },
+      { title: 'Вернул', cls: 'num', fn: function (d) { return u.priv(d.paid); } },
+      { title: 'Осталось', cls: 'num', fn: function (d) {
+        var left = E.safeRound(num(d.sum) - num(d.paid));
+        return left > 0 ? '<b class="c-red private">' + money(left) + '</b>'
+          : '<span class="c-green">вернул</span>'; } },
+      { title: 'Кассир', fn: function (d) { return esc(d.cashier || '—'); } },
+      { title: '', cls: 'center', fn: function (d) { return u.rowMenu('debtors', d.id, { form: 'debtor' }); } }
+    ], list, { step: 40, empty: 'Долгов нет.' }));
+
+    h += '<div class="banner"><span>' + ic('info') + '</span><span>Пока долг не погашен, он не выручка. ' +
+      'Когда человек вернёт деньги — впишите сумму в «Уже погашено», а сами деньги ' +
+      'придут в кассу через сверку смены (или запишите «Приход денег»).</span></div>';
+    return h;
+  }
+
+  /* --- Отчёт за месяц -------------------------------------------------------------- */
+  function viewReport() {
+    var u = U();
+    var all = dds();
+    if (!all.length) {
+      return u.pageHead('Отчёт за месяц', 'Что было и как это выглядит рядом с прошлым месяцем') +
+        u.blank({ icon: 'doc', title: 'Сравнивать пока не с чем',
+          why: 'Этот отчёт ставит месяц рядом с прошлым и показывает, что выросло, ' +
+            'а что просело. Он появится, когда наберётся хотя бы одна закрытая смена.',
+          actions: [
+            { name: 'Свести кассу', icon: 'calculator', form: 'shiftClose' },
+            { name: 'На Пульт', icon: 'gauge', go: 'pulse' }
+          ] });
+    }
+    var months = {};
+    all.forEach(function (r) { if (r.date) months[E.ymOf(r.date)] = 1; });
+    var list = Object.keys(months).sort().reverse();
+    var ym = S.settings.reportMonth && list.indexOf(S.settings.reportMonth) >= 0
+      ? S.settings.reportMonth : list[0];
+    var prevYm = E.prevMonth(ym);
+    function of(m) { return all.filter(function (r) { return E.ymOf(r.date) === m; }); }
+    var a = E.totals(of(ym)), b = E.totals(of(prevYm));
+
+    var h = u.pageHead('Отчёт за месяц', E.monthTitle(ym) + ' — против ' + E.monthName(prevYm),
+      '<select id="repMonth" style="background:var(--fill);border:none;border-radius:9px;padding:9px 12px;font-size:14px">' +
+      list.map(function (m) {
+        return '<option value="' + m + '"' + (m === ym ? ' selected' : '') + '>' +
+          esc(E.monthTitle(m)) + '</option>';
+      }).join('') + '</select> <button class="btn" data-act="print">' + ic('print') + ' Печать</button>');
+
+    function line(name, x, y, isMoney) {
+      return { name: name, cur: x, prev: y, delta: E.safeRound(x - y),
+        pct: y ? E.safeRound((x - y) / Math.abs(y) * 100) : null, money: isMoney !== false };
+    }
+    var lines = [
+      line('Выручка', a.revenue, b.revenue),
+      line('в т.ч. наличными', a.zCash, b.zCash),
+      line('в т.ч. безналом', a.zCashless, b.zCashless),
+      line('Доля безнала, %', a.cashlessShare, b.cashlessShare, false),
+      line('Выплаты из ящика', a.payouts, b.payouts),
+      line('Прочие расходы', a.expense, b.expense),
+      line('Товар за наличные', a.goodsCash, b.goodsCash),
+      line('Взято в долг', a.debtTaken, b.debtTaken),
+      line('Погашено долга', a.debtPaid, b.debtPaid),
+      line('Недостачи', a.short, b.short),
+      line('Излишки', a.over, b.over),
+      line('Забрал владелец', a.draw, b.draw),
+      line('Смен закрыто', a.shifts, b.shifts, false),
+      line('Средняя выручка за смену', a.avgShift, b.avgShift)
+    ];
+
+    h += '<div class="stat-grid">' +
+      u.stat('Выручка', u.priv(a.revenue), 'в прошлом месяце ' + money(b.revenue)) +
+      u.stat('Потрачено', u.priv(a.spent), 'выплаты плюс расходы') +
+      u.stat('Недостачи', u.priv(a.short), a.badShifts + ' смен не сошлись',
+        a.short ? 'c-red' : 'c-green') +
+      u.stat('Доля безнала', u.pct(a.cashlessShare), 'в прошлом месяце ' + u.pct(b.cashlessShare)) +
+      '</div>';
+
+    h += u.card('Строка за строкой', u.table('repT', [
+      { title: 'Показатель', fn: function (r) { return esc(r.name); } },
+      { title: E.monthTitle(ym), cls: 'num', fn: function (r) {
+        return r.money ? u.priv(r.cur) : u.nf(r.cur, r.name.indexOf('%') > 0 ? 1 : 0); } },
+      { title: E.monthTitle(prevYm), cls: 'num', fn: function (r) {
+        return r.money ? u.priv(r.prev) : u.nf(r.prev, r.name.indexOf('%') > 0 ? 1 : 0); } },
+      { title: 'Разница', cls: 'num', fn: function (r) {
+        return '<span class="' + u.cls(r.delta) + (r.money ? ' private' : '') + '">' +
+          (r.delta > 0 ? '+' : '') + (r.money ? money(r.delta) : u.nf(r.delta, 1)) + '</span>'; } },
+      { title: '%', cls: 'num', fn: function (r) {
+        return r.pct == null ? '—' : '<span class="' + u.cls(r.pct) + '">' +
+          (r.pct > 0 ? '+' : '') + u.pct(r.pct) + '</span>'; } }
+    /* nosort: порядок строк здесь и есть отчёт — выручка, себестоимость,
+       прибыль. Пересортировать его по алфавиту значит сломать смысл. */
+    ], lines, { step: 30, nosort: true }));
+
+    var cats = Object.keys(a.byCategory).map(function (k) {
+      return { name: k, sum: a.byCategory[k], prev: b.byCategory[k] || 0 };
+    }).sort(function (x, y) { return y.sum - x.sum; });
+    if (cats.length) {
+      h += u.card('Расходы по статьям', u.table('catT', [
+        { title: 'Статья', fn: function (r) { return esc(E.catLabel(r.name)); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.sum); } },
+        { title: 'Доля', cls: 'num', fn: function (r) {
+          return u.pct(E.div(r.sum, a.expense) * 100); } },
+        { title: 'В прошлом месяце', cls: 'num', fn: function (r) { return u.priv(r.prev); } }
+      ], cats, { step: 20 }));
+    }
+    return h;
+  }
+
+  /* ==========================================================================
+     ДЕЙСТВИЯ
+     ========================================================================== */
+  var A = window.WM_EXTRA_ACTIONS = window.WM_EXTRA_ACTIONS || {};
+
+  A['short-withhold'] = function (el) {
+    var id = el.dataset.id;
+    var r = (S.state.dds || []).filter(function (x) { return x.id === id; })[0];
+    U().closeSheet();
+    if (!r) return null;
+    var c = E.shiftCalc(r);
+    S.update('dds', id, { shortAction: 'удержано' });
+    U().openForm('timesheetRow', { date: r.date, employee: r.cashier,
+      fine: Math.abs(c.diff), note: 'Недостача по смене ' + E.txt(r.till) });
+    return null;
+  };
+
+  A['short-loss'] = function (el) {
+    var id = el.dataset.id;
+    U().closeSheet();
+    S.update('dds', id, { shortAction: 'убыток' });
+    U().recompute();
+    return 'Недостача списана в убыток. Решение записано в смене.';
+  };
+
+
+  /* ==========================================================================
+     ОКНО ПОДРОБНОСТЕЙ
+
+     В отчёте видно «Коммунальные 7 000 ₽». Первый вопрос владельца — из чего
+     они сложились. Раньше на него можно было ответить только уйдя в «Базу
+     операций» и выставив там фильтры руками.
+
+     Теперь строка отчёта нажимается и открывает окно: все записи, из которых
+     сложилась сумма, с датой, счётом и кассиром. Отчёт при этом не покидается —
+     закрыл окно и читаешь дальше.
+
+     data-drill="вид|что|с|по" — вид говорит, что показывать:
+       cat    — расходы по статье (и по её подстатьям)
+       acc    — движение по счёту
+       shift  — смены за период
+     ========================================================================== */
+  A['drill'] = function (el) {
+    var p = E.txt(el.dataset.drill).split('|');
+    var вид = p[0], что = decodeURIComponent(p[1] || ''), от = p[2] || '', до = p[3] || '';
+    var u = U();
+
+    var строки = dds().filter(function (r) {
+      var d = E.txt(r.date);
+      if (от && d < от) return false;
+      if (до && d > до) return false;
+      if (вид === 'cat') {
+        if (!E.isExpense(r)) return false;
+        var c = E.txt(r.category);
+        // Статья-группа показывает и свои подстатьи: «Коммунальные» и «Свет»
+        return E.norm(c) === E.norm(что) || E.norm(E.catGroup(c)) === E.norm(что);
+      }
+      if (вид === 'kind') {
+        /* Группа затрат из отчёта о прибыли («Аренда», «Коммунальные»).
+           Группу считаем по ГРУППЕ статьи: «Коммунальные / Свет» должен
+           попасть в «Коммунальные», а не в «прочие расходы». */
+        if (!E.isExpense(r) || E.notACost(r.category)) return false;
+        return E.costKindOf(E.catGroup(r.category) || r.category) === что;
+      }
+      if (вид === 'acc') return E.txt(r.account) === что || E.txt(r.toAccount) === что;
+      if (вид === 'shift') return E.isShift(r);
+      return false;
+    }).sort(function (a, b) { return E.txt(a.date) < E.txt(b.date) ? -1 : 1; });
+
+    var сумма = E.safeRound(строки.reduce(function (a, r) {
+      return a + num(вид === 'shift' ? E.shiftCalc(r).revenue : r.amount);
+    }, 0));
+
+    var заголовок = вид === 'cat' ? E.catLabel(что)
+      : вид === 'kind' ? (E.costKindName ? E.costKindName(что) : что)
+      : вид === 'acc' ? (accName(что) || 'Счёт') : 'Смены';
+    var период = (от || до)
+      ? ' · ' + (от ? dateRu(от) : '') + (до ? ' – ' + dateRu(до) : '') : '';
+
+    var h = '<div class="drill-head"><div class="drill-sum">' + esc(money(сумма)) + '</div>' +
+      '<div class="drill-sub">' + u.nf(строки.length) + ' ' +
+      u.plural(строки.length, 'запись', 'записи', 'записей') + esc(период) + '</div></div>';
+
+    if (!строки.length) {
+      h += '<div class="empty">За этот период записей по «' + esc(заголовок) + '» нет.</div>';
+    } else {
+      h += u.table('drillT', [
+        { title: 'Дата', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Что', fn: function (r) {
+          return вид === 'shift'
+            ? esc((r.till || '') + ' ' + (r.shift || '') + (r.cashier ? ' · ' + r.cashier : ''))
+            : esc(E.catLabel(r.category) || '—') +
+              (r.note ? ' <span class="c-muted">· ' + esc(r.note) + '</span>' : ''); } },
+        { title: 'Счёт', fn: function (r) { return esc(accName(r.account) || '—'); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) {
+          return u.priv(вид === 'shift' ? E.shiftCalc(r).revenue : r.amount); } },
+        { title: '', cls: 'center', fn: function (r) {
+          return вид === 'shift' ? '' : u.rowMenu('dds', r.id, { form: 'moneyOut' }); } }
+      ], строки, { step: 60,
+        total: [{ html: 'Всего' }, { html: '' }, { html: '' },
+          { cls: 'num', html: '<b>' + u.priv(сумма) + '</b>' }, { html: '' }] });
+    }
+
+    /* Кнопка в базу операций: когда подробностей мало — правят прямо здесь,
+       когда надо копать глубже — идут туда, где есть все фильтры. */
+    h += '<div class="form-actions"><button class="btn" data-act="drill-ledger" ' +
+      'data-kind="' + esc(вид) + '" data-what="' + esc(encodeURIComponent(что)) + '">' +
+      ic('list') + ' Показать в базе операций</button></div>';
+
+    u.sheet(заголовок + период, h);
+    return null;
+  };
+
+  /* Перейти в базу операций с уже выставленным фильтром */
+  A['drill-ledger'] = function (el) {
+    var вид = E.txt(el.dataset.kind), что = decodeURIComponent(el.dataset.what || '');
+    U().closeSheet();
+    if (вид === 'cat') FLT().set('ledger', 'cat', что);
+    U().go('ledger');
+    return null;
+  };
+
+
+  /* Отметить выплату оплаченной. Долг сама не уменьшает — предлагает вписать
+     сумму в итоги дня, чтобы у кредиторки остался один источник. */
+  /* «Отложить» у конверта: открывает обычный перевод, но конверт и счёт-получатель
+     уже проставлены. Отдельной «операции откладывания» в программе нет — это
+     важно: чем меньше видов записей, тем меньше мест, где деньги могут
+     потеряться. */
+  A['fund-put'] = function (el) {
+    var f = funds().filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!f) return 'Конверт не найден.';
+    var ft = E.fundTotals(funds(), dds(), null, U().month ? U().month() : E.ymOf(today()));
+    var row = ft.rows.filter(function (x) { return x.id === f.id; })[0];
+    U().openForm('moveCash', { date: today(), toAccount: E.txt(f.account),
+      account: accDefault(false), fund: f.id,
+      amount: row && row.toPut > 0 ? row.toPut : '' });
+    return null;
+  };
+
+  /* --------------------------------------------------------------------------
+     «РАЗОБРАТЬ»: ЧТО ЗНАЧИТ «НЕ РАСПИСАНО ИЗ ЯЩИКА»
+
+     Это самая непонятная строка в программе, и объяснять её надо словами,
+     а не отправлять человека в журнал разбираться самому.
+
+     Суть простая. При сверке смены кассир пишет одной строкой, сколько всего
+     вынул из ящика («выплаты из ящика»). Сумма известна, а на ЧТО ушли эти
+     деньги — нет. Пока не расписано, в отчёте о прибыли их не видно:
+     программа не знает, товар это был, зарплата или аренда.
+
+     Окно показывает, сколько не расписано по дням, и даёт кнопки — каждая
+     открывает нужную форму с уже подставленной датой.
+     -------------------------------------------------------------------------- */
+  /* Кнопки быстрого ввода. Экран перерисовываем целиком: на нём нет полей,
+     которые можно потерять, — только набранная сумма, а она в FAST_SUM. */
+  A['fast-key'] = function (el) {
+    var k = el.dataset.key;
+    if (k === 'C') FAST_SUM = '';
+    else if (k === '⌫') FAST_SUM = FAST_SUM.slice(0, -1);
+    else if (k === '00') FAST_SUM = FAST_SUM ? FAST_SUM + '00' : '';
+    else FAST_SUM = (FAST_SUM + k).replace(/^0+(?=\d)/, '');
+    if (FAST_SUM.length > 9) FAST_SUM = FAST_SUM.slice(0, 9);
+    return null;      // перерисовку делает общий обработчик нажатий
+  };
+
+  A['fast-add'] = function (el) {
+    var было = num(window.WMNum.calc(FAST_SUM) || 0);
+    FAST_SUM = String(было + num(el.dataset.add));
+    return null;
+  };
+
+  /* Нажали статью — запись готова. Дата сегодняшняя, счёт по памяти о том,
+     чем платили по этой статье в прошлый раз, конверт по названию статьи. */
+  A['fast-cat'] = function (el) {
+    var cat = decodeURIComponent(el.dataset.cat || '');
+    var сумма = E.safeRound(num(window.WMNum.calc(FAST_SUM) || 0));
+    if (!сумма) return 'Сначала наберите сумму.';
+    if (!cat) return 'Не понял статью.';
+
+    var не = E.notACost(cat);
+    if (не) {
+      return 'Это не расход магазина. ' + (не.why || '') +
+        ' Запишите через «Итоги дня» или «Перевод».';
+    }
+    var lock = S.lockedWhy('dds', { date: today() });
+    if (lock) return lock;
+
+    var acc = accForCategory(cat, false);
+    var rec = { type: E.T_OUT, date: today(), category: cat, method: 'Наличные',
+      account: acc, amount: сумма, fund: fundForCategory(cat) };
+    S.add('dds', rec);
+    S.save();
+    FAST_SUM = '';
+    refresh();
+
+    /* Сразу говорим, куда легло, и даём поправить: быстрый ввод хорош тем,
+       что ошибка исправляется так же быстро, как делается.
+       Возвращаем строку — объект {ok:…} это соглашение форм, не действий. */
+    return E.catLabel(cat) + ' — ' + money(сумма) + ', счёт «' +
+      (accName(acc) || '—') + '», сегодня. Ошиблись — поправьте в списке ниже.';
+  };
+
+  A['payout-help'] = function () {
+    var u = U();
+    var sel = { rows: dds() };
+    var chk = E.tillPayoutCheck(dds(), null,
+      { payouts: S.state.payouts || [], accounts: accounts() });
+    var дни = (chk.rows || []).filter(function (r) { return r.left > 0.5; })
+      .sort(function (a, b) { return b.date < a.date ? -1 : 1; });
+    var день = дни.length ? дни[0].date : today();
+
+    var h = '<div class="card-pad">' +
+      '<p><b>Что это значит.</b> При сверке смены вы написали, сколько всего вынули ' +
+      'из денежного ящика — это поле «Выплаты из ящика». Сумма известна, а на что ' +
+      'именно ушли эти деньги — нет. Пока не расписано, в отчёте о прибыли их не видно: ' +
+      'программа не знает, товар это был, зарплата или аренда.</p>' +
+      '<p><b>Что сделать.</b> Вспомните, на что уходили деньги из ящика, и запишите ' +
+      'каждую трату своей кнопкой. Сумма «не расписано» будет уменьшаться, пока не ' +
+      'дойдёт до нуля.</p></div>';
+
+    h += '<div class="nav-group">Куда обычно уходят деньги</div>';
+    h += '<div class="list">' +
+      u.listRow({ icon: 'box', title: 'Купили товар за наличные',
+        sub: 'впишите сумму в «Итоги дня» — это не расход, это закуп', tap: true,
+        attrs: ' data-form="dayTotals" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'supplier', title: 'Отдали долг поставщику',
+        sub: 'тоже в «Итоги дня», поле «Погашение долгов»', tap: true,
+        attrs: ' data-form="dayTotals" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'receipt', title: 'Расход магазина',
+        sub: 'аренда, обед, ГСМ, хозтовары — «Расход», счёт «Касса»', tap: true,
+        attrs: ' data-form="moneyOut" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'people', title: 'Выдали зарплату',
+        sub: 'из журнала выплат — тогда она попадёт и в ведомость', tap: true,
+        attrs: ' data-form="payoutRow" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'truck', title: 'Увезли в сейф или банк',
+        sub: 'это перевод, а не трата — прибыль он не меняет', tap: true,
+        attrs: ' data-form="moveCash" data-pre-date="' + esc(день) + '"' }) +
+      u.listRow({ icon: 'wallet', title: 'Владелец взял себе',
+        sub: 'не расход магазина, но записать надо', tap: true,
+        attrs: ' data-form="moneyDraw" data-pre-date="' + esc(день) + '"' }) +
+      '</div>';
+
+    if (дни.length) {
+      h += '<div class="nav-group">По каким дням не сходится</div>';
+      h += u.table('payoutDays', [
+        { title: 'День', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Вынули из ящика', cls: 'num', fn: function (r) { return u.priv(r.payouts); } },
+        { title: 'Уже расписано', cls: 'num', fn: function (r) { return u.priv(r.explained); } },
+        { title: 'Не расписано', cls: 'num', fn: function (r) {
+          return '<b class="c-orange">' + u.priv(r.left) + '</b>'; } }
+      ], дни, { step: 12, empty: 'Всё расписано' });
+    }
+
+    h += '<div class="card-pad"><div class="form-hint">Если вспомнить не удаётся — ' +
+      'не страшно. Проверьте, не завышены ли «выплаты из ящика» в той смене: ' +
+      'бывает, что кассир написал больше, чем брал. Открыть смену можно в «Базе операций».' +
+      '</div><button class="btn" data-go="ledger">Открыть базу операций</button></div>';
+
+    u.sheet('Не расписано ' + money(chk.left) + ' из ящика', h);
+    return null;
+  };
+
+  A['plan-paid'] = function (el) {
+    var p = (S.state.plans || []).filter(function (x) { return x.id === el.dataset.id; })[0];
+    if (!p) return 'Выплата не найдена.';
+    p.status = 'Оплачена';
+    p.paidAt = today();
+    var next = makeNext(p);
+    S.save(); refresh(); U().render();
+    var day = dds().filter(function (r) { return E.isDay(r) && r.date === today(); })[0];
+    if (day) {
+      return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '.' + next + ' ' +
+        'Не забудьте добавить эту сумму в «Погашение долгов ТП» за сегодня: ' +
+        'сейчас там ' + money(day.debtPaid) + '.';
+    }
+    U().openForm('dayTotals', { date: today(), debtPaid: num(p.amount) });
+    return 'Отмечено: ' + p.supplier + ' — ' + money(p.amount) + '.' + next + ' ' +
+      'Вписал сумму в итоги дня — проверьте и сохраните.';
+  };
+
+  window.WM_EXTRA_CHANGE = function (el) {
+    if (el.id === 'repMonth') { S.setSetting('reportMonth', el.value); return true; }
+    return false;
+  };
+
+  /* ==========================================================================
+     РЕГИСТРАЦИЯ ЭКРАНОВ
+     ========================================================================== */
+  /* Выбрали статью — счёт подставляется сам, тот же, с которого платили по ней
+     в прошлый раз. Нельзя перебивать владельца: если он уже трогал поле счёта
+     руками, его выбор остаётся. Перерисовывать всю форму ради этого тоже
+     нельзя — набранное пропало бы. */
+  (function () {
+    function refit(el) {
+      if (!el || !el.name || !el.closest) return;
+      var box = el.closest('.sheet');
+      if (!box) return;
+      var acc = box.querySelector('select[name="account"]');
+      if (!acc) return;
+      if (el.name === 'account') { acc.dataset.touched = '1'; return; }
+      if (el.name === 'fund') { el.dataset.touched = '1'; return; }
+      if (el.name !== 'category' && el.name !== 'method') return;
+      if (acc.dataset.touched === '1') return;
+      var cat = box.querySelector('[name="category"]');
+      var met = box.querySelector('[name="method"]');
+      var cashless = met ? E.norm(met.value) !== 'наличные' : false;
+      var want = accForCategory(cat ? cat.value : '', cashless);
+      if (want && acc.value !== want) acc.value = want;
+      // и конверт: «Аренда» → конверт «Аренда»
+      var fnd = box.querySelector('select[name="fund"]');
+      if (fnd && fnd.dataset.touched !== '1' && cat) {
+        var wf = fundForCategory(cat.value);
+        if (wf && fnd.value !== wf) fnd.value = wf;
+      }
+    }
+    document.addEventListener('change', function (e) { refit(e.target); });
+    document.addEventListener('input', function (e) { refit(e.target); });
+  })();
+
+  /* --------------------------------------------------------------------------
+     НАКОПЛЕНИЯ
+
+     Экран отвечает на один вопрос: хватит ли денег, когда придёт счёт.
+     Сверху — сколько отложено всего, сколько ещё надо отложить в этом месяце
+     и не съедает ли закуп больше положенного.
+     -------------------------------------------------------------------------- */
+  function viewFunds() {
+    var u = U(), m = U().month ? U().month() : E.ymOf(today());
+    var ft = E.fundTotals(funds(), dds(), null, m);
+    var pc = E.purchaseCheck(dds(), S.settings, m);
+    var t = ft.totals;
+
+    var h = u.pageHead('Накопления', 'Чтобы в конце месяца было чем платить',
+      '<button class="btn btn-primary" data-form="moveCash">' + ic('truck') +
+      ' Отложить</button> <button class="btn" data-form="fundCard">' + ic('plus') +
+      ' Новый конверт</button>');
+
+    h += '<div class="stat-grid">' +
+      u.stat('Отложено сейчас', u.priv(t.left), 'лежит в конвертах') +
+      u.stat('Надо отложить в этом месяце', u.priv(t.short),
+        t.short > 0 ? 'ещё не отложено' : 'план выполнен',
+        t.short > 0 ? 'c-orange' : 'c-green') +
+      u.stat('План на месяц', u.priv(t.plan), 'по всем конвертам') +
+      '</div>';
+
+    /* Закуп — главный пожиратель выручки. Если он выходит за рамки,
+       откладывать будет не из чего, и это надо видеть заранее. */
+    if (pc.revenue) {
+      var bad = !pc.ok;
+      h += '<div class="banner ' + (bad ? 'orange' : 'green') + '"><span>' +
+        ic(bad ? 'warning' : 'check') + '</span><span>' +
+        'На товар ушло <b>' + esc(money(pc.purchase)) + '</b> — это ' +
+        esc(u.pct(pc.sharePct)) + ' выручки. ' +
+        (bad
+          ? 'Больше вашей планки в ' + esc(u.pct(pc.limitPct)) + ' на <b>' +
+            esc(money(pc.over)) + '</b>. Столько же не хватит на аренду, зарплату и налоги — ' +
+            'закупайте осторожнее или поднимайте наценку.'
+          : 'Ваша планка — ' + esc(u.pct(pc.limitPct)) + ', до неё ещё ' +
+            esc(money(pc.room)) + '. Планка меняется в настройках.') +
+        '</span></div>';
+    }
+
+    if (!ft.rows.length) {
+      return h + u.blank({ icon: 'safe', title: 'Конвертов пока нет',
+        why: 'Конверт — это цель, под которую откладывают заранее: аренда, зарплата, ' +
+          'налоги. Заведите первый, впишите, сколько откладывать в месяц, — ' +
+          'и программа будет следить, чтобы к сроку деньги были.',
+        actions: [{ name: 'Завести конверт', icon: 'plus', form: 'fundCard' }] });
+    }
+
+    h += u.card('Конверты', u.table('fundsT', [
+      { title: 'На что', fn: function (r) { return esc(r.name) +
+        (r.note ? '<br><small class="c-muted">' + esc(r.note) + '</small>' : ''); } },
+      { title: 'План в месяц', cls: 'num', fn: function (r) {
+        return r.plan ? u.priv(r.plan) : '<span class="c-muted">не задан</span>'; } },
+      { title: 'Отложено в этом месяце', cls: 'num', fn: function (r) {
+        return u.priv(r.putThisMonth) + (r.plan
+          ? ' <small class="c-muted">' + u.pct(r.donePct) + '</small>' : ''); } },
+      { title: 'Ещё отложить', cls: 'num', fn: function (r) {
+        return r.toPut > 0 ? '<b class="c-orange">' + u.priv(r.toPut) + '</b>'
+          : '<span class="c-green">хватает</span>'; } },
+      { title: 'Лежит в конверте', cls: 'num', fn: function (r) {
+        return '<b>' + u.priv(r.left) + '</b>'; } },
+      { title: 'Потрачено', cls: 'num', fn: function (r) {
+        return r.spent ? u.priv(r.spent) : '—'; } },
+      { title: '', cls: 'center', fn: function (r) {
+        return '<button class="btn btn-sm" data-edit="funds:' + esc(r.id) + ':fundCard">' +
+          ic('edit', 16) + '</button> ' +
+          '<button class="btn btn-sm" data-act="fund-put" data-id="' + esc(r.id) +
+          '">Отложить</button>'; } }
+    ], ft.rows, { step: 30, empty: 'Конвертов нет',
+      total: [{ html: 'Всего' },
+        { cls: 'num', html: u.priv(t.plan) },
+        { cls: 'num', html: u.priv(t.putThisMonth) },
+        { cls: 'num', html: t.short ? '<b class="c-orange">' + u.priv(t.short) + '</b>' : '—' },
+        { cls: 'num', html: '<b>' + u.priv(t.left) + '</b>' },
+        { cls: 'num', html: u.priv(t.spent) }, { html: '' }] }),
+      'Деньги в конвертах лежат на настоящих счетах — конверт лишь помечает, что они заняты');
+
+    /* Бюджеты. Отдельная карточка, потому что это про другое: конверт копит
+       деньги, бюджет ставит потолок трате. Смешать их — запутать владельца. */
+    var bt = E.budgetTotals(budgets(), dds(), m);
+    var bh = '';
+    if (bt.rows.length) {
+      bh = u.table('budgetsT', [
+        { title: 'Статья', fn: function (r) { return esc(r.label); } },
+        { title: 'Лимит на месяц', cls: 'num', fn: function (r) { return u.priv(r.limit); } },
+        { title: 'Потрачено', cls: 'num', fn: function (r) {
+          return u.priv(r.spent) + ' <small class="c-muted">' + u.pct(r.pct) + '</small>'; } },
+        { title: 'Осталось', cls: 'num', fn: function (r) {
+          return r.over
+            ? '<b class="c-red">перебор ' + u.priv(r.over) + '</b>'
+            : '<b class="c-green">' + u.priv(r.left) + '</b>'; } },
+        { title: '', cls: 'center', fn: function (r) {
+          return '<button class="btn btn-sm" data-edit="budgets:' + esc(r.id) + ':budgetCard">' +
+            ic('edit', 16) + '</button>'; } }
+      ], bt.rows, { step: 30, empty: 'Лимитов нет',
+        total: [{ html: 'Всего' }, { cls: 'num', html: u.priv(bt.totals.limit) },
+          { cls: 'num', html: u.priv(bt.totals.spent) },
+          { cls: 'num', html: bt.totals.over
+            ? '<b class="c-red">перебор ' + u.priv(bt.totals.over) + '</b>'
+            : '<b class="c-green">' + u.priv(bt.totals.left) + '</b>' }, { html: '' }] });
+    } else {
+      bh = '<div class="empty"><b>Лимитов пока нет</b><br>' +
+        'Бюджет — это потолок траты по статье: «на обеды не больше 10 000 в месяц». ' +
+        'Деньги он не двигает, просто предупреждает, когда разогналось.</div>';
+    }
+    h += u.card('Лимиты на месяц', bh +
+      '<div class="card-pad"><button class="btn btn-primary" data-form="budgetCard">' +
+      ic('plus') + ' Поставить лимит</button></div>',
+      bt.totals.overCount
+        ? '<span class="c-red">перебор по ' + bt.totals.overCount + ' статьям</span>'
+        : 'Конверт копит деньги, бюджет ставит потолок трате');
+
+    h += '<div class="banner blue"><span>' + ic('info') + '</span><span>' +
+      'Конверт не создаёт новых денег и не меняет прибыль: он помечает переводы и расходы, ' +
+      'которые и так есть. «Отложить» — это обычный перевод, например из кассы в сейф, ' +
+      'с пометкой конверта. Заплатили аренду и отметили тот же конверт — он уменьшился.' +
+      '</span></div>';
+    return h;
+  }
+
+  function budgets() { return S.state.budgets || []; }
+
+  FORMS.budgetCard = {
+    title: 'Лимит на статью', icon: 'scale',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('На какую статью', 'category', 'list', v.category || '',
+        { options: categories(), placeholder: 'Обед, ГСМ, Расходники',
+          hint: 'если поставить на группу («Коммунальные»), засчитаются и подстатьи' }) +
+        u.fieldRow('Не больше, в месяц', 'limit', 'number', v.limit || '') +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Бюджет денег не двигает — он только следит, чтобы трата по статье ' +
+      'не разогналась. Копить деньги заранее — это конверты, они выше.',
+    save: function (v) {
+      if (!E.txt(v.category)) return 'Выберите статью, на которую ставим лимит.';
+      var bad = Q.checkAmount(v.limit); if (bad) return 'Лимит: ' + bad;
+      var ed = U().editing();
+      var same = budgets().filter(function (b) {
+        return E.norm(b.category) === E.norm(v.category) && (!ed || b.id !== ed.id);
+      })[0];
+      if (same) return 'Лимит на «' + E.catLabel(same.category) + '» уже стоит — поправьте его.';
+      var rec = { category: E.txt(v.category), limit: num(v.limit), note: E.txt(v.note) };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('budgets', rec);
+      S.save(); refresh();
+      return { ok: 'Лимит на «' + E.catLabel(rec.category) + '»: ' + money(rec.limit) + ' в месяц.' };
+    }
+  };
+
+  FORMS.fundCard = {
+    title: 'Конверт', icon: 'safe',
+    editsInPlace: true,
+    body: function (v) {
+      var u = U(); v = v || {};
+      return u.fieldRow('На что откладываем', 'name', 'text', v.name || '',
+        { placeholder: 'Аренда, Зарплата, Налоги, На ремонт' }) +
+        u.fieldRow('Сколько в месяц', 'plan', 'number', v.plan || '',
+          { hint: 'сколько надо откладывать каждый месяц; 0 — если просто копите' }) +
+        u.fieldRow('Где лежат деньги', 'account', 'select', v.account || accDefault(false),
+          { options: accOptions(),
+            hint: 'настоящий счёт, обычно сейф или расчётный счёт' }) +
+        u.fieldRow('Заметка', 'note', 'text', v.note || '');
+    },
+    hint: 'Конверт — это цель, а не отдельный кошелёк. Деньги лежат на обычном счёте, ' +
+      'а конверт показывает, сколько из них уже занято под аренду или зарплату.',
+    save: function (v) {
+      if (!E.txt(v.name)) return 'Впишите, на что откладываете.';
+      var bad = Q.checkAmount(v.plan, { allowEmpty: true, allowZero: true });
+      if (bad) return 'Сколько в месяц: ' + bad;
+      var ed = U().editing();
+      var same = funds().filter(function (f) {
+        return E.norm(f.name) === E.norm(v.name) && (!ed || f.id !== ed.id);
+      })[0];
+      if (same) return 'Конверт «' + same.name + '» уже есть.';
+      var rec = { name: E.txt(v.name), plan: num(v.plan),
+        account: E.txt(v.account), note: E.txt(v.note) };
+      if (ed) S.update(ed.coll, ed.id, rec); else S.add('funds', rec);
+      S.save(); refresh();
+      return { ok: 'Конверт «' + rec.name + '» сохранён.' };
+    }
+  };
+
+  /* ==========================================================================
+     БЫСТРЫЙ ВВОД: СУММА → СТАТЬЯ → ГОТОВО
+
+     Обычная форма расхода — шесть полей, и это правильно, когда запись
+     непростая. Но девять расходов из десяти в магазине одинаковые: обед,
+     хозтовары, ГСМ. Ради них открывать форму и заполнять шесть полей —
+     слишком долго, и владелец просто перестаёт записывать.
+
+     Здесь три касания: набрал сумму, ткнул статью — записано. Всё остальное
+     программа подставляет сама: дата сегодняшняя, счёт — тот, с которого
+     платили по этой статье в прошлый раз, конверт — по названию статьи.
+
+     Статьи показываем те, которыми пользуются чаще всего: программа считает
+     их по вашим же записям, а не по списку из справочника.
+     ========================================================================== */
+  var FAST_SUM = '';
+
+  // Чем чаще статьёй пользуются, тем выше она стоит
+  function topCategories(n) {
+    var by = {};
+    dds().forEach(function (r) {
+      if (!E.isExpense(r)) return;
+      var c = E.txt(r.category);
+      if (!c || E.notACost(c)) return;
+      by[c] = (by[c] || 0) + 1;
+    });
+    var list = Object.keys(by).sort(function (a, b) { return by[b] - by[a]; });
+    // Добавим справочные статьи, если своих записей ещё мало
+    categories().forEach(function (c) {
+      if (list.indexOf(c) < 0 && !E.notACost(c)) list.push(c);
+    });
+    return list.slice(0, n || 12);
+  }
+
+  function viewFast() {
+    var u = U();
+    var сумма = FAST_SUM;
+    var число = сумма ? num(window.WMNum.calc(сумма) || 0) : 0;
+
+    var h = u.pageHead('Быстрый ввод', 'Сумма, статья — и записано',
+      '<button class="btn" data-form="moneyOut">' + ic('receipt') + ' Обычная форма</button>');
+
+    h += '<div class="fast-sum' + (число ? '' : ' empty') + '">' +
+      (число ? esc(money(число)) : '0 ₽') + '</div>';
+    if (число) {
+      var acc = accounts().filter(function (a) { return a.id === accForCategory('', false); })[0];
+      h += '<div class="fast-note">Спишется со счёта «' +
+        esc(acc ? acc.name : 'по умолчанию') + '» сегодняшним числом. ' +
+        'Счёт подставится точнее, когда выберете статью.</div>';
+    } else {
+      h += '<div class="fast-note">Наберите сумму и нажмите статью — запись готова.</div>';
+    }
+
+    h += '<div class="fast-pad">';
+    ['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', '⌫'].forEach(function (k) {
+      h += '<button class="fast-key' + (k === '⌫' ? ' wide-del' : '') +
+        '" data-act="fast-key" data-key="' + esc(k) + '">' + esc(k) + '</button>';
+    });
+    h += '</div>';
+
+    h += '<div class="quick fast-quick">' +
+      [100, 500, 1000, 5000].map(function (q) {
+        return '<button class="btn" data-act="fast-add" data-add="' + q + '">+' +
+          E.fmtNum(q) + '</button>';
+      }).join('') +
+      (число ? ' <button class="btn" data-act="fast-key" data-key="C">Стереть</button>' : '') +
+      '</div>';
+
+    var cats = topCategories(12);
+    h += u.card('На что потратили', '<div class="fast-cats">' +
+      cats.map(function (c) {
+        return '<button class="btn fast-cat' + (число ? ' btn-primary' : '') +
+          '" data-act="fast-cat" data-cat="' + encodeURIComponent(c) + '"' +
+          (число ? '' : ' disabled') + '>' +
+          esc(E.catLabel(c)) + '</button>';
+      }).join('') + '</div>',
+      число ? 'Нажмите статью — запись сохранится' : 'Сначала наберите сумму');
+
+    var сегодня = dds().filter(function (r) {
+      return E.isExpense(r) && E.txt(r.date) === today();
+    });
+    if (сегодня.length) {
+      h += u.card('Записано сегодня', u.table('fastToday', [
+        { title: 'Статья', fn: function (r) { return esc(E.catLabel(r.category)); } },
+        { title: 'Счёт', fn: function (r) { return esc(accName(r.account) || '—'); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r.amount); } },
+        { title: '', cls: 'center', fn: function (r) {
+          return u.rowMenu('dds', r.id, { form: 'moneyOut' }); } }
+      ], сегодня.slice().reverse(), { step: 20, empty: '' }),
+        'Ошиблись — поправьте здесь же');
+    }
+    return h;
+  }
+
+  function drawCashiers() {
+    var u = U(), rating = E.cashierRating(pick().rows);
+    if (rating.length < 2) return;
+    var список = rating.slice().sort(function (a, b) { return b.per1000 - a.per1000; }).slice(0, 12);
+    u.chart('cashierBars', 'bar', {
+      легенда: false,
+      data: {
+        labels: список.map(function (r) { return r.name; }),
+        datasets: [{
+          label: 'Недостача на 1000 ₽',
+          data: список.map(function (r) { return r.per1000; }),
+          backgroundColor: список.map(function (r) {
+            return r.per1000 > 0 ? u.тема('--red') : u.тема('--green');
+          }),
+          borderRadius: 3, maxBarThickness: 40
+        }]
+      }
+    });
+  }
+
+  var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
+  VIEWS.push(
+    { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },
+    { id: 'morning', icon: 'calculator', name: 'Утро: сверка кассы', group: 'Каждый день', render: viewMorning },
+    { id: 'evening', icon: 'moon', name: 'Вечер: итоги дня', group: 'Каждый день', render: viewEvening },
+    { id: 'finpay', icon: 'calendar', name: 'План выплат', group: 'Каждый день', render: viewPlans },
+    { id: 'ledger', icon: 'list', name: 'База операций', group: 'Деньги', render: viewLedger },
+    { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers, onDraw: drawCashiers },
+    { id: 'debtors', icon: 'notebook', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
+    { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport },
+    { id: 'funds', icon: 'safe', name: 'Накопления', group: 'Деньги', render: viewFunds },
+    { id: 'fast', icon: 'plus', name: 'Быстрый ввод', group: 'Каждый день', render: viewFast }
+  );
+})();
