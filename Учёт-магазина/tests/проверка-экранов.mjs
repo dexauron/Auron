@@ -4842,6 +4842,117 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 33. Сортировка по щелчку на заголовок — как в 1С и МойСклад.
+
+       Владелец работает в 1С и знает МойСклад, и попросил дизайн в их духе.
+       Главное, что там есть и чего у нас не было: нажал на «Сумма» — увидел,
+       где больше всего денег. Сортировка живёт в помощнике table(), поэтому
+       работает сразу во всех таблицах программы.
+
+       Сортировка — то место, где ошибка выглядит как работающая программа:
+       стрелка в заголовке честно показывает «по возрастанию», а порядок не
+       меняется. Поэтому проверяем не стрелку, а сам порядок строк. */
+{
+  console.log('— Сортировка таблиц по заголовку');
+  const { page, ctx, errs } = await open();
+
+  /* Записи в РАЗНЫХ месяцах и с разными суммами. Разные месяцы тут не для
+     красоты: именно на них ломались обе ошибки, которые нашлись по дороге:
+     дата как номер дня и дата как число 2026. */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    [['2026-09-02', 100], ['2026-10-01', 200], ['2026-08-19', 300],
+     ['2026-10-10', 400], ['2026-09-20', 500]].forEach(([d, a]) => {
+      S.add('dds', { type: 'Расход', date: d, category: 'Аренда',
+        method: 'Наличные', amount: a });
+    });
+    S.save(); window.WMUI.recompute(); window.WMUI.go('ledger');
+  });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const sel = document.getElementById('periodSel');
+    if (sel) { sel.value = 'all'; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+  });
+  await page.waitForTimeout(500);
+
+  const шапка = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('table.data th')).map(t => t.innerText.trim()));
+  const iДата = шапка.findIndex(t => /^Дата/.test(t));
+  const iСумма = шапка.findIndex(t => /^Сумма/.test(t));
+  check('в таблице есть столбцы «Дата» и «Сумма»', iДата >= 0 && iСумма >= 0,
+    шапка.join(' | '), 'есть');
+
+  async function столбец(n) {
+    return page.evaluate(i => Array.from(
+      document.querySelectorAll('table.data tbody tr'))
+      .map(r => r.children[i] ? r.children[i].innerText.trim() : '')
+      .filter(x => x && x !== '—'), n);
+  }
+  async function нажать(n) {
+    await page.evaluate(i => document.querySelectorAll('table.data th')[i].click(), n);
+    await page.waitForTimeout(350);
+  }
+
+  const порядокДо = await столбец(iДата);
+
+  await нажать(iДата);
+  const датыВверх = await столбец(iДата);
+  check('ДАТА СОРТИРУЕТСЯ ПО НАСТОЯЩЕЙ ДАТЕ, А НЕ ПО НОМЕРУ ДНЯ',
+    датыВверх.join(' · ') === '19 авг · 2 сен · 20 сен · 1 окт · 10 окт',
+    датыВверх.join(' · '), '19 авг · 2 сен · 20 сен · 1 окт · 10 окт');
+  check('и в заголовке видно, в какую сторону',
+    /↑/.test(await page.evaluate(i => document.querySelectorAll('table.data th')[i].innerText, iДата)),
+    'стрелка есть', 'стрелка есть');
+
+  await нажать(iДата);
+  const датыВниз = await столбец(iДата);
+  check('ВТОРОЕ НАЖАТИЕ — В ОБРАТНУЮ СТОРОНУ',
+    датыВниз.join(' · ') === датыВверх.slice().reverse().join(' · '),
+    датыВниз.join(' · '), 'задом наперёд');
+
+  /* Третье нажатие обязано вернуть порядок, в котором строки пришли. Без
+     него из сортировки не выбраться, а исходный порядок — обычно по дате
+     записи — тоже нужен. */
+  await нажать(iДата);
+  const датыНазад = await столбец(iДата);
+  const стрелкаУшла = await page.evaluate(i =>
+    !/[↑↓]/.test(document.querySelectorAll('table.data th')[i].innerText), iДата);
+  /* Порядок строк тут проверять мало: в этой таблице записи и так лежат от
+     новых к старым, и «вернулось как было» совпадает с «осталось по
+     убыванию». Поэтому требуем ещё, чтобы стрелка из заголовка пропала —
+     то есть сортировка действительно снялась, а не просто не изменилась. */
+  check('ТРЕТЬЕ НАЖАТИЕ СНИМАЕТ СОРТИРОВКУ',
+    стрелкаУшла && датыНазад.join(' · ') === порядокДо.join(' · '),
+    (стрелкаУшла ? 'стрелки нет' : 'стрелка осталась') + ', ' + датыНазад.join(' · '),
+    'без стрелки, ' + порядокДо.join(' · '));
+
+  await нажать(iСумма);
+  const суммыВверх = await столбец(iСумма);
+  const числа = суммыВверх.map(x => +x.replace(/[^\d]/g, ''));
+  const порознь = числа.slice().sort((a, b) => a - b);
+  check('СУММА СОРТИРУЕТСЯ КАК ЧИСЛО, А НЕ КАК СЛОВО',
+    числа.join(',') === порознь.join(','), суммыВверх.slice(0, 6).join(' · '),
+    'по возрастанию');
+
+  /* «1 000» как слово меньше, чем «200»: если бы сортировали текстом,
+     тысяча оказалась бы в начале. Проверяем именно этим числом. */
+  await page.evaluate(() => {
+    const S = window.WMStore;
+    S.add('dds', { type: 'Расход', date: '2026-09-05', category: 'Аренда',
+      method: 'Наличные', amount: 1000 });
+    S.save(); window.WMUI.recompute(); window.WMUI.render();
+  });
+  await page.waitForTimeout(400);
+  const сТысячей = await столбец(iСумма);
+  check('И ТЫСЯЧА НЕ ОКАЗЫВАЕТСЯ МЕНЬШЕ ДВУХСОТ',
+    сТысячей[сТысячей.length - 1].replace(/[^\d]/g, '') === '1000',
+    сТысячей.join(' · '), 'тысяча последняя');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

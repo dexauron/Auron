@@ -85,6 +85,7 @@
   var VIEW = 'today';
   var PERIOD = 'month';
   var PAGE = {};              // сколько строк показано в таблицах
+  var SORT = {};              // по какому столбцу и в какую сторону отсортировано
   var SEARCH_T = null;        // пауза перед поиском, пока владелец печатает
   var EXPORT_ALL = false;     // на время выгрузки в Excel показываем таблицы целиком
   var TAB = {};               // выбранные вкладки внутри экранов
@@ -553,11 +554,119 @@
      столбцов на экран шириной 39 мм всё равно не помещаются, а крутить
      таблицу вбок и гадать, чья это цифра, — мучение. Название столбца
      кладём в data-подпись каждой ячейки, дальше всё делает разметка. */
+  /* --- СОРТИРОВКА ПО ЩЕЛЧКУ НА ЗАГОЛОВОК ---------------------------------
+     Так устроены 1С и МойСклад, и владелец привык именно к этому: нажал на
+     «Сумма» — увидел, где больше всего денег; нажал ещё раз — где меньше
+     всего. Без этого приходится глазами искать по всей таблице.
+
+     Сортировка живёт в помощнике table(), поэтому заработала сразу во всех
+     59 таблицах программы, а не в той, до которой дошли руки.
+
+     ПО ЧЕМУ СОРТИРУЕМ. Столбец может отдавать готовую разметку — «1 234 ₽»
+     жирным, значок, ссылку. Поэтому значение берём по порядку: если столбец
+     сказал, как сравнивать (sort), — по нему; если знает своё поле (key) —
+     по полю; иначе вынимаем из разметки текст. Текст разбираем как дату,
+     потом как число, и только потом сравниваем как слова. */
+  function безРазметки(v) {
+    return String(v == null ? '' : v).replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/g, ' ')
+      .replace(/[\u00a0\u202f]/g, ' ').trim();
+  }
+
+  var МЕС_СОРТ = { 'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04', 'мая': '05', 'май': '05',
+    'июн': '06', 'июл': '07', 'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12' };
+
+  function сортЗначение(c, r, i) {
+    if (c.sort) return c.sort(r, i);
+    if (c.key != null && r[c.key] != null) return r[c.key];
+    var t = безРазметки(c.fn ? c.fn(r, i) : '');
+    /* Дата, напечатанная по-русски: «1 сен», «19 сен». Как число это номер
+       дня, и «1 окт» встало бы раньше «2 сен»; как слово — «10» раньше «2».
+       Поэтому за такой надписью берём настоящую дату записи, а если её нет,
+       собираем «ММ-ДД» из названия месяца. */
+    var d = /^(\d{1,2})\s+([а-яё]{3})/i.exec(t);
+    if (d && МЕС_СОРТ[d[2].toLowerCase()]) {
+      if (r && r.date) return r.date;
+      return МЕС_СОРТ[d[2].toLowerCase()] + '-' + ('0' + d[1]).slice(-2);
+    }
+    return t;
+  }
+
+  /* Дату 19.09.2026 нельзя сравнивать как число (получится 19) и как слово
+     (тогда 02.12 окажется раньше 19.09 любого года). Переводим в вид,
+     который правильно сравнивается по алфавиту. */
+  function какДата(t) {
+    var s = String(t == null ? '' : t);
+    // 2026-10-10 — так дата и хранится, и в этом виде она верно сравнивается
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    var m = /^(\d{2})\.(\d{2})\.(\d{4})/.exec(s);
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : null;
+  }
+
+  /* ЧИСЛО — ТОЛЬКО ЕСЛИ ВСЯ СТРОКА ЧИСЛО, а не начинается с цифр.
+
+     Первая версия брала число с начала строки, и «2026-10-10» превращалось
+     в 2026. Все даты становились одинаковыми, сортировка по дате ничего не
+     меняла — а стрелка в заголовке при этом честно показывала «по
+     возрастанию». Ошибка, которая выглядит как работающая программа.
+
+     Поэтому: убираем пробелы, рубль, процент, приводим все виды тире к
+     минусу — и требуем, чтобы дальше не осталось ничего, кроме числа. */
+  function какЧисло(t) {
+    if (typeof t === 'number') return isFinite(t) ? t : null;
+    var s = String(t == null ? '' : t)
+      .replace(/[\u00a0\u202f\s]/g, '')
+      .replace(/[\u2212\u2013\u2014]/g, '-')
+      .replace(/[₽%]/g, '')
+      .replace(',', '.');
+    if (!/^[-+]?\d+(\.\d+)?$/.test(s)) return null;
+    var n = parseFloat(s);
+    return isFinite(n) ? n : null;
+  }
+
+  function сравнить(a, b) {
+    var da = какДата(a), db = какДата(b);
+    if (da && db) return da < db ? -1 : da > db ? 1 : 0;
+    var na = какЧисло(a), nb = какЧисло(b);
+    if (na !== null && nb !== null) return na < nb ? -1 : na > nb ? 1 : 0;
+    return безРазметки(a).localeCompare(безРазметки(b), 'ru');
+  }
+
+  function пусто(v) {
+    var t = безРазметки(v);
+    return !t || t === '—' || t === '-';
+  }
+
+  function отсортировать(id, cols, rows) {
+    var s = SORT[id];
+    if (!s || !cols[s.i]) return rows;
+    var c = cols[s.i];
+    return rows.slice().sort(function (x, y) {
+      var a = сортЗначение(c, x, 0), b = сортЗначение(c, y, 0);
+      /* Пустое всегда внизу, в какую сторону ни сортируй: прочерк — это не
+         «меньше всех», это отсутствие ответа. Поэтому решаем про пустоту
+         ОТДЕЛЬНО, до сравнения, и не умножаем её на направление. */
+      var па = пусто(a), пб = пусто(b);
+      if (па || пб) return па === пб ? 0 : (па ? 1 : -1);
+      return сравнить(a, b) * s.dir;
+    });
+  }
+
   function table(id, cols, rows, opts) {
     opts = opts || {};
     var step = opts.step || 40, limit = EXPORT_ALL ? rows.length : (PAGE[id] || step);
+    if (!opts.nosort) rows = отсортировать(id, cols, rows);
+    var с = SORT[id];
     var h = '<div class="table-wrap"><table class="data"><thead><tr>';
-    cols.forEach(function (c) { h += '<th class="' + (c.cls || '') + '">' + esc(c.title) + '</th>'; });
+    cols.forEach(function (c, i) {
+      var активен = с && с.i === i;
+      var стрелка = активен ? '<span class="th-dir">' + (с.dir > 0 ? '↑' : '↓') + '</span>' : '';
+      var кл = (c.cls || '') + (opts.nosort || !c.title ? '' : ' th-sort') + (активен ? ' th-on' : '');
+      h += '<th class="' + кл.trim() + '"' +
+        (opts.nosort || !c.title ? '' :
+          ' data-act="sort" data-id="' + esc(id) + '" data-col="' + i + '" tabindex="0"') +
+        '>' + esc(c.title) + стрелка + '</th>';
+    });
     h += '</tr></thead><tbody>';
     if (!rows.length) h += '<tr class="plain"><td colspan="' + cols.length + '"><div class="empty">' + (opts.empty || 'Пока пусто') + '</div></td></tr>';
     rows.slice(0, limit).forEach(function (r, i) {
@@ -580,8 +689,10 @@
       h += '</tr>';
     }
     if (rows.length > limit) {
-      h += '<tr class="plain"><td colspan="' + cols.length + '"><div class="more"><button class="btn btn-sm" data-act="more" data-id="' +
-        esc(id) + '" data-step="' + step + '">Показать ещё (' + nf(rows.length - limit) + ')</button></div></td></tr>';
+      h += '<tr class="plain"><td colspan="' + cols.length + '"><div class="more">' +
+        '<span class="more-of">Показано ' + nf(limit) + ' из ' + nf(rows.length) + '</span>' +
+        '<button class="btn btn-sm" data-act="more" data-id="' +
+        esc(id) + '" data-step="' + step + '">Показать ещё</button></div></td></tr>';
     }
     return h + '</tbody></table></div>';
   }
@@ -3182,6 +3293,18 @@
       else if (a === 'folder-reconnect') reconnectFolder();
       else if (a === 'folder-sync') syncFolder(false);
       else if (a === 'theme-flip') перевернутьТему();
+      else if (a === 'sort') {
+        var тид = el.dataset.id, ткол = +el.dataset.col;
+        var было = SORT[тид];
+        /* Первое нажатие — по возрастанию, второе — по убыванию, третье
+           возвращает порядок, в котором строки пришли. Третье нажатие важно:
+           иначе из «как было» уже не выбраться, а «как было» — это обычно
+           порядок по дате, и он тоже нужен. */
+        if (!было || было.i !== ткол) SORT[тид] = { i: ткол, dir: 1 };
+        else if (было.dir > 0) SORT[тид] = { i: ткол, dir: -1 };
+        else delete SORT[тид];
+        render();
+      }
       else if (a === 'backup2-connect') выбратьПапкуКопий();
       else if (a === 'backup2-now') копияВоВторуюПапку();
       else if (a === 'backup2-forget') {

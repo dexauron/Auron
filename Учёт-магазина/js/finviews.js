@@ -1916,7 +1916,9 @@
       { title: '%', cls: 'num', fn: function (r) {
         return r.pct == null ? '—' : '<span class="' + u.cls(r.pct) + '">' +
           (r.pct > 0 ? '+' : '') + u.pct(r.pct) + '</span>'; } }
-    ], lines, { step: 30 }));
+    /* nosort: порядок строк здесь и есть отчёт — выручка, себестоимость,
+       прибыль. Пересортировать его по алфавиту значит сломать смысл. */
+    ], lines, { step: 30, nosort: true }));
 
     var cats = Object.keys(a.byCategory).map(function (k) {
       return { name: k, sum: a.byCategory[k], prev: b.byCategory[k] || 0 };

@@ -274,7 +274,8 @@ table.data td.num, table.data th.num { text-align: right; white-space: nowrap; }
 table.data td.center, table.data th.center { text-align: center; white-space: nowrap; }
 table.data td.center .btn { vertical-align: middle; }
 tr.total td { background: var(--bg-inset); font-weight: 680; }
-.more { text-align: center; padding: 12px; }
+.more { text-align: center; padding: 12px; display: flex; align-items: center;
+  justify-content: center; gap: 12px; flex-wrap: wrap; }
 
 /* ---------- Значки ---------- */
 .badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill); white-space: nowrap; }
@@ -1677,3 +1678,30 @@ body.huge .btn, body.huge input, body.huge select, body.huge textarea { font-siz
    любой свой цвет будет спорить с фоном. */
 a { color: var(--accent); }
 .banner a, .alert-bar a { color: inherit; text-decoration: underline; }
+
+/* --- ТАБЛИЦЫ КАК В 1С И МОЙСКЛАД -------------------------------------------
+   Владелец работает в 1С и знает МойСклад. Главное, что там есть и чего у
+   нас не было, — это сортировка по щелчку на заголовок и понятная сетка:
+   видно, где кончается один столбец и начинается другой.
+   ------------------------------------------------------------------------- */
+table.data th.th-sort { cursor: pointer; user-select: none; white-space: nowrap; }
+table.data th.th-sort:hover { background: var(--fill); color: var(--label); }
+table.data th.th-on { color: var(--label); }
+.th-dir { margin-left: 4px; font-size: 11px; opacity: .9; }
+
+/* Разделители столбцов. В отчёте из двадцати колонок без них глаз съезжает
+   на соседнюю строку — это главная беда плотных таблиц. Линия еле видна:
+   её задача разделять, а не рисоваться. */
+table.data th + th, table.data td + td {
+  border-left: 1px solid color-mix(in srgb, var(--separator) 55%, transparent);
+}
+
+/* Числа одной ширины: 1 111 и 9 999 должны стоять столбик в столбик,
+   иначе колонка сумм читается как забор. */
+table.data td.num, table.data th.num, .stat-value, .hero-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* «Показано 50 из 696» — как в МойСклад. Без этого не понять, много ли
+   осталось за кнопкой «Показать ещё». */
+.more-of { font-size: 12.5px; color: var(--label-2); }

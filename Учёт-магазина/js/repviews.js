@@ -1039,7 +1039,8 @@
     h += u.card('Сводка за месяц', u.table('rdyT', [
       { title: 'Показатель', fn: function (r) { return esc(r[0]); } },
       { title: 'Сумма', cls: 'num', fn: function (r) { return u.priv(r[1]); } }
-    ], lines, { step: 30 }));
+    // nosort: сводка читается сверху вниз по смыслу, а не по алфавиту
+    ], lines, { step: 30, nosort: true }));
 
     h += u.card('Затраты по статьям', u.table('rdyC', [
       { title: 'Статья', cls: 'drillable',
