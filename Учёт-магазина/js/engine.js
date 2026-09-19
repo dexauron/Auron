@@ -3593,9 +3593,18 @@
         group: st ? st.group : '',
         stock: safeRound(have), demand: demand, lead: lead, rop: rop,
         order: order,
+        /* НА СКОЛЬКО ДНЕЙ ХВАТИТ ТОГО, ЧТО ЛЕЖИТ. Это главное число экрана
+           заказа: по нему решают, ехать за товаром сегодня или можно завтра.
+           Его читал экран («Хватит на»), два фильтра из трёх отбирали по
+           нему — а расчёт его не возвращал вовсе, и в столбце всегда стоял
+           прочерк, а фильтры не находили ничего. */
+        daysLeft: demand > 0 ? safeRound(div(have, demand)) : null,
         price: bp ? bp.price : (st ? st.buyPrice : s.buyPrice),
         supplier: bp ? bp.supplier : '',
+        /* Два имени у одной суммы: sum — как было, orderSum — как её зовёт
+           экран. Переименовать молча нельзя: вдруг на sum кто-то опирается. */
         sum: safeRound(order * (bp ? bp.price : (st ? st.buyPrice : s.buyPrice))),
+        orderSum: safeRound(order * (bp ? bp.price : (st ? st.buyPrice : s.buyPrice))),
         critical: have <= 0
       });
     }
