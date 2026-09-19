@@ -2147,6 +2147,119 @@
      закрывают. Уведомление без кнопки — это просто повод для тревоги, а не
      помощь.
      -------------------------------------------------------------------------- */
+  /* --------------------------------------------------------------------------
+     ПОИСК, КОТОРЫЙ ОТВЕЧАЕТ
+
+     Раньше строка поиска вверху вела в никуда: набираешь — и оказываешься на
+     Пульте, потому что экрана с таким именем в программе не было вовсе.
+
+     Теперь так: сначала программа пробует ОТВЕТИТЬ. «Сколько я должен
+     Молокозаводу» — крупная цифра и строчка под ней. Не поняла вопрос —
+     говорит об этом прямо и показывает, что нашла по этим словам среди
+     записей, товаров и людей.
+
+     Честность важнее удобства: молча показать не то хуже, чем сказать «не
+     понял». Неверному ответу поверят.
+     -------------------------------------------------------------------------- */
+  function viewSearch() {
+    var q = E.txt($('search') ? $('search').value : '').trim();
+    var h = pageHead('Поиск', q ? 'Что нашлось по запросу «' + esc(q) + '»' : 'Спросите про деньги');
+
+    if (q.length < 2) {
+      /* Пустой экран поиска — не тупик, а подсказка. Примеры не просто
+         написаны, а нажимаются: владелец видит, КАК спрашивать, нажимает и
+         сразу получает ответ на своих данных. Прочитать «спросите словами»
+         и придумать вопрос самому — лишняя работа. */
+      var примеры = ['сколько в сейфе', 'расходы за этот месяц',
+        'выручка за этот месяц', 'сколько должен поставщикам', 'недостачи'];
+      return h + card('Спросите словами',
+        '<div class="card-pad"><div class="ask-why">Нажмите пример или наберите свой ' +
+        'вопрос в строке поиска вверху. Программа посчитает по вашим записям и ' +
+        'ответит строкой, а не отправит искать глазами.</div>' +
+        '<div class="row-btns">' + примеры.map(function (p2) {
+          return '<button class="btn" data-act="ask-example" data-q="' + esc(p2) + '">' +
+            ic('search', 16) + ' ' + esc(p2) + '</button>';
+        }).join('') + '</div></div>');
+    }
+
+    var A = window.WMAsk;
+    var о = A ? A.спросить(q, S, E, Q) : { есть: false };
+
+    if (о.есть) {
+      /* Ответ — крупной цифрой: за ним и пришли. Под ним подпись, откуда
+         число взялось, и кнопка на экран с подробностями. */
+      h += '<div class="ask">' +
+        '<div class="ask-q">' + esc(о.заголовок) + '</div>' +
+        (о.число === null ? ''
+          : '<div class="ask-a private">' + (о.деньги ? money(о.число) : nf(о.число)) + '</div>') +
+        (о.подпись ? '<div class="ask-why">' + esc(о.подпись) + '</div>' : '') +
+        (о.go ? '<div class="row-btns"><button class="btn btn-primary" data-go="' +
+          esc(о.go) + '">Посмотреть подробно</button></div>' : '') +
+        '</div>';
+    } else {
+      h += '<div class="banner"><span>' + ic('info') + '</span><span>' +
+        '<b>Не понял вопрос.</b> Показать неверное число хуже, чем сказать об этом. ' +
+        'Спросите иначе — например: «сколько я должен Молокозаводу», «расходы за июль», ' +
+        '«недостачи Ани», «сколько в сейфе». А ниже — что нашлось по этим словам.' +
+        '</span></div>';
+    }
+
+    /* Записи по словам показываем всегда, а фразу «ничего не нашлось» —
+       только когда ответа не было. Под удачным ответом она бессмысленна:
+       «сколько в сейфе» и не должно ничего находить среди записей. */
+    h += найденноеПоСловам(q, !о.есть);
+    return h;
+  }
+
+  /* Что нашлось по словам — всегда, даже когда программа ответила: вопрос
+     мог быть понят не так, и тогда записи под ответом это покажут. */
+  function найденноеПоСловам(q, сказатьЕслиПусто) {
+    var н = E.norm(q), h = '';
+    function подходит(текст) { return E.norm(текст).indexOf(н) >= 0; }
+
+    var записи = (S.state.dds || []).filter(function (r) {
+      return подходит([r.category, r.cashier, r.note, r.till, r.shift,
+        r.supplier, r.type].join(' '));
+    }).slice(0, 200);
+
+    if (записи.length) {
+      h += card('Записи', table('findRows', [
+        { title: 'Дата', key: 'date', fn: function (r) { return esc(dateRu(r.date)); } },
+        { title: 'Что это', fn: function (r) { return esc(E.txt(r.type)); } },
+        { title: 'Подробности', fn: function (r) {
+          return esc([r.category, r.cashier, r.till, r.note].filter(Boolean).join(' · ')); } },
+        { title: 'Сумма', cls: 'num', fn: function (r) {
+          return priv(E.txt(r.type) === 'Смена' ? E.shiftCalc(r).revenue : r.amount); } }
+      ], записи, { step: 20 }), 'найдено ' + nf(записи.length));
+    }
+
+    var товары = (D.sales || []).filter(function (r) { return подходит(r.name); }).slice(0, 50);
+    if (товары.length) {
+      h += card('Товары', table('findGoods', [
+        { title: 'Товар', fn: function (r) { return esc(r.name); } },
+        { title: 'Продано', cls: 'num', fn: function (r) { return nf(r.qty, 2); } },
+        { title: 'Выручка', cls: 'num', fn: function (r) { return priv(r.revenue); } }
+      ], товары, { step: 20 }), 'из выгрузок 1С');
+    }
+
+    var люди = (S.state.staff || []).filter(function (r) {
+      return подходит([r.name, r.position, r.phone].join(' '));
+    });
+    if (люди.length) {
+      h += card('Люди', listOf(люди.map(function (r) {
+        return listRow({ icon: 'person', title: esc(r.name), sub: esc(E.txt(r.position)),
+          value: E.txt(r.phone) ? '<a class="phone" href="tel:' + esc(r.phone) + '">' +
+            esc(r.phone) + '</a>' : '' });
+      }), ''));
+    }
+
+    if (сказатьЕслиПусто && !записи.length && !товары.length && !люди.length) {
+      h += '<div class="card"><div class="empty">По словам «' + esc(q) +
+        '» в базе ничего не нашлось.</div></div>';
+    }
+    return h;
+  }
+
   function viewNotices() {
     var список = уведомления();
     var N = window.WMNotices;
@@ -2372,6 +2485,10 @@
   var VIEWS = [
     { id: 'notices', icon: 'bell', name: 'Уведомления', group: 'Ещё', render: viewNotices },
     { id: 'data', icon: 'folder', name: 'Данные и копии', group: 'Ещё', render: viewData },
+    /* Экран поиска не показывается в меню: на него попадают, набрав вопрос
+       в строке вверху. Пункта «Поиск» в меню быть не должно — открывать
+       пустой поиск незачем. */
+    { id: 'search', icon: 'search', name: 'Поиск', group: 'Ещё', render: viewSearch, hidden: true },
     { id: 'settings', icon: 'gear', name: 'Настройки', group: 'Ещё', render: viewSettings },
     { id: 'menucfg', icon: 'menu', name: 'Настроить меню', group: 'Ещё', render: viewMenuConfig }
   ];
@@ -3417,6 +3534,10 @@
       else if (a === 'folder-reconnect') reconnectFolder();
       else if (a === 'folder-sync') syncFolder(false);
       else if (a === 'theme-flip') перевернутьТему();
+      else if (a === 'ask-example') {
+        var поле = $('search');
+        if (поле) { поле.value = E.txt(el.dataset.q); go('search'); }
+      }
       else if (a === 'sort') {
         var тид = el.dataset.id, ткол = +el.dataset.col;
         var было = SORT[тид];

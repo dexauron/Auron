@@ -1715,3 +1715,17 @@ table.data td.num, table.data th.num, .stat-value, .hero-value {
 .chart-note { padding: 0 var(--pad-card) 14px; font-size: 12.5px; color: var(--label-2); }
 body.compact .chart-note { font-size: 12px; }
 @media print { .chart-box { break-inside: avoid; } }
+
+/* --- ОТВЕТ ПОИСКА ----------------------------------------------------------
+   Владелец спросил словами — значит, ждёт ответ, а не таблицу. Цифра
+   крупная, подпись под ней мелкая: сначала число, потом откуда оно.
+   ------------------------------------------------------------------------- */
+.ask { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow);
+  padding: 18px var(--pad-card) 16px; display: flex; flex-direction: column; gap: 6px; }
+.ask-q { font-size: 13.5px; color: var(--label-2); font-weight: 500; }
+.ask-a { font-size: clamp(30px, 5vw, 44px); font-weight: 700; letter-spacing: -1px;
+  line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ask-why { font-size: 13.5px; color: var(--label-2); line-height: 1.5; }
+.ask .row-btns { margin: 8px 0 0; }
+body.compact .ask { padding: 14px var(--pad-card) 12px; }
+body.compact .ask-a { font-size: clamp(26px, 4.4vw, 34px); }

@@ -4131,8 +4131,10 @@ console.log('Страница: ' + PAGE + '\n');
       await page.waitForTimeout(200);
       const t = (await page.evaluate(() => document.getElementById('page').innerText))
         .replace(/[\u00a0\u202f]/g, ' ');
-      // «Что менялось» пуст намеренно — пример в журнал не пишет
-      if (v !== 'log' && (t.match(/\d/g) || []).length < 12) пустые.push(v);
+      /* Два экрана пусты намеренно: «Что менялось» — пример в журнал не
+         пишет; «Поиск» без вопроса показывает примеры вопросов, и чисел на
+         нём быть не должно. */
+      if (v !== 'log' && v !== 'search' && (t.match(/\d/g) || []).length < 12) пустые.push(v);
     } catch (e) { сбои.push(v); }
   }
   check('ВСЕ ЭКРАНЫ ЗАПОЛНИЛИСЬ ЧИСЛАМИ', пустые.length === 0,
@@ -5071,7 +5073,7 @@ console.log('Страница: ' + PAGE + '\n');
 
   /* «Что менялось» пример НЕ заполняет нарочно: он кладёт записи разом, не
      через журнал правок, иначе забил бы его собой до потери смысла. */
-  const МОЖНО_ПУСТО = ['log'];
+  const МОЖНО_ПУСТО = ['log', 'search'];
 
   const ids = await screensOf(page);
   const плохие = [];
@@ -5260,6 +5262,68 @@ console.log('Страница: ' + PAGE + '\n');
   check('«СВЕРЯТЬ БЕЗНАЛ» МОЛЧИТ, КОГДА НЕ ПРОСИЛИ, И НАПОМИНАЕТ, КОГДА ПРОСИЛИ',
     !молчит && говорит, 'не сверять: ' + (молчит ? 'говорит' : 'молчит') +
     ', каждый день: ' + (говорит ? 'говорит' : 'молчит'), 'молчит / говорит');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
+/* 37. Строка поиска вверху больше не ведёт в никуда.
+
+       Она вела: экрана с именем «search» в программе не было, и набор в
+       строке выбрасывал владельца на Пульт. Молча — он набирал вопрос и
+       оказывался не там, где ждал.
+
+       Теперь программа сначала пробует ОТВЕТИТЬ, а не показать список. */
+{
+  console.log('— Поиск отвечает, а не ведёт в никуда');
+  const { page, ctx, errs } = await open();
+
+  page.removeAllListeners('dialog');
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => window.WMUI.go('data'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-act="demo-fill"]').click());
+  await page.waitForTimeout(2800);
+
+  async function спросить(в) {
+    await page.fill('#search', в);
+    await page.waitForTimeout(650);
+    return page.evaluate(() =>
+      document.getElementById('page').innerText.replace(/[\u00a0\u202f]/g, ' ').replace(/\s+/g, ' '));
+  }
+
+  const сейф = await спросить('сколько в сейфе');
+  check('НАБРАЛ ВОПРОС — ПОПАЛ НА ПОИСК, А НЕ НА ПУЛЬТ',
+    /^Поиск/.test(сейф), сейф.slice(0, 40), 'экран «Поиск»');
+  check('И ПРОГРАММА ОТВЕТИЛА ЦИФРОЙ',
+    /В сейфе/.test(сейф) && /₽/.test(сейф), сейф.slice(0, 80), 'ответ с суммой');
+
+  const расх = await спросить('расходы за июль');
+  check('вопрос с месяцем понят', /Расходы/.test(расх) && /июль/.test(расх),
+    расх.slice(0, 80), 'расходы за июль');
+
+  const долг = await спросить('сколько я должен Молокозаводу');
+  check('вопрос про поставщика понят', /Молокозавод/.test(долг),
+    долг.slice(0, 80), 'про Молокозавод');
+
+  /* Честность важнее удобства: не понял — скажи. */
+  const чушь = await спросить('погода в Грозном');
+  check('НЕ ПОНЯЛ — ГОВОРИТ ОБ ЭТОМ, А НЕ ПОКАЗЫВАЕТ СЛУЧАЙНОЕ ЧИСЛО',
+    /Не понял вопрос/.test(чушь) && !/₽/.test(чушь.slice(0, 200)),
+    чушь.slice(0, 80), 'сказал «не понял»');
+
+  /* Кнопка под ответом должна вести на экран, где это видно подробно. */
+  await спросить('сколько в сейфе');
+  const увело = await page.evaluate(async () => {
+    const b = document.querySelector('.ask [data-go]');
+    if (!b) return 'кнопки нет';
+    b.click();
+    await new Promise(r => setTimeout(r, 400));
+    return document.getElementById('page').innerText.slice(0, 40).replace(/\s+/g, ' ');
+  });
+  check('и кнопка под ответом ведёт к подробностям',
+    /Пульт/.test(увело), увело, 'на Пульт');
 
   check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
   await page.close(); await ctx.close();
