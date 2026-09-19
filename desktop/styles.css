@@ -1,0 +1,1625 @@
+/* ============================================================================
+   Оформление в стиле iOS: светлая тема по умолчанию,
+   тёмная включается автоматически по настройке системы.
+   ========================================================================== */
+:root {
+  --bg: #F2F2F7;
+  --bg-elev: #FFFFFF;
+  --bg-inset: #F7F7FA;
+  --sidebar: rgba(246,246,248,.92);
+  --label: #000000;
+  --label-2: rgba(60,60,67,.62);
+  --label-3: rgba(60,60,67,.35);
+  --separator: rgba(60,60,67,.14);
+  --fill: rgba(120,120,128,.12);
+  --fill-2: rgba(120,120,128,.08);
+  --blue: #007AFF; --green: #34C759; --red: #FF3B30; --orange: #FF9500;
+  --purple: #AF52DE; --teal: #30B0C7; --indigo: #5856D6; --pink: #FF2D55;
+  --shadow: 0 1px 2px rgba(0,0,0,.05), 0 6px 20px rgba(0,0,0,.04);
+  --shadow-sheet: 0 20px 60px rgba(0,0,0,.28);
+  --r-card: 16px; --r-inner: 12px; --r-pill: 980px;
+  --sidebar-w: 258px;
+}
+/* Тёмная тема: по настройке системы, либо принудительно из «Настроек» */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --bg-elev: #1C1C1E; --bg-inset: #2C2C2E; --sidebar: rgba(28,28,30,.92);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,.62); --label-3: rgba(235,235,245,.32);
+    --separator: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-2: rgba(120,120,128,.16);
+    --blue: #0A84FF; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-sheet: 0 20px 60px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"] {
+    --bg: #000000; --bg-elev: #1C1C1E; --bg-inset: #2C2C2E; --sidebar: rgba(28,28,30,.92);
+    --label: #FFFFFF; --label-2: rgba(235,235,245,.62); --label-3: rgba(235,235,245,.32);
+    --separator: rgba(84,84,88,.5); --fill: rgba(120,120,128,.24); --fill-2: rgba(120,120,128,.16);
+    --blue: #0A84FF; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
+    --shadow: 0 1px 2px rgba(0,0,0,.4); --shadow-sheet: 0 20px 60px rgba(0,0,0,.6);
+}
+
+/* ── Вид Auron ──────────────────────────────────────────────────────────────
+   Когда полный учёт открыт ВНУТРИ приложения Auron, он берёт его цвета:
+   иначе половины продукта выглядят как два разных приложения, и владелец
+   каждый раз заново соображает, где он находится. Ставится само —
+   `js/auron-bridge.js` включает эту тему, когда рядом есть база Auron.
+   Цвета взяты один в один из webapp/Index.html: расходиться им нельзя,
+   иначе при следующей правке Auron половины опять разъедутся.
+   Системный акцент «синий» здесь — фирменный цвет Auron: в программе он
+   работает как «главное действие», и подменять его отдельным цветом
+   значило бы раскрасить экран в два главных цвета сразу. */
+:root[data-theme="auron"] {
+    --bg: #07090C; --bg-elev: #101318; --bg-inset: #161A21;
+    --sidebar: rgba(16,19,24,.92);
+    --label: #F3F4F6; --label-2: #C7C7CC; --label-3: #8E8E93;
+    --separator: rgba(255,255,255,.075);
+    --fill: rgba(255,255,255,.06); --fill-2: rgba(255,255,255,.035);
+    --blue: #5E5CE6; --green: #30D158; --red: #FF453A; --orange: #FF9F0A;
+    --purple: #BF5AF2; --teal: #40C8E0; --indigo: #5E5CE6; --pink: #FF375F;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 12px 30px -18px rgba(0,0,0,.7);
+    --shadow-sheet: 0 2px 4px rgba(0,0,0,.4), 0 24px 60px -20px rgba(0,0,0,.85);
+    --r-card: 20px; --r-inner: 14px;
+    color-scheme: dark;
+}
+/* Кромки как в Auron: светлая сверху, тёмная снизу — карточка получает
+   толщину без нарисованного «трёхмерного» рисунка, который в приложении
+   про деньги мешает читать цифры. */
+:root[data-theme="auron"] .card,
+:root[data-theme="auron"] .sheet {
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.055);
+}
+
+/* Шапка возврата в Auron: полный учёт — часть приложения, а не отдельная
+   программа, поэтому из него всегда виден путь назад. */
+.auron-back {
+  display: none; align-items: center; gap: 10px;
+  padding: 10px 14px; background: var(--bg-elev);
+  border-bottom: 1px solid var(--separator);
+  position: sticky; top: 0; z-index: 40;
+}
+/* Показываем, только когда возвращаться ЕСТЬ КУДА: в приложении на
+   телефоне полный учёт открыт поверх Auron. На сервере он сам и есть
+   приложение — кнопка «назад» там уводила бы в никуда и делала вид,
+   будто это вложенная чужая программа. */
+html.has-auron-back .auron-back { display: flex; }
+.auron-back button {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 14px; border-radius: 980px;
+  border: 1px solid var(--separator); background: var(--fill);
+  color: var(--label); font: inherit; font-weight: 600; cursor: pointer;
+}
+.auron-back button:active { opacity: .7; }
+.auron-back .auron-where { color: var(--label-2); font-size: 13px; }
+
+
+/* Крупный шрифт: включается в «Настройках» — всё становится больше */
+body.big { font-size: 17px; }
+body.big .page-title { font-size: 36px; }
+body.big .hero-value { font-size: 48px; }
+body.big .stat-value { font-size: 30px; }
+body.big .row-title, body.big .form-row label, body.big .form-row input,
+body.big .form-row select { font-size: 17px; }
+body.big .row-sub, body.big .card-note, body.big .stat-label { font-size: 14.5px; }
+body.big .btn { height: 44px; font-size: 16px; }
+body.big table.data { font-size: 15px; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--label);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", Inter, Roboto, system-ui, sans-serif;
+  font-size: 15px; line-height: 1.45; display: flex; overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+.num, .stat-value, td.num, .money { font-variant-numeric: tabular-nums; }
+
+/* ---------- Боковое меню ---------- */
+.sidebar {
+  width: var(--sidebar-w); flex-shrink: 0; background: var(--sidebar);
+  backdrop-filter: saturate(180%) blur(20px); border-right: .5px solid var(--separator);
+  display: flex; flex-direction: column; height: 100vh;
+}
+.brand { padding: 18px 18px 10px; }
+.brand-name { font-size: 20px; font-weight: 700; letter-spacing: -.4px; }
+.brand-sub { font-size: 12px; color: var(--label-2); margin-top: 2px; }
+.nav { flex: 1; overflow-y: auto; padding: 6px 10px 18px; }
+.nav-group { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--label-3); padding: 14px 10px 6px; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+  cursor: pointer; font-size: 14.5px; font-weight: 500; color: var(--label); transition: background .12s; }
+.nav-item:hover { background: var(--fill-2); }
+.nav-item.active { background: var(--blue); color: #fff; }
+.nav-item.active .nav-count { background: rgba(255,255,255,.25); color: #fff; }
+.nav-icon { width: 22px; text-align: center; font-size: 15px; }
+.nav-count { margin-left: auto; font-size: 12px; font-weight: 600; background: var(--red); color: #fff;
+  border-radius: var(--r-pill); padding: 1px 7px; min-width: 20px; text-align: center; }
+.sidebar-foot { padding: 10px 14px 14px; border-top: .5px solid var(--separator); }
+
+/* ---------- Основная область ---------- */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { display: flex; align-items: center; gap: 12px; padding: 12px 26px;
+  border-bottom: .5px solid var(--separator); background: var(--sidebar);
+  backdrop-filter: saturate(180%) blur(20px); flex-wrap: wrap; }
+.search { flex: 1; min-width: 180px; max-width: 380px; display: flex; align-items: center; gap: 8px;
+  background: var(--fill); border-radius: 10px; padding: 8px 12px; }
+.search input { background: none; border: none; outline: none; width: 100%; font-size: 14.5px; }
+.search input::placeholder { color: var(--label-3); }
+.scroll { flex: 1; overflow-y: auto; }
+.page { max-width: 1180px; margin: 0 auto; padding: 26px 26px 60px; display: flex; flex-direction: column; gap: 22px; }
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-title { font-size: 32px; font-weight: 700; letter-spacing: -.7px; }
+.page-sub { font-size: 14px; color: var(--label-2); margin-top: 3px; }
+
+/* ---------- Кнопки ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 38px;
+  padding: 0 16px; border-radius: 10px; border: none; background: var(--fill); color: var(--label);
+  font-size: 14.5px; font-weight: 600; cursor: pointer; transition: filter .12s, background .12s; white-space: nowrap; }
+.btn:hover { filter: brightness(.96); }
+/* Нажатие видно сразу: кнопка чуть проседает. На телефоне это единственный
+   отклик, который есть, — без него непонятно, попал ты по кнопке или нет. */
+.btn:active { transform: scale(.97); filter: brightness(.92); }
+.btn { transition: filter .12s, background .12s, transform .08s; }
+.btn-primary { box-shadow: 0 1px 2px rgba(0,122,255,.25); }
+.btn-primary { background: var(--blue); color: #fff; }
+.btn-danger { background: var(--fill); color: var(--red); }
+.btn-plain { background: none; color: var(--blue); padding: 0 6px; height: 32px; }
+.btn-sm { height: 30px; padding: 0 11px; font-size: 13px; border-radius: 8px; }
+.btn-lg { height: 46px; font-size: 16px; border-radius: 13px; }
+.btn-icon { width: 38px; padding: 0; }
+
+/* Сегментированный переключатель периода */
+.segmented { display: inline-flex; background: var(--fill); border-radius: 10px; padding: 2px; gap: 2px; }
+.segmented button { border: none; background: none; padding: 6px 13px; border-radius: 8px;
+  font-size: 13.5px; font-weight: 600; color: var(--label-2); cursor: pointer; }
+.segmented button.active { background: var(--bg-elev); color: var(--label); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+
+/* ---------- Карточки ---------- */
+.card { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); overflow: hidden; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 20px 10px; flex-wrap: wrap; }
+.card-head .card-note { flex: 1 1 220px; text-align: right; }
+.card-title { font-size: 17px; font-weight: 650; letter-spacing: -.35px;
+  display: flex; align-items: center; gap: 8px; }
+.card-ic { display: inline-flex; color: var(--label-2); }
+.card-note { font-size: 13px; color: var(--label-2); }
+/* Подпись под заголовком карточки: тем же тоном, что и .card-note,
+   но на своей строке. Без неё текст шёл размером с основной. */
+.card-sub { font-size: 13px; color: var(--label-2); line-height: 1.4; margin-top: 2px; }
+.card-body { padding: 4px 20px 18px; font-size: 14.5px; color: var(--label-2); line-height: 1.55; }
+.card-pad { padding: 18px 20px; }
+
+/* Главная цифра */
+.hero { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 22px 24px;
+  display: flex; flex-direction: column; gap: 4px; }
+.hero-label { font-size: 14px; color: var(--label-2); font-weight: 500; }
+.hero-value { font-size: 42px; font-weight: 700; letter-spacing: -1.2px; line-height: 1.1; }
+.hero-sub { font-size: 14px; color: var(--label-2); }
+
+/* 240 px — чтобы «10 905 800 ₽» помещалось в строку: при 210 знак рубля
+   переносился на вторую строку и карточка выглядела сломанной */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.stat { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 3px; }
+.stat-label { font-size: 13px; color: var(--label-2); font-weight: 500; }
+.stat-value { font-size: 26px; font-weight: 680; letter-spacing: -.6px; white-space: nowrap; }
+.stat-sub { font-size: 12.5px; color: var(--label-3); }
+.c-green { color: var(--green); } .c-red { color: var(--red); } .c-orange { color: var(--orange); }
+.c-blue { color: var(--blue); } .c-muted { color: var(--label-2); }
+
+/* ---------- Список в стиле iOS ---------- */
+.list { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow); overflow: hidden; }
+/* Разделитель начинается там же, где текст, — так его рисует iOS.
+   Линия от края до края режет список на куски, а с отступом он читается
+   как одно целое. */
+.row { display: flex; align-items: center; gap: 13px; padding: 12px 18px; min-height: 56px;
+  position: relative; }
+.row + .row::before { content: ''; position: absolute; left: 18px; right: 0; top: 0;
+  height: .5px; background: var(--separator); }
+.row.tappable { cursor: pointer; }
+.row.tappable:hover { background: var(--fill-2); }
+.row.tappable:active { background: var(--fill); }
+.row-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center;
+  justify-content: center; font-size: 15px; flex-shrink: 0; background: var(--fill); }
+.row-main { flex: 1; min-width: 0; }
+.row-title { font-size: 15.5px; font-weight: 550; letter-spacing: -.2px; }
+.row-sub { font-size: 13px; color: var(--label-2); margin-top: 1px; }
+.row-value { font-size: 16px; font-weight: 640; text-align: right; white-space: nowrap; }
+.row-value small { display: block; font-size: 12px; font-weight: 500; color: var(--label-2); }
+.chevron { color: var(--label-3); font-size: 17px; margin-left: 2px; }
+
+/* ---------- Таблицы (для больших списков) ---------- */
+.table-wrap { overflow-x: auto; }
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th { text-align: left; font-size: 12px; font-weight: 600; color: var(--label-2);
+  padding: 11px 16px; border-bottom: .5px solid var(--separator); white-space: nowrap;
+  position: sticky; top: 0; background: var(--bg-elev); letter-spacing: 0; }
+table.data td { padding: 12px 16px; border-bottom: .5px solid var(--separator); }
+table.data tbody tr:last-child td { border-bottom: none; }
+table.data tr:last-child td { border-bottom: none; }
+table.data tr:hover td { background: var(--fill-2); }
+table.data td.num, table.data th.num { text-align: right; white-space: nowrap; }
+table.data td.center, table.data th.center { text-align: center; white-space: nowrap; }
+table.data td.center .btn { vertical-align: middle; }
+tr.total td { background: var(--bg-inset); font-weight: 680; }
+.more { text-align: center; padding: 12px; }
+
+/* ---------- Значки ---------- */
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: var(--r-pill); white-space: nowrap; }
+.b-green { background: rgba(52,199,89,.14); color: var(--green); }
+.b-red { background: rgba(255,59,48,.14); color: var(--red); }
+.b-orange { background: rgba(255,149,0,.16); color: var(--orange); }
+.b-blue { background: rgba(0,122,255,.14); color: var(--blue); }
+.b-gray { background: var(--fill); color: var(--label-2); }
+
+/* ---------- Формы: сгруппированный список, как в настройках iPhone ---------- */
+.form-list { background: var(--bg-elev); border-radius: var(--r-card); overflow: hidden; }
+
+/* Строка формы — ровно одна строка: слева что спрашиваем, справа что отвечают.
+   Раньше подсказка занимала отдельную строку во всю ширину, и строки выходили
+   втрое выше соседних: форма растягивалась на три экрана, а взгляду не за что
+   было зацепиться. Теперь подсказка стоит под названием мелким серым. */
+.form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  padding: 10px 16px; min-height: 48px; position: relative; }
+/* Разделитель с отступом слева — так его рисует iOS: линия начинается там,
+   где начинается текст, и список читается как единое целое. */
+.form-row + .form-row::before { content: ''; position: absolute; left: 16px; right: 0; top: 0;
+  height: .5px; background: var(--separator); }
+.form-row label { font-size: 16px; flex: 0 0 44%; color: var(--label); line-height: 1.25; }
+/* Пояснение под названием поля свёрнуто до двух строк: иначе одна строка
+   формы разрасталась на шесть, и форма выглядела стеной текста. Полностью
+   оно раскрывается, когда владелец встал в это поле или подвёл курсор —
+   то есть ровно тогда, когда собрался его заполнять. */
+.form-row label small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; font-size: 12.5px; color: var(--label-2);
+  font-weight: 400; margin-top: 2px; line-height: 1.35; transition: none; }
+.form-row:hover label small, .form-row:focus-within label small { -webkit-line-clamp: 99; }
+.form-row input, .form-row select, .form-row textarea {
+  flex: 1; border: none; background: none; outline: none; text-align: right; font-size: 16px;
+  min-width: 0; padding: 7px 0; border-radius: 8px; }
+.form-row input::placeholder { color: var(--label-3); }
+/* Пустое числовое поле без подсказки выглядело пустым местом — непонятно,
+   куда жать. Показываем серый ноль: видно и поле, и что в нём пока пусто. */
+.form-row .num-input:placeholder-shown { background: var(--fill-2); }
+.form-row .num-input { padding-left: 10px; padding-right: 10px; }
+.form-row select { text-align: right; text-align-last: right; color: var(--blue);
+  appearance: none; padding-right: 16px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") right center no-repeat; }
+/* Пустое поле выглядит пустым местом: непонятно, можно ли туда писать.
+   Под курсором и в фокусе оно подсвечивается — и сразу видно, что это поле. */
+.form-row input:hover, .form-row textarea:hover,
+.form-row input:focus, .form-row textarea:focus {
+  background: var(--fill-2); padding-left: 10px; padding-right: 10px; }
+.form-row input:focus, .form-row textarea:focus {
+  box-shadow: inset 0 0 0 1.5px var(--blue); }
+/* Число и калькулятор — в одном ряду: поле справа, кнопка рядом с ним.
+   Иначе калькулятор уезжает под число, и строка ломается на три этажа. */
+.form-row .num-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.form-row .num-field input { flex: 1; min-width: 0; }
+.num-calc { flex: 0 0 auto; width: 34px; height: 34px; padding: 0; display: inline-flex;
+  align-items: center; justify-content: center; background: var(--fill-2); border: none;
+  color: var(--label-2); box-shadow: none; }
+.num-calc:hover { background: var(--fill); color: var(--blue); }
+.num-calc svg { width: 18px; height: 18px; }
+/* Подсказка под числом («55 000 ₽ пятьдесят пять тысяч») — мелко и вплотную,
+   она поясняет, а не спорит за место с самим полем. */
+.form-row .num-hint { flex: 0 0 auto; width: 100%; text-align: right; margin-top: 1px; }
+.num-hint { font-size: 12.5px; color: var(--label-2); min-height: 0; line-height: 1.3; }
+.num-hint:empty { display: none; }
+.num-hint b { color: var(--label-2); font-size: 12.5px; font-weight: 600; }
+.num-hint .c-muted { font-size: 12px; }
+
+/* Список «за что + сколько»: выплаты из кассы за смену, по строке на каждую */
+.pair-box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+/* Строка формы, которой тесно рядом с подписью: подпись сверху, поле под
+   ней во всю ширину. Нужна спискам «кому и за что» — в трети строки
+   название поставщика не помещается. */
+.form-row-wide { flex-direction: column; align-items: stretch; gap: 4px; }
+.form-row-wide > label { flex-basis: auto; width: 100%; }
+.form-row-wide .pair-row input { text-align: left; }
+.form-row-wide .pair-row input.num-input { flex: 0 0 30%; text-align: right; }
+/* Просвет между строками задаёт список, а не коробка: коробка отделяет
+   список от кнопки «+ ещё строка», а строки лежат внутри списка и без
+   этого правила слипались. */
+.pair-list { display: flex; flex-direction: column; gap: 6px; }
+.pair-row { display: flex; gap: 8px; align-items: center; }
+.form-row .pair-row input { flex: 1; text-align: left; border: none;
+  border-radius: 9px; padding: 8px 10px; background: var(--fill-2); }
+.form-row .pair-row input.num-input { flex: 0 0 34%; text-align: right; }
+.pair-row .pair-del { flex: 0 0 auto; padding: 0 9px; color: var(--label-3); }
+.pair-box > .btn { align-self: flex-start; }
+
+/* Заголовок части формы. Длинную форму без них читать невозможно: владелец
+   жаловался, что глазам не за что зацепиться. Тон тихий — это указатель,
+   а не сообщение. */
+/* --- Кассовая книга ------------------------------------------------------
+   Остаток на утро и на вечер — это не такая же строка, как приход или
+   расход: это рамка дня. Поэтому тоном тише и с чертой. */
+/* --- Колокольчик: значок с числом непрочитанного ------------------------
+   Число маленькое и красное только когда есть что читать. Значок, который
+   горит всегда, перестаёт что-либо значить. */
+.bell-wrap { position: relative; display: inline-flex; }
+#bellBtn.has { color: var(--blue); }
+.bell-n { position: absolute; top: -3px; right: -3px; min-width: 17px; height: 17px;
+  padding: 0 4px; border-radius: 9px; background: var(--red); color: #fff;
+  font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px var(--bg); }
+.bell-n[hidden] { display: none; }
+
+/* Точка «новое» слева от текста уведомления */
+.dot-new { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--blue); margin-right: 7px; vertical-align: 1px; }
+
+/* --- Настройки: разделы свёрнуты, сверху поиск -------------------------- */
+.set-find { display: flex; gap: 8px; align-items: center; margin: 0 0 14px; }
+.set-find input { flex: 1; min-width: 0; padding: 11px 14px; font-size: 15px;
+  border: 1px solid var(--separator); border-radius: var(--r-card);
+  background: var(--bg-elev); color: var(--label); }
+.set-find input:focus { outline: none; border-color: var(--blue); }
+
+.set-g { margin-bottom: 10px; overflow: hidden; }
+.set-h { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 14px 18px; background: none; border: 0; cursor: pointer;
+  font-size: 16px; font-weight: 650; color: var(--label); text-align: left; }
+.set-h:hover { background: var(--fill-2); }
+.set-n { flex: 1; min-width: 0; }
+.set-c { font-size: 12.5px; font-weight: 600; color: var(--label-3);
+  background: var(--fill); border-radius: var(--r-pill); padding: 2px 9px; }
+.set-g.open .set-h { border-bottom: 1px solid var(--separator); }
+
+/* Строки кассовой книги: день свёрнут в одну строку, раскрывается нажатием.
+   Пять колонок в сетке, а не таблицей: на телефоне сетка переносится, а
+   таблица уезжает за экран. */
+.cb-t { display: flex; flex-direction: column; }
+.cb-r { display: grid; grid-template-columns: 1fr auto auto auto auto;
+  gap: 14px; align-items: baseline; padding: 9px 16px; }
+.cb-r > b { text-align: right; font-variant-numeric: tabular-nums; min-width: 82px;
+  font-weight: 600; }
+.cb-th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px;
+  color: var(--label-3); padding-bottom: 4px; }
+.cb-th b { font-weight: 700; }
+.cb-day { cursor: pointer; border-top: 1px solid var(--separator); }
+.cb-day:hover { background: var(--fill-2); }
+.cb-day > span { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.cb-day.open { background: var(--fill-2); }
+.cb-line { padding: 5px 16px 5px 34px; font-size: 13.5px; color: var(--label-2); }
+.cb-line > span { display: flex; align-items: center; gap: 6px; }
+.cb-line > span svg { flex: 0 0 auto; opacity: .55; }
+.cb-line > b { font-weight: 600; min-width: 82px; }
+.cb-line i { font-style: normal; color: var(--label-3); }
+.c-muted { color: var(--label-3); font-weight: 500; }
+@media (max-width: 700px) {
+  .cb-r { grid-template-columns: 1fr auto auto; gap: 8px; }
+  .cb-r > b:nth-child(2), .cb-th b:nth-child(2) { display: none; }
+  .cb-line { padding-left: 22px; }
+}
+
+.cb-head { display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 16px; font-size: 13.5px; color: var(--label-2); }
+.cb-head b { font-size: 15px; color: var(--label); font-weight: 650; }
+.cb-close { border-top: 1px solid var(--separator); }
+
+/* Бланк КО-4: он существует только на бумаге, на экране его не видно. */
+@media print {
+  .ko4 h2 { font-size: 14pt; margin: 0 0 2mm; }
+  .ko4-t { width: 100%; border-collapse: collapse; margin: 4mm 0 1mm;
+    font-size: 9pt; page-break-inside: avoid; }
+  .ko4-t caption { text-align: left; font-weight: 700; padding-bottom: 1mm; }
+  .ko4-t th, .ko4-t td { border: 1px solid #000; padding: 1.2mm 2mm; text-align: left; }
+  .ko4-t th:nth-child(3), .ko4-t th:nth-child(4),
+  .ko4-t td:nth-child(3), .ko4-t td:nth-child(4) { text-align: right; width: 22mm; }
+  .ko4-t th:first-child, .ko4-t td:first-child { width: 20mm; }
+  .ko4-sum td { font-weight: 700; }
+  .ko4-sign { font-size: 9pt; margin-bottom: 6mm; }
+}
+
+/* Строка под плитками Пульта: что пришло и что ушло за период. */
+.pulse-flow { padding: 0 4px 12px; font-size: 13.5px; color: var(--label-2); line-height: 1.5; }
+
+.form-cap { padding: 16px 16px 6px; font-size: 12px; font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase; color: var(--label-2); }
+.form-cap:first-child { padding-top: 6px; }
+
+/* Пояснение внутри экрана, не в форме: тем же тоном, что и подписи форм */
+.hint { font-size: 13px; color: var(--label-2); line-height: 1.45; }
+
+/* Пояснение ко всей форме — как «footer» секции в iOS: без плашки, мелко */
+.form-hint { padding: 10px 16px 0; font-size: 13px; color: var(--label-2); background: none;
+  line-height: 1.45; display: flex; gap: 7px; align-items: flex-start; }
+.form-hint svg { flex: 0 0 auto; margin-top: 2px; opacity: .6; }
+.form-actions { display: flex; gap: 10px; padding: 4px 0 0; }
+.form-actions .btn-lg { flex: 1; }
+
+/* ---------- Лист (модальное окно) ---------- */
+.backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.28); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center; z-index: 60; padding: 20px;
+  animation: fadeIn .18s ease; }
+@keyframes fadeIn { from { opacity: 0; } }
+.sheet { background: var(--bg); border-radius: 22px; box-shadow: var(--shadow-sheet);
+  width: min(560px, 100%); max-height: 88vh; display: flex; flex-direction: column;
+  overflow: hidden; animation: sheetIn .26s cubic-bezier(.32,.72,0,1); }
+@keyframes sheetIn { from { transform: translateY(14px) scale(.99); opacity: 0; } }
+.sheet-grabber { display: none; }
+/* Панель листа: «Отмена» слева, название по центру, «Готово» справа —
+   как в любом окне на телефоне, и рука сама тянется в нужный угол. */
+.sheet-head { flex: 0 0 auto; background: var(--bg); display: grid;
+  grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  padding: 14px 14px 10px; z-index: 2; border-bottom: .5px solid transparent; }
+.sheet-head.stuck { border-bottom-color: var(--separator); }
+.sheet-title { font-size: 17px; font-weight: 640; letter-spacing: -.3px; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-head-right { display: flex; justify-content: flex-end; }
+.sheet-btn { background: none; border: none; color: var(--blue); font-size: 16px;
+  padding: 6px 4px; cursor: pointer; border-radius: 8px; }
+.sheet-btn.strong { font-weight: 600; }
+.sheet-btn:active { opacity: .5; }
+.sheet-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 0 16px 16px; display: flex; flex-direction: column; gap: 14px; }
+.sheet-text { font-size: 15px; line-height: 1.55; white-space: pre-line; color: var(--label); }
+/* Главная кнопка не теряется в конце длинной формы: она прижата к низу листа */
+.sheet-body > form { display: flex; flex-direction: column; gap: 12px; }
+.sheet-body .form-actions { position: sticky; bottom: -16px; background: var(--bg);
+  padding: 10px 0 2px; margin-top: auto; }
+
+/* ---------- Прочее ---------- */
+/* Подсказка снизу перекрывала кнопку «Сохранить» в открытой форме.
+   Пока форма открыта — поднимаем её выше кнопки. */
+body.sheet-open .toast { bottom: 96px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 26px; z-index: 90;
+  background: rgba(28,28,30,.94); color: #fff; padding: 12px 18px; border-radius: 14px;
+  font-size: 14px; max-width: 520px; white-space: pre-line; box-shadow: var(--shadow-sheet); }
+@media (prefers-color-scheme: dark) { .toast { background: rgba(58,58,60,.96); } }
+.banner { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: var(--r-card);
+  background: rgba(255,149,0,.12); color: var(--label); font-size: 14.5px; }
+.banner.blue { background: rgba(0,122,255,.1); }
+.banner.green { background: rgba(52,199,89,.12); }
+/* Кнопка в баннере стоит СПРАВА, отдельно от текста, а не внутри абзаца:
+   вставленная в текст, она разрывала фразу пополам и читалась как опечатка. */
+.banner .btn { margin-left: auto; flex: 0 0 auto; }
+.banner > span:nth-child(2) { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 720px) {
+  .banner { flex-wrap: wrap; align-items: flex-start; }
+  .banner .btn { margin-left: 0; width: 100%; margin-top: 4px; }
+}
+.empty { padding: 40px 24px; text-align: center; color: var(--label-2); font-size: 14.5px; line-height: 1.7; }
+.empty b { color: var(--label); }
+.quick { display: flex; gap: 10px; flex-wrap: wrap; }
+.quick .btn { height: 44px; border-radius: 13px; padding: 0 18px; }
+.chart-box { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow);
+  padding: 16px 18px; height: 260px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 1000px) { .grid-2 { grid-template-columns: 1fr; } }
+a.phone { color: var(--blue); text-decoration: none; font-weight: 550; }
+.priv .private { filter: blur(7px); user-select: none; }
+.saved-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; }
+.saved-dot.off { background: var(--label-3); }
+.sync-line { font-size: 13px; color: var(--label-2); display: flex; align-items: center; gap: 7px; }
+
+
+/* Шапка с реквизитами видна только на печати */
+.print-head { display: none; }
+.print-sub { font-size: 12px; color: var(--label-2); font-weight: 400; }
+
+/* ============================================================================
+   ПЕЧАТЬ: отчёт, который не стыдно положить на стол директору
+
+   Первая страница — сводка: кто отчитывается, за какой период, главная цифра
+   и несколько ключевых. Её отдают руководителю.
+   Дальше — подробные таблицы: их смотрят, если спросят цифры.
+
+   С экрана на бумагу не уходит ничего лишнего: ни меню, ни кнопок, ни
+   фильтров, ни подсказок. Только документ.
+   ========================================================================== */
+.print-only { display: none; }
+.print-foot { display: none; }
+
+@page { size: A4 portrait; margin: 16mm 14mm 14mm; }
+
+@media print {
+  :root { --bg: #fff; --bg-elev: #fff; --bg-inset: #fff;
+    --label: #000; --label-2: #444; --label-3: #777; --separator: #bbb;
+    --fill: #f0f0f0; --fill-2: #f6f6f6;
+    --blue: #000; --green: #000; --red: #000; --orange: #000; }
+
+  body { display: block; overflow: visible; background: #fff; color: #000;
+    font-size: 10.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .scroll { overflow: visible; height: auto; }
+
+  /* Всё, что помогает работать, но мешает читать документ */
+  .sidebar, .topbar, .tabbar, .quick, .filters, .btn, .chip, .segmented,
+  .toast, .backdrop, .row-menu, .more, .draft-bar, .scroll-hint,
+  .search-tip, .ana-bar, .ana-loaded, .chevron, .drill-mark,
+  .alert-bar, .print-hide,
+  /* Своя шапка отчёта дублировала печатную: на бумаге название магазина
+     стояло дважды подряд. Печатной хватает. */
+  .rep-head, .rep-foot,
+  /* Прячем КНОПКИ, а не всё подряд с data-атрибутом. Раньше здесь стояло
+     [data-go] — и вместе с кнопками с бумаги исчезали строки отчёта:
+     раздел «Что не сошлось» печатался пустым, хотя расхождения были. */
+  button[data-act], button[data-form], button[data-go], button[data-edit],
+  button[data-del], button[data-menu], button[data-drill],
+  a[data-go] { display: none !important; }
+
+  .print-only { display: block; }
+
+  /* Шапка документа */
+  .print-head { display: block; text-align: center; margin-bottom: 4mm;
+    padding-bottom: 3mm; border-bottom: 1.5pt solid #000; }
+  .print-org { font-size: 14pt; font-weight: 700; letter-spacing: -.2pt; }
+  .print-sub { font-size: 9pt; color: #444; font-weight: 400; margin-top: 1mm; }
+
+  /* Заголовок отчёта — по центру, как в деловом документе */
+  .page-head { display: block; text-align: center; margin: 0 0 5mm; }
+  .page-title { font-size: 15pt; font-weight: 700; letter-spacing: -.2pt; }
+  .page-sub { font-size: 10pt; color: #444; margin-top: 1mm; }
+
+  /* Сводка: главные цифры в ряд, крупно и без рамок-коробок */
+  .stat-grid { display: grid !important; grid-template-columns: repeat(3, 1fr);
+    gap: 3mm; margin-bottom: 5mm; }
+  /* Без рамок: на бумаге коробка вокруг числа выглядит обрывком таблицы.
+     Цифры разделяет воздух и линия под подписью — как в годовом отчёте. */
+  .stat, .hero { border: none; box-shadow: none; padding: 0; break-inside: avoid; }
+  .stat-label, .hero-label { border-bottom: .5pt solid #ccc; padding-bottom: 1mm;
+    margin-bottom: 1.5mm; display: block; }
+  .stat-label, .hero-label { font-size: 8.5pt; color: #555; font-weight: 500;
+    text-transform: uppercase; letter-spacing: .3pt; }
+  .stat-value { font-size: 15pt; font-weight: 700; letter-spacing: -.3pt; }
+  .hero-value { font-size: 24pt; font-weight: 700; }
+  .stat-sub, .hero-sub { font-size: 8.5pt; color: #666; }
+
+  /* Карточки становятся разделами документа, а не плитками */
+  .card, .list { box-shadow: none; border: none; border-radius: 0;
+    margin-bottom: 4mm; break-inside: auto; }
+  .card-head { padding: 0 0 2mm; border-bottom: .75pt solid #000; margin-bottom: 2mm;
+    break-after: avoid; }
+  .card-title { font-size: 11pt; font-weight: 700; letter-spacing: 0; }
+  .card-ic { display: none; }
+  .card-note { font-size: 8.5pt; color: #555; }
+  .card-body, .card-pad { padding: 0 0 2mm; font-size: 9.5pt; }
+
+  /* Таблицы — главное содержимое отчёта */
+  table.data { font-size: 9.5pt; width: 100%; }
+  table.data th { background: #f2f2f2 !important; color: #000; font-size: 8.5pt;
+    font-weight: 700; padding: 1.5mm 2mm; border-bottom: .75pt solid #000;
+    position: static; }
+  table.data td { padding: 1.5mm 2mm; border-bottom: .25pt solid #ddd; }
+  table.data tr { break-inside: avoid; }
+  thead { display: table-header-group; }   /* шапка повторяется на каждой странице */
+  tr.total td { background: #f2f2f2 !important; font-weight: 700;
+    border-top: .75pt solid #000; }
+  .table-wrap { overflow: visible !important; }
+
+  /* Строки-списки */
+  .row { padding: 1.5mm 0; min-height: 0; break-inside: avoid; }
+  .row + .row::before { left: 0; }
+  .row-icon, .card-ic, .blank-ic { display: none !important; }
+  .row-title { font-size: 10pt; font-weight: 600; }
+  .row-sub { font-size: 8.5pt; color: #555; }
+  .row-value { font-size: 10pt; font-weight: 700; }
+
+  /* Подсказки и баннеры: на бумаге они не нужны, это интерфейс, а не отчёт */
+  .banner, .empty, .blank, .filter-note, .form-hint { display: none !important; }
+  /* ...но предупреждение о неточности — нужно: оно про достоверность цифр */
+  .banner.orange { display: flex !important; border: .5pt solid #000;
+    background: #fff !important; padding: 2mm; font-size: 8.5pt; margin-bottom: 3mm; }
+
+  /* Скрытые суммы на бумаге показываются: печатают для себя */
+  .priv .private { filter: none; }
+
+  /* Графики печатаются как есть, но не рвутся между страницами */
+  .chart-box { break-inside: avoid; height: 55mm; border: none; box-shadow: none;
+    padding: 0; margin-bottom: 4mm; }
+
+  /* Подвал с подписями — в конце документа */
+  .print-foot { display: block; margin-top: 8mm; padding-top: 3mm;
+    border-top: .5pt solid #999; break-inside: avoid; }
+  .print-when { font-size: 8.5pt; color: #555; margin-bottom: 6mm; }
+  .sign-row { display: flex; gap: 14mm; }
+  .sign-cell { flex: 1; }
+  .sign-cell .sign-line { display: block; border-bottom: .75pt solid #000;
+    height: 8mm; margin-bottom: 1mm; }
+  .sign-cell small { font-size: 8.5pt; color: #555; }
+
+  /* Разрыв страницы перед подробностями: сводка остаётся отдельным листом */
+  .print-break { break-before: page; }
+}
+
+/* --- Фильтры: одинаковые кнопки на всех экранах ----------------------------- */
+.filters { background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow);
+  padding: 12px 16px 14px; margin-bottom: 14px; }
+.filter-head { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-size: 13px; font-weight: 650; color: var(--label-2); margin-bottom: 8px;
+  text-transform: uppercase; letter-spacing: .3px; }
+.filter-line { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; flex-wrap: wrap; }
+.filter-name { flex: 0 0 110px; font-size: 13.5px; color: var(--label-2); padding-top: 6px; font-weight: 550; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 240px; }
+/* Вкладки внутри экрана («Справочники»): те же кнопки, но своя раскладка.
+   Брать для них .chips нельзя — её flex-basis задан для строки фильтров. */
+.tabs { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs .chip { flex: 0 0 auto; }
+.chip { border: none; background: var(--fill-2); color: var(--label); cursor: pointer;
+  padding: 6px 12px; border-radius: var(--r-pill); font-size: 13.5px; font-weight: 550;
+  line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip:hover { background: var(--fill); }
+.chip.active { background: var(--blue); color: #fff; }
+.chip small { opacity: .65; font-weight: 500; margin-left: 3px; }
+.chip.active small { opacity: .8; }
+/* крестик «убрать сохранённый набор» внутри кнопки набора */
+/* Режим показа: красная полоса сверху и приглушённые кнопки записи */
+.ro-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; background: rgba(255,59,48,.12); border: 1px solid rgba(255,59,48,.35);
+  color: var(--label); border-radius: var(--r-inner); padding: 11px 16px; font-weight: 600; }
+body.readonly .btn-primary:not([data-act="readonly-off"]):not([data-act="share-whatsapp"]),
+body.readonly .btn-danger { opacity: .45; }
+body.readonly .quick .btn { opacity: .45; }
+
+.filter-acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip small[data-filterset-del] { margin-left: 7px; opacity: .5; padding: 0 2px; }
+.chip small[data-filterset-del]:hover { opacity: 1; color: #FF3B30; }
+.filter-input { flex: 1 1 240px; height: 34px; border: 1px solid var(--separator);
+  background: var(--bg-inset); color: var(--label); border-radius: var(--r-inner);
+  padding: 0 12px; font-size: 14px; font-family: inherit; }
+.filter-note { font-size: 13px; color: var(--label-2); padding: 8px 20px 0; }
+
+/* --- Окно «Подробнее» ------------------------------------------------------- */
+.detail .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px; margin-bottom: 18px; }
+.detail .fact { background: var(--bg-inset); border-radius: var(--r-inner); padding: 10px 12px; }
+.detail .fact-label { font-size: 12.5px; color: var(--label-2); margin-bottom: 3px; }
+.detail .fact-value { font-size: 16px; font-weight: 650; letter-spacing: -.2px; }
+.detail .det-block { margin-bottom: 18px; }
+.detail .det-block h4 { font-size: 14px; font-weight: 650; color: var(--label-2);
+  margin: 0 0 8px; text-transform: uppercase; letter-spacing: .3px; }
+.detail .det-block .table-wrap { border: 1px solid var(--separator); border-radius: var(--r-inner); }
+.detail .note-box { background: var(--bg-inset); border-radius: var(--r-inner);
+  padding: 10px 12px; font-size: 14px; }
+.more-link { color: var(--blue); text-decoration: none; cursor: pointer; font-weight: 550; }
+.more-link:hover { text-decoration: underline; }
+.btn-ghost { background: none; box-shadow: none; color: var(--label-2); font-size: 17px;
+  padding: 0 8px; min-width: 28px; }
+@media (max-width: 700px) {
+  .filter-name { flex-basis: 100%; padding-top: 0; }
+}
+
+.detail .det-source { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+
+/* --- Водопад «куда ушли деньги» --------------------------------------------
+   Полосы рисуем разметкой, без графиков: печатается как есть и работает
+   на любом компьютере без интернета. ------------------------------------- */
+.flow { display: flex; flex-direction: column; gap: 7px; }
+.flow-row { display: flex; align-items: center; gap: 12px; }
+.flow-name { flex: 0 0 30%; font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.flow-track { flex: 1; min-width: 0; background: var(--fill); border-radius: 6px; height: 22px; }
+.flow-bar { height: 100%; border-radius: 6px; min-width: 3px; }
+.flow-in { background: var(--blue, #007AFF); }
+.flow-out { background: #FF9F0A; }
+.flow-draw { background: #AF52DE; }
+.flow-left { background: #30D158; }
+.flow-minus { background: #FF3B30; }
+.flow-sum { flex: 0 0 34%; text-align: right; font-size: 14px;
+  font-variant-numeric: tabular-nums; }
+.flow-sum small { display: block; font-size: 12px; }
+@media (max-width: 700px) {
+  .flow-row { flex-wrap: wrap; }
+  .flow-name { flex-basis: 60%; }
+  .flow-sum { flex-basis: 36%; }
+  .flow-track { flex-basis: 100%; order: 3; }
+}
+
+/* --- Числовое поле: калькулятор и подсказка --------------------------------- */
+.num-field { display: flex; gap: 8px; align-items: center; }
+.num-field .num-input { flex: 1; min-width: 0; }
+.num-calc { flex-shrink: 0; height: 38px; padding: 0 12px; font-size: 17px; }
+/* правила .num-hint живут выше, в блоке форм — второй набор их перекрывал */
+
+/* --- Калькулятор ------------------------------------------------------------ */
+.calc-sheet { width: min(380px, 100%); }
+.calc-screen { background: var(--bg-inset); border-radius: var(--r-inner); padding: 14px 16px; }
+.calc-screen input { width: 100%; border: none; background: none; color: var(--label);
+  font-size: 30px; font-weight: 650; text-align: right; letter-spacing: -.5px;
+  font-family: inherit; outline: none; padding: 0; }
+.calc-result { text-align: right; font-size: 15px; color: var(--label-2); margin-top: 6px; min-height: 20px; }
+.calc-result b { font-size: 17px; color: var(--green); }
+.calc-result small { display: block; font-size: 12px; color: var(--label-3); margin-top: 2px; }
+.calc-quick { display: flex; gap: 6px; flex-wrap: wrap; }
+.calc-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.calc-key { height: 56px; border: none; border-radius: 14px; background: var(--fill);
+  color: var(--label); font-size: 21px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.calc-key:active { transform: scale(.96); }
+.calc-key:hover { background: var(--fill-2); }
+.calc-op { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue); }
+.calc-eq { background: var(--blue); color: #fff; }
+.calc-back-key { font-size: 18px; }
+@media (max-width: 480px) { .calc-key { height: 52px; font-size: 19px; } }
+
+/* --- Тревожная строка под шапкой: видна с любого экрана --------------------- */
+/* Скрытая полоса обязана исчезать: атрибут hidden сам по себе слабее
+   правила display ниже, и полоса оставалась узкой розовой полоской. */
+.alert-bar[hidden] { display: none; }
+.alert-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 10px 24px; font-size: 14px; font-weight: 550;
+  background: color-mix(in srgb, var(--red) 12%, var(--bg));
+  color: var(--label); border-bottom: .5px solid var(--separator); }
+.alert-bar.warn { background: color-mix(in srgb, var(--orange) 14%, var(--bg)); }
+.alert-bar.info { background: color-mix(in srgb, var(--blue) 12%, var(--bg)); }
+.alert-bar .alert-item { display: flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 3px 10px; border-radius: var(--r-pill); background: var(--bg-elev);
+  box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.alert-bar .alert-item:hover { background: var(--fill-2); }
+.alert-bar .alert-more { margin-left: auto; color: var(--label-2); font-weight: 500; font-size: 13px; }
+/* Сколько сейчас в кассе — не тревога, а справка: у правого края и тише.
+   Без margin-left она липла к последней кнопке и читалась как её часть. */
+.alert-bar .alert-cash { margin-left: auto; color: var(--label-2); font-size: 13px;
+  white-space: nowrap; }
+.alert-bar .alert-cash b { color: var(--label); font-weight: 600; }
+@media (max-width: 700px) { .alert-bar { padding: 9px 16px; font-size: 13px; } }
+
+/* --- Купюры и пересчёт кассы ------------------------------------------------ */
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.note-cell { background: var(--bg-inset); border-radius: var(--r-inner); padding: 9px 11px; }
+.note-cell label { display: block; font-size: 12.5px; color: var(--label-2); margin-bottom: 4px; }
+.note-cell input { width: 100%; border: 1px solid var(--separator); background: var(--bg-elev);
+  color: var(--label); border-radius: 9px; padding: 6px 9px; font-size: 15px;
+  font-family: inherit; text-align: right; }
+.note-cell .note-sum { font-size: 12px; color: var(--label-2); text-align: right; margin-top: 3px; min-height: 15px; }
+.notes-total { display: flex; justify-content: space-between; align-items: baseline;
+  padding: 12px 14px; background: var(--bg-inset); border-radius: var(--r-inner); margin-top: 10px; }
+.notes-total b { font-size: 22px; letter-spacing: -.4px; }
+
+/* --- Спарклайн в строке ------------------------------------------------------ */
+.spark { display: inline-block; vertical-align: middle; }
+.spark path { fill: none; stroke: var(--blue); stroke-width: 1.6; }
+.spark .spark-fill { fill: color-mix(in srgb, var(--blue) 14%, transparent); stroke: none; }
+
+/* --- Шаблоны частых записей -------------------------------------------------- */
+/* Полоска шаблонов над формой. «В шаблоны» — тихая кнопка: она не действие
+   формы, а способ запомнить её на потом, и спорить за внимание не должна. */
+.tpl-bar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  padding: 0 2px 2px; }
+.tpl-label { font-size: 13px; color: var(--label-2); font-weight: 550; }
+.tpl-save { margin-left: auto; background: none; border: none; color: var(--label-2);
+  font-size: 13px; height: auto; padding: 4px 2px; box-shadow: none; }
+.tpl-save:hover { background: none; color: var(--blue); }
+.tpl-save svg { width: 15px; height: 15px; }
+
+/* --- Сравнение с прошлым периодом ------------------------------------------- */
+.delta { font-size: 12.5px; font-weight: 600; margin-left: 6px; white-space: nowrap; }
+.delta.up { color: var(--green); }
+.delta.down { color: var(--red); }
+.delta.flat { color: var(--label-3); }
+
+/* --- Ведомость и печать ------------------------------------------------------ */
+.sign-line { display: inline-block; width: 110px; border-bottom: 1px solid var(--label-3); height: 15px; }
+.print-sign { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  font-size: 14.5px; padding-top: 22px; }
+
+/* --- Крупный режим: для телефона и для тех, кому мелко ----------------------- */
+body.big { font-size: 17px; }
+body.big .row-title { font-size: 17.5px; }
+body.big .row-sub, body.big .card-note { font-size: 14.5px; }
+body.big .stat-value { font-size: 26px; }
+body.big .hero-value { font-size: 40px; }
+body.big table.data { font-size: 15.5px; }
+body.big .btn { height: 44px; font-size: 16px; }
+body.big .btn-sm { height: 36px; font-size: 14.5px; }
+body.big .chip { font-size: 15px; padding: 8px 14px; }
+body.big .nav-item { padding: 12px 14px; font-size: 16px; }
+body.big .form-row input, body.big .form-row select { height: 46px; font-size: 17px; }
+@media (max-width: 700px) {
+  body.big .grid-2, body.big .stat-grid { grid-template-columns: 1fr; }
+  body.big .table-wrap { font-size: 15px; }
+}
+
+/* --- Быстрая строка и массовый ввод ------------------------------------------ */
+.quick-line { font-size: 17px !important; }
+.quick-parsed { font-size: 13.5px; color: var(--label-2); margin-top: 7px; min-height: 20px; line-height: 1.5; }
+.bulk-lines { width: 100%; border: 1px solid var(--separator); background: var(--bg-elev);
+  color: var(--label); border-radius: var(--r-inner); padding: 10px 12px; font-size: 15px;
+  font-family: inherit; resize: vertical; line-height: 1.6; }
+.bulk-preview { margin-top: 10px; max-height: 260px; overflow-y: auto; }
+.bulk-head { font-size: 13px; color: var(--label-2); font-weight: 600; padding: 4px 0 8px; }
+.bulk-row { display: flex; gap: 8px; align-items: baseline; font-size: 13.5px;
+  padding: 5px 8px; border-radius: 8px; }
+.bulk-row:nth-child(odd) { background: var(--fill-2); }
+.bulk-row.bad { background: color-mix(in srgb, var(--red) 10%, transparent); }
+.bulk-no { color: var(--label-3); font-size: 12px; min-width: 18px; }
+
+/* --- Меню действий у строки --------------------------------------------------- */
+.row-menu { position: relative; display: inline-block; }
+.row-menu-btn { background: none; border: none; color: var(--label-2); font-size: 18px;
+  cursor: pointer; padding: 2px 7px; border-radius: 7px; line-height: 1; }
+.row-menu-btn:hover { background: var(--fill); }
+.row-menu-list { position: fixed; z-index: 80; background: var(--bg-elev); border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.22); padding: 6px; min-width: 190px; }
+.row-menu-list button { display: flex; align-items: center; gap: 9px; width: 100%; border: none;
+  background: none; color: var(--label); font-size: 14.5px; font-family: inherit; text-align: left;
+  padding: 9px 11px; border-radius: 8px; cursor: pointer; }
+.row-menu-list button:hover { background: var(--fill-2); }
+.row-menu-list button.danger { color: var(--red); }
+
+/* --- Напоминание о незаконченной записи -------------------------------------- */
+.draft-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: 22px; z-index: 85;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--bg-elev); border-radius: 14px; box-shadow: 0 10px 34px rgba(0,0,0,.22);
+  padding: 12px 16px; font-size: 14px; max-width: min(560px, calc(100% - 32px)); }
+
+/* --- Полоска доли в таблице --------------------------------------------------- */
+.bar-line { background: var(--fill-2); border-radius: 4px; height: 8px; width: 120px; overflow: hidden; }
+.bar-line span { display: block; height: 100%; border-radius: 4px; }
+
+/* --- График смен -------------------------------------------------------------- */
+.sched-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 0 18px 18px; }
+.sched-head { font-size: 12px; color: var(--label-2); text-align: center; padding: 4px 0; font-weight: 600; }
+.sched-cell { border-radius: 10px; background: var(--fill-2); padding: 6px 7px; min-height: 74px; }
+.sched-cell.weekend { background: color-mix(in srgb, var(--orange) 8%, var(--fill-2)); }
+.sched-cell.empty { background: color-mix(in srgb, var(--red) 8%, transparent); }
+.sched-cell.now { outline: 2px solid var(--blue); }
+.sched-day { font-size: 12px; color: var(--label-2); margin-bottom: 3px; }
+.sched-who { font-size: 12px; padding: 2px 5px; border-radius: 5px; background: var(--fill);
+  margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-who.fact { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); font-weight: 600; }
+.sched-abs { font-size: 11px; color: var(--orange); margin-top: 2px; }
+.sched-more { font-size: 11px; color: var(--label-3); }
+@media (max-width: 700px) { .sched-cell { min-height: 58px; padding: 4px; } .sched-who { font-size: 10.5px; } }
+
+/* ============================================================================
+   ТРИ УСТРОЙСТВА — ОДНА ПРОГРАММА
+   Раскладка меняется по ширине окна, а не «мобильная версия отдельно».
+     телефон   — до 700 px: меню внизу, как в приложениях на iPhone;
+     планшет   — 701–1099: меню прячется за ☰, всё остальное как на компьютере;
+     компьютер — от 1100: меню слева видно всегда.
+   Отступы под «чёлку» и полосу дома берём из env(safe-area-inset-*):
+   без них на iPhone часть кнопок уезжает под системные элементы.
+   ========================================================================== */
+.only-mobile { display: none; }
+.tabbar { display: none; }
+
+/* --- Общее для всех размеров ------------------------------------------------ */
+.topbar {
+  padding-top: calc(12px + env(safe-area-inset-top));
+  padding-left: calc(26px + env(safe-area-inset-left));
+  padding-right: calc(26px + env(safe-area-inset-right));
+}
+.sidebar { padding-top: env(safe-area-inset-top); padding-left: env(safe-area-inset-left); }
+
+/* Пальцем попадать труднее, чем мышью: на сенсорных экранах всё крупнее.
+   44 px — размер, ниже которого кнопка перестаёт быть удобной. */
+@media (pointer: coarse) {
+  .btn { height: 44px; padding: 0 18px; }
+  /* мелкие кнопки внутри строк — 40 px: ниже палец начинает промахиваться,
+     а 44 px, как у главных кнопок, сделали бы строки таблиц вдвое выше */
+  .btn-sm { height: 40px; padding: 0 14px; font-size: 13.5px; }
+  .btn-icon { width: 44px; }
+  .chip { padding: 9px 15px; font-size: 14px; }
+  .row { min-height: 60px; }
+  .segmented button { padding: 9px 15px; }
+  table.data td, table.data th { padding: 13px 14px; }
+  .form-row { min-height: 54px; }
+}
+
+/* ---------------------------------------------------------------------------
+   ТЕЛЕФОН (до 700 px)
+   Сверху остаётся только период и «спрятать суммы» — всё остальное ушло вниз,
+   на панель вкладок. Так больше места достаётся самим цифрам.
+   --------------------------------------------------------------------------- */
+@media (max-width: 700px) {
+  .sidebar { display: none; }
+  .hide-mobile { display: none !important; }
+  #menuBtn, #addBtn, .topbar .search { display: none; }
+
+  .topbar { padding: 8px 12px; gap: 8px;
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-left: calc(12px + env(safe-area-inset-left));
+    padding-right: calc(12px + env(safe-area-inset-right)); }
+  .segmented { flex: 1; overflow-x: auto; scrollbar-width: none; }
+  .segmented::-webkit-scrollbar { display: none; }
+  .segmented button { flex: 1 0 auto; padding: 8px 12px; font-size: 13px; }
+
+  .page { padding: 14px 14px 24px; gap: 16px;
+    padding-left: calc(14px + env(safe-area-inset-left));
+    padding-right: calc(14px + env(safe-area-inset-right)); }
+  .page-title { font-size: 28px; }
+  .page-head { align-items: flex-start; gap: 10px; }
+  .hero-value { font-size: 32px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { padding: 13px 14px; }
+  .stat-value { font-size: 21px; }
+  .grid-2 { grid-template-columns: 1fr; }
+
+  /* Форма: подпись сверху, поле во всю ширину — как в настройках iPhone.
+     16 px обязательны: с меньшим шрифтом Safari зумит страницу при вводе. */
+  .form-row { flex-direction: column; align-items: stretch; gap: 3px; padding: 10px 16px; }
+  .form-row label { flex-basis: auto; font-size: 13px; color: var(--label-2); }
+  .form-row label small { font-size: 12px; margin-top: 1px; }
+  .form-row input, .form-row select, .form-row textarea { text-align: left; font-size: 16px; padding: 6px 0; }
+  .form-row select { text-align-last: left; background-position: right center; }
+  .form-row input:focus, .form-row textarea:focus { padding-left: 0; padding-right: 0; }
+  .form-row .num-field { align-items: stretch; }
+  .form-row .num-hint { text-align: left; }
+  .form-row .pair-row input.num-input { flex: 0 0 38%; }
+  /* Лист выезжает снизу и тянется за ухват — так открываются окна на телефоне */
+  .sheet { width: 100%; max-height: 92vh; border-radius: 16px 16px 0 0; align-self: flex-end;
+    padding-bottom: env(safe-area-inset-bottom); animation: sheetUp .3s cubic-bezier(.32,.72,0,1); }
+  @keyframes sheetUp { from { transform: translateY(100%); } }
+  .sheet-grabber { display: block; width: 36px; height: 5px; border-radius: 3px;
+    background: var(--label-3); margin: 8px auto 0; flex: 0 0 auto; }
+  .sheet-head { padding: 10px 12px 8px; }
+  .sheet-title { font-size: 16px; }
+  .backdrop { padding: 0; align-items: flex-end; z-index: 80; }
+  /* Пока форма открыта, нижняя панель вкладок прячется: она перекрывала
+     кнопку «Сохранить», и до неё нельзя было дотянуться. */
+  body.sheet-open .tabbar { display: none; }
+  body.sheet-open .toast { bottom: 84px; max-width: 86vw; font-size: 13.5px; padding: 10px 14px; }
+  .sheet-body .form-actions { padding-bottom: calc(6px + env(safe-area-inset-bottom)); }
+  .quick { gap: 8px; }
+  .quick .btn { flex: 1 1 100%; }
+  .filter-name { flex-basis: 100%; padding-top: 0; }
+
+  /* Панель вкладок внизу — главная навигация на телефоне */
+  .tabbar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    background: var(--sidebar); backdrop-filter: saturate(180%) blur(20px);
+    border-top: .5px solid var(--separator);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right);
+  }
+  .tab { flex: 1; border: none; background: none; cursor: pointer; color: var(--label-2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 7px 2px 6px; min-height: 50px; font-family: inherit; }
+  .tab-icon { font-size: 21px; line-height: 1; }
+  .tab-name { font-size: 10.5px; font-weight: 600; letter-spacing: -.1px; }
+  .tab.active { color: var(--blue); }
+  .tab-add .tab-icon { color: #fff; background: var(--blue); border-radius: 50%;
+    width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 600; }
+  .tab-add.active { color: var(--label-2); }
+  /* место под панель, чтобы последняя строка не пряталась под ней */
+  .scroll { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  .toast { bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .draft-bar { bottom: calc(70px + env(safe-area-inset-bottom)); }
+
+  /* Таблица на телефоне: каждая строка — карточка «подпись — значение».
+     Восемь столбцов на узкий экран не помещаются, а крутить таблицу вбок и
+     гадать, к какой строке относится цифра, неудобно. Подписи берутся из
+     заголовков столбцов, поэтому работает на любом экране сразу. */
+  .table-wrap { overflow-x: visible; }
+  table.data, table.data tbody, table.data tr, table.data td { display: block; width: auto; }
+  table.data thead { display: none; }
+  table.data tr { padding: 11px 16px; border-bottom: .5px solid var(--separator); }
+  table.data tr:last-child { border-bottom: none; }
+  table.data td { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; padding: 3px 0; border: none; text-align: right; font-size: 14px; }
+  table.data td::before { content: attr(data-label); color: var(--label-2); font-size: 12.5px;
+    font-weight: 550; text-align: left; flex: 0 0 42%; }
+  table.data td:empty { display: none; }
+  /* первая ячейка — заголовок карточки, подпись ей не нужна */
+  table.data tr > td:first-child { font-size: 15.5px; font-weight: 600; text-align: left;
+    padding-bottom: 5px; }
+  table.data tr > td:first-child::before { display: none; }
+  table.data td.num, table.data th.num { white-space: normal; }
+  table.data td.center { justify-content: flex-end; padding-top: 7px; }
+  table.data td.center::before { display: none; }
+  tr.total { background: var(--bg-inset); }
+  /* строки «пока пусто» и «показать ещё» карточками не делаем */
+  table.data tr.plain { padding: 0; }
+  table.data tr.plain td { display: block; text-align: center; }
+  table.data tr.plain td::before { display: none; }
+}
+
+/* Узкий телефон: цифры мельче, чтобы в два столбца влезала любая сумма */
+@media (max-width: 430px) {
+  .stat-value { font-size: 19px; letter-spacing: -.4px; white-space: normal; }
+  .stat { padding: 12px 13px; }
+  .page-title { font-size: 26px; }
+  .tab-name { font-size: 10px; }
+}
+/* Совсем узкий (меньше 360 px): в один столбец, иначе суммы не помещаются */
+@media (max-width: 359px) {
+  .stat-grid { grid-template-columns: 1fr; }
+}
+
+/* Телефон лёжа: высоты мало — ужимаем всё по вертикали */
+@media (max-width: 900px) and (max-height: 460px) {
+  .topbar { padding-top: calc(6px + env(safe-area-inset-top)); padding-bottom: 6px; }
+  .page { padding-top: 10px; gap: 12px; }
+  .page-title { font-size: 22px; }
+  .tab { min-height: 42px; padding: 4px 2px; }
+  .tab-icon { font-size: 17px; }
+  .tab-name { display: none; }
+  .scroll { padding-bottom: calc(46px + env(safe-area-inset-bottom)); }
+}
+
+/* ---------------------------------------------------------------------------
+   ПЛАНШЕТ (701–1099 px)
+   Меню прячется за ☰ — на iPad в книжной ориентации так делают почти все.
+   Всё остальное как на компьютере: строка поиска, период, «Записать».
+   --------------------------------------------------------------------------- */
+@media (min-width: 701px) and (max-width: 1099px) {
+  .sidebar { display: none; }
+  .only-mobile { display: inline-flex; }
+  .topbar { padding-left: calc(16px + env(safe-area-inset-left));
+    padding-right: calc(16px + env(safe-area-inset-right)); gap: 10px; }
+  .search { max-width: 300px; }
+  #syncBtn { display: none; }
+  .page { padding: 20px 20px 50px;
+    padding-left: calc(20px + env(safe-area-inset-left));
+    padding-right: calc(20px + env(safe-area-inset-right)); }
+  .stat-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+  .sheet { width: min(620px, 92%); }
+}
+
+/* ---------------------------------------------------------------------------
+   КОМПЬЮТЕР (от 1100 px) — меню слева видно всегда
+   --------------------------------------------------------------------------- */
+@media (min-width: 1100px) {
+  .sidebar { display: flex; }
+  .only-mobile { display: none; }
+}
+
+/* Большой монитор: не растягиваем строки на всю ширину — читать неудобно */
+@media (min-width: 1700px) {
+  .page { max-width: 1360px; }
+  .stat-grid { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+}
+
+/* Крупный режим на телефоне: карточки в один столбец, иначе цифры не влезают */
+@media (max-width: 700px) {
+  body.big .stat-grid { grid-template-columns: 1fr; }
+  body.big .tab-name { font-size: 11.5px; }
+}
+
+/* Мышью не наводят на сенсорном экране — подсветка строки только там, где есть курсор */
+@media (hover: none) {
+  .row.tappable:hover, table.data tr:hover td { background: none; }
+}
+
+/* ============================================================================
+   График смен: календарь месяца. На телефоне колонок меньше — иначе
+   в клетку не влезает ни одно имя.
+   ========================================================================== */
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px; padding: 14px 16px 18px; }
+.cal-dow { font-size: 12px; font-weight: 650; color: var(--label-2);
+  text-align: center; text-transform: uppercase; letter-spacing: .3px; padding-bottom: 2px; }
+.cal-cell { min-height: 74px; border-radius: var(--r-inner); background: var(--fill-2);
+  padding: 6px 7px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.cal-cell.empty { background: transparent; min-height: 0; }
+.cal-cell.weekend { background: var(--fill); }
+.cal-cell.gap { box-shadow: inset 0 0 0 1px rgba(255,149,0,.45); }
+.cal-cell.today { box-shadow: inset 0 0 0 2px var(--blue); }
+.cal-day { font-size: 12.5px; font-weight: 700; color: var(--label-2); }
+.cal-who { font-size: 12px; line-height: 1.25; color: var(--label);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-none { font-size: 12px; color: var(--label-3); }
+.sub-title { font-size: 13px; font-weight: 650; color: var(--label-2);
+  padding: 14px 20px 4px; text-transform: uppercase; letter-spacing: .3px; }
+.inline-label { display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; color: var(--label-2); font-weight: 550; }
+.inline-label select { height: 34px; border-radius: var(--r-inner);
+  border: 1px solid var(--separator); background: var(--bg-inset);
+  color: var(--label); padding: 0 10px; font-size: 14px; }
+
+@media (max-width: 700px) {
+  /* На телефоне неделя не помещается: показываем календарь в две колонки
+     по дням — так видно и число, и кто выходил. */
+  .cal-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cal-dow { display: none; }
+  .cal-cell.empty { display: none; }
+  .cal-cell { min-height: 60px; }
+}
+
+/* Кнопка «Показать все экраны» в меню: та же строка, но приглушённая —
+   это не экран, а переключатель, и путать их не нужно. */
+.nav-item.nav-more { color: var(--label-2); font-weight: 550; margin-top: 4px; }
+.nav-item.nav-more .nav-icon { opacity: .6; }
+.nav-count.nav-count-quiet { background: var(--fill-2); color: var(--label-2); }
+
+/* ============================================================================
+   Значки. Рисуются линиями и берут цвет текста — поэтому одинаково хорошо
+   выглядят в светлой и тёмной теме, а в выделенном пункте меню становятся
+   белыми вместе с надписью. Толщину линии не трогаем: она задана в самом
+   значке и одинакова у всех.
+   ========================================================================== */
+.ic { display: block; flex: 0 0 auto; }
+.nav-icon { display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; color: var(--label-2); }
+.nav-item.active .nav-icon { color: inherit; }
+.row-icon { display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; color: var(--label-2); flex: 0 0 auto; }
+.tab-icon { display: flex; align-items: center; justify-content: center;
+  height: 24px; }
+/* Плюс лежит на синем кружке — значит он белый. Правило ниже задаёт
+   сам кружок только на телефоне, здесь важен цвет самой линии. */
+.tab-add .tab-icon { color: #fff; }
+.stat-icon, .banner .ic { color: inherit; }
+
+/* Значок в кнопке стоит вплотную к надписи и выравнивается по её середине.
+   Правило намеренно не трогает display: иначе оно перебивает скрытие кнопок
+   по ширине экрана («только на телефоне», «спрятать на телефоне») — они
+   объявлены выше и с тем же весом. */
+.btn { align-items: center; gap: 7px; }
+.btn:not(.only-mobile):not(.hide-mobile) { display: inline-flex; }
+.btn .ic, .btn > span[data-ic] { flex: 0 0 auto; }
+.btn-icon { justify-content: center; padding-left: 10px; padding-right: 10px; }
+.btn-icon .ic { margin: 0; }
+.search-ic { display: flex; align-items: center; color: var(--label-3); }
+#privacyBtn.is-off { color: var(--blue); }
+.row-menu-list .ic { color: var(--label-2); }
+.row-menu-list button.danger .ic { color: #FF3B30; }
+.banner > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
+.alert-item > span:first-child { display: flex; align-items: center; flex: 0 0 auto; }
+.row-menu-btn { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ============================================================================
+   Проще на глаз: одна главная цифра, дела строкой, один выбор периода.
+   ========================================================================== */
+/* Период — обычный список вместо пяти кнопок в ряд */
+.segmented select { height: 34px; border: none; border-radius: var(--r-pill);
+  background: var(--fill-2); color: var(--label); font-size: 14px; font-weight: 600;
+  padding: 0 30px 0 12px; cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238e8e93' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; }
+.segmented select:hover { background-color: var(--fill); }
+
+/* Главная цифра: крупно и без соседей, чтобы взгляду было где остановиться */
+.hero { padding: 26px 24px 22px; }
+.hero-value { font-size: clamp(38px, 6vw, 54px); letter-spacing: -1.2px; }
+.hero-sub { margin-top: 8px; font-size: 14px; color: var(--label-2); }
+
+/* Ряд кнопок между карточками: «Разбить по поставщикам», «Свернуть».
+   Отступы такие же, как у карточек, иначе кнопка липнет к цифре над ней и
+   читается как её часть. */
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+
+/* Главное действие крупнее остальных: их не надо разглядывать */
+.quick-main { align-items: center; gap: 8px; margin: 4px 0 18px; }
+.quick-main .btn-lg { padding: 12px 22px; font-size: 16px; }
+
+/* Дело — одна строка: текст слева, кнопка справа, объяснений нет */
+.card .row .btn-sm { white-space: nowrap; }
+
+/* Блок периода был рассчитан на пять кнопок в ряд; теперь там один список,
+   и растягиваться ему больше не на что. */
+.segmented { flex: 0 0 auto; background: none; padding: 0; }
+
+/* Дело на телефоне: длинную строку не сжимаем в столбик из трёх слов —
+   вся строка и так открывает нужный экран, кнопка справа лишь подсказка. */
+@media (max-width: 700px) {
+  .card .row .btn-sm { padding: 5px 10px; font-size: 12.5px; }
+  .row-title { font-size: 15px; }
+}
+
+/* ============================================================================
+   Платёжная ведомость: бумага, на которой расписываются за деньги.
+   На экране выглядит как документ, на печати остаётся только она.
+   ========================================================================== */
+.payslip-head { padding: 20px 22px 6px; text-align: center; }
+.payslip-org { font-size: 14px; font-weight: 650; }
+.payslip-org span { font-size: 12.5px; font-weight: 400; color: var(--label-2); }
+.payslip-title { font-size: 19px; font-weight: 700; margin-top: 14px; }
+.payslip-sub { font-size: 13.5px; color: var(--label-2); margin-top: 3px; }
+.payslip .data th, .payslip .data td { border: .5px solid var(--separator); }
+.payslip .data td.sign { min-width: 130px; }
+/* Линия, на которой расписываются: пустая, во всю ширину клетки */
+.sign-line { display: block; min-width: 110px; height: 17px;
+  border-bottom: .8px solid var(--label-3); }
+.sign-line.wide { display: inline-block; min-width: 240px; margin: 0 8px; }
+.payslip-foot { padding: 16px 22px 22px; font-size: 14px; }
+.payslip-signs { display: flex; flex-wrap: wrap; gap: 26px 40px; margin-top: 22px; }
+.payslip-signs small { display: block; font-size: 11px; color: var(--label-3);
+  margin-left: 76px; margin-top: 2px; }
+
+@media print {
+  /* Строку ведомости не разрываем между страницами: подпись должна остаться
+     рядом с фамилией. */
+  .payslip .data tr { break-inside: avoid; }
+  .payslip { box-shadow: none; }
+  .sign-line { border-bottom: .8px solid #000; }
+}
+
+/* Шапка и подпись печатного отчёта */
+.rep-head { text-align: center; padding: 6px 0 16px; }
+.rep-org { font-size: 13.5px; color: var(--label-2); font-weight: 600; }
+.rep-title { font-size: 20px; font-weight: 700; margin-top: 4px; }
+.rep-foot { margin: 22px 0 8px; font-size: 13.5px; color: var(--label-2); }
+.inline-label input[type="date"] { height: 34px; border-radius: var(--r-inner);
+  border: 1px solid var(--separator); background: var(--bg-inset);
+  color: var(--label); padding: 0 10px; font-size: 14px; }
+
+/* Кто попадёт в ведомость: отмеченные — залиты, остальные — обычные кнопки */
+.slip-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn.btn-on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.btn-on .c-muted { color: rgba(255,255,255,.75); }
+@media print { .slip-pick, .quick, .banner { display: none !important; } }
+
+/* Поле даты: сам календарь и две быстрые кнопки рядом */
+.date-field { display: flex; gap: 6px; align-items: center; }
+.date-field input[type="date"] { flex: 1 1 auto; min-width: 0; }
+.btn.date-quick { flex: 0 0 auto; white-space: nowrap; }
+@media (max-width: 560px) { .date-field { flex-wrap: wrap; }
+  .date-field input[type="date"] { flex: 1 0 100%; } }
+
+/* ---- Меню деревом: избранное сверху, остальное по папкам ---------------- */
+.nav-item .nav-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.nav-item.nav-sub { padding-left: 26px; }
+
+/* Папка. Видно, сколько внутри, и сколько там дел — даже когда свёрнута */
+.nav-folder { display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 10px; cursor: pointer; color: var(--label-2); font-weight: 550;
+  user-select: none; }
+.nav-folder:hover { background: var(--fill-2); color: var(--label); }
+.nav-folder .nav-name { flex: 1 1 auto; }
+.nav-folder .nav-of { font-size: 12px; color: var(--label-3); font-variant-numeric: tabular-nums; }
+.nav-folder .nav-count { margin-left: 6px; }
+
+/* Звёздочка: тихо ждёт, пока на строку не навели */
+.nav-star { flex: 0 0 auto; background: none; border: 0; padding: 2px; margin-left: 4px;
+  color: var(--label-3); cursor: pointer; opacity: 0; border-radius: 6px; }
+.nav-item:hover .nav-star, .nav-star.on { opacity: 1; }
+.nav-star.on { color: #f5a623; }
+.nav-star.on .ic { fill: currentColor; }
+.nav-item.active .nav-star { color: rgba(255,255,255,.85); }
+.nav-star:hover { background: var(--fill-2); color: var(--label); }
+/* На телефоне наведения нет — звёздочку показываем всегда */
+@media (hover: none) { .nav-star { opacity: 1; } }
+
+.nav-empty { font-size: 12px; color: var(--label-3); padding: 2px 10px 8px; line-height: 1.4; }
+
+/* ---- Экран «Настроить меню» -------------------------------------------- */
+.mcfg-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  border-bottom: 1px solid var(--separator); flex-wrap: wrap; }
+.mcfg-row:last-child { border-bottom: 0; }
+.mcfg-row.off { opacity: .55; }
+.mcfg-ic { flex: 0 0 auto; color: var(--label-2); display: flex; }
+.mcfg-name { flex: 1 1 160px; min-width: 0; text-align: left; background: none; border: 0;
+  font: inherit; color: var(--label); cursor: pointer; padding: 0; }
+.mcfg-name:hover { color: var(--blue); text-decoration: underline; }
+@media (max-width: 560px) {
+  .mcfg-name { flex: 1 0 100%; font-weight: 600; }
+  .mcfg-row .btn { flex: 1 1 auto; }
+}
+
+/* Значок слева от названия карточки — в настройках и им подобных */
+.card-title .card-ic { display: inline-flex; vertical-align: -3px; margin-right: 8px;
+  color: var(--label-2); }
+
+/* Уведомление с кнопкой «Отменить»: текст слева, действие справа */
+.toast { display: flex; align-items: center; gap: 14px; }
+.toast-text { flex: 1 1 auto; }
+.toast-act { flex: 0 0 auto; background: none; border: 0; padding: 4px 2px; font: inherit;
+  font-weight: 650; color: #6cb8ff; cursor: pointer; border-radius: 8px; }
+.toast-act:hover { text-decoration: underline; }
+@media (max-width: 560px) { .toast { max-width: calc(100vw - 32px); } }
+
+/* Итог пересчёта кассы — виден сразу, пока считаешь купюры */
+.cc-total { margin: 4px 14px 10px; padding: 14px 16px; border-radius: var(--r-inner);
+  background: var(--fill-2); }
+.cc-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 3px 0; }
+.cc-line > span { color: var(--label-2); }
+.cc-big { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cc-sub { font-size: 13px; color: var(--label-3); padding-bottom: 4px; }
+.cc-diff { margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--separator);
+  font-weight: 600; }
+.cc-diff.ok > span, .cc-diff.ok > b { color: var(--green); }
+.cc-diff.bad > span, .cc-diff.bad > b { color: var(--red); }
+.cc-diff.warn > span, .cc-diff.warn > b { color: var(--orange); }
+
+/* Таблица шире экрана: показываем, что справа есть продолжение.
+   Без этого край просто обрезан, и человек не догадывается прокрутить. */
+.table-wrap { position: relative; }
+.table-wrap.scrollable::after { content: ''; position: absolute; top: 0; right: 0; bottom: 0;
+  width: 44px; pointer-events: none; border-radius: 0 var(--r-inner) var(--r-inner) 0;
+  background: linear-gradient(90deg, rgba(127,127,127,0), var(--bg-elev) 72%); }
+.table-wrap.scrolled-end::after { opacity: 0; }
+@media (prefers-color-scheme: dark) {
+  .table-wrap.scrollable::after {
+    background: linear-gradient(90deg, rgba(127,127,127,0), var(--bg-elev) 72%); }
+}
+.table-wrap.scrollable { scrollbar-width: thin; }
+.table-wrap.scrollable::-webkit-scrollbar { height: 8px; }
+.table-wrap.scrollable::-webkit-scrollbar-thumb {
+  background: var(--fill-2); border-radius: 4px; }
+.scroll-hint { font-size: 12px; color: var(--label-2); padding: 6px 20px 12px;
+  display: flex; align-items: center; gap: 6px; }
+.scroll-hint::before { content: '↔'; font-size: 15px; opacity: .7; }
+
+/* ---- Быстрый ввод: сумма крупно, клавиши под пальцем ------------------- */
+.fast-sum { font-size: 44px; font-weight: 700; text-align: center; padding: 18px 0 6px;
+  font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+.fast-sum.empty { color: var(--label-3); }
+.fast-note { text-align: center; color: var(--label-2); font-size: 13px;
+  padding: 0 20px 14px; line-height: 1.4; }
+.fast-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  max-width: 420px; margin: 0 auto 14px; }
+.fast-key { font: inherit; font-size: 24px; font-weight: 600; padding: 18px 0;
+  background: var(--bg-elev); color: var(--label); border: 1px solid var(--separator);
+  border-radius: var(--r-inner); cursor: pointer; }
+.fast-key:hover { background: var(--fill-2); }
+.fast-key:active { transform: scale(.97); }
+.fast-quick { justify-content: center; }
+.fast-cats { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 20px 18px; }
+.fast-cat { flex: 1 1 150px; padding: 16px 12px; font-size: 15px; }
+.fast-cat[disabled] { opacity: .45; cursor: default; }
+@media (max-width: 560px) {
+  .fast-sum { font-size: 38px; }
+  .fast-key { padding: 16px 0; font-size: 22px; }
+  .fast-cat { flex: 1 1 calc(50% - 5px); }
+}
+
+/* Умный поиск: подсказка про то, что он умеет, и подсветка найденного */
+.search-tip { font-size: 12px; color: var(--muted); margin-left: 8px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 100%; cursor: help; }
+mark { background: #ffe9a8; color: inherit; border-radius: 3px; padding: 0 1px; }
+:root[data-theme="dark"] mark, .dark mark { background: #7a5c00; color: #fff; }
+
+/* Панель периода анализа: даты и кнопки загруженных выгрузок */
+.ana-bar { align-items: center; }
+.ana-loaded { align-items: center; margin-top: -4px; }
+.ana-loaded .filter-name { font-size: 12px; color: var(--muted); margin-right: 4px; }
+@media (max-width: 560px) {
+  .search-tip { display: none; }
+  .ana-bar .inline-label { flex: 1 1 45%; }
+}
+
+/* ---------- Пустой экран: что это, почему пусто, что нажать ---------- */
+.blank-card { background: var(--bg-elev); }
+.blank { padding: 48px 28px 40px; text-align: center; display: flex; flex-direction: column;
+  align-items: center; gap: 10px; }
+.blank-ic { width: 60px; height: 60px; border-radius: 18px; background: var(--fill-2);
+  display: flex; align-items: center; justify-content: center; color: var(--label-3);
+  margin-bottom: 4px; }
+.blank-title { font-size: 19px; font-weight: 650; letter-spacing: -.3px; }
+.blank-why { font-size: 14.5px; color: var(--label-2); line-height: 1.55; max-width: 460px; }
+.blank-acts { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  margin-top: 12px; }
+@media (max-width: 620px) {
+  .blank { padding: 34px 18px 30px; }
+  .blank-acts .btn { flex: 1 1 100%; }
+}
+
+/* ---------- Окно подробностей: из чего сложилась сумма ---------- */
+.drill-head { padding: 4px 2px 14px; }
+.drill-sum { font-size: 32px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+.drill-sub { font-size: 13.5px; color: var(--label-2); margin-top: 2px; }
+/* Строка отчёта, которая раскрывается: под курсором видно, что она нажимается */
+.drillable { cursor: pointer; }
+.drillable:hover { background: var(--fill-2); }
+.drillable .drill-mark { color: var(--label-3); font-size: 15px; margin-left: 6px; }
+.drillable:hover .drill-mark { color: var(--blue); }
+
+/* Разбор расхождения по ящику: «каким должно быть каждое число, чтобы сошлось».
+   Спокойный серый блок — это подсказка, а не ошибка, пугать ею нельзя. */
+.cc-fix {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fill-2);
+}
+.cc-fix-h { font-size: 13px; color: var(--label-2); margin-bottom: 6px; }
+.cc-fix-r {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding: 3px 0; font-size: 15px;
+}
+.cc-fix-r span { color: var(--label-2); }
+.cc-fix-r b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cc-fix-r s { color: var(--label-3); font-weight: 400; }
+.cc-fix-n { font-size: 12px; color: var(--label-3); margin-top: 8px; line-height: 1.35; }
+
+/* Мастер настройки: шапка шага. Владелец должен видеть, сколько осталось, —
+   иначе длинная настройка кажется бесконечной и её бросают. */
+.wiz-head { padding: 4px 0 14px; }
+.wiz-step { font-size: 13px; font-weight: 600; color: var(--label-2); letter-spacing: .02em; }
+.wiz-bar { display: flex; gap: 5px; margin: 8px 0 8px; }
+.wiz-bar i { flex: 1; height: 4px; border-radius: 2px; background: var(--fill); }
+.wiz-bar i.on { background: var(--blue); }
+.wiz-why { font-size: 14px; color: var(--label-2); line-height: 1.4; }
+.wiz-nav { padding-top: 14px; }
+
+/* Сверка в три колонки: что сказала касса, что должно быть, что есть по факту.
+   Числа выравниваем по правому краю моноширинными цифрами — иначе глаз не
+   поймает разницу между 76 769 и 67 969, а она и есть вся суть. */
+.cc-cmp {
+  margin-top: 12px; padding: 10px 12px 8px;
+  border-radius: 12px; background: var(--fill-2);
+}
+.cc-cmp-h, .cc-cmp-r {
+  display: grid; grid-template-columns: 1fr auto auto auto;
+  gap: 10px; align-items: baseline;
+}
+.cc-cmp-h { font-size: 11px; color: var(--label-3); padding-bottom: 6px;
+  border-bottom: 1px solid var(--separator); text-transform: uppercase; letter-spacing: .03em; }
+.cc-cmp-h b { font-weight: 600; min-width: 74px; text-align: right; }
+.cc-cmp-r { padding: 7px 0 2px; font-size: 15px; }
+.cc-cmp-r span { color: var(--label-2); }
+.cc-cmp-r b { min-width: 74px; text-align: right; font-variant-numeric: tabular-nums; }
+.cc-cmp-r i { font-style: normal; color: var(--label-3); font-weight: 400; }
+.cc-cmp-n { font-size: 12px; color: var(--label-3); text-align: right; padding-bottom: 4px; }
+.cc-cmp-n.bad { color: var(--red); }
+.cc-cmp-t {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--separator);
+  font-size: 15px; font-weight: 600;
+}
+.cc-cmp-t b { font-size: 19px; font-variant-numeric: tabular-nums; }
+.cc-cmp-t.ok { color: var(--green); }
+.cc-cmp-t.bad { color: var(--red); }
+.cc-cmp-t.warn { color: var(--orange); }
+@media (max-width: 480px) {
+  .cc-cmp-h b, .cc-cmp-r b { min-width: 62px; }
+  .cc-cmp-r, .cc-cmp-h { gap: 6px; font-size: 14px; }
+}
+
+/* Девять клеток ABC×XYZ. Слева направо — ровность, сверху вниз — деньги.
+   Кормильца (AX) красим зелёным, мёртвый груз (CZ) — красным: владелец должен
+   находить их взглядом, не читая подписей. */
+.xyz-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 8px; padding: 4px 0 12px;
+}
+.xyz-cell {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 12px 6px; border-radius: var(--r-inner);
+  background: var(--fill-2); cursor: pointer;
+  transition: background .12s ease;
+}
+.xyz-cell:hover { background: var(--fill); }
+.xyz-cell b { font-size: 13px; font-weight: 700; color: var(--label-2); letter-spacing: .04em; }
+.xyz-cell span { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.xyz-cell i { font-style: normal; font-size: 12px; color: var(--label-3); }
+.xyz-cell.empty { opacity: .45; cursor: default; }
+.xyz-cell.ax { background: rgba(52, 199, 89, .14); }
+.xyz-cell.ax b, .xyz-cell.ax span { color: var(--green); }
+.xyz-cell.cz { background: rgba(255, 59, 48, .12); }
+.xyz-cell.cz b, .xyz-cell.cz span { color: var(--red); }
+.xyz-legend { font-size: 12px; color: var(--label-3); line-height: 1.45; padding-bottom: 4px; }
+@media (max-width: 420px) {
+  .xyz-cell { padding: 9px 4px; }
+  .xyz-cell span { font-size: 18px; }
+  .xyz-cell i { font-size: 11px; }
+}
+
+/* Ревизор. Собранное правило владелец видит фразой, пока выбирает кубики, —
+   иначе он поймёт, что получилось, только после сохранения. */
+.rule-preview {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 12px 14px; margin-bottom: 14px;
+  border-radius: var(--r-inner); background: rgba(0, 122, 255, .1);
+  font-size: 15px; line-height: 1.4; color: var(--blue);
+}
+.rule-preview svg { flex: none; margin-top: 1px; }
+.rev-list { display: flex; flex-direction: column; gap: 8px; padding: 4px 0 2px; }
+.rev-item { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; color: var(--label-2); }
+.rev-item svg { flex: none; margin-top: 2px; color: var(--green); }
+.card-note { font-size: 12px; color: var(--label-3); padding-top: 10px; line-height: 1.4; }
+
+/* «Подробнее»: объяснение по требованию.
+   Владелец: «слишком много объяснений, мешает глазам сфокусироваться и
+   искать». Короткая подпись остаётся, длинное объяснение прячется за
+   значком — нажал и прочитал, когда нужно. */
+.more-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 6px; margin-left: 6px;
+  border: 0; border-radius: var(--r-pill);
+  background: var(--fill); color: var(--label-2);
+  font: inherit; font-size: 11.5px; line-height: 1; cursor: pointer;
+  vertical-align: middle;
+}
+.more-btn:hover { background: var(--fill); color: var(--blue); }
+.more-btn.on { background: var(--blue); color: #fff; }
+.more-box {
+  display: block; margin-top: 6px; padding: 9px 11px;
+  border-radius: var(--r-inner); background: var(--fill-2);
+  font-size: 13px; line-height: 1.45; color: var(--label-2);
+  font-weight: 400; white-space: normal;
+}
+.more-box[hidden] { display: none; }
+.form-hint .more-btn { margin-left: 0; }
+/* На бумаге прятать нечего: печатаем всё, что объясняет документ */
+@media print { .more-box[hidden] { display: block !important; } .more-btn { display: none !important; } }
+
+/* ============================================================================
+   ПЛАВНОСТЬ
+
+   Ощущение дорогой программы на восемьдесят процентов состоит из того, что
+   ничего не дёргается. До этой правки на весь файл было пять анимаций:
+   экраны переключались рывком, окна появлялись мгновенно, списки моргали.
+
+   Длительности намеренно короткие — 120–220 мс. Медленная анимация красива
+   ровно один раз, а потом начинает мешать: владелец открывает сверку кассы
+   в семь утра и ждать её выезда не должен.
+
+   Всё уважает системную настройку «уменьшить движение»: кому анимация мешает
+   или вредит, тот её не увидит.
+   ========================================================================== */
+#page { animation: page-in .18s ease both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(6px); } }
+
+.card { transition: box-shadow .16s ease, transform .16s ease; }
+.list-row, .nav-item, .btn, .chip, .stat, .xyz-cell, .more-btn {
+  transition: background-color .14s ease, color .14s ease,
+              border-color .14s ease, transform .12s ease, opacity .14s ease;
+}
+.btn:active, .chip:active, .list-row:active, .xyz-cell:active { transform: scale(.97); }
+.nav-item { will-change: background-color; }
+
+/* Окно выезжает снизу, как на телефоне, и затемнение проявляется вместе с ним */
+.sheet { animation: sheet-in .24s cubic-bezier(.22,.8,.3,1) both; }
+@keyframes sheet-in { from { transform: translateY(18px); opacity: .6; } }
+.sheet-back, .backdrop { animation: fade-in .2s ease both; }
+@keyframes fade-in { from { opacity: 0; } }
+
+/* Свёрнутое объяснение раскрывается, а не выпрыгивает */
+.more-box:not([hidden]) { animation: more-in .16s ease both; }
+@keyframes more-in { from { opacity: 0; transform: translateY(-3px); } }
+
+/* Строки таблицы проявляются по очереди — глаз успевает за ними */
+.table-wrap table.data tbody tr { animation: row-in .2s ease both; }
+@keyframes row-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; scroll-behavior: auto !important;
+  }
+}
+@media print { *, *::before, *::after { animation: none !important; } }
+
+/* --- Скелетон: пока грузится выгрузка 1С ---------------------------------------
+   Раньше программа просто застывала на двадцати тысячах строк, и было
+   непонятно — работает она или повисла. */
+.skeleton { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.sk-line {
+  height: 14px; border-radius: 7px;
+  background: linear-gradient(90deg, var(--fill-2) 25%, var(--fill) 37%, var(--fill-2) 63%);
+  background-size: 400% 100%;
+  animation: sk 1.2s ease-in-out infinite;
+}
+.sk-line.w70 { width: 70%; } .sk-line.w40 { width: 40%; } .sk-line.w90 { width: 90%; }
+.sk-line.tall { height: 30px; border-radius: 10px; }
+@keyframes sk { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+
+/* --- Ещё крупнее ---------------------------------------------------------------
+   «Крупный режим» в программе уже был. Заводить рядом вторую настройку размера
+   значит развести два механизма на одно дело и однажды в них запутаться.
+   Поэтому просто добавили третью ступень к существующей: магазин
+   круглосуточный, смотрят ночью и с телефона. */
+body.huge { font-size: 19px; }
+body.huge .page-title { font-size: 40px; }
+body.huge .hero-value { font-size: 54px; }
+body.huge .stat-value { font-size: 34px; }
+body.huge .btn, body.huge input, body.huge select, body.huge textarea { font-size: 17px; }
+
+/* Командная палитра: сорок экранов — это много, чтобы искать их глазами */
+.cmd-wrap { position: fixed; inset: 0; z-index: 900; display: flex;
+  align-items: flex-start; justify-content: center; padding: 10vh 16px 16px; }
+.cmd-back { position: absolute; inset: 0; background: rgba(0,0,0,.35);
+  backdrop-filter: blur(3px); animation: fade-in .18s ease both; }
+.cmd-box { position: relative; width: 100%; max-width: 560px; overflow: hidden;
+  background: var(--bg-elev); border-radius: var(--r-card); box-shadow: var(--shadow-sheet);
+  animation: cmd-in .2s cubic-bezier(.22,.8,.3,1) both; }
+@keyframes cmd-in { from { transform: translateY(-10px) scale(.98); opacity: 0; } }
+.cmd-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+  border-bottom: 1px solid var(--separator); }
+.cmd-head svg { flex: none; color: var(--label-3); }
+.cmd-head input { flex: 1; border: 0; background: none; outline: none;
+  font: inherit; font-size: 17px; color: var(--label); }
+.cmd-head kbd { font: inherit; font-size: 11px; color: var(--label-3);
+  border: 1px solid var(--separator); border-radius: 5px; padding: 2px 6px; }
+.cmd-list { max-height: 52vh; overflow: auto; padding: 6px; }
+.cmd-row { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border: 0; border-radius: var(--r-inner); background: none;
+  font: inherit; text-align: left; color: var(--label); cursor: pointer; }
+.cmd-row svg { flex: none; color: var(--label-2); }
+.cmd-row.on, .cmd-row:hover { background: var(--fill-2); }
+.cmd-row.on svg { color: var(--blue); }
+.cmd-name { flex: 1; font-size: 15px; }
+.cmd-where { font-size: 12px; color: var(--label-3); }
+.cmd-empty { padding: 22px 16px; text-align: center; font-size: 14px; color: var(--label-2); }
+.cmd-foot { padding: 9px 16px; border-top: 1px solid var(--separator);
+  font-size: 11.5px; color: var(--label-3); }
+@media print { .cmd-wrap { display: none !important; } }
