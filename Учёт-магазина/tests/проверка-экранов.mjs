@@ -4722,6 +4722,38 @@ console.log('Страница: ' + PAGE + '\n');
     await page.evaluate(() => document.body.classList.contains('compact')),
     'включён', 'включён');
 
+  /* Светлая тема в программе была и раньше — и лежала в «Настройках» на
+     седьмом экране прокрутки. Владелец про неё не знал и попросил «чтобы
+     была и белая». Значит, тема нужна не в настройках, а под рукой:
+     одна кнопка в шапке. Проверяем нажатием — она и должна работать
+     нажатием, а не чтением документации. */
+  const перекл = await page.evaluate(async () => {
+    const b = document.getElementById('themeBtn');
+    if (!b) return { беда: 'кнопки темы нет' };
+    const до = document.documentElement.getAttribute('data-theme');
+    const подсказкаДо = b.title;
+    b.click();
+    await new Promise(r => setTimeout(r, 300));
+    const после = document.documentElement.getAttribute('data-theme');
+    const настройка = window.WMStore.settings.theme;
+    // подпись читаем ПОКА светло: после второго нажатия она снова про светлую
+    const подсказкаПосле = document.getElementById('themeBtn').title;
+    document.getElementById('themeBtn').click();
+    await new Promise(r => setTimeout(r, 300));
+    return { до: до, после: после, назад: document.documentElement.getAttribute('data-theme'),
+      настройка: настройка, подсказкаДо: подсказкаДо, подсказкаПосле: подсказкаПосле };
+  });
+  check('ТЕМА ПЕРЕКЛЮЧАЕТСЯ ОДНОЙ КНОПКОЙ В ШАПКЕ',
+    !перекл.беда && перекл.до === 'dark' && перекл.после === 'light',
+    перекл.беда || (перекл.до + ' → ' + перекл.после), 'dark → light');
+  check('и обратно тоже', перекл.назад === 'dark', перекл.назад, 'dark');
+  /* Нажал на солнце — хочет светлую сейчас и завтра, а не «как в системе». */
+  check('ВЫБОР ЗАПОМИНАЕТСЯ, А НЕ СБРАСЫВАЕТСЯ В «АВТО»',
+    перекл.настройка === 'Светлая', перекл.настройка, 'Светлая');
+  check('и кнопка подписана тем, что она сделает',
+    /светлую/.test(перекл.подсказкаДо) && /тёмную/.test(перекл.подсказкаПосле),
+    перекл.подсказкаДо + ' / ' + перекл.подсказкаПосле, 'понятно');
+
   await page.evaluate(() => {
     window.__контраст = function () {
       /* Браузер отдаёт цвет двумя разными записями. Обычную — «rgb(19, 23,
