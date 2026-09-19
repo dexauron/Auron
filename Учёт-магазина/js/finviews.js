@@ -1682,6 +1682,16 @@
       '</div>';
     h += wholeNote(sel);
 
+    /* Сравнивать кассиров голой суммой недостач нельзя: у кого выручка
+       больше, у того и недостачи больше. Поэтому на картинке — недостача на
+       каждую тысячу рублей выручки. Это то самое число, которое владелец
+       ищет глазами в таблице, и именно его удобно сравнивать столбиками. */
+    if (rating.length > 1) {
+      h += u.card('Недостачи на 1000 ₽ выручки', u.chartBox('cashierBars', 220,
+        'Чем выше столбик, тем чаще у человека не сходится касса. Голая сумма ' +
+        'тут не годится: у кого выручка больше, у того и недостачи больше.'));
+    }
+
     h += u.card('Антирейтинг', u.table('rateT', [
       { title: 'Кассир', fn: function (r) { return esc(r.name); } },
       { title: 'Смен', cls: 'num', fn: function (r) { return u.nf(r.shifts); } },
@@ -2514,6 +2524,26 @@
     return h;
   }
 
+  function drawCashiers() {
+    var u = U(), rating = E.cashierRating(pick().rows);
+    if (rating.length < 2) return;
+    var список = rating.slice().sort(function (a, b) { return b.per1000 - a.per1000; }).slice(0, 12);
+    u.chart('cashierBars', 'bar', {
+      легенда: false,
+      data: {
+        labels: список.map(function (r) { return r.name; }),
+        datasets: [{
+          label: 'Недостача на 1000 ₽',
+          data: список.map(function (r) { return r.per1000; }),
+          backgroundColor: список.map(function (r) {
+            return r.per1000 > 0 ? u.тема('--red') : u.тема('--green');
+          }),
+          borderRadius: 3, maxBarThickness: 40
+        }]
+      }
+    });
+  }
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
     { id: 'pulse', icon: 'gauge', name: 'Пульт', group: 'Каждый день', render: viewPulse },
@@ -2521,7 +2551,7 @@
     { id: 'evening', icon: 'moon', name: 'Вечер: итоги дня', group: 'Каждый день', render: viewEvening },
     { id: 'finpay', icon: 'calendar', name: 'План выплат', group: 'Каждый день', render: viewPlans },
     { id: 'ledger', icon: 'list', name: 'База операций', group: 'Деньги', render: viewLedger },
-    { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers },
+    { id: 'cashiers', icon: 'people', name: 'Кассиры и расхождения', group: 'Деньги', render: viewCashiers, onDraw: drawCashiers },
     { id: 'debtors', icon: 'notebook', name: 'Долги покупателей', group: 'Деньги', render: viewDebtors },
     { id: 'finreport', icon: 'doc', name: 'Отчёт за месяц', group: 'Деньги', render: viewReport },
     { id: 'funds', icon: 'safe', name: 'Накопления', group: 'Деньги', render: viewFunds },

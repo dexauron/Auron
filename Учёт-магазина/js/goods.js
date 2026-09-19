@@ -35,28 +35,53 @@
   var MONTH_RU = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
     'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь'];
 
+  /* СЕЗОННОСТЬ: в каком месяце магазин живёт, а в каком спит.
+
+     СЧИТАЕМ СРЕДНЕЕ ЗА ГОД, А НЕ СУММУ. Магазин работает третий год: январь
+     успел случиться трижды, декабрь — дважды. Сравнивать их суммы — значит
+     объявить январь сезонным просто потому, что он был чаще. Поэтому у
+     каждого месяца считается, в скольких годах он встретился (years), и
+     сравниваются средние за год (avg).
+
+     Экран «Сезонность» читал поля years, avg, vs, mark и best/worst — а их
+     здесь не было вовсе, поэтому показывал нули и прочерки во всех строках.
+     Имена ниже — те, которые он и ждёт. */
   function seasons(dds, isIncome) {
-    var by = {}, total = 0;
+    var by = {}, годы = {}, total = 0;
     (dds || []).forEach(function (r) {
       if (!r.date || (isIncome && !isIncome(r))) return;
-      var m = +r.date.slice(5, 7) - 1;
+      var m = +String(r.date).slice(5, 7) - 1;
       if (m < 0 || m > 11) return;
       by[m] = (by[m] || 0) + num(r.amount);
+      if (!годы[m]) годы[m] = {};
+      годы[m][String(r.date).slice(0, 4)] = 1;
       total += num(r.amount);
     });
     var months = [];
     for (var i = 0; i < 12; i++) {
       var sum = round(by[i] || 0);
-      months.push({ m: i, name: MONTH_RU[i], sum: sum,
+      var лет = годы[i] ? Object.keys(годы[i]).length : 0;
+      months.push({ m: i, name: MONTH_RU[i], sum: sum, years: лет,
+        avg: лет ? round(sum / лет) : 0,
         share: total ? round(sum / total * 100) : 0 });
     }
     var withData = months.filter(function (x) { return x.sum > 0; });
-    var avg = withData.length ? total / withData.length : 0;
+    /* Обычный месяц — это средний из тех, что были. Месяцы без данных в
+       среднее не идут: иначе новый магазин, проработавший три месяца,
+       выглядел бы так, будто девять месяцев в году у него провал. */
+    var avg = withData.length
+      ? withData.reduce(function (a, x) { return a + x.avg; }, 0) / withData.length : 0;
     months.forEach(function (x) {
-      x.vsAvg = avg ? round((x.sum - avg) / avg * 100) : 0;
-      x.kind = !x.sum ? 'нет данных' : (x.vsAvg > 15 ? 'сезон' : (x.vsAvg < -15 ? 'затишье' : 'обычно'));
+      x.vs = avg && x.years ? round((x.avg - avg) / avg * 100) : null;
+      x.vsAvg = x.vs;                       // прежнее имя: его могли читать снаружи
+      x.mark = !x.years ? '' : (x.vs > 15 ? 'сезон' : (x.vs < -15 ? 'затишье' : ''));
+      x.kind = !x.years ? 'нет данных' : (x.mark || 'обычно');
     });
-    return { months: months, total: round(total), avg: round(avg), monthsWithData: withData.length };
+    var порядок = withData.slice().sort(function (a, b) { return b.avg - a.avg; });
+    return { months: months, total: round(total), avg: round(avg),
+      monthsWithData: withData.length,
+      best: порядок[0] || null,
+      worst: порядок.length > 1 ? порядок[порядок.length - 1] : null };
   }
 
   // Сезонность группы товаров по приходам

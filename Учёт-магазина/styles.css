@@ -1705,3 +1705,13 @@ table.data td.num, table.data th.num, .stat-value, .hero-value {
 /* «Показано 50 из 696» — как в МойСклад. Без этого не понять, много ли
    осталось за кнопкой «Показать ещё». */
 .more-of { font-size: 12.5px; color: var(--label-2); }
+
+/* --- МЕСТО ПОД ДИАГРАММУ ---------------------------------------------------
+   Высоту задаёт экран, ширину — карточка. Без фиксированной высоты Chart.js
+   растягивает холст бесконечно: страница уезжает вниз на километр.
+   ------------------------------------------------------------------------- */
+.chart-box { position: relative; width: 100%; padding: 4px var(--pad-card) 10px; }
+.chart-box canvas { display: block; width: 100% !important; height: 100% !important; }
+.chart-note { padding: 0 var(--pad-card) 14px; font-size: 12.5px; color: var(--label-2); }
+body.compact .chart-note { font-size: 12px; }
+@media print { .chart-box { break-inside: avoid; } }

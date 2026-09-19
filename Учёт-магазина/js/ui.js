@@ -468,6 +468,114 @@
     return Math.max(1, Math.round((new Date(r.to) - new Date(r.from)) / 86400000) + 1);
   }
 
+  /* --- ДИАГРАММЫ -------------------------------------------------------------
+     Chart.js лежал в папке vendor и грузился при каждом запуске — 205 КБ, —
+     не рисуя НИ ОДНОЙ диаграммы. Теперь работает.
+
+     Экраны про Chart.js не знают: они просят место под диаграмму (chartBox)
+     и говорят, что нарисовать (chart). Захотим сменить библиотеку — правка
+     будет здесь, а не в двадцати экранах.
+
+     ЦВЕТА БЕРУТСЯ ИЗ ТЕМЫ. Диаграмма, нарисованная чёрным по чёрному, —
+     обычная беда тёмных тем: на светлой всё хорошо, на тёмной пусто.
+     ------------------------------------------------------------------------- */
+  var ГРАФИКИ = {};        // живые диаграммы: их надо гасить перед перерисовкой
+
+  function тема(имя) {
+    return getComputedStyle(document.documentElement).getPropertyValue(имя).trim();
+  }
+
+  /* Цвета для долей — когда столбиков много и каждый свой. Подобраны так,
+     чтобы читались и на белом, и на почти чёрном: слишком светлые пропадают
+     на белом, слишком тёмные — на чёрном. */
+  /* Зелёного здесь нарочно нет в начале: зелёный в программе означает «это
+     ваши деньги, они остались». Когда «Осталось» на круге зелёное и первая
+     доля расхода тоже зелёная, круг читается как одно пятно — проверено
+     глазами на настоящих данных. */
+  var ЦВЕТА_ДОЛЕЙ = ['#4DA3FF', '#F5A524', '#F0506E', '#A277F5', '#E8743B',
+    '#6C7BF5', '#F06595', '#2BBBAD', '#C9A227', '#8FBF3F'];
+
+  function chartBox(id, высота, подпись) {
+    /* private — чтобы в режиме «скрыть суммы» диаграмма пряталась вместе с
+       цифрами. Иначе прячешь числа, а картинка их всё равно показывает. */
+    return '<div class="chart-box private" style="height:' + (+высота || 220) + 'px">' +
+      '<canvas id="' + esc(id) + '"></canvas></div>' +
+      (подпись ? '<div class="chart-note">' + esc(подпись) + '</div>' : '');
+  }
+
+  function погаситьГрафики() {
+    Object.keys(ГРАФИКИ).forEach(function (k) {
+      try { ГРАФИКИ[k].destroy(); } catch (e) { /* уже мёртв — и хорошо */ }
+      delete ГРАФИКИ[k];
+    });
+  }
+
+  function chart(id, вид, конфиг) {
+    if (typeof window.Chart !== 'function') return;   // библиотеки нет — экран живёт без картинки
+    var el = $(id); if (!el) return;
+    try { ГРАФИКИ[id] = new window.Chart(el, слитьНастройки(вид, конфиг)); }
+    catch (e) { /* диаграмма не главное: экран должен открыться и без неё */ }
+  }
+
+  /* Общие настройки: без них каждая диаграмма настраивала бы подписи, сетку
+     и всплывающие подсказки заново — и по-разному. */
+  function слитьНастройки(вид, c) {
+    var подпись = тема('--label-2'), сетка = тема('--separator'), текст = тема('--label');
+    var деньги = c.деньги !== false;
+    var опции = {
+      responsive: true,
+      maintainAspectRatio: false,
+      /* Без плавного появления: программа перерисовывает экран на каждое
+         нажатие, и диаграмма, которая каждый раз «вырастает», мельтешит. */
+      animation: false,
+      plugins: {
+        legend: c.легенда === false ? { display: false }
+          : { position: 'bottom', labels: { color: подпись, boxWidth: 12, padding: 14,
+              font: { size: 12 } } },
+        tooltip: {
+          backgroundColor: тема('--bg-elev'),
+          titleColor: текст, bodyColor: текст,
+          borderColor: сетка, borderWidth: 1, padding: 10, displayColors: true,
+          callbacks: {
+            label: function (ctx) {
+              var v = ctx.parsed && ctx.parsed.y != null ? ctx.parsed.y
+                : (ctx.parsed != null && typeof ctx.parsed === 'number' ? ctx.parsed : ctx.raw);
+              var имя = ctx.dataset && ctx.dataset.label ? ctx.dataset.label + ': ' : '';
+              if (вид === 'doughnut' || вид === 'pie') имя = ctx.label + ': ';
+              return имя + (деньги ? money(v) : nf(v));
+            }
+          }
+        }
+      }
+    };
+    if (вид !== 'doughnut' && вид !== 'pie') {
+      опции.scales = {
+        x: { ticks: { color: подпись, font: { size: 11 } }, grid: { display: false },
+          border: { color: сетка } },
+        y: { ticks: { color: подпись, font: { size: 11 },
+            callback: function (v) { return деньги ? коротко(v) : nf(v); } },
+          grid: { color: сетка }, border: { display: false },
+          beginAtZero: c.снуля !== false }
+      };
+    }
+    return { type: вид, data: c.data, options: опции };
+  }
+
+  /* На оси не место для «1 234 567 ₽»: подписи налезут друг на друга.
+     Пишем коротко — 1,2 млн, — а точную сумму человек увидит в подсказке. */
+  function коротко(v) {
+    var a = Math.abs(v);
+    if (a >= 1e9) return nf(v / 1e9, 1) + ' млрд';
+    if (a >= 1e6) return nf(v / 1e6, 1) + ' млн';
+    if (a >= 1e3) return nf(Math.round(v / 1e3)) + ' тыс';
+    /* Мелкие величины округлять до целых нельзя. На экране кассиров ось
+       показывает недостачу на 1000 ₽ выручки — там 0,37 и 0,08, — и вся
+       ось превращалась в столбик нулей. */
+    if (a > 0 && a < 1) return nf(v, 2);
+    if (a > 0 && a < 10) return nf(v, 1);
+    return nf(v);
+  }
+
   /* --- Компоненты ------------------------------------------------------------ */
   function hero(label, value, sub, color) {
     return '<div class="hero"><div class="hero-label">' + esc(label) + '</div>' +
@@ -2160,6 +2268,7 @@
     ic: ic,
     dateRu: dateRu, plural: plural, today: today,
     card: card, listRow: listRow, listOf: listOf, table: table, stat: stat, hero: hero,
+    chartBox: chartBox, chart: chart, ЦВЕТА_ДОЛЕЙ: ЦВЕТА_ДОЛЕЙ, тема: тема,
     blank: blank, blankReport: blankReport, printFoot: printFoot, more: more,
     /* Уровень подробности раздела числом: 1 просто, 2 обычно, 3 подробно.
        Экраны спрашивают его сами и решают, что показывать сразу. */
@@ -2612,6 +2721,10 @@
     var html;
     try { html = v.render(); }
     catch (e) { html = pageHead('Ошибка', e.message) + '<div class="card"><div class="empty">Что-то пошло не так на этом экране.<br>' + esc(e.message) + '</div></div>'; }
+    /* Перерисовка выбрасывает все холсты из страницы. Диаграммы, которые на
+       них жили, при этом остаются в памяти и держат свои холсты — поэтому
+       гасим их ДО замены, а не после. */
+    погаситьГрафики();
     $('page').innerHTML = readOnlyBar() + html;
     markScrollables();
     document.body.classList.toggle('readonly', readOnly());

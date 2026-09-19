@@ -899,6 +899,16 @@
       u.stat('Самый тихий', esc(sez.worst ? sez.worst.name : '—'),
         sez.worst ? money(sez.worst.avg) + ' в среднем' : '') +
       '</div>';
+    /* Сезонность — это про форму года, а не про двенадцать чисел. Таблица
+       отвечает «сколько в марте», картинка — «когда магазин живёт, а когда
+       спит». Второе и есть вопрос, ради которого сюда заходят. */
+    /* Место под диаграмму занимаем только если есть что рисовать: пустой
+       прямоугольник на пол-экрана выглядит как сломанная программа. */
+    if (sez.monthsWithData > 1) {
+      h += u.card('Год по месяцам', u.chartBox('seasonBars', 230,
+        'Средняя выручка месяца за все годы наблюдений. Зелёный — выше обычного.'));
+    }
+
     h += u.card('По месяцам', u.table('seasonT', [
       { title: 'Месяц', fn: function (r) { return esc(r.name); } },
       { title: 'Лет наблюдений', cls: 'num', fn: function (r) { return u.nf(r.years); } },
@@ -909,6 +919,32 @@
       { title: '', fn: function (r) { return r.mark ? u.badge(r.mark, r.mark === 'сезон' ? 'green' : 'gray') : ''; } }
     ], sez.months, { step: 12 }));
     return h;
+  }
+
+  function drawSeasons() {
+    var u = U(), F = window.WMFin;
+    var sez = G.seasons(F.flatten(S.state.dds || []), F.isIncome);
+    var мес = (sez.months || []).filter(function (m) { return m.years > 0 && m.avg > 0; });
+    if (мес.length < 2) return;
+    u.chart('seasonBars', 'bar', {
+      легенда: false,
+      data: {
+        labels: мес.map(function (m) { return m.name; }),
+        datasets: [{
+          label: 'В среднем за месяц',
+          data: мес.map(function (m) { return m.avg; }),
+          /* Выше обычного — зелёным, ниже — приглушённым: чтобы «когда
+             живём» читалось с одного взгляда, без сравнения столбиков. */
+          backgroundColor: мес.map(function (m) {
+            return m.vs > 0 ? u.тема('--green') : u.тема('--fill');
+          }),
+          borderColor: мес.map(function (m) {
+            return m.vs > 0 ? u.тема('--green') : u.тема('--label-3');
+          }),
+          borderWidth: 1, borderRadius: 3, maxBarThickness: 44
+        }]
+      }
+    });
   }
 
   /* --- Действия и поля экрана «Списания» ---------------------------------------- */
@@ -965,6 +1001,6 @@
     { id: 'returns', icon: 'returnArrow', name: 'Возвраты поставщикам', group: 'Товары', render: viewReturns },
     { id: 'abc', icon: 'medal', name: 'ABC и XYZ', group: 'Товары', render: viewAbc },
     { id: 'pricecmp', icon: 'tag', name: 'Цены поставщиков', group: 'Товары', render: viewPrices },
-    { id: 'seasons', icon: 'calendar', name: 'Сезонность', group: 'Отчёты', render: viewSeasons }
+    { id: 'seasons', icon: 'calendar', name: 'Сезонность', group: 'Отчёты', render: viewSeasons, onDraw: drawSeasons }
   );
 })();

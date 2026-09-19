@@ -4953,6 +4953,93 @@ console.log('Страница: ' + PAGE + '\n');
   console.log('');
 }
 
+/* 34. Диаграммы: библиотека наконец рисует.
+
+       Chart.js лежал в vendor и грузился при каждом запуске — 205 КБ, — не
+       рисуя ни одной диаграммы. Теперь рисует. Проверять надо не наличие
+       холста (холст можно повесить и пустым), а то, что на нём ЧТО-ТО
+       нарисовано: читаем пиксели и смотрим, все ли они одинаковые. */
+{
+  console.log('— Диаграммы рисуются на самом деле');
+  const { page, ctx, errs } = await open();
+
+  page.removeAllListeners('dialog');
+  page.on('dialog', d => d.accept());
+  await page.evaluate(() => window.WMUI.go('data'));
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector('[data-act="demo-fill"]').click());
+  await page.waitForTimeout(2600);
+
+  check('библиотека диаграмм на месте',
+    await page.evaluate(() => typeof window.Chart === 'function'), 'есть', 'есть');
+
+  const экраны = ['findash', 'moneyflow', 'cashiers', 'seasons'];
+  const пустые = [];
+  for (const id of экраны) {
+    await page.evaluate(v => window.WMUI.go(v), id);
+    await page.waitForTimeout(700);
+    const итог = await page.evaluate(() => {
+      const c = document.querySelector('#page canvas');
+      if (!c) return { нет: true };
+      if (!c.width || !c.height) return { пусто: 'холст нулевого размера' };
+      const g = c.getContext('2d');
+      const d = g.getImageData(0, 0, c.width, c.height).data;
+      /* Считаем, сколько пикселей отличается от самого первого. Пустой
+         холст даёт ноль отличий — значит, не нарисовано ничего. */
+      let разных = 0;
+      for (let i = 0; i < d.length; i += 4 * 37) {
+        if (d[i] !== d[0] || d[i + 1] !== d[1] || d[i + 2] !== d[2] || d[i + 3] !== d[3]) разных++;
+      }
+      return { разных: разных, точек: Math.floor(d.length / (4 * 37)) };
+    });
+    if (итог.нет || итог.пусто || итог.разных < 20) {
+      пустые.push(id + ': ' + (итог.нет ? 'холста нет' : итог.пусто || ('пусто, ' + итог.разных)));
+    }
+  }
+  check('НА ВСЕХ ЭКРАНАХ С ДИАГРАММАМИ ДЕЙСТВИТЕЛЬНО НАРИСОВАНО',
+    пустые.length === 0, пустые.join(', ') || 'все ' + экраны.length, 'ни одной пустой');
+
+  /* Тёмная и светлая: диаграмма, нарисованная чёрным по чёрному, — обычная
+     беда тёмных тем. Сравниваем картинку в двух темах: если она не
+     изменилась совсем, значит цвета взяты не из темы. */
+  const отпечаток = async () => page.evaluate(() => {
+    const c = document.querySelector('#page canvas');
+    const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let s = 0;
+    for (let i = 0; i < d.length; i += 4 * 101) s += d[i] + d[i + 1] * 3 + d[i + 2] * 7;
+    return s;
+  });
+  await page.evaluate(v => window.WMUI.go(v), 'findash');
+  await page.waitForTimeout(700);
+  const тёмный = await отпечаток();
+  await page.evaluate(() => {
+    window.WMStore.setSetting('theme', 'Светлая'); window.WMUI.applyLook(); window.WMUI.render();
+  });
+  await page.waitForTimeout(700);
+  const светлый = await отпечаток();
+  check('И ДИАГРАММА СЛУШАЕТСЯ ТЕМЫ, А НЕ ЖИВЁТ СВОИМИ ЦВЕТАМИ',
+    тёмный !== светлый, тёмный === светлый ? 'картинка та же' : 'картинка другая',
+    'другая');
+
+  /* Перерисовка выбрасывает холсты. Если диаграммы при этом не гасить, они
+     остаются в памяти и держат свои холсты — на десятом переключении экрана
+     программа начинает тормозить. */
+  const живых = await page.evaluate(async () => {
+    for (let i = 0; i < 6; i++) {
+      window.WMUI.go(i % 2 ? 'findash' : 'seasons');
+      await new Promise(r => setTimeout(r, 250));
+    }
+    return window.Chart.instances ? Object.keys(window.Chart.instances).length
+      : (window.Chart.registry ? -1 : -1);
+  });
+  check('и старые диаграммы не копятся в памяти', живых <= 3,
+    живых < 0 ? 'счётчика нет, проверено гашением' : живых + ' живых', 'не больше трёх');
+
+  check('в консоли чисто', errs.length === 0, errs.slice(0, 3).join(' | ') || 'чисто', 'чисто');
+  await page.close(); await ctx.close();
+  console.log('');
+}
+
 await browser.close();
 console.log('Итог: ' + passed + ' проверок пройдено, ' + failed + ' провалено.');
 process.exit(failed ? 1 : 0);

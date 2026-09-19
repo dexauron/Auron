@@ -19,6 +19,7 @@ export default [
         ss: 'readonly', jspdf: 'readonly', BigInt: 'readonly', Intl: 'readonly',
         alert: 'readonly', confirm: 'readonly', prompt: 'readonly',
         requestAnimationFrame: 'readonly', matchMedia: 'readonly',
+        getComputedStyle: 'readonly',
         indexedDB: 'readonly', crypto: 'readonly', location: 'readonly',
         history: 'readonly', screen: 'readonly', performance: 'readonly',
         DOMParser: 'readonly', Image: 'readonly', FormData: 'readonly',

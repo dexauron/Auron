@@ -154,6 +154,16 @@
       u.stat('В среднем за день', u.priv(t.avgDay), u.nf(t.dayCount) + ' дней с выручкой') +
       '</div>';
 
+    /* Выручка по дням. Таблица из тридцати строк отвечает на вопрос «сколько
+       было 14-го», а картинка — на вопрос «как идёт месяц»: где провал, где
+       выходные, ровно ли торгуем. Это разные вопросы, и для второго таблица
+       не годится. */
+    var поДням = R.avgCheck(F.flatten(rows)).days || [];
+    if (поДням.length > 1) {
+      h += u.card('Выручка по дням', u.chartBox('dashDays', 230,
+        'Столбик — день. Наведите на столбик, чтобы увидеть точную сумму.'));
+    }
+
     if (pace && pace.forecast) {
       h += '<div class="banner blue"><span>' + ic('chartLine') + '</span><span>Такими темпами месяц закроется на ' +
         '<b>' + esc(money(pace.forecast)) + '</b> выручки: за ' + u.nf(pace.daysDone) +
@@ -522,6 +532,15 @@
         'Этот отчёт складывается из закрытых смен. Закройте первую — и здесь ' +
         'появится выручка, прибыль и сравнение с прошлым месяцем.');
     }
+    /* Доли расхода кружком. «Дорожка денег» ниже показывает порядок шагов, а
+       кружок — соотношение: что съело больше всего. Одно без другого
+       неполно, поэтому здесь и то и другое. */
+    var расходы = flow.steps.filter(function (r) { return r.kind === 'out' && r.sum > 0; });
+    if (расходы.length > 1) {
+      h += u.card('На что ушла выручка', u.chartBox('flowPie', 260,
+        'Доли от выручки за ' + monthRu(m) + '. Остаток — это то, что не ушло никуда.'));
+    }
+
     h += u.card('Дорожка денег', u.table('flowT', [
       { title: 'Шаг', fn: function (r) {
         return (r.kind === 'start' ? '<b>' : '') + esc(r.name) + (r.kind === 'start' ? '</b>' : ''); } },
@@ -1377,11 +1396,62 @@
     return out.slice(0, 4).join(' · ');
   }
 
+  /* ==========================================================================
+     ДИАГРАММЫ ОТЧЁТОВ
+
+     Рисуются после того, как экран нарисован: холста до этого просто нет.
+     Данные считаются заново — это дешевле, чем тащить их из render() через
+     общую переменную и потом гадать, свежие они или от прошлого экрана.
+     ========================================================================== */
+  function drawDash() {
+    var u = U(), m = ym();
+    var дни = R.avgCheck(F.flatten(rowsOf(m))).days || [];
+    if (дни.length < 2) return;
+    u.chart('dashDays', 'bar', {
+      легенда: false,
+      data: {
+        labels: дни.map(function (d) { return +String(d.date).slice(8, 10); }),
+        datasets: [{
+          label: 'Выручка',
+          data: дни.map(function (d) { return d.revenue; }),
+          backgroundColor: u.тема('--accent'),
+          borderRadius: 3, maxBarThickness: 26
+        }]
+      }
+    });
+  }
+
+  function drawMoneyFlow() {
+    var u = U(), m = ym();
+    var flow = R.moneyFlow(F.flatten(dds()), m);
+    var расходы = (flow.steps || []).filter(function (r) { return r.kind === 'out' && r.sum > 0; });
+    if (расходы.length < 2) return;
+    var остаток = flow.steps.length ? flow.steps[flow.steps.length - 1].left : 0;
+    var имена = расходы.map(function (r) { return r.name; });
+    var суммы = расходы.map(function (r) { return r.sum; });
+    if (остаток > 0) { имена.push('Осталось'); суммы.push(остаток); }
+    u.chart('flowPie', 'doughnut', {
+      data: {
+        labels: имена,
+        datasets: [{
+          data: суммы,
+          backgroundColor: имена.map(function (_, i) {
+            /* Остаток — всегда зелёный и всегда последний: это не «ещё одна
+               статья расхода», а то, что у магазина осталось. */
+            return (остаток > 0 && i === имена.length - 1)
+              ? u.тема('--green') : u.ЦВЕТА_ДОЛЕЙ[i % u.ЦВЕТА_ДОЛЕЙ.length];
+          }),
+          borderColor: u.тема('--bg-elev'), borderWidth: 2
+        }]
+      }
+    });
+  }
+
   var VIEWS = window.WM_EXTRA_VIEWS = window.WM_EXTRA_VIEWS || [];
   VIEWS.push(
-    { id: 'findash', icon: 'chartPie', name: 'Дашборд', group: 'Отчёты', render: viewDash },
+    { id: 'findash', icon: 'chartPie', name: 'Дашборд', group: 'Отчёты', render: viewDash, onDraw: drawDash },
     { id: 'owner', icon: 'person', name: 'Отчёт собственнику', group: 'Отчёты', render: viewOwner },
-    { id: 'moneyflow', icon: 'coins', name: 'Куда ушли деньги', group: 'Отчёты', render: viewMoneyFlow },
+    { id: 'moneyflow', icon: 'coins', name: 'Куда ушли деньги', group: 'Отчёты', render: viewMoneyFlow, onDraw: drawMoneyFlow },
     { id: 'avgcheck', icon: 'receipt', name: 'Средний чек', group: 'Отчёты', render: viewAvgCheck },
     { id: 'earners', icon: 'medal', name: 'Кто зарабатывает', group: 'Отчёты', render: viewEarners },
     { id: 'ready', icon: 'doc', name: 'Готовый отчёт', group: 'Отчёты', render: viewReady },
