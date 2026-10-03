@@ -1,4 +1,4 @@
-// «Подорожало» — обратная сторона «Сегодня дешевле», только для своих
+// «Подорожало» — обратная сторона «Стало дешевле», только для своих
 
 /* Покупателю каталог показывает, что подешевело. Владельцу и сотруднику нужно
  * ровно обратное, и по двум разным ценам:
@@ -156,7 +156,11 @@ function retailRise(p) {
 function marginSqueeze(p, cost, retail) {
   if (!cost || retail) return null;                        // ценник тоже подняли — всё честно
   const sell = Number(p && p.retail_price);
-  if (!(sell > 0) || sell <= cost.is) return null;
+  if (!(sell > 0)) return null;
+  /* Закупка переросла ценник — товар продаётся В МИНУС. Это самый тяжёлый
+     случай, а раньше он молча пропадал: проценты наценки тут считать нечего,
+     поэтому возвращалось «ничего». Теперь говорим прямо. */
+  if (sell <= cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
   return { wasPct: Math.round(((sell - cost.was) / cost.was) * 100), isPct: Math.round(((sell - cost.is) / cost.is) * 100) };
 }
 
@@ -184,7 +188,7 @@ function riseOf(p, rows) {
  *     изменения ценника в список даже не заглядывает.
  * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
  * массивы, что и остальной кэш приложения. */
-let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [] };
+let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [], total: 0 };
 
 function refreshRise() {
   /* Держим один и тот же объект, а не создаём новый пустой при каждом вызове:
@@ -206,7 +210,9 @@ function refreshRise() {
     }
     out.sort((a, b) => b.pct - a.pct);
   }
-  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out.slice(0, LIST_MAX) };
+  /* total — настоящее число подорожавших. list урезан до LIST_MAX: длиннее
+     список никто не листает, но писать «200 товаров», когда их 640, нельзя. */
+  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out.slice(0, LIST_MAX), total: out.length };
 }
 
 /* Первый расчёт после нового каталога — не на горячем пути. Он занимает
@@ -234,7 +240,7 @@ function risenList() {
   return riseCache.list;
 }
 
-export const riseCount = () => risenList().length;
+export const riseCount = () => { risenList(); return riseCache.total; };
 
 // одна строка «было → стало, дата» — общий вид для полосы, списка и карточки
 function riseText(kind, r) {
@@ -259,12 +265,16 @@ export function riseHtml(p) {
   const lines = [];
   if (r.retail) lines.push(riseText('Ценник', r.retail));
   if (r.cost) lines.push(riseText(`Закупка${r.cost.sup ? ' · ' + r.cost.sup : ''}`, r.cost));
-  if (r.squeeze) lines.push(`Ценник не меняли — наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
+  if (r.squeeze && r.squeeze.loss != null) {
+    lines.push(`Закупка выше ценника — продаём в минус ${fmtPrice(r.squeeze.loss)} с единицы`);
+  } else if (r.squeeze) {
+    lines.push(`Ценник не меняли — наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
+  }
   return `<div class="rise-box">${ic('warn', 'ic-xs')}<div>${lines.map((t) => `<div>${esc(t)}</div>`).join('')}</div></div>`;
 }
 
 /* ── Полоса на главной ──────────────────────────────────────────────────────
- * Ровно там же, где у покупателя «Сегодня дешевле», и по тем же правилам:
+ * Ровно там же, где у покупателя «Стало дешевле», и по тем же правилам:
  * прячется, как только человек начал искать или фильтровать — иначе она лезет
  * в глаза поверх результата. */
 export function renderRiseStrip() {
@@ -277,15 +287,21 @@ export function renderRiseStrip() {
   const list = show ? risenList() : [];
   if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
   const rows = list.slice(0, RISE_ROWS).map((r) => {
-    const main = r.cost || r.retail;
+    /* Показываем ТО ЖЕ, по чему строка попала наверх. Раньше здесь всегда
+       брали закупку, а сортировка шла по большему из двух ростов: товар с
+       ценником +50% стоял первым, а рядом с ним было написано +5%.
+       И цену показываем ТЕКУЩУЮ: прежняя без новой ничего не говорит. */
+    const main = (r.cost && r.cost.pct >= (r.retail ? r.retail.pct : 0)) ? r.cost : r.retail;
+    const what = main === r.cost ? 'закупка' : 'ценник';
     return `<button class="arr-row" data-similar="${esc(r.p.id)}">
-      <span class="arr-name">${esc(r.p.name)}</span>
-      <span class="arr-price rise-up">+${String(main.pct).replace('.', ',')}%
+      <span class="arr-name">${esc(r.p.name)}<small class="arr-what">${what}</small></span>
+      <span class="arr-price rise-up">${esc(fmtPrice(main.is))}
         <span class="card-was">${esc(fmtPrice(main.was))}</span></span></button>`;
   }).join('');
+  const total = riseCache.total || list.length;
   box.innerHTML = `<div class="arr-head">
       <span class="arr-title">Подорожало</span>
-      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+      <span class="arr-when">${total} ${plural(total, 'товар', 'товара', 'товаров')}</span>
     </div>
     <div class="arr-list">${rows}</div>`;
   box.hidden = false;
@@ -302,15 +318,18 @@ function renderRisen() {
     return;
   }
   const squeezed = list.filter((r) => r.squeeze).length;
+  const total = riseCache.total || list.length;   // list урезан, число — настоящее
   box.innerHTML = `
-    <div class="ord-total">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} подорожало за месяц${
+    <div class="ord-total">${total} ${plural(total, 'товар', 'товара', 'товаров')} подорожало за месяц${
   squeezed ? ` · у ${squeezed} ${plural(squeezed, 'него', 'них', 'них')} ценник не меняли` : ''}</div>
     <div class="ios-group">${list.map((r) => {
     const lines = [];
     if (r.retail) lines.push(riseText('Ценник', r.retail));
     if (r.cost) lines.push(riseText(`Закупка${r.cost.sup ? ' · ' + r.cost.sup : ''}`, r.cost));
-    if (r.squeeze) lines.push(`наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
-    const main = r.cost || r.retail;
+    if (r.squeeze && r.squeeze.loss != null) lines.push(`закупка выше ценника — продаём в минус ${fmtPrice(r.squeeze.loss)}`);
+    else if (r.squeeze) lines.push(`наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
+    // процент справа — от того же роста, по которому строка стоит на своём месте
+    const main = (r.cost && r.cost.pct >= (r.retail ? r.retail.pct : 0)) ? r.cost : r.retail;
     return `<button class="ios-row ios-row-link" data-rise-open="${esc(r.p.id)}">
         <span class="ios-row-title">${esc(r.p.name)}
           <span class="ord-sub">${esc(lines.join(' · '))}</span></span>

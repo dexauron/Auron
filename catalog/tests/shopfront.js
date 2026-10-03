@@ -21,9 +21,13 @@ const products = [
   const { chk, done } = runner('ВИТРИНА ПОКУПАТЕЛЯ');
   const { page, errs } = await newPage(b, { products, groups: [{ id: 'g1', name: 'Разное' }] });
 
-  const paint = (was) => page.evaluate(async (w) => {
+  // снимок цен, с которым сравниваем, — как в жизни: цены и ДЕНЬ снимка
+  const snapAt = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
+  const paint = (was) => page.evaluate(async (d) => {
     const P = window.WM_PUBLISH, s = P._state();
+    const w = d.was;
     s.priceWas = w;
+    s.priceWasAt = Object.keys(w).length ? d.at : '';
     P.renderAll();
     await new Promise((r) => setTimeout(r, 250));
     return {
@@ -32,7 +36,7 @@ const products = [
       cheap: document.getElementById('cheaperStrip').hidden
         ? '' : document.getElementById('cheaperStrip').innerText.replace(/\s+/g, ' '),
     };
-  }, was);
+  }, { was, at: snapAt });
 
   // ── 1. Фасовка отдельной строкой, как у Zepto ──
   const v = await paint({ p1: 101, p2: 25 });
@@ -48,8 +52,12 @@ const products = [
     `видно, что подешевело и на сколько (${(v.grid.match(/89 ₽.{0,16}/) || [''])[0]})`);
   chk(/card-was/.test(v.html) && /card-drop/.test(v.html), 'старая цена зачёркнута, выгода — плашкой');
 
-  // ── 3. Полоса «Сегодня дешевле» ──
-  chk(/Сегодня дешевле/.test(v.cheap), `полоса на главной есть (${v.cheap.slice(0, 50)})`);
+  /* ── 3. Полоса «Стало дешевле» ──
+     Раньше заголовок обещал «сегодня», хотя снимок цен живёт до недели и
+     цена могла упасть пять дней назад. Теперь честно: «Стало дешевле» и
+     строкой ниже — с какого дня сравниваем. */
+  chk(/Стало дешевле/.test(v.cheap), `полоса на главной есть (${v.cheap.slice(0, 50)})`);
+  chk(/сравниваем с ценами на/.test(v.cheap), `сказано, с какого дня сравниваем (${(v.cheap.match(/сравниваем[^\n]*/) || ['НЕ СКАЗАНО'])[0]})`);
   chk(/2 товара/.test(v.cheap), 'сказано, сколько товаров подешевело');
   chk(/Молоко/.test(v.cheap) && /Сок/.test(v.cheap), 'в полосе именно подешевевшие товары');
 
@@ -104,7 +112,7 @@ const products = [
     };
   });
   chk(/card-was/.test(staff.html), 'вошедшему зачёркнутую цену тоже показываем');
-  chk(!staff.cheap, 'и полоса «сегодня дешевле» у него есть');
+  chk(!staff.cheap, 'и полоса «стало дешевле» у него есть');
   chk(/row-pack/.test(staff.html), 'фасовка отдельной строкой — тоже');
   chk(!staff.shelfBtn, 'а вот кнопки про ценник у него нет — он сам его и печатает');
 

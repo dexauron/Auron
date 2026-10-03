@@ -52,8 +52,35 @@ export async function startScan(onResult, { keepOpen = false } = {}) {
   }
 }
 
-// штрихкоды магазина: EAN/UPC/Code128/39/ITF — сужаем список, чтобы распознавалось точнее
-const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar'];
+/* Что ловим. Сканер ОДИН: он сам разбирается, штрихкод перед ним или QR —
+ * отдельных режимов нет, человек просто наводит камеру (решение владельца).
+ * Поэтому к магазинным штрихкодам добавлены qr_code и data_matrix: QR висят
+ * на витринах, в накладных и на упаковке, и раньше камера их молча не
+ * замечала. Список всё равно сужен: распознавать «всё подряд» медленнее. */
+const BARCODE_FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39',
+  'itf', 'codabar', 'qr_code', 'data_matrix'];
+
+/* Камера с отступлением. Раньше просили сразу всё — задняя камера, Full HD,
+ * непрерывная фокусировка одной строкой — и если телефон хоть одного не умел,
+ * браузер отвечал отказом ЦЕЛИКОМ, а человек видел «камера недоступна», хотя
+ * камера работает. Теперь просим по убыванию: лучшее — приемлемое — хоть
+ * какое-нибудь. Фокусировку просим только как пожелание (advanced): она не
+ * стандартная, и требовать её нельзя. */
+async function openCamera() {
+  const tries = [
+    { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 },
+      advanced: [{ focusMode: 'continuous' }] },
+    { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+    { facingMode: 'environment' },
+    true,
+  ];
+  let last = null;
+  for (const video of tries) {
+    try { return await navigator.mediaDevices.getUserMedia({ video, audio: false }); }
+    catch (e) { last = e; }
+  }
+  throw last || new Error('camera');
+}
 
 async function scanNative(done) {
   const box = $('scanContainer');
@@ -64,19 +91,19 @@ async function scanNative(done) {
   box.appendChild(video);
   // просим камеру повыше разрешением и с постоянной фокусировкой — резче мелкие
   // и некачественные штрихкоды
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 }, height: { ideal: 1080 },
-      focusMode: 'continuous', advanced: [{ focusMode: 'continuous' }],
-    },
-    audio: false,
-  });
+  const stream = await openCamera();
   const track = stream.getVideoTracks()[0];
   let active = true;
   scanStopFn = () => {
     active = false;
-    try { track && track.applyConstraints({ advanced: [{ torch: false }] }); } catch (e) { /* */ }
+    /* Гасим подсветку. applyConstraints возвращает ОБЕЩАНИЕ: обычный try/catch
+       ловит только мгновенные ошибки, а отказ приходит позже — и прилетал в
+       приложение как «что-то пошло не так» после КАЖДОГО скана, на всех
+       телефонах, где камера не умеет этой настройки. Ловим и отказ тоже. */
+    try {
+      const off = track && track.applyConstraints({ advanced: [{ torch: false }] });
+      if (off && typeof off.catch === 'function') off.catch(() => { /* камера не умеет — не беда */ });
+    } catch (e) { /* не умеет вовсе */ }
     stream.getTracks().forEach((t) => t.stop());
     box.innerHTML = '';
     $('scanTorch').hidden = true;
@@ -108,8 +135,11 @@ async function scanNative(done) {
     try {
       const codes = await detector.detect(video);
       if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); if (!active) return; }
-      // каждый второй кадр пробуем инверсию (для тёмных/светлых штрихкодов)
-      if (video.videoWidth && (frame++ % 2 === 0)) {
+      /* Инверсия — приём для редкого случая (светлый код на тёмном фоне), а
+         стоит она целого кадра: копия картинки и проход по всем точкам. Раньше
+         её делали на каждом втором кадре, и обычные штрихкоды из-за этого
+         ловились вдвое реже. Теперь каждый четвёртый. */
+      if (video.videoWidth && (frame++ % 4 === 0)) {
         const w = Math.min(960, video.videoWidth); const h = Math.round(video.videoHeight * (w / video.videoWidth));
         canvas.width = w; canvas.height = h;
         cx.drawImage(video, 0, 0, w, h);
@@ -121,7 +151,10 @@ async function scanNative(done) {
         if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); if (!active) return; }
       }
     } catch (e) { /* кадр не считался — пробуем дальше */ }
-    setTimeout(tick, 160);
+    /* Следующий кадр — сразу, как браузер его нарисует. Раньше ждали 160 мс
+       между попытками: это шесть кадров в секунду, и ценник приходилось
+       держать перед камерой неподвижно по несколько секунд. */
+    if (active) requestAnimationFrame(tick);
   };
   tick();
 }
@@ -160,17 +193,23 @@ async function scanWithLibrary(done) {
     await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
   }
   $('scanContainer').innerHTML = '';
-  // сузим до магазинных штрихкодов — точнее и быстрее распознаёт
+  // магазинные штрихкоды И QR: сканер один, режимов не делим
   let formats;
   try {
     const F = window.Html5QrcodeSupportedFormats;
-    formats = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.CODABAR].filter((x) => x != null);
+    formats = [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.CODE_39, F.ITF, F.CODABAR,
+      F.QR_CODE, F.DATA_MATRIX].filter((x) => x != null);
   } catch (e) { formats = undefined; }
   const scanner = new window.Html5Qrcode('scanContainer', formats ? { formatsToSupport: formats } : undefined);
   scanStopFn = () => { scanner.stop().then(() => scanner.clear()).catch(() => {}); $('scanTorch').hidden = true; };
+  /* Окно наведения. Было 260x170 — узкая горизонтальная щель: длинный
+     штрихкод в неё ещё попадал, а квадратный QR уже нет, и попасть в неё с
+     вытянутой руки трудно. Берём большой квадрат по ширине кадра: он ловит
+     и то, и другое, и целиться проще. */
+  const qrbox = (w, h) => { const side = Math.round(Math.min(w, h) * 0.8); return { width: side, height: side }; };
   await scanner.start(
     { facingMode: 'environment' },
-    { fps: 15, qrbox: { width: 260, height: 170 }, aspectRatio: 1.4 },
+    { fps: 15, qrbox },
     (text) => done(text),
     () => {},
   );
@@ -198,13 +237,87 @@ async function scanWithLibrary(done) {
  * там внутри лежит код товара и вес. Догадку принимаем, только если код
  * действительно нашёлся в каталоге: иначе обычный штрихкод, начинающийся с
  * двойки, мог бы притвориться весовым. */
+/* ── Что вообще поймала камера ───────────────────────────────────────────
+ * Сканер один на штрихкоды и QR, значит в руках может оказаться что угодно:
+ * цифры с упаковки, ссылка на наш же каталог, чужая ссылка, просто текст.
+ * Разбираем ТУТ, один раз, чтобы остальной код про это не думал. */
+function readScan(text) {
+  const raw = String(text == null ? '' : text).trim();
+  if (!raw) return { kind: 'empty', raw, value: '' };
+  // только цифры (возможно с пробелами/дефисами) — обычный штрихкод
+  if (/^[\d\s-]+$/.test(raw)) return { kind: 'code', raw, value: raw.replace(/\D/g, '') };
+  // ссылка: наш каталог кладёт товар в ?p=… или #p=…
+  if (/^(https?:)?\/\//i.test(raw) || /^[\w.-]+\.[a-z]{2,}\//i.test(raw)) {
+    const mine = /[?#&]p=([^&#\s]+)/.exec(raw);
+    if (mine) return { kind: 'product', raw, value: decodeURIComponent(mine[1]) };
+    // чужая ссылка: иногда внутри лежит сам штрихкод (…/product/4600000000011)
+    const digits = (raw.match(/\d{8,14}/g) || []).sort((a, b) => b.length - a.length)[0];
+    if (digits) return { kind: 'code', raw, value: digits };
+    return { kind: 'link', raw, value: raw };
+  }
+  // длинная цифровая часть внутри текста — тоже считаем кодом
+  const inside = (raw.match(/\d{8,14}/g) || []).sort((a, b) => b.length - a.length)[0];
+  if (inside) return { kind: 'code', raw, value: inside };
+  return { kind: 'text', raw, value: raw };
+}
+
+/* Указатель «штрихкод → товар». Раньше каждый скан обходил весь каталог и у
+ * каждого товара — все его штрихкоды: на 16 тысячах товаров это заметная
+ * пауза ровно в тот момент, когда человек держит камеру у полки.
+ * Собирается один раз на каталог и сам сбрасывается после новой выгрузки. */
+let bcIndex = null; let bcGen = -1;
+function barcodeIndex() {
+  if (bcIndex && bcGen === state.dataGen) return bcIndex;
+  const m = new Map();
+  const put = (k, p) => { if (k && !m.has(k)) m.set(k, p); };
+  for (const p of state.products) {
+    for (const b of (p.barcodes || [])) for (const k of bcKeys(b)) put(k, p);
+    if (p.code != null && String(p.code).trim()) put('c:' + String(p.code).trim(), p);
+  }
+  bcIndex = m; bcGen = state.dataGen;
+  return m;
+}
+
+/* Один штрихкод — несколько написаний. Это и была главная причина, по которой
+ * «товар не найден» при живом товаре:
+ *   • 1С отдаёт UPC-A в 12 цифр, камера читает его же как EAN-13 с нулём
+ *     впереди (и наоборот);
+ *   • в выгрузке попадаются пробелы, дефисы и ведущие нули;
+ *   • EAN-8 иногда записан как 13 цифр с нулями слева.
+ * Поэтому у каждого штрихкода несколько ключей, и совпадение по любому
+ * считается попаданием. */
+function bcKeys(b) {
+  const d = String(b == null ? '' : b).replace(/\D/g, '');
+  if (!d) return [];
+  const keys = new Set([d]);
+  keys.add(d.replace(/^0+/, '') || d);          // без ведущих нулей
+  if (d.length === 12) keys.add('0' + d);       // UPC-A -> EAN-13
+  if (d.length === 13 && d[0] === '0') keys.add(d.slice(1));  // EAN-13 -> UPC-A
+  return [...keys].filter(Boolean);
+}
+
 export function findByBarcode(text) {
-  const hit = state.products.find((x) => (x.barcodes || []).some((b) => norm(b) === norm(text)));
-  if (hit) return { p: hit, grams: 0 };
-  const sc = parseScaleBarcode(text);
-  if (!sc) return null;
-  const p = state.products.find((x) => x.code != null && String(x.code) === sc.code);
-  return p ? { p, grams: sc.grams } : null;
+  const r = readScan(text);
+  if (r.kind === 'empty') return null;
+  const idx = barcodeIndex();
+
+  // ссылка на наш каталог — товар назван прямо
+  if (r.kind === 'product') {
+    const p = state.products.find((x) => String(x.id) === r.value);
+    if (p) return { p, grams: 0 };
+  }
+  if (r.kind === 'code') {
+    for (const k of bcKeys(r.value)) { const p = idx.get(k); if (p) return { p, grams: 0 }; }
+    // этикетка магазинных весов: внутри код товара и вес этой упаковки
+    const sc = parseScaleBarcode(r.value);
+    if (sc) { const p = idx.get('c:' + sc.code); if (p) return { p, grams: sc.grams }; }
+    // не штрихкод — может быть просто код товара с ценника
+    const p = idx.get('c:' + r.value) || idx.get('c:' + String(Number(r.value)));
+    if (p) return { p, grams: 0 };
+  }
+  // последняя попытка: вдруг это точный код товара, записанный не цифрами
+  const byCode = state.products.find((x) => x.code != null && norm(x.code) === norm(r.value));
+  return byCode ? { p: byCode, grams: 0 } : null;
 }
 
 /* Сумма к оплате — с копейками, как на этикетке весов: «181,50 ₽», а не
@@ -221,8 +334,11 @@ export function scanToPrice(text) {
   const grams = found ? found.grams : 0;
   box.hidden = false;
   if (!p) {
+    const r = readScan(text);
+    // ссылку целиком не показываем — она не помещается и ничего не говорит
+    const shown = r.kind === 'link' ? 'ссылка' : (r.value || r.raw);
     box.innerHTML = `<div class="scan-result-miss">Такого товара у нас нет</div>
-      <div class="scan-result-code">${esc(text)}</div>`;
+      <div class="scan-result-code">${esc(String(shown).slice(0, 40))}</div>`;
     return;
   }
   const has = (v) => v != null && v !== '';
@@ -266,16 +382,30 @@ export function scanToSearch(text) {
      не закрываем камеру: этикеток обычно проверяют несколько подряд.
      Решение владельца: у сотрудника ценника нет, кроме этого случая. */
   if (found && found.grams) { scanToPrice(text); return; }
-  const input = $('searchInput');
-  input.value = text;
-  state.query = text;
-  $('searchClear').hidden = false;
-  renderActiveFilters();
-  renderGrid();
   // обычный штрихкод — открываем карточку и камеру закрываем: держать её
   // включённой под карточкой незачем, да и телефон греется
-  if (found) { closeSheet('scanSheet'); openProduct(found.p); }
-  else toast('Товар с таким штрихкодом в каталоге не найден');
+  if (found) {
+    closeSheet('scanSheet');
+    openProduct(found.p);
+    return;
+  }
+  /* Не нашли. Что положить в поиск — зависит от того, ЧТО поймала камера.
+     Раньше туда уходило всё подряд, и после QR в строке поиска оказывалась
+     ссылка целиком: искать по ней бессмысленно, а человек видел пустую
+     выдачу и думал, что сломался поиск. */
+  const r = readScan(text);
+  const put = (q) => {
+    const input = $('searchInput');
+    input.value = q;
+    state.query = q;
+    $('searchClear').hidden = !q;
+    renderActiveFilters();
+    renderGrid();
+  };
+  if (r.kind === 'link') { toast('Это ссылка, а не товар магазина'); return; }
+  if (r.kind === 'text') { put(r.value); toast('Ищем по надписи с кода'); return; }
+  put(r.value);
+  toast('Товар с таким кодом в каталоге не найден');
 }
 
 /* Действия на ценнике: положить в список, сообщить о неверном ценнике,

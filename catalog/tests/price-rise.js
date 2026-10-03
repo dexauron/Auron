@@ -1,5 +1,5 @@
 // «Подорожало»: на сколько выросла цена и когда — сотруднику и владельцу.
-/* Зеркало покупательского «Сегодня дешевле», только для своих и по двум ценам:
+/* Зеркало покупательского «Стало дешевле», только для своих и по двум ценам:
  * закупочной (наши деньги) и розничной (что на ценнике).
  *
  * Главное, что здесь проверяется, — причина, по которой этой возможности не
@@ -127,6 +127,57 @@ const openWork = (page) => page.evaluate(async () => {
     return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' ') };
   });
   chk(!strip.hidden && /Подорожало/.test(strip.text), `на главной есть полоса «Подорожало» (${strip.text.slice(0, 50)})`);
+  /* Находки аудита 2026-10-03. На полосе было видно только процент и старую
+     цену, причём ВСЕГДА закупочную — хотя наверх строка попадала по большему
+     из двух ростов. Владелец видел «+1099,8%» и зачёркнутые 12,81 ₽ и не
+     понимал ни сколько стоит теперь, ни что подорожало. */
+  const rows = await page.evaluate(() => [...document.querySelectorAll('#riseStrip .arr-row')].map((r) => ({
+    name: (r.querySelector('.arr-name') || {}).textContent || '',
+    what: (r.querySelector('.arr-what') || {}).textContent || '',
+    price: (r.querySelector('.arr-price') || {}).textContent.replace(/\s+/g, ' ').trim(),
+    was: (r.querySelector('.card-was') || {}).textContent || '',
+  })));
+  chk(rows.length > 0 && rows.every((r) => /ценник|закупка/.test(r.what)),
+    `сказано, ЧТО подорожало — ценник или закупка (${rows.map((r) => r.what).join(', ')})`);
+  chk(rows.every((r) => r.was && r.price.replace(r.was, '').trim()),
+    `видна и новая цена, и прежняя (${rows.map((r) => r.price).join(' | ')})`);
+  chk(!rows.some((r) => /%/.test(r.price)), 'голого процента без цены на полосе нет');
+
+  // число в заголовке — настоящее, а не «сколько поместилось в список»
+  const honest = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    const hist = {};
+    for (const p of s.products) hist[p.id] = [{ price: Number(p.retail_price) / 2, at: new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10) }];
+    s.retailHist = hist;
+    P.renderAll();
+    // пересчёт «Подорожало» идёт в свободную минуту — ждём, пока полоса оживёт
+    await new Promise((r) => setTimeout(r, 1200));
+    return { head: (document.querySelector('#riseStrip .arr-when') || {}).textContent || '', n: s.products.length };
+  });
+  chk(new RegExp('^' + honest.n + ' ').test(honest.head.trim()),
+    `в заголовке настоящее число подорожавших (${honest.head.trim()}, товаров ${honest.n})`);
+
+  /* Закупка переросла ценник — продаём в минус. Раньше этот случай молча
+     пропадал: наценку в минусе посчитать нельзя, и строка не выводилась
+     вовсе — самый тяжёлый случай был единственным, о котором мы молчали
+     (находка аудита 2026-10-03). */
+  const loss = await page.evaluate(async (d) => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    s.prices = []; s.retailHist = {};
+    P.svImportRows(d.a); P.svImportRows(d.b);
+    s.products.find((x) => x.id === 'p3').retail_price = 45;   // ценник прежний
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.querySelector('[data-work="risen"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return document.getElementById('risenBody').innerText.replace(/\s+/g, ' ');
+  }, {
+    a: priceFile([['Батон нарезной', '201', 'Хлебозавод', 'шт', '30', ru(10)]]),
+    b: priceFile([['Батон нарезной', '201', 'Хлебозавод', 'шт', '60', ru(1)]]),
+  });
+  chk(/продаём в минус/.test(loss), `сказано прямо, что товар продаётся в минус (${(loss.match(/.{0,20}продаём в минус.{0,20}/) || ['НЕ СКАЗАНО'])[0]})`);
+  chk(/15\D*₽/.test(loss), `и на сколько именно — 60 закупка против 45 ценника (${(loss.match(/минус[^·]*/) || [''])[0]})`);
 
   // ── 6. Покупателю этого не видно ──
   const guest = await page.evaluate(async () => {
@@ -148,6 +199,11 @@ const openWork = (page) => page.evaluate(async () => {
   // ── 7. Сотруднику — только ценник, закупка остаётся закрытой ──
   const staff = await page.evaluate(async () => {
     const P = window.WM_PUBLISH; const s = P._state();
+    /* Возвращаем историю ценника: проверка «в минус» выше её обнуляла, а без
+       истории строки «Подорожало» у роли без доступа к закупкам нет вовсе —
+       мы специально не выдумываем «за месяц не менялось», когда не знаем. */
+    s.retailHist = { p1: [{ price: 100, at: new Date(Date.now() - 86400000).toISOString().slice(0, 10) }] };
+    s.products.find((x) => x.id === 'p1').retail_price = 120;
     s.session = { role: 'staff' }; s.isAdmin = false; s.canPurchase = false; s.canSales = false;
     P.renderAll();
     await new Promise((r) => setTimeout(r, 300));
