@@ -1917,3 +1917,11 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .floor-code-note { margin-top: 15px; font-size: 14px; line-height: 1.45; }
 .floor-entry:focus-visible, .floor-code-input:focus-visible,
 .floor-sheet-body button:focus-visible { outline: 3px solid var(--brand-ink); outline-offset: 3px; }
+
+/* ═══ Товары без фото — компактная плитка ════════════════════════════════
+   После выгрузки из 1С фото есть далеко не у всех товаров, а пустой серый
+   квадрат занимал почти всю плитку: на экран влезало три товара, и сотрудник
+   листал ради кода. Без фото показываем только то, что нужно, — название,
+   код и цену. Плитки с фото не меняются. */
+.grid:not(.list) .card-photo.no-photo { display: none; }
+.grid:not(.list) .card-body { padding-top: 11px; }
