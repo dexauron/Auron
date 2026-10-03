@@ -91,7 +91,13 @@ function render() {
   const box = $('priceNewsBody');
   if (!box) return;
   const seg = $('priceNewsSeg');
-  if (seg) for (const b of seg.querySelectorAll('[data-dir]')) b.classList.toggle('active', b.dataset.dir === dir);
+  /* Не только цветом: экранный диктор про класс не знает, а про aria-pressed
+     знает — иначе незрячий человек не слышит, какая половина открыта. */
+  if (seg) for (const b of seg.querySelectorAll('[data-dir]')) {
+    const on = b.dataset.dir === dir;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  }
   const upBtn = seg && seg.querySelector('[data-dir="up"]');
   if (upBtn) upBtn.hidden = !state.session;      // покупателю половины «подорожало» нет
 
