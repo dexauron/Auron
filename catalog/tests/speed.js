@@ -34,6 +34,23 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   });
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
+  /* Витрина лежит кусками (`p/00.json…`) с описью `index.json` — подменяем
+     именно её, и НЕСКОЛЬКИМИ кусками, как в настоящем магазине: иначе замер
+     уходит мимо постепенной загрузки. Пока здесь подменялся только старый
+     цельный products.json, проверка молча грузила настоящий каталог из
+     репозитория и искала в нём названия, которых там нет, — поиск упирался
+     в потолок 15 с, и это выглядело как «каталог тормозит». */
+  const PARTS = 16;
+  const PER = Math.ceil(N / PARTS);
+  await ctx.route('**/data/index.json*', (r) => r.fulfill(J({
+    v: 2, app: 4, savedAt: new Date().toISOString(), n: PARTS,
+    parts: Array.from({ length: PARTS }, (_, i) => 'part' + i), groups: 'g', popular: 'pop',
+  })));
+  await ctx.route('**/data/p/*.json*', (r) => {
+    const m = /\/p\/(\d+)\.json/.exec(r.request().url());
+    const i = m ? Number(m[1]) : 0;
+    r.fulfill(J(products.slice(i * PER, (i + 1) * PER)));
+  });
   await ctx.route('**/data/products.json*', (r) => r.fulfill(J(products)));
   await ctx.route('**/data/groups.json*', (r) => r.fulfill(J(groups)));
   await ctx.route('**/data/popular.json*', (r) => r.fulfill(J([])));
