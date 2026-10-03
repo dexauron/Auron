@@ -408,6 +408,7 @@ export function buildFullSnapshot() {
     orders: state.orders || [],                 // заказы поставщикам: кто, у кого, когда придёт
     orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
+    floorPassword: state.floorPassword || null, // код сотрудника зала (для повторной выкладки floor.enc)
   };
 }
 /* ── Закрытый каталог: один на всех, ключ — в «конвертиках» ─────────────────
@@ -587,6 +588,7 @@ function applySnapshot(data, role) {
   state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
+  state.floorPassword = data.floorPassword || null;
   tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу
   buildIndex();
   state.popularIds = buildPopularIds();

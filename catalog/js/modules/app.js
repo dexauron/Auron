@@ -354,6 +354,51 @@ function bindEvents() {
   // Настройки устройства раньше открывались вкладкой «Ещё»; теперь на её месте
   // «Фильтры», поэтому вход к ним — из окна входа (там же, где кнопка «Войти»).
   $('loginDevice').addEventListener('click', () => { closeSheet('loginSheet'); openDeviceSheet(); });
+
+  // ── Вход «Сотрудника зала» (разметка — PR #16; без неё блок бездействует) ──
+  const floorBtn = $('floorLoginBtn');
+  if (floorBtn) floorBtn.addEventListener('click', () => openSheet('floorLoginSheet'));
+  const floorForm = $('floorLoginForm');
+  if (floorForm) floorForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = ($('floorLoginCode').value || '').trim();
+    const err = $('floorLoginError'); const btn = $('floorLoginSubmit');
+    if (err) err.hidden = true;
+    if (!code) { if (err) { err.textContent = 'Введите код.'; err.hidden = false; } return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Входим…'; }
+    try {
+      await unlockFloor(code);
+      $('floorLoginCode').value = '';
+      closeSheet('floorLoginSheet');
+      toast('Вход сотрудника зала');
+    } catch (e2) {
+      if (err) { err.textContent = e2 && e2.message === 'NO_FLOOR' ? 'Владелец ещё не задал код для сотрудников.' : 'Код не подошёл.'; err.hidden = false; }
+    } finally { if (btn) { btn.disabled = false; btn.textContent = 'Войти'; } }
+  });
+  // Владелец задаёт/меняет код зала
+  const floorCodeMenu = $('menuFloorCode');
+  if (floorCodeMenu) floorCodeMenu.addEventListener('click', () => { closeSheet('adminMenuSheet'); openSheet('floorCodeSheet'); });
+  const floorCodeForm = $('floorCodeForm');
+  if (floorCodeForm) floorCodeForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = ($('floorCodeNew').value || '').trim();
+    const again = ($('floorCodeAgain').value || '').trim();
+    const err = $('floorCodeError'); const btn = $('floorCodeSubmit');
+    if (err) err.hidden = true;
+    if (code.length < 8) { if (err) { err.textContent = 'Код сотрудника — минимум 8 символов (лучше короткая фраза).'; err.hidden = false; } return; }
+    if (code !== again) { if (err) { err.textContent = 'Коды не совпали.'; err.hidden = false; } return; }
+    if (!ui.secretPw) { if (err) { err.textContent = 'Задать код может только владелец.'; err.hidden = false; } return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем…'; }
+    try {
+      state.floorPassword = code;
+      await publishFull(ui.secretPw);   // сохранить код зала в каталоге владельца
+      await publishFloor(code);         // выложить floor.enc для входа сотрудника
+      closeSheet('floorCodeSheet');
+      toast('Код сотрудника зала сохранён');
+    } catch (e2) {
+      if (err) { err.textContent = (e2 && e2.friendly) || 'Не удалось опубликовать.'; err.hidden = false; }
+    } finally { if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; } }
+  });
   // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
   ui.openAdminOrLogin = function () {
     if (state.session) {
