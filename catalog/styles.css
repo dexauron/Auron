@@ -1556,45 +1556,148 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 }
 .banner-today:active { opacity: .6; }
 .banner-go { float: right; color: var(--accent); font-weight: 600; }
-/* Добавление позиции в заказ: поиск с подсказками, скан, количество.
-   Раньше это была одна тесная строка «поле — число — кнопка», и товар искался
-   точным совпадением: ошибся в букве — позиция ушла в заказ без кода. */
-.ord-add { margin-top: 8px; position: relative; }
-.ord-pick { display: flex; gap: 8px; align-items: center; }
+/* Заказ поставщику: подбор товара, количество и действия. */
+.ord-add {
+  position: relative;
+  margin: 12px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.ord-pick { display: flex; align-items: stretch; gap: 8px; }
 .ord-add .ios-inp {
-  flex: 1; width: auto; min-width: 0; height: 46px; padding: 0 12px; text-align: left;
-  border: .5px solid var(--border); border-radius: 11px; background: var(--surface);
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
 }
 .ord-scan {
-  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 11px;
-  border: .5px solid var(--border); background: var(--surface); color: var(--accent);
+  flex: 0 0 52px;
+  width: 52px;
+  min-height: 52px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--accent);
 }
 .ord-sug {
-  margin-top: 6px; max-height: 232px; overflow-y: auto;
-  border: .5px solid var(--border); border-radius: 12px; background: var(--surface);
+  max-height: min(288px, 38dvh);
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
 }
 .ord-sug-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px;
-  padding: 9px 12px; border: 0; border-top: .5px solid var(--border);
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .ord-sug-row:first-child { border-top: 0; }
 .ord-sug-row:active { background: var(--surface-2); }
-.ord-sug-name { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
-.ord-sug-code { flex: 0 0 auto; color: var(--text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
-.ord-qty-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.ord-sug-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ord-sug-code {
+  flex: 0 0 auto;
+  max-width: 40%;
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ord-qty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
 .ord-qty-unit {
-  flex: 0 0 auto; min-width: 34px; color: var(--text-2);
-  font-size: 15px; font-weight: 600;
+  flex: 0 0 auto;
+  min-width: 26px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 650;
 }
 .ord-qty-row .qty-step { flex: 0 0 auto; }
+.ord-qty-row .qty-step > button,
+.ord-item .qty-step > button { min-width: 48px; min-height: 48px; }
 .ord-qty-row .ord-qty {
-  width: 56px; min-height: 40px; border: 0; background: none; color: inherit;
-  font: inherit; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums;
+  width: 58px;
+  min-height: 48px;
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.ord-item-add { flex: 1; margin: 0; min-height: 46px; }
+.ord-item-add { flex: 1 1 auto; min-width: 0; min-height: 52px; margin: 0; font-size: 16px; }
+.ord-item { gap: 8px; }
+.ord-item .ios-row-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .ord-item .qty-step { flex: 0 0 auto; }
-.ord-item .ios-row-title { flex: 1 1 auto; min-width: 0; }
+.ord-item .shop-qty { min-width: 52px; white-space: nowrap; }
+.ord-item .rst-rm { flex: 0 0 48px; min-width: 48px; min-height: 48px; }
+#ordSendWa, #ordCopy { min-height: 56px; }
+#ordSendWa .ios-row-title, #ordCopy .ios-row-title { line-height: 1.35; }
+.ord-add :is(input, button):focus-visible,
+.ord-item button:focus-visible,
+#ordSendWa:focus-visible,
+#ordCopy:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+#devSessions .ios-row { min-height: 56px; cursor: default; }
+#devSessions .ios-row-title { font-size: 15px; line-height: 1.35; }
+#devSessions .ord-sub { display: block; margin-top: 2px; color: var(--text-2); }
+#devSessions .ios-row-value {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+@media (max-width: 420px) {
+  .ord-item { display: grid; grid-template-columns: minmax(0, 1fr) 48px; row-gap: 8px; }
+  .ord-item .ios-row-title { grid-column: 1 / -1; }
+  .ord-item .qty-step { grid-column: 1; justify-self: start; }
+  .ord-item .rst-rm { grid-column: 2; justify-self: end; }
+}
+@media (max-width: 360px) {
+  .ord-add { padding: 12px; }
+  .ord-qty-row { display: grid; grid-template-columns: 26px minmax(0, 1fr); }
+  .ord-qty-row .qty-step { grid-column: 2; justify-self: start; }
+  .ord-item-add { grid-column: 1 / -1; width: 100%; }
+  #devSessions .ios-row { flex-wrap: wrap; }
+  #devSessions .ios-row-value { width: 100%; text-align: left; }
+}
 /* подсказка в заголовке группы — обычным текстом, заголовок и так капсом */
 .ios-group-title .hint { text-transform: none; letter-spacing: 0; }
 
