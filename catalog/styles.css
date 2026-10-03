@@ -1556,14 +1556,45 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 }
 .banner-today:active { opacity: .6; }
 .banner-go { float: right; color: var(--accent); font-weight: 600; }
-/* Строка добавления позиции в заказ: название, количество, кнопка */
-.ord-add { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+/* Добавление позиции в заказ: поиск с подсказками, скан, количество.
+   Раньше это была одна тесная строка «поле — число — кнопка», и товар искался
+   точным совпадением: ошибся в букве — позиция ушла в заказ без кода. */
+.ord-add { margin-top: 8px; position: relative; }
+.ord-pick { display: flex; gap: 8px; align-items: center; }
 .ord-add .ios-inp {
-  flex: 1; width: auto; height: 44px; padding: 0 12px; text-align: left;
-  border: .5px solid var(--border); border-radius: 10px; background: var(--surface);
+  flex: 1; width: auto; min-width: 0; height: 46px; padding: 0 12px; text-align: left;
+  border: .5px solid var(--border); border-radius: 11px; background: var(--surface);
 }
-.ord-add .ord-qty { flex: 0 0 64px; text-align: center; }
-.ord-add .btn { flex: 0 0 auto; margin: 0; height: 44px; }
+.ord-scan {
+  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 11px;
+  border: .5px solid var(--border); background: var(--surface); color: var(--accent);
+}
+.ord-sug {
+  margin-top: 6px; max-height: 232px; overflow-y: auto;
+  border: .5px solid var(--border); border-radius: 12px; background: var(--surface);
+}
+.ord-sug-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px;
+  padding: 9px 12px; border: 0; border-top: .5px solid var(--border);
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.ord-sug-row:first-child { border-top: 0; }
+.ord-sug-row:active { background: var(--surface-2); }
+.ord-sug-name { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.ord-sug-code { flex: 0 0 auto; color: var(--text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+.ord-qty-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.ord-qty-unit {
+  flex: 0 0 auto; min-width: 34px; color: var(--text-2);
+  font-size: 15px; font-weight: 600;
+}
+.ord-qty-row .qty-step { flex: 0 0 auto; }
+.ord-qty-row .ord-qty {
+  width: 56px; min-height: 40px; border: 0; background: none; color: inherit;
+  font: inherit; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums;
+}
+.ord-item-add { flex: 1; margin: 0; min-height: 46px; }
+.ord-item .qty-step { flex: 0 0 auto; }
+.ord-item .ios-row-title { flex: 1 1 auto; min-width: 0; }
 /* подсказка в заголовке группы — обычным текстом, заголовок и так капсом */
 .ios-group-title .hint { text-transform: none; letter-spacing: 0; }
 

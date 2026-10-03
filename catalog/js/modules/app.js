@@ -17,7 +17,7 @@ import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, open
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
-import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
+import { bindOrderForm, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openShelfReport, openStore } from './guest.js';
@@ -947,14 +947,9 @@ function bindEvents() {
   $('ordReceived').addEventListener('click', markReceived);
   $('ordSendWa').addEventListener('click', sendOrderToSupplier);
   $('ordShare').addEventListener('click', shareOrders);
-  // позиции заказа: что именно заказали
-  $('ordItemAdd').addEventListener('click', addOrderItem);
-  $('ordItemName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addOrderItem(); } });
-  $('ordItemQty').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addOrderItem(); } });
-  $('ordItems').addEventListener('click', (e) => {
-    const rm = e.target.closest('[data-ord-item-rm]');
-    if (rm) removeOrderItem(rm.dataset.ordItemRm);
-  });
+  // позиции заказа: поиск подсказками, скан, количество — всё в своём модуле
+  ui.findByBarcode = findByBarcode;
+  bindOrderForm((onFound) => startScan(onFound));
   $('ordersBody').addEventListener('click', (e) => {
     const md = e.target.closest('[data-ord-mode]');
     if (md) { setOrdersMode(md.dataset.ordMode); return; }

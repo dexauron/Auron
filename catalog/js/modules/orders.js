@@ -11,10 +11,10 @@
  *     одной кнопкой передаётся владельцу текстом (WhatsApp, сообщение).
  * Так сотрудник не остаётся без инструмента, а записи не теряются. */
 
-import { $, state } from './store.js';
+import { $, state, ui } from './store.js';
 import { closeSheet, esc, moneyNum, moneyText, openSheet, supplierById, toast } from './core.js';
 import { ic } from './icons.js';
-import { fmtDate, fmtPrice, todayISO } from './catalog.js';
+import { fmtDate, fmtPrice, suggestProducts, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
 import { plural } from './competitors.js';
 import { svSaveAndPublish, svUuid } from './imports.js';
@@ -235,37 +235,147 @@ function orderRow(o) {
  * суммой, а если позиции записали — они видны и в списке, и в сообщении
  * владельцу. Товар ищем по коду, штрихкоду и названию; чего нет в каталоге,
  * записываем как есть (заказывают и то, чего в базе ещё нет). */
+/* Единица товара. Весовой заказывают в килограммах, штучный — в штуках:
+ * «3 шт сыра на развес» не значит ничего, а «3 кг» значит (просьба
+ * владельца). Единицу берём у самого товара, а не выдумываем. */
+const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
+const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
+const fmtQty = (n) => String(Math.round(Number(n) * 1000) / 1000).replace('.', ',');
+
+let picked = null;        // товар, выбранный подсказкой или сканом
+
 function renderOrderItems() {
   const box = $('ordItems');
   if (!box) return;
   box.hidden = !formItems.length;
-  box.innerHTML = formItems.map((it, i) => `<div class="ios-row">
+  box.innerHTML = formItems.map((it, i) => `<div class="ios-row ord-item">
     <span class="ios-row-title">${esc(it.name)}${it.code ? `<span class="ord-sub">код ${esc(it.code)}</span>` : ''}</span>
-    <span class="ios-row-value">${it.qty ? '× ' + esc(String(it.qty)) : ''}</span>
+    <span class="qty-step">
+      <button type="button" data-ord-item-minus="${i}" aria-label="Меньше">&minus;</button>
+      <span class="shop-qty">${esc(fmtQty(it.qty || 1))} ${esc(it.unit || 'шт')}</span>
+      <button type="button" data-ord-item-plus="${i}" aria-label="Больше">+</button>
+    </span>
     <button class="rst-rm" data-ord-item-rm="${i}" aria-label="Убрать позицию">${ic('close', 'ic-xs')}</button>
   </div>`).join('');
 }
 
-export function addOrderItem() {
+/* Подсказки: несколько самых подходящих товаров тем же поиском, что и в
+ * каталоге. Раньше заказ искал ТОЧНОЕ совпадение — ошибся в букве, и товар
+ * уходил в заказ свободным текстом, без кода, а значит и поставщик получал
+ * заказ без кода. */
+function renderSuggest() {
+  const box = $('ordSuggest'); const inp = $('ordItemName');
+  if (!box || !inp) return;
+  const q = String(inp.value || '').trim();
+  if (picked && picked.name === q) { box.hidden = true; box.innerHTML = ''; return; }
+  const list = suggestProducts(q, 8);
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = list.map((p) => `<button type="button" class="ord-sug-row" data-ord-pick="${esc(p.id)}">
+    <span class="ord-sug-name">${esc(p.name)}</span>
+    <span class="ord-sug-code">${esc(p.code || '')}</span></button>`).join('');
+  box.hidden = false;
+}
+
+// товар выбран (подсказкой или сканом): подставляем название и его единицу
+function pickProduct(p) {
+  picked = p;
+  const inp = $('ordItemName');
+  if (inp) inp.value = p.name;
+  const u = $('ordItemUnit');
+  if (u) u.textContent = unitOf(p);
+  const q = $('ordItemQty');
+  if (q) q.value = fmtQty(unitOf(p) === 'кг' ? 1 : 1);
+  renderSuggest();
+}
+
+function qtyStep(delta) {
+  const el = $('ordItemQty');
+  if (!el) return;
+  const unit = ($('ordItemUnit') || {}).textContent || 'шт';
+  const step = stepOf(unit);
+  const cur = Number(String(el.value || '').replace(',', '.')) || 0;
+  el.value = fmtQty(Math.max(step, Math.round((cur + delta * step) * 1000) / 1000));
+}
+
+function addOrderItem() {
   const nameEl = $('ordItemName'); const qtyEl = $('ordItemQty');
   const raw = String(nameEl.value || '').trim();
-  if (!raw) return;
-  const low = raw.toLowerCase();
-  const p = state.products.find((x) => String(x.code || '').trim() === raw)
-    || state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === raw))
-    || state.products.find((x) => String(x.name || '').toLowerCase() === low);
+  if (!raw) { nameEl.focus(); return; }
+  /* Товар не выбрали подсказкой — пробуем узнать его сами: по коду,
+     штрихкоду, точному названию, а в конце по лучшей подсказке. Чего нет в
+     каталоге, записываем как есть: заказывают и то, чего в базе ещё нет. */
+  let p = picked;
+  if (!p) {
+    const low = raw.toLowerCase();
+    p = state.products.find((x) => String(x.code || '').trim() === raw)
+      || state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === raw))
+      || state.products.find((x) => String(x.name || '').toLowerCase() === low)
+      || suggestProducts(raw, 1)[0] || null;
+  }
+  const unit = p ? unitOf(p) : 'шт';
   formItems.push({
     name: p ? p.name : raw,
     code: p ? (p.code || '') : '',
-    qty: Number(String(qtyEl.value).replace(',', '.')) || 0,
+    unit,
+    qty: Number(String(qtyEl.value).replace(',', '.')) || 1,
   });
-  nameEl.value = ''; qtyEl.value = '';
+  picked = null;
+  nameEl.value = ''; qtyEl.value = '1';
+  const u = $('ordItemUnit'); if (u) u.textContent = 'шт';
+  renderSuggest();
+  renderOrderItems();
+  // поле остаётся в руках: следующую позицию вводят сразу
+  nameEl.focus();
+}
+
+function removeOrderItem(i) {
+  formItems.splice(Number(i), 1);
   renderOrderItems();
 }
 
-export function removeOrderItem(i) {
-  formItems.splice(Number(i), 1);
+function stepOrderItem(i, delta) {
+  const it = formItems[Number(i)];
+  if (!it) return;
+  const step = stepOf(it.unit || 'шт');
+  it.qty = Math.max(step, Math.round(((Number(it.qty) || 1) + delta * step) * 1000) / 1000);
   renderOrderItems();
+}
+
+/* Обработчики формы заказа. Живут здесь, рядом с самой формой: app.js уже
+ * дорос до предела, который держит проверка «модули». */
+export function bindOrderForm(scan) {
+  const nameEl = $('ordItemName');
+  if (nameEl) {
+    nameEl.addEventListener('input', () => { picked = null; renderSuggest(); });
+    nameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addOrderItem(); } });
+  }
+  const sug = $('ordSuggest');
+  if (sug) sug.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ord-pick]');
+    if (!b) return;
+    const p = state.products.find((x) => x.id === b.dataset.ordPick);
+    if (p) pickProduct(p);
+    const q = $('ordItemQty'); if (q) q.focus();
+  });
+  const minus = $('ordQtyMinus'); if (minus) minus.addEventListener('click', () => qtyStep(-1));
+  const plus = $('ordQtyPlus'); if (plus) plus.addEventListener('click', () => qtyStep(1));
+  const add = $('ordItemAdd'); if (add) add.addEventListener('click', addOrderItem);
+  const items = $('ordItems');
+  if (items) items.addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-ord-item-rm]');
+    if (rm) { removeOrderItem(rm.dataset.ordItemRm); return; }
+    const mi = e.target.closest('[data-ord-item-minus]');
+    if (mi) { stepOrderItem(mi.dataset.ordItemMinus, -1); return; }
+    const pl = e.target.closest('[data-ord-item-plus]');
+    if (pl) stepOrderItem(pl.dataset.ordItemPlus, 1);
+  });
+  const scanBtn = $('ordItemScan');
+  if (scanBtn && scan) scanBtn.addEventListener('click', () => scan((text) => {
+    const found = findInCatalog(text);
+    if (found) { pickProduct(found); toast('Нашёл: ' + found.name); }
+    else { const inp = $('ordItemName'); if (inp) { inp.value = String(text); picked = null; renderSuggest(); } toast('Такого штрихкода в каталоге нет'); }
+  }));
+  const copy = $('ordCopy'); if (copy) copy.addEventListener('click', copyOrder);
 }
 
 /* prefill — заказ, начатый из списка «закончилось на полке»: поставщик уже
@@ -286,8 +396,11 @@ export function openOrderForm(id, dayISO, prefill) {
   $('ordAmount').value = o && o.amount != null ? moneyText(String(o.amount)) : '';
   $('ordWho').value = o ? (o.who || '') : deviceName();
   $('ordNote').value = o ? (o.note || '') : ((prefill && prefill.note) || '');
+  picked = null;
   renderOrderItems();
-  $('ordItemName').value = ''; $('ordItemQty').value = '';
+  $('ordItemName').value = ''; $('ordItemQty').value = '1';
+  const unitEl = $('ordItemUnit'); if (unitEl) unitEl.textContent = 'шт';
+  const sugBox = $('ordSuggest'); if (sugBox) { sugBox.hidden = true; sugBox.innerHTML = ''; }
   $('ordError').hidden = true;
   $('ordDelete').hidden = !o;
   $('ordReceived').hidden = !o || o.status === 'received';
@@ -320,7 +433,7 @@ function orderText(d) {
   const items = d.items.slice(0, WA_MAX_LINES);
   if (items.length) {
     lines.push(...items.map((x, i) => {
-      const qty = Number(x.qty) > 0 ? ` — ${x.qty}` : '';
+      const qty = Number(x.qty) > 0 ? ` — ${String(x.qty).replace('.', ',')} ${x.unit || 'шт'}` : '';
       return `${i + 1}. ${x.name}${x.code ? ` (код ${x.code})` : ''}${qty}`;
     }));
     const rest = d.items.length - items.length;
@@ -331,6 +444,46 @@ function orderText(d) {
   if (d.note) lines.push(d.note);
   if (d.who) lines.push(`Заказал: ${d.who}`);
   return lines.join('\n');
+}
+
+/* «Скопировать заказ» — весь текст в буфер. Нужен, когда поставщика в базе
+ * нет: владелец вставляет текст в любое сообщение и отправляет кому угодно
+ * (его просьба). Поэтому поставщик здесь НЕ обязателен — в отличие от
+ * отправки в WhatsApp, где без него непонятно, кому слать.
+ * Запасной путь обязателен: navigator.clipboard в вебе доступен не всегда
+ * (старый браузер, страница без https), и без него кнопка молчала бы. */
+async function copyOrder() {
+  const d = readForm();
+  const err = $('ordError');
+  if (!d.items.length) { err.textContent = 'Добавь, что заказываем: копировать пока нечего.'; err.hidden = false; return; }
+  err.hidden = true;
+  const text = orderText(d);
+  let ok = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }
+  } catch (e) { ok = false; }
+  if (!ok) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-1000px;opacity:0';
+      document.body.appendChild(ta);
+      ta.select(); ta.setSelectionRange(0, text.length);
+      ok = document.execCommand('copy');
+      ta.remove();
+    } catch (e) { ok = false; }
+  }
+  if (ok) toast('Заказ скопирован — вставь в сообщение кому угодно');
+  else { err.textContent = 'Не вышло скопировать. Выдели текст заказа вручную.'; err.hidden = false; }
+}
+
+/* Найти товар по тому, что поймала камера. Сканер в форме заказа — тот же,
+ * что везде, и разбор штрихкода тоже общий: иначе заказ находил бы товары
+ * иначе, чем каталог. */
+function findInCatalog(text) {
+  const hit = ui.findByBarcode && ui.findByBarcode(text);
+  return hit ? hit.p : null;
 }
 
 // Кнопка «Отправить заказ поставщику в WhatsApp» в окне заказа

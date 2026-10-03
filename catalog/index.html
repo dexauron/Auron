@@ -1219,12 +1219,29 @@
           <div class="ios-row"><span class="ios-row-title">Должен прийти</span>
             <input type="date" id="ordDue" class="ios-inp"></div>
         </div>
-        <div class="ios-group-title">Что заказали <span class="hint">— необязательно</span></div>
+        <div class="ios-group-title">Что заказали</div>
         <div class="ios-group" id="ordItems"></div>
+        <!-- Добавление позиции: ищем как в каталоге (подсказками), а не точным
+             совпадением строки; рядом тот же сканер, что везде. Добавил —
+             поле очистилось и осталось в руках: следующую позицию вводишь
+             сразу, не отрывая рук (просьба владельца). -->
         <div class="ord-add">
-          <input type="text" id="ordItemName" class="ios-inp ios-inp-wide" placeholder="товар или код" autocomplete="off">
-          <input type="text" id="ordItemQty" class="ios-inp ord-qty" inputmode="decimal" placeholder="шт">
-          <button class="btn btn-secondary" id="ordItemAdd">Добавить</button>
+          <div class="ord-pick">
+            <input type="text" id="ordItemName" class="ios-inp" placeholder="название, код или штрихкод" autocomplete="off" enterkeyhint="done">
+            <button type="button" class="icon-btn ord-scan" id="ordItemScan" aria-label="Сканировать штрихкод">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8"/></svg>
+            </button>
+          </div>
+          <div class="ord-sug" id="ordSuggest" hidden></div>
+          <div class="ord-qty-row">
+            <span class="ord-qty-unit" id="ordItemUnit">шт</span>
+            <span class="qty-step">
+              <button type="button" id="ordQtyMinus" aria-label="Меньше">&minus;</button>
+              <input type="text" id="ordItemQty" class="ord-qty" inputmode="decimal" value="1" aria-label="Количество">
+              <button type="button" id="ordQtyPlus" aria-label="Больше">+</button>
+            </span>
+            <button type="button" class="btn btn-primary ord-item-add" id="ordItemAdd">Добавить</button>
+          </div>
         </div>
 
         <div class="ios-group-title">Кто заказал</div>
@@ -1233,8 +1250,13 @@
           <div class="ios-row"><input type="text" id="ordNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="примечание"></div>
         </div>
         <div class="form-error" id="ordError" hidden></div>
+        <!-- Две дороги: поставщику из базы — сразу в WhatsApp; кому угодно
+             ещё — скопировать весь текст и отправить вручную (просьба
+             владельца: поставщика может не быть в базе). -->
         <div class="ios-group" style="margin-top:14px">
           <button class="ios-row ios-row-action" id="ordSendWa"><span class="ios-row-title">Отправить заказ поставщику в WhatsApp</span></button>
+          <button class="ios-row ios-row-action" id="ordCopy"><span class="ios-row-title">Скопировать заказ</span>
+            </button>
         </div>
         <div class="ios-group">
           <button class="ios-row ios-row-action" id="ordReceived"><span class="ios-row-title">Отметить: заказ пришёл</span></button>

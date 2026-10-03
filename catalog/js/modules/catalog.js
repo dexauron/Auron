@@ -749,6 +749,41 @@ export function visibleProducts() {
   return sortList(scored, true);
 }
 
+/* Подсказки для формы заказа: несколько самых подходящих товаров по тому же
+ * поиску, что и в каталоге. Раньше заказ искал товар ТОЧНЫМ совпадением кода,
+ * штрихкода или названия — ошибся в букве, и товар уходил в заказ свободным
+ * текстом, без кода. Фильтры каталога тут не применяются: заказывают и то,
+ * что сейчас отфильтровано с экрана. */
+export function suggestProducts(query, max = 8) {
+  const q = norm(query);
+  if (q.length < 2) return [];
+  const list = state.products;
+  if (/^\d{2,}$/.test(q)) return searchByCode(list, q).slice(0, max);
+  const qT = translit(q);
+  const qVars = q === qT ? [q] : [q, qT];
+  const tokens = q.split(/\s+/).filter(Boolean).map((w) => {
+    const wt = translit(w);
+    return { q: w, qVars: w === wt ? [w] : [w, wt] };
+  });
+  let hits = candidateList(list, tokens, qVars)
+    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens, false) }))
+    .filter((x) => x.s >= SEARCH_THRESHOLD);
+  /* Опечатки разбираем так же, как в каталоге: товар с опечаткой в кандидаты
+     не попадает («прастоквашино» и «Простоквашино» начинаются по-разному).
+     Без этого подсказки в заказе были строже самого поиска. */
+  if (hits.length < max && q.length >= 4) {
+    const seen = new Set(hits.map((x) => x.p));
+    for (const p of fuzzyPool(list, q, qVars, seen)) {
+      const sc = scoreProduct(p, q, qVars, tokens);
+      if (sc >= SEARCH_THRESHOLD) hits.push({ p, s: sc });
+    }
+  }
+  return hits
+    .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
+    .slice(0, max)
+    .map((x) => x.p);
+}
+
 /* Кандидаты: товары из указателя плюс товары подходящих групп. Если запрос
  * ничего не дал (например, ищут только по группе), кандидатов просто нет —
  * дальше сработает разбор опечаток. Когда список уже сужен фильтрами
