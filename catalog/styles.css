@@ -1925,3 +1925,96 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    код и цену. Плитки с фото не меняются. */
 .grid:not(.list) .card-photo.no-photo { display: none; }
 .grid:not(.list) .card-body { padding-top: 11px; }
+
+/* Покупательская витрина: крупные цели нажатия и спокойный список.
+   Роль определяется видимой кнопкой входа в зал; JS управляет её hidden. */
+body:has(#floorLoginBtn:not([hidden])) .search-row { gap: 8px; }
+body:has(#floorLoginBtn:not([hidden])) #viewToggleBtn,
+body:has(#floorLoginBtn:not([hidden])) .tabbar [data-tab="filters"] { display: none; }
+body:has(#floorLoginBtn:not([hidden])) .search-input {
+  height: 56px;
+  min-width: 0;
+  font-size: 17px;
+  border-radius: 14px;
+}
+body:has(#floorLoginBtn:not([hidden])) #scanSearchBtn,
+body:has(#floorLoginBtn:not([hidden])) #filterBtn {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+}
+body:has(#floorLoginBtn:not([hidden])) .search-clear {
+  width: 42px;
+  height: 42px;
+  right: 4px;
+}
+body:has(#floorLoginBtn:not([hidden])) .tabbar .tab {
+  min-height: 64px;
+  font-size: 11.5px;
+  gap: 4px;
+}
+body:has(#floorLoginBtn:not([hidden])) { --tabbar-h: 64px; }
+
+body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row {
+  min-height: 82px;
+  padding: 12px 14px;
+  gap: 14px;
+  border-color: var(--border);
+  border-radius: 16px;
+}
+body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+body:has(#floorLoginBtn:not([hidden])) .grid.list .row-sub {
+  margin-top: 6px;
+  gap: 6px 12px;
+}
+body:has(#floorLoginBtn:not([hidden])) .grid.list .card-price {
+  font-size: 18px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+/* Если Claude добавит в гостевую строку публичное фото, оно уже имеет место;
+   строка без фото остаётся компактной и не показывает пустой квадрат. */
+body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo:not(.no-photo) {
+  display: block;
+  flex: 0 0 68px;
+  width: 68px;
+  height: 68px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+}
+body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo.no-photo { display: none; }
+
+#productSheet:has(#btnShopAdd:not([hidden])) .sheet-title {
+  font-size: 24px;
+  line-height: 1.25;
+  min-height: 44px;
+}
+#productSheet:has(#btnShopAdd:not([hidden])) .field-hero-val { font-size: 34px; }
+#productSheet:has(#btnShopAdd:not([hidden])) #btnShopAdd {
+  min-height: 56px;
+  border-radius: 14px;
+  font-size: 18px;
+}
+#productSheet:has(#btnShopAdd:not([hidden])) .sheet-actions .btn {
+  min-height: 48px;
+  font-size: 15px;
+}
+#productSheet:has(#btnShopAdd:not([hidden])) .photo-strip img {
+  max-height: 320px;
+  object-fit: contain;
+}
+body:has(#floorLoginBtn:not([hidden])) .empty-title { font-size: 22px; }
+body:has(#floorLoginBtn:not([hidden])) .empty-text { font-size: 16px; line-height: 1.45; }
+body:has(#floorLoginBtn:not([hidden])) .empty-reset { min-height: 50px; font-size: 16px; }
+
+@media (max-width: 360px) {
+  body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row { padding: 10px; gap: 10px; }
+  body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo:not(.no-photo) {
+    flex-basis: 60px; width: 60px; height: 60px;
+  }
+}
