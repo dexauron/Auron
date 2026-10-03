@@ -119,11 +119,28 @@ export function renderCatScreen() {
     </button>`).join('') + '</div>';
 }
 
+// Короткий обзор уже существующих категорий на главной. Сами товары и правила
+// поиска здесь не меняются: кнопки ведут на привычный экран категорий.
+function renderHomeGroups() {
+  const box = $('homeGroups');
+  if (!box) return;
+  const { cats } = catCounts();
+  const all = catalogSections(cats).sort((a, b) => cats[b.name] - cats[a.name]);
+  if (!all.length) { box.hidden = true; return; }
+  box.innerHTML = `<div class="home-section-head"><h2>Группы товаров</h2><button class="home-all" data-home-all>Все группы ›</button></div>
+    <div class="home-group-grid">${all.slice(0, 4).map((c) => `<button class="home-group" data-home-cat="${esc(c.name)}">
+      <span class="home-group-icon">${catIcon(c.name)}</span><span>${esc(c.name)}</span></button>`).join('')}</div>
+    <h2 class="home-products-title">Товары</h2>`;
+  box.hidden = state.tab !== 'catalog' || !!state.query || filtersBesidesQuery();
+}
+
 export function renderGrid() {
   // поиск перерисовывает только сетку, а лента завоза при поиске не нужна
   renderArrivals();
   const list = visibleProducts();
   const grid = $('productGrid');
+  const home = $('homeGroups');
+  if (home && home.innerHTML) home.hidden = state.tab !== 'catalog' || !!state.query || filtersBesidesQuery();
   $('loader').hidden = true;
   /* Покупателю каталог показывается СПИСКОМ и без фотографий (решение
      владельца): ему нужны название, код, цена, наличие и дата поступления,
@@ -160,17 +177,19 @@ export function renderGrid() {
       empty.querySelector('.empty-text').textContent = 'Похоже, браузер подставил его сам. В каталоге почты нет — очисти поиск и введи название или код.';
     } else {
       empty.querySelector('.empty-icon').innerHTML = wolfEmpty(ic('search'));
-      empty.querySelector('.empty-title').textContent = 'Ничего не нашлось';
+      empty.querySelector('.empty-title').textContent = 'Ничего не найдено';
       /* «Снимите фильтры» человеку, который просто искал словом, — совет ни о
          чём: никаких фильтров он не включал. Отвечаем по тому, что он сделал. */
       empty.querySelector('.empty-text').textContent = filtersBesidesQuery()
         ? 'Под выбранные фильтры товаров нет. Снимите часть фильтров.'
-        : 'Попробуй написать по-другому или выбери группу';
+        : 'Проверьте название или код. Можно также отсканировать штрихкод.';
     }
     /* Когда пусто из-за фильтров или поиска — предлагаем сбросить одним
        касанием. Пустое избранное сюда не относится: сбрасывать там нечего,
        а кнопка «Сбросить фильтры» просто уводила с раздела. */
     $('emptyReset').hidden = !(anyFilterActive() && state.products.length);
+    $('emptyReset').textContent = state.query && !filtersBesidesQuery() ? 'Очистить поиск' : 'Сбросить фильтры';
+    $('emptyScan').hidden = !state.query || !state.products.length;
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
@@ -185,6 +204,7 @@ export function renderGrid() {
   }
 
   $('emptyState').hidden = true;
+  $('emptyScan').hidden = true;
   // на больших каталогах рисуем страницами — телефон не потянет 15 000 карточек разом
   const shown = list.slice(0, state.renderLimit);
   const hlTokens = queryHlTokens();
@@ -505,6 +525,7 @@ export function removeFilter(type, val) {
 export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
+  renderHomeGroups();
   renderNewProducts();
   renderCheaper();
   renderRiseStrip();
