@@ -8,6 +8,7 @@ import { orderRules } from './card.js';
 import { byName, saveCache, tidyMemory } from './data.js';
 import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
+import { buildFloorData, encryptFloor, FLOOR_FILE } from './floordata.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -142,13 +143,14 @@ export async function ghCommit(files, message, opts = {}) {
 
 /* Витринные поля — что видит покупатель, зашедший без пароля.
  * arrival_at (только дата) — на нём держится «Новее» и строка «завоз».
- * Код товара — с ним проще объяснить кассиру, что берёшь.
- * ШТРИХКОДЫ здесь потому, что владелец решил оставить покупателю сканер
- * (2026-08-27): без них наведённая камера не находила ничего, и сканер у
- * покупателя выглядел сломанным. Секрета в штрихкоде нет — он напечатан на
- * самой упаковке. Артикул, поставщики, закупки и остаток числом остаются
- * закрытыми. */
-const PUBLIC_FIELDS = ['id', 'name', 'code', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+ * КОД КАССЫ здесь НЕ публикуем (решение владельца 2026-10-03): код — для
+ * сотрудников, он уходит в отдельный файл зала (floor.enc), а в публичный
+ * JSON не попадает вовсе. Раньше код был публичным, но это противоречило
+ * модели «публично — без кодов», и экран его лишь прятал, а в файле он был.
+ * ШТРИХКОДЫ остаются: владелец оставил покупателю сканер (2026-08-27), а
+ * секрета в штрихкоде нет — он напечатан на самой упаковке. Артикул,
+ * поставщики, закупки и остаток числом остаются закрытыми. */
+const PUBLIC_FIELDS = ['id', 'name', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
 /* Отзывы уезжают отдельно и обрезанными: они и написаны для покупателя, но
  * витрину качает каждый, и тащить в неё всю переписку незачем. */
 const PUB_REVIEWS = 5;
@@ -407,6 +409,7 @@ export function buildFullSnapshot() {
     orders: state.orders || [],                 // заказы поставщикам: кто, у кого, когда придёт
     orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
+    floorPassword: state.floorPassword || null, // код сотрудника зала (для повторной выкладки floor.enc)
   };
 }
 /* ── Закрытый каталог: один на всех, ключ — в «конвертиках» ─────────────────
@@ -566,6 +569,13 @@ export async function publishFull(password, { onProgress = null, rotate = false 
   for (const old of [SECRET_FILE, STAFF_FILE]) {
     if (await rawExists(old)) files.push({ path: `${CFG.DATA_PATH}/${old}`, content: null });
   }
+  // Данные для сотрудника зала — в ТОТ ЖЕ коммит (атомарно): новый пароль и
+  // новый floor.enc уезжают вместе, нет окна, где старый floor.enc ещё
+  // открывается прежним кодом. Денег в floor.enc нет (buildFloorData).
+  if (state.floorPassword) {
+    const floorBlob = await encryptFloor(buildFloorData(state.products, state.groups), state.floorPassword);
+    files.push({ path: `${CFG.DATA_PATH}/${FLOOR_FILE}`, content: floorBlob });
+  }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
   _cat = cat.saved;
   return { sha, sent: files.length };
@@ -586,6 +596,7 @@ function applySnapshot(data, role) {
   state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
+  state.floorPassword = data.floorPassword || null;
   tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу
   buildIndex();
   state.popularIds = buildPopularIds();

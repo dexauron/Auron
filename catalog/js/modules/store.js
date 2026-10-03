@@ -92,6 +92,7 @@ export const state = {
   canSales: false,  // видят «Ходовые товары» (продажи/выручка) — только владелец
   serverless: false, // режим без сервера (каталог на GitHub)
   staffPassword: null, // пароль сотрудника (задаёт владелец; хранится в его каталоге)
+  floorPassword: null, // код сотрудника зала (задаёт владелец; хранится в его каталоге)
   contacts: {},     // supplier_id → контакты (загружаются после входа)
   competitors: [],  // магазины конкурентов (список названий)
   compPrices: [],   // записанные цены магазинов: {product_id, competitor_id, price, observed_at}
