@@ -3,9 +3,14 @@
 // магазином. Всё рабочее и внутреннее ему не показывается вовсе.
 const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers');
 
+/* Настоящая картинка (прозрачный GIF в самой ссылке): внешние ссылки в тесте
+   не загружаются, а приложение правильно убирает битую картинку и помечает
+   место «без фото» — тогда проверить показ фото было бы невозможно. */
+const IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
+
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3.2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт',
-    photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
+    photos: [IMG], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
     description: 'Пастеризованное, жирность 3,2%. Срок годности 10 суток.',
     article: 'АРТ-9', department: 'Молочный', note: 'ставить вперёд', supplier_ids: ['s1'] },
   // у покупателя данные приходят как в настоящей витрине: штрихкоды есть,
@@ -24,7 +29,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   // ── 1. Каталог показан списком, без фотографий ──
   const grid = await page.evaluate(() => ({
     list: document.getElementById('productGrid').classList.contains('list'),
-    photos: document.querySelectorAll('#productGrid img').length,
+    photos: document.querySelectorAll('#productGrid .card-photo:not(.no-photo)').length,
     toggle: getComputedStyle(document.getElementById('viewToggleBtn')).display,
     strips: [...document.querySelectorAll('.recent-strip')].filter((s) => !s.hidden).length,
     text: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
@@ -33,7 +38,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   /* Решение 2026-10-03 (премиум-версия): покупателю фотографии ПОКАЗЫВАЕМ —
      они и так лежат в открытой витрине, а без них товар не узнать. Раньше их
      прятали. У сотрудника список остаётся плотным, без фото. */
-  chk(grid.photos > 0, `фотографии в списке показаны (${grid.photos})`);
+  chk(grid.photos > 0, `фото товара в списке показано (${grid.photos})`);
   chk(grid.toggle === 'none', 'переключателя вида нет — покупателю нечего переключать');
   chk(grid.strips === 0, `ленты с фотографиями скрыты (${grid.strips})`);
   // пустых плашек быть не должно: однажды «что нового» висела пустой белой полосой
@@ -120,10 +125,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       compare: document.getElementById('btnCompareAdd').hidden,
     };
   });
-  /* Проверяем, что блок фото покупателю ОТКРЫТ. Само число картинок тут не
-     считаем: в наборе фото — внешняя ссылка, она не загружается, и приложение
-     правильно убирает битую картинку. Загрузку проверяет buyer-photos.js. */
-  chk(!card.photoHidden, 'в карточке покупателя фотографии включены');
+  chk(!card.photoHidden && card.photos === 1, `в карточке покупателя показано фото (${card.photos})`);
   chk(/Поступил/.test(card.text) && /20\.08/.test(card.text), `видно, когда товар поступил (${(card.text.match(/Поступил[^·]*/) || [''])[0]})`);
   chk(!/Код товара/.test(card.text) && !/101/.test(card.text), 'в карточке покупателя кода товара нет');
   chk(!/Артикул|Штрихкод|Отдел|Примечание/.test(card.text), 'внутренние поля скрыты (артикул, штрихкод, отдел, примечание)');
