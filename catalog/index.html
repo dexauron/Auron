@@ -58,6 +58,11 @@
         <span class="filter-badge" id="filterBadge" hidden></span>
       </button>
     </div>
+    <button class="floor-entry guest-only" id="floorLoginBtn" type="button" aria-haspopup="dialog" aria-controls="floorLoginSheet">
+      <span class="floor-entry-icon" aria-hidden="true">▦</span>
+      <span>Я сотрудник</span>
+      <span class="floor-entry-arrow" aria-hidden="true">›</span>
+    </button>
     <nav class="chips active-filters" id="activeFilters" hidden></nav>
   </header>
 
@@ -190,6 +195,25 @@
     </div>
   </div>
 
+  <!-- Отдельный вход сотрудников зала: код открывает каталог без закупок и продаж. -->
+  <div class="sheet-backdrop" id="floorLoginSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="floorLoginTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body floor-sheet-body">
+        <div class="floor-sheet-icon" aria-hidden="true">▦</div>
+        <h2 class="sheet-title floor-sheet-title" id="floorLoginTitle">Вход сотрудника зала</h2>
+        <p class="muted floor-sheet-description">Введите код, который сообщил вам владелец магазина. После входа вы увидите коды товаров и штрихкоды.</p>
+        <form id="floorLoginForm">
+          <label class="field-label floor-field-label" for="floorLoginCode">Код сотрудника</label>
+          <input type="password" id="floorLoginCode" class="input floor-code-input" required autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+          <div class="form-error" id="floorLoginError" role="alert" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block floor-submit" id="floorLoginSubmit">Открыть каталог</button>
+        </form>
+        <button type="button" class="btn btn-ghost btn-block floor-cancel" data-close="floorLoginSheet">Отмена</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Вход: одна форма для всех — права определяются по аккаунту -->
   <div class="sheet-backdrop" id="loginSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
@@ -262,6 +286,7 @@
           <div class="ios-group">
             <button class="ios-row ios-row-link" id="menuOwnerPass"><span class="ios-row-title">Пароль каталога (ваш)</span></button>
             <button class="ios-row ios-row-link" id="menuStaffPass"><span class="ios-row-title">Пароль сотрудника</span></button>
+            <button class="ios-row ios-row-link" id="menuFloorCode"><span class="ios-row-title">Код для сотрудников зала</span></button>
             <button class="ios-row ios-row-link" id="menuPublish"><span class="ios-row-title">Публикация на GitHub</span></button>
           </div>
         </div>
@@ -759,6 +784,30 @@
         <p class="muted" style="margin-top:12px">Держи это окно открытым, пока идёт поиск.
         Останавливать и продолжать можно в любой день — прогресс сохраняется.</p>
         <button class="btn btn-ghost sheet-close" data-close="photoSearchSheet">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Отдельный код сотрудников зала (только владелец). -->
+  <div class="sheet-backdrop" id="floorCodeSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="floorCodeTitle">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <button class="ios-nav-btn" type="button" data-close="floorCodeSheet">Отмена</button>
+        <h2 class="ios-nav-title" id="floorCodeTitle">Код сотрудников зала</h2>
+        <span></span>
+      </div>
+      <div class="sheet-body floor-sheet-body">
+        <p class="floor-sheet-description muted">Задайте отдельный код для зала. С ним доступны товары и коды кассы, но не закупки и продажи. Передайте код только сотрудникам.</p>
+        <form id="floorCodeForm">
+          <label class="field-label floor-field-label" for="floorCodeNew">Новый код</label>
+          <input type="password" id="floorCodeNew" class="input floor-code-input" required autocomplete="new-password" autocapitalize="off" spellcheck="false">
+          <label class="field-label floor-field-label" for="floorCodeAgain">Повторите код</label>
+          <input type="password" id="floorCodeAgain" class="input floor-code-input" required autocomplete="new-password" autocapitalize="off" spellcheck="false">
+          <div class="form-error" id="floorCodeError" role="alert" hidden></div>
+          <button type="submit" class="btn btn-primary btn-block floor-submit" id="floorCodeSubmit">Сохранить код</button>
+        </form>
+        <p class="ios-note floor-code-note">После смены кода прежний код перестанет открывать каталог после новой публикации.</p>
       </div>
     </div>
   </div>
