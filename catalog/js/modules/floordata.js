@@ -17,17 +17,14 @@ const FLOOR_SCALAR = [
   'is_weighted', 'unit', 'retail_price', 'arrival_at', 'created_at', 'stock_state',
 ];
 const FLOOR_ARRAY = ['photos', 'barcodes'];
-export const FLOOR_FIELDS = [...FLOOR_SCALAR, ...FLOOR_ARRAY];
-export const FLOOR_FORBIDDEN = [
-  'prices', 'sales', 'contacts', 'orders', 'orderRules', 'compPrices',
-  'competitors', 'retailHist', 'unitCoef', 'staffPassword', 'floorPassword', 'note',
-  'cost', 'buy_price', 'purchase', 'supplier_id', 'supplier_ids',
-  'margin', 'markup', 'stock', 'stock_qty',
-];
+/* Чего в данных зала нет НИКОГДА (белый список выше это и обеспечивает):
+   закупки и наценка, продажи, контакты и сами поставщики, заказы, цены
+   конкурентов, история ценника, пароли, свободное примечание, остаток числом.
+   Проверяется тестами floor-data.js и floor-crypto.js. */
 
 const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
 
-export function floorProduct(p) {
+function floorProduct(p) {
   const o = {};
   if (!p || typeof p !== 'object') return o;
   for (const k of FLOOR_SCALAR) if (p[k] != null && isPrim(p[k])) o[k] = p[k];
@@ -53,7 +50,7 @@ export function buildFloorData(products, groups) {
 }
 
 // ── Шифрование файла зала (AES-GCM, ключ из кода через PBKDF2) ──────────────
-export const FLOOR_ITER = 310000;   // усиленный PBKDF2: файл публичный
+const FLOOR_ITER = 310000;   // усиленный PBKDF2: файл публичный
 async function deriveKey(code, salt) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(

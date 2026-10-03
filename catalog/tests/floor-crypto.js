@@ -15,11 +15,11 @@ const SENT = ['777.77', '4242424242', 'ТАЙНЫЙ_ПОСТАВЩИК'];
       cost: sent[0], supplier_ids: [sent[2]], stock: 7,
     }];
     s.groups = [{ id: 'g1', name: 'Молочные', sort_order: 1 }];
-    const data = P.buildFloorData(s.products, s.groups);
-    const blob = await P.encryptFloor(data, 'okno-kover-slon-42');
-    const okData = await P.decryptFloor(blob, 'okno-kover-slon-42');
+    const data = window.WM_FLOOR.buildFloorData(s.products, s.groups);
+    const blob = await window.WM_FLOOR.encryptFloor(data, 'okno-kover-slon-42');
+    const okData = await window.WM_FLOOR.decryptFloor(blob, 'okno-kover-slon-42');
     let wrongThrew = false;
-    try { await P.decryptFloor(blob, 'ne-tot-kod'); } catch (e) { wrongThrew = true; }
+    try { await window.WM_FLOOR.decryptFloor(blob, 'ne-tot-kod'); } catch (e) { wrongThrew = true; }
     return {
       blob, okData, wrongThrew,
       okJson: JSON.stringify(okData),

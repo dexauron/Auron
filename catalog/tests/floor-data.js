@@ -37,7 +37,7 @@ const SENTINELS = ['777.77', '4242424242', 'ТАЙНЫЙ_ПОСТАВЩИК', '1
     s.prices = [{ product_id: 'p1', supplier_id: sent[2], price: sent[0], price_date: '2026-10-01' }];
     s.sales = [{ code: '100500', name: 'Молоко 1л', qty: 10, amount: sent[3] }];
     s.contacts = { [sent[2]]: { phone: sent[1] } };
-    const data = P.buildFloorData(s.products, s.groups);
+    const data = window.WM_FLOOR.buildFloorData(s.products, s.groups);
     return { data, json: JSON.stringify(data) };
   }, SENTINELS);
 

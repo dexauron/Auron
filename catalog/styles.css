@@ -1925,3 +1925,16 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    код и цену. Плитки с фото не меняются. */
 .grid:not(.list) .card-photo.no-photo { display: none; }
 .grid:not(.list) .card-body { padding-top: 11px; }
+
+/* ═══ Список — действительно плотный вид ══════════════════════════════════
+   Список существует ради одного: увидеть за раз максимум кодов. После того как
+   плитки без фото стали компактными, список оказался РЕЖЕ плиток (93px на товар
+   против 83px) — то есть переключение в него ухудшало то, ради чего его и
+   включают. Поджимаем отступы и держим название в ОДНУ строку: в этом режиме
+   человек ищет код, а не читает описание. Зоны нажатия остаются крупными (≥44px). */
+.grid.list { gap: 8px; }
+.grid.list .card-row { padding: 8px 12px; min-height: 60px; }
+.grid.list .card-code { min-height: 44px; }
+.grid.list .card-name {
+  min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}

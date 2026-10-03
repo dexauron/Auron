@@ -17,6 +17,16 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
+  /* Витрина читается кусками (index.json + p/NN.json) — подменяем именно её,
+     иначе тест молча работает на настоящем каталоге из репозитория. */
+  await ctx.route('**/data/index.json*', (r) => r.fulfill(J({
+    v: 2, app: 4, savedAt: new Date().toISOString(), n: 1,
+    parts: ['test'], groups: 'test', popular: 'test',
+  })));
+  await ctx.route('**/data/p/*.json*', (r) => {
+    const m = /\/p\/(\d+)\.json/.exec(r.request().url());
+    r.fulfill(J(m && Number(m[1]) === 0 ? products : []));
+  });
   await ctx.route('**/data/products.json*', (r) => r.fulfill(J(products)));
   await ctx.route('**/data/groups.json*', (r) => r.fulfill(J([{ id: 'g1', name: 'Группа' }])));
   await ctx.route('**/data/popular.json*', (r) => r.fulfill(J([])));

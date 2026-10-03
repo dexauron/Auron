@@ -176,11 +176,28 @@ export function stockState(p, perDay) {
   return 'in';
 }
 
+/* Поля-массивы витрины и проверка «это примитив».
+   Витрину качает кто угодно, поэтому в неё нельзя класть значение «как есть»:
+   разрешённое поле с хитрым содержимым — тоже канал утечки. Если фото пришло
+   объектом {url, buy_price} (кривой импорт), закупка оказалась бы в открытом
+   файле. Берём только примитивы, а в photos/barcodes — только строки и числа.
+   Та же защита, что и в данных зала (floordata.js). */
+const PUBLIC_ARRAY = ['photos', 'barcodes'];
+const isPrimPub = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+
 export function buildPublicProducts() {
   return state.products
     .map((p) => {
       const o = {};
-      for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
+      for (const k of PUBLIC_FIELDS) {
+        if (p[k] == null) continue;
+        if (PUBLIC_ARRAY.includes(k)) {
+          const arr = Array.isArray(p[k])
+            ? p[k].filter((x) => typeof x === 'string' || typeof x === 'number').map(String).filter((x) => x.trim())
+            : [];
+          if (arr.length) o[k] = arr;
+        } else if (isPrimPub(p[k])) o[k] = p[k];
+      }
       // даты кладём без времени — «Новее» нужна только дата, а витрину качает
       // каждый покупатель, лишние 14 символов на товар тут заметны
       if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);
