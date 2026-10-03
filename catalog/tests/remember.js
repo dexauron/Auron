@@ -95,8 +95,9 @@ const groups = [{ id: 'g1', name: 'Молочное' }];
   const errs3 = [];
   page3.on('pageerror', (e) => errs3.push(e.message));
   await page3.goto('http://localhost:8123/', { timeout: 60000 });
-  await page3.waitForFunction(() => window.WM_PUBLISH && !localStorage.getItem('wm_sv_auth'),
-    null, { timeout: 15000 });
+  await page3.waitForFunction(() => window.WM_PUBLISH
+    && !localStorage.getItem('wm_sv_auth') && !window.WM_PUBLISH._state().session,
+  null, { timeout: 15000 });
   const revoked = await page3.evaluate(() => ({
     saved: localStorage.getItem('wm_sv_auth'),
     role: window.WM_PUBLISH._state().role,
