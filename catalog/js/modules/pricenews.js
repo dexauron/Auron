@@ -15,7 +15,7 @@ import { $, state, ui } from './store.js';
 import { closeSheet, esc, norm, openSheet } from './core.js';
 import { fmtDate, fmtPrice } from './catalog.js';
 import { plural } from './competitors.js';
-import { risenAll } from './pricerise.js';
+import { risenAll, risenReady, risenSoon } from './pricerise.js';
 
 const PAGE = 60;            // столько строк рисуем за раз, дальше — «Показать ещё»
 let dir = 'down';           // какая половина открыта: down — подешевело, up — подорожало
@@ -134,7 +134,14 @@ function renderPriceNewsEntry() {
   const wrap = $('priceNewsEntry');
   if (!wrap) return;
   const down = listFor('down').length;
-  const up = state.session ? listFor('up').length : 0;
+  /* Подорожавшие считаем, только если ответ уже готов. Иначе просим посчитать
+     в свободную минуту и перерисовать строку: прямой вызов отсюда замедлял
+     каждую перерисовку главного экрана втрое. */
+  let up = 0;
+  if (state.session) {
+    if (risenReady()) up = listFor('up').length;
+    else risenSoon(renderPriceNewsEntry);
+  }
   const set = (id, valId, n) => {
     const b = $(id); const v = $(valId);
     if (!b) return;
