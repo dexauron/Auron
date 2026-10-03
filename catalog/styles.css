@@ -1900,11 +1900,12 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
   display: grid; place-items: center; flex: none;
   color: #fff; background: #5e5ce6;
 }
-.floor-entry-icon { width: 30px; height: 30px; border-radius: 9px; font-size: 21px; }
+.floor-entry-icon { width: 30px; height: 30px; border-radius: 9px; }
+.floor-entry-icon svg { width: 21px; height: 21px; }
 .floor-entry-arrow { margin-left: auto; font-size: 26px; line-height: 1; }
 .floor-sheet-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
-.floor-sheet-icon { width: 58px; height: 58px; margin: 7px auto 15px;
-  border-radius: 17px; font-size: 35px; }
+.floor-sheet-icon { width: 58px; height: 58px; margin: 7px auto 15px; border-radius: 17px; }
+.floor-sheet-icon svg { width: 35px; height: 35px; }
 .floor-sheet-title { text-align: center; font-size: 25px; line-height: 1.2; }
 .floor-sheet-description { max-width: 420px; margin: 12px auto 22px;
   font-size: 16px; line-height: 1.45; text-align: center; }
