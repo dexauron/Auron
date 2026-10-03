@@ -33,8 +33,11 @@ const products = [
     return {
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
       html: document.getElementById('productGrid').innerHTML,
-      cheap: document.getElementById('cheaperStrip').hidden
-        ? '' : document.getElementById('cheaperStrip').innerText.replace(/\s+/g, ' '),
+      /* Полосы «Стало дешевле» на главном экране больше нет — она закрывала
+         собой каталог. Смотрим вход в «Фильтрах», который ведёт на экран
+         «Изменения цен» (его целиком проверяет price-news.js). */
+      cheap: document.getElementById('openCheaper').hidden
+        ? '' : (document.getElementById('openCheaper').innerText || '').replace(/\s+/g, ' '),
     };
   }, { was, at: snapAt });
 
@@ -52,18 +55,16 @@ const products = [
     `видно, что подешевело и на сколько (${(v.grid.match(/89 ₽.{0,16}/) || [''])[0]})`);
   chk(/card-was/.test(v.html) && /card-drop/.test(v.html), 'старая цена зачёркнута, выгода — плашкой');
 
-  /* ── 3. Полоса «Стало дешевле» ──
-     Раньше заголовок обещал «сегодня», хотя снимок цен живёт до недели и
-     цена могла упасть пять дней назад. Теперь честно: «Стало дешевле» и
-     строкой ниже — с какого дня сравниваем. */
-  chk(/Стало дешевле/.test(v.cheap), `полоса на главной есть (${v.cheap.slice(0, 50)})`);
-  chk(/сравниваем с ценами на/.test(v.cheap), `сказано, с какого дня сравниваем (${(v.cheap.match(/сравниваем[^\n]*/) || ['НЕ СКАЗАНО'])[0]})`);
-  chk(/2 товара/.test(v.cheap), 'сказано, сколько товаров подешевело');
-  chk(/Молоко/.test(v.cheap) && /Сок/.test(v.cheap), 'в полосе именно подешевевшие товары');
+  /* ── 3. Вход «Подешевело» ──
+     Список подешевевшего висел прямо на главном экране и закрывал собой
+     каталог. Теперь это отдельный экран «Изменения цен» (его целиком
+     проверяет price-news.js), а здесь — только вход в «Фильтрах». */
+  chk(/Подешевело/.test(v.cheap), `вход «Подешевело» есть (${v.cheap.slice(0, 50)})`);
+  chk(/2 товара/.test(v.cheap), `сказано, сколько товаров подешевело (${v.cheap})`);
 
   // ── 4. Не с чем сравнивать — ничего не выдумываем ──
   const empty = await paint({});
-  chk(!empty.cheap, 'у первого посетителя полосы нет — сравнивать не с чем');
+  chk(!empty.cheap, 'у первого посетителя входа нет — сравнивать не с чем');
   chk(!/card-was/.test(empty.html), 'и зачёркнутых цен тоже нет');
 
   // ── 5. «Цена на ценнике другая» ──
@@ -107,12 +108,12 @@ const products = [
     return {
       html: document.getElementById('productGrid').innerHTML,
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
-      cheap: document.getElementById('cheaperStrip').hidden,
+      cheap: document.getElementById('openCheaper').hidden,
       shelfBtn: !!document.querySelector('[data-shelf-scanned]'),
     };
   });
   chk(/card-was/.test(staff.html), 'вошедшему зачёркнутую цену тоже показываем');
-  chk(!staff.cheap, 'и полоса «стало дешевле» у него есть');
+  chk(!staff.cheap, 'и вход «подешевело» у него есть');
   chk(/row-pack/.test(staff.html), 'фасовка отдельной строкой — тоже');
   chk(!staff.shelfBtn, 'а вот кнопки про ценник у него нет — он сам его и печатает');
 

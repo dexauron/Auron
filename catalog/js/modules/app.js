@@ -27,6 +27,7 @@ import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { bindPriceRise } from './pricerise.js';
+import { bindPriceNews } from './pricenews.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -300,7 +301,6 @@ function bindEvents() {
   // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
   $('myStrip').addEventListener('click', openSimilar);
   $('newStrip').addEventListener('click', openSimilar);
-  $('cheaperStrip').addEventListener('click', openSimilar);
   $('arrivalStrip').addEventListener('click', (e) => {
     const all = e.target.closest('[data-arr-all]');
     if (all) {
@@ -972,7 +972,8 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
-  bindPriceRise(openProduct);
+  bindPriceRise();
+  bindPriceNews(openProduct);   // «Изменения цен» — отдельный экран
   bindMargin(openProduct);
   bindScanResult(openProduct, toggleShop, openShelfReport);
   // отзывы: покупатель оценивает, владелец добавляет и сразу публикует

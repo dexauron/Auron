@@ -9,7 +9,6 @@ import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
 import { ratingText } from './reviews.js';
-import { renderRiseStrip } from './pricerise.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -525,11 +524,11 @@ function markRole() {
 
 export function renderAll() {
   markRole();
+  ui.anyFilter = anyFilterActive;        // тем же правилом пользуются другие экраны
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
-  renderCheaper();
-  renderRiseStrip();
+  if (ui.renderPriceNewsEntry) ui.renderPriceNewsEntry();   // вход в «Изменения цен»
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
@@ -739,47 +738,6 @@ export function renderNewProducts() {
         <span class="similar-photo${ph ? '' : ' no-photo'}">${ph ? `<img src="${esc(ph)}" loading="lazy" alt="" onerror="wmImgFail(this)">` : ic('box', 'ic-ph')}</span>
         <span class="similar-name">${esc(x.name)}</span>${price}</button>`;
     }).join('') + '</div>';
-}
-
-/* ── «Стало дешевле» ──────────────────────────────────────────────────────
- * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
- * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
- * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
- * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
- * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
- * Видна всем (решение владельца): сотруднику у полки этот вопрос задают чаще
- * всего, а владельцу по ней видно, что новая цена доехала до каталога. */
-const CHEAP_ROWS = 5;
-
-function renderCheaper() {
-  ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
-  ui.anyFilter = anyFilterActive;        // полосе «подорожало» нужно то же правило показа
-  const box = $('cheaperStrip');
-  if (!box) return;
-  const show = state.tab === 'catalog'
-    && !state.query && !state.favOnly && !anyFilterActive();
-  const was = state.priceWas || {};
-  const list = show ? state.products.filter((p) => {
-    const w = Number(was[p.id]); const n = Number(p.retail_price);
-    return w > 0 && n > 0 && w > n;
-  }) : [];
-  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
-  // сверху то, где выгода больше в рублях: она и решает
-  list.sort((a, b) => (was[b.id] - b.retail_price) - (was[a.id] - a.retail_price));
-  const rows = list.slice(0, CHEAP_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
-      <span class="arr-name">${esc(p.name)}</span>
-      <span class="arr-price">${esc(fmtRetail(p))}
-        <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
-  /* Заголовок раньше обещал «сегодня», а снимок цен живёт до недели: цена
-     могла упасть пять дней назад. Говорим, с какого дня сравниваем. */
-  const since = state.priceWasAt
-    ? `<p class="arr-since">сравниваем с ценами на ${esc(fmtDate(state.priceWasAt))}</p>` : '';
-  box.innerHTML = `<div class="arr-head">
-      <span class="arr-title">Стало дешевле</span>
-      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
-    </div>
-    <div class="arr-list">${rows}</div>${since}`;
-  box.hidden = false;
 }
 
 /* ── «Сегодня привезли» ──────────────────────────────────────────────────

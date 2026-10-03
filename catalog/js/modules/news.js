@@ -123,7 +123,7 @@ export async function checkNews() {
 
   if (!fresh) { try { await idbSet(SNAP_KEY, { at: new Date().toISOString(), prices: now }); } catch (e) { /* не влезло */ } }
   if (state.session) hideBanner(); else renderNewsBanner();
-  if (ui.renderCheaper) ui.renderCheaper();   // полоса «сегодня дешевле» на главной
+  if (ui.renderPriceNewsEntry) ui.renderPriceNewsEntry();   // число в «Изменениях цен»
 }
 
 function hideBanner() { const el = $('newsBanner'); if (el) el.hidden = true; }
