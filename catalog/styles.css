@@ -1977,10 +1977,16 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row {
   border-color: var(--border);
   border-radius: 16px;
 }
+/* Покупателю название переносится целиком: плотный список сотрудника держит
+   его в одну строку (так быстрее искать код), а покупателю нужна читаемость —
+   у него и строка выше. */
 body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
   font-size: 17px;
   line-height: 1.35;
   font-weight: 650;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   overflow-wrap: anywhere;
 }
 body:has(#floorLoginBtn:not([hidden])) .grid.list .row-sub {
@@ -2033,13 +2039,4 @@ body:has(#floorLoginBtn:not([hidden])) .empty-reset { min-height: 50px; font-siz
   body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo {
     flex-basis: 60px; width: 60px; height: 60px;
   }
-}
-
-/* Покупателю название в строке переносится: мой плотный список держит его в
-   одну строку (сотруднику так быстрее искать код), а покупателю нужна
-   читаемость — у него и строка выше. */
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
-  white-space: normal;
-  overflow: visible;
-  text-overflow: clip;
 }
