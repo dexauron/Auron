@@ -39,6 +39,13 @@ function total(list) {
   }, 0);
 }
 
+/* Единица товара. Весовой берут килограммами, штучный — штуками: «2 шт
+ * сыра на развес» не значит ничего, а «2 кг» значит (просьба владельца).
+ * Единицу спрашиваем у самого товара, а не выдумываем. */
+const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
+const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
+const rowUnit = (x) => x.unit || unitOf(state.products.find((y) => y.id === x.id));
+
 /* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его
  * в список, не открывая карточку. */
 export function toggleShop(p) {
@@ -46,7 +53,9 @@ export function toggleShop(p) {
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
   if (i >= 0) { list.splice(i, 1); write(list); renderShopBar(); return false; }
-  list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: 1, done: false });
+  const unit = unitOf(p);
+  list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p),
+    unit, qty: 1, done: false });
   write(list);
   renderShopBar();
   return true;
@@ -56,7 +65,8 @@ function shopQty(id, delta) {
   const list = read();
   const row = list.find((x) => x.id === id);
   if (!row) return;
-  row.qty = Math.max(1, Math.round(((Number(row.qty) || 1) + delta) * 1000) / 1000);
+  const step = stepOf(rowUnit(row));
+  row.qty = Math.max(step, Math.round(((Number(row.qty) || 1) + delta * step) * 1000) / 1000);
   write(list);
   renderShop();
   renderShopBar();
@@ -95,7 +105,13 @@ function renderShopBar() {
   if (!bar) return;
   const list = read();
   const left = list.filter((x) => !x.done).length;
-  bar.hidden = !(list.length && !state.session);
+  /* Полоску видят ВСЕ, у кого список не пуст. Раньше она пряталась от
+     вошедших: сотрудник собирал список и терял к нему дорогу (просьба
+     владельца — список нужен и сотруднику, и владельцу). */
+  bar.hidden = !list.length;
+  // сколько в списке — видно прямо в меню, не открывая его
+  const mc = $('menuShopCount');
+  if (mc) mc.textContent = left ? `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}` : '';
   if (list.length) {
     $('shopCount').textContent = `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}`;
     $('shopTotal').textContent = fmtPrice(total(list));
@@ -122,17 +138,18 @@ function renderShop() {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const sum = price * (Number(x.qty) || 1);
+    const unit = rowUnit(x);
     return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
     <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
-        <span class="ord-sub">${(Number(x.qty) || 1) > 1
-    ? `${fmtNum(x.qty)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
-    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
+        <span class="ord-sub">${(Number(x.qty) || 1) !== 1
+    ? `${fmtNum(x.qty)} ${esc(unit)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
+    : (price ? `${fmtPrice(price)} / ${esc(unit)}` : 'цена не указана')}${x.code && state.session ? ' · код ' + esc(x.code) : ''}</span></span>
       <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
-        <span class="shop-qty">${fmtNum(x.qty)}</span>
+        <span class="shop-qty">${fmtNum(x.qty)} ${esc(unit)}</span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
@@ -224,10 +241,11 @@ function shopText(wa) {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const qty = Number(x.qty) || 1;
+    const unit = rowUnit(x);
     let tail = '';
-    if (price && qty > 1) tail = ` — ${fmtNum(qty)} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
+    if (price && qty !== 1) tail = ` — ${fmtNum(qty)} ${unit} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
     else if (price) tail = ` — ${fmtPrice(price)}`;
-    else if (qty > 1) tail = ` — ${fmtNum(qty)} шт`;
+    else if (qty !== 1) tail = ` — ${fmtNum(qty)} ${unit}`;
     return `${i + 1}. ${x.name}${tail}`;
   });
   const rest = list.length - lines.length;
@@ -332,6 +350,8 @@ export function bindShopping() {
     else toast('Убрано из списка');
   });
   $('shopOpen').addEventListener('click', openShop);
+  const menuShop = $('menuShop');
+  if (menuShop) menuShop.addEventListener('click', () => { closeSheet('adminMenuSheet'); openShop(); });
   $('shopShare').addEventListener('click', shareShop);
   $('shopWa').addEventListener('click', shopToWhatsApp);
   $('shopClear').addEventListener('click', clearShop);
