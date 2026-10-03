@@ -34,6 +34,14 @@ export function restoreLogin(after) {
     if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
     renderAll();
     if (after) safely('после входа', after)();
-  }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
+  }).catch((err) => {
+    /* Нет сети — оставляем запомненный вход и офлайн-кэш. Если свежий файл
+       ключей прочитан и пароль явно отвергнут, роль уже отозвана: нельзя
+       оставлять старые права после смены пароля. */
+    if (err && err.message === 'BAD_PASSWORD') {
+      clearSvAuth();
+      location.reload();
+    }
+  });
   return true;
 }
