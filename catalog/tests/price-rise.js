@@ -179,6 +179,26 @@ const openWork = (page) => page.evaluate(async () => {
   chk(/продаём в минус/.test(loss), `сказано прямо, что товар продаётся в минус (${(loss.match(/.{0,20}продаём в минус.{0,20}/) || ['НЕ СКАЗАНО'])[0]})`);
   chk(/15\D*₽/.test(loss), `и на сколько именно — 60 закупка против 45 ценника (${(loss.match(/минус[^·]*/) || [''])[0]})`);
 
+  // Ровно по себестоимости — нулевая наценка, НЕ продажа в минус 0 ₽.
+  const breakEven = await page.evaluate(async (d) => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    s.prices = []; s.retailHist = {};
+    P.svImportRows(d.a); P.svImportRows(d.b);
+    s.products.find((x) => x.id === 'p3').retail_price = 60;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 300));
+    document.querySelector('[data-work="risen"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return document.getElementById('risenBody').innerText.replace(/\\s+/g, ' ');
+  }, {
+    a: priceFile([['Батон нарезной', '201', 'Хлебозавод', 'шт', '30', ru(10)]]),
+    b: priceFile([['Батон нарезной', '201', 'Хлебозавод', 'шт', '60', ru(1)]]),
+  });
+  chk(!/продаём в минус 0/.test(breakEven), 'цена равна закупке — ложного убытка 0 ₽ нет');
+  chk(/наценка упала с 100% до 0%/.test(breakEven),
+    'цена равна закупке — показана нулевая наценка');
+
   // ── 6. Покупателю этого не видно ──
   const guest = await page.evaluate(async () => {
     const P = window.WM_PUBLISH; const s = P._state();
