@@ -7,6 +7,8 @@ import { buildIndex } from './catalog.js';
 import { byName } from './data.js';
 import { renderAll, viewChosen } from './render.js';
 import { decryptFloor, FLOOR_FILE } from './floordata.js';
+import { logSession } from './sessionlog.js';
+import { saveSvAuth } from './publish.js';
 
 // Разложить данные зала в приложение: роль zal, денег нет.
 export function applyFloorSnapshot(data) {
@@ -34,6 +36,16 @@ export function applyFloorSnapshot(data) {
   const fab = $('fabAdd'); if (fab) fab.hidden = true;            // добавлять товар он не может
   const ab = $('adminBtn'); if (ab) ab.classList.toggle('is-admin', true);
   const al = $('adminBtnLabel'); if (al) al.hidden = true;
+}
+
+/* Запомнить вход зала на этом устройстве. Раньше его НЕ запоминали вовсе:
+ * владелец и бухгалтер входили один раз, а сотрудник зала набирал код у полки
+ * заново при каждом открытии каталога — и просто переставал им пользоваться.
+ * Код лежит на телефоне так же, как пароль владельца; размен осознанный, и в
+ * самом `floor.enc` денег нет вовсе. «Выйти» стирает и запись, и данные. */
+export function rememberFloor(code) {
+  saveSvAuth('zal', code);
+  logSession('in', 'zal');
 }
 
 function rawUrl() {

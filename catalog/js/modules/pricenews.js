@@ -50,7 +50,8 @@ function risenRows() {
        «Подорожало»; окна больше нет, а новость эта — самая важная из всех,
        и ради неё не должно приходиться открывать каждый товар. */
     let note = '';
-    if (r.squeeze && r.squeeze.loss != null) note = `продаём в минус ${fmtPrice(r.squeeze.loss)}`;
+    if (r.squeeze && r.squeeze.even) note = 'продаём без наценки';
+    else if (r.squeeze && r.squeeze.loss != null) note = `продаём в минус ${fmtPrice(r.squeeze.loss)}`;
     else if (r.squeeze) note = `наценка ${r.squeeze.wasPct}% → ${r.squeeze.isPct}%`;
     return { p: r.p, what: main === r.cost ? 'закупка' : 'ценник', was: main.was, is: main.is, at: main.at, down: false, note };
   }).filter(Boolean);
@@ -74,7 +75,7 @@ function rowHtml(r) {
   const cls = r.down ? 'pn-down' : 'pn-up';
   const when = r.at ? fmtDate(r.at) : '';
   const sub = [r.what, when].filter(Boolean).join(' · ');
-  const loss = /в минус/.test(r.note);
+  const loss = /в минус|без наценки/.test(r.note);
   return `<button class="pn-row" data-pn-open="${esc(r.p.id)}">
     <span class="pn-main">
       <span class="pn-name">${esc(r.p.name)}</span>

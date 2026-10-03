@@ -3,14 +3,14 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { applyFloorSnapshot } from './floor.js';
+
 import { bindFloorUI } from './floorui.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
+import { applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
@@ -28,6 +28,9 @@ import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMar
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { bindPriceRise } from './pricerise.js';
 import { bindPriceNews } from './pricenews.js';
+import { logSession } from './sessionlog.js';
+import { applyFloorSnapshot, rememberFloor } from './floor.js';
+import { restoreLogin } from './restore.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
@@ -779,6 +782,7 @@ function bindEvents() {
     closeSheet('adminMenuSheet');
     if (state.serverless) {
       // серверлес: забываем пароль, запомненный вход и данные, перезагружаем витрину
+      logSession('out', state.role || 'owner');   // в журнале видно и выход
       ui.secretPw = null; clearSvAuth();
       state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.canSales = false; state.role = null;
       toast('Вы вышли из аккаунта');
@@ -1137,25 +1141,8 @@ async function init() {
   // мгновенно показываем сохранённый каталог, затем тихо обновляем
   if (await loadCache()) renderAll();
 
-  // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
-  // «Выйти», даже после обновления страницы. Роль поднимаем сразу (данные —
-  // из кэша), а полный каталог (закупка/продажи) дотягиваем из GitHub в фоне.
-  let svRestored = false;
-  try {
-    const saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null');
-    if (saved && saved.pw) {
-      svRestored = true;
-      // Права поднимаем сразу по запомненной роли, но окончательное слово — за
-      // каталогом: владелец мог сменить пароль сотрудника, и тогда роль другая.
-      if (saved.role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
-      unlockAny(saved.pw).then((role) => {
-        if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
-        renderAll();
-        safely('проверка витрины', checkShowcaseFresh)();
-        safely('что нового', checkNews)();
-      }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
-    }
-  } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
+  // Запомненный вход: поднимаем роль, если входили раньше (restore.js)
+  const svRestored = restoreLogin(() => { checkShowcaseFresh(); checkNews(); });
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
@@ -1182,6 +1169,7 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
   window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, applyFloorSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
+    _rememberFloor: rememberFloor, _logSession: logSession, _openDevice: openDeviceSheet,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
     _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkNews: checkNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _packText: packText,

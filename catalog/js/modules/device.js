@@ -1,6 +1,7 @@
 // Настройки этого устройства
 
 import { $, CACHE_KEY, state } from './store.js';
+import { roleName, sessionLog } from './sessionlog.js';
 import { esc, openSheet, savedErrors, toast } from './core.js';
 import { todayISO } from './catalog.js';
 import { THEME_KEY, applyTheme, countActiveFilters, favorites, renderAll } from './render.js';
@@ -123,6 +124,25 @@ function renderDeviceSheet() {
   if (wolf) wolf.checked = mascotOn();
   // Последние сбои — здесь, а не в тайной консоли: если каталог однажды повёл
   // себя странно, владелец видит, что именно случилось, и может это назвать.
+  /* Входы и выходы — ответ на «каталог не помнит, когда зашли и когда вышли».
+     Показываем ролью, а не служебным словом: «Сотрудник зала», а не «zal». */
+  const ses = sessionLog();
+  const when = (at) => {
+    const d = new Date(at);
+    const t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const day = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+    const today = new Date().toDateString() === d.toDateString();
+    return today ? `сегодня в ${t}` : `${day}, ${t}`;
+  };
+  const sbox = $('devSessions');
+  if (sbox) {
+    sbox.innerHTML = ses.length
+      ? ses.slice(0, 10).map((r) => `<div class="ios-row"><span class="ios-row-title">${esc(roleName(r.role))}
+          <span class="ord-sub">${r.event === 'in' ? 'вошёл' : 'вышел'}</span></span>
+          <span class="ios-row-value">${esc(when(r.at))}</span></div>`).join('')
+      : '<div class="ios-row"><span class="ios-row-title muted">Входов пока не было</span></div>';
+  }
+
   const errs = savedErrors();
   $('devErrors').innerHTML = errs.length
     ? errs.slice(0, 5).map((e) => `<div class="ios-row"><span class="ios-row-title">${esc(e.msg)}

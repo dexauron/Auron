@@ -1,6 +1,7 @@
 // Публикация на GitHub: шифрование, снимки, вход по паролю
 
 import { $, CFG, state, ui } from './store.js';
+import { logSession } from './sessionlog.js';
 import { norm, toast } from './core.js';
 import { buildIndex } from './catalog.js';
 import { renderAll } from './render.js';
@@ -645,7 +646,7 @@ export async function unlockStaff(password) {
 }
 
 // запомнить вход на устройстве (по просьбе владельца — не выходить до явного выхода)
-function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
+export function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
 export function clearSvAuth() { try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* некритично */ } }
 
 // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
@@ -656,6 +657,7 @@ export function applyServerless(pw) {
   state.session = { user: { email: 'owner' }, serverless: true };
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('owner', pw);
+  logSession('in', 'owner');
   $('fabAdd').hidden = false;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
@@ -680,6 +682,7 @@ export function applyStaff(pw) {
   state.session = { user: { email: 'staff' }, serverless: true, staff: true };
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('staff', pw);
+  logSession('in', 'staff');
   $('fabAdd').hidden = true;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;

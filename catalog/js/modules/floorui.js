@@ -4,7 +4,7 @@
 import { $, CFG, state, ui } from './store.js';
 import { closeSheet, openSheet, toast } from './core.js';
 import { publishFull } from './publish.js';
-import { unlockFloor } from './floor.js';
+import { rememberFloor, unlockFloor } from './floor.js';
 import { buildFloorData, encryptFloor, decryptFloor } from './floordata.js';
 
 /* Доступ для проверок: сборка данных зала и шифрование живут в чистом модуле,
@@ -51,6 +51,7 @@ export function bindFloorUI() {
     if (btn) { btn.disabled = true; btn.textContent = 'Входим…'; }
     try {
       await unlockFloor(code);
+      rememberFloor(code);          // больше не спрашиваем код каждый раз
       $('floorLoginCode').value = '';
       closeSheet('floorLoginSheet');
       toast('Вход сотрудника зала');

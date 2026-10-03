@@ -159,7 +159,10 @@ function marginSqueeze(p, cost, retail) {
   /* Закупка переросла ценник — товар продаётся В МИНУС. Это самый тяжёлый
      случай, а раньше он молча пропадал: проценты наценки тут считать нечего,
      поэтому возвращалось «ничего». Теперь говорим прямо. */
-  if (sell <= cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
+  /* Закупка СРАВНЯЛАСЬ с ценником — это ещё не минус, а ноль: «продаём в
+     минус 0 ₽» звучало бы глупо и сбивало бы с толку (находка GPT). */
+  if (sell === cost.is) return { even: true };
+  if (sell < cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
   return { wasPct: Math.round(((sell - cost.was) / cost.was) * 100), isPct: Math.round(((sell - cost.is) / cost.is) * 100) };
 }
 
@@ -264,7 +267,9 @@ export function riseHtml(p) {
   const lines = [];
   if (r.retail) lines.push(riseText('Ценник', r.retail));
   if (r.cost) lines.push(riseText(`Закупка${r.cost.sup ? ' · ' + r.cost.sup : ''}`, r.cost));
-  if (r.squeeze && r.squeeze.loss != null) {
+  if (r.squeeze && r.squeeze.even) {
+    lines.push('Закупка сравнялась с ценником — продаём без наценки');
+  } else if (r.squeeze && r.squeeze.loss != null) {
     lines.push(`Закупка выше ценника — продаём в минус ${fmtPrice(r.squeeze.loss)} с единицы`);
   } else if (r.squeeze) {
     lines.push(`Ценник не меняли — наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
