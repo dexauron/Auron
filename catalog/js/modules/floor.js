@@ -5,7 +5,7 @@
 import { $, CFG, state } from './store.js';
 import { buildIndex } from './catalog.js';
 import { byName } from './data.js';
-import { renderAll } from './render.js';
+import { renderAll, viewChosen } from './render.js';
 import { decryptFloor, FLOOR_FILE } from './floordata.js';
 
 // Разложить данные зала в приложение: роль zal, денег нет.
@@ -23,6 +23,10 @@ export function applyFloorSnapshot(data) {
   state.session = { user: { email: 'floor' }, serverless: true, floor: true };
   state.isAdmin = false; state.role = 'zal';
   state.canPurchase = false; state.canSales = false;   // деньги в UI скрыты этими флагами
+  /* Сотрудник зала ищет КОД, а не разглядывает товар: плотный список с
+     кодами ему удобнее плиток, и на экран влезает вдвое больше. Если он сам
+     переключил вид на этом телефоне — не перебиваем. */
+  if (!viewChosen()) state.view = 'list';
   buildIndex();
   renderAll();
   // Шапка должна показывать, что сотрудник ВОШЁЛ: иначе он видит кнопку

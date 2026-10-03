@@ -2043,3 +2043,50 @@ body[data-role="guest"] .empty-reset { min-height: 50px; font-size: 16px; }
     flex-basis: 60px; width: 60px; height: 60px;
   }
 }
+
+/* Зал: код читается с расстояния, список остаётся без фотографий. Правила
+   привязаны к РОЛИ (data-role="zal"), а не к видимости кнопки «Закончилось
+   на полке»: её видит любой сотрудник, и крупные коды уехали бы заодно к
+   бухгалтеру и владельцу, у которых список должен оставаться плотным. */
+body[data-role="zal"] .grid.list .card-code {
+  min-height: 48px;
+  max-width: 52%;
+  padding: 8px 12px;
+  font-size: 21px;
+  line-height: 1.15;
+  text-align: center;
+  /* Код не сжимается и не переносится НИКОГДА: это главное, что сотрудник
+     читает в строке. Если места мало — сокращается название, а не код. */
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+body[data-role="zal"] .grid.list .row-main { min-width: 0; }
+body[data-role="zal"] #productSheet #btnRestock {
+  min-height: 60px;
+  margin: 14px 0 16px;
+  border-radius: 16px;
+  font-size: 18px;
+}
+body[data-role="zal"] #productSheet #sheetFields .copy-btn {
+  min-width: 48px;
+  min-height: 48px;
+}
+/* Класс field-code стоит только на строке кода кассы (card.js). */
+body[data-role="zal"] #productSheet #sheetFields .field-code {
+  min-height: 76px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin: 0 0 10px;
+}
+body[data-role="zal"] #productSheet #sheetFields .field-code .field-val {
+  margin-left: auto;
+  color: var(--brand-ink);
+  font-size: 29px;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 360px) {
+  body[data-role="zal"] #productSheet #sheetFields .field-code .field-val { font-size: 25px; }
+}

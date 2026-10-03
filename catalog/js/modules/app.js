@@ -6,7 +6,7 @@ import { ic, paintIcons } from './icons.js';
 import { applyFloorSnapshot } from './floor.js';
 import { bindFloorUI } from './floorui.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
+import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
@@ -65,11 +65,11 @@ function bindEvents() {
   $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
   $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
   $('filterReset').addEventListener('click', clearAllFilters);
-  // Круглая иконка «вид» в шапке — переключает размер плиток
-  // Три режима по кругу: плитки → плотные плитки → список.
-  // Список — для кассы: без фото влезает втрое больше строк, а код крупный.
+  // Круглая иконка «вид» в шапке. Три режима по кругу: плитки → плотные
+  // плитки → список. Список — для кассы: влезает втрое больше строк.
   $('viewToggleBtn').addEventListener('click', () => {
     state.view = state.view === 'normal' ? 'compact' : (state.view === 'compact' ? 'list' : 'normal');
+    markViewPicked();   // человек выбрал вид сам — больше ничего за него не решаем
     state.renderLimit = PAGE_SIZE;
     renderAll();
   });

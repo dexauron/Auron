@@ -34,6 +34,7 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
          стили делают крупную плашку кода, не задевая артикул. */
       codeRows: [...document.querySelectorAll('#sheetFields .field-row.field-code')]
         .map((x) => (x.textContent || '').trim()),
+      comp: ((document.getElementById('sheetCompetitors') || {}).textContent || '').trim(),
       adminHidden: (document.getElementById('sheetAdminActions') || {}).hidden,
       fabHidden: (document.getElementById('fabAdd') || {}).hidden,
     };
@@ -49,6 +50,9 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
   chk(r.stock === '', 'остатка числом нет');
   chk(r.sales === '', 'продаж/«Ходовых» нет');
   chk(r.markup === '', 'наценки нет');
+  /* Цены других магазинов — разведка для закупок. В меню сотруднику зала их
+     уже не показывали, в карточке должно быть так же. */
+  chk(r.comp === '', 'цен других магазинов у зала нет');
   chk(r.supplier === '', 'цен и контактов поставщиков нет');
   chk(r.adminHidden === true, 'кнопки правки товара скрыты');
   chk(r.fabHidden === true, 'кнопка «добавить товар» скрыта');

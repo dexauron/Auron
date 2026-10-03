@@ -581,6 +581,17 @@ function saveFilters() {
     }));
   } catch (e) { /* нет места — не критично */ }
 }
+/* Переключал ли человек вид каталога САМ на этом устройстве. Сам вид
+ * сохраняется при каждой перерисовке, поэтому «есть ли он в памяти» ни о чём
+ * не говорит — нужна отдельная отметка. По ней сотруднику зала ставится
+ * плотный список по умолчанию, а его собственный выбор не перебивается. */
+const VIEW_PICKED_KEY = 'wm_view_picked';
+export function markViewPicked() {
+  try { localStorage.setItem(VIEW_PICKED_KEY, '1'); } catch (e) { /* нет места — не критично */ }
+}
+export function viewChosen() {
+  try { return localStorage.getItem(VIEW_PICKED_KEY) === '1'; } catch (e) { return false; }
+}
 export function loadFilters() {
   try {
     const f = JSON.parse(localStorage.getItem(FILTERS_KEY));
