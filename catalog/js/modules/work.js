@@ -46,15 +46,15 @@ function renderWork() {
 
   box.innerHTML = `
     <div class="ios-group">
-      ${row('orders', 'Заказы поставщикам', orders)}
-      ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
+      ${state.canPurchase ? row('orders', 'Заказы поставщикам', orders) : ''}
+      ${state.canPurchase && o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
       ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
       ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
       ${row('scan', 'Сканировать штрихкод', '')}
     </div>
-    <p class="ios-note">«Просрочено» — поставки, у которых день прихода прошёл, а «пришёл» никто
-    не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>`;
+    ${state.canPurchase ? `<p class="ios-note">«Просрочено» — поставки, у которых день прихода прошёл, а «пришёл» никто
+    не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>` : ''}`;
 }
 
 /* Плашка вверху главного экрана: что ждёт сегодня. Сотрудник заходит в каталог
@@ -63,7 +63,8 @@ function renderWork() {
 function renderTodayBanner() {
   const el = $('todayBanner');
   if (!el) return;
-  if (!state.session) { el.hidden = true; return; }
+  // плашка про поставки и суммы — не для сотрудника зала (деньги закупок)
+  if (!state.session || !state.canPurchase) { el.hidden = true; return; }
   const t = ordersDue(todayISO());
   const late = ordersSummary().overdue;
   if (!t.count && !late) { el.hidden = true; return; }
@@ -80,7 +81,7 @@ export function renderWorkBadge() {
   renderTodayBanner();
   const el = $('tabWorkCount');
   if (!el) return;
-  const n = state.session ? ordersSummary().overdue + restockCount() : 0;
+  const n = state.session ? (state.canPurchase ? ordersSummary().overdue : 0) + restockCount() : 0;
   el.textContent = n > 99 ? '99+' : n;
   el.hidden = !n;
 }
