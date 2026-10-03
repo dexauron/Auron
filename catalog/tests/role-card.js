@@ -46,6 +46,20 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
   chk(r.supplier === '', 'цен и контактов поставщиков нет');
   chk(r.adminHidden === true, 'кнопки правки товара скрыты');
   chk(r.fabHidden === true, 'кнопка «добавить товар» скрыта');
+  // шапка: сотрудник должен видеть, что он ВОШЁЛ (а не кнопку «Войти»),
+  // и иметь возможность выйти
+  const hdr = await page.evaluate(() => {
+    const vis = (id) => { let n = document.getElementById(id); if (!n) return 'НЕТ';
+      while (n && n !== document.body) { if (n.hidden) return false; n = n.parentElement; } return true; };
+    document.getElementById('adminBtn').click();
+    const ab = document.getElementById('adminBtn'); const al = document.getElementById('adminBtnLabel');
+    return { isAdminClass: !!(ab && ab.classList.contains('is-admin')), labelHidden: !!(al && al.hidden),
+      logout: vis('menuLogout'), device: vis('menuDevice'), addProduct: vis('menuAddProduct'), publish: vis('menuPublish') };
+  });
+  chk(hdr.isAdminClass === true && hdr.labelHidden === true, 'шапка показывает вошедшего сотрудника (нет кнопки «Войти»)');
+  chk(hdr.logout === true, 'сотрудник может выйти из аккаунта');
+  chk(hdr.device === true, 'настройки устройства доступны сотруднику');
+  chk(hdr.addProduct === false && hdr.publish === false, 'правка и публикация сотруднику недоступны');
   chk(errs.length === 0, 'нет ошибок страницы (' + errs.length + ')');
 
   await done(b);
