@@ -3,6 +3,7 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
+import { buildFloorData } from './floordata.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
@@ -1181,7 +1182,7 @@ function runQuickActionFromUrl() {
 
 // Тестовый доступ — только на localhost (в проде не открываем).
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, buildFloorData, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
