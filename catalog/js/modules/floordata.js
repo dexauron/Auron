@@ -1,51 +1,38 @@
-// Данные для «Сотрудника зала» — без денег
+// Данные и шифрование для «Сотрудника зала» — без денег, без зависимостей
 //
-// Сотрудник зала входит отдельным коротким кодом и должен видеть ВСЁ, что
-// нужно, чтобы пробить товар на кассе: код кассы, штрихкоды, артикул, отдел,
-// группу, фото, наличие словом. Но НИКОГДА — деньги магазина: закупочные
-// цены, поставщиков, продажи/«Ходовые», наценку.
+// Модуль намеренно НИ ОТ ЧЕГО не зависит (чистый): его используют и публикация
+// (publish.js, сборка floor.enc одним коммитом), и вход (floor.js). Так нет
+// циклов импорта.
 //
-// Для зала собирается ОТДЕЛЬНЫЙ набор данных: переносятся только разрешённые
-// поля, и только как ПРИМИТИВЫ. Это важно: разрешённое поле с «хитрым»
-// содержимым — тоже канал утечки (например, фото пришло объектом
-// {url, buy_price} из кривого импорта, или в свободном примечании написана
-// сумма закупки). Поэтому:
-//   • скалярные поля берём, только если это строка/число/логическое;
-//   • массивы (photos, barcodes) — только строковые/числовые элементы;
-//   • свободный текст note в данные зала НЕ кладём вовсе (там может оказаться
-//     закупочная сумма) — сотруднику зала он не нужен для кассы.
+// Сотрудник зала видит данные для кассы (код, штрихкоды, артикул, отдел,
+// группа, фото, наличие словом), но НИКОГДА — деньги. Поэтому:
+//   • в floor-данные переносятся только разрешённые поля и только примитивы;
+//   • массивы (photos/barcodes) — только строковые/числовые элементы;
+//   • свободный note НЕ включаем (там может оказаться сумма закупки);
+//   • файл floor.enc публичный, код подбираем офлайн → шифрование усилено
+//     (PBKDF2 310 000), а в самом файле денег нет вовсе.
 
-// Скалярные поля (копируются, только если значение — примитив).
 const FLOOR_SCALAR = [
   'id', 'name', 'code', 'article', 'department', 'group_id', 'category',
   'is_weighted', 'unit', 'retail_price', 'arrival_at', 'created_at', 'stock_state',
 ];
-// Поля-массивы: оставляем только строковые/числовые элементы (объекты выкидываем).
 const FLOOR_ARRAY = ['photos', 'barcodes'];
-
-// Полный список разрешённых ключей (для тестов и ревью).
 export const FLOOR_FIELDS = [...FLOOR_SCALAR, ...FLOOR_ARRAY];
-
-// Поля, которых в данных зала быть НЕ ДОЛЖНО ни при каких условиях.
 export const FLOOR_FORBIDDEN = [
   'prices', 'sales', 'contacts', 'orders', 'orderRules', 'compPrices',
-  'competitors', 'retailHist', 'unitCoef', 'staffPassword', 'note',
+  'competitors', 'retailHist', 'unitCoef', 'staffPassword', 'floorPassword', 'note',
   'cost', 'buy_price', 'purchase', 'supplier_id', 'supplier_ids',
   'margin', 'markup', 'stock', 'stock_qty',
 ];
 
 const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
 
-// Один товар → только разрешённые поля, только примитивы и строковые массивы.
 export function floorProduct(p) {
   const o = {};
   if (!p || typeof p !== 'object') return o;
-  for (const k of FLOOR_SCALAR) {
-    if (p[k] != null && isPrim(p[k])) o[k] = p[k];
-  }
+  for (const k of FLOOR_SCALAR) if (p[k] != null && isPrim(p[k])) o[k] = p[k];
   for (const k of FLOOR_ARRAY) {
     if (Array.isArray(p[k])) {
-      // только строки/числа → в строку; объекты и вложенность выкидываем
       const arr = p[k].filter((x) => typeof x === 'string' || typeof x === 'number').map(String).filter((s) => s.trim());
       if (arr.length) o[k] = arr;
     }
@@ -53,7 +40,6 @@ export function floorProduct(p) {
   return o;
 }
 
-// Весь набор данных зала: товары (урезанные) + группы (имя и порядок — строками).
 export function buildFloorData(products, groups) {
   return {
     v: 1,
@@ -65,3 +51,38 @@ export function buildFloorData(products, groups) {
     })),
   };
 }
+
+// ── Шифрование файла зала (AES-GCM, ключ из кода через PBKDF2) ──────────────
+export const FLOOR_ITER = 310000;   // усиленный PBKDF2: файл публичный
+async function deriveKey(code, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(code), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: FLOOR_ITER, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+function b64(bytes) { let s = ''; const CH = 0x8000; for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH)); return btoa(s); }
+function unb64(str) { const bin = atob(str); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+const canGzip = typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+async function gzip(u8) { const st = new Blob([u8]).stream().pipeThrough(new CompressionStream('gzip')); return new Uint8Array(await new Response(st).arrayBuffer()); }
+async function gunzip(u8) { const st = new Blob([u8]).stream().pipeThrough(new DecompressionStream('gzip')); return new Uint8Array(await new Response(st).arrayBuffer()); }
+
+export async function encryptFloor(obj, code) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(code, salt);
+  let bytes = new TextEncoder().encode(JSON.stringify(obj));
+  let z = null;
+  if (canGzip) { bytes = await gzip(bytes); z = 'gzip'; }
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes));
+  return JSON.stringify({ v: 1, alg: 'AES-GCM', kdf: 'PBKDF2', iter: FLOOR_ITER, z, salt: b64(salt), iv: b64(iv), data: b64(ct) });
+}
+export async function decryptFloor(blob, code) {
+  const env = typeof blob === 'string' ? JSON.parse(blob) : blob;
+  const key = await deriveKey(code, unb64(env.salt));
+  let plain = new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.data)));
+  if (env.z === 'gzip') plain = await gunzip(plain);
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+
+// Имя файла зала в папке данных (используют и публикация, и вход).
+export const FLOOR_FILE = 'floor.enc';

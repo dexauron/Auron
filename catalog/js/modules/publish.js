@@ -8,6 +8,7 @@ import { orderRules } from './card.js';
 import { byName, saveCache, tidyMemory } from './data.js';
 import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
+import { buildFloorData, encryptFloor, FLOOR_FILE } from './floordata.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -567,6 +568,13 @@ export async function publishFull(password, { onProgress = null, rotate = false 
   // переход со старого формата: две цельные копии больше не нужны
   for (const old of [SECRET_FILE, STAFF_FILE]) {
     if (await rawExists(old)) files.push({ path: `${CFG.DATA_PATH}/${old}`, content: null });
+  }
+  // Данные для сотрудника зала — в ТОТ ЖЕ коммит (атомарно): новый пароль и
+  // новый floor.enc уезжают вместе, нет окна, где старый floor.enc ещё
+  // открывается прежним кодом. Денег в floor.enc нет (buildFloorData).
+  if (state.floorPassword) {
+    const floorBlob = await encryptFloor(buildFloorData(state.products, state.groups), state.floorPassword);
+    files.push({ path: `${CFG.DATA_PATH}/${FLOOR_FILE}`, content: floorBlob });
   }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
   _cat = cat.saved;

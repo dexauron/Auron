@@ -3,8 +3,8 @@
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-import { buildFloorData } from './floordata.js';
-import { encryptFloor, decryptFloor, publishFloor, unlockFloor, applyFloorSnapshot } from './floor.js';
+import { buildFloorData, encryptFloor, decryptFloor } from './floordata.js';
+import { unlockFloor, applyFloorSnapshot } from './floor.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
 import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
@@ -363,6 +363,7 @@ function bindEvents() {
     e.preventDefault();
     const code = ($('floorLoginCode').value || '').trim();
     const err = $('floorLoginError'); const btn = $('floorLoginSubmit');
+    const orig = btn ? btn.textContent : '';   // вернём исходную надпись кнопки
     if (err) err.hidden = true;
     if (!code) { if (err) { err.textContent = 'Введите код.'; err.hidden = false; } return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Входим…'; }
@@ -372,8 +373,13 @@ function bindEvents() {
       closeSheet('floorLoginSheet');
       toast('Вход сотрудника зала');
     } catch (e2) {
-      if (err) { err.textContent = e2 && e2.message === 'NO_FLOOR' ? 'Владелец ещё не задал код для сотрудников.' : 'Код не подошёл.'; err.hidden = false; }
-    } finally { if (btn) { btn.disabled = false; btn.textContent = 'Войти'; } }
+      // различаем: файла нет / сбой загрузки (НЕ «неверный код») / неверный код
+      let msg;
+      if (e2 && e2.message === 'NO_FLOOR') msg = 'Владелец ещё не задал код для сотрудников.';
+      else if (e2 && (e2.code === 'load' || e2.name === 'TypeError')) msg = 'Не удалось загрузить данные — проверьте интернет и попробуйте ещё раз.';
+      else msg = 'Код не подошёл.';
+      if (err) { err.textContent = msg; err.hidden = false; }
+    } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
   });
   // Владелец задаёт/меняет код зала
   const floorCodeMenu = $('menuFloorCode');
@@ -384,20 +390,25 @@ function bindEvents() {
     const code = ($('floorCodeNew').value || '').trim();
     const again = ($('floorCodeAgain').value || '').trim();
     const err = $('floorCodeError'); const btn = $('floorCodeSubmit');
+    const orig = btn ? btn.textContent : '';
     if (err) err.hidden = true;
     if (code.length < 8) { if (err) { err.textContent = 'Код сотрудника — минимум 8 символов (лучше короткая фраза).'; err.hidden = false; } return; }
     if (code !== again) { if (err) { err.textContent = 'Коды не совпали.'; err.hidden = false; } return; }
     if (!ui.secretPw) { if (err) { err.textContent = 'Задать код может только владелец.'; err.hidden = false; } return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем…'; }
+    const prevFloor = state.floorPassword;
     try {
       state.floorPassword = code;
-      await publishFull(ui.secretPw);   // сохранить код зала в каталоге владельца
-      await publishFloor(code);         // выложить floor.enc для входа сотрудника
+      // Одна атомарная публикация: каталог владельца + floor.enc уезжают
+      // ОДНИМ коммитом (floor.enc собирается внутри publishFull). Нет окна, где
+      // старый floor.enc ещё открывается прежним кодом.
+      await publishFull(ui.secretPw);
       closeSheet('floorCodeSheet');
       toast('Код сотрудника зала сохранён');
     } catch (e2) {
-      if (err) { err.textContent = (e2 && e2.friendly) || 'Не удалось опубликовать.'; err.hidden = false; }
-    } finally { if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; } }
+      state.floorPassword = prevFloor;   // публикация не прошла — код не меняем
+      if (err) { err.textContent = (e2 && e2.friendly) || 'Не удалось опубликовать. Старый код пока действует.'; err.hidden = false; }
+    } finally { if (btn) { btn.disabled = false; btn.textContent = orig; } }
   });
   // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
   ui.openAdminOrLogin = function () {
@@ -1228,7 +1239,7 @@ function runQuickActionFromUrl() {
 
 // Тестовый доступ — только на localhost (в проде не открываем).
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, buildFloorData, encryptFloor, decryptFloor, publishFloor, unlockFloor, applyFloorSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, buildFloorData, encryptFloor, decryptFloor, unlockFloor, applyFloorSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
