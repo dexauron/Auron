@@ -741,7 +741,7 @@ export function renderNewProducts() {
     }).join('') + '</div>';
 }
 
-/* ── «Сегодня дешевле» ──────────────────────────────────────────────────────
+/* ── «Стало дешевле» ──────────────────────────────────────────────────────
  * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
  * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
  * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
@@ -771,7 +771,7 @@ function renderCheaper() {
       <span class="arr-price">${esc(fmtRetail(p))}
         <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
   box.innerHTML = `<div class="arr-head">
-      <span class="arr-title">Сегодня дешевле</span>
+      <span class="arr-title">Стало дешевле</span>
       <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
     </div>
     <div class="arr-list">${rows}</div>`;
