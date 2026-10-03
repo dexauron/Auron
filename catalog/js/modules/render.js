@@ -228,7 +228,8 @@ export function renderGrid() {
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
     // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
     // кассой нужен именно код, а не описание товара.
-    const code = p.code
+    // код на плитке — только вошедшим (покупателю коды кассы не показываем)
+    const code = p.code && state.session
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
