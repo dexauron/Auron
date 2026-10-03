@@ -432,13 +432,19 @@ function bindEvents() {
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
       $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
+      // Денежные/закупочные инструменты — не для сотрудника зала (canPurchase=false):
+      // заказы, остатки/«сколько заказать», залежавшиеся. Сотрудник зала видит
+      // только то, что нужно для кассы.
+      $('menuOrders').hidden = !state.canPurchase;
+      $('menuRestock').hidden = !state.canPurchase;
+      $('menuStale').hidden = !state.canPurchase;
       // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
       const noCat = uncategorized().length;
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // цены магазинов ведут все вошедшие — и владелец, и сотрудник
-      $('menuCompStores').hidden = false;
+      // Разведка цен конкурентов — инструмент владельца/закупок, не для зала.
+      $('menuCompStores').hidden = !state.canPurchase;
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
       if (state.serverless) {
         $('menuSuppliers').hidden = true;
