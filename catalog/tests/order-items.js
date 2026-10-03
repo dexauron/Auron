@@ -153,7 +153,22 @@ const items = (page) => page.evaluate(() => [...document.querySelectorAll('#ordI
   chk(!/и ещё/.test(big.text), 'копия заказа не обрезана словами «и ещё N позиций»');
   chk(/Товар 69/.test(big.text), 'в копии есть и последняя позиция');
 
-  // ── 7. Отправка в WhatsApp без поставщика не уходит ──
+  /* Свободное название не подменяется похожим товаром (находка GPT). Новинка
+     в каталоге отсутствует, хотя «Молоко Простоквашино» лежит рядом: взять её
+     код значило бы отправить поставщику чужой товар. */
+  const rawName = 'Молоко Простоквашино Новинка 950мл';
+  const near = await type(page, rawName);
+  const free = await page.evaluate(async () => {
+    document.getElementById('ordItemAdd').click();
+    await new Promise((r) => setTimeout(r, 200));
+    const rows = [...document.querySelectorAll('#ordItems .ord-item')];
+    return rows[rows.length - 1].innerText.replace(/\s+/g, ' ').trim();
+  });
+  chk(near.length > 0, 'похожий товар при этом в подсказках виден — одно нажатие, если он всё-таки наш');
+  chk(free.includes(rawName) && !/код 101/.test(free),
+    `свободное название записано как есть, без чужого кода (${free.slice(0, 70)})`);
+
+  // ── 8. Отправка в WhatsApp без поставщика не уходит ──
   const noSup = await page.evaluate(async () => {
     document.getElementById('ordSendWa').click();
     await new Promise((r) => setTimeout(r, 200));

@@ -20,9 +20,14 @@ export function restoreLogin(after) {
   if (!saved || !saved.pw) return false;
 
   if (saved.role === 'zal') {
-    // Данные зала — отдельный публичный файл, открываемый кодом.
-    // Код сменили или нет связи — тихо становимся покупателем, вход рядом.
-    unlockFloor(saved.pw).catch(() => clearSvAuth());
+    /* Данные зала — отдельный публичный файл, открываемый кодом.
+       Код СМЕНИЛИ — запомненный вход снимаем. Нет связи или файла ещё нет —
+       оставляем как есть: иначе сотрудник, у которого в зале пропал
+       интернет, выпал бы из каталога и набирал код заново. */
+    unlockFloor(saved.pw).catch((e) => {
+      const offline = e && (e.code === 'load' || e.message === 'NO_FLOOR' || e.name === 'TypeError');
+      if (!offline) clearSvAuth();
+    });
     return true;
   }
 
@@ -34,6 +39,11 @@ export function restoreLogin(after) {
     if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
     renderAll();
     if (after) safely('после входа', after)();
-  }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
+  }).catch((err) => {
+    /* Нет сети — оставляем запомненный вход и работаем по кэшу. Но если
+       свежий файл ключей прочитан и пароль ЯВНО отвергнут, значит владелец
+       его сменил: держать старые права нельзя (находка GPT). */
+    if (err && err.message === 'BAD_PASSWORD') { clearSvAuth(); location.reload(); }
+  });
   return true;
 }
