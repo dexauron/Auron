@@ -202,6 +202,26 @@ const openWork = (page) => page.evaluate(async () => {
   chk(/продаём в минус/.test(loss), `сказано прямо, что товар продаётся в минус (${(loss.match(/.{0,20}продаём в минус.{0,20}/) || ['НЕ СКАЗАНО'])[0]})`);
   chk(/15\D*₽/.test(loss), `и на сколько именно — 60 закупка против 45 ценника (${(loss.match(/минус[^·]*/) || [''])[0]})`);
 
+  /* Ровно по себестоимости — это НЕ «продаём в минус 0 ₽». Граничный случай
+     нашёл GPT: закупка сравнялась с ценником, вычитание дало ноль, и экран
+     говорил глупость. Теперь говорим по сути: продаём без наценки. */
+  const even = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH; const s = P._state();
+    s.products.find((x) => x.id === 'p3').retail_price = 60;   // закупка тоже 60
+    // как в приложении: правка товара пересобирает указатель, и расчёты устаревают
+    P.buildIndex();
+    P.renderAll();
+    await new Promise((r) => setTimeout(r, 900));
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="filters"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.getElementById('openRisen').click();
+    await new Promise((r) => setTimeout(r, 450));
+    return document.getElementById('priceNewsBody').innerText.replace(/\s+/g, ' ');
+  });
+  chk(!/в минус 0/.test(even), `цена равна закупке — ложного убытка «0 ₽» нет (${(even.match(/.{0,24}в минус.{0,12}/) || ['нет такой строки'])[0]})`);
+  chk(/без наценки/.test(even), `сказано по сути: продаём без наценки (${(even.match(/Батон[^А-Я]{0,46}/) || [''])[0]})`);
+
   // ── 6. Покупателю этого не видно ──
   const guest = await page.evaluate(async () => {
     const P = window.WM_PUBLISH; const s = P._state();

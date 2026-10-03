@@ -113,7 +113,47 @@ const items = (page) => page.evaluate(() => [...document.querySelectorAll('#ordI
     `и количество с единицей (${(copied.text.match(/— [^\n]*/g) || []).join(' | ')})`);
   chk(/код 103/.test(copied.text) && /код 101/.test(copied.text), 'и коды товаров — поставщику понятно, что отгружать');
 
-  // ── 5. Отправка в WhatsApp без поставщика не уходит ──
+  /* ── 5. Количество только положительное (находка GPT) ──
+     Поле ввода свободное: «0» или «-3» уехали бы в заказ как есть, и
+     поставщик получил бы «— -3 шт». */
+  const bad = await page.evaluate(async () => {
+    const inp = document.getElementById('ordItemName');
+    inp.value = '102'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 250));
+    document.getElementById('ordItemQty').value = '-3';
+    document.getElementById('ordItemAdd').click();
+    await new Promise((r) => setTimeout(r, 200));
+    const rows = [...document.querySelectorAll('#ordItems .ord-item')];
+    return rows[rows.length - 1].innerText.replace(/\s+/g, ' ').trim();
+  });
+  chk(/1 шт/.test(bad) && !/-/.test(bad.replace(/−/g, '')), `отрицательное количество не уходит в заказ (${bad.slice(0, 46)})`);
+
+  /* ── 6. Копия заказа — ЦЕЛИКОМ ──
+     В сообщение WhatsApp длинный список не заталкиваем, но копия должна быть
+     полной: «…и ещё 40 позиций» в заказе поставщику означало бы недопоставку
+     (находка GPT). */
+  const big = await page.evaluate(async () => {
+    let text = '';
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText: (t) => { text = t; return Promise.resolve(); } },
+    });
+    // набиваем заказ выше предела сообщения
+    for (let i = 0; i < 70; i++) {
+      const inp = document.getElementById('ordItemName');
+      inp.value = 'Товар ' + i;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+      document.getElementById('ordItemAdd').click();
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    document.getElementById('ordCopy').click();
+    await new Promise((r) => setTimeout(r, 300));
+    return { text, rows: document.querySelectorAll('#ordItems .ord-item').length };
+  });
+  chk(big.rows >= 70, `в заказе больше шестидесяти позиций (${big.rows})`);
+  chk(!/и ещё/.test(big.text), 'копия заказа не обрезана словами «и ещё N позиций»');
+  chk(/Товар 69/.test(big.text), 'в копии есть и последняя позиция');
+
+  // ── 7. Отправка в WhatsApp без поставщика не уходит ──
   const noSup = await page.evaluate(async () => {
     document.getElementById('ordSendWa').click();
     await new Promise((r) => setTimeout(r, 200));

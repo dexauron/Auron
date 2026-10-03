@@ -313,11 +313,16 @@ function addOrderItem() {
       || suggestProducts(raw, 1)[0] || null;
   }
   const unit = p ? unitOf(p) : 'шт';
+  /* Количество только положительное. Поле ввода свободное: «0» или «-3»
+     уехали бы в заказ как есть, и поставщик получил бы «— -3 шт» (находка
+     GPT). Меньше шага не бывает: ноль килограммов не заказывают. */
+  const step = stepOf(unit);
+  const typed = Number(String(qtyEl.value).replace(',', '.'));
   formItems.push({
     name: p ? p.name : raw,
     code: p ? (p.code || '') : '',
     unit,
-    qty: Number(String(qtyEl.value).replace(',', '.')) || 1,
+    qty: typed > 0 ? Math.round(typed * 1000) / 1000 : step,
   });
   picked = null;
   nameEl.value = ''; qtyEl.value = '1';
@@ -427,10 +432,14 @@ function readForm() {
  * терялись коды. Теперь заказ уходит готовым текстом: что, сколько, к какому
  * числу и от кого. Телефон поставщика записан в каталоге — открывается сразу
  * его переписка; телефона нет — WhatsApp сам спросит, кому отправить. */
-function orderText(d) {
+/* full — не обрезать список. В сообщение WhatsApp больше шестидесяти строк
+ * не заталкиваем: это уже не сообщение, а простыня. Но КОПИЯ заказа должна
+ * быть полной — её вставляют в любое письмо, и «…и ещё 40 позиций» в заказе
+ * поставщику означало бы недопоставку (находка GPT). */
+function orderText(d, full) {
   const who = (supplierById(d.supplier_id) || {}).name || d.supplier_name || '';
   const lines = [`*Заказ${who ? ' — ' + who : ''}*`, ''];
-  const items = d.items.slice(0, WA_MAX_LINES);
+  const items = full ? d.items : d.items.slice(0, WA_MAX_LINES);
   if (items.length) {
     lines.push(...items.map((x, i) => {
       const qty = Number(x.qty) > 0 ? ` — ${String(x.qty).replace('.', ',')} ${x.unit || 'шт'}` : '';
@@ -457,7 +466,7 @@ async function copyOrder() {
   const err = $('ordError');
   if (!d.items.length) { err.textContent = 'Добавь, что заказываем: копировать пока нечего.'; err.hidden = false; return; }
   err.hidden = true;
-  const text = orderText(d);
+  const text = orderText(d, true);   // копия — всегда полная
   let ok = false;
   try {
     if (navigator.clipboard && navigator.clipboard.writeText) { await navigator.clipboard.writeText(text); ok = true; }

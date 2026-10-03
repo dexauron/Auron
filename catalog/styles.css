@@ -1556,45 +1556,148 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 }
 .banner-today:active { opacity: .6; }
 .banner-go { float: right; color: var(--accent); font-weight: 600; }
-/* Добавление позиции в заказ: поиск с подсказками, скан, количество.
-   Раньше это была одна тесная строка «поле — число — кнопка», и товар искался
-   точным совпадением: ошибся в букве — позиция ушла в заказ без кода. */
-.ord-add { margin-top: 8px; position: relative; }
-.ord-pick { display: flex; gap: 8px; align-items: center; }
+/* Заказ поставщику: подбор товара, количество и действия. */
+.ord-add {
+  position: relative;
+  margin: 12px 0 18px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.ord-pick { display: flex; align-items: stretch; gap: 8px; }
 .ord-add .ios-inp {
-  flex: 1; width: auto; min-width: 0; height: 46px; padding: 0 12px; text-align: left;
-  border: .5px solid var(--border); border-radius: 11px; background: var(--surface);
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  min-height: 52px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  text-align: left;
 }
 .ord-scan {
-  flex: 0 0 auto; width: 46px; height: 46px; border-radius: 11px;
-  border: .5px solid var(--border); background: var(--surface); color: var(--accent);
+  flex: 0 0 52px;
+  width: 52px;
+  min-height: 52px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--accent);
 }
 .ord-sug {
-  margin-top: 6px; max-height: 232px; overflow-y: auto;
-  border: .5px solid var(--border); border-radius: 12px; background: var(--surface);
+  max-height: min(288px, 38dvh);
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
 }
 .ord-sug-row {
-  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px;
-  padding: 9px 12px; border: 0; border-top: .5px solid var(--border);
-  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 .ord-sug-row:first-child { border-top: 0; }
 .ord-sug-row:active { background: var(--surface-2); }
-.ord-sug-name { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
-.ord-sug-code { flex: 0 0 auto; color: var(--text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
-.ord-qty-row { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+.ord-sug-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ord-sug-code {
+  flex: 0 0 auto;
+  max-width: 40%;
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.ord-qty-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
 .ord-qty-unit {
-  flex: 0 0 auto; min-width: 34px; color: var(--text-2);
-  font-size: 15px; font-weight: 600;
+  flex: 0 0 auto;
+  min-width: 26px;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 650;
 }
 .ord-qty-row .qty-step { flex: 0 0 auto; }
+.ord-qty-row .qty-step > button,
+.ord-item .qty-step > button { min-width: 48px; min-height: 48px; }
 .ord-qty-row .ord-qty {
-  width: 56px; min-height: 40px; border: 0; background: none; color: inherit;
-  font: inherit; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums;
+  width: 58px;
+  min-height: 48px;
+  padding: 0 3px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
-.ord-item-add { flex: 1; margin: 0; min-height: 46px; }
+.ord-item-add { flex: 1 1 auto; min-width: 0; min-height: 52px; margin: 0; font-size: 16px; }
+.ord-item { gap: 8px; }
+.ord-item .ios-row-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .ord-item .qty-step { flex: 0 0 auto; }
-.ord-item .ios-row-title { flex: 1 1 auto; min-width: 0; }
+.ord-item .shop-qty { min-width: 52px; white-space: nowrap; }
+.ord-item .rst-rm { flex: 0 0 48px; min-width: 48px; min-height: 48px; }
+#ordSendWa, #ordCopy { min-height: 56px; }
+#ordSendWa .ios-row-title, #ordCopy .ios-row-title { line-height: 1.35; }
+.ord-add :is(input, button):focus-visible,
+.ord-item button:focus-visible,
+#ordSendWa:focus-visible,
+#ordCopy:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+#devSessions .ios-row { min-height: 56px; cursor: default; }
+#devSessions .ios-row-title { font-size: 15px; line-height: 1.35; }
+#devSessions .ord-sub { display: block; margin-top: 2px; color: var(--text-2); }
+#devSessions .ios-row-value {
+  flex: 0 0 auto;
+  color: var(--text-2);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+@media (max-width: 420px) {
+  .ord-item { display: grid; grid-template-columns: minmax(0, 1fr) 48px; row-gap: 8px; }
+  .ord-item .ios-row-title { grid-column: 1 / -1; }
+  .ord-item .qty-step { grid-column: 1; justify-self: start; }
+  .ord-item .rst-rm { grid-column: 2; justify-self: end; }
+}
+@media (max-width: 360px) {
+  .ord-add { padding: 12px; }
+  .ord-qty-row { display: grid; grid-template-columns: 26px minmax(0, 1fr); }
+  .ord-qty-row .qty-step { grid-column: 2; justify-self: start; }
+  .ord-item-add { grid-column: 1 / -1; width: 100%; }
+  #devSessions .ios-row { flex-wrap: wrap; }
+  #devSessions .ios-row-value { width: 100%; text-align: left; }
+}
 /* подсказка в заголовке группы — обычным текстом, заголовок и так капсом */
 .ios-group-title .hint { text-transform: none; letter-spacing: 0; }
 
@@ -2134,6 +2237,77 @@ body[data-role="zal"] #productSheet #sheetFields .field-code .field-val {
   body[data-role="zal"] #productSheet #sheetFields .field-code .field-val { font-size: 25px; }
 }
 
+/* Бухгалтер: закупки и наценка читаются в карточке товара без мелких чисел.
+   Только оформление роли; доступ к данным и действиям задаёт JS. */
+body[data-role="staff"] #productSheet .price-title,
+body[data-role="staff"] #productSheet .sec-title,
+body[data-role="staff"] #supplierViewSheet .supview-hist-title {
+  font-size: 14px;
+  line-height: 1.35;
+  letter-spacing: .025em;
+}
+body[data-role="staff"] #productSheet .price-row {
+  align-items: center;
+  gap: 6px 10px;
+  min-height: 76px;
+  padding: 12px 14px;
+  border-radius: 14px;
+}
+body[data-role="staff"] #productSheet .price-row .price-sup {
+  flex: 1 1 45%;
+  min-width: 0;
+  font-size: 16px;
+  line-height: 1.3;
+}
+body[data-role="staff"] #productSheet .price-row .price-val {
+  margin-left: auto;
+  max-width: 100%;
+  font-size: 22px;
+  line-height: 1.2;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+body[data-role="staff"] #productSheet .price-row .sup-chevron { margin-left: auto; }
+body[data-role="staff"] #productSheet .price-row .price-pack,
+body[data-role="staff"] #productSheet .price-row .price-meta {
+  font-size: 14px;
+  line-height: 1.4;
+}
+body[data-role="staff"] #productSheet .price-row.price-row-old { opacity: 1; }
+body[data-role="staff"] #productSheet .price-row.price-row-old .price-date { color: var(--warn); }
+body[data-role="staff"] #productSheet .markup-line {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+body[data-role="staff"] #productSheet .markup-line .markup-val {
+  font-size: 22px;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+body[data-role="staff"] #productSheet .markup-line .markup-pct { font-size: 17px; }
+body[data-role="staff"] #productSheet .markup-line .markup-sub { font-size: 14px; }
+body[data-role="staff"] #supplierViewSheet .price-hist-row {
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+body[data-role="staff"] #supplierViewSheet .price-hist-row:last-child { border-bottom: 0; }
+body[data-role="staff"] #supplierViewSheet .price-hist-row span:last-child {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+body[data-role="staff"] #productSheet .price-row:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
 /* Изменение цен: название и пара цен читаются на узком телефоне.
    Данные и смысл движения цены формирует JS. */
 #cheaperStrip .arr-head, #riseStrip .arr-head {
@@ -2250,4 +2424,173 @@ body[data-role="zal"] #productSheet #sheetFields .field-code .field-val {
 
 @media (max-width: 360px) {
   .pn-row { grid-template-columns: minmax(0, 1fr) minmax(96px, 40%); gap: 8px; padding: 11px 12px; }
+}
+
+/* Экран изменений цен: шапка остаётся на месте, прокручивается только список. */
+#priceNewsSheet { --pn-pos: var(--pos); --pn-neg: var(--neg); }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) #priceNewsSheet { --pn-pos: #166534; --pn-neg: #B42318; }
+}
+:root[data-theme="light"] #priceNewsSheet { --pn-pos: #166534; --pn-neg: #B42318; }
+#priceNewsSheet .sheet-tall {
+  max-height: 92vh;
+  max-height: 92dvh;
+  overflow: hidden;
+}
+#priceNewsSheet .sheet-handle,
+#priceNewsSheet .ios-nav,
+#priceNewsSheet .pn-head { flex: 0 0 auto; }
+#priceNewsSheet .ios-nav { z-index: 2; }
+#priceNewsSheet .ios-nav-btn { min-height: 48px; }
+#priceNewsSheet .pn-head {
+  padding: 4px 16px 14px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .06);
+}
+#priceNewsSheet .pn-head .seg {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 12px;
+}
+#priceNewsSheet .pn-head .seg button {
+  min-width: 0;
+  min-height: 48px;
+  padding: 10px 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
+#priceNewsSheet .pn-head .seg button.active {
+  color: var(--brand-ink);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .16);
+}
+#priceNewsSheet .pn-search .search-input {
+  height: 52px;
+  padding-left: 44px;
+  font-size: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+#priceNewsSheet .pn-search .search-ic { left: 15px; }
+#priceNewsSheet .pn-search .search-input:focus-visible,
+#priceNewsSheet .pn-head .seg button:focus-visible,
+#priceNewsSheet .pn-more:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+#priceNewsSheet .pn-since {
+  margin: 10px 2px 0;
+  font-size: 14px;
+  line-height: 1.35;
+}
+#priceNewsSheet #priceNewsBody {
+  min-height: 0;
+  padding: 0 0 calc(12px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#priceNewsSheet .pn-total {
+  padding: 16px 18px 9px;
+  font-size: 14px;
+  letter-spacing: .025em;
+}
+#priceNewsSheet .pn-list { margin: 0 12px; }
+#priceNewsSheet .pn-row {
+  grid-template-columns: minmax(0, 1fr) minmax(108px, 38%);
+  gap: 10px;
+  min-height: 80px;
+  padding: 14px;
+}
+#priceNewsSheet .pn-name { font-size: 16px; line-height: 1.35; }
+#priceNewsSheet .pn-sub,
+#priceNewsSheet .pn-note { font-size: 14px; line-height: 1.35; }
+#priceNewsSheet .pn-note.pn-loss { color: var(--pn-neg); font-weight: 700; }
+#priceNewsSheet .pn-price {
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#priceNewsSheet .pn-was {
+  margin-top: 5px;
+  font-size: 14px;
+  line-height: 1.3;
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+}
+#priceNewsSheet .pn-price.pn-up { color: var(--pn-neg); }
+#priceNewsSheet .pn-price.pn-down { color: var(--pn-pos); }
+#priceNewsSheet .pn-more {
+  min-height: 52px;
+  margin-bottom: calc(16px + env(safe-area-inset-bottom));
+  font-size: 16px;
+}
+@media (max-width: 360px) {
+  #priceNewsSheet .pn-head { padding-inline: 12px; }
+  #priceNewsSheet .pn-row {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, 40%);
+    gap: 8px;
+    padding: 12px;
+  }
+  #priceNewsSheet .pn-price { font-size: 18px; }
+}
+
+/* Камера: одна крупная квадратная область для штрихкода и QR. */
+#scanSheet .sheet-body { text-align: center; }
+#scanSheet .sheet-title {
+  justify-content: center;
+  padding-left: 0;
+  font-size: 20px;
+  line-height: 1.3;
+}
+#scanSheet #scanModeSeg { margin-bottom: 12px; }
+#scanSheet #scanModeSeg button { min-height: 48px; font-size: 16px; }
+#scanSheet .scan-box {
+  position: relative;
+  width: min(100%, 420px, 62dvh);
+  aspect-ratio: 1;
+  min-height: 0;
+  margin: 8px auto 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #101117;
+  overflow: hidden;
+}
+#scanSheet .scan-box video {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 0;
+}
+#scanSheet .scan-box::after {
+  content: '';
+  position: absolute;
+  inset: 11%;
+  border: 2px solid rgba(255, 255, 255, .82);
+  border-radius: 18px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .45);
+  pointer-events: none;
+}
+#scanSheet .scan-guide-text {
+  margin: 0 4px 12px;
+  color: var(--text-2);
+  font-size: 15px;
+  line-height: 1.4;
+}
+#scanSheet #scanTorch {
+  min-height: 54px;
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+#scanSheet .sheet-close { min-height: 48px; }
+#scanSheet #scanTorch:focus-visible,
+#scanSheet .sheet-close:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+@media (max-height: 480px) {
+  #scanSheet .scan-box { width: min(100%, 50dvh); }
 }
