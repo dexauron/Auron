@@ -34,9 +34,10 @@ const openWork = (page) => page.evaluate(async () => {
   const toLogin = await page.evaluate(async () => {
     document.querySelector('[data-work="login"]').click();
     await new Promise((r) => setTimeout(r, 400));
-    return { work: document.getElementById('workSheet').hidden, login: !document.getElementById('loginSheet').hidden };
+    // вход один: сначала спрашиваем, кто пришёл — зал или владелец/бухгалтер
+    return { work: document.getElementById('workSheet').hidden, login: !document.getElementById('entryChoiceSheet').hidden };
   });
-  chk(toLogin.work && toLogin.login, 'кнопка «Войти» ведёт на вход');
+  chk(toLogin.work && toLogin.login, 'кнопка «Войти» ведёт на выбор входа');
 
   // 2. После входа — состояние дел прямо в строках
   await asOwner(page, { suppliers });

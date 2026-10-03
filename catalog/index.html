@@ -31,7 +31,7 @@
         <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
           <span id="themeIcon"><i data-ic="auto"></i></span>
         </button>
-        <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
+        <button class="icon-btn" id="adminBtn" title="Войти в каталог">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
           <span id="adminBtnLabel">Войти</span>
         </button>
@@ -58,11 +58,6 @@
         <span class="filter-badge" id="filterBadge" hidden></span>
       </button>
     </div>
-    <button class="floor-entry guest-only" id="floorLoginBtn" type="button" aria-haspopup="dialog" aria-controls="floorLoginSheet">
-      <span class="floor-entry-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2M3 3h3m12 0h3M3 3v3m18-3v3"/></svg></span>
-      <span>Я сотрудник</span>
-      <span class="floor-entry-arrow" aria-hidden="true">›</span>
-    </button>
     <nav class="chips active-filters" id="activeFilters" hidden></nav>
   </header>
 
@@ -191,6 +186,28 @@
           <button class="btn btn-danger" id="btnDeleteProduct">Удалить</button>
         </div>
         <button class="btn btn-ghost sheet-close" id="sheetClose">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Один вход: выбор роли, затем действующая форма соответствующего доступа. -->
+  <div class="sheet-backdrop" id="entryChoiceSheet" hidden>
+    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="entryChoiceTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-body entry-choice-body">
+        <h2 class="sheet-title entry-choice-title" id="entryChoiceTitle">Войти в каталог</h2>
+        <p class="muted entry-choice-sub">Выберите свой способ входа</p>
+        <button class="entry-choice-option" id="entryChoiceFloor" type="button">
+          <span class="entry-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2"/></svg></span>
+          <span class="entry-choice-label"><strong>Сотрудник зала</strong><small>Вход по коду магазина</small></span>
+          <span class="entry-choice-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="entry-choice-option" id="entryChoiceOwner" type="button">
+          <span class="entry-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V7l-8-4Z"/><path d="M9 12l2 2 4-4"/></svg></span>
+          <span class="entry-choice-label"><strong>Владелец или бухгалтер</strong><small>Вход в свой аккаунт</small></span>
+          <span class="entry-choice-arrow" aria-hidden="true">›</span>
+        </button>
+        <button class="btn btn-ghost btn-block entry-choice-cancel" type="button" data-close="entryChoiceSheet">Отмена</button>
       </div>
     </div>
   </div>

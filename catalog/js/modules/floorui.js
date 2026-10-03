@@ -1,7 +1,7 @@
 // Экран входа «Сотрудника зала» и настройка кода зала (владелец).
 // Разметка — в index.html; без неё обработчики просто не вешаются.
 
-import { $, state, ui } from './store.js';
+import { $, CFG, state, ui } from './store.js';
 import { closeSheet, openSheet, toast } from './core.js';
 import { publishFull } from './publish.js';
 import { unlockFloor } from './floor.js';
@@ -20,12 +20,26 @@ function applyRoleMenu() {
   for (const id of MONEY_MENU) { const el = $(id); if (el) el.hidden = !state.canPurchase; }
 }
 
+/* Форма входа владельца/бухгалтера. Живёт здесь, рядом с остальными дверями
+ * входа: лист выбора открывает либо её, либо форму кода зала. */
+function openOwnerLogin() {
+  // email виден сразу, только если служебные аккаунты не настроены в config.js
+  $('loginEmailWrap').hidden = !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
+  $('loginError').hidden = true;
+  openSheet('loginSheet');
+}
+
 export function bindFloorUI() {
+  ui.openLogin = openOwnerLogin;
   // меню пересобирается при каждом открытии — там же прячем денежные пункты
   const adminBtn = $('adminBtn');
   if (adminBtn) adminBtn.addEventListener('click', applyRoleMenu);
-  const floorBtn = $('floorLoginBtn');
-  if (floorBtn) floorBtn.addEventListener('click', () => openSheet('floorLoginSheet'));
+  /* Одна дверь входа: «Войти» спрашивает, кто пришёл, и открывает нужную
+     форму. Сами формы прежние — меняется только то, как до них дойти. */
+  const chFloor = $('entryChoiceFloor');
+  if (chFloor) chFloor.addEventListener('click', () => { closeSheet('entryChoiceSheet'); openSheet('floorLoginSheet'); });
+  const chOwner = $('entryChoiceOwner');
+  if (chOwner) chOwner.addEventListener('click', () => { closeSheet('entryChoiceSheet'); openOwnerLogin(); });
   const floorForm = $('floorLoginForm');
   if (floorForm) floorForm.addEventListener('submit', async (e) => {
     e.preventDefault();

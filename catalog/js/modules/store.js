@@ -70,6 +70,7 @@ export const ui = {
   topPeriod: null,
   topMode: 'amount',
   openAdminOrLogin: () => {},
+  openLogin: () => {},        // форма входа владельца/бухгалтера (ставит app.js)
   calcProduct: null,
   lastMissing: [],
   dedupRunning: false,

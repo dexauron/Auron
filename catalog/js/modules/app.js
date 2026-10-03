@@ -341,18 +341,12 @@ function bindEvents() {
   // спрашивается один раз, дальше хранится на устройстве и подставляется сам.
   const ADMIN_EMAIL_KEY = 'wm_admin_email';
 
-  function openLogin() {
-    // email виден сразу, только если служебные аккаунты не настроены в config.js
-    $('loginEmailWrap').hidden = !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
-    $('loginError').hidden = true;
-    openSheet('loginSheet');
-  }
+  const openLogin = () => ui.openLogin();   // сама форма — в floorui.js (вход)
 
   // через стрелку, а не напрямую: обработчик вешается ДО присваивания ниже,
   // и прямая ссылка запомнила бы пустую заглушку — кнопка «Войти» молчала бы
   $('adminBtn').addEventListener('click', () => ui.openAdminOrLogin());
-  // Настройки устройства раньше открывались вкладкой «Ещё»; теперь на её месте
-  // «Фильтры», поэтому вход к ним — из окна входа (там же, где кнопка «Войти»).
+  // Настройки устройства — из окна входа: вкладку «Ещё» заняли «Фильтры».
   $('loginDevice').addEventListener('click', () => { closeSheet('loginSheet'); openDeviceSheet(); });
 
   bindFloorUI();   // вход сотрудника зала и код зала — в своём модуле
@@ -396,7 +390,8 @@ function bindEvents() {
       if (!state.serverless) {
       }
     } else {
-      openLogin();
+      // одна дверь: сначала спрашиваем, кто пришёл (формы открывает floorui.js)
+      openSheet('entryChoiceSheet');
     }
   };
 
