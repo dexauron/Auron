@@ -58,6 +58,15 @@ const OTHER_STORE = {
     // ВАЖНО: широкая ловушка — ПЕРВОЙ, конкретные адреса после неё,
     // иначе ловушка перехватит и товары (Playwright проверяет роуты с конца).
     await ctx.route('**/data/*.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+    /* Витрина читается кусками с описью — подменяем её ЯВНО, как в helpers.js.
+       Раньше опись попадала в широкую ловушку и приложение уходило на запасной
+       цельный файл: проверка шла не тем путём, что живой каталог. */
+    await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ v: 2, app: 4, savedAt: new Date().toISOString(), n: 1, parts: ['test'], groups: 'test', popular: 'test' }) }));
+    await ctx.route('**/data/p/*.json*', (r) => {
+      const m = /\/p\/(\d+)\.json/.exec(r.request().url());
+      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify((m ? Number(m[1]) : 0) === 0 ? products : []) });
+    });
     await ctx.route('**/data/products.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(products) }));
     await ctx.route('**/data/groups.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groups) }));
     await ctx.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ status: 404, body: 'x' }));
