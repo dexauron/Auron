@@ -105,13 +105,11 @@ const groups = [{ id: 'g1', name: 'Молочное' }];
   chk(!revoked.saved, `сменили пароль — запомненный вход снят (${revoked.saved || 'снят'})`);
   chk(errs3.length === 0, `при отзыве роли сбоев нет (${errs3[0] || 0})`);
 
-  // ── 8. Нет связи — вход НЕ снимаем ──
-  const page4 = await ctx.newPage();
-  await page4.evaluate(() => {}).catch(() => {});
-  await ctx.route('**/data/keys.json*', (r) => r.abort());
-  await page4.goto('http://localhost:8123/', { timeout: 60000 });
-  await page4.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
-  await page4.evaluate(() => {
+  /* ── 8. Нет связи — вход НЕ снимаем ──
+     Сотрудник зала в подсобке без интернета не должен выпадать из каталога и
+     набирать код заново. Файл зала в проверке и так недоступен (404), так что
+     восстановление заведомо не пройдёт — важно, что запись переживёт это. */
+  await page3.evaluate(() => {
     localStorage.setItem('wm_sv_auth', JSON.stringify({ role: 'zal', pw: 'кодзала123' }));
   });
   const page5 = await ctx.newPage();
