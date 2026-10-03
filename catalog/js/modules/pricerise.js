@@ -157,10 +157,10 @@ function marginSqueeze(p, cost, retail) {
   if (!cost || retail) return null;                        // ценник тоже подняли — всё честно
   const sell = Number(p && p.retail_price);
   if (!(sell > 0)) return null;
-  /* Закупка переросла ценник — товар продаётся В МИНУС. Это самый тяжёлый
+  /* Закупка строго выше ценника — товар продаётся В МИНУС. Равенство даёт 0% наценки, не убыток. Это самый тяжёлый
      случай, а раньше он молча пропадал: проценты наценки тут считать нечего,
      поэтому возвращалось «ничего». Теперь говорим прямо. */
-  if (sell <= cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
+  if (sell < cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
   return { wasPct: Math.round(((sell - cost.was) / cost.was) * 100), isPct: Math.round(((sell - cost.is) / cost.is) * 100) };
 }
 
