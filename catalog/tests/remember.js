@@ -84,6 +84,29 @@ const groups = [{ id: 'g1', name: 'Молочное' }];
   chk(!/owner|zal|staff/.test(shown), 'служебных слов на экране нет');
   chk(/вышел/.test(shown) && /вошёл/.test(shown), 'видно и вход, и выход');
 
+  // ── 7. Сменённый пароль снимает запомненную роль при доступной сети ──
+  await page.evaluate(() => window.WM_PUBLISH.applyStaff('старый-пароль'));
+  let keyReads = 0;
+  await ctx.route('**/data/keys.json*', (route) => {
+    keyReads++;
+    route.fulfill({ status: 200, contentType: 'application/json', body: '{"staff":{}}' });
+  });
+  const page3 = await ctx.newPage();
+  const errs3 = [];
+  page3.on('pageerror', (e) => errs3.push(e.message));
+  await page3.goto('http://localhost:8123/', { timeout: 60000 });
+  await page3.waitForFunction(() => window.WM_PUBLISH && !localStorage.getItem('wm_sv_auth'),
+    null, { timeout: 15000 });
+  const revoked = await page3.evaluate(() => ({
+    saved: localStorage.getItem('wm_sv_auth'),
+    role: window.WM_PUBLISH._state().role,
+    session: !!window.WM_PUBLISH._state().session,
+  }));
+  chk(keyReads > 0, 'новые ключи были прочитаны перед отзывом роли');
+  chk(!revoked.saved && !revoked.session && !revoked.role,
+    `старый пароль снят, роль не осталась (${JSON.stringify(revoked)})`);
+  chk(errs3.length === 0, `нет сбоев при отзыве роли (${errs3[0] || 0})`);
+
   chk(errs.length === 0, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
