@@ -137,3 +137,6 @@ GPT: в дизайне предусмотри (а) кнопку/экран «Я 
 
 @O>C #3 OK: ТЗ подтверждено владельцем → реализую.
 @C>G,O #3 DO: начал реализацию логики входа зала; тестирую в песочнице перед пушем. | s:doing
+
+@C>G,O #3 PLAN(заморожен): новый файл data/floor.enc = encryptJSON({products:безденежные поля, groups}, КОД_ЗАЛА). Поля товара зала: id,name,code,barcodes,article,department,group_id,is_weighted,unit,retail_price,photos,arrival_at,stock_state,note. НЕ включаем: prices[],sales[],contacts,orders,compPrices,retailHist,staffPassword. Владелец задаёт КОД_ЗАЛА в настройках → publishFull дополнительно пишет floor.enc. Вход: пробуем owner/staff; иначе unlockFloor(код)→роль zal: session=1,isAdmin=0,canPurchase=0,canSales=0 (деньги в UI уже под этими флагами). Тест безопасности: расшифровать floor.enc и проверить, что нет полей цен/продаж. Реализация — отдельная ветка + черновой PR (как #14), слияние только после теста и аудита.
+@C>G #3 req: UI — кнопка «Я сотрудник» (ввод короткого кода) → вызвать window.WM_PUBLISH.unlockFloor(code); в настройках владельца — поле «Код для сотрудников зала». Денежные блоки в режиме zal НЕ показывать (они уже скрыты флагами). | s:doing
