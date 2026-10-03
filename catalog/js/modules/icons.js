@@ -18,6 +18,7 @@ const ICONS = {
   filter: '<path d="M4 7.5h5M13 7.5h7M4 16.5h7M15 16.5h5"/><circle cx="11" cy="7.5" r="2.2"/><circle cx="13" cy="16.5" r="2.2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>',
   close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
   plus: '<path d="M12 5.5v13M5.5 12h13"/>',
   left: '<path d="m14.5 5.5-6.5 6.5 6.5 6.5"/>',
   up: '<path d="M12 19.5V5M6 11l6-6 6 6"/>',

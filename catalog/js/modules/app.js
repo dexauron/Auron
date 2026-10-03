@@ -198,6 +198,7 @@ function bindEvents() {
 
   // Сброс фильтров из пустого экрана
   $('emptyReset').addEventListener('click', clearAllFilters);
+  $('emptyScan').addEventListener('click', () => $('scanSearchBtn').click());
 
   // Переключение темы
   $('themeBtn').addEventListener('click', toggleTheme);
@@ -423,6 +424,11 @@ function bindEvents() {
     if (grp) { state.selCats = []; state.selGroups = [grp.dataset.grp]; switchTab('catalog'); return; }
     const all = e.target.closest('[data-cat-tile]');
     if (all) { state.selCats = [all.dataset.catTile]; state.selGroups = []; switchTab('catalog'); }
+  });
+  $('homeGroups').addEventListener('click', (e) => {
+    const category = e.target.closest('[data-home-cat]');
+    if (category) { ui.openCat = category.dataset.homeCat; switchTab('cats'); return; }
+    if (e.target.closest('[data-home-all]')) { ui.openCat = null; switchTab('cats'); }
   });
 
   // цены в карточке: открывает вход, тап по строке — историю цены

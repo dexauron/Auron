@@ -98,7 +98,7 @@ export function openProduct(p) {
   // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
   // покупателям без входа их не показываем
   // код товара виден всем — по нему покупатель объяснит кассиру, что берёт
-  if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
+  if (p.code) rows.push(fieldRow('Код для кассы', p.code, false, true, true));
   // когда товар завезли — видно всем: покупателю это говорит о свежести
   if (p.arrival_at) rows.push(fieldRow('Поступил', fmtDate(p.arrival_at)));
   if (state.session) {
@@ -121,7 +121,8 @@ export function openProduct(p) {
       if (list) rows.push(fieldRow('Фасовки', list));
     }
     if (p.department) rows.push(fieldRow('Отдел', p.department));
-    if (p.note) rows.push(`<div class="field-row"><span class="field-key">Примечание</span><span class="field-val" style="font-weight:400;font-size:14px">${esc(p.note)}</span></div>`);
+    if (g) rows.push(fieldRow('Группа', g.name));
+    if (p.note) rows.push(`<div class="field-row field-note"><span class="field-key">Примечание</span><span class="field-val">${esc(p.note)}</span></div>`);
   }
   if (!rows.length && state.session) rows.push('<div class="field-row"><span class="field-key">Коды не указаны</span></div>');
   $('sheetFields').innerHTML = rows.join('');
@@ -847,10 +848,10 @@ export async function copyText(text, okMsg) {
   catch (e) { toast('Не удалось скопировать'); }
 }
 
-function fieldRow(key, val, main = false, copy = false) {
-  const cls = main ? ' field-main' : '';
+function fieldRow(key, val, main = false, copy = false, code = false) {
+  const cls = (main ? ' field-main' : '') + (code ? ' field-code' : '');
   const copyBtn = (copy || main)
-    ? `<button class="copy-btn" data-copy="${esc(val)}">⧉</button>`
+    ? `<button class="copy-btn" data-copy="${esc(val)}" aria-label="Скопировать ${esc(key)}">${ic('copy')}</button>`
     : '';
   return `<div class="field-row${cls}"><span class="field-key">${esc(key)}</span><span class="field-val">${esc(val)}</span>${copyBtn}</div>`;
 }

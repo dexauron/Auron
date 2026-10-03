@@ -37,10 +37,12 @@
         </button>
       </div>
     </div>
+    <h1 class="catalog-lead">Какой товар ищем?</h1>
     <div class="search-row">
       <div class="search-wrap">
         <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input type="search" id="searchInput" class="search-input" placeholder="Название, код, штрихкод…"
+        <input type="search" id="searchInput" class="search-input" placeholder="Найти товар"
+               aria-label="Поиск по названию, коду или штрихкоду"
                name="wm-q" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
                inputmode="search" autocapitalize="off" aria-autocomplete="none"
                data-form-type="other" data-lpignore="true" data-1p-ignore data-bwignore list="recentQ">
@@ -81,6 +83,7 @@
 
   <!-- Сетка товаров -->
   <main class="content">
+    <section class="home-groups" id="homeGroups" aria-label="Группы товаров" hidden></section>
     <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
     <!-- Покупателю: что подешевело со вчера. Причина зайти сегодня -->
@@ -94,6 +97,7 @@
       <div class="empty-icon"><i data-ic="search"></i></div>
       <div class="empty-title">Ничего не нашлось</div>
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
+      <button class="btn btn-primary empty-scan" id="emptyScan" hidden><i data-ic="camera"></i> Сканировать штрихкод</button>
       <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
       <button class="btn btn-primary empty-reset" id="emptyAsk" hidden>Спросить в магазине</button>
     </div>

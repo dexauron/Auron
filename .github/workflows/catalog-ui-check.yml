@@ -1,0 +1,58 @@
+name: Проверка интерфейса каталога
+
+on:
+  pull_request:
+    branches:
+      - claude/store-product-catalog-60wer4
+    paths:
+      - 'catalog/index.html'
+      - 'catalog/styles.css'
+      - 'catalog/js/modules/**'
+      - '.github/workflows/catalog-ui-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          filter: blob:none
+          sparse-checkout: |
+            catalog/index.html
+            catalog/styles.css
+            catalog/js/modules
+      - name: Проверить JavaScript
+        run: |
+          for file in catalog/js/modules/*.js; do
+            node --check "$file"
+          done
+      - name: Проверить основные элементы страницы
+        run: |
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class Page(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.ids = set()
+                  self.duplicates = set()
+
+              def handle_starttag(self, tag, attrs):
+                  for key, value in attrs:
+                      if key == 'id':
+                          if value in self.ids:
+                              self.duplicates.add(value)
+                          self.ids.add(value)
+
+          page = Page()
+          page.feed(Path('catalog/index.html').read_text(encoding='utf-8'))
+          assert not page.duplicates, f'Повторяются ID: {page.duplicates}'
+          required = {'searchInput', 'scanSearchBtn', 'homeGroups', 'productGrid',
+                      'productSheet', 'emptyState', 'emptyScan', 'tabbar'}
+          assert required <= page.ids, f'Не хватает элементов: {required - page.ids}'
+          assert Path('catalog/styles.css').stat().st_size > 0
+          PY
