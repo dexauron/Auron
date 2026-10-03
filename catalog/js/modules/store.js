@@ -104,6 +104,7 @@ export const state = {
   syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
   showcaseAt: '',   // когда владелец в последний раз опубликовал витрину
   priceWas: {},     // прежняя цена товаров, которые подешевели с прошлого захода
+  priceWasAt: '',   // с какого дня сравниваем (снимок цен живёт до недели)
   renderLimit: PAGE_SIZE,
   sort: 'relevance',   // relevance | name | cheap | expensive | new
   view: 'normal',      // normal | compact — размер плиток

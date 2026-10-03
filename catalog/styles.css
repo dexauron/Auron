@@ -2156,3 +2156,7 @@ body[data-role="zal"] #productSheet #sheetFields .field-code .field-val {
     padding: 11px 12px;
   }
 }
+
+/* С какого дня сравниваем цены: снимок живёт до недели, и без этой строки
+   полоса обещала бы «сегодня» там, где цена упала пять дней назад. */
+.arr-since { margin: 2px 14px 10px; color: var(--text-2); font-size: 13px; line-height: 1.3; }
