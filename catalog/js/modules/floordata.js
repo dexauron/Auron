@@ -19,7 +19,9 @@ const FLOOR_SCALAR = [
 const FLOOR_ARRAY = ['photos', 'barcodes'];
 /* Чего в данных зала нет НИКОГДА (белый список выше это и обеспечивает):
    закупки и наценка, продажи, контакты и сами поставщики, заказы, цены
-   конкурентов, история ценника, пароли, свободное примечание, остаток числом.
+   конкурентов, пароли, свободное примечание, остаток числом. История
+   РОЗНИЧНОГО ценника есть: по ней сотрудник перепечатывает ценники, а цен
+   закупки в ней нет по устройству (см. retailHist ниже).
    Проверяется тестами floor-data.js и floor-crypto.js. */
 
 const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
@@ -37,10 +39,29 @@ function floorProduct(p) {
   return o;
 }
 
-export function buildFloorData(products, groups) {
+/* История розничного ценника: {id товара: [{price, at}]}. Берём только то,
+ * что относится к переданным товарам, и только числа с датами — никаких
+ * вложенных объектов. Закупочных цен тут нет: их хранит отдельный state.prices,
+ * который в данные зала не попадает вовсе. */
+function floorRetailHist(hist, products) {
+  const out = {};
+  if (!hist || typeof hist !== 'object') return out;
+  const ids = new Set((products || []).map((p) => p && p.id).filter(Boolean));
+  for (const [id, rows] of Object.entries(hist)) {
+    if (!ids.has(id) || !Array.isArray(rows)) continue;
+    const keep = rows
+      .filter((r) => r && Number(r.price) > 0 && typeof r.at === 'string')
+      .map((r) => ({ price: Number(r.price), at: r.at }));
+    if (keep.length) out[id] = keep;
+  }
+  return out;
+}
+
+export function buildFloorData(products, groups, retailHist) {
   return {
-    v: 1,
+    v: 2,
     products: (products || []).map(floorProduct),
+    retailHist: floorRetailHist(retailHist, products),
     groups: (groups || []).map((g) => ({
       id: isPrim(g.id) ? g.id : '',
       name: isPrim(g.name) ? g.name : '',

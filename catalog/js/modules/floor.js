@@ -15,6 +15,10 @@ export function applyFloorSnapshot(data) {
   state.products = (data.products || []).slice().sort(byName);
   state.prices = []; state.sales = []; state.contacts = {};
   state.competitors = []; state.compPrices = [];
+  /* История РОЗНИЧНОГО ценника — чтобы «Подорожало» говорило правду: без неё
+     экран уверял, что цены за месяц не менялись, хотя данных просто не было.
+     Закупочных цен тут нет, их считает только роль с доступом к деньгам. */
+  state.retailHist = data.retailHist || {};
   state.serverless = true;
   state.session = { user: { email: 'floor' }, serverless: true, floor: true };
   state.isAdmin = false; state.role = 'zal';

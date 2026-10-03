@@ -37,7 +37,15 @@ const SENTINELS = ['777.77', '4242424242', 'ТАЙНЫЙ_ПОСТАВЩИК', '1
     s.prices = [{ product_id: 'p1', supplier_id: sent[2], price: sent[0], price_date: '2026-10-01' }];
     s.sales = [{ code: '100500', name: 'Молоко 1л', qty: 10, amount: sent[3] }];
     s.contacts = { [sent[2]]: { phone: sent[1] } };
-    const data = window.WM_FLOOR.buildFloorData(s.products, s.groups);
+    /* История ценника: нужна залу (перепечатать ценники), но и в ней не должно
+       оказаться ничего лишнего — проверяем «хитрую» строку с закупкой и чужой
+       товар, которого в выгрузке нет. */
+    s.retailHist = {
+      p1: [{ price: 79, at: '2026-09-20', cost: sent[0], supplier: sent[2] }],
+      p2: [{ price: 0, at: '2026-09-01' }],
+      pX: [{ price: 55, at: '2026-09-02' }],
+    };
+    const data = window.WM_FLOOR.buildFloorData(s.products, s.groups, s.retailHist);
     return { data, json: JSON.stringify(data) };
   }, SENTINELS);
 
@@ -52,6 +60,12 @@ const SENTINELS = ['777.77', '4242424242', 'ТАЙНЫЙ_ПОСТАВЩИК', '1
   chk(Array.isArray(p2.photos) && p2.photos.every((x) => typeof x === 'string'), 'photos — только строки (объект с buy_price выкинут)');
   chk(Array.isArray(p2.barcodes) && p2.barcodes.every((x) => typeof x === 'string'), 'barcodes — только строки (объект выкинут)');
   chk(!('prices' in out.data) && !('sales' in out.data) && !('contacts' in out.data), 'нет массивов цен/продаж/контактов');
+  const rh = out.data.retailHist || {};
+  chk(rh.p1 && rh.p1.length === 1 && rh.p1[0].price === 79 && rh.p1[0].at === '2026-09-20',
+    'история РОЗНИЧНОГО ценника дошла до зала (по ней он перепечатывает ценники)');
+  chk(Object.keys(rh.p1[0]).join(',') === 'price,at', 'в строке истории только цена и дата: ' + Object.keys(rh.p1[0]).join(','));
+  chk(!rh.p2 && !rh.pX, 'пустые и чужие записи истории выброшены');
+
   const leaked = SENTINELS.filter((v) => out.json.includes(v));
   chk(leaked.length === 0, 'ни одной денежной метки в данных зала' + (leaked.length ? ': ' + leaked.join(',') : ''));
 

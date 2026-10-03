@@ -590,7 +590,7 @@ export async function publishFull(password, { onProgress = null, rotate = false 
   // новый floor.enc уезжают вместе, нет окна, где старый floor.enc ещё
   // открывается прежним кодом. Денег в floor.enc нет (buildFloorData).
   if (state.floorPassword) {
-    const floorBlob = await encryptFloor(buildFloorData(state.products, state.groups), state.floorPassword);
+    const floorBlob = await encryptFloor(buildFloorData(state.products, state.groups, state.retailHist), state.floorPassword);
     files.push({ path: `${CFG.DATA_PATH}/${FLOOR_FILE}`, content: floorBlob });
   }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });

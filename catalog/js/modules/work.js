@@ -43,13 +43,17 @@ function renderWork() {
   const rest = restockCount();
   const cmp = compareCount();
   const up = riseCount();
+  /* «Подорожало» показываем, только когда история ценника вправду есть. У
+     зала старый файл данных её не содержит — и строка уверяла бы, что за
+     месяц цены не менялись, хотя мы просто не знаем. Лучше молчать. */
+  const knowsRise = state.canPurchase || Object.keys(state.retailHist || {}).length > 0;
 
   box.innerHTML = `
     <div class="ios-group">
       ${state.canPurchase ? row('orders', 'Заказы поставщикам', orders) : ''}
       ${state.canPurchase && o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
-      ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
+      ${knowsRise ? row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up) : ''}
       ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
       ${row('scan', 'Сканировать штрихкод', '')}
     </div>
