@@ -1887,22 +1887,33 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
   margin: 0; padding: 10px 12px; font-size: 14px;
 }
 
-/* Отдельный вход сотрудника зала. Поведение и права подключает модуль входа. */
-.floor-entry {
-  display: flex; align-items: center; gap: 10px;
-  max-width: 1080px; min-height: 48px; margin: 10px auto 0;
-  padding: 8px 14px; border: 1px solid rgba(94,92,230,.32);
-  border-radius: 15px; background: rgba(94,92,230,.10);
-  color: var(--brand-ink); font-family: inherit; font-size: 16px;
-  font-weight: 700; line-height: 1.2; cursor: pointer;
+/* Единый вход: крупные варианты в листе выбора. */
+body[data-role="guest"] #adminBtn { min-height: 48px; }
+.entry-choice-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+.entry-choice-title { text-align: center; font-size: 25px; line-height: 1.2; }
+.entry-choice-sub { margin: 10px 0 22px; text-align: center; font-size: 16px; line-height: 1.45; }
+.entry-choice-option {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; min-height: 76px; margin: 0 0 10px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 17px;
+  background: var(--surface); color: var(--text);
+  font: inherit; text-align: left; cursor: pointer;
 }
-.floor-entry-icon, .floor-sheet-icon {
+.entry-choice-icon, .floor-sheet-icon {
   display: grid; place-items: center; flex: none;
   color: #fff; background: #5e5ce6;
 }
-.floor-entry-icon { width: 30px; height: 30px; border-radius: 9px; }
-.floor-entry-icon svg { width: 21px; height: 21px; }
-.floor-entry-arrow { margin-left: auto; font-size: 26px; line-height: 1; }
+.entry-choice-icon { width: 42px; height: 42px; border-radius: 12px; }
+.entry-choice-icon svg { width: 25px; height: 25px; }
+.entry-choice-label { display: grid; gap: 4px; min-width: 0; }
+.entry-choice-label strong { font-size: 17px; line-height: 1.2; }
+.entry-choice-label small { color: var(--text-2); font-size: 14px; line-height: 1.25; }
+.entry-choice-arrow { margin-left: auto; color: var(--text-2); font-size: 26px; line-height: 1; }
+.entry-choice-cancel { min-height: 50px; margin-top: 10px; font-size: 16px; }
+.entry-choice-option:focus-visible, .entry-choice-cancel:focus-visible,
+.floor-code-input:focus-visible, .floor-sheet-body button:focus-visible {
+  outline: 3px solid var(--brand-ink); outline-offset: 3px;
+}
 .floor-sheet-body { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 .floor-sheet-icon { width: 58px; height: 58px; margin: 7px auto 15px; border-radius: 17px; }
 .floor-sheet-icon svg { width: 35px; height: 35px; }
@@ -1915,8 +1926,6 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .floor-submit { min-height: 58px; margin-top: 18px; border-radius: 16px; font-size: 17px; }
 .floor-cancel { min-height: 50px; margin-top: 8px; font-size: 16px; }
 .floor-code-note { margin-top: 15px; font-size: 14px; line-height: 1.45; }
-.floor-entry:focus-visible, .floor-code-input:focus-visible,
-.floor-sheet-body button:focus-visible { outline: 3px solid var(--brand-ink); outline-offset: 3px; }
 
 /* ═══ Товары без фото — компактная плитка ════════════════════════════════
    После выгрузки из 1С фото есть далеко не у всех товаров, а пустой серый
