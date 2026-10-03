@@ -245,7 +245,11 @@ export function renderGrid() {
          читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
          полное название: человек мог искать как раз по граммам. */
       const title = pack ? nameNoPack(p) : p.name;
+      /* Фото в строке списка. Показывать ли его — решают стили: покупателю
+         витрина с картинками, сотруднику плотный список без них. Нет фото —
+         блок помечен no-photo и стиль его убирает, строка остаётся компактной. */
       return `<article class="card card-row" data-id="${esc(p.id)}">
+        <div class="${photoCls}">${img}</div>
         <div class="row-main">
           <div class="card-name">${highlight(title, hlTokens)}</div>
           ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
