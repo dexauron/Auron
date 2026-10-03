@@ -12,6 +12,7 @@ import { fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
+import { shopCount } from './shopping.js';
 import { compareCount } from './compare.js';
 import { riseCount } from './pricerise.js';
 
@@ -43,6 +44,7 @@ function renderWork() {
   const rest = restockCount();
   const cmp = compareCount();
   const up = riseCount();
+  const shopN = shopCount();
   /* «Подорожало» показываем, только когда история ценника вправду есть. У
      зала старый файл данных её не содержит — и строка уверяла бы, что за
      месяц цены не менялись, хотя мы просто не знаем. Лучше молчать. */
@@ -53,6 +55,7 @@ function renderWork() {
       ${state.canPurchase ? row('orders', 'Заказы поставщикам', orders) : ''}
       ${state.canPurchase && o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
+      ${row('shop', 'Список покупок', shopN ? `${shopN} ${plural(shopN, 'позиция', 'позиции', 'позиций')}` : 'пусто')}
       ${knowsRise ? row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up) : ''}
       ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
       ${row('scan', 'Сканировать штрихкод', '')}
@@ -83,6 +86,11 @@ function renderTodayBanner() {
  * которые закончились. Ноль значка не рисует: пустой кружок только мешает. */
 export function renderWorkBadge() {
   renderTodayBanner();
+  /* Если экран «Работа» открыт — пересобираем и его: счётчики в строках
+     («закончилось», список покупок, заказы) должны оставаться свежими, пока
+     человек ходит по вложенным окнам и возвращается назад. */
+  const ws = $('workSheet');
+  if (ws && !ws.hidden) renderWork();
   const el = $('tabWorkCount');
   if (!el) return;
   const n = state.session ? (state.canPurchase ? ordersSummary().overdue : 0) + restockCount() : 0;

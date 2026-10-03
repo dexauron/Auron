@@ -48,6 +48,9 @@ const rowUnit = (x) => x.unit || unitOf(state.products.find((y) => y.id === x.id
 
 /* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его
  * в список, не открывая карточку. */
+// сколько ещё не вычеркнуто — для строки на вкладке «Работа»
+export function shopCount() { return read().filter((x) => !x.done).length; }
+
 export function toggleShop(p) {
   if (!p) return false;
   const list = read();
@@ -109,9 +112,6 @@ function renderShopBar() {
      вошедших: сотрудник собирал список и терял к нему дорогу (просьба
      владельца — список нужен и сотруднику, и владельцу). */
   bar.hidden = !list.length;
-  // сколько в списке — видно прямо в меню, не открывая его
-  const mc = $('menuShopCount');
-  if (mc) mc.textContent = left ? `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}` : '';
   if (list.length) {
     $('shopCount').textContent = `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}`;
     $('shopTotal').textContent = fmtPrice(total(list));
@@ -350,8 +350,10 @@ export function bindShopping() {
     else toast('Убрано из списка');
   });
   $('shopOpen').addEventListener('click', openShop);
-  const menuShop = $('menuShop');
-  if (menuShop) menuShop.addEventListener('click', () => { closeSheet('adminMenuSheet'); openShop(); });
+  /* Открывается со вкладки «Работа» — там же, где «Закончилось на полке» и
+     заказы. В меню строки больше нет: два входа в одно место лишние. */
+  ui.workActions = ui.workActions || {};
+  ui.workActions.shop = openShop;
   $('shopShare').addEventListener('click', shareShop);
   $('shopWa').addEventListener('click', shopToWhatsApp);
   $('shopClear').addEventListener('click', clearShop);

@@ -24,33 +24,35 @@ const closeAll = (page) => page.evaluate(() => {
 
   // ── 1. Меню → Заказы → «назад» возвращает в меню ──
   await page.evaluate(async () => {
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 300));
-    document.getElementById('menuOrders').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="orders"]').click();
     await new Promise((r) => setTimeout(r, 400));
   });
-  chk((await openSheets(page)).includes('ordersSheet'), 'из меню открылись «Заказы поставщикам»');
+  chk((await openSheets(page)).includes('ordersSheet'), 'со вкладки «Работа» открылись «Заказы поставщикам»');
   const backToMenu = await page.evaluate(async () => {
     const btn = document.querySelector('#ordersSheet .sheet-back') || document.querySelector('#ordersSheet [data-close]');
     btn.click();
     await new Promise((r) => setTimeout(r, 400));
     return [...document.querySelectorAll('.sheet-backdrop')].filter((x) => !x.hidden).map((x) => x.id);
   });
-  chk(backToMenu.includes('adminMenuSheet'), `«назад» вернул в меню, а не на главный экран (${backToMenu.join(', ') || 'пусто'})`);
+  chk(backToMenu.includes('workSheet'), `«назад» вернул на «Работу», а не на главный экран (${backToMenu.join(', ') || 'пусто'})`);
   chk(!backToMenu.includes('ordersSheet'), 'а заказы закрылись');
 
   // ── 2. Кнопка «назад» телефона — тоже ──
   await closeAll(page);
   await page.evaluate(async () => {
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 300));
-    document.getElementById('menuRestock').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="restock"]').click();
     await new Promise((r) => setTimeout(r, 400));
   });
   await page.goBack();
   await page.waitForTimeout(500);
   const phoneBack = await openSheets(page);
-  chk(phoneBack.includes('adminMenuSheet'), `кнопка «назад» телефона тоже возвращает в меню (${phoneBack.join(', ') || 'пусто'})`);
+  chk(phoneBack.includes('workSheet'), `кнопка «назад» телефона тоже возвращает на «Работу» (${phoneBack.join(', ') || 'пусто'})`);
 
   // ── 3. Фильтры → «Подешевело» → назад в фильтры ──
   await closeAll(page);

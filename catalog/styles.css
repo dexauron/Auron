@@ -1084,13 +1084,10 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
   box-shadow: 0 0 0 2px var(--surface);
 }
 /* панель перекрывает низ страницы — освобождаем место под ней */
-/* Под нижней панелью — место, чтобы последние строки списка не прятались под
-   ней. Плюс высота круглой кнопки «+», когда она есть: без этого ПОСЛЕДНИЙ
-   товар навсегда оставался под кнопкой, и его код нельзя было увидеть, сколько
-   ни листай (ошибка со снимка владельца). Кнопка есть только у владельца,
-   поэтому запас добавляем только ему. */
+/* Место под нижней панелью, чтобы последние строки списка не прятались под
+   ней. Круглой кнопки «+» больше нет — товары приходят из выгрузки 1С, —
+   поэтому и отдельного запаса под неё не нужно. */
 body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)); }
-body[data-role="owner"] { padding-bottom: calc(var(--tabbar-h) + 90px + env(safe-area-inset-bottom)); }
 .fab { bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); }
 
 /* ═══ Экран категорий ══════════════════════════════ */
@@ -2116,7 +2113,7 @@ body[data-role="guest"] .search-row { gap: 8px; }
    оставляем ВКЛАДКОЙ внизу: до неё дотягивается большой палец. Кнопку
    фильтра наверху убираем как дубль — заодно поиск становится шире. */
 body[data-role="guest"] #viewToggleBtn,
-body[data-role="guest"] #filterBtn { display: none; }
+
 body[data-role="guest"] .search-input {
   height: 56px;
   min-width: 0;

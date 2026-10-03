@@ -10,13 +10,16 @@ const products = [
 const groups = [{ id: 'g1', name: 'Молочные' }, { id: 'g2', name: 'Хлеб' }];
 const suppliers = [{ id: 's1', name: 'Молзавод' }, { id: 's2', name: 'Хлебозавод' }];
 
+/* Список пополнения открывается со вкладки «Работа». Счётчик — там же, в
+   строке: в меню его больше нет, из меню строку убрали как дубль вкладки. */
 const openList = (page) => page.evaluate(async () => {
   document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-  document.getElementById('adminBtn').click();
-  await new Promise((r) => setTimeout(r, 250));
-  const badge = document.getElementById('menuRestockCount').textContent;
-  document.getElementById('menuRestock').click();
+  document.querySelector('.tabbar [data-tab="work"]').click();
   await new Promise((r) => setTimeout(r, 350));
+  const row = document.querySelector('[data-work="restock"]');
+  const badge = (row.querySelector('.ios-row-value') || {}).textContent || '';
+  row.click();
+  await new Promise((r) => setTimeout(r, 400));
   return badge;
 });
 
@@ -77,7 +80,8 @@ const openList = (page) => page.evaluate(async () => {
       total: box.querySelector('.ord-total').innerText.replace(/\s+/g, ' '),
     };
   });
-  chk(badge === '3', `в меню видно, сколько позиций ждёт заказа (${badge})`);
+  // счётчик переехал в строку на вкладке «Работа» — и теперь он словами
+  chk(/^3 /.test(badge), `на вкладке «Работа» видно, сколько позиций ждёт заказа (${badge})`);
   chk(view.open && view.rows === 3, `список открылся со всеми позициями (${view.rows})`);
   // заголовки групп рисуются заглавными (text-transform), поэтому сверяем без учёта регистра
   chk(view.heads.length === 2 && view.heads.some((h) => /молзавод · 2/i.test(h)) && view.heads.some((h) => /хлебозавод · 1/i.test(h)),
@@ -115,10 +119,10 @@ const openList = (page) => page.evaluate(async () => {
 
   const marks = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 250));
-    const badge2 = document.getElementById('menuRestockCount').textContent;
-    document.getElementById('menuRestock').click();
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const badge2 = ((document.querySelector('[data-work="restock"] .ios-row-value') || {}).textContent) || '';
+    document.querySelector('[data-work="restock"]').click();
     await new Promise((r) => setTimeout(r, 350));
     const box = document.getElementById('restockBody');
     return {
@@ -128,7 +132,7 @@ const openList = (page) => page.evaluate(async () => {
     };
   });
   chk(marks.done === 2, `в списке видно, что уже заказано (${marks.done})`);
-  chk(marks.badge2 === '1', `счётчик считает только неготовое (${marks.badge2})`);
+  chk(/^1 /.test(marks.badge2), `счётчик считает только неготовое (${marks.badge2})`);
   chk(marks.buttons === 1, `у поставщика, где всё заказано, кнопки «Заказать» нет (${marks.buttons})`);
 
   // 5. Убрать позицию крестиком
@@ -149,9 +153,10 @@ const openList = (page) => page.evaluate(async () => {
     list.forEach((x) => { x.ordered = old; });
     localStorage.setItem('wm_restock_v1', JSON.stringify(list));
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuRestock').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="restock"]').click();
     await new Promise((r) => setTimeout(r, 350));
     return {
       left: JSON.parse(localStorage.getItem('wm_restock_v1') || '[]').length,

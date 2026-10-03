@@ -31,12 +31,33 @@ export function updateFavButton(p) {
   b.title = on ? 'Убрать из избранного' : 'В избранное';
 }
 
+/* Главное действие карточки — ОДНО и у каждой роли своё.
+ * «Закончилось на полке» — работа сотрудника ЗАЛА: он ходит и отмечает пустые
+ * полки. Бухгалтеру и владельцу эта кнопка нужна редко, а висела она у них
+ * первой и во всю ширину, над ценой и полями — то есть занимала самое важное
+ * место под самое редкое действие. Теперь у зала она наверху и крупная, у
+ * остальных — в нижнем ряду мелких, рядом с «Поделиться».
+ * Покупателю её нет вовсе (класс emp-only). */
+function placeRestockButton(p) {
+  const b = $('btnRestock');
+  if (!b) return;
+  b.textContent = inRestock(p.id) ? 'Убрать из списка пополнения' : 'Закончилось на полке';
+  const zal = state.role === 'zal';
+  b.classList.toggle('btn-primary', zal);
+  b.classList.toggle('btn-block', zal);
+  b.classList.toggle('btn-secondary', !zal);
+  const top = $('sheetDescription');
+  const row = document.querySelector('#productSheet .sheet-actions');
+  if (zal) { if (top && top.nextSibling !== b) top.parentNode.insertBefore(b, top.nextSibling); }
+  else if (row && b.parentNode !== row) row.insertBefore(b, row.firstChild);
+}
+
 export function openProduct(p) {
   ui.currentProduct = p;
   pushRecentProduct(p.id);
   trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
   { const b = $('btnCompareAdd'); if (b) b.textContent = inCompare(p.id) ? 'Убрать из сравнения' : 'К сравнению'; }
-  { const b = $('btnRestock'); if (b) b.textContent = inRestock(p.id) ? 'Убрать из списка пополнения' : 'Закончилось на полке'; }
+  placeRestockButton(p);        // главное действие карточки — своё у каждой роли
   syncShopButton(p);            // «в список покупок» / «убрать» — для покупателя
   syncWaitButton(p);            // «сообщить, когда появится» — если товара нет
   renderCompareBar();

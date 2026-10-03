@@ -23,7 +23,9 @@ const openForm = (page) => page.evaluate(async () => {
   document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
   document.getElementById('adminBtn').click();
   await new Promise((r) => setTimeout(r, 300));
-  document.getElementById('menuOrders').click();
+  document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="orders"]').click();
   await new Promise((r) => setTimeout(r, 400));
   document.getElementById('ordAdd').click();
   await new Promise((r) => setTimeout(r, 400));

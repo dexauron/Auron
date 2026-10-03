@@ -131,14 +131,19 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     });
     await scan('storeSheet с подсказками');
 
-    for (const [id, menu] of [['restockSheet', 'menuRestock']]) {
-      await page.evaluate(async (m) => {
+    // «закончилось на полке» открывается со вкладки «Работа» (в меню его нет)
+    for (const [id, work] of [['restockSheet', 'restock']]) {
+      await page.evaluate(async (w) => {
         document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-        document.getElementById('adminBtn').click();
+        // выше мы примеряли роль покупателя — возвращаем сотрудника: список
+        // пополнения живёт на его вкладке «Работа»
+        const P = window.WM_PUBLISH; P.ghSetToken('tok'); P.applyServerless('pw');
         await new Promise((r) => setTimeout(r, 250));
-        document.getElementById(m).click();
+        document.querySelector('.tabbar [data-tab="work"]').click();
         await new Promise((r) => setTimeout(r, 350));
-      }, menu);
+        document.querySelector(`[data-work="${w}"]`).click();
+        await new Promise((r) => setTimeout(r, 350));
+      }, work);
       await scan(`${id} со списком`);
     }
     chk(!bad.length, `ширина ${W}px: ничего не вылезает за край${bad.length ? ' — ' + bad.join(' | ') : ''}`);

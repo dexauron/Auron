@@ -6,7 +6,7 @@ import { ic, paintIcons } from './icons.js';
 
 import { bindFloorUI } from './floorui.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
+import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
@@ -31,7 +31,7 @@ import { bindPriceNews } from './pricenews.js';
 import { logSession } from './sessionlog.js';
 import { applyFloorSnapshot, rememberFloor } from './floor.js';
 import { restoreLogin } from './restore.js';
-import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
+import { clearRestock, openRestock, orderFromRestock, removeRestock, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -65,7 +65,6 @@ function bindEvents() {
   });
 
   // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
-  $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
   $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
   $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
   $('filterReset').addEventListener('click', clearAllFilters);
@@ -390,7 +389,6 @@ function bindEvents() {
         $('menuDedup').hidden = true;
       } else {
       }
-      renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderMarginBadge();    // сколько товаров продаётся в минус
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
@@ -795,8 +793,9 @@ function bindEvents() {
     }
   });
 
-  $('fabAdd').addEventListener('click', () => openForm(null));
-  $('menuAddProduct').addEventListener('click', () => { closeSheet('adminMenuSheet'); openForm(null); });
+  /* Кнопки «добавить товар» нет. Новые товары приходят ТОЛЬКО из выгрузки 1С
+     (решение владельца: «вручную я товар не добавлю»). Сама форма осталась —
+     ею правят уже существующий товар: фото, описание, штрихкод. */
   $('btnEditProduct').addEventListener('click', () => { closeSheet('productSheet'); openForm(ui.currentProduct); });
   $('btnDeleteProduct').addEventListener('click', deleteProduct);
   $('productForm').addEventListener('submit', submitForm);
@@ -944,7 +943,6 @@ function bindEvents() {
     compare: openCompare,
     scan: () => runScan(),
   };
-  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
@@ -984,7 +982,6 @@ function bindEvents() {
   $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
-  $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;

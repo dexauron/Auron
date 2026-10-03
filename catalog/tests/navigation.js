@@ -59,12 +59,9 @@ const groups = [
     return getComputedStyle(t).position === 'fixed' && Math.abs(r.bottom - innerHeight) < 2;
   });
   chk(atBottom, 'панель закреплена внизу экрана');
-  const overlap = await page.evaluate(() => {
-    const t = document.getElementById('tabbar').getBoundingClientRect();
-    const fab = document.getElementById('fabAdd').getBoundingClientRect();
-    return fab.bottom > t.top;
-  });
-  chk(!overlap, 'кнопка «＋» не перекрывается панелью');
+  // круглой кнопки «＋» больше нет: товары приходят только из выгрузки 1С
+  const noFab = await page.evaluate(() => !document.getElementById('fabAdd'));
+  chk(noFab, 'ручного добавления товара нет — каталог наполняется выгрузкой');
 
   // ── экран категорий ──
   await page.click('.tabbar [data-tab="cats"]'); await page.waitForTimeout(500);

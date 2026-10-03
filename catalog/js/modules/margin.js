@@ -120,11 +120,12 @@ export function renderMarginBadge() {
   row.hidden = !state.canPurchase;
   // «Залежалось» видит и сотрудник: ему решать, что убрать с полки
   const se = $('menuStaleCount');
-  if (se) { const st = staleItems().length; se.textContent = st ? String(st) : '—'; }
+  // пусто — значит пусто: прочерк в меню выглядит как «что-то сломалось»
+  if (se) { const st = staleItems().length; se.textContent = st ? String(st) : ''; }
   if (!state.canPurchase) return;
   const n = marginCount();
   const el = $('menuMarginCount');
-  el.textContent = n ? String(n) : '—';
+  el.textContent = n ? String(n) : '';
   el.classList.toggle('margin-bad', n > 0);
 }
 

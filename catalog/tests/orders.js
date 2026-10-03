@@ -21,12 +21,15 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   await asOwner(page, { suppliers });
   await page.waitForTimeout(300);
 
+  // заказы открываются со вкладки «Работа»: из меню строку убрали как дубль
   const openOrders = async () => {
-    await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
-    await page.evaluate(() => document.getElementById('adminBtn').click());
-    await page.waitForTimeout(250);
-    await page.evaluate(() => document.getElementById('menuOrders').click());
-    await page.waitForTimeout(400);
+    await page.evaluate(async () => {
+      document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
+      document.querySelector('.tabbar [data-tab="work"]').click();
+      await new Promise((r) => setTimeout(r, 350));
+      document.querySelector('[data-work="orders"]').click();
+    });
+    await page.waitForTimeout(450);
   };
   await openOrders();
   const empty = await page.evaluate(() => ({
@@ -99,9 +102,10 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     const P = window.WM_PUBLISH;
     P.applyStaff('staffpw');
     await new Promise((r) => setTimeout(r, 200));
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="orders"]').click();
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));
@@ -171,9 +175,10 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   // ── Что заказали: позиции внутри заказа ──
   const items = await page.evaluate(async (due) => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="orders"]').click();
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));

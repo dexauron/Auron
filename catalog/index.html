@@ -53,10 +53,6 @@
       <button class="round-btn" id="viewToggleBtn" title="Размер плиток">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
       </button>
-      <button class="round-btn" id="filterBtn" title="Фильтр">
-        <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8h16M4 16h16"/><circle cx="9" cy="8" r="2.3" fill="var(--surface)"/><circle cx="15" cy="16" r="2.3" fill="var(--surface)"/></svg>
-        <span class="filter-badge" id="filterBadge" hidden></span>
-      </button>
     </div>
     <nav class="chips active-filters" id="activeFilters" hidden></nav>
   </header>
@@ -101,7 +97,6 @@
   <div class="wolf-bubble" id="wolfBubble" hidden></div>
 
   <!-- Кнопка добавления (только админ) -->
-  <button class="fab" id="fabAdd" hidden title="Добавить товар" aria-label="Добавить товар"><i data-ic="plus"></i></button>
 
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
@@ -265,23 +260,19 @@
       <div class="sheet-body">
         <p class="muted menu-role" id="adminEmail"></p>
 
+        <div class="ios-group-title">Отчёты</div>
         <div class="ios-group">
           <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
-          <button class="ios-row ios-row-link" id="menuOrders"><span class="ios-row-title">Заказы поставщикам</span></button>
-          <button class="ios-row ios-row-link" id="menuRestock"><span class="ios-row-title">Закончилось на полке</span><span class="ios-row-value" id="menuRestockCount"></span></button>
           <!-- Тот же список покупок, что у покупателя: сотрудник и владелец
                собирают им закупку по залу. Второго такого механизма заводить
                незачем — ошибки были бы те же, а учить пришлось бы дважды. -->
-          <button class="ios-row ios-row-link" id="menuShop"><span class="ios-row-title">Список покупок</span><span class="ios-row-value" id="menuShopCount"></span></button>
           <button class="ios-row ios-row-link" id="menuStale"><span class="ios-row-title">Залежалось</span><span class="ios-row-value" id="menuStaleCount"></span></button>
           <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
-          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
         </div>
 
         <div id="menuAdminOnly">
           <div class="ios-group-title">Каталог</div>
           <div class="ios-group">
-            <button class="ios-row ios-row-link" id="menuAddProduct"><span class="ios-row-title">Добавить товар</span></button>
             <button class="ios-row ios-row-link" id="menuImportHub"><span class="ios-row-title">Загрузка из 1С</span></button>
             <button class="ios-row ios-row-link" id="menuGroups"><span class="ios-row-title">Группы товаров</span></button>
             <button class="ios-row ios-row-link" id="menuSuppliers"><span class="ios-row-title">Поставщики</span></button>
@@ -310,6 +301,7 @@
         </div>
 
         <div class="ios-group">
+          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
           <button class="ios-row ios-row-danger" id="menuLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>
         </div>
       </div>

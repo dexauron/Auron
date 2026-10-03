@@ -36,7 +36,7 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
         .map((x) => (x.textContent || '').trim()),
       comp: ((document.getElementById('sheetCompetitors') || {}).textContent || '').trim(),
       adminHidden: (document.getElementById('sheetAdminActions') || {}).hidden,
-      fabHidden: (document.getElementById('fabAdd') || {}).hidden,
+      fab: !!document.getElementById('fabAdd'),
     };
   });
 
@@ -55,7 +55,8 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
   chk(r.comp === '', 'цен других магазинов у зала нет');
   chk(r.supplier === '', 'цен и контактов поставщиков нет');
   chk(r.adminHidden === true, 'кнопки правки товара скрыты');
-  chk(r.fabHidden === true, 'кнопка «добавить товар» скрыта');
+  // кнопки «добавить товар» нет ни у кого: товары приходят только из выгрузки 1С
+  chk(r.fab === false, 'кнопки «добавить товар» нет вовсе');
   // шапка: сотрудник должен видеть, что он ВОШЁЛ (а не кнопку «Войти»),
   // и иметь возможность выйти
   const hdr = await page.evaluate(() => {
@@ -64,12 +65,12 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
     document.getElementById('adminBtn').click();
     const ab = document.getElementById('adminBtn'); const al = document.getElementById('adminBtnLabel');
     return { isAdminClass: !!(ab && ab.classList.contains('is-admin')), labelHidden: !!(al && al.hidden),
-      logout: vis('menuLogout'), device: vis('menuDevice'), addProduct: vis('menuAddProduct'), publish: vis('menuPublish') };
+      logout: vis('menuLogout'), device: vis('menuDevice'), publish: vis('menuPublish') };
   });
   chk(hdr.isAdminClass === true && hdr.labelHidden === true, 'шапка показывает вошедшего сотрудника (нет кнопки «Войти»)');
   chk(hdr.logout === true, 'сотрудник может выйти из аккаунта');
   chk(hdr.device === true, 'настройки устройства доступны сотруднику');
-  chk(hdr.addProduct === false && hdr.publish === false, 'правка и публикация сотруднику недоступны');
+  chk(hdr.publish === false, 'публикация сотруднику недоступна');
   chk(errs.length === 0, 'нет ошибок страницы (' + errs.length + ')');
 
   await done(b);

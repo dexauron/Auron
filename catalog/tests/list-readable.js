@@ -62,16 +62,15 @@ const toList = (page) => page.evaluate(async () => {
     await new Promise((r) => setTimeout(r, 400));
     const cards = [...document.querySelectorAll('.grid.list .card')];
     const last = cards[cards.length - 1].getBoundingClientRect();
-    const fab = document.getElementById('fabAdd');
-    const f = fab.getBoundingClientRect();
     const tab = document.querySelector('.tabbar').getBoundingClientRect();
     return {
-      подКнопкой: !fab.hidden && last.bottom > f.top && last.right > f.left,
+      // круглой кнопки «+» больше нет — проверяем, что её и правда нет
+      подКнопкой: !!document.getElementById('fabAdd'),
       подПанелью: last.bottom > tab.top,
       name: cards[cards.length - 1].innerText.replace(/\s+/g, ' ').trim().slice(0, 40),
     };
   });
-  chk(!bottom.подКнопкой, `последний товар не закрыт кнопкой «+» (${bottom.name})`);
+  chk(!bottom.подКнопкой, `кнопки «+» нет — последний товар ничем не закрыт (${bottom.name})`);
   chk(!bottom.подПанелью, 'и не уходит под нижнюю панель');
 
   chk(errs.length === 0, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);

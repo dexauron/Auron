@@ -397,7 +397,7 @@ function updateResultsCount(n) {
 }
 
 // синхронизирует окно фильтров и значок с состоянием
-export function syncControls() {
+function syncControls() {
   renderFilterCats();
   { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
@@ -440,13 +440,11 @@ export function syncControls() {
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   const n = countActiveFilters();
-  const badge = $('filterBadge');
-  if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
-  // тот же счётчик на вкладке «Фильтры» — видно, что фильтр включён,
-  // даже когда шапка ушла вверх при прокрутке
+  /* Счётчик включённых фильтров — на вкладке «Фильтры». Кнопки фильтра в
+     шапке больше нет: это был дубль той же вкладки, до которого вдобавок не
+     дотянуться большим пальцем. */
   const tb = $('tabFilterCount');
   if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
-  const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
 }
 
 const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };

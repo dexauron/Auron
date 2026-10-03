@@ -658,7 +658,6 @@ export function applyServerless(pw) {
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('owner', pw);
   logSession('in', 'owner');
-  $('fabAdd').hidden = false;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();
@@ -683,7 +682,6 @@ export function applyStaff(pw) {
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('staff', pw);
   logSession('in', 'staff');
-  $('fabAdd').hidden = true;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();
