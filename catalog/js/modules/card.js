@@ -102,7 +102,7 @@ export function openProduct(p) {
   // КОД КАССЫ с 2026-10-03 — тоже только вошедшим (решение владельца): он ушёл
   // из публичной витрины, но в уже выложенных данных может ещё лежать, поэтому
   // прячем его и в интерфейсе — защита с двух сторон, а не только в файле.
-  if (p.code && state.session) rows.push(fieldRow('Код товара', p.code, false, true));
+  if (p.code && state.session) rows.push(fieldRow('Код товара', p.code, false, true, 'field-code'));
   // когда товар завезли — видно всем: покупателю это говорит о свежести
   if (p.arrival_at) rows.push(fieldRow('Поступил', fmtDate(p.arrival_at)));
   if (state.session) {
@@ -851,8 +851,11 @@ export async function copyText(text, okMsg) {
   catch (e) { toast('Не удалось скопировать'); }
 }
 
-function fieldRow(key, val, main = false, copy = false) {
-  const cls = main ? ' field-main' : '';
+/* `extra` — дополнительный класс на строку. Нужен оформлению: по нему стили
+ * выделяют именно код кассы, а не «любую первую строку» (иначе у товара без
+ * кода крупной плашкой становился бы артикул). */
+function fieldRow(key, val, main = false, copy = false, extra = '') {
+  const cls = (main ? ' field-main' : '') + (extra ? ' ' + extra : '');
   const copyBtn = (copy || main)
     ? `<button class="copy-btn" data-copy="${esc(val)}">⧉</button>`
     : '';

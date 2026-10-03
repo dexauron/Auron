@@ -1940,37 +1940,40 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 }
 
 /* Покупательская витрина: крупные цели нажатия и спокойный список.
-   Роль определяется видимой кнопкой входа в зал; JS управляет её hidden. */
-body:has(#floorLoginBtn:not([hidden])) .search-row { gap: 8px; }
+   Роль берётся из метки `data-role` на странице (её ставит render.js):
+   guest — покупатель, zal — сотрудник зала, staff — бухгалтер, owner —
+   владелец. Раньше роль угадывалась по видимости кнопки входа — стоило
+   кнопку подвинуть, и оформление ломалось. */
+body[data-role="guest"] .search-row { gap: 8px; }
 /* Покупателю нечего переключать (список всегда) — вид убираем. Фильтры
    оставляем ВКЛАДКОЙ внизу: до неё дотягивается большой палец. Кнопку
    фильтра наверху убираем как дубль — заодно поиск становится шире. */
-body:has(#floorLoginBtn:not([hidden])) #viewToggleBtn,
-body:has(#floorLoginBtn:not([hidden])) #filterBtn { display: none; }
-body:has(#floorLoginBtn:not([hidden])) .search-input {
+body[data-role="guest"] #viewToggleBtn,
+body[data-role="guest"] #filterBtn { display: none; }
+body[data-role="guest"] .search-input {
   height: 56px;
   min-width: 0;
   font-size: 17px;
   border-radius: 14px;
 }
-body:has(#floorLoginBtn:not([hidden])) #scanSearchBtn {
+body[data-role="guest"] #scanSearchBtn {
   width: 52px;
   height: 52px;
   border-radius: 14px;
 }
-body:has(#floorLoginBtn:not([hidden])) .search-clear {
+body[data-role="guest"] .search-clear {
   width: 42px;
   height: 42px;
   right: 4px;
 }
-body:has(#floorLoginBtn:not([hidden])) .tabbar .tab {
+body[data-role="guest"] .tabbar .tab {
   min-height: 64px;
   font-size: 11.5px;
   gap: 4px;
 }
-body:has(#floorLoginBtn:not([hidden])) { --tabbar-h: 64px; }
+body[data-role="guest"] { --tabbar-h: 64px; }
 
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row {
+body[data-role="guest"] .grid.list .card-row {
   min-height: 82px;
   padding: 12px 14px;
   gap: 14px;
@@ -1980,7 +1983,7 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row {
 /* Покупателю название переносится целиком: плотный список сотрудника держит
    его в одну строку (так быстрее искать код), а покупателю нужна читаемость —
    у него и строка выше. */
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
+body[data-role="guest"] .grid.list .card-name {
   font-size: 17px;
   line-height: 1.35;
   font-weight: 650;
@@ -1989,11 +1992,11 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
   text-overflow: clip;
   overflow-wrap: anywhere;
 }
-body:has(#floorLoginBtn:not([hidden])) .grid.list .row-sub {
+body[data-role="guest"] .grid.list .row-sub {
   margin-top: 6px;
   gap: 6px 12px;
 }
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-price {
+body[data-role="guest"] .grid.list .card-price {
   font-size: 18px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
@@ -2001,7 +2004,7 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-price {
 /* Покупателю фото в строке показываем. Товар без фото держит такое же место
    со значком-заглушкой: иначе названия прыгают то от края, то от картинки, и
    список выглядит рваным. Сотруднику фото в списке не показываем вовсе. */
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo {
+body[data-role="guest"] .grid.list .card-photo {
   display: grid;
   flex: 0 0 68px;
   width: 68px;
@@ -2009,7 +2012,7 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo {
   aspect-ratio: 1;
   border-radius: 10px;
 }
-body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo.no-photo { font-size: 30px; }
+body[data-role="guest"] .grid.list .card-photo.no-photo { font-size: 30px; }
 
 #productSheet:has(#btnShopAdd:not([hidden])) .sheet-title {
   font-size: 24px;
@@ -2030,13 +2033,13 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo.no-photo { font-si
   max-height: 320px;
   object-fit: contain;
 }
-body:has(#floorLoginBtn:not([hidden])) .empty-title { font-size: 22px; }
-body:has(#floorLoginBtn:not([hidden])) .empty-text { font-size: 16px; line-height: 1.45; }
-body:has(#floorLoginBtn:not([hidden])) .empty-reset { min-height: 50px; font-size: 16px; }
+body[data-role="guest"] .empty-title { font-size: 22px; }
+body[data-role="guest"] .empty-text { font-size: 16px; line-height: 1.45; }
+body[data-role="guest"] .empty-reset { min-height: 50px; font-size: 16px; }
 
 @media (max-width: 360px) {
-  body:has(#floorLoginBtn:not([hidden])) .grid.list .card-row { padding: 10px; gap: 10px; }
-  body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo {
+  body[data-role="guest"] .grid.list .card-row { padding: 10px; gap: 10px; }
+  body[data-role="guest"] .grid.list .card-photo {
     flex-basis: 60px; width: 60px; height: 60px;
   }
 }

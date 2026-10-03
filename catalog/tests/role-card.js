@@ -30,6 +30,10 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
       fields: t('sheetFields'),
       stock: t('sheetStock'), sales: t('sheetSales'),
       markup: t('sheetMarkup'), supplier: t('sheetSupplier'),
+      /* Отдельный класс на строке кода — контракт для оформления: по нему
+         стили делают крупную плашку кода, не задевая артикул. */
+      codeRows: [...document.querySelectorAll('#sheetFields .field-row.field-code')]
+        .map((x) => (x.textContent || '').trim()),
       adminHidden: (document.getElementById('sheetAdminActions') || {}).hidden,
       fabHidden: (document.getElementById('fabAdd') || {}).hidden,
     };
@@ -38,6 +42,8 @@ const { chromium, newPage, openProduct, runner } = require('./helpers');
   chk(r.role === 'zal' && r.isAdmin === false && r.canPurchase === false && r.canSales === false,
     'роль зала выставлена верно (без прав на деньги)');
   chk(r.fields.includes('100500'), 'код кассы показан сотруднику');
+  chk(r.codeRows.length === 1 && r.codeRows[0].includes('100500'),
+    'строка кода помечена классом field-code (и только она) — на это опирается оформление');
   chk(r.fields.includes('A-1'), 'артикул показан сотруднику');
   chk(r.fields.includes('Молочка'), 'отдел показан сотруднику');
   chk(r.stock === '', 'остатка числом нет');

@@ -507,7 +507,24 @@ export function removeFilter(type, val) {
   renderAll();
 }
 
+/* Кто сейчас смотрит каталог — одной меткой на странице. Оформление ролей
+ * опирается ИМЕННО на неё, а не на «видна ли кнопка входа»: кнопки двигаются
+ * и переименовываются, а роль — нет. Значения: guest (покупатель), zal
+ * (сотрудник зала), staff (бухгалтер), owner (владелец). */
+function markRole() {
+  const el = document.body;
+  if (!el) return;
+  let role = 'guest';
+  if (state.session) {
+    if (state.isAdmin) role = 'owner';
+    else if (state.role === 'zal') role = 'zal';
+    else role = 'staff';
+  }
+  if (el.dataset.role !== role) el.dataset.role = role;
+}
+
 export function renderAll() {
+  markRole();
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
