@@ -1926,6 +1926,19 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
 .grid:not(.list) .card-photo.no-photo { display: none; }
 .grid:not(.list) .card-body { padding-top: 11px; }
 
+/* ═══ Список — действительно плотный вид ══════════════════════════════════
+   Список существует ради одного: увидеть за раз максимум кодов. После того как
+   плитки без фото стали компактными, список оказался РЕЖЕ плиток (93px на товар
+   против 83px) — то есть переключение в него ухудшало то, ради чего его и
+   включают. Поджимаем отступы и держим название в ОДНУ строку: в этом режиме
+   человек ищет код, а не читает описание. Зоны нажатия остаются крупными (≥44px). */
+.grid.list { gap: 8px; }
+.grid.list .card-row { padding: 8px 12px; min-height: 60px; }
+.grid.list .card-code { min-height: 44px; }
+.grid.list .card-name {
+  min-height: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
 /* Покупательская витрина: крупные цели нажатия и спокойный список.
    Роль определяется видимой кнопкой входа в зал; JS управляет её hidden. */
 body:has(#floorLoginBtn:not([hidden])) .search-row { gap: 8px; }
@@ -1966,6 +1979,9 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-name {
   font-size: 17px;
   line-height: 1.35;
   font-weight: 650;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
   overflow-wrap: anywhere;
 }
 body:has(#floorLoginBtn:not([hidden])) .grid.list .row-sub {
@@ -1977,8 +1993,7 @@ body:has(#floorLoginBtn:not([hidden])) .grid.list .card-price {
   font-weight: 750;
   font-variant-numeric: tabular-nums;
 }
-/* Если Claude добавит в гостевую строку публичное фото, оно уже имеет место;
-   строка без фото остаётся компактной и не показывает пустой квадрат. */
+/* Публичное фото в строке; без фото строка остаётся компактной. */
 body:has(#floorLoginBtn:not([hidden])) .grid.list .card-photo:not(.no-photo) {
   display: block;
   flex: 0 0 68px;

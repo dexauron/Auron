@@ -44,11 +44,13 @@ export function openProduct(p) {
   updateFavButton(p);
   $('sheetName').textContent = p.name;
 
-  // Покупателю (тот, кто не вводил пароль) фотографии не показываем: решение
-  // владельца — у него каталог списком, только нужные сведения.
-  const photos = state.session ? (p.photos || []).filter((u) => u && String(u).trim()) : [];
-  $('sheetPhotos').hidden = !state.session;
-  $('sheetDots').hidden = !state.session;
+  /* Фотографии видит и покупатель: они и так лежат в открытой витрине, а без
+     них карточка выглядит пустой и товар не узнать. Коды кассы, закупки и
+     прочее внутреннее по-прежнему скрыты — показываем только картинку.
+     Нет фото — блок не занимает место. */
+  const photos = (p.photos || []).filter((u) => u && String(u).trim());
+  $('sheetPhotos').hidden = !photos.length;
+  $('sheetDots').hidden = photos.length < 2;
   $('sheetPhotos').innerHTML = photos.length
     ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
     : `<div class="photo-placeholder">${ic('box', 'ic-ph')}</div>`;
