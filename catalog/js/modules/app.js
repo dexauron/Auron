@@ -1,7 +1,7 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
+import { addBackButtons, attachMoneyInput, closeSheet, enableSwipeToClose, goBack, logError, moneyNum, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
 
 import { bindFloorUI } from './floorui.js';
@@ -330,12 +330,16 @@ function bindEvents() {
     if (btn) copyText(btn.dataset.copy, 'Скопировано: ' + btn.dataset.copy);
   });
 
-  // Закрытие шторок: крестики, кнопки, тап по фону, стрелка «назад», смахивание вниз
+  /* Закрытие шторок: крестики, «Готово», тап по фону, стрелка «назад»,
+     смахивание вниз. Везде goBack, а не просто «закрыть»: если окно открыли
+     из другого окна, человек должен вернуться ТУДА, откуда пришёл, а не на
+     главный экран (жалоба владельца). Пришёл с главного — закроется, как
+     раньше. */
   document.querySelectorAll('[data-close]').forEach((b) =>
-    b.addEventListener('click', () => closeSheet(b.dataset.close)));
-  $('sheetClose').addEventListener('click', () => closeSheet('productSheet'));
+    b.addEventListener('click', () => goBack(b.dataset.close)));
+  $('sheetClose').addEventListener('click', () => goBack('productSheet'));
   document.querySelectorAll('.sheet-backdrop').forEach((bd) =>
-    bd.addEventListener('click', (e) => { if (e.target === bd) closeSheet(bd.id); }));
+    bd.addEventListener('click', (e) => { if (e.target === bd) goBack(bd.id); }));
   addBackButtons();
   enableSwipeToClose();
 
