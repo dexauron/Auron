@@ -1030,13 +1030,13 @@
         <button class="ios-nav-btn strong" data-close="priceNewsSheet">Готово</button>
       </div>
       <div class="pn-head">
-        <div class="seg" id="priceNewsSeg">
+        <div class="seg" id="priceNewsSeg" role="group" aria-label="Тип изменения цены">
           <button data-dir="down">Подешевело</button>
           <button data-dir="up">Подорожало</button>
         </div>
         <div class="search-wrap pn-search">
           <span class="search-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
-          <input type="search" class="search-input" id="priceNewsQuery" placeholder="Найти в списке" autocomplete="off" enterkeyhint="search">
+          <input type="search" class="search-input" id="priceNewsQuery" aria-label="Поиск по изменениям цен" placeholder="Найти в списке" autocomplete="off" enterkeyhint="search">
         </div>
         <p class="pn-since" id="priceNewsSince"></p>
       </div>
