@@ -13,8 +13,10 @@ import { openProduct } from './card.js';
  * полке и сразу видит его карточку с кодами. */
 
 let scanStopFn = null;
+let scanEpoch = 0;
 
 export function stopScan() {
+  scanEpoch++;
   if (scanStopFn) { scanStopFn(); scanStopFn = null; }
 }
 
@@ -26,6 +28,8 @@ export function stopScan() {
 const REPEAT_MS = 2500;
 export async function startScan(onResult, { keepOpen = false } = {}) {
   openSheet('scanSheet');
+  const epoch = ++scanEpoch;
+  const isCurrent = () => epoch === scanEpoch;
   $('scanFallback').hidden = true;
   let finished = false;
   const recent = new Map();
@@ -46,9 +50,10 @@ export async function startScan(onResult, { keepOpen = false } = {}) {
     onResult(t);
   };
   try {
-    if ('BarcodeDetector' in window) await scanNative(done);
-    else await scanWithLibrary(done);
+    if ('BarcodeDetector' in window) await scanNative(done, isCurrent);
+    else await scanWithLibrary(done, isCurrent);
   } catch (e) {
+    if (!isCurrent()) return; // окно закрыли, пока ждём загрузку или камеру
     if (e && e.code === 'SCANNER_LIBRARY') {
       $('scanContainer').textContent = 'Распознавание сейчас недоступно. Проверь связь и попробуй снова.';
       $('scanFallback').hidden = false;
@@ -105,7 +110,7 @@ async function openCamera() {
   throw last || new Error('camera');
 }
 
-async function scanNative(done) {
+async function scanNative(done, isCurrent) {
   const box = $('scanContainer');
   box.innerHTML = '';
   const video = document.createElement('video');
@@ -115,6 +120,7 @@ async function scanNative(done) {
   // просим камеру повыше разрешением и с постоянной фокусировкой — резче мелкие
   // и некачественные штрихкоды
   const stream = await openCamera();
+  if (!isCurrent()) { stream.getTracks().forEach((t) => t.stop()); return; }
   const track = stream.getVideoTracks()[0];
   let active = true;
   scanStopFn = () => {
@@ -220,7 +226,7 @@ export function loadScript(src) {
   });
 }
 
-async function scanWithLibrary(done) {
+async function scanWithLibrary(done, isCurrent) {
   if (!window.Html5Qrcode) {
     toast('Включаем сканер…');
     try {
@@ -232,6 +238,7 @@ async function scanWithLibrary(done) {
       throw error;
     }
   }
+  if (!isCurrent()) return;
   $('scanContainer').innerHTML = '';
   // магазинные штрихкоды И QR: сканер один, режимов не делим
   let formats;
@@ -253,6 +260,10 @@ async function scanWithLibrary(done) {
     (text) => done(text),
     () => {},
   );
+  if (!isCurrent()) {
+    try { await scanner.stop(); await scanner.clear(); } catch (e) { /* уже остановлен */ }
+    return;
+  }
   // подсветка через трек камеры библиотеки, если доступна
   try {
     const track = scanner.getRunningTrackCameraCapabilities && scanner.getRunningTrackCameraCapabilities();
