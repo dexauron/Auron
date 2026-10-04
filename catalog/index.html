@@ -884,17 +884,10 @@
       <div class="sheet-handle"></div>
       <div class="sheet-body">
         <h2 class="sheet-title" id="scanTitle">Сканировать товар</h2>
-        <!-- Переключатель — только вошедшим. У покупателя выбирать нечего:
-             он всегда получает ценник, ради него он камеру и открыл.
-             Режим «Ценник» из этого списка убран по решению владельца:
-             сотруднику он не нужен, у него в карточке и так всё есть. -->
-        <div class="seg emp-only" id="scanModeSeg">
-          <button data-scanmode="card">Товар</button>
-          <button data-scanmode="out">Закончилось</button>
-        </div>
         <div id="scanResult" class="scan-result" hidden></div>
         <div id="scanContainer" class="scan-box"></div>
         <p class="scan-guide-text">Помести штрихкод или QR-код внутри рамки.</p>
+        <p id="scanFallback" class="scan-guide-text" hidden>Можно ввести код или название в поиске каталога.</p>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Готово</button>
       </div>
