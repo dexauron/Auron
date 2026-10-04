@@ -838,6 +838,8 @@ function bindEvents() {
     else startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
+  // «ничего не нашлось» у сотрудника: камера находит то, что название не нашло
+  $('emptyScan').addEventListener('click', runScan);
 
   /* Быстрые действия с ярлыка приложения (долгое нажатие на значок на главном
      экране телефона): «Сканер» и «Закончилось». Ярлык открывает

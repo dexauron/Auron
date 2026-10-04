@@ -96,8 +96,12 @@ const openWork = (page) => page.evaluate(async () => {
     const el = document.getElementById('todayBanner');
     return { shown: !el.hidden, text: el.innerText.replace(/\s+/g, ' ') };
   }, local(new Date()));
-  chk(banner.shown && /Сегодня 1 поставка/.test(banner.text), `видно, что сегодня ждём поставку (${banner.text})`);
-  chk(/5\s?400/.test(banner.text.replace(/ /g, ' ')) && /просрочено 1/.test(banner.text),
+  /* На сегодня две поставки: o1 (12 000) из набора выше и только что добавленная
+     o3 (5 400) — итого 17 400. Раньше проверка ждала «1 поставка»: плашка не
+     пересчитывалась после добавления заказа и показывала устаревшее число.
+     Теперь экран «Работа» и плашка обновляются вместе — и число стало правдой. */
+  chk(banner.shown && /Сегодня 2 поставки/.test(banner.text), `видно, сколько поставок сегодня (${banner.text})`);
+  chk(/17\s?400/.test(banner.text.replace(/ /g, ' ')) && /просрочено 1/.test(banner.text),
     `в плашке сумма на сегодня и просрочка (${banner.text})`);
 
   const bannerGo = await page.evaluate(async () => {
