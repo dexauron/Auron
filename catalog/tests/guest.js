@@ -96,13 +96,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(tag.shop && tag.open, 'с ценника можно положить в список покупок и открыть карточку');
 
   // ── 1в. Выбирать режим камеры покупателю не нужно ──
-  const seg = await page.evaluate(() => {
-    const el = document.getElementById('scanModeSeg');
-    return { hidden: el.hidden || getComputedStyle(el).display === 'none',
-      price: !!el.querySelector('[data-scanmode="price"]') };
-  });
-  chk(seg.hidden, 'переключателя режимов у покупателя нет — он сразу получает ценник');
-  chk(!seg.price, 'режим «Ценник» из списка сотрудника убран — ему он не нужен');
+  const seg = await page.evaluate(() => document.getElementById('scanModeSeg'));
+  chk(seg === null, 'переключателя режимов нет — действие определяется ролью');
 
   // ── 2. Карточка товара: только нужное покупателю ──
   await page.evaluate(() => {

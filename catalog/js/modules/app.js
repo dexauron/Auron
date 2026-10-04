@@ -16,7 +16,7 @@ import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, fin
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan } from './scanner.js';
 import { bindOrderForm, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
@@ -801,41 +801,24 @@ function bindEvents() {
   $('productForm').addEventListener('submit', submitForm);
 
   // Сканер: для всех — поиск товара; в форме админа — добавляет штрихкод в список
-  /* Сканер работает в двух режимах, и телефон помнит выбранный:
-     «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
-     включённой и на каждый штрихкод крупно показывает цену. */
-  const SCAN_MODE_KEY = 'wm_scan_mode';
-  /* Режим «Ценник» из списка убран: он теперь ЕДИНСТВЕННЫЙ у покупателя и
-     не нужен сотруднику (решение владельца). На телефонах, где сотрудник
-     когда-то выбрал «price», молча возвращаемся к «Товар». */
-  const MODES = ['card', 'out'];
-  const scanMode = () => {
-    try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
-  };
-  const syncScanMode = () => {
-    document.querySelectorAll('#scanModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.scanmode === scanMode()));
-    const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
-  };
   const runScan = () => {
-    const seg = $('scanModeSeg');
     const res = $('scanResult');
+    if (res) { res.hidden = true; res.innerHTML = ''; }
     /* Покупателю выбирать нечего: он навёл камеру, чтобы узнать цену. Сразу
        ценник — и камера остаётся включённой, чтобы проверить следующий товар. */
     if (!state.session) {
-      if (seg) seg.hidden = true;
-      if (res) { res.hidden = true; res.innerHTML = ''; }
-      $('scanTitle').textContent = 'Наведи камеру на штрихкод — покажу цену';
+      $('scanTitle').textContent = 'Ценник по штрихкоду или QR';
       startScan(scanToPrice, { keepOpen: true });
       return;
     }
-    // переключатель мог быть спрятан пересчётом или режимом покупателя
-    if (seg) seg.hidden = false;
-    $('scanTitle').textContent = 'Наведи камеру на штрихкод';
-    syncScanMode();
-    if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
-    // камеру держим открытой: по весовой этикетке сотрудник видит ценник и
-    // сверяет следующую, а обычный штрихкод закроет её сам, открыв карточку
-    else startScan(scanToSearch, { keepOpen: true });
+    /* Сотруднику зала сканер нужен прежде всего чтобы УЗНАТЬ ТОВАР: он стоит
+       у полки, наводит камеру и видит карточку с кодом кассы — ради этого
+       каталог и делался. «Закончилось на полке» он отмечает оттуда же, первой
+       крупной кнопкой в карточке, и реже. Поэтому отдельного режима «пустая
+       полка» в камере нет: один скан даёт и то, и другое.
+       Бухгалтер и владелец получают ту же карточку — со своими полями. */
+    $('scanTitle').textContent = 'Наведи камеру — открою товар';
+    startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
   // «ничего не нашлось» у сотрудника: камера находит то, что название не нашло
@@ -852,14 +835,6 @@ function bindEvents() {
     if (!state.session) { ui.openAdminOrLogin(); return; }
     openRestock();
   };
-  $('scanModeSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-scanmode]');
-    if (!b) return;
-    try { localStorage.setItem(SCAN_MODE_KEY, b.dataset.scanmode); } catch (err) { /* приватный режим */ }
-    stopScan();
-    closeSheet('scanSheet');
-    setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
-  });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
     const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -991,6 +966,10 @@ function bindEvents() {
     $('btnRestock').textContent = added ? 'Убрать из списка пополнения' : 'Закончилось на полке';
     toast(added ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
   });
+  /* Камера с экрана «Закончилось на полке» отмечает пустые полки ПОДРЯД и не
+     закрывается: сотрудник идёт вдоль стеллажа. Из каталога та же кнопка
+     открывает товар — режим задаёт экран, а не переключатель. */
+  $('restockScan').addEventListener('click', () => startScan(scanToRestock, { keepOpen: true }));
   $('restockShare').addEventListener('click', shareRestock);
   $('restockClear').addEventListener('click', clearRestock);
   $('restockBody').addEventListener('click', (e) => {

@@ -1437,7 +1437,7 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .scan-result-name { font-size: 17px; font-weight: 600; line-height: 1.25; }
 .scan-result-price { font-size: 44px; font-weight: 800; letter-spacing: -.03em;
   font-variant-numeric: tabular-nums; margin: 4px 0 2px; }
-.scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.scan-result-code { font-size: 15px; color: var(--text-2); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .scan-result-miss { font-size: 17px; font-weight: 600; color: var(--warn); }
 .scan-result .btn { margin-top: 10px; }
 
@@ -2564,8 +2564,6 @@ body[data-role="staff"] #productSheet .price-row:focus-visible {
   font-size: 20px;
   line-height: 1.3;
 }
-#scanSheet #scanModeSeg { margin-bottom: 12px; }
-#scanSheet #scanModeSeg button { min-height: 48px; font-size: 16px; }
 #scanSheet .scan-box {
   position: relative;
   width: min(100%, 420px, 62dvh);
@@ -2598,6 +2596,8 @@ body[data-role="staff"] #productSheet .price-row:focus-visible {
   font-size: 15px;
   line-height: 1.4;
 }
+#scanSheet #scanFallback { color: var(--warn); font-weight: 600; }
+#scanSheet .scan-result-hint { margin-top: 8px; font-size: 14px; line-height: 1.4; }
 #scanSheet #scanTorch {
   min-height: 54px;
   margin: 0 0 10px;
