@@ -173,8 +173,14 @@ export function renderGrid() {
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
+    const typed = !!(state.query && state.query.trim().length > 1);
     const ask = $('emptyAsk');
-    if (ask) ask.hidden = !(!state.session && state.query && state.query.trim().length > 1);
+    if (ask) ask.hidden = !(!state.session && typed);
+    /* Сотрудник искал и не нашёл. Переписывать запрос у полки неудобно —
+       куда быстрее навести камеру: штрихкод на упаковке находит товар там,
+       где название из 1С подвело. Раньше ему тут не предлагали ничего. */
+    const scan = $('emptyScan');
+    if (scan) scan.hidden = !(state.session && typed);
     // Ничего не нашлось — значит и показывать нечего: чистим сетку и убираем
     // кнопку «Показать ещё» от прошлого показа. Без этого экран говорил
     // «Ничего не нашлось» и тут же предлагал «Показать ещё (осталось 17795)».
@@ -397,7 +403,7 @@ function updateResultsCount(n) {
 }
 
 // синхронизирует окно фильтров и значок с состоянием
-export function syncControls() {
+function syncControls() {
   renderFilterCats();
   { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
@@ -440,13 +446,11 @@ export function syncControls() {
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
   const n = countActiveFilters();
-  const badge = $('filterBadge');
-  if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
-  // тот же счётчик на вкладке «Фильтры» — видно, что фильтр включён,
-  // даже когда шапка ушла вверх при прокрутке
+  /* Счётчик включённых фильтров — на вкладке «Фильтры». Кнопки фильтра в
+     шапке больше нет: это был дубль той же вкладки, до которого вдобавок не
+     дотянуться большим пальцем. */
   const tb = $('tabFilterCount');
   if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
-  const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
 }
 
 const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };

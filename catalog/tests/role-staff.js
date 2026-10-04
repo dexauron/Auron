@@ -33,13 +33,13 @@ const prices = [
     return {
       role: s.role, isAdmin: s.isAdmin, canPurchase: s.canPurchase,
       mark: document.body.dataset.role,
-      fab: (document.getElementById('fabAdd') || {}).hidden,
+      fab: !!document.getElementById('fabAdd'),
     };
   });
   chk(r.role === 'staff' && r.isAdmin === false, 'роль бухгалтера выставлена');
   chk(r.canPurchase === true, 'деньги ему открыты — это его работа');
   chk(r.mark === 'staff', `страница помечена ролью для оформления (${r.mark})`);
-  chk(r.fab === true, 'кнопки «добавить товар» нет');
+  chk(r.fab === false, 'кнопки «добавить товар» нет вовсе — товары приходят из 1С');
 
   // ── карточка: цены видны, правка — нет ──
   await openProduct(page, 'p1');

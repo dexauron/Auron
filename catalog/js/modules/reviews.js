@@ -174,7 +174,7 @@ export function renderReviewsBadge() {
   if (!el) return;
   let n = 0;
   for (const p of state.products || []) n += (p.reviews || []).length;
-  el.textContent = n ? String(n) : '—';
+  el.textContent = n ? String(n) : '';
 }
 
 export function bindReviews(onSaved) {

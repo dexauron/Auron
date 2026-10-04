@@ -12,10 +12,11 @@ import { buildFloorData, encryptFloor, decryptFloor } from './floordata.js';
    порядка сборки window.WM_PUBLISH в app.js. */
 if (typeof window !== 'undefined') window.WM_FLOOR = { buildFloorData, encryptFloor, decryptFloor };
 
-/* Денежные/закупочные пункты меню — не для сотрудника зала: заказы, остатки
-   и «сколько заказать», залежавшиеся, разведка цен конкурентов. Он видит
-   только то, что нужно для кассы. */
-const MONEY_MENU = ['menuOrders', 'menuRestock', 'menuStale', 'menuCompStores'];
+/* Денежные пункты меню — не для сотрудника зала: ходовые товары (выручка),
+   залежавшиеся, разведка цен конкурентов. Он видит только то, что нужно для
+   кассы. Заказы и «закончилось на полке» переехали на вкладку «Работа», где
+   у каждой роли показывается своё. */
+const MONEY_MENU = ['menuTop', 'menuStale', 'menuCompStores'];
 function applyRoleMenu() {
   for (const id of MONEY_MENU) { const el = $(id); if (el) el.hidden = !state.canPurchase; }
 }

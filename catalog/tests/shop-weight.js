@@ -89,18 +89,22 @@ const openShop = (page) => page.evaluate(async () => {
     add: (document.getElementById('btnShopAdd') || {}).hidden,
   }));
   chk(owner.bar, 'у вошедшего полоска списка на месте — раньше она пропадала');
+  /* Список покупок живёт на вкладке «Работа» — там же, где «закончилось на
+     полке» и заказы. Из меню строку убрали: два входа в одно место лишние. */
   const menu = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 350));
-    const row = document.getElementById('menuShop');
-    return { exists: !!row, hidden: row ? row.hidden : 'НЕТ', val: row ? row.innerText.replace(/\s+/g, ' ').trim() : '' };
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    const row = document.querySelector('[data-work="shop"]');
+    return { exists: !!row, val: row ? row.innerText.replace(/\s+/g, ' ').trim() : '' };
   });
-  chk(menu.exists && menu.hidden === false, 'в меню сотрудника есть «Список покупок»');
+  chk(menu.exists, 'на вкладке «Работа» есть «Список покупок»');
   chk(/2 позиции/.test(menu.val), `и видно, сколько в нём (${menu.val})`);
 
   const ownerBody = await page.evaluate(async () => {
-    document.getElementById('menuShop').click();
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="shop"]').click();
     await new Promise((r) => setTimeout(r, 400));
     return document.getElementById('shopBody').innerText.replace(/\s+/g, ' ');
   });

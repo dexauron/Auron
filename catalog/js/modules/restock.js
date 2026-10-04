@@ -45,11 +45,14 @@ export const inRestock = (id) => restockList().some((x) => x.id === id);
 
 /* Отметить/снять отметку. Название и код запоминаем прямо в строке: товар
  * могут удалить из каталога, а список пополнения от этого рассыпаться не должен. */
+// список пополнения изменился — обновляем счётчики на вкладке «Работа»
+const refresh = () => { if (ui.renderWorkBadge) ui.renderWorkBadge(); };
+
 export function toggleRestock(p) {
   if (!p) return false;
   const list = restockList();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) { list.splice(i, 1); write(list); renderRestockBadge(); return false; }
+  if (i >= 0) { list.splice(i, 1); write(list); refresh(); return false; }
   const sup = (p.supplier_ids || [])[0] || '';
   list.push({
     id: p.id,
@@ -60,14 +63,12 @@ export function toggleRestock(p) {
     who: deviceName(),
     at: todayISO(),
   });
-  write(list);
-  renderRestockBadge();
+  write(list); refresh();
   return true;
 }
 
 export function removeRestock(id) {
   write(restockList().filter((x) => x.id !== id));
-  renderRestockBadge();
   renderRestock();
 }
 
@@ -75,17 +76,7 @@ export function clearRestock() {
   if (!restockList().length) return;
   if (!confirm('Очистить весь список пополнения?')) return;
   write([]);
-  renderRestockBadge();
   renderRestock();
-}
-
-// Счётчик в меню: сколько позиций ждёт заказа, видно не открывая список
-export function renderRestockBadge() {
-  const el = $('menuRestockCount');
-  if (!el) { if (ui.renderWorkBadge) ui.renderWorkBadge(); return; }
-  const n = restockCount();
-  el.textContent = n ? String(n) : '';
-  if (ui.renderWorkBadge) ui.renderWorkBadge();
 }
 
 export function openRestock() {
@@ -165,8 +156,7 @@ function markRestockOrdered(supplierId) {
     if ((x.supplier_id || '') === supplierId && !x.ordered) { x.ordered = todayISO(); n++; }
   }
   if (!n) return;
-  write(list);
-  renderRestockBadge();
+  write(list); refresh();
   renderRestock();
 }
 

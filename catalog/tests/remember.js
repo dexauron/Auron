@@ -84,6 +84,41 @@ const groups = [{ id: 'g1', name: 'Молочное' }];
   chk(!/owner|zal|staff/.test(shown), 'служебных слов на экране нет');
   chk(/вышел/.test(shown) && /вошёл/.test(shown), 'видно и вход, и выход');
 
+  /* ── 7. Пароль сменили — запомненный вход снимается ──
+     Находка GPT: прежде ЛЮБАЯ неудача при восстановлении оставляла старые
+     права. Теперь различаем: пароль отвергнут — права снимаем; нет связи —
+     оставляем, иначе человек выпадет из каталога там, где нет интернета. */
+  await page.evaluate(() => {
+    localStorage.setItem('wm_sv_auth', JSON.stringify({ role: 'staff', pw: 'старый' }));
+  });
+  await ctx.route('**/data/keys.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"staff":{}}' }));
+  const page3 = await ctx.newPage();
+  const errs3 = [];
+  page3.on('pageerror', (e) => errs3.push(e.message));
+  await page3.goto('http://localhost:8123/', { timeout: 60000 });
+  await page3.waitForFunction(() => window.WM_PUBLISH && !localStorage.getItem('wm_sv_auth'),
+    null, { timeout: 20000 }).catch(() => {});
+  const revoked = await page3.evaluate(() => ({
+    saved: localStorage.getItem('wm_sv_auth'),
+    session: !!window.WM_PUBLISH._state().session,
+  }));
+  chk(!revoked.saved, `сменили пароль — запомненный вход снят (${revoked.saved || 'снят'})`);
+  chk(errs3.length === 0, `при отзыве роли сбоев нет (${errs3[0] || 0})`);
+
+  /* ── 8. Нет связи — вход НЕ снимаем ──
+     Сотрудник зала в подсобке без интернета не должен выпадать из каталога и
+     набирать код заново. Файл зала в проверке и так недоступен (404), так что
+     восстановление заведомо не пройдёт — важно, что запись переживёт это. */
+  await page3.evaluate(() => {
+    localStorage.setItem('wm_sv_auth', JSON.stringify({ role: 'zal', pw: 'кодзала123' }));
+  });
+  const page5 = await ctx.newPage();
+  await page5.goto('http://localhost:8123/', { timeout: 60000 });
+  await page5.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
+  await page5.waitForTimeout(1500);
+  const offline = await page5.evaluate(() => localStorage.getItem('wm_sv_auth'));
+  chk(!!offline, 'нет связи — запомненный вход сотрудника зала остался на месте');
+
   chk(errs.length === 0, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();

@@ -31,9 +31,10 @@ const spaced = (s) => String(s).replace(/ | /g, ' ');
   // ── как вводим: сумма заказа ──
   const typed = await page.evaluate(async (due) => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.getElementById('adminBtn').click();
-    await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="work"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+    document.querySelector('[data-work="orders"]').click();
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));

@@ -2,7 +2,10 @@
 const { chromium, newPage, asOwner } = require('./helpers');
 const { runner } = require('./helpers');
 
-const MONEY_ITEMS = ['menuOrders', 'menuRestock', 'menuStale', 'menuCompStores', 'menuTop', 'menuAdminOnly'];
+/* Денежные пункты меню. Заказы и «закончилось на полке» отсюда УБРАНЫ: они
+   живут на вкладке «Работа», и держать их в двух местах было лишним. У зала
+   на той вкладке показывается только его работа — это проверяет role-work.js. */
+const MONEY_ITEMS = ['menuStale', 'menuCompStores', 'menuTop', 'menuAdminOnly'];
 
 (async () => {
   const b = await chromium.launch();
@@ -16,8 +19,7 @@ const MONEY_ITEMS = ['menuOrders', 'menuRestock', 'menuStale', 'menuCompStores',
     const r = {}; ids.forEach((id) => { const el = document.getElementById(id); r[id] = el ? el.hidden : 'нет элемента'; });
     return r;
   }, MONEY_ITEMS);
-  chk(ownerHidden.menuOrders === false && ownerHidden.menuRestock === false
-    && ownerHidden.menuStale === false && ownerHidden.menuCompStores === false
+  chk(ownerHidden.menuStale === false && ownerHidden.menuCompStores === false
     && ownerHidden.menuTop === false && ownerHidden.menuAdminOnly === false,
   'владелец видит заказы/остатки/залежавшиеся/разведку/Ходовые/админ-блок: ' + JSON.stringify(ownerHidden));
 
@@ -30,8 +32,6 @@ const MONEY_ITEMS = ['menuOrders', 'menuRestock', 'menuStale', 'menuCompStores',
     const r = {}; ids.forEach((id) => { const el = document.getElementById(id); r[id] = el ? el.hidden : 'нет элемента'; });
     return r;
   }, MONEY_ITEMS);
-  chk(floorHidden.menuOrders === true, 'заказы скрыты у зала');
-  chk(floorHidden.menuRestock === true, 'остатки/«сколько заказать» скрыты у зала');
   chk(floorHidden.menuStale === true, 'залежавшиеся скрыты у зала');
   chk(floorHidden.menuCompStores === true, 'разведка цен скрыта у зала');
   chk(floorHidden.menuTop === true, '«Ходовые» скрыты у зала');

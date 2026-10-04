@@ -33,7 +33,6 @@ export function applyFloorSnapshot(data) {
   renderAll();
   // Шапка должна показывать, что сотрудник ВОШЁЛ: иначе он видит кнопку
   // «Войти», хотя уже внутри, и думает, что вход не сработал.
-  const fab = $('fabAdd'); if (fab) fab.hidden = true;            // добавлять товар он не может
   const ab = $('adminBtn'); if (ab) ab.classList.toggle('is-admin', true);
   const al = $('adminBtnLabel'); if (al) al.hidden = true;
 }

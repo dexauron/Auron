@@ -301,16 +301,18 @@ function addOrderItem() {
   const nameEl = $('ordItemName'); const qtyEl = $('ordItemQty');
   const raw = String(nameEl.value || '').trim();
   if (!raw) { nameEl.focus(); return; }
-  /* Товар не выбрали подсказкой — пробуем узнать его сами: по коду,
-     штрихкоду, точному названию, а в конце по лучшей подсказке. Чего нет в
-     каталоге, записываем как есть: заказывают и то, чего в базе ещё нет. */
+  /* Товар засчитывается только при ТОЧНОМ попадании — код, штрихкод или
+     название целиком — либо если человек сам выбрал подсказку. Похожее
+     название молча подменять чужим товаром нельзя: заказывают и новинки,
+     которых в базе ещё нет, а поставщик получил бы чужой код (находка GPT).
+     Подсказка рядом — одно нажатие, если товар всё-таки наш. */
   let p = picked;
   if (!p) {
     const low = raw.toLowerCase();
     p = state.products.find((x) => String(x.code || '').trim() === raw)
       || state.products.find((x) => (x.barcodes || []).some((b) => String(b).trim() === raw))
       || state.products.find((x) => String(x.name || '').toLowerCase() === low)
-      || suggestProducts(raw, 1)[0] || null;
+      || null;
   }
   const unit = p ? unitOf(p) : 'шт';
   /* Количество только положительное. Поле ввода свободное: «0» или «-3»

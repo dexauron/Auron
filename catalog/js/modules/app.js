@@ -1,12 +1,12 @@
 // Связывание всего вместе и запуск
 
 import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
-import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
+import { addBackButtons, attachMoneyInput, closeSheet, enableSwipeToClose, goBack, logError, moneyNum, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
 
 import { bindFloorUI } from './floorui.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
+import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
@@ -16,7 +16,7 @@ import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, fin
 import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan } from './scanner.js';
 import { bindOrderForm, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
@@ -31,7 +31,7 @@ import { bindPriceNews } from './pricenews.js';
 import { logSession } from './sessionlog.js';
 import { applyFloorSnapshot, rememberFloor } from './floor.js';
 import { restoreLogin } from './restore.js';
-import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
+import { clearRestock, openRestock, orderFromRestock, removeRestock, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -65,7 +65,6 @@ function bindEvents() {
   });
 
   // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
-  $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
   $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
   $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
   $('filterReset').addEventListener('click', clearAllFilters);
@@ -330,12 +329,16 @@ function bindEvents() {
     if (btn) copyText(btn.dataset.copy, 'Скопировано: ' + btn.dataset.copy);
   });
 
-  // Закрытие шторок: крестики, кнопки, тап по фону, стрелка «назад», смахивание вниз
+  /* Закрытие шторок: крестики, «Готово», тап по фону, стрелка «назад»,
+     смахивание вниз. Везде goBack, а не просто «закрыть»: если окно открыли
+     из другого окна, человек должен вернуться ТУДА, откуда пришёл, а не на
+     главный экран (жалоба владельца). Пришёл с главного — закроется, как
+     раньше. */
   document.querySelectorAll('[data-close]').forEach((b) =>
-    b.addEventListener('click', () => closeSheet(b.dataset.close)));
-  $('sheetClose').addEventListener('click', () => closeSheet('productSheet'));
+    b.addEventListener('click', () => goBack(b.dataset.close)));
+  $('sheetClose').addEventListener('click', () => goBack('productSheet'));
   document.querySelectorAll('.sheet-backdrop').forEach((bd) =>
-    bd.addEventListener('click', (e) => { if (e.target === bd) closeSheet(bd.id); }));
+    bd.addEventListener('click', (e) => { if (e.target === bd) goBack(bd.id); }));
   addBackButtons();
   enableSwipeToClose();
 
@@ -386,7 +389,6 @@ function bindEvents() {
         $('menuDedup').hidden = true;
       } else {
       }
-      renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderMarginBadge();    // сколько товаров продаётся в минус
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
@@ -791,50 +793,36 @@ function bindEvents() {
     }
   });
 
-  $('fabAdd').addEventListener('click', () => openForm(null));
-  $('menuAddProduct').addEventListener('click', () => { closeSheet('adminMenuSheet'); openForm(null); });
+  /* Кнопки «добавить товар» нет. Новые товары приходят ТОЛЬКО из выгрузки 1С
+     (решение владельца: «вручную я товар не добавлю»). Сама форма осталась —
+     ею правят уже существующий товар: фото, описание, штрихкод. */
   $('btnEditProduct').addEventListener('click', () => { closeSheet('productSheet'); openForm(ui.currentProduct); });
   $('btnDeleteProduct').addEventListener('click', deleteProduct);
   $('productForm').addEventListener('submit', submitForm);
 
   // Сканер: для всех — поиск товара; в форме админа — добавляет штрихкод в список
-  /* Сканер работает в двух режимах, и телефон помнит выбранный:
-     «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
-     включённой и на каждый штрихкод крупно показывает цену. */
-  const SCAN_MODE_KEY = 'wm_scan_mode';
-  /* Режим «Ценник» из списка убран: он теперь ЕДИНСТВЕННЫЙ у покупателя и
-     не нужен сотруднику (решение владельца). На телефонах, где сотрудник
-     когда-то выбрал «price», молча возвращаемся к «Товар». */
-  const MODES = ['card', 'out'];
-  const scanMode = () => {
-    try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
-  };
-  const syncScanMode = () => {
-    document.querySelectorAll('#scanModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.scanmode === scanMode()));
-    const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
-  };
   const runScan = () => {
-    const seg = $('scanModeSeg');
     const res = $('scanResult');
+    if (res) { res.hidden = true; res.innerHTML = ''; }
     /* Покупателю выбирать нечего: он навёл камеру, чтобы узнать цену. Сразу
        ценник — и камера остаётся включённой, чтобы проверить следующий товар. */
     if (!state.session) {
-      if (seg) seg.hidden = true;
-      if (res) { res.hidden = true; res.innerHTML = ''; }
-      $('scanTitle').textContent = 'Наведи камеру на штрихкод — покажу цену';
+      $('scanTitle').textContent = 'Ценник по штрихкоду или QR';
       startScan(scanToPrice, { keepOpen: true });
       return;
     }
-    // переключатель мог быть спрятан пересчётом или режимом покупателя
-    if (seg) seg.hidden = false;
-    $('scanTitle').textContent = 'Наведи камеру на штрихкод';
-    syncScanMode();
-    if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
-    // камеру держим открытой: по весовой этикетке сотрудник видит ценник и
-    // сверяет следующую, а обычный штрихкод закроет её сам, открыв карточку
-    else startScan(scanToSearch, { keepOpen: true });
+    /* Сотруднику зала сканер нужен прежде всего чтобы УЗНАТЬ ТОВАР: он стоит
+       у полки, наводит камеру и видит карточку с кодом кассы — ради этого
+       каталог и делался. «Закончилось на полке» он отмечает оттуда же, первой
+       крупной кнопкой в карточке, и реже. Поэтому отдельного режима «пустая
+       полка» в камере нет: один скан даёт и то, и другое.
+       Бухгалтер и владелец получают ту же карточку — со своими полями. */
+    $('scanTitle').textContent = 'Наведи камеру — открою товар';
+    startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
+  // «ничего не нашлось» у сотрудника: камера находит то, что название не нашло
+  $('emptyScan').addEventListener('click', runScan);
 
   /* Быстрые действия с ярлыка приложения (долгое нажатие на значок на главном
      экране телефона): «Сканер» и «Закончилось». Ярлык открывает
@@ -847,14 +835,6 @@ function bindEvents() {
     if (!state.session) { ui.openAdminOrLogin(); return; }
     openRestock();
   };
-  $('scanModeSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('[data-scanmode]');
-    if (!b) return;
-    try { localStorage.setItem(SCAN_MODE_KEY, b.dataset.scanmode); } catch (err) { /* приватный режим */ }
-    stopScan();
-    closeSheet('scanSheet');
-    setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
-  });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
     const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -940,7 +920,6 @@ function bindEvents() {
     compare: openCompare,
     scan: () => runScan(),
   };
-  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
@@ -980,7 +959,6 @@ function bindEvents() {
   $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
-  $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;
@@ -988,6 +966,10 @@ function bindEvents() {
     $('btnRestock').textContent = added ? 'Убрать из списка пополнения' : 'Закончилось на полке';
     toast(added ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
   });
+  /* Камера с экрана «Закончилось на полке» отмечает пустые полки ПОДРЯД и не
+     закрывается: сотрудник идёт вдоль стеллажа. Из каталога та же кнопка
+     открывает товар — режим задаёт экран, а не переключатель. */
+  $('restockScan').addEventListener('click', () => startScan(scanToRestock, { keepOpen: true }));
   $('restockShare').addEventListener('click', shareRestock);
   $('restockClear').addEventListener('click', clearRestock);
   $('restockBody').addEventListener('click', (e) => {
