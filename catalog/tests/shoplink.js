@@ -37,6 +37,15 @@ const products = [
   chk(/ip4/.test(link), 'товар без кода ушёл по внутреннему номеру');
   chk(!/102/.test(link), 'вычеркнутое в ссылку не кладём — это уже куплено');
 
+  // Вес меньше килограмма тоже должен уйти в ссылку — иначе 0,5 кг станет 1 кг.
+  const fractionalLink = await page.evaluate(() => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify([
+      { id: 'p3', name: 'Сыр Российский', code: '5940', price: 790, unit: 'кг', qty: 0.5, done: false },
+    ]));
+    return window.WM_PUBLISH._shopLink();
+  });
+  chk(/#l=5940x0\.5$/.test(fractionalLink), `полкилограмма не превратились в килограмм (${fractionalLink})`);
+
   // ── 2. Другой человек открыл ссылку ──
   const got = await page.evaluate(async (l) => {
     const P = window.WM_PUBLISH;
