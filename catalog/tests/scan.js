@@ -79,6 +79,26 @@ async function scanPage(b, code) {
     await ctx.close();
   }
 
+  // ── 7. Из двух кодов выбираем тот, что ближе к центру камеры ──
+  {
+    const { ctx, page } = await scanPage(b, '4607167620117');
+    await page.evaluate(() => {
+      window.BarcodeDetector = class {
+        static getSupportedFormats() { return Promise.resolve(['ean_13']); }
+        detect(video) { return Promise.resolve([
+          { rawValue: '4607167620117', boundingBox: { x: 0, y: 0, width: 10, height: 10 } },
+          { rawValue: '012345678905', boundingBox: { x: video.videoWidth / 2 - 5,
+            y: video.videoHeight / 2 - 5, width: 10, height: 10 } },
+        ]); }
+      };
+    });
+    await page.click('#scanSearchBtn');
+    await page.waitForFunction(() => !document.getElementById('productSheet').hidden, { timeout: 5000 });
+    const name = await page.locator('#sheetName').textContent();
+    chk(/Сок/.test(name), `из нескольких кодов выбран центральный (${name})`);
+    await ctx.close();
+  }
+
   // ── 2. QR с ссылкой на наш же товар ──
   {
     const { ctx, page, errs } = await scanPage(b, 'https://dexauron.github.io/Auron/catalog/?p=p2');
@@ -121,6 +141,51 @@ async function scanPage(b, code) {
     chk(r.qrDigits === r.plain, 'QR с чужой ссылкой: берём штрихкод изнутри');
     chk(r.byCode === r.plain, 'код товара с ценника тоже находит товар');
     chk(r.junk === null, 'на бессмыслицу товар не выдумываем');
+    await ctx.close();
+  }
+
+  // ── 4. У роли зала скан сразу отмечает пустую полку, у владельца открывает товар ──
+  {
+    const { ctx, page, errs } = await scanPage(b, '4607167620117');
+    await page.evaluate(() => { window.WM_PUBLISH._state().role = 'zal'; });
+    await page.click('#scanSearchBtn');
+    await page.waitForFunction(() => /в списке пополнения/.test(document.getElementById('scanResult').textContent), { timeout: 5000 });
+    const st = await page.evaluate(() => ({
+      title: document.getElementById('scanTitle').textContent,
+      camera: !document.getElementById('scanSheet').hidden,
+      card: !document.getElementById('productSheet').hidden,
+      modes: document.getElementById('scanModeSeg'),
+    }));
+    chk(st.camera && !st.card && /пустую полку/.test(st.title), 'зал отмечает товар, камера остаётся открытой');
+    chk(st.modes === null && errs.length === 0, 'роль определяет действие без переключателя и ошибок');
+    await ctx.close();
+  }
+
+  // ── 5. Если товара нет, сообщение остаётся в открытом сканере ──
+  {
+    const { ctx, page } = await scanPage(b, '9999999999999');
+    await page.click('#scanSearchBtn');
+    await page.waitForFunction(() => /Товар не найден/.test(document.getElementById('scanResult').textContent), { timeout: 5000 });
+    const st = await page.evaluate(() => ({
+      camera: !document.getElementById('scanSheet').hidden,
+      result: document.getElementById('scanResult').textContent,
+    }));
+    chk(st.camera && /9999999999999/.test(st.result), 'неизвестный код виден рядом с камерой');
+    await ctx.close();
+  }
+
+  // ── 6. Нет доступа к библиотеке: говорим о распознавании, не о камере ──
+  {
+    const { ctx, page, errs } = await scanPage(b, '4607167620117');
+    await page.evaluate(() => { delete window.BarcodeDetector; });
+    await ctx.route('https://cdn.jsdelivr.net/**', (r) => r.abort());
+    await page.click('#scanSearchBtn');
+    await page.waitForFunction(() => /Распознавание сейчас недоступно/.test(document.getElementById('scanContainer').textContent), { timeout: 5000 });
+    const st = await page.evaluate(() => ({
+      fallback: !document.getElementById('scanFallback').hidden,
+      camera: !document.getElementById('scanSheet').hidden,
+    }));
+    chk(st.fallback && st.camera && errs.length === 0, 'при сбое CDN виден честный ответ и ручной поиск');
     await ctx.close();
   }
 
