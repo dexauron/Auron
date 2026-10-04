@@ -26,14 +26,16 @@ export function stopScan() {
 const REPEAT_MS = 2500;
 export async function startScan(onResult, { keepOpen = false } = {}) {
   openSheet('scanSheet');
+  $('scanFallback').hidden = true;
   let finished = false;
-  let lastText = ''; let lastAt = 0;
+  const recent = new Map();
   const done = (text) => {
     const t = String(text).trim();
     if (keepOpen) {
       const now = Date.now();
-      if (t === lastText && now - lastAt < REPEAT_MS) return;
-      lastText = t; lastAt = now;
+      if (now - (recent.get(t) || 0) < REPEAT_MS) return;
+      recent.set(t, now);
+      for (const [code, at] of recent) if (now - at >= REPEAT_MS) recent.delete(code);
       try { navigator.vibrate && navigator.vibrate(40); } catch (e) { /* необязательно */ }
       onResult(t);
       return;                       // камера продолжает работать
@@ -47,9 +49,30 @@ export async function startScan(onResult, { keepOpen = false } = {}) {
     if ('BarcodeDetector' in window) await scanNative(done);
     else await scanWithLibrary(done);
   } catch (e) {
-    toast('Камера недоступна. Разреши доступ к камере в настройках браузера');
-    closeSheet('scanSheet');
+    if (e && e.code === 'SCANNER_LIBRARY') {
+      $('scanContainer').textContent = 'Распознавание сейчас недоступно. Проверь связь и попробуй снова.';
+      $('scanFallback').hidden = false;
+    } else {
+      toast('Камера недоступна. Разреши доступ к камере в настройках браузера');
+      closeSheet('scanSheet');
+    }
   }
+}
+
+/* Несколько упаковок попали в кадр: читаем ближайший к середине рамки код,
+ * а не случайный первый из массива распознавателя. */
+function centeredCode(codes, video) {
+  const valid = codes.filter((x) => x.rawValue);
+  const cx = video.videoWidth / 2; const cy = video.videoHeight / 2;
+  valid.sort((a, b) => {
+    const dist = (x) => {
+      const r = x.boundingBox;
+      if (!r) return Infinity;
+      return (r.x + r.width / 2 - cx) ** 2 + (r.y + r.height / 2 - cy) ** 2;
+    };
+    return dist(a) - dist(b);
+  });
+  return valid[0] && valid[0].rawValue;
 }
 
 /* Что ловим. Сканер ОДИН: он сам разбирается, штрихкод перед ним или QR —
@@ -134,7 +157,8 @@ async function scanNative(done) {
     if (!active) return;
     try {
       const codes = await detector.detect(video);
-      if (codes.length && codes[0].rawValue) { done(codes[0].rawValue); if (!active) return; }
+      const code = centeredCode(codes, video);
+      if (code) { done(code); if (!active) return; }
       /* Инверсия — приём для редкого случая (светлый код на тёмном фоне), а
          стоит она целого кадра: копия картинки и проход по всем точкам. Раньше
          её делали на каждом втором кадре, и обычные штрихкоды из-за этого
@@ -148,7 +172,8 @@ async function scanNative(done) {
         for (let i = 0; i < d.length; i += 4) { d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2]; }
         cx.putImageData(img, 0, 0);
         const inv = await detector.detect(canvas);
-        if (inv.length && inv[0].rawValue) { done(inv[0].rawValue); if (!active) return; }
+        const inverted = centeredCode(inv, video);
+        if (inverted) { done(inverted); if (!active) return; }
       }
     } catch (e) { /* кадр не считался — пробуем дальше */ }
     /* Следующий кадр — сразу, как браузер его нарисует. Раньше ждали 160 мс
@@ -181,8 +206,16 @@ export function loadScript(src) {
   return new Promise((res, rej) => {
     const s = document.createElement('script');
     s.src = src;
-    s.onload = res;
-    s.onerror = rej;
+    let settled = false;
+    const finish = (error) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      s.onload = s.onerror = null;
+      if (error) { s.remove(); rej(error); } else res();
+    };
+    const timer = setTimeout(() => finish(new Error('script timeout')), 10000);
+    s.onload = () => finish();
+    s.onerror = () => finish(new Error('script load failed'));
     document.head.appendChild(s);
   });
 }
@@ -190,7 +223,14 @@ export function loadScript(src) {
 async function scanWithLibrary(done) {
   if (!window.Html5Qrcode) {
     toast('Включаем сканер…');
-    await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
+    try {
+      await loadScript('https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js');
+      if (!window.Html5Qrcode) throw new Error('library missing');
+    } catch (cause) {
+      const error = new Error('scanner library unavailable');
+      error.code = 'SCANNER_LIBRARY';
+      throw error;
+    }
   }
   $('scanContainer').innerHTML = '';
   // магазинные штрихкоды И QR: сканер один, режимов не делим
@@ -394,6 +434,14 @@ export function scanToSearch(text) {
      ссылка целиком: искать по ней бессмысленно, а человек видел пустую
      выдачу и думал, что сломался поиск. */
   const r = readScan(text);
+  const result = $('scanResult');
+  if (result) {
+    const shown = r.kind === 'link' ? 'ссылка' : (r.value || r.raw);
+    result.hidden = false;
+    result.innerHTML = `<div class="scan-result-miss">Товар не найден</div>
+      <div class="scan-result-code">${esc(String(shown).slice(0, 40))}</div>
+      <div class="scan-result-hint">Проверь код или найди товар по названию в поиске.</div>`;
+  }
   const put = (q) => {
     const input = $('searchInput');
     input.value = q;
