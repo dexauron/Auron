@@ -79,7 +79,7 @@ async function scanPage(b, code) {
     await ctx.close();
   }
 
-  // ── 7. Из двух кодов выбираем тот, что ближе к центру камеры ──
+  // ── Несколько кодов: выбираем тот, что ближе к центру камеры ──
   {
     const { ctx, page } = await scanPage(b, '4607167620117');
     await page.evaluate(() => {
@@ -186,6 +186,22 @@ async function scanPage(b, code) {
       camera: !document.getElementById('scanSheet').hidden,
     }));
     chk(st.fallback && st.camera && errs.length === 0, 'при сбое CDN виден честный ответ и ручной поиск');
+    await ctx.close();
+  }
+
+  // ── Закрыли окно во время загрузки: поздний отказ не возвращает сканер ──
+  {
+    const { ctx, page, errs } = await scanPage(b, '4607167620117');
+    await page.evaluate(() => { delete window.BarcodeDetector; });
+    await ctx.route('https://cdn.jsdelivr.net/**', (r) => { setTimeout(() => r.abort(), 600); });
+    await page.click('#scanSearchBtn');
+    await page.click('#scanSheet [data-close="scanSheet"]');
+    await page.waitForTimeout(900);
+    const st = await page.evaluate(() => ({
+      closed: document.getElementById('scanSheet').hidden,
+      fallback: document.getElementById('scanFallback').hidden,
+    }));
+    chk(st.closed && st.fallback && errs.length === 0, 'поздний отказ не открывает закрытый сканер');
     await ctx.close();
   }
 
