@@ -189,7 +189,11 @@ export function shopLink() {
     const key = code ? code : 'i' + x.id;
     if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
     const q = Number(x.qty) || 1;
-    parts.push(q > 1 ? `${key}x${q}` : key);
+    /* Количество кладём, если оно НЕ единица — включая дробь. Было `q > 1`,
+       и это осталось с тех пор, когда количество было только целым: у весового
+       товара полкило (0,5) в ссылку не попадало вовсе, а у получателя
+       подставлялась единица — полкило превращалось в килограмм (находка GPT). */
+    parts.push(q !== 1 ? `${key}x${q}` : key);
   }
   if (!parts.length) return '';
   const base = location.origin + location.pathname;

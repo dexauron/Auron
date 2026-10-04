@@ -37,6 +37,17 @@ const products = [
   chk(/ip4/.test(link), 'товар без кода ушёл по внутреннему номеру');
   chk(!/102/.test(link), 'вычеркнутое в ссылку не кладём — это уже куплено');
 
+  /* Вес меньше килограмма тоже должен уйти в ссылку — иначе 0,5 кг станет
+     1 кг у получателя (находка GPT). Проверяем и смесь: две дроби подряд и
+     целое — разделитель позиций «-» не должен спорить с точкой в дроби. */
+  const fractionalLink = await page.evaluate(() => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify([
+      { id: 'p3', name: 'Сыр Российский', code: '5940', price: 790, unit: 'кг', qty: 0.5, done: false },
+    ]));
+    return window.WM_PUBLISH._shopLink();
+  });
+  chk(/#l=5940x0\.5$/.test(fractionalLink), `полкилограмма не превратились в килограмм (${fractionalLink})`);
+
   // ── 2. Другой человек открыл ссылку ──
   const got = await page.evaluate(async (l) => {
     const P = window.WM_PUBLISH;
@@ -76,6 +87,35 @@ const products = [
     return JSON.parse(localStorage.getItem('wm_shop_v1')).length;
   }, link);
   chk(again === 4, `та же ссылка второй раз не задваивает товары (${again})`);
+
+  // получатель читает точку в ссылке как десятичный разделитель
+  const receivedHalf = await page.evaluate(async (l) => {
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = l.slice(l.indexOf('#'));
+    await new Promise((r) => setTimeout(r, 100));
+    window.WM_PUBLISH._shopFromHash();
+    await new Promise((r) => setTimeout(r, 200));
+    return (JSON.parse(localStorage.getItem('wm_shop_v1')).find((x) => x.code === '5940') || {}).qty;
+  }, fractionalLink);
+  chk(receivedHalf === 0.5, `получатель увидел 0,5, а не 1 (${receivedHalf})`);
+
+  // смесь дробей и целого в одной ссылке доезжает до последней позиции
+  const mixed = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    localStorage.setItem('wm_shop_v1', JSON.stringify([
+      { id: 'p3', name: 'Сыр', code: '5940', price: 790, unit: 'кг', qty: 0.5, done: false },
+      { id: 'p1', name: 'Молоко', code: '101', price: 89, unit: 'шт', qty: 3, done: false },
+    ]));
+    const link = P._shopLink();
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = link.slice(link.indexOf('#'));
+    await new Promise((r) => setTimeout(r, 120));
+    P._shopFromHash();
+    await new Promise((r) => setTimeout(r, 250));
+    return { link, got: JSON.parse(localStorage.getItem('wm_shop_v1')).map((x) => `${x.code}:${x.qty}`).sort() };
+  });
+  chk(mixed.got.join(',') === '101:3,5940:0.5',
+    `дроби и целое в одной ссылке не мешают друг другу (${mixed.link.split('#')[1]} → ${mixed.got.join(', ')})`);
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
