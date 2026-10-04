@@ -210,7 +210,7 @@ export function shopFromHash() {
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* некритично */ }
   const list = read();
   const have = new Set(list.map((x) => x.id));
-  let added = 0; let missing = 0;
+  let added = 0; let missing = 0; let overflow = 0;
   for (const chunk of m[1].split('-')) {
     if (!chunk) continue;
     const [encodedKey, qty] = chunk.split('x');
@@ -222,17 +222,20 @@ export function shopFromHash() {
       : state.products.find((x) => x.code != null && String(x.code) === key);
     if (!p) { missing++; continue; }
     if (have.has(p.id)) continue;                      // уже есть — количество не трогаем
+    if (list.length >= MAX) { overflow++; continue; } // свои позиции не вытесняем
     list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: Number(qty) || 1, done: false });
     have.add(p.id);
     added++;
   }
-  if (!added && !missing) return;
+  if (!added && !missing && !overflow) return;
   write(list);
   renderShopBar();
   openShop();
+  const addedText = `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`;
   toast(added
-    ? `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`
-    : 'Этих товаров у нас нет');
+    ? addedText + (overflow ? `; ${overflow} не поместилось (предел ${MAX})` : '')
+    : overflow ? `Список заполнен: ${overflow} не поместилось (предел ${MAX})`
+      : 'Этих товаров у нас нет');
 }
 
 /* ── Отправить список ───────────────────────────────────────────────────────
