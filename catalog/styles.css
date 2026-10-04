@@ -2612,3 +2612,55 @@ body[data-role="staff"] #productSheet .price-row:focus-visible {
 @media (max-height: 480px) {
   #scanSheet .scan-box { width: min(100%, 50dvh); }
 }
+
+/* Список сотрудника: код кассы и количество читаются рядом с названием.
+   Покупательская строка остаётся без этих уплотнений. */
+:is(body[data-role="zal"], body[data-role="staff"], body[data-role="owner"])
+  #shopSheet .swipe-wrap .shop-row {
+  padding: 9px 12px;
+  column-gap: 8px;
+  row-gap: 3px;
+}
+:is(body[data-role="zal"], body[data-role="staff"], body[data-role="owner"])
+  #shopSheet .shop-row .ios-row-title {
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+:is(body[data-role="zal"], body[data-role="staff"], body[data-role="owner"])
+  #shopSheet .shop-row .ord-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+#shopSheet .shop-row .shop-check,
+#shopSheet .shop-row .rst-rm { min-width: 48px; min-height: 48px; }
+#shopSheet .shop-row .qty-step > button { min-width: 48px; min-height: 48px; }
+#shopSheet .shop-row .shop-qty { min-width: 60px; white-space: nowrap; }
+#shopSheet .shop-row button:focus-visible,
+#shopBar #shopOpen:focus-visible {
+  outline: 3px solid var(--brand-ink);
+  outline-offset: 2px;
+}
+#shopSheet .filter-actions button,
+#shopBar #shopOpen { min-height: 48px; }
+
+/* У вошедших сравнение поставщиков и список покупок могут быть открыты
+   одновременно. Их нижние полосы не должны накрывать друг друга. */
+#shopBar:not([hidden]) ~ #compareBar:not([hidden]) {
+  /* 48 точек кнопка + 16 отступов + граница, с запасом вверх: полоса
+     сравнения не должна касаться полосы списка покупок. */
+  bottom: calc(var(--tabbar-h) + 65px + env(safe-area-inset-bottom));
+}
+@supports selector(body:has(#shopBar:not([hidden]))) {
+  body:has(#shopBar:not([hidden])) {
+    padding-bottom: calc(var(--tabbar-h) + 80px + env(safe-area-inset-bottom));
+  }
+  body:has(#compareBar:not([hidden])) {
+    padding-bottom: calc(var(--tabbar-h) + 80px + env(safe-area-inset-bottom));
+  }
+  body:has(#shopBar:not([hidden]) ~ #compareBar:not([hidden])) {
+    padding-bottom: calc(var(--tabbar-h) + 146px + env(safe-area-inset-bottom));
+  }
+}
