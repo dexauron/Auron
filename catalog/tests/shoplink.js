@@ -17,6 +17,8 @@ const products = [
     id: `p${i + 5}`, name: `Товар ${i + 5}`, code: String(i + 1005),
     retail_price: 10, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in',
   })),
+  { id: '3f4933ec-86a7-4c3e-8300-6f0d30b5e63e', name: 'Товар без кода',
+    code: '', retail_price: 25, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
 ];
 
 (async () => {
@@ -135,9 +137,27 @@ const products = [
     await new Promise((r) => setTimeout(r, 250));
     const received = JSON.parse(localStorage.getItem('wm_shop_v1'));
     return { count: received.length, last: received.some((x) => x.id === 'p61') };
-  }, products);
+  }, products.slice(0, 61));
   chk(longList.count === 61 && longList.last,
     `ссылка передала все 61 позиции, включая последнюю (${longList.count}, p61: ${longList.last})`);
+
+  // В публичном каталоге внутренний id бывает UUID с дефисами, а кода кассы
+  // у товара нет. Такой товар тоже должен доехать по ссылке.
+  const uuid = await page.evaluate(async (item) => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify([{
+      id: item.id, name: item.name, code: '', price: item.retail_price, qty: 1, done: false,
+    }]));
+    const link = window.WM_PUBLISH._shopLink();
+    localStorage.setItem('wm_shop_v1', '[]');
+    if (link) {
+      window.location.hash = link.slice(link.indexOf('#'));
+      await new Promise((r) => setTimeout(r, 120));
+      window.WM_PUBLISH._shopFromHash();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { link, received: JSON.parse(localStorage.getItem('wm_shop_v1')).some((x) => x.id === item.id) };
+  }, products[61]);
+  chk(uuid.received, `товар без кода с UUID передан по ссылке (${uuid.link || 'ссылка пустая'})`);
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
