@@ -86,6 +86,17 @@ const products = [
   }, link);
   chk(again === 4, `та же ссылка второй раз не задваивает товары (${again})`);
 
+  // Получатель должен прочитать точку в URL как десятичный разделитель.
+  const receivedHalf = await page.evaluate(async (l) => {
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = l.slice(l.indexOf('#'));
+    await new Promise((r) => setTimeout(r, 100));
+    window.WM_PUBLISH._shopFromHash();
+    await new Promise((r) => setTimeout(r, 200));
+    return (JSON.parse(localStorage.getItem('wm_shop_v1')).find((x) => x.id === 'p3') || {}).qty;
+  }, fractionalLink);
+  chk(receivedHalf === 0.5, `получатель увидел 0,5, а не 1 (${receivedHalf})`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
