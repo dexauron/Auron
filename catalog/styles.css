@@ -2649,7 +2649,9 @@ body[data-role="staff"] #productSheet .price-row:focus-visible {
 /* У вошедших сравнение поставщиков и список покупок могут быть открыты
    одновременно. Их нижние полосы не должны накрывать друг друга. */
 #shopBar:not([hidden]) ~ #compareBar:not([hidden]) {
-  bottom: calc(var(--tabbar-h) + 61px + env(safe-area-inset-bottom));
+  /* 48px button + 16px vertical padding + .5px border; round up so the
+     comparison strip never touches the shopping strip. */
+  bottom: calc(var(--tabbar-h) + 65px + env(safe-area-inset-bottom));
 }
 @supports selector(body:has(#shopBar:not([hidden]))) {
   body:has(#shopBar:not([hidden])) {
@@ -2659,6 +2661,6 @@ body[data-role="staff"] #productSheet .price-row:focus-visible {
     padding-bottom: calc(var(--tabbar-h) + 80px + env(safe-area-inset-bottom));
   }
   body:has(#shopBar:not([hidden]) ~ #compareBar:not([hidden])) {
-    padding-bottom: calc(var(--tabbar-h) + 142px + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--tabbar-h) + 146px + env(safe-area-inset-bottom));
   }
 }
