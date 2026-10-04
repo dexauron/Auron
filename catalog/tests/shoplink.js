@@ -13,6 +13,10 @@ const products = [
   { id: 'p3', name: 'Сыр Российский', code: '5940', retail_price: 790, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
   // у этого товара кода нет — в ссылку он должен уйти по внутреннему номеру
   { id: 'p4', name: 'Зелень укроп', code: '', retail_price: 30, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
+  ...Array.from({ length: 57 }, (_, i) => ({
+    id: `p${i + 5}`, name: `Товар ${i + 5}`, code: String(i + 1005),
+    retail_price: 10, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in',
+  })),
 ];
 
 (async () => {
@@ -116,6 +120,24 @@ const products = [
   });
   chk(mixed.got.join(',') === '101:3,5940:0.5',
     `дроби и целое в одной ссылке не мешают друг другу (${mixed.link.split('#')[1]} → ${mixed.got.join(', ')})`);
+
+  // В списке можно хранить 200 позиций. Ссылка должна передавать и 61-ю:
+  // текст сообщения обещает получателю весь список целиком по ссылке.
+  const longList = await page.evaluate(async (items) => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify(items.map((p) => ({
+      id: p.id, name: p.name, code: p.code, price: p.retail_price, qty: 1, done: false,
+    }))));
+    const link = window.WM_PUBLISH._shopLink();
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = link.slice(link.indexOf('#'));
+    await new Promise((r) => setTimeout(r, 120));
+    window.WM_PUBLISH._shopFromHash();
+    await new Promise((r) => setTimeout(r, 250));
+    const received = JSON.parse(localStorage.getItem('wm_shop_v1'));
+    return { count: received.length, last: received.some((x) => x.id === 'p61') };
+  }, products);
+  chk(longList.count === 61 && longList.last,
+    `ссылка передала все 61 позиции, включая последнюю (${longList.count}, p61: ${longList.last})`);
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
