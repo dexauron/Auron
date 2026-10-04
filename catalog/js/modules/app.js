@@ -821,6 +821,7 @@ function bindEvents() {
     startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
+  $('emptyScan').addEventListener('click', runScan);
 
   /* Быстрые действия с ярлыка приложения (долгое нажатие на значок на главном
      экране телефона): «Сканер» и «Закончилось». Ярлык открывает
