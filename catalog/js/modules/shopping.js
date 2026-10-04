@@ -189,7 +189,7 @@ export function shopLink() {
     const key = code ? code : 'i' + x.id;
     if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
     const q = Number(x.qty) || 1;
-    parts.push(q > 1 ? `${key}x${q}` : key);
+    parts.push(q !== 1 ? `${key}x${q}` : key);
   }
   if (!parts.length) return '';
   const base = location.origin + location.pathname;
