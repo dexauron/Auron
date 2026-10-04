@@ -188,13 +188,15 @@ export function shopLink() {
     const p = state.products.find((y) => y.id === x.id);
     const code = p && p.code ? String(p.code) : '';
     const key = code ? code : 'i' + x.id;
-    if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
+    // Разделители ссылки — «-» и «x». UUID без кода содержит дефисы:
+    // кодируем каждый ключ отдельно, чтобы такой товар не пропадал.
+    const safeKey = encodeURIComponent(key).replace(/-/g, '%2D').replace(/x/g, '%78');
     const q = Number(x.qty) || 1;
     /* Количество кладём, если оно НЕ единица — включая дробь. Было `q > 1`,
        и это осталось с тех пор, когда количество было только целым: у весового
        товара полкило (0,5) в ссылку не попадало вовсе, а у получателя
        подставлялась единица — полкило превращалось в килограмм (находка GPT). */
-    parts.push(q !== 1 ? `${key}x${q}` : key);
+    parts.push(q !== 1 ? `${safeKey}x${q}` : safeKey);
   }
   if (!parts.length) return '';
   const base = location.origin + location.pathname;
@@ -209,9 +211,12 @@ export function shopFromHash() {
   const list = read();
   const have = new Set(list.map((x) => x.id));
   let added = 0; let missing = 0;
-  for (const chunk of decodeURIComponent(m[1]).split('-')) {
+  for (const chunk of m[1].split('-')) {
     if (!chunk) continue;
-    const [key, qty] = chunk.split('x');
+    const [encodedKey, qty] = chunk.split('x');
+    let key;
+    try { key = decodeURIComponent(encodedKey); }
+    catch (e) { missing++; continue; } // испорченная ссылка — остальные позиции читаем
     const p = key[0] === 'i'
       ? state.products.find((x) => String(x.id) === key.slice(1))
       : state.products.find((x) => x.code != null && String(x.code) === key);
