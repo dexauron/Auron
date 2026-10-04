@@ -17,6 +17,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -31,3 +32,19 @@ jobs:
 
       - name: Без эмодзи в интерфейсе
         run: node catalog/tests/no-emoji.js
+
+      - name: Зависимости браузерных проверок
+        run: npm install --no-save --no-package-lock --ignore-scripts playwright@1.62.1 eslint@9
+
+      - name: Chromium для Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Полный набор сценариев каталога
+        run: |
+          python3 -m http.server 8123 --directory catalog > /tmp/catalog-test-server.log 2>&1 &
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent http://localhost:8123/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://localhost:8123/ > /dev/null
+          node catalog/tests/run.js
