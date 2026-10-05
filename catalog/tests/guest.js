@@ -228,6 +228,29 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(capacity.count === 50 && capacity.first === 'old-0' && /Список заполнен/.test(capacity.error),
     '51-я подсказка не стирает первую без предупреждения');
 
+  const storageFailure = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try { document.getElementById('repSave').click(); }
+    finally { Storage.prototype.setItem = real; }
+    const result = {
+      count: JSON.parse(localStorage.getItem(key) || '[]').length,
+      open: !document.getElementById('priceReportSheet').hidden,
+      error: document.getElementById('repError').innerText
+    };
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    return result;
+  });
+  chk(storageFailure.count === 0 && storageFailure.open && /Не удалось сохранить/.test(storageFailure.error),
+    'при ошибке памяти форма остаётся открытой и сообщает о несохранённой подсказке');
+
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
