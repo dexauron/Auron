@@ -221,6 +221,32 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   });
   chk(reopened === 2, `при открытии заказа позиции на месте (${reopened})`);
 
+  // Телефон сотрудника может запретить запись: форма должна остаться с ошибкой.
+  const storageFailure = await page.evaluate(async (due) => {
+    const key = 'wm_orders_local_v1';
+    const before = JSON.parse(localStorage.getItem(key) || '[]').length;
+    document.getElementById('ordAdd').click();
+    await new Promise((r) => setTimeout(r, 180));
+    document.getElementById('ordSupplier').value = 's1';
+    document.getElementById('ordAmount').value = '1200';
+    document.getElementById('ordDue').value = due;
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try {
+      document.getElementById('ordSave').click();
+      await new Promise((r) => setTimeout(r, 300));
+    } finally { Storage.prototype.setItem = real; }
+    return { before, after: JSON.parse(localStorage.getItem(key) || '[]').length,
+      open: !document.getElementById('orderFormSheet').hidden,
+      error: document.getElementById('ordError').innerText };
+  }, iso(2));
+  chk(storageFailure.after === storageFailure.before && storageFailure.open
+    && /Не удалось сохранить/.test(storageFailure.error),
+  'отказ памяти не закрывает несохранённый заказ и показывает ошибку');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
