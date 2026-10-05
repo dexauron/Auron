@@ -221,6 +221,32 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   });
   chk(reopened === 2, `при открытии заказа позиции на месте (${reopened})`);
 
+  // Опубликованный владельцем заказ сотрудник может только просматривать.
+  const published = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    document.querySelector('[data-ord-today]').click();
+    await new Promise((r) => setTimeout(r, 220));
+    const id = window.WM_PUBLISH._state().orders[0].id;
+    const row = document.querySelector(`#ordersBody [data-ord-open="${id}"]`);
+    if (!row) return { missing: true };
+    row.click();
+    await new Promise((r) => setTimeout(r, 180));
+    const buttons = {
+      save: document.getElementById('ordSave').hidden,
+      del: document.getElementById('ordDelete').hidden,
+      received: document.getElementById('ordReceived').hidden,
+      title: document.getElementById('ordFormTitle').textContent
+    };
+    const before = JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length;
+    document.getElementById('ordAmount').value = '7777';
+    document.getElementById('ordSave').click();
+    await new Promise((r) => setTimeout(r, 250));
+    return { ...buttons, before, after: JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length };
+  });
+  chk(!published.missing && published.save && published.del && published.received
+    && /просмотр/.test(published.title), 'сотруднику заказ владельца открыт только для просмотра');
+  chk(published.after === published.before, 'сохранение чужого заказа не создаёт локальный дубликат');
+
   // Телефон сотрудника может запретить запись: форма должна остаться с ошибкой.
   const storageFailure = await page.evaluate(async (due) => {
     const key = 'wm_orders_local_v1';
