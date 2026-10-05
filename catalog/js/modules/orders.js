@@ -410,9 +410,16 @@ export function openOrderForm(id, dayISO, prefill) {
   const unitEl = $('ordItemUnit'); if (unitEl) unitEl.textContent = 'шт';
   const sugBox = $('ordSuggest'); if (sugBox) { sugBox.hidden = true; sugBox.innerHTML = ''; }
   $('ordError').hidden = true;
-  $('ordDelete').hidden = !o;
-  $('ordReceived').hidden = !o || o.status === 'received';
-  $('ordFormTitle').textContent = o ? 'Заказ' : 'Новый заказ';
+  const readonly = !!o && !o.local && !state.isAdmin;
+  $('ordSave').hidden = readonly;
+  $('ordDelete').hidden = !o || readonly;
+  $('ordReceived').hidden = !o || o.status === 'received' || readonly;
+  for (const key of ['ordSupplier', 'ordPlaced', 'ordDue', 'ordAmount', 'ordWho', 'ordNote']) {
+    $(key).disabled = readonly;
+  }
+  document.querySelector('#orderFormSheet .ord-add').hidden = readonly;
+  document.querySelectorAll('#ordItems [data-ord-item-rm]').forEach((b) => { b.hidden = readonly; });
+  $('ordFormTitle').textContent = readonly ? 'Заказ · просмотр' : o ? 'Заказ' : 'Новый заказ';
   openSheet('orderFormSheet');
 }
 
@@ -516,9 +523,18 @@ function showWeekOf(dateISO) {
   renderOrders();
 }
 
+function publishedForStaff() {
+  return !state.isAdmin && !!editingId && (state.orders || []).some((x) => x.id === editingId);
+}
+
 export async function saveOrder() {
   const data = readForm();
   const err = $('ordError');
+  if (publishedForStaff()) {
+    err.textContent = 'Заказ владельца доступен только для просмотра.';
+    err.hidden = false;
+    return;
+  }
   if (!data.supplier_id) { err.textContent = 'Выбери поставщика.'; err.hidden = false; return; }
   if (!data.due_at) { err.textContent = 'Укажи, когда заказ должен прийти.'; err.hidden = false; return; }
   if (!(data.amount > 0)) { err.textContent = 'Укажи сумму заказа.'; err.hidden = false; return; }
@@ -561,6 +577,7 @@ function afterSaved() {
 export async function markReceived() {
   const id = editingId;
   if (!id) return;
+  if (publishedForStaff()) { toast('Отметить заказ владельца может только владелец'); return; }
   const own = (state.orders || []).find((x) => x.id === id);
   if (own && state.isAdmin) {
     own.status = 'received';
@@ -581,6 +598,7 @@ export async function markReceived() {
 
 export async function deleteOrder() {
   if (!editingId) return;
+  if (publishedForStaff()) { toast('Удалить заказ владельца может только владелец'); return; }
   if (!confirm('Удалить этот заказ?')) return;
   const id = editingId;
   if (state.isAdmin && (state.orders || []).some((x) => x.id === id)) {
