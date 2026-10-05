@@ -53,9 +53,7 @@ const openWork = (page) => page.evaluate(async () => {
     ]));
     P.renderAll();
     await new Promise((r) => setTimeout(r, 200));
-    // воскресенье этой недели: не раньше «сегодня» в любой день запуска,
-    // поэтому поставка считается будущей, а не просроченной
-  }, { now: iso(6), past: iso(-9) });
+  }, { now: local(new Date()), past: iso(-9) });
 
   await openWork(page);
   const work = await page.evaluate(() => {
