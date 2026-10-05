@@ -25,10 +25,13 @@ const MAX = 50;
 const isGuest = () => !state.session;
 
 function read() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  try {
+    const list = JSON.parse(localStorage.getItem(KEY));
+    return Array.isArray(list) ? list.filter((x) => x && typeof x === 'object') : [];
+  } catch (e) { return []; }
 }
 function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 
 /* ── Экран «Магазин» ───────────────────────────────────────────────────── */
@@ -93,7 +96,8 @@ function renderStore() {
     ${list.length
     ? `<div class="ios-group">${rows}</div>
        <p class="ios-note">${list.length} ${plural(list.length, 'подсказка', 'подсказки', 'подсказок')} —
-       хранятся только на твоём телефоне, пока не отправишь.</p>`
+       хранятся только на твоём телефоне. После отправки проверь сообщение в WhatsApp и очисти список здесь.</p>
+       <button type="button" class="btn btn-ghost btn-block" id="storeClear">Очистить подсказки</button>`
     : `<p class="ios-note">Пока пусто. Открой товар и нажми «Видел дешевле в другом магазине» —
        подсказки соберутся здесь и уйдут владельцу одним сообщением.</p>`}`;
 
@@ -102,8 +106,17 @@ function renderStore() {
 
 function removeReport(i) {
   const list = read();
-  list.splice(Number(i), 1);
-  write(list);
+  const index = Number(i);
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) return;
+  list.splice(index, 1);
+  if (!write(list)) { toast('Не удалось сохранить изменение. Проверь память телефона.'); return; }
+  renderStore();
+  renderStoreBadge();
+}
+
+function clearReports() {
+  if (!confirm('Очистить все подсказки о ценах с этого телефона?')) return;
+  if (!write([])) { toast('Не удалось очистить список. Проверь память телефона.'); return; }
   renderStore();
   renderStoreBadge();
 }
@@ -184,19 +197,28 @@ function savePriceReport() {
   const err = $('repError');
   if (!(price > 0)) { err.textContent = 'Напиши цену, которую видел.'; err.hidden = false; return; }
   const list = read();
+  if (list.length >= MAX) {
+    err.textContent = 'Список заполнен (50 подсказок). Отправь его и очисти в разделе «Магазин».';
+    err.hidden = false;
+    return;
+  }
   list.push({
     id: prod.id, name: prod.name, code: prod.code || '',
     price, store: $('repStore').value.trim(), at: todayISO(),
   });
-  write(list);
+  if (!write(list)) {
+    err.textContent = 'Не удалось сохранить подсказку на телефоне. Проверь свободное место и настройки браузера.';
+    err.hidden = false;
+    return;
+  }
   closeSheet('priceReportSheet');
   buzz();
   wolfSay('Спасибо! Подсказка сохранена — отправь её в разделе «Магазин»', { ms: 4200 });
   renderStoreBadge();
 }
 
-/* Одним сообщением: владельцу приходит готовый список, ничего переписывать
- * руками не нужно. Отправленное больше не копится. */
+/* WhatsApp лишь открывает черновик сообщения. Подтвердить отправку браузер
+ * не может, поэтому очередь остаётся до явного удаления покупателем. */
 function sendReports() {
   const list = read();
   const wa = storeWa();
@@ -205,12 +227,9 @@ function sendReports() {
     + list.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
       + (x.store ? `, ${x.store}` : '')).join('\n');
   sendWhatsApp(text, wa);
-  write([]);
-  renderStore();
-  renderStoreBadge();
 }
 
-// сколько подсказок ждёт отправки — кружок на вкладке «Магазин»
+// сколько подсказок хранится на телефоне — кружок на вкладке «Магазин»
 function renderStoreBadge() {
   const el = $('tabStoreCount');
   if (!el) return;
@@ -240,6 +259,7 @@ export function bindGuest() {
   $('storeBody').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-rep-rm]');
     if (rm) { removeReport(rm.dataset.repRm); return; }
+    if (e.target.closest('#storeClear')) { clearReports(); return; }
     if (e.target.closest('#storeAsk')) openAsk('');
   });
   attachMoneyInput($('repPrice'));

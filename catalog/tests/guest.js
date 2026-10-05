@@ -188,7 +188,68 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
-  chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
+  chk(sent.left === 1, `открытие WhatsApp не удаляет подсказку до подтверждённой отправки (${sent.left})`);
+  const clear = await page.evaluate(() => {
+    const real = window.confirm;
+    const button = document.getElementById('storeClear');
+    const note = document.getElementById('storeBody').innerText;
+    window.confirm = () => false;
+    button.click();
+    const rejected = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = () => true;
+    button.click();
+    const accepted = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = real;
+    return { rejected, accepted, note,
+      badgeHidden: document.getElementById('tabStoreCount').hidden,
+      sendHidden: document.getElementById('storeSend').hidden };
+  });
+  chk(/После отправки проверь сообщение/.test(clear.note), 'экран объясняет, когда очищать подсказки');
+  chk(clear.rejected === 1, 'отмена очистки сохраняет подсказку');
+  chk(clear.accepted === 0 && clear.badgeHidden && clear.sendHidden,
+    'явная очистка удаляет подсказку и обновляет кнопки');
+
+  const capacity = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      id: 'old-' + i, name: 'Старая подсказка ' + i, price: 10 + i, at: '2026-10-01'
+    }));
+    localStorage.setItem(key, JSON.stringify(items));
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    document.getElementById('repSave').click();
+    const kept = JSON.parse(localStorage.getItem(key) || '[]');
+    const error = document.getElementById('repError').innerText;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    localStorage.removeItem(key);
+    return { count: kept.length, first: kept[0]?.id, error };
+  });
+  chk(capacity.count === 50 && capacity.first === 'old-0' && /Список заполнен/.test(capacity.error),
+    '51-я подсказка не стирает первую без предупреждения');
+
+  const storageFailure = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try { document.getElementById('repSave').click(); }
+    finally { Storage.prototype.setItem = real; }
+    const result = {
+      count: JSON.parse(localStorage.getItem(key) || '[]').length,
+      open: !document.getElementById('priceReportSheet').hidden,
+      error: document.getElementById('repError').innerText
+    };
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    return result;
+  });
+  chk(storageFailure.count === 0 && storageFailure.open && /Не удалось сохранить/.test(storageFailure.error),
+    'при ошибке памяти форма остаётся открытой и сообщает о несохранённой подсказке');
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
@@ -345,6 +406,48 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' '), seen: localStorage.getItem('wm_news_seen') };
   });
   chk(again.hidden, `посмотрел новинки — сегодня плашка больше не показывается (${again.text} / отметка: ${again.seen})`);
+
+  // Пометки ожидания тоже хранятся на телефоне: предел и отказ памяти не должны врать.
+  const waitCapacity = await page.evaluate(async () => {
+    const key = 'wm_guest_wait_v1';
+    window.WM_PUBLISH._state().products.find((p) => p.id === 'p2').stock = 0;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    window.location.hash = ''; await new Promise((r) => setTimeout(r, 100));
+    window.location.hash = '#p=p2'; await new Promise((r) => setTimeout(r, 500));
+    localStorage.setItem(key, JSON.stringify(Array.from({ length: 100 }, (_, i) => ({
+      id: 'old-' + i, name: 'Ожидание ' + i, at: '2026-10-01'
+    }))));
+    const btn = document.getElementById('btnWait');
+    btn.click();
+    await new Promise((r) => setTimeout(r, 150));
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const result = { count: list.length, first: list[0]?.id, hasNew: list.some((x) => x.id === 'p2'),
+      label: btn.textContent, toast: document.getElementById('toast').textContent };
+    localStorage.removeItem(key);
+    return result;
+  });
+  chk(waitCapacity.count === 100 && waitCapacity.first === 'old-0' && !waitCapacity.hasNew
+    && /Сообщить/.test(waitCapacity.label) && /Список ожидания заполнен/.test(waitCapacity.toast),
+    '101-я пометка не вытесняет старую и сообщает о пределе');
+
+  const waitStorageFailure = await page.evaluate(() => {
+    const key = 'wm_guest_wait_v1';
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try { document.getElementById('btnWait').click(); }
+    finally { Storage.prototype.setItem = real; }
+    return {
+      count: JSON.parse(localStorage.getItem(key) || '[]').length,
+      label: document.getElementById('btnWait').textContent,
+      toast: document.getElementById('toast').textContent
+    };
+  });
+  chk(waitStorageFailure.count === 0 && /Сообщить/.test(waitStorageFailure.label)
+    && /Не удалось сохранить/.test(waitStorageFailure.toast),
+    'при отказе памяти ожидание не обещает уведомление');
 
   // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});

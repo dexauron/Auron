@@ -16,6 +16,7 @@ import { stockState } from './publish.js';
 import { buzz, wolfSay } from './mascot.js';
 
 const WAIT_KEY = 'wm_guest_wait_v1';
+const WAIT_MAX = 100;
 const SNAP_KEY = 'wm_price_snapshot';
 const SNAP_DAYS = 7;            // столько живёт снимок цен
 const DROP_MIN_RUB = 1;         // мелочь в копейках — не новость
@@ -31,10 +32,11 @@ const SEEN_KEY = 'wm_news_seen';
 let news = { appeared: [], cheaper: [], fresh: [] };
 
 function readWait() {
-  try { return JSON.parse(localStorage.getItem(WAIT_KEY)) || []; } catch (e) { return []; }
+  try { const list = JSON.parse(localStorage.getItem(WAIT_KEY)); return Array.isArray(list) ? list : []; }
+  catch (e) { return []; }
 }
 function writeWait(list) {
-  try { localStorage.setItem(WAIT_KEY, JSON.stringify(list.slice(-100))); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(WAIT_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 const isWaiting = (id) => readWait().some((x) => x.id === id);
 const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
@@ -53,12 +55,19 @@ function toggleWait(p) {
   if (!p) return;
   const list = readWait();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) { list.splice(i, 1); writeWait(list); toast('Больше не слежу за этим товаром'); }
-  else {
+  if (i >= 0) {
+    list.splice(i, 1);
+    if (!writeWait(list)) { toast('Не удалось сохранить изменение на телефоне'); return; }
+    toast('Больше не слежу за этим товаром');
+  } else {
+    if (list.length >= WAIT_MAX) {
+      toast('Список ожидания заполнен (100 товаров). Убери ненужные отметки.');
+      return;
+    }
     list.push({ id: p.id, name: p.name || '', code: p.code || '', at: todayISO() });
-    writeWait(list);
+    if (!writeWait(list)) { toast('Не удалось сохранить ожидание на телефоне'); return; }
     buzz();
-    wolfSay('Хорошо! Скажу, когда он снова появится');
+    wolfSay('Отмечено. При следующем открытии покажу, если товар появился');
   }
   syncWaitButton(p);
 }

@@ -31,10 +31,11 @@ let onSaved = null;        // что сделать после сохранен�
                            // заказанным то, что закончилось на полке)
 
 function localOrders() {
-  try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch (e) { return []; }
+  try { const list = JSON.parse(localStorage.getItem(LOCAL_KEY)); return Array.isArray(list) ? list : []; }
+  catch (e) { return []; }
 }
 function saveLocal(list) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 function allOrders() {
   const mine = localOrders().map((o) => ({ ...o, local: true }));
@@ -409,9 +410,16 @@ export function openOrderForm(id, dayISO, prefill) {
   const unitEl = $('ordItemUnit'); if (unitEl) unitEl.textContent = 'шт';
   const sugBox = $('ordSuggest'); if (sugBox) { sugBox.hidden = true; sugBox.innerHTML = ''; }
   $('ordError').hidden = true;
-  $('ordDelete').hidden = !o;
-  $('ordReceived').hidden = !o || o.status === 'received';
-  $('ordFormTitle').textContent = o ? 'Заказ' : 'Новый заказ';
+  const readonly = !!o && !o.local && !state.isAdmin;
+  $('ordSave').hidden = readonly;
+  $('ordDelete').hidden = !o || readonly;
+  $('ordReceived').hidden = !o || o.status === 'received' || readonly;
+  for (const key of ['ordSupplier', 'ordPlaced', 'ordDue', 'ordAmount', 'ordWho', 'ordNote']) {
+    $(key).disabled = readonly;
+  }
+  document.querySelector('#orderFormSheet .ord-add').hidden = readonly;
+  document.querySelectorAll('#ordItems [data-ord-item-rm]').forEach((b) => { b.hidden = readonly; });
+  $('ordFormTitle').textContent = readonly ? 'Заказ · просмотр' : o ? 'Заказ' : 'Новый заказ';
   openSheet('orderFormSheet');
 }
 
@@ -515,9 +523,18 @@ function showWeekOf(dateISO) {
   renderOrders();
 }
 
+function publishedForStaff() {
+  return !state.isAdmin && !!editingId && (state.orders || []).some((x) => x.id === editingId);
+}
+
 export async function saveOrder() {
   const data = readForm();
   const err = $('ordError');
+  if (publishedForStaff()) {
+    err.textContent = 'Заказ владельца доступен только для просмотра.';
+    err.hidden = false;
+    return;
+  }
   if (!data.supplier_id) { err.textContent = 'Выбери поставщика.'; err.hidden = false; return; }
   if (!data.due_at) { err.textContent = 'Укажи, когда заказ должен прийти.'; err.hidden = false; return; }
   if (!(data.amount > 0)) { err.textContent = 'Укажи сумму заказа.'; err.hidden = false; return; }
@@ -537,7 +554,11 @@ export async function saveOrder() {
   const found = list.find((x) => x.id === editingId);
   if (found) Object.assign(found, data);
   else list.push({ id: svUuid(), status: 'ordered', ...data });
-  saveLocal(list);
+  if (!saveLocal(list)) {
+    err.textContent = 'Не удалось сохранить заказ на телефоне. Проверь свободное место и настройки браузера.';
+    err.hidden = false;
+    return;
+  }
   closeSheet('orderFormSheet');
   showWeekOf(data.due_at);
   afterSaved();
@@ -556,6 +577,7 @@ function afterSaved() {
 export async function markReceived() {
   const id = editingId;
   if (!id) return;
+  if (publishedForStaff()) { toast('Отметить заказ владельца может только владелец'); return; }
   const own = (state.orders || []).find((x) => x.id === id);
   if (own && state.isAdmin) {
     own.status = 'received';
@@ -566,13 +588,17 @@ export async function markReceived() {
   }
   const list = localOrders();
   const mine = list.find((x) => x.id === id);
-  if (mine) { mine.status = 'received'; saveLocal(list); }
+  if (mine) {
+    mine.status = 'received';
+    if (!saveLocal(list)) { toast('Не удалось сохранить отметку на телефоне'); return; }
+  }
   closeSheet('orderFormSheet');
   renderOrders();
 }
 
 export async function deleteOrder() {
   if (!editingId) return;
+  if (publishedForStaff()) { toast('Удалить заказ владельца может только владелец'); return; }
   if (!confirm('Удалить этот заказ?')) return;
   const id = editingId;
   if (state.isAdmin && (state.orders || []).some((x) => x.id === id)) {
@@ -582,7 +608,9 @@ export async function deleteOrder() {
     await svSaveAndPublish('Заказ удалён');
     return;
   }
-  saveLocal(localOrders().filter((x) => x.id !== id));
+  if (!saveLocal(localOrders().filter((x) => x.id !== id))) {
+    toast('Не удалось удалить заказ на телефоне'); return;
+  }
   closeSheet('orderFormSheet');
   renderOrders();
 }

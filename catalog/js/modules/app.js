@@ -31,7 +31,7 @@ import { bindPriceNews } from './pricenews.js';
 import { logSession } from './sessionlog.js';
 import { applyFloorSnapshot, rememberFloor } from './floor.js';
 import { restoreLogin } from './restore.js';
-import { clearRestock, openRestock, orderFromRestock, removeRestock, scanToRestock, shareRestock, toggleRestock } from './restock.js';
+import { clearRestock, inRestock, openRestock, orderFromRestock, removeRestock, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -962,9 +962,11 @@ function bindEvents() {
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;
-    const added = toggleRestock(p);
-    $('btnRestock').textContent = added ? 'Убрать из списка пополнения' : 'Закончилось на полке';
-    toast(added ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
+    const wasListed = inRestock(p.id);
+    toggleRestock(p);
+    const isListed = inRestock(p.id);
+    $('btnRestock').textContent = isListed ? 'Убрать из списка пополнения' : 'Закончилось на полке';
+    if (wasListed !== isListed) toast(isListed ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
   });
   /* Камера с экрана «Закончилось на полке» отмечает пустые полки ПОДРЯД и не
      закрывается: сотрудник идёт вдоль стеллажа. Из каталога та же кнопка

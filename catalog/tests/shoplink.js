@@ -13,6 +13,12 @@ const products = [
   { id: 'p3', name: 'Сыр Российский', code: '5940', retail_price: 790, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
   // у этого товара кода нет — в ссылку он должен уйти по внутреннему номеру
   { id: 'p4', name: 'Зелень укроп', code: '', retail_price: 30, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
+  ...Array.from({ length: 57 }, (_, i) => ({
+    id: `p${i + 5}`, name: `Товар ${i + 5}`, code: String(i + 1005),
+    retail_price: 10, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in',
+  })),
+  { id: '3f4933ec-86a7-4c3e-8300-6f0d30b5e63e', name: 'Товар без кода',
+    code: '', retail_price: 25, group_id: 'g1', photos: [], barcodes: [], stock_state: 'in' },
 ];
 
 (async () => {
@@ -116,6 +122,60 @@ const products = [
   });
   chk(mixed.got.join(',') === '101:3,5940:0.5',
     `дроби и целое в одной ссылке не мешают друг другу (${mixed.link.split('#')[1]} → ${mixed.got.join(', ')})`);
+
+  // В списке можно хранить 200 позиций. Ссылка должна передавать и 61-ю:
+  // текст сообщения обещает получателю весь список целиком по ссылке.
+  const longList = await page.evaluate(async (items) => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify(items.map((p) => ({
+      id: p.id, name: p.name, code: p.code, price: p.retail_price, qty: 1, done: false,
+    }))));
+    const link = window.WM_PUBLISH._shopLink();
+    localStorage.setItem('wm_shop_v1', '[]');
+    window.location.hash = link.slice(link.indexOf('#'));
+    await new Promise((r) => setTimeout(r, 120));
+    window.WM_PUBLISH._shopFromHash();
+    await new Promise((r) => setTimeout(r, 250));
+    const received = JSON.parse(localStorage.getItem('wm_shop_v1'));
+    return { count: received.length, last: received.some((x) => x.id === 'p61') };
+  }, products.slice(0, 61));
+  chk(longList.count === 61 && longList.last,
+    `ссылка передала все 61 позиции, включая последнюю (${longList.count}, p61: ${longList.last})`);
+
+  // В публичном каталоге внутренний id бывает UUID с дефисами, а кода кассы
+  // у товара нет. Такой товар тоже должен доехать по ссылке.
+  const uuid = await page.evaluate(async (item) => {
+    localStorage.setItem('wm_shop_v1', JSON.stringify([{
+      id: item.id, name: item.name, code: '', price: item.retail_price, qty: 1, done: false,
+    }]));
+    const link = window.WM_PUBLISH._shopLink();
+    localStorage.setItem('wm_shop_v1', '[]');
+    if (link) {
+      window.location.hash = link.slice(link.indexOf('#'));
+      await new Promise((r) => setTimeout(r, 120));
+      window.WM_PUBLISH._shopFromHash();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return { link, received: JSON.parse(localStorage.getItem('wm_shop_v1')).some((x) => x.id === item.id) };
+  }, products[61]);
+  chk(uuid.received, `товар без кода с UUID передан по ссылке (${uuid.link || 'ссылка пустая'})`);
+
+  // Когда свой список почти полон, новая ссылка не должна вытеснять
+  // записанные человеком товары из-за ограничения хранения в 200 позиций.
+  const nearLimit = await page.evaluate(async () => {
+    const own = Array.from({ length: 199 }, (_, i) => ({
+      id: `own-${i}`, name: `Свой товар ${i}`, code: '', price: 1, qty: 1, done: false,
+    }));
+    localStorage.setItem('wm_shop_v1', JSON.stringify(own));
+    window.location.hash = '#l=101-102';
+    await new Promise((r) => setTimeout(r, 120));
+    window.WM_PUBLISH._shopFromHash();
+    await new Promise((r) => setTimeout(r, 250));
+    const list = JSON.parse(localStorage.getItem('wm_shop_v1'));
+    return { count: list.length, own: list.filter((x) => x.id.startsWith('own-')).length,
+      first: list.some((x) => x.id === 'own-0'), added: list.filter((x) => x.id === 'p1' || x.id === 'p2').length };
+  });
+  chk(nearLimit.count === 200 && nearLimit.own === 199 && nearLimit.first && nearLimit.added === 1,
+    `при полном списке свои 199 товаров сохранены (${JSON.stringify(nearLimit)})`);
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);

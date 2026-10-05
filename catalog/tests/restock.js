@@ -166,6 +166,28 @@ const openList = (page) => page.evaluate(async () => {
   chk(tidied.left === 0, `старое заказанное подчищается само (${tidied.left})`);
   chk(/Список пуст/.test(tidied.text), `пустой список объясняет, что делать (${tidied.text.slice(0, 50)})`);
 
+  // Переполнение не должно молча стирать первую незавершённую позицию.
+  await openProduct(page, 'p1');
+  const capacity = await page.evaluate(async () => {
+    const key = 'wm_restock_v1';
+    localStorage.setItem(key, JSON.stringify(Array.from({ length: 300 }, (_, i) => ({
+      id: 'old-' + i, name: 'Позиция ' + i, at: '2026-10-05', ordered: ''
+    }))));
+    document.getElementById('btnRestock').click();
+    await new Promise((r) => setTimeout(r, 150));
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const toast = document.getElementById('toast').textContent;
+    window.WM_PUBLISH._scanRestock('4600000000011');
+    return { count: list.length, first: list[0]?.id, hasNew: list.some((x) => x.id === 'p1'),
+      label: document.getElementById('btnRestock').textContent.trim(), toast,
+      scan: document.getElementById('scanResult').innerText };
+  });
+  chk(capacity.count === 300 && capacity.first === 'old-0' && !capacity.hasNew && /Закончилось/.test(capacity.label),
+    '301-я отметка не удаляет первую и не показывает ложный успех');
+  chk(/Список заполнен/.test(capacity.toast) && !/Убрано/.test(capacity.toast),
+    'кнопка не выдаёт ложное сообщение «Убрано» после отказа');
+  chk(/не удалось добавить/.test(capacity.scan), 'сканер тоже показывает отказ при полном списке');
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
