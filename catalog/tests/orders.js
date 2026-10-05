@@ -235,6 +235,7 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
       save: document.getElementById('ordSave').hidden,
       del: document.getElementById('ordDelete').hidden,
       received: document.getElementById('ordReceived').hidden,
+      disabled: document.getElementById('ordAmount').disabled,
       title: document.getElementById('ordFormTitle').textContent
     };
     const before = JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length;
@@ -243,7 +244,7 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     await new Promise((r) => setTimeout(r, 250));
     return { ...buttons, before, after: JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length };
   });
-  chk(!published.missing && published.save && published.del && published.received
+  chk(!published.missing && published.save && published.del && published.received && published.disabled
     && /просмотр/.test(published.title), 'сотруднику заказ владельца открыт только для просмотра');
   chk(published.after === published.before, 'сохранение чужого заказа не создаёт локальный дубликат');
 
