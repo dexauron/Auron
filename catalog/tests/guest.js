@@ -188,7 +188,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
-  chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
+  chk(sent.left === 1, `открытие WhatsApp не удаляет подсказку до подтверждённой отправки (${sent.left})`);
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
