@@ -31,10 +31,11 @@ let onSaved = null;        // что сделать после сохранен�
                            // заказанным то, что закончилось на полке)
 
 function localOrders() {
-  try { return JSON.parse(localStorage.getItem(LOCAL_KEY)) || []; } catch (e) { return []; }
+  try { const list = JSON.parse(localStorage.getItem(LOCAL_KEY)); return Array.isArray(list) ? list : []; }
+  catch (e) { return []; }
 }
 function saveLocal(list) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 function allOrders() {
   const mine = localOrders().map((o) => ({ ...o, local: true }));
@@ -537,7 +538,11 @@ export async function saveOrder() {
   const found = list.find((x) => x.id === editingId);
   if (found) Object.assign(found, data);
   else list.push({ id: svUuid(), status: 'ordered', ...data });
-  saveLocal(list);
+  if (!saveLocal(list)) {
+    err.textContent = 'Не удалось сохранить заказ на телефоне. Проверь свободное место и настройки браузера.';
+    err.hidden = false;
+    return;
+  }
   closeSheet('orderFormSheet');
   showWeekOf(data.due_at);
   afterSaved();
@@ -566,7 +571,10 @@ export async function markReceived() {
   }
   const list = localOrders();
   const mine = list.find((x) => x.id === id);
-  if (mine) { mine.status = 'received'; saveLocal(list); }
+  if (mine) {
+    mine.status = 'received';
+    if (!saveLocal(list)) { toast('Не удалось сохранить отметку на телефоне'); return; }
+  }
   closeSheet('orderFormSheet');
   renderOrders();
 }
@@ -582,7 +590,9 @@ export async function deleteOrder() {
     await svSaveAndPublish('Заказ удалён');
     return;
   }
-  saveLocal(localOrders().filter((x) => x.id !== id));
+  if (!saveLocal(localOrders().filter((x) => x.id !== id))) {
+    toast('Не удалось удалить заказ на телефоне'); return;
+  }
   closeSheet('orderFormSheet');
   renderOrders();
 }
