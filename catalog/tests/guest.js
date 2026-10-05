@@ -346,6 +346,48 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   });
   chk(again.hidden, `посмотрел новинки — сегодня плашка больше не показывается (${again.text} / отметка: ${again.seen})`);
 
+  // Пометки ожидания тоже хранятся на телефоне: предел и отказ памяти не должны врать.
+  const waitCapacity = await page.evaluate(async () => {
+    const key = 'wm_guest_wait_v1';
+    window.WM_PUBLISH._state().products.find((p) => p.id === 'p2').stock = 0;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    window.location.hash = ''; await new Promise((r) => setTimeout(r, 100));
+    window.location.hash = '#p=p2'; await new Promise((r) => setTimeout(r, 500));
+    localStorage.setItem(key, JSON.stringify(Array.from({ length: 100 }, (_, i) => ({
+      id: 'old-' + i, name: 'Ожидание ' + i, at: '2026-10-01'
+    }))));
+    const btn = document.getElementById('btnWait');
+    btn.click();
+    await new Promise((r) => setTimeout(r, 150));
+    const list = JSON.parse(localStorage.getItem(key) || '[]');
+    const result = { count: list.length, first: list[0]?.id, hasNew: list.some((x) => x.id === 'p2'),
+      label: btn.textContent, toast: document.getElementById('toast').textContent };
+    localStorage.removeItem(key);
+    return result;
+  });
+  chk(waitCapacity.count === 100 && waitCapacity.first === 'old-0' && !waitCapacity.hasNew
+    && /Сообщить/.test(waitCapacity.label) && /Список ожидания заполнен/.test(waitCapacity.toast),
+    '101-я пометка не вытесняет старую и сообщает о пределе');
+
+  const waitStorageFailure = await page.evaluate(() => {
+    const key = 'wm_guest_wait_v1';
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try { document.getElementById('btnWait').click(); }
+    finally { Storage.prototype.setItem = real; }
+    return {
+      count: JSON.parse(localStorage.getItem(key) || '[]').length,
+      label: document.getElementById('btnWait').textContent,
+      toast: document.getElementById('toast').textContent
+    };
+  });
+  chk(waitStorageFailure.count === 0 && /Сообщить/.test(waitStorageFailure.label)
+    && /Не удалось сохранить/.test(waitStorageFailure.toast),
+    'при отказе памяти ожидание не обещает уведомление');
+
   // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
   await page.waitForTimeout(400);
