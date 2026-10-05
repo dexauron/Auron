@@ -189,6 +189,25 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
   chk(sent.left === 1, `открытие WhatsApp не удаляет подсказку до подтверждённой отправки (${sent.left})`);
+  const clear = await page.evaluate(() => {
+    const real = window.confirm;
+    const button = document.getElementById('storeClear');
+    const note = document.getElementById('storeBody').innerText;
+    window.confirm = () => false;
+    button.click();
+    const rejected = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = () => true;
+    button.click();
+    const accepted = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = real;
+    return { rejected, accepted, note,
+      badgeHidden: document.getElementById('tabStoreCount').hidden,
+      sendHidden: document.getElementById('storeSend').hidden };
+  });
+  chk(/После отправки проверь сообщение/.test(clear.note), 'экран объясняет, когда очищать подсказки');
+  chk(clear.rejected === 1, 'отмена очистки сохраняет подсказку');
+  chk(clear.accepted === 0 && clear.badgeHidden && clear.sendHidden,
+    'явная очистка удаляет подсказку и обновляет кнопки');
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
