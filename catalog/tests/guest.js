@@ -209,6 +209,25 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(clear.accepted === 0 && clear.badgeHidden && clear.sendHidden,
     'явная очистка удаляет подсказку и обновляет кнопки');
 
+  const capacity = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      id: 'old-' + i, name: 'Старая подсказка ' + i, price: 10 + i, at: '2026-10-01'
+    }));
+    localStorage.setItem(key, JSON.stringify(items));
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    document.getElementById('repSave').click();
+    const kept = JSON.parse(localStorage.getItem(key) || '[]');
+    const error = document.getElementById('repError').innerText;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    localStorage.removeItem(key);
+    return { count: kept.length, first: kept[0]?.id, error };
+  });
+  chk(capacity.count === 50 && capacity.first === 'old-0' && /Список заполнен/.test(capacity.error),
+    '51-я подсказка не стирает первую без предупреждения');
+
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
