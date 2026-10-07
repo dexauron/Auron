@@ -191,21 +191,34 @@ function renderShop() {
  *
  * Полученный список ДОБАВЛЯЕТСЯ к своему, а не заменяет его: человек мог уже
  * что-то отметить сам, и потерять это из-за чужой ссылки он не должен. */
-const LIST_MAX = 60;      // длиннее в ссылку не влезет, да и не бывает
+// Ссылка включает весь сохранённый список: write() ограничивает его MAX позициями.
+const LIST_MAX = MAX;
+
+/* Внутренний номер товара — UUID с дефисами. В ссылке дефис разделяет
+   позиции, поэтому раньше каждый дефис уезжал как «%2D»: на 200 товарах
+   ссылка пухла до девяти тысяч знаков, а у покупателя кода кассы нет вовсе —
+   значит таких товаров в его списке ВСЕ. Дефисы в UUID стоят на известных
+   местах, их можно просто убрать и вернуть при чтении: ссылка короче почти
+   вдвое и читается без хитростей. */
+const bare = (id) => String(id).replace(/-/g, '');
+const sameId = (a, b) => String(a).replace(/-/g, '') === b;
 
 export function shopLink() {
   const parts = [];
   for (const x of read().filter((y) => !y.done).slice(0, LIST_MAX)) {
     const p = state.products.find((y) => y.id === x.id);
     const code = p && p.code ? String(p.code) : '';
-    const key = code ? code : 'i' + x.id;
-    if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
+    const key = code ? code : 'i' + bare(x.id);
+    /* Разделители ссылки — «-» и «x», поэтому ключ от них чистим. Обычно
+       чистить нечего: код кассы — цифры, а внутренний номер мы кладём без
+       дефисов. Замены оставлены на случай нестандартного номера. */
+    const safeKey = encodeURIComponent(key).replace(/-/g, '%2D').replace(/x/g, '%78');
     const q = Number(x.qty) || 1;
     /* Количество кладём, если оно НЕ единица — включая дробь. Было `q > 1`,
        и это осталось с тех пор, когда количество было только целым: у весового
        товара полкило (0,5) в ссылку не попадало вовсе, а у получателя
        подставлялась единица — полкило превращалось в килограмм (находка GPT). */
-    parts.push(q !== 1 ? `${key}x${q}` : key);
+    parts.push(q !== 1 ? `${safeKey}x${q}` : safeKey);
   }
   if (!parts.length) return '';
   const base = location.origin + location.pathname;
@@ -219,26 +232,34 @@ export function shopFromHash() {
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* некритично */ }
   const list = read();
   const have = new Set(list.map((x) => x.id));
-  let added = 0; let missing = 0;
-  for (const chunk of decodeURIComponent(m[1]).split('-')) {
+  let added = 0; let missing = 0; let overflow = 0;
+  for (const chunk of m[1].split('-')) {
     if (!chunk) continue;
-    const [key, qty] = chunk.split('x');
+    const [encodedKey, qty] = chunk.split('x');
+    let key;
+    try { key = decodeURIComponent(encodedKey); }
+    catch (e) { missing++; continue; } // испорченная ссылка — остальные позиции читаем
     const p = key[0] === 'i'
-      ? state.products.find((x) => String(x.id) === key.slice(1))
+      ? state.products.find((x) => sameId(x.id, key.slice(1)))
       : state.products.find((x) => x.code != null && String(x.code) === key);
     if (!p) { missing++; continue; }
     if (have.has(p.id)) continue;                      // уже есть — количество не трогаем
+    if (list.length >= MAX) { overflow++; continue; } // свои позиции не вытесняем
     list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: Number(qty) || 1, done: false });
     have.add(p.id);
     added++;
   }
-  if (!added && !missing) return;
-  write(list);
+  if (!added && !missing && !overflow) return;
+  /* Записать могло и не получиться (память телефона полна). Тогда не
+     рассказываем про добавленные позиции — их никто не сохранил. */
+  if (added && !write(list)) { toast('Не удалось сохранить список на устройстве'); return; }
   renderShopBar();
   openShop();
+  const addedText = `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`;
   toast(added
-    ? `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`
-    : 'Этих товаров у нас нет');
+    ? addedText + (overflow ? `; ${overflow} не поместилось (предел ${MAX})` : '')
+    : overflow ? `Список заполнен: ${overflow} не поместилось (предел ${MAX})`
+      : 'Этих товаров у нас нет');
 }
 
 /* ── Отправить список ───────────────────────────────────────────────────────
