@@ -22,7 +22,7 @@ import { bindGuest, openShelfReport, openStore } from './guest.js';
 import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
-import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
+import { bindMargin, marginCount, marginIssues, openMargin, openStale, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { bindPriceRise } from './pricerise.js';
 import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
@@ -314,14 +314,11 @@ function bindEvents() {
       $('menuTitle').textContent = roleName;
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
-      $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
       // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
       const noCat = uncategorized().length;
       setRowText('menuSortCats', noCat
         ? `Разложить по категориям (${noCat} в «Прочем»)`
         : 'Разложить по категориям — всё разложено');
-      // цены магазинов ведут все вошедшие — и владелец, и сотрудник
-      $('menuCompStores').hidden = false;
       // Бесплатный режим: серверные функции скрываем — они работали только с сервером
       if (state.serverless) {
         $('menuSuppliers').hidden = true;
@@ -329,7 +326,6 @@ function bindEvents() {
       } else {
       }
       renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
-      renderMarginBadge();    // сколько товаров продаётся в минус
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
       if (!state.serverless) {
@@ -400,11 +396,10 @@ function bindEvents() {
   $('orSave').addEventListener('click', saveOrderRules);
 
   // разведка цен: «Добавить цену магазина» в карточке товара
-  $('menuCompStores').addEventListener('click', () => {
-    closeSheet('adminMenuSheet');
-    renderCompStores();
-    openSheet('compStoresSheet');
-  });
+  ui.workActions = ui.workActions || {};
+  ui.workActions.comp = () => { renderCompStores(); openSheet('compStoresSheet'); };
+  ui.workActions.orders = openOrders;
+  ui.workActions.top = openTopSheet;
   $('compStoresList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-comp-view]');
     if (b) openCompStoreView(b.dataset.compView);
@@ -880,7 +875,6 @@ function bindEvents() {
     compare: openCompare,
     scan: () => runScan(),
   };
-  $('menuOrders').addEventListener('click', () => { closeSheet('adminMenuSheet'); openOrders(); });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
@@ -924,7 +918,6 @@ function bindEvents() {
   $('btnRate').addEventListener('click', () => openRate(ui.currentProduct));
 
   // ── «Закончилось на полке»: список пополнения ──
-  $('menuRestock').addEventListener('click', () => { closeSheet('adminMenuSheet'); openRestock(); });
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;
@@ -946,7 +939,6 @@ function bindEvents() {
   $('menuSortCats').addEventListener('click', () => { closeSheet('adminMenuSheet'); sortByInternet(); });
 
   // Ходовые товары (после входа)
-  $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
   // выбор периода из выпадающего списка
   $('topChips').addEventListener('change', (e) => {
     const sel = e.target.closest('#topPeriodSel');

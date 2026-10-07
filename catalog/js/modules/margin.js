@@ -112,28 +112,19 @@ export function openMargin() {
   openSheet('marginSheet');
 }
 
-/* Счётчик в меню. Ноль пишем прочерком, а не пустотой: пустое место читается
- * как «ещё не посчитали», прочерк — как «посчитали, всё в порядке». */
-export function renderMarginBadge() {
-  const row = $('menuMargin');
-  if (!row) return;
-  row.hidden = !state.canPurchase;
-  // «Залежалось» видит и сотрудник: ему решать, что убрать с полки
-  const se = $('menuStaleCount');
-  if (se) { const st = staleItems().length; se.textContent = st ? String(st) : '—'; }
-  if (!state.canPurchase) return;
-  const n = marginCount();
-  const el = $('menuMarginCount');
-  el.textContent = n ? String(n) : '—';
-  el.classList.toggle('margin-bad', n > 0);
-}
+/* Сколько нужно вкладке «Работа»: убыточных товаров и залежавшихся позиций.
+ * Через общий `ui`, а не импортом: иначе модуль наценки и модуль вкладки
+ * ссылались бы друг на друга по кругу. */
 
 /* Обработчики модуль вешает сам: app.js уже дорос до предела, который держит
  * проверка «модули», и складывать в него ещё и это нельзя. */
 export function bindMargin(openProduct) {
   ui.importStale = importStale;   // модуль загрузки зовёт разбор через ui, без встречного импорта
-  $('menuMargin').addEventListener('click', () => { closeSheet('adminMenuSheet'); openMargin(); });
-  $('menuStale').addEventListener('click', () => { closeSheet('adminMenuSheet'); openStale(); });
+  ui.marginCount = marginCount;
+  ui.staleCount = () => staleItems().length;
+  ui.workActions = ui.workActions || {};
+  ui.workActions.margin = openMargin;
+  ui.workActions.stale = openStale;
   $('staleBody').addEventListener('click', (e) => {
     const b = e.target.closest('[data-margin-open]');
     if (!b) return;
