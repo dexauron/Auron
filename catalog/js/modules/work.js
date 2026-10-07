@@ -14,6 +14,7 @@ import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
 import { compareCount } from './compare.js';
 import { riseCount } from './pricerise.js';
+import { feature } from './brand.js';
 
 export function openWork() {
   renderWork();
@@ -41,18 +42,34 @@ function renderWork() {
     ? `${o.week} ${plural(o.week, 'поставка', 'поставки', 'поставок')} · ${fmtPrice(o.sum)}`
     : 'на этой неделе пусто';
   const rest = restockCount();
-  const cmp = compareCount();
   const up = riseCount();
+  const num = (fn) => (typeof fn === 'function' ? fn() : 0);
 
+  /* Три понятных кучки вместо одного длинного списка: что делаем в смену, что
+     с ценами, чем смотрим. Раньше половина этих строк жила ещё и в меню под
+     человечком — одно и то же в двух местах только путает. */
   box.innerHTML = `
+    <div class="ios-group-title">Дела смены</div>
     <div class="ios-group">
       ${row('orders', 'Заказы поставщикам', orders)}
       ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
-      ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
-      ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
-      ${row('scan', 'Сканировать штрихкод', '')}
+      ${row('stale', 'Залежалось', num(ui.staleCount) || 'ничего')}
     </div>
+
+    <div class="ios-group-title">Цены</div>
+    <div class="ios-group">
+      ${state.canPurchase ? row('margin', 'Наценка и убыточные', num(ui.marginCount) || 'всё в порядке', num(ui.marginCount) > 0) : ''}
+      ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
+      ${state.canSales && feature('sales') ? row('top', 'Ходовые товары', '') : ''}
+      ${feature('competitors') ? row('comp', 'Цены других магазинов', '') : ''}
+    </div>
+
+    <div class="ios-group-title">Инструменты</div>
+    <div class="ios-group">
+      ${state.canPurchase ? row('compare', 'Сравнение товаров', compareCount() ? `отобрано ${compareCount()}` : 'пусто') : ''}
+    </div>
+
     <p class="ios-note">«Просрочено» — поставки, у которых день прихода прошёл, а «пришёл» никто
     не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>`;
 }
