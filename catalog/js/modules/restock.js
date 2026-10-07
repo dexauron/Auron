@@ -9,7 +9,7 @@
  * поэтому список лежит на телефоне сотрудника и одной кнопкой уходит владельцу
  * текстом. Так же, как заказы: инструмент есть у всех, записи не теряются. */
 
-import { $, ui } from './store.js';
+import { $, localList, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
@@ -22,13 +22,9 @@ const KEY = 'wm_restock_v1';
 const MAX = 300;          // столько строк уже не список, а склад — дальше не копим
 const KEEP_ORDERED_DAYS = 14;  // заказанное держим две недели и убираем само
 
-function read() {
-  try { const list = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(list) ? list : []; }
-  catch (e) { return []; }
-}
-function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
-}
+const shelf = localList(KEY, { max: MAX });
+const read = () => shelf.read();
+const write = (list) => shelf.write(list);
 
 /* Список сам подчищается: заказанное старше двух недель уже не нужно —
  * иначе за полгода экран превращается в простыню, а телефон копит мусор. */

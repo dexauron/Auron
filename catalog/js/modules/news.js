@@ -8,9 +8,9 @@
  * Снимок цен держим неделю: иначе «подешевело» исчезало бы сразу после
  * первого же захода, и человек ничего не успевал заметить. */
 
-import { $, idbGet, idbSet, state, ui } from './store.js';
+import { $, idbGet, idbSet, localList, lsGet, lsSet, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { daysAgoISO, fmtDate, fmtPrice, fmtRetail, todayISO } from './catalog.js';
+import { daysAgoISO, fmtDate, fmtPrice, fmtRetail, priceOf, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { stockState } from './publish.js';
 import { buzz, wolfSay } from './mascot.js';
@@ -31,15 +31,10 @@ const SEEN_KEY = 'wm_news_seen';
 
 let news = { appeared: [], cheaper: [], fresh: [] };
 
-function readWait() {
-  try { const list = JSON.parse(localStorage.getItem(WAIT_KEY)); return Array.isArray(list) ? list : []; }
-  catch (e) { return []; }
-}
-function writeWait(list) {
-  try { localStorage.setItem(WAIT_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
-}
+const waitStore = localList(WAIT_KEY, { max: WAIT_MAX });
+const readWait = () => waitStore.read();
+const writeWait = (list) => waitStore.write(list);
 const isWaiting = (id) => readWait().some((x) => x.id === id);
-const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
 
 /* Кнопка «Сообщите, когда появится» — только у покупателя и только когда
  * товара нет: в остальных случаях она бессмысленна и только мешает. */
@@ -153,7 +148,7 @@ function renderNewsBanner() {
    * напоминаем не чаще раза в день; появление ожидаемого товара или снижение
    * цены — новость сама по себе и показывается всегда. */
   let seen = '';
-  try { seen = localStorage.getItem(SEEN_KEY) || ''; } catch (e) { seen = ''; }
+  seen = lsGet(SEEN_KEY);
   if (news.fresh.length >= 3 && (parts.length || seen !== todayISO())) {
     parts.push(`${news.fresh.length} ${plural(news.fresh.length, 'новинка', 'новинки', 'новинок')}`);
   }
@@ -166,7 +161,7 @@ function openNews() {
   const box = $('newsBody');
   if (!box) return;
   // посмотрел — сегодня про новинки больше не напоминаем
-  try { localStorage.setItem(SEEN_KEY, todayISO()); } catch (e) { /* приватный режим */ }
+  lsSet(SEEN_KEY, todayISO());
   const row = (p, extra) => `<button class="ios-row ios-row-link" data-news-open="${esc(p.id)}">
     <span class="ios-row-title">${esc(p.name)}${extra ? `<span class="ord-sub">${extra}</span>` : ''}</span>
     <span class="ios-row-value">${esc(fmtRetail(p))}</span></button>`;

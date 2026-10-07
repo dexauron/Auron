@@ -1,6 +1,6 @@
 // Карточка товара: цены, остаток, калькулятор, поставщики
 
-import { $, state, ui } from './store.js';
+import { $, lsJson, lsSetJson, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
 import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, productsWithWords, telHref, updatedText } from './catalog.js';
@@ -454,7 +454,7 @@ export function orderRules() {
 }
 export function loadOrderRules() {
   if (state.orderRules) return;
-  try { state.orderRules = JSON.parse(localStorage.getItem(ORDER_RULES_KEY)) || null; } catch (e) { state.orderRules = null; }
+  state.orderRules = lsJson(ORDER_RULES_KEY);
 }
 
 // Чистый расчёт заказа — без вёрстки, чтобы его можно было проверить отдельно.
@@ -509,7 +509,7 @@ export async function saveOrderRules() {
   if (cycle < 1) return bad('Заказ не может быть реже, чем раз в 1 день');
   if (lead > 90 || cycle > 90 || safety > 90) return bad('Больше 90 дней — похоже на опечатку');
   state.orderRules = { lead, cycle, safety };
-  try { localStorage.setItem(ORDER_RULES_KEY, JSON.stringify(state.orderRules)); } catch (e) { /* приватный режим */ }
+  lsSetJson(ORDER_RULES_KEY, state.orderRules);
   $('orError').hidden = true;
   if (!$('productSheet').hidden && ui.currentProduct) renderStock(ui.currentProduct, ui.cardSales);
   closeSheet('orderRulesSheet');

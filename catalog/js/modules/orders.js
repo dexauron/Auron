@@ -11,10 +11,10 @@
  *     одной кнопкой передаётся владельцу текстом (WhatsApp, сообщение).
  * Так сотрудник не остаётся без инструмента, а записи не теряются. */
 
-import { $, state, ui } from './store.js';
+import { $, localList, lsGet, lsSet, state, ui } from './store.js';
 import { closeSheet, esc, moneyNum, moneyText, openSheet, supplierById, toast } from './core.js';
 import { ic } from './icons.js';
-import { fmtDate, fmtPrice, suggestProducts, todayISO } from './catalog.js';
+import { fmtDate, fmtPrice, stepOf, suggestProducts, todayISO, unitOf } from './catalog.js';
 import { deviceName } from './device.js';
 import { plural } from './competitors.js';
 import { svSaveAndPublish, svUuid } from './imports.js';
@@ -30,13 +30,9 @@ let formItems = [];        // позиции текущего заказа: чт
 let onSaved = null;        // что сделать после сохранения (например, пометить
                            // заказанным то, что закончилось на полке)
 
-function localOrders() {
-  try { const list = JSON.parse(localStorage.getItem(LOCAL_KEY)); return Array.isArray(list) ? list : []; }
-  catch (e) { return []; }
-}
-function saveLocal(list) {
-  try { localStorage.setItem(LOCAL_KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
-}
+const localStore = localList(LOCAL_KEY);
+const localOrders = () => localStore.read();
+const saveLocal = (list) => localStore.write(list);
 function allOrders() {
   const mine = localOrders().map((o) => ({ ...o, local: true }));
   return [...(state.orders || []), ...mine];
@@ -76,9 +72,9 @@ function monthGrid(ym) {
   return cells;
 }
 
-const mode = () => { try { return localStorage.getItem(MODE_KEY) === 'month' ? 'month' : 'week'; } catch (e) { return 'week'; } };
+const mode = () => (lsGet(MODE_KEY) === 'month' ? 'month' : 'week');
 export function setOrdersMode(m) {
-  try { localStorage.setItem(MODE_KEY, m); } catch (e) { /* приватный режим */ }
+  lsSet(MODE_KEY, m);
   renderOrders();
 }
 export function ordersToday() {
@@ -239,8 +235,6 @@ function orderRow(o) {
 /* Единица товара. Весовой заказывают в килограммах, штучный — в штуках:
  * «3 шт сыра на развес» не значит ничего, а «3 кг» значит (просьба
  * владельца). Единицу берём у самого товара, а не выдумываем. */
-const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
-const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
 const fmtQty = (n) => String(Math.round(Number(n) * 1000) / 1000).replace('.', ',');
 
 let picked = null;        // товар, выбранный подсказкой или сканом

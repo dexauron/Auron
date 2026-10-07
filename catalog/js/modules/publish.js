@@ -1,6 +1,6 @@
 // Публикация на GitHub: шифрование, снимки, вход по паролю
 
-import { $, CFG, state, ui } from './store.js';
+import { $, CFG, lsDel, lsGet, lsSet, lsSetJson, state, ui } from './store.js';
 import { logSession } from './sessionlog.js';
 import { norm, toast } from './core.js';
 import { buildIndex } from './catalog.js';
@@ -9,7 +9,7 @@ import { orderRules } from './card.js';
 import { byName, saveCache, tidyMemory } from './data.js';
 import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
-import { buildFloorData, encryptFloor, FLOOR_FILE } from './floordata.js';
+import { buildFloorData, encryptFloor, FLOOR_FILE, isPrim, primStrings } from './floordata.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -18,8 +18,8 @@ import { buildFloorData, encryptFloor, FLOOR_FILE } from './floordata.js';
    чтобы деплой срабатывал один раз). Витрина — публично; секретное (закупка,
    «Ходовые») позже уедет в зашифрованный файл. */
 export const GH_TOKEN_KEY = 'wm_gh_token';
-export function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
-export function ghSetToken(t) { try { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); } catch (e) { /* приватный режим */ } }
+export function ghToken() { return lsGet(GH_TOKEN_KEY); }
+export function ghSetToken(t) { if (t) lsSet(GH_TOKEN_KEY, t); else lsDel(GH_TOKEN_KEY); }
 export function ghConfigured() { return !!(ghToken() && CFG.GITHUB_OWNER && CFG.GITHUB_REPO); }
 export const ghRepo = () => `/repos/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}`;
 export const ghBranch = () => CFG.GITHUB_BRANCH || 'main';
@@ -182,9 +182,8 @@ export function stockState(p, perDay) {
    разрешённое поле с хитрым содержимым — тоже канал утечки. Если фото пришло
    объектом {url, buy_price} (кривой импорт), закупка оказалась бы в открытом
    файле. Берём только примитивы, а в photos/barcodes — только строки и числа.
-   Та же защита, что и в данных зала (floordata.js). */
+   Защита общая с данными зала — `isPrim` и `primStrings` из floordata.js. */
 const PUBLIC_ARRAY = ['photos', 'barcodes'];
-const isPrimPub = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
 
 export function buildPublicProducts() {
   return state.products
@@ -193,11 +192,9 @@ export function buildPublicProducts() {
       for (const k of PUBLIC_FIELDS) {
         if (p[k] == null) continue;
         if (PUBLIC_ARRAY.includes(k)) {
-          const arr = Array.isArray(p[k])
-            ? p[k].filter((x) => typeof x === 'string' || typeof x === 'number').map(String).filter((x) => x.trim())
-            : [];
+          const arr = primStrings(p[k]);
           if (arr.length) o[k] = arr;
-        } else if (isPrimPub(p[k])) o[k] = p[k];
+        } else if (isPrim(p[k])) o[k] = p[k];
       }
       // даты кладём без времени — «Новее» нужна только дата, а витрину качает
       // каждый покупатель, лишние 14 символов на товар тут заметны
@@ -646,8 +643,8 @@ export async function unlockStaff(password) {
 }
 
 // запомнить вход на устройстве (по просьбе владельца — не выходить до явного выхода)
-export function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
-export function clearSvAuth() { try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* некритично */ } }
+export function saveSvAuth(role, pw) { lsSetJson(SV_AUTH_KEY, { role, pw }); }
+export function clearSvAuth() { lsDel(SV_AUTH_KEY); }
 
 // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
 // разделы, запомнить пароль для публикаций и вход на устройстве.

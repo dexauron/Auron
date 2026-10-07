@@ -6,6 +6,7 @@
  * Теперь путь один на все роли, а особенности каждой — внутри.
  */
 
+import { lsJson } from './store.js';
 import { safely } from './core.js';
 import { renderAll } from './render.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, clearSvAuth, unlockAny } from './publish.js';
@@ -15,8 +16,7 @@ import { unlockFloor } from './floor.js';
  * витрины и новости. Эти проверки живут в app.js, поэтому приходят доводом,
  * а не импортом: модулю входа про них знать незачем. */
 export function restoreLogin(after) {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null'); } catch (e) { return false; }
+  const saved = lsJson(SV_AUTH_KEY);
   if (!saved || !saved.pw) return false;
 
   if (saved.role === 'zal') {

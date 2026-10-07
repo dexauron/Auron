@@ -24,17 +24,22 @@ const FLOOR_ARRAY = ['photos', 'barcodes'];
    закупки в ней нет по устройству (см. retailHist ниже).
    Проверяется тестами floor-data.js и floor-crypto.js. */
 
-const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+/* Что можно положить в публикуемый файл. Защита от «утечки через поле»: в данные
+ * попадают только примитивы, а в списки (фото, штрихкоды) — только строки и числа.
+ * Нужна в двух местах — витрине (publish.js) и данных зала — поэтому живёт здесь
+ * одна: разойдись копии, и в один из файлов уехало бы лишнее. */
+export const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+export const primStrings = (arr) => (Array.isArray(arr)
+  ? arr.filter((x) => typeof x === 'string' || typeof x === 'number').map(String).filter((s) => s.trim())
+  : []);
 
 function floorProduct(p) {
   const o = {};
   if (!p || typeof p !== 'object') return o;
   for (const k of FLOOR_SCALAR) if (p[k] != null && isPrim(p[k])) o[k] = p[k];
   for (const k of FLOOR_ARRAY) {
-    if (Array.isArray(p[k])) {
-      const arr = p[k].filter((x) => typeof x === 'string' || typeof x === 'number').map(String).filter((s) => s.trim());
-      if (arr.length) o[k] = arr;
-    }
+    const arr = primStrings(p[k]);
+    if (arr.length) o[k] = arr;
   }
   return o;
 }

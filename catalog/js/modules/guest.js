@@ -11,7 +11,7 @@
  * и подсказать цену из другого магазина. Сервера нет, поэтому подсказки
  * копятся у него на телефоне и уходят владельцу одним сообщением. */
 
-import { $, CFG, state, ui } from './store.js';
+import { $, CFG, localList, state, ui } from './store.js';
 import { attachMoneyInput, closeSheet, esc, moneyNum, openSheet, toast } from './core.js';
 import { fmtDate, fmtPrice, todayISO, updatedText } from './catalog.js';
 import { plural } from './competitors.js';
@@ -24,15 +24,9 @@ const MAX = 50;
 
 const isGuest = () => !state.session;
 
-function read() {
-  try {
-    const list = JSON.parse(localStorage.getItem(KEY));
-    return Array.isArray(list) ? list.filter((x) => x && typeof x === 'object') : [];
-  } catch (e) { return []; }
-}
-function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
-}
+const reports = localList(KEY, { max: MAX });
+const read = () => reports.read();
+const write = (list) => reports.write(list);
 
 /* ── Экран «Магазин» ───────────────────────────────────────────────────── */
 export function openStore() {

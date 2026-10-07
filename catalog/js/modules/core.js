@@ -1,6 +1,6 @@
 // Мелкие помощники: элементы, экранирование, форматы, шторки
 
-import { $, state, ui } from './store.js';
+import { $, localList, state, ui } from './store.js';
 import { ic } from './icons.js';
 import { stopScan } from './scanner.js';
 
@@ -283,15 +283,15 @@ export function setRowText(id, text) {
  * Само приложение при этом продолжает работать: остальные обработчики целы. */
 const ERR_KEY = 'wm_errors_v1';
 const ERR_KEEP = 20;
+// Свежие записи в начале: журнал читают сверху вниз.
+const errStore = localList(ERR_KEY, { max: ERR_KEEP, keep: 'first' });
 let lastErrAt = 0;
 
 export function logError(where, err) {
   const msg = String((err && (err.message || err)) || 'неизвестная ошибка').slice(0, 300);
-  try {
-    const list = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');
-    list.unshift({ at: new Date().toISOString(), where, msg });
-    localStorage.setItem(ERR_KEY, JSON.stringify(list.slice(0, ERR_KEEP)));
-  } catch (e) { /* приватный режим или нет места */ }
+  const list = errStore.read();
+  list.unshift({ at: new Date().toISOString(), where, msg });
+  errStore.write(list);
   // не заваливаем человека сообщениями: не чаще одного раза в 10 секунд
   const now = Date.now();
   if (now - lastErrAt > 10000) {
@@ -301,7 +301,7 @@ export function logError(where, err) {
 }
 
 export function savedErrors() {
-  try { return JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch (e) { return []; }
+  return errStore.read();
 }
 
 export function watchErrors() {

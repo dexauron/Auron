@@ -101,6 +101,15 @@ export const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFracti
 export const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 // цена с единицей: у весовых показываем «/кг», чтобы было понятно
 export const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
+
+/* Цена на полке, единица товара и шаг количества. Жили тремя копиями в
+ * shopping.js, orders.js и news.js — а это ровно те места, где количество и
+ * сумма должны совпадать до копейки. Разойдись копии хоть на шаг, и в списке
+ * покупок было бы одно, а в заказе поставщику другое. */
+export const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
+export const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
+// Весовой товар считаем по 100 г, штучный — по штуке.
+export const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
 /* ── Фасовка из названия ────────────────────────────────────────────────────
  * Веса товара в 1С нет ни в одном справочнике (проверено: колонки «Масса
  * нетто» и «Ёмкость упаковки» пустые целиком), зато он написан прямо в

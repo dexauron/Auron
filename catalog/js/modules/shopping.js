@@ -7,9 +7,9 @@
  *
  * Всё живёт на его телефоне: сервера нет, да и не нужен — список личный. */
 
-import { $, state, ui } from './store.js';
+import { $, localList, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { fmtNum, fmtPrice } from './catalog.js';
+import { fmtNum, fmtPrice, priceOf, stepOf, unitOf } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
@@ -18,17 +18,10 @@ import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
 const KEY = 'wm_shop_v1';
 const MAX = 200;
 
-function read() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
-}
-function write(list) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX)));
-    return true;
-  } catch (e) { return false; }
-}
+const shop = localList(KEY, { max: MAX });
+const read = () => shop.read();
+const write = (list) => shop.write(list);
 
-const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
 const inShop = (id) => read().some((x) => x.id === id);
 
 /* Итог считаем по цене, записанной в момент добавления: она могла измениться,
@@ -45,8 +38,6 @@ function total(list) {
 /* Единица товара. Весовой берут килограммами, штучный — штуками: «2 шт
  * сыра на развес» не значит ничего, а «2 кг» значит (просьба владельца).
  * Единицу спрашиваем у самого товара, а не выдумываем. */
-const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
-const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
 const rowUnit = (x) => x.unit || unitOf(state.products.find((y) => y.id === x.id));
 
 /* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его

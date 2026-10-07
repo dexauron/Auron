@@ -1,6 +1,6 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
-import { $, PAGE_SIZE, state, ui } from './store.js';
+import { $, PAGE_SIZE, localList, lsDel, lsGet, lsJson, lsSet, lsSetJson, state, ui } from './store.js';
 import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
@@ -575,30 +575,24 @@ const RECENT_KEY = 'wm_recent_q_v1';
 export const THEME_KEY = 'wm_theme';
 
 function saveFilters() {
-  try {
-    localStorage.setItem(FILTERS_KEY, JSON.stringify({
-      selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
-      quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
-      priceMin: state.priceMin, priceMax: state.priceMax,
-      selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
-    }));
-  } catch (e) { /* нет места — не критично */ }
+  lsSetJson(FILTERS_KEY, {
+    selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
+    quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
+    priceMin: state.priceMin, priceMax: state.priceMax,
+    selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
+  });
 }
 /* Переключал ли человек вид каталога САМ на этом устройстве. Сам вид
  * сохраняется при каждой перерисовке, поэтому «есть ли он в памяти» ни о чём
  * не говорит — нужна отдельная отметка. По ней сотруднику зала ставится
  * плотный список по умолчанию, а его собственный выбор не перебивается. */
 const VIEW_PICKED_KEY = 'wm_view_picked';
-export function markViewPicked() {
-  try { localStorage.setItem(VIEW_PICKED_KEY, '1'); } catch (e) { /* нет места — не критично */ }
-}
-export function viewChosen() {
-  try { return localStorage.getItem(VIEW_PICKED_KEY) === '1'; } catch (e) { return false; }
-}
+export const markViewPicked = () => lsSet(VIEW_PICKED_KEY, '1');
+export const viewChosen = () => lsGet(VIEW_PICKED_KEY) === '1';
 export function loadFilters() {
+  const f = lsJson(FILTERS_KEY);
+  if (!f) return;
   try {
-    const f = JSON.parse(localStorage.getItem(FILTERS_KEY));
-    if (!f) return;
     state.selCats = Array.isArray(f.selCats) ? f.selCats : [];
     state.selGroups = Array.isArray(f.selGroups) ? f.selGroups : [];
     state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
@@ -616,7 +610,8 @@ export function loadFilters() {
   } catch (e) { /* игнорируем битые данные */ }
 }
 
-function recentQueries() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; } }
+const recentStore = localList(RECENT_KEY, { max: 8, keep: 'first', of: 'values' });
+const recentQueries = () => recentStore.read();
 export function addRecentQuery(q) {
   q = q.trim();
   if (q.length < 2) return;
@@ -624,7 +619,7 @@ export function addRecentQuery(q) {
   let list = recentQueries().filter((x) => x.toLowerCase() !== q.toLowerCase());
   list.unshift(q);
   list = list.slice(0, 8);
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
+  recentStore.write(list);
   trackSearch(q); // анонимный учёт запроса — для подсказок частых запросов
   renderRecent();
 }
@@ -641,24 +636,27 @@ export function renderRecent() {
 
 /* ── Избранное (♥) и «Недавно смотрели» — у покупателя на телефоне ──
  * Хранятся только на устройстве (localStorage), в базу не уходят. */
+const DEVICE_ID_KEY = 'wm_device_id';
 const FAV_KEY = 'wm_favorites_v1';
 const RECENT_PROD_KEY = 'wm_recent_products_v1';
 
-export function favorites() { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } }
+const favStore = localList(FAV_KEY, { max: 500, keep: 'first', of: 'values' });
+export const favorites = () => favStore.read();
 export const isFav = (id) => favorites().includes(id);
 export function toggleFav(id) {
   const list = favorites();
   const i = list.indexOf(id);
   if (i >= 0) list.splice(i, 1); else list.unshift(id);
-  try { localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, 500))); } catch (e) { /* нет места */ }
+  favStore.write(list);
   return i < 0; // true = товар стал избранным
 }
 
-function recentProducts() { try { return JSON.parse(localStorage.getItem(RECENT_PROD_KEY)) || []; } catch (e) { return []; } }
+const recentProdStore = localList(RECENT_PROD_KEY, { max: 24, keep: 'first', of: 'values' });
+const recentProducts = () => recentProdStore.read();
 export function pushRecentProduct(id) {
   const list = recentProducts().filter((x) => x !== id);
   list.unshift(id);
-  try { localStorage.setItem(RECENT_PROD_KEY, JSON.stringify(list.slice(0, 24))); } catch (e) { /* нет места */ }
+  recentProdStore.write(list);
 }
 
 /* ── Популярность: анонимный учёт (без личности) ──
@@ -668,12 +666,11 @@ export function pushRecentProduct(id) {
 // стабильный анонимный номер устройства — «якорь» памяти (избранное/просмотры
 // и так живут в localStorage; номер даёт единый идентификатор на будущее)
 export function deviceId() {
-  let id = null;
-  try { id = localStorage.getItem('wm_device_id'); } catch (e) { /* */ }
+  let id = lsGet(DEVICE_ID_KEY);
   if (!id) {
     id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
       : String(Date.now()) + Math.random().toString(16).slice(2);
-    try { localStorage.setItem('wm_device_id', id); } catch (e) { /* */ }
+    lsSet(DEVICE_ID_KEY, id);
   }
   return id;
 }
@@ -812,12 +809,12 @@ export function applyTheme(t) {
   const icon = $('themeIcon');
   if (icon) icon.innerHTML = ic(t === 'dark' ? 'sun' : t === 'light' ? 'moon' : 'auto');
 }
-export function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
+export const initTheme = () => applyTheme(lsGet(THEME_KEY, null));
 export function toggleTheme() {
-  let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }
+  const cur = lsGet(THEME_KEY, null);
   // цикл: авто → тёмная → светлая → авто
   const next = cur == null ? 'dark' : cur === 'dark' ? 'light' : null;
-  try { next ? localStorage.setItem(THEME_KEY, next) : localStorage.removeItem(THEME_KEY); } catch (e) { /* */ }
+  if (next) lsSet(THEME_KEY, next); else lsDel(THEME_KEY);
   applyTheme(next);
 }
 

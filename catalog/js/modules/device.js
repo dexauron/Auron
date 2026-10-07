@@ -1,6 +1,6 @@
 // Настройки этого устройства
 
-import { $, CACHE_KEY, state } from './store.js';
+import { $, CACHE_KEY, lsCan, lsGet, lsJson, lsSet, lsSetJson, state } from './store.js';
 import { roleName, sessionLog } from './sessionlog.js';
 import { esc, openSheet, savedErrors, toast } from './core.js';
 import { todayISO } from './catalog.js';
@@ -48,9 +48,9 @@ const installed = () => {
     return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   } catch (e) { return false; }
 };
-const hintHidden = () => { try { return localStorage.getItem(INSTALL_KEY) === 'off'; } catch (e) { return true; } };
+const hintHidden = () => !lsCan() || lsGet(INSTALL_KEY) === 'off';
 const hideHint = () => {
-  try { localStorage.setItem(INSTALL_KEY, 'off'); } catch (e) { /* приватный режим */ }
+  lsSet(INSTALL_KEY, 'off');
   const el = $('installBanner'); if (el) el.hidden = true;
 };
 
@@ -90,12 +90,12 @@ export function applyPowerMode() {
 }
 
 export function deviceName() {
-  try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
+  return lsGet(DEV_NAME_KEY);
 }
 
 // Что именно телефон помнит. Ключ → человеческое имя и краткое значение.
 function deviceMemory() {
-  const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
+  const get = (k) => lsGet(k, null);
   const viewName = { normal: 'плитки', compact: 'плотные плитки', list: 'список' }[state.view] || state.view;
   const tabName = { catalog: 'Каталог', cats: 'Категории', fav: 'Избранное' }[state.tab] || state.tab;
   const themeRaw = get(THEME_KEY);
@@ -183,13 +183,11 @@ export const popViews = (id) => state.popularity[id] || 0;
 // защита от накрутки: один просмотр/запрос за товар (запрос) в день с устройства
 const TRACK_KEY = 'wm_tracked_v1';
 function trackedToday() {
-  try {
-    const o = JSON.parse(localStorage.getItem(TRACK_KEY));
-    if (o && o.d === todayISO()) return o;
-  } catch (e) { /* */ }
+  const o = lsJson(TRACK_KEY);
+  if (o && o.d === todayISO()) return o;
   return { d: todayISO(), v: {}, s: {} };
 }
-function saveTracked(o) { try { localStorage.setItem(TRACK_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
+function saveTracked(o) { lsSetJson(TRACK_KEY, o); }
 
 export function trackView(p) {
   if (!p) return;

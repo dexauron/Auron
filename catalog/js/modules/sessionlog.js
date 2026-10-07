@@ -9,6 +9,8 @@
  * Поэтому и подпись на экране говорит честно — «на этом устройстве».
  */
 
+import { localList } from './store.js';
+
 const KEY = 'wm_session_log_v1';
 const KEEP = 50;             // полсотни записей — это недели работы, больше незачем
 
@@ -20,9 +22,9 @@ const ROLE_NAME = {
 };
 export const roleName = (r) => ROLE_NAME[r] || 'Сотрудник';
 
-export function sessionLog() {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; }
-}
+const log = localList(KEY, { max: KEEP, keep: 'first' });
+
+export const sessionLog = () => log.read();
 
 /* Записываем вход или выход. Повтор того же события подряд не пишем:
  * приложение поднимает запомненный вход при каждом запуске, и журнал за день
@@ -33,5 +35,5 @@ export function logSession(event, role) {
   if (top && top.event === event && top.role === role
       && Date.now() - new Date(top.at).getTime() < 12 * 3600 * 1000) return;
   list.unshift({ at: new Date().toISOString(), event, role });
-  try { localStorage.setItem(KEY, JSON.stringify(list.slice(0, KEEP))); } catch (e) { /* нет места */ }
+  log.write(list);
 }

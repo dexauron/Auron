@@ -14,12 +14,14 @@
  * В маленьком магазине это работает лучше, чем 5000 отзывов у сети: люди
  * узнают соседей по именам. */
 
-import { $, state, ui } from './store.js';
+import { $, lsGet, lsSet, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { sendWhatsApp, storeWa } from './whatsapp.js';
+
+const RATE_NAME_KEY = 'wm_rate_name';   // как человек подписывает отзыв — чтобы не вводить заново
 
 const MAX_TEXT = 200;        // длиннее никто не читает, а витрина тяжелеет
 
@@ -70,7 +72,7 @@ export function reviewsHtml(p) {
 export function openRate(p) {
   if (!p) return;
   ui.rateFor = p;
-  $('rateName').value = localStorage.getItem('wm_rate_name') || '';
+  $('rateName').value = lsGet(RATE_NAME_KEY);
   $('rateText').value = '';
   $('rateError').hidden = true;
   ui.rateStars = 0;
@@ -95,7 +97,7 @@ function sendRate() {
   if (!wa) { toast('Магазин не указал номер для связи'); return; }
   const name = $('rateName').value.trim().slice(0, 40);
   const words = $('rateText').value.trim().slice(0, MAX_TEXT);
-  try { localStorage.setItem('wm_rate_name', name); } catch (e) { /* приватный режим */ }
+  lsSet(RATE_NAME_KEY, name);
   const text = `Отзыв о товаре\n${p.name}${p.code ? ` (код ${p.code})` : ''}\n`
     + `Оценка: ${ui.rateStars} из 5\n`
     + (name ? `Имя: ${name}\n` : '')

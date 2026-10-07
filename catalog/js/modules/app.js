@@ -1,6 +1,6 @@
 // Связывание всего вместе и запуск
 
-import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
+import { $, CFG, PAGE_SIZE, lsDel, lsGet, lsSet, state, ui, idbSet } from './store.js';
 import { addBackButtons, attachMoneyInput, closeSheet, enableSwipeToClose, goBack, logError, moneyNum, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
 import { ic, paintIcons } from './icons.js';
 
@@ -447,7 +447,7 @@ function bindEvents() {
   $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
   $('devName').addEventListener('change', () => {
     const v = $('devName').value.trim();
-    try { if (v) localStorage.setItem(DEV_NAME_KEY, v); else localStorage.removeItem(DEV_NAME_KEY); } catch (e) { /* */ }
+    if (v) lsSet(DEV_NAME_KEY, v); else lsDel(DEV_NAME_KEY);
     toast(v ? `Устройство названо: ${v}` : 'Название устройства убрано');
   });
   $('devReset').addEventListener('click', resetDevice);
@@ -774,7 +774,7 @@ function bindEvents() {
       const svc = CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length
         ? CFG.SERVICE_EMAILS.slice() : (CFG.STAFF_EMAIL ? [CFG.STAFF_EMAIL] : []);
       for (const e of svc) if (!emails.includes(e)) emails.push(e);
-      const savedAdmin = localStorage.getItem(ADMIN_EMAIL_KEY);
+      const savedAdmin = lsGet(ADMIN_EMAIL_KEY, null);
       if (savedAdmin && !emails.includes(savedAdmin)) emails.push(savedAdmin);
     }
 
