@@ -131,13 +131,12 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     });
     await scan('storeSheet с подсказками');
 
+    // рабочие списки открываются из вкладки «Работа»
     for (const [id, what] of [['restockSheet', 'restock']]) {
-      await page.evaluate(async (m) => {
+      await page.evaluate(async (w) => {
         document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-        document.getElementById('adminBtn').click();
-        await new Promise((r) => setTimeout(r, 250));
         window.WM_PUBLISH._work(w);
-        await new Promise((r) => setTimeout(r, 350));
+        await new Promise((r) => setTimeout(r, 450));
       }, what);
       await scan(`${id} со списком`);
     }
