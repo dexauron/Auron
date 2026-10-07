@@ -13,7 +13,9 @@ import { svSaveAndPublish, svUuid } from './imports.js';
 
 export function openForm(product) {
   ui.editingProduct = product;
-  $('formTitle').textContent = product ? 'Изменить товар' : 'Новый товар';
+  /* Добавить товар вручную нельзя — каталог наполняется выгрузкой из 1С.
+     Форма осталась только для правки, поэтому и называется по делу. */
+  $('formTitle').textContent = 'Изменить товар';
   $('fName').value = product?.name || '';
   $('fCode').value = product?.code || '';
   $('fArticle').value = product?.article || '';

@@ -23,10 +23,11 @@ const MAX = 300;          // столько строк уже не список,
 const KEEP_ORDERED_DAYS = 14;  // заказанное держим две недели и убираем само
 
 function read() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  try { const list = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(list) ? list : []; }
+  catch (e) { return []; }
 }
 function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 
 /* Список сам подчищается: заказанное старше двух недель уже не нужно —
@@ -52,7 +53,15 @@ export function toggleRestock(p) {
   if (!p) return false;
   const list = restockList();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) { list.splice(i, 1); write(list); refresh(); return false; }
+  if (i >= 0) {
+    list.splice(i, 1);
+    if (!write(list)) { toast('Не удалось сохранить изменение на телефоне'); return true; }
+    refresh(); return false;
+  }
+  if (list.length >= MAX) {
+    toast('Список заполнен (300 позиций). Передай или очисти его перед добавлением новых.');
+    return false;
+  }
   const sup = (p.supplier_ids || [])[0] || '';
   list.push({
     id: p.id,
@@ -63,19 +72,22 @@ export function toggleRestock(p) {
     who: deviceName(),
     at: todayISO(),
   });
-  write(list); refresh();
+  if (!write(list)) { toast('Не удалось сохранить отметку на телефоне'); return false; }
+  refresh();
   return true;
 }
 
 export function removeRestock(id) {
-  write(restockList().filter((x) => x.id !== id));
+  if (!write(restockList().filter((x) => x.id !== id))) {
+    toast('Не удалось сохранить изменение на телефоне'); return;
+  }
   renderRestock();
 }
 
 export function clearRestock() {
   if (!restockList().length) return;
   if (!confirm('Очистить весь список пополнения?')) return;
-  write([]);
+  if (!write([])) { toast('Не удалось очистить список на телефоне'); return; }
   renderRestock();
 }
 
@@ -156,7 +168,8 @@ function markRestockOrdered(supplierId) {
     if ((x.supplier_id || '') === supplierId && !x.ordered) { x.ordered = todayISO(); n++; }
   }
   if (!n) return;
-  write(list); refresh();
+  if (!write(list)) { toast('Не удалось отметить заказанное на телефоне'); return; }
+  refresh();
   renderRestock();
 }
 
@@ -189,8 +202,9 @@ export function scanToRestock(text) {
       <div class="scan-result-code">${esc(text)}</div>`;
     return;
   }
-  const added = inRestock(p.id) ? false : toggleRestock(p);
+  const already = inRestock(p.id);
+  const added = already ? false : toggleRestock(p);
   box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
-    <div class="scan-result-price">${added ? 'в списке пополнения' : 'уже в списке'}</div>
+    <div class="scan-result-price">${already ? 'уже в списке' : added ? 'в списке пополнения' : 'не удалось добавить'}</div>
     <div class="scan-result-code">всего в списке: ${restockCount()}</div>`;
 }
