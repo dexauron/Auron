@@ -22,7 +22,10 @@ function read() {
   try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
 }
 function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+  try {
+    localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX)));
+    return true;
+  } catch (e) { return false; }
 }
 
 const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
@@ -55,11 +58,20 @@ export function toggleShop(p) {
   if (!p) return false;
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) { list.splice(i, 1); write(list); renderShopBar(); return false; }
+  if (i >= 0) {
+    list.splice(i, 1);
+    if (!write(list)) { toast('Не удалось сохранить список на устройстве'); return null; }
+    renderShopBar();
+    return false;
+  }
+  if (list.length >= MAX) {
+    toast(`Список заполнен — максимум ${MAX} позиций`);
+    return null;
+  }
   const unit = unitOf(p);
   list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p),
     unit, qty: 1, done: false });
-  write(list);
+  if (!write(list)) { toast('Не удалось сохранить список на устройстве'); return null; }
   renderShopBar();
   return true;
 }
@@ -349,6 +361,7 @@ export function bindShopping() {
     const p = ui.currentProduct;
     if (!p) return;
     const added = toggleShop(p);
+    if (added === null) return;
     syncShopButton(p);
     if (added) { buzz(); wolfSay('Записал в список покупок'); }
     else toast('Убрано из списка');

@@ -469,6 +469,7 @@ export function bindScanResult(openProductFn, toggleShopFn, openShelfFn) {
       const p = state.products.find((x) => x.id === add.dataset.shopScanned);
       if (!p) return;
       const added = toggleShopFn(p);
+      if (added === null) return;
       add.textContent = added ? 'Убрать из списка покупок' : 'В список покупок';
       toast(added ? 'Записал в список покупок' : 'Убрано из списка');
       return;
