@@ -25,10 +25,13 @@ const MAX = 50;
 const isGuest = () => !state.session;
 
 function read() {
-  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+  try {
+    const list = JSON.parse(localStorage.getItem(KEY));
+    return Array.isArray(list) ? list.filter((x) => x && typeof x === 'object') : [];
+  } catch (e) { return []; }
 }
 function write(list) {
-  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+  try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (e) { return false; }
 }
 
 /* ── Экран «Магазин» ───────────────────────────────────────────────────── */
@@ -43,9 +46,10 @@ function renderStore() {
   const list = read();
   const wa = storeWa();
   const phone = CFG.STORE_PHONE || '';
+  const waiting = list.filter((x) => !x.sent);
   const rows = list.map((x, i) => `<div class="ios-row">
     <span class="ios-row-title">${esc(x.name)}
-      <span class="ord-sub">${esc(x.store || 'магазин не указан')}${x.code ? ' · код ' + esc(x.code) : ''} · ${fmtDate(x.at)}</span></span>
+      <span class="ord-sub">${esc(x.store || 'магазин не указан')}${x.code ? ' · код ' + esc(x.code) : ''} · ${fmtDate(x.at)}${x.sent ? ' · отправлено ' + fmtDate(x.sent) : ''}</span></span>
     <span class="ios-row-value">${fmtPrice(x.price)}</span>
     <button class="rst-rm" data-rep-rm="${i}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
   </div>`).join('');
@@ -92,18 +96,30 @@ function renderStore() {
     <div class="ios-group-title">Цены в других магазинах</div>
     ${list.length
     ? `<div class="ios-group">${rows}</div>
-       <p class="ios-note">${list.length} ${plural(list.length, 'подсказка', 'подсказки', 'подсказок')} —
-       хранятся только на твоём телефоне, пока не отправишь.</p>`
+       <p class="ios-note">${waiting.length
+    ? `${waiting.length} ${plural(waiting.length, 'подсказка', 'подсказки', 'подсказок')} ждёт отправки`
+    : 'Всё отправлено'} — хранятся только на твоём телефоне. Отправленное помечено
+       и второй раз владельцу не уйдёт; когда не нужно — очисти список.</p>
+       <button type="button" class="btn btn-ghost btn-block" id="storeClear">Очистить подсказки</button>`
     : `<p class="ios-note">Пока пусто. Открой товар и нажми «Видел дешевле в другом магазине» —
        подсказки соберутся здесь и уйдут владельцу одним сообщением.</p>`}`;
 
-  $('storeSend').hidden = !(list.length && wa);
+  $('storeSend').hidden = !(waiting.length && wa);
 }
 
 function removeReport(i) {
   const list = read();
-  list.splice(Number(i), 1);
-  write(list);
+  const index = Number(i);
+  if (!Number.isInteger(index) || index < 0 || index >= list.length) return;
+  list.splice(index, 1);
+  if (!write(list)) { toast('Не удалось сохранить изменение. Проверь память телефона.'); return; }
+  renderStore();
+  renderStoreBadge();
+}
+
+function clearReports() {
+  if (!confirm('Очистить все подсказки о ценах с этого телефона?')) return;
+  if (!write([])) { toast('Не удалось очистить список. Проверь память телефона.'); return; }
   renderStore();
   renderStoreBadge();
 }
@@ -184,37 +200,61 @@ function savePriceReport() {
   const err = $('repError');
   if (!(price > 0)) { err.textContent = 'Напиши цену, которую видел.'; err.hidden = false; return; }
   const list = read();
+  /* Дошли до предела — освобождаем место за счёт УЖЕ ОТПРАВЛЕННЫХ: они до
+     владельца доехали, их не жалко. Своё, что ещё ждёт отправки, не трогаем
+     никогда — именно это раньше и терялось молча. */
+  while (list.length >= MAX) {
+    const old = list.findIndex((x) => x.sent);
+    if (old < 0) break;
+    list.splice(old, 1);
+  }
+  if (list.length >= MAX) {
+    err.textContent = `Список заполнен (${MAX} подсказок). Отправь его в разделе «Магазин» — место освободится.`;
+    err.hidden = false;
+    return;
+  }
   list.push({
     id: prod.id, name: prod.name, code: prod.code || '',
     price, store: $('repStore').value.trim(), at: todayISO(),
   });
-  write(list);
+  if (!write(list)) {
+    err.textContent = 'Не удалось сохранить подсказку на телефоне. Проверь свободное место и настройки браузера.';
+    err.hidden = false;
+    return;
+  }
   closeSheet('priceReportSheet');
   buzz();
   wolfSay('Спасибо! Подсказка сохранена — отправь её в разделе «Магазин»', { ms: 4200 });
   renderStoreBadge();
 }
 
-/* Одним сообщением: владельцу приходит готовый список, ничего переписывать
- * руками не нужно. Отправленное больше не копится. */
+/* WhatsApp лишь открывает черновик сообщения. Подтвердить отправку браузер
+ * не может, поэтому очередь остаётся до явного удаления покупателем. */
 function sendReports() {
   const list = read();
   const wa = storeWa();
-  if (!list.length || !wa) return;
+  const waiting = list.filter((x) => !x.sent);
+  if (!waiting.length || !wa) return;
   const text = 'Здравствуйте! Заметил цены в других магазинах:\n'
-    + list.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
+    + waiting.map((x) => `— ${x.name}${x.code ? ' (код ' + x.code + ')' : ''}: ${fmtPrice(x.price)}`
       + (x.store ? `, ${x.store}` : '')).join('\n');
   sendWhatsApp(text, wa);
-  write([]);
+  /* Пометка «отправлено», а не удаление. Браузер не знает, нажал ли человек
+     в WhatsApp «отправить», поэтому подсказку мы не выбрасываем — но и
+     второй раз владельцу её не шлём, иначе он получит один и тот же список
+     трижды и перестанет их читать. */
+  const at = todayISO();
+  for (const x of waiting) x.sent = at;
+  if (!write(list)) toast('Подсказки отправлены, но пометку сохранить не удалось — проверь, что не отправишь их второй раз');
   renderStore();
   renderStoreBadge();
 }
 
-// сколько подсказок ждёт отправки — кружок на вкладке «Магазин»
+// сколько подсказок хранится на телефоне — кружок на вкладке «Магазин»
 function renderStoreBadge() {
   const el = $('tabStoreCount');
   if (!el) return;
-  const n = isGuest() ? read().length : 0;
+  const n = isGuest() ? read().filter((x) => !x.sent).length : 0;
   el.textContent = n > 99 ? '99+' : n;
   el.hidden = !n;
 }
@@ -240,6 +280,7 @@ export function bindGuest() {
   $('storeBody').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-rep-rm]');
     if (rm) { removeReport(rm.dataset.repRm); return; }
+    if (e.target.closest('#storeClear')) { clearReports(); return; }
     if (e.target.closest('#storeAsk')) openAsk('');
   });
   attachMoneyInput($('repPrice'));

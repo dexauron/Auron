@@ -188,7 +188,89 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
-  chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
+  chk(sent.left === 1, `открытие WhatsApp не удаляет подсказку до подтверждённой отправки (${sent.left})`);
+  /* Подсказка остаётся на телефоне, но помечена отправленной: второй раз
+     владельцу тот же список не уйдёт — иначе он получит его трижды и
+     перестанет читать. */
+  const after = await page.evaluate(async () => {
+    const note = document.getElementById('storeBody').innerText;
+    const stored = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]');
+    const real = window.open;
+    let opened = null;
+    window.open = (u) => { opened = u; return { closed: false }; };
+    document.getElementById('storeSend').click();           // жмём ещё раз
+    await new Promise((r) => setTimeout(r, 200));
+    window.open = real;
+    return { note, sent: stored.every((x) => x.sent), opened,
+      badgeHidden: document.getElementById('tabStoreCount').hidden,
+      sendHidden: document.getElementById('storeSend').hidden };
+  });
+  chk(after.sent, 'отправленная подсказка помечена датой отправки');
+  chk(/отправлено \d/.test(after.note), `в списке видно, что подсказка уже ушла (${after.note.replace(/\n/g, ' ').slice(-90)})`);
+  chk(after.sendHidden && after.badgeHidden, 'кнопка отправки и кружок на вкладке погасли — отправлять больше нечего');
+  chk(after.opened === null, 'второй раз тот же список владельцу не уходит');
+
+  const clear = await page.evaluate(() => {
+    const real = window.confirm;
+    const button = document.getElementById('storeClear');
+    const note = document.getElementById('storeBody').innerText;
+    window.confirm = () => false;
+    button.click();
+    const rejected = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = () => true;
+    button.click();
+    const accepted = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
+    window.confirm = real;
+    return { rejected, accepted, note,
+      badgeHidden: document.getElementById('tabStoreCount').hidden,
+      sendHidden: document.getElementById('storeSend').hidden };
+  });
+  chk(/Всё отправлено|ждёт отправки/.test(clear.note), 'экран говорит, что ждёт отправки, а что уже ушло');
+  chk(clear.rejected === 1, 'отмена очистки сохраняет подсказку');
+  chk(clear.accepted === 0 && clear.badgeHidden && clear.sendHidden,
+    'явная очистка удаляет подсказку и обновляет кнопки');
+
+  const capacity = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    const items = Array.from({ length: 50 }, (_, i) => ({
+      id: 'old-' + i, name: 'Старая подсказка ' + i, price: 10 + i, at: '2026-10-01'
+    }));
+    localStorage.setItem(key, JSON.stringify(items));
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    document.getElementById('repSave').click();
+    const kept = JSON.parse(localStorage.getItem(key) || '[]');
+    const error = document.getElementById('repError').innerText;
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    localStorage.removeItem(key);
+    return { count: kept.length, first: kept[0]?.id, error };
+  });
+  chk(capacity.count === 50 && capacity.first === 'old-0' && /Список заполнен/.test(capacity.error),
+    '51-я подсказка не стирает первую без предупреждения');
+
+  const storageFailure = await page.evaluate(async () => {
+    const key = 'wm_guest_prices_v1';
+    document.getElementById('btnReportPrice').click();
+    await new Promise((r) => setTimeout(r, 100));
+    document.getElementById('repPrice').value = '123';
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k, v) {
+      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+      return real.call(this, k, v);
+    };
+    try { document.getElementById('repSave').click(); }
+    finally { Storage.prototype.setItem = real; }
+    const result = {
+      count: JSON.parse(localStorage.getItem(key) || '[]').length,
+      open: !document.getElementById('priceReportSheet').hidden,
+      error: document.getElementById('repError').innerText
+    };
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
+    return result;
+  });
+  chk(storageFailure.count === 0 && storageFailure.open && /Не удалось сохранить/.test(storageFailure.error),
+    'при ошибке памяти форма остаётся открытой и сообщает о несохранённой подсказке');
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
