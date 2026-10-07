@@ -519,7 +519,7 @@ export function loadFilters() {
     state.quick = Array.isArray(f.quick) ? f.quick : [];
     if (['relevance', 'name', 'cheap', 'expensive', 'new', 'popular'].includes(f.sort)) state.sort = f.sort;
     if (['normal', 'compact', 'list'].includes(f.view)) state.view = f.view;
-    if (['catalog', 'cats', 'fav'].includes(f.tab)) state.tab = f.tab;
+    if (['catalog', 'pick', 'fav'].includes(f.tab)) state.tab = f.tab;
     if (state.tab === 'fav') state.favOnly = true;
     state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
     state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;

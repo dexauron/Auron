@@ -96,7 +96,7 @@ export function deviceName() {
 function deviceMemory() {
   const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const viewName = { normal: 'плитки', compact: 'плотные плитки', list: 'список' }[state.view] || state.view;
-  const tabName = { catalog: 'Каталог', cats: 'Категории', fav: 'Избранное' }[state.tab] || state.tab;
+  const tabName = { catalog: 'Каталог', pick: 'Подбор', fav: 'Избранное' }[state.tab] || state.tab;
   const themeRaw = get(THEME_KEY);
   const rows = [
     { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
