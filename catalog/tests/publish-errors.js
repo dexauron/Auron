@@ -22,7 +22,7 @@ const local = (d) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISO
   const res = await page.evaluate(async (due) => {
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    window.WM_PUBLISH._work('orders');
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));

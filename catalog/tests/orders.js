@@ -101,7 +101,7 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     await new Promise((r) => setTimeout(r, 200));
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    window.WM_PUBLISH._work('orders');
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));
@@ -173,7 +173,7 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     document.getElementById('adminBtn').click();
     await new Promise((r) => setTimeout(r, 250));
-    document.getElementById('menuOrders').click();
+    window.WM_PUBLISH._work('orders');
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));

@@ -1123,7 +1123,11 @@ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _packText: packText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
     _staleItems: staleItems, _openStale: openStale,
-    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate, _orderForm: openOrderForm };
+    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate, _orderForm: openOrderForm,
+    // вкладка «Работа»: открыть её дело по имени и посмотреть, какие дела есть
+    _work: (what) => { openWork(); runWorkAction(what); },
+    _workRows: () => [...document.querySelectorAll('#workBody [data-work]')]
+      .map((b) => b.innerText.replace(/\s+/g, ' ').trim()) };
 }
 
 init();
