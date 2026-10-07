@@ -220,9 +220,6 @@ body {
 .filter-label { font-size: 18px; }
 .filter-hint { font-weight: 400; font-size: 13px; color: var(--text-2); }
 /* список-чекбоксы */
-.check-cb { width: 24px; height: 24px; flex: 0 0 auto; accent-color: var(--accent); cursor: pointer; }
-.check-text { flex: 1; font-size: 16px; }
-.check-count { font-size: 14px; color: var(--text-2); }
 /* iOS-сегменты: единый трек, выбранный сегмент — «приподнятая» карточка */
 .seg {
   display: flex; flex-wrap: wrap; gap: 4px;
