@@ -158,9 +158,6 @@ export function renderSupplierList() {
   $('supplierList').innerHTML = html;
 }
 
-/* ── Все группы (список с поиском) ────────────── */
-
-
 // управление (только админ): список поставщиков с числом товаров
 export function renderSuppliersManager() {
   const counts = {};

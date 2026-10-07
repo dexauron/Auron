@@ -1,7 +1,7 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
 import { $, PAGE_SIZE, state, ui } from './store.js';
-import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
+import { esc, expectPop, groupById, highlight, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
@@ -356,7 +356,7 @@ function updateResultsCount(n) {
 }
 
 // синхронизирует окно фильтров и значок с состоянием
-export function syncControls() {
+function syncControls() {
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
   document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
   // даты поступления в поля + подсветка активного пресета
