@@ -396,10 +396,6 @@ function bindEvents() {
   $('orSave').addEventListener('click', saveOrderRules);
 
   // разведка цен: «Добавить цену магазина» в карточке товара
-  ui.workActions = ui.workActions || {};
-  ui.workActions.comp = () => { renderCompStores(); openSheet('compStoresSheet'); };
-  ui.workActions.orders = openOrders;
-  ui.workActions.top = openTopSheet;
   $('compStoresList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-comp-view]');
     if (b) openCompStoreView(b.dataset.compView);
@@ -869,12 +865,17 @@ function bindEvents() {
 
   // ── Заказы поставщикам ──
   ui.renderWorkBadge = renderWorkBadge;   // значок «сколько дел» на вкладке
-  ui.workActions = {
+  /* Все входы вкладки «Работа» — в одном объекте. Остальные модули добавляют
+     свои ключи (margin, stale, risen) через тот же `ui`, поэтому ПРИСВАИВАТЬ
+     объект заново здесь нельзя: так однажды и затёрлись «Цены магазинов» и
+     «Ходовые». Сканера тут нет нарочно — он в шапке, рядом с поиском. */
+  ui.workActions = Object.assign(ui.workActions || {}, {
     orders: openOrders,
     restock: openRestock,
     compare: openCompare,
-    scan: () => runScan(),
-  };
+    top: openTopSheet,
+    comp: () => { renderCompStores(); openSheet('compStoresSheet'); },
+  });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
