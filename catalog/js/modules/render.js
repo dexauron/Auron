@@ -38,8 +38,8 @@ const looksLikeEmail = (q) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(q || '
 export function switchTab(tab) {
   // «Фильтры» — не раздел, а окно: нижняя панель даёт до них дотянуться большим
   // пальцем. Меню и настройки устройства переехали на кнопку человечка в шапке.
-  if (tab === 'filters') { syncControls(); openSheet('filterSheet'); return; }
   state.tab = tab;
+  if (tab === 'pick') syncControls();          // поля подбора — под текущее состояние
   if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
   else if (state.favOnly) state.favOnly = false;
   if (tab !== 'catalog') { state.query = ''; $('searchInput').value = ''; }
@@ -58,11 +58,13 @@ function syncTabs() {
   // «Работа»: сколько дел ждёт. Через ui, а не импортом — иначе модули
   // сетки и рабочих списков ссылались бы друг на друга по кругу.
   if (ui.renderWorkBadge) ui.renderWorkBadge();
-  // экран категорий и сетка товаров не показываются одновременно
-  const cats = state.tab === 'cats';
-  $('catScreen').hidden = !cats;
-  $('productGrid').hidden = cats;
-  if (cats) { $('emptyState').hidden = true; $('loader').hidden = true; }
+  /* «Подбор» и сетка товаров не показываются одновременно: на этой вкладке
+     человек выбирает, ЧТО показать, а результат смотрит на «Каталоге». */
+  const pick = state.tab === 'pick';
+  $('catScreen').hidden = !pick;
+  $('pickScreen').hidden = !pick;
+  $('productGrid').hidden = pick;
+  if (pick) { $('emptyState').hidden = true; $('loader').hidden = true; }
 }
 
 // Плитки категорий: иконка, название и сколько товаров. Пустые не показываем —
@@ -85,7 +87,7 @@ function catCounts() {
 
 export function renderCatScreen() {
   const box = $('catScreen');
-  if (!box || state.tab !== 'cats') return;
+  if (!box || state.tab !== 'pick') return;
   const { cats, groupsIn } = catCounts();
   const all = catalogSections(cats);
   if (!all.length) {
@@ -327,45 +329,6 @@ const QUICK_CHIPS = [
 
 // Категории списком-чекбоксами в окне фильтра (как в референсе)
 // какие категории раскрыты в дереве фильтра (показывают свои подкатегории)
-export const filterCatOpen = new Set();
-export function renderFilterCats() {
-  const box = $('filterCats');
-  if (!box) return;
-  // товаров в категории и в каждой подгруппе; подгруппы, отнесённые к категории
-  const counts = {};
-  const groupCounts = {};
-  const subsByCat = {};
-  for (const g of state.groups) {
-    const c = categoryOf(g.name) || OTHER_CAT.name;
-    (subsByCat[c] = subsByCat[c] || []).push(g);
-  }
-  for (const p of state.products) {
-    const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1;
-    if (p.group_id) groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
-  }
-  const cats = catalogSections(counts).map((c) => c.name).sort((a, b) => counts[b] - counts[a]);
-  if (!cats.length) { box.innerHTML = '<p class="muted" style="margin:0">Категорий пока нет</p>'; return; }
-  box.innerHTML = cats.map((c) => {
-    const on = state.selCats.includes(c);
-    const subs = (subsByCat[c] || []).filter((g) => groupCounts[g.id]).sort((a, b) => groupCounts[b.id] - groupCounts[a.id]);
-    const expanded = filterCatOpen.has(c);
-    const caret = subs.length
-      ? `<button type="button" class="tree-caret${expanded ? ' open' : ''}" data-tcat="${esc(c)}" aria-label="Показать подкатегории">▸</button>`
-      : '<span class="tree-caret-empty"></span>';
-    let html = `<div class="tree-cat">${caret}`
-      + `<label class="tree-cat-label"><input type="checkbox" class="check-cb" data-fcat="${esc(c)}"${on ? ' checked' : ''}>`
-      + `<span class="check-text">${catIcon(c)} ${esc(c)}</span><span class="check-count">${counts[c]}</span></label></div>`;
-    if (subs.length && expanded) {
-      html += '<div class="tree-subs">' + subs.map((g) => {
-        const gon = state.selGroups.includes(g.id);
-        return `<label class="tree-sub"><input type="checkbox" class="check-cb" data-fgroup="${esc(g.id)}"${gon ? ' checked' : ''}>`
-          + `<span class="check-text">${esc(g.name)}</span><span class="check-count">${groupCounts[g.id]}</span></label>`;
-      }).join('') + '</div>';
-    }
-    return html;
-  }).join('');
-}
-
 function renderQuick() {
   const base = baseFiltered();
   let html = '';
@@ -394,8 +357,6 @@ function updateResultsCount(n) {
 
 // синхронизирует окно фильтров и значок с состоянием
 export function syncControls() {
-  renderFilterCats();
-  { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
   document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
   // даты поступления в поля + подсветка активного пресета
@@ -426,23 +387,12 @@ export function syncControls() {
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
-  // подписи кнопок «Группы» и «Поставщики» — со счётчиком выбранного
-  const gBtn = $('filterGroupsBtn');
-  if (gBtn) {
-    const gn = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted').length + state.selCats.length;
-    gBtn.textContent = gn ? `Группы: выбрано ${gn}` : 'Выбрать группы…';
-    gBtn.classList.toggle('picked', gn > 0);
-  }
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
+  // значок на вкладке «Подбор»: видно, что фильтр включён, не открывая её
   const n = countActiveFilters();
-  const badge = $('filterBadge');
-  if (badge) { badge.hidden = !n; badge.textContent = n || ''; }
-  // тот же счётчик на вкладке «Фильтры» — видно, что фильтр включён,
-  // даже когда шапка ушла вверх при прокрутке
   const tb = $('tabFilterCount');
   if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
-  const fb = $('filterBtn'); if (fb) fb.classList.toggle('active', n > 0);
 }
 
 const QUICK_LABEL = { withprice: 'С ценой', barcode: 'Штрихкод', nophoto: 'Без фото', noprice: 'Без цены', nobarcode: 'Без ШК' };

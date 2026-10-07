@@ -4,14 +4,14 @@ import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
+import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderGrid, renderRecent, showSkeleton, switchTab, syncControls, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
 import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
-import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
+import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
 import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
@@ -58,10 +58,9 @@ function bindEvents() {
     input.focus();
   });
 
-  // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
-  $('filterBtn').addEventListener('click', () => { syncControls(); openSheet('filterSheet'); });
-  $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
-  $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
+  /* «Показать товары» — это просто возврат на каталог: подбор и сетка живут на
+     разных вкладках, и отдельного окна у фильтра больше нет. */
+  $('filterApply').addEventListener('click', () => switchTab('catalog'));
   $('filterReset').addEventListener('click', clearAllFilters);
   // Круглая иконка «вид» в шапке — переключает размер плиток
   // Три режима по кругу: плитки → плотные плитки → список.
@@ -70,41 +69,6 @@ function bindEvents() {
     state.view = state.view === 'normal' ? 'compact' : (state.view === 'compact' ? 'list' : 'normal');
     state.renderLimit = PAGE_SIZE;
     renderAll();
-  });
-
-  // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
-  $('filterCats').addEventListener('change', (e) => {
-    const cb = e.target.closest('[data-fcat]');
-    if (cb) {
-      const c = cb.dataset.fcat;
-      if (cb.checked) { if (!state.selCats.includes(c)) state.selCats = [...state.selCats, c]; }
-      else {
-        state.selCats = state.selCats.filter((x) => x !== c);
-        const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
-        state.selGroups = state.selGroups.filter((x) => !ids.has(x));
-      }
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-      renderFilterCats(); // обновить дерево (счётчики/галочки)
-      return;
-    }
-    // подкатегория (подгруппа) в дереве
-    const gb = e.target.closest('[data-fgroup]');
-    if (gb) {
-      const gid = gb.dataset.fgroup;
-      if (gb.checked) { if (!state.selGroups.includes(gid)) state.selGroups = [...state.selGroups, gid]; }
-      else state.selGroups = state.selGroups.filter((x) => x !== gid);
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    }
-  });
-  // сворачивание/разворачивание категории в дереве
-  $('filterCats').addEventListener('click', (e) => {
-    const car = e.target.closest('[data-tcat]');
-    if (!car) return;
-    const c = car.dataset.tcat;
-    if (filterCatOpen.has(c)) filterCatOpen.delete(c); else filterCatOpen.add(c);
-    renderFilterCats();
   });
 
   // Сортировка (сегменты)
@@ -141,12 +105,6 @@ function bindEvents() {
   };
   $('arrivalFrom').addEventListener('change', onArrivalDate);
   $('arrivalTo').addEventListener('change', onArrivalDate);
-  // Группы — открыть полный список для выбора (можно несколько)
-  $('filterGroupsBtn').addEventListener('click', () => {
-    $('groupsPickSearch').value = '';
-    renderGroupsPick();
-    openSheet('groupsPickSheet');
-  });
   // Поставщики — открыть список поставщиков (только админ/аналитик)
   $('filterSuppliersBtn').addEventListener('click', () => {
     $('supplierSearch').value = '';
@@ -229,23 +187,6 @@ function bindEvents() {
     renderAll();
   });
   $('supplierSearch').addEventListener('input', renderSupplierList);
-
-  // выбор групп в полном списке — тап отмечает/снимает, шторка остаётся открытой
-  $('groupsPickList').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-pick-group]');
-    if (!btn) return;
-    const id = btn.dataset.pickGroup;
-    if (!id) { // «снять выбор» — убираем только конкретные группы
-      state.selGroups = state.selGroups.filter((x) => x === 'none' || x === 'weighted');
-    } else {
-      state.selGroups = state.selGroups.includes(id)
-        ? state.selGroups.filter((x) => x !== id) : [...state.selGroups, id];
-    }
-    state.renderLimit = PAGE_SIZE;
-    renderGroupsPick();
-    renderAll();
-  });
-  $('groupsPickSearch').addEventListener('input', renderGroupsPick);
 
   // «все товары поставщика» из карточки товара
   $('sheetSupplier').addEventListener('click', (e) => {
