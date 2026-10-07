@@ -68,7 +68,7 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   chk(cover.cards === products.length, `открылись все карточки (${cover.cards} из ${products.length})`);
 
   // ── разделы нижней панели ──
-  for (const t of ['cats', 'fav', 'catalog']) {
+  for (const t of ['pick', 'fav', 'catalog']) {
     await closeAll(page);
     await page.click(`.tabbar [data-tab="${t}"]`); await page.waitForTimeout(400);
     const ok = await page.evaluate((x) => document.querySelector(`.tabbar [data-tab="${x}"]`).classList.contains('active'), t);
@@ -93,10 +93,11 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   chk(cover.menu.length >= 6, `пункты меню открываются (${cover.menu.length}: ${cover.menu.join(', ')})`);
 
   // ── сортировка и поиск ──
-  await closeAll(page); await page.click('#filterBtn'); await page.waitForTimeout(400);
-  const sorts = await page.evaluate(() => [...document.querySelectorAll('#filterSheet [data-sort]')].map((x) => x.dataset.sort));
+  // сортировка живёт на вкладке «Подбор» — отдельного окна фильтра больше нет
+  await closeAll(page); await page.click('.tabbar [data-tab="pick"]'); await page.waitForTimeout(400);
+  const sorts = await page.evaluate(() => [...document.querySelectorAll('#pickScreen [data-sort]')].map((x) => x.dataset.sort));
   for (const s of sorts) {
-    await page.click(`#filterSheet [data-sort="${s}"]`).catch(() => problems.push(`сортировка «${s}» не нажалась`));
+    await page.click(`#pickScreen [data-sort="${s}"]`).catch(() => problems.push(`сортировка «${s}» не нажалась`));
     await page.waitForTimeout(200);
     const n = await page.evaluate(() => document.querySelectorAll('#productGrid .card').length);
     if (!n) problems.push(`сортировка «${s}»: сетка опустела`); else cover.sorts.push(s);

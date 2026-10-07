@@ -20,14 +20,14 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   await one.page.waitForTimeout(400);
   await one.page.click('#viewToggleBtn');                       // плотные
   await one.page.click('#viewToggleBtn'); await one.page.waitForTimeout(300);   // список
-  await one.page.click('.tabbar [data-tab="cats"]'); await one.page.waitForTimeout(300);
+  await one.page.click('.tabbar [data-tab="pick"]'); await one.page.waitForTimeout(300);
   await one.page.click('#themeBtn'); await one.page.waitForTimeout(200);
   const set = await one.page.evaluate(() => ({
     view: window.WM_PUBLISH._state().view,
     tab: window.WM_PUBLISH._state().tab,
     theme: document.documentElement.getAttribute('data-theme'),
   }));
-  chk(set.view === 'list' && set.tab === 'cats', `настройки выставлены (вид «${set.view}», раздел «${set.tab}»)`);
+  chk(set.view === 'list' && set.tab === 'pick', `настройки выставлены (вид «${set.view}», раздел «${set.tab}»)`);
 
   // перезагрузка того же устройства — всё на месте
   await one.page.reload({ waitUntil: 'load' });
@@ -40,7 +40,7 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
     listShown: !!document.querySelector('#productGrid.list, #catScreen:not([hidden])'),
   }));
   chk(after.view === 'list', `после перезагрузки вид списка сохранился (${after.view})`);
-  chk(after.tab === 'cats', `и открытый раздел тоже (${after.tab})`);
+  chk(after.tab === 'pick', `и открытый раздел тоже (${after.tab})`);
   chk(after.theme === set.theme, `и тема (${after.theme})`);
 
   // ── ВТОРОЕ устройство: свои настройки, чужие не подхватывает ──
