@@ -62,6 +62,7 @@ function syncTabs() {
   /* «Подбор» и сетка товаров не показываются одновременно: на этой вкладке
      человек выбирает, ЧТО показать, а результат смотрит на «Каталоге». */
   const pick = state.tab === 'pick';
+  $('catFindWrap').hidden = !pick;
   $('catScreen').hidden = !pick;
   $('pickScreen').hidden = !pick;
   $('productGrid').hidden = pick;
@@ -97,16 +98,14 @@ export function renderCatScreen() {
   }
   all.sort((a, b) => cats[b.name] - cats[a.name]);
 
-  /* Поиск по категориям и группам. Групп из 1С больше двухсот, и найти нужную
+  /* Поиск по категориям и группам: групп из 1С больше двухсот, и найти нужную
      перебором плиток нельзя. Раньше для этого был отдельный экран «Все
-     группы»; он ушёл вместе с объединением вкладок, и искать стало негде —
-     поле вернулось сюда, где теперь живёт весь подбор. */
+     группы»; он ушёл вместе с объединением вкладок — поле вернулось сюда, где
+     теперь живёт весь подбор. Само поле стоит в разметке отдельно, здесь мы им
+     только управляем. */
   const q = norm(ui.catQuery || '');
-  const field = `<div class="cat-find">
-    <input type="search" id="catFind" class="input" placeholder="Найти категорию или группу…"
-           value="${esc(ui.catQuery || '')}" autocomplete="off" aria-label="Найти категорию или группу">
-    ${ui.catQuery ? `<button class="cat-find-x" id="catFindClear" aria-label="Очистить">${ic('close', 'ic-xs')}</button>` : ''}
-  </div>`;
+  const xBtn = $('catFindClear');
+  if (xBtn) { xBtn.hidden = !q; if (!xBtn.innerHTML) xBtn.innerHTML = ic('close', 'ic-xs'); }
 
   // общий вид строки группы: с галочкой, если она уже отмечена
   const grpRow = (id, name, n) => {
@@ -127,7 +126,7 @@ export function renderCatScreen() {
       }
     }
     hits.sort((a, b) => b.n - a.n);
-    box.innerHTML = field + (hits.length
+    box.innerHTML = (hits.length
       ? `<p class="ios-note cat-hint">Нашлось ${hits.length} ${plural(hits.length, 'группа', 'группы', 'групп')}.
          Отмечай сколько нужно — отмеченные видно сверху, снимаются там же.</p>`
         + hits.slice(0, 60).map((g) => grpRow(g.id, `${g.name} · ${g.cat}`, g.n)).join('')
@@ -153,7 +152,7 @@ export function renderCatScreen() {
 
   /* Плитки категорий. Отмеченные подсвечиваем: иначе, выбрав две категории,
      человек не видит, что именно он выбрал, и жмёт наугад. */
-  box.innerHTML = field + '<div class="cat-grid">' + all.map((c) => {
+  box.innerHTML = '<div class="cat-grid">' + all.map((c) => {
     const on = state.selCats.includes(c.name);
     return `<button class="cat-tile${on ? ' cat-on' : ''}" data-cat-open="${esc(c.name)}">
       <span class="cat-ico">${catIcon(c.name)}</span>
