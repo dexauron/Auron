@@ -81,11 +81,6 @@
   <main class="content">
     <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
-    <!-- Покупателю: что подешевело со вчера. Причина зайти сегодня -->
-    <div class="arr-strip" id="cheaperStrip" hidden></div>
-    <div class="arr-strip" id="riseStrip" hidden></div>
-    <!-- Покупателю: что привезли сегодня (или последний завоз) -->
-    <div class="arr-strip" id="arrivalStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <!-- «Подбор»: одно место, где человек выбирает, что показать.
          Раньше это жило в трёх местах сразу — вкладка «Категории», окно
@@ -94,6 +89,10 @@
          Теперь сверху плитки категорий (#catScreen), под ними — всё
          остальное: сортировка, цена, поступление, поставщик. -->
     <div class="pick-screen" id="pickScreen" hidden>
+      <!-- «Что изменилось»: завоз, подешевело, подорожало. Раньше это были три
+           полосы на главном экране; теперь строки здесь, а список открывается
+           самим каталогом — там уже есть и поиск, и сортировка. -->
+      <div id="pickLists"></div>
 <div class="ios-group-title">Сортировка</div>
       <div class="ios-group" id="sortSeg">
         <button class="ios-row" data-sort="relevance"><span class="ios-row-title">По совпадению</span><span class="ios-check"></span></button>

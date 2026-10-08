@@ -1,6 +1,6 @@
 // Категории товаров и умный поиск
 
-import { $, CFG, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state } from './store.js';
+import { $, CFG, RELATIVE_CUTOFF, SEARCH_THRESHOLD, state, ui } from './store.js';
 import { cmpRu, cmpStr, groupById, norm, stripPunct, supplierById, translit } from './core.js';
 import { CATEGORIES, OTHER_CAT, catCache, ic } from './icons.js';
 import { favorites } from './render.js';
@@ -685,6 +685,13 @@ export function visibleProducts() {
   // фильтр по поставщикам — объединение (товар от любого отмеченного)
   if (selSuppliers.length) {
     list = list.filter((p) => (p.supplier_ids || []).some((id) => selSuppliers.includes(id)));
+  }
+  /* Подборка «что изменилось»: завоз, подешевело, подорожало. Считает её тот,
+     кто знает данные (render.js, pricerise.js), сюда приходит готовый список —
+     поэтому здесь нет ни даты завоза, ни истории цен. */
+  if (state.pick && ui.pickList) {
+    const ids = new Set(ui.pickList(state.pick).map((p) => p.id));
+    list = list.filter((p) => ids.has(p.id));
   }
   // только избранное (сердечко) — по локальному списку устройства
   if (state.favOnly) { const f = new Set(favorites()); list = list.filter((p) => f.has(p.id)); }

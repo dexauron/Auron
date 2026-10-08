@@ -108,7 +108,8 @@ export const state = {
   quick: [],           // быстрые фильтры: 'withprice'|'barcode'|'nophoto'|'noprice'|'nobarcode'
   priceMin: null,      // диапазон розничной цены (₽)
   priceMax: null,
-  selType: '',         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
+  selType: '',
+  pick: '',         // подборка «что изменилось»: '' | 'arrived' | 'cheaper' | 'risen'         // '' | 'weighted' | 'piece' — весовые/штучные (сотрудникам)
   arrivalFrom: '',     // диапазон дат поступления (завоза), ISO YYYY-MM-DD; пусто = без границы
   arrivalTo: '',
   favOnly: false,      // показывать только избранные товары (сердечко)

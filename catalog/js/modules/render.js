@@ -482,6 +482,7 @@ export function clearAllFilters() {
   state.selCats = []; state.selGroups = []; state.selSuppliers = [];
   state.quick = []; state.priceMin = null; state.priceMax = null;
   state.selType = ''; state.arrivalFrom = ''; state.arrivalTo = ''; state.favOnly = false;
+  state.pick = '';
   const af = $('arrivalFrom'); const at = $('arrivalTo'); if (af) af.value = ''; if (at) at.value = '';
   state.query = '';
   state.renderLimit = PAGE_SIZE;
@@ -700,6 +701,7 @@ function arrivalTitle(day) {
 /* Товары подборки. Одна функция и для списка на экране, и для счётчика в
  * строке — иначе строка обещала бы одно, а каталог показывал другое. */
 export function pickList(kind) {
+  ui.pickList = pickList;          // цепочка фильтров зовёт через ui, без встречного импорта
   if (kind === 'arrived') {
     const day = arrivalDay();
     if (!day) return [];
