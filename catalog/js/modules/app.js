@@ -348,13 +348,35 @@ function bindEvents() {
     runWorkAction(b.dataset.work);
   });
   $('catScreen').addEventListener('click', (e) => {
+    if (e.target.closest('#catFindClear')) { ui.catQuery = ''; renderCatScreen(); return; }
     if (e.target.closest('[data-cat-back]')) { ui.openCat = null; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
     const open = e.target.closest('[data-cat-open]');
     if (open) { ui.openCat = open.dataset.catOpen; renderCatScreen(); window.scrollTo({ top: 0 }); return; }
+    /* Группа и категория ОТМЕЧАЮТСЯ, а не «применяются и уводят»: иначе нельзя
+       выбрать две. Отмеченное видно галочкой и плашками сверху, а внизу всегда
+       на виду кнопка «Показать N товаров» — она и уводит в каталог. */
+    const toggle = (list, v) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
     const grp = e.target.closest('[data-grp]');
-    if (grp) { state.selCats = []; state.selGroups = [grp.dataset.grp]; switchTab('catalog'); return; }
+    if (grp) {
+      state.selGroups = toggle(state.selGroups, grp.dataset.grp);
+      state.renderLimit = PAGE_SIZE;
+      renderAll(); renderCatScreen();
+      return;
+    }
     const all = e.target.closest('[data-cat-tile]');
-    if (all) { state.selCats = [all.dataset.catTile]; state.selGroups = []; switchTab('catalog'); }
+    if (all) {
+      state.selCats = toggle(state.selCats, all.dataset.catTile);
+      state.renderLimit = PAGE_SIZE;
+      renderAll(); renderCatScreen();
+    }
+  });
+  /* Поиск по категориям и группам: групп из 1С больше двухсот, плитками их не
+     просмотреть. Раньше это был отдельный экран «Все группы». */
+  $('catScreen').addEventListener('input', (e) => {
+    if (!e.target.closest('#catFind')) return;
+    ui.catQuery = e.target.value;
+    ui.openCat = null;
+    renderCatScreen();
   });
 
   // цены в карточке: открывает вход, тап по строке — историю цены

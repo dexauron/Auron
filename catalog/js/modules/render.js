@@ -1,7 +1,7 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
 import { $, PAGE_SIZE, state, ui } from './store.js';
-import { esc, expectPop, groupById, highlight, supplierById, moneyText } from './core.js';
+import { esc, expectPop, groupById, highlight, norm, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
@@ -105,7 +105,7 @@ export function renderCatScreen() {
   const field = `<div class="cat-find">
     <input type="search" id="catFind" class="input" placeholder="Найти категорию или группу…"
            value="${esc(ui.catQuery || '')}" autocomplete="off" aria-label="Найти категорию или группу">
-    ${ui.catQuery ? '<button class="cat-find-x" id="catFindClear" aria-label="Очистить">✕</button>' : ''}
+    ${ui.catQuery ? `<button class="cat-find-x" id="catFindClear" aria-label="Очистить">${ic('close', 'ic-xs')}</button>` : ''}
   </div>`;
 
   // общий вид строки группы: с галочкой, если она уже отмечена
@@ -391,9 +391,12 @@ export function countActiveFilters() {
     + (state.pick ? 1 : 0);
 }
 
+/* Подпись кнопки внизу «Подбора». Пишем число прямо на ней: человек отмечает
+   несколько категорий и групп подряд, и ему нужно видеть, сколько уже набралось,
+   не уходя с экрана. */
 function updateResultsCount(n) {
   const ap = $('filterApply');
-  if (ap) ap.textContent = `Показать ${n}`;
+  if (ap) ap.textContent = `Показать ${n} ${plural(n, 'товар', 'товара', 'товаров')}`;
 }
 
 // синхронизирует окно фильтров и значок с состоянием
