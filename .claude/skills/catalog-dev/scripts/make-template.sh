@@ -24,7 +24,7 @@ mkdir -p "$OUT"
 
 # 1. Весь код как есть. Каталог ложится в КОРЕНЬ репозитория: тогда GitHub
 #    Pages отдаёт его прямо, без подпапки, и адрес получается короче.
-rsync -a --exclude 'data' "$SRC"/ "$OUT"/
+( cd "$SRC" && tar -cf - --exclude='./data' . ) | ( cd "$OUT" && tar -xf - )
 
 # 2. Личное — вон.
 rm -f  "$OUT/icons/logo-round.png" \
