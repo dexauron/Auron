@@ -263,32 +263,17 @@ export function riseHtml(p) {
   return `<div class="rise-box">${ic('warn', 'ic-xs')}<div>${lines.map((t) => `<div>${esc(t)}</div>`).join('')}</div></div>`;
 }
 
-/* ── Полоса на главной ──────────────────────────────────────────────────────
- * Ровно там же, где у покупателя «Сегодня дешевле», и по тем же правилам:
- * прячется, как только человек начал искать или фильтровать — иначе она лезет
- * в глаза поверх результата. */
-export function renderRiseStrip() {
-  ui.renderRiseStrip = renderRiseStrip;
-  const box = $('riseStrip');
-  if (!box) return;
-  const show = state.session && state.tab === 'catalog' && !state.query && !state.favOnly && !ui.anyFilter();
-  if (!state.retailHist) state.retailHist = {};
-  if (show && !riseReady()) { riseWhenIdle(renderRiseStrip); box.hidden = true; return; }
-  const list = show ? risenList() : [];
-  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
-  const rows = list.slice(0, RISE_ROWS).map((r) => {
-    const main = r.cost || r.retail;
-    return `<button class="arr-row" data-similar="${esc(r.p.id)}">
-      <span class="arr-name">${esc(r.p.name)}</span>
-      <span class="arr-price rise-up">+${String(main.pct).replace('.', ',')}%
-        <span class="card-was">${esc(fmtPrice(main.was))}</span></span></button>`;
-  }).join('');
-  box.innerHTML = `<div class="arr-head">
-      <span class="arr-title">Подорожало</span>
-      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
-    </div>
-    <div class="arr-list">${rows}</div>`;
-  box.hidden = false;
+/* ── Подборка «Подорожало» ──────────────────────────────────────────────────
+ * Полосы на главном экране больше нет (владелец: «во вкладке каталога я не
+ * хочу, чтобы это там было»). Наружу отдаём только набор товаров — строку в
+ * «Подборе» и сам список рисует каталог, у него для этого всё есть.
+ *
+ * Первый расчёт после нового каталога — в свободную минуту: он занимает
+ * заметную долю секунды на бюджетном телефоне. Пока не посчитано, строки
+ * просто нет, а посчитав — перерисовываем «Подбор». */
+function riseIds() {
+  if (!riseReady()) { riseWhenIdle(() => { if (ui.renderAll) ui.renderAll(); }); return new Set(); }
+  return new Set(risenList().map((r) => r.p.id));
 }
 
 /* ── Отдельный экран во вкладке «Работа» ────────────────────────────────── */
@@ -327,6 +312,7 @@ function openRisen() {
 }
 
 export function bindPriceRise(openProduct) {
+  ui.risenIds = riseIds;          // подборка «Подорожало» во вкладке «Подбор»
   ui.workActions = ui.workActions || {};
   ui.workActions.risen = openRisen;
   $('risenBody').addEventListener('click', (e) => {

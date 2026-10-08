@@ -118,15 +118,31 @@ const openWork = (page) => page.evaluate(async () => {
   const card = await page.evaluate(() => document.getElementById('sheetRise').innerText.replace(/\s+/g, ' '));
   chk(/Закупка/.test(card) && /Ценник/.test(card), `в карточке товара тоже видно подорожание (${card.slice(0, 70)})`);
 
-  const strip = await page.evaluate(async () => {
+  /* Полосы на главном экране больше нет — «Подорожало» стало строкой-подборкой
+     во вкладке «Подбор», а список открывается самим каталогом. */
+  const pick = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
     window.location.hash = '';
-    window.WM_PUBLISH.renderAll();
-    await new Promise((r) => setTimeout(r, 400));
-    const el = document.getElementById('riseStrip');
-    return { hidden: el.hidden, text: el.innerText.replace(/\s+/g, ' ') };
+    document.querySelector('.tabbar [data-tab="pick"]').click();
+    await new Promise((r) => setTimeout(r, 500));
+    const row = document.querySelector('#pickLists [data-pick="risen"]');
+    const text = row ? row.innerText.replace(/\s+/g, ' ').trim() : '';
+    if (row) row.click();
+    await new Promise((r) => setTimeout(r, 500));
+    return {
+      text,
+      tab: [...document.querySelectorAll('.tabbar .tab')].find((t) => t.classList.contains('active')).dataset.tab,
+      cards: document.querySelectorAll('#productGrid .card').length,
+      chip: document.getElementById('activeFilters').innerText.replace(/\s+/g, ' '),
+      noStrip: !document.getElementById('riseStrip'),
+    };
   });
-  chk(!strip.hidden && /Подорожало/.test(strip.text), `на главной есть полоса «Подорожало» (${strip.text.slice(0, 50)})`);
+  chk(pick.noStrip, 'полосы на главном экране больше нет');
+  chk(/Подорожало/.test(pick.text) && /2 товара/.test(pick.text),
+    `в «Подборе» строка «Подорожало» со счётчиком (${pick.text})`);
+  chk(pick.tab === 'catalog' && pick.cards === 2,
+    `тап показывает эти товары обычным списком (${pick.cards})`);
+  chk(/Подорожало/.test(pick.chip), `видно, что подборка включена, и её можно снять (${pick.chip})`);
 
   // ── 6. Покупателю этого не видно ──
   const guest = await page.evaluate(async () => {
@@ -134,7 +150,9 @@ const openWork = (page) => page.evaluate(async () => {
     s.session = null; s.isAdmin = false; s.canPurchase = false; s.canSales = false;
     P.renderAll();
     await new Promise((r) => setTimeout(r, 400));
-    const strip = document.getElementById('riseStrip').hidden;
+    document.querySelector('.tabbar [data-tab="pick"]').click();
+    await new Promise((r) => setTimeout(r, 450));
+    const strip = !document.querySelector('#pickLists [data-pick="risen"]');
     // вкладка «Работа» покупателю и так спрятана (.emp-only), но откроем её
     // насильно: содержимое тоже не должно ничего ему рассказывать
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
@@ -142,7 +160,7 @@ const openWork = (page) => page.evaluate(async () => {
     await new Promise((r) => setTimeout(r, 400));
     return { strip, work: document.getElementById('workBody').innerText.replace(/\s+/g, ' ') };
   });
-  chk(guest.strip, 'покупателю полоса «Подорожало» не показывается');
+  chk(guest.strip, 'покупателю подборки «Подорожало» в подборе нет');
   chk(!/Подорожало/.test(guest.work), `и во вкладке «Работа» её для него нет (${guest.work.slice(0, 50)})`);
 
   // ── 7. Сотруднику — только ценник, закупка остаётся закрытой ──
