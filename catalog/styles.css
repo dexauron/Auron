@@ -1051,6 +1051,23 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .fab { bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom)); }
 
 /* ═══ Экран категорий ══════════════════════════════ */
+.cat-find {
+  position: relative;
+  padding: 10px calc(14px + env(safe-area-inset-right)) 0 calc(14px + env(safe-area-inset-left));
+}
+.cat-find .input { width: 100%; }
+.cat-find-x {
+  position: absolute; right: calc(20px + env(safe-area-inset-right)); top: 50%;
+  transform: translateY(-40%);
+  min-width: 34px; min-height: 34px; display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: none; color: var(--text-2); cursor: pointer;
+}
+/* отмеченные категории и группы видно, не открывая каталог */
+.cat-tile.cat-on { border-color: var(--accent); background: rgba(94, 92, 230, .10); }
+.grp-row.grp-on .grp-name { font-weight: 700; color: var(--brand-ink); }
+.grp-mark { min-width: 20px; display: inline-flex; justify-content: flex-end; color: var(--brand-ink); }
+.cat-hint { margin: 6px 0 10px; }
+
 .cat-screen { padding: 14px calc(14px + env(safe-area-inset-right)) 8px calc(14px + env(safe-area-inset-left)); }
 .cat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .cat-tile {
