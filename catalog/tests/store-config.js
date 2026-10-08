@@ -30,6 +30,32 @@ const OTHER_STORE = {
   const html = fs.readFileSync(path.join(dir, '..', '..', 'index.html'), 'utf8');
   chk(/class="brand-name"/.test(html), 'в разметке есть место под название магазина');
 
+  /* ── Движок должен быть пригоден для ЧУЖОГО магазина ───────────────────────
+   * Владелец решил отдать каталог как заготовку: «чтобы любой смог переделать
+   * под свой магазин». Значит ничего нашего не должно быть зашито ни в
+   * разметке, ни в модулях — ни названия, ни телефона, ни адреса, ни наших
+   * картинок. Всё это живёт только в js/config.js, и только его и правят.
+   * Проверяем файлами, а не экраном: на экране подстановка из настроек всё
+   * замаскирует, а в заготовку уедут именно файлы. */
+  const cfgText = fs.readFileSync(path.join(dir, '..', 'config.js'), 'utf8');
+  const mods = fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
+    .map((f) => ({ f, t: fs.readFileSync(path.join(dir, f), 'utf8') }));
+  const OURS = [
+    ['название магазина', /Way Market/],
+    ['номер телефона', /7964\s?0616601|\+7 964/],
+    ['адрес магазина', /Грозн/],
+    ['наш логотип', /logo-round/],
+    ['наш талисман', /wolf\.png|wolf-head\.png/],
+  ];
+  for (const [what, re] of OURS) {
+    const inHtml = re.test(html);
+    // в комментариях пояснения допустимы — там нет настоящих значений
+    const inMods = mods.filter((m) => re.test(m.t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')));
+    chk(!inHtml && !inMods.length,
+      `${what} не зашит в движке${inHtml ? ' — есть в index.html' : ''}${inMods.length ? ' — есть в ' + inMods.map((m) => m.f).join(', ') : ''}`);
+    chk(re.test(cfgText), `${what} задаётся в js/config.js — там его и меняют`);
+  }
+
   // ── 2. Каталог как есть — это Way Market ──
   {
     const { page, errs } = await newPage(b, { products, groups });
