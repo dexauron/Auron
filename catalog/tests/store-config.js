@@ -31,30 +31,34 @@ const OTHER_STORE = {
   chk(/class="brand-name"/.test(html), 'в разметке есть место под название магазина');
 
   /* ── Движок должен быть пригоден для ЧУЖОГО магазина ───────────────────────
-   * Владелец решил отдать каталог как заготовку: «чтобы любой смог переделать
-   * под свой магазин». Значит ничего нашего не должно быть зашито ни в
-   * разметке, ни в модулях — ни названия, ни телефона, ни адреса, ни наших
-   * картинок. Всё это живёт только в js/config.js, и только его и правят.
-   * Проверяем файлами, а не экраном: на экране подстановка из настроек всё
-   * замаскирует, а в заготовку уедут именно файлы. */
+   * Каталог отдаётся заготовкой: «чтобы любой смог переделать под свой
+   * магазин». Значит ничего, что описывает КОНКРЕТНЫЙ магазин, не должно быть
+   * зашито ни в разметке, ни в модулях. Проверка не знает, чей это магазин:
+   * она берёт значения из js/config.js и ищет ИХ в коде — поэтому работает и в
+   * заготовке, и в любой копии, кем бы она ни была настроена. */
   const cfgText = fs.readFileSync(path.join(dir, '..', 'config.js'), 'utf8');
+  const cfg = {};
+  for (const [, k, v] of cfgText.matchAll(/^\s*([A-Z_]+):\s*'([^']*)'/gm)) cfg[k] = v;
   const mods = fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
-    .map((f) => ({ f, t: fs.readFileSync(path.join(dir, f), 'utf8') }));
-  const OURS = [
-    ['название магазина', /Way Market/],
-    ['номер телефона', /7964\s?0616601|\+7 964/],
-    ['адрес магазина', /Грозн/],
-    ['наш логотип', /logo-round/],
-    ['наш талисман', /wolf\.png|wolf-head\.png/],
-  ];
-  for (const [what, re] of OURS) {
-    const inHtml = re.test(html);
-    // в комментариях пояснения допустимы — там нет настоящих значений
-    const inMods = mods.filter((m) => re.test(m.t.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '')));
-    chk(!inHtml && !inMods.length,
-      `${what} не зашит в движке${inHtml ? ' — есть в index.html' : ''}${inMods.length ? ' — есть в ' + inMods.map((m) => m.f).join(', ') : ''}`);
-    chk(re.test(cfgText), `${what} задаётся в js/config.js — там его и меняют`);
+    .map((f) => ({ f, t: fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '') }));
+  const htmlNoComments = html.replace(/<!--[\s\S]*?-->/g, '');
+  const OWN = ['STORE_NAME', 'STORE_PHONE', 'STORE_WHATSAPP', 'STORE_ADDRESS',
+    'STORE_PROMISE', 'LOGO', 'MASCOT', 'MASCOT_HEAD', 'MASCOT_NAME'];
+  const leaked = [];
+  for (const k of OWN) {
+    const v = cfg[k];
+    if (!v || v.length < 4) continue;                  // пустое и короткое не ищем
+    if (htmlNoComments.includes(v)) leaked.push(`${k} → index.html`);
+    for (const m of mods) if (m.t.includes(v)) leaked.push(`${k} → ${m.f}`);
   }
+  chk(!leaked.length, `ничего из настроек магазина не зашито в движке${leaked.length ? ': ' + leaked.join(', ') : ''}`);
+  // и наоборот: настройки действительно заполнены — иначе проверка выше пустая
+  chk(OWN.filter((k) => cfg[k]).length >= 5,
+    `настройки магазина заполнены, проверке есть что искать (${OWN.filter((k) => cfg[k]).length} из ${OWN.length})`);
+  // офлайн-копия тоже не должна знать имена наших картинок
+  const sw = fs.readFileSync(path.join(dir, '..', '..', 'sw.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const swLeak = OWN.filter((k) => cfg[k] && cfg[k].length > 4 && sw.includes(cfg[k]));
+  chk(!swLeak.length, `офлайн-копия не знает картинок магазина${swLeak.length ? ': ' + swLeak.join(', ') : ''}`);
 
   // ── 2. Каталог как есть — это Way Market ──
   {
