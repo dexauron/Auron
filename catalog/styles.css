@@ -1317,7 +1317,11 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .pick-screen {
   padding: 2px calc(14px + env(safe-area-inset-right)) 0 calc(14px + env(safe-area-inset-left));
 }
-.pick-screen .ios-group-title:first-child { margin-top: 0; }
+.pick-screen > *:first-child > .ios-group-title:first-child,
+.pick-screen > .ios-group-title:first-child { margin-top: 0; }
+/* выбранная подборка видна и не открывая каталог */
+.pick-screen .ios-row-link.is-on .ios-row-title { font-weight: 700; color: var(--brand-ink); }
+.pick-screen .ios-row-link.is-on .ios-row-value { color: var(--brand-ink); font-weight: 600; }
 .pick-actions {
   position: sticky; bottom: 0; z-index: 2;
   display: flex; gap: 10px; margin-top: 14px;
@@ -1696,7 +1700,6 @@ a.ios-row, a.ios-row-link { color: inherit; text-decoration: none; }
    Покупателю на главной: что появилось в магазине сегодня (или в последний
    завоз). Это единственная причина заходить в каталог каждый день, поэтому
    блок стоит выше всего остального и читается за секунду. */
-.arr-strip { margin: 12px 16px 4px; }
 
 /* ═══ Кавказский штрих ═══════════════════════════════════════════════════
    Ровно один: тонкая полоска-орнамент под шапкой — ромбы, как насечка на
