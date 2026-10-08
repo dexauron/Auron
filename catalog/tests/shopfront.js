@@ -29,8 +29,7 @@ const products = [
     return {
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
       html: document.getElementById('productGrid').innerHTML,
-      // полосы на главной больше нет: «подешевело» живёт строкой в «Подборе»
-      cheap: (document.querySelector('#pickLists [data-pick="cheaper"]') || {}).innerText || '',
+
     };
   }, was);
 
@@ -48,15 +47,40 @@ const products = [
     `видно, что подешевело и на сколько (${(v.grid.match(/89 ₽.{0,16}/) || [''])[0]})`);
   chk(/card-was/.test(v.html) && /card-drop/.test(v.html), 'старая цена зачёркнута, выгода — плашкой');
 
-  // ── 3. Полоса «Сегодня дешевле» ──
-  chk(/Сегодня дешевле/.test(v.cheap), `полоса на главной есть (${v.cheap.slice(0, 50)})`);
-  chk(/2 товара/.test(v.cheap), 'сказано, сколько товаров подешевело');
-  chk(/Молоко/.test(v.cheap) && /Сок/.test(v.cheap), 'в полосе именно подешевевшие товары');
+  /* ── 3. Подборка «Сегодня дешевле» ──
+     Полосы на главном экране больше нет: подборка стала строкой во вкладке
+     «Подбор», а список открывает сам каталог — там уже есть поиск и сортировка. */
+  const pickCheaper = () => page.evaluate(async () => {
+    document.querySelector('.tabbar [data-tab="pick"]').click();
+    await new Promise((r) => setTimeout(r, 450));
+    const row = document.querySelector('#pickLists [data-pick="cheaper"]');
+    const text = row ? row.innerText.replace(/\s+/g, ' ').trim() : '';
+    if (row) row.click();
+    await new Promise((r) => setTimeout(r, 450));
+    const names = [...document.querySelectorAll('#productGrid .card')].map((c) => c.innerText.split('\n')[0]);
+    return { text, names, noStrip: !document.getElementById('cheaperStrip') };
+  });
+  const cheap = await pickCheaper();
+  chk(cheap.noStrip, 'полосы на главном экране больше нет');
+  chk(/Сегодня дешевле/.test(cheap.text) && /2 товара/.test(cheap.text),
+    `в «Подборе» строка со счётчиком (${cheap.text})`);
+  chk(cheap.names.length === 2 && cheap.names.join(' ').includes('Молоко') && cheap.names.join(' ').includes('Сок'),
+    `тап показывает именно подешевевшие товары (${cheap.names.join(', ')})`);
 
   // ── 4. Не с чем сравнивать — ничего не выдумываем ──
+  await page.evaluate(() => { window.WM_PUBLISH._state().pick = ''; });
   const empty = await paint({});
-  chk(!empty.cheap, 'у первого посетителя полосы нет — сравнивать не с чем');
+  const noRow = await page.evaluate(async () => {
+    document.querySelector('.tabbar [data-tab="pick"]').click();
+    await new Promise((r) => setTimeout(r, 450));
+    return !document.querySelector('#pickLists [data-pick="cheaper"]');
+  });
+  chk(noRow, 'у первого посетителя подборки нет — сравнивать не с чем');
   chk(!/card-was/.test(empty.html), 'и зачёркнутых цен тоже нет');
+  await page.evaluate(async () => {
+    document.querySelector('.tabbar [data-tab="catalog"]').click();
+    await new Promise((r) => setTimeout(r, 350));
+  });
 
   // ── 5. «Цена на ценнике другая» ──
   const shelf = await page.evaluate(async () => {
@@ -99,12 +123,19 @@ const products = [
     return {
       html: document.getElementById('productGrid').innerHTML,
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
-      cheap: !document.querySelector('#pickLists [data-pick="cheaper"]'),
+
       shelfBtn: !!document.querySelector('[data-shelf-scanned]'),
     };
   });
   chk(/card-was/.test(staff.html), 'вошедшему зачёркнутую цену тоже показываем');
-  chk(!staff.cheap, 'и полоса «сегодня дешевле» у него есть');
+  const staffPick = await page.evaluate(async () => {
+    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
+    document.querySelector('.tabbar [data-tab="pick"]').click();
+    await new Promise((r) => setTimeout(r, 450));
+    const row = document.querySelector('#pickLists [data-pick="cheaper"]');
+    return row ? row.innerText.replace(/\s+/g, ' ').trim() : '';
+  });
+  chk(/Сегодня дешевле/.test(staffPick), `и подборка «сегодня дешевле» у него есть (${staffPick})`);
   chk(/row-pack/.test(staff.html), 'фасовка отдельной строкой — тоже');
   chk(!staff.shelfBtn, 'а вот кнопки про ценник у него нет — он сам его и печатает');
 
