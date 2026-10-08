@@ -32,7 +32,7 @@ let lastSay = 0;
 let hideTimer = 0;
 
 // есть ли талисман у этого магазина вообще
-export const hasMascot = () => !!(CFG.MASCOT || CFG.MASCOT_HEAD);
+const hasMascot = () => !!(CFG.MASCOT || CFG.MASCOT_HEAD);
 export const mascotName = () => CFG.MASCOT_NAME || 'Талисман';
 
 export const mascotOn = () => {
