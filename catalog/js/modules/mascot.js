@@ -194,6 +194,19 @@ function wolfTap() {
 }
 
 export function bindMascot() {
+  /* Талисман — настройка магазина. Нет картинки — нет и талисмана: убираем
+     кнопку в шапке и строку в настройках устройства, чтобы чужой магазин не
+     видел переключателя для того, чего у него нет. */
+  const head = $('wolfHi');
+  const img = document.querySelector('#wolfHi .wolf-head');
+  if (img && CFG.MASCOT_HEAD) img.src = CFG.MASCOT_HEAD;
+  if (head) head.hidden = !hasMascot();
+  const row = document.querySelector('label[for="devWolf"]');
+  if (row) {
+    row.hidden = !hasMascot();
+    const title = row.querySelector('.ios-row-title');
+    if (title) title.firstChild.textContent = mascotName();
+  }
   applyMascot();
   ui.hideWolf = hideBubble;   // окна прячут облачко, не зная про этот модуль
   const btn = $('wolfHi');

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
-  <title>Way Market · Каталог</title>
+  <title>Каталог товаров</title>
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -17,15 +17,19 @@
   <header class="header">
     <div class="header-row">
       <div class="brand">
-        <img class="brand-logo-img" src="icons/logo-round.png" alt="Way Market">
+        <!-- Название, подпись и логотип подставляются из js/config.js: в самой
+             разметке названия магазина нет, иначе каталог нельзя было бы
+             переделать под другой магазин одной правкой настроек. -->
+        <img class="brand-logo-img" alt="" hidden>
         <div class="brand-text">
-          <div class="brand-name">Way Market</div>
-          <div class="brand-sub">Каталог товаров</div>
+          <div class="brand-name"></div>
+          <div class="brand-sub"></div>
         </div>
       </div>
-      <!-- Волк Way Market: здоровается и подсказывает. Тап — подсказка -->
-      <button class="wolf-hi" id="wolfHi" type="button" aria-label="Помощник">
-        <img class="wolf wolf-head" src="icons/wolf-head.png" width="96" height="122" alt="" decoding="async">
+      <!-- Талисман магазина: здоровается и подсказывает. Картинка — из настроек
+           (MASCOT_HEAD); не указана — кнопки здесь нет. -->
+      <button class="wolf-hi" id="wolfHi" type="button" aria-label="Помощник" hidden>
+        <img class="wolf wolf-head" width="96" height="122" alt="" decoding="async">
       </button>
       <div class="header-btns">
         <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
@@ -628,7 +632,7 @@
         <div class="ios-group-title">Помощник</div>
         <div class="ios-group">
           <label class="ios-row" for="devWolf">
-            <span class="ios-row-title">Волк-помощник
+            <span class="ios-row-title">Талисман
               <span class="ord-sub">Здоровается, подсказывает и отмечает покупки</span></span>
             <span class="ios-switch"><input type="checkbox" id="devWolf"><span class="ios-knob"></span></span>
           </label>
