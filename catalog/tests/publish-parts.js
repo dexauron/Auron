@@ -1,6 +1,8 @@
 // Публикация по частям. Главное, что проверяем: после мелкой правки на GitHub
 // уезжает НЕСКОЛЬКО файлов, а не весь каталог. Раньше любая мелочь переписывала
 // витрину целиком и два зашифрованных файла по 17 МБ.
+const fs = require('fs');
+const path = require('path');
 const { chromium, runner } = require('./helpers');
 
 const N = 400;                       // товаров в проверочном каталоге
@@ -62,6 +64,12 @@ function fakeGithub() {
     },
   };
 }
+
+/* Куда магазин публикует данные — его настройка (DATA_PATH). Проверка берёт
+   её из js/config.js, а не зашивает нашу: иначе в чужой копии каталога этот
+   набор падал бы на пустом месте. */
+const DP = (fs.readFileSync(path.join(__dirname, '..', 'js', 'config.js'), 'utf8')
+  .match(/DATA_PATH:\s*'([^']+)'/) || [, 'data'])[1];
 
 (async () => {
   const b = await chromium.launch();
@@ -203,7 +211,7 @@ function fakeGithub() {
   chk(newOwner === N, `новый пароль владельца открывает каталог (${newOwner} товаров)`);
 
   // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
-  const keysFile = gh.fs.get(DP + '/keys.json') || '';
+  const keysFile = gh.fs.get(`${DP}/keys.json`) || '';
   chk(!/ownerpw|staffpw|другойпароль|новыйпароль/.test(keysFile) && keysFile.length < 2000,
     `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
 
@@ -248,7 +256,7 @@ function fakeGithub() {
     window.__legacy = old;
     return old.length > 0;
   });
-  gh.fs.set(DP + '/secret-catalog.enc', await page.evaluate(() => window.__legacy));
+  gh.fs.set(`${DP}/secret-catalog.enc`, await page.evaluate(() => window.__legacy));
   const readOld = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = [];
