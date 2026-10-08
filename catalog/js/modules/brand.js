@@ -59,6 +59,10 @@ export function applyBrand() {
     }
   }
 
+  // тот же логотип на экране входа
+  const li = document.querySelector('.login-logo');
+  if (li && CFG.LOGO) { li.src = CFG.LOGO; li.hidden = false; }
+
   if (CFG.ACCENT) {
     const root = document.documentElement.style;
     root.setProperty('--brand', CFG.ACCENT);
