@@ -271,7 +271,7 @@ export function riseHtml(p) {
  * Первый расчёт после нового каталога — в свободную минуту: он занимает
  * заметную долю секунды на бюджетном телефоне. Пока не посчитано, строки
  * просто нет, а посчитав — перерисовываем «Подбор». */
-export function riseIds() {
+function riseIds() {
   if (!riseReady()) { riseWhenIdle(() => { if (ui.renderAll) ui.renderAll(); }); return new Set(); }
   return new Set(risenList().map((r) => r.p.id));
 }

@@ -701,8 +701,7 @@ function arrivalTitle(day) {
 
 /* Товары подборки. Одна функция и для списка на экране, и для счётчика в
  * строке — иначе строка обещала бы одно, а каталог показывал другое. */
-export function pickList(kind) {
-  ui.pickList = pickList;          // цепочка фильтров зовёт через ui, без встречного импорта
+function pickList(kind) {
   if (kind === 'arrived') {
     const day = arrivalDay();
     if (!day) return [];
@@ -724,10 +723,15 @@ export function pickList(kind) {
   return [];
 }
 
-export const PICK_KINDS = ['arrived', 'cheaper', 'risen'];
+/* Цепочка фильтров зовёт подборку через общий `ui`, а не импортом: иначе
+   каталог и отрисовка ссылались бы друг на друга по кругу. Присваиваем сразу
+   при загрузке модуля, а не внутри функции — её могут спросить раньше, чем
+   нарисуют первый экран. */
+ui.pickList = pickList;
 
-// подпись подборки — наружу, для плашки активного фильтра
-export function pickLabel(kind) {
+const PICK_KINDS = ['arrived', 'cheaper', 'risen'];
+
+function pickLabel(kind) {
   if (kind === 'arrived') { const d = arrivalDay(); return d ? arrivalTitle(d) : 'Завоз'; }
   if (kind === 'cheaper') return 'Сегодня дешевле';
   if (kind === 'risen') return 'Подорожало';
