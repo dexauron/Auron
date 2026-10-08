@@ -857,7 +857,6 @@ function bindEvents() {
   });
   $('compareOpen').addEventListener('click', openCompare);
   $('compareClear').addEventListener('click', clearCompare);
-  $('compareClear2').addEventListener('click', clearCompare);
   $('compareBody').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-cmp-rm]');
     if (rm) removeFromCompare(rm.dataset.cmpRm);

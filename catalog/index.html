@@ -195,10 +195,10 @@
       Список: <span id="shopCount">0</span> · <span id="shopTotal">0 ₽</span></button>
   </div>
 
-  <!-- Отобрано для сравнения: полоска над нижней панелью -->
+  <!-- Отобрано для сравнения: полоска над нижней панелью. Одно действие —
+       открыть сравнение; «Очистить» живёт внутри окна, где видно, что чистишь. -->
   <div class="compare-bar" id="compareBar" hidden>
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
-    <button class="btn btn-ghost" id="compareClear">Очистить</button>
   </div>
 
   <nav class="tabbar" id="tabbar">
@@ -1129,7 +1129,7 @@
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="ios-nav">
-        <button class="ios-nav-btn" id="compareClear2">Очистить</button>
+        <button class="ios-nav-btn" id="compareClear">Очистить</button>
         <h2 class="ios-nav-title">Сравнение</h2>
         <button class="ios-nav-btn strong" data-close="compareSheet">Готово</button>
       </div>
