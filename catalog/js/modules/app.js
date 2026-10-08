@@ -4,7 +4,7 @@ import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
 import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
 import { buildIndex, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
+import { addRecentQuery, choosePick, clearAllFilters, closeLightbox, deviceId, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
@@ -239,18 +239,13 @@ function bindEvents() {
   // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
   $('myStrip').addEventListener('click', openSimilar);
   $('newStrip').addEventListener('click', openSimilar);
-  $('cheaperStrip').addEventListener('click', openSimilar);
-  $('arrivalStrip').addEventListener('click', (e) => {
-    const all = e.target.closest('[data-arr-all]');
-    if (all) {
-      // «Показать все» — это фильтр по дню завоза, к нему у каталога всё есть
-      state.arrivalFrom = all.dataset.arrAll; state.arrivalTo = all.dataset.arrAll;
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-      window.scrollTo({ top: 0 });
-      return;
-    }
-    openSimilar(e);
+
+  /* Подборки «что изменилось» во вкладке «Подбор»: завоз, подешевело,
+     подорожало. Тап — и каталог показывает ровно эти товары; отдельного экрана
+     под каждую подборку нет, он и не нужен. */
+  $('pickLists').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pick]');
+    if (b) choosePick(b.dataset.pick);
   });
 
   // Точки под фото
