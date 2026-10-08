@@ -24,16 +24,7 @@ const groups = [{ id: 'g1', name: 'Выпечка и фастфуд', sort_order
 
   const fits = () => page.evaluate(() => [...document.querySelectorAll('#productGrid .card')]
     .filter((c) => { const r = c.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }).length);
-  /* Плотность вида — сколько высоты экрана тратится на ОДИН товар. Считать
-     «сколько целиком влезло» грубо: ответ скачет на целую единицу и зависит от
-     высоты окна. Пиксели на товар сравнивают виды честно. */
-  const density = () => page.evaluate(() => {
-    const grid = document.getElementById('productGrid');
-    const n = grid.querySelectorAll('.card').length;
-    return n ? Math.round(grid.scrollHeight / n) : 0;
-  });
   const fitTiles = await fits();
-  const densTiles = await density();
 
   // ── код виден на плитке и он заметнее прочего ──
   const sizes = await page.evaluate(() => {
@@ -82,13 +73,7 @@ const groups = [{ id: 'g1', name: 'Выпечка и фастфуд', sort_order
   chk(/list/.test(list.cls), 'третье нажатие — режим списка');
   chk(!list.photoShown, 'в списке фото не показываются — место под коробки не тратится');
   chk(list.codePx >= 18, `код в списке крупный (${list.codePx}px)`);
-  /* Раньше здесь требовалось «в списке влезает в 1.8 раза больше»: это было
-     верно, пока плитка без фото занимала пустой квадрат во весь экран. Теперь
-     плитки компактные, и такой разрыв недостижим — да и не нужен. Проверяем то,
-     ради чего список существует: он ПЛОТНЕЕ плиток. */
-  const densList = await density();
-  chk(densList < densTiles,
-    `список плотнее плиток: ${densList}px на товар против ${densTiles}px (на экране ${fitList} против ${fitTiles})`);
+  chk(fitList >= fitTiles * 1.8, `на экран влезает заметно больше товаров: список ${fitList} против плиток ${fitTiles}`);
 
   // ── четвёртое нажатие возвращает плитки ──
   await page.click('#viewToggleBtn'); await page.waitForTimeout(300);

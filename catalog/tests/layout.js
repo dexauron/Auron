@@ -3,7 +3,7 @@
 // («Похожие товары», чипы) прокручиваются нарочно — их не считаем.
 const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers');
 
-const SHEETS = ['filterSheet', 'adminMenuSheet', 'deviceSheet', 'suppliersManageSheet', 'supplierEditSheet',
+const SHEETS = ['adminMenuSheet', 'deviceSheet', 'suppliersManageSheet', 'supplierEditSheet',
   'groupsSheet', 'orderRulesSheet', 'calcSheet', 'topSheet', 'publishSheet', 'formSheet', 'loginSheet',
   'ordersSheet', 'orderFormSheet', 'compareSheet', 'restockSheet', 'workSheet', 'scanSheet',
   'shopSheet', 'storeSheet', 'newsSheet', 'priceReportSheet', 'askSheet'];
@@ -55,7 +55,7 @@ const products = Array.from({ length: 6 }, (_, i) => ({
          шла в самом конце, при закрытых окнах: кнопки были нулевого размера,
          пропускались — и так проехали голые кнопки «−/+» в списке покупок. */
       const tiny = await page.evaluate(() => {
-        const skip = (el) => el.closest('.ios-switch') || el.classList.contains('check-cb') || el.closest('.tree-sub');
+        const skip = (el) => el.closest('.ios-switch') || el.classList.contains('check-cb');
         const out2 = [];
         document.querySelectorAll('button, [role="button"]').forEach((el) => {
           const r = el.getBoundingClientRect();
@@ -75,6 +75,24 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     };
 
     await scan('главный экран');
+    /* «Подбор» — самый плотный экран приложения: плитки категорий, сортировка,
+       цена, поступление, поставщик, чипы. Он не окно, а часть страницы, и в
+       список окон ниже не попадает — смотрим его отдельно. */
+    await page.evaluate(async () => {
+      document.querySelector('.tabbar [data-tab="pick"]').click();
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    await scan('вкладка «Подбор»');
+    await page.evaluate(async () => {
+      const t = document.querySelector('.cat-tile');
+      if (t) t.click();                       // второй уровень: группы внутри категории
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    await scan('«Подбор»: группы внутри категории');
+    await page.evaluate(async () => {
+      document.querySelector('.tabbar [data-tab="catalog"]').click();
+      await new Promise((r) => setTimeout(r, 400));
+    });
     await openProduct(page, 'p1'); await page.waitForTimeout(350);
     await scan('карточка товара');
     await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
@@ -131,19 +149,13 @@ const products = Array.from({ length: 6 }, (_, i) => ({
     });
     await scan('storeSheet с подсказками');
 
-    // «закончилось на полке» открывается со вкладки «Работа» (в меню его нет)
-    for (const [id, work] of [['restockSheet', 'restock']]) {
+    // рабочие списки открываются из вкладки «Работа»
+    for (const [id, what] of [['restockSheet', 'restock']]) {
       await page.evaluate(async (w) => {
         document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-        // выше мы примеряли роль покупателя — возвращаем сотрудника: список
-        // пополнения живёт на его вкладке «Работа»
-        const P = window.WM_PUBLISH; P.ghSetToken('tok'); P.applyServerless('pw');
-        await new Promise((r) => setTimeout(r, 250));
-        document.querySelector('.tabbar [data-tab="work"]').click();
-        await new Promise((r) => setTimeout(r, 350));
-        document.querySelector(`[data-work="${w}"]`).click();
-        await new Promise((r) => setTimeout(r, 350));
-      }, work);
+        window.WM_PUBLISH._work(w);
+        await new Promise((r) => setTimeout(r, 450));
+      }, what);
       await scan(`${id} со списком`);
     }
     chk(!bad.length, `ширина ${W}px: ничего не вылезает за край${bad.length ? ' — ' + bad.join(' | ') : ''}`);

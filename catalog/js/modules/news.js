@@ -8,15 +8,14 @@
  * Снимок цен держим неделю: иначе «подешевело» исчезало бы сразу после
  * первого же захода, и человек ничего не успевал заметить. */
 
-import { $, idbGet, idbSet, localList, lsGet, lsSet, state, ui } from './store.js';
+import { $, idbGet, idbSet, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { daysAgoISO, fmtDate, fmtPrice, fmtRetail, priceOf, todayISO } from './catalog.js';
+import { daysAgoISO, fmtDate, fmtPrice, fmtRetail, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { stockState } from './publish.js';
 import { buzz, wolfSay } from './mascot.js';
 
 const WAIT_KEY = 'wm_guest_wait_v1';
-const WAIT_MAX = 100;
 const SNAP_KEY = 'wm_price_snapshot';
 const SNAP_DAYS = 7;            // столько живёт снимок цен
 const DROP_MIN_RUB = 1;         // мелочь в копейках — не новость
@@ -31,10 +30,14 @@ const SEEN_KEY = 'wm_news_seen';
 
 let news = { appeared: [], cheaper: [], fresh: [] };
 
-const waitStore = localList(WAIT_KEY, { max: WAIT_MAX });
-const readWait = () => waitStore.read();
-const writeWait = (list) => waitStore.write(list);
+function readWait() {
+  try { return JSON.parse(localStorage.getItem(WAIT_KEY)) || []; } catch (e) { return []; }
+}
+function writeWait(list) {
+  try { localStorage.setItem(WAIT_KEY, JSON.stringify(list.slice(-100))); } catch (e) { /* нет места */ }
+}
 const isWaiting = (id) => readWait().some((x) => x.id === id);
+const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
 
 /* Кнопка «Сообщите, когда появится» — только у покупателя и только когда
  * товара нет: в остальных случаях она бессмысленна и только мешает. */
@@ -50,19 +53,12 @@ function toggleWait(p) {
   if (!p) return;
   const list = readWait();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) {
-    list.splice(i, 1);
-    if (!writeWait(list)) { toast('Не удалось сохранить изменение на телефоне'); return; }
-    toast('Больше не слежу за этим товаром');
-  } else {
-    if (list.length >= WAIT_MAX) {
-      toast('Список ожидания заполнен (100 товаров). Убери ненужные отметки.');
-      return;
-    }
+  if (i >= 0) { list.splice(i, 1); writeWait(list); toast('Больше не слежу за этим товаром'); }
+  else {
     list.push({ id: p.id, name: p.name || '', code: p.code || '', at: todayISO() });
-    if (!writeWait(list)) { toast('Не удалось сохранить ожидание на телефоне'); return; }
+    writeWait(list);
     buzz();
-    wolfSay('Отмечено. При следующем открытии покажу, если товар появился');
+    wolfSay('Хорошо! Скажу, когда он снова появится');
   }
   syncWaitButton(p);
 }
@@ -88,10 +84,6 @@ export async function checkNews() {
      зачёркнутой рядом с новой — так экономия видна, не открывая ничего.
      Кладём в общее состояние, чтобы отрисовка не лезла в хранилище сама. */
   state.priceWas = {};
-  /* С КАКОГО дня сравниваем. Снимок цен живёт до недели, поэтому «Сегодня
-     дешевле» было неправдой: цена могла упасть пять дней назад. Дату отдаём
-     наружу, чтобы полоса могла честно сказать, с чем сравнивает. */
-  state.priceWasAt = fresh ? String(snap.at).slice(0, 10) : '';
   if (fresh) {
     for (const p of state.products) {
       const was = snap.prices[p.id];
@@ -127,7 +119,7 @@ export async function checkNews() {
 
   if (!fresh) { try { await idbSet(SNAP_KEY, { at: new Date().toISOString(), prices: now }); } catch (e) { /* не влезло */ } }
   if (state.session) hideBanner(); else renderNewsBanner();
-  if (ui.renderPriceNewsEntry) ui.renderPriceNewsEntry();   // число в «Изменениях цен»
+  if (ui.renderCheaper) ui.renderCheaper();   // полоса «сегодня дешевле» на главной
 }
 
 function hideBanner() { const el = $('newsBanner'); if (el) el.hidden = true; }
@@ -148,7 +140,7 @@ function renderNewsBanner() {
    * напоминаем не чаще раза в день; появление ожидаемого товара или снижение
    * цены — новость сама по себе и показывается всегда. */
   let seen = '';
-  seen = lsGet(SEEN_KEY);
+  try { seen = localStorage.getItem(SEEN_KEY) || ''; } catch (e) { seen = ''; }
   if (news.fresh.length >= 3 && (parts.length || seen !== todayISO())) {
     parts.push(`${news.fresh.length} ${plural(news.fresh.length, 'новинка', 'новинки', 'новинок')}`);
   }
@@ -161,7 +153,7 @@ function openNews() {
   const box = $('newsBody');
   if (!box) return;
   // посмотрел — сегодня про новинки больше не напоминаем
-  lsSet(SEEN_KEY, todayISO());
+  try { localStorage.setItem(SEEN_KEY, todayISO()); } catch (e) { /* приватный режим */ }
   const row = (p, extra) => `<button class="ios-row ios-row-link" data-news-open="${esc(p.id)}">
     <span class="ios-row-title">${esc(p.name)}${extra ? `<span class="ord-sub">${extra}</span>` : ''}</span>
     <span class="ios-row-value">${esc(fmtRetail(p))}</span></button>`;

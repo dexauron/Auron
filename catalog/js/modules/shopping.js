@@ -7,9 +7,9 @@
  *
  * Всё живёт на его телефоне: сервера нет, да и не нужен — список личный. */
 
-import { $, localList, state, ui } from './store.js';
+import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { fmtNum, fmtPrice, priceOf, stepOf, unitOf } from './catalog.js';
+import { fmtNum, fmtPrice } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
@@ -18,10 +18,14 @@ import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
 const KEY = 'wm_shop_v1';
 const MAX = 200;
 
-const shop = localList(KEY, { max: MAX });
-const read = () => shop.read();
-const write = (list) => shop.write(list);
+function read() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+}
+function write(list) {
+  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+}
 
+const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
 const inShop = (id) => read().some((x) => x.id === id);
 
 /* Итог считаем по цене, записанной в момент добавления: она могла измениться,
@@ -35,34 +39,15 @@ function total(list) {
   }, 0);
 }
 
-/* Единица товара. Весовой берут килограммами, штучный — штуками: «2 шт
- * сыра на развес» не значит ничего, а «2 кг» значит (просьба владельца).
- * Единицу спрашиваем у самого товара, а не выдумываем. */
-const rowUnit = (x) => x.unit || unitOf(state.products.find((y) => y.id === x.id));
-
 /* Наружу — ради ценника: покупатель отсканировал товар и тут же кладёт его
  * в список, не открывая карточку. */
-// сколько ещё не вычеркнуто — для строки на вкладке «Работа»
-export function shopCount() { return read().filter((x) => !x.done).length; }
-
 export function toggleShop(p) {
   if (!p) return false;
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) {
-    list.splice(i, 1);
-    if (!write(list)) { toast('Не удалось сохранить список на устройстве'); return null; }
-    renderShopBar();
-    return false;
-  }
-  if (list.length >= MAX) {
-    toast(`Список заполнен — максимум ${MAX} позиций`);
-    return null;
-  }
-  const unit = unitOf(p);
-  list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p),
-    unit, qty: 1, done: false });
-  if (!write(list)) { toast('Не удалось сохранить список на устройстве'); return null; }
+  if (i >= 0) { list.splice(i, 1); write(list); renderShopBar(); return false; }
+  list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: 1, done: false });
+  write(list);
   renderShopBar();
   return true;
 }
@@ -71,8 +56,7 @@ function shopQty(id, delta) {
   const list = read();
   const row = list.find((x) => x.id === id);
   if (!row) return;
-  const step = stepOf(rowUnit(row));
-  row.qty = Math.max(step, Math.round(((Number(row.qty) || 1) + delta * step) * 1000) / 1000);
+  row.qty = Math.max(1, Math.round(((Number(row.qty) || 1) + delta) * 1000) / 1000);
   write(list);
   renderShop();
   renderShopBar();
@@ -111,10 +95,7 @@ function renderShopBar() {
   if (!bar) return;
   const list = read();
   const left = list.filter((x) => !x.done).length;
-  /* Полоску видят ВСЕ, у кого список не пуст. Раньше она пряталась от
-     вошедших: сотрудник собирал список и терял к нему дорогу (просьба
-     владельца — список нужен и сотруднику, и владельцу). */
-  bar.hidden = !list.length;
+  bar.hidden = !(list.length && !state.session);
   if (list.length) {
     $('shopCount').textContent = `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}`;
     $('shopTotal').textContent = fmtPrice(total(list));
@@ -141,18 +122,17 @@ function renderShop() {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const sum = price * (Number(x.qty) || 1);
-    const unit = rowUnit(x);
     return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
     <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
-        <span class="ord-sub">${(Number(x.qty) || 1) !== 1
-    ? `${fmtNum(x.qty)} ${esc(unit)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
-    : (price ? `${fmtPrice(price)} / ${esc(unit)}` : 'цена не указана')}${x.code && state.session ? ' · код ' + esc(x.code) : ''}</span></span>
+        <span class="ord-sub">${(Number(x.qty) || 1) > 1
+    ? `${fmtNum(x.qty)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
+    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
       <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
-        <span class="shop-qty">${fmtNum(x.qty)} ${esc(unit)}</span>
+        <span class="shop-qty">${fmtNum(x.qty)}</span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
@@ -182,34 +162,17 @@ function renderShop() {
  *
  * Полученный список ДОБАВЛЯЕТСЯ к своему, а не заменяет его: человек мог уже
  * что-то отметить сам, и потерять это из-за чужой ссылки он не должен. */
-// Ссылка включает весь сохранённый список: write() ограничивает его MAX позициями.
-const LIST_MAX = MAX;
-
-/* Внутренний номер товара — UUID с дефисами. В ссылке дефис разделяет
-   позиции, поэтому раньше каждый дефис уезжал как «%2D»: на 200 товарах
-   ссылка пухла до девяти тысяч знаков, а у покупателя кода кассы нет вовсе —
-   значит таких товаров в его списке ВСЕ. Дефисы в UUID стоят на известных
-   местах, их можно просто убрать и вернуть при чтении: ссылка короче почти
-   вдвое и читается без хитростей. */
-const bare = (id) => String(id).replace(/-/g, '');
-const sameId = (a, b) => String(a).replace(/-/g, '') === b;
+const LIST_MAX = 60;      // длиннее в ссылку не влезет, да и не бывает
 
 export function shopLink() {
   const parts = [];
   for (const x of read().filter((y) => !y.done).slice(0, LIST_MAX)) {
     const p = state.products.find((y) => y.id === x.id);
     const code = p && p.code ? String(p.code) : '';
-    const key = code ? code : 'i' + bare(x.id);
-    /* Разделители ссылки — «-» и «x», поэтому ключ от них чистим. Обычно
-       чистить нечего: код кассы — цифры, а внутренний номер мы кладём без
-       дефисов. Замены оставлены на случай нестандартного номера. */
-    const safeKey = encodeURIComponent(key).replace(/-/g, '%2D').replace(/x/g, '%78');
+    const key = code ? code : 'i' + x.id;
+    if (/[-x&#]/.test(key)) continue;                 // ключ в ссылку не годится
     const q = Number(x.qty) || 1;
-    /* Количество кладём, если оно НЕ единица — включая дробь. Было `q > 1`,
-       и это осталось с тех пор, когда количество было только целым: у весового
-       товара полкило (0,5) в ссылку не попадало вовсе, а у получателя
-       подставлялась единица — полкило превращалось в килограмм (находка GPT). */
-    parts.push(q !== 1 ? `${safeKey}x${q}` : safeKey);
+    parts.push(q > 1 ? `${key}x${q}` : key);
   }
   if (!parts.length) return '';
   const base = location.origin + location.pathname;
@@ -223,34 +186,26 @@ export function shopFromHash() {
   try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { /* некритично */ }
   const list = read();
   const have = new Set(list.map((x) => x.id));
-  let added = 0; let missing = 0; let overflow = 0;
-  for (const chunk of m[1].split('-')) {
+  let added = 0; let missing = 0;
+  for (const chunk of decodeURIComponent(m[1]).split('-')) {
     if (!chunk) continue;
-    const [encodedKey, qty] = chunk.split('x');
-    let key;
-    try { key = decodeURIComponent(encodedKey); }
-    catch (e) { missing++; continue; } // испорченная ссылка — остальные позиции читаем
+    const [key, qty] = chunk.split('x');
     const p = key[0] === 'i'
-      ? state.products.find((x) => sameId(x.id, key.slice(1)))
+      ? state.products.find((x) => String(x.id) === key.slice(1))
       : state.products.find((x) => x.code != null && String(x.code) === key);
     if (!p) { missing++; continue; }
     if (have.has(p.id)) continue;                      // уже есть — количество не трогаем
-    if (list.length >= MAX) { overflow++; continue; } // свои позиции не вытесняем
     list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: Number(qty) || 1, done: false });
     have.add(p.id);
     added++;
   }
-  if (!added && !missing && !overflow) return;
-  /* Записать могло и не получиться (память телефона полна). Тогда не
-     рассказываем про добавленные позиции — их никто не сохранил. */
-  if (added && !write(list)) { toast('Не удалось сохранить список на устройстве'); return; }
+  if (!added && !missing) return;
+  write(list);
   renderShopBar();
   openShop();
-  const addedText = `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`;
   toast(added
-    ? addedText + (overflow ? `; ${overflow} не поместилось (предел ${MAX})` : '')
-    : overflow ? `Список заполнен: ${overflow} не поместилось (предел ${MAX})`
-      : 'Этих товаров у нас нет');
+    ? `Добавил ${added} ${plural(added, 'позицию', 'позиции', 'позиций')} из присланного списка`
+    : 'Этих товаров у нас нет');
 }
 
 /* ── Отправить список ───────────────────────────────────────────────────────
@@ -269,11 +224,10 @@ function shopText(wa) {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
     const qty = Number(x.qty) || 1;
-    const unit = rowUnit(x);
     let tail = '';
-    if (price && qty !== 1) tail = ` — ${fmtNum(qty)} ${unit} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
+    if (price && qty > 1) tail = ` — ${fmtNum(qty)} × ${fmtPrice(price)} = ${fmtPrice(price * qty)}`;
     else if (price) tail = ` — ${fmtPrice(price)}`;
-    else if (qty !== 1) tail = ` — ${fmtNum(qty)} ${unit}`;
+    else if (qty > 1) tail = ` — ${fmtNum(qty)} шт`;
     return `${i + 1}. ${x.name}${tail}`;
   });
   const rest = list.length - lines.length;
@@ -373,16 +327,11 @@ export function bindShopping() {
     const p = ui.currentProduct;
     if (!p) return;
     const added = toggleShop(p);
-    if (added === null) return;
     syncShopButton(p);
     if (added) { buzz(); wolfSay('Записал в список покупок'); }
     else toast('Убрано из списка');
   });
   $('shopOpen').addEventListener('click', openShop);
-  /* Открывается со вкладки «Работа» — там же, где «Закончилось на полке» и
-     заказы. В меню строки больше нет: два входа в одно место лишние. */
-  ui.workActions = ui.workActions || {};
-  ui.workActions.shop = openShop;
   $('shopShare').addEventListener('click', shareShop);
   $('shopWa').addEventListener('click', shopToWhatsApp);
   $('shopClear').addEventListener('click', clearShop);

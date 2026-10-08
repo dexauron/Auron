@@ -26,13 +26,11 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     await page.waitForFunction(() => window.WM_PUBLISH, { timeout: 30000 });
     await page.waitForTimeout(1200);
     const st = await page.evaluate(() => ({
-      /* Вход теперь один и начинается с вопроса «кто пришёл»: сотрудник зала
-         или владелец/бухгалтер. Раньше дверей было две. */
-      login: !document.getElementById('entryChoiceSheet').hidden,
+      login: !document.getElementById('loginSheet').hidden,
       restock: !document.getElementById('restockSheet').hidden,
       url: location.search,
     }));
-    chk(st.login && !st.restock, 'без входа ярлык «Закончилось» открывает выбор входа');
+    chk(st.login && !st.restock, 'без входа ярлык «Закончилось» открывает вход');
     chk(st.url === '', `адрес чистится, чтобы обновление не повторяло действие (“${st.url}”)`);
     await page.context().close();
   }

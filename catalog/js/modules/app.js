@@ -1,37 +1,31 @@
 // Связывание всего вместе и запуск
 
-import { $, CFG, PAGE_SIZE, lsDel, lsGet, lsSet, state, ui, idbSet } from './store.js';
-import { addBackButtons, attachMoneyInput, closeSheet, enableSwipeToClose, goBack, logError, moneyNum, norm, openSheet, safely, setRowText, toast, translit, watchErrors } from './core.js';
+import { $, CFG, PAGE_SIZE, state, ui, idbSet } from './store.js';
+import { addBackButtons, closeSheet, enableSwipeToClose, logError, norm, openSheet, safely, setRowText, toast, translit, watchErrors, attachMoneyInput, moneyNum } from './core.js';
 import { ic, paintIcons } from './icons.js';
-
-import { bindFloorUI } from './floorui.js';
-import { buildIndex, categoryOf, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
-import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, filterCatOpen, initTheme, loadFilters, markViewPicked, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderFilterCats, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
+import { buildIndex, daysAgoISO, packText, parseScaleBarcode, productCategory, scoreProduct, todayISO, updatedText, visibleProducts, warmSearchIndex } from './catalog.js';
+import { addRecentQuery, clearAllFilters, closeLightbox, deviceId, initTheme, loadFilters, openLightbox, removeFilter, renderActiveFilters, renderAll, renderCatScreen, renderGrid, renderRecent, showSkeleton, switchTab, toggleFav, toggleTheme } from './render.js';
 import { DEV_NAME_KEY, openDeviceSheet, resetDevice, applyPowerMode, watchInstall } from './device.js';
 import { calcOffer, copyText, loadOrderRules, openFromHash, openOrderRules, openPriceCalc, openProduct, openSupplierView, orderPlan, renderCalcResult, renderOrderRulesExample, renderStock, saveOrderRules, shareProduct, updateFavButton } from './card.js';
 import { loadCache, saveCache, tidyMemory } from './data.js';
-import { applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
+import { SV_AUTH_KEY, applyServerless, applyStaff, autoPublish, buildFullSnapshot, buildPopularIds, buildPublicProducts, clearSvAuth, decryptJSON, encryptJSON, ghApi, ghBranch, ghCommit, ghConfigured, ghRepo, ghSetToken, ghToken, publishFull, publishShowcase, unlockAny, unlockSecret, unlockStaff, ghReason, SHOWCASE_V } from './publish.js';
 import { openCompStoreView, openCompetitorAdd, renderCompStoreList, renderCompStores, renderCompetitors, showCompChosen, submitCompetitorPrice } from './competitors.js';
 import { attachFoundPhoto, autoPhotoSearch, createCompetitor, dedupProducts, findProductPhoto, isOwner, renderPhotoManager, runPhotoSearch, sortByInternet, uncategorized } from './photos.js';
-import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderGroupsPick, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
+import { addGroup, addSupplier, deleteGroup, deleteProduct, deleteSupplier, openSupplierEdit, saveSupplierEdit, loadTopProducts, openForm, openTopSheet, periodLabel, renameGroup, renderFormSupplierTags, renderGroupsManager, renderSupplierList, renderSuppliersManager, renderTopPeriods, submitForm } from './admin.js';
 import { applyBrand } from './brand.js';
 import { IMPORT_ORDER, checkShowcaseFresh, downloadMissing, refresh, smartPick, smartRun, svImportRows, svSaveAndPublish } from './imports.js';
-import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan } from './scanner.js';
-import { bindOrderForm, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
+import { bindScanResult, findByBarcode, scanToPrice, scanToSearch, startScan, stopScan } from './scanner.js';
+import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ordersToday, removeOrderItem, saveOrder, sendOrderToSupplier, setOrdersMode, shareOrders, shiftMonth, shiftWeek, showDayWeek } from './orders.js';
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openShelfReport, openStore } from './guest.js';
 import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
-import { bindMargin, marginCount, marginIssues, openMargin, openStale, renderMarginBadge, staleItems } from './margin.js';
+import { bindMargin, marginCount, marginIssues, openMargin, openStale, staleItems } from './margin.js';
 import { bindReviews, openRate, ratingOf, ratingText, renderReviewsBadge } from './reviews.js';
 import { bindPriceRise } from './pricerise.js';
-import { bindPriceNews } from './pricenews.js';
-import { logSession } from './sessionlog.js';
-import { applyFloorSnapshot, rememberFloor } from './floor.js';
-import { restoreLogin } from './restore.js';
-import { clearRestock, inRestock, openRestock, orderFromRestock, removeRestock, scanToRestock, shareRestock, toggleRestock } from './restock.js';
+import { clearRestock, openRestock, orderFromRestock, removeRestock, renderRestockBadge, scanToRestock, shareRestock, toggleRestock } from './restock.js';
 
 /* ── События ──────────────────────────────────── */
 
@@ -64,52 +58,17 @@ function bindEvents() {
     input.focus();
   });
 
-  // Окно фильтров (одна кнопка — всё внутри: категории, сортировка, цена, вид)
-  $('filterFav').addEventListener('change', (e) => { state.favOnly = e.target.checked; state.renderLimit = PAGE_SIZE; renderAll(); });
-  $('filterApply').addEventListener('click', () => closeSheet('filterSheet'));
+  /* «Показать товары» — это просто возврат на каталог: подбор и сетка живут на
+     разных вкладках, и отдельного окна у фильтра больше нет. */
+  $('filterApply').addEventListener('click', () => switchTab('catalog'));
   $('filterReset').addEventListener('click', clearAllFilters);
-  // Круглая иконка «вид» в шапке. Три режима по кругу: плитки → плотные
-  // плитки → список. Список — для кассы: влезает втрое больше строк.
+  // Круглая иконка «вид» в шапке — переключает размер плиток
+  // Три режима по кругу: плитки → плотные плитки → список.
+  // Список — для кассы: без фото влезает втрое больше строк, а код крупный.
   $('viewToggleBtn').addEventListener('click', () => {
     state.view = state.view === 'normal' ? 'compact' : (state.view === 'compact' ? 'list' : 'normal');
-    markViewPicked();   // человек выбрал вид сам — больше ничего за него не решаем
     state.renderLimit = PAGE_SIZE;
     renderAll();
-  });
-
-  // Категории-чекбоксы: отметка добавляет/снимает категорию (и её подгруппы)
-  $('filterCats').addEventListener('change', (e) => {
-    const cb = e.target.closest('[data-fcat]');
-    if (cb) {
-      const c = cb.dataset.fcat;
-      if (cb.checked) { if (!state.selCats.includes(c)) state.selCats = [...state.selCats, c]; }
-      else {
-        state.selCats = state.selCats.filter((x) => x !== c);
-        const ids = new Set(state.groups.filter((g) => categoryOf(g.name) === c).map((g) => g.id));
-        state.selGroups = state.selGroups.filter((x) => !ids.has(x));
-      }
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-      renderFilterCats(); // обновить дерево (счётчики/галочки)
-      return;
-    }
-    // подкатегория (подгруппа) в дереве
-    const gb = e.target.closest('[data-fgroup]');
-    if (gb) {
-      const gid = gb.dataset.fgroup;
-      if (gb.checked) { if (!state.selGroups.includes(gid)) state.selGroups = [...state.selGroups, gid]; }
-      else state.selGroups = state.selGroups.filter((x) => x !== gid);
-      state.renderLimit = PAGE_SIZE;
-      renderAll();
-    }
-  });
-  // сворачивание/разворачивание категории в дереве
-  $('filterCats').addEventListener('click', (e) => {
-    const car = e.target.closest('[data-tcat]');
-    if (!car) return;
-    const c = car.dataset.tcat;
-    if (filterCatOpen.has(c)) filterCatOpen.delete(c); else filterCatOpen.add(c);
-    renderFilterCats();
   });
 
   // Сортировка (сегменты)
@@ -146,12 +105,6 @@ function bindEvents() {
   };
   $('arrivalFrom').addEventListener('change', onArrivalDate);
   $('arrivalTo').addEventListener('change', onArrivalDate);
-  // Группы — открыть полный список для выбора (можно несколько)
-  $('filterGroupsBtn').addEventListener('click', () => {
-    $('groupsPickSearch').value = '';
-    renderGroupsPick();
-    openSheet('groupsPickSheet');
-  });
   // Поставщики — открыть список поставщиков (только админ/аналитик)
   $('filterSuppliersBtn').addEventListener('click', () => {
     $('supplierSearch').value = '';
@@ -235,23 +188,6 @@ function bindEvents() {
   });
   $('supplierSearch').addEventListener('input', renderSupplierList);
 
-  // выбор групп в полном списке — тап отмечает/снимает, шторка остаётся открытой
-  $('groupsPickList').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-pick-group]');
-    if (!btn) return;
-    const id = btn.dataset.pickGroup;
-    if (!id) { // «снять выбор» — убираем только конкретные группы
-      state.selGroups = state.selGroups.filter((x) => x === 'none' || x === 'weighted');
-    } else {
-      state.selGroups = state.selGroups.includes(id)
-        ? state.selGroups.filter((x) => x !== id) : [...state.selGroups, id];
-    }
-    state.renderLimit = PAGE_SIZE;
-    renderGroupsPick();
-    renderAll();
-  });
-  $('groupsPickSearch').addEventListener('input', renderGroupsPick);
-
   // «все товары поставщика» из карточки товара
   $('sheetSupplier').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-supplier-all]');
@@ -303,6 +239,7 @@ function bindEvents() {
   // Без этих трёх строк по ним просто не нажималось — ленты были картинкой.
   $('myStrip').addEventListener('click', openSimilar);
   $('newStrip').addEventListener('click', openSimilar);
+  $('cheaperStrip').addEventListener('click', openSimilar);
   $('arrivalStrip').addEventListener('click', (e) => {
     const all = e.target.closest('[data-arr-all]');
     if (all) {
@@ -329,16 +266,12 @@ function bindEvents() {
     if (btn) copyText(btn.dataset.copy, 'Скопировано: ' + btn.dataset.copy);
   });
 
-  /* Закрытие шторок: крестики, «Готово», тап по фону, стрелка «назад»,
-     смахивание вниз. Везде goBack, а не просто «закрыть»: если окно открыли
-     из другого окна, человек должен вернуться ТУДА, откуда пришёл, а не на
-     главный экран (жалоба владельца). Пришёл с главного — закроется, как
-     раньше. */
+  // Закрытие шторок: крестики, кнопки, тап по фону, стрелка «назад», смахивание вниз
   document.querySelectorAll('[data-close]').forEach((b) =>
-    b.addEventListener('click', () => goBack(b.dataset.close)));
-  $('sheetClose').addEventListener('click', () => goBack('productSheet'));
+    b.addEventListener('click', () => closeSheet(b.dataset.close)));
+  $('sheetClose').addEventListener('click', () => closeSheet('productSheet'));
   document.querySelectorAll('.sheet-backdrop').forEach((bd) =>
-    bd.addEventListener('click', (e) => { if (e.target === bd) goBack(bd.id); }));
+    bd.addEventListener('click', (e) => { if (e.target === bd) closeSheet(bd.id); }));
   addBackButtons();
   enableSwipeToClose();
 
@@ -347,15 +280,19 @@ function bindEvents() {
   // спрашивается один раз, дальше хранится на устройстве и подставляется сам.
   const ADMIN_EMAIL_KEY = 'wm_admin_email';
 
-  const openLogin = () => ui.openLogin();   // сама форма — в floorui.js (вход)
+  function openLogin() {
+    // email виден сразу, только если служебные аккаунты не настроены в config.js
+    $('loginEmailWrap').hidden = !!(CFG.STAFF_EMAIL || (CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length));
+    $('loginError').hidden = true;
+    openSheet('loginSheet');
+  }
 
   // через стрелку, а не напрямую: обработчик вешается ДО присваивания ниже,
   // и прямая ссылка запомнила бы пустую заглушку — кнопка «Войти» молчала бы
   $('adminBtn').addEventListener('click', () => ui.openAdminOrLogin());
-  // Настройки устройства — из окна входа: вкладку «Ещё» заняли «Фильтры».
+  // Настройки устройства раньше открывались вкладкой «Ещё»; теперь на её месте
+  // «Фильтры», поэтому вход к ним — из окна входа (там же, где кнопка «Войти»).
   $('loginDevice').addEventListener('click', () => { closeSheet('loginSheet'); openDeviceSheet(); });
-
-  bindFloorUI();   // вход сотрудника зала и код зала — в своём модуле
   // Присваиваем внешней переменной: switchTab живёт вне bindEvents.
   ui.openAdminOrLogin = function () {
     if (state.session) {
@@ -377,7 +314,6 @@ function bindEvents() {
       $('menuTitle').textContent = roleName;
       $('adminEmail').textContent = roleHint;
       $('menuAdminOnly').hidden = !state.isAdmin;
-      $('menuTop').hidden = !state.canSales; // «Ходовые» (продажи/выручка) — только владелец
       // на кнопке «Дозаполнить фото» — сколько товаров ещё без фото
       const noCat = uncategorized().length;
       setRowText('menuSortCats', noCat
@@ -389,14 +325,13 @@ function bindEvents() {
         $('menuDedup').hidden = true;
       } else {
       }
-      renderMarginBadge();    // сколько товаров продаётся в минус
+      renderRestockBadge();   // сколько позиций ждёт заказа — видно сразу в меню
       renderReviewsBadge();   // сколько отзывов уже опубликовано
       openSheet('adminMenuSheet');
       if (!state.serverless) {
       }
     } else {
-      // одна дверь: сначала спрашиваем, кто пришёл (формы открывает floorui.js)
-      openSheet('entryChoiceSheet');
+      openLogin();
     }
   };
 
@@ -447,7 +382,7 @@ function bindEvents() {
   $('menuDevice').addEventListener('click', () => { closeSheet('adminMenuSheet'); openDeviceSheet(); });
   $('devName').addEventListener('change', () => {
     const v = $('devName').value.trim();
-    if (v) lsSet(DEV_NAME_KEY, v); else lsDel(DEV_NAME_KEY);
+    try { if (v) localStorage.setItem(DEV_NAME_KEY, v); else localStorage.removeItem(DEV_NAME_KEY); } catch (e) { /* */ }
     toast(v ? `Устройство названо: ${v}` : 'Название устройства убрано');
   });
   $('devReset').addEventListener('click', resetDevice);
@@ -461,11 +396,6 @@ function bindEvents() {
   $('orSave').addEventListener('click', saveOrderRules);
 
   // разведка цен: «Добавить цену магазина» в карточке товара
-  $('menuCompStores').addEventListener('click', () => {
-    closeSheet('adminMenuSheet');
-    renderCompStores();
-    openSheet('compStoresSheet');
-  });
   $('compStoresList').addEventListener('click', (e) => {
     const b = e.target.closest('[data-comp-view]');
     if (b) openCompStoreView(b.dataset.compView);
@@ -774,7 +704,7 @@ function bindEvents() {
       const svc = CFG.SERVICE_EMAILS && CFG.SERVICE_EMAILS.length
         ? CFG.SERVICE_EMAILS.slice() : (CFG.STAFF_EMAIL ? [CFG.STAFF_EMAIL] : []);
       for (const e of svc) if (!emails.includes(e)) emails.push(e);
-      const savedAdmin = lsGet(ADMIN_EMAIL_KEY, null);
+      const savedAdmin = localStorage.getItem(ADMIN_EMAIL_KEY);
       if (savedAdmin && !emails.includes(savedAdmin)) emails.push(savedAdmin);
     }
 
@@ -784,7 +714,6 @@ function bindEvents() {
     closeSheet('adminMenuSheet');
     if (state.serverless) {
       // серверлес: забываем пароль, запомненный вход и данные, перезагружаем витрину
-      logSession('out', state.role || 'owner');   // в журнале видно и выход
       ui.secretPw = null; clearSvAuth();
       state.serverless = false; state.session = null; state.isAdmin = false; state.canPurchase = false; state.canSales = false; state.role = null;
       toast('Вы вышли из аккаунта');
@@ -793,36 +722,50 @@ function bindEvents() {
     }
   });
 
-  /* Кнопки «добавить товар» нет. Новые товары приходят ТОЛЬКО из выгрузки 1С
-     (решение владельца: «вручную я товар не добавлю»). Сама форма осталась —
-     ею правят уже существующий товар: фото, описание, штрихкод. */
+  $('fabAdd').addEventListener('click', () => openForm(null));
+  $('menuAddProduct').addEventListener('click', () => { closeSheet('adminMenuSheet'); openForm(null); });
   $('btnEditProduct').addEventListener('click', () => { closeSheet('productSheet'); openForm(ui.currentProduct); });
   $('btnDeleteProduct').addEventListener('click', deleteProduct);
   $('productForm').addEventListener('submit', submitForm);
 
   // Сканер: для всех — поиск товара; в форме админа — добавляет штрихкод в список
+  /* Сканер работает в двух режимах, и телефон помнит выбранный:
+     «Открыть товар» — как раньше, «Проверить ценник» — камера остаётся
+     включённой и на каждый штрихкод крупно показывает цену. */
+  const SCAN_MODE_KEY = 'wm_scan_mode';
+  /* Режим «Ценник» из списка убран: он теперь ЕДИНСТВЕННЫЙ у покупателя и
+     не нужен сотруднику (решение владельца). На телефонах, где сотрудник
+     когда-то выбрал «price», молча возвращаемся к «Товар». */
+  const MODES = ['card', 'out'];
+  const scanMode = () => {
+    try { const v = localStorage.getItem(SCAN_MODE_KEY); return MODES.includes(v) ? v : 'card'; } catch (e) { return 'card'; }
+  };
+  const syncScanMode = () => {
+    document.querySelectorAll('#scanModeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.scanmode === scanMode()));
+    const res = $('scanResult'); if (res && scanMode() === 'card') { res.hidden = true; res.innerHTML = ''; }
+  };
   const runScan = () => {
+    const seg = $('scanModeSeg');
     const res = $('scanResult');
-    if (res) { res.hidden = true; res.innerHTML = ''; }
     /* Покупателю выбирать нечего: он навёл камеру, чтобы узнать цену. Сразу
        ценник — и камера остаётся включённой, чтобы проверить следующий товар. */
     if (!state.session) {
-      $('scanTitle').textContent = 'Ценник по штрихкоду или QR';
+      if (seg) seg.hidden = true;
+      if (res) { res.hidden = true; res.innerHTML = ''; }
+      $('scanTitle').textContent = 'Наведи камеру на штрихкод — покажу цену';
       startScan(scanToPrice, { keepOpen: true });
       return;
     }
-    /* Сотруднику зала сканер нужен прежде всего чтобы УЗНАТЬ ТОВАР: он стоит
-       у полки, наводит камеру и видит карточку с кодом кассы — ради этого
-       каталог и делался. «Закончилось на полке» он отмечает оттуда же, первой
-       крупной кнопкой в карточке, и реже. Поэтому отдельного режима «пустая
-       полка» в камере нет: один скан даёт и то, и другое.
-       Бухгалтер и владелец получают ту же карточку — со своими полями. */
-    $('scanTitle').textContent = 'Наведи камеру — открою товар';
-    startScan(scanToSearch, { keepOpen: true });
+    // переключатель мог быть спрятан пересчётом или режимом покупателя
+    if (seg) seg.hidden = false;
+    $('scanTitle').textContent = 'Наведи камеру на штрихкод';
+    syncScanMode();
+    if (scanMode() === 'out') startScan(scanToRestock, { keepOpen: true });
+    // камеру держим открытой: по весовой этикетке сотрудник видит ценник и
+    // сверяет следующую, а обычный штрихкод закроет её сам, открыв карточку
+    else startScan(scanToSearch, { keepOpen: true });
   };
   $('scanSearchBtn').addEventListener('click', runScan);
-  // «ничего не нашлось» у сотрудника: камера находит то, что название не нашло
-  $('emptyScan').addEventListener('click', runScan);
 
   /* Быстрые действия с ярлыка приложения (долгое нажатие на значок на главном
      экране телефона): «Сканер» и «Закончилось». Ярлык открывает
@@ -835,6 +778,14 @@ function bindEvents() {
     if (!state.session) { ui.openAdminOrLogin(); return; }
     openRestock();
   };
+  $('scanModeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-scanmode]');
+    if (!b) return;
+    try { localStorage.setItem(SCAN_MODE_KEY, b.dataset.scanmode); } catch (err) { /* приватный режим */ }
+    stopScan();
+    closeSheet('scanSheet');
+    setTimeout(runScan, 120);          // перезапускаем камеру уже в новом режиме
+  });
   $('btnScan').addEventListener('click', () => startScan((text) => {
     const ta = $('fBarcodes');
     const lines = ta.value.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -906,7 +857,6 @@ function bindEvents() {
   });
   $('compareOpen').addEventListener('click', openCompare);
   $('compareClear').addEventListener('click', clearCompare);
-  $('compareClear2').addEventListener('click', clearCompare);
   $('compareBody').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-cmp-rm]');
     if (rm) removeFromCompare(rm.dataset.cmpRm);
@@ -914,21 +864,31 @@ function bindEvents() {
 
   // ── Заказы поставщикам ──
   ui.renderWorkBadge = renderWorkBadge;   // значок «сколько дел» на вкладке
-  ui.workActions = {
+  /* Все входы вкладки «Работа» — в одном объекте. Остальные модули добавляют
+     свои ключи (margin, stale, risen) через тот же `ui`, поэтому ПРИСВАИВАТЬ
+     объект заново здесь нельзя: так однажды и затёрлись «Цены магазинов» и
+     «Ходовые». Сканера тут нет нарочно — он в шапке, рядом с поиском. */
+  ui.workActions = Object.assign(ui.workActions || {}, {
     orders: openOrders,
     restock: openRestock,
     compare: openCompare,
-    scan: () => runScan(),
-  };
+    top: openTopSheet,
+    comp: () => { renderCompStores(); openSheet('compStoresSheet'); },
+  });
   $('ordAdd').addEventListener('click', () => openOrderForm(null));
   $('ordSave').addEventListener('click', saveOrder);
   $('ordDelete').addEventListener('click', deleteOrder);
   $('ordReceived').addEventListener('click', markReceived);
   $('ordSendWa').addEventListener('click', sendOrderToSupplier);
   $('ordShare').addEventListener('click', shareOrders);
-  // позиции заказа: поиск подсказками, скан, количество — всё в своём модуле
-  ui.findByBarcode = findByBarcode;
-  bindOrderForm((onFound) => startScan(onFound));
+  // позиции заказа: что именно заказали
+  $('ordItemAdd').addEventListener('click', addOrderItem);
+  $('ordItemName').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addOrderItem(); } });
+  $('ordItemQty').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addOrderItem(); } });
+  $('ordItems').addEventListener('click', (e) => {
+    const rm = e.target.closest('[data-ord-item-rm]');
+    if (rm) removeOrderItem(rm.dataset.ordItemRm);
+  });
   $('ordersBody').addEventListener('click', (e) => {
     const md = e.target.closest('[data-ord-mode]');
     if (md) { setOrdersMode(md.dataset.ordMode); return; }
@@ -950,8 +910,7 @@ function bindEvents() {
   bindGuest();
   bindNews(openProduct);
   bindMascot();
-  bindPriceRise();
-  bindPriceNews(openProduct);   // «Изменения цен» — отдельный экран
+  bindPriceRise(openProduct);
   bindMargin(openProduct);
   bindScanResult(openProduct, toggleShop, openShelfReport);
   // отзывы: покупатель оценивает, владелец добавляет и сразу публикует
@@ -962,16 +921,10 @@ function bindEvents() {
   $('btnRestock').addEventListener('click', () => {
     const p = ui.currentProduct;
     if (!p) return;
-    const wasListed = inRestock(p.id);
-    toggleRestock(p);
-    const isListed = inRestock(p.id);
-    $('btnRestock').textContent = isListed ? 'Убрать из списка пополнения' : 'Закончилось на полке';
-    if (wasListed !== isListed) toast(isListed ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
+    const added = toggleRestock(p);
+    $('btnRestock').textContent = added ? 'Убрать из списка пополнения' : 'Закончилось на полке';
+    toast(added ? 'Добавлено в список пополнения' : 'Убрано из списка пополнения');
   });
-  /* Камера с экрана «Закончилось на полке» отмечает пустые полки ПОДРЯД и не
-     закрывается: сотрудник идёт вдоль стеллажа. Из каталога та же кнопка
-     открывает товар — режим задаёт экран, а не переключатель. */
-  $('restockScan').addEventListener('click', () => startScan(scanToRestock, { keepOpen: true }));
   $('restockShare').addEventListener('click', shareRestock);
   $('restockClear').addEventListener('click', clearRestock);
   $('restockBody').addEventListener('click', (e) => {
@@ -986,7 +939,6 @@ function bindEvents() {
   $('menuSortCats').addEventListener('click', () => { closeSheet('adminMenuSheet'); sortByInternet(); });
 
   // Ходовые товары (после входа)
-  $('menuTop').addEventListener('click', () => { closeSheet('adminMenuSheet'); openTopSheet(); });
   // выбор периода из выпадающего списка
   $('topChips').addEventListener('change', (e) => {
     const sel = e.target.closest('#topPeriodSel');
@@ -1120,8 +1072,25 @@ async function init() {
   // мгновенно показываем сохранённый каталог, затем тихо обновляем
   if (await loadCache()) renderAll();
 
-  // Запомненный вход: поднимаем роль, если входили раньше (restore.js)
-  const svRestored = restoreLogin(() => { checkShowcaseFresh(); checkNews(); });
+  // Запомненный вход без сервера (владелец/сотрудник): не выходим до явного
+  // «Выйти», даже после обновления страницы. Роль поднимаем сразу (данные —
+  // из кэша), а полный каталог (закупка/продажи) дотягиваем из GitHub в фоне.
+  let svRestored = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem(SV_AUTH_KEY) || 'null');
+    if (saved && saved.pw) {
+      svRestored = true;
+      // Права поднимаем сразу по запомненной роли, но окончательное слово — за
+      // каталогом: владелец мог сменить пароль сотрудника, и тогда роль другая.
+      if (saved.role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
+      unlockAny(saved.pw).then((role) => {
+        if (role === 'staff') applyStaff(saved.pw); else applyServerless(saved.pw);
+        renderAll();
+        safely('проверка витрины', checkShowcaseFresh)();
+        safely('что нового', checkNews)();
+      }).catch(() => { /* нет связи или пароль сменили — останемся с кэшем */ });
+    }
+  } catch (e) { /* не вышло восстановить — вход по паролю остаётся доступен */ }
 
   await safely('обновление каталога', refresh)();
   warmSearchIndex();   // указатель поиска соберётся в свободную минуту
@@ -1145,16 +1114,19 @@ function runQuickActionFromUrl() {
 
 // Тестовый доступ — только на localhost (в проде не открываем).
 if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, applyFloorSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
+  window.WM_PUBLISH = { publishShowcase, publishFull, unlockSecret, unlockStaff, applyServerless, applyStaff, ghCommit, refresh, buildPublicProducts, buildFullSnapshot, unlockAny, ghConfigured, ghSetToken, autoPublish, encryptJSON, decryptJSON, svImportRows, buildIndex, visibleProducts, scoreProduct, buildPopularIds, renderAll, _norm: norm, _translit: translit, _state: () => state,
     _importOrder: () => IMPORT_ORDER, _cat: productCategory,
     _renderStock: renderStock, _orderPlan: orderPlan, _calcOffer: calcOffer, _tidyMemory: tidyMemory, _ui: () => ui,
-    _rememberFloor: rememberFloor, _logSession: logSession, _openDevice: openDeviceSheet,
     _scanRestock: scanToRestock, _scanSearch: scanToSearch, _scanPrice: scanToPrice, _findByBarcode: findByBarcode, _parseScale: parseScaleBarcode, _shopFromHash: shopFromHash, _shopLink: shopLink, _updatedText: updatedText,
     _ean13: (d) => { let s2 = 0; for (let i = 0; i < 12; i++) s2 += Number(d[i]) * (i % 2 ? 3 : 1); return d + String((10 - (s2 % 10)) % 10); }, _ghReason: ghReason, _idbSet: idbSet, _checkNews: checkNews,
     _showcaseV: SHOWCASE_V, _checkShowcaseFresh: checkShowcaseFresh, _packText: packText,
     _marginCount: marginCount, _marginIssues: marginIssues, _openMargin: openMargin,
     _staleItems: staleItems, _openStale: openStale,
-    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate, _orderForm: openOrderForm };
+    _ratingOf: ratingOf, _ratingText: ratingText, _openRate: openRate, _orderForm: openOrderForm,
+    // вкладка «Работа»: открыть её дело по имени и посмотреть, какие дела есть
+    _work: (what) => { openWork(); runWorkAction(what); },
+    _workRows: () => [...document.querySelectorAll('#workBody [data-work]')]
+      .map((b) => b.innerText.replace(/\s+/g, ' ').trim()) };
 }
 
 init();

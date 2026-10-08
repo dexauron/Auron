@@ -34,10 +34,9 @@ const openWork = (page) => page.evaluate(async () => {
   const toLogin = await page.evaluate(async () => {
     document.querySelector('[data-work="login"]').click();
     await new Promise((r) => setTimeout(r, 400));
-    // вход один: сначала спрашиваем, кто пришёл — зал или владелец/бухгалтер
-    return { work: document.getElementById('workSheet').hidden, login: !document.getElementById('entryChoiceSheet').hidden };
+    return { work: document.getElementById('workSheet').hidden, login: !document.getElementById('loginSheet').hidden };
   });
-  chk(toLogin.work && toLogin.login, 'кнопка «Войти» ведёт на выбор входа');
+  chk(toLogin.work && toLogin.login, 'кнопка «Войти» ведёт на вход');
 
   // 2. После входа — состояние дел прямо в строках
   await asOwner(page, { suppliers });
@@ -53,7 +52,9 @@ const openWork = (page) => page.evaluate(async () => {
     ]));
     P.renderAll();
     await new Promise((r) => setTimeout(r, 200));
-  }, { now: local(new Date()), past: iso(-9) });
+    // воскресенье этой недели: не раньше «сегодня» в любой день запуска,
+    // поэтому поставка считается будущей, а не просроченной
+  }, { now: iso(6), past: iso(-9) });
 
   await openWork(page);
   const work = await page.evaluate(() => {
@@ -61,6 +62,9 @@ const openWork = (page) => page.evaluate(async () => {
     const row = (w) => { const el = box.querySelector(`[data-work="${w}"]`); return el ? el.innerText.replace(/\s+/g, ' ') : ''; };
     return {
       orders: row('orders'), restock: row('restock'), scan: row('scan'),
+      titles: [...box.querySelectorAll('.ios-group-title')].map((t) => t.textContent.trim()),
+      rows: [...box.querySelectorAll('[data-work]')].map((x) => x.dataset.work),
+      header: !!document.getElementById('scanSearchBtn'),
       late: (box.querySelector('.ord-late') || {}).textContent || '',
       badge: document.getElementById('tabWorkCount').textContent,
       badgeShown: !document.getElementById('tabWorkCount').hidden,
@@ -70,7 +74,18 @@ const openWork = (page) => page.evaluate(async () => {
     `видно, сколько поставок на неделе и на какую сумму (${work.orders})`);
   chk(work.late === '1', `просроченная поставка вынесена отдельно (${work.late})`);
   chk(/1 ждёт заказа/.test(work.restock), `видно, сколько позиций ждёт заказа (${work.restock})`);
-  chk(/Сканировать/.test(work.scan), 'сканер открывается отсюда же');
+  /* Сканера здесь нарочно нет: он живёт круглой кнопкой в шапке, рядом с
+     поиском, и был виден в двух местах сразу. */
+  chk(!work.scan && work.header, 'сканер не повторяется — он один, в шапке');
+  chk(work.titles.length === 3 && /Дела смены/.test(work.titles[0]),
+    `дела разложены по группам (${work.titles.join(' | ')})`);
+  for (const what of ['stale', 'margin', 'risen', 'top', 'comp'])
+    chk(work.rows.includes(what), `«${what}» переехало из меню во вкладку (${work.rows.join(',')})`);
+  chk(await page.evaluate(() => !document.getElementById('menuOrders')
+    && !document.getElementById('menuRestock') && !document.getElementById('menuMargin')
+    && !document.getElementById('menuStale') && !document.getElementById('menuTop')
+    && !document.getElementById('menuCompStores')),
+  'в меню этих строк больше нет — дела живут в одном месте');
   chk(work.badgeShown && work.badge === '2', `на вкладке значок «сколько дел» (${work.badge})`);
 
   // 3. Строки ведут туда, куда обещают
@@ -94,12 +109,8 @@ const openWork = (page) => page.evaluate(async () => {
     const el = document.getElementById('todayBanner');
     return { shown: !el.hidden, text: el.innerText.replace(/\s+/g, ' ') };
   }, local(new Date()));
-  /* На сегодня две поставки: o1 (12 000) из набора выше и только что добавленная
-     o3 (5 400) — итого 17 400. Раньше проверка ждала «1 поставка»: плашка не
-     пересчитывалась после добавления заказа и показывала устаревшее число.
-     Теперь экран «Работа» и плашка обновляются вместе — и число стало правдой. */
-  chk(banner.shown && /Сегодня 2 поставки/.test(banner.text), `видно, сколько поставок сегодня (${banner.text})`);
-  chk(/17\s?400/.test(banner.text.replace(/ /g, ' ')) && /просрочено 1/.test(banner.text),
+  chk(banner.shown && /Сегодня 1 поставка/.test(banner.text), `видно, что сегодня ждём поставку (${banner.text})`);
+  chk(/5\s?400/.test(banner.text.replace(/ /g, ' ')) && /просрочено 1/.test(banner.text),
     `в плашке сумма на сегодня и просрочка (${banner.text})`);
 
   const bannerGo = await page.evaluate(async () => {

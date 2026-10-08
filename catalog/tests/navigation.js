@@ -34,22 +34,41 @@ const groups = [
   // ── нижняя панель ──
   // видимые разделы: без входа это разделы покупателя, после входа — рабочие
   const tabs = await page.evaluate(() => [...document.querySelectorAll('.tabbar .tab')].filter((t) => !t.hidden).map((t) => t.innerText.replace(/\s+/g, ' ').trim()));
-  chk(tabs.length === 5, `в нижней панели 5 разделов (${tabs.join(' | ')})`);
-  chk(/Каталог/.test(tabs[0]) && /Категории/.test(tabs[1]), 'первые разделы — «Каталог» и «Категории»');
-  // «Ещё» заменили на «Фильтры»: до фильтров теперь дотягивается большой палец.
-  // «Работа» — дела смены (заказы, «закончилось»), раньше они прятались в меню.
-  chk(/Фильтры/.test(tabs[4]) && !tabs.some((t) => /Ещё/.test(t)),
-    `последний раздел — «Фильтры», а не «Ещё» (${tabs[4]})`);
-  chk(/Магазин/.test(tabs[3]), `без входа рядом с фильтрами — «Магазин» для покупателя (${tabs[3]})`);
-  await page.click('.tabbar [data-tab="filters"]'); await page.waitForTimeout(450);
+  chk(tabs.length === 4, `в нижней панели 4 раздела (${tabs.join(' | ')})`);
+  chk(/Каталог/.test(tabs[0]) && /Подбор/.test(tabs[1]), 'первые разделы — «Каталог» и «Подбор»');
+  /* «Подбор» — одна вкладка вместо прежних «Категории» и «Фильтры» и вместо
+     кнопки фильтра в шапке: категорию выбирали в трёх местах сразу, и все три
+     писали в одно и то же. «Ещё» убрали ещё раньше. */
+  chk(!tabs.some((t) => /Категории|Фильтры|Ещё/.test(t)),
+    `отдельных «Категорий» и «Фильтров» больше нет (${tabs.join(' | ')})`);
+  chk(!(await page.evaluate(() => !!document.getElementById('filterBtn'))),
+    'кнопки фильтра в шапке нет — фильтр живёт в одном месте');
+  chk(/Магазин/.test(tabs[3]), `без входа последний раздел — «Магазин» для покупателя (${tabs[3]})`);
+
+  await page.click('.tabbar [data-tab="pick"]'); await page.waitForTimeout(450);
   const filt = await page.evaluate(() => ({
-    open: !document.getElementById('filterSheet').hidden,
-    nav: (document.querySelector('#filterSheet .ios-nav-title') || {}).textContent,
+    pick: !document.getElementById('pickScreen').hidden,
+    cats: !document.getElementById('catScreen').hidden,
+    grid: document.getElementById('productGrid').hidden,
+    titles: [...document.querySelectorAll('#pickScreen .ios-group-title')].map((t) => t.textContent.trim()),
     apply: (document.getElementById('filterApply') || {}).textContent,
+    reset: (document.getElementById('filterReset') || {}).textContent,
+    noSheet: !document.getElementById('filterSheet'),
   }));
-  chk(filt.open && /Фильтры/.test(filt.nav || ''), `вкладка открывает окно фильтров (${filt.nav})`);
-  chk(/Показать/.test(filt.apply || ''), `внизу окна видно, сколько товаров найдётся (${filt.apply})`);
-  await page.click('#filterSheet [data-close="filterSheet"]'); await page.waitForTimeout(350);
+  chk(filt.pick && filt.cats && filt.grid,
+    'на «Подборе» видны и плитки категорий, и поля подбора, а сетка скрыта');
+  chk(filt.noSheet, 'отдельного окна фильтров больше нет');
+  chk(/Сортировка/.test(filt.titles.join(' ')) && /Цена/.test(filt.titles.join(' ')),
+    `подбор собран в одном месте (${filt.titles.join(' | ')})`);
+  chk(!/Категории/.test(filt.titles.join(' ')),
+    `категории не повторяются списком — они плитками выше (${filt.titles.join(' | ')})`);
+  chk(/Показать/.test(filt.apply || '') && /Сбросить/.test(filt.reset || ''),
+    `внизу «Показать товары» и «Сбросить» (${filt.apply} / ${filt.reset})`);
+  await page.click('#filterApply'); await page.waitForTimeout(400);
+  chk(await page.evaluate(() => document.getElementById('pickScreen').hidden
+    && !document.getElementById('productGrid').hidden),
+  '«Показать товары» возвращает на каталог');
+
   // ленты «Популярное» на главной больше нет — владелец попросил убрать
   const noPopular = await page.evaluate(() => !document.getElementById('popularStrip')
     && !/Популярное/.test(document.body.innerText));
@@ -59,19 +78,22 @@ const groups = [
     return getComputedStyle(t).position === 'fixed' && Math.abs(r.bottom - innerHeight) < 2;
   });
   chk(atBottom, 'панель закреплена внизу экрана');
-  // круглой кнопки «＋» больше нет: товары приходят только из выгрузки 1С
-  const noFab = await page.evaluate(() => !document.getElementById('fabAdd'));
-  chk(noFab, 'ручного добавления товара нет — каталог наполняется выгрузкой');
+  const overlap = await page.evaluate(() => {
+    const t = document.getElementById('tabbar').getBoundingClientRect();
+    const fab = document.getElementById('fabAdd').getBoundingClientRect();
+    return fab.bottom > t.top;
+  });
+  chk(!overlap, 'кнопка «＋» не перекрывается панелью');
 
   // ── экран категорий ──
-  await page.click('.tabbar [data-tab="cats"]'); await page.waitForTimeout(500);
+  await page.click('.tabbar [data-tab="pick"]'); await page.waitForTimeout(500);
   const cats = await page.evaluate(() => ({
     hidden: document.getElementById('catScreen').hidden,
     gridHidden: document.getElementById('productGrid').hidden,
     tiles: [...document.querySelectorAll('.cat-tile')].map((t) => t.innerText.replace(/\s+/g, ' ').trim()),
   }));
   console.log('--- категории ---\n' + cats.tiles.join('\n') + '\n---');
-  chk(!cats.hidden && cats.gridHidden, 'на вкладке «Категории» видны плитки, сетка товаров скрыта');
+  chk(!cats.hidden && cats.gridHidden, 'на вкладке «Подбор» видны плитки, сетка товаров скрыта');
   chk(cats.tiles.length >= 3, `категории разложены по плиткам (${cats.tiles.length})`);
   chk(cats.tiles.some((t) => /Молочное/.test(t)), 'молочные товары попали в «Молочное»');
   chk(cats.tiles.every((t) => /\d+ товар/.test(t)), 'у каждой плитки написано, сколько товаров');

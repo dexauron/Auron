@@ -9,7 +9,7 @@
  * поэтому список лежит на телефоне сотрудника и одной кнопкой уходит владельцу
  * текстом. Так же, как заказы: инструмент есть у всех, записи не теряются. */
 
-import { $, localList, ui } from './store.js';
+import { $, ui } from './store.js';
 import { closeSheet, esc, openSheet, supplierById, toast } from './core.js';
 import { fmtDate, todayISO } from './catalog.js';
 import { deviceName } from './device.js';
@@ -22,9 +22,12 @@ const KEY = 'wm_restock_v1';
 const MAX = 300;          // столько строк уже не список, а склад — дальше не копим
 const KEEP_ORDERED_DAYS = 14;  // заказанное держим две недели и убираем само
 
-const shelf = localList(KEY, { max: MAX });
-const read = () => shelf.read();
-const write = (list) => shelf.write(list);
+function read() {
+  try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch (e) { return []; }
+}
+function write(list) {
+  try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+}
 
 /* Список сам подчищается: заказанное старше двух недель уже не нужно —
  * иначе за полгода экран превращается в простыню, а телефон копит мусор. */
@@ -42,22 +45,11 @@ export const inRestock = (id) => restockList().some((x) => x.id === id);
 
 /* Отметить/снять отметку. Название и код запоминаем прямо в строке: товар
  * могут удалить из каталога, а список пополнения от этого рассыпаться не должен. */
-// список пополнения изменился — обновляем счётчики на вкладке «Работа»
-const refresh = () => { if (ui.renderWorkBadge) ui.renderWorkBadge(); };
-
 export function toggleRestock(p) {
   if (!p) return false;
   const list = restockList();
   const i = list.findIndex((x) => x.id === p.id);
-  if (i >= 0) {
-    list.splice(i, 1);
-    if (!write(list)) { toast('Не удалось сохранить изменение на телефоне'); return true; }
-    refresh(); return false;
-  }
-  if (list.length >= MAX) {
-    toast('Список заполнен (300 позиций). Передай или очисти его перед добавлением новых.');
-    return false;
-  }
+  if (i >= 0) { list.splice(i, 1); write(list); renderRestockBadge(); return false; }
   const sup = (p.supplier_ids || [])[0] || '';
   list.push({
     id: p.id,
@@ -68,23 +60,28 @@ export function toggleRestock(p) {
     who: deviceName(),
     at: todayISO(),
   });
-  if (!write(list)) { toast('Не удалось сохранить отметку на телефоне'); return false; }
-  refresh();
+  write(list);
+  renderRestockBadge();
   return true;
 }
 
 export function removeRestock(id) {
-  if (!write(restockList().filter((x) => x.id !== id))) {
-    toast('Не удалось сохранить изменение на телефоне'); return;
-  }
+  write(restockList().filter((x) => x.id !== id));
+  renderRestockBadge();
   renderRestock();
 }
 
 export function clearRestock() {
   if (!restockList().length) return;
   if (!confirm('Очистить весь список пополнения?')) return;
-  if (!write([])) { toast('Не удалось очистить список на телефоне'); return; }
+  write([]);
+  renderRestockBadge();
   renderRestock();
+}
+
+// Счёт ведёт вкладка «Работа» — ей и говорим, что список изменился
+export function renderRestockBadge() {
+  if (ui.renderWorkBadge) ui.renderWorkBadge();
 }
 
 export function openRestock() {
@@ -164,8 +161,8 @@ function markRestockOrdered(supplierId) {
     if ((x.supplier_id || '') === supplierId && !x.ordered) { x.ordered = todayISO(); n++; }
   }
   if (!n) return;
-  if (!write(list)) { toast('Не удалось отметить заказанное на телефоне'); return; }
-  refresh();
+  write(list);
+  renderRestockBadge();
   renderRestock();
 }
 
@@ -198,9 +195,8 @@ export function scanToRestock(text) {
       <div class="scan-result-code">${esc(text)}</div>`;
     return;
   }
-  const already = inRestock(p.id);
-  const added = already ? false : toggleRestock(p);
+  const added = inRestock(p.id) ? false : toggleRestock(p);
   box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
-    <div class="scan-result-price">${already ? 'уже в списке' : added ? 'в списке пополнения' : 'не удалось добавить'}</div>
+    <div class="scan-result-price">${added ? 'в списке пополнения' : 'уже в списке'}</div>
     <div class="scan-result-code">всего в списке: ${restockCount()}</div>`;
 }

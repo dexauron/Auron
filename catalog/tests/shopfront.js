@@ -21,25 +21,18 @@ const products = [
   const { chk, done } = runner('ВИТРИНА ПОКУПАТЕЛЯ');
   const { page, errs } = await newPage(b, { products, groups: [{ id: 'g1', name: 'Разное' }] });
 
-  // снимок цен, с которым сравниваем, — как в жизни: цены и ДЕНЬ снимка
-  const snapAt = new Date(Date.now() - 3 * 86400000).toISOString().slice(0, 10);
-  const paint = (was) => page.evaluate(async (d) => {
+  const paint = (was) => page.evaluate(async (w) => {
     const P = window.WM_PUBLISH, s = P._state();
-    const w = d.was;
     s.priceWas = w;
-    s.priceWasAt = Object.keys(w).length ? d.at : '';
     P.renderAll();
     await new Promise((r) => setTimeout(r, 250));
     return {
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
       html: document.getElementById('productGrid').innerHTML,
-      /* Полосы «Стало дешевле» на главном экране больше нет — она закрывала
-         собой каталог. Смотрим вход в «Фильтрах», который ведёт на экран
-         «Изменения цен» (его целиком проверяет price-news.js). */
-      cheap: document.getElementById('openCheaper').hidden
-        ? '' : (document.getElementById('openCheaper').innerText || '').replace(/\s+/g, ' '),
+      cheap: document.getElementById('cheaperStrip').hidden
+        ? '' : document.getElementById('cheaperStrip').innerText.replace(/\s+/g, ' '),
     };
-  }, { was, at: snapAt });
+  }, was);
 
   // ── 1. Фасовка отдельной строкой, как у Zepto ──
   const v = await paint({ p1: 101, p2: 25 });
@@ -55,16 +48,14 @@ const products = [
     `видно, что подешевело и на сколько (${(v.grid.match(/89 ₽.{0,16}/) || [''])[0]})`);
   chk(/card-was/.test(v.html) && /card-drop/.test(v.html), 'старая цена зачёркнута, выгода — плашкой');
 
-  /* ── 3. Вход «Подешевело» ──
-     Список подешевевшего висел прямо на главном экране и закрывал собой
-     каталог. Теперь это отдельный экран «Изменения цен» (его целиком
-     проверяет price-news.js), а здесь — только вход в «Фильтрах». */
-  chk(/Подешевело/.test(v.cheap), `вход «Подешевело» есть (${v.cheap.slice(0, 50)})`);
-  chk(/2 товара/.test(v.cheap), `сказано, сколько товаров подешевело (${v.cheap})`);
+  // ── 3. Полоса «Сегодня дешевле» ──
+  chk(/Сегодня дешевле/.test(v.cheap), `полоса на главной есть (${v.cheap.slice(0, 50)})`);
+  chk(/2 товара/.test(v.cheap), 'сказано, сколько товаров подешевело');
+  chk(/Молоко/.test(v.cheap) && /Сок/.test(v.cheap), 'в полосе именно подешевевшие товары');
 
   // ── 4. Не с чем сравнивать — ничего не выдумываем ──
   const empty = await paint({});
-  chk(!empty.cheap, 'у первого посетителя входа нет — сравнивать не с чем');
+  chk(!empty.cheap, 'у первого посетителя полосы нет — сравнивать не с чем');
   chk(!/card-was/.test(empty.html), 'и зачёркнутых цен тоже нет');
 
   // ── 5. «Цена на ценнике другая» ──
@@ -108,12 +99,12 @@ const products = [
     return {
       html: document.getElementById('productGrid').innerHTML,
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
-      cheap: document.getElementById('openCheaper').hidden,
+      cheap: document.getElementById('cheaperStrip').hidden,
       shelfBtn: !!document.querySelector('[data-shelf-scanned]'),
     };
   });
   chk(/card-was/.test(staff.html), 'вошедшему зачёркнутую цену тоже показываем');
-  chk(!staff.cheap, 'и вход «подешевело» у него есть');
+  chk(!staff.cheap, 'и полоса «сегодня дешевле» у него есть');
   chk(/row-pack/.test(staff.html), 'фасовка отдельной строкой — тоже');
   chk(!staff.shelfBtn, 'а вот кнопки про ценник у него нет — он сам его и печатает');
 

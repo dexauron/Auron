@@ -56,22 +56,19 @@ function compVerdict(our, all) {
   return `<div class="comp-verdict comp-v-bad">${ic('warn', 'ic-xs')} Дешевле в магазине «${who}» — ${esc(fmtPrice(cp))}, это на ${esc(fmtPrice(our - cp))} меньше нашей ${sub}</div>`;
 }
 
-// Цены в других магазинах — разведка для закупок. Видят те, кому доступны
-// деньги (владелец, бухгалтер); они же их и вносят.
+// Цены в других магазинах. Видят ВСЕ (в том числе покупатель без входа),
+// вносит любой вошедший — владелец или сотрудник.
 export function renderCompetitors(p) {
   const box = $('sheetCompetitors');
   if (!box) return;
   // Цены чужих магазинов — внутренняя разведка магазина, а не витрина.
   // Покупателю их показывать нельзя: каталог прямым текстом сообщал ему,
   // где тот же товар дешевле, и отправлял к конкуренту.
-  /* Сотруднику зала этот блок не нужен: по чужим ценам работают закупки, а
-     список «куда сходить за этим товаром» в меню ему уже не показывается —
-     в карточке должно быть так же. */
-  if (!state.session || !state.canPurchase) { box.innerHTML = ''; return; }
+  if (!state.session) { box.innerHTML = ''; return; }
   const our = (p.retail_price != null && p.retail_price !== '') ? Number(p.retail_price) : null;
   const all = (state.compPrices || []).filter((r) => r.product_id === p.id);
   const rows = compRowsFor(p.id);
-  const canAdd = !!state.canPurchase; // тот, кто работает с закупками
+  const canAdd = !!state.session; // вошедший сотрудник или владелец
 
   const ourRow = `<div class="comp-row comp-ours">
     <span class="comp-store">Наш магазин</span>

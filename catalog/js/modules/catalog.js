@@ -101,15 +101,6 @@ export const fmtPrice = (n) => Number(n).toLocaleString('ru-RU', { maximumFracti
 export const fmtNum = (n) => Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 3 });
 // цена с единицей: у весовых показываем «/кг», чтобы было понятно
 export const fmtRetail = (p) => fmtPrice(p.retail_price) + (p.is_weighted ? '/кг' : '');
-
-/* Цена на полке, единица товара и шаг количества. Жили тремя копиями в
- * shopping.js, orders.js и news.js — а это ровно те места, где количество и
- * сумма должны совпадать до копейки. Разойдись копии хоть на шаг, и в списке
- * покупок было бы одно, а в заказе поставщику другое. */
-export const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
-export const unitOf = (p) => (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
-// Весовой товар считаем по 100 г, штучный — по штуке.
-export const stepOf = (unit) => (unit === 'кг' ? 0.1 : 1);
 /* ── Фасовка из названия ────────────────────────────────────────────────────
  * Веса товара в 1С нет ни в одном справочнике (проверено: колонки «Масса
  * нетто» и «Ёмкость упаковки» пустые целиком), зато он написан прямо в
@@ -756,41 +747,6 @@ export function visibleProducts() {
     .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
     .map((x) => x.p);
   return sortList(scored, true);
-}
-
-/* Подсказки для формы заказа: несколько самых подходящих товаров по тому же
- * поиску, что и в каталоге. Раньше заказ искал товар ТОЧНЫМ совпадением кода,
- * штрихкода или названия — ошибся в букве, и товар уходил в заказ свободным
- * текстом, без кода. Фильтры каталога тут не применяются: заказывают и то,
- * что сейчас отфильтровано с экрана. */
-export function suggestProducts(query, max = 8) {
-  const q = norm(query);
-  if (q.length < 2) return [];
-  const list = state.products;
-  if (/^\d{2,}$/.test(q)) return searchByCode(list, q).slice(0, max);
-  const qT = translit(q);
-  const qVars = q === qT ? [q] : [q, qT];
-  const tokens = q.split(/\s+/).filter(Boolean).map((w) => {
-    const wt = translit(w);
-    return { q: w, qVars: w === wt ? [w] : [w, wt] };
-  });
-  let hits = candidateList(list, tokens, qVars)
-    .map((p) => ({ p, s: scoreProduct(p, q, qVars, tokens, false) }))
-    .filter((x) => x.s >= SEARCH_THRESHOLD);
-  /* Опечатки разбираем так же, как в каталоге: товар с опечаткой в кандидаты
-     не попадает («прастоквашино» и «Простоквашино» начинаются по-разному).
-     Без этого подсказки в заказе были строже самого поиска. */
-  if (hits.length < max && q.length >= 4) {
-    const seen = new Set(hits.map((x) => x.p));
-    for (const p of fuzzyPool(list, q, qVars, seen)) {
-      const sc = scoreProduct(p, q, qVars, tokens);
-      if (sc >= SEARCH_THRESHOLD) hits.push({ p, s: sc });
-    }
-  }
-  return hits
-    .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
-    .slice(0, max)
-    .map((x) => x.p);
 }
 
 /* Кандидаты: товары из указателя плюс товары подходящих групп. Если запрос

@@ -31,7 +31,7 @@
         <button class="icon-btn icon-btn-round" id="themeBtn" title="Светлая / тёмная тема">
           <span id="themeIcon"><i data-ic="auto"></i></span>
         </button>
-        <button class="icon-btn" id="adminBtn" title="Войти в каталог">
+        <button class="icon-btn" id="adminBtn" title="Вход для сотрудников и администратора">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/></svg>
           <span id="adminBtnLabel">Войти</span>
         </button>
@@ -50,7 +50,9 @@
       <button class="round-btn round-btn-accent" id="scanSearchBtn" title="Сканировать штрихкод камерой">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/><path d="M18 8v8"/></svg>
       </button>
-      <button class="round-btn" id="viewToggleBtn" title="Размер плиток">
+      <!-- Только вошедшим: у покупателя каталог всегда списком без фото
+           (решение владельца), и этот переключатель ему ничего не менял. -->
+      <button class="round-btn emp-only" id="viewToggleBtn" title="Размер плиток">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
       </button>
     </div>
@@ -79,9 +81,96 @@
   <main class="content">
     <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
+    <!-- Покупателю: что подешевело со вчера. Причина зайти сегодня -->
+    <div class="arr-strip" id="cheaperStrip" hidden></div>
+    <div class="arr-strip" id="riseStrip" hidden></div>
     <!-- Покупателю: что привезли сегодня (или последний завоз) -->
     <div class="arr-strip" id="arrivalStrip" hidden></div>
     <div class="cat-screen" id="catScreen" hidden></div>
+    <!-- «Подбор»: одно место, где человек выбирает, что показать.
+         Раньше это жило в трёх местах сразу — вкладка «Категории», окно
+         фильтра (с теми же категориями галочками) и ещё один экран «Все
+         группы». Все три писали в одно и то же состояние и только путали.
+         Теперь сверху плитки категорий (#catScreen), под ними — всё
+         остальное: сортировка, цена, поступление, поставщик. -->
+    <div class="pick-screen" id="pickScreen" hidden>
+<div class="ios-group-title">Сортировка</div>
+      <div class="ios-group" id="sortSeg">
+        <button class="ios-row" data-sort="relevance"><span class="ios-row-title">По совпадению</span><span class="ios-check"></span></button>
+        <button class="ios-row" data-sort="name"><span class="ios-row-title">По названию, А–Я</span><span class="ios-check"></span></button>
+        <button class="ios-row" data-sort="cheap"><span class="ios-row-title">Сначала дешёвые</span><span class="ios-check"></span></button>
+        <button class="ios-row" data-sort="expensive"><span class="ios-row-title">Сначала дорогие</span><span class="ios-check"></span></button>
+        <button class="ios-row" data-sort="new"><span class="ios-row-title">Сначала новые</span><span class="ios-check"></span></button>
+        <button class="ios-row" data-sort="popular"><span class="ios-row-title">Сначала ходовые</span><span class="ios-check"></span></button>
+      </div>
+
+      <div class="emp-only">
+        <div class="ios-group-title">Тип товара</div>
+        <div class="seg" id="typeSeg">
+          <button data-type="">Все</button>
+          <button data-type="weighted">Весовые</button>
+          <button data-type="piece">Штучные</button>
+        </div>
+      </div>
+
+      <div class="ios-group-title">Цена, ₽</div>
+      <div class="chips chips-wrap price-presets" id="pricePresets">
+        <button class="chip" data-pmin="" data-pmax="100">до 100</button>
+        <button class="chip" data-pmin="100" data-pmax="300">100–300</button>
+        <button class="chip" data-pmin="300" data-pmax="1000">300–1000</button>
+        <button class="chip" data-pmin="1000" data-pmax="">от 1000</button>
+      </div>
+      <div class="ios-group">
+        <div class="ios-row">
+          <span class="ios-row-title">От</span>
+          <input type="text" id="priceMin" class="ios-inp money" inputmode="decimal" placeholder="любая">
+        </div>
+        <div class="ios-row">
+          <span class="ios-row-title">До</span>
+          <input type="text" id="priceMax" class="ios-inp money" inputmode="decimal" placeholder="любая">
+        </div>
+      </div>
+
+      <div class="emp-only">
+        <div class="ios-group-title">Поступление</div>
+        <div class="chips chips-wrap" id="arrivalPresets">
+          <button class="chip" data-days="0">Сегодня</button>
+          <button class="chip" data-days="7">7 дней</button>
+          <button class="chip" data-days="30">30 дней</button>
+          <button class="chip" data-days="90">3 месяца</button>
+        </div>
+        <div class="ios-group">
+          <div class="ios-row">
+            <span class="ios-row-title">С</span>
+            <input type="date" id="arrivalFrom" class="ios-inp" aria-label="Поступление с">
+          </div>
+          <div class="ios-row">
+            <span class="ios-row-title">По</span>
+            <input type="date" id="arrivalTo" class="ios-inp" aria-label="Поступление по">
+          </div>
+        </div>
+        <p class="ios-note">Дата берётся из файла «Цены поставщиков» (колонка «Период»).</p>
+      </div>
+
+      <div class="purchase-only">
+        <div class="ios-group-title">Поставщики</div>
+        <div class="ios-group">
+          <button class="ios-row ios-row-link" id="filterSuppliersBtn">
+            <span class="ios-row-title">Выбрать поставщиков</span>
+            <span class="ios-row-value" id="filterSuppliersVal">Все</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="emp-only">
+        <div class="ios-group-title">Показывать</div>
+        <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
+      </div>
+      <div class="pick-actions">
+        <button class="btn btn-ghost" id="filterReset">Сбросить</button>
+        <button class="btn btn-primary" id="filterApply">Показать товары</button>
+      </div>
+    </div>
     <div class="grid" id="productGrid"></div>
     <div class="empty-state" id="emptyState" hidden>
       <div class="empty-icon"><i data-ic="search"></i></div>
@@ -89,9 +178,6 @@
       <div class="empty-text">Попробуй написать по-другому или выбери группу</div>
       <button class="btn btn-secondary empty-reset" id="emptyReset" hidden>Сбросить фильтры</button>
       <button class="btn btn-primary empty-reset" id="emptyAsk" hidden>Спросить в магазине</button>
-      <!-- Сотруднику у полки полезнее не переписывать запрос, а навести камеру:
-           штрихкод на упаковке найдёт товар там, где название подвело. -->
-      <button class="btn btn-primary empty-reset" id="emptyScan" hidden>Сканировать штрихкод</button>
     </div>
     <div class="loader" id="loader"><div class="spinner"></div></div>
   </main>
@@ -100,6 +186,7 @@
   <div class="wolf-bubble" id="wolfBubble" hidden></div>
 
   <!-- Кнопка добавления (только админ) -->
+  <button class="fab" id="fabAdd" hidden title="Добавить товар" aria-label="Добавить товар"><i data-ic="plus"></i></button>
 
   <!-- Нижняя панель: главный способ переключаться между разделами.
        Так устроено любое продуктовое приложение — большие пальцы дотягиваются
@@ -110,18 +197,19 @@
       Список: <span id="shopCount">0</span> · <span id="shopTotal">0 ₽</span></button>
   </div>
 
-  <!-- Отобрано для сравнения: полоска над нижней панелью -->
+  <!-- Отобрано для сравнения: полоска над нижней панелью. Одно действие —
+       открыть сравнение; «Очистить» живёт внутри окна, где видно, что чистишь. -->
   <div class="compare-bar" id="compareBar" hidden>
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
-    <button class="btn btn-ghost" id="compareClear">Очистить</button>
   </div>
 
   <nav class="tabbar" id="tabbar">
     <button class="tab active" data-tab="catalog">
       <span class="tab-ico"><i data-ic="catalog"></i></span><span class="tab-txt">Каталог</span>
     </button>
-    <button class="tab" data-tab="cats">
-      <span class="tab-ico"><i data-ic="cats"></i></span><span class="tab-txt">Категории</span>
+    <button class="tab" data-tab="pick">
+      <span class="tab-ico"><i data-ic="cats"></i></span><span class="tab-txt">Подбор</span>
+      <span class="tab-badge" id="tabFilterCount" hidden></span>
     </button>
     <button class="tab" data-tab="fav">
       <span class="tab-ico"><i data-ic="heart"></i></span><span class="tab-txt">Избранное</span>
@@ -134,10 +222,6 @@
     <button class="tab guest-only" data-tab="store">
       <span class="tab-ico"><i data-ic="store"></i></span><span class="tab-txt">Магазин</span>
       <span class="tab-badge" id="tabStoreCount" hidden></span>
-    </button>
-    <button class="tab" data-tab="filters">
-      <span class="tab-ico"><i data-ic="filter"></i></span><span class="tab-txt">Фильтры</span>
-      <span class="tab-badge" id="tabFilterCount" hidden></span>
     </button>
   </nav>
 
@@ -152,7 +236,6 @@
         <h2 class="sheet-title" id="sheetName"></h2>
         <div class="badge-row" id="sheetBadges"></div>
         <p class="sheet-desc" id="sheetDescription" hidden></p>
-        <button class="btn btn-primary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
         <div id="sheetRise"></div>
         <div class="fields" id="sheetFields"></div>
         <div id="sheetMarkup"></div>
@@ -166,7 +249,8 @@
              покупок», у сотрудника «закончилось на полке». Всё остальное —
              редкое, и лежит ниже мелким рядом: пять одинаковых кнопок подряд
              делали важным всё сразу, то есть ничего. -->
-        <button class="btn btn-primary btn-block" id="btnShopAdd">В список покупок</button>
+        <button class="btn btn-primary btn-block guest-only" id="btnShopAdd">В список покупок</button>
+        <button class="btn btn-primary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
         <button class="btn btn-secondary btn-block guest-only" id="btnWait" hidden>Сообщить, когда появится</button>
         <div class="sheet-actions">
           <button class="btn btn-secondary purchase-only" id="btnCompareAdd">К сравнению</button>
@@ -181,47 +265,6 @@
           <button class="btn btn-danger" id="btnDeleteProduct">Удалить</button>
         </div>
         <button class="btn btn-ghost sheet-close" id="sheetClose">Закрыть</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Один вход: выбор роли, затем действующая форма соответствующего доступа. -->
-  <div class="sheet-backdrop" id="entryChoiceSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="entryChoiceTitle">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body entry-choice-body">
-        <h2 class="sheet-title entry-choice-title" id="entryChoiceTitle">Войти в каталог</h2>
-        <p class="muted entry-choice-sub">Выберите свой способ входа</p>
-        <button class="entry-choice-option" id="entryChoiceFloor" type="button">
-          <span class="entry-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2"/></svg></span>
-          <span class="entry-choice-label"><strong>Сотрудник зала</strong><small>Вход по коду магазина</small></span>
-          <span class="entry-choice-arrow" aria-hidden="true">›</span>
-        </button>
-        <button class="entry-choice-option" id="entryChoiceOwner" type="button">
-          <span class="entry-choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 5 3.4 8.3 8 9 4.6-.7 8-4 8-9V7l-8-4Z"/><path d="M9 12l2 2 4-4"/></svg></span>
-          <span class="entry-choice-label"><strong>Владелец или бухгалтер</strong><small>Вход в свой аккаунт</small></span>
-          <span class="entry-choice-arrow" aria-hidden="true">›</span>
-        </button>
-        <button class="btn btn-ghost btn-block entry-choice-cancel" type="button" data-close="entryChoiceSheet">Отмена</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Отдельный вход сотрудников зала: код открывает каталог без закупок и продаж. -->
-  <div class="sheet-backdrop" id="floorLoginSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="floorLoginTitle">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body floor-sheet-body">
-        <div class="floor-sheet-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3"/><path d="M5 20v-2a7 7 0 0 1 14 0v2M3 3h3m12 0h3M3 3v3m18-3v3"/></svg></div>
-        <h2 class="sheet-title floor-sheet-title" id="floorLoginTitle">Вход сотрудника зала</h2>
-        <p class="muted floor-sheet-description">Введите код, который сообщил вам владелец магазина. После входа вы увидите коды товаров и штрихкоды.</p>
-        <form id="floorLoginForm">
-          <label class="field-label floor-field-label" for="floorLoginCode">Код сотрудника</label>
-          <input type="password" id="floorLoginCode" class="input floor-code-input" required minlength="8" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
-          <div class="form-error" id="floorLoginError" role="alert" hidden></div>
-          <button type="submit" class="btn btn-primary btn-block floor-submit" id="floorLoginSubmit">Открыть каталог</button>
-        </form>
-        <button type="button" class="btn btn-ghost btn-block floor-cancel" data-close="floorLoginSheet">Отмена</button>
       </div>
     </div>
   </div>
@@ -263,19 +306,17 @@
       <div class="sheet-body">
         <p class="muted menu-role" id="adminEmail"></p>
 
-        <div class="ios-group-title">Отчёты</div>
+        <!-- В меню только настройка. Всё, что делается каждый день — заказы,
+             «закончилось», «залежалось», наценка, ходовые, чужие цены — живёт во
+             вкладке «Работа» внизу экрана. Раньше эти строки были и там, и тут. -->
         <div class="ios-group">
-          <button class="ios-row ios-row-link" id="menuTop"><span class="ios-row-title">Ходовые товары</span></button>
-          <!-- Тот же список покупок, что у покупателя: сотрудник и владелец
-               собирают им закупку по залу. Второго такого механизма заводить
-               незачем — ошибки были бы те же, а учить пришлось бы дважды. -->
-          <button class="ios-row ios-row-link" id="menuStale"><span class="ios-row-title">Залежалось</span><span class="ios-row-value" id="menuStaleCount"></span></button>
-          <button class="ios-row ios-row-link" id="menuCompStores"><span class="ios-row-title">Цены других магазинов</span></button>
+          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
         </div>
 
         <div id="menuAdminOnly">
           <div class="ios-group-title">Каталог</div>
           <div class="ios-group">
+            <button class="ios-row ios-row-link" id="menuAddProduct"><span class="ios-row-title">Добавить товар</span></button>
             <button class="ios-row ios-row-link" id="menuImportHub"><span class="ios-row-title">Загрузка из 1С</span></button>
             <button class="ios-row ios-row-link" id="menuGroups"><span class="ios-row-title">Группы товаров</span></button>
             <button class="ios-row ios-row-link" id="menuSuppliers"><span class="ios-row-title">Поставщики</span></button>
@@ -289,22 +330,15 @@
             <button class="ios-row ios-row-link" id="menuReviews"><span class="ios-row-title">Отзывы покупателей</span><span class="ios-row-value" id="menuReviewsCount"></span></button>
           </div>
 
-          <div class="ios-group-title">Деньги</div>
-          <div class="ios-group">
-            <button class="ios-row ios-row-link" id="menuMargin"><span class="ios-row-title">Наценка и убыточные товары</span><span class="ios-row-value" id="menuMarginCount"></span></button>
-          </div>
-
           <div class="ios-group-title">Доступ и публикация</div>
           <div class="ios-group">
             <button class="ios-row ios-row-link" id="menuOwnerPass"><span class="ios-row-title">Пароль каталога (ваш)</span></button>
             <button class="ios-row ios-row-link" id="menuStaffPass"><span class="ios-row-title">Пароль сотрудника</span></button>
-            <button class="ios-row ios-row-link" id="menuFloorCode"><span class="ios-row-title">Код для сотрудников зала</span></button>
             <button class="ios-row ios-row-link" id="menuPublish"><span class="ios-row-title">Публикация на GitHub</span></button>
           </div>
         </div>
 
         <div class="ios-group">
-          <button class="ios-row ios-row-link" id="menuDevice"><span class="ios-row-title">Это устройство</span></button>
           <button class="ios-row ios-row-danger" id="menuLogout"><span class="ios-row-title">Выйти из аккаунта</span></button>
         </div>
       </div>
@@ -472,7 +506,7 @@
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
-        <h2 class="sheet-title" id="formTitle">Товар</h2>
+        <h2 class="sheet-title" id="formTitle">Новый товар</h2>
         <form id="productForm">
           <label class="field-label">Фотографии</label>
           <div class="photo-manager" id="photoManager"></div>
@@ -544,16 +578,6 @@
   </div>
 
   <!-- Выбор группы (все группы, доступен всем) -->
-  <div class="sheet-backdrop" id="groupsPickSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true">
-      <div class="sheet-handle"></div>
-      <div class="sheet-body">
-        <h2 class="sheet-title">Все группы</h2>
-        <p class="muted">Отметь одну или несколько групп. Повторный тап снимает отметку.</p>
-        <input type="search" id="groupsPickSearch" class="input" placeholder="Найти группу…" autocomplete="off">
-        <div id="groupsPickList"></div>
-        <button class="btn btn-ghost sheet-close" data-close="groupsPickSheet">Закрыть</button>
-      </div>
     </div>
   </div>
 
@@ -613,12 +637,6 @@
 
         <div class="ios-group-title">Что запомнено</div>
         <div class="ios-group" id="devList"></div>
-
-        <!-- Кто и когда входил с ЭТОГО телефона. Журнал местный: сервера нет,
-             собрать записи со всех телефонов магазина нечем — так и написано. -->
-        <div class="ios-group-title">Входы и выходы</div>
-        <div class="ios-group" id="devSessions"></div>
-        <p class="ios-note">Журнал этого телефона. У каждого сотрудника он свой — общего журнала по магазину нет, собирать его негде.</p>
 
         <div class="ios-group-title">Сбои приложения</div>
         <div class="ios-group" id="devErrors"></div>
@@ -807,30 +825,6 @@
     </div>
   </div>
 
-  <!-- Отдельный код сотрудников зала (только владелец). -->
-  <div class="sheet-backdrop" id="floorCodeSheet" hidden>
-    <div class="sheet sheet-small" role="dialog" aria-modal="true" aria-labelledby="floorCodeTitle">
-      <div class="sheet-handle"></div>
-      <div class="ios-nav">
-        <button class="ios-nav-btn" type="button" data-close="floorCodeSheet">Отмена</button>
-        <h2 class="ios-nav-title" id="floorCodeTitle">Код сотрудников зала</h2>
-        <span></span>
-      </div>
-      <div class="sheet-body floor-sheet-body">
-        <p class="floor-sheet-description muted">Задайте отдельный код для зала: не менее 8 символов, буквы и цифры или длинную фразу. Передайте его только сотрудникам. Закупки и продажи останутся закрытыми.</p>
-        <form id="floorCodeForm">
-          <label class="field-label floor-field-label" for="floorCodeNew">Новый код</label>
-          <input type="password" id="floorCodeNew" class="input floor-code-input" required minlength="8" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-          <label class="field-label floor-field-label" for="floorCodeAgain">Повторите код</label>
-          <input type="password" id="floorCodeAgain" class="input floor-code-input" required minlength="8" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-          <div class="form-error" id="floorCodeError" role="alert" hidden></div>
-          <button type="submit" class="btn btn-primary btn-block floor-submit" id="floorCodeSubmit">Сохранить код</button>
-        </form>
-        <p class="ios-note floor-code-note">После смены кода прежний код перестанет открывать каталог после новой публикации.</p>
-      </div>
-    </div>
-  </div>
-
   <!-- Пароль магазина (только админ) -->
   <div class="sheet-backdrop" id="staffPassSheet" hidden>
     <div class="sheet sheet-small" role="dialog" aria-modal="true">
@@ -886,11 +880,17 @@
     <div class="sheet sheet-small">
       <div class="sheet-handle"></div>
       <div class="sheet-body">
-        <h2 class="sheet-title" id="scanTitle">Сканировать товар</h2>
+        <h2 class="sheet-title" id="scanTitle">Наведи камеру на штрихкод</h2>
+        <!-- Переключатель — только вошедшим. У покупателя выбирать нечего:
+             он всегда получает ценник, ради него он камеру и открыл.
+             Режим «Ценник» из этого списка убран по решению владельца:
+             сотруднику он не нужен, у него в карточке и так всё есть. -->
+        <div class="seg emp-only" id="scanModeSeg">
+          <button data-scanmode="card">Товар</button>
+          <button data-scanmode="out">Закончилось</button>
+        </div>
         <div id="scanResult" class="scan-result" hidden></div>
         <div id="scanContainer" class="scan-box"></div>
-        <p class="scan-guide-text">Помести штрихкод или QR-код внутри рамки.</p>
-        <p id="scanFallback" class="scan-guide-text" hidden>Можно ввести код или название в поиске каталога.</p>
         <button class="btn btn-secondary btn-block" id="scanTorch" hidden>Подсветка</button>
         <button class="btn btn-ghost sheet-close" data-close="scanSheet">Готово</button>
       </div>
@@ -898,147 +898,6 @@
   </div>
 
 <!-- Фильтры и сортировка: всё в одном окне (минимализм) -->
-  <div class="sheet-backdrop" id="filterSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" data-no-back>
-      <div class="sheet-handle"></div>
-      <!-- Шапка как в системных окнах iOS: действие слева, название по центру,
-           действие справа. Никаких крестиков в углу. -->
-      <div class="ios-nav">
-        <button class="ios-nav-btn" id="filterReset">Сбросить</button>
-        <h2 class="ios-nav-title">Фильтры</h2>
-        <button class="ios-nav-btn strong" data-close="filterSheet">Готово</button>
-      </div>
-      <div class="sheet-body filter-body">
-
-        <!-- Изменения цен. Раньше два списка висели прямо на главном экране и
-             закрывали собой каталог; теперь это отдельный экран, и заходят в
-             него отсюда (решение владельца). -->
-        <div class="ios-group" id="priceNewsEntry" hidden>
-          <button class="ios-row ios-row-link" id="openCheaper" hidden>
-            <span class="ios-row-title">Подешевело</span>
-            <span class="ios-row-value" id="openCheaperVal"></span>
-          </button>
-          <button class="ios-row ios-row-link" id="openRisen" hidden>
-            <span class="ios-row-title">Подорожало</span>
-            <span class="ios-row-value" id="openRisenVal"></span>
-          </button>
-        </div>
-
-        <!-- Сгруппированный список: как «Настройки» на iPhone -->
-        <div class="ios-group">
-          <label class="ios-row" for="filterFav">
-            <span class="ios-row-title">Только избранное</span>
-            <span class="ios-switch"><input type="checkbox" id="filterFav"><span class="ios-knob"></span></span>
-          </label>
-        </div>
-
-        <div class="ios-group-title">Сортировка</div>
-        <div class="ios-group" id="sortSeg">
-          <button class="ios-row" data-sort="relevance"><span class="ios-row-title">По совпадению</span><span class="ios-check"></span></button>
-          <button class="ios-row" data-sort="name"><span class="ios-row-title">По названию, А–Я</span><span class="ios-check"></span></button>
-          <button class="ios-row" data-sort="cheap"><span class="ios-row-title">Сначала дешёвые</span><span class="ios-check"></span></button>
-          <button class="ios-row" data-sort="expensive"><span class="ios-row-title">Сначала дорогие</span><span class="ios-check"></span></button>
-          <button class="ios-row" data-sort="new"><span class="ios-row-title">Сначала новые</span><span class="ios-check"></span></button>
-          <button class="ios-row" data-sort="popular"><span class="ios-row-title">Сначала ходовые</span><span class="ios-check"></span></button>
-        </div>
-
-        <div class="ios-group-title">Категории</div>
-        <div class="ios-group check-list" id="filterCats"></div>
-        <button class="btn btn-secondary btn-block" id="filterGroupsBtn" hidden>Подгруппы…</button>
-
-        <div class="emp-only">
-          <div class="ios-group-title">Тип товара</div>
-          <div class="seg" id="typeSeg">
-            <button data-type="">Все</button>
-            <button data-type="weighted">Весовые</button>
-            <button data-type="piece">Штучные</button>
-          </div>
-        </div>
-
-        <div class="ios-group-title">Цена, ₽</div>
-        <div class="chips chips-wrap price-presets" id="pricePresets">
-          <button class="chip" data-pmin="" data-pmax="100">до 100</button>
-          <button class="chip" data-pmin="100" data-pmax="300">100–300</button>
-          <button class="chip" data-pmin="300" data-pmax="1000">300–1000</button>
-          <button class="chip" data-pmin="1000" data-pmax="">от 1000</button>
-        </div>
-        <div class="ios-group">
-          <div class="ios-row">
-            <span class="ios-row-title">От</span>
-            <input type="text" id="priceMin" class="ios-inp money" inputmode="decimal" placeholder="любая">
-          </div>
-          <div class="ios-row">
-            <span class="ios-row-title">До</span>
-            <input type="text" id="priceMax" class="ios-inp money" inputmode="decimal" placeholder="любая">
-          </div>
-        </div>
-
-        <div class="emp-only">
-          <div class="ios-group-title">Поступление</div>
-          <div class="chips chips-wrap" id="arrivalPresets">
-            <button class="chip" data-days="0">Сегодня</button>
-            <button class="chip" data-days="7">7 дней</button>
-            <button class="chip" data-days="30">30 дней</button>
-            <button class="chip" data-days="90">3 месяца</button>
-          </div>
-          <div class="ios-group">
-            <div class="ios-row">
-              <span class="ios-row-title">С</span>
-              <input type="date" id="arrivalFrom" class="ios-inp" aria-label="Поступление с">
-            </div>
-            <div class="ios-row">
-              <span class="ios-row-title">По</span>
-              <input type="date" id="arrivalTo" class="ios-inp" aria-label="Поступление по">
-            </div>
-          </div>
-          <p class="ios-note">Дата берётся из файла «Цены поставщиков» (колонка «Период»).</p>
-        </div>
-
-        <div class="purchase-only">
-          <div class="ios-group-title">Поставщики</div>
-          <div class="ios-group">
-            <button class="ios-row ios-row-link" id="filterSuppliersBtn">
-              <span class="ios-row-title">Выбрать поставщиков</span>
-              <span class="ios-row-value" id="filterSuppliersVal">Все</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="emp-only">
-          <div class="ios-group-title">Показывать</div>
-          <nav class="chips chips-quick chips-wrap" id="quickChips"></nav>
-        </div>
-      </div>
-      <!-- Кнопка результата всегда на виду, как в фильтрах системных приложений -->
-      <div class="filter-actions">
-        <button class="btn btn-primary btn-block" id="filterApply">Показать</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Изменения цен: полный список с поиском. Открывается из «Фильтров».
-       Внутри одного экрана переключаются «подешевело» и «подорожало» — это
-       одна и та же новость, просто в разные стороны. -->
-  <div class="sheet-backdrop" id="priceNewsSheet" hidden>
-    <div class="sheet sheet-tall" role="dialog" aria-modal="true" data-no-back>
-      <div class="sheet-handle"></div>
-      <div class="ios-nav">
-        <span class="ios-nav-btn ios-nav-spacer"></span>
-        <h2 class="ios-nav-title">Изменения цен</h2>
-        <button class="ios-nav-btn strong" data-close="priceNewsSheet">Готово</button>
-      </div>
-      <div class="pn-head">
-        <div class="seg" id="priceNewsSeg" role="group" aria-label="Тип изменения цены">
-          <button data-dir="down">Подешевело</button>
-          <button data-dir="up">Подорожало</button>
-        </div>
-        <div class="search-wrap pn-search">
-          <span class="search-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
-          <input type="search" class="search-input" id="priceNewsQuery" aria-label="Поиск по изменениям цен" placeholder="Найти в списке" autocomplete="off" enterkeyhint="search">
-        </div>
-        <p class="pn-since" id="priceNewsSince"></p>
-      </div>
-      <div class="sheet-body" id="priceNewsBody"></div>
     </div>
   </div>
 
@@ -1212,29 +1071,12 @@
           <div class="ios-row"><span class="ios-row-title">Должен прийти</span>
             <input type="date" id="ordDue" class="ios-inp"></div>
         </div>
-        <div class="ios-group-title">Что заказали</div>
+        <div class="ios-group-title">Что заказали <span class="hint">— необязательно</span></div>
         <div class="ios-group" id="ordItems"></div>
-        <!-- Добавление позиции: ищем как в каталоге (подсказками), а не точным
-             совпадением строки; рядом тот же сканер, что везде. Добавил —
-             поле очистилось и осталось в руках: следующую позицию вводишь
-             сразу, не отрывая рук (просьба владельца). -->
         <div class="ord-add">
-          <div class="ord-pick">
-            <input type="text" id="ordItemName" class="ios-inp" placeholder="название, код или штрихкод" autocomplete="off" enterkeyhint="done">
-            <button type="button" class="icon-btn ord-scan" id="ordItemScan" aria-label="Сканировать штрихкод">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8"/></svg>
-            </button>
-          </div>
-          <div class="ord-sug" id="ordSuggest" hidden></div>
-          <div class="ord-qty-row">
-            <span class="ord-qty-unit" id="ordItemUnit">шт</span>
-            <span class="qty-step">
-              <button type="button" id="ordQtyMinus" aria-label="Меньше">&minus;</button>
-              <input type="text" id="ordItemQty" class="ord-qty" inputmode="decimal" value="1" aria-label="Количество">
-              <button type="button" id="ordQtyPlus" aria-label="Больше">+</button>
-            </span>
-            <button type="button" class="btn btn-primary ord-item-add" id="ordItemAdd">Добавить</button>
-          </div>
+          <input type="text" id="ordItemName" class="ios-inp ios-inp-wide" placeholder="товар или код" autocomplete="off">
+          <input type="text" id="ordItemQty" class="ios-inp ord-qty" inputmode="decimal" placeholder="шт">
+          <button class="btn btn-secondary" id="ordItemAdd">Добавить</button>
         </div>
 
         <div class="ios-group-title">Кто заказал</div>
@@ -1243,13 +1085,8 @@
           <div class="ios-row"><input type="text" id="ordNote" class="ios-inp ios-inp-wide" maxlength="140" placeholder="примечание"></div>
         </div>
         <div class="form-error" id="ordError" hidden></div>
-        <!-- Две дороги: поставщику из базы — сразу в WhatsApp; кому угодно
-             ещё — скопировать весь текст и отправить вручную (просьба
-             владельца: поставщика может не быть в базе). -->
         <div class="ios-group" style="margin-top:14px">
           <button class="ios-row ios-row-action" id="ordSendWa"><span class="ios-row-title">Отправить заказ поставщику в WhatsApp</span></button>
-          <button class="ios-row ios-row-action" id="ordCopy"><span class="ios-row-title">Скопировать заказ</span>
-            </button>
         </div>
         <div class="ios-group">
           <button class="ios-row ios-row-action" id="ordReceived"><span class="ios-row-title">Отметить: заказ пришёл</span></button>
@@ -1258,6 +1095,18 @@
           <button class="ios-row ios-row-danger" id="ordDelete"><span class="ios-row-title">Удалить заказ</span></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Подорожало: что выросло в цене и когда (сотрудник и владелец) -->
+  <div class="sheet-backdrop" id="risenSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <h2 class="ios-nav-title">Подорожало</h2>
+        <button class="ios-nav-btn strong" data-close="risenSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="risenBody"></div>
     </div>
   </div>
 
@@ -1272,11 +1121,6 @@
       </div>
       <div class="sheet-body" id="restockBody"></div>
       <div class="filter-actions">
-        <!-- Отмечать пустые полки подряд: сотрудник идёт вдоль стеллажа и
-             сканирует одну за другой, не открывая карточку каждой. Раньше для
-             этого был переключатель режимов в самой камере — лишний выбор
-             заранее; теперь режим задаёт экран, с которого камеру открыли. -->
-        <button class="btn btn-primary btn-block" id="restockScan">Отмечать сканером</button>
         <button class="btn btn-secondary btn-block" id="restockClear">Очистить список</button>
       </div>
     </div>
@@ -1287,7 +1131,7 @@
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="ios-nav">
-        <button class="ios-nav-btn" id="compareClear2">Очистить</button>
+        <button class="ios-nav-btn" id="compareClear">Очистить</button>
         <h2 class="ios-nav-title">Сравнение</h2>
         <button class="ios-nav-btn strong" data-close="compareSheet">Готово</button>
       </div>

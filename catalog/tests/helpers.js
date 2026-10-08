@@ -13,21 +13,6 @@ async function newPage(browser, data = {}) {
   await ctx.addInitScript(() => localStorage.setItem('wm_gh_token', 'tok'));
   await ctx.route('**/auth/v1/**', (r) => r.fulfill({ status: 200, body: '{}' }));
   await ctx.route('**/rest/v1/**', (r) => r.fulfill(J([])));
-  /* Витрина лежит кусками (`p/00.json…`) с описью `index.json` — приложение
-     читает именно её. Пока обвязка подменяла только старый цельный
-     products.json, подставленные товары до приложения не доходили, и тесты
-     молча работали на НАСТОЯЩЕМ каталоге из репозитория. Теперь подменяем
-     новый формат: опись из одного куска + сам кусок. Старый файл оставляем
-     запасным — его читают при отсутствии описи. */
-  await ctx.route('**/data/index.json*', (r) => r.fulfill(J({
-    v: 2, app: 4, savedAt: new Date().toISOString(), n: 1,
-    parts: ['test'], groups: 'test', popular: 'test',
-  })));
-  await ctx.route('**/data/p/*.json*', (r) => {
-    const m = /\/p\/(\d+)\.json/.exec(r.request().url());
-    const i = m ? Number(m[1]) : 0;
-    r.fulfill(J(i === 0 ? (data.products || []) : []));
-  });
   await ctx.route('**/data/products.json*', (r) => r.fulfill(J(data.products || [])));
   await ctx.route('**/data/groups.json*', (r) => r.fulfill(J(data.groups || [])));
   await ctx.route('**/data/popular.json*', (r) => r.fulfill(J(data.popular || [])));

@@ -1,6 +1,6 @@
 // Мелкие помощники: элементы, экранирование, форматы, шторки
 
-import { $, localList, state, ui } from './store.js';
+import { $, state, ui } from './store.js';
 import { ic } from './icons.js';
 import { stopScan } from './scanner.js';
 
@@ -161,40 +161,12 @@ function restackSheets() {
   });
 }
 
-/* ── Откуда пришли ─────────────────────────────────────────────────────────
- * Почти все переходы в каталоге выглядят так: «закрыть окно А, открыть окно Б»
- * (меню → заказы, фильтры → изменения цен, вход → настройки устройства…).
- * Окно А при этом закрывалось НАСОВСЕМ, и «назад» из Б выбрасывало человека
- * на главный экран — он терял место, где был (жалоба владельца).
- *
- * Чинить девятнадцать мест по отдельности — значит забыть двадцатое. Поэтому
- * запоминаем переход там, где он виден всегда: если окно открывают СРАЗУ
- * после того, как закрыли другое, второе и есть «откуда пришли». «Сразу» —
- * это тот же обработчик нажатия: отметку снимаем следующим же тиком, так что
- * случайно связать два разных действия человека нельзя.
- */
-const cameFrom = new Map();
-let justClosed = null;
-let justClosedTimer = 0;
-let goingBack = false;      // идём НАЗАД, а не вперёд — новый след не оставляем
-
-function markClosed(id) {
-  justClosed = id;
-  clearTimeout(justClosedTimer);
-  justClosedTimer = setTimeout(() => { justClosed = null; }, 0);
-}
-
 export function openSheet(id) {
   /* Облачко волка живёт поверх страницы, и открытое окно оно бы закрыло собой.
      Прячем его молча: человек уже перешёл к делу, реплика ему не нужна. */
   if (ui.hideWolf) ui.hideWolf();
   const el = $(id);
   if (!el || !el.hidden) return; // нет элемента или уже открыт
-  /* Возврат следа не оставляет: иначе «меню → устройство → назад в меню»
-     записало бы устройство как «откуда пришли в меню», и «назад» из меню
-     снова открывало бы устройство — человек ходил бы кругами. */
-  if (!goingBack && justClosed && justClosed !== id) cameFrom.set(id, justClosed);
-  else cameFrom.delete(id);
   el.hidden = false;
   document.body.style.overflow = 'hidden';
   sheetStack.push(id);
@@ -220,33 +192,15 @@ export function closeSheet(id) {
   const el = $(id);
   if (!el || el.hidden) return;
   hideSheet(id);
-  markClosed(id);
   // «съедаем» нашу history-запись, чтобы счётчик «назад» не сбился
   if (window.history.state && window.history.state.wmSheet) { expectPop++; try { history.back(); } catch (e) { expectPop--; } }
-}
-
-/* «Назад» — вернуться туда, откуда пришли. Если неоткуда (окно открыли с
- * главного экрана) — просто закрываем, как раньше.
- * popped — пришли сюда кнопкой «назад» телефона: запись истории браузер уже
- * снял сам, второй раз её снимать нельзя. */
-export function goBack(id, popped) {
-  const el = $(id);
-  if (!el || el.hidden) return;
-  const back = cameFrom.get(id);
-  cameFrom.delete(id);
-  if (popped) hideSheet(id); else closeSheet(id);
-  if (back && $(back)) {
-    goingBack = true;
-    try { openSheet(back); } finally { goingBack = false; }
-  }
 }
 
 window.addEventListener('popstate', () => {
   if (expectPop > 0) { expectPop--; return; } // это наш собственный закрывающий back — окно уже скрыто
   const lb = $('lightbox');
   if (lb && !lb.hidden) { lb.hidden = true; lb.querySelector('img') && (lb.querySelector('img').src = ''); return; } // «назад» закрывает фото на весь экран
-  // «назад» на телефоне → вернуться туда, откуда пришли (а не на главный экран)
-  if (sheetStack.length) goBack(sheetStack[sheetStack.length - 1], true);
+  if (sheetStack.length) hideSheet(sheetStack[sheetStack.length - 1]); // «назад» на телефоне → закрыть верхнее окно
 });
 
 // Клавиша Esc закрывает верхнее окно (компьютер и планшет с клавиатурой).
@@ -283,15 +237,15 @@ export function setRowText(id, text) {
  * Само приложение при этом продолжает работать: остальные обработчики целы. */
 const ERR_KEY = 'wm_errors_v1';
 const ERR_KEEP = 20;
-// Свежие записи в начале: журнал читают сверху вниз.
-const errStore = localList(ERR_KEY, { max: ERR_KEEP, keep: 'first' });
 let lastErrAt = 0;
 
 export function logError(where, err) {
   const msg = String((err && (err.message || err)) || 'неизвестная ошибка').slice(0, 300);
-  const list = errStore.read();
-  list.unshift({ at: new Date().toISOString(), where, msg });
-  errStore.write(list);
+  try {
+    const list = JSON.parse(localStorage.getItem(ERR_KEY) || '[]');
+    list.unshift({ at: new Date().toISOString(), where, msg });
+    localStorage.setItem(ERR_KEY, JSON.stringify(list.slice(0, ERR_KEEP)));
+  } catch (e) { /* приватный режим или нет места */ }
   // не заваливаем человека сообщениями: не чаще одного раза в 10 секунд
   const now = Date.now();
   if (now - lastErrAt > 10000) {
@@ -301,7 +255,7 @@ export function logError(where, err) {
 }
 
 export function savedErrors() {
-  return errStore.read();
+  try { return JSON.parse(localStorage.getItem(ERR_KEY) || '[]'); } catch (e) { return []; }
 }
 
 export function watchErrors() {
@@ -333,7 +287,7 @@ export function addBackButtons() {
     b.className = 'sheet-back';
     b.setAttribute('aria-label', 'Назад');
     b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
-    b.addEventListener('click', () => goBack(bd.id));
+    b.addEventListener('click', () => closeSheet(bd.id));
     sheet.insertBefore(b, sheet.firstChild);
   });
 }
@@ -373,7 +327,7 @@ export function enableSwipeToClose() {
       sheet.style.transform = '';
       if (bd) { bd.style.transition = 'opacity .3s ease'; bd.style.opacity = ''; }
       // закрыть, если утянул далеко ИЛИ быстро фликнул вниз
-      if ((cur > 110 || (vel > 0.6 && cur > 40)) && bd) goBack(bd.id);
+      if ((cur > 110 || (vel > 0.6 && cur > 40)) && bd) closeSheet(bd.id);
       setTimeout(() => { sheet.style.transition = ''; if (bd) bd.style.transition = ''; }, 400);
     };
     sheet.addEventListener('touchend', finish);

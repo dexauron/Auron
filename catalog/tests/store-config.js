@@ -36,12 +36,13 @@ const OTHER_STORE = {
     const own = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
-      compMenu: !document.getElementById('menuCompStores').hidden,
-      topMenu: !document.getElementById('menuTop').hidden,
+      work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
+        window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
     chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
-    chk(own.compMenu && own.topMenu, 'включённые возможности видны в меню');
+    chk(/Ходовые/.test(own.work) && /других магазинов/.test(own.work),
+      `включённые возможности видны во вкладке «Работа» (${own.work})`);
     chk(own.cat === 'Молочное', `разделы продуктового магазина работают (молоко → ${own.cat})`);
     chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
@@ -58,15 +59,6 @@ const OTHER_STORE = {
     // ВАЖНО: широкая ловушка — ПЕРВОЙ, конкретные адреса после неё,
     // иначе ловушка перехватит и товары (Playwright проверяет роуты с конца).
     await ctx.route('**/data/*.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-    /* Витрина читается кусками с описью — подменяем её ЯВНО, как в helpers.js.
-       Раньше опись попадала в широкую ловушку и приложение уходило на запасной
-       цельный файл: проверка шла не тем путём, что живой каталог. */
-    await ctx.route('**/data/index.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
-      body: JSON.stringify({ v: 2, app: 4, savedAt: new Date().toISOString(), n: 1, parts: ['test'], groups: 'test', popular: 'test' }) }));
-    await ctx.route('**/data/p/*.json*', (r) => {
-      const m = /\/p\/(\d+)\.json/.exec(r.request().url());
-      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify((m ? Number(m[1]) : 0) === 0 ? products : []) });
-    });
     await ctx.route('**/data/products.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(products) }));
     await ctx.route('**/data/groups.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groups) }));
     await ctx.route('https://raw.githubusercontent.com/**', (r) => r.fulfill({ status: 404, body: 'x' }));
@@ -83,8 +75,8 @@ const OTHER_STORE = {
       sub: (document.querySelector('.brand-sub') || {}).textContent,
       letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
       accent: document.documentElement.style.getPropertyValue('--brand').trim(),
-      compMenu: document.getElementById('menuCompStores').hidden,
-      topMenu: document.getElementById('menuTop').hidden,
+      work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
+        window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       milk: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
       screw: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p2')),
       cards: document.querySelectorAll('.card').length,
@@ -93,7 +85,8 @@ const OTHER_STORE = {
       `другой магазин: ${other.name} · ${other.sub}`);
     chk(other.letter === 'С', `логотипа нет — показана первая буква названия (${other.letter})`);
     chk(other.accent === '#B3261E', `цвет магазина применён (${other.accent})`);
-    chk(other.compMenu && other.topMenu, 'выключенные возможности исчезли из меню');
+    chk(!/Ходовые/.test(other.work) && !/других магазинов/.test(other.work),
+      `выключенные возможности исчезли и из вкладки «Работа» (${other.work})`);
     chk(other.milk === 'Молочные продукты' && other.screw === 'Крепёж',
       `разделы взяты из групп 1С, а не из продуктовых правил (молоко → ${other.milk}, саморез → ${other.screw})`);
     chk(other.cards === products.length, `товары показываются (${other.cards})`);

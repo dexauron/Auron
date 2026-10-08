@@ -10,16 +10,14 @@ const products = [
 const groups = [{ id: 'g1', name: 'Молочные' }, { id: 'g2', name: 'Хлеб' }];
 const suppliers = [{ id: 's1', name: 'Молзавод' }, { id: 's2', name: 'Хлебозавод' }];
 
-/* Список пополнения открывается со вкладки «Работа». Счётчик — там же, в
-   строке: в меню его больше нет, из меню строку убрали как дубль вкладки. */
 const openList = (page) => page.evaluate(async () => {
   document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-  document.querySelector('.tabbar [data-tab="work"]').click();
+  document.getElementById('adminBtn').click();
+  await new Promise((r) => setTimeout(r, 250));
+  // счёт дел теперь на вкладке «Работа», а не на строке в меню
+  const badge = document.getElementById('tabWorkCount').textContent;
+  window.WM_PUBLISH._work('restock');
   await new Promise((r) => setTimeout(r, 350));
-  const row = document.querySelector('[data-work="restock"]');
-  const badge = (row.querySelector('.ios-row-value') || {}).textContent || '';
-  row.click();
-  await new Promise((r) => setTimeout(r, 400));
   return badge;
 });
 
@@ -80,8 +78,7 @@ const openList = (page) => page.evaluate(async () => {
       total: box.querySelector('.ord-total').innerText.replace(/\s+/g, ' '),
     };
   });
-  // счётчик переехал в строку на вкладке «Работа» — и теперь он словами
-  chk(/^3 /.test(badge), `на вкладке «Работа» видно, сколько позиций ждёт заказа (${badge})`);
+  chk(badge === '3', `в меню видно, сколько позиций ждёт заказа (${badge})`);
   chk(view.open && view.rows === 3, `список открылся со всеми позициями (${view.rows})`);
   // заголовки групп рисуются заглавными (text-transform), поэтому сверяем без учёта регистра
   chk(view.heads.length === 2 && view.heads.some((h) => /молзавод · 2/i.test(h)) && view.heads.some((h) => /хлебозавод · 1/i.test(h)),
@@ -119,10 +116,10 @@ const openList = (page) => page.evaluate(async () => {
 
   const marks = await page.evaluate(async () => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.querySelector('.tabbar [data-tab="work"]').click();
-    await new Promise((r) => setTimeout(r, 400));
-    const badge2 = ((document.querySelector('[data-work="restock"] .ios-row-value') || {}).textContent) || '';
-    document.querySelector('[data-work="restock"]').click();
+    document.getElementById('adminBtn').click();
+    await new Promise((r) => setTimeout(r, 250));
+    const badge2 = document.getElementById('tabWorkCount').textContent;
+    window.WM_PUBLISH._work('restock');
     await new Promise((r) => setTimeout(r, 350));
     const box = document.getElementById('restockBody');
     return {
@@ -132,7 +129,7 @@ const openList = (page) => page.evaluate(async () => {
     };
   });
   chk(marks.done === 2, `в списке видно, что уже заказано (${marks.done})`);
-  chk(/^1 /.test(marks.badge2), `счётчик считает только неготовое (${marks.badge2})`);
+  chk(marks.badge2 === '1', `счётчик считает только неготовое (${marks.badge2})`);
   chk(marks.buttons === 1, `у поставщика, где всё заказано, кнопки «Заказать» нет (${marks.buttons})`);
 
   // 5. Убрать позицию крестиком
@@ -153,10 +150,9 @@ const openList = (page) => page.evaluate(async () => {
     list.forEach((x) => { x.ordered = old; });
     localStorage.setItem('wm_restock_v1', JSON.stringify(list));
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
-    document.querySelector('.tabbar [data-tab="work"]').click();
-    await new Promise((r) => setTimeout(r, 350));
-    document.querySelector('[data-work="restock"]').click();
+    document.getElementById('adminBtn').click();
+    await new Promise((r) => setTimeout(r, 250));
+    window.WM_PUBLISH._work('restock');
     await new Promise((r) => setTimeout(r, 350));
     return {
       left: JSON.parse(localStorage.getItem('wm_restock_v1') || '[]').length,
@@ -165,28 +161,6 @@ const openList = (page) => page.evaluate(async () => {
   });
   chk(tidied.left === 0, `старое заказанное подчищается само (${tidied.left})`);
   chk(/Список пуст/.test(tidied.text), `пустой список объясняет, что делать (${tidied.text.slice(0, 50)})`);
-
-  // Переполнение не должно молча стирать первую незавершённую позицию.
-  await openProduct(page, 'p1');
-  const capacity = await page.evaluate(async () => {
-    const key = 'wm_restock_v1';
-    localStorage.setItem(key, JSON.stringify(Array.from({ length: 300 }, (_, i) => ({
-      id: 'old-' + i, name: 'Позиция ' + i, at: '2026-10-05', ordered: ''
-    }))));
-    document.getElementById('btnRestock').click();
-    await new Promise((r) => setTimeout(r, 150));
-    const list = JSON.parse(localStorage.getItem(key) || '[]');
-    const toast = document.getElementById('toast').textContent;
-    window.WM_PUBLISH._scanRestock('4600000000011');
-    return { count: list.length, first: list[0]?.id, hasNew: list.some((x) => x.id === 'p1'),
-      label: document.getElementById('btnRestock').textContent.trim(), toast,
-      scan: document.getElementById('scanResult').innerText };
-  });
-  chk(capacity.count === 300 && capacity.first === 'old-0' && !capacity.hasNew && /Закончилось/.test(capacity.label),
-    '301-я отметка не удаляет первую и не показывает ложный успех');
-  chk(/Список заполнен/.test(capacity.toast) && !/Убрано/.test(capacity.toast),
-    'кнопка не выдаёт ложное сообщение «Убрано» после отказа');
-  chk(/не удалось добавить/.test(capacity.scan), 'сканер тоже показывает отказ при полном списке');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);

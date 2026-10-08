@@ -20,14 +20,14 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   await one.page.waitForTimeout(400);
   await one.page.click('#viewToggleBtn');                       // плотные
   await one.page.click('#viewToggleBtn'); await one.page.waitForTimeout(300);   // список
-  await one.page.click('.tabbar [data-tab="cats"]'); await one.page.waitForTimeout(300);
+  await one.page.click('.tabbar [data-tab="pick"]'); await one.page.waitForTimeout(300);
   await one.page.click('#themeBtn'); await one.page.waitForTimeout(200);
   const set = await one.page.evaluate(() => ({
     view: window.WM_PUBLISH._state().view,
     tab: window.WM_PUBLISH._state().tab,
     theme: document.documentElement.getAttribute('data-theme'),
   }));
-  chk(set.view === 'list' && set.tab === 'cats', `настройки выставлены (вид «${set.view}», раздел «${set.tab}»)`);
+  chk(set.view === 'list' && set.tab === 'pick', `настройки выставлены (вид «${set.view}», раздел «${set.tab}»)`);
 
   // перезагрузка того же устройства — всё на месте
   await one.page.reload({ waitUntil: 'load' });
@@ -40,7 +40,7 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
     listShown: !!document.querySelector('#productGrid.list, #catScreen:not([hidden])'),
   }));
   chk(after.view === 'list', `после перезагрузки вид списка сохранился (${after.view})`);
-  chk(after.tab === 'cats', `и открытый раздел тоже (${after.tab})`);
+  chk(after.tab === 'pick', `и открытый раздел тоже (${after.tab})`);
   chk(after.theme === set.theme, `и тема (${after.theme})`);
 
   // ── ВТОРОЕ устройство: свои настройки, чужие не подхватывает ──
@@ -58,14 +58,8 @@ const groups = [{ id: 'g1', name: 'Продукты', sort_order: 1 }];
   // Раньше сюда вела вкладка «Ещё», теперь на её месте «Фильтры».
   const openDevice = async (page) => {
     await page.click('#adminBtn'); await page.waitForTimeout(350);
-    /* Без входа «Войти» открывает выбор: зал или владелец/бухгалтер. Настройки
-       устройства лежат в форме владельца, поэтому проходим через выбор.
-       После входа кнопка живёт в меню. */
+    // без входа кнопка живёт в окне входа, после входа — в меню
     await page.evaluate(async () => {
-      if (!document.getElementById('entryChoiceSheet').hidden) {
-        document.getElementById('entryChoiceOwner').click();
-        await new Promise((r) => setTimeout(r, 250));
-      }
       const btn = document.getElementById('loginSheet').hidden
         ? document.getElementById('menuDevice') : document.getElementById('loginDevice');
       btn.click();

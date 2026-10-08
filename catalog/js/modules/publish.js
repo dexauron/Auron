@@ -1,7 +1,6 @@
 // Публикация на GitHub: шифрование, снимки, вход по паролю
 
-import { $, CFG, lsDel, lsGet, lsSet, lsSetJson, state, ui } from './store.js';
-import { logSession } from './sessionlog.js';
+import { $, CFG, state, ui } from './store.js';
 import { norm, toast } from './core.js';
 import { buildIndex } from './catalog.js';
 import { renderAll } from './render.js';
@@ -9,7 +8,6 @@ import { orderRules } from './card.js';
 import { byName, saveCache, tidyMemory } from './data.js';
 import { autoDedup } from './photos.js';
 import { digest, partName, pool, shard } from './parts.js';
-import { buildFloorData, encryptFloor, FLOOR_FILE, isPrim, primStrings } from './floordata.js';
 
 /* ── Публикация каталога на GitHub (бесплатно, без сервера) ──────────────
    Владелец один раз вставляет «ключ» (GitHub token) — он хранится ТОЛЬКО на
@@ -18,8 +16,8 @@ import { buildFloorData, encryptFloor, FLOOR_FILE, isPrim, primStrings } from '.
    чтобы деплой срабатывал один раз). Витрина — публично; секретное (закупка,
    «Ходовые») позже уедет в зашифрованный файл. */
 export const GH_TOKEN_KEY = 'wm_gh_token';
-export function ghToken() { return lsGet(GH_TOKEN_KEY); }
-export function ghSetToken(t) { if (t) lsSet(GH_TOKEN_KEY, t); else lsDel(GH_TOKEN_KEY); }
+export function ghToken() { try { return localStorage.getItem(GH_TOKEN_KEY) || ''; } catch (e) { return ''; } }
+export function ghSetToken(t) { try { if (t) localStorage.setItem(GH_TOKEN_KEY, t); else localStorage.removeItem(GH_TOKEN_KEY); } catch (e) { /* приватный режим */ } }
 export function ghConfigured() { return !!(ghToken() && CFG.GITHUB_OWNER && CFG.GITHUB_REPO); }
 export const ghRepo = () => `/repos/${CFG.GITHUB_OWNER}/${CFG.GITHUB_REPO}`;
 export const ghBranch = () => CFG.GITHUB_BRANCH || 'main';
@@ -144,14 +142,13 @@ export async function ghCommit(files, message, opts = {}) {
 
 /* Витринные поля — что видит покупатель, зашедший без пароля.
  * arrival_at (только дата) — на нём держится «Новее» и строка «завоз».
- * КОД КАССЫ здесь НЕ публикуем (решение владельца 2026-10-03): код — для
- * сотрудников, он уходит в отдельный файл зала (floor.enc), а в публичный
- * JSON не попадает вовсе. Раньше код был публичным, но это противоречило
- * модели «публично — без кодов», и экран его лишь прятал, а в файле он был.
- * ШТРИХКОДЫ остаются: владелец оставил покупателю сканер (2026-08-27), а
- * секрета в штрихкоде нет — он напечатан на самой упаковке. Артикул,
- * поставщики, закупки и остаток числом остаются закрытыми. */
-const PUBLIC_FIELDS = ['id', 'name', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
+ * Код товара — с ним проще объяснить кассиру, что берёшь.
+ * ШТРИХКОДЫ здесь потому, что владелец решил оставить покупателю сканер
+ * (2026-08-27): без них наведённая камера не находила ничего, и сканер у
+ * покупателя выглядел сломанным. Секрета в штрихкоде нет — он напечатан на
+ * самой упаковке. Артикул, поставщики, закупки и остаток числом остаются
+ * закрытыми. */
+const PUBLIC_FIELDS = ['id', 'name', 'code', 'barcodes', 'category', 'group_id', 'retail_price', 'is_weighted', 'unit', 'description', 'photos', 'arrival_at'];
 /* Отзывы уезжают отдельно и обрезанными: они и написаны для покупателя, но
  * витрину качает каждый, и тащить в неё всю переписку незачем. */
 const PUB_REVIEWS = 5;
@@ -177,25 +174,11 @@ export function stockState(p, perDay) {
   return 'in';
 }
 
-/* Поля-массивы витрины и проверка «это примитив».
-   Витрину качает кто угодно, поэтому в неё нельзя класть значение «как есть»:
-   разрешённое поле с хитрым содержимым — тоже канал утечки. Если фото пришло
-   объектом {url, buy_price} (кривой импорт), закупка оказалась бы в открытом
-   файле. Берём только примитивы, а в photos/barcodes — только строки и числа.
-   Защита общая с данными зала — `isPrim` и `primStrings` из floordata.js. */
-const PUBLIC_ARRAY = ['photos', 'barcodes'];
-
 export function buildPublicProducts() {
   return state.products
     .map((p) => {
       const o = {};
-      for (const k of PUBLIC_FIELDS) {
-        if (p[k] == null) continue;
-        if (PUBLIC_ARRAY.includes(k)) {
-          const arr = primStrings(p[k]);
-          if (arr.length) o[k] = arr;
-        } else if (isPrim(p[k])) o[k] = p[k];
-      }
+      for (const k of PUBLIC_FIELDS) if (p[k] != null) o[k] = p[k];
       // даты кладём без времени — «Новее» нужна только дата, а витрину качает
       // каждый покупатель, лишние 14 символов на товар тут заметны
       if (o.arrival_at) o.arrival_at = String(o.arrival_at).slice(0, 10);
@@ -424,7 +407,6 @@ export function buildFullSnapshot() {
     orders: state.orders || [],                 // заказы поставщикам: кто, у кого, когда придёт
     orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
-    floorPassword: state.floorPassword || null, // код сотрудника зала (для повторной выкладки floor.enc)
   };
 }
 /* ── Закрытый каталог: один на всех, ключ — в «конвертиках» ─────────────────
@@ -584,13 +566,6 @@ export async function publishFull(password, { onProgress = null, rotate = false 
   for (const old of [SECRET_FILE, STAFF_FILE]) {
     if (await rawExists(old)) files.push({ path: `${CFG.DATA_PATH}/${old}`, content: null });
   }
-  // Данные для сотрудника зала — в ТОТ ЖЕ коммит (атомарно): новый пароль и
-  // новый floor.enc уезжают вместе, нет окна, где старый floor.enc ещё
-  // открывается прежним кодом. Денег в floor.enc нет (buildFloorData).
-  if (state.floorPassword) {
-    const floorBlob = await encryptFloor(buildFloorData(state.products, state.groups, state.retailHist), state.floorPassword);
-    files.push({ path: `${CFG.DATA_PATH}/${FLOOR_FILE}`, content: floorBlob });
-  }
   const sha = await ghCommit(files, 'Каталог: обновлены витрина и защищённые данные', { onProgress });
   _cat = cat.saved;
   return { sha, sent: files.length };
@@ -611,7 +586,6 @@ function applySnapshot(data, role) {
   state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
-  state.floorPassword = data.floorPassword || null;
   tidyMemory();          // каталог мог прийти с залежавшейся историей — чистим сразу
   buildIndex();
   state.popularIds = buildPopularIds();
@@ -643,8 +617,8 @@ export async function unlockStaff(password) {
 }
 
 // запомнить вход на устройстве (по просьбе владельца — не выходить до явного выхода)
-export function saveSvAuth(role, pw) { lsSetJson(SV_AUTH_KEY, { role, pw }); }
-export function clearSvAuth() { lsDel(SV_AUTH_KEY); }
+function saveSvAuth(role, pw) { try { localStorage.setItem(SV_AUTH_KEY, JSON.stringify({ role, pw })); } catch (e) { /* приватный режим */ } }
+export function clearSvAuth() { try { localStorage.removeItem(SV_AUTH_KEY); } catch (e) { /* некритично */ } }
 
 // Включить режим «вошёл владелец без сервера»: кнопки админа, внутренние
 // разделы, запомнить пароль для публикаций и вход на устройстве.
@@ -654,7 +628,7 @@ export function applyServerless(pw) {
   state.session = { user: { email: 'owner' }, serverless: true };
   state.isAdmin = true; state.role = 'admin'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('owner', pw);
-  logSession('in', 'owner');
+  $('fabAdd').hidden = false;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();
@@ -665,20 +639,15 @@ export function applyServerless(pw) {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(autoDedup, { timeout: 15000 });
   else setTimeout(autoDedup, 4000);
 }
-/* Вход БУХГАЛТЕРА. Он работает с деньгами: закупочные цены, поставщики и
- * контакты, наценка, «Ходовые» (продажи и выручка) — всё открыто, это его
- * работа. Чего он не может — МЕНЯТЬ каталог: ни править товар, ни удалять,
- * ни импортировать, ни публиковать. Закреплено проверкой role-staff.js.
- * (Прежний комментарий уверял, что «Ходовые» ему закрыты — код всегда
- * говорил обратное; оставляем как в коде: без выручки бухгалтеру нечего
- * считать.) Вход запоминается на устройстве. */
+// Включить режим «вошёл сотрудник»: видит закупку/контакты, но не «Ходовые» и
+// не правит каталог. Тоже запоминается на устройстве.
 export function applyStaff(pw) {
   ui.secretPw = null; // сотрудник не публикует
   state.serverless = true;
   state.session = { user: { email: 'staff' }, serverless: true, staff: true };
   state.isAdmin = false; state.role = 'staff'; state.canPurchase = true; state.canSales = true;
   saveSvAuth('staff', pw);
-  logSession('in', 'staff');
+  $('fabAdd').hidden = true;
   $('adminBtn').classList.toggle('is-admin', true);
   $('adminBtnLabel').hidden = true;
   saveCache();

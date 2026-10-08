@@ -1,7 +1,7 @@
 // Отрисовка: сетка, разделы, фильтры, ленты
 
-import { $, PAGE_SIZE, localList, lsDel, lsGet, lsJson, lsSet, lsSetJson, state, ui } from './store.js';
-import { esc, expectPop, groupById, highlight, openSheet, supplierById, moneyText } from './core.js';
+import { $, PAGE_SIZE, state, ui } from './store.js';
+import { esc, expectPop, groupById, highlight, supplierById, moneyText } from './core.js';
 import { CATEGORIES, OTHER_CAT, ic } from './icons.js';
 import { QUICK, catGroupPredicate, catIcon, catalogSections, categoryOf, daysAgoISO, fmtDate, fmtRetail, isTopSeller, nameNoPack, packText, productCategory, queryHlTokens, todayISO, visibleProducts, fmtPrice } from './catalog.js';
 import { trackSearch } from './device.js';
@@ -9,6 +9,7 @@ import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
 import { ratingText } from './reviews.js';
+import { renderRiseStrip } from './pricerise.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -37,8 +38,8 @@ const looksLikeEmail = (q) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(q || '
 export function switchTab(tab) {
   // «Фильтры» — не раздел, а окно: нижняя панель даёт до них дотянуться большим
   // пальцем. Меню и настройки устройства переехали на кнопку человечка в шапке.
-  if (tab === 'filters') { syncControls(); openSheet('filterSheet'); return; }
   state.tab = tab;
+  if (tab === 'pick') syncControls();          // поля подбора — под текущее состояние
   if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
   else if (state.favOnly) state.favOnly = false;
   if (tab !== 'catalog') { state.query = ''; $('searchInput').value = ''; }
@@ -57,11 +58,13 @@ function syncTabs() {
   // «Работа»: сколько дел ждёт. Через ui, а не импортом — иначе модули
   // сетки и рабочих списков ссылались бы друг на друга по кругу.
   if (ui.renderWorkBadge) ui.renderWorkBadge();
-  // экран категорий и сетка товаров не показываются одновременно
-  const cats = state.tab === 'cats';
-  $('catScreen').hidden = !cats;
-  $('productGrid').hidden = cats;
-  if (cats) { $('emptyState').hidden = true; $('loader').hidden = true; }
+  /* «Подбор» и сетка товаров не показываются одновременно: на этой вкладке
+     человек выбирает, ЧТО показать, а результат смотрит на «Каталоге». */
+  const pick = state.tab === 'pick';
+  $('catScreen').hidden = !pick;
+  $('pickScreen').hidden = !pick;
+  $('productGrid').hidden = pick;
+  if (pick) { $('emptyState').hidden = true; $('loader').hidden = true; }
 }
 
 // Плитки категорий: иконка, название и сколько товаров. Пустые не показываем —
@@ -84,7 +87,7 @@ function catCounts() {
 
 export function renderCatScreen() {
   const box = $('catScreen');
-  if (!box || state.tab !== 'cats') return;
+  if (!box || state.tab !== 'pick') return;
   const { cats, groupsIn } = catCounts();
   const all = catalogSections(cats);
   if (!all.length) {
@@ -173,14 +176,8 @@ export function renderGrid() {
     /* Покупатель искал товар и не нашёл. Раньше он на этом просто уходил, и
        магазин об этом не узнавал. Теперь предлагаем спросить — заодно владелец
        увидит, чего людям не хватает. */
-    const typed = !!(state.query && state.query.trim().length > 1);
     const ask = $('emptyAsk');
-    if (ask) ask.hidden = !(!state.session && typed);
-    /* Сотрудник искал и не нашёл. Переписывать запрос у полки неудобно —
-       куда быстрее навести камеру: штрихкод на упаковке находит товар там,
-       где название из 1С подвело. Раньше ему тут не предлагали ничего. */
-    const scan = $('emptyScan');
-    if (scan) scan.hidden = !(state.session && typed);
+    if (ask) ask.hidden = !(!state.session && state.query && state.query.trim().length > 1);
     // Ничего не нашлось — значит и показывать нечего: чистим сетку и убираем
     // кнопку «Показать ещё» от прошлого показа. Без этого экран говорил
     // «Ничего не нашлось» и тут же предлагал «Показать ещё (осталось 17795)».
@@ -233,8 +230,7 @@ export function renderGrid() {
     // Код — не метка в общей куче, а главное на плитке: ради него каталог и
     // сделан. Тап по коду копирует его, не открывая карточку: сотруднику за
     // кассой нужен именно код, а не описание товара.
-    // код на плитке — только вошедшим (покупателю коды кассы не показываем)
-    const code = p.code && state.session
+    const code = p.code
       ? `<button type="button" class="card-code" data-copy-code="${esc(p.code)}" title="Скопировать код">${esc(p.code)}</button>`
       : '';
     const tagRow = tags.length ? `<div class="card-tags">${tags.join('')}</div>` : '';
@@ -250,11 +246,7 @@ export function renderGrid() {
          читается с одного взгляда (приём из Zepto). При поиске подсвечиваем
          полное название: человек мог искать как раз по граммам. */
       const title = pack ? nameNoPack(p) : p.name;
-      /* Фото в строке списка. Показывать ли его — решают стили: покупателю
-         витрина с картинками, сотруднику плотный список без них. Нет фото —
-         блок помечен no-photo и стиль его убирает, строка остаётся компактной. */
       return `<article class="card card-row" data-id="${esc(p.id)}">
-        <div class="${photoCls}">${img}</div>
         <div class="row-main">
           <div class="card-name">${highlight(title, hlTokens)}</div>
           ${pack ? `<div class="row-pack">${esc(pack)}</div>` : ''}
@@ -337,45 +329,6 @@ const QUICK_CHIPS = [
 
 // Категории списком-чекбоксами в окне фильтра (как в референсе)
 // какие категории раскрыты в дереве фильтра (показывают свои подкатегории)
-export const filterCatOpen = new Set();
-export function renderFilterCats() {
-  const box = $('filterCats');
-  if (!box) return;
-  // товаров в категории и в каждой подгруппе; подгруппы, отнесённые к категории
-  const counts = {};
-  const groupCounts = {};
-  const subsByCat = {};
-  for (const g of state.groups) {
-    const c = categoryOf(g.name) || OTHER_CAT.name;
-    (subsByCat[c] = subsByCat[c] || []).push(g);
-  }
-  for (const p of state.products) {
-    const c = productCategory(p); if (c) counts[c] = (counts[c] || 0) + 1;
-    if (p.group_id) groupCounts[p.group_id] = (groupCounts[p.group_id] || 0) + 1;
-  }
-  const cats = catalogSections(counts).map((c) => c.name).sort((a, b) => counts[b] - counts[a]);
-  if (!cats.length) { box.innerHTML = '<p class="muted" style="margin:0">Категорий пока нет</p>'; return; }
-  box.innerHTML = cats.map((c) => {
-    const on = state.selCats.includes(c);
-    const subs = (subsByCat[c] || []).filter((g) => groupCounts[g.id]).sort((a, b) => groupCounts[b.id] - groupCounts[a.id]);
-    const expanded = filterCatOpen.has(c);
-    const caret = subs.length
-      ? `<button type="button" class="tree-caret${expanded ? ' open' : ''}" data-tcat="${esc(c)}" aria-label="Показать подкатегории">▸</button>`
-      : '<span class="tree-caret-empty"></span>';
-    let html = `<div class="tree-cat">${caret}`
-      + `<label class="tree-cat-label"><input type="checkbox" class="check-cb" data-fcat="${esc(c)}"${on ? ' checked' : ''}>`
-      + `<span class="check-text">${catIcon(c)} ${esc(c)}</span><span class="check-count">${counts[c]}</span></label></div>`;
-    if (subs.length && expanded) {
-      html += '<div class="tree-subs">' + subs.map((g) => {
-        const gon = state.selGroups.includes(g.id);
-        return `<label class="tree-sub"><input type="checkbox" class="check-cb" data-fgroup="${esc(g.id)}"${gon ? ' checked' : ''}>`
-          + `<span class="check-text">${esc(g.name)}</span><span class="check-count">${groupCounts[g.id]}</span></label>`;
-      }).join('') + '</div>';
-    }
-    return html;
-  }).join('');
-}
-
 function renderQuick() {
   const base = baseFiltered();
   let html = '';
@@ -404,8 +357,6 @@ function updateResultsCount(n) {
 
 // синхронизирует окно фильтров и значок с состоянием
 function syncControls() {
-  renderFilterCats();
-  { const ff = $('filterFav'); if (ff) ff.checked = !!state.favOnly; }
   document.querySelectorAll('#sortSeg button').forEach((b) => b.classList.toggle('active', b.dataset.sort === state.sort));
   document.querySelectorAll('#typeSeg button').forEach((b) => b.classList.toggle('active', b.dataset.type === state.selType));
   // даты поступления в поля + подсветка активного пресета
@@ -436,19 +387,10 @@ function syncControls() {
   if (ui.applyGuestMode) ui.applyGuestMode();   // класс «покупатель» на странице
   if (ui.renderShopBar) ui.renderShopBar();     // полоска «сколько выйдет»
   document.querySelectorAll('.purchase-only').forEach((el) => { el.hidden = !state.canPurchase; });
-  // подписи кнопок «Группы» и «Поставщики» — со счётчиком выбранного
-  const gBtn = $('filterGroupsBtn');
-  if (gBtn) {
-    const gn = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted').length + state.selCats.length;
-    gBtn.textContent = gn ? `Группы: выбрано ${gn}` : 'Выбрать группы…';
-    gBtn.classList.toggle('picked', gn > 0);
-  }
   const sVal = $('filterSuppliersVal');
   if (sVal) sVal.textContent = state.selSuppliers.length ? `Выбрано: ${state.selSuppliers.length}` : 'Все';
+  // значок на вкладке «Подбор»: видно, что фильтр включён, не открывая её
   const n = countActiveFilters();
-  /* Счётчик включённых фильтров — на вкладке «Фильтры». Кнопки фильтра в
-     шапке больше нет: это был дубль той же вкладки, до которого вдобавок не
-     дотянуться большим пальцем. */
   const tb = $('tabFilterCount');
   if (tb) { tb.hidden = !n; tb.textContent = n || ''; }
 }
@@ -510,29 +452,12 @@ export function removeFilter(type, val) {
   renderAll();
 }
 
-/* Кто сейчас смотрит каталог — одной меткой на странице. Оформление ролей
- * опирается ИМЕННО на неё, а не на «видна ли кнопка входа»: кнопки двигаются
- * и переименовываются, а роль — нет. Значения: guest (покупатель), zal
- * (сотрудник зала), staff (бухгалтер), owner (владелец). */
-function markRole() {
-  const el = document.body;
-  if (!el) return;
-  let role = 'guest';
-  if (state.session) {
-    if (state.isAdmin) role = 'owner';
-    else if (state.role === 'zal') role = 'zal';
-    else role = 'staff';
-  }
-  if (el.dataset.role !== role) el.dataset.role = role;
-}
-
 export function renderAll() {
-  markRole();
-  ui.anyFilter = anyFilterActive;        // тем же правилом пользуются другие экраны
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
-  if (ui.renderPriceNewsEntry) ui.renderPriceNewsEntry();   // вход в «Изменения цен»
+  renderCheaper();
+  renderRiseStrip();
   renderArrivals();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
@@ -575,31 +500,26 @@ const RECENT_KEY = 'wm_recent_q_v1';
 export const THEME_KEY = 'wm_theme';
 
 function saveFilters() {
-  lsSetJson(FILTERS_KEY, {
-    selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
-    quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
-    priceMin: state.priceMin, priceMax: state.priceMax,
-    selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
-  });
-}
-/* Переключал ли человек вид каталога САМ на этом устройстве. Сам вид
- * сохраняется при каждой перерисовке, поэтому «есть ли он в памяти» ни о чём
- * не говорит — нужна отдельная отметка. По ней сотруднику зала ставится
- * плотный список по умолчанию, а его собственный выбор не перебивается. */
-const VIEW_PICKED_KEY = 'wm_view_picked';
-export const markViewPicked = () => lsSet(VIEW_PICKED_KEY, '1');
-export const viewChosen = () => lsGet(VIEW_PICKED_KEY) === '1';
-export function loadFilters() {
-  const f = lsJson(FILTERS_KEY);
-  if (!f) return;
   try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      selCats: state.selCats, selGroups: state.selGroups, selSuppliers: state.selSuppliers,
+      quick: state.quick, sort: state.sort, view: state.view, tab: state.tab,
+      priceMin: state.priceMin, priceMax: state.priceMax,
+      selType: state.selType, arrivalFrom: state.arrivalFrom, arrivalTo: state.arrivalTo,
+    }));
+  } catch (e) { /* нет места — не критично */ }
+}
+export function loadFilters() {
+  try {
+    const f = JSON.parse(localStorage.getItem(FILTERS_KEY));
+    if (!f) return;
     state.selCats = Array.isArray(f.selCats) ? f.selCats : [];
     state.selGroups = Array.isArray(f.selGroups) ? f.selGroups : [];
     state.selSuppliers = Array.isArray(f.selSuppliers) ? f.selSuppliers : [];
     state.quick = Array.isArray(f.quick) ? f.quick : [];
     if (['relevance', 'name', 'cheap', 'expensive', 'new', 'popular'].includes(f.sort)) state.sort = f.sort;
     if (['normal', 'compact', 'list'].includes(f.view)) state.view = f.view;
-    if (['catalog', 'cats', 'fav'].includes(f.tab)) state.tab = f.tab;
+    if (['catalog', 'pick', 'fav'].includes(f.tab)) state.tab = f.tab;
     if (state.tab === 'fav') state.favOnly = true;
     state.priceMin = (typeof f.priceMin === 'number') ? f.priceMin : null;
     state.priceMax = (typeof f.priceMax === 'number') ? f.priceMax : null;
@@ -610,8 +530,7 @@ export function loadFilters() {
   } catch (e) { /* игнорируем битые данные */ }
 }
 
-const recentStore = localList(RECENT_KEY, { max: 8, keep: 'first', of: 'values' });
-const recentQueries = () => recentStore.read();
+function recentQueries() { try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || []; } catch (e) { return []; } }
 export function addRecentQuery(q) {
   q = q.trim();
   if (q.length < 2) return;
@@ -619,7 +538,7 @@ export function addRecentQuery(q) {
   let list = recentQueries().filter((x) => x.toLowerCase() !== q.toLowerCase());
   list.unshift(q);
   list = list.slice(0, 8);
-  recentStore.write(list);
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(list)); } catch (e) { /* нет места */ }
   trackSearch(q); // анонимный учёт запроса — для подсказок частых запросов
   renderRecent();
 }
@@ -636,27 +555,24 @@ export function renderRecent() {
 
 /* ── Избранное (♥) и «Недавно смотрели» — у покупателя на телефоне ──
  * Хранятся только на устройстве (localStorage), в базу не уходят. */
-const DEVICE_ID_KEY = 'wm_device_id';
 const FAV_KEY = 'wm_favorites_v1';
 const RECENT_PROD_KEY = 'wm_recent_products_v1';
 
-const favStore = localList(FAV_KEY, { max: 500, keep: 'first', of: 'values' });
-export const favorites = () => favStore.read();
+export function favorites() { try { return JSON.parse(localStorage.getItem(FAV_KEY)) || []; } catch (e) { return []; } }
 export const isFav = (id) => favorites().includes(id);
 export function toggleFav(id) {
   const list = favorites();
   const i = list.indexOf(id);
   if (i >= 0) list.splice(i, 1); else list.unshift(id);
-  favStore.write(list);
+  try { localStorage.setItem(FAV_KEY, JSON.stringify(list.slice(0, 500))); } catch (e) { /* нет места */ }
   return i < 0; // true = товар стал избранным
 }
 
-const recentProdStore = localList(RECENT_PROD_KEY, { max: 24, keep: 'first', of: 'values' });
-const recentProducts = () => recentProdStore.read();
+function recentProducts() { try { return JSON.parse(localStorage.getItem(RECENT_PROD_KEY)) || []; } catch (e) { return []; } }
 export function pushRecentProduct(id) {
   const list = recentProducts().filter((x) => x !== id);
   list.unshift(id);
-  recentProdStore.write(list);
+  try { localStorage.setItem(RECENT_PROD_KEY, JSON.stringify(list.slice(0, 24))); } catch (e) { /* нет места */ }
 }
 
 /* ── Популярность: анонимный учёт (без личности) ──
@@ -666,11 +582,12 @@ export function pushRecentProduct(id) {
 // стабильный анонимный номер устройства — «якорь» памяти (избранное/просмотры
 // и так живут в localStorage; номер даёт единый идентификатор на будущее)
 export function deviceId() {
-  let id = lsGet(DEVICE_ID_KEY);
+  let id = null;
+  try { id = localStorage.getItem('wm_device_id'); } catch (e) { /* */ }
   if (!id) {
     id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
       : String(Date.now()) + Math.random().toString(16).slice(2);
-    lsSet(DEVICE_ID_KEY, id);
+    try { localStorage.setItem('wm_device_id', id); } catch (e) { /* */ }
   }
   return id;
 }
@@ -741,6 +658,43 @@ export function renderNewProducts() {
     }).join('') + '</div>';
 }
 
+/* ── «Сегодня дешевле» ──────────────────────────────────────────────────────
+ * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
+ * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
+ * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
+ * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
+ * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
+ * Видна всем (решение владельца): сотруднику у полки этот вопрос задают чаще
+ * всего, а владельцу по ней видно, что новая цена доехала до каталога. */
+const CHEAP_ROWS = 5;
+
+function renderCheaper() {
+  ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
+  ui.anyFilter = anyFilterActive;        // полосе «подорожало» нужно то же правило показа
+  const box = $('cheaperStrip');
+  if (!box) return;
+  const show = state.tab === 'catalog'
+    && !state.query && !state.favOnly && !anyFilterActive();
+  const was = state.priceWas || {};
+  const list = show ? state.products.filter((p) => {
+    const w = Number(was[p.id]); const n = Number(p.retail_price);
+    return w > 0 && n > 0 && w > n;
+  }) : [];
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  // сверху то, где выгода больше в рублях: она и решает
+  list.sort((a, b) => (was[b.id] - b.retail_price) - (was[a.id] - a.retail_price));
+  const rows = list.slice(0, CHEAP_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
+      <span class="arr-name">${esc(p.name)}</span>
+      <span class="arr-price">${esc(fmtRetail(p))}
+        <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">Сегодня дешевле</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>`;
+  box.hidden = false;
+}
+
 /* ── «Сегодня привезли» ──────────────────────────────────────────────────
  * Покупателю важен один вопрос: «что у вас нового?». Раньше ответ на него
  * лежал в фильтре по дате поступления — то есть нигде. Теперь завоз виден
@@ -809,12 +763,12 @@ export function applyTheme(t) {
   const icon = $('themeIcon');
   if (icon) icon.innerHTML = ic(t === 'dark' ? 'sun' : t === 'light' ? 'moon' : 'auto');
 }
-export const initTheme = () => applyTheme(lsGet(THEME_KEY, null));
+export function initTheme() { try { applyTheme(localStorage.getItem(THEME_KEY)); } catch (e) { /* */ } }
 export function toggleTheme() {
-  const cur = lsGet(THEME_KEY, null);
+  let cur; try { cur = localStorage.getItem(THEME_KEY); } catch (e) { cur = null; }
   // цикл: авто → тёмная → светлая → авто
   const next = cur == null ? 'dark' : cur === 'dark' ? 'light' : null;
-  if (next) lsSet(THEME_KEY, next); else lsDel(THEME_KEY);
+  try { next ? localStorage.setItem(THEME_KEY, next) : localStorage.removeItem(THEME_KEY); } catch (e) { /* */ }
   applyTheme(next);
 }
 

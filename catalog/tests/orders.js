@@ -21,15 +21,12 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   await asOwner(page, { suppliers });
   await page.waitForTimeout(300);
 
-  // заказы открываются со вкладки «Работа»: из меню строку убрали как дубль
   const openOrders = async () => {
-    await page.evaluate(async () => {
-      document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-      document.querySelector('.tabbar [data-tab="work"]').click();
-      await new Promise((r) => setTimeout(r, 350));
-      document.querySelector('[data-work="orders"]').click();
-    });
-    await page.waitForTimeout(450);
+    await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
+    await page.evaluate(() => document.getElementById('adminBtn').click());
+    await page.waitForTimeout(250);
+    await page.evaluate(() => window.WM_PUBLISH._work('orders'));
+    await page.waitForTimeout(400);
   };
   await openOrders();
   const empty = await page.evaluate(() => ({
@@ -102,10 +99,9 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     const P = window.WM_PUBLISH;
     P.applyStaff('staffpw');
     await new Promise((r) => setTimeout(r, 200));
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
-    document.querySelector('.tabbar [data-tab="work"]').click();
-    await new Promise((r) => setTimeout(r, 350));
-    document.querySelector('[data-work="orders"]').click();
+    document.getElementById('adminBtn').click();
+    await new Promise((r) => setTimeout(r, 250));
+    window.WM_PUBLISH._work('orders');
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));
@@ -175,10 +171,9 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
   // ── Что заказали: позиции внутри заказа ──
   const items = await page.evaluate(async (due) => {
     document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; });
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((x) => { x.hidden = true; });
-    document.querySelector('.tabbar [data-tab="work"]').click();
-    await new Promise((r) => setTimeout(r, 350));
-    document.querySelector('[data-work="orders"]').click();
+    document.getElementById('adminBtn').click();
+    await new Promise((r) => setTimeout(r, 250));
+    window.WM_PUBLISH._work('orders');
     await new Promise((r) => setTimeout(r, 350));
     document.getElementById('ordAdd').click();
     await new Promise((r) => setTimeout(r, 300));
@@ -220,59 +215,6 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     return document.querySelectorAll('#ordItems .ios-row').length;
   });
   chk(reopened === 2, `при открытии заказа позиции на месте (${reopened})`);
-
-  // Опубликованный владельцем заказ сотрудник может только просматривать.
-  const published = await page.evaluate(async () => {
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
-    document.querySelector('[data-ord-today]').click();
-    await new Promise((r) => setTimeout(r, 220));
-    const id = window.WM_PUBLISH._state().orders[0].id;
-    const row = document.querySelector(`#ordersBody [data-ord-open="${id}"]`);
-    if (!row) return { missing: true };
-    row.click();
-    await new Promise((r) => setTimeout(r, 180));
-    const buttons = {
-      save: document.getElementById('ordSave').hidden,
-      del: document.getElementById('ordDelete').hidden,
-      received: document.getElementById('ordReceived').hidden,
-      disabled: document.getElementById('ordAmount').disabled,
-      title: document.getElementById('ordFormTitle').textContent
-    };
-    const before = JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length;
-    document.getElementById('ordAmount').value = '7777';
-    document.getElementById('ordSave').click();
-    await new Promise((r) => setTimeout(r, 250));
-    return { ...buttons, before, after: JSON.parse(localStorage.getItem('wm_orders_local_v1') || '[]').length };
-  });
-  chk(!published.missing && published.save && published.del && published.received && published.disabled
-    && /просмотр/.test(published.title), 'сотруднику заказ владельца открыт только для просмотра');
-  chk(published.after === published.before, 'сохранение чужого заказа не создаёт локальный дубликат');
-
-  // Телефон сотрудника может запретить запись: форма должна остаться с ошибкой.
-  const storageFailure = await page.evaluate(async (due) => {
-    const key = 'wm_orders_local_v1';
-    const before = JSON.parse(localStorage.getItem(key) || '[]').length;
-    document.getElementById('ordAdd').click();
-    await new Promise((r) => setTimeout(r, 180));
-    document.getElementById('ordSupplier').value = 's1';
-    document.getElementById('ordAmount').value = '1200';
-    document.getElementById('ordDue').value = due;
-    const real = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (k, v) {
-      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
-      return real.call(this, k, v);
-    };
-    try {
-      document.getElementById('ordSave').click();
-      await new Promise((r) => setTimeout(r, 300));
-    } finally { Storage.prototype.setItem = real; }
-    return { before, after: JSON.parse(localStorage.getItem(key) || '[]').length,
-      open: !document.getElementById('orderFormSheet').hidden,
-      error: document.getElementById('ordError').innerText };
-  }, iso(2));
-  chk(storageFailure.after === storageFailure.before && storageFailure.open
-    && /Не удалось сохранить/.test(storageFailure.error),
-  'отказ памяти не закрывает несохранённый заказ и показывает ошибку');
 
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);

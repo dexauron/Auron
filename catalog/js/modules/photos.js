@@ -1,6 +1,6 @@
 // Фото товаров: поиск в открытых базах, дозаполнение
 
-import { $, lsGet, lsJson, lsSetJson, state, ui } from './store.js';
+import { $, state, ui } from './store.js';
 import { esc, norm, toast } from './core.js';
 import { OTHER_CAT, ic } from './icons.js';
 import { bigrams, buildIndex, dice, hasPhoto, productCategory } from './catalog.js';
@@ -26,7 +26,6 @@ export async function createCompetitor(name) {
 
 /* ── Кэш цен на телефоне: карточки открываются и без связи ── */
 
-const CLEAN_PHOTOS_KEY = 'wm_clean_photos';   // чистка битых ссылок на фото при загрузке
 const PRICE_CACHE_KEY = 'wm_price_cache_v1';
 const CONTACTS_CACHE_KEY = 'wm_contacts_cache_v1';
 const PRICE_CACHE_MAX = 400; // товаров в кэше; старые вытесняются
@@ -50,7 +49,7 @@ export function renderPhotoManager() {
 // становятся ровными, как в витрине. Работает на телефоне, «мозг» для обрезки
 // подгружается один раз. Если не вышло (нет сети/не потянул) — берём обычное фото.
 let _bgr = null;
-const cleanPhotosOn = () => lsGet(CLEAN_PHOTOS_KEY) === '1';
+const cleanPhotosOn = () => { try { return localStorage.getItem('wm_clean_photos') === '1'; } catch (e) { return false; } };
 
 /* ── Поиск фото по штрихкодам ─────────────────────
  * Открытая всемирная база Open Food Facts (+ Open Beauty Facts для химии
@@ -66,7 +65,7 @@ const PHOTO_CHECKED_KEY = 'wm_photo_checked_v3'; // товар → когда и
 const RECHECK_DAYS = 90;
 function loadChecked() {
   let o = {};
-  o = lsJson(PHOTO_CHECKED_KEY, {});
+  try { o = JSON.parse(localStorage.getItem(PHOTO_CHECKED_KEY)) || {}; } catch (e) { /* пусто */ }
   const edge = Date.now() - RECHECK_DAYS * 86400000;
   for (const id of Object.keys(o)) if (!(Number(o[id]) > edge)) delete o[id];
   return o;
@@ -258,7 +257,7 @@ export async function autoPhotoSearch() {
   const todo = photoCandidates().filter((p) => !checked[p.id]);
   if (!todo.length) return;
   ui.photoSearchRunning = true;
-  const save = () => lsSetJson(PHOTO_CHECKED_KEY, checked);
+  const save = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
   toast(`Ищу фото товаров в фоне (${todo.length})…`);
   let done = 0;
   let found = 0;
@@ -348,7 +347,7 @@ export async function runPhotoSearch() {
   ui.photoSearchRunning = true;
   btn.textContent = '⏸ Остановить';
   const checked = loadChecked();
-  const saveChecked = () => lsSetJson(PHOTO_CHECKED_KEY, checked);
+  const saveChecked = () => { try { localStorage.setItem(PHOTO_CHECKED_KEY, JSON.stringify(checked)); } catch (e) { /* некритично */ } };
   const todo = photoCandidates().filter((p) => !checked[p.id]);
   const status = (msg) => { const el = $('photoSearchStatus'); el.hidden = false; el.textContent = msg; };
   let done = 0;

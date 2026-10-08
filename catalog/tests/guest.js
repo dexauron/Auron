@@ -3,14 +3,9 @@
 // магазином. Всё рабочее и внутреннее ему не показывается вовсе.
 const { chromium, newPage, asOwner, openProduct, runner } = require('./helpers');
 
-/* Настоящая картинка (прозрачный GIF в самой ссылке): внешние ссылки в тесте
-   не загружаются, а приложение правильно убирает битую картинку и помечает
-   место «без фото» — тогда проверить показ фото было бы невозможно. */
-const IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
-
 const products = [
   { id: 'p1', name: 'Молоко Простоквашино 3.2%', code: '101', group_id: 'g1', retail_price: 89, unit: 'шт',
-    photos: [IMG], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
+    photos: ['https://example.com/1.jpg'], barcodes: ['4600000000011'], stock_state: 'in', arrival_at: '2026-08-20',
     description: 'Пастеризованное, жирность 3,2%. Срок годности 10 суток.',
     article: 'АРТ-9', department: 'Молочный', note: 'ставить вперёд', supplier_ids: ['s1'] },
   // у покупателя данные приходят как в настоящей витрине: штрихкоды есть,
@@ -29,25 +24,20 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   // ── 1. Каталог показан списком, без фотографий ──
   const grid = await page.evaluate(() => ({
     list: document.getElementById('productGrid').classList.contains('list'),
-    photos: document.querySelectorAll('#productGrid .card-photo:not(.no-photo)').length,
+    photos: document.querySelectorAll('#productGrid img').length,
     toggle: getComputedStyle(document.getElementById('viewToggleBtn')).display,
     strips: [...document.querySelectorAll('.recent-strip')].filter((s) => !s.hidden).length,
     text: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
   }));
   chk(grid.list, 'каталог показан списком');
-  /* Решение 2026-10-03 (премиум-версия): покупателю фотографии ПОКАЗЫВАЕМ —
-     они и так лежат в открытой витрине, а без них товар не узнать. Раньше их
-     прятали. У сотрудника список остаётся плотным, без фото. */
-  chk(grid.photos > 0, `фото товара в списке показано (${grid.photos})`);
+  chk(grid.photos === 0, `фотографий в списке нет (${grid.photos})`);
   chk(grid.toggle === 'none', 'переключателя вида нет — покупателю нечего переключать');
   chk(grid.strips === 0, `ленты с фотографиями скрыты (${grid.strips})`);
   // пустых плашек быть не должно: однажды «что нового» висела пустой белой полосой
   const emptyBanner = await page.evaluate(() => document.getElementById('newsBanner').hidden);
   chk(emptyBanner, 'плашка «что нового» не показывается, когда новостей нет');
   chk(/89|75/.test(grid.text), `цена видна (${grid.text.slice(0, 60)})`);
-  // Решение владельца 2026-10-03: коды кассы — только сотрудникам. Покупатель
-  // их не видит ни в сетке, ни в карточке (раньше код показывали всем).
-  chk(!/101|102/.test(grid.text), 'кода товара у покупателя нет');
+  chk(/101|102/.test(grid.text), 'код товара виден');
   chk(/Есть|Мало|Нет/.test(grid.text), 'видно, есть ли товар в магазине');
   chk(!/без ШК/.test(grid.text), 'служебных пометок для кассы («без ШК») покупателю не видно');
   chk(/завоз 20\.08|завоз 25\.08/.test(grid.text), `в списке видно, когда товар завезли (${(grid.text.match(/завоз [\d.]+/) || [''])[0]})`);
@@ -96,8 +86,13 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(tag.shop && tag.open, 'с ценника можно положить в список покупок и открыть карточку');
 
   // ── 1в. Выбирать режим камеры покупателю не нужно ──
-  const seg = await page.evaluate(() => document.getElementById('scanModeSeg'));
-  chk(seg === null, 'переключателя режимов нет — действие определяется ролью');
+  const seg = await page.evaluate(() => {
+    const el = document.getElementById('scanModeSeg');
+    return { hidden: el.hidden || getComputedStyle(el).display === 'none',
+      price: !!el.querySelector('[data-scanmode="price"]') };
+  });
+  chk(seg.hidden, 'переключателя режимов у покупателя нет — он сразу получает ценник');
+  chk(!seg.price, 'режим «Ценник» из списка сотрудника убран — ему он не нужен');
 
   // ── 2. Карточка товара: только нужное покупателю ──
   await page.evaluate(() => {
@@ -120,9 +115,9 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
       compare: document.getElementById('btnCompareAdd').hidden,
     };
   });
-  chk(!card.photoHidden && card.photos === 1, `в карточке покупателя показано фото (${card.photos})`);
+  chk(card.photoHidden && card.photos === 0, 'в карточке нет фотографий');
   chk(/Поступил/.test(card.text) && /20\.08/.test(card.text), `видно, когда товар поступил (${(card.text.match(/Поступил[^·]*/) || [''])[0]})`);
-  chk(!/Код товара/.test(card.text) && !/101/.test(card.text), 'в карточке покупателя кода товара нет');
+  chk(/Код товара/.test(card.text) && /101/.test(card.text), 'код товара показан');
   chk(!/Артикул|Штрихкод|Отдел|Примечание/.test(card.text), 'внутренние поля скрыты (артикул, штрихкод, отдел, примечание)');
   chk(!card.prices.trim() && !card.stock.trim(), 'закупочные цены и остаток числом не показаны');
   chk(!card.similar.trim(), 'лента «похожие» с фотографиями скрыта');
@@ -188,89 +183,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
-  chk(sent.left === 1, `открытие WhatsApp не удаляет подсказку до подтверждённой отправки (${sent.left})`);
-  /* Подсказка остаётся на телефоне, но помечена отправленной: второй раз
-     владельцу тот же список не уйдёт — иначе он получит его трижды и
-     перестанет читать. */
-  const after = await page.evaluate(async () => {
-    const note = document.getElementById('storeBody').innerText;
-    const stored = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]');
-    const real = window.open;
-    let opened = null;
-    window.open = (u) => { opened = u; return { closed: false }; };
-    document.getElementById('storeSend').click();           // жмём ещё раз
-    await new Promise((r) => setTimeout(r, 200));
-    window.open = real;
-    return { note, sent: stored.every((x) => x.sent), opened,
-      badgeHidden: document.getElementById('tabStoreCount').hidden,
-      sendHidden: document.getElementById('storeSend').hidden };
-  });
-  chk(after.sent, 'отправленная подсказка помечена датой отправки');
-  chk(/отправлено \d/.test(after.note), `в списке видно, что подсказка уже ушла (${after.note.replace(/\n/g, ' ').slice(-90)})`);
-  chk(after.sendHidden && after.badgeHidden, 'кнопка отправки и кружок на вкладке погасли — отправлять больше нечего');
-  chk(after.opened === null, 'второй раз тот же список владельцу не уходит');
-
-  const clear = await page.evaluate(() => {
-    const real = window.confirm;
-    const button = document.getElementById('storeClear');
-    const note = document.getElementById('storeBody').innerText;
-    window.confirm = () => false;
-    button.click();
-    const rejected = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
-    window.confirm = () => true;
-    button.click();
-    const accepted = JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length;
-    window.confirm = real;
-    return { rejected, accepted, note,
-      badgeHidden: document.getElementById('tabStoreCount').hidden,
-      sendHidden: document.getElementById('storeSend').hidden };
-  });
-  chk(/Всё отправлено|ждёт отправки/.test(clear.note), 'экран говорит, что ждёт отправки, а что уже ушло');
-  chk(clear.rejected === 1, 'отмена очистки сохраняет подсказку');
-  chk(clear.accepted === 0 && clear.badgeHidden && clear.sendHidden,
-    'явная очистка удаляет подсказку и обновляет кнопки');
-
-  const capacity = await page.evaluate(async () => {
-    const key = 'wm_guest_prices_v1';
-    const items = Array.from({ length: 50 }, (_, i) => ({
-      id: 'old-' + i, name: 'Старая подсказка ' + i, price: 10 + i, at: '2026-10-01'
-    }));
-    localStorage.setItem(key, JSON.stringify(items));
-    document.getElementById('btnReportPrice').click();
-    await new Promise((r) => setTimeout(r, 100));
-    document.getElementById('repPrice').value = '123';
-    document.getElementById('repSave').click();
-    const kept = JSON.parse(localStorage.getItem(key) || '[]');
-    const error = document.getElementById('repError').innerText;
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
-    localStorage.removeItem(key);
-    return { count: kept.length, first: kept[0]?.id, error };
-  });
-  chk(capacity.count === 50 && capacity.first === 'old-0' && /Список заполнен/.test(capacity.error),
-    '51-я подсказка не стирает первую без предупреждения');
-
-  const storageFailure = await page.evaluate(async () => {
-    const key = 'wm_guest_prices_v1';
-    document.getElementById('btnReportPrice').click();
-    await new Promise((r) => setTimeout(r, 100));
-    document.getElementById('repPrice').value = '123';
-    const real = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (k, v) {
-      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
-      return real.call(this, k, v);
-    };
-    try { document.getElementById('repSave').click(); }
-    finally { Storage.prototype.setItem = real; }
-    const result = {
-      count: JSON.parse(localStorage.getItem(key) || '[]').length,
-      open: !document.getElementById('priceReportSheet').hidden,
-      error: document.getElementById('repError').innerText
-    };
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
-    return result;
-  });
-  chk(storageFailure.count === 0 && storageFailure.open && /Не удалось сохранить/.test(storageFailure.error),
-    'при ошибке памяти форма остаётся открытой и сообщает о несохранённой подсказке');
+  chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
@@ -428,48 +341,6 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   });
   chk(again.hidden, `посмотрел новинки — сегодня плашка больше не показывается (${again.text} / отметка: ${again.seen})`);
 
-  // Пометки ожидания тоже хранятся на телефоне: предел и отказ памяти не должны врать.
-  const waitCapacity = await page.evaluate(async () => {
-    const key = 'wm_guest_wait_v1';
-    window.WM_PUBLISH._state().products.find((p) => p.id === 'p2').stock = 0;
-    document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((el) => { el.hidden = true; });
-    window.location.hash = ''; await new Promise((r) => setTimeout(r, 100));
-    window.location.hash = '#p=p2'; await new Promise((r) => setTimeout(r, 500));
-    localStorage.setItem(key, JSON.stringify(Array.from({ length: 100 }, (_, i) => ({
-      id: 'old-' + i, name: 'Ожидание ' + i, at: '2026-10-01'
-    }))));
-    const btn = document.getElementById('btnWait');
-    btn.click();
-    await new Promise((r) => setTimeout(r, 150));
-    const list = JSON.parse(localStorage.getItem(key) || '[]');
-    const result = { count: list.length, first: list[0]?.id, hasNew: list.some((x) => x.id === 'p2'),
-      label: btn.textContent, toast: document.getElementById('toast').textContent };
-    localStorage.removeItem(key);
-    return result;
-  });
-  chk(waitCapacity.count === 100 && waitCapacity.first === 'old-0' && !waitCapacity.hasNew
-    && /Сообщить/.test(waitCapacity.label) && /Список ожидания заполнен/.test(waitCapacity.toast),
-    '101-я пометка не вытесняет старую и сообщает о пределе');
-
-  const waitStorageFailure = await page.evaluate(() => {
-    const key = 'wm_guest_wait_v1';
-    const real = Storage.prototype.setItem;
-    Storage.prototype.setItem = function (k, v) {
-      if (k === key) throw new DOMException('Quota exceeded', 'QuotaExceededError');
-      return real.call(this, k, v);
-    };
-    try { document.getElementById('btnWait').click(); }
-    finally { Storage.prototype.setItem = real; }
-    return {
-      count: JSON.parse(localStorage.getItem(key) || '[]').length,
-      label: document.getElementById('btnWait').textContent,
-      toast: document.getElementById('toast').textContent
-    };
-  });
-  chk(waitStorageFailure.count === 0 && /Сообщить/.test(waitStorageFailure.label)
-    && /Не удалось сохранить/.test(waitStorageFailure.toast),
-    'при отказе памяти ожидание не обещает уведомление');
-
   // ── 8. После входа сотрудника всё рабочее возвращается ──
   await asOwner(page, {});
   await page.waitForTimeout(400);
@@ -482,10 +353,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   }));
   chk(!staff.guestClass && staff.storeTab && !staff.workTab,
     'после входа каталог снова рабочий: «Магазин» скрыт, «Работа» на месте');
-  /* Решение 2026-10-04 (просьба владельца): список покупок нужен и сотруднику,
-     и владельцу — ими собирают закупку по залу. Раньше полоска от вошедших
-     пряталась, и сотрудник терял к списку дорогу. */
-  chk(!staff.shopBar, 'полоска списка покупок есть и у вошедшего — список нужен и ему');
+  chk(staff.shopBar, 'полоска списка покупок сотруднику не мешает');
   chk(staff.toggle !== 'none', 'переключатель вида вернулся сотруднику');
 
   /* ── Когда данные обновились ──

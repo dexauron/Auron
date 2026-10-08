@@ -48,79 +48,6 @@ export async function idbSet(key, value) {
   });
 }
 
-/* ── Хранилище на телефоне (localStorage) ──────────────────────────────
- * Один и тот же код «прочитать список / записать список» жил в ШЕСТИ модулях
- * в шести слегка разных видах — и именно поэтому в одном месте проверка типа
- * данных была, а в другом нет; в одном отказ записи был виден, в другом молча
- * проглатывался. Отсюда и брались находки вроде «нажал, увидел готово, а
- * ничего не сохранилось». Теперь этот код один.
- *
- * localStorage умеет отказать: полная память телефона, приватное окно,
- * запрещённые данные сайта. Поэтому чтение никогда не роняет экран, а запись
- * честно отвечает true или false — приложение не должно рисовать успех там,
- * где ничего не сохранилось. */
-
-/* Доступно ли хранилище вообще. Нужно там, где «не смогли запомнить» и
- * «ещё не отмечали» — это РАЗНЫЕ ответы: подсказку об установке, которую
- * человек закрыл, прятать надо, а непоказанную — показать. */
-export function lsCan() {
-  try { localStorage.getItem('wm_probe'); return true; } catch (e) { return false; }
-}
-
-export function lsGet(key, fallback = '') {
-  try { const v = localStorage.getItem(key); return v == null ? fallback : v; } catch (e) { return fallback; }
-}
-export function lsSet(key, value) {
-  try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
-}
-export function lsDel(key) {
-  try { localStorage.removeItem(key); return true; } catch (e) { return false; }
-}
-
-/* Сохранённый на телефоне объект или словарь: правила заказа, кэши, снимки.
- * Испорченную запись (не тот тип) отдаём как `fallback`, а не роняем экран. */
-export function lsJson(key, fallback = null) {
-  try {
-    const v = JSON.parse(localStorage.getItem(key));
-    return v == null || typeof v !== 'object' ? fallback : v;
-  } catch (e) { return fallback; }
-}
-export function lsSetJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; }
-}
-
-/* Список записей на этом телефоне: покупки, пустые полки, заказы сотрудника,
- * «жду товар», подсказки о ценах, журнал входов.
- *   max  — сколько держим; 0 — без предела;
- *   keep — где свежие: 'last' у списков, которые пополняют в конец (push),
- *          'first' у журнала, который пополняют в начало (unshift);
- *   of   — 'records' для списков записей (покупки, заказы) и 'values' для
- *          списков простых значений (избранное — это номера товаров, недавние
- *          запросы — строки). Разница важна: у записей мусором считается всё,
- *          что не объект, у значений — наоборот. */
-export function localList(key, { max = 0, keep = 'last', of = 'records' } = {}) {
-  const trim = (list) => (!max || list.length <= max ? list
-    : keep === 'first' ? list.slice(0, max) : list.slice(-max));
-  const clean = (x) => (of === 'values'
-    ? (typeof x === 'string' || typeof x === 'number') && x !== ''
-    : Boolean(x) && typeof x === 'object');
-  return {
-    key,
-    max,
-    read() {
-      try {
-        const list = JSON.parse(localStorage.getItem(key));
-        /* Проверяем и тип всего списка, и каждую запись: сбой публикации
-           однажды оставил в хранилище объект вместо массива (находка GPT). */
-        return Array.isArray(list) ? list.filter(clean) : [];
-      } catch (e) { return []; }
-    },
-    write(list) {
-      try { localStorage.setItem(key, JSON.stringify(trim(list))); return true; } catch (e) { return false; }
-    },
-  };
-}
-
 export const PAGE_SIZE = 80; // карточек на экране до кнопки «Показать ещё»
 
 // Общее изменяемое состояние интерфейса. Отдельным объектом, а не набором
@@ -143,7 +70,6 @@ export const ui = {
   topPeriod: null,
   topMode: 'amount',
   openAdminOrLogin: () => {},
-  openLogin: () => {},        // форма входа владельца/бухгалтера (ставит app.js)
   calcProduct: null,
   lastMissing: [],
   dedupRunning: false,
@@ -166,7 +92,6 @@ export const state = {
   canSales: false,  // видят «Ходовые товары» (продажи/выручка) — только владелец
   serverless: false, // режим без сервера (каталог на GitHub)
   staffPassword: null, // пароль сотрудника (задаёт владелец; хранится в его каталоге)
-  floorPassword: null, // код сотрудника зала (задаёт владелец; хранится в его каталоге)
   contacts: {},     // supplier_id → контакты (загружаются после входа)
   competitors: [],  // магазины конкурентов (список названий)
   compPrices: [],   // записанные цены магазинов: {product_id, competitor_id, price, observed_at}
@@ -177,7 +102,6 @@ export const state = {
   syncMax: '',      // самый свежий updated_at — для докачки только изменившихся товаров
   showcaseAt: '',   // когда владелец в последний раз опубликовал витрину
   priceWas: {},     // прежняя цена товаров, которые подешевели с прошлого захода
-  priceWasAt: '',   // с какого дня сравниваем (снимок цен живёт до недели)
   renderLimit: PAGE_SIZE,
   sort: 'relevance',   // relevance | name | cheap | expensive | new
   view: 'normal',      // normal | compact — размер плиток

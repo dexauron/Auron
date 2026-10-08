@@ -1,4 +1,4 @@
-// «Подорожало» — обратная сторона «Стало дешевле», только для своих
+// «Подорожало» — обратная сторона «Сегодня дешевле», только для своих
 
 /* Покупателю каталог показывает, что подешевело. Владельцу и сотруднику нужно
  * ровно обратное, и по двум разным ценам:
@@ -18,8 +18,8 @@
  * это уже не новость. Порога нет — владелец просил показывать ЛЮБОЕ
  * изменение, а от разрастания списка спасает тот же месячный срок. */
 
-import { state, ui } from './store.js';
-import { cmpStr, esc, supplierById } from './core.js';
+import { $, state, ui } from './store.js';
+import { closeSheet, cmpStr, esc, openSheet, supplierById } from './core.js';
 import { fmtPrice, todayISO } from './catalog.js';
 import { priceParts } from './card.js';
 import { plural } from './competitors.js';
@@ -28,6 +28,7 @@ import { RETAIL_HIST_ROWS, priceStamp, pricesByProduct, pricesOf } from './data.
 
 const RISE_DAYS = 30;          // окно новостей — месяц, как просил владелец
 const RISE_ROWS = 6;           // столько строк в полосе на главной
+const LIST_MAX = 200;          // длиннее список никто не листает
 
 const edgeISO = () => new Date(Date.now() - RISE_DAYS * 86400000).toISOString().slice(0, 10);
 const pct = (was, is) => Math.round(((is - was) / was) * 1000) / 10;
@@ -155,14 +156,7 @@ function retailRise(p) {
 function marginSqueeze(p, cost, retail) {
   if (!cost || retail) return null;                        // ценник тоже подняли — всё честно
   const sell = Number(p && p.retail_price);
-  if (!(sell > 0)) return null;
-  /* Закупка переросла ценник — товар продаётся В МИНУС. Это самый тяжёлый
-     случай, а раньше он молча пропадал: проценты наценки тут считать нечего,
-     поэтому возвращалось «ничего». Теперь говорим прямо. */
-  /* Закупка СРАВНЯЛАСЬ с ценником — это ещё не минус, а ноль: «продаём в
-     минус 0 ₽» звучало бы глупо и сбивало бы с толку (находка GPT). */
-  if (sell === cost.is) return { even: true };
-  if (sell < cost.is) return { loss: Math.round((cost.is - sell) * 100) / 100 };
+  if (!(sell > 0) || sell <= cost.is) return null;
   return { wasPct: Math.round(((sell - cost.was) / cost.was) * 100), isPct: Math.round(((sell - cost.is) / cost.is) * 100) };
 }
 
@@ -190,7 +184,7 @@ function riseOf(p, rows) {
  *     изменения ценника в список даже не заглядывает.
  * Ответ помнится, пока не приехал новый каталог: сверяем по тем же ссылкам на
  * массивы, что и остальной кэш приложения. */
-let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [], total: 0 };
+let riseCache = { stamp: -1, products: null, retail: null, session: null, can: null, list: [] };
 
 function refreshRise() {
   /* Держим один и тот же объект, а не создаём новый пустой при каждом вызове:
@@ -212,9 +206,7 @@ function refreshRise() {
     }
     out.sort((a, b) => b.pct - a.pct);
   }
-  /* Список держим ЦЕЛИКОМ: по нему ищут на отдельном экране «Изменения цен».
-     Раньше он резался до двухсот, и число в заголовке врало. */
-  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out, total: out.length };
+  riseCache = { stamp: priceStamp(), products: state.products, retail, session: !!state.session, can: seesCost(), list: out.slice(0, LIST_MAX) };
 }
 
 /* Первый расчёт после нового каталога — не на горячем пути. Он занимает
@@ -242,7 +234,7 @@ function risenList() {
   return riseCache.list;
 }
 
-export const riseCount = () => { risenList(); return riseCache.total; };
+export const riseCount = () => risenList().length;
 
 // одна строка «было → стало, дата» — общий вид для полосы, списка и карточки
 function riseText(kind, r) {
@@ -267,32 +259,81 @@ export function riseHtml(p) {
   const lines = [];
   if (r.retail) lines.push(riseText('Ценник', r.retail));
   if (r.cost) lines.push(riseText(`Закупка${r.cost.sup ? ' · ' + r.cost.sup : ''}`, r.cost));
-  if (r.squeeze && r.squeeze.even) {
-    lines.push('Закупка сравнялась с ценником — продаём без наценки');
-  } else if (r.squeeze && r.squeeze.loss != null) {
-    lines.push(`Закупка выше ценника — продаём в минус ${fmtPrice(r.squeeze.loss)} с единицы`);
-  } else if (r.squeeze) {
-    lines.push(`Ценник не меняли — наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
-  }
+  if (r.squeeze) lines.push(`Ценник не меняли — наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
   return `<div class="rise-box">${ic('warn', 'ic-xs')}<div>${lines.map((t) => `<div>${esc(t)}</div>`).join('')}</div></div>`;
 }
 
-/* Полный список подорожавшего — для экрана «Изменения цен» (pricenews.js).
- * Раньше тут были и полоса на главном экране, и своё окно во вкладке
- * «Работа»: три места про одно и то же. Владелец решил иначе — главный экран
- * чистый, а весь список живёт на одном экране с поиском. */
-export function risenAll() { return risenList(); }
+/* ── Полоса на главной ──────────────────────────────────────────────────────
+ * Ровно там же, где у покупателя «Сегодня дешевле», и по тем же правилам:
+ * прячется, как только человек начал искать или фильтровать — иначе она лезет
+ * в глаза поверх результата. */
+export function renderRiseStrip() {
+  ui.renderRiseStrip = renderRiseStrip;
+  const box = $('riseStrip');
+  if (!box) return;
+  const show = state.session && state.tab === 'catalog' && !state.query && !state.favOnly && !ui.anyFilter();
+  if (!state.retailHist) state.retailHist = {};
+  if (show && !riseReady()) { riseWhenIdle(renderRiseStrip); box.hidden = true; return; }
+  const list = show ? risenList() : [];
+  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
+  const rows = list.slice(0, RISE_ROWS).map((r) => {
+    const main = r.cost || r.retail;
+    return `<button class="arr-row" data-similar="${esc(r.p.id)}">
+      <span class="arr-name">${esc(r.p.name)}</span>
+      <span class="arr-price rise-up">+${String(main.pct).replace('.', ',')}%
+        <span class="card-was">${esc(fmtPrice(main.was))}</span></span></button>`;
+  }).join('');
+  box.innerHTML = `<div class="arr-head">
+      <span class="arr-title">Подорожало</span>
+      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
+    </div>
+    <div class="arr-list">${rows}</div>`;
+  box.hidden = false;
+}
 
-/* Посчитан ли список уже. Расчёт тяжёлый (на настоящем магазине это
- * двенадцать тысяч товаров и двадцать пять тысяч строк цен), поэтому экраны,
- * которым число нужно «между делом», сначала спрашивают здесь, а если ещё не
- * посчитано — просят посчитать в свободную минуту. Главный экран из-за
- * прямого вызова замирал на секунду при каждой перерисовке. */
-export function risenReady() { return riseReady(); }
-export function risenSoon(after) { riseWhenIdle(after); }
+/* ── Отдельный экран во вкладке «Работа» ────────────────────────────────── */
+function renderRisen() {
+  const box = $('risenBody');
+  if (!box) return;
+  const list = risenList();
+  if (!list.length) {
+    box.innerHTML = `<p class="ios-note">За месяц цены не менялись — ни на ценнике, ни у поставщиков.
+      Список заполнится сам после ближайшей выгрузки из 1С.</p>`;
+    return;
+  }
+  const squeezed = list.filter((r) => r.squeeze).length;
+  box.innerHTML = `
+    <div class="ord-total">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')} подорожало за месяц${
+  squeezed ? ` · у ${squeezed} ${plural(squeezed, 'него', 'них', 'них')} ценник не меняли` : ''}</div>
+    <div class="ios-group">${list.map((r) => {
+    const lines = [];
+    if (r.retail) lines.push(riseText('Ценник', r.retail));
+    if (r.cost) lines.push(riseText(`Закупка${r.cost.sup ? ' · ' + r.cost.sup : ''}`, r.cost));
+    if (r.squeeze) lines.push(`наценка упала с ${r.squeeze.wasPct}% до ${r.squeeze.isPct}%`);
+    const main = r.cost || r.retail;
+    return `<button class="ios-row ios-row-link" data-rise-open="${esc(r.p.id)}">
+        <span class="ios-row-title">${esc(r.p.name)}
+          <span class="ord-sub">${esc(lines.join(' · '))}</span></span>
+        <span class="ios-row-value rise-up">+${String(main.pct).replace('.', ',')}%</span>
+      </button>`;
+  }).join('')}</div>
+    <p class="ios-note">Сверху то, что подорожало сильнее. Даты берутся из выгрузок 1С;
+    история хранится месяц, потом стирается сама.</p>`;
+}
 
-export function bindPriceRise() {
-  // «Работа → Подорожало» открывает тот же экран изменений цен
+function openRisen() {
+  renderRisen();
+  openSheet('risenSheet');
+}
+
+export function bindPriceRise(openProduct) {
   ui.workActions = ui.workActions || {};
-  ui.workActions.risen = () => ui.openPriceNews && ui.openPriceNews('up');
+  ui.workActions.risen = openRisen;
+  $('risenBody').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-rise-open]');
+    if (!b) return;
+    closeSheet('risenSheet');
+    const p = state.products.find((x) => x.id === b.dataset.riseOpen);
+    if (p) openProduct(p);
+  });
 }

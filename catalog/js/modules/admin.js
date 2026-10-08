@@ -13,9 +13,7 @@ import { svSaveAndPublish, svUuid } from './imports.js';
 
 export function openForm(product) {
   ui.editingProduct = product;
-  /* Добавить товар вручную нельзя — каталог наполняется выгрузкой из 1С.
-     Форма осталась только для правки, поэтому и называется по делу. */
-  $('formTitle').textContent = 'Изменить товар';
+  $('formTitle').textContent = product ? 'Изменить товар' : 'Новый товар';
   $('fName').value = product?.name || '';
   $('fCode').value = product?.code || '';
   $('fArticle').value = product?.article || '';
@@ -158,30 +156,6 @@ export function renderSupplierList() {
   }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
   if (filtered.length > 100) html += `<p class="muted">Показаны первые 100 из ${filtered.length} — уточни поиск</p>`;
   $('supplierList').innerHTML = html;
-}
-
-/* ── Все группы (список с поиском) ────────────── */
-
-export function renderGroupsPick() {
-  const counts = {};
-  for (const p of state.products) {
-    if (p.group_id) counts[p.group_id] = (counts[p.group_id] || 0) + 1;
-  }
-  const q = norm($('groupsPickSearch').value);
-  const filtered = q ? state.groups.filter((g) => norm(g.name).includes(q)) : state.groups;
-  const picked = state.selGroups.filter((x) => x !== 'none' && x !== 'weighted');
-  let html = '';
-  if (picked.length) {
-    html += `<button class="btn btn-ghost btn-block" data-pick-group="" style="margin-bottom:6px">Снять выбор (${picked.length})</button>`;
-  }
-  html += filtered.map((g) => {
-    const on = state.selGroups.includes(g.id);
-    return `
-    <button class="btn btn-secondary btn-block${on ? ' picked' : ''}" data-pick-group="${esc(g.id)}">
-      <span>${on ? checkMark : ''}${esc(g.name)}</span> <span class="chip-count">${counts[g.id] || 0}</span>
-    </button>`;
-  }).join('') || '<p class="muted">Не нашлось — попробуй иначе</p>';
-  $('groupsPickList').innerHTML = html;
 }
 
 // управление (только админ): список поставщиков с числом товаров

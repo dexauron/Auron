@@ -12,9 +12,9 @@ import { fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
 import { ordersDue, ordersSummary } from './orders.js';
 import { restockCount } from './restock.js';
-import { shopCount } from './shopping.js';
 import { compareCount } from './compare.js';
 import { riseCount } from './pricerise.js';
+import { feature } from './brand.js';
 
 export function openWork() {
   renderWork();
@@ -42,26 +42,36 @@ function renderWork() {
     ? `${o.week} ${plural(o.week, 'поставка', 'поставки', 'поставок')} · ${fmtPrice(o.sum)}`
     : 'на этой неделе пусто';
   const rest = restockCount();
-  const cmp = compareCount();
   const up = riseCount();
-  const shopN = shopCount();
-  /* «Подорожало» показываем, только когда история ценника вправду есть. У
-     зала старый файл данных её не содержит — и строка уверяла бы, что за
-     месяц цены не менялись, хотя мы просто не знаем. Лучше молчать. */
-  const knowsRise = state.canPurchase || Object.keys(state.retailHist || {}).length > 0;
+  const num = (fn) => (typeof fn === 'function' ? fn() : 0);
 
+  /* Три понятных кучки вместо одного длинного списка: что делаем в смену, что
+     с ценами, чем смотрим. Раньше половина этих строк жила ещё и в меню под
+     человечком — одно и то же в двух местах только путает. */
   box.innerHTML = `
+    <div class="ios-group-title">Дела смены</div>
     <div class="ios-group">
-      ${state.canPurchase ? row('orders', 'Заказы поставщикам', orders) : ''}
-      ${state.canPurchase && o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
+      ${row('orders', 'Заказы поставщикам', orders)}
+      ${o.overdue ? row('orders', 'Просрочено', o.overdue, true) : ''}
       ${row('restock', 'Закончилось на полке', rest ? `${rest} ${plural(rest, 'ждёт', 'ждут', 'ждут')} заказа` : 'пусто')}
-      ${row('shop', 'Список покупок', shopN ? `${shopN} ${plural(shopN, 'позиция', 'позиции', 'позиций')}` : 'пусто')}
-      ${knowsRise ? row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up) : ''}
-      ${state.canPurchase ? row('compare', 'Сравнение товаров', cmp ? `отобрано ${cmp}` : 'пусто') : ''}
-      ${row('scan', 'Сканировать штрихкод', '')}
+      ${row('stale', 'Залежалось', num(ui.staleCount) || 'ничего')}
     </div>
-    ${state.canPurchase ? `<p class="ios-note">«Просрочено» — поставки, у которых день прихода прошёл, а «пришёл» никто
-    не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>` : ''}`;
+
+    <div class="ios-group-title">Цены</div>
+    <div class="ios-group">
+      ${state.canPurchase ? row('margin', 'Наценка и убыточные', num(ui.marginCount) || 'всё в порядке', num(ui.marginCount) > 0) : ''}
+      ${row('risen', 'Подорожало', up ? `${up} ${plural(up, 'товар', 'товара', 'товаров')} за месяц` : 'за месяц не менялось', !!up)}
+      ${state.canSales && feature('sales') ? row('top', 'Ходовые товары', '') : ''}
+      ${feature('competitors') ? row('comp', 'Цены других магазинов', '') : ''}
+    </div>
+
+    <div class="ios-group-title">Инструменты</div>
+    <div class="ios-group">
+      ${state.canPurchase ? row('compare', 'Сравнение товаров', compareCount() ? `отобрано ${compareCount()}` : 'пусто') : ''}
+    </div>
+
+    <p class="ios-note">«Просрочено» — поставки, у которых день прихода прошёл, а «пришёл» никто
+    не отметил. Записи хранятся на этом телефоне и уходят владельцу кнопкой «Передать».</p>`;
 }
 
 /* Плашка вверху главного экрана: что ждёт сегодня. Сотрудник заходит в каталог
@@ -70,8 +80,7 @@ function renderWork() {
 function renderTodayBanner() {
   const el = $('todayBanner');
   if (!el) return;
-  // плашка про поставки и суммы — не для сотрудника зала (деньги закупок)
-  if (!state.session || !state.canPurchase) { el.hidden = true; return; }
+  if (!state.session) { el.hidden = true; return; }
   const t = ordersDue(todayISO());
   const late = ordersSummary().overdue;
   if (!t.count && !late) { el.hidden = true; return; }
@@ -86,14 +95,9 @@ function renderTodayBanner() {
  * которые закончились. Ноль значка не рисует: пустой кружок только мешает. */
 export function renderWorkBadge() {
   renderTodayBanner();
-  /* Если экран «Работа» открыт — пересобираем и его: счётчики в строках
-     («закончилось», список покупок, заказы) должны оставаться свежими, пока
-     человек ходит по вложенным окнам и возвращается назад. */
-  const ws = $('workSheet');
-  if (ws && !ws.hidden) renderWork();
   const el = $('tabWorkCount');
   if (!el) return;
-  const n = state.session ? (state.canPurchase ? ordersSummary().overdue : 0) + restockCount() : 0;
+  const n = state.session ? ordersSummary().overdue + restockCount() : 0;
   el.textContent = n > 99 ? '99+' : n;
   el.hidden = !n;
 }

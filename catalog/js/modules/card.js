@@ -1,6 +1,6 @@
 // Карточка товара: цены, остаток, калькулятор, поставщики
 
-import { $, lsJson, lsSetJson, state, ui } from './store.js';
+import { $, state, ui } from './store.js';
 import { closeSheet, esc, groupById, norm, openSheet, supplierById, toast, moneyNum } from './core.js';
 import { ic, warnMark } from './icons.js';
 import { STALE_PRICE_DAYS, fmtDate, fmtNum, fmtPrice, fmtRetail, hasPhoto, isFreshPrice, isTopSeller, priceAgeDays, productsWithWords, telHref, updatedText } from './catalog.js';
@@ -31,33 +31,12 @@ export function updateFavButton(p) {
   b.title = on ? 'Убрать из избранного' : 'В избранное';
 }
 
-/* Главное действие карточки — ОДНО и у каждой роли своё.
- * «Закончилось на полке» — работа сотрудника ЗАЛА: он ходит и отмечает пустые
- * полки. Бухгалтеру и владельцу эта кнопка нужна редко, а висела она у них
- * первой и во всю ширину, над ценой и полями — то есть занимала самое важное
- * место под самое редкое действие. Теперь у зала она наверху и крупная, у
- * остальных — в нижнем ряду мелких, рядом с «Поделиться».
- * Покупателю её нет вовсе (класс emp-only). */
-function placeRestockButton(p) {
-  const b = $('btnRestock');
-  if (!b) return;
-  b.textContent = inRestock(p.id) ? 'Убрать из списка пополнения' : 'Закончилось на полке';
-  const zal = state.role === 'zal';
-  b.classList.toggle('btn-primary', zal);
-  b.classList.toggle('btn-block', zal);
-  b.classList.toggle('btn-secondary', !zal);
-  const top = $('sheetDescription');
-  const row = document.querySelector('#productSheet .sheet-actions');
-  if (zal) { if (top && top.nextSibling !== b) top.parentNode.insertBefore(b, top.nextSibling); }
-  else if (row && b.parentNode !== row) row.insertBefore(b, row.firstChild);
-}
-
 export function openProduct(p) {
   ui.currentProduct = p;
   pushRecentProduct(p.id);
   trackView(p); // анонимный учёт: товар открыли (для «Популярного»)
   { const b = $('btnCompareAdd'); if (b) b.textContent = inCompare(p.id) ? 'Убрать из сравнения' : 'К сравнению'; }
-  placeRestockButton(p);        // главное действие карточки — своё у каждой роли
+  { const b = $('btnRestock'); if (b) b.textContent = inRestock(p.id) ? 'Убрать из списка пополнения' : 'Закончилось на полке'; }
   syncShopButton(p);            // «в список покупок» / «убрать» — для покупателя
   syncWaitButton(p);            // «сообщить, когда появится» — если товара нет
   renderCompareBar();
@@ -65,13 +44,11 @@ export function openProduct(p) {
   updateFavButton(p);
   $('sheetName').textContent = p.name;
 
-  /* Фотографии видит и покупатель: они и так лежат в открытой витрине, а без
-     них карточка выглядит пустой и товар не узнать. Коды кассы, закупки и
-     прочее внутреннее по-прежнему скрыты — показываем только картинку.
-     Нет фото — блок не занимает место. */
-  const photos = (p.photos || []).filter((u) => u && String(u).trim());
-  $('sheetPhotos').hidden = !photos.length;
-  $('sheetDots').hidden = photos.length < 2;
+  // Покупателю (тот, кто не вводил пароль) фотографии не показываем: решение
+  // владельца — у него каталог списком, только нужные сведения.
+  const photos = state.session ? (p.photos || []).filter((u) => u && String(u).trim()) : [];
+  $('sheetPhotos').hidden = !state.session;
+  $('sheetDots').hidden = !state.session;
   $('sheetPhotos').innerHTML = photos.length
     ? photos.map((u) => `<img src="${esc(u)}" alt="" onerror="wmImgFail(this)">`).join('')
     : `<div class="photo-placeholder">${ic('box', 'ic-ph')}</div>`;
@@ -119,11 +96,9 @@ export function openProduct(p) {
     rows.push(`<div class="field-hero"><span class="field-hero-val">${esc(fmtRetail(p))}</span></div>`);
   }
   // коды кассы/артикул/штрихкод/отдел/примечание — это внутренние данные магазина,
-  // покупателям без входа их не показываем.
-  // КОД КАССЫ с 2026-10-03 — тоже только вошедшим (решение владельца): он ушёл
-  // из публичной витрины, но в уже выложенных данных может ещё лежать, поэтому
-  // прячем его и в интерфейсе — защита с двух сторон, а не только в файле.
-  if (p.code && state.session) rows.push(fieldRow('Код товара', p.code, false, true, 'field-code'));
+  // покупателям без входа их не показываем
+  // код товара виден всем — по нему покупатель объяснит кассиру, что берёт
+  if (p.code) rows.push(fieldRow('Код товара', p.code, false, true));
   // когда товар завезли — видно всем: покупателю это говорит о свежести
   if (p.arrival_at) rows.push(fieldRow('Поступил', fmtDate(p.arrival_at)));
   if (state.session) {
@@ -454,7 +429,7 @@ export function orderRules() {
 }
 export function loadOrderRules() {
   if (state.orderRules) return;
-  state.orderRules = lsJson(ORDER_RULES_KEY);
+  try { state.orderRules = JSON.parse(localStorage.getItem(ORDER_RULES_KEY)) || null; } catch (e) { state.orderRules = null; }
 }
 
 // Чистый расчёт заказа — без вёрстки, чтобы его можно было проверить отдельно.
@@ -509,7 +484,7 @@ export async function saveOrderRules() {
   if (cycle < 1) return bad('Заказ не может быть реже, чем раз в 1 день');
   if (lead > 90 || cycle > 90 || safety > 90) return bad('Больше 90 дней — похоже на опечатку');
   state.orderRules = { lead, cycle, safety };
-  lsSetJson(ORDER_RULES_KEY, state.orderRules);
+  try { localStorage.setItem(ORDER_RULES_KEY, JSON.stringify(state.orderRules)); } catch (e) { /* приватный режим */ }
   $('orError').hidden = true;
   if (!$('productSheet').hidden && ui.currentProduct) renderStock(ui.currentProduct, ui.cardSales);
   closeSheet('orderRulesSheet');
@@ -872,11 +847,8 @@ export async function copyText(text, okMsg) {
   catch (e) { toast('Не удалось скопировать'); }
 }
 
-/* `extra` — дополнительный класс на строку. Нужен оформлению: по нему стили
- * выделяют именно код кассы, а не «любую первую строку» (иначе у товара без
- * кода крупной плашкой становился бы артикул). */
-function fieldRow(key, val, main = false, copy = false, extra = '') {
-  const cls = (main ? ' field-main' : '') + (extra ? ' ' + extra : '');
+function fieldRow(key, val, main = false, copy = false) {
+  const cls = main ? ' field-main' : '';
   const copyBtn = (copy || main)
     ? `<button class="copy-btn" data-copy="${esc(val)}">⧉</button>`
     : '';

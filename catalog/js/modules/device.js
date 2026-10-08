@@ -1,7 +1,6 @@
 // Настройки этого устройства
 
-import { $, CACHE_KEY, lsCan, lsGet, lsJson, lsSet, lsSetJson, state } from './store.js';
-import { roleName, sessionLog } from './sessionlog.js';
+import { $, CACHE_KEY, state } from './store.js';
 import { esc, openSheet, savedErrors, toast } from './core.js';
 import { todayISO } from './catalog.js';
 import { THEME_KEY, applyTheme, countActiveFilters, favorites, renderAll } from './render.js';
@@ -48,9 +47,9 @@ const installed = () => {
     return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   } catch (e) { return false; }
 };
-const hintHidden = () => !lsCan() || lsGet(INSTALL_KEY) === 'off';
+const hintHidden = () => { try { return localStorage.getItem(INSTALL_KEY) === 'off'; } catch (e) { return true; } };
 const hideHint = () => {
-  lsSet(INSTALL_KEY, 'off');
+  try { localStorage.setItem(INSTALL_KEY, 'off'); } catch (e) { /* приватный режим */ }
   const el = $('installBanner'); if (el) el.hidden = true;
 };
 
@@ -90,14 +89,14 @@ export function applyPowerMode() {
 }
 
 export function deviceName() {
-  return lsGet(DEV_NAME_KEY);
+  try { return localStorage.getItem(DEV_NAME_KEY) || ''; } catch (e) { return ''; }
 }
 
 // Что именно телефон помнит. Ключ → человеческое имя и краткое значение.
 function deviceMemory() {
-  const get = (k) => lsGet(k, null);
+  const get = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
   const viewName = { normal: 'плитки', compact: 'плотные плитки', list: 'список' }[state.view] || state.view;
-  const tabName = { catalog: 'Каталог', cats: 'Категории', fav: 'Избранное' }[state.tab] || state.tab;
+  const tabName = { catalog: 'Каталог', pick: 'Подбор', fav: 'Избранное' }[state.tab] || state.tab;
   const themeRaw = get(THEME_KEY);
   const rows = [
     { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
@@ -124,25 +123,6 @@ function renderDeviceSheet() {
   if (wolf) wolf.checked = mascotOn();
   // Последние сбои — здесь, а не в тайной консоли: если каталог однажды повёл
   // себя странно, владелец видит, что именно случилось, и может это назвать.
-  /* Входы и выходы — ответ на «каталог не помнит, когда зашли и когда вышли».
-     Показываем ролью, а не служебным словом: «Сотрудник зала», а не «zal». */
-  const ses = sessionLog();
-  const when = (at) => {
-    const d = new Date(at);
-    const t = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    const day = d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
-    const today = new Date().toDateString() === d.toDateString();
-    return today ? `сегодня в ${t}` : `${day}, ${t}`;
-  };
-  const sbox = $('devSessions');
-  if (sbox) {
-    sbox.innerHTML = ses.length
-      ? ses.slice(0, 10).map((r) => `<div class="ios-row"><span class="ios-row-title">${esc(roleName(r.role))}
-          <span class="ord-sub">${r.event === 'in' ? 'вошёл' : 'вышел'}</span></span>
-          <span class="ios-row-value">${esc(when(r.at))}</span></div>`).join('')
-      : '<div class="ios-row"><span class="ios-row-title muted">Входов пока не было</span></div>';
-  }
-
   const errs = savedErrors();
   $('devErrors').innerHTML = errs.length
     ? errs.slice(0, 5).map((e) => `<div class="ios-row"><span class="ios-row-title">${esc(e.msg)}
@@ -183,11 +163,13 @@ export const popViews = (id) => state.popularity[id] || 0;
 // защита от накрутки: один просмотр/запрос за товар (запрос) в день с устройства
 const TRACK_KEY = 'wm_tracked_v1';
 function trackedToday() {
-  const o = lsJson(TRACK_KEY);
-  if (o && o.d === todayISO()) return o;
+  try {
+    const o = JSON.parse(localStorage.getItem(TRACK_KEY));
+    if (o && o.d === todayISO()) return o;
+  } catch (e) { /* */ }
   return { d: todayISO(), v: {}, s: {} };
 }
-function saveTracked(o) { lsSetJson(TRACK_KEY, o); }
+function saveTracked(o) { try { localStorage.setItem(TRACK_KEY, JSON.stringify(o)); } catch (e) { /* */ } }
 
 export function trackView(p) {
   if (!p) return;

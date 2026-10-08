@@ -68,7 +68,7 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   chk(cover.cards === products.length, `открылись все карточки (${cover.cards} из ${products.length})`);
 
   // ── разделы нижней панели ──
-  for (const t of ['cats', 'fav', 'catalog']) {
+  for (const t of ['pick', 'fav', 'catalog']) {
     await closeAll(page);
     await page.click(`.tabbar [data-tab="${t}"]`); await page.waitForTimeout(400);
     const ok = await page.evaluate((x) => document.querySelector(`.tabbar [data-tab="${x}"]`).classList.contains('active'), t);
@@ -93,11 +93,11 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
   chk(cover.menu.length >= 6, `пункты меню открываются (${cover.menu.length}: ${cover.menu.join(', ')})`);
 
   // ── сортировка и поиск ──
-  // фильтры открываются вкладкой: кнопки в шапке больше нет — она была дублем
-  await closeAll(page); await page.click('.tabbar [data-tab="filters"]'); await page.waitForTimeout(400);
-  const sorts = await page.evaluate(() => [...document.querySelectorAll('#filterSheet [data-sort]')].map((x) => x.dataset.sort));
+  // сортировка живёт на вкладке «Подбор» — отдельного окна фильтра больше нет
+  await closeAll(page); await page.click('.tabbar [data-tab="pick"]'); await page.waitForTimeout(400);
+  const sorts = await page.evaluate(() => [...document.querySelectorAll('#pickScreen [data-sort]')].map((x) => x.dataset.sort));
   for (const s of sorts) {
-    await page.click(`#filterSheet [data-sort="${s}"]`).catch(() => problems.push(`сортировка «${s}» не нажалась`));
+    await page.click(`#pickScreen [data-sort="${s}"]`).catch(() => problems.push(`сортировка «${s}» не нажалась`));
     await page.waitForTimeout(200);
     const n = await page.evaluate(() => document.querySelectorAll('#productGrid .card').length);
     if (!n) problems.push(`сортировка «${s}»: сетка опустела`); else cover.sorts.push(s);
@@ -124,9 +124,7 @@ const МУСОР = ['undefined', 'NaN', 'Infinity', '[object', 'null ₽'];
     'Магнит', 'ЦЕНЫ В ДРУГИХ МАГАЗИНАХ', 'Дешевле в магазине']) {
     if (buyer.includes(secret)) problems.push(`покупатель видит внутреннее: «${secret}»`);
   }
-  // Решение владельца 2026-10-03: без входа код кассы не показываем —
-  // коды нужны сотрудникам, покупателю достаточно названия, цены и наличия.
-  chk(!/Код товара/.test(buyer), 'без входа кода товара нет (коды — сотрудникам)');
+  chk(/Код товара/.test(buyer), 'без входа виден код товара — ради него каталог и делался');
   // самое важное: лишнее не должно попадать в ОТКРЫТЫЙ файл витрины, даже если
   // в интерфейсе оно скрыто — файл скачивается по прямой ссылке
   const leak = await page.evaluate(() => {

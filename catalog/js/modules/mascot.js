@@ -14,7 +14,7 @@
  *      там человек работает, а не развлекается.
  * Выключается одним переключателем в настройках устройства. */
 
-import { $, CFG, lsDel, lsGet, lsSet, state, ui } from './store.js';
+import { $, CFG, state, ui } from './store.js';
 import { esc, toast } from './core.js';
 
 const OFF_KEY = 'wm_wolf';       // 'off' — человек выключил волка
@@ -29,11 +29,14 @@ let lastSay = 0;
 let hideTimer = 0;
 
 export const mascotOn = () => {
-  return lsGet(OFF_KEY) !== 'off';
+  try { return localStorage.getItem(OFF_KEY) !== 'off'; } catch (e) { return true; }
 };
 
 function setMascot(on) {
-  if (on) lsDel(OFF_KEY); else lsSet(OFF_KEY, 'off');
+  try {
+    if (on) localStorage.removeItem(OFF_KEY);
+    else localStorage.setItem(OFF_KEY, 'off');
+  } catch (e) { /* приватный режим */ }
   applyMascot();
 }
 
@@ -130,11 +133,12 @@ function partOfDay() {
 }
 
 function greetedToday() {
-  const d = new Date().toISOString().slice(0, 10);
-  if (lsGet(HI_KEY) === d) return true;
-  // Не смогли запомнить (приватный режим, нет места) — лучше промолчать,
-  // чем здороваться при каждом открытии каталога.
-  return !lsSet(HI_KEY, d);
+  try {
+    const d = new Date().toISOString().slice(0, 10);
+    if (localStorage.getItem(HI_KEY) === d) return true;
+    localStorage.setItem(HI_KEY, d);
+    return false;
+  } catch (e) { return true; }   // не можем запомнить — лучше промолчать
 }
 
 export function greet(force) {
