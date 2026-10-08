@@ -64,7 +64,7 @@ const prices = [
   chk(afterRm === 2, `товар можно убрать из сравнения (осталось ${afterRm})`);
 
   const cleared = await page.evaluate(async () => {
-    document.getElementById('compareClear2').click();
+    document.getElementById('compareClear').click();
     await new Promise((r) => setTimeout(r, 300));
     return document.getElementById('compareBar').hidden;
   });

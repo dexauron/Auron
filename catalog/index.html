@@ -50,7 +50,9 @@
       <button class="round-btn round-btn-accent" id="scanSearchBtn" title="Сканировать штрихкод камерой">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 8v8"/><path d="M11 8v8"/><path d="M15 8v8"/><path d="M18 8v8"/></svg>
       </button>
-      <button class="round-btn" id="viewToggleBtn" title="Размер плиток">
+      <!-- Только вошедшим: у покупателя каталог всегда списком без фото
+           (решение владельца), и этот переключатель ему ничего не менял. -->
+      <button class="round-btn emp-only" id="viewToggleBtn" title="Размер плиток">
         <svg viewBox="0 0 24 24" width="21" height="21" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
       </button>
     </div>
@@ -195,10 +197,10 @@
       Список: <span id="shopCount">0</span> · <span id="shopTotal">0 ₽</span></button>
   </div>
 
-  <!-- Отобрано для сравнения: полоска над нижней панелью -->
+  <!-- Отобрано для сравнения: полоска над нижней панелью. Одно действие —
+       открыть сравнение; «Очистить» живёт внутри окна, где видно, что чистишь. -->
   <div class="compare-bar" id="compareBar" hidden>
     <button class="btn btn-primary" id="compareOpen">Сравнить (<span id="compareCount">0</span>)</button>
-    <button class="btn btn-ghost" id="compareClear">Очистить</button>
   </div>
 
   <nav class="tabbar" id="tabbar">
@@ -1129,7 +1131,7 @@
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="ios-nav">
-        <button class="ios-nav-btn" id="compareClear2">Очистить</button>
+        <button class="ios-nav-btn" id="compareClear">Очистить</button>
         <h2 class="ios-nav-title">Сравнение</h2>
         <button class="ios-nav-btn strong" data-close="compareSheet">Готово</button>
       </div>
