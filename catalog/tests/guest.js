@@ -170,7 +170,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   chk(store.body.includes(cfg.STORE_ADDRESS) && store.body.includes(cfg.STORE_HOURS),
     `видны адрес и часы работы из настроек (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
   chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
-  chk(store.tel.replace(/[^+\d]/g, '') === 'tel:' + cfg.STORE_PHONE.replace(/[^+\d]/g, '').replace('tel:', ''),
+  const digits = (x) => String(x).replace(/[^+\d]/g, '');
+  chk(digits(store.tel) === digits(cfg.STORE_PHONE),
     `и кнопка позвонить по номеру из настроек (${store.tel})`);
   chk(/Молоко/.test(store.body) && /Магнит/.test(store.body), 'подсказка о цене видна в списке');
   chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
