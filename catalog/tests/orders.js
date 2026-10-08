@@ -25,7 +25,7 @@ const iso = (shift) => { const d = monday(); d.setDate(d.getDate() + shift); ret
     await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
     await page.evaluate(() => document.getElementById('adminBtn').click());
     await page.waitForTimeout(250);
-    await page.evaluate(() => document.getElementById('menuOrders').click());
+    await page.evaluate(() => window.WM_PUBLISH._work('orders'));
     await page.waitForTimeout(400);
   };
   await openOrders();
