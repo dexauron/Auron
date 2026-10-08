@@ -91,7 +91,7 @@ const openShopList = (page, rows) => page.evaluate(async (list) => {
   // ── 4. Заказ поставщику ──
   await page.evaluate(() => document.querySelectorAll('.sheet-backdrop:not([hidden])').forEach((s) => { s.hidden = true; }));
   await asOwner(page, { suppliers });
-  await page.evaluate(() => { window.WM_PUBLISH._state().contacts.s1 = { phone: '8 964 061-66-01' }; });
+  await page.evaluate(() => { window.WM_PUBLISH._state().contacts.s1 = { phone: '8 900 000-11-22' }; });
   await spy(page);
   const noSup = await page.evaluate(async () => {
     window.WM_PUBLISH._orderForm(null, null, { items: [{ name: 'Молоко 3,2%', code: '101', qty: 6 }] });
@@ -118,7 +118,7 @@ const openShopList = (page, rows) => page.evaluate(async (list) => {
   });
   const ord = await grabbed(page);
   chk(!!ord, 'заказ открывает WhatsApp');
-  chk(ord.phone === '79640616601', `номер поставщика приведён к международному виду — восьмёрка стала семёркой (${ord.phone})`);
+  chk(ord.phone === '79000001122', `номер поставщика приведён к международному виду — восьмёрка стала семёркой (${ord.phone})`);
   chk(/Молзавод/.test(ord.text), 'в заказе видно, кому он адресован');
   chk(/Молоко 3,2%.*101.*6/.test(ord.text), `позиция с кодом и количеством (${(ord.text.match(/1\. .*/) || [''])[0]})`);
   chk(/Нужно к/.test(ord.text), 'указан срок поставки');

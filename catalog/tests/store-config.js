@@ -60,20 +60,32 @@ const OTHER_STORE = {
   const swLeak = OWN.filter((k) => cfg[k] && cfg[k].length > 4 && sw.includes(cfg[k]));
   chk(!swLeak.length, `офлайн-копия не знает картинок магазина${swLeak.length ? ': ' + swLeak.join(', ') : ''}`);
 
-  // ── 2. Каталог как есть — это Way Market ──
+  /* ── 2. Настройки действительно применились ────────────────────────────────
+   * Сверяем с тем, что написано в js/config.js, а не с «Way Market»: проверка
+   * должна проходить и в заготовке, и в копии любого магазина. */
   {
     const { page, errs } = await newPage(b, { products, groups });
     const own = await page.evaluate(() => ({
+      c: window.CATALOG_CONFIG,
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
+      letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
+      logo: (document.querySelector('.brand-logo-img') || {}).getAttribute
+        ? (document.querySelector('.brand-logo-img') || {}).getAttribute('src') : null,
       work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
         window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
-    chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
-    chk(/Ходовые/.test(own.work) && /других магазинов/.test(own.work),
-      `включённые возможности видны во вкладке «Работа» (${own.work})`);
-    chk(own.cat === 'Молочное', `разделы продуктового магазина работают (молоко → ${own.cat})`);
+    chk(own.name === own.c.STORE_NAME && own.title.includes(own.c.STORE_NAME),
+      `название из настроек стоит в шапке и на вкладке (${own.name})`);
+    chk(own.c.LOGO ? own.logo === own.c.LOGO : !!own.letter,
+      `логотип из настроек, а без логотипа — первая буква (${own.logo || own.letter})`);
+    const on = (k) => own.c.FEATURES[k] !== false;
+    chk(/Ходовые/.test(own.work) === on('sales')
+      && /других магазинов/.test(own.work) === on('competitors'),
+    `во вкладке «Работа» ровно то, что включено в настройках (${own.work})`);
+    chk(own.c.CATEGORIES !== 'grocery' || own.cat === 'Молочное',
+      `разделы продуктового магазина работают (молоко → ${own.cat})`);
     chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
   }

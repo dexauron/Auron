@@ -185,7 +185,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     window.open = real;
     return { opened, left: JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length };
   });
-  chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
+  chk(sent.opened.includes(`wa.me/${cfg.STORE_WHATSAPP}?text=`), 'отправка открывает WhatsApp с готовым текстом');
   chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
     `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
   chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
@@ -253,7 +253,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   });
   chk(ask.shown, 'ничего не нашлось — покупателю предложено спросить в магазине');
   chk(/Милка/.test(ask.text), `запрос подставлен в вопрос (${ask.text})`);
-  chk(/wa\.me\/79640616601/.test(ask.opened) && /Милка/.test(decodeURIComponent(ask.opened)),
+  chk(ask.opened.includes(`wa.me/${cfg.STORE_WHATSAPP}`) && /Милка/.test(decodeURIComponent(ask.opened)),
     'вопрос уходит владельцу в WhatsApp готовым текстом');
 
   // ── 7. «Сообщить, когда появится» и «что подешевело» ──
