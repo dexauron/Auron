@@ -1,7 +1,7 @@
 /* Каталог товаров — service worker.
  * Стратегия «сначала сеть»: онлайн всегда свежая версия (версии кэша бампать
  * не нужно), офлайн — последняя сохранённая копия приложения. */
-const CACHE = 'wm-catalog-v131';
+const CACHE = 'wm-catalog-v132';
 // Отдельный «вечный» кэш для фото товаров: заполняется по мере просмотра,
 // НЕ очищается при обновлении приложения — фото грузятся один раз и потом
 // показываются мгновенно, работают офлайн и не тратят трафик.
@@ -19,7 +19,12 @@ const DATA = 'wm-data-v1';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/modules/app.js',
   'js/modules/store.js', 'js/modules/core.js', 'js/modules/icons.js', 'js/modules/catalog.js', 'js/modules/render.js', 'js/modules/device.js', 'js/modules/card.js', 'js/modules/data.js', 'js/modules/brand.js', 'js/modules/parts.js', 'js/modules/publish.js', 'js/modules/competitors.js', 'js/modules/photos.js', 'js/modules/admin.js', 'js/modules/imports.js', 'js/modules/scanner.js', 'js/modules/orders.js', 'js/modules/compare.js', 'js/modules/restock.js', 'js/modules/work.js', 'js/modules/guest.js', 'js/modules/shopping.js', 'js/modules/news.js', 'js/modules/mascot.js', 'js/modules/margin.js', 'js/modules/reviews.js', 'js/modules/whatsapp.js', 'js/modules/pricerise.js', 'js/xlsx-worker.js', 'js/config.js',
   'manifest.webmanifest',
-  'icons/icon-192.png', 'icons/logo-round.png', 'icons/wolf.png', 'icons/wolf-head.png'];
+  /* Картинки магазина — логотип и талисман — здесь НЕ перечислены нарочно:
+     их имена задаёт сам магазин в js/config.js, и движок не должен их знать
+     (иначе каталог нельзя переделать под другой магазин одной правкой
+     настроек). Они сохранятся в офлайн-копию при первом показе — см. ветку
+     «остальное своё» ниже. */
+  'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

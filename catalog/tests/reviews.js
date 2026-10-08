@@ -18,7 +18,7 @@ const products = [
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('ОТЗЫВЫ');
+  const { chk, skip, done } = runner('ОТЗЫВЫ');
   const { page, errs } = await newPage(b, { products, groups: [{ id: 'g1', name: 'Молочное' }] });
 
   // ── 1. Оценка считается ──
@@ -66,11 +66,17 @@ const products = [
     const s = P._state();
     return { opened, after: s.products.find((x) => x.id === 'p2').reviews };
   });
-  chk(/wa\.me\//.test(sent.opened), 'отзыв уходит владельцу в WhatsApp');
-  chk(/%D0%9C%D0%B0%D1%80%D1%8C%D1%8F%D0%BC|Марьям/.test(decodeURIComponent(sent.opened)),
-    'в сообщении есть имя');
-  chk(/код 102/.test(decodeURIComponent(sent.opened)), 'в сообщении есть код товара — владельцу не надо его искать');
-  chk(/5 из 5/.test(decodeURIComponent(sent.opened)), 'в сообщении есть оценка');
+  /* Отзыв уезжает владельцу в WhatsApp. В чистой заготовке номера нет — тогда
+     проверять нечего, и мы честно говорим «пропущено», а не пугаем красным. */
+  const waCfg = await page.evaluate(() => window.CATALOG_CONFIG.STORE_WHATSAPP);
+  if (!waCfg) skip('отзыв уходит владельцу в WhatsApp — номера в настройках нет');
+  else {
+    const msg = decodeURIComponent(sent.opened);
+    chk(/wa\.me\//.test(sent.opened), 'отзыв уходит владельцу в WhatsApp');
+    chk(/Марьям/.test(msg), 'в сообщении есть имя');
+    chk(/код 102/.test(msg), 'в сообщении есть код товара — владельцу не надо его искать');
+    chk(/5 из 5/.test(msg), 'в сообщении есть оценка');
+  }
   chk(!before && !sent.after, 'покупатель НИЧЕГО не опубликовал сам — отзыв в каталог не попал');
 
   // ── 4. Владелец добавляет отзыв ──

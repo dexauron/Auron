@@ -66,12 +66,17 @@ const text = (page, sel) => page.evaluate((s) => {
 function runner(title) {
   let fail = false;
   const chk = (cond, msg) => { if (!cond) { console.log('FAIL:', msg); fail = true; } else console.log('OK:', msg); };
+  /* Проверка, которой нечего проверять в ЭТОМ магазине. Каталог отдаётся
+     заготовкой, и у чистой копии не заполнены ни номер WhatsApp, ни адрес —
+     значит связанные проверки неприменимы. Писать «OK» было бы неправдой, а
+     «FAIL» напугало бы нового хозяина: пишем «ПРОПУЩЕНО» и объясняем, почему. */
+  const skip = (why) => console.log('ПРОПУЩЕНО:', why);
   const done = async (browser) => {
     console.log(fail ? `\n=== ${title}: ЕСТЬ ОШИБКИ ===` : `\n=== ${title}: ОК ===`);
     await browser.close();
     process.exit(fail ? 1 : 0);
   };
-  return { chk, done };
+  return { chk, skip, done };
 }
 
 module.exports = { chromium, J, newPage, asOwner, closeAll, openProduct, text, runner };

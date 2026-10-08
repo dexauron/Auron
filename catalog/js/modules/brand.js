@@ -2,8 +2,9 @@
 
 /* Движок один, а магазинов может быть много. Всё, чем один магазин отличается
  * от другого, живёт в одном файле настроек (js/config.js) — здесь эти настройки
- * применяются к странице. В коде приложения названия «Way Market» нет нигде:
- * поменял настройки — получил каталог другого магазина. */
+ * применяются к странице. Названия конкретного магазина в коде нет нигде:
+ * поменял настройки — получил каталог другого магазина. Это проверяет тест
+ * store-config: он берёт значения из настроек и ищет их в движке. */
 
 import { $, CFG } from './store.js';
 
@@ -46,15 +47,22 @@ export function applyBrand() {
 
   const logo = document.querySelector('.brand-logo-img');
   if (logo) {
-    if (CFG.LOGO) { logo.src = CFG.LOGO; logo.alt = name; }
+    /* В разметке картинка спрятана и без адреса: иначе до загрузки настроек
+       мигал бы логотип чужого магазина или битый значок. */
+    if (CFG.LOGO) { logo.src = CFG.LOGO; logo.alt = name; logo.hidden = false; }
     else {
       // логотипа нет — рисуем кружок с первой буквой названия
       const dot = document.createElement('div');
       dot.className = 'brand-logo-img brand-logo-letter';
       dot.textContent = name.trim().charAt(0).toUpperCase();
+      dot.hidden = false;
       logo.replaceWith(dot);
     }
   }
+
+  // тот же логотип на экране входа
+  const li = document.querySelector('.login-logo');
+  if (li && CFG.LOGO) { li.src = CFG.LOGO; li.hidden = false; }
 
   if (CFG.ACCENT) {
     const root = document.documentElement.style;

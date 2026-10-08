@@ -1,6 +1,7 @@
 // Движок один, магазинов может быть много. Проверяем, что каталог целиком
 // описывается ОДНИМ файлом настроек: поменял — получил каталог другого
-// магазина, и нигде в коде не осталось зашитого «Way Market».
+// магазина, и нигде в коде не осталось зашитого названия, телефона, адреса
+// или картинок конкретного магазина.
 const fs = require('fs');
 const path = require('path');
 const { chromium, newPage, runner } = require('./helpers');
@@ -20,30 +21,72 @@ const OTHER_STORE = {
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('НАСТРОЙКИ МАГАЗИНА');
+  const { chk, skip, done } = runner('НАСТРОЙКИ МАГАЗИНА');
 
-  // ── 1. В коде движка нет названия конкретного магазина ──
+  // ── 1. В коде движка нет ничего, что описывает конкретный магазин ──
   const dir = path.join(__dirname, '..', 'js', 'modules');
-  const hard = fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
-    .filter((f) => /Way Market/.test(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^.*названия «Way Market».*$/gm, '')));
-  chk(!hard.length, `в модулях нет зашитого названия магазина${hard.length ? ': ' + hard.join(', ') : ''}`);
   const html = fs.readFileSync(path.join(dir, '..', '..', 'index.html'), 'utf8');
   chk(/class="brand-name"/.test(html), 'в разметке есть место под название магазина');
 
-  // ── 2. Каталог как есть — это Way Market ──
+  /* ── Движок должен быть пригоден для ЧУЖОГО магазина ───────────────────────
+   * Каталог отдаётся заготовкой: «чтобы любой смог переделать под свой
+   * магазин». Значит ничего, что описывает КОНКРЕТНЫЙ магазин, не должно быть
+   * зашито ни в разметке, ни в модулях. Проверка не знает, чей это магазин:
+   * она берёт значения из js/config.js и ищет ИХ в коде — поэтому работает и в
+   * заготовке, и в любой копии, кем бы она ни была настроена. */
+  const cfgText = fs.readFileSync(path.join(dir, '..', 'config.js'), 'utf8');
+  const cfg = {};
+  for (const [, k, v] of cfgText.matchAll(/^\s*([A-Z_]+):\s*'([^']*)'/gm)) cfg[k] = v;
+  const mods = fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
+    .map((f) => ({ f, t: fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '') }));
+  const htmlNoComments = html.replace(/<!--[\s\S]*?-->/g, '');
+  const OWN = ['STORE_NAME', 'STORE_PHONE', 'STORE_WHATSAPP', 'STORE_ADDRESS',
+    'STORE_PROMISE', 'LOGO', 'MASCOT', 'MASCOT_HEAD', 'MASCOT_NAME'];
+  const leaked = [];
+  for (const k of OWN) {
+    const v = cfg[k];
+    if (!v || v.length < 4) continue;                  // пустое и короткое не ищем
+    if (htmlNoComments.includes(v)) leaked.push(`${k} → index.html`);
+    for (const m of mods) if (m.t.includes(v)) leaked.push(`${k} → ${m.f}`);
+  }
+  chk(!leaked.length, `ничего из настроек магазина не зашито в движке${leaked.length ? ': ' + leaked.join(', ') : ''}`);
+  /* И наоборот: если настройки пустые, проверка выше ничего не доказывает —
+     говорим об этом прямо. В чистой заготовке так и должно быть: её ещё не
+     настроили под магазин. */
+  const filled = OWN.filter((k) => cfg[k]).length;
+  if (filled >= 5) chk(true, `настройки магазина заполнены, проверке есть что искать (${filled} из ${OWN.length})`);
+  else skip(`магазин ещё не настроен (${filled} из ${OWN.length} полей) — проверке выше нечего искать`);
+  // офлайн-копия тоже не должна знать имена наших картинок
+  const sw = fs.readFileSync(path.join(dir, '..', '..', 'sw.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const swLeak = OWN.filter((k) => cfg[k] && cfg[k].length > 4 && sw.includes(cfg[k]));
+  chk(!swLeak.length, `офлайн-копия не знает картинок магазина${swLeak.length ? ': ' + swLeak.join(', ') : ''}`);
+
+  /* ── 2. Настройки действительно применились ────────────────────────────────
+   * Сверяем с тем, что написано в js/config.js, а не с именем нашего магазина:
+   * должна проходить и в заготовке, и в копии любого магазина. */
   {
     const { page, errs } = await newPage(b, { products, groups });
     const own = await page.evaluate(() => ({
+      c: window.CATALOG_CONFIG,
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
+      letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
+      logo: (document.querySelector('.brand-logo-img') || {}).getAttribute
+        ? (document.querySelector('.brand-logo-img') || {}).getAttribute('src') : null,
       work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
         window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
-    chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
-    chk(/Ходовые/.test(own.work) && /других магазинов/.test(own.work),
-      `включённые возможности видны во вкладке «Работа» (${own.work})`);
-    chk(own.cat === 'Молочное', `разделы продуктового магазина работают (молоко → ${own.cat})`);
+    chk(own.name === own.c.STORE_NAME && own.title.includes(own.c.STORE_NAME),
+      `название из настроек стоит в шапке и на вкладке (${own.name})`);
+    chk(own.c.LOGO ? own.logo === own.c.LOGO : !!own.letter,
+      `логотип из настроек, а без логотипа — первая буква (${own.logo || own.letter})`);
+    const on = (k) => own.c.FEATURES[k] !== false;
+    chk(/Ходовые/.test(own.work) === on('sales')
+      && /других магазинов/.test(own.work) === on('competitors'),
+    `во вкладке «Работа» ровно то, что включено в настройках (${own.work})`);
+    chk(own.c.CATEGORIES !== 'grocery' || own.cat === 'Молочное',
+      `разделы продуктового магазина работают (молоко → ${own.cat})`);
     chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
     await page.context().close();
   }

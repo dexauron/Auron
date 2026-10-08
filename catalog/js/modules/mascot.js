@@ -1,7 +1,10 @@
-// Волк — талисман магазина и живой помощник каталога
+// Талисман магазина и живой помощник каталога
 
-/* У магазина есть свой волк в папахе и черкеске. До сих пор он жил только
- * картинкой в переписке; здесь он выходит в каталог и делает три вещи:
+/* Талисман — настройка магазина (MASCOT в js/config.js), а не часть движка:
+ * у первого магазина это волк в папахе и черкеске, у другого будет своё, а
+ * если картинки нет — талисмана нет вовсе и каталог от этого не меняется.
+ *
+ * Он делает три вещи:
  * здоровается, подсказывает на пустых экранах и радуется, когда человек
  * что-то отметил. Это не украшение ради украшения: каталог без сервера
  * ничем не может напомнить о себе, и единственное, что заставляет вернуться, —
@@ -28,7 +31,12 @@ const SHOW_MS = 2800;            // сколько висит облачко
 let lastSay = 0;
 let hideTimer = 0;
 
+// есть ли талисман у этого магазина вообще
+const hasMascot = () => !!(CFG.MASCOT || CFG.MASCOT_HEAD);
+export const mascotName = () => CFG.MASCOT_NAME || 'Талисман';
+
 export const mascotOn = () => {
+  if (!hasMascot()) return false;        // картинки нет — и разговора нет
   try { return localStorage.getItem(OFF_KEY) !== 'off'; } catch (e) { return true; }
 };
 
@@ -117,7 +125,8 @@ export function buzz(ms) {
  * Волк превращает её из тупика в разговор. Значок остаётся рядом в разметке:
  * если волка выключили, он и покажется вместо картинки. */
 export function wolfEmpty(iconHtml) {
-  return `<img class="wolf wolf-empty" src="icons/wolf.png" width="150" height="305" alt="" decoding="async" loading="lazy">`
+  if (!CFG.MASCOT) return iconHtml;      // талисмана нет — обычный значок
+  return `<img class="wolf wolf-empty" src="${esc(CFG.MASCOT)}" width="150" height="305" alt="" decoding="async" loading="lazy">`
     + `<span class="wolf-fallback">${iconHtml}</span>`;
 }
 
@@ -185,6 +194,19 @@ function wolfTap() {
 }
 
 export function bindMascot() {
+  /* Талисман — настройка магазина. Нет картинки — нет и талисмана: убираем
+     кнопку в шапке и строку в настройках устройства, чтобы чужой магазин не
+     видел переключателя для того, чего у него нет. */
+  const head = $('wolfHi');
+  const img = document.querySelector('#wolfHi .wolf-head');
+  if (img && CFG.MASCOT_HEAD) img.src = CFG.MASCOT_HEAD;
+  if (head) head.hidden = !hasMascot();
+  const row = document.querySelector('label[for="devWolf"]');
+  if (row) {
+    row.hidden = !hasMascot();
+    const title = row.querySelector('.ios-row-title');
+    if (title) title.firstChild.textContent = mascotName();
+  }
   applyMascot();
   ui.hideWolf = hideBubble;   // окна прячут облачко, не зная про этот модуль
   const btn = $('wolfHi');

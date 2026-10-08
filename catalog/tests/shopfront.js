@@ -18,7 +18,7 @@ const products = [
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('ВИТРИНА ПОКУПАТЕЛЯ');
+  const { chk, skip, done } = runner('ВИТРИНА ПОКУПАТЕЛЯ');
   const { page, errs } = await newPage(b, { products, groups: [{ id: 'g1', name: 'Разное' }] });
 
   const paint = (was) => page.evaluate(async (w) => {
@@ -102,10 +102,14 @@ const products = [
   });
   chk(shelf.btn, 'на ценнике есть кнопка «цена на ценнике другая»');
   chk(/89 ₽/.test(shelf.ours), `человеку показана наша цена для сверки (${shelf.ours})`);
-  chk(/wa\.me\//.test(shelf.opened), 'сообщение уходит владельцу сразу — ценник правят сегодня');
-  chk(/На ценнике: 95 ₽/.test(shelf.opened) && /В каталоге: 89 ₽/.test(shelf.opened),
-    'в сообщении обе цены и код — владельцу не надо ничего искать');
-  chk(/код 101/.test(shelf.opened), 'код товара в сообщении есть');
+  const waCfg = await page.evaluate(() => window.CATALOG_CONFIG.STORE_WHATSAPP);
+  if (!waCfg) skip('расхождение цены уходит в WhatsApp — номера в настройках нет');
+  else {
+    chk(/wa\.me\//.test(shelf.opened), 'сообщение уходит владельцу сразу — ценник правят сегодня');
+    chk(/На ценнике: 95 ₽/.test(shelf.opened) && /В каталоге: 89 ₽/.test(shelf.opened),
+      'в сообщении обе цены и код — владельцу не надо ничего искать');
+    chk(/код 101/.test(shelf.opened), 'код товара в сообщении есть');
+  }
 
   /* ── 6. Вошедшему — то же самое, кроме покупательского ──
      Решение владельца: зачёркнутая цена и полоса «сегодня дешевле» нужны и

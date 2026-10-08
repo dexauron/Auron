@@ -1,0 +1,39 @@
+# Выкладывает каталог на GitHub Pages при каждом изменении в ветке main.
+# Закрытые (зашифрованные) файлы на сайт не попадают — они нужны только
+# приложению и читаются напрямую из репозитория.
+name: Выложить каталог на сайт
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pages.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Собрать сайт
+        run: |
+          mkdir -p _site
+          rsync -a --exclude '.git' --exclude '.github' --exclude '_site' ./ _site/
+          # закрытую часть на сайт не выкладываем
+          rm -f _site/data/*.enc
+          rm -rf _site/data/sec _site/data/sec-staff
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: pages
+        uses: actions/deploy-pages@v4

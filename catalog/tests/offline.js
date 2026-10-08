@@ -35,14 +35,18 @@ const J = (o) => ({ status: 200, contentType: 'application/json', body: JSON.str
   const controlled = await page.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller));
   chk(controlled, 'офлайн-копия приложения установилась и управляет страницей');
 
-  // что попало в офлайн-копию: оболочка — да, тяжёлый разборщик Excel — нет
-  const cached = await page.evaluate(async () => {
+  /* Что попало в офлайн-копию: оболочка — да, тяжёлый разборщик Excel — нет.
+     Имя копии берём из самого sw.js: в чужом магазине оно своё, и проверка не
+     должна знать наше. */
+  const swName = (fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8')
+    .match(/const CACHE = '([^']+)'/) || [])[1];
+  const cached = await page.evaluate(async (want) => {
     const names = await caches.keys();
-    const shell = names.find((n) => n.startsWith('wm-catalog-'));
+    const shell = names.find((n) => n === want);
     const c = await caches.open(shell);
     const keys = (await c.keys()).map((r) => new URL(r.url).pathname);
     return { shell, count: keys.length, hasApp: keys.some((k) => k.endsWith('js/modules/app.js')), hasXlsx: keys.some((k) => k.includes('vendor/xlsx.min.js')) };
-  });
+  }, swName);
   chk(cached.hasApp, `оболочка сохранена на телефоне (${cached.count} файлов)`);
   chk(!cached.hasXlsx, 'разборщик Excel не занимает место, пока не понадобился');
 
