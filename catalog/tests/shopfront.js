@@ -29,8 +29,8 @@ const products = [
     return {
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
       html: document.getElementById('productGrid').innerHTML,
-      cheap: document.getElementById('cheaperStrip').hidden
-        ? '' : document.getElementById('cheaperStrip').innerText.replace(/\s+/g, ' '),
+      // полосы на главной больше нет: «подешевело» живёт строкой в «Подборе»
+      cheap: (document.querySelector('#pickLists [data-pick="cheaper"]') || {}).innerText || '',
     };
   }, was);
 
@@ -99,7 +99,7 @@ const products = [
     return {
       html: document.getElementById('productGrid').innerHTML,
       grid: document.getElementById('productGrid').innerText.replace(/\s+/g, ' '),
-      cheap: document.getElementById('cheaperStrip').hidden,
+      cheap: !document.querySelector('#pickLists [data-pick="cheaper"]'),
       shelfBtn: !!document.querySelector('[data-shelf-scanned]'),
     };
   });
