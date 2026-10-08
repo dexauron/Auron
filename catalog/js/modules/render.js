@@ -39,7 +39,9 @@ export function switchTab(tab) {
   // пальцем. Меню и настройки устройства переехали на кнопку человечка в шапке.
   state.tab = tab;
   if (tab === 'pick') syncControls();          // поля подбора — под текущее состояние
-  if (tab === 'fav') { state.favOnly = true; state.selCats = []; }
+  /* «Избранное» больше не сбрасывает выбранную категорию: раньше нельзя было
+     посмотреть избранное внутри раздела или в своём диапазоне цен. */
+  if (tab === 'fav') state.favOnly = true;
   else if (state.favOnly) state.favOnly = false;
   if (tab !== 'catalog') { state.query = ''; $('searchInput').value = ''; }
   state.renderLimit = PAGE_SIZE;
@@ -95,7 +97,45 @@ export function renderCatScreen() {
   }
   all.sort((a, b) => cats[b.name] - cats[a.name]);
 
-  // вторая ступень: раскрытая категория показывает свои группы
+  /* Поиск по категориям и группам. Групп из 1С больше двухсот, и найти нужную
+     перебором плиток нельзя. Раньше для этого был отдельный экран «Все
+     группы»; он ушёл вместе с объединением вкладок, и искать стало негде —
+     поле вернулось сюда, где теперь живёт весь подбор. */
+  const q = norm(ui.catQuery || '');
+  const field = `<div class="cat-find">
+    <input type="search" id="catFind" class="input" placeholder="Найти категорию или группу…"
+           value="${esc(ui.catQuery || '')}" autocomplete="off" aria-label="Найти категорию или группу">
+    ${ui.catQuery ? '<button class="cat-find-x" id="catFindClear" aria-label="Очистить">✕</button>' : ''}
+  </div>`;
+
+  // общий вид строки группы: с галочкой, если она уже отмечена
+  const grpRow = (id, name, n) => {
+    const on = state.selGroups.includes(id);
+    return `<button class="grp-row${on ? ' grp-on' : ''}" data-grp="${esc(id)}">
+      <span class="grp-name">${esc(name)}</span>
+      <span class="grp-count">${n}</span>
+      <span class="grp-mark">${on ? ic('check', 'ic-xs') : ''}</span></button>`;
+  };
+
+  // ── Поиск: показываем подходящие группы из всех категорий сразу ──
+  if (q.length >= 2) {
+    const hits = [];
+    for (const [cat, gs] of Object.entries(groupsIn)) {
+      for (const [id, n] of Object.entries(gs)) {
+        const name = id === 'none' ? 'Без группы' : (groupById(id) || {}).name || 'Без названия';
+        if (norm(name).includes(q) || norm(cat).includes(q)) hits.push({ id, name, n, cat });
+      }
+    }
+    hits.sort((a, b) => b.n - a.n);
+    box.innerHTML = field + (hits.length
+      ? `<p class="ios-note cat-hint">Нашлось ${hits.length} ${plural(hits.length, 'группа', 'группы', 'групп')}.
+         Отмечай сколько нужно — отмеченные видно сверху, снимаются там же.</p>`
+        + hits.slice(0, 60).map((g) => grpRow(g.id, `${g.name} · ${g.cat}`, g.n)).join('')
+      : '<p class="muted cat-empty">Ничего не нашлось. Попробуй короче.</p>');
+    return;
+  }
+
+  // ── Вторая ступень: раскрытая категория показывает свои группы ──
   if (ui.openCat && cats[ui.openCat]) {
     const cat = all.find((c) => c.name === ui.openCat) || OTHER_CAT;
     const list = Object.entries(groupsIn[ui.openCat] || {})
@@ -107,17 +147,20 @@ export function renderCatScreen() {
         <span><b>${esc(ui.openCat)}</b><span class="cat-count">${cats[ui.openCat]} ${plural(cats[ui.openCat], 'товар', 'товара', 'товаров')} · ${list.length} ${plural(list.length, 'группа', 'группы', 'групп')}</span></span></div>
       <button class="grp-row grp-all" data-cat-tile="${esc(ui.openCat)}">
         <span class="grp-name">Показать все</span><span class="grp-count">${cats[ui.openCat]}</span></button>
-      ${list.map((g) => `<button class="grp-row" data-grp="${esc(g.id)}">
-        <span class="grp-name">${esc(g.name)}</span><span class="grp-count">${g.n}</span></button>`).join('')}`;
+      ${list.map((g) => grpRow(g.id, g.name, g.n)).join('')}`;
     return;
   }
 
-  box.innerHTML = '<div class="cat-grid">' + all.map((c) => `
-    <button class="cat-tile" data-cat-open="${esc(c.name)}">
+  /* Плитки категорий. Отмеченные подсвечиваем: иначе, выбрав две категории,
+     человек не видит, что именно он выбрал, и жмёт наугад. */
+  box.innerHTML = field + '<div class="cat-grid">' + all.map((c) => {
+    const on = state.selCats.includes(c.name);
+    return `<button class="cat-tile${on ? ' cat-on' : ''}" data-cat-open="${esc(c.name)}">
       <span class="cat-ico">${catIcon(c.name)}</span>
       <span class="cat-name">${esc(c.name)}</span>
       <span class="cat-count">${cats[c.name]} ${plural(cats[c.name], 'товар', 'товара', 'товаров')} · ${Object.keys(groupsIn[c.name] || {}).length} ${plural(Object.keys(groupsIn[c.name] || {}).length, 'группа', 'группы', 'групп')}</span>
-    </button>`).join('') + '</div>';
+    </button>`;
+  }).join('') + '</div>';
 }
 
 export function renderGrid() {
