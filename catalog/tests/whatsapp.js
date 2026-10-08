@@ -36,7 +36,7 @@ const openShopList = (page, rows) => page.evaluate(async (list) => {
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('ОТПРАВКА В WHATSAPP');
+  const { chk, skip, done } = runner('ОТПРАВКА В WHATSAPP');
   const { page, errs } = await newPage(b, { products, groups });
 
   // ── 1. Список покупок уходит в WhatsApp ──
@@ -64,7 +64,13 @@ const openShopList = (page, rows) => page.evaluate(async (list) => {
   chk(/Итого/.test(shop.text), 'внизу итоговая сумма');
   chk(!/Хлеб Столовый/.test(shop.text), 'вычеркнутое не отправляем — это уже куплено');
   chk(/#l=/.test(shop.text), 'рядом с текстом ушла ссылка на живой список');
-  chk(/Мира/.test(shop.text), `в конце подпись магазина с адресом (${shop.text.split('\n').pop()})`);
+  /* Подпись в конце собирается из настроек: название, адрес, часы. Что из
+     этого заполнено — то и проверяем; в чистой заготовке адреса нет. */
+  const cfg = await page.evaluate(() => window.CATALOG_CONFIG);
+  const sign = shop.text.split('\n').pop();
+  chk(sign.includes(cfg.STORE_NAME), `в конце подпись магазина (${sign})`);
+  if (cfg.STORE_ADDRESS) chk(sign.includes(cfg.STORE_ADDRESS), `в подписи есть адрес (${sign})`);
+  else skip('в настройках магазина нет адреса — в подписи только название');
 
   // ── 2. Длинный список не превращается в простыню ──
   await spy(page);

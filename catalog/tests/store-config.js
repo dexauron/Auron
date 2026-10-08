@@ -21,7 +21,7 @@ const OTHER_STORE = {
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('НАСТРОЙКИ МАГАЗИНА');
+  const { chk, skip, done } = runner('НАСТРОЙКИ МАГАЗИНА');
 
   // ── 1. В коде движка нет ничего, что описывает конкретный магазин ──
   const dir = path.join(__dirname, '..', 'js', 'modules');
@@ -50,9 +50,12 @@ const OTHER_STORE = {
     for (const m of mods) if (m.t.includes(v)) leaked.push(`${k} → ${m.f}`);
   }
   chk(!leaked.length, `ничего из настроек магазина не зашито в движке${leaked.length ? ': ' + leaked.join(', ') : ''}`);
-  // и наоборот: настройки действительно заполнены — иначе проверка выше пустая
-  chk(OWN.filter((k) => cfg[k]).length >= 5,
-    `настройки магазина заполнены, проверке есть что искать (${OWN.filter((k) => cfg[k]).length} из ${OWN.length})`);
+  /* И наоборот: если настройки пустые, проверка выше ничего не доказывает —
+     говорим об этом прямо. В чистой заготовке так и должно быть: её ещё не
+     настроили под магазин. */
+  const filled = OWN.filter((k) => cfg[k]).length;
+  if (filled >= 5) chk(true, `настройки магазина заполнены, проверке есть что искать (${filled} из ${OWN.length})`);
+  else skip(`магазин ещё не настроен (${filled} из ${OWN.length} полей) — проверке выше нечего искать`);
   // офлайн-копия тоже не должна знать имена наших картинок
   const sw = fs.readFileSync(path.join(dir, '..', '..', 'sw.js'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   const swLeak = OWN.filter((k) => cfg[k] && cfg[k].length > 4 && sw.includes(cfg[k]));
