@@ -17,7 +17,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('ПОКУПАТЕЛЬ БЕЗ ПАРОЛЯ');
+  const { chk, skip, done } = runner('ПОКУПАТЕЛЬ БЕЗ ПАРОЛЯ');
   const { page, errs } = await newPage(b, { products, groups });
   await page.waitForTimeout(400);
 
@@ -166,15 +166,19 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   /* Сверяем с настройками магазина, а не с нашим адресом: каталог отдаётся как
      заготовка под любой магазин, и проверка не должна знать, чей он. */
   const cfg = await page.evaluate(() => window.CATALOG_CONFIG);
-  chk(store.wa.includes(cfg.STORE_WHATSAPP), `есть кнопка WhatsApp на номер из настроек (${store.wa})`);
-  chk(store.body.includes(cfg.STORE_ADDRESS) && store.body.includes(cfg.STORE_HOURS),
-    `видны адрес и часы работы из настроек (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
-  chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
   const digits = (x) => String(x).replace(/[^+\d]/g, '');
-  chk(digits(store.tel) === digits(cfg.STORE_PHONE),
-    `и кнопка позвонить по номеру из настроек (${store.tel})`);
+  if (cfg.STORE_WHATSAPP) chk(store.wa.includes(cfg.STORE_WHATSAPP), `есть кнопка WhatsApp на номер из настроек (${store.wa})`);
+  else skip('в настройках магазина нет номера WhatsApp — кнопке неоткуда взяться');
+  if (cfg.STORE_ADDRESS && cfg.STORE_HOURS) {
+    chk(store.body.includes(cfg.STORE_ADDRESS) && store.body.includes(cfg.STORE_HOURS),
+      `видны адрес и часы работы из настроек (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
+    chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
+  } else skip('в настройках магазина нет адреса или часов работы');
+  if (cfg.STORE_PHONE) chk(digits(store.tel) === digits(cfg.STORE_PHONE), `и кнопка позвонить по номеру из настроек (${store.tel})`);
+  else skip('в настройках магазина нет телефона для звонка');
   chk(/Молоко/.test(store.body) && /Магнит/.test(store.body), 'подсказка о цене видна в списке');
-  chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
+  if (!cfg.STORE_WHATSAPP) skip('подсказки о ценах уходят в WhatsApp — номер в настройках не задан');
+  else chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
 
   const sent = await page.evaluate(async () => {
     let opened = '';
