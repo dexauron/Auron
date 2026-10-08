@@ -122,8 +122,6 @@ export function renderCatScreen() {
 }
 
 export function renderGrid() {
-  // поиск перерисовывает только сетку, а лента завоза при поиске не нужна
-  renderArrivals();
   const list = visibleProducts();
   const grid = $('productGrid');
   $('loader').hidden = true;
@@ -347,7 +345,8 @@ function renderQuick() {
 export function countActiveFilters() {
   return state.quick.length + state.selCats.length + state.selGroups.length
     + state.selSuppliers.length + ((state.priceMin != null || state.priceMax != null) ? 1 : 0)
-    + (state.selType ? 1 : 0) + ((state.arrivalFrom || state.arrivalTo) ? 1 : 0);
+    + (state.selType ? 1 : 0) + ((state.arrivalFrom || state.arrivalTo) ? 1 : 0)
+    + (state.pick ? 1 : 0);
 }
 
 function updateResultsCount(n) {
@@ -422,6 +421,7 @@ export function renderActiveFilters() {
       : state.priceMin != null ? `от ${fmtPrice(state.priceMin)}` : `до ${fmtPrice(state.priceMax)}`;
     items.push(['price', '', lbl]);
   }
+  if (state.pick) items.push(['pick', '', pickLabel(state.pick)]);
   for (const k of state.quick) items.push(['quick', k, QUICK_LABEL[k] || k]);
 
   if (!items.length) { box.hidden = true; box.innerHTML = ''; return; }
@@ -456,9 +456,7 @@ export function renderAll() {
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
-  renderCheaper();
-  renderRiseStrip();
-  renderArrivals();
+  renderPickLists();
   renderMyFrequent();
   if (state.tab !== 'cats') renderGrid();
 }
@@ -658,55 +656,22 @@ export function renderNewProducts() {
     }).join('') + '</div>';
 }
 
-/* ── «Сегодня дешевле» ──────────────────────────────────────────────────────
- * Приём из китайского JD: полоса «успей» с ценами прямо на главной. Ради неё
- * туда и заходят каждый день — не потому что понадобилось, а посмотреть.
- * У нас она честнее: это не выдуманная акция, а настоящее снижение цены с
- * прошлого захода. Считает сам телефон, сравнивая с ценами, которые он видел
- * в прошлый раз; поэтому у первого посетителя полосы нет — сравнивать не с чем.
- * Видна всем (решение владельца): сотруднику у полки этот вопрос задают чаще
- * всего, а владельцу по ней видно, что новая цена доехала до каталога. */
-const CHEAP_ROWS = 5;
-
-function renderCheaper() {
-  ui.renderCheaper = renderCheaper;      // звать из «что нового» без встречного импорта
-  ui.anyFilter = anyFilterActive;        // полосе «подорожало» нужно то же правило показа
-  const box = $('cheaperStrip');
-  if (!box) return;
-  const show = state.tab === 'catalog'
-    && !state.query && !state.favOnly && !anyFilterActive();
-  const was = state.priceWas || {};
-  const list = show ? state.products.filter((p) => {
-    const w = Number(was[p.id]); const n = Number(p.retail_price);
-    return w > 0 && n > 0 && w > n;
-  }) : [];
-  if (!list.length) { box.hidden = true; box.innerHTML = ''; return; }
-  // сверху то, где выгода больше в рублях: она и решает
-  list.sort((a, b) => (was[b.id] - b.retail_price) - (was[a.id] - a.retail_price));
-  const rows = list.slice(0, CHEAP_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
-      <span class="arr-name">${esc(p.name)}</span>
-      <span class="arr-price">${esc(fmtRetail(p))}
-        <span class="card-was">${esc(fmtPrice(was[p.id]))}</span></span></button>`).join('');
-  box.innerHTML = `<div class="arr-head">
-      <span class="arr-title">Сегодня дешевле</span>
-      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
-    </div>
-    <div class="arr-list">${rows}</div>`;
-  box.hidden = false;
-}
-
-/* ── «Сегодня привезли» ──────────────────────────────────────────────────
- * Покупателю важен один вопрос: «что у вас нового?». Раньше ответ на него
- * лежал в фильтре по дате поступления — то есть нигде. Теперь завоз виден
- * сразу на главной, без единого нажатия.
- * Если сегодня ещё не привозили, показываем последний завоз за неделю и
- * честно называем день: пустой блок «сегодня ничего» никому не нужен, а
- * «привезли в понедельник» — это по-прежнему свежий товар.
- * Только покупателю: у сотрудника на главной своя лента новинок с фото,
- * а завоз он и так видит в заказах. */
+/* ── Подборки «что изменилось» ──────────────────────────────────────────────
+ * Раньше это были три полосы на главном экране: «Сегодня привезли», «Сегодня
+ * дешевле», «Подорожало». Каждая показывала первые пять-шесть строк, и у одной
+ * была кнопка «Показать все», а у двух других — нет. Владелец: «во вкладке
+ * каталога я не хочу, чтобы это там было, хочу в подборе, где уже выдаётся
+ * список с поиском».
+ *
+ * Теперь это три строки во вкладке «Подбор», рядом с категориями: видно
+ * название и сколько товаров. Тап — и тот же каталог показывает ровно эти
+ * товары, с обычным поиском, сортировкой и видом. Никаких «первых шести» и
+ * отдельного экрана под каждую подборку: экран уже есть, это сам каталог.
+ *
+ * Покупателю на главной остаётся однострочная плашка «что нового» — её он и
+ * заходит посмотреть; сами списки живут в подборе. */
 
 const ARR_MAX_DAYS = 7;   // дальше недели «свежим завозом» это уже не назвать
-const ARR_ROWS = 6;       // больше строк — и блок съедает весь первый экран
 
 /* Ответ не меняется, пока не приехал новый каталог, а товаров бывает
  * пятнадцать тысяч: считаем один раз на загрузку данных. */
@@ -725,32 +690,76 @@ function arrivalDay() {
   return best;
 }
 
-function renderArrivals() {
-  const box = $('arrivalStrip');
-  if (!box) return;
-  const show = !state.session && state.tab === 'catalog'
-    && !state.query && !state.favOnly && !anyFilterActive();
-  const day = show ? arrivalDay() : '';
-  const list = day
-    ? state.products.filter((p) => String(p.arrival_at || '').slice(0, 10) === day)
-    : [];
-  // один товар — это не завоз, а случайность в данных: молчим
-  if (list.length < 2) { box.hidden = true; box.innerHTML = ''; return; }
-  list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  const title = day === todayISO() ? 'Сегодня привезли'
-    : day === daysAgoISO(1) ? 'Вчера привезли'
-      : 'Привезли ' + fmtDate(day);
-  const rows = list.slice(0, ARR_ROWS).map((p) => `<button class="arr-row" data-similar="${esc(p.id)}">
-      <span class="arr-name">${esc(p.name)}</span>
-      <span class="arr-price">${esc(fmtRetail(p))}</span></button>`).join('');
-  const rest = list.length - ARR_ROWS;
-  box.innerHTML = `<div class="arr-head">
-      <span class="arr-title">${esc(title)}</span>
-      <span class="arr-when">${list.length} ${plural(list.length, 'товар', 'товара', 'товаров')}</span>
-    </div>
-    <div class="arr-list">${rows}</div>
-    ${rest > 0 ? `<button class="arr-more" data-arr-all="${esc(day)}">Показать все ${list.length} \u203a</button>` : ''}`;
-  box.hidden = false;
+// название завоза словами: «Сегодня привезли», «Вчера привезли», «Привезли 3 октября»
+function arrivalTitle(day) {
+  if (day === todayISO()) return 'Сегодня привезли';
+  if (day === daysAgoISO(1)) return 'Вчера привезли';
+  return 'Привезли ' + fmtDate(day);
+}
+
+/* Товары подборки. Одна функция и для списка на экране, и для счётчика в
+ * строке — иначе строка обещала бы одно, а каталог показывал другое. */
+export function pickList(kind) {
+  if (kind === 'arrived') {
+    const day = arrivalDay();
+    if (!day) return [];
+    const list = state.products.filter((p) => String(p.arrival_at || '').slice(0, 10) === day);
+    // один товар — это не завоз, а случайность в данных
+    return list.length < 2 ? [] : list;
+  }
+  if (kind === 'cheaper') {
+    const was = state.priceWas || {};
+    return state.products.filter((p) => {
+      const w = Number(was[p.id]); const n = Number(p.retail_price);
+      return w > 0 && n > 0 && w > n;
+    });
+  }
+  if (kind === 'risen') {
+    const ids = ui.risenIds ? ui.risenIds() : null;
+    return ids ? state.products.filter((p) => ids.has(p.id)) : [];
+  }
+  return [];
+}
+
+export const PICK_KINDS = ['arrived', 'cheaper', 'risen'];
+
+// подпись подборки — наружу, для плашки активного фильтра
+export function pickLabel(kind) {
+  if (kind === 'arrived') { const d = arrivalDay(); return d ? arrivalTitle(d) : 'Завоз'; }
+  if (kind === 'cheaper') return 'Сегодня дешевле';
+  if (kind === 'risen') return 'Подорожало';
+  return '';
+}
+
+/* Строки подборок во вкладке «Подбор». Пустые не показываем: тыкать в
+ * «Подорожало — 0» обидно, как и в пустую категорию. */
+function renderPickLists() {
+  const box = $('pickLists');
+  if (!box || state.tab !== 'pick') return;
+  const rows = [];
+  for (const kind of PICK_KINDS) {
+    // завоз — покупателю: сотрудник видит поставки в заказах
+    if (kind === 'arrived' && state.session) continue;
+    // подорожание — только вошедшим: это рабочая цифра, не покупательская
+    if (kind === 'risen' && !state.session) continue;
+    const n = pickList(kind).length;
+    if (!n) continue;
+    const on = state.pick === kind ? ' is-on' : '';
+    rows.push(`<button class="ios-row ios-row-link${on}" data-pick="${esc(kind)}">
+      <span class="ios-row-title">${esc(pickLabel(kind))}</span>
+      <span class="ios-row-value">${n} ${plural(n, 'товар', 'товара', 'товаров')}</span></button>`);
+  }
+  box.innerHTML = rows.length
+    ? `<div class="ios-group-title">Что изменилось</div><div class="ios-group">${rows.join('')}</div>`
+    : '';
+}
+
+/* Выбрать подборку и сразу показать её каталогом: список, поиск и сортировка
+ * там уже есть, второй раз их строить незачем. Повторный тап снимает выбор. */
+export function choosePick(kind) {
+  state.pick = state.pick === kind ? '' : kind;
+  state.renderLimit = PAGE_SIZE;
+  if (state.pick) switchTab('catalog'); else renderAll();
 }
 
 // «Недавно смотрели» — горизонтальная лента на главной, когда нет поиска и фильтров
