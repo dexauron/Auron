@@ -9,7 +9,6 @@ import { stockState } from './publish.js';
 import { plural } from './competitors.js';
 import { wolfEmpty } from './mascot.js';
 import { ratingText } from './reviews.js';
-import { renderRiseStrip } from './pricerise.js';
 
 /* ── Отрисовка ────────────────────────────────── */
 
@@ -453,6 +452,7 @@ export function removeFilter(type, val) {
 }
 
 export function renderAll() {
+  ui.renderAll = renderAll;        // перерисовка по готовности отложенных расчётов
   renderQuick(); renderActiveFilters(); syncControls(); saveFilters();
   syncTabs(); renderCatScreen();
   renderNewProducts();
