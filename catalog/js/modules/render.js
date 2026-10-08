@@ -444,6 +444,7 @@ export function removeFilter(type, val) {
     case 'type': state.selType = ''; break;
     case 'arrival': state.arrivalFrom = ''; state.arrivalTo = ''; { const af = $('arrivalFrom'); const at = $('arrivalTo'); if (af) af.value = ''; if (at) at.value = ''; } break;
     case 'price': state.priceMin = null; state.priceMax = null; { const a = $('priceMin'); const b = $('priceMax'); if (a) a.value = ''; if (b) b.value = ''; } break;
+    case 'pick': state.pick = ''; break;
     case 'quick': state.quick = state.quick.filter((x) => x !== val); break;
     case 'all': clearAllFilters(); return;
   }
