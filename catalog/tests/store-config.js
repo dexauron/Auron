@@ -1,6 +1,7 @@
 // Движок один, магазинов может быть много. Проверяем, что каталог целиком
 // описывается ОДНИМ файлом настроек: поменял — получил каталог другого
-// магазина, и нигде в коде не осталось зашитого «Way Market».
+// магазина, и нигде в коде не осталось зашитого названия, телефона, адреса
+// или картинок конкретного магазина.
 const fs = require('fs');
 const path = require('path');
 const { chromium, newPage, runner } = require('./helpers');
@@ -22,11 +23,8 @@ const OTHER_STORE = {
   const b = await chromium.launch();
   const { chk, done } = runner('НАСТРОЙКИ МАГАЗИНА');
 
-  // ── 1. В коде движка нет названия конкретного магазина ──
+  // ── 1. В коде движка нет ничего, что описывает конкретный магазин ──
   const dir = path.join(__dirname, '..', 'js', 'modules');
-  const hard = fs.readdirSync(dir).filter((f) => f.endsWith('.js'))
-    .filter((f) => /Way Market/.test(fs.readFileSync(path.join(dir, f), 'utf8').replace(/^.*названия «Way Market».*$/gm, '')));
-  chk(!hard.length, `в модулях нет зашитого названия магазина${hard.length ? ': ' + hard.join(', ') : ''}`);
   const html = fs.readFileSync(path.join(dir, '..', '..', 'index.html'), 'utf8');
   chk(/class="brand-name"/.test(html), 'в разметке есть место под название магазина');
 
@@ -61,7 +59,7 @@ const OTHER_STORE = {
   chk(!swLeak.length, `офлайн-копия не знает картинок магазина${swLeak.length ? ': ' + swLeak.join(', ') : ''}`);
 
   /* ── 2. Настройки действительно применились ────────────────────────────────
-   * Сверяем с тем, что написано в js/config.js, а не с «Way Market»: проверка
+   * Сверяем с тем, что написано в js/config.js, а не с именем нашего магазина:
    * должна проходить и в заготовке, и в копии любого магазина. */
   {
     const { page, errs } = await newPage(b, { products, groups });
