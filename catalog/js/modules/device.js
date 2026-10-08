@@ -6,7 +6,7 @@ import { todayISO } from './catalog.js';
 import { THEME_KEY, applyTheme, countActiveFilters, favorites, renderAll } from './render.js';
 import { GH_TOKEN_KEY, SV_AUTH_KEY, ghToken } from './publish.js';
 import { plural } from './competitors.js';
-import { mascotOn } from './mascot.js';
+import { mascotName, mascotOn } from './mascot.js';
 
 /* ── Настройки этого устройства ─────────────────────
  * Каталог живёт на десятках телефонов: у кассы, у сотрудников зала, у
@@ -101,7 +101,7 @@ function deviceMemory() {
   const rows = [
     { name: 'Вход', val: state.session ? (state.isAdmin ? 'владелец' : 'сотрудник') : 'не выполнен' },
     { name: 'Экономный режим', val: isLowPower() ? 'включён — телефон послабее, размытие выключено' : 'не нужен' },
-    { name: 'Волк-помощник', val: mascotOn() ? 'включён' : 'выключен' },
+    { name: mascotName(), val: mascotOn() ? 'включён' : 'выключен' },
     { name: 'Вид списка', val: viewName },
     { name: 'Открытый раздел', val: tabName },
     { name: 'Тема', val: themeRaw === 'dark' ? 'тёмная' : themeRaw === 'light' ? 'светлая' : 'как в телефоне' },

@@ -17,7 +17,7 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
 
 (async () => {
   const b = await chromium.launch();
-  const { chk, done } = runner('ПОКУПАТЕЛЬ БЕЗ ПАРОЛЯ');
+  const { chk, skip, done } = runner('ПОКУПАТЕЛЬ БЕЗ ПАРОЛЯ');
   const { page, errs } = await newPage(b, { products, groups });
   await page.waitForTimeout(400);
 
@@ -163,27 +163,39 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
     };
   });
   chk(store.open, 'вкладка «Магазин» открывает свой экран');
-  chk(/wa\.me\/79640616601/.test(store.wa), `есть кнопка WhatsApp на номер магазина (${store.wa})`);
-  chk(/Грозный/.test(store.body) && /Круглосуточно/.test(store.body),
-    `видны адрес и часы работы (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
-  chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
-  chk(/^tel:\+79640616601$/.test(store.tel), `и кнопка позвонить (${store.tel})`);
+  /* Сверяем с настройками магазина, а не с нашим адресом: каталог отдаётся как
+     заготовка под любой магазин, и проверка не должна знать, чей он. */
+  const cfg = await page.evaluate(() => window.CATALOG_CONFIG);
+  const digits = (x) => String(x).replace(/[^+\d]/g, '');
+  if (cfg.STORE_WHATSAPP) chk(store.wa.includes(cfg.STORE_WHATSAPP), `есть кнопка WhatsApp на номер из настроек (${store.wa})`);
+  else skip('в настройках магазина нет номера WhatsApp — кнопке неоткуда взяться');
+  if (cfg.STORE_ADDRESS && cfg.STORE_HOURS) {
+    chk(store.body.includes(cfg.STORE_ADDRESS) && store.body.includes(cfg.STORE_HOURS),
+      `видны адрес и часы работы из настроек (${(store.body.match(/Адрес[^·]{0,60}/) || [''])[0]})`);
+    chk(/yandex\.ru\/maps|maps\./.test(store.map), `адрес открывает карту с маршрутом (${store.map.slice(0, 60)})`);
+  } else skip('в настройках магазина нет адреса или часов работы');
+  if (cfg.STORE_PHONE) chk(digits(store.tel) === digits(cfg.STORE_PHONE), `и кнопка позвонить по номеру из настроек (${store.tel})`);
+  else skip('в настройках магазина нет телефона для звонка');
   chk(/Молоко/.test(store.body) && /Магнит/.test(store.body), 'подсказка о цене видна в списке');
-  chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
+  if (!cfg.STORE_WHATSAPP) skip('подсказки о ценах уходят в WhatsApp — номер в настройках не задан');
+  else chk(store.canSend, 'кнопка «Отправить подсказки в WhatsApp» доступна');
 
-  const sent = await page.evaluate(async () => {
-    let opened = '';
-    const real = window.open;
-    window.open = (u) => { opened = u; return { closed: false }; };   // настоящий браузер возвращает окно; вернём null — приложение решит, что всплывающие запрещены, и уйдёт по адресу само
-    document.getElementById('storeSend').click();
-    await new Promise((r) => setTimeout(r, 300));
-    window.open = real;
-    return { opened, left: JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length };
-  });
-  chk(/wa\.me\/79640616601\?text=/.test(sent.opened), 'отправка открывает WhatsApp с готовым текстом');
-  chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
-    `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
-  chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
+  if (!cfg.STORE_WHATSAPP) skip('отправку подсказок проверять нечем — номера в настройках нет');
+  else {
+    const sent = await page.evaluate(async () => {
+      let opened = '';
+      const real = window.open;
+      window.open = (u) => { opened = u; return { closed: false }; };
+      document.getElementById('storeSend').click();
+      await new Promise((r) => setTimeout(r, 300));
+      window.open = real;
+      return { opened, left: JSON.parse(localStorage.getItem('wm_guest_prices_v1') || '[]').length };
+    });
+    chk(sent.opened.includes(`wa.me/${cfg.STORE_WHATSAPP}?text=`), 'отправка открывает WhatsApp с готовым текстом');
+    chk(decodeURIComponent(sent.opened).includes('Молоко') && decodeURIComponent(sent.opened).includes('Магнит'),
+      `в сообщении перечислены подсказки (${decodeURIComponent(sent.opened).slice(0, 80)}…)`);
+    chk(sent.left === 0, `отправленное больше не копится (${sent.left})`);
+  }
 
   // ── 5. Список покупок: сколько выйдет ──
   const shop = await page.evaluate(async () => {
@@ -248,7 +260,8 @@ const groups = [{ id: 'g1', name: 'Молочные' }];
   });
   chk(ask.shown, 'ничего не нашлось — покупателю предложено спросить в магазине');
   chk(/Милка/.test(ask.text), `запрос подставлен в вопрос (${ask.text})`);
-  chk(/wa\.me\/79640616601/.test(ask.opened) && /Милка/.test(decodeURIComponent(ask.opened)),
+  if (!cfg.STORE_WHATSAPP) skip('вопрос уходит в WhatsApp — номера в настройках нет');
+  else chk(ask.opened.includes(`wa.me/${cfg.STORE_WHATSAPP}`) && /Милка/.test(decodeURIComponent(ask.opened)),
     'вопрос уходит владельцу в WhatsApp готовым текстом');
 
   // ── 7. «Сообщить, когда появится» и «что подешевело» ──

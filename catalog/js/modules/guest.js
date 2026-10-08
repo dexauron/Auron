@@ -57,9 +57,10 @@ function renderStore() {
   const hours = CFG.STORE_HOURS || '';
   const map = CFG.STORE_MAP || (addr ? 'https://yandex.ru/maps/?text=' + encodeURIComponent(addr) : '');
   const upd = updatedText();
-  /* Обещание магазина. Для Грозного «весь товар халяльный» — не украшение
-     и не реклама, а первое, что человек хочет знать. Сетевые магазины такого
-     не пишут никогда, потому что за всю сеть этого не пообещать. */
+  /* Обещание магазина — одна строка из настроек (STORE_PROMISE). У первого
+     магазина это «весь товар халяльный»: там это не украшение и не реклама, а
+     первое, что человек хочет знать. Сетевые магазины такого не пишут никогда,
+     потому что за всю сеть этого не пообещать. Пусто — строки нет. */
   const promise = CFG.STORE_PROMISE || '';
   const about = (addr || hours) ? `<div class="ios-group">
       ${addr ? `<a class="ios-row ios-row-link" id="storeMap" href="${esc(map)}" target="_blank" rel="noopener">
