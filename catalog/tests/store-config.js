@@ -36,7 +36,8 @@ const OTHER_STORE = {
     const own = await page.evaluate(() => ({
       title: document.title,
       name: (document.querySelector('.brand-name') || {}).textContent,
-      work: (window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
+      work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
+        window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       cat: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
     }));
     chk(/Way Market/.test(own.title) && own.name === 'Way Market', `свой магазин на месте (${own.name})`);
@@ -74,7 +75,8 @@ const OTHER_STORE = {
       sub: (document.querySelector('.brand-sub') || {}).textContent,
       letter: (document.querySelector('.brand-logo-letter') || {}).textContent,
       accent: document.documentElement.style.getPropertyValue('--brand').trim(),
-      work: (window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
+      work: (window.WM_PUBLISH.ghSetToken('t'), window.WM_PUBLISH.applyServerless('pw'),
+        window.WM_PUBLISH._work('x'), window.WM_PUBLISH._workRows().join(' | ')),
       milk: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p1')),
       screw: window.WM_PUBLISH._cat(window.WM_PUBLISH._state().products.find((p) => p.id === 'p2')),
       cards: document.querySelectorAll('.card').length,
