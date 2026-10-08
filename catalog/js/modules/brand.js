@@ -46,12 +46,15 @@ export function applyBrand() {
 
   const logo = document.querySelector('.brand-logo-img');
   if (logo) {
-    if (CFG.LOGO) { logo.src = CFG.LOGO; logo.alt = name; }
+    /* В разметке картинка спрятана и без адреса: иначе до загрузки настроек
+       мигал бы логотип чужого магазина или битый значок. */
+    if (CFG.LOGO) { logo.src = CFG.LOGO; logo.alt = name; logo.hidden = false; }
     else {
       // логотипа нет — рисуем кружок с первой буквой названия
       const dot = document.createElement('div');
       dot.className = 'brand-logo-img brand-logo-letter';
       dot.textContent = name.trim().charAt(0).toUpperCase();
+      dot.hidden = false;
       logo.replaceWith(dot);
     }
   }
