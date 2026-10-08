@@ -1135,7 +1135,10 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
    Групп из 1С больше двухсот — списком их не просмотреть. Разложенные по
    13 понятным категориям, они просматриваются в два тапа. */
 .cat-back {
-  display: block; margin-bottom: 10px; padding: 8px 2px;
+  /* Высота под палец: кнопка складывалась из отступов и высоты строки и выходила
+     33 px — мельче, чем нужно, чтобы попасть на ходу одной рукой. */
+  display: inline-flex; align-items: center; min-height: 44px;
+  margin-bottom: 6px; padding: 8px 2px;
   border: 0; background: none; color: var(--brand-ink);
   font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
 }
