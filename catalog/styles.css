@@ -210,9 +210,7 @@ body {
 .chip.chip-quick.warn.active { background: var(--warn); border-color: var(--warn); color: #fff; }
 
 /* ── Окно фильтров в стиле магазина: шапка, секции, чекбоксы ── */
-.filter-head { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 14px 12px; background: var(--bg); }
 /* крупные жирные заголовки секций (Категории, Сортировка, Цена…) */
-.filter-section-title, .filter-label { font-size: 18px; font-weight: 800; color: var(--text); margin: 22px 0 12px; letter-spacing: -.01em; }
 /* список-чекбоксы */
 /* iOS-сегменты: единый трек, выбранный сегмент — «приподнятая» карточка */
 .seg {
@@ -990,11 +988,8 @@ body { -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; 
 .publish-help-list li { margin-bottom: 4px; }
 
 /* «Только избранное» в фильтре */
-.filter-fav { display: flex; align-items: center; gap: 10px; padding: 10px 4px 14px; font-size: 15px; font-weight: 600; cursor: pointer; }
 
 /* Дерево категорий → подкатегорий в фильтре */
-.tree-caret { flex: 0 0 auto; width: 44px; height: 44px; margin-left: -7px; border: none; background: transparent; color: var(--text-2); font-size: 13px; cursor: pointer; transition: transform .15s; display: flex; align-items: center; justify-content: center; }
-.tree-caret.open { transform: rotate(90deg); color: var(--brand-ink); }
 
 /* Фильтр цен других магазинов внутри карточки товара */
 .comp-filter { display: flex; flex-direction: column; gap: 8px; margin: 0 0 10px; }
@@ -1112,7 +1107,6 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 /* ═══ Настройки устройства ═════════════════════════
    Каталог живёт на десятках телефонов, и настройки у каждого свои. Экран
    делает это видимым: что запомнено и как сбросить. */
-.dev-list { margin: 4px 0 14px; }
 
 /* ═══ Категории: второй уровень и заголовки в поиске ═══
    Групп из 1С больше двухсот — списком их не просмотреть. Разложенные по
@@ -1198,7 +1192,7 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 
 /* Разделители тоньше волоса и без рамок вокруг каждой строки: в iOS строки
    списка разделяет линия, а рамка идёт вокруг ГРУППЫ строк */
-.field-row, .dev-row, .calc-row, .grp-row, .comp-row, .price-hist-row {
+.field-row, .calc-row, .grp-row, .comp-row, .price-hist-row {
   border-width: .5px;
 }
 .grp-row { border: 0; border-bottom: .5px solid var(--border); border-radius: 0; margin-bottom: 0; background: var(--surface); }
@@ -1224,7 +1218,7 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .sheet-handle { width: 36px; height: 5px; border-radius: 3px; }
 
 /* Значения выравниваем табличными цифрами — числа не «пляшут» */
-.card-price, .field-hero-val, .price-val, .dev-val, .grp-count { font-variant-numeric: tabular-nums; }
+.card-price, .field-hero-val, .price-val, .grp-count { font-variant-numeric: tabular-nums; }
 
 /* ═══ Системный вид iOS: сгруппированные списки, переключатели, шапки ════════
    Раньше окна были набором отдельных кнопок и подписей — на телефоне это
@@ -1353,7 +1347,6 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 
 /* Раскрывающая стрелка в списке категорий: рисуем фигурой, а не знаком из
    шрифта — символ «▸» на разных телефонах разного размера и веса. */
-.tree-caret { font-size: 0; }
 
 /* Коды товара в карточке — сгруппированным списком: это главное, ради чего
    сотрудник открывает товар, и выглядеть должно как системный список. */
@@ -1385,7 +1378,7 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .copy-btn { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .ios-nav-btn { min-height: 44px; }
 .seg button { min-height: 36px; }
-.card-code, .code-chip { min-height: 34px; display: inline-flex; align-items: center; }
+.card-code { min-height: 34px; display: inline-flex; align-items: center; }
 /* код товара прямо в ленте «Мои частые» — за ним сотрудник туда и идёт */
 .similar-code { display: inline-block; margin-top: 2px; font-weight: 700; font-size: 15px;
   color: var(--brand-ink); font-variant-numeric: tabular-nums; }
