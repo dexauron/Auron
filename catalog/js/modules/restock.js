@@ -79,12 +79,8 @@ export function clearRestock() {
   renderRestock();
 }
 
-// Счётчик в меню: сколько позиций ждёт заказа, видно не открывая список
+// Счёт ведёт вкладка «Работа» — ей и говорим, что список изменился
 export function renderRestockBadge() {
-  const el = $('menuRestockCount');
-  if (!el) { if (ui.renderWorkBadge) ui.renderWorkBadge(); return; }
-  const n = restockCount();
-  el.textContent = n ? String(n) : '';
   if (ui.renderWorkBadge) ui.renderWorkBadge();
 }
 
