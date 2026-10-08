@@ -52,7 +52,7 @@ function fakeGithub() {
       // Путь берём по куску «/data/…», а не по номеру папки: в адресе raw
       // название ветки само содержит косую черту и сбивает счёт.
       const serve = (r, q) => {
-        const key = 'catalog/data/' + q.url().split('/data/')[1].split('?')[0];
+        const key = DP + '/' + q.url().split('/data/')[1].split('?')[0];
         return fs.has(key)
           ? r.fulfill({ status: 200, contentType: 'application/json', body: fs.get(key) })
           : r.fulfill({ status: 404, body: 'no' });
@@ -203,7 +203,7 @@ function fakeGithub() {
   chk(newOwner === N, `новый пароль владельца открывает каталог (${newOwner} товаров)`);
 
   // ── 8. В открытом файле ключей нет ни пароля, ни данных ──
-  const keysFile = gh.fs.get('catalog/data/keys.json') || '';
+  const keysFile = gh.fs.get(DP + '/keys.json') || '';
   chk(!/ownerpw|staffpw|другойпароль|новыйпароль/.test(keysFile) && keysFile.length < 2000,
     `конвертики с ключом ничего не выдают (${keysFile.length} байт, паролей внутри нет)`);
 
@@ -213,11 +213,11 @@ function fakeGithub() {
      выглядела успешной, а покупатели не могли сканировать. Теперь в описи
      стоит номер версии, и приложение владельца само просит опубликовать
      заново. Проверяем и номер, и то, ради чего он появился, — штрихкоды. */
-  const idxRaw = gh.fs.get('catalog/data/index.json') || '{}';
+  const idxRaw = gh.fs.get(`${DP}/index.json`) || '{}';
   const idx = JSON.parse(idxRaw);
   const wantV = await page.evaluate(() => window.WM_PUBLISH._showcaseV);
   chk(idx.app === wantV, `в описи витрины стоит её версия (app=${idx.app}, ожидали ${wantV})`);
-  const shopPart = JSON.parse(gh.fs.get('catalog/data/p/00.json') || '[]');
+  const shopPart = JSON.parse(gh.fs.get(`${DP}/p/00.json`) || '[]');
   chk(shopPart.length > 0 && shopPart.every((p) => Array.isArray(p.barcodes) && p.barcodes.length),
     `штрихкоды покупателю уехали (${shopPart.filter((p) => (p.barcodes || []).length).length} из ${shopPart.length})`);
 
@@ -234,21 +234,21 @@ function fakeGithub() {
   chk(fresh.hidden, 'свежая витрина владельца не тревожит');
   // подменяем опись на такую, какой её собирала версия без номера
   const oldIdx = JSON.parse(idxRaw); delete oldIdx.app;
-  gh.fs.set('catalog/data/index.json', JSON.stringify(oldIdx));
+  gh.fs.set(`${DP}/index.json`, JSON.stringify(oldIdx));
   const stale = await bannerAfterCheck();
   chk(!stale.hidden && /опубликовать заново/.test(stale.text),
     `про старую витрину владельцу сказано словами (${stale.text.slice(0, 40)}…)`);
-  gh.fs.set('catalog/data/index.json', idxRaw);
+  gh.fs.set(`${DP}/index.json`, idxRaw);
 
   // ── 9. Старый цельный файл всё ещё читается ──
-  ['catalog/data/keys.json', 'catalog/data/catalog.enc'].forEach((f) => gh.fs.delete(f));
+  [`${DP}/keys.json`, `${DP}/catalog.enc`].forEach((f) => gh.fs.delete(f));
   const legacy = await page.evaluate(async () => {
     const P = window.WM_PUBLISH;
     const old = await P.encryptJSON({ v: 1, products: [{ id: 'x1', name: 'Старый товар' }], groups: [] }, 'oldpw');
     window.__legacy = old;
     return old.length > 0;
   });
-  gh.fs.set('catalog/data/secret-catalog.enc', await page.evaluate(() => window.__legacy));
+  gh.fs.set(DP + '/secret-catalog.enc', await page.evaluate(() => window.__legacy));
   const readOld = await page.evaluate(async () => {
     const P = window.WM_PUBLISH, s = P._state();
     s.products = [];
