@@ -85,6 +85,14 @@
   <main class="content">
     <div class="recent-strip" id="myStrip" hidden></div>
     <div class="recent-strip" id="newStrip" hidden></div>
+    <!-- Поиск по категориям и группам. Живёт ОТДЕЛЬНО от списка ниже: если
+         держать поле внутри перерисовываемой части, оно теряет курсор на каждой
+         набранной букве. -->
+    <div class="cat-find" id="catFindWrap" hidden>
+      <input type="search" id="catFind" class="input" placeholder="Найти категорию или группу…"
+             autocomplete="off" aria-label="Найти категорию или группу">
+      <button class="cat-find-x" id="catFindClear" type="button" aria-label="Очистить" hidden></button>
+    </div>
     <div class="cat-screen" id="catScreen" hidden></div>
     <!-- «Подбор»: одно место, где человек выбирает, что показать.
          Раньше это жило в трёх местах сразу — вкладка «Категории», окно

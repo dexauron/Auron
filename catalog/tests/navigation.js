@@ -112,13 +112,24 @@ const groups = [
   chk(inside.rows.some((r) => /Молочные продукты/.test(r)), 'внутри категории видны настоящие группы из 1С');
   chk(inside.rows.some((r) => /Показать все/.test(r)), 'есть «Показать все» — вся категория целиком');
 
-  // тап по группе ведёт в каталог с этой группой
+  /* Тап по группе ОТМЕЧАЕТ её и остаётся на «Подборе»: так можно отметить
+     вторую и третью (см. tests/pick-multi.js). В каталог уводит кнопка внизу,
+     и на ней написано, сколько товаров уже набралось. */
   await page.click('.grp-row[data-grp="g1"]'); await page.waitForTimeout(600);
+  const marked = await page.evaluate(() => ({
+    tab: [...document.querySelectorAll('.tabbar .tab')].find((t) => t.classList.contains('active')).dataset.tab,
+    picked: window.WM_PUBLISH._state().selGroups,
+    btn: document.getElementById('filterApply').textContent,
+  }));
+  chk(marked.tab === 'pick' && marked.picked.join(',') === 'g1',
+    `тап отмечает группу и оставляет на «Подборе» (${marked.picked.join(',')})`);
+  chk(/Показать 2 товара/.test(marked.btn), `на кнопке видно, сколько набралось (${marked.btn})`);
+  await page.click('#filterApply'); await page.waitForTimeout(600);
   const after = await page.evaluate(() => ({
     tab: [...document.querySelectorAll('.tabbar .tab')].find((t) => t.classList.contains('active')).dataset.tab,
     names: [...document.querySelectorAll('#productGrid .card')].map((c) => c.innerText.replace(/\s+/g, ' ')),
   }));
-  chk(after.tab === 'catalog', 'после выбора группы открывается «Каталог»');
+  chk(after.tab === 'catalog', 'кнопка внизу открывает «Каталог»');
   chk(after.names.length === 2 && after.names.every((n) => /Молоко|Кефир/.test(n)),
     `показаны только товары группы (${after.names.length}: ${after.names.map((n) => n.slice(0, 18)).join(', ')})`);
 
