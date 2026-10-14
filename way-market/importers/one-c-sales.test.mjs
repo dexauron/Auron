@@ -39,6 +39,15 @@ test('missing cost and partial future period block confirmed gross profit', () =
   assert.equal(previewSalesImport(r, sha).canApply, false);
 });
 
+test('complete rows in an ongoing month may be staged as provisional snapshot', () => {
+  const copy = rows.map(r => [...r]); copy[3][2] = 'Период: 01.10.2026 - 31.10.2026';
+  const r = parseSalesRows(copy, opts);
+  assert.equal(r.status, 'provisional');
+  assert.equal(r.totals.grossProfitKopecks, 4_000);
+  assert.deepEqual(r.issues.map(x => x.reason), ['period_not_closed']);
+  assert.equal(previewSalesImport(r, sha).canApply, true);
+});
+
 test('wrong report, malformed monetary value and manipulated footer are rejected', () => {
   assert.throws(() => parseSalesRows([['Прайс-лист']], opts), /supported 1C Sales/);
   const copy = rows.map(r => [...r]); copy[8][2] = '50.001'; copy[9][2] = 999;
