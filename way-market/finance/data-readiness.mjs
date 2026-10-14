@@ -44,7 +44,8 @@ export function assessMetric(metricId, evidence, { periodStart, periodEnd, scope
   const needed = requirements.flatMap(field => {
     const record = evidence[field];
     const aligned = record?.periodStart === periodStart && record?.periodEnd === periodEnd && record?.scopeId === scopeId;
-    if (record?.status === 'verified' && record.coverageComplete === true && record.source && aligned) return [];
+    const validCount = field !== 'receipts' || (Number.isSafeInteger(record?.count) && record.count >= 0);
+    if (record?.status === 'verified' && record.coverageComplete === true && record.source && aligned && validCount) return [];
     return [{ field, label: DATA_FIELDS[field].label, action: DATA_FIELDS[field].action,
       reason: !record ? 'missing' : !aligned ? 'wrong_scope_or_period' : 'unverified_or_incomplete' }];
   });
