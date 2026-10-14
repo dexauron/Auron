@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#153829">
+  <title>Way Market — покупательский сценарий</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#18362b;background:#f4f3ed}
+    *{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button{cursor:pointer}
+    .shell{max-width:1060px;margin:auto;padding:24px 20px 120px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:24px}
+    .brand{font-weight:850;letter-spacing:-.045em;font-size:26px}.brand span{color:#b37a34}
+    .eyebrow{font-size:11px;font-weight:750;letter-spacing:.14em;text-transform:uppercase;color:#8d7045}
+    .hero{border-radius:30px;padding:32px;background:#153829;color:white;display:grid;grid-template-columns:1.3fr .7fr;gap:16px;box-shadow:0 18px 45px #15382920}
+    .hero h1{font-size:clamp(28px,5vw,48px);line-height:1.05;letter-spacing:-.055em;margin:10px 0}.hero p{color:#d6e1d8;max-width:520px;line-height:1.55}
+    .hero-art{display:grid;place-items:center;font-size:88px;background:radial-gradient(circle at 50% 46%,#65876c,#2d5640 65%,transparent 68%);min-height:180px}
+    .notice{border:1px solid #dedbd0;border-radius:16px;padding:11px 15px;background:#fffdf8;color:#6a685c;font-size:13px;margin:18px 0}
+    .tools{display:flex;gap:10px;margin:24px 0 18px}.tools input{flex:1;min-width:0;border:1px solid #d6d9cd;border-radius:15px;padding:15px 17px;background:white;outline-color:#4b815d}
+    .chips{display:flex;gap:8px;overflow:auto;padding:2px 0 18px}.chip{white-space:nowrap;border:1px solid #d7ddd4;border-radius:99px;padding:10px 15px;background:white;color:#234532}
+    .chip.active{background:#1c5037;border-color:#1c5037;color:white}
+    .section-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin:10px 0 14px}.section-head h2{font-size:24px;letter-spacing:-.04em;margin:0}.section-head small{color:#777d74}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+    .card{border:1px solid #e4e6dc;background:white;border-radius:22px;overflow:hidden;box-shadow:0 7px 22px #17342108;display:flex;flex-direction:column}
+    .picture{height:164px;background:linear-gradient(145deg,#f0eee3,#e0e9dc);display:grid;place-items:center;font-size:68px;position:relative}
+    .picture em{position:absolute;top:11px;left:11px;background:#fffef6;border-radius:99px;padding:5px 9px;font-size:11px;font-style:normal;font-weight:700;color:#2b5437}
+    .body{padding:16px;display:flex;flex:1;flex-direction:column}.body h3{font-size:17px;line-height:1.3;letter-spacing:-.02em;margin:0 0 8px}.body p{font-size:12px;color:#737b71;margin:0 0 14px}.meta{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:auto}
+    .price{font-weight:800;font-size:20px}.add{border:0;background:#225e3f;color:white;border-radius:13px;padding:10px 13px;font-weight:700}.add:focus-visible,.chip:focus-visible,.action:focus-visible{outline:3px solid #bf924e;outline-offset:2px}
+    .cart{position:fixed;bottom:0;left:0;right:0;background:#fff;box-shadow:0 -10px 35px #183c2222;border-top:1px solid #e7e9df;z-index:3}
+    .cart-inner{max-width:1060px;margin:auto;padding:12px 20px;display:flex;align-items:center;gap:10px;justify-content:space-between}
+    .cart-title strong{display:block}.cart-title small{color:#68776b}.action{background:#1c5037;color:white;border:0;border-radius:14px;padding:13px 18px;font-weight:750}
+    .overlay{position:fixed;inset:0;background:#081b10aa;display:grid;place-items:end center;z-index:5;padding:12px}.overlay[hidden]{display:none}
+    .panel{background:#fff;border-radius:24px 24px 16px 16px;width:min(560px,100%);max-height:90vh;overflow:auto;padding:24px}.panel h2{margin:0 0 6px}.hint{font-size:13px;color:#65736a;line-height:1.5}
+    .row{display:flex;align-items:center;gap:8px;border-bottom:1px solid #ecede8;padding:13px 0}.row label{flex:1}.qty{width:56px;text-align:center;border:1px solid #d9dfd5;border-radius:10px;padding:7px}
+    .choice{display:flex;gap:8px;margin:18px 0}.choice label{flex:1;display:flex;gap:7px;padding:12px;border:1px solid #dce1da;border-radius:12px}
+    .panel-actions{display:flex;gap:8px;justify-content:space-between;margin-top:20px}.secondary{border:1px solid #dce1da;background:#fff;border-radius:12px;padding:12px 16px}
+    .empty{padding:30px;border:1px dashed #cdd8cd;border-radius:16px;text-align:center;color:#66756a}
+    @media(max-width:580px){.shell{padding:16px 14px 110px}.hero{grid-template-columns:1fr;padding:25px}.hero-art{display:none}.cart-inner{padding:11px 14px}.brand{font-size:23px}.section-head h2{font-size:21px}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header><div class="brand">WAY <span>MARKET</span></div><div class="eyebrow">Каталог для покупателей</div></header>
+    <section class="hero"><div><div class="eyebrow" style="color:#d8bd83">Удобно выбирать</div><h1>Всё нужное<br>в одном списке</h1><p>Найдите товары, составьте список для магазина или отправьте заявку в WhatsApp. Наличие и итоговую цену подтвердит сотрудник.</p></div><div class="hero-art" aria-hidden="true">🛒</div></section>
+    <div class="notice"><strong>Демонстрация на вымышленных товарах.</strong> Изображения ниже — временные обозначения для проверки сценария; фотографии из каталога Auron будут подключены при переносе. Заказы и платежи здесь не проводятся.</div>
+    <div class="tools"><input id="search" type="search" aria-label="Найти товар" placeholder="Найти товар…" autocomplete="off"></div>
+    <div class="chips" id="filters" aria-label="Категории"></div>
+    <div class="section-head"><h2 id="title">Часто покупают</h2><small id="freshness">Обновлено: тестовые данные</small></div>
+    <main class="grid" id="products"></main>
+  </div>
+  <div class="cart"><div class="cart-inner"><div class="cart-title"><strong id="cartCount">Список пуст</strong><small id="cartTotal">Добавьте товары</small></div><button class="action" id="openCart">Открыть список</button></div></div>
+  <div class="overlay" id="overlay" hidden><section class="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle"><h2 id="panelTitle">Список покупок</h2><p class="hint">Можно пользоваться им в магазине или подготовить сообщение для WhatsApp. Отправку нужно подтвердить в самом WhatsApp.</p><div id="cartRows"></div><div class="choice"><label><input type="radio" name="method" value="Самовывоз" checked> Самовывоз</label><label><input type="radio" name="method" value="Доставка"> Доставка</label></div><div class="panel-actions"><button class="secondary" id="closeCart">Закрыть</button><button class="action" id="sendCart">Подготовить WhatsApp</button></div></section></div>
+  <script>
+    'use strict';
+    // Только фиктивные данные. В боевой версии товары берутся из отдельной публичной модели.
+    const products = [
+      {id:'demo-1',name:'Молоко пастеризованное 1 л',category:'Молочные',price:120,stock:'есть',art:'🥛',popular:true},
+      {id:'demo-2',name:'Хлеб пшеничный',category:'Хлеб',price:65,stock:'мало',art:'🍞',popular:true},
+      {id:'demo-3',name:'Яблоки свежие 1 кг',category:'Овощи и фрукты',price:160,stock:'есть',art:'🍎',popular:true},
+      {id:'demo-4',name:'Чай чёрный 100 г',category:'Бакалея',price:190,stock:'нет',art:'🍵',popular:false},
+      {id:'demo-5',name:'Рис 900 г',category:'Бакалея',price:145,stock:'неизвестно',art:'🍚',popular:false},
+      {id:'demo-6',name:'Бананы 1 кг',category:'Овощи и фрукты',price:175,stock:'есть',art:'🍌',popular:false}
+    ];
+    const byId = new Map(products.map(p=>[p.id,p]));
+    const key='way_market_buyer_demo_cart_v1';
+    let cart={}; try{const saved=JSON.parse(localStorage.getItem(key)||'{}');for(const [id,n] of Object.entries(saved))if(byId.has(id)&&Number.isInteger(n)&&n>0&&n<=99)cart[id]=n}catch{}
+    let filter='Все';const el=id=>document.getElementById(id);const money=n=>new Intl.NumberFormat('ru-RU').format(n)+' ₽';
+    function save(){try{localStorage.setItem(key,JSON.stringify(cart))}catch{}renderCartSummary()}
+    function renderProducts(){
+      const q=el('search').value.trim().toLocaleLowerCase('ru');
+      const shown=products.filter(p=>(filter==='Все'||p.category===filter)&&p.name.toLocaleLowerCase('ru').includes(q));
+      el('title').textContent=filter==='Все'&&!q?'Часто покупают':'Товары';
+      const ordered=filter==='Все'&&!q?shown.sort((a,b)=>Number(b.popular)-Number(a.popular)):shown;
+      el('products').replaceChildren(...ordered.map(p=>{
+        const card=document.createElement('article');card.className='card';
+        const pic=document.createElement('div');pic.className='picture';pic.textContent=p.art;
+        const badge=document.createElement('em');badge.textContent=p.popular?'Часто берут':p.category;pic.append(badge);
+        const body=document.createElement('div');body.className='body';
+        const name=document.createElement('h3');name.textContent=p.name;
+        const note=document.createElement('p');note.textContent='Наличие: '+p.stock+' · данные тестовые';
+        const meta=document.createElement('div');meta.className='meta';
+        const price=document.createElement('span');price.className='price';price.textContent=money(p.price);
+        const btn=document.createElement('button');btn.className='add';btn.textContent='В список';btn.setAttribute('aria-label','Добавить '+p.name+' в список');btn.addEventListener('click',()=>{cart[p.id]=Math.min(99,(cart[p.id]||0)+1);save()});
+        meta.append(price,btn);body.append(name,note,meta);card.append(pic,body);return card
+      }));
+      if(!shown.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='Товары не найдены. Попробуйте другой запрос.';el('products').append(empty)}
+    }
+    function renderFilters(){const categories=['Все',...new Set(products.map(p=>p.category))];el('filters').replaceChildren(...categories.map(c=>{const b=document.createElement('button');b.className='chip'+(c===filter?' active':'');b.textContent=c;b.addEventListener('click',()=>{filter=c;renderFilters();renderProducts()});return b}))}
+    function renderCartSummary(){const count=Object.values(cart).reduce((a,b)=>a+b,0);const total=Object.entries(cart).reduce((a,[id,n])=>a+byId.get(id).price*n,0);el('cartCount').textContent=count?`В списке: ${count}`:'Список пуст';el('cartTotal').textContent=count?'Примерно '+money(total):'Добавьте товары'}
+    function renderRows(){const rows=Object.entries(cart);el('cartRows').replaceChildren(...rows.map(([id,n])=>{const p=byId.get(id),row=document.createElement('div');row.className='row';const label=document.createElement('label');label.textContent=p.name+' · '+money(p.price*n);const qty=document.createElement('input');qty.className='qty';qty.type='number';qty.min='0';qty.max='99';qty.value=n;qty.setAttribute('aria-label','Количество: '+p.name);qty.addEventListener('change',()=>{const x=Number(qty.value);if(!Number.isInteger(x)||x<0||x>99){qty.value=cart[id];return}if(x===0)delete cart[id];else cart[id]=x;save();renderRows()});row.append(label,qty);return row}));if(!rows.length){const empty=document.createElement('p');empty.className='empty';empty.textContent='Список пуст. Добавьте товары из каталога.';el('cartRows').append(empty)}el('sendCart').disabled=!rows.length}
+    function openCart(){renderRows();el('overlay').hidden=false;el('closeCart').focus()}
+    function closeCart(){el('overlay').hidden=true;el('openCart').focus()}
+    function send(){if(!Object.keys(cart).length)return;const method=document.querySelector('input[name="method"]:checked').value;const lines=Object.entries(cart).map(([id,n])=>{const p=byId.get(id);return `• ${p.name} — ${n} × ${p.price} ₽`});const total=Object.entries(cart).reduce((a,[id,n])=>a+byId.get(id).price*n,0);const message=['Здравствуйте! Хочу заказать:','',...lines,'',`Ориентировочная сумма: ${money(total)}`,`Получение: ${method}`,'Пожалуйста, подтвердите наличие, итоговую цену и условия получения.'].join('\n');const url='https://api.whatsapp.com/send?text='+encodeURIComponent(message);window.open(url,'_blank','noopener,noreferrer')}
+    el('search').addEventListener('input',renderProducts);el('openCart').addEventListener('click',openCart);el('closeCart').addEventListener('click',closeCart);el('overlay').addEventListener('click',e=>{if(e.target===el('overlay'))closeCart()});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!el('overlay').hidden)closeCart()});el('sendCart').addEventListener('click',send);renderFilters();renderProducts();renderCartSummary();
+  </script>
+</body>
+</html>
