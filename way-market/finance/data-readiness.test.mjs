@@ -35,3 +35,12 @@ test('cash needs opening balance, not a supplier invoice or reported profit', ()
   assert.deepEqual(r.needed.map(x => x.field), ['openingCash']);
   assert.throws(() => assessMetric('unknown', {}, context), RangeError);
 });
+
+test('average receipt accepts verified aggregate count without individual receipt IDs', () => {
+  const evidence = { sales: verified(), returns: verified('accountant: no returns'), receipts: { ...verified('Z reports'), count: 42 } };
+  assert.equal(assessMetric('average_receipt', evidence, context).status, 'ready');
+  evidence.receipts.count = undefined;
+  assert.deepEqual(assessMetric('average_receipt', evidence, context).needed.map(x => x.field), ['receipts']);
+  evidence.receipts.count = -1;
+  assert.equal(assessMetric('average_receipt', evidence, context).status, 'needs_data');
+});
