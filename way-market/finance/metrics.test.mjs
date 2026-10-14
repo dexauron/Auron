@@ -19,9 +19,23 @@ test('net profit uses sold inventory and expenses for the same period', () => {
   });
   assert.deepEqual(result, {
     netSalesKopecks: 1_900_000, costOfGoodsSoldKopecks: 1_140_000,
-    grossProfitKopecks: 760_000, grossMarginPercent: 40,
+    grossProfitKopecks: 760_000, averageMarkupPercent: 760_000 / 1_140_000 * 100,
+    grossMarginPercent: 40, profitFromSalesKopecks: 460_000,
+    salesProfitabilityPercent: 460_000 / 1_900_000 * 100,
     netProfitKopecks: 400_000, netProfitMarginPercent: 400_000 / 1_900_000 * 100
   });
+});
+
+test('average markup uses total profit divided by total sold cost, not mean of percentages', () => {
+  // SKU A: cost 1, sale 2 (100% markup); SKU B: cost 99, sale 99 (0% markup).
+  const r = calculatePeriodProfit({
+    salesRevenueKopecks: 10_100, salesReturnsKopecks: 0, discountsKopecks: 0,
+    costOfGoodsSoldKopecks: 10_000, returnedGoodsCostKopecks: 0,
+    operatingExpensesKopecks: 0, otherIncomeKopecks: 0,
+    otherExpensesKopecks: 0, taxExpenseKopecks: 0
+  });
+  assert.equal(r.averageMarkupPercent, 1);
+  assert.ok(Math.abs(r.grossMarginPercent - 100 / 10_100 * 100) < 1e-9);
 });
 
 test('unknown costs are rejected; zero denominators do not invent percentages', () => {
@@ -29,10 +43,19 @@ test('unknown costs are rejected; zero denominators do not invent percentages', 
   assert.equal(markupPercent(0, 100), null);
   assert.throws(() => calculatePeriodProfit({salesRevenueKopecks: 0}), /salesReturnsKopecks/);
   assert.throws(() => priceForTargetMargin(100, 10000), RangeError);
-  assert.throws(() => calculatePeriodProfit({
+  assert.throws(() => priceForTargetMargin(0, 3000), RangeError);
+});
+
+test('refunds of past sales can make the current period negative', () => {
+  const result = calculatePeriodProfit({
     salesRevenueKopecks: 0, salesReturnsKopecks: 1, discountsKopecks: 0,
-    costOfGoodsSoldKopecks: 0, returnedGoodsCostKopecks: 0,
+    costOfGoodsSoldKopecks: 0, returnedGoodsCostKopecks: 1,
     operatingExpensesKopecks: 0, otherIncomeKopecks: 0,
     otherExpensesKopecks: 0, taxExpenseKopecks: 0
-  }), RangeError);
+  });
+  assert.equal(result.netSalesKopecks, -1);
+  assert.equal(result.costOfGoodsSoldKopecks, -1);
+  assert.equal(result.grossProfitKopecks, 0);
+  assert.equal(result.grossMarginPercent, null);
+  assert.equal(result.averageMarkupPercent, null);
 });
