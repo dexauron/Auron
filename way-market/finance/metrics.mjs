@@ -30,6 +30,7 @@ export function grossMarginPercent(costKopecks, sellingPriceKopecks) {
 // realised margin is never lower than the requested target.
 export function priceForTargetMargin(costKopecks, targetBasisPoints) {
   const cost = amount(costKopecks, 'costKopecks');
+  if (cost === 0) throw new RangeError('a positive cost is required for a target margin price');
   if (!Number.isInteger(targetBasisPoints) || targetBasisPoints < 0 || targetBasisPoints >= 10000) {
     throw new RangeError('targetBasisPoints must be between 0 and 9999');
   }
@@ -53,15 +54,21 @@ export function calculatePeriodProfit(input) {
   const v = Object.fromEntries(fields.map(k => [k, amount(input[k], k)]));
   const netSales = safe(v.salesRevenueKopecks - v.salesReturnsKopecks - v.discountsKopecks, 'netSales');
   const cogs = safe(v.costOfGoodsSoldKopecks - v.returnedGoodsCostKopecks, 'costOfGoodsSold');
-  if (netSales < 0 || cogs < 0) throw new RangeError('returns exceed sales or returned cost exceeds cost of goods sold');
+  // Returns from older sales may exceed current-period sales. Do not erase a
+  // valid negative period by treating it as an invalid input.
   const grossProfit = safe(netSales - cogs, 'grossProfit');
+  const profitFromSales = safe(grossProfit - v.operatingExpensesKopecks, 'profitFromSales');
   const netProfit = safe(grossProfit - v.operatingExpensesKopecks + v.otherIncomeKopecks - v.otherExpensesKopecks - v.taxExpenseKopecks, 'netProfit');
   return {
     netSalesKopecks: netSales,
     costOfGoodsSoldKopecks: cogs,
     grossProfitKopecks: grossProfit,
-    grossMarginPercent: netSales === 0 ? null : (grossProfit / netSales) * 100,
+    // Ratio of totals, never the unweighted mean of SKU percentages.
+    averageMarkupPercent: cogs <= 0 ? null : (grossProfit / cogs) * 100,
+    grossMarginPercent: netSales <= 0 ? null : (grossProfit / netSales) * 100,
+    profitFromSalesKopecks: profitFromSales,
+    salesProfitabilityPercent: netSales <= 0 ? null : (profitFromSales / netSales) * 100,
     netProfitKopecks: netProfit,
-    netProfitMarginPercent: netSales === 0 ? null : (netProfit / netSales) * 100
+    netProfitMarginPercent: netSales <= 0 ? null : (netProfit / netSales) * 100
   };
 }
