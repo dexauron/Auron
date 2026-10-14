@@ -78,12 +78,15 @@ export function parseSalesRows(rows, { scopeId, asOfDate } = {}) {
     if (footer.profit !== footer.sales - footer.cost) issues.push({ row: footer.row, field: 'profit', reason: 'footer_profit_does_not_reconcile' });
   }
   if (periodEnd > asOfDate) issues.push({ field: 'period', reason: 'period_not_closed' });
-  const complete = issues.length === 0;
+  // An ongoing month may be imported as a provisional snapshot. Missing
+  // amounts or a failed reconciliation still block the proposed import.
+  const blocking = issues.some(x => x.reason !== 'period_not_closed');
+  const status = blocking ? 'needs_review' : periodEnd > asOfDate ? 'provisional' : 'validated';
   return {
     kind: 'one_c_sales_sku_month', scopeId, periodStart, periodEnd, asOfDate,
     snapshotKey: JSON.stringify([scopeId, periodStart, periodEnd, 'one_c_sales_sku_month']),
-    lineCount, totals: { salesKopecks, costKopecks, grossProfitKopecks: complete ? salesKopecks - costKopecks : null },
-    status: complete ? 'validated' : 'needs_review', issues
+    lineCount, totals: { salesKopecks, costKopecks, grossProfitKopecks: blocking ? null : salesKopecks - costKopecks },
+    status, issues
   };
 }
 
@@ -94,7 +97,7 @@ export function previewSalesImport(report, checksumSha256, previous = null) {
   if (!/^[a-f0-9]{64}$/i.test(checksumSha256 || '')) throw new TypeError('SHA-256 of original file required');
   if (previous && previous.snapshotKey !== report.snapshotKey) throw new TypeError('Previous snapshot key differs');
   const comparison = previous ? (previous.checksumSha256 === checksumSha256.toLowerCase() ? 'duplicate' : 'revision') : 'new';
-  return { comparison, canApply: report.status === 'validated' && comparison !== 'duplicate',
+  return { comparison, canApply: ['validated', 'provisional'].includes(report.status) && comparison !== 'duplicate',
     snapshotKey: report.snapshotKey, checksumSha256: checksumSha256.toLowerCase(),
     status: report.status, issues: report.issues, totals: report.totals, lineCount: report.lineCount };
 }
