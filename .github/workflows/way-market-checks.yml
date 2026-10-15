@@ -22,5 +22,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Pure calculations, import and mockup navigation
-        run: node --test way-market/finance/*.test.mjs way-market/importers/*.test.mjs way-market/mockups/*.test.cjs
+      - name: Calculations, imports, mockups and local cash app
+        run: node --test way-market/finance/*.test.mjs way-market/importers/*.test.mjs way-market/mockups/*.test.cjs way-market/local-app/*.test.mjs
