@@ -1,0 +1,22 @@
+// Isolated proof on fictional data. No listeners, auth service or remote DB.
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),path=require('node:path');
+const root=path.resolve(process.argv[2]||path.join(__dirname,'../..'));
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const {DatabaseSync}=require('node:sqlite');
+const db=new DatabaseSync(':memory:');
+db.exec(read('server/db.js').match(/db\.exec\(`([\s\S]*?)`\);/)[1]);
+const adapter={prepare:s=>db.prepare(s),transaction:fn=>(...a)=>{db.exec('BEGIN');try{let r=fn(...a);db.exec('COMMIT');return r}catch(e){db.exec('ROLLBACK');throw e}}};
+db.exec("INSERT INTO users(id,google_id)VALUES(1,'fixture-1'),(2,'fixture-2');INSERT INTO orgs(id,user_id,name)VALUES('org-a',1,'A'),('org-b',2,'B');INSERT INTO accounts(id,org_id,name,balance)VALUES('account-a','org-a','cash',1000),('account-b','org-b','cash',1000)");
+const routes=new Map(),app={use(){},listen(){}};for(const m of ['get','post','put','delete','patch'])app[m]=(p,...h)=>routes.set(m+' '+p,h.at(-1));
+const express=()=>app;express.json=()=>{};
+const ctx={require:n=>n==='express'?express:n==='cors'?()=>()=>{}:n==='jsonwebtoken'?{}:n==='./db'?{getDb:()=>adapter}:n==='https'?{}:require(n),process:{env:{}},console:{log(){}},__dirname:path.join(root,'server')};
+vm.runInNewContext(read('server/index.js'),ctx);
+const call=(route,body,uid=1)=>{let res={statusCode:200,status(n){this.statusCode=n;return this},json(v){this.data=v;return this}};routes.get(route)({uid,params:{orgId:'org-a'},body},res);return res};
+const tx={uuid:'fixture-a',date:'2026-10-15',type:'Расход',amount:100,accountId:'account-b'};
+call('post /api/orgs/:orgId/transactions',tx);assert.equal(db.prepare("SELECT balance FROM accounts WHERE id='account-b'").get().balance,900);
+db.prepare("INSERT INTO transactions(id,uuid,org_id,date,type,amount,account_id,comment)VALUES(?,?,?,?,?,?,?,?)").run('tx-b','fixture-secret','org-b','2026-10-15','Доход',100,'account-b','fixture private B');
+const leaked=call('post /api/orgs/:orgId/transactions',{...tx,uuid:'fixture-secret'});assert.equal(leaked.data.id,'tx-b');
+call('post /api/orgs/:orgId/transactions',{...tx,uuid:'negative',accountId:'account-a',amount:-100});assert.equal(db.prepare("SELECT balance FROM accounts WHERE id='account-a'").get().balance,1100);
+const shift={date:'2026-10-15',shiftNum:1,cashier:'fixture',withdrawals:[{amount:100,accountId:'account-a'}]};call('post /api/orgs/:orgId/shifts',shift);call('post /api/orgs/:orgId/shifts',shift);assert.equal(db.prepare('SELECT count(*) n FROM shifts').get().n,2);
+const result={isolated:true,realServicesContacted:false,crossAccountBalanceMutation:true,crossOrgDuplicateResponse:true,negativeExpenseAccepted:true,repeatedShiftCreatesTwo:true};
+(async()=>{let q='[]';const c={localStorage:{getItem:()=>q,setItem:(k,v)=>q=v},navigator:{onLine:true},Date,module:{exports:{}}};vm.runInNewContext(read('app/js/offline-queue.js'),c);let release;const api=c.module.exports;api.enqueue({client_uuid:'a'});let work=api.flush(()=>new Promise(r=>release=r));api.enqueue({client_uuid:'b'});release();await work;assert.equal(api.pendingCount(),0);result.concurrentQueueEntryLost=true;console.log(JSON.stringify(result));db.close()})().catch(e=>{console.error(e);process.exit(1)});

@@ -8,7 +8,8 @@ const rows = [
   ['Класс ABC'], ['Товар А', 2, 130, 100, 30], ['Товар Б', 1, 50, 40, 10],
   ['Итого', 3, 180, 140, 40]
 ];
-const opts = { scopeId: 'test-store', asOfDate: '2026-10-14' };
+const opts = { scopeId: 'test-store', asOfDate: '2026-10-14', taxBasisConfirmation: {
+  sales:'excluding_vat', cost:'excluding_vat', approvedBy:'synthetic-accountant', source:'synthetic-fixture-only' } };
 const sha = 'a'.repeat(64);
 
 test('validated gross sales use sold cost and exclude footer double counting', () => {
@@ -18,7 +19,8 @@ test('validated gross sales use sold cost and exclude footer double counting', (
   assert.deepEqual(result.totals, { salesKopecks: 18_000, costKopecks: 14_000, grossProfitKopecks: 4_000 });
   assert.deepEqual(previewSalesImport(result, sha), {
     comparison: 'new', canApply: true, snapshotKey: result.snapshotKey, checksumSha256: sha,
-    status: 'validated', issues: [], totals: result.totals, lineCount: 2
+    status: 'validated', issues: [], totals: result.totals, lineCount: 2,
+    taxBasisConfirmation: opts.taxBasisConfirmation
   });
 });
 
@@ -56,4 +58,21 @@ test('wrong report, malformed monetary value and manipulated footer are rejected
   assert.ok(r.issues.some(x => x.reason === 'missing_or_invalid'));
   assert.ok(r.issues.some(x => x.reason === 'total_does_not_reconcile'));
   assert.throws(() => previewSalesImport(r, 'not-sha'), /SHA-256/);
+});
+
+test('matching source totals do not confirm an unknown or mixed VAT basis', () => {
+  for (const confirmation of [null, {...opts.taxBasisConfirmation, sales:'including_vat'}, {...opts.taxBasisConfirmation, approvedBy:''}]) {
+    const r = parseSalesRows(rows, {...opts, taxBasisConfirmation:confirmation});
+    assert.equal(r.status, 'needs_review');
+    assert.equal(r.totals.grossProfitKopecks, null);
+    assert.equal(previewSalesImport(r, sha).canApply, false);
+    assert.ok(r.issues.some(x=>x.reason==='tax_basis_not_confirmed'));
+  }
+});
+
+test('unnamed rows with values require review instead of disappearing', () => {
+  const copy=rows.map(r=>[...r]); copy.splice(7,0,['',1,0,0,0]);
+  const r=parseSalesRows(copy,opts);
+  assert.equal(r.status,'needs_review');
+  assert.ok(r.issues.some(x=>x.reason==='missing_product_name'));
 });

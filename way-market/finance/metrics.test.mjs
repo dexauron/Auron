@@ -59,3 +59,11 @@ test('refunds of past sales can make the current period negative', () => {
   assert.equal(result.grossMarginPercent, null);
   assert.equal(result.averageMarkupPercent, null);
 });
+
+test('large offsetting amounts preserve each kopeck and reject out-of-range results', () => {
+  const input = { salesRevenueKopecks: 2, salesReturnsKopecks: 0, discountsKopecks: 0,
+    costOfGoodsSoldKopecks: 0, returnedGoodsCostKopecks: 0, operatingExpensesKopecks: 0,
+    otherIncomeKopecks: Number.MAX_SAFE_INTEGER, otherExpensesKopecks: Number.MAX_SAFE_INTEGER, taxExpenseKopecks: 0 };
+  assert.equal(calculatePeriodProfit(input).netProfitKopecks, 2);
+  assert.throws(() => calculatePeriodProfit({...input, otherExpensesKopecks: 0}), RangeError);
+});

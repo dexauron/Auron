@@ -44,3 +44,10 @@ test('average receipt accepts verified aggregate count without individual receip
   evidence.receipts.count = -1;
   assert.equal(assessMetric('average_receipt', evidence, context).status, 'needs_data');
 });
+
+test('impossible calendar dates and blank sources cannot become ready', () => {
+  assert.throws(() => assessMetric('net_sales', {}, {...context, periodStart:'2026-02-31'}), TypeError);
+  assert.throws(() => assessMetric('net_sales', {}, {...context, periodEnd:'2026-99-99'}), TypeError);
+  assert.equal(assessMetric('net_sales', {sales:verified(' '), returns:verified()}, context).status, 'needs_data');
+  assert.throws(() => assessMetric('net_sales', {}, {...context, scopeId:'  '}), TypeError);
+});

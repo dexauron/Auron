@@ -29,9 +29,9 @@ function isoDate(ru) {
 const valueAt = (row, index) => row?.[index];
 const nonblank = v => v !== undefined && v !== null && String(v).trim() !== '';
 
-export function parseSalesRows(rows, { scopeId, asOfDate } = {}) {
+export function parseSalesRows(rows, { scopeId, asOfDate, taxBasisConfirmation = null } = {}) {
   if (!Array.isArray(rows) || !rows.every(Array.isArray)) throw new TypeError('rows must be an array of cell arrays');
-  if (!scopeId || !/^\d{4}-\d{2}-\d{2}$/.test(asOfDate || '') || !isoDate(asOfDate.slice(8, 10)+'.'+asOfDate.slice(5, 7)+'.'+asOfDate.slice(0, 4))) {
+  if (typeof scopeId !== 'string' || !scopeId.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(asOfDate || '') || !isoDate(asOfDate.slice(8, 10)+'.'+asOfDate.slice(5, 7)+'.'+asOfDate.slice(0, 4))) {
     throw new TypeError('scopeId and a valid asOfDate are required');
   }
   const titleFound = rows.slice(0, 10).some(row => row.some(v => String(v ?? '').trim() === 'Продажи'));
@@ -43,6 +43,13 @@ export function parseSalesRows(rows, { scopeId, asOfDate } = {}) {
   if (!periodStart || !periodEnd || periodStart > periodEnd) throw new TypeError('Invalid report period');
   const index = Object.fromEntries(Object.entries(COLUMNS).map(([key, name]) => [key, rows[headIndex].indexOf(name)]));
   const issues = [];
+  // The report explicitly labels cost "without VAT" but not its sales column.
+  // Reconciliation alone cannot establish a comparable accounting basis.
+  const basisVerified = taxBasisConfirmation?.sales === 'excluding_vat' &&
+    taxBasisConfirmation?.cost === 'excluding_vat' &&
+    typeof taxBasisConfirmation?.approvedBy === 'string' && taxBasisConfirmation.approvedBy.trim() &&
+    typeof taxBasisConfirmation?.source === 'string' && taxBasisConfirmation.source.trim();
+  if (!basisVerified) issues.push({ field: 'taxBasis', reason: 'tax_basis_not_confirmed' });
   let salesKopecks = 0, costKopecks = 0, profitKopecks = 0, lineCount = 0;
   let footer = null;
   for (let i = headIndex + 1; i < rows.length; i++) {
@@ -53,7 +60,12 @@ export function parseSalesRows(rows, { scopeId, asOfDate } = {}) {
       footer = { row: i + 1, sales: money(valueAt(row, index.sales)), cost: money(valueAt(row, index.cost)), profit: money(valueAt(row, index.profit)) };
       continue;
     }
-    if (!name) continue; // e.g. the separate ABC/XYZ heading row
+    if (!name) {
+      if ([index.quantity, index.sales, index.cost, index.profit].some(col => nonblank(valueAt(row, col)))) {
+        issues.push({ row: i + 1, field: 'product', reason: 'missing_product_name' });
+      }
+      continue;
+    }
     if (![index.quantity, index.sales, index.cost, index.profit].some(col => nonblank(valueAt(row, col)))) continue; // section heading
     if (footer) { issues.push({ row: i + 1, field: 'product', reason: 'row_after_footer' }); continue; }
     lineCount++;
@@ -84,6 +96,8 @@ export function parseSalesRows(rows, { scopeId, asOfDate } = {}) {
   const status = blocking ? 'needs_review' : periodEnd > asOfDate ? 'provisional' : 'validated';
   return {
     kind: 'one_c_sales_sku_month', scopeId, periodStart, periodEnd, asOfDate,
+    taxBasisConfirmation: basisVerified ? { sales: 'excluding_vat', cost: 'excluding_vat',
+      approvedBy: taxBasisConfirmation.approvedBy.trim(), source: taxBasisConfirmation.source.trim() } : null,
     snapshotKey: JSON.stringify([scopeId, periodStart, periodEnd, 'one_c_sales_sku_month']),
     lineCount, totals: { salesKopecks, costKopecks, grossProfitKopecks: blocking ? null : salesKopecks - costKopecks },
     status, issues
@@ -99,5 +113,6 @@ export function previewSalesImport(report, checksumSha256, previous = null) {
   const comparison = previous ? (previous.checksumSha256 === checksumSha256.toLowerCase() ? 'duplicate' : 'revision') : 'new';
   return { comparison, canApply: ['validated', 'provisional'].includes(report.status) && comparison !== 'duplicate',
     snapshotKey: report.snapshotKey, checksumSha256: checksumSha256.toLowerCase(),
-    status: report.status, issues: report.issues, totals: report.totals, lineCount: report.lineCount };
+    status: report.status, issues: report.issues, totals: report.totals, lineCount: report.lineCount,
+    taxBasisConfirmation: report.taxBasisConfirmation };
 }

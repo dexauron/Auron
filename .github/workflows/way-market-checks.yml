@@ -1,0 +1,26 @@
+name: Way Market checks
+
+on:
+  push:
+    branches: [way-market/unified-system]
+    paths:
+      - 'way-market/**'
+      - '.github/workflows/way-market-checks.yml'
+  pull_request:
+    paths:
+      - 'way-market/**'
+      - '.github/workflows/way-market-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Pure calculations, import and mockup navigation
+        run: node --test way-market/finance/*.test.mjs way-market/importers/*.test.mjs way-market/mockups/*.test.cjs

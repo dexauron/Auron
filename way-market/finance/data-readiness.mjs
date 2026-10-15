@@ -34,10 +34,16 @@ export const METRIC_REQUIREMENTS = Object.freeze({
 // evidence[field] = { status:'verified', periodStart, periodEnd, scopeId,
 // source, coverageComplete:true }. `status:'unverified'` means present but
 // still requires review. A verified 0 is allowed; a missing value is not 0.
+function isIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const d = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === value;
+}
+
 export function assessMetric(metricId, evidence, { periodStart, periodEnd, scopeId } = {}) {
   const requirements = METRIC_REQUIREMENTS[metricId];
   if (!requirements) throw new RangeError(`Unknown metric: ${metricId}`);
-  if (!periodStart || !periodEnd || !scopeId || periodStart > periodEnd) {
+  if (!isIsoDate(periodStart) || !isIsoDate(periodEnd) || typeof scopeId !== 'string' || !scopeId.trim() || periodStart > periodEnd) {
     throw new TypeError('An explicit valid period and scopeId are required');
   }
   if (!evidence || typeof evidence !== 'object') throw new TypeError('evidence is required');
@@ -45,7 +51,8 @@ export function assessMetric(metricId, evidence, { periodStart, periodEnd, scope
     const record = evidence[field];
     const aligned = record?.periodStart === periodStart && record?.periodEnd === periodEnd && record?.scopeId === scopeId;
     const validCount = field !== 'receipts' || (Number.isSafeInteger(record?.count) && record.count >= 0);
-    if (record?.status === 'verified' && record.coverageComplete === true && record.source && aligned && validCount) return [];
+    const namedSource = typeof record?.source === 'string' && record.source.trim().length > 0;
+    if (record?.status === 'verified' && record.coverageComplete === true && namedSource && aligned && validCount) return [];
     return [{ field, label: DATA_FIELDS[field].label, action: DATA_FIELDS[field].action,
       reason: !record ? 'missing' : !aligned ? 'wrong_scope_or_period' : 'unverified_or_incomplete' }];
   });

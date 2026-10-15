@@ -9,9 +9,12 @@ function amount(value, name) {
   return value;
 }
 
-function safe(value, name) {
-  if (!Number.isSafeInteger(value)) throw new RangeError(`${name} exceeds safe integer range`);
-  return value;
+function exactSum(values, name) {
+  const value = values.reduce((sum, n) => sum + BigInt(n), 0n);
+  if (value > BigInt(Number.MAX_SAFE_INTEGER) || value < BigInt(Number.MIN_SAFE_INTEGER)) {
+    throw new RangeError(`${name} exceeds safe integer range`);
+  }
+  return Number(value);
 }
 
 export function markupPercent(costKopecks, sellingPriceKopecks) {
@@ -52,13 +55,13 @@ export function calculatePeriodProfit(input) {
   ];
   if (!input || typeof input !== 'object') throw new TypeError('input is required');
   const v = Object.fromEntries(fields.map(k => [k, amount(input[k], k)]));
-  const netSales = safe(v.salesRevenueKopecks - v.salesReturnsKopecks - v.discountsKopecks, 'netSales');
-  const cogs = safe(v.costOfGoodsSoldKopecks - v.returnedGoodsCostKopecks, 'costOfGoodsSold');
+  const netSales = exactSum([v.salesRevenueKopecks, -v.salesReturnsKopecks, -v.discountsKopecks], 'netSales');
+  const cogs = exactSum([v.costOfGoodsSoldKopecks, -v.returnedGoodsCostKopecks], 'costOfGoodsSold');
   // Returns from older sales may exceed current-period sales. Do not erase a
   // valid negative period by treating it as an invalid input.
-  const grossProfit = safe(netSales - cogs, 'grossProfit');
-  const profitFromSales = safe(grossProfit - v.operatingExpensesKopecks, 'profitFromSales');
-  const netProfit = safe(grossProfit - v.operatingExpensesKopecks + v.otherIncomeKopecks - v.otherExpensesKopecks - v.taxExpenseKopecks, 'netProfit');
+  const grossProfit = exactSum([netSales, -cogs], 'grossProfit');
+  const profitFromSales = exactSum([grossProfit, -v.operatingExpensesKopecks], 'profitFromSales');
+  const netProfit = exactSum([grossProfit, -v.operatingExpensesKopecks, v.otherIncomeKopecks, -v.otherExpensesKopecks, -v.taxExpenseKopecks], 'netProfit');
   return {
     netSalesKopecks: netSales,
     costOfGoodsSoldKopecks: cogs,
