@@ -45,6 +45,7 @@ export function validateArchive(archive) {
       if([row.author,row.reason].some(v=>v!==v.trim()||/[\x00-\x1f]/.test(v))) fail('неверный автор / причина справочника');
       if(!isDeepStrictEqual(data,JSON.parse(row.data)) || row.payload_hash!==checksum({data,expectedVersion:i,author:row.author,reason:row.reason})) fail('данные / запрос справочника не совпадают');
       for(const key of ['categories','recipients']) if(previous[key].some(old=>!data[key].some(item=>item.id===old.id))) fail('категории/получатели удалены вместо отключения');
+      if(previous.worksheet && !data.worksheet) fail('настройки кассового листа удалены');
       previous=data; ids.add(row.request_id);
       for(const c of data.categories) knownCategories.add(JSON.stringify([c.id,c.name,c.kind]));
     }

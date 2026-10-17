@@ -1,3 +1,4 @@
+import {reconcileExcel, validateExcelSettings} from './worksheet.mjs';
 // Shared browser/server rules. Money is parsed as decimal text, never parseFloat.
 export const FORMULA_VERSION = 'cash-net-v1';
 export class InputError extends Error {}
@@ -32,7 +33,7 @@ export function defaultCatalog() {
   return { categories: [ ['suppliers', 'Поставщикам', 'cash_out'], ['payroll', 'Зарплата и авансы', 'cash_out'], ['lunch', 'Обед', 'cash_out'], ['owner-cash', 'Деньги владельцу', 'cash_out'], ['owner-goods', 'Товар владельцу без оплаты', 'unpaid_goods'] ].map(([id,name,kind]) => ({ id,name,kind,active:true })), recipients: [] };
 }
 export function validateCatalog(raw) {
-  if (!objectKeys(raw, ['categories','recipients']) || !Array.isArray(raw.categories) || raw.categories.length > 200 || !Array.isArray(raw.recipients) || raw.recipients.length > 200) throw new InputError('Справочник: допускается до 200 категорий и получателей');
+  if (!objectKeys(raw, ['categories','recipients',...(raw && Object.hasOwn(raw,'worksheet')?['worksheet']:[])]) || !Array.isArray(raw.categories) || raw.categories.length > 200 || !Array.isArray(raw.recipients) || raw.recipients.length > 200) throw new InputError('Справочник: допускается до 200 категорий и получателей');
   const ids = new Set(), names = new Set();
   const categories = raw.categories.map(c => {
     if (!objectKeys(c, ['id','name','kind','active']) || !Object.hasOwn(CATEGORY_KINDS,c.kind) || typeof c.active !== 'boolean') throw new InputError('Проверьте название и тип категории');
@@ -49,7 +50,7 @@ export function validateCatalog(raw) {
     if(ids.has(result.id) || (result.active && names.has(name))) throw new InputError('Повтор получателя');
     ids.add(result.id); if(result.active) names.add(name); return result;
   });
-  return {categories,recipients};
+  return {categories,recipients,...(raw.worksheet!==undefined?{worksheet:validateExcelSettings(raw.worksheet)}:{})};
 }
 export function reconcileCategories(raw) {
   if (!Array.isArray(raw) || raw.length > 100) throw new InputError('Допускается до 100 записей по категориям');
@@ -132,6 +133,7 @@ export function reconcileNonCash(raw) {
   }));
 }
 export function reconcile(raw) {
+  if(raw && Object.hasOwn(raw,'worksheet')) return reconcileExcel(raw);
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new InputError('Нужны данные смены');
   const date = text(raw.date, 'Дата', 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date) {

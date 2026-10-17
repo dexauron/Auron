@@ -43,6 +43,7 @@ export function openStore(filename, { requireSchema1 = false } = {}) {
         const repeat=db.prepare('SELECT * FROM catalog_revisions WHERE request_id=?').get(payload.requestId);
         if(repeat) {if(repeat.payload_hash!==hash) throw new ConflictError('Запрос справочника уже использован');db.exec('COMMIT');return unpackCatalog(repeat);}
         const previous=catalog();
+        if(previous.data.worksheet && !data.worksheet) throw new InputError('Настройки кассового листа нельзя удалять при изменении категорий');
         if(previous.version!==payload.expectedVersion) throw new ConflictError('Справочник изменён. Откройте актуальную версию');
         for(const key of ['categories','recipients']) if(previous.data[key].some(old=>!data[key].some(item=>item.id===old.id))) throw new InputError('Не удаляйте использованные категории/получателей: отключите их');
         db.prepare('INSERT INTO catalog_revisions VALUES (?,?,?,?,?,?,?)').run(payload.expectedVersion+1,new Date().toISOString(),author,reason,JSON.stringify(data),payload.requestId,hash);

@@ -13,6 +13,10 @@ import { runtimeConfig, verifyStorageChoice } from './config.mjs';
 const root = dirname(fileURLToPath(import.meta.url));
 const assets = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
+  ['/advanced.html', ['public/advanced.html', 'text/html; charset=utf-8']],
+  ['/excel-app.mjs', ['public/excel-app.mjs', 'text/javascript; charset=utf-8']],
+  ['/excel.css', ['public/excel.css', 'text/css; charset=utf-8']],
+  ['/worksheet.mjs', ['worksheet.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['public/app.mjs', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['public/styles.css', 'text/css; charset=utf-8']],
   ['/domain.mjs', ['domain.mjs', 'text/javascript; charset=utf-8']]

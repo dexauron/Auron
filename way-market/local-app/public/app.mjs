@@ -379,7 +379,7 @@ function configRow(kind,p) {
   $(`catalog-${kind}`).append(row);
 }
 function draftCatalog() {
-  return Object.fromEntries(['categories','recipients'].map(kind=>[kind,[...$(`catalog-${kind}`).children].map(row=>({id:row.dataset.id,name:row.querySelector('[data-key=name]').value,...(kind==='categories'?{kind:row.querySelector('[data-key=kind]').value}:{}),active:row.querySelector('[data-key=active]').checked}))]));
+  return {...(catalogState.data.worksheet?{worksheet:catalogState.data.worksheet}:{}),...Object.fromEntries(['categories','recipients'].map(kind=>[kind,[...$(`catalog-${kind}`).children].map(row=>({id:row.dataset.id,name:row.querySelector('[data-key=name]').value,...(kind==='categories'?{kind:row.querySelector('[data-key=kind]').value}:{}),active:row.querySelector('[data-key=active]').checked}))]))};
 }
 function renderCatalog() {
   for(const kind of ['categories','recipients']) {$(`catalog-${kind}`).replaceChildren();catalogState.data[kind].forEach(p=>configRow(kind,p));}
@@ -458,6 +458,7 @@ function reset() {
   $('notice').hidden = true; updateModes(); view('cash'); showFlow(0); preview();
 }
 async function openRecord(record) {
+  if(record.input.worksheet){location.assign('/#record='+record.id);return;}
   if (busy || (dirty && !window.confirm('Открыть сохранённую смену? Несохранённые изменения будут потеряны.'))) return;
   for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   for (const k of fields) form.elements[k].value = record.input[k] ?? '';
@@ -629,3 +630,6 @@ $('check-backup').addEventListener('click', async () => {
 });
 try { ({ token } = await api('/api/session')); $('save').disabled = false; archiveControls(); await loadCatalog(); }
 catch (error) { notice('Нет подключения к локальному сервису. ' + error.message, true); $('save').disabled = true; }
+
+if(/^#record=[a-f0-9-]{36}$/.test(location.hash))openRecord(await api('/api/shifts/'+location.hash.slice(8)));
+else if(['#backup','#catalog'].includes(location.hash))view(location.hash.slice(1));
