@@ -25,6 +25,16 @@ function write(list) {
   try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
 }
 
+/* Сколько единиц в упаковке — из описания фасовок товара. Нужна только для
+   подсказки «это 2 коробки по 12», в расходник уходят штуки. */
+function packSize(p) {
+  for (const u of ((p && p.pack_units) || [])) {
+    const n = Number(u && u.qty);
+    if (n > 1) return n;
+  }
+  return 0;
+}
+
 const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
 const inShop = (id) => read().some((x) => x.id === id);
 
@@ -133,18 +143,28 @@ function renderShop() {
   const rows = list.map((x) => {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
-    const sum = price * (Number(x.qty) || 1);
+    const qty = Number(x.qty) || 1;
+    const sum = price * qty;
+    // «кг» или «шт» прямо у числа: иначе непонятно, две штуки или два килограмма
+    const unit = x.unit || (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
+    /* Подсказка про упаковки: количество ставится в штуках (в них считается и
+       расходник), а сколько это коробок — говорим рядом словами. */
+    const packQty = packSize(p);
+    const packHint = (!x.weighted && packQty > 1 && qty >= packQty)
+      ? `${fmtNum(Math.floor(qty / packQty))} ${plural(Math.floor(qty / packQty), 'упаковка', 'упаковки', 'упаковок')} по ${fmtNum(packQty)}`
+      : '';
     return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
     <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
         <span class="ord-sub">${(Number(x.qty) || 1) > 1
-    ? `${fmtNum(x.qty)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
-    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
+    ? `${fmtNum(x.qty)} ${esc(unit)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
+    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}${
+  packHint ? ' · ' + esc(packHint) : ''}</span></span>
       <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
-        <span class="shop-qty">${fmtNum(x.qty)}</span>
+        <span class="shop-qty">${fmtNum(x.qty)}<span class="shop-unit">${esc(unit)}</span></span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
