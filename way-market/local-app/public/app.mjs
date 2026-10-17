@@ -14,7 +14,7 @@ const fields = ['date', 'register', 'shiftNo', 'cashier', 'author', 'accountant'
 const rub = n => n == null ? 'Не указано' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(n / 100);
 const el = (tag, value, className) => { const n = document.createElement(tag); if (value != null) n.textContent = value; if (className) n.className = className; return n; };
 let token = '', saved = null, pending = null, dirty = false, busy = false;
-let flowIndex = 0, fullForm = false;
+let flowIndex = 0, fullForm = true;
 let flowCards = [];
 let catalogState = {version:0,data:defaultCatalog()}, catalogReady=false, catalogDirty=false, catalogBusy=false, catalogPending=null;
 const flowLabels = ['Смена', 'Наличные', 'Выплаты', 'Терминал', 'Проверка'];
@@ -94,9 +94,13 @@ async function api(path, body) {
   return data;
 }
 function getInput() {
+  syncSheetSources();
   const raw = Object.fromEntries(fields.map(k => [k, form.elements[k].value]));
   raw.zBasisConfirmed = form.elements.zBasisConfirmed.checked;
   raw.nonCash = legacyNonCash ?? { mode: 'aggregate', ...Object.fromEntries(nonCashFields.map(key => [key, form.elements[key].value])), periodConfirmed: form.elements.periodConfirmed.checked };
+  if(!legacyNonCash && form.elements.bankDetailMode?.value==='components')raw.nonCash.breakdown=Object.fromEntries(['card','qr','bluetooth','bio'].map(k=>[k,form.elements[`terminal_${k}`].value]));
+  if(form.elements.reportBasis?.value==='collection')raw.reportTemplate={basis:'collection',amount:form.elements.reportAmount.value,insertion:form.elements.reportInsertion.value};
+  if(form.elements.receiptCount?.value || form.elements.documentCount?.value) raw.counts={receipts:form.elements.receiptCount.value,documents:form.elements.documentCount.value};
   if (form.elements.cashSetupEnabled.checked) raw.cashSetup = {
     ...Object.fromEntries(['additionalCash', 'previousTransfers', 'paymentMode', 'suppliers', 'payroll', 'other'].map(k => [k, form.elements[k].value])),
     independentReports: form.elements.independentReports.checked, factBasisConfirmed: form.elements.factBasisConfirmed.checked
@@ -120,10 +124,12 @@ function preview() {
     $('difference').className = r.receivedDifference < 0 ? 'negative' : r.receivedDifference > 0 ? 'positive' : '';
     $('difference-label').textContent = r.receivedDifference == null ? 'Пересчёт ещё не внесён' : r.receivedDifference === 0 ? 'Суммы совпадают' : 'Предварительное расхождение · требуется проверка';
     $('calc-hint').textContent = r.warnings.length ? r.warnings.join(' ') : r.categoryResult ? `Внесения по категориям: ${rub(r.categoryResult.cashIn)}. Неоплаченные чеки в наличной выручке: ${rub(r.categoryResult.goodsAdjustment)}. Это отдельная корректировка, не выдача денег.` : r.cashSetup ? 'Начало + наличные двух отчётов + внесения − выплаты − предыдущие передачи − размен.' : 'Остаток + наличные по Z + поступления − выплаты − оставлено.';
+    updateSheetReport(r,raw);
   } catch (error) {
     for (const id of ['expected', 'cash-paid', 'claimed-total', 'received-total', 'difference', 'claimed-diff', 'transfer-diff']) $(id).textContent = '—';
     $('calc-hint').textContent = error.message;
     $('difference-label').textContent = 'Данных для расчёта пока недостаточно';
+    if($('sheet-cash-status')){$('sheet-cash-status').textContent=error.message;for(const k of ['sheet-cash-sales','sheet-total-sales','sheet-actual-sales'])$(k).textContent='—';}
   }
 }
 function changed() {
@@ -145,9 +151,14 @@ function stageError(index) {
     for (const name of ['date', 'register', 'shiftNo', 'cashier', 'author']) if (!form.elements[name].value.trim()) return fieldError(name, 'Заполните выделенное поле, чтобы продолжить.');
     const value = form.elements.date.value;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) return fieldError('date', 'Укажите существующую дату смены.');
+    for(const name of ['receiptCount','documentCount'])if(form.elements[name]?.value && !/^\d{1,9}$/.test(form.elements[name].value))return fieldError(name,'Количество чеков / ФД должно быть целым неотрицательным числом.');
   }
   if (index === 1 || index === 2) {
     const expanded = form.elements.cashSetupEnabled.checked;
+    if(index===1 && form.elements.reportBasis?.value==='collection') {
+      for(const name of ['reportAmount','reportInsertion'])try{money(form.elements[name].value);}catch{return fieldError(name,'Укажите сумму отчёта и внесение; неизвестное не равно нулю.');}
+      if(money(form.elements.reportAmount.value)<money(form.elements.reportInsertion.value))return fieldError('reportAmount','Внесение превышает сумму инкассации. Проверьте отчёт.');
+    }
     const names = index === 1 ? ['zCash', 'opening', 'retained', 'otherIn', ...(expanded ? ['additionalCash', 'previousTransfers'] : [])] : expanded ? ['suppliers', 'payroll', 'other'] : [];
     for (const name of names) {
       const control = form.elements[name];
@@ -175,6 +186,10 @@ function stageError(index) {
     }
   }
   if (index === 3) {
+    if(form.elements.bankDetailMode?.value==='components')for(const key of ['card','qr','bluetooth','bio']){
+      const name=`terminal_${key}`,v=form.elements[name].value;
+      try{money(form.elements.reportMode.value==='net'&&v.startsWith('-')?v.slice(1):v);}catch{return fieldError(name,'Укажите сумму вида оплаты. Если его не было, нажмите «Не было».');}
+    }
     try { reconcileNonCash(getInput().nonCash); } catch (e) { return fieldError('reportRef', e.message); }
   }
   if (index === 4) {
@@ -188,27 +203,11 @@ function stageError(index) {
 }
 function showFlow(index, { focus = false } = {}) {
   flowIndex = Math.max(0, Math.min(4, index));
-  $('flow-error').hidden = true;
-  flowCards.forEach((card, i) => { card.hidden = !fullForm && i !== flowIndex; });
-  document.querySelector('.summary').hidden = !fullForm && flowIndex !== 4;
-  $('flow-counter').textContent = fullForm ? 'ВСЯ ФОРМА' : `ШАГ ${flowIndex + 1} ИЗ 5`;
-  $('flow-instruction').textContent = fullForm ? 'Все поля доступны. Расчёт и правила проверки те же.' : flowHints[flowIndex];
-  $('flow-back').hidden = fullForm || flowIndex === 0;
-  $('flow-next').hidden = fullForm || flowIndex === 4;
-  $('save').hidden = !fullForm && flowIndex !== 4;
-  $('flow-mode').textContent = fullForm ? 'По шагам' : 'Вся форма';
-  $('flow-mode').setAttribute('aria-pressed', String(fullForm));
-  for (const button of $('flow-steps').children) {
-    const active = Number(button.dataset.step) === flowIndex;
-    button.setAttribute('aria-current', active && !fullForm ? 'step' : 'false');
-    button.classList.toggle('current', active && !fullForm);
-  }
-  document.querySelector('.workspace').classList.toggle('review-layout', fullForm || flowIndex === 4);
-  if (focus) {
-    const heading = flowCards[flowIndex].querySelector('h2'); heading.tabIndex = -1; heading.focus({ preventScroll: true });
-    $('flow-steps').scrollIntoView({ block: 'start', behavior: 'auto' });
-  }
-  updateFlowHints();
+  fullForm=true;
+  $('flow-error').hidden=true;flowCards.forEach(card=>card.hidden=false);document.querySelector('.summary').hidden=false;
+  $('flow-back').hidden=true;$('flow-next').hidden=true;$('save').hidden=false;
+  if(focus){const heading=flowCards[flowIndex].querySelector('h2');heading.tabIndex=-1;heading.focus({preventScroll:true});heading.scrollIntoView({block:'start'});}
+
 }
 function showStageError(index, error) {
   showFlow(index); $('flow-error').hidden = false; $('flow-error').textContent = error.message;
@@ -220,44 +219,120 @@ function updateFlowHints() {
     details.querySelector('summary').textContent = `${details.dataset.title} · ${complete ? 'указано' : 'заполнить'}`;
   }
 }
-function initFlow() {
-  const cards = [...form.querySelectorAll(':scope > section.card')];
-  // Terminal totals precede the handover/review, while input names and persisted schema stay unchanged.
-  form.insertBefore(cards[4], cards[3]); flowCards = [cards[0], cards[1], cards[2], cards[4], cards[3]];
-  flowCards.forEach((card, i) => {
-    card.querySelector('.step').textContent = String(i + 1);
-    const button = el('button'); button.type = 'button'; button.dataset.step = i;
-    button.append(el('span', String(i + 1), 'flow-number'), el('span', flowLabels[i]));
-    button.addEventListener('click', () => showFlow(i, { focus: true })); $('flow-steps').append(button);
-  });
-  function disclosure(parent, title, names) {
-    const details = el('details', null, 'flow-disclosure'); details.dataset.title = title; details.dataset.flowFields = names.join(',');
-    details.append(el('summary', title)); const grid = el('div', null, 'fields');
-    for (const name of names) grid.append(form.elements[name].closest('label'));
-    details.append(grid); parent.append(details); return details;
+function initFlow() { initSheet(); }
+function kopeckText(n) {
+  const a=Math.abs(n);return`${n<0?'-':''}${Math.trunc(a/100)}.${String(a%100).padStart(2,'0')}`;
+}
+function syncSheetSources() {
+  if(!form.elements.reportBasis)return;
+  const collection=form.elements.reportBasis.value==='collection';
+  $('sheet-collection-fields').hidden=!collection;form.elements.zCash.readOnly=collection;
+  if(collection)try{
+    const n=money(form.elements.reportAmount.value)-money(form.elements.reportInsertion.value);
+    form.elements.zCash.value=n<0?'':kopeckText(n);
+  }catch{form.elements.zCash.value='';}
+  const components=form.elements.bankDetailMode.value==='components' && !legacyNonCash;
+  $('sheet-terminal-breakdown').hidden=!components;
+  const target=form.elements.reportMode.value==='net'?'reportNet':'reportSales';
+  for(const key of ['reportNet','reportSales'])form.elements[key].readOnly=components && key===target;
+  if(components)try{
+    const values=['card','qr','bluetooth','bio'].map(k=>form.elements[`terminal_${k}`].value);
+    const sum=values.reduce((s,v)=>s+BigInt(form.elements.reportMode.value==='net'&&v.startsWith('-')?-money(v.slice(1)):money(v)),0n);
+    if(sum>BigInt(Number.MAX_SAFE_INTEGER)||sum< -BigInt(Number.MAX_SAFE_INTEGER))throw new Error('Сумма вне диапазона');
+    form.elements[target].value=kopeckText(Number(sum));
+  }catch{form.elements[target].value='';}
+}
+function fillSheet(raw={}) {
+  if(!form.elements.reportBasis)return;
+  form.elements.reportBasis.value=raw.reportTemplate?.basis==='collection'?'collection':'sales';
+  form.elements.reportAmount.value=raw.reportTemplate?.amount??'';form.elements.reportInsertion.value=raw.reportTemplate?.insertion??'';
+  form.elements.bankDetailMode.value=raw.nonCash?.breakdown?'components':'total';
+  form.elements.bankDetailMode.disabled=Boolean(legacyNonCash);
+  for(const key of ['card','qr','bluetooth','bio'])form.elements[`terminal_${key}`].value=raw.nonCash?.breakdown?.[key]??'';
+  form.elements.receiptCount.value=raw.counts?.receipts??'';form.elements.documentCount.value=raw.counts?.documents??'';
+  syncSheetSources();
+}
+function updateSheetReport(r,raw) {
+  if(!$('sheet-cash-sales'))return;
+  let bank;
+  try{bank=reconcileNonCash(raw.nonCash);}catch{}
+  const exact=(...values)=>{const sum=values.reduce((a,v)=>a+BigInt(v),0n);return sum>BigInt(Number.MAX_SAFE_INTEGER)||sum< -BigInt(Number.MAX_SAFE_INTEGER)?null:Number(sum);};
+  const cashSales=exact(r.amounts.zCash,r.cashSetup?.additionalCash??0);
+  $('sheet-cash-sales').textContent=rub(cashSales);
+  $('sheet-total-sales').textContent=rub(bank?.mode==='aggregate'&&bank.zNet!==null?cashSales!==null?exact(cashSales,bank.zNet):null:null);
+  const actual=r.received===null?null:exact(r.received,-r.amounts.opening,-r.amounts.otherIn,-(r.categoryResult?.cashIn??0),r.amounts.retained,r.cashPaid,r.categoryResult?.goodsAdjustment??0,r.cashSetup?.previousTransfers??0);
+  $('sheet-actual-sales').textContent=rub(actual);
+  $('sheet-cash-status').textContent=r.warnings.join(' ');
+}
+function initSheet() {
+  document.body.classList.add('sheet-mode');
+  const cards=[...form.querySelectorAll(':scope > section.card')];flowCards=[cards[0],cards[1],cards[2],cards[4],cards[3]];
+  const actions=form.querySelector('.form-actions'),summary=document.querySelector('.summary');
+  const columns=el('div',null,'sheet-columns'),cashColumn=el('div',null,'sheet-cash-column'),bankColumn=el('div',null,'sheet-bank-column');
+  cashColumn.append(cards[1],cards[2]);bankColumn.append(cards[4]);columns.append(cashColumn,bankColumn);
+  const results=el('div',null,'sheet-results');results.append(cards[3],summary);
+  form.replaceChildren(cards[0],columns,results,actions);cards[0].classList.add('sheet-metadata');
+  const cashTitle=cards[1].querySelector('h2');cashTitle.textContent='Наличные';cards[2].querySelector('h2').textContent='Выплаты';cards[4].querySelector('h2').textContent='Эквайринг';
+  const makeInput=(name,label,mode='decimal')=>{const l=el('label',label),i=el('input');i.name=name;i.inputMode=mode;i.placeholder='Не указано';l.append(i);return l;};
+  cards[0].querySelector('.fields').append(makeInput('receiptCount','Чеков за смену','numeric'),makeInput('documentCount','ФД за смену','numeric'));
+  const basisLabel=el('label','Сумма из отчёта'),basis=el('select');basis.name='reportBasis';
+  for(const [value,title]of [['sales','Наличные продажи после возвратов'],['collection','Инкассация, включающая внесение']]){const o=el('option',title);o.value=value;basis.append(o);}basisLabel.append(basis);
+  const sourceFields=el('div',null,'fields');sourceFields.id='sheet-collection-fields';sourceFields.hidden=true;sourceFields.append(makeInput('reportAmount','Инкассация по отчёту'),makeInput('reportInsertion','Внесение в этой инкассации'));
+  cards[1].querySelector('.card-title').after(basisLabel,sourceFields);
+  const modeLabel=el('label','Ввод терминала'),mode=el('select');mode.name='bankDetailMode';
+  for(const [value,title]of [['total','Общей суммой'],['components','По видам оплаты']]){const o=el('option',title);o.value=value;mode.append(o);}modeLabel.append(mode);
+  const breakdown=el('div',null,'fields');breakdown.id='sheet-terminal-breakdown';breakdown.hidden=true;
+  for(const [key,title]of [['card','Оплата картой'],['qr','QR'],['bluetooth','Bluetooth'],['bio','Био']])breakdown.append(makeInput(`terminal_${key}`,title));
+  cards[4].querySelector('.card-title').after(modeLabel,breakdown);
+  const dl=summary.querySelector('dl');
+  for(const [id,title]of [['sheet-total-sales','Общая торговля по отчётам'],['sheet-cash-sales','Наличные продажи по отчётам'],['sheet-actual-sales','Наличные продажи по пересчёту']]){const row=el('div'),value=el('dd','—');value.id=id;row.append(el('dt',title),value);dl.prepend(row);}
+  const status=el('p',null,'sheet-status');status.id='sheet-cash-status';status.setAttribute('role','status');summary.querySelector('.result-card').append(status);
+  const bankReview=el('button','Безналичные пока не сверены.','text-button full');bankReview.id='review-noncash';bankReview.type='button';bankReview.addEventListener('click',()=>{cards[4].scrollIntoView({block:'start'});});summary.querySelector('.result-card').append(bankReview);
+  const dialog=el('dialog',null,'help-dialog');dialog.id='help-dialog';dialog.setAttribute('aria-labelledby','help-title');
+  const close=el('button','Закрыть','secondary'),title=el('h2'),body=el('div',null,'help-body');close.type='button';title.id='help-title';body.id='help-body';dialog.append(title,body,close);document.body.append(dialog);let opener;
+  close.addEventListener('click',()=>dialog.close());dialog.addEventListener('close',()=>opener?.focus());
+  function question(target,heading,content) {
+    const button=el('button','?','help-button');button.type='button';button.setAttribute('aria-label',`Пояснение: ${heading}`);button.setAttribute('aria-haspopup','dialog');
+    button.addEventListener('click',event=>{event.preventDefault();event.stopPropagation();opener=button;title.textContent=heading;body.textContent=typeof content==='function'?content():content;dialog.showModal();});target.append(button);return button;
   }
-  disclosure(cards[1], 'Размен на начало и конец', ['opening', 'retained']);
-  disclosure(cards[1], 'Другие движения наличных', ['otherIn', 'previousTransfers']);
-  form.elements.previousTransfers.closest('label').dataset.expandedCash = 'true';
-  const settings = el('details', null, 'flow-disclosure'); settings.append(el('summary', 'Способ расчёта'), $('legacy-form-setting')); cards[1].append(settings);
-  const paymentSettings = el('details', null, 'flow-disclosure'); paymentSettings.append(el('summary', 'Способ ввода: общая сумма, категории или получатели'), $('payment-mode-setting')); $('payment-mode-wrap').append(paymentSettings);
-  for (const name of ['otherIn', 'additionalCash', 'previousTransfers', 'suppliers', 'payroll', 'other']) {
-    const control = form.elements[name], label = control.closest('label'), button = el('button', 'Не было', 'zero-button'); button.type = 'button';
-    button.setAttribute('aria-label', `${name === 'additionalCash' ? 'Нет второго отчёта' : label.childNodes[0].textContent}: указать ноль`);
-    if (name === 'additionalCash') button.textContent = 'Нет второго отчёта';
-    button.addEventListener('click', () => {
-      if (control.value && control.value !== '0' && !window.confirm('Заменить введённую сумму нулём?')) return;
-      control.value = '0'; control.removeAttribute('aria-invalid'); changed();
-    }); label.append(button);
+  const helps={
+    zCash:'Наличные продажи первого отчёта после возвратов, до вычета выплат. Если выбрана инкассация с внесением, поле рассчитывается: инкассация − внесение. Не вычитайте размен второй раз.',
+    reportBasis:'Выберите строку, которую переносите. «Инкассация» и «Выручка» могут означать разные суммы. Режим инкассации используйте только если в неё включено указанное внесение. Физический размен на начало/конец учитывается отдельно.',
+    reportAmount:'Перенесите инкассацию из отчёта. В этом режиме она включает внесение, указанное следующей строкой. Программа сначала выделяет продажи, не считает внесение выручкой.',
+    reportInsertion:'Это внесение, уже включённое в инкассацию выбранного отчёта. Оно вычитается для выделения продаж. Не прибавляйте ту же сумму повторно как прочее поступление.',
+    additionalCash:'Отдельные наличные продажи другого отчёта, после возвратов. Прибавляются один раз. Не включайте сюда безналичные и сумму, уже входящую в первый отчёт.',
+    opening:'Фактические наличные на начало. Размен указывается здесь либо как отдельное фактическое внесение — не дважды.',retained:'Фактические наличные, оставленные в кассе, например размен. Они уменьшают передачу бухгалтеру, но не являются расходом.',
+    otherIn:'Фактические внесения сверх начального остатка. Не дублируйте их в категориях или в другом поле.',previousTransfers:'Деньги, уже переданные из этой кассы раньше в течение сдаваемой смены. Не повторяйте в выплатах.',
+    suppliers:'Общая фактическая выплата поставщикам наличными. Детализация необязательна. Общая сумма и её подробности не вычитаются вместе.',payroll:'Фактически выданные наличные зарплаты и авансы, в том числе самому кассиру. Это движение денег, не повторное начисление расхода для прибыли.',other:'Другие фактические выдачи наличных. Если используете свои категории, прежние общие суммы нужно обнулить.',
+    paymentMode:'Выберите фиксированные общие суммы, свои категории или подробные выплаты. При переключении данные не удаляются автоматически. Один расход включается один раз.',
+    claimed:'Сумма, которую кассир заявил к передаче. Это его расчёт, а не независимый пересчёт бухгалтера.',received:'Деньги, фактически принятые и пересчитанные бухгалтером. Если пересчёта ещё не было, оставьте поле пустым; не вводите 0 вместо неизвестного.',
+    receiptCount:'Количество чеков именно за смену. Не берите накопительный счётчик ФН. Это количество, не сумма денег.',documentCount:'Количество фискальных документов за смену. Оно не обязано равняться числу чеков: в него входят другие фискальные документы.',
+    bankDetailMode:'Можно перенести общий итог либо суммы по карте, QR, Bluetooth и био. Во втором случае итог складывается автоматически. Отсутствующий вид оплаты указывайте явным нулём, только если отсутствие известно.',
+    reportRef:'Укажите источник и период итогового отчёта терминала. При нескольких терминалах нужны все отчёты за сопоставимый период.',
+    zMode:'Сумма после возвратов или продажи и возвраты отдельно. Не вычитайте возвраты повторно. Используйте итоги смены, не накопительные суммы ФН.',reportMode:'Укажите, содержат ли суммы терминала вычет возвратов. Виды оплаты должны быть на той же основе. Неизвестные возвраты нельзя считать нулём.'
+  };
+  for(const label of $('cash-view').querySelectorAll('label')) {
+    const control=label.querySelector('input,select,textarea');if(!control)continue;
+    const caption=label.childNodes[0]?.textContent?.trim()||control.name;
+    const text=helps[control.name]??(control.name.startsWith('terminal_')?'Сумма этого вида оплаты за выбранный период, на основе, указанной для терминала. QR и Bluetooth не объявляются СБП или картами автоматически.':`Поле «${caption}». Введите данные по сдаваемой смене. Пустая сумма означает неизвестное, а не ноль.`);
+    question(label,caption,text);
   }
-  $('flow-mode').addEventListener('click', () => { fullForm = !fullForm; showFlow(flowIndex, { focus: true }); });
-  const bankReview = el('button', 'Безналичные пока не сверены.', 'text-button full'); bankReview.id = 'review-noncash'; bankReview.type = 'button';
-  bankReview.addEventListener('click', () => showFlow(3, { focus: true }));
-  document.querySelector('.result-card').append(bankReview);
-  $('flow-back').addEventListener('click', () => showFlow(flowIndex - 1, { focus: true }));
-  $('flow-next').addEventListener('click', () => { const error = stageError(flowIndex); if (error) showStageError(flowIndex, error); else showFlow(flowIndex + 1, { focus: true }); });
-  form.addEventListener('input', e => { e.target.removeAttribute('aria-invalid'); $('flow-error').hidden = true; });
-  updateModes(); showFlow(0);
+  for(const card of cards){const details=[...card.querySelectorAll('.hint,details')].filter(n=>!n.querySelector('input,select,textarea,button')).map(n=>n.textContent.trim());question(card.querySelector('h2'),card.querySelector('h2').textContent,details.join('\n\n')||'Данные этого раздела относятся к одной сдаче смены.');}
+  question(summary.querySelector('.result-label'),'Как считается передача',()=>`${$('calc-hint').textContent}\n\nОжидается = начальный остаток + наличные продажи + внесения − выдачи − неоплаченные чеки, включённые в наличные − предыдущие передачи − оставленные наличные.\n\nРазница = принято бухгалтером − ожидается. Плюс — излишек, минус — недостача; причина требует проверки.\n\nТорговля по пересчёту восстанавливается из принятой суммы с обратным учётом этих движений. Общая торговля по отчётам = наличные продажи + безналичные кассы, без повторного сложения выручки и её частей.`);
+  for(const node of $('cash-view').querySelectorAll('.hint,.small-note'))node.hidden=true;
+  for(const d of $('cash-view').querySelectorAll('details'))if(!d.querySelector('input,select,textarea,button,dl,table'))d.hidden=true;
+  for(const d of summary.querySelectorAll('details'))d.open=true;
+  for(const name of ['otherIn','additionalCash','previousTransfers','suppliers','payroll','other','reportInsertion', 'terminal_card','terminal_qr','terminal_bluetooth','terminal_bio']) {
+    const control=form.elements[name],button=el('button',name==='additionalCash'?'Нет отчёта':'Не было','zero-button');button.type='button';button.addEventListener('click',()=>{if(control.value && !/^0([.,]0{1,2})?$/.test(control.value)&&!window.confirm('Заменить эту сумму нулём?'))return;control.value='0';changed();});control.closest('label').append(button);
+  }
+  for(const name of ['zBasisConfirmed','independentReports','factBasisConfirmed','periodConfirmed']) {
+    const label=form.elements[name].closest('label'),span=label.querySelector('span');
+    const before=span.textContent;span.textContent={zBasisConfirmed:'Возвраты учтены',independentReports:'Продажи отчётов не пересекаются',factBasisConfirmed:'Суммы указаны без повторов',periodConfirmed:'Период и терминалы проверены'}[name];question(label,span.textContent,before);
+  }
+  $('flow-back').hidden=true;$('flow-next').hidden=true;$('save').hidden=false;
+  $('flow-steps').hidden=true;document.querySelector('.flow-heading').hidden=true;
+  form.addEventListener('input',e=>{e.target.removeAttribute('aria-invalid');$('flow-error').hidden=true;});
+  showFlow(0);updateModes();
 }
 function categoryInput() {
   return [...$('category-entries').children].map(row=>({id:row.dataset.id,category:row._category,
@@ -376,6 +451,7 @@ function reset() {
   $('category-entries').replaceChildren();
   for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   form.elements.cashSetupEnabled.checked = true; fillNonCash();
+  fillSheet();
   for (const key of ['date', 'register', 'shiftNo']) form.elements[key].disabled = false;
   form.elements.date.value = date(); $('payments').replaceChildren(); $('no-payments').hidden = false;
   $('reason-wrap').hidden = true; $('save-state').textContent = 'Ещё не сохранено'; $('print').disabled = true;
@@ -386,6 +462,7 @@ async function openRecord(record) {
   for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   for (const k of fields) form.elements[k].value = record.input[k] ?? '';
   fillNonCash(record.input.nonCash);
+  fillSheet(record.input);
   form.elements.cashSetupEnabled.checked = record.input.cashSetup !== undefined;
   for (const key of ['additionalCash', 'previousTransfers', 'paymentMode', 'suppliers', 'payroll', 'other']) form.elements[key].value = record.input.cashSetup?.[key] ?? (key === 'paymentMode' ? 'totals' : '');
   for (const key of ['independentReports', 'factBasisConfirmed']) form.elements[key].checked = record.input.cashSetup?.[key] === true;
@@ -426,6 +503,8 @@ function buildPrint(record) {
     const row = el('tr'); row.append(el('td', label), el('td', rub(value))); table.append(row);
   }
   target.append(table);
+  if(r.reportTemplate)target.append(el('p',`Источник наличных: инкассация ${rub(r.reportTemplate.amount)} − внесение ${rub(r.reportTemplate.insertion)} = продажи ${rub(r.reportTemplate.net)}.`));
+  if(r.counts)target.append(el('p',`Чеков за смену: ${r.counts.receipts??'не указано'}. ФД: ${r.counts.documents??'не указано'}.`));
   if (r.cashSetup) {
     const s = r.cashSetup;
     target.append(el('p', `Наличные второго отчёта: ${rub(s.additionalCash)}. Предыдущие передачи: ${rub(s.previousTransfers)}.`));
@@ -441,6 +520,7 @@ function buildPrint(record) {
   if (r.nonCash?.mode === 'aggregate') {
     const n = r.nonCash;
     target.append(el('h3', 'Общая безналичная сверка'), el('p', `Касса после возвратов: ${rub(n.zNet)}. Терминалы после возвратов: ${rub(n.reportNet)}. Разница: ${rub(n.difference)}.`), el('p', `Источник: ${n.reportRef || 'не указан'}. Сопоставимость периода: ${n.periodConfirmed ? 'заявлена' : 'не подтверждена'}. Зачисление банка не проверено.`));
+    if(n.breakdown)target.append(el('p',`Карта: ${rub(n.breakdown.card)}; QR: ${rub(n.breakdown.qr)}; Bluetooth: ${rub(n.breakdown.bluetooth)}; био: ${rub(n.breakdown.bio)}.`));
   } else if (r.nonCash) {
     target.append(el('h3', 'Безналичная сверка — отдельно от наличных'));
     const nonCashTable = el('table', null, 'print-table');
@@ -485,12 +565,12 @@ $('example').addEventListener('click', () => {
   for (const [key, value] of Object.entries({ additionalCash: '1000', previousTransfers: '0', paymentMode: 'totals', suppliers: '7500', payroll: '1000', other: '0' })) form.elements[key].value = value;
   form.elements.independentReports.checked = true; form.elements.factBasisConfirmed.checked = true;
   fillNonCash({ mode: 'aggregate', zMode: 'net', zNet: '58000', reportMode: 'net', reportNet: '57900', reportRef: 'Вымышленные отчёты за один тестовый период', periodConfirmed: true });
+  fillSheet();
   $('payments').replaceChildren(); $('category-entries').replaceChildren(); changed(); showFlow(4);
 });
 form.addEventListener('submit', async event => {
   event.preventDefault(); if (busy) return;
-  // Enter on an earlier step advances the flow instead of saving an unseen final result.
-  if (!fullForm && flowIndex < 4) { const error = stageError(flowIndex); if (error) showStageError(flowIndex, error); else showFlow(flowIndex + 1, { focus: true }); return; }
+  // All worksheet groups are visible; validate each before saving.
   try {
     for (let i = 0; i < 5; i++) { const error = stageError(i); if (error) { showStageError(i, error); return; } }
     reconcile(getInput());

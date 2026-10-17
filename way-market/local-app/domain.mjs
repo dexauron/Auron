@@ -80,7 +80,7 @@ function signedMoney(value, label) {
   return v.startsWith('-') ? -money(v.slice(1), label) : money(v, label);
 }
 export function reconcileAggregateNonCash(raw) {
-  const allowed = ['mode', 'zMode', 'zSales', 'zReturns', 'zNet', 'reportMode', 'reportSales', 'reportReturns', 'reportNet', 'reportRef', 'periodConfirmed'];
+  const allowed = ['mode', 'zMode', 'zSales', 'zReturns', 'zNet', 'reportMode', 'reportSales', 'reportReturns', 'reportNet', 'reportRef', 'periodConfirmed', 'breakdown'];
   if (!raw || raw.mode !== 'aggregate' || Object.keys(raw).some(k => !allowed.includes(k)) || typeof raw.periodConfirmed !== 'boolean') throw new InputError('Неверная структура общей безналичной сверки');
   const result = {};
   for (const prefix of ['z', 'report']) {
@@ -99,7 +99,16 @@ export function reconcileAggregateNonCash(raw) {
     }
   }
   const reportRef = result.reportNet === null ? '' : text(raw.reportRef, 'Источник и период отчёта терминалов', 200);
+  let breakdown;
+  if(raw.breakdown!==undefined) {
+    if(!objectKeys(raw.breakdown,['card','qr','bluetooth','bio'])) throw new InputError('Проверьте виды оплаты терминала');
+    breakdown=Object.fromEntries(Object.entries(raw.breakdown).map(([k,v])=>[k,raw.reportMode==='net'?signedMoney(v,'Сумма по виду оплаты'):money(v,'Сумма по виду оплаты')]));
+    const sum=Object.values(breakdown).reduce((a,v)=>a+BigInt(v),0n);
+    const target=raw.reportMode==='net'?result.reportNet:optionalMoney(raw.reportSales,'Продажи терминала');
+    if(target===null || sum!==BigInt(target)) throw new InputError('Итог терминала не совпадает с картой, QR, Bluetooth и био');
+  }
   return { mode: 'aggregate', ...result, reportRef, periodConfirmed: raw.periodConfirmed,
+    ...(breakdown?{breakdown}:{}),
     difference: result.zNet === null || result.reportNet === null || !raw.periodConfirmed ? null : result.reportNet - result.zNet,
     formulaVersion: 'noncash-aggregate-v1' };
 }
@@ -138,6 +147,24 @@ export function reconcile(raw) {
     retained: 'Оставлено в кассе'
   };
   const amounts = Object.fromEntries(Object.entries(labels).map(([k, label]) => [k, money(raw[k], label)]));
+  let reportTemplate;
+  if(raw.reportTemplate!==undefined) {
+    const t=raw.reportTemplate;
+    if(!objectKeys(t,['basis','amount','insertion']) || !['sales','collection'].includes(t.basis)) throw new InputError('Выберите основу наличного отчёта');
+    const amount=money(t.amount,'Сумма наличного отчёта'), insertion=money(t.insertion,'Внесение по отчёту');
+    const net=t.basis==='collection'?amount-insertion:amount;
+    if(net<0 || amounts.zCash!==net) throw new InputError('Наличные продажи не соответствуют сумме отчёта и внесению');
+    reportTemplate={basis:t.basis,amount,insertion,net};
+  }
+  let counts;
+  if(raw.counts!==undefined) {
+    if(!objectKeys(raw.counts,['receipts','documents'])) throw new InputError('Проверьте количество чеков и ФД');
+    counts=Object.fromEntries(Object.entries(raw.counts).map(([k,v])=>{
+      if(v==='')return[k,null];
+      if(typeof v!=='string'||!/^\d{1,9}$/.test(v))throw new InputError('Количество чеков / ФД: целое неотрицательное число');
+      return[k,Number(v)];
+    }));
+  }
   const claimed = optionalMoney(raw.claimed, 'Заявлено кассиром');
   const received = optionalMoney(raw.received, 'Пересчитано бухгалтером');
   const accountant = received === null ? '' : text(raw.accountant, 'Бухгалтер');
@@ -186,6 +213,8 @@ export function reconcile(raw) {
     formulaVersion: categoryMode ? 'cash-categories-v3' : cashSetup ? 'cash-multi-source-v2' : FORMULA_VERSION, cashPaid: safe(cashPaid), expected: safe(expected),
     ...(categoryResult ? { categoryResult } : {}),
     ...(cashSetup ? { cashSetup } : {}),
+    ...(reportTemplate ? {reportTemplate} : {}),
+    ...(counts ? {counts} : {}),
     claimedDifference: claimed === null ? null : safe(BigInt(claimed) - expected),
     receivedDifference: received === null ? null : safe(BigInt(received) - expected),
     transferDifference: claimed === null || received === null ? null : received - claimed,
