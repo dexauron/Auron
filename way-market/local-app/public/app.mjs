@@ -1,7 +1,7 @@
 import { reconcile } from '/domain.mjs';
 const $ = id => document.getElementById(id);
 const form = $('shift-form');
-const iconPaths = { cash: 'M3 5h18v14H3z M3 9h18 M8 14h3', history: 'M3 11a9 9 0 1 1 3 8 M3 4v7h7 M12 7v5l3 2', info: 'M12 8h.01 M12 11v6 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0', plus: 'M12 5v14 M5 12h14' };
+const iconPaths = { cash: 'M3 5h18v14H3z M3 9h18 M8 14h3', history: 'M3 11a9 9 0 1 1 3 8 M3 4v7h7 M12 7v5l3 2', info: 'M12 8h.01 M12 11v6 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0', plus: 'M12 5v14 M5 12h14', backup: 'M4 9h16v11H4z M3 4h18v5H3z M9 13h6 M12 13v4' };
 for (const node of document.querySelectorAll('[data-icon]')) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
@@ -66,12 +66,12 @@ function paymentRow(p = {}) {
   $('payments').append(row); $('no-payments').hidden = true;
 }
 function view(name) {
-  for (const k of ['cash', 'history', 'method']) {
+  for (const k of ['cash', 'history', 'backup', 'method']) {
     $(`${k}-view`).hidden = k !== name;
     $(`nav-${k}`).classList.toggle('active', k === name);
     $(`nav-${k}`).setAttribute('aria-current', k === name ? 'page' : 'false');
   }
-  const titles = { cash: ['Сверка смены', 'От отчёта кассы — к сумме, принятой бухгалтером.'], history: ['История смен', 'Сохранённые данные и версии исправлений.'], method: ['Как считаем', 'Понятные правила и границы тестовой версии.'] };
+  const titles = { cash: ['Сверка смены', 'От отчёта кассы — к сумме, принятой бухгалтером.'], history: ['История смен', 'Сохранённые данные и версии исправлений.'], backup: ['Копии данных', 'Сохранённая история, которую можно восстановить отдельно.'], method: ['Как считаем', 'Понятные правила и границы тестовой версии.'] };
   $('page-title').textContent = titles[name][0]; $('subtitle').textContent = titles[name][1];
   if (name === 'history') loadHistory().catch(e => notice(e.message, true));
 }
@@ -136,7 +136,7 @@ function buildPrint(record) {
 form.addEventListener('input', changed); form.addEventListener('change', changed);
 $('add-payment').addEventListener('click', () => { if ($('payments').children.length >= 100) return notice('Можно добавить до 100 выплат.', true); paymentRow(); changed(); });
 $('new-shift').addEventListener('click', reset);
-for (const name of ['cash', 'history', 'method']) $(`nav-${name}`).addEventListener('click', () => view(name));
+for (const name of ['cash', 'history', 'backup', 'method']) $(`nav-${name}`).addEventListener('click', () => view(name));
 $('refresh-history').addEventListener('click', () => loadHistory().catch(e => notice(e.message, true)));
 $('example').addEventListener('click', () => {
   if (busy || saved || (dirty && !window.confirm('Заменить введённые данные тестовым примером?'))) { if (saved) notice('Сначала начните новую смену.', true); return; }
@@ -167,5 +167,39 @@ form.addEventListener('submit', async event => {
 $('print').addEventListener('click', () => { if (!saved || dirty || busy) return; buildPrint(saved); window.print(); });
 window.addEventListener('beforeunload', event => { if (dirty || busy) { event.preventDefault(); event.returnValue = ''; } });
 form.elements.date.value = date(); preview();
-try { ({ token } = await api('/api/session')); $('save').disabled = false; }
+let archiveBusy = false;
+function archiveControls() {
+  $('download-backup').disabled = archiveBusy || !token;
+  $('check-backup').disabled = archiveBusy || !token || !$('backup-file').files.length;
+  $('backup-file').disabled = archiveBusy;
+}
+$('backup-file').addEventListener('change', () => { $('backup-check-result').hidden = true; archiveControls(); });
+$('download-backup').addEventListener('click', async () => {
+  if (archiveBusy) return;
+  archiveBusy = true; archiveControls(); $('backup-status').textContent = 'Формируем снимок сохранённых данных…';
+  try {
+    const archive = await api('/api/archive/download', {});
+    const blob = new Blob([JSON.stringify(archive)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob), link = el('a');
+    link.href = url; link.download = `way-market-test-${archive.payload.createdAt.replace(/[-:.]/g, '')}.json`;
+    document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+    $('backup-status').textContent = 'Архив передан браузеру для сохранения. Найдите скачанный файл, перенесите копию на отдельный защищённый носитель и проверьте её ниже. Это не подтверждение, что копия уже находится вне сервера.';
+  } catch (e) { $('backup-status').textContent = 'Архив не получен: ' + e.message; }
+  finally { archiveBusy = false; archiveControls(); }
+});
+$('check-backup').addEventListener('click', async () => {
+  if (archiveBusy || !$('backup-file').files.length) return;
+  archiveBusy = true; archiveControls();
+  const result = $('backup-check-result'); result.hidden = false; result.className = 'notice'; result.textContent = 'Проверяем архив…';
+  try {
+    const file = $('backup-file').files[0];
+    if (file.size > 16 * 1024 * 1024) throw new Error('Размер больше 16 МиБ');
+    let archive;
+    try { archive = JSON.parse(await file.text()); } catch { throw new Error('Не удалось прочитать JSON'); }
+    const stats = await api('/api/archive/check', archive);
+    result.textContent = `Архив прошёл проверку. Смен: ${stats.shifts}; версий: ${stats.revisions}. Создан: ${new Date(stats.createdAt).toLocaleString('ru-RU')}. Рабочие данные не изменены. Пробное восстановление в новый файл выполняется отдельно.`;
+  } catch (e) { result.className = 'notice error'; result.textContent = 'Проверка не пройдена: ' + e.message; }
+  finally { archiveBusy = false; archiveControls(); }
+});
+try { ({ token } = await api('/api/session')); $('save').disabled = false; archiveControls(); }
 catch (error) { notice('Нет подключения к локальному сервису. ' + error.message, true); $('save').disabled = true; }

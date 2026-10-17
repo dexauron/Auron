@@ -5,3 +5,6 @@
 @media print{@page{size:A4;margin:16mm}body{background:white;color:black;font-size:11pt}.sidebar,.test-banner,header,#notice,#cash-view,#history-view,#method-view{display:none!important}main{margin:0;padding:0;max-width:none}#print-view{display:block}#print-view h1{font-size:22pt;margin:14px 0}#print-view p{line-height:1.5}.print-table{font-size:10pt}tr{break-inside:avoid}.signatures{break-inside:avoid}#print-view small{font-size:9pt}}
 
 [data-icon]{display:inline-flex;vertical-align:middle}[data-icon] svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#backup-status{margin-top:16px}#check-backup{margin:16px 0}#backup-check-result{overflow-wrap:anywhere}input[type=file]{font-size:12px}
+@media(max-width:650px){nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nav{justify-content:flex-start;font-size:12px;padding:10px}.sidebar nav [data-icon]{margin-right:4px}}
+@media print{#backup-view{display:none!important}}

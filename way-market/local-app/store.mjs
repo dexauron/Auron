@@ -1,12 +1,13 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomUUID } from 'node:crypto';
 import { reconcile, InputError } from './domain.mjs';
+import { createArchive, validateArchive } from './archive.mjs';
 
 export class ConflictError extends Error {}
-export function openStore(filename) {
+export function openStore(filename, { requireSchema1 = false } = {}) {
   const db = new DatabaseSync(filename);
   const schemaVersion = db.prepare('PRAGMA user_version').get().user_version;
-  if (schemaVersion !== 0 && schemaVersion !== 1) { db.close(); throw new Error('Неподдерживаемая версия базы'); }
+  if ((requireSchema1 && schemaVersion !== 1) || (schemaVersion !== 0 && schemaVersion !== 1)) { db.close(); throw new Error('Неподдерживаемая версия базы'); }
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS revisions (
       id TEXT NOT NULL, version INTEGER NOT NULL, shift_key TEXT NOT NULL,
@@ -27,6 +28,31 @@ export function openStore(filename) {
       (SELECT id, MAX(version) v FROM revisions GROUP BY id) m ON r.id=m.id AND r.version=m.v
       ORDER BY r.created_at DESC, r.id LIMIT 100`).all().map(unpack),
     history: id => db.prepare('SELECT * FROM revisions WHERE id=? ORDER BY version DESC').all(id).map(unpack),
+    archive() {
+      // A single read transaction makes revisions and retry records one snapshot.
+      db.exec('BEGIN');
+      try {
+        const result = createArchive(
+          db.prepare('SELECT * FROM revisions ORDER BY id, version').all(),
+          db.prepare('SELECT * FROM requests ORDER BY request_id').all()
+        );
+        db.exec('COMMIT'); return result;
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    },
+    restoreArchive(archive) {
+      const stats = validateArchive(archive);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        if (db.prepare('SELECT COUNT(*) n FROM revisions').get().n || db.prepare('SELECT COUNT(*) n FROM requests').get().n) {
+          throw new ConflictError('Восстановление разрешено только в пустую отдельную базу');
+        }
+        const insertRevision = db.prepare('INSERT INTO revisions (id,version,shift_key,created_at,input,result,reason) VALUES (?,?,?,?,?,?,?)');
+        const insertRequest = db.prepare('INSERT INTO requests (request_id,payload_hash,id,version) VALUES (?,?,?,?)');
+        for (const r of archive.payload.revisions) insertRevision.run(r.id, r.version, r.shift_key, r.created_at, r.input, r.result, r.reason);
+        for (const r of archive.payload.requests) insertRequest.run(r.request_id, r.payload_hash, r.id, r.version);
+        db.exec('COMMIT'); return stats;
+      } catch (error) { db.exec('ROLLBACK'); throw error; }
+    },
     save(payload) {
       if (!payload || typeof payload.requestId !== 'string' || !/^[a-zA-Z0-9-]{16,80}$/.test(payload.requestId)) throw new InputError('Нужен идентификатор запроса');
       const { input, expectedVersion, id } = payload;
