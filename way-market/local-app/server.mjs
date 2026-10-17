@@ -1,12 +1,14 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile, mkdir, stat } from 'node:fs/promises';
-import { join, dirname, isAbsolute } from 'node:path';
+import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir } from 'node:os';
 import { openStore, ConflictError } from './store.mjs';
 import { InputError } from './domain.mjs';
 import { MAX_ARCHIVE_BYTES, validateArchive } from './archive.mjs';
+import { runtimeConfig, verifyStorageChoice } from './config.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const assets = new Map([
@@ -15,7 +17,7 @@ const assets = new Map([
   ['/styles.css', ['public/styles.css', 'text/css; charset=utf-8']],
   ['/domain.mjs', ['domain.mjs', 'text/javascript; charset=utf-8']]
 ]);
-export function createApp(store) {
+export function createApp(store, { mode = 'personal-test' } = {}) {
   const token = randomBytes(32).toString('hex');
   const server = createServer(async (req, res) => {
     const headers = {
@@ -38,7 +40,7 @@ export function createApp(store) {
         const bytes = await readFile(join(root, file));
         res.writeHead(200, { ...headers, 'Content-Type': type }); res.end(bytes); return;
       }
-      if (req.method === 'GET' && path === '/api/session') return send(200, { token, mode: 'local-test' });
+      if (req.method === 'GET' && path === '/api/session') return send(200, { token, mode });
       if (req.method === 'GET' && path === '/api/shifts') return send(200, store.list());
       const match = /^\/api\/shifts\/([a-f0-9-]{36})(\/history)?$/.exec(path);
       if (req.method === 'GET' && match) {
@@ -80,21 +82,18 @@ export function createApp(store) {
   return server;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const args = process.argv.slice(2);
-  if (args.length && (args.length !== 2 || args[0] !== '--recovered-test' || !isAbsolute(args[1]))) {
-    throw new Error('Для просмотра восстановленной тестовой базы: --recovered-test "полный-путь.sqlite"');
-  }
-  const recovered = args.length ? args[1] : null;
-  if (recovered && !(await stat(recovered)).isFile()) throw new Error('Не найден файл восстановленной базы');
-  const dataDir = join(process.env.LOCALAPPDATA || homedir(), 'WayMarket-Test');
+  const config = runtimeConfig(process.argv.slice(2), { platform: process.platform, env: process.env, home: homedir() });
+  verifyStorageChoice(config, existsSync);
+  const { dataDir, databasePath, recovered } = config;
+  if (recovered && !(await stat(databasePath)).isFile()) throw new Error('Не найден файл восстановленной базы');
   if (!recovered) await mkdir(dataDir, { recursive: true, mode: 0o700 });
-  const databasePath = recovered || join(dataDir, 'cash-test.sqlite');
-  const store = openStore(databasePath, { requireSchema1: !!recovered });
-  const server = createApp(store);
+  const store = openStore(databasePath, { requireSchema1: recovered });
+  const server = createApp(store, { mode: config.mode });
   server.on('error', error => { console.error(error.message); store.close(); process.exitCode = 1; });
-  server.listen(3210, '127.0.0.1', () => {
+  server.listen(config.port, config.host, () => {
     console.log('Way Market TEST: http://127.0.0.1:3210');
     console.log(`Тестовая база: ${databasePath}`);
+    console.log(`Режим: ${config.mode}`);
     if (recovered) console.log('ОТКРЫТА ОТДЕЛЬНАЯ ВОССТАНОВЛЕННАЯ ТЕСТОВАЯ КОПИЯ. Изменения сохраняются в неё.');
     console.log('Только этот компьютер. Остановка: Ctrl+C. Реальные данные не вводить.');
   });
