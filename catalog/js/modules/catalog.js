@@ -711,11 +711,24 @@ export function visibleProducts() {
 
   const q = norm(state.query);
   if (!q) return sortList(list, false);
+  return sortList(searchProducts(state.query, list), true);
+}
+
+/* ── Поиск по запросу ───────────────────────────────────────────────────────
+ * Выделен из visibleProducts отдельной функцией: поиск нужен не только главному
+ * экрану — список покупок собирается своим полем, и выдача там должна быть
+ * РОВНО та же. Иначе в каталоге завелись бы два похожих поиска, которые со
+ * временем разъезжаются. Состояние приложения функция не трогает: и запрос, и
+ * список приходят снаружи. */
+export function searchProducts(query, list = state.products, limit = 0) {
+  const q = norm(query);
+  if (!q) return [];
+  const cut = (arr) => (limit ? arr.slice(0, limit) : arr);
   // Запрос из одних цифр — это код или штрихкод, самый частый случай у кассы.
   // Полная оценка всех 17 тысяч товаров на такой запрос занимала на телефоне
   // около секунды НА КАЖДУЮ НАЖАТУЮ ЦИФРУ, и каталог казался зависшим.
   // Цифры ищем напрямую по кодам — без транслита и разбора опечаток.
-  if (/^\d{2,}$/.test(q)) return sortList(searchByCode(list, q), true);
+  if (/^\d{2,}$/.test(q)) return cut(searchByCode(list, q));
   const qT = translit(q);
   const qVars = q === qT ? [q] : [q, qT];
   // слова запроса — каждое ищется отдельно (в любом порядке)
@@ -753,7 +766,7 @@ export function visibleProducts() {
   const scored = hits
     .sort((a, b) => b.s - a.s || cmpRu(a.p.name, b.p.name))
     .map((x) => x.p);
-  return sortList(scored, true);
+  return cut(scored);
 }
 
 /* Кандидаты: товары из указателя плюс товары подходящих групп. Если запрос
