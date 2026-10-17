@@ -19,7 +19,7 @@ import { addOrderItem, deleteOrder, markReceived, openOrderForm, openOrders, ord
 import { clearCompare, inCompare, openCompare, removeFromCompare, toggleCompare } from './compare.js';
 import { openWork, renderWorkBadge, runWorkAction } from './work.js';
 import { bindGuest, openShelfReport, openStore } from './guest.js';
-import { bindShopping, shopFromHash, shopLink, toggleShop } from './shopping.js';
+import { bindShopping, scanToShop, shopFromHash, shopLink, toggleShop } from './shopping.js';
 import { bindNews, checkNews } from './news.js';
 import { bindMascot, greet, wolfSay, buzz } from './mascot.js';
 import { bindMargin, marginCount, marginIssues, openMargin, openStale, staleItems } from './margin.js';

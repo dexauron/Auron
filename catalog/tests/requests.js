@@ -202,6 +202,115 @@ const SHOP = [
   chk(!guest.copy && !guest.save, 'покупателю выгрузки в 1С и «Сохранить как заявку» не видно');
   chk(guest.wa, 'а «Отправить в WhatsApp» у него на месте — этим он и присылает список');
 
+
+  /* ── 8. Список собирается прямо в своём окне ───────────────────────────────
+   * Владелец: «заходишь в это окно, и там же сканером или вводишь код,
+   * наименование, поиск — и заодно количество». Раньше за каждым товаром
+   * приходилось выходить в каталог, искать, открывать карточку и возвращаться:
+   * на сорок позиций — сорок кругов по приложению. */
+  await asOwner(page, {});
+  await openShop(page, []);
+  const addRow = await page.evaluate(() => ({
+    field: !!document.getElementById('shopFind'),
+    scan: !!document.getElementById('shopScan'),
+  }));
+  chk(addRow.field && addRow.scan, 'в окне списка есть поле поиска и кнопка камеры');
+
+  // поиск по названию
+  const byName = await page.evaluate(async () => {
+    const f = document.getElementById('shopFind');
+    f.value = 'колбас'; f.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    return [...document.querySelectorAll('#shopFindList [data-shop-pick]')]
+      .map((x) => x.innerText.replace(/\s+/g, ' ').trim());
+  });
+  chk(byName.length === 1 && /Колбаса/.test(byName[0]), `поиск по названию находит товар (${byName.join(' | ')})`);
+  chk(/код 202/.test(byName[0]), `в найденном видно код и цену (${byName[0]})`);
+
+  // поиск по коду
+  const byCode = await page.evaluate(async () => {
+    const f = document.getElementById('shopFind');
+    f.value = '303'; f.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 400));
+    return [...document.querySelectorAll('#shopFindList [data-shop-pick]')]
+      .map((x) => x.innerText.replace(/\s+/g, ' ').trim());
+  });
+  chk(byCode.some((r) => /Батон/.test(r)), `поиск по коду находит товар (${byCode.join(' | ')})`);
+
+  // выбрали — добавилось, поле очистилось, можно набирать следующий
+  const picked = await page.evaluate(async () => {
+    document.querySelector('#shopFindList [data-shop-pick]').click();
+    await new Promise((r) => setTimeout(r, 400));
+    return {
+      list: JSON.parse(localStorage.getItem('wm_shop_v1') || '[]').map((x) => x.code),
+      field: document.getElementById('shopFind').value,
+      focus: document.activeElement.id,
+      rows: document.querySelectorAll('#shopBody [data-shop-qty]').length,
+    };
+  });
+  chk(picked.list.includes('303'), `тап по найденному добавляет его в список (${picked.list.join(',')})`);
+  chk(picked.field === '' && picked.focus === 'shopFind',
+    'поле очищается и курсор остаётся в нём — следующий товар набирается сразу');
+  chk(picked.rows === 1, `товар появился в списке строкой (${picked.rows})`);
+
+  // количество набирается руками
+  const typedQty = await page.evaluate(async () => {
+    const inp = document.querySelector('#shopBody [data-shop-qty]');
+    inp.value = '24';
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 350));
+    return JSON.parse(localStorage.getItem('wm_shop_v1') || '[]')[0].qty;
+  });
+  chk(typedQty === 24, `количество можно ввести числом, а не кнопками ±1 (${typedQty})`);
+
+  const badQty = await page.evaluate(async () => {
+    const inp = document.querySelector('#shopBody [data-shop-qty]');
+    inp.value = '';
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return { saved: JSON.parse(localStorage.getItem('wm_shop_v1') || '[]')[0].qty, shown: inp.value };
+  });
+  chk(badQty.saved === 24 && badQty.shown === '24',
+    `пустое поле не превращает позицию в ноль — возвращается прежнее (${badQty.saved})`);
+
+  const comma = await page.evaluate(async () => {
+    const inp = document.querySelector('#shopBody [data-shop-qty]');
+    inp.value = '2,5';
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 300));
+    return JSON.parse(localStorage.getItem('wm_shop_v1') || '[]')[0].qty;
+  });
+  chk(comma === 2.5, `дробное через запятую понимается — так набирают вес (${comma})`);
+
+  // сканер добавляет в список и складывает повторы
+  const scanned = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    P._scanShop('4600000000011');          // Молоко
+    P._scanShop('4600000000011');          // то же второй раз
+    P._scanShop('0000000000000');          // чужой штрихкод
+    await new Promise((r) => setTimeout(r, 300));
+    const list = JSON.parse(localStorage.getItem('wm_shop_v1') || '[]');
+    return {
+      milk: (list.find((x) => x.code === '101') || {}).qty,
+      n: list.length,
+      panel: document.getElementById('scanResult').innerText.replace(/\s+/g, ' '),
+    };
+  });
+  chk(scanned.milk === 2, `сканирование добавляет товар, повтор прибавляет количество (${scanned.milk})`);
+  chk(/Нет в каталоге/.test(scanned.panel), `чужой штрихкод так и говорит (${scanned.panel.slice(0, 30)})`);
+
+  // весовая этикетка: вес с неё сразу становится количеством
+  const weighed = await page.evaluate(async () => {
+    const P = window.WM_PUBLISH;
+    const ean = P._ean13('23' + '00202' + '00330');   // код 202, 330 г
+    P._scanShop(ean);
+    await new Promise((r) => setTimeout(r, 300));
+    const list = JSON.parse(localStorage.getItem('wm_shop_v1') || '[]');
+    return { ean, qty: (list.find((x) => x.code === '202') || {}).qty };
+  });
+  chk(weighed.qty === 0.33,
+    `с весовой этикетки вес сразу становится количеством, его не набирают руками (${weighed.qty} кг)`);
+
   chk(!errs.length, `нет сбоев JS (${errs.length}${errs.length ? ': ' + errs[0] : ''})`);
   await done(b);
 })();
