@@ -260,7 +260,9 @@
              покупок», у сотрудника «закончилось на полке». Всё остальное —
              редкое, и лежит ниже мелким рядом: пять одинаковых кнопок подряд
              делали важным всё сразу, то есть ничего. -->
-        <button class="btn btn-primary btn-block guest-only" id="btnShopAdd">В список покупок</button>
+        <!-- список покупок нужен всем: покупателю — что взять, сотруднику — что донести,
+             владельцу — чтобы собрать расходник и провести его в 1С -->
+        <button class="btn btn-primary btn-block" id="btnShopAdd">В список покупок</button>
         <button class="btn btn-primary btn-block emp-only" id="btnRestock">Закончилось на полке</button>
         <button class="btn btn-secondary btn-block guest-only" id="btnWait" hidden>Сообщить, когда появится</button>
         <div class="sheet-actions">
@@ -967,6 +969,12 @@
       <div class="sheet-body" id="shopBody"></div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-block" id="shopWa" hidden>Отправить в WhatsApp</button>
+        <!-- Для вошедших: этим списком владелец собирает расходную накладную -->
+        <div class="sheet-actions emp-only" id="shopOnec">
+          <button class="btn btn-secondary" id="shopCopy1c">Скопировать для 1С</button>
+          <button class="btn btn-secondary" id="shopFile1c">Скачать файл</button>
+        </div>
+        <button class="btn btn-secondary btn-block emp-only" id="shopSaveReq">Сохранить как заявку</button>
         <button class="btn btn-ghost btn-block" id="shopClear">Очистить список</button>
       </div>
     </div>
@@ -1107,6 +1115,18 @@
           <button class="ios-row ios-row-danger" id="ordDelete"><span class="ios-row-title">Удалить заказ</span></button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Заявки: собранные списки покупок, которые владелец проводит в 1С -->
+  <div class="sheet-backdrop" id="requestsSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="ios-nav">
+        <h2 class="ios-nav-title">Заявки</h2>
+        <button class="ios-nav-btn strong" data-close="requestsSheet">Готово</button>
+      </div>
+      <div class="sheet-body" id="requestsBody"></div>
     </div>
   </div>
 

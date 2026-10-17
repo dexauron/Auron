@@ -14,6 +14,7 @@ import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
 import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
+import { copyForOnec, downloadForOnec } from './onec.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -366,6 +367,13 @@ export function bindShopping() {
   $('shopOpen').addEventListener('click', openShop);
   $('shopShare').addEventListener('click', shareShop);
   $('shopWa').addEventListener('click', shopToWhatsApp);
+  /* Выгрузка в 1С и «Сохранить как заявку» — только вошедшим: это рабочая
+     часть, покупателю она ни к чему. */
+  $('shopCopy1c').addEventListener('click', () => copyForOnec(read()));
+  $('shopFile1c').addEventListener('click', () => downloadForOnec(read(), 'Список покупок'));
+  $('shopSaveReq').addEventListener('click', () => {
+    if (ui.saveAsRequest) ui.saveAsRequest(read());
+  });
   $('shopClear').addEventListener('click', clearShop);
   $('shopBody').addEventListener('click', (e) => {
     const done = e.target.closest('[data-shop-done]');

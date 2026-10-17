@@ -404,6 +404,7 @@ export function buildFullSnapshot() {
     competitors: state.competitors || [], compPrices: state.compPrices || [],
     unitCoef: state.unitCoef || {},
     retailHist: state.retailHist || {},      // как менялся ценник — для «подорожало»
+    requests: state.requests || [],          // заявки: собранные списки покупок для 1С
     orders: state.orders || [],                 // заказы поставщикам: кто, у кого, когда придёт
     orderRules: state.orderRules || null,       // правила заказа — общие для всего магазина
     staffPassword: state.staffPassword || null, // пароль сотрудника хранится в каталоге владельца
@@ -583,6 +584,7 @@ function applySnapshot(data, role) {
   state.compPrices = data.compPrices || [];
   state.unitCoef = data.unitCoef || {};
   state.retailHist = data.retailHist || {};
+  state.requests = data.requests || [];
   state.orders = data.orders || [];
   if (data.orderRules) state.orderRules = data.orderRules;
   state.staffPassword = data.staffPassword || null;
