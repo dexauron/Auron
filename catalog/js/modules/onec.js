@@ -86,7 +86,16 @@ export async function downloadForOnec(items, title = 'Список покупо�
       { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 12 }];
     const wb = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(wb, ws, 'Лист_1');   // лист назван как в шаблоне
-    window.XLSX.writeFile(wb, fileName(title));
+    /* Сохраняем сами, а не через writeFile разборщика: он отдаёт файл с именем
+       «download», и в папке загрузок такие не отличить друг от друга. Нам нужно
+       имя с датой — заявок будет много. */
+    const data = window.XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const url = URL.createObjectURL(new Blob([data],
+      { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName(title);
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
     toast(`Файл на ${rows.length} строк сохранён`);
     return true;
   } catch (e) { toast('Не получилось собрать файл: ' + (e && e.message ? e.message : 'ошибка')); return false; }
