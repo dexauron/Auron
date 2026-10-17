@@ -354,7 +354,7 @@ function pickFound(id) {
 /* Сканер в окне списка. Камера не закрывается: обходя склад, человек наводит
  * её на товар за товаром. Весовую этикетку понимаем тоже — вес с неё сразу
  * становится количеством, его не надо набирать руками. */
-function scanToShop(text) {
+export function scanToShop(text) {
   const box = $('scanResult');
   if (!box) return;
   const found = findByBarcode(text);
