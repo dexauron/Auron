@@ -327,7 +327,7 @@ function initSheet() {
   }
   for(const name of ['zBasisConfirmed','independentReports','factBasisConfirmed','periodConfirmed']) {
     const label=form.elements[name].closest('label'),span=label.querySelector('span');
-    const before=span.textContent;span.textContent={zBasisConfirmed:'Возвраты учтены',independentReports:'Продажи отчётов не пересекаются',factBasisConfirmed:'Суммы указаны без повторов',periodConfirmed:'Период и терминалы проверены'}[name];question(label,span.textContent,before);
+    const before=span.textContent;span.textContent={zBasisConfirmed:'Возвраты учтены',independentReports:'Продажи отчётов не пересекаются',factBasisConfirmed:'Суммы указаны без повторов',periodConfirmed:'Период и терминалы проверены'}[name];label.querySelector('.help-button')?.remove();question(label,span.textContent,before);
   }
   $('flow-back').hidden=true;$('flow-next').hidden=true;$('save').hidden=false;
   $('flow-steps').hidden=true;document.querySelector('.flow-heading').hidden=true;
