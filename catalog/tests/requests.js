@@ -113,7 +113,8 @@ const SHOP = [
   const saus = rows.find((r) => /Колбаса/.test(r[2])) || [];
   chk(saus[4] === 'кг' && saus[5] === '2,5',
     `у весового единица «кг», а дробное число с запятой — иначе Excel сделает из него дату (${saus[4]}, ${saus[5]})`);
-  chk(rows.every((r) => r[8] === ''), 'колонка «Всего» оставлена пустой — её считает сама 1С');
+  // без строки заголовков: в ней «Всего» — это само название колонки
+  chk(rows.slice(1).every((r) => r[8] === ''), 'колонка «Всего» оставлена пустой — её считает сама 1С');
 
   // ── 4. Сохранить как заявку ──
   const saved = await page.evaluate(async () => {
@@ -137,7 +138,7 @@ const SHOP = [
     };
   });
   chk(screen.open && screen.rows === 1, `окно заявок открывается из «Работы» (${screen.rows})`);
-  chk(/Ждут приёмки · 1/.test(screen.text), `видно, сколько ждёт приёмки (${screen.text.slice(0, 40)})`);
+  chk(/ждут приёмки · 1/i.test(screen.text), `видно, сколько ждёт приёмки (${screen.text.slice(0, 40)})`);
 
   const inside = await page.evaluate(async () => {
     document.querySelector('#requestsBody [data-req-open]').click();
@@ -161,7 +162,7 @@ const SHOP = [
     };
   });
   chk(!!taken.takenAt, `отметка «всё принял» сохранилась (${taken.takenAt})`);
-  chk(/Принятые · 1/.test(taken.text), `принятая переехала в свою группу (${taken.text.slice(0, 60)})`);
+  chk(/принятые · 1/i.test(taken.text), `принятая переехала в свою группу (${taken.text.slice(0, 60)})`);
   chk(taken.struck === 1, 'принятая заявка зачёркнута');
 
   // главное требование: принятую можно открыть и скопировать заново в любой день
