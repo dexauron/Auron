@@ -966,6 +966,19 @@
         <h2 class="ios-nav-title">Список покупок</h2>
         <button class="ios-nav-btn strong" data-close="shopSheet">Готово</button>
       </div>
+      <!-- Добавление прямо здесь: сканером или поиском по коду и названию.
+           Иначе на каждый товар приходилось выходить в каталог, искать его,
+           открывать карточку и возвращаться — на сорок позиций это сорок
+           кругов по приложению. -->
+      <div class="shop-add">
+        <div class="shop-add-row">
+          <input type="search" id="shopFind" class="input" autocomplete="off"
+                 placeholder="Код, штрихкод или название…" aria-label="Найти товар для списка">
+          <button class="round-btn round-btn-accent" id="shopScan" type="button"
+                  aria-label="Сканировать штрихкод"><i data-ic="camera"></i></button>
+        </div>
+        <div id="shopFindList"></div>
+      </div>
       <div class="sheet-body" id="shopBody"></div>
       <div class="filter-actions">
         <button class="btn btn-primary btn-block" id="shopWa" hidden>Отправить в WhatsApp</button>
