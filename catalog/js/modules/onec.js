@@ -20,6 +20,7 @@
 
 import { state } from './store.js';
 import { toast } from './core.js';
+import { plural } from './competitors.js';
 import { loadScript } from './scanner.js';
 
 // Порядок и написание — ровно как в шаблоне владельца. Не менять на глаз.
@@ -61,7 +62,7 @@ export async function copyForOnec(items) {
   if (!rows.length) { toast('Нечего копировать — в списке нет количества'); return false; }
   try {
     await navigator.clipboard.writeText(toTsv(items));
-    toast(`Скопировано ${rows.length} строк — вставь в Excel или сразу в 1С`);
+    toast(`Скопировал ${rows.length} ${plural(rows.length, 'строку', 'строки', 'строк')} — вставь в Excel или сразу в 1С`);
     return true;
   } catch (e) { toast('Браузер не дал скопировать. Открой список на компьютере'); return false; }
 }
@@ -96,7 +97,7 @@ export async function downloadForOnec(items, title = 'Список покупо�
     a.href = url; a.download = fileName(title);
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    toast(`Файл на ${rows.length} строк сохранён`);
+    toast(`Файл сохранён: ${rows.length} ${plural(rows.length, 'строка', 'строки', 'строк')}`);
     return true;
   } catch (e) { toast('Не получилось собрать файл: ' + (e && e.message ? e.message : 'ошибка')); return false; }
 }
