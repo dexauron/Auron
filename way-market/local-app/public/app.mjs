@@ -1,3 +1,4 @@
+import {differenceText,showDifference} from '/difference.mjs';
 import { reconcile, reconcileNonCash, money, defaultCatalog, validateCatalog, reconcileCategories, CATEGORY_KINDS } from '/domain.mjs';
 const $ = id => document.getElementById(id);
 const form = $('shift-form');
@@ -74,12 +75,12 @@ function fillNonCash(raw = {}) {
 function previewNonCash(raw) {
     try {
       const r = reconcileNonCash(raw);
-      nonCashDifference.textContent = r.mode === 'aggregate' ? rub(r.difference) : 'Сохранён прежний формат';
+      nonCashDifference.textContent = r.mode === 'aggregate' ? differenceText(r.difference, 'Не указано') : 'Сохранён прежний формат';
       nonCashDifference.className = r.difference < 0 ? 'negative' : r.difference > 0 ? 'positive' : '';
       nonCashStatus.textContent = r.mode !== 'aggregate' ? 'Ранее введённая детализация сохранена. Общие поля ниже не заменяют её автоматически.' : r.difference == null ? 'Для сверки нужны оба источника и подтверждение сопоставимости периода.' : r.difference === 0 ? 'Итоги совпадают. Зачисление и комиссия банка проверяются отдельно.' : 'Есть расхождение. Проверьте источники, период и возвраты; причина пока не установлена.';
-      if ($('review-noncash')) $('review-noncash').textContent = r.mode !== 'aggregate' ? 'Безналичные: сохранена прежняя детализация.' : r.difference == null ? 'Безналичные пока не сверены. Их можно дополнить позже.' : r.difference === 0 ? 'Безналичные: итоги кассы и терминалов совпадают.' : `Безналичные: разница ${rub(r.difference)}. Требуется проверка.`;
+      if ($('review-noncash')) $('review-noncash').textContent = r.mode !== 'aggregate' ? 'Безналичные: сохранена прежняя детализация.' : r.difference == null ? 'Безналичные пока не сверены. Их можно дополнить позже.' : r.difference === 0 ? 'Безналичные: итоги кассы и терминалов совпадают.' : `Безналичные: разница ${differenceText(r.difference, 'Не указано')}. Требуется проверка.`;
     } catch (e) {
-      nonCashDifference.textContent = '—'; nonCashStatus.textContent = e.message;
+      showDifference(nonCashDifference,null); nonCashStatus.textContent = e.message;
       if ($('review-noncash')) $('review-noncash').textContent = 'Безналичные: проверьте введённые данные.';
     }
 }
@@ -121,13 +122,14 @@ function preview() {
   try {
     const r = reconcile({ ...raw, nonCash: undefined });
     for (const [id, value] of Object.entries({ expected: r.expected, 'cash-paid': r.cashPaid, 'claimed-total': r.claimed, 'received-total': r.received, difference: r.receivedDifference, 'claimed-diff': r.claimedDifference, 'transfer-diff': r.transferDifference })) $(id).textContent = rub(value);
-    $('difference').className = r.receivedDifference < 0 ? 'negative' : r.receivedDifference > 0 ? 'positive' : '';
+    for(const [id,value] of [['difference',r.receivedDifference],['claimed-diff',r.claimedDifference],['transfer-diff',r.transferDifference]])showDifference($(id),value,'Не указано');
     $('difference-label').textContent = r.receivedDifference == null ? 'Пересчёт ещё не внесён' : r.receivedDifference === 0 ? 'Суммы совпадают' : 'Предварительное расхождение · требуется проверка';
     $('calc-hint').textContent = r.warnings.length ? r.warnings.join(' ') : r.categoryResult ? `Внесения по категориям: ${rub(r.categoryResult.cashIn)}. Неоплаченные чеки в наличной выручке: ${rub(r.categoryResult.goodsAdjustment)}. Это отдельная корректировка, не выдача денег.` : r.cashSetup ? 'Начало + наличные двух отчётов + внесения − выплаты − предыдущие передачи − размен.' : 'Остаток + наличные по Z + поступления − выплаты − оставлено.';
     updateSheetReport(r,raw);
   } catch (error) {
     for (const id of ['expected', 'cash-paid', 'claimed-total', 'received-total', 'difference', 'claimed-diff', 'transfer-diff']) $(id).textContent = '—';
     $('calc-hint').textContent = error.message;
+    for(const id of ['difference','claimed-diff','transfer-diff'])showDifference($(id),null);
     $('difference-label').textContent = 'Данных для расчёта пока недостаточно';
     if($('sheet-cash-status')){$('sheet-cash-status').textContent=error.message;for(const k of ['sheet-cash-sales','sheet-total-sales','sheet-actual-sales'])$(k).textContent='—';}
   }
@@ -483,7 +485,7 @@ async function loadHistory() {
   for (const r of rows) {
     const row = el('button', null, 'history-row'); row.type = 'button';
     const info = el('span'); info.append(el('strong', `${r.result.date} · ${r.result.register} · № ${r.result.shiftNo}`), el('small', `${r.result.cashier} · версия ${r.version}`));
-    const number = el('span', rub(r.result.receivedDifference), 'history-amount'); number.append(el('small', 'Факт минус расчёт'));
+    const number = showDifference(el('span', null, 'history-amount'),r.result.receivedDifference,'Не указано'); number.append(el('small', 'Факт минус расчёт'));
     row.append(info, number); row.addEventListener('click', () => openRecord(r)); list.append(row);
     const details = el('details', null, 'versions'); details.append(el('summary', 'Версии и причины изменений'));
     details.addEventListener('toggle', async () => {
@@ -501,7 +503,7 @@ function buildPrint(record) {
   target.append(el('p', 'ТЕСТОВЫЙ БЛАНК · НЕ ЯВЛЯЕТСЯ ПРОВЕДЕНИЕМ ПЛАТЕЖА', 'print-label'), el('h1', 'Сверка наличных за смену'), el('p', `${r.date} · ${r.register} · смена ${r.shiftNo}\nКассир: ${r.cashier}. Бухгалтер: ${r.accountant || 'не указан'}.`));
   const table = el('table', null, 'print-table');
   for (const [label, value] of [['Остаток на начало', r.amounts.opening], ['Наличные по Z (возвраты учтены)', r.amounts.zCash], ['Прочие поступления', r.amounts.otherIn], ['Выполненные наличные выплаты', r.cashPaid], ['Оставлено в кассе', r.amounts.retained], ['Расчётная передача', r.expected], ['Кассир заявил передачу', r.claimed], ['Бухгалтер получил и пересчитал', r.received], ['Факт минус расчёт', r.receivedDifference], ['Принято минус заявлено', r.transferDifference]]) {
-    const row = el('tr'); row.append(el('td', label), el('td', rub(value))); table.append(row);
+    const row = el('tr'); row.append(el('td', label),['Факт минус расчёт','Принято минус заявлено'].includes(label)?showDifference(el('td'),value,'Не указано'):el('td', rub(value))); table.append(row);
   }
   target.append(table);
   if(r.reportTemplate)target.append(el('p',`Источник наличных: инкассация ${rub(r.reportTemplate.amount)} − внесение ${rub(r.reportTemplate.insertion)} = продажи ${rub(r.reportTemplate.net)}.`));
@@ -520,7 +522,9 @@ function buildPrint(record) {
   }
   if (r.nonCash?.mode === 'aggregate') {
     const n = r.nonCash;
-    target.append(el('h3', 'Общая безналичная сверка'), el('p', `Касса после возвратов: ${rub(n.zNet)}. Терминалы после возвратов: ${rub(n.reportNet)}. Разница: ${rub(n.difference)}.`), el('p', `Источник: ${n.reportRef || 'не указан'}. Сопоставимость периода: ${n.periodConfirmed ? 'заявлена' : 'не подтверждена'}. Зачисление банка не проверено.`));
+    const totals=el('p',`Касса после возвратов: ${rub(n.zNet)}. Терминалы после возвратов: ${rub(n.reportNet)}. Разница: `);
+    totals.append(showDifference(el('span'),n.difference,'Не указано'));
+    target.append(el('h3', 'Общая безналичная сверка'), totals, el('p', `Источник: ${n.reportRef || 'не указан'}. Сопоставимость периода: ${n.periodConfirmed ? 'заявлена' : 'не подтверждена'}. Зачисление банка не проверено.`));
     if(n.breakdown)target.append(el('p',`Карта: ${rub(n.breakdown.card)}; QR: ${rub(n.breakdown.qr)}; Bluetooth: ${rub(n.breakdown.bluetooth)}; био: ${rub(n.breakdown.bio)}.`));
   } else if (r.nonCash) {
     target.append(el('h3', 'Безналичная сверка — отдельно от наличных'));
@@ -530,7 +534,7 @@ function buildPrint(record) {
     nonCashTable.append(heading);
     for (const [channel, title] of [['card', 'Карточный эквайринг'], ['sbp', 'СБП']]) {
       const p = r.nonCash[channel];
-      const row = el('tr'); row.append(el('td', title), el('td', rub(p.zNet)), el('td', rub(p.reportNet)), el('td', rub(p.difference))); nonCashTable.append(row);
+      const row = el('tr'); row.append(el('td', title), el('td', rub(p.zNet)), el('td', rub(p.reportNet)), showDifference(el('td'),p.difference,'Не указано')); nonCashTable.append(row);
     }
     target.append(nonCashTable);
     for (const [channel, title] of [['card', 'Эквайринг'], ['sbp', 'СБП']]) target.append(el('p', `${title}: ${r.nonCash[channel].reportRef || 'отчёт не указан'}`));

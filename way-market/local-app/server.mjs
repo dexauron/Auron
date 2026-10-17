@@ -15,6 +15,7 @@ const assets = new Map([
   ['/', ['public/index.html', 'text/html; charset=utf-8']],
   ['/advanced.html', ['public/advanced.html', 'text/html; charset=utf-8']],
   ['/excel-app.mjs', ['public/excel-app.mjs', 'text/javascript; charset=utf-8']],
+  ['/difference.mjs', ['public/difference.mjs', 'text/javascript; charset=utf-8']],
   ['/excel.css', ['public/excel.css', 'text/css; charset=utf-8']],
   ['/worksheet.mjs', ['worksheet.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['public/app.mjs', 'text/javascript; charset=utf-8']],
