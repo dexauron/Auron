@@ -148,13 +148,14 @@ ok('старый лист со своим снимком настроек');
 
 // 11. Черновик переживает перезагрузку.
 await page.click('#new'); await page.fill('[name=cashier]', 'Кассир черновика'); await page.fill('[name=cashReport]', '1 234,50');
-await page.reload(); await page.waitForSelector('#notice:not([hidden])');
-assert.match(await text('#notice'), /Есть несохранённый лист/);
-await page.click('#notice button:first-of-type'); await page.waitForTimeout(200);
+await page.reload(); await page.waitForSelector('#draft-recovery:not([hidden])');
+assert.match(await text('#draft-recovery'), /Несохранённых черновиков/);
+await page.click('#draft-recovery button');
+await page.locator('#drafts-list .draft-row').filter({hasText:'Кассир черновика'}).getByRole('button',{name:'Восстановить'}).click(); await page.waitForTimeout(200);
 assert.equal(await page.inputValue('[name=cashier]'), 'Кассир черновика'); assert.equal(await page.inputValue('[name=cashReport]'), '1 234,50');
 assert.match((await status()).text, /Черновик восстановлен/);
 await page.click('#new'); await page.waitForTimeout(100);
-assert.equal(await page.evaluate(() => localStorage.getItem('way-market:excel-draft')), null);
+assert.equal(await page.evaluate(() => Object.keys(localStorage).filter(k=>k.startsWith('way-market:excel-draft')).length), 0);
 ok('черновик восстановлен после перезагрузки и удалён при новом листе');
 
 // 12. Старая запись подробного режима открывается в /advanced.html.
