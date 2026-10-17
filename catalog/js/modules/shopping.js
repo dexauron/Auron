@@ -14,6 +14,7 @@ import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
 import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
+import { copyForOnec, downloadForOnec } from './onec.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -23,6 +24,16 @@ function read() {
 }
 function write(list) {
   try { localStorage.setItem(KEY, JSON.stringify(list.slice(-MAX))); } catch (e) { /* нет места */ }
+}
+
+/* Сколько единиц в упаковке — из описания фасовок товара. Нужна только для
+   подсказки «это 2 коробки по 12», в расходник уходят штуки. */
+function packSize(p) {
+  for (const u of ((p && p.pack_units) || [])) {
+    const n = Number(u && u.qty);
+    if (n > 1) return n;
+  }
+  return 0;
 }
 
 const priceOf = (p) => (p && p.retail_price != null && p.retail_price !== '' ? Number(p.retail_price) : 0);
@@ -46,7 +57,14 @@ export function toggleShop(p) {
   const list = read();
   const i = list.findIndex((x) => x.id === p.id);
   if (i >= 0) { list.splice(i, 1); write(list); renderShopBar(); return false; }
-  list.push({ id: p.id, name: p.name || '', code: p.code || '', price: priceOf(p), qty: 1, done: false });
+  /* Складываем сразу всё, что нужно выгрузке в 1С: товар может уйти из
+     каталога после очередной выгрузки, а заявка должна остаться читаемой. */
+  list.push({
+    id: p.id, name: p.name || '', code: p.code || '', article: p.article || '',
+    barcode: (p.barcodes || [])[0] || '',
+    unit: p.is_weighted ? 'кг' : (p.unit || 'шт'), weighted: !!p.is_weighted,
+    price: priceOf(p), qty: p.is_weighted ? 1 : 1, done: false,
+  });
   write(list);
   renderShopBar();
   return true;
@@ -56,7 +74,10 @@ function shopQty(id, delta) {
   const list = read();
   const row = list.find((x) => x.id === id);
   if (!row) return;
-  row.qty = Math.max(1, Math.round(((Number(row.qty) || 1) + delta) * 1000) / 1000);
+  // у весового товара шаг полкило: «+1 кг» колбасы — это уже много
+  const step = row.weighted ? 0.5 : 1;
+  const min = row.weighted ? 0.1 : 1;
+  row.qty = Math.max(min, Math.round(((Number(row.qty) || 1) + delta * step) * 1000) / 1000);
   write(list);
   renderShop();
   renderShopBar();
@@ -95,7 +116,9 @@ function renderShopBar() {
   if (!bar) return;
   const list = read();
   const left = list.filter((x) => !x.done).length;
-  bar.hidden = !(list.length && !state.session);
+  /* Виден всем: владелец собирает им расходник, сотрудник — что донести из
+     склада, покупатель — что взять. Раньше полоска была только у покупателя. */
+  bar.hidden = !list.length;
   if (list.length) {
     $('shopCount').textContent = `${left} ${plural(left, 'позиция', 'позиции', 'позиций')}`;
     $('shopTotal').textContent = fmtPrice(total(list));
@@ -121,18 +144,28 @@ function renderShop() {
   const rows = list.map((x) => {
     const p = state.products.find((y) => y.id === x.id);
     const price = p ? priceOf(p) : Number(x.price) || 0;
-    const sum = price * (Number(x.qty) || 1);
+    const qty = Number(x.qty) || 1;
+    const sum = price * qty;
+    // «кг» или «шт» прямо у числа: иначе непонятно, две штуки или два килограмма
+    const unit = x.unit || (p && p.is_weighted ? 'кг' : ((p && p.unit) || 'шт'));
+    /* Подсказка про упаковки: количество ставится в штуках (в них считается и
+       расходник), а сколько это коробок — говорим рядом словами. */
+    const packQty = packSize(p);
+    const packHint = (!x.weighted && packQty > 1 && qty >= packQty)
+      ? `${fmtNum(Math.floor(qty / packQty))} ${plural(Math.floor(qty / packQty), 'упаковка', 'упаковки', 'упаковок')} по ${fmtNum(packQty)}`
+      : '';
     return `<div class="swipe-wrap"><span class="swipe-hint">Убрать</span>
     <div class="ios-row shop-row${x.done ? ' shop-done' : ''}">
       <button class="shop-check" data-shop-done="${esc(x.id)}" aria-label="Вычеркнуть">
         ${x.done ? ic('check', 'ic-xs') : ''}</button>
       <span class="ios-row-title">${esc(x.name)}
         <span class="ord-sub">${(Number(x.qty) || 1) > 1
-    ? `${fmtNum(x.qty)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
-    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}</span></span>
+    ? `${fmtNum(x.qty)} ${esc(unit)} × ${fmtPrice(price)} = ${fmtPrice(sum)}`
+    : (price ? fmtPrice(price) : 'цена не указана')}${x.code ? ' · код ' + esc(x.code) : ''}${
+  packHint ? ' · ' + esc(packHint) : ''}</span></span>
       <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
-        <span class="shop-qty">${fmtNum(x.qty)}</span>
+        <span class="shop-qty">${fmtNum(x.qty)}<span class="shop-unit">${esc(unit)}</span></span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
@@ -334,6 +367,13 @@ export function bindShopping() {
   $('shopOpen').addEventListener('click', openShop);
   $('shopShare').addEventListener('click', shareShop);
   $('shopWa').addEventListener('click', shopToWhatsApp);
+  /* Выгрузка в 1С и «Сохранить как заявку» — только вошедшим: это рабочая
+     часть, покупателю она ни к чему. */
+  $('shopCopy1c').addEventListener('click', () => copyForOnec(read()));
+  $('shopFile1c').addEventListener('click', () => downloadForOnec(read(), 'Список покупок'));
+  $('shopSaveReq').addEventListener('click', () => {
+    if (ui.saveAsRequest) ui.saveAsRequest(read());
+  });
   $('shopClear').addEventListener('click', clearShop);
   $('shopBody').addEventListener('click', (e) => {
     const done = e.target.closest('[data-shop-done]');
