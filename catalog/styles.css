@@ -1328,6 +1328,18 @@ body { padding-bottom: calc(var(--tabbar-h) + 18px + env(safe-area-inset-bottom)
 .seg button { padding: 7px 10px; border-radius: 7px; font-size: 13px; font-weight: 500; letter-spacing: -.01em; }
 .seg button.active { background: var(--surface); font-weight: 600; box-shadow: 0 1px 3px rgba(0, 0, 0, .2), 0 0 0 .5px rgba(0, 0, 0, .04); }
 
+.shop-add { padding: 8px var(--sheet-px, 18px) 0; }
+.shop-add-row { display: flex; gap: 8px; align-items: center; }
+.shop-add-row .input { flex: 1; min-width: 0; }
+.shop-add #shopFindList { max-height: 44vh; overflow-y: auto; }
+/* количество набирается руками: кнопками ± набрать «24» — двадцать четыре тапа */
+input.shop-qty {
+  width: 56px; min-height: 34px; padding: 4px 2px;
+  border: none; background: none; color: var(--text);
+  font: inherit; font-variant-numeric: tabular-nums; text-align: center;
+}
+input.shop-qty:focus { outline: 2px solid var(--accent); border-radius: 8px; }
+
 /* ── Вкладка «Подбор» ──
    Плитки категорий (.cat-screen) и поля подбора живут на одном экране, а не в
    окне: раньше это были две вкладки и ещё окно поверх них. */
