@@ -23,13 +23,13 @@ import { toast } from './core.js';
 import { loadScript } from './scanner.js';
 
 // Порядок и написание — ровно как в шаблоне владельца. Не менять на глаз.
-export const ONEC_COLUMNS = ['Код', 'Штрих-код', 'Наименование номенклатуры', 'Артикул',
+const ONEC_COLUMNS = ['Код', 'Штрих-код', 'Наименование номенклатуры', 'Артикул',
   'Наименование единицы', 'Количество', 'Розничная цена', 'Розничная сумма', 'Всего'];
 
 /* Строка товара для 1С. Берём из самого товара, а чего нет — из записи списка:
  * товар мог уйти из каталога после очередной выгрузки, а заявка должна
  * остаться читаемой и через полгода. */
-export function onecRow(item) {
+function onecRow(item) {
   const p = (state.products || []).find((x) => x.id === item.id) || {};
   const qty = Number(item.qty) || 0;
   const price = Number(item.price != null && item.price !== '' ? item.price : p.retail_price) || 0;

@@ -19,10 +19,9 @@
  * снимок не разрастался. */
 
 import { $, state, ui } from './store.js';
-import { closeSheet, esc, openSheet, toast } from './core.js';
+import { esc, openSheet, toast } from './core.js';
 import { fmtDate, fmtNum, fmtPrice, todayISO } from './catalog.js';
 import { plural } from './competitors.js';
-import { ic } from './icons.js';
 import { copyForOnec, downloadForOnec } from './onec.js';
 import { deviceName } from './device.js';
 
@@ -39,7 +38,7 @@ const lines = (items) => items.filter((x) => Number(x.qty) > 0).length;
 
 /* Отложить текущий список покупок в заявки. Сам список при этом не стираем:
  * человек мог отложить его «на всякий» и продолжить собирать. */
-export function saveAsRequest(items, who) {
+function saveAsRequest(items, who) {
   const keep = (items || []).filter((x) => Number(x.qty) > 0);
   if (!keep.length) { toast('В списке нет количества — нечего сохранять'); return null; }
   const rec = {
@@ -119,7 +118,7 @@ function renderRequests() {
   box.innerHTML = r ? oneHtml(r) : listHtml();
 }
 
-export function openRequests() {
+function openRequests() {
   openId = null;
   renderRequests();
   openSheet('requestsSheet');
