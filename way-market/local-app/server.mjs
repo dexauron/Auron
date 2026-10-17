@@ -42,17 +42,19 @@ export function createApp(store, { mode = 'personal-test' } = {}) {
       }
       if (req.method === 'GET' && path === '/api/session') return send(200, { token, mode });
       if (req.method === 'GET' && path === '/api/shifts') return send(200, store.list());
+      if (req.method === 'GET' && path === '/api/catalog') return send(200, store.catalog());
+      if (req.method === 'GET' && path === '/api/catalog/history') return send(200, store.catalogHistory());
       const match = /^\/api\/shifts\/([a-f0-9-]{36})(\/history)?$/.exec(path);
       if (req.method === 'GET' && match) {
         const result = match[2] ? store.history(match[1]) : store.get(match[1]);
         return send(result ? 200 : 404, result ?? { error: 'Запись не найдена' });
       }
-      if (req.method === 'POST' && ['/api/shifts', '/api/archive/download', '/api/archive/check'].includes(path)) {
+      if (req.method === 'POST' && ['/api/shifts', '/api/catalog', '/api/archive/download', '/api/archive/check'].includes(path)) {
         const supplied = Buffer.from(req.headers['x-way-token'] ?? '');
         const expected = Buffer.from(token);
         if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return send(403, { error: 'Обновите страницу перед сохранением' });
         if (req.headers['content-type'] !== 'application/json') return send(415, { error: 'Требуется JSON' });
-        const limit = path === '/api/archive/check' ? MAX_ARCHIVE_BYTES : 65536;
+        const limit = path === '/api/archive/check' ? MAX_ARCHIVE_BYTES : path === '/api/catalog' ? 256 * 1024 : 65536;
         const chunks = []; let size = 0;
         for await (const chunk of req) {
           size += chunk.length;
@@ -63,6 +65,7 @@ export function createApp(store, { mode = 'personal-test' } = {}) {
         try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }
         catch { throw new InputError('Неверный JSON'); }
         if (path === '/api/archive/check') return send(200, validateArchive(payload));
+        if (path === '/api/catalog') return send(200, store.saveCatalog(payload));
         if (path === '/api/archive/download') {
           const filename = `way-market-test-${new Date().toISOString().replace(/[-:.]/g, '')}.json`;
           return send(200, store.archive(), { 'Content-Disposition': `attachment; filename="${filename}"` });

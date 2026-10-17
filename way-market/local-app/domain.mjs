@@ -22,6 +22,57 @@ function text(value, label, max = 100) {
 function optionalMoney(value, label) {
   return value === '' || value == null ? null : money(value, label);
 }
+export const CATEGORY_KINDS = { cash_out: 'Выдача наличных', cash_in: 'Внесение наличных', unpaid_goods: 'Товар без оплаты' };
+const objectKeys = (v, keys) => v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === keys.length && keys.every(k => Object.hasOwn(v, k));
+function identifier(value) {
+  if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9-]{1,79}$/.test(value)) throw new InputError('Неверный идентификатор категории / записи');
+  return value;
+}
+export function defaultCatalog() {
+  return { categories: [ ['suppliers', 'Поставщикам', 'cash_out'], ['payroll', 'Зарплата и авансы', 'cash_out'], ['lunch', 'Обед', 'cash_out'], ['owner-cash', 'Деньги владельцу', 'cash_out'], ['owner-goods', 'Товар владельцу без оплаты', 'unpaid_goods'] ].map(([id,name,kind]) => ({ id,name,kind,active:true })), recipients: [] };
+}
+export function validateCatalog(raw) {
+  if (!objectKeys(raw, ['categories','recipients']) || !Array.isArray(raw.categories) || raw.categories.length > 200 || !Array.isArray(raw.recipients) || raw.recipients.length > 200) throw new InputError('Справочник: допускается до 200 категорий и получателей');
+  const ids = new Set(), names = new Set();
+  const categories = raw.categories.map(c => {
+    if (!objectKeys(c, ['id','name','kind','active']) || !Object.hasOwn(CATEGORY_KINDS,c.kind) || typeof c.active !== 'boolean') throw new InputError('Проверьте название и тип категории');
+    const result = { id: identifier(c.id), name: text(c.name, 'Категория', 80), kind:c.kind, active:c.active };
+    const name = result.name.toLocaleLowerCase('ru');
+    if (ids.has(result.id) || (result.active && names.has(name))) throw new InputError('Повтор категории: используйте разные названия');
+    ids.add(result.id); if (result.active) names.add(name); return result;
+  });
+  ids.clear(); names.clear();
+  const recipients = raw.recipients.map(p => {
+    if (!objectKeys(p, ['id','name','active']) || typeof p.active !== 'boolean') throw new InputError('Неверный получатель');
+    const result = { id:identifier(p.id), name:text(p.name,'Получатель',100), active:p.active };
+    const name=result.name.toLocaleLowerCase('ru');
+    if(ids.has(result.id) || (result.active && names.has(name))) throw new InputError('Повтор получателя');
+    ids.add(result.id); if(result.active) names.add(name); return result;
+  });
+  return {categories,recipients};
+}
+export function reconcileCategories(raw) {
+  if (!Array.isArray(raw) || raw.length > 100) throw new InputError('Допускается до 100 записей по категориям');
+  const ids = new Set(), bases = new Map();
+  let cashOut=0n, cashIn=0n, goodsAdjustment=0n, unpaidGoods=0n;
+  const entries=raw.map(e => {
+    if(!objectKeys(e,['id','category','recipient','amount','basis','includedInCashSales','note']) || !objectKeys(e.category,['id','name','kind']) || !Object.hasOwn(CATEGORY_KINDS,e.category.kind) || !['total','detail'].includes(e.basis)) throw new InputError('Проверьте категорию и способ ввода операции');
+    const id=identifier(e.id); if(ids.has(id)) throw new InputError('Повтор одной операции'); ids.add(id);
+    const category={id:identifier(e.category.id),name:text(e.category.name,'Категория',80),kind:e.category.kind};
+    const previous=bases.get(category.id);
+    if(previous && (previous.basis !== 'detail' || e.basis !== 'detail' || previous.name!==category.name || previous.kind!==category.kind)) throw new InputError('В категории нельзя смешивать общий итог и подробности или разные правила');
+    bases.set(category.id,{...category,basis:e.basis});
+    if(typeof e.includedInCashSales !== 'boolean' || (category.kind !== 'unpaid_goods' && e.includedInCashSales)) throw new InputError('Уточните: неоплаченный товар включён в наличную выручку?');
+    const recipient=e.recipient === '' ? '' : text(e.recipient,'Получатель');
+    const note=e.note === '' ? '' : text(e.note,'Основание',300);
+    const amount=money(e.amount,category.name);
+    if(category.kind==='cash_out') cashOut+=BigInt(amount);
+    if(category.kind==='cash_in') cashIn+=BigInt(amount);
+    if(category.kind==='unpaid_goods') {unpaidGoods+=BigInt(amount);if(e.includedInCashSales) goodsAdjustment+=BigInt(amount);}
+    return {id,category,recipient,amount,basis:e.basis,includedInCashSales:e.includedInCashSales,note};
+  });
+  return { entries, cashOut:Number(cashOut), cashIn:Number(cashIn), goodsAdjustment:Number(goodsAdjustment), unpaidGoods:Number(unpaidGoods) };
+}
 export const NONCASH_FORMULA_VERSION = 'noncash-gross-returns-v1';
 function signedMoney(value, label) {
   if (typeof value !== 'string') throw new InputError(`${label}: введите сумму`);
@@ -106,26 +157,34 @@ export function reconcile(raw) {
   if (raw.cashSetup !== undefined) {
     const s = raw.cashSetup;
     const keys = ['additionalCash', 'independentReports', 'paymentMode', 'suppliers', 'payroll', 'other', 'previousTransfers', 'factBasisConfirmed'];
-    if (!s || typeof s !== 'object' || Array.isArray(s) || Object.keys(s).some(k => !keys.includes(k)) || !['totals', 'details'].includes(s.paymentMode)) throw new InputError('Неверные настройки сверки наличных');
+    if (!s || typeof s !== 'object' || Array.isArray(s) || Object.keys(s).some(k => !keys.includes(k)) || !['totals', 'details', 'categories'].includes(s.paymentMode)) throw new InputError('Неверные настройки сверки наличных');
     if (typeof s.independentReports !== 'boolean' || s.factBasisConfirmed !== true) throw new InputError('Подтвердите фактическую основу движений денег; это не подтверждение разрешения');
     const additionalCash = money(s.additionalCash, 'Наличные второго отчёта');
     if (additionalCash !== 0 && !s.independentReports) throw new InputError('Подтвердите: наличные двух отчётов не пересекаются');
     const grouped = Object.fromEntries(['suppliers', 'payroll', 'other'].map(k => [k, money(s[k], 'Общие выплаты')]));
     if (s.paymentMode === 'totals' && payments.length) throw new InputError('Выберите общие суммы или подробные выплаты; вместе они не учитываются');
     if (s.paymentMode === 'details' && Object.values(grouped).some(v => v !== 0)) throw new InputError('В подробном режиме общие суммы должны быть 0');
+    if (s.paymentMode === 'categories' && (payments.length || Object.values(grouped).some(v => v !== 0))) throw new InputError('Для категорий уберите прежние выплаты: одна сумма учитывается один раз');
     if (s.paymentMode === 'totals') cashPaid = Object.values(grouped).reduce((sum, v) => sum + BigInt(v), 0n);
     cashSetup = { additionalCash, independentReports: s.independentReports, paymentMode: s.paymentMode, ...grouped,
       previousTransfers: money(s.previousTransfers, 'Предыдущие передачи'), factBasisConfirmed: true };
   }
+  const categoryMode = cashSetup?.paymentMode === 'categories';
+  if (!categoryMode && raw.categoryEntries !== undefined) throw new InputError('Выберите режим категорий, чтобы записи участвовали в расчёте');
+  const categoryResult = categoryMode ? reconcileCategories(raw.categoryEntries) : undefined;
+  if(categoryResult?.cashIn && amounts.otherIn) throw new InputError('Внесения вводите в одном месте: по категориям или в прочих поступлениях');
+  if(categoryResult) cashPaid=BigInt(categoryResult.cashOut);
   const expected = BigInt(amounts.opening) + BigInt(amounts.zCash) + BigInt(amounts.otherIn) - BigInt(amounts.retained) - cashPaid
-    + BigInt(cashSetup?.additionalCash ?? 0) - BigInt(cashSetup?.previousTransfers ?? 0);
+    + BigInt(cashSetup?.additionalCash ?? 0) - BigInt(cashSetup?.previousTransfers ?? 0)
+    + BigInt(categoryResult?.cashIn ?? 0) - BigInt(categoryResult?.goodsAdjustment ?? 0);
   const safe = n => {
     if (n > BigInt(Number.MAX_SAFE_INTEGER) || n < BigInt(Number.MIN_SAFE_INTEGER)) throw new InputError('Сумма вне допустимого диапазона');
     return Number(n);
   };
   return {
     date, register, shiftNo, cashier, author, accountant, amounts, claimed, received, payments,
-    formulaVersion: cashSetup ? 'cash-multi-source-v2' : FORMULA_VERSION, cashPaid: safe(cashPaid), expected: safe(expected),
+    formulaVersion: categoryMode ? 'cash-categories-v3' : cashSetup ? 'cash-multi-source-v2' : FORMULA_VERSION, cashPaid: safe(cashPaid), expected: safe(expected),
+    ...(categoryResult ? { categoryResult } : {}),
     ...(cashSetup ? { cashSetup } : {}),
     claimedDifference: claimed === null ? null : safe(BigInt(claimed) - expected),
     receivedDifference: received === null ? null : safe(BigInt(received) - expected),

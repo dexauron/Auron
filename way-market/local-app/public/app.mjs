@@ -1,4 +1,4 @@
-import { reconcile, reconcileNonCash, money } from '/domain.mjs';
+import { reconcile, reconcileNonCash, money, defaultCatalog, validateCatalog, reconcileCategories, CATEGORY_KINDS } from '/domain.mjs';
 const $ = id => document.getElementById(id);
 const form = $('shift-form');
 const iconPaths = { cash: 'M3 5h18v14H3z M3 9h18 M8 14h3', history: 'M3 11a9 9 0 1 1 3 8 M3 4v7h7 M12 7v5l3 2', info: 'M12 8h.01 M12 11v6 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0', plus: 'M12 5v14 M5 12h14', backup: 'M4 9h16v11H4z M3 4h18v5H3z M9 13h6 M12 13v4' };
@@ -16,6 +16,7 @@ const el = (tag, value, className) => { const n = document.createElement(tag); i
 let token = '', saved = null, pending = null, dirty = false, busy = false;
 let flowIndex = 0, fullForm = false;
 let flowCards = [];
+let catalogState = {version:0,data:defaultCatalog()}, catalogReady=false, catalogDirty=false, catalogBusy=false, catalogPending=null;
 const flowLabels = ['Смена', 'Наличные', 'Выплаты', 'Терминал', 'Проверка'];
 const flowHints = ['Укажите, чью смену сдаёте.', 'Перенесите наличные из отчётов и укажите размен.', 'Введите общие суммы. Получателей перечислять необязательно.', 'Сравните кассовый отчёт с итогом терминалов.', 'Укажите передачу денег и проверьте результат.'];
 const sources = { cash: 'Наличные', card: 'Карта', sbp: 'СБП' };
@@ -53,12 +54,14 @@ function updateModes() {
   const enabled = form.elements.cashSetupEnabled.checked;
   $('cash-setup-fields').hidden = !enabled; $('payment-mode-wrap').hidden = !enabled;
   const totals = enabled && form.elements.paymentMode.value === 'totals';
+  const categories = enabled && form.elements.paymentMode.value === 'categories';
   for (const label of document.querySelectorAll('[data-expanded-cash]')) label.hidden = !enabled;
   const secondAmount = form.elements.additionalCash.value.trim();
   form.elements.independentReports.closest('label').hidden = !enabled || secondAmount === '' || /^[0,.]+$/.test(secondAmount);
-  $('payment-totals').hidden = !totals; $('add-payment').hidden = totals;
+  $('payment-totals').hidden = !(totals || (categories && ['suppliers','payroll','other'].some(k=>/[1-9]/.test(form.elements[k].value)))); $('add-payment').hidden = totals || categories;
+  if($('category-editor')) $('category-editor').hidden = !categories && !$('category-entries').children.length;
   // Existing details remain visible so a mode conflict cannot hide paid amounts.
-  $('no-payments').hidden = totals || $('payments').children.length > 0;
+  $('no-payments').hidden = totals || categories || $('payments').children.length > 0;
   for (const label of document.querySelectorAll('[data-basis]')) label.hidden = form.elements[`${label.dataset.prefix}Mode`].value !== label.dataset.basis;
 }
 function fillNonCash(raw = {}) {
@@ -105,6 +108,7 @@ function getInput() {
     source: row.querySelector('[data-key=source]').value,
     confirmed: row.querySelector('[data-key=confirmed]').checked
   }));
+  if(raw.cashSetup?.paymentMode==='categories' || $('category-entries').children.length) raw.categoryEntries=categoryInput();
   return raw;
 }
 function preview() {
@@ -115,7 +119,7 @@ function preview() {
     for (const [id, value] of Object.entries({ expected: r.expected, 'cash-paid': r.cashPaid, 'claimed-total': r.claimed, 'received-total': r.received, difference: r.receivedDifference, 'claimed-diff': r.claimedDifference, 'transfer-diff': r.transferDifference })) $(id).textContent = rub(value);
     $('difference').className = r.receivedDifference < 0 ? 'negative' : r.receivedDifference > 0 ? 'positive' : '';
     $('difference-label').textContent = r.receivedDifference == null ? 'Пересчёт ещё не внесён' : r.receivedDifference === 0 ? 'Суммы совпадают' : 'Предварительное расхождение · требуется проверка';
-    $('calc-hint').textContent = r.warnings.length ? r.warnings.join(' ') : r.cashSetup ? 'Начало + наличные двух отчётов + внесения − выплаты − предыдущие передачи − размен.' : 'Остаток + наличные по Z + поступления − выплаты − оставлено.';
+    $('calc-hint').textContent = r.warnings.length ? r.warnings.join(' ') : r.categoryResult ? `Внесения по категориям: ${rub(r.categoryResult.cashIn)}. Неоплаченные чеки в наличной выручке: ${rub(r.categoryResult.goodsAdjustment)}. Это отдельная корректировка, не выдача денег.` : r.cashSetup ? 'Начало + наличные двух отчётов + внесения − выплаты − предыдущие передачи − размен.' : 'Остаток + наличные по Z + поступления − выплаты − оставлено.';
   } catch (error) {
     for (const id of ['expected', 'cash-paid', 'claimed-total', 'received-total', 'difference', 'claimed-diff', 'transfer-diff']) $(id).textContent = '—';
     $('calc-hint').textContent = error.message;
@@ -154,6 +158,17 @@ function stageError(index) {
     if (index === 1 && expanded && money(form.elements.additionalCash.value) !== 0 && !form.elements.independentReports.checked) return fieldError('independentReports', 'Подтвердите, что наличные двух отчётов не пересекаются.');
     if (index === 2 && expanded && !form.elements.factBasisConfirmed.checked) return fieldError('factBasisConfirmed', 'Проверьте фактические выдачи и отметьте, что суммы указаны без повторов.');
     if (index === 2 && expanded) {
+      if(form.elements.paymentMode.value!=='categories' && $('category-entries').children.length) return fieldError('paymentMode','Записи категорий сохранены. Выберите «Свои категории» либо явно уберите эти записи перед сменой способа ввода.');
+      if(form.elements.paymentMode.value==='categories') {
+        if($('payments').children.length || ['suppliers','payroll','other'].some(k=>money(form.elements[k].value)!==0)) return fieldError('paymentMode','Уберите прежние общие/подробные выплаты: суммы должны учитываться только в категориях.');
+        for(const row of $('category-entries').children) {
+          if(!row._category) return {name:'paymentMode',control:row.querySelector('[data-field=category]'),message:'Выберите категорию этой операции.'};
+          try{money(row.querySelector('[data-field=amount]').value);}catch(e){return {name:'paymentMode',control:row.querySelector('[data-field=amount]'),message:'Укажите сумму операции в рублях и копейках.'};}
+          if(row._category.kind==='unpaid_goods' && row.querySelector('[data-field=included]').value==='') return {name:'paymentMode',control:row.querySelector('[data-field=included]'),message:'Уточните, включён ли неоплаченный чек в наличную выручку. Без этого разницу считать нельзя.'};
+        }
+        try{reconcileCategories(categoryInput());}catch(e){return fieldError('paymentMode',e.message);}
+        return null;
+      }
       const detailed = form.elements.paymentMode.value === 'details';
       if (!detailed && $('payments').children.length) return fieldError('paymentMode', 'Введены общие суммы и подробные записи. Выберите один способ: записи сохранены и не удаляются автоматически.');
       if (detailed && ['suppliers', 'payroll', 'other'].some(k => money(form.elements[k].value) !== 0)) return fieldError('paymentMode', 'Перед подробным вводом обнулите общие суммы. Одни выплаты нельзя вычесть дважды.');
@@ -197,7 +212,7 @@ function showFlow(index, { focus = false } = {}) {
 }
 function showStageError(index, error) {
   showFlow(index); $('flow-error').hidden = false; $('flow-error').textContent = error.message;
-  revealControl(form.elements[error.name]);
+  revealControl(error.control ?? form.elements[error.name]);
 }
 function updateFlowHints() {
   for (const details of document.querySelectorAll('[data-flow-fields]')) {
@@ -225,7 +240,7 @@ function initFlow() {
   disclosure(cards[1], 'Другие движения наличных', ['otherIn', 'previousTransfers']);
   form.elements.previousTransfers.closest('label').dataset.expandedCash = 'true';
   const settings = el('details', null, 'flow-disclosure'); settings.append(el('summary', 'Способ расчёта'), $('legacy-form-setting')); cards[1].append(settings);
-  const paymentSettings = el('details', null, 'flow-disclosure'); paymentSettings.append(el('summary', 'Ввести выплаты по получателям'), $('payment-mode-setting')); $('payment-mode-wrap').append(paymentSettings);
+  const paymentSettings = el('details', null, 'flow-disclosure'); paymentSettings.append(el('summary', 'Способ ввода: общая сумма, категории или получатели'), $('payment-mode-setting')); $('payment-mode-wrap').append(paymentSettings);
   for (const name of ['otherIn', 'additionalCash', 'previousTransfers', 'suppliers', 'payroll', 'other']) {
     const control = form.elements[name], label = control.closest('label'), button = el('button', 'Не было', 'zero-button'); button.type = 'button';
     button.setAttribute('aria-label', `${name === 'additionalCash' ? 'Нет второго отчёта' : label.childNodes[0].textContent}: указать ноль`);
@@ -244,6 +259,98 @@ function initFlow() {
   form.addEventListener('input', e => { e.target.removeAttribute('aria-invalid'); $('flow-error').hidden = true; });
   updateModes(); showFlow(0);
 }
+function categoryInput() {
+  return [...$('category-entries').children].map(row=>({id:row.dataset.id,category:row._category,
+    recipient:row.querySelector('[data-field=recipient]').value,amount:row.querySelector('[data-field=amount]').value,
+    basis:row.querySelector('[data-field=basis]').value,
+    includedInCashSales:row._category?.kind==='unpaid_goods'?(row.querySelector('[data-field=included]').value===''?null:row.querySelector('[data-field=included]').value==='yes'):false,
+    note:row.querySelector('[data-field=note]').value}));
+}
+function refreshCategoryOptions(row) {
+  const select=row.querySelector('[data-field=category]'), chosen=row._category;
+  select.replaceChildren();const blank=el('option','Выберите категорию');blank.value='';select.append(blank);
+  const same=c=>chosen&&c.id===chosen.id&&c.name===chosen.name&&c.kind===chosen.kind;
+  for(const c of catalogState.data.categories.filter(c=>c.active)) {const option=el('option',c.name);option.value=c.id;select.append(option);}
+  if(chosen && !catalogState.data.categories.some(c=>c.active&&same(c))) {const old=el('option',`${chosen.name} · прежнее правило`);old.value='@old';select.append(old);select.value='@old';}
+  else select.value=chosen?.id??'';
+  row.querySelector('[data-field=included]').closest('label').hidden=chosen?.kind!=='unpaid_goods';
+  row.querySelector('[data-field=effect]').textContent=chosen ? CATEGORY_KINDS[chosen.kind] : 'Выберите, что произошло.';
+}
+function categoryRow(p={}) {
+  const row=el('div',null,'payment category-entry');row.dataset.id=p.id??crypto.randomUUID();row._category=p.category??null;
+  row.innerHTML=`<div class="payment-header"><span>Операция</span><button type="button" class="text-button" data-remove>Убрать</button></div>
+    <div class="fields"><label>Категория<select data-field="category"></select></label><label>Сумма, ₽<input data-field="amount" inputmode="decimal" placeholder="0,00"></label>
+    <label class="wide">Этот неоплаченный чек включён в наличную выручку?<select data-field="included"><option value="">Нужно уточнить</option><option value="yes">Да — включён</option><option value="no">Нет — не включён</option></select></label></div>
+    <p data-field="effect" class="hint"></p>
+    <details><summary>Получатель и подробности</summary><div class="fields"><label>Кому — необязательно<input data-field="recipient" list="recipient-options" maxlength="100" placeholder="Имя или общая сумма"></label><label>Способ ввода<select data-field="basis"><option value="total">Общая сумма категории</option><option value="detail">Отдельная операция</option></select></label><label class="wide">Документ / пояснение<input data-field="note" maxlength="300" placeholder="Необязательно"></label></div></details>`;
+  for(const key of ['amount','recipient','note']) row.querySelector(`[data-field=${key}]`).value=p[key]??'';
+  row.querySelector('[data-field=basis]').value=p.basis??'total';
+  row.querySelector('[data-field=included]').value=typeof p.includedInCashSales==='boolean'?(p.includedInCashSales?'yes':'no'):'';
+  if(p.recipient || p.note || p.basis==='detail')row.querySelector('details').open=true;
+  row.querySelector('[data-field=category]').addEventListener('change',e=>{
+    if(e.target.value==='@old') return;
+    const c=catalogState.data.categories.find(c=>c.active&&c.id===e.target.value);
+    row._category=c?{id:c.id,name:c.name,kind:c.kind}:null;
+    row.querySelector('[data-field=included]').value='';refreshCategoryOptions(row);
+  });
+  row.querySelector('[data-remove]').addEventListener('click',()=>{if(row.querySelector('[data-field=amount]').value && !window.confirm('Убрать эту операцию из редактируемой версии? Сохранённая история останется.'))return;row.remove();changed();});
+  $('category-entries').append(row);refreshCategoryOptions(row);return row;
+}
+function configRow(kind,p) {
+  const row=el('div',null,'catalog-row');row.dataset.id=p.id;row.dataset.kind=kind;
+  const label=el('label',kind==='categories'?'Название категории':'Имя получателя'),name=el('input');name.value=p.name;name.maxLength=kind==='categories'?80:100;name.dataset.key='name';label.append(name);row.append(label);
+  if(kind==='categories') {const label=el('label','Что учитывает'),select=el('select');select.dataset.key='kind';for(const [value,title] of Object.entries(CATEGORY_KINDS)){const o=el('option',title);o.value=value;select.append(o);}select.value=p.kind;label.append(select);row.append(label);}
+  const activeLabel=el('label',null,'check'),active=el('input');active.type='checkbox';active.checked=p.active;active.dataset.key='active';activeLabel.append(active,el('span','Доступно для новых записей'));row.append(activeLabel);
+  $(`catalog-${kind}`).append(row);
+}
+function draftCatalog() {
+  return Object.fromEntries(['categories','recipients'].map(kind=>[kind,[...$(`catalog-${kind}`).children].map(row=>({id:row.dataset.id,name:row.querySelector('[data-key=name]').value,...(kind==='categories'?{kind:row.querySelector('[data-key=kind]').value}:{}),active:row.querySelector('[data-key=active]').checked}))]));
+}
+function renderCatalog() {
+  for(const kind of ['categories','recipients']) {$(`catalog-${kind}`).replaceChildren();catalogState.data[kind].forEach(p=>configRow(kind,p));}
+  $('recipient-options').replaceChildren();for(const p of catalogState.data.recipients.filter(p=>p.active)){const o=el('option');o.value=p.name;$('recipient-options').append(o);}
+  for(const row of $('category-entries').children) refreshCategoryOptions(row);
+  $('catalog-state').textContent=`Версия справочника: ${catalogState.version}. ${catalogState.author?'Изменил: '+catalogState.author+'.':''} Имена в тестовой версии не подтверждены входом.`;
+}
+async function loadCatalog() {
+  if(catalogDirty && !window.confirm('Обновить справочник? Несохранённые настройки будут потеряны.')) return;
+  catalogState=await api('/api/catalog');catalogReady=true;catalogDirty=false;catalogPending=null;renderCatalog();$('catalog-save').disabled=false;$('add-category-entry').disabled=false;
+}
+function initCategories() {
+  const nav=el('button',null,'nav');nav.id='nav-catalog';nav.innerHTML='<span data-icon><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6"/></svg></span><span>Настройки</span>';nav.addEventListener('click',()=>view('catalog'));document.querySelector('.sidebar nav').append(nav);
+  const option=el('option','Свои категории');option.value='categories';form.elements.paymentMode.append(option);
+  const editor=el('div');editor.id='category-editor';editor.hidden=true;
+  editor.append(el('p','Выберите категорию и сумму. Можно одной суммой за смену или отдельными операциями. Внесения по категориям не дублируйте в «Прочих поступлениях».','hint'));
+  const entries=el('div');entries.id='category-entries';const add=el('button','+ Операция по категории','secondary');add.id='add-category-entry';add.type='button';add.disabled=true;
+  add.addEventListener('click',()=>{if(!catalogReady || entries.children.length>=100)return;categoryRow();changed();});
+  const settings=el('button','Настроить категории и получателей','text-button');settings.type='button';settings.addEventListener('click',()=>view('catalog'));
+  editor.append(entries,add,settings);$('payment-mode-wrap').append(editor);
+  const datalist=el('datalist');datalist.id='recipient-options';document.body.append(datalist);
+  form.elements.paymentMode.addEventListener('change',()=>{
+    if(form.elements.paymentMode.value==='categories') for(const k of ['suppliers','payroll','other']) if(form.elements[k].value==='')form.elements[k].value='0';
+    changed();
+  });
+  const catalogForm=$('catalog-form');
+  const configChanged=()=>{catalogDirty=true;catalogPending=null;$('catalog-state').textContent='Есть несохранённые настройки. Старые смены не изменены.';};
+  catalogForm.addEventListener('input',configChanged);catalogForm.addEventListener('change',configChanged);
+  $('catalog-add-category').addEventListener('click',()=>{if($('catalog-categories').children.length>=200)return;configRow('categories',{id:crypto.randomUUID(),name:'',kind:'cash_out',active:true});configChanged();});
+  $('catalog-add-recipient').addEventListener('click',()=>{if($('catalog-recipients').children.length>=200)return;configRow('recipients',{id:crypto.randomUUID(),name:'',active:true});configChanged();});
+  $('catalog-reload').addEventListener('click',()=>{if(!catalogBusy)loadCatalog().catch(e=>notice(e.message,true));});
+  catalogForm.addEventListener('submit',async event=>{
+    event.preventDefault();if(catalogBusy||!catalogReady)return;
+    const controls=[...catalogForm.querySelectorAll('input,select,button')];
+    try{
+      const data=validateCatalog(draftCatalog());
+      catalogPending??={data,expectedVersion:catalogState.version,requestId:crypto.randomUUID(),author:catalogForm.elements.catalogAuthor.value,reason:catalogForm.elements.catalogReason.value};
+      catalogBusy=true;controls.forEach(c=>c.disabled=true);
+      catalogState=await api('/api/catalog',catalogPending);catalogDirty=false;catalogPending=null;renderCatalog();catalogForm.elements.catalogReason.value='';notice(`Настройки сохранены. Версия ${catalogState.version}. Старые смены сохранены по прежним правилам.`);
+    }catch(e){notice(e.message,true);}finally{catalogBusy=false;controls.forEach(c=>c.disabled=false);}
+  });
+  $('catalog-history').addEventListener('toggle',async()=>{
+    if(!$('catalog-history').open)return;
+    try{const rows=await api('/api/catalog/history');$('catalog-history-list').replaceChildren();for(const r of rows)$('catalog-history-list').append(el('p',`Версия ${r.version} · ${r.author} · ${new Date(r.createdAt).toLocaleString('ru-RU')} · ${r.reason}`));}catch(e){notice(e.message,true);}
+  });
+}
 function paymentRow(p = {}) {
   const row = el('div', null, 'payment');
   // Only static markup; user-provided content is assigned via input.value below.
@@ -254,18 +361,19 @@ function paymentRow(p = {}) {
   $('payments').append(row); $('no-payments').hidden = true;
 }
 function view(name) {
-  for (const k of ['cash', 'history', 'backup', 'method']) {
+  for (const k of ['cash', 'history', 'backup', 'method', 'catalog']) {
     $(`${k}-view`).hidden = k !== name;
     $(`nav-${k}`).classList.toggle('active', k === name);
     $(`nav-${k}`).setAttribute('aria-current', k === name ? 'page' : 'false');
   }
-  const titles = { cash: ['Сверка смены', 'От отчёта кассы — к сумме, принятой бухгалтером.'], history: ['История смен', 'Сохранённые данные и версии исправлений.'], backup: ['Копии данных', 'Сохранённая история, которую можно восстановить отдельно.'], method: ['Как считаем', 'Понятные правила и границы тестовой версии.'] };
+  const titles = { cash: ['Сверка смены', 'От отчёта кассы — к сумме, принятой бухгалтером.'], history: ['История смен', 'Сохранённые данные и версии исправлений.'], backup: ['Копии данных', 'Сохранённая история, которую можно восстановить отдельно.'], method: ['Как считаем', 'Понятные правила и границы тестовой версии.'], catalog:['Настройки','Ваши категории, получатели и история изменений.'] };
   $('page-title').textContent = titles[name][0]; $('subtitle').textContent = titles[name][1];
   if (name === 'history') loadHistory().catch(e => notice(e.message, true));
 }
 function reset() {
   if (busy || (dirty && !window.confirm('Начать новую смену? Несохранённые изменения будут потеряны.'))) return;
   form.reset(); saved = null; pending = null; dirty = false;
+  $('category-entries').replaceChildren();
   for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   form.elements.cashSetupEnabled.checked = true; fillNonCash();
   for (const key of ['date', 'register', 'shiftNo']) form.elements[key].disabled = false;
@@ -281,6 +389,7 @@ async function openRecord(record) {
   form.elements.cashSetupEnabled.checked = record.input.cashSetup !== undefined;
   for (const key of ['additionalCash', 'previousTransfers', 'paymentMode', 'suppliers', 'payroll', 'other']) form.elements[key].value = record.input.cashSetup?.[key] ?? (key === 'paymentMode' ? 'totals' : '');
   for (const key of ['independentReports', 'factBasisConfirmed']) form.elements[key].checked = record.input.cashSetup?.[key] === true;
+  $('category-entries').replaceChildren(); (record.input.categoryEntries ?? []).forEach(categoryRow);
   form.elements.zBasisConfirmed.checked = record.input.zBasisConfirmed;
   for (const k of ['date', 'register', 'shiftNo']) form.elements[k].disabled = true;
   form.elements.reason.value = ''; $('payments').replaceChildren();
@@ -322,6 +431,12 @@ function buildPrint(record) {
     target.append(el('p', `Наличные второго отчёта: ${rub(s.additionalCash)}. Предыдущие передачи: ${rub(s.previousTransfers)}.`));
     if (s.paymentMode === 'totals') target.append(el('p', `Общие выплаты наличными: поставщикам ${rub(s.suppliers)}; зарплата и авансы ${rub(s.payroll)}; другие выдачи ${rub(s.other)}.`));
     target.append(el('p', 'Фактическая основа движений заявлена автором ввода. Независимое подтверждение разрешений в этой версии отсутствует.'));
+  }
+  if(r.categoryResult) {
+    target.append(el('h3','Операции по категориям'));
+    const table=el('table',null,'print-table');
+    for(const e of r.categoryResult.entries) {const row=el('tr');row.append(el('td',e.category.name),el('td',e.recipient||'Общая сумма'),el('td',CATEGORY_KINDS[e.category.kind]),el('td',rub(e.amount)),el('td',e.category.kind==='unpaid_goods'?(e.includedInCashSales?'Чек включён в наличные':'Не включён в наличные'):(e.category.kind==='cash_in'?'Прибавлено':'Вычтено')),el('td',e.note));table.append(row);}
+    target.append(table,el('p',`Физически выдано: ${rub(r.categoryResult.cashOut)}. Внесено по категориям: ${rub(r.categoryResult.cashIn)}. Корректировка неоплаченных чеков: ${rub(r.categoryResult.goodsAdjustment)}.`));
   }
   if (r.nonCash?.mode === 'aggregate') {
     const n = r.nonCash;
@@ -370,7 +485,7 @@ $('example').addEventListener('click', () => {
   for (const [key, value] of Object.entries({ additionalCash: '1000', previousTransfers: '0', paymentMode: 'totals', suppliers: '7500', payroll: '1000', other: '0' })) form.elements[key].value = value;
   form.elements.independentReports.checked = true; form.elements.factBasisConfirmed.checked = true;
   fillNonCash({ mode: 'aggregate', zMode: 'net', zNet: '58000', reportMode: 'net', reportNet: '57900', reportRef: 'Вымышленные отчёты за один тестовый период', periodConfirmed: true });
-  $('payments').replaceChildren(); changed(); showFlow(4);
+  $('payments').replaceChildren(); $('category-entries').replaceChildren(); changed(); showFlow(4);
 });
 form.addEventListener('submit', async event => {
   event.preventDefault(); if (busy) return;
@@ -396,8 +511,8 @@ form.addEventListener('submit', async event => {
   finally { busy = false; $('save').disabled = false; $('save').textContent = 'Сохранить сверку'; }
 });
 $('print').addEventListener('click', () => { if (!saved || dirty || busy) return; buildPrint(saved); window.print(); });
-window.addEventListener('beforeunload', event => { if (dirty || busy) { event.preventDefault(); event.returnValue = ''; } });
-form.elements.date.value = date(); form.elements.cashSetupEnabled.checked = true; initFlow(); preview();
+window.addEventListener('beforeunload', event => { if (dirty || busy || catalogDirty || catalogBusy) { event.preventDefault(); event.returnValue = ''; } });
+form.elements.date.value = date(); form.elements.cashSetupEnabled.checked = true; initCategories(); initFlow(); preview();
 let archiveBusy = false;
 function archiveControls() {
   $('download-backup').disabled = archiveBusy || !token;
@@ -432,5 +547,5 @@ $('check-backup').addEventListener('click', async () => {
   } catch (e) { result.className = 'notice error'; result.textContent = 'Проверка не пройдена: ' + e.message; }
   finally { archiveBusy = false; archiveControls(); }
 });
-try { ({ token } = await api('/api/session')); $('save').disabled = false; archiveControls(); }
+try { ({ token } = await api('/api/session')); $('save').disabled = false; archiveControls(); await loadCatalog(); }
 catch (error) { notice('Нет подключения к локальному сервису. ' + error.message, true); $('save').disabled = true; }

@@ -76,3 +76,6 @@ button,a,input,summary{-webkit-tap-highlight-color:transparent}
 @media(max-width:360px){main{padding-left:12px;padding-right:12px}.sidebar{padding-left:16px;padding-right:16px}.card{padding:22px 16px}h1{font-size:27px}.card-title h2{font-size:21px}#flow-steps button{font-size:9px}.flow-heading{gap:4px}}
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 @media print{.flow-heading,#flow-steps,#flow-error{display:none!important}.print-table{font-size:10pt}}
+.catalog-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:18px 0;border-bottom:1px solid #e1e8e3}.catalog-row .check{grid-column:1/-1;margin:0}.catalog-row input,.catalog-row select{min-width:0}#catalog-form>.fields{margin:24px 0}#catalog-state{margin:20px 0}#catalog-save,#catalog-reload{margin:8px 8px 8px 0}#category-editor>.secondary{margin:16px 0}#category-editor>.text-button{display:block}#category-editor .hint{margin:14px 0}.category-entry .wide select{max-width:100%}
+@media(max-width:760px){.sidebar nav{grid-template-columns:repeat(5,minmax(0,1fr))}.sidebar .nav{font-size:10px}.catalog-row{grid-template-columns:minmax(0,1fr)}}
+@media print{#catalog-view{display:none!important}}

@@ -27,6 +27,7 @@ export async function restoreToNewFile(source, destination) {
     const ordered = (rows, key) => [...rows].sort((a,b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
     if (!isDeepStrictEqual(ordered(restored.payload.revisions, r => `${r.id}/${r.version}`), ordered(archive.payload.revisions, r => `${r.id}/${r.version}`))) throw new Error('Не совпали восстановленные версии');
     if (!isDeepStrictEqual(ordered(restored.payload.requests, r => r.request_id), ordered(archive.payload.requests, r => r.request_id))) throw new Error('Не совпали восстановленные запросы');
+    if (!isDeepStrictEqual(ordered(restored.payload.catalogRevisions ?? [],r=>r.version),ordered(archive.payload.catalogRevisions ?? [],r=>r.version))) throw new Error('Не совпал восстановленный справочник');
     store.close(); store = null;
     await link(tempFile, target);
     return { ...stats, destination: target };

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
-import { reconcile, InputError } from './domain.mjs';
+import { reconcile, InputError, validateCatalog, defaultCatalog } from './domain.mjs';
 
 export const MAX_ARCHIVE_BYTES = 16 * 1024 * 1024;
 const UUID = /^[a-f0-9-]{36}$/;
@@ -17,9 +17,10 @@ function timestamp(value) {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
     Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
 }
-export function createArchive(revisions, requests) {
-  const payload = { format: 'way-market-test-archive', version: 1,
-    createdAt: new Date().toISOString(), revisions: revisions.map(r => ({ ...r })), requests: requests.map(r => ({ ...r })) };
+export function createArchive(revisions, requests, catalogRevisions = []) {
+  const payload = { format: 'way-market-test-archive', version: catalogRevisions.length ? 2 : 1,
+    createdAt: new Date().toISOString(), revisions: revisions.map(r => ({ ...r })), requests: requests.map(r => ({ ...r })),
+    ...(catalogRevisions.length ? {catalogRevisions:catalogRevisions.map(r=>({...r}))} : {}) };
   const result = { payload, sha256: checksum(payload) };
   validateArchive(result);
   return result;
@@ -27,13 +28,27 @@ export function createArchive(revisions, requests) {
 export function validateArchive(archive) {
   if (!exactKeys(archive, ['payload', 'sha256'])) fail('неизвестная структура');
   const p = archive.payload;
-  if (!exactKeys(p, ['format', 'version', 'createdAt', 'revisions', 'requests']) ||
-      p.format !== 'way-market-test-archive' || p.version !== 1 || !timestamp(p.createdAt)) fail('неподдерживаемый формат или версия');
+  if (!exactKeys(p, ['format', 'version', 'createdAt', 'revisions', 'requests', ...(p?.version===2?['catalogRevisions']:[])]) ||
+      p.format !== 'way-market-test-archive' || ![1,2].includes(p.version) || !timestamp(p.createdAt)) fail('неподдерживаемый формат или версия');
   if (!Array.isArray(p.revisions) || !Array.isArray(p.requests) || p.revisions.length > 10000 || p.requests.length !== p.revisions.length) fail('неверное число записей');
   let encoded;
   try { encoded = JSON.stringify(p); } catch { fail('не удалось прочитать структуру'); }
   if (Buffer.byteLength(encoded) > MAX_ARCHIVE_BYTES - 256) fail('превышен размер 16 МиБ');
   if (typeof archive.sha256 !== 'string' || archive.sha256 !== checksum(p)) fail('контрольная сумма не совпадает; файл изменён или повреждён');
+  const knownCategories=new Set(defaultCatalog().categories.map(c=>JSON.stringify([c.id,c.name,c.kind])));
+  if(p.version===2) {
+    if(!Array.isArray(p.catalogRevisions) || !p.catalogRevisions.length || p.catalogRevisions.length>10000) fail('неверная история справочника');
+    const ids=new Set(); let previous=defaultCatalog();
+    for(const [i,row] of [...p.catalogRevisions].sort((a,b)=>a.version-b.version).entries()) {
+      if(!exactKeys(row,['version','created_at','author','reason','data','request_id','payload_hash']) || row.version!==i+1 || !timestamp(row.created_at) || typeof row.author!=='string' || !row.author.trim() || row.author.length>100 || typeof row.reason!=='string' || !row.reason.trim() || row.reason.length>500 || typeof row.data!=='string' || typeof row.request_id!=='string' || !REQUEST.test(row.request_id) || ids.has(row.request_id)) fail('повреждена версия справочника');
+      let data;try{data=validateCatalog(JSON.parse(row.data));}catch{fail('неверные категории / получатели');}
+      if([row.author,row.reason].some(v=>v!==v.trim()||/[\x00-\x1f]/.test(v))) fail('неверный автор / причина справочника');
+      if(!isDeepStrictEqual(data,JSON.parse(row.data)) || row.payload_hash!==checksum({data,expectedVersion:i,author:row.author,reason:row.reason})) fail('данные / запрос справочника не совпадают');
+      for(const key of ['categories','recipients']) if(previous[key].some(old=>!data[key].some(item=>item.id===old.id))) fail('категории/получатели удалены вместо отключения');
+      previous=data; ids.add(row.request_id);
+      for(const c of data.categories) knownCategories.add(JSON.stringify([c.id,c.name,c.kind]));
+    }
+  }
   const revisions = new Map(), keys = new Map(), groups = new Map();
   for (const row of p.revisions) {
     if (!exactKeys(row, ['id', 'version', 'shift_key', 'created_at', 'input', 'result', 'reason']) ||
@@ -43,6 +58,7 @@ export function validateArchive(archive) {
     try { input = JSON.parse(row.input); stored = JSON.parse(row.result); calculated = reconcile(input); }
     catch { fail('неверные исходные данные версии'); }
     if (!isDeepStrictEqual(stored, calculated) || row.shift_key !== shiftKey(calculated)) fail('сохранённый расчёт не соответствует исходным данным или версии формулы');
+    if(calculated.categoryResult?.entries.some(e=>!knownCategories.has(JSON.stringify([e.category.id,e.category.name,e.category.kind])))) fail('категория смены не найдена в истории справочника');
     const identity = `${row.id}/${row.version}`;
     if (revisions.has(identity)) fail('повтор версии');
     if (keys.has(row.shift_key) && keys.get(row.shift_key) !== row.id) fail('одна смена имеет разные идентификаторы');
@@ -62,5 +78,5 @@ export function validateArchive(archive) {
     if (r.payload_hash !== requestHash(JSON.parse(row.input), row.version, row.id, row.reason)) fail('запрос не соответствует снимку версии');
     requestIds.add(r.request_id); targets.add(identity);
   }
-  return { shifts: groups.size, revisions: revisions.size, requests: requestIds.size, createdAt: p.createdAt, sha256: archive.sha256 };
+  return { shifts: groups.size, revisions: revisions.size, requests: requestIds.size, createdAt: p.createdAt, sha256: archive.sha256, ...(p.version===2?{catalogVersions:p.catalogRevisions.length}:{}) };
 }
