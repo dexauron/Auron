@@ -354,7 +354,7 @@ function pickFound(id) {
 /* Сканер в окне списка. Камера не закрывается: обходя склад, человек наводит
  * её на товар за товаром. Весовую этикетку понимаем тоже — вес с неё сразу
  * становится количеством, его не надо набирать руками. */
-export function scanToShop(text) {
+function scanToShop(text) {
   const box = $('scanResult');
   if (!box) return;
   const found = findByBarcode(text);
@@ -410,7 +410,8 @@ function enableSwipeRemove(box) {
   box.addEventListener('touchstart', (e) => {
     row = null;
     const r = e.target.closest('.shop-row');
-    if (!r || e.target.closest('button')) return;   // по кнопкам жест не начинаем
+    // по кнопкам и по полю количества жест не начинаем: там набирают цифры
+    if (!r || e.target.closest('button, input')) return;
     row = r; dx = 0; axis = '';
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     r.style.transition = 'none';
