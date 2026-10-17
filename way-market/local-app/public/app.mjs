@@ -1,4 +1,4 @@
-import { reconcile, reconcileNonCash } from '/domain.mjs';
+import { reconcile, reconcileNonCash, money } from '/domain.mjs';
 const $ = id => document.getElementById(id);
 const form = $('shift-form');
 const iconPaths = { cash: 'M3 5h18v14H3z M3 9h18 M8 14h3', history: 'M3 11a9 9 0 1 1 3 8 M3 4v7h7 M12 7v5l3 2', info: 'M12 8h.01 M12 11v6 M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0', plus: 'M12 5v14 M5 12h14', backup: 'M4 9h16v11H4z M3 4h18v5H3z M9 13h6 M12 13v4' };
@@ -14,6 +14,10 @@ const fields = ['date', 'register', 'shiftNo', 'cashier', 'author', 'accountant'
 const rub = n => n == null ? 'Не указано' : new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB' }).format(n / 100);
 const el = (tag, value, className) => { const n = document.createElement(tag); if (value != null) n.textContent = value; if (className) n.className = className; return n; };
 let token = '', saved = null, pending = null, dirty = false, busy = false;
+let flowIndex = 0, fullForm = false;
+let flowCards = [];
+const flowLabels = ['Смена', 'Наличные', 'Выплаты', 'Терминал', 'Проверка'];
+const flowHints = ['Укажите, чью смену сдаёте.', 'Перенесите наличные из отчётов и укажите размен.', 'Введите общие суммы. Получателей перечислять необязательно.', 'Сравните кассовый отчёт с итогом терминалов.', 'Укажите передачу денег и проверьте результат.'];
 const sources = { cash: 'Наличные', card: 'Карта', sbp: 'СБП' };
 const date = () => new Intl.DateTimeFormat('sv-SE').format(new Date());
 const nonCashFields = ['zMode', 'zSales', 'zReturns', 'zNet', 'reportMode', 'reportSales', 'reportReturns', 'reportNet', 'reportRef'];
@@ -49,6 +53,9 @@ function updateModes() {
   const enabled = form.elements.cashSetupEnabled.checked;
   $('cash-setup-fields').hidden = !enabled; $('payment-mode-wrap').hidden = !enabled;
   const totals = enabled && form.elements.paymentMode.value === 'totals';
+  for (const label of document.querySelectorAll('[data-expanded-cash]')) label.hidden = !enabled;
+  const secondAmount = form.elements.additionalCash.value.trim();
+  form.elements.independentReports.closest('label').hidden = !enabled || secondAmount === '' || /^[0,.]+$/.test(secondAmount);
   $('payment-totals').hidden = !totals; $('add-payment').hidden = totals;
   // Existing details remain visible so a mode conflict cannot hide paid amounts.
   $('no-payments').hidden = totals || $('payments').children.length > 0;
@@ -67,8 +74,10 @@ function previewNonCash(raw) {
       nonCashDifference.textContent = r.mode === 'aggregate' ? rub(r.difference) : 'Сохранён прежний формат';
       nonCashDifference.className = r.difference < 0 ? 'negative' : r.difference > 0 ? 'positive' : '';
       nonCashStatus.textContent = r.mode !== 'aggregate' ? 'Ранее введённая детализация сохранена. Общие поля ниже не заменяют её автоматически.' : r.difference == null ? 'Для сверки нужны оба источника и подтверждение сопоставимости периода.' : r.difference === 0 ? 'Итоги совпадают. Зачисление и комиссия банка проверяются отдельно.' : 'Есть расхождение. Проверьте источники, период и возвраты; причина пока не установлена.';
+      if ($('review-noncash')) $('review-noncash').textContent = r.mode !== 'aggregate' ? 'Безналичные: сохранена прежняя детализация.' : r.difference == null ? 'Безналичные пока не сверены. Их можно дополнить позже.' : r.difference === 0 ? 'Безналичные: итоги кассы и терминалов совпадают.' : `Безналичные: разница ${rub(r.difference)}. Требуется проверка.`;
     } catch (e) {
       nonCashDifference.textContent = '—'; nonCashStatus.textContent = e.message;
+      if ($('review-noncash')) $('review-noncash').textContent = 'Безналичные: проверьте введённые данные.';
     }
 }
 function notice(message, error = false) {
@@ -118,6 +127,122 @@ function changed() {
   dirty = true; pending = null; $('print').disabled = true;
   $('save-state').textContent = saved ? `Есть изменения · сохранена версия ${saved.version}` : 'Ещё не сохранено';
   preview();
+  updateFlowHints();
+}
+function revealControl(control) {
+  if (!control) return;
+  for (let parent = control.parentElement; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.open = true;
+  control.setAttribute('aria-invalid', 'true');
+  control.focus({ preventScroll: true }); control.scrollIntoView({ block: 'center', behavior: 'auto' });
+}
+function stageError(index) {
+  const fieldError = (name, message) => ({ name, message });
+  if (index === 0) {
+    for (const name of ['date', 'register', 'shiftNo', 'cashier', 'author']) if (!form.elements[name].value.trim()) return fieldError(name, 'Заполните выделенное поле, чтобы продолжить.');
+    const value = form.elements.date.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value) return fieldError('date', 'Укажите существующую дату смены.');
+  }
+  if (index === 1 || index === 2) {
+    const expanded = form.elements.cashSetupEnabled.checked;
+    const names = index === 1 ? ['zCash', 'opening', 'retained', 'otherIn', ...(expanded ? ['additionalCash', 'previousTransfers'] : [])] : expanded ? ['suppliers', 'payroll', 'other'] : [];
+    for (const name of names) {
+      const control = form.elements[name];
+      try { money(control.value, control.closest('label').childNodes[0].textContent); }
+      catch (e) { return fieldError(name, control.value === '' ? 'Укажите сумму. Если движения не было, нажмите «Не было». Пустое поле означает, что данных нет.' : e.message); }
+    }
+    if (index === 1 && !form.elements.zBasisConfirmed.checked) return fieldError('zBasisConfirmed', 'Проверьте, как учтены возвраты и выплаты, затем отметьте подтверждение.');
+    if (index === 1 && expanded && money(form.elements.additionalCash.value) !== 0 && !form.elements.independentReports.checked) return fieldError('independentReports', 'Подтвердите, что наличные двух отчётов не пересекаются.');
+    if (index === 2 && expanded && !form.elements.factBasisConfirmed.checked) return fieldError('factBasisConfirmed', 'Проверьте фактические выдачи и отметьте, что суммы указаны без повторов.');
+    if (index === 2 && expanded) {
+      const detailed = form.elements.paymentMode.value === 'details';
+      if (!detailed && $('payments').children.length) return fieldError('paymentMode', 'Введены общие суммы и подробные записи. Выберите один способ: записи сохранены и не удаляются автоматически.');
+      if (detailed && ['suppliers', 'payroll', 'other'].some(k => money(form.elements[k].value) !== 0)) return fieldError('paymentMode', 'Перед подробным вводом обнулите общие суммы. Одни выплаты нельзя вычесть дважды.');
+    }
+  }
+  if (index === 3) {
+    try { reconcileNonCash(getInput().nonCash); } catch (e) { return fieldError('reportRef', e.message); }
+  }
+  if (index === 4) {
+    for (const name of ['claimed', 'received']) if (form.elements[name].value !== '') {
+      try { money(form.elements[name].value); } catch (e) { return fieldError(name, e.message); }
+    }
+    if (form.elements.received.value !== '' && !form.elements.accountant.value.trim()) return fieldError('accountant', 'Укажите, кто получил и пересчитал деньги.');
+    if (saved && dirty && !form.elements.reason.value.trim()) return fieldError('reason', 'Опишите причину исправления сохранённой версии.');
+  }
+  return null;
+}
+function showFlow(index, { focus = false } = {}) {
+  flowIndex = Math.max(0, Math.min(4, index));
+  $('flow-error').hidden = true;
+  flowCards.forEach((card, i) => { card.hidden = !fullForm && i !== flowIndex; });
+  document.querySelector('.summary').hidden = !fullForm && flowIndex !== 4;
+  $('flow-counter').textContent = fullForm ? 'ВСЯ ФОРМА' : `ШАГ ${flowIndex + 1} ИЗ 5`;
+  $('flow-instruction').textContent = fullForm ? 'Все поля доступны. Расчёт и правила проверки те же.' : flowHints[flowIndex];
+  $('flow-back').hidden = fullForm || flowIndex === 0;
+  $('flow-next').hidden = fullForm || flowIndex === 4;
+  $('save').hidden = !fullForm && flowIndex !== 4;
+  $('flow-mode').textContent = fullForm ? 'По шагам' : 'Вся форма';
+  $('flow-mode').setAttribute('aria-pressed', String(fullForm));
+  for (const button of $('flow-steps').children) {
+    const active = Number(button.dataset.step) === flowIndex;
+    button.setAttribute('aria-current', active && !fullForm ? 'step' : 'false');
+    button.classList.toggle('current', active && !fullForm);
+  }
+  document.querySelector('.workspace').classList.toggle('review-layout', fullForm || flowIndex === 4);
+  if (focus) {
+    const heading = flowCards[flowIndex].querySelector('h2'); heading.tabIndex = -1; heading.focus({ preventScroll: true });
+    $('flow-steps').scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
+  updateFlowHints();
+}
+function showStageError(index, error) {
+  showFlow(index); $('flow-error').hidden = false; $('flow-error').textContent = error.message;
+  revealControl(form.elements[error.name]);
+}
+function updateFlowHints() {
+  for (const details of document.querySelectorAll('[data-flow-fields]')) {
+    const complete = details.dataset.flowFields.split(',').filter(k => !form.elements[k].closest('label').hidden).every(k => form.elements[k].value.trim() !== '');
+    details.querySelector('summary').textContent = `${details.dataset.title} · ${complete ? 'указано' : 'заполнить'}`;
+  }
+}
+function initFlow() {
+  const cards = [...form.querySelectorAll(':scope > section.card')];
+  // Terminal totals precede the handover/review, while input names and persisted schema stay unchanged.
+  form.insertBefore(cards[4], cards[3]); flowCards = [cards[0], cards[1], cards[2], cards[4], cards[3]];
+  flowCards.forEach((card, i) => {
+    card.querySelector('.step').textContent = String(i + 1);
+    const button = el('button'); button.type = 'button'; button.dataset.step = i;
+    button.append(el('span', String(i + 1), 'flow-number'), el('span', flowLabels[i]));
+    button.addEventListener('click', () => showFlow(i, { focus: true })); $('flow-steps').append(button);
+  });
+  function disclosure(parent, title, names) {
+    const details = el('details', null, 'flow-disclosure'); details.dataset.title = title; details.dataset.flowFields = names.join(',');
+    details.append(el('summary', title)); const grid = el('div', null, 'fields');
+    for (const name of names) grid.append(form.elements[name].closest('label'));
+    details.append(grid); parent.append(details); return details;
+  }
+  disclosure(cards[1], 'Размен на начало и конец', ['opening', 'retained']);
+  disclosure(cards[1], 'Другие движения наличных', ['otherIn', 'previousTransfers']);
+  form.elements.previousTransfers.closest('label').dataset.expandedCash = 'true';
+  const settings = el('details', null, 'flow-disclosure'); settings.append(el('summary', 'Способ расчёта'), $('legacy-form-setting')); cards[1].append(settings);
+  const paymentSettings = el('details', null, 'flow-disclosure'); paymentSettings.append(el('summary', 'Ввести выплаты по получателям'), $('payment-mode-setting')); $('payment-mode-wrap').append(paymentSettings);
+  for (const name of ['otherIn', 'additionalCash', 'previousTransfers', 'suppliers', 'payroll', 'other']) {
+    const control = form.elements[name], label = control.closest('label'), button = el('button', 'Не было', 'zero-button'); button.type = 'button';
+    button.setAttribute('aria-label', `${name === 'additionalCash' ? 'Нет второго отчёта' : label.childNodes[0].textContent}: указать ноль`);
+    if (name === 'additionalCash') button.textContent = 'Нет второго отчёта';
+    button.addEventListener('click', () => {
+      if (control.value && control.value !== '0' && !window.confirm('Заменить введённую сумму нулём?')) return;
+      control.value = '0'; control.removeAttribute('aria-invalid'); changed();
+    }); label.append(button);
+  }
+  $('flow-mode').addEventListener('click', () => { fullForm = !fullForm; showFlow(flowIndex, { focus: true }); });
+  const bankReview = el('button', 'Безналичные пока не сверены.', 'text-button full'); bankReview.id = 'review-noncash'; bankReview.type = 'button';
+  bankReview.addEventListener('click', () => showFlow(3, { focus: true }));
+  document.querySelector('.result-card').append(bankReview);
+  $('flow-back').addEventListener('click', () => showFlow(flowIndex - 1, { focus: true }));
+  $('flow-next').addEventListener('click', () => { const error = stageError(flowIndex); if (error) showStageError(flowIndex, error); else showFlow(flowIndex + 1, { focus: true }); });
+  form.addEventListener('input', e => { e.target.removeAttribute('aria-invalid'); $('flow-error').hidden = true; });
+  updateModes(); showFlow(0);
 }
 function paymentRow(p = {}) {
   const row = el('div', null, 'payment');
@@ -141,14 +266,16 @@ function view(name) {
 function reset() {
   if (busy || (dirty && !window.confirm('Начать новую смену? Несохранённые изменения будут потеряны.'))) return;
   form.reset(); saved = null; pending = null; dirty = false;
+  for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   form.elements.cashSetupEnabled.checked = true; fillNonCash();
   for (const key of ['date', 'register', 'shiftNo']) form.elements[key].disabled = false;
   form.elements.date.value = date(); $('payments').replaceChildren(); $('no-payments').hidden = false;
   $('reason-wrap').hidden = true; $('save-state').textContent = 'Ещё не сохранено'; $('print').disabled = true;
-  $('notice').hidden = true; updateModes(); view('cash'); preview();
+  $('notice').hidden = true; updateModes(); view('cash'); showFlow(0); preview();
 }
 async function openRecord(record) {
   if (busy || (dirty && !window.confirm('Открыть сохранённую смену? Несохранённые изменения будут потеряны.'))) return;
+  for (const control of form.querySelectorAll('[aria-invalid]')) control.removeAttribute('aria-invalid');
   for (const k of fields) form.elements[k].value = record.input[k] ?? '';
   fillNonCash(record.input.nonCash);
   form.elements.cashSetupEnabled.checked = record.input.cashSetup !== undefined;
@@ -161,7 +288,7 @@ async function openRecord(record) {
   saved = record; pending = null; dirty = false;
   $('reason-wrap').hidden = false; $('print').disabled = false;
   $('save-state').textContent = `Сохранено · версия ${record.version} · ${new Date(record.createdAt).toLocaleString('ru-RU')}`;
-  updateModes(); view('cash'); preview(); notice('Открыта сохранённая версия. Для исправления укажите причину и сохраните новую версию.');
+  updateModes(); view('cash'); showFlow(4); preview(); notice('Открыта сохранённая версия. Для исправления укажите причину и сохраните новую версию.');
 }
 async function loadHistory() {
   const rows = await api('/api/shifts'); const list = $('history-list'); list.replaceChildren();
@@ -243,11 +370,14 @@ $('example').addEventListener('click', () => {
   for (const [key, value] of Object.entries({ additionalCash: '1000', previousTransfers: '0', paymentMode: 'totals', suppliers: '7500', payroll: '1000', other: '0' })) form.elements[key].value = value;
   form.elements.independentReports.checked = true; form.elements.factBasisConfirmed.checked = true;
   fillNonCash({ mode: 'aggregate', zMode: 'net', zNet: '58000', reportMode: 'net', reportNet: '57900', reportRef: 'Вымышленные отчёты за один тестовый период', periodConfirmed: true });
-  $('payments').replaceChildren(); changed();
+  $('payments').replaceChildren(); changed(); showFlow(4);
 });
 form.addEventListener('submit', async event => {
   event.preventDefault(); if (busy) return;
+  // Enter on an earlier step advances the flow instead of saving an unseen final result.
+  if (!fullForm && flowIndex < 4) { const error = stageError(flowIndex); if (error) showStageError(flowIndex, error); else showFlow(flowIndex + 1, { focus: true }); return; }
   try {
+    for (let i = 0; i < 5; i++) { const error = stageError(i); if (error) { showStageError(i, error); return; } }
     reconcile(getInput());
     if (saved && !dirty) return notice('Изменений нет. Сохранённая версия уже доступна для печати.');
     pending ??= { requestId: crypto.randomUUID(), id: saved?.id ?? null, expectedVersion: saved?.version ?? 0, input: getInput(), reason: form.elements.reason.value };
@@ -261,13 +391,13 @@ form.addEventListener('submit', async event => {
     saved = record; dirty = false; pending = null; $('reason-wrap').hidden = false;
     form.elements.reason.value = ''; ['date', 'register', 'shiftNo'].forEach(k => { form.elements[k].disabled = true; });
     $('save-state').textContent = `Сохранено · версия ${record.version} · ${new Date(record.createdAt).toLocaleString('ru-RU')}`;
-    $('print').disabled = false; notice(`Сверка сохранена. Версия ${record.version}. Денежные счета не изменялись.`);
+    $('print').disabled = false; notice(`Сверка сохранена. Версия ${record.version}.`);
   } catch (error) { notice(error.message, true); }
   finally { busy = false; $('save').disabled = false; $('save').textContent = 'Сохранить сверку'; }
 });
 $('print').addEventListener('click', () => { if (!saved || dirty || busy) return; buildPrint(saved); window.print(); });
 window.addEventListener('beforeunload', event => { if (dirty || busy) { event.preventDefault(); event.returnValue = ''; } });
-form.elements.date.value = date(); form.elements.cashSetupEnabled.checked = true; updateModes(); preview();
+form.elements.date.value = date(); form.elements.cashSetupEnabled.checked = true; initFlow(); preview();
 let archiveBusy = false;
 function archiveControls() {
   $('download-backup').disabled = archiveBusy || !token;
