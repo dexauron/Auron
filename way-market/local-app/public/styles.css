@@ -8,3 +8,5 @@
 #backup-status{margin-top:16px}#check-backup{margin:16px 0}#backup-check-result{overflow-wrap:anywhere}input[type=file]{font-size:12px}
 @media(max-width:650px){nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.nav{justify-content:flex-start;font-size:12px;padding:10px}.sidebar nav [data-icon]{margin-right:4px}}
 @media print{#backup-view{display:none!important}}
+.noncash-channel{padding:14px 0;border-top:1px solid #edf0ee}.noncash-channel h3{margin:0 0 18px;font-size:15px}.noncash-channel .hint{margin-top:12px}.noncash-totals{background:#f5f8f6;border-radius:12px;padding:8px 14px;margin:16px 0}.noncash-channel>summary{font-size:15px;font-weight:600;margin-bottom:16px}
+:where([hidden]){display:none!important}
