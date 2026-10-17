@@ -9,12 +9,13 @@
 
 import { $, state, ui } from './store.js';
 import { closeSheet, esc, openSheet, toast } from './core.js';
-import { fmtNum, fmtPrice } from './catalog.js';
+import { fmtNum, fmtPrice, searchProducts } from './catalog.js';
 import { plural } from './competitors.js';
 import { ic } from './icons.js';
 import { buzz, wolfSay } from './mascot.js';
 import { WA_MAX_LINES, sendWhatsApp, storeSignature } from './whatsapp.js';
 import { copyForOnec, downloadForOnec } from './onec.js';
+import { findByBarcode, startScan } from './scanner.js';
 
 const KEY = 'wm_shop_v1';
 const MAX = 200;
@@ -139,6 +140,7 @@ function renderShop() {
       здесь соберётся, что взять, и сколько это выйдет.</p>`;
     $('shopShare').hidden = true;
     $('shopWa').hidden = true;
+    renderFind();            // поле поиска остаётся: с него список и начинают
     return;
   }
   const rows = list.map((x) => {
@@ -165,7 +167,9 @@ function renderShop() {
   packHint ? ' · ' + esc(packHint) : ''}</span></span>
       <span class="qty-step">
         <button data-shop-minus="${esc(x.id)}" aria-label="Меньше">−</button>
-        <span class="shop-qty">${fmtNum(x.qty)}<span class="shop-unit">${esc(unit)}</span></span>
+        <input class="shop-qty" type="text" inputmode="decimal" data-shop-qty="${esc(x.id)}"
+               value="${fmtNum(x.qty)}" aria-label="Количество">
+        <span class="shop-unit">${esc(unit)}</span>
         <button data-shop-plus="${esc(x.id)}" aria-label="Больше">+</button>
       </span>
       <button class="rst-rm" data-shop-rm="${esc(x.id)}" aria-label="Убрать">${ic('close', 'ic-xs')}</button>
@@ -180,6 +184,7 @@ function renderShop() {
     которое ты поставил.</p>`;
   $('shopShare').hidden = false;
   $('shopWa').hidden = false;
+  renderFind();
 }
 
 /* ── Список по ссылке ───────────────────────────────────────────────────────
@@ -302,6 +307,87 @@ export function syncShopButton(p) {
   ui.shopFor = p.id;
 }
 
+/* ── Добавление прямо в окне списка ─────────────────────────────────────────
+ * Собрать список на сорок позиций, выходя за каждой в каталог, невозможно:
+ * найти товар, открыть карточку, нажать «в список», вернуться — и так сорок
+ * раз. Поэтому здесь своё поле и своя кнопка камеры. Поиск при этом НЕ свой:
+ * зовём тот же searchProducts, что и главный экран, иначе выдача разъехалась
+ * бы с привычной. */
+const FIND_ROWS = 7;          // больше строк не помещается над списком
+
+function renderFind() {
+  const box = $('shopFindList');
+  if (!box) return;
+  const q = String(ui.shopQuery || '').trim();
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  const have = new Set(read().map((x) => x.id));
+  const hits = searchProducts(q, state.products, FIND_ROWS);
+  if (!hits.length) {
+    box.innerHTML = '<p class="ios-note">Ничего не нашлось. Попробуй код или часть названия.</p>';
+    return;
+  }
+  box.innerHTML = `<div class="ios-group">${hits.map((p) => {
+    const inList = have.has(p.id);
+    return `<button class="ios-row ios-row-link${inList ? ' grp-on' : ''}" data-shop-pick="${esc(p.id)}">
+      <span class="ios-row-title">${esc(p.name)}
+        <span class="ord-sub">${p.code ? 'код ' + esc(p.code) : 'без кода'}${
+  p.retail_price ? ' · ' + esc(fmtPrice(p.retail_price)) : ''}${p.is_weighted ? ' · весовой' : ''}</span></span>
+      <span class="ios-row-value">${inList ? ic('check', 'ic-xs') : '+'}</span></button>`;
+  }).join('')}</div>`;
+}
+
+/* Выбрали товар из найденного: добавляем и очищаем поле, чтобы сразу набирать
+ * следующий. Уже добавленный не удаляем по второму тапу — в списке покупок это
+ * было бы ловушкой: искал, нашёл, тапнул и случайно убрал. */
+function pickFound(id) {
+  const p = state.products.find((x) => x.id === id);
+  if (!p) return;
+  if (!inShop(p.id)) { toggleShop(p); toast('Добавил: ' + p.name); }
+  else toast('Уже в списке');
+  ui.shopQuery = '';
+  const f = $('shopFind');
+  if (f) { f.value = ''; f.focus(); }
+  renderFind();
+  renderShop();
+}
+
+/* Сканер в окне списка. Камера не закрывается: обходя склад, человек наводит
+ * её на товар за товаром. Весовую этикетку понимаем тоже — вес с неё сразу
+ * становится количеством, его не надо набирать руками. */
+export function scanToShop(text) {
+  const box = $('scanResult');
+  if (!box) return;
+  const found = findByBarcode(text);
+  const p = found && found.p;
+  box.hidden = false;
+  if (!p) {
+    box.innerHTML = `<div class="scan-result-miss">Нет в каталоге</div>
+      <div class="scan-result-code">${esc(text)}</div>`;
+    return;
+  }
+  const list = read();
+  const row = list.find((x) => x.id === p.id);
+  const kg = found.grams ? Math.round((found.grams / 1000) * 1000) / 1000 : 0;
+  if (row) {
+    // тот же товар второй раз — прибавляем: так считают, обходя полки
+    row.qty = Math.round(((Number(row.qty) || 0) + (kg || 1)) * 1000) / 1000;
+    write(list);
+  } else {
+    toggleShop(p);
+    if (kg) {
+      const l2 = read();
+      const r2 = l2.find((x) => x.id === p.id);
+      if (r2) { r2.qty = kg; write(l2); }
+    }
+  }
+  renderShopBar();
+  renderShop();
+  const now = read().find((x) => x.id === p.id) || {};
+  box.innerHTML = `<div class="scan-result-name">${esc(p.name)}</div>
+    <div class="scan-result-price">в списке: ${fmtNum(now.qty)} ${esc(now.unit || 'шт')}</div>
+    <div class="scan-result-code">всего позиций: ${read().length}</div>`;
+}
+
 /* ── Смахнуть строку влево — убрать ──────────────────────────────────────
  * В зале человек держит телефон одной рукой, и попасть в маленький крестик
  * на ходу трудно. Смахивание — то же движение, что в почте и в заметках:
@@ -324,7 +410,8 @@ function enableSwipeRemove(box) {
   box.addEventListener('touchstart', (e) => {
     row = null;
     const r = e.target.closest('.shop-row');
-    if (!r || e.target.closest('button')) return;   // по кнопкам жест не начинаем
+    // по кнопкам и по полю количества жест не начинаем: там набирают цифры
+    if (!r || e.target.closest('button, input')) return;
     row = r; dx = 0; axis = '';
     x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
     r.style.transition = 'none';
@@ -369,6 +456,33 @@ export function bindShopping() {
   $('shopWa').addEventListener('click', shopToWhatsApp);
   /* Выгрузка в 1С и «Сохранить как заявку» — только вошедшим: это рабочая
      часть, покупателю она ни к чему. */
+  $('shopFind').addEventListener('input', (e) => { ui.shopQuery = e.target.value; renderFind(); });
+  $('shopFindList').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-shop-pick]');
+    if (b) pickFound(b.dataset.shopPick);
+  });
+  $('shopScan').addEventListener('click', () => {
+    const t = $('scanTitle'); if (t) t.textContent = 'Наведи камеру — товар уйдёт в список покупок';
+    const seg = $('scanModeSeg'); if (seg) seg.hidden = true;   // режимы тут не нужны
+    const res = $('scanResult'); if (res) { res.hidden = true; res.innerHTML = ''; }
+    startScan(scanToShop, { keepOpen: true });
+  });
+  /* Количество набирается руками: кнопками ±1 набрать «24» — двадцать четыре
+     нажатия. Пустое поле и мусор не превращаем в ноль молча — возвращаем то,
+     что было, иначе позиция тихо исчезла бы из выгрузки. */
+  $('shopBody').addEventListener('change', (e) => {
+    const inp = e.target.closest('[data-shop-qty]');
+    if (!inp) return;
+    const list = read();
+    const row = list.find((x) => x.id === inp.dataset.shopQty);
+    if (!row) return;
+    const n = Number(String(inp.value).replace(',', '.').replace(/\s/g, ''));
+    if (!Number.isFinite(n) || n <= 0) { inp.value = fmtNum(row.qty); return; }
+    row.qty = Math.round(n * 1000) / 1000;
+    write(list);
+    renderShop();
+    renderShopBar();
+  });
   $('shopCopy1c').addEventListener('click', () => copyForOnec(read()));
   $('shopFile1c').addEventListener('click', () => downloadForOnec(read(), 'Список покупок'));
   $('shopSaveReq').addEventListener('click', () => {
