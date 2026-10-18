@@ -1,8 +1,11 @@
 import { createRequire } from 'node:module';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { openWorkspace } from '../local-app/workspace-store.mjs';
 import { createWorkspaceServer } from '../local-app/workspace-server.mjs';
+import { createBackupService, backupWorker } from '../local-app/workspace-backups.mjs';
 const require = createRequire(process.env.PLAYWRIGHT_FROM ?? import.meta.url);
 const { chromium } = require('playwright');
 const launch = () => chromium.launch({ headless: true, ...(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}), ...(process.env.WAY_BROWSER_SINGLE_PROCESS ? { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process', '--no-zygote'] } : {}) });
@@ -10,7 +13,9 @@ const password = 'Длинная тестовая фраза для входа';
 const snapshots = process.argv[2]; if (snapshots) await mkdir(snapshots, { recursive: true });
 let passed = 0;
 async function scenario(name, viewport, run) {
-  const w = openWorkspace(':memory:'), { server, setupCode } = createWorkspaceServer(w);
+  const folder = await mkdtemp(join(tmpdir(), 'way-browser-backups-')), w = openWorkspace(':memory:');
+  const backupService = createBackupService(w, { directory: join(folder, 'backups'), restoreDirectory: join(folder, 'restored') });
+  const { server, setupCode } = createWorkspaceServer(w, { backupService });
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const browser = await launch(), ctx = await browser.newContext({ viewport }), page = await ctx.newPage(), errors = [];
   page.on('pageerror', error => errors.push(error.message)); page.on('dialog', d => d.accept());
@@ -18,7 +23,7 @@ async function scenario(name, viewport, run) {
   const login = async (login = 'owner') => { await page.goto(base); await page.locator('#login-form [name=login]').fill(login); await page.locator('#login-form [name=password]').fill(password); await page.locator('#login-button').click(); await page.locator('#app').waitFor({ state: 'visible' }); await page.getByRole('heading', { name: 'С чего начать', exact: true }).waitFor(); };
   const nav = label => page.locator(viewport.width > 760 ? '#navigation' : '#mobile-navigation').getByRole('button', { name: label, exact: true });
   try { await run({ w, page, ctx, base, setupCode, login, nav }); assert.deepEqual(errors, []); passed++; console.log('✓ ' + name); }
-  finally { await browser.close(); await new Promise(r => server.close(r)); w.close(); }
+  finally { await browser.close(); await backupService.close(); await new Promise(r => server.close(r)); w.close(); await rm(folder, { recursive: true, force: true }); }
 }
 await scenario('Owner bootstrap, create employee, catalog and task; cross-tab logout scrubs data', { width: 1440, height: 1000 }, async ({ page, w, ctx, base, setupCode, nav }) => {
   await page.goto(base); await page.locator('#setup-code-label').waitFor({ state: 'visible' });
@@ -103,5 +108,29 @@ await scenario('Administrator, employee and representative get distinct navigati
     await page.locator('#profile-button').click(); await page.getByRole('button', { name: 'Выйти', exact: true }).click();
     await page.locator('#entry').waitFor({ state: 'visible' });
   }
+});
+await scenario('Owner creates, downloads, verifies and restores a full encrypted copy on phone', { width: 390, height: 844 }, async ({ w, page, login }) => {
+  const key = 'Отдельный пароль копии для испытаний';
+  await w.accounts.bootstrapOwner({ login: 'owner', name: 'Владелец', password });
+  await login(); await page.locator('#profile-button').click(); await page.locator('#modal').getByRole('button', { name: 'Резервные копии', exact: true }).click();
+  await page.getByRole('heading', { name: 'Копия всей рабочей области' }).waitFor();
+  await page.getByRole('button', { name: 'Создать копию', exact: true }).click();
+  for (const [name, value] of Object.entries({ password: key, passwordAgain: key, currentPassword: password })) await page.locator(`#modal [name=${name}]`).fill(value);
+  await page.getByRole('button', { name: 'Создать и проверить', exact: true }).click(); await page.locator('#modal').waitFor({ state: 'hidden' });
+  await page.locator('.backup-alert').waitFor({ state: 'hidden', timeout: 5000 });
+  assert.equal(await page.locator('#page').getByRole('button', { name: 'Действия', exact: true }).count(), 1);
+  async function action(label) { await page.locator('#page').getByRole('button', { name: 'Действия', exact: true }).first().click(); await page.locator('#modal').getByRole('button', { name: label, exact: true }).click(); }
+  await action('Скачать файл'); await page.locator('#modal [name=currentPassword]').fill(password);
+  const downloaded = page.waitForEvent('download'); await page.locator('#modal').getByRole('button', { name: 'Скачать файл', exact: true }).click();
+  const download = await downloaded, bytes = await readFile(await download.path());
+  const decoded = await backupWorker({ operation: 'decrypt', password: key, bytes }); assert.equal(decoded.stats.users, 1);
+  await page.locator('#modal').waitFor({ state: 'hidden' });
+  await action('Проверить копию'); await page.locator('#modal [name=password]').fill(key); await page.locator('#modal [name=currentPassword]').fill(password);
+  await page.locator('#modal').getByRole('button', { name: 'Проверить', exact: true }).click(); await page.locator('#modal').waitFor({ state: 'hidden' });
+  await action('Проверить восстановление'); await page.locator('#modal [name=password]').fill(key); await page.locator('#modal [name=currentPassword]').fill(password);
+  await page.locator('#modal').getByRole('button', { name: 'Восстановить отдельно', exact: true }).click();
+  await page.locator('#modal').getByText('Отдельная база восстановлена и проверена. Действующая база не заменена.', { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  if (snapshots) await page.screenshot({ path: `${snapshots}/backup-restore-390.png`, fullPage: true });
 });
 console.log(`Workspace browser scenarios passed: ${passed}`);
