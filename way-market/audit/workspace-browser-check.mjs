@@ -1,0 +1,107 @@
+import { createRequire } from 'node:module';
+import { mkdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import { openWorkspace } from '../local-app/workspace-store.mjs';
+import { createWorkspaceServer } from '../local-app/workspace-server.mjs';
+const require = createRequire(process.env.PLAYWRIGHT_FROM ?? import.meta.url);
+const { chromium } = require('playwright');
+const launch = () => chromium.launch({ headless: true, ...(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {}), ...(process.env.WAY_BROWSER_SINGLE_PROCESS ? { args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--single-process', '--no-zygote'] } : {}) });
+const password = 'Длинная тестовая фраза для входа';
+const snapshots = process.argv[2]; if (snapshots) await mkdir(snapshots, { recursive: true });
+let passed = 0;
+async function scenario(name, viewport, run) {
+  const w = openWorkspace(':memory:'), { server, setupCode } = createWorkspaceServer(w);
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  const browser = await launch(), ctx = await browser.newContext({ viewport }), page = await ctx.newPage(), errors = [];
+  page.on('pageerror', error => errors.push(error.message)); page.on('dialog', d => d.accept());
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const login = async (login = 'owner') => { await page.goto(base); await page.locator('#login-form [name=login]').fill(login); await page.locator('#login-form [name=password]').fill(password); await page.locator('#login-button').click(); await page.locator('#app').waitFor({ state: 'visible' }); await page.getByRole('heading', { name: 'С чего начать', exact: true }).waitFor(); };
+  const nav = label => page.locator(viewport.width > 760 ? '#navigation' : '#mobile-navigation').getByRole('button', { name: label, exact: true });
+  try { await run({ w, page, ctx, base, setupCode, login, nav }); assert.deepEqual(errors, []); passed++; console.log('✓ ' + name); }
+  finally { await browser.close(); await new Promise(r => server.close(r)); w.close(); }
+}
+await scenario('Owner bootstrap, create employee, catalog and task; cross-tab logout scrubs data', { width: 1440, height: 1000 }, async ({ page, w, ctx, base, setupCode, nav }) => {
+  await page.goto(base); await page.locator('#setup-code-label').waitFor({ state: 'visible' });
+  for (const [key, value] of Object.entries({ code: setupCode, name: 'Владелец', login: 'owner', password })) await page.locator(`#login-form [name=${key}]`).fill(value);
+  await page.locator('#login-button').click(); await page.locator('#app').waitFor({ state: 'visible' });
+  await nav('Сотрудники').click(); await page.getByRole('button', { name: 'Добавить сотрудника' }).click();
+  for (const [key, value] of Object.entries({ name: 'Сотрудник тест', login: 'employee', password })) await page.locator(`#modal [name=${key}]`).fill(value);
+  await page.getByRole('button', { name: 'Создать аккаунт', exact: true }).click(); await page.locator('#modal').waitFor({ state: 'hidden' });
+  await page.locator('#page').getByText('Сотрудник тест', { exact: true }).waitFor();
+  await nav('Каталог').click(); await page.getByRole('button', { name: 'Добавить товар' }).click();
+  await page.locator('#modal [name=name]').fill('Молоко <script>'); await page.locator('#modal [name=price]').fill('99,90');
+  await page.getByRole('button', { name: 'Сохранить товар' }).click(); await page.locator('#modal').waitFor({ state: 'hidden' });
+  await page.getByText('Молоко <script>', { exact: true }).waitFor();
+  await nav('Задачи').click(); await page.getByRole('button', { name: 'Назначить задачу' }).click();
+  await page.locator('#modal [name=title]').fill('Проверить ценники');
+  await page.locator('#modal [name=assigneeId]').selectOption({ label: 'Сотрудник тест · Сотрудник' });
+  await page.getByRole('button', { name: 'Назначить', exact: true }).click(); await page.locator('#modal').waitFor({ state: 'hidden' });
+  await page.getByText('Проверить ценники', { exact: true }).waitFor();
+  if (snapshots) await page.screenshot({ path: `${snapshots}/desktop-tasks.png`, fullPage: true });
+  const second = await ctx.newPage(); await second.goto(base); await second.locator('#app').waitFor({ state: 'visible' });
+  await page.locator('#profile-button').click(); await page.getByRole('button', { name: 'Выйти', exact: true }).click();
+  await second.locator('#entry').waitFor({ state: 'visible' }); assert.equal(await second.locator('#page').innerText(), '');
+  assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
+});
+for (const width of [1440, 390, 320]) await scenario(`Cashier submit, accountant accept, history and no overflow at ${width}px`, { width, height: 960 }, async ({ w, page, login, nav }) => {
+  await w.accounts.bootstrapOwner({ login: 'owner', name: 'Владелец', password });
+  const o = await w.accounts.login({ login: 'owner', password });
+  await w.accounts.createUser(o.token, { login: 'cashier', name: 'Кассир тест', password, role: 'cashier' });
+  await w.accounts.createUser(o.token, { login: 'accountant', name: 'Бухгалтер тест', password, role: 'accountant' });
+  await login('cashier'); await nav('Касса').click(); await page.getByRole('button', { name: 'Новая сдача' }).click();
+  await page.locator('#page [name=shiftNo]').fill('1');
+  await page.locator('#page details').evaluate(e => { e.open = true; });
+  const values = { cashReport: '34000', cashViaTerminal: '1000', suppliers: '7500', payroll: '1000', lunch: '0', owner: '0', insertion: '4000', cashReturns: '0', cashCancelled: '0', card: '30000', qr: '20000', bluetooth: '7900', bio: '0', bankZ: '57900', bankReturns: '0', bankCancelled: '0', retained: '0', claimed: '22500' };
+  for (const [key, value] of Object.entries(values)) await page.locator(`#page [name=${key}]`).fill(value);
+  await page.locator('#page details').evaluate(e => { e.open = false; });
+  await page.locator('#page [name=claimed]').press('Enter'); assert.equal(w.cashList(o.token).length, 0);
+  let releaseSave;
+  const saveGate = new Promise(resolve => { releaseSave = resolve; });
+  await page.route('**/api/cash', async route => { if (route.request().method() === 'POST') await saveGate; await route.continue(); });
+  await page.getByRole('button', { name: 'Отправить сдачу', exact: true }).click();
+  assert.equal(await page.locator('#page [name=cashReport]').isDisabled(), true);
+  releaseSave();
+  await page.waitForFunction(() => document.querySelector('.save-bar small')?.textContent.includes('Сохранено'));
+  await page.unroute('**/api/cash');
+  assert.equal(w.cashList(o.token)[0].result.expected, 2250000);
+  assert.equal(await page.locator('#page [name=received]').count(), 0);
+  if (snapshots) await page.screenshot({ path: `${snapshots}/cashier-${width}.png`, fullPage: true });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.locator('#profile-button').click(); await page.getByRole('button', { name: 'Выйти', exact: true }).click();
+  await login('accountant'); await nav('Касса').click(); await page.locator('.row-button').first().click();
+  await page.locator('#page [name=received]').fill('22499,99'); await page.locator('#page [name=reason]').fill('Самостоятельно пересчитал');
+  await page.getByRole('button', { name: 'Принять кассу', exact: true }).click();
+  await page.waitForFunction(() => document.querySelector('.save-bar small')?.textContent.includes('версия 2'));
+  assert.equal(w.cashList(o.token)[0].result.receivedDifference, -1);
+  assert.match(await page.locator('.cash-report').innerText(), /−/);
+  if (snapshots) await page.screenshot({ path: `${snapshots}/accountant-${width}.png`, fullPage: true });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await page.evaluate(() => { window.print = () => { window.__printedSnapshot = document.querySelector('#workspace-print').innerText; }; });
+  await page.locator('#page [name=received]').fill('99999');
+  await page.locator('.save-bar').getByRole('button', { name: 'Печать', exact: true }).click();
+  const printed = await page.evaluate(() => window.__printedSnapshot);
+  assert.match(printed, /22499[.,]99/); assert.equal(printed.includes('99999'), false);
+  await page.locator('.save-bar').getByRole('button', { name: 'История', exact: true }).click();
+  await page.locator('#modal').getByRole('button', { name: 'Просмотр', exact: true }).last().click();
+  await page.waitForFunction(() => document.querySelector('.save-bar small')?.textContent.includes('версия 1'));
+  assert.equal(await page.locator('#page [name=cashReport]').isDisabled(), true);
+  assert.equal(await page.locator('#page').getByRole('button', { name: 'Принять кассу', exact: true }).count(), 0);
+});
+await scenario('Administrator, employee and representative get distinct navigation without cash access', { width: 390, height: 844 }, async ({ w, page, login, nav }) => {
+  await w.accounts.bootstrapOwner({ login: 'owner', name: 'Владелец', password });
+  const owner = await w.accounts.login({ login: 'owner', password });
+  for (const role of ['administrator', 'employee', 'representative']) {
+    await w.accounts.createUser(owner.token, { login: role, name: role, role, password });
+    await login(role);
+    assert.equal(await page.locator('#navigation [data-page=cash]').count(), 0);
+    assert.equal(await page.locator('#navigation [data-page=users]').count(), 0);
+    assert.equal(await page.evaluate(async () => (await fetch('/api/cash')).status), 403);
+    await nav('Задачи').click(); await page.getByRole('heading', { name: 'Рабочие поручения' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Назначить задачу', exact: true }).count(), role === 'administrator' ? 1 : 0);
+    await nav('Каталог').click(); await page.getByRole('heading', { name: 'Товары', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Добавить товар', exact: true }).count(), role === 'administrator' ? 1 : 0);
+    await page.locator('#profile-button').click(); await page.getByRole('button', { name: 'Выйти', exact: true }).click();
+    await page.locator('#entry').waitFor({ state: 'visible' });
+  }
+});
+console.log(`Workspace browser scenarios passed: ${passed}`);

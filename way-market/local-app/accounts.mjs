@@ -1,33 +1,36 @@
-// Isolated foundation, NOT wired to the cash HTTP server yet. See the integration
-// gates in docs/WAY_MARKET_ACCOUNTS.md before exposing any route or enabling LAN.
+// Account foundation. The new workspace server uses the optional shared business
+// transaction; the legacy cash HTTP server remains separate. LAN stays disabled.
 import { DatabaseSync } from 'node:sqlite';
 import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { permitted, AccessError } from './access.mjs';
+import { InputError } from './domain.mjs';
+export class AccountConflictError extends Error {}
 
 const derive = promisify(scrypt);
 const hash = value => createHash('sha256').update(value).digest('hex');
 const cost = { N: 131072, r: 8, p: 1, maxmem: 160 * 1024 * 1024 };
-const roles = new Set(['owner', 'accountant', 'cashier', 'employee', 'representative']);
+const roles = new Set(['owner', 'administrator', 'accountant', 'cashier', 'employee', 'representative']);
 const absoluteMs = 8 * 60 * 60 * 1000, idleMs = 15 * 60 * 1000;
 const publicUser = u => ({ id: u.id, login: u.login, name: u.name, role: u.role, active: Boolean(u.active), version: u.version });
 const validToken = token => typeof token === 'string' && /^[a-f0-9]{64}$/.test(token);
 const failure = () => new AccessError('Вход не выполнен. Проверьте данные или повторите позже.');
 function credentials(login, name, password, role) {
-  if (typeof login !== 'string' || !/^[a-zA-Z0-9._-]{3,64}$/.test(login)) throw new Error('Логин: 3–64 латинских символа, цифры, точка, дефис или подчёркивание');
-  if (typeof name !== 'string' || !name.trim() || name.length > 100 || /[\x00-\x1f]/.test(name)) throw new Error('Укажите имя до 100 символов');
-  if (typeof password !== 'string' || [...password].length < 15 || [...password].length > 128 || /[\x00-\x1f]/.test(password)) throw new Error('Пароль: 15–128 символов; можно использовать фразу');
-  if (!roles.has(role)) throw new Error('Неизвестная роль');
+  if (typeof login !== 'string' || !/^[a-zA-Z0-9._-]{3,64}$/.test(login)) throw new InputError('Логин: 3–64 латинских символа, цифры, точка, дефис или подчёркивание');
+  if (typeof name !== 'string' || !name.trim() || name.length > 100 || /[\x00-\x1f]/.test(name)) throw new InputError('Укажите имя до 100 символов');
+  if (typeof password !== 'string' || [...password].length < 15 || [...password].length > 128 || /[\x00-\x1f]/.test(password)) throw new InputError('Пароль: 15–128 символов; можно использовать фразу');
+  if (!roles.has(role)) throw new InputError('Неизвестная роль');
   return { login: login.toLowerCase(), name: name.trim() };
 }
 
-export function openAccounts(filename, { clock = Date.now } = {}) {
+export function openAccounts(filename, { clock = Date.now, workspace = false } = {}) {
   const db = new DatabaseSync(filename);
   if (![0, 1].includes(db.prepare('PRAGMA user_version').get().user_version)) { db.close(); throw new Error('Неподдерживаемая база аккаунтов'); }
   // Never pass cash-test.sqlite: this separate schema deliberately refuses a
   // financial database, including one whose user_version is also 1.
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='revisions'").get()) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   const ownTables = new Set(['account_users', 'account_sessions', 'account_events', 'account_attempts']);
+  if (workspace) for (const name of ['workspace_cash', 'workspace_requests', 'workspace_tasks', 'workspace_products']) ownTables.add(name);
   if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().some(t => !ownTables.has(t.name))) { db.close(); throw new Error('Нужна отдельная база аккаунтов'); }
   db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
     CREATE TABLE IF NOT EXISTS account_users (
@@ -47,6 +50,12 @@ export function openAccounts(filename, { clock = Date.now } = {}) {
       bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_ms INTEGER NOT NULL
     ) STRICT;
     PRAGMA user_version=1;`);
+  if (workspace) db.exec(`
+    CREATE TABLE IF NOT EXISTS workspace_cash (id TEXT NOT NULL, version INTEGER NOT NULL, shift_key TEXT NOT NULL, cashier_id TEXT NOT NULL, actor_id TEXT NOT NULL, status TEXT NOT NULL, at_ms INTEGER NOT NULL, input TEXT NOT NULL, result TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version), UNIQUE(shift_key,version)) STRICT;
+    CREATE INDEX IF NOT EXISTS workspace_cash_owner ON workspace_cash(cashier_id,id,version);
+    CREATE TABLE IF NOT EXISTS workspace_requests (id TEXT PRIMARY KEY, digest TEXT NOT NULL, result TEXT NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS workspace_tasks (id TEXT PRIMARY KEY, version INTEGER NOT NULL, creator_id TEXT NOT NULL, assignee_id TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL, related_cash TEXT, at_ms INTEGER NOT NULL) STRICT;
+    CREATE TABLE IF NOT EXISTS workspace_products (id TEXT PRIMARY KEY, version INTEGER NOT NULL, name TEXT NOT NULL, barcode TEXT NOT NULL, price INTEGER NOT NULL, active INTEGER NOT NULL) STRICT;`);
   let activeKdf = 0;
   const now = () => {
     const n = clock();
@@ -85,13 +94,41 @@ export function openAccounts(filename, { clock = Date.now } = {}) {
     return actor;
   }
   function insertUser(c, passwordHash, salt, role, actor) {
-    if (db.prepare('SELECT id FROM account_users WHERE login=?').get(c.login)) throw new Error('Логин уже занят');
+    if (db.prepare('SELECT id FROM account_users WHERE login=?').get(c.login)) throw new InputError('Логин уже занят');
     const id = randomUUID();
     db.prepare('INSERT INTO account_users VALUES (?,?,?,?,1,1,?,?)').run(id, c.login, c.name, role, salt, passwordHash.toString('hex'));
     event(actor ?? id, actor ? 'account.created' : 'owner.bootstrap', id, { role });
     return publicUser(userById(id));
   }
   return {
+    configured() { return Boolean(db.prepare('SELECT id FROM account_users LIMIT 1').get()); },
+    // Trusted synchronous backend extension: auth, business write and audit share
+    // this connection and transaction. Never expose SQL/callbacks over HTTP.
+    command(token, action, resolveResource, apply) {
+      if (!workspace) throw new Error('Рабочие модули не подключены');
+      return transaction(() => {
+        const actor = session(token), resource = resolveResource(db, actor);
+        if (!permitted(actor, action, resource)) throw new AccessError();
+        const result = apply(db, actor, (kind, subject, detail) => event(actor.id, kind, subject, detail), now());
+        if (result && typeof result.then === 'function') throw new Error('Команда должна быть синхронной');
+        return result;
+      });
+    },
+    async changePassword(token, { currentPassword, password }) {
+      const actor = session(token), current = userById(actor.id);
+      credentials(current.login, current.name, password, current.role);
+      if (typeof currentPassword !== 'string' || Buffer.byteLength(currentPassword) > 512) throw failure();
+      const proof = await kdf(currentPassword, current.salt);
+      if (!timingSafeEqual(proof, Buffer.from(current.verifier, 'hex'))) throw failure();
+      const salt = randomBytes(16).toString('hex'), verifier = await kdf(password, salt);
+      transaction(() => {
+        const fresh = session(token);
+        if (userById(fresh.id).version !== current.version) throw new AccessError('Аккаунт изменён. Войдите снова');
+        db.prepare('UPDATE account_users SET salt=?,verifier=?,version=version+1 WHERE id=?').run(salt, verifier.toString('hex'), fresh.id);
+        db.prepare('DELETE FROM account_sessions WHERE user_id=?').run(fresh.id);
+        event(fresh.id, 'password.changed', fresh.id);
+      });
+    },
     async bootstrapOwner({ login, name, password }) {
       const c = credentials(login, name, password, 'owner');
       if (db.prepare('SELECT id FROM account_users LIMIT 1').get()) throw new AccessError('Первый владелец уже создан');
@@ -147,8 +184,8 @@ export function openAccounts(filename, { clock = Date.now } = {}) {
     updateUser(token, { id, expectedVersion, role, active, name, reason }) {
       return transaction(() => {
         const actor = authorize(token, 'accounts.manage'), target = userById(id);
-        if (!target || target.version !== expectedVersion) throw new Error('Аккаунт уже изменён. Обновите список');
-        if (!roles.has(role) || typeof active !== 'boolean' || typeof name !== 'string' || !name.trim() || name.length > 100 || /[\x00-\x1f]/.test(name) || typeof reason !== 'string' || !reason.trim() || reason.length > 500) throw new Error('Укажите роль, имя, состояние и причину изменения');
+        if (!target || target.version !== expectedVersion) throw new AccountConflictError('Аккаунт уже изменён. Обновите список');
+        if (!roles.has(role) || typeof active !== 'boolean' || typeof name !== 'string' || !name.trim() || name.length > 100 || /[\x00-\x1f]/.test(name) || typeof reason !== 'string' || !reason.trim() || reason.length > 500) throw new InputError('Укажите роль, имя, состояние и причину изменения');
         if (target.role === 'owner' && target.active && (role !== 'owner' || !active) && db.prepare("SELECT COUNT(*) n FROM account_users WHERE role='owner' AND active=1").get().n <= 1) throw new AccessError('Нельзя отключить последнего владельца');
         db.prepare('UPDATE account_users SET role=?,active=?,name=?,version=version+1 WHERE id=?').run(role, Number(active), name.trim(), id);
         db.prepare('DELETE FROM account_sessions WHERE user_id=?').run(id);
