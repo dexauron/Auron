@@ -14,6 +14,10 @@ const canCash = () => ['owner', 'accountant', 'cashier'].includes(user?.role);
 const managesCash = () => ['owner', 'accountant'].includes(user?.role);
 const managesTasks = () => ['owner', 'accountant', 'administrator'].includes(user?.role);
 let csrf = '', user = null, configured = true, current = 'home', generation = 0, renderVersion = 0, dirty = false, pending = null;
+let capabilities = {};
+const backupAlert = $('backup-alert-template').content.firstElementChild.cloneNode(true); backupAlert.hidden = true; $('content').querySelector('header').before(backupAlert);
+backupAlert.querySelector('button').addEventListener('click', () => render('backups'));
+icons.backups = 'M4 5h16v14H4z M4 10h16 M8 15h3 M12 2v6 M9 5l3 3 3-3';
 const channel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('way-workspace-session') : null;
 channel?.addEventListener('message', () => checkSession());
 let noticeTimer;
@@ -22,6 +26,7 @@ function scrub() {
   generation++; renderVersion++; user = null; dirty = false; pending = null;
   $('modal').close(); $('modal-body').replaceChildren(); $('page').replaceChildren();
   $('navigation').replaceChildren(); $('mobile-navigation').replaceChildren(); $('profile-button').textContent = '';
+  backupAlert.hidden = true; backupAlert.querySelector('span').textContent = '';
   $('app').hidden = true; $('entry').hidden = false; $('login-form').reset();
 }
 async function api(path, data) {
@@ -72,16 +77,19 @@ $('login-form').addEventListener('submit', async e => {
 });
 async function checkSession(force = false) {
   try {
-    const s = await api('/api/session'); csrf = s.csrf; configured = s.configured;
+    const s = await api('/api/session'); csrf = s.csrf; configured = s.configured; capabilities = s.capabilities ?? {};
     if (!s.user) { if (user) scrub(); showEntry(); return; }
     if (user?.id !== s.user.id || user?.version !== s.user.version || force) {
       scrub(); user = s.user; $('entry').hidden = true; $('app').hidden = false; buildNavigation(); await render('home', true);
     }
+    const warning = user?.role === 'owner' && s.backupHealth ? s.backupHealth.lastError || (s.backupHealth.scheduleNeedsUnlock ? 'Автокопии приостановлены: включите расписание заново.' : !s.backupHealth.hasSuccessfulCopy ? 'Резервная копия ещё не создана.' : '') : '';
+    backupAlert.hidden = !warning; if (backupAlert.querySelector('span').textContent !== warning) backupAlert.querySelector('span').textContent = warning;
   } catch (error) { notice('Нет связи с сервером. Сохранение новых данных не подтверждено.'); }
 }
 function buildNavigation() {
   const pages = [['home', 'Главная'], ...(canCash() ? [['cash', 'Касса']] : []), ['tasks', 'Задачи'], ['products', 'Каталог']];
   if (user.role === 'owner') pages.push(['users', 'Сотрудники'], ['security', 'История']);
+  if (user.role === 'owner' && capabilities.backups) pages.push(['backups', 'Резервные копии']);
   for (const [id, label] of pages) {
     const b = button('', () => render(id), ''); b.dataset.page = id; b.append(svg(id), node('span', label)); $('navigation').append(b);
     if (['home', 'cash', 'tasks', 'products'].includes(id)) { const mobile = button('', () => render(id), ''); mobile.dataset.page = id; mobile.append(svg(id), node('span', label)); $('mobile-navigation').append(mobile); }
@@ -89,6 +97,7 @@ function buildNavigation() {
   $('profile-button').textContent = `${user.name} · ${roles[user.role]}`;
 }
 const titles = { home: ['Главная', 'Главное для вашей работы.'], cash: ['Касса', 'Сдача и приём денег — без лишних действий.'], tasks: ['Задачи', 'Поручения и результат работы.'], products: ['Каталог', 'Товары и розничные цены.'], users: ['Сотрудники', 'Личные аккаунты и полномочия.'], security: ['История действий', 'Кто, когда и что изменил.'] };
+titles.backups = ['Резервные копии', 'Зашифрованные копии и проверка восстановления.'];
 async function render(page = current, force = false) {
   if (!user || (!force && dirty && !confirm('Покинуть ввод? Несохранённые изменения будут потеряны.'))) return;
   dirty = false; pending = null; current = page; const version = ++renderVersion;
@@ -96,7 +105,7 @@ async function render(page = current, force = false) {
   for (const b of document.querySelectorAll('[data-page]')) { b.classList.toggle('active', b.dataset.page === page); b.setAttribute('aria-current', b.dataset.page === page ? 'page' : 'false'); }
   $('page').replaceChildren(node('p', 'Загружаем…', 'empty'));
   try {
-    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage })[page]();
+    const content = await ({ home: homePage, cash: cashPage, tasks: tasksPage, products: productsPage, users: usersPage, security: securityPage, backups: backupsPage })[page]();
     if (version !== renderVersion || !user) return;
     $('page').replaceChildren(content); window.scrollTo(0, 0);
   } catch (error) { if (version === renderVersion && user) $('page').replaceChildren(node('p', error.message, 'error')); }
@@ -120,7 +129,7 @@ async function homePage() {
   if (user.role === 'owner') next.append(node('p', 'Создайте сотрудникам личные аккаунты и назначьте задачи. Для кассовой сдачи выберите кассира; бухгалтер принимает деньги отдельным действием.'), button('Управлять сотрудниками', () => render('users'), 'primary'));
   else if (user.role === 'cashier') next.append(node('p', 'Заполните отчёты своей смены и укажите, сколько передаёте. Фактически полученные деньги внесёт бухгалтер.'), button('Сдать кассу', () => render('cash'), 'primary'));
   else next.append(node('p', 'Задачи связывают участников работы. Каталог доступен без финансовых сведений других сотрудников.'), button('Открыть задачи', () => render('tasks'), 'primary'));
-  next.append(node('p', 'Эта рабочая область пока включает аккаунты, кассовые сдачи, задачи и ручной каталог. Закупки, табель, зарплатные начисления, ИИ и полное резервирование ещё не подключены.', 'fine')); root.append(next); return root;
+  next.append(node('p', 'Рабочая область включает аккаунты, кассу, задачи и ручной каталог. Резервные копии доступны владельцу в отдельном разделе. Закупки, табель, зарплатные начисления и ИИ ещё не подключены.', 'fine')); root.append(next); return root;
 }
 async function usersPage() {
   const users = await api('/api/users'), root = surface('Команда');
@@ -173,7 +182,63 @@ function productForm(p) {
 async function securityPage() {
   const events = await api('/api/security'), root = surface('Журнал');
   const names = { 'owner.bootstrap': 'Создан владелец', 'account.created': 'Создан аккаунт', 'account.updated': 'Изменены права', 'login.succeeded': 'Вход', 'login.failed': 'Неудачный вход', 'login.throttled': 'Ограничены попытки входа', logout: 'Выход', 'password.changed': 'Изменён пароль', 'cash.submitted': 'Отправлена сдача', 'cash.accepted': 'Принята касса', 'task.changed': 'Изменена задача', 'product.changed': 'Изменён товар' };
+  Object.assign(names, { 'backup.started': 'Начато резервирование', 'backup.completed': 'Создана проверенная копия', 'backup.failed': 'Ошибка резервирования', 'backup.downloaded': 'Скачана зашифрованная копия', 'backup.verified': 'Проверена резервная копия', 'backup.restored': 'Восстановлена отдельная база', 'backup.restore-checked': 'Проверено восстановление', 'backup.schedule-enabled': 'Включено расписание копий', 'backup.schedule-disabled': 'Отключено расписание копий' });
   for (const e of events.reverse()) { const details = node('details'), s = node('summary', `${names[e.kind] ?? e.kind} · ${time(e.at_ms)}`); details.append(s, node('p', `Автор: ${e.actor_id ?? 'Неавторизованный вход'}`, 'fine'), node('pre', JSON.stringify(e.detail, null, 2))); root.append(details); } return root;
+}
+async function backupsPage() {
+  const state = await api('/api/backups'), root = node('div'), actions = surface('Копия всей рабочей области');
+  actions.append(node('p', 'Аккаунты, касса со всеми версиями, задачи, каталог и журнал. Копии защищены отдельным паролем и проверяются перед сохранением.', 'fine'));
+  const buttons = node('div', null, 'button-row'); buttons.append(button('Создать копию', () => backupForm('create'), 'primary'), button('Настроить расписание', () => backupForm('schedule'))); actions.append(buttons);
+  actions.append(help('Как хранить копии', 'Скачайте копию на другой физический носитель. Папка на том же SSD не защитит от его поломки. Запишите пароль копии отдельно: без него расшифровать файл нельзя. Копия не содержит действующих сеансов входа. Автоматическое удаление старых копий не включено.'));
+  if (state.lastError) actions.append(node('p', state.lastError, 'error'));
+  actions.append(node('p', state.busy ? 'Выполняется операция. Дождитесь завершения и обновите раздел.' : state.schedule ? `Автоматически каждые ${state.schedule.minutes} мин. Следующая попытка: ${time(state.schedule.nextAt)}` : state.scheduleNeedsUnlock ? 'Автокопии приостановлены. Введите пароль и включите расписание заново.' : 'Расписание не включено.', 'statusline'));
+  if (state.lastSuccess) actions.append(node('p', `Последняя успешная копия: ${time(state.lastSuccess.at)}.${state.lastSuccessPresent ? '' : ' Файл больше не найден в папке — проверьте отдельный носитель.'}`, state.lastSuccessPresent ? 'fine' : 'error'));
+  actions.append(node('p', 'Пароль расписания хранится только в памяти сервера. После перезапуска нужно включить расписание заново; автоматически оно не возобновится.', 'fine'));
+  if (state.schedule) actions.append(button('Отключить расписание', () => backupForm('disable'), 'secondary'));
+  const folders = node('details'); folders.append(node('summary', 'Папки на сервере'), node('p', state.directory, 'fine'), node('p', `Проверочные базы: ${state.restoreDirectory}`, 'fine')); actions.append(folders); root.append(actions);
+  const list = surface('Сохранённые копии');
+  if (!state.files.length) list.append(node('p', 'Копий пока нет.', 'empty'));
+  for (const copy of state.files) {
+    const row = node('div', null, 'row'), caption = node('div', null, 'row-main'); caption.append(node('strong', time(copy.at)), node('small', `${Math.ceil(copy.bytes / 1024)} КБ · зашифрованная копия`));
+    row.append(caption, button('Действия', () => { const menu = node('div', null, 'backup-menu'); menu.append(node('p', copy.id, 'fine'), button('Скачать файл', () => backupForm('download', copy.id)), button('Проверить копию', () => backupForm('verify', copy.id)), button('Проверить восстановление', () => backupForm('restore', copy.id))); modal('Резервная копия', menu); })); list.append(row);
+  }
+  root.append(list); return root;
+}
+function backupForm(operation, id) {
+  const labels = { create: ['Создать копию', 'Создать и проверить'], schedule: ['Автоматические копии', 'Создать копию и включить'], verify: ['Проверка копии', 'Проверить'], restore: ['Проверка восстановления', 'Восстановить отдельно'], download: ['Скачать копию', 'Скачать файл'], disable: ['Отключить расписание', 'Отключить'] };
+  const f = node('form');
+  if (['create', 'schedule', 'verify', 'restore'].includes(operation)) {
+    field(f, 'Пароль резервной копии', 'password', { type: 'password', required: true, minLength: 15, maxLength: 128, autocomplete: ['create', 'schedule'].includes(operation) ? 'new-password' : 'off' });
+    if (['create', 'schedule'].includes(operation)) field(f, 'Повторите пароль копии', 'passwordAgain', { type: 'password', required: true, minLength: 15, maxLength: 128, autocomplete: 'new-password' });
+  }
+  if (operation === 'schedule') { field(f, 'Период, минут · от 10 до 1440', 'minutes', { type: 'number', min: 10, max: 1440, step: 1, value: '60', required: true }); f.append(node('p', 'После остановки сервера пароль не сохраняется. Старые копии автоматически не удаляются.', 'fine')); }
+  if (operation === 'restore') f.append(node('p', 'Создадим отдельную проверочную базу. Действующая база не заменяется. Старые сеансы входа не восстанавливаются.', 'fine'));
+  field(f, 'Ваш текущий пароль для подтверждения', 'currentPassword', { type: 'password', required: true, maxLength: 128, autocomplete: 'current-password' });
+  const progress = node('p', '', 'fine'); progress.setAttribute('role', 'status'); f.append(progress);
+  formSubmit(f, labels[operation][1], async () => {
+    const payload = { ...Object.fromEntries(new FormData(f)), ...(id ? { id } : {}) };
+    if (operation === 'schedule') payload.minutes = Number(payload.minutes);
+    if (payload.passwordAgain !== undefined && payload.passwordAgain !== payload.password) throw new Error('Пароли резервной копии не совпадают');
+    progress.textContent = 'Обрабатываем и проверяем. Можно подождать; не закрывайте окно.';
+    const fields = [...f.querySelectorAll('input,select')].map(e => [e, e.disabled]);
+    for (const [e] of fields) e.disabled = true;
+    try {
+      if (operation === 'download') {
+        const issued = generation, response = await fetch('/api/backups/download', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Way-Token': csrf }, body: JSON.stringify(payload) });
+        if (!response.ok) { const result = await response.json(); if (response.status === 401) { scrub(); showEntry(); } throw new Error(result.error); }
+        const blob = await response.blob(); if (issued !== generation) throw new Error('Сеанс изменён. Повторите скачивание после входа');
+        const url = URL.createObjectURL(blob), a = node('a'); a.href = url; a.download = id; a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+        f.reset(); $('modal').close(); notice('Файл передан браузеру. Сохраните на отдельный носитель.');
+      } else {
+        const result = await api(`/api/backups/${operation}`, payload); f.reset();
+        if (operation === 'restore') {
+          const done = node('div'); done.append(node('p', 'Отдельная база восстановлена и проверена. Действующая база не заменена.'), node('p', result.path, 'fine'), node('p', `Пользователей: ${result.stats.users}. Сдач: ${result.stats.cash}. Версий: ${result.stats.cashVersions}. Задач: ${result.stats.tasks}. Товаров: ${result.stats.products}.`, 'fine')); $('modal-body').replaceChildren(done);
+        } else { $('modal').close(); notice(operation === 'verify' ? 'Копия расшифрована: структура, связи и расчёты прошли проверку.' : operation === 'disable' ? 'Расписание отключено.' : 'Копия создана и проверена.'); }
+      }
+      if (user) await checkSession();
+      if (user && current === 'backups') await render('backups', true);
+    } finally { payload.password = payload.passwordAgain = payload.currentPassword = ''; for (const [e, disabled] of fields) e.disabled = disabled; progress.textContent = ''; }
+  }); modal(labels[operation][0], f);
 }
 
 async function cashPage() {
@@ -278,6 +343,7 @@ function printCash(record) {
 $('profile-button').addEventListener('click', () => {
   const content = node('div'); content.append(node('p', `${user.name} · ${roles[user.role]}`));
   if (user.role === 'owner') content.append(button('Сотрудники', () => { $('modal').close(); render('users'); }), button('История действий', () => { $('modal').close(); render('security'); }));
+  if (user.role === 'owner' && capabilities.backups) content.append(button('Резервные копии', () => { $('modal').close(); render('backups'); }));
   content.append(button('Сменить пароль', () => {
     const f = node('form'); field(f, 'Текущий пароль', 'currentPassword', { type: 'password', autocomplete: 'current-password', required: true }); field(f, 'Новый пароль-фраза · от 15 символов', 'password', { type: 'password', autocomplete: 'new-password', minLength: 15, maxLength: 128, required: true });
     formSubmit(f, 'Сменить пароль', async () => { await api('/api/password', Object.fromEntries(new FormData(f))); f.reset(); scrub(); showEntry(); channel?.postMessage('changed'); notice('Пароль изменён. Войдите заново.'); }); modal('Смена пароля', f);

@@ -5,6 +5,7 @@ import { randomBytes, randomUUID, createHash, scrypt, timingSafeEqual } from 'no
 import { promisify } from 'node:util';
 import { permitted, AccessError } from './access.mjs';
 import { InputError } from './domain.mjs';
+import { ARCHIVE_TABLES, MAX_WORKSPACE_ROWS } from './workspace-archive.mjs';
 export class AccountConflictError extends Error {}
 
 const derive = promisify(scrypt);
@@ -49,6 +50,7 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
     CREATE TABLE IF NOT EXISTS account_attempts (
       bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires_ms INTEGER NOT NULL
     ) STRICT;
+    CREATE INDEX IF NOT EXISTS account_event_kind ON account_events(kind,sequence);
     PRAGMA user_version=1;`);
   if (workspace) db.exec(`
     CREATE TABLE IF NOT EXISTS workspace_cash (id TEXT NOT NULL, version INTEGER NOT NULL, shift_key TEXT NOT NULL, cashier_id TEXT NOT NULL, actor_id TEXT NOT NULL, status TEXT NOT NULL, at_ms INTEGER NOT NULL, input TEXT NOT NULL, result TEXT NOT NULL, reason TEXT NOT NULL, PRIMARY KEY(id,version), UNIQUE(shift_key,version)) STRICT;
@@ -100,7 +102,62 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
     event(actor ?? id, actor ? 'account.created' : 'owner.bootstrap', id, { role });
     return publicUser(userById(id));
   }
+  function backupActor(proof) {
+    if (!workspace) throw new AccessError();
+    if (typeof proof === 'string') return authorize(proof, 'backup.manage');
+    // Only the trusted scheduler calls this branch. HTTP supplies cookie strings.
+    const current = proof && userById(proof.id);
+    if (!current || !current.active || current.role !== 'owner' || current.version !== proof.version) throw new AccessError('Владелец отключён или полномочия изменены. Настройте резервирование заново');
+    return publicUser(current);
+  }
   return {
+    backupActor,
+    backupState(proof) {
+      backupActor(proof);
+      const success = db.prepare("SELECT detail FROM account_events WHERE kind='backup.completed' ORDER BY sequence DESC LIMIT 1").get();
+      const operation = db.prepare("SELECT kind,detail FROM account_events WHERE kind IN ('backup.failed','backup.completed','backup.verified','backup.restore-checked') ORDER BY sequence DESC LIMIT 1").get();
+      const schedule = db.prepare("SELECT kind FROM account_events WHERE kind IN ('backup.schedule-enabled','backup.schedule-disabled') ORDER BY sequence DESC LIMIT 1").get();
+      return { lastSuccess: success ? JSON.parse(success.detail) : null, lastOperation: operation ? { kind: operation.kind, detail: JSON.parse(operation.detail) } : null, lastSchedule: schedule?.kind ?? null };
+    },
+    backupEvent(proof, kind, detail = {}) {
+      transaction(() => { const actor = backupActor(proof); event(actor.id, `backup.${kind}`, null, detail); });
+    },
+    workspaceSnapshot(proof, { withMetadata = false } = {}) {
+      return transaction(() => {
+        const actor = backupActor(proof); event(actor.id, 'backup.started', null);
+        let total = 0;
+        for (const table of Object.keys(ARCHIVE_TABLES)) total += db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n;
+        if (total > MAX_WORKSPACE_ROWS) throw new InputError('База превышает лимит этого этапа резервирования');
+        const tables = Object.fromEntries(Object.keys(ARCHIVE_TABLES).map(table => [table, db.prepare(`SELECT * FROM ${table} ORDER BY ${table === 'account_events' ? 'sequence' : table === 'workspace_cash' ? 'id,version' : 'id'}`).all()]));
+        return withMetadata ? { tables, createdAt: new Date(now()).toISOString() } : tables;
+      });
+    },
+    // Trusted import only AFTER worker validation, into a new empty database.
+    restoreWorkspace(archive, operatorId) {
+      if (!workspace) throw new Error('Нужна рабочая база');
+      return transaction(() => {
+        if (Object.keys(ARCHIVE_TABLES).some(table => db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n)) throw new AccountConflictError('Восстановление разрешено только в новую пустую базу');
+        for (const [table, columns] of Object.entries(ARCHIVE_TABLES)) {
+          const insert = db.prepare(`INSERT INTO ${table} (${columns.join(',')}) VALUES (${columns.map(() => '?').join(',')})`);
+          for (const row of archive.tables[table]) insert.run(...columns.map(k => row[k]));
+        }
+        db.prepare('DELETE FROM account_sessions').run(); db.prepare('DELETE FROM account_attempts').run();
+        event(null, 'backup.restored', null, { operatorId, sourceCreatedAt: archive.createdAt, sourceDigest: archive.digest });
+      });
+    },
+    async confirmPassword(token, currentPassword) {
+      const actor = session(token), current = userById(actor.id), at = now(), bucket = `reauth-${actor.id}`;
+      const allowed = transaction(() => {
+        db.prepare('DELETE FROM account_attempts WHERE expires_ms<=?').run(at);
+        if ((db.prepare('SELECT count FROM account_attempts WHERE bucket=?').get(bucket)?.count ?? 0) >= 5) return false;
+        db.prepare('INSERT INTO account_attempts VALUES (?,1,?) ON CONFLICT(bucket) DO UPDATE SET count=count+1').run(bucket, at + 60000); return true;
+      });
+      if (!allowed || typeof currentPassword !== 'string' || Buffer.byteLength(currentPassword) > 512) throw failure();
+      const candidate = await kdf(currentPassword, current.salt);
+      if (!timingSafeEqual(candidate, Buffer.from(current.verifier, 'hex')) || session(token).version !== current.version) throw failure();
+      return actor;
+    },
+    checkpoint() { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); },
     configured() { return Boolean(db.prepare('SELECT id FROM account_users LIMIT 1').get()); },
     // Trusted synchronous backend extension: auth, business write and audit share
     // this connection and transaction. Never expose SQL/callbacks over HTTP.

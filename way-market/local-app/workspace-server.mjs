@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile, mkdir } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { readFile, mkdir, lstat } from 'node:fs/promises';
+import { join, dirname, isAbsolute, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { openWorkspace } from './workspace-store.mjs';
@@ -9,6 +9,7 @@ import { AccessError } from './access.mjs';
 import { InputError } from './domain.mjs';
 import { VersionError } from './workspace-store.mjs';
 import { AccountConflictError } from './accounts.mjs';
+import { createBackupService } from './workspace-backups.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const files = new Map([
@@ -20,7 +21,7 @@ const files = new Map([
   ['/amount.mjs', ['public/amount.mjs', 'text/javascript; charset=utf-8']]
 ]);
 const equal = (a, b) => typeof a === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).toString('hex') } = {}) {
+export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).toString('hex'), backupService = null } = {}) {
   const csrf = randomBytes(32).toString('hex');
   const a = workspace.accounts;
   const server = createServer(async (req, res) => {
@@ -42,7 +43,8 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
       if (req.method === 'GET' && path === '/api/session') {
         let user = null;
         try { user = a.session(token, false); } catch (error) { if (!(error instanceof AccessError)) throw error; }
-        return send(200, { csrf, configured: a.configured(), user });
+        const backupHealth = user?.role === 'owner' && backupService ? backupService.health({ id: user.id, version: user.version }) : null;
+        return send(200, { csrf, configured: a.configured(), user, capabilities: { backups: Boolean(backupService) }, backupHealth });
       }
       let payload;
       if (req.method === 'POST') {
@@ -64,6 +66,7 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
       let actor;
       try { actor = a.session(token); } catch (error) { if (error instanceof AccessError) return send(401, { error: 'Войдите в аккаунт' }, { 'Set-Cookie': cookie('') }); throw error; }
       if (req.method === 'GET') {
+        if (path === '/api/backups' && backupService) return send(200, await backupService.status(token));
         if (path === '/api/directory') return send(200, workspace.directory(token));
         if (path === '/api/users') return send(200, a.listUsers(token));
         if (path === '/api/security') return send(200, a.securityHistory(token));
@@ -74,6 +77,17 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
         if (path === '/api/products') return send(200, workspace.products(token));
       }
       if (req.method === 'POST') {
+        if (path.startsWith('/api/backups/') && backupService) {
+          if (path === '/api/backups/create') return send(200, await backupService.create(token, payload));
+          if (path === '/api/backups/verify') return send(200, await backupService.verify(token, payload));
+          if (path === '/api/backups/restore') return send(200, await backupService.restore(token, payload));
+          if (path === '/api/backups/schedule') return send(200, await backupService.configure(token, payload));
+          if (path === '/api/backups/disable') return send(200, await backupService.disable(token, payload));
+          if (path === '/api/backups/download') {
+            const bytes = await backupService.download(token, payload);
+            res.writeHead(200, { ...headers, 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="${payload.id}"` }); res.end(bytes); return;
+          }
+        }
         if (path === '/api/logout') { a.logout(token); return send(200, { loggedOut: true }, { 'Set-Cookie': cookie('') }); }
         if (path === '/api/password') { await a.changePassword(token, payload); return send(200, { changed: true }, { 'Set-Cookie': cookie('') }); }
         if (path === '/api/users') return send(200, await a.createUser(token, payload));
@@ -98,14 +112,24 @@ export function createWorkspaceServer(workspace, { setupCode = randomBytes(32).t
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dir = process.platform === 'win32' ? join(process.env.ProgramData ?? homedir(), 'WayMarket-Workspace-Test') : join(homedir(), '.way-market-workspace-test');
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const workspace = openWorkspace(join(dir, 'workspace-test.sqlite'));
-  const { server, setupCode } = createWorkspaceServer(workspace);
+  const args = process.argv.slice(2); let databasePath = join(dir, 'workspace-test.sqlite');
+  if (args.length) {
+    if (args.length !== 2 || args[0] !== '--restored-test' || !isAbsolute(args[1])) throw new Error('Допустимо: --restored-test "абсолютный путь отдельной восстановленной базы"');
+    const local = relative(join(dir, 'restored'), args[1]);
+    if (!local || local.startsWith('..') || isAbsolute(local)) throw new Error('Выберите копию из папки restored этой рабочей области');
+    if (!(await lstat(args[1])).isFile()) throw new Error('Не найден обычный файл восстановленной базы'); databasePath = args[1];
+  }
+  const workspace = openWorkspace(databasePath);
+  const backupService = createBackupService(workspace, { directory: process.env.WAY_MARKET_BACKUP_DIR || join(dir, 'backups'), restoreDirectory: join(dir, 'restored') });
+  const { server, setupCode } = createWorkspaceServer(workspace, { backupService });
   server.on('error', e => { console.error(e.message); workspace.close(); process.exitCode = 1; });
   server.listen(3211, '127.0.0.1', () => {
     console.log('Way Market WORKSPACE TEST: http://127.0.0.1:3211');
-    console.log(`Отдельная тестовая база: ${join(dir, 'workspace-test.sqlite')}`);
+    console.log(`Отдельная тестовая база: ${databasePath}`);
+    if (args.length) console.log('ОТКРЫТА ВОССТАНОВЛЕННАЯ КОПИЯ. Обычная база не заменена.');
     if (!workspace.accounts.configured()) console.log(`Код первичной настройки (ввести в браузере сервера): ${setupCode}`);
     console.log('Только вымышленные данные. LAN выключен. Прежняя кассовая база не изменяется.');
   });
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { workspace.close(); process.exit(0); }));
+  let stopping = false;
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { if (stopping) return; stopping = true; const stopped = backupService.close(); server.close(async () => { await stopped; workspace.close(); process.exit(0); }); });
 }

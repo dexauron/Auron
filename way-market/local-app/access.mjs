@@ -2,7 +2,7 @@
 // never from request fields, a display name, or a browser role selector.
 const actions = new Set(['cash.read', 'cash.submit', 'cash.accept', 'cash.correct',
   'cash.settings', 'archive.manage', 'accounts.manage', 'security.read', 'workspace.read',
-  'tasks.read', 'tasks.create', 'tasks.update', 'catalog.read', 'catalog.manage']);
+  'tasks.read', 'tasks.create', 'tasks.update', 'catalog.read', 'catalog.manage', 'backup.manage']);
 export function permitted(principal, action, resource = {}) {
   if (!principal?.id || !principal.active || !actions.has(action)) return false;
   if (principal.role === 'owner') return true;
