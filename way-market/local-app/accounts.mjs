@@ -112,6 +112,15 @@ export function openAccounts(filename, { clock = Date.now, workspace = false } =
     return publicUser(current);
   }
   return {
+    // Trusted startup diagnostic, never exposed as an HTTP endpoint.
+    networkReadiness(maxAgeMinutes) {
+      if (!workspace || !Number.isSafeInteger(maxAgeMinutes) || maxAgeMinutes < 10 || maxAgeMinutes > 10080) throw new Error('Неверная проверка запуска');
+      const configured = Boolean(db.prepare("SELECT id FROM account_users WHERE active=1 AND role='owner' LIMIT 1").get());
+      const rows = db.prepare("SELECT at_ms,detail FROM account_events WHERE kind='backup.completed' ORDER BY sequence DESC").all();
+      const restored = new Set(db.prepare("SELECT detail FROM account_events WHERE kind='backup.restore-checked'").all().map(r => JSON.parse(r.detail)).filter(d => Number.isSafeInteger(d.stats?.drafts)).map(d => d.id));
+      const checked = rows.find(row => { const d = JSON.parse(row.detail); return Number.isSafeInteger(d.stats?.drafts) && restored.has(d.id) && now() >= row.at_ms && now()-row.at_ms <= maxAgeMinutes*60000; });
+      return { configured, checkedCopy: checked ? JSON.parse(checked.detail) : null };
+    },
     backupActor,
     backupState(proof) {
       backupActor(proof);

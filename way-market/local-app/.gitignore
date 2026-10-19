@@ -4,3 +4,9 @@
 node_modules/
 *.log
 .env
+*.pfx
+*.pem
+*.key
+*.cer
+*.wmbackup
+https-test*.json

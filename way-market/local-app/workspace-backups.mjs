@@ -88,6 +88,13 @@ export function createBackupService(workspace, { directory, restoreDirectory, in
   async function confirmation(token, currentPassword) { allowed(token); await accounts.confirmPassword(token, currentPassword); allowed(token); }
   function stopTimer() { if (timer) clearInterval(timer); timer = null; schedule = null; }
   return {
+    async startupReadiness(maxAgeMinutes) {
+      const state = accounts.networkReadiness(maxAgeMinutes);
+      if (!state.configured || !state.checkedCopy) throw new InputError('До HTTPS создайте владельца, свежую копию и проверьте её восстановление в локальном режиме');
+      const bytes = await bytesFor(state.checkedCopy.id);
+      if (digest(bytes) !== state.checkedCopy.digest) throw new InputError('Проверенная перед запуском копия отсутствует или изменена');
+      return { checkedCopyId: state.checkedCopy.id, checkedAt: state.checkedCopy.at };
+    },
     health(proof) {
       const saved = accounts.backupState(proof), latest = saved.lastOperation;
       return { lastError: lastError || (latest?.kind === 'backup.failed' ? latest.detail.reason : ''), hasSuccessfulCopy: Boolean(lastSuccess || saved.lastSuccess), scheduleNeedsUnlock: !schedule && saved.lastSchedule === 'backup.schedule-enabled' };
