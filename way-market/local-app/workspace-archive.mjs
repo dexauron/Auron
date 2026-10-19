@@ -1,3 +1,4 @@
+import { procurementState, validateProcurementDocument, PROCUREMENT_KINDS } from './procurement-data.mjs';
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { reconcileExcel } from './worksheet.mjs';
@@ -12,6 +13,7 @@ export const ARCHIVE_TABLES = {
   workspace_requests: ['id', 'digest', 'result'],
   workspace_tasks: ['id', 'version', 'creator_id', 'assignee_id', 'title', 'status', 'related_cash', 'at_ms'],
   workspace_products: ['id', 'version', 'name', 'barcode', 'price', 'active'],
+  workspace_procurement: ['id', 'version', 'kind', 'actor_id', 'at_ms', 'data', 'reason'],
   workspace_drafts: ['id', 'user_id', 'slot', 'version', 'base_version', 'fields', 'at_ms', 'request_id', 'request_digest']
 };
 const hash = payload => createHash('sha256').update(JSON.stringify(payload)).digest('hex');
@@ -22,18 +24,18 @@ const id = v => typeof v === 'string' && /^[a-f0-9-]{36}$/.test(v);
 const clean = (v, max, blank = false) => typeof v === 'string' && (blank || v.trim().length > 0) && v.length <= max && !/[\x00-\x1f]/.test(v);
 const json = (v, max = MAX_WORKSPACE_BYTES) => { if (typeof v !== 'string' || v.length > max) fail(); try { return JSON.parse(v); } catch { fail(); } };
 export function makeWorkspaceArchive(tables, createdAt = new Date().toISOString()) {
-  const payload = { format: 'way-market-workspace', version: 2, createdAt, tables };
+  const payload = { format: 'way-market-workspace', version: 3, createdAt, tables };
   const archive = { ...payload, digest: hash(payload) };
   validateWorkspaceArchive(archive);
   return archive;
 }
 export function validateWorkspaceArchive(archive) {
-  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || ![1, 2].includes(archive.version) || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES).filter(t => archive.version === 2 || t !== 'workspace_drafts'))) fail();
+  if (!exact(archive, ['format', 'version', 'createdAt', 'tables', 'digest']) || archive.format !== 'way-market-workspace' || ![1, 2, 3].includes(archive.version) || typeof archive.createdAt !== 'string' || !Number.isFinite(Date.parse(archive.createdAt)) || new Date(archive.createdAt).toISOString() !== archive.createdAt || !exact(archive.tables, Object.keys(ARCHIVE_TABLES).filter(t => (archive.version >= 2 || t !== 'workspace_drafts') && (archive.version >= 3 || t !== 'workspace_procurement')))) fail();
   const { digest, ...payload } = archive;
   if (typeof digest !== 'string' || digest !== hash(payload) || Buffer.byteLength(JSON.stringify(archive)) > MAX_WORKSPACE_BYTES) fail();
   let count = 0;
   for (const [table, columns] of Object.entries(ARCHIVE_TABLES)) {
-    if (table === 'workspace_drafts' && archive.version === 1) continue;
+    if ((table === 'workspace_drafts' && archive.version === 1) || (table === 'workspace_procurement' && archive.version < 3)) continue;
     const rows = archive.tables[table]; if (!Array.isArray(rows)) fail(); count += rows.length;
     if (count > MAX_WORKSPACE_ROWS || rows.some(r => !exact(r, columns))) fail();
   }
@@ -70,11 +72,29 @@ export function validateWorkspaceArchive(archive) {
   for (const p of t.workspace_products) {
     if (!id(p.id) || products.has(p.id) || !integer(p.version, 1) || !clean(p.name, 150) || typeof p.barcode !== 'string' || !/^\d{0,32}$/.test(p.barcode) || !integer(p.price) || p.price > 99999999999 || ![0, 1].includes(p.active)) fail(); products.set(p.id, p);
   }
+  const procurement = new Map();
+  for (const r of t.workspace_procurement ?? []) {
+    if (!id(r.id) || !integer(r.version, 1) || !PROCUREMENT_KINDS.includes(r.kind) || !users.has(r.actor_id) || !integer(r.at_ms) || !clean(r.reason, 500, r.version === 1)) fail();
+    const data = json(r.data, 65536); try { validateProcurementDocument(r.kind, data); } catch { fail(); }
+    const versions = procurement.get(r.id) ?? new Map(); if (versions.has(r.version)) fail(); versions.set(r.version, r); procurement.set(r.id, versions);
+  }
+  for (const versions of procurement.values()) {
+    const first = versions.get(1); if (!first || (first.kind === 'receipt' && versions.size !== 1)) fail();
+    for (let n = 1; n <= versions.size; n++) {
+      const r = versions.get(n); if (!r || r.kind !== first.kind) fail();
+      const eventsForVersion = t.account_events.filter(e => e.kind === 'procurement.changed' && e.subject_id === r.id && JSON.parse(e.detail).version === n);
+      if (eventsForVersion.length !== 1) fail();
+      const e = eventsForVersion[0], d = JSON.parse(e.detail);
+      if (e.actor_id !== r.actor_id || e.at_ms < r.at_ms || d.kind !== r.kind || d.reason !== r.reason || !isDeepStrictEqual(d.after, JSON.parse(r.data)) || !isDeepStrictEqual(d.before, n === 1 ? null : JSON.parse(versions.get(n - 1).data))) fail();
+    }
+  }
+  let procurementTotals;
+  try { procurementTotals = procurementState([...procurement.values()].map(v => v.get(v.size)), t.workspace_products); } catch { fail(); }
   const requests = new Set();
   for (const r of t.workspace_requests) {
     if (!id(r.id) || requests.has(r.id) || !/^[a-f0-9]{64}$/.test(r.digest)) fail(); requests.add(r.id);
     const out = json(r.result, 1000);
-    if (!exact(out, ['id', 'version']) || !id(out.id) || !integer(out.version, 1) || !(cash.get(out.id)?.has(out.version) || tasks.get(out.id)?.version >= out.version || products.get(out.id)?.version >= out.version)) fail();
+    if (!exact(out, ['id', 'version']) || !id(out.id) || !integer(out.version, 1) || !(cash.get(out.id)?.has(out.version) || tasks.get(out.id)?.version >= out.version || products.get(out.id)?.version >= out.version || procurement.get(out.id)?.has(out.version))) fail();
   }
   // Every business revision must retain its original retry record and audit.
   const targets = new Set(t.workspace_requests.map(r => { const out = JSON.parse(r.result); return `${out.id}:${out.version}`; }));
@@ -82,6 +102,7 @@ export function validateWorkspaceArchive(archive) {
   for (const row of t.workspace_cash) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`cash.${row.status}:${row.id}:${row.version}`)) fail();
   for (const row of t.workspace_tasks) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`task.changed:${row.id}:${row.version}`)) fail();
   for (const row of t.workspace_products) if (!targets.has(`${row.id}:${row.version}`) || !audit.has(`product.changed:${row.id}:${row.version}`)) fail();
+  for (const versions of procurement.values()) for (const r of versions.values()) if (!targets.has(`${r.id}:${r.version}`)) fail();
   const draftIds = new Set(), draftSlots = new Set(); let drafts = 0;
   for (const d of t.workspace_drafts ?? []) {
     const user = users.get(d.user_id), key = `${d.user_id}:${d.slot}`;
@@ -96,5 +117,5 @@ export function validateWorkspaceArchive(archive) {
       drafts++;
     }
   }
-  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, drafts, events: events.size, createdAt: archive.createdAt };
+  return { users: users.size, cash: cash.size, cashVersions: t.workspace_cash.length, tasks: tasks.size, products: products.size, drafts, suppliers: procurementTotals.suppliers.length, budgets: procurementTotals.budgets.length, orders: procurementTotals.orders.length, receipts: procurementTotals.receipts.length, reviews: procurementTotals.reviews.length, events: events.size, createdAt: archive.createdAt };
 }

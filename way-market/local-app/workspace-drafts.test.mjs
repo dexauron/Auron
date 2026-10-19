@@ -123,7 +123,7 @@ function resign(archive) { const { digest, ...payload } = archive; archive.diges
 test('encrypted version 2 backup restores private raw drafts and validates their user and cash links', async () => {
   const encrypted = await backupWorker({ operation: 'encrypt', password, tables: w.accounts.workspaceSnapshot(owner.token) });
   const { archive } = await backupWorker({ operation: 'decrypt', password, bytes: encrypted.bytes });
-  assert.equal(archive.version, 2); assert.ok(validateWorkspaceArchive(archive).drafts > 0);
+  assert.equal(archive.version, 3); assert.ok(validateWorkspaceArchive(archive).drafts > 0);
   const restored = openWorkspace(':memory:');
   try {
     restored.accounts.restoreWorkspace(archive, owner.user.id);
@@ -138,7 +138,7 @@ test('encrypted version 2 backup restores private raw drafts and validates their
 test('version 1 backups remain restorable and are compared with an empty draft table', async () => {
   const encrypted = await backupWorker({ operation: 'encrypt', password, tables: w.accounts.workspaceSnapshot(owner.token) });
   const { archive } = await backupWorker({ operation: 'decrypt', password, bytes: encrypted.bytes });
-  archive.version = 1; delete archive.tables.workspace_drafts; resign(archive); validateWorkspaceArchive(archive);
+  archive.version = 1; delete archive.tables.workspace_drafts; delete archive.tables.workspace_procurement; resign(archive); validateWorkspaceArchive(archive);
   const restored = openWorkspace(':memory:');
   try {
     restored.accounts.restoreWorkspace(archive, owner.user.id);

@@ -5,6 +5,8 @@ import { InputError, money } from './domain.mjs';
 import { reconcileExcel, defaultExcelSettings, EXCEL_FIELDS } from './worksheet.mjs';
 import { readDraft, listDrafts, writeDraft, consumeDraft } from './workspace-drafts.mjs';
 
+import { procurementMethods } from './workspace-procurement.mjs';
+
 export class VersionError extends Error {}
 const manager = a => ['owner', 'accountant'].includes(a.role);
 const taskManager = a => ['owner', 'accountant', 'administrator'].includes(a.role);
@@ -36,6 +38,7 @@ export function openWorkspace(filename, options = {}) {
   const command = accounts.command;
   return {
     accounts,
+    ...procurementMethods(command, request, VersionError),
     draftList(token) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => listDrafts(db, actor)); },
     draftGet(token, slot) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor) => readDraft(db, actor, slot)); },
     draftSave(token, p) { return command(token, 'cash.submit', (db, actor) => ({ cashierId: actor.id }), (db, actor, audit, at) => writeDraft(db, actor, audit, at, p)); },
